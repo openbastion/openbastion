@@ -1,0 +1,285 @@
+package application_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
+	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
+	"github.com/openbastion/openbastion/services/access/session-broker/internal/infrastructure"
+)
+
+type fakeAuthz struct {
+	allowed bool
+	reason  string
+	calls   int
+}
+
+func (f *fakeAuthz) CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (bool, string, error) {
+	f.calls++
+	return f.allowed, f.reason, nil
+}
+
+type fakeVaultAuthorizer struct {
+	calls        int
+	lastProxyID  string
+	scopeToken   string
+	authorizeErr error
+}
+
+func (f *fakeVaultAuthorizer) AuthorizeScope(ctx context.Context, sessionID, accountID, proxyServiceID string, ttl time.Duration) (string, time.Time, error) {
+	f.calls++
+	f.lastProxyID = proxyServiceID
+	if f.authorizeErr != nil {
+		return "", time.Time{}, f.authorizeErr
+	}
+	if f.scopeToken == "" {
+		f.scopeToken = "scope-token-fake"
+	}
+	return f.scopeToken, time.Now().UTC().Add(ttl), nil
+}
+
+type fakeAudit struct {
+	events  []string
+	failing bool
+}
+
+func (f *fakeAudit) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
+	if f.failing {
+		return errors.New("audit unreachable")
+	}
+	f.events = append(f.events, action)
+	return nil
+}
+
+type fakeAccountLookup struct {
+	targetHost string
+	targetUser string
+	err        error
+}
+
+func (f *fakeAccountLookup) GetAccount(ctx context.Context, accountID string) (string, string, error) {
+	if f.err != nil {
+		return "", "", f.err
+	}
+	host, user := f.targetHost, f.targetUser
+	if host == "" {
+		host = "10.0.0.9:22"
+	}
+	if user == "" {
+		user = "root"
+	}
+	return host, user, nil
+}
+
+type fakeProxyClient struct {
+	calls            int
+	lastScopeToken   string
+	lastTargetHost   string
+	lastTargetUser   string
+	connectionTicket string
+	proxyEndpoint    string
+	establishErr     error
+}
+
+func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration) (string, string, error) {
+	f.calls++
+	f.lastScopeToken = scopeToken
+	f.lastTargetHost = targetHost
+	f.lastTargetUser = targetUser
+	if f.establishErr != nil {
+		return "", "", f.establishErr
+	}
+	ticket := f.connectionTicket
+	if ticket == "" {
+		ticket = "connection-ticket-fake"
+	}
+	endpoint := f.proxyEndpoint
+	if endpoint == "" {
+		endpoint = "127.0.0.1:2222"
+	}
+	return endpoint, ticket, nil
+}
+
+func newTestBroker(authz *fakeAuthz, vault *fakeVaultAuthorizer, audit *fakeAudit, accounts *fakeAccountLookup, proxy *fakeProxyClient) *application.SessionBrokerService {
+	store := infrastructure.NewInMemoryStore()
+	return application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy)
+}
+
+func newDefaultTestBroker(authz *fakeAuthz, vault *fakeVaultAuthorizer, audit *fakeAudit) *application.SessionBrokerService {
+	return newTestBroker(authz, vault, audit, &fakeAccountLookup{}, &fakeProxyClient{})
+}
+
+func TestCreateSession_DeniedWhenAuthorizationRefuses(t *testing.T) {
+	authz := &fakeAuthz{allowed: false, reason: "no policy matches"}
+	audit := &fakeAudit{}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
+
+	_, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", 60)
+	if err == nil {
+		t.Fatal("expected CreateSession to fail when Authorization denies")
+	}
+	if len(audit.events) != 1 || audit.events[0] != "session.create" {
+		t.Fatalf("expected exactly one session.create audit event (failure), got %v", audit.events)
+	}
+}
+
+func TestCreateSession_GrantsImmediatelyWhenAllowed(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	audit := &fakeAudit{}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
+
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", 60)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if sess.Status != domain.StatusActive {
+		t.Fatalf("expected immediate grant (MVP, no Workflow Service), got status %q", sess.Status)
+	}
+	if len(audit.events) != 1 || audit.events[0] != "session.create" {
+		t.Fatalf("expected exactly one session.create audit event, got %v", audit.events)
+	}
+}
+
+func TestCreateSession_FailClosedWhenAuditUnreachable(t *testing.T) {
+	// Guide HA §1: audit is fail-closed. An unauditable grant must not
+	// leave the session active.
+	authz := &fakeAuthz{allowed: true}
+	audit := &fakeAudit{failing: true}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
+
+	_, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", 60)
+	if err == nil {
+		t.Fatal("expected CreateSession to fail closed when audit emission fails")
+	}
+}
+
+func TestGetSession_ReflectsExpiryWithoutMutatingStoredStatus(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	audit := &fakeAudit{}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
+
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "short-lived", -1) // already expired
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	got, err := broker.GetSession(context.Background(), sess.ID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got.Status != domain.StatusExpired {
+		t.Fatalf("expected EffectiveStatus to report expired, got %q", got.Status)
+	}
+}
+
+func TestTerminateSession_EmitsAuditAndRejectsDoubleTermination(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	audit := &fakeAudit{}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
+
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+
+	if _, err := broker.TerminateSession(context.Background(), sess.ID); err != nil {
+		t.Fatalf("TerminateSession: %v", err)
+	}
+	if _, err := broker.TerminateSession(context.Background(), sess.ID); err == nil {
+		t.Fatal("expected terminating an already-terminated session to fail")
+	}
+	if len(audit.events) != 2 || audit.events[1] != "session.terminate" {
+		t.Fatalf("expected [session.create, session.terminate], got %v", audit.events)
+	}
+}
+
+func TestConnect_ResolvesAccountThenVaultThenProxy_ReturnsOnlyTheTicket(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	vault := &fakeVaultAuthorizer{}
+	audit := &fakeAudit{}
+	accounts := &fakeAccountLookup{targetHost: "10.0.4.12:22", targetUser: "root"}
+	proxy := &fakeProxyClient{connectionTicket: "tix-abc", proxyEndpoint: "127.0.0.1:2222"}
+	broker := newTestBroker(authz, vault, audit, accounts, proxy)
+
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+
+	proxyEndpoint, ticket, _, err := broker.Connect(context.Background(), sess.ID)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if ticket != "tix-abc" {
+		t.Fatalf("expected the connection ticket returned by the proxy, got %q", ticket)
+	}
+	if proxyEndpoint != "127.0.0.1:2222" {
+		t.Fatalf("expected the proxy endpoint returned by the proxy, got %q", proxyEndpoint)
+	}
+	if vault.calls != 1 || vault.lastProxyID != "ssh-proxy" {
+		t.Fatalf("expected exactly one AuthorizeScope call scoped to ssh-proxy, got calls=%d lastProxyID=%q", vault.calls, vault.lastProxyID)
+	}
+	if proxy.calls != 1 || proxy.lastTargetHost != "10.0.4.12:22" || proxy.lastTargetUser != "root" {
+		t.Fatalf("expected EstablishSession called once with the resolved account metadata, got calls=%d host=%q user=%q",
+			proxy.calls, proxy.lastTargetHost, proxy.lastTargetUser)
+	}
+	if proxy.lastScopeToken != vault.scopeToken {
+		t.Fatalf("expected the proxy to receive the exact scope token Vault issued, got %q want %q", proxy.lastScopeToken, vault.scopeToken)
+	}
+}
+
+func TestConnect_NeverReturnsTheScopeTokenItself(t *testing.T) {
+	// The whole point of splitting VaultAuthorizer and ProxyClient into
+	// separate steps is that the scope token stays inside this method —
+	// this test asserts that property directly, not just indirectly via
+	// field names.
+	authz := &fakeAuthz{allowed: true}
+	vault := &fakeVaultAuthorizer{scopeToken: "super-secret-scope-token"}
+	audit := &fakeAudit{}
+	accounts := &fakeAccountLookup{}
+	proxy := &fakeProxyClient{connectionTicket: "tix-xyz"}
+	broker := newTestBroker(authz, vault, audit, accounts, proxy)
+
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	_, ticket, _, err := broker.Connect(context.Background(), sess.ID)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if ticket == vault.scopeToken {
+		t.Fatal("Connect must never return the raw Vault scope token to its caller")
+	}
+}
+
+func TestConnect_RejectsTerminatedSession(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{})
+
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	_, _ = broker.TerminateSession(context.Background(), sess.ID)
+
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID); err == nil {
+		t.Fatal("expected Connect to reject a terminated session")
+	}
+}
+
+func TestConnect_RejectsUnsupportedProtocol(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{})
+
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", 60)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID); err == nil {
+		t.Fatal("expected Connect to reject a protocol outside MVP scope (doc 04 §2)")
+	}
+}
+
+func TestConnect_PropagatesProxyEstablishError(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	proxy := &fakeProxyClient{establishErr: errors.New("proxy unreachable")}
+	broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{}, proxy)
+
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID); err == nil {
+		t.Fatal("expected Connect to fail when the proxy cannot establish the session")
+	}
+}

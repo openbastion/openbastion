@@ -1,0 +1,27 @@
+syntax = "proto3";
+package openbastion.audit.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/audit/v1;auditv1";
+
+service AuditIngestion {
+  // Le chaînage prev_hash → hash (doc 06 §4) est calculé côté Audit Service :
+  // un appelant ne connaît jamais le dernier hash de la chaîne.
+  rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
+}
+
+message EmitEventRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string action = 2;              // ex. "session.connect", "vault.rotate"
+  string resource_type = 3;
+  string resource_id = 4;
+  bool success = 5;
+  bytes signature = 6;            // signée par la clé de service de l'émetteur
+}
+
+message EmitEventResponse {
+  string event_id = 1;
+  google.protobuf.Timestamp ts = 2;
+}

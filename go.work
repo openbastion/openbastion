@@ -1,0 +1,13 @@
+go 1.22
+
+use (
+	./pkg/proxycore
+	./services/access/api-gateway
+	./services/access/authentication
+	./services/access/authorization
+	./services/access/session-broker
+	./services/proxy/ssh-proxy
+	./services/vault/password-vault
+	./services/recording-audit/audit-service
+	./test/integration
+)

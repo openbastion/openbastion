@@ -1,0 +1,114 @@
+// Package application implements AuditIngestion.EmitEvent
+// (proto/audit/v1/audit.proto, doc 07 §7) with the hash-chaining scheme
+// described in OpenBastion_06_Modele_Donnees.md §4 and Guide Sécurité §9:
+// each event's hash covers its own fields plus the previous event's hash,
+// so a retroactive edit anywhere in the chain is detectable.
+package application
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
+)
+
+// Store is the append-only persistence port. A PostgreSQL-backed
+// implementation matching the partitioned audit_events table (doc 06 §3)
+// is the natural next increment; nothing here depends on it directly.
+type Store interface {
+	Append(ctx context.Context, e *domain.Event) error
+	Last(ctx context.Context) (*domain.Event, error) // nil, nil if the chain is empty
+	All(ctx context.Context) ([]*domain.Event, error)
+}
+
+// AuditService computes the hash chain itself — a caller never supplies or
+// even knows the previous hash, by design (doc 06 §4).
+type AuditService struct {
+	mu    sync.Mutex // serializes chain extension; a production deployment
+	store Store       // would use a DB-level append lock instead of this
+}
+
+func NewAuditService(store Store) *AuditService {
+	return &AuditService{store: store}
+}
+
+func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) (*domain.Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	last, err := s.store.Last(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var prevHash []byte
+	if last != nil {
+		prevHash = last.Hash
+	}
+
+	e := &domain.Event{
+		ID: nextID(), Timestamp: time.Now().UTC(), ActorID: actorID,
+		Action: action, ResourceType: resourceType, ResourceID: resourceID,
+		Success: success, PrevHash: prevHash,
+	}
+	e.Hash = computeHash(e)
+
+	if err := s.store.Append(ctx, e); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+// VerifyChain re-derives every event's hash from its own fields and
+// prev_hash, and confirms each event correctly links to the next. This is
+// the runnable form of "toute altération rétroactive... devient
+// détectable" (doc 06 §4, Guide Sécurité §9) — not just a design claim.
+func (s *AuditService) VerifyChain(ctx context.Context) error {
+	events, err := s.store.All(ctx)
+	if err != nil {
+		return err
+	}
+	var prevHash []byte
+	for i, e := range events {
+		if want := computeHash(e); string(want) != string(e.Hash) {
+			return fmt.Errorf("event %d (%s): hash does not match its own fields — tampered", i, e.ID)
+		}
+		if string(e.PrevHash) != string(prevHash) {
+			return fmt.Errorf("event %d (%s): prev_hash does not match the preceding event — chain broken", i, e.ID)
+		}
+		prevHash = e.Hash
+	}
+	return nil
+}
+
+func computeHash(e *domain.Event) []byte {
+	h := sha256.New()
+	h.Write(e.PrevHash)
+	h.Write([]byte(e.ID))
+	h.Write([]byte(e.ActorID))
+	h.Write([]byte(e.Action))
+	h.Write([]byte(e.ResourceType))
+	h.Write([]byte(e.ResourceID))
+	var successByte [1]byte
+	if e.Success {
+		successByte[0] = 1
+	}
+	h.Write(successByte[:])
+	var tsBuf [8]byte
+	binary.BigEndian.PutUint64(tsBuf[:], uint64(e.Timestamp.UnixNano()))
+	h.Write(tsBuf[:])
+	return h.Sum(nil)
+}
+
+var idCounter int64
+
+// nextID is deliberately simple for this increment — swap for a UUID/ULID
+// generator without touching the hashing logic above, which only needs
+// e.ID to be stable and included in the hash input.
+func nextID() string {
+	idCounter++
+	return fmt.Sprintf("evt_%d_%d", time.Now().UTC().UnixNano(), idCounter)
+}

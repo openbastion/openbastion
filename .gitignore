@@ -1,0 +1,12 @@
+# Binaires compilés localement (chaque service se construit avec `make build`)
+/bin/
+*.exe
+*.test
+
+# Artefacts d'IDE / OS
+.DS_Store
+*.swp
+
+# Variables d'environnement locales
+.env
+.env.local

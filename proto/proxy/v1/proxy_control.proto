@@ -1,0 +1,46 @@
+syntax = "proto3";
+package openbastion.proxy.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/proxy/v1;proxyv1";
+
+// Implémenté identiquement par les 9 proxies protocolaires. Ne transporte
+// jamais de secret (ADR-0003). Voir OpenBastion_07_Interfaces_Inter_Services.md §4.
+service ProxyControl {
+  rpc EstablishSession(EstablishSessionRequest) returns (EstablishSessionResponse);
+  rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
+  rpc StreamHealth(HealthRequest) returns (stream HealthStatus);
+}
+
+message EstablishSessionRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string target_host = 3;
+  string vault_scope_token = 4;    // jeton d'autorisation émis par le Broker — pas un secret
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message EstablishSessionResponse {
+  string proxy_endpoint = 1;
+  string connection_ticket = 2;    // jeton à usage unique, consommé à la connexion du client
+}
+
+message TerminateSessionRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+}
+
+message TerminateSessionResponse {
+  bool terminated = 1;
+}
+
+message HealthRequest {
+  string proxy_instance_id = 1;
+}
+
+message HealthStatus {
+  int32 active_sessions = 1;
+  google.protobuf.Timestamp reported_at = 2;
+}

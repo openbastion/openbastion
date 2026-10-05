@@ -1,0 +1,30 @@
+syntax = "proto3";
+package openbastion.recording.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/recording/v1;recordingv1";
+
+service SessionRecording {
+  rpc StreamCommandEntries(stream CommandEntry) returns (StreamAck);
+  // Signature réservée pour l'ajout du Video Recorder en v1.0 — ne rompt pas
+  // le contrat existant.
+  rpc StreamVideoFrames(stream VideoFrame) returns (StreamAck);
+}
+
+message CommandEntry {
+  string session_id = 1;
+  google.protobuf.Timestamp ts = 2;
+  string command = 3;
+}
+
+message VideoFrame {
+  string session_id = 1;
+  google.protobuf.Timestamp ts = 2;
+  bytes frame_data = 3;
+  string codec = 4;
+}
+
+message StreamAck {
+  int64 entries_received = 1;
+}

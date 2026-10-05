@@ -1,0 +1,14 @@
+syntax = "proto3";
+package openbastion.common.v1;
+
+option go_package = "github.com/openbastion/openbastion/proto/common/v1;commonv1";
+
+// Reconstruit côté serveur à partir du JWT vérifié en périphérie et du
+// certificat mTLS de l'appelant — jamais un secret de session ici.
+// Voir OpenBastion_07_Interfaces_Inter_Services.md §2.
+message RequestContext {
+  string trace_id = 1;
+  string actor_user_id = 2;       // vide pour un appel système (Scheduler, ...)
+  repeated string actor_roles = 3;
+  string calling_service_id = 4;  // identité mTLS du service appelant
+}

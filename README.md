@@ -1,1 +1,77 @@
-# openbastion
+# OpenBastion
+
+Plateforme PAM (Privileged Access Management) open source, cloud-native, écrite en Go. Licence Apache 2.0.
+
+> **État du projet** : implémentation du MVP en cours. Ce dépôt contient actuellement le premier incrément vertical — la partie du système qui prouve l'invariant de sécurité fondateur — pas encore l'ensemble des services du périmètre MVP. Voir `docs/architecture/OpenBastion_04_Roadmap.md` pour la feuille de route complète.
+
+## L'invariant
+
+Un secret cible ne transite **jamais** par le control plane (Gateway, Session Broker, Workflow). Seul un proxy protocolaire, authentifié par mTLS, peut échanger un jeton de scope à usage unique contre un credential éphémère — directement auprès du Vault. Le control plane autorise ; il ne voit jamais le secret.
+
+Documenté dans `docs/architecture/OpenBastion_03_ADR.md` (ADR-0003), et **prouvé en code** :
+
+- `pkg/proxycore` — purge mémoire du credential, octet par octet, testée.
+- `services/vault/password-vault` — scope à usage unique, rejet strict par identité de proxy appelante, chiffrement enveloppe AES-256-GCM.
+- `services/recording-audit/audit-service` — journal d'audit chaîné par hash, falsification rétroactive détectable même quand l'attaquant recalcule le hash de l'événement modifié.
+- `services/access/authorization` — RBAC deny-by-default, un `deny` explicite l'emporte toujours sur un `allow`.
+- `services/access/session-broker` — orchestrateur dont le port vers le Vault (`VaultAuthorizer`) n'a **structurellement aucune méthode** pour récupérer un credential : l'invariant est encodé dans le système de types Go, pas seulement documenté. Audit fail-closed (Guide HA §1) : un échec d'audit empêche l'octroi de la session.
+- `services/proxy/ssh-proxy` — **le premier protocole réel** : un vrai serveur SSH (`golang.org/x/crypto/ssh`) authentifie l'opérateur par ticket à usage unique, récupère le credential exact au Vault, s'authentifie vers la cible avec, et relaie un shell interactif — testé avec un vrai client, un vrai proxy et une vraie fausse cible SSH, trois participants au protocole, pas des mocks.
+- **Le câblage Session Broker ↔ ssh-proxy est fait** : `POST /sessions/{id}/connect` (le vrai endpoint public du doc 05, plus de placeholder interne) résout le compte, obtient un scope Vault, appelle le vrai `ssh-proxy`, et ne renvoie que le ticket de connexion — jamais le scope token Vault, testé explicitement.
+- `services/access/authentication` — mots de passe en Argon2id réel, jetons signés HMAC-SHA256 (volontairement pas un JWT — voir `NOTES_SANDBOX.md`).
+- `services/access/api-gateway` — point d'entrée public unique : `POST /auth/login` limité en débit, tout le reste sous jeton vérifié. **Écrase systématiquement l'identité revendiquée par le client** avec celle qu'elle vient de vérifier — sur `POST /sessions` (`requestedBy`/`actorRoles`) comme sur `POST /policies` (`createdBy`) — un client ne peut pas usurper un autre utilisateur ni s'auto-attribuer des rôles en éditant sa requête, prouvé au niveau HTTP unitaire *et* en inter-processus réel avec une identité falsifiée explicite. Route aussi les surfaces d'administration (`/vault/accounts/*`, `/policies`), avec traduction de la forme REST publique vers le contrat interne de Password Vault là où les deux divergent.
+- **Rotation vraiment automatique** : `Rotate` génère désormais 32 octets aléatoires si aucun secret n'est fourni — un vrai manque comblé en routant `/vault/accounts/{id}/rotate`, pas juste un ajout de tuyauterie. Vérifié en inter-processus réel : rotation via la Gateway, puis confirmation que le credential a effectivement changé.
+- `test/integration` — cinq scénarios de bout en bout sur des processus réels et séparés : le flux SSH bas niveau, le flux à cinq processus, **le flux complet à sept processus entièrement piloté par la Gateway**, le routage des surfaces d'administration, et la persistance PostgreSQL à travers un redémarrage de processus.
+- **Le dernier écart RBAC est comblé** : `Password Vault` applique désormais un vrai `Authorization.CheckAccess`, fail-closed, sur ses propres écritures (onboarding, rotation) — qu'on l'atteigne via la Gateway ou directement sur son port. Espace de ressource dédié (`vault:account-admin:*`) distinct de celui des sessions, pour qu'avoir le droit d'ouvrir une session sur un compte n'offre aucun droit de l'administrer.
+- **PostgreSQL réel** : `services/vault/password-vault` bascule sur une vraie base (`DATABASE_URL`) sans aucun changement à sa couche application — exactement le bénéfice de séparation Clean Architecture annoncé depuis le début. Prouvé par un test qui onboarde un compte, **tue le processus**, en démarre un second sur la même base, et vérifie que tout — y compris une rotation ultérieure — a survécu.
+
+## Démarrage rapide
+
+Prérequis : Go ≥ 1.22.
+
+```sh
+make build            # compile tous les modules implémentés
+make vet               # go vet sur l'ensemble
+make test              # tests unitaires (hermétique, sans PostgreSQL)
+make test-integration  # tests de bout en bout, inter-processus réel
+make test-postgres     # tests PostgreSQL réels (TEST_DATABASE_URL requis)
+```
+
+Lancer les services individuellement (dans des terminaux séparés, dans cet ordre) :
+
+```sh
+make run-vault           # :8081
+make run-audit            # :8082
+make run-authorization     # :8083
+make run-authentication      # :8086
+make run-ssh-proxy             # :2222 (SSH réel) + :8085 (API interne)
+make run-broker                  # :8084 — appelle Authorization/Vault/Audit/ssh-proxy
+make run-gateway                   # :8080 — point d'entrée public unique
+```
+
+## Une remarque avant de lire le code
+
+Le transport inter-services documenté est gRPC (`docs/architecture/OpenBastion_07_Interfaces_Inter_Services.md`). Ce dépôt, construit dans un environnement au réseau restreint, expose HTTP/JSON à la place — avec exactement les mêmes noms de champs que les messages Protobuf, dans la seule couche `internal/interfaces/`. **Lire `NOTES_SANDBOX.md` avant de s'étonner de ce choix** : il explique précisément la contrainte rencontrée, comment `golang.org/x/crypto/ssh` et `golang.org/x/crypto/argon2` ont malgré tout pu être utilisés (un `replace` vers leur mirroir GitHub officiel), et l'historique du câblage Broker/ssh-proxy/Gateway.
+
+## Structure
+
+Voir `docs/architecture/OpenBastion_02_Arborescence_Depot.md` pour l'arborescence cible complète (~35 microservices). Ce qui existe aujourd'hui :
+
+```
+pkg/proxycore/                                   pipeline proxy partagé (ADR-0006)
+services/access/authorization/                   décision RBAC (deny-by-default)
+services/access/session-broker/                  orchestrateur de session
+services/proxy/ssh-proxy/                        premier proxy protocolaire réel (SSH)
+services/vault/password-vault/                   coffre-fort (comptes, secrets, scopes)
+services/recording-audit/audit-service/          audit à chaînage de hash
+test/integration/                                preuve inter-processus de l'invariant
+proto/                                            contrats gRPC/Protobuf (doc 07)
+docs/                                             les 14 documents d'architecture et guides
+```
+
+## Documentation
+
+L'ensemble de la documentation d'architecture (architecture globale, C4, ADR, feuille de route, contrats OpenAPI, modèle de données, guides sécurité/HA/PRA-PCA, documentation développeur/administrateur/utilisateur) vit sous `docs/`.
+
+## Licence
+
+Apache License 2.0 — voir `LICENSE`.

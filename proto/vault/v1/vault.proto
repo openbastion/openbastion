@@ -1,0 +1,43 @@
+syntax = "proto3";
+package openbastion.vault.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/vault/v1;vaultv1";
+
+// Appelé par le Session Broker. Ne renvoie jamais de secret.
+// Voir OpenBastion_07_Interfaces_Inter_Services.md §5, ADR-0003.
+service VaultAuthorization {
+  rpc AuthorizeScope(AuthorizeScopeRequest) returns (AuthorizeScopeResponse);
+}
+
+// Appelé UNIQUEMENT par un proxy protocolaire, jamais par le control plane.
+// Seul RPC de tout le système qui transporte un secret.
+service VaultCredentialIssuance {
+  rpc FetchCredential(FetchCredentialRequest) returns (FetchCredentialResponse);
+}
+
+message AuthorizeScopeRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string privileged_account_id = 3;
+  string proxy_service_id = 4;     // identité mTLS du proxy autorisé à échanger ce scope
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message AuthorizeScopeResponse {
+  string scope_token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message FetchCredentialRequest {
+  string scope_token = 1;          // émis par AuthorizeScope, à usage unique
+  string calling_proxy_id = 2;     // dérivé du certificat mTLS, vérifié contre le scope
+}
+
+message FetchCredentialResponse {
+  bytes credential_material = 1;   // en mémoire uniquement côté appelant ; jamais journalisé
+  string credential_type = 2;      // ex. "ssh_private_key", "password"
+  google.protobuf.Timestamp valid_until = 3;
+}

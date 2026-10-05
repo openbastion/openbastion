@@ -1,0 +1,58 @@
+syntax = "proto3";
+package openbastion.access.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/access/v1;accessv1";
+
+service SessionOrchestration {
+  rpc CreateSession(CreateSessionRequest) returns (Session);
+  rpc GetSession(GetSessionRequest) returns (Session);
+  rpc TerminateSession(TerminateSessionRequest) returns (Session);
+}
+
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_PENDING_APPROVAL = 1;
+  SESSION_STATUS_ACTIVE = 2;
+  SESSION_STATUS_EXPIRED = 3;
+  SESSION_STATUS_TERMINATED = 4;
+  SESSION_STATUS_DENIED = 5;
+}
+
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_SSH = 1;
+  // PROTOCOL_RDP, PROTOCOL_VNC, PROTOCOL_DATABASE, ... ajoutés en v1.0
+  // sans renumérotation des valeurs existantes.
+}
+
+message CreateSessionRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string privileged_account_id = 2;
+  Protocol protocol = 3;
+  string justification = 4;
+  int32 duration_minutes = 5;
+}
+
+message Session {
+  string id = 1;
+  SessionStatus status = 2;
+  Protocol protocol = 3;
+  string requested_by = 4;
+  string privileged_account_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+message GetSessionRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+}
+
+message TerminateSessionRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string reason = 3;
+}
