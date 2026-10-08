@@ -3,15 +3,15 @@
 // Session Broker, Password Vault, and Authorization.
 //
 // Every route requires a valid bearer token except /auth/login. Password
-// Vault now enforces real RBAC on its own write operations (onboarding,
-// rotation) via Authorization.CheckAccess — the Gateway's job here is
-// only to inject the caller's verified roles, not to duplicate that
-// decision; see /NOTES_SANDBOX.md for why the check belongs in Password
-// Vault itself rather than (or in addition to) the Gateway: a client
-// reaching Password Vault directly, bypassing the Gateway, must be
-// exactly as gated as one going through it. Authorization's own
-// POST /policies is not yet RBAC-gated on who may create a policy — a
-// remaining, separate gap noted in /NOTES_SANDBOX.md.
+// Vault enforces real RBAC on its own write operations (onboarding,
+// rotation) via Authorization.CheckAccess, and Authorization enforces the
+// same discipline on itself for POST /policies (authz:policy-admin) — the
+// Gateway's job in both cases is only to inject the caller's verified
+// roles, never to duplicate that decision; see /NOTES_SANDBOX.md for why
+// the check belongs in the service itself rather than (or in addition
+// to) the Gateway: a client reaching Password Vault or Authorization
+// directly, bypassing the Gateway, must be exactly as gated as one going
+// through it.
 package interfaces
 
 import (
@@ -294,8 +294,13 @@ func (g *GatewayServer) handlePoliciesCollection(w http.ResponseWriter, r *http.
 	// Same principle as session creation (doc 00 §4.1): who created a
 	// policy is an audit-relevant fact, and it comes from the Gateway's
 	// verified identity, never from what the client's own request body
-	// claims.
+	// claims. actorRoles is the same identity injection already applied
+	// to vault account onboarding/rotation (handleVaultAccountsCollection
+	// below) — Authorization now RBAC-gates CreatePolicy itself
+	// (authz:policy-admin), so the Gateway must stop any caller from
+	// claiming a role it doesn't actually hold here too.
 	body["createdBy"] = id.Username
+	body["actorRoles"] = id.Roles
 
 	g.forwardJSON(w, r.Context(), http.MethodPost, g.authorizationURL+"/authz/v1/policies", body)
 }

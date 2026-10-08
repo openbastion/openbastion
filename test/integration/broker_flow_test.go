@@ -36,11 +36,18 @@ func startServiceWithExtraPort(t *testing.T, root, binPath, httpPort, sshPort st
 	return startService(t, root, binPath, httpPort, env...)
 }
 
-func authzCreatePolicy(t *testing.T, baseURL, role, resourcePattern, effect string) {
+// authzCreatePolicy calls POST /policies directly against a running
+// Authorization process. actorRoles is almost always []string{"platform-admin"}
+// in these tests — the role cmd/authorization/main.go's BootstrapAdminPolicy
+// grants authz:policy-admin to on first boot (BOOTSTRAP_ADMIN_ROLE default),
+// since every Authorization process here is started fresh with an empty
+// store. See admin_routes_test.go for the one test that also exercises a
+// non-bootstrap role creating a policy through the Gateway.
+func authzCreatePolicy(t *testing.T, baseURL string, actorRoles []string, role, resourcePattern, effect string) {
 	t.Helper()
-	body, _ := json.Marshal(map[string]string{
+	body, _ := json.Marshal(map[string]any{
 		"name": "it-test-policy", "role": role, "resourcePattern": resourcePattern,
-		"effect": effect, "createdBy": "it-admin",
+		"effect": effect, "createdBy": "it-admin", "actorRoles": actorRoles,
 	})
 	resp, err := http.Post(baseURL+"/authz/v1/policies", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -218,7 +225,7 @@ func TestFullFlow_AuthorizationBrokerVaultAuditSSHProxy_AcrossFiveRealProcesses(
 	targetAddr := startFakeTargetSSHServer(t, secretValue)
 
 	const accountID = "acc_fullflow_it"
-	authzCreatePolicy(t, authz.baseURL, "vault-admin", "vault:account-admin:*", "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "vault:account-admin:*", "allow")
 	onboardAccountFull(t, vault.baseURL, accountID, "fullflow-test-account", "root", targetAddr, secretValue, []string{"vault-admin"})
 
 	t.Run("deny-by-default: no policy means CreateSession is refused", func(t *testing.T) {
@@ -228,7 +235,7 @@ func TestFullFlow_AuthorizationBrokerVaultAuditSSHProxy_AcrossFiveRealProcesses(
 		}
 	})
 
-	authzCreatePolicy(t, authz.baseURL, "dba", "vault:account:"+accountID, "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "dba", "vault:account:"+accountID, "allow")
 
 	sess, status := brokerCreateSession(t, broker.baseURL, []string{"dba"}, accountID)
 	if status != http.StatusCreated {

@@ -26,8 +26,20 @@ func mustEnv(key, def string) string {
 func main() {
 	port := mustEnv("PORT", "8081")
 	authorizationURL := mustEnv("AUTHORIZATION_URL", "http://127.0.0.1:8083")
+	dsn := os.Getenv("DATABASE_URL")
+	kmsKeyHex := os.Getenv("KMS_KEY_HEX")
 
-	kms, err := infrastructure.NewLocalKMS()
+	// Fail closed, not open: a random per-process key (NewLocalKMS's
+	// fallback) silently makes every secret unreadable the moment this
+	// process restarts, which is exactly the failure mode PostgreSQL
+	// persistence exists to avoid. A real deployment generates this once
+	// (`openssl rand -hex 32`) and keeps it outside the database — see
+	// infrastructure.NewLocalKMSFromHexKey's doc comment and
+	// NOTES_SANDBOX.md for the bug this closes.
+	if dsn != "" && kmsKeyHex == "" {
+		log.Fatalf("password-vault: DATABASE_URL is set but KMS_KEY_HEX is not — refusing to start with a random, per-process encryption key that would make every secret unreadable after a restart. Generate one with `openssl rand -hex 32` and set KMS_KEY_HEX.")
+	}
+	kms, err := infrastructure.NewLocalKMSFromHexKey(kmsKeyHex)
 	if err != nil {
 		log.Fatalf("kms: %v", err)
 	}
@@ -36,7 +48,7 @@ func main() {
 	var secrets domain.SecretRepository
 	var scopes domain.ScopeRepository
 
-	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+	if dsn != "" {
 		ctx := context.Background()
 		db, err := infrastructure.OpenPostgres(ctx, dsn)
 		if err != nil {

@@ -21,6 +21,12 @@ func (s *InMemoryStore) Create(ctx context.Context, p *domain.Policy) error {
 	return nil
 }
 
+func (s *InMemoryStore) Count(ctx context.Context) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.policies), nil
+}
+
 func (s *InMemoryStore) ForRoles(ctx context.Context, roles []string) ([]*domain.Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -4,7 +4,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -19,11 +21,52 @@ type LocalKMS struct {
 	key   [32]byte // AES-256
 }
 
+// NewLocalKMS generates a fresh, random, in-process-only key — see
+// NewLocalKMSFromHexKey's doc comment for why this is unsafe to use
+// whenever sealed material is expected to outlive the process (i.e.
+// whenever DATABASE_URL is set; cmd/password-vault/main.go enforces
+// this). Kept for callers that only ever need a single process's
+// lifetime — the in-memory store, and every existing test/example that
+// predates PostgreSQL support.
 func NewLocalKMS() (*LocalKMS, error) {
-	var key [32]byte
-	if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-		return nil, err
+	return NewLocalKMSFromHexKey("")
+}
+
+// NewLocalKMSFromHexKey builds a LocalKMS from a hex-encoded 32-byte
+// (AES-256) key, typically KMS_KEY_HEX (cmd/password-vault/main.go).
+//
+// An empty hexKey generates a fresh random key instead, exactly like
+// NewLocalKMS did unconditionally before this increment — fine for a
+// single process's lifetime (the in-memory store, tests), but any
+// material it seals becomes permanently unreadable the moment that
+// process exits: a restarted process would generate ANOTHER random key
+// with no relation to the first, so Open would fail GCM authentication
+// on every row the previous process wrote. This was a real, latent bug
+// in this increment's own PostgreSQL support until caught by
+// TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart actually
+// restarting a second process — see NOTES_SANDBOX.md. A persistent
+// deployment (DATABASE_URL set) MUST supply KMS_KEY_HEX, generated once
+// (e.g. `openssl rand -hex 32`) and kept outside the database — exactly
+// the separation doc 06 §3 already documents for encryption_key_id. A
+// real external KMS/HSM client would replace this file entirely; this
+// is still only ever a stand-in for one.
+func NewLocalKMSFromHexKey(hexKey string) (*LocalKMS, error) {
+	if hexKey == "" {
+		var key [32]byte
+		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+			return nil, err
+		}
+		return &LocalKMS{keyID: "local-dev-key-v1", key: key}, nil
 	}
+	raw, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return nil, fmt.Errorf("KMS_KEY_HEX: invalid hex encoding: %w", err)
+	}
+	if len(raw) != 32 {
+		return nil, fmt.Errorf("KMS_KEY_HEX: expected 32 bytes (64 hex characters) for AES-256, got %d bytes", len(raw))
+	}
+	var key [32]byte
+	copy(key[:], raw)
 	return &LocalKMS{keyID: "local-dev-key-v1", key: key}, nil
 }
 

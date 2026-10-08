@@ -140,9 +140,9 @@ func TestGatewayFlow_LoginThroughRealSSHConnection_AcrossSevenRealProcesses(t *t
 	targetAddr := startFakeTargetSSHServer(t, secretValue)
 
 	const accountID = "acc_gateway_it"
-	authzCreatePolicy(t, authz.baseURL, "vault-admin", "vault:account-admin:*", "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "vault:account-admin:*", "allow")
 	onboardAccountFull(t, vault.baseURL, accountID, "gateway-test-account", "root", targetAddr, secretValue, []string{"vault-admin"})
-	authzCreatePolicy(t, authz.baseURL, "dba", "vault:account:"+accountID, "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "dba", "vault:account:"+accountID, "allow")
 	authCreateUser(t, authn.baseURL, "real-operator", "Real Operator", "op-password-123", []string{"dba"})
 
 	// -- login, through the Gateway --

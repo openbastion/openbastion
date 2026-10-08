@@ -68,7 +68,11 @@ func (s *VaultService) OnboardAccount(ctx context.Context, actorRoles []string, 
 	if err := s.accounts.Create(ctx, account); err != nil {
 		return err
 	}
-	return s.storeNewVersion(ctx, id, initialSecret)
+	// A freshly created account has no prior secret version by
+	// construction — version 1, always, no lookup needed (unlike Rotate
+	// below, which must compute this before it changes the very state
+	// the lookup would otherwise see).
+	return s.storeVersion(ctx, id, initialSecret, 1)
 }
 
 func (s *VaultService) GetAccount(ctx context.Context, id string) (*domain.PrivilegedAccount, error) {
@@ -89,20 +93,34 @@ func (s *VaultService) Rotate(ctx context.Context, actorRoles []string, accountI
 		}
 		newSecret = generated
 	}
+
+	// The next version number MUST be read before SupersedeCurrent runs:
+	// SupersedeCurrent clears superseded_at on every existing row, so a
+	// lookup made afterward always finds nothing and always computes
+	// version 1 again — on every single rotation, not just the first.
+	// InMemoryStore stayed silent about this (AddVersion just appends,
+	// with nothing enforcing version uniqueness), but PostgresStore's
+	// UNIQUE (privileged_account_id, version) correctly rejected the
+	// resulting duplicate insert outright — caught by
+	// TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart
+	// actually exercising a real rotation against Postgres. See
+	// NOTES_SANDBOX.md and TestRotate_IncrementsVersionNumberEachTime
+	// below, which pins the correct behavior independent of storage
+	// engine.
+	nextVersion := 1
+	if current, err := s.secrets.CurrentVersion(ctx, accountID); err == nil && current != nil {
+		nextVersion = current.Version + 1
+	}
 	if err := s.secrets.SupersedeCurrent(ctx, accountID); err != nil {
 		return err
 	}
-	return s.storeNewVersion(ctx, accountID, newSecret)
+	return s.storeVersion(ctx, accountID, newSecret, nextVersion)
 }
 
-func (s *VaultService) storeNewVersion(ctx context.Context, accountID string, secret []byte) error {
+func (s *VaultService) storeVersion(ctx context.Context, accountID string, secret []byte, version int) error {
 	sealed, err := s.kms.Seal(secret)
 	if err != nil {
 		return err
-	}
-	version := 1
-	if current, err := s.secrets.CurrentVersion(ctx, accountID); err == nil && current != nil {
-		version = current.Version + 1
 	}
 	return s.secrets.AddVersion(ctx, &domain.SecretVersion{
 		ID: randomID("secret"), PrivilegedAccountID: accountID,

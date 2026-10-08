@@ -400,6 +400,7 @@ func TestHandlePoliciesCollection_InjectsVerifiedUsernameAsCreatedByOverridingCl
 	body, _ := json.Marshal(map[string]any{
 		"name": "dba-prod-db", "role": "dba", "resourcePattern": "vault:account:prod-*",
 		"effect": "allow", "createdBy": "someone-else-entirely",
+		"actorRoles": []string{"super-admin-i-am-not"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/policies", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+validToken)
@@ -411,6 +412,10 @@ func TestHandlePoliciesCollection_InjectsVerifiedUsernameAsCreatedByOverridingCl
 	}
 	if authz.lastBody == nil {
 		t.Fatal("Authorization never received a request")
+	}
+	roles, _ := authz.lastBody["actorRoles"].([]any)
+	if len(roles) != 1 || roles[0] != "admin" {
+		t.Fatalf("expected the verified caller roles ['admin'] to override the client's forged actorRoles claim, got %v", roles)
 	}
 	if authz.lastBody["createdBy"] != "real-admin" {
 		t.Fatalf("expected createdBy to be overridden to the verified username 'real-admin', got %v", authz.lastBody["createdBy"])

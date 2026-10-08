@@ -134,7 +134,25 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		}
 	})
 
-	authzCreatePolicy(t, authz.baseURL, "admin", "vault:account-admin:*", "allow")
+	t.Run("policy creation is denied before any policy-admin grant exists", func(t *testing.T) {
+		// The second gap this increment closes: Authorization itself now
+		// RBAC-gates its own POST /policies (authz:policy-admin), not
+		// just vault writes — proven here the same way, end to end
+		// through the real Gateway, before any grant exists at all.
+		if status := gatewayCreatePolicy(t, gateway.baseURL, token, "admin-routes-policy", "dba", "vault:account:"+accountID, "allow", "someone-else-entirely"); status != http.StatusForbidden {
+			t.Fatalf("expected 403 before any policy-admin grant exists, got %d", status)
+		}
+	})
+
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "admin", "vault:account-admin:*", "allow")
+	// The "admin" role used by this test's Gateway operator also needs
+	// authz:policy-admin itself — granted here by platform-admin, the
+	// bootstrap role — since the later subtest below creates a policy
+	// *through the Gateway* as "admin", and Authorization now RBAC-gates
+	// that exactly like any other write (authorization_service.go
+	// CreatePolicy). Hardcoded literal, not an import of authorization's
+	// internal package — same convention as "vault:account-admin:*" above.
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "admin", "authz:policy-admin", "allow")
 
 	t.Run("onboard account through the Gateway", func(t *testing.T) {
 		if status := gatewayOnboardAccount(t, gateway.baseURL, token, accountID, "admin-routes-account", "root", "10.0.0.42:22", initialSecret); status != http.StatusCreated {

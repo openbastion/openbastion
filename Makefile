@@ -72,6 +72,7 @@ test-postgres:
 		echo "TEST_DATABASE_URL non défini — voir NOTES_SANDBOX.md"; exit 1; \
 	fi
 	$(GO) test ./services/vault/password-vault/internal/infrastructure/... -run TestPostgres -v -count=1
+	$(GO) test ./services/access/authorization/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=30s
 
 ## Lance chaque service en local (ports par défaut : voir chaque cmd/main.go).

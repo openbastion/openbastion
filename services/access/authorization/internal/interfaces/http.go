@@ -35,11 +35,12 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 // -- policies (mirrors POST /policies, doc 05 §2) ---------------------
 
 type createPolicyRequest struct {
-	Name            string `json:"name"`
-	Role            string `json:"role"`
-	ResourcePattern string `json:"resourcePattern"`
-	Effect          string `json:"effect"`
-	CreatedBy       string `json:"createdBy"`
+	Name            string   `json:"name"`
+	Role            string   `json:"role"`
+	ResourcePattern string   `json:"resourcePattern"`
+	Effect          string   `json:"effect"`
+	CreatedBy       string   `json:"createdBy"`
+	ActorRoles      []string `json:"actorRoles"`
 }
 
 type createPolicyResponse struct {
@@ -52,9 +53,13 @@ func (s *HTTPServer) handleCreatePolicy(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	p, err := s.svc.CreatePolicy(r.Context(), req.Name, req.Role, req.ResourcePattern, domain.Effect(req.Effect), req.CreatedBy)
+	p, err := s.svc.CreatePolicy(r.Context(), req.ActorRoles, req.Name, req.Role, req.ResourcePattern, domain.Effect(req.Effect), req.CreatedBy)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		// Mirrors password-vault/internal/interfaces/http.go: every
+		// CreatePolicy error — RBAC denial or otherwise — surfaces as 403,
+		// not 400, since the dominant failure mode on this endpoint is now
+		// an access decision, not malformed input.
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

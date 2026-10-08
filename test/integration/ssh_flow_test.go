@@ -261,7 +261,7 @@ func TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses(t *testing.T) {
 
 	const accountID = "acc_it_ssh"
 	const secretValue = "it-test-secret-value"
-	authzCreatePolicy(t, authz.baseURL, "vault-admin", "vault:account-admin:*", "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "vault:account-admin:*", "allow")
 	onboardAccount(t, vault.baseURL, accountID, secretValue)
 
 	ctx := context.Background()

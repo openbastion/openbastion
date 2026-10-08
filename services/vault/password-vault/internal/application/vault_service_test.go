@@ -171,6 +171,57 @@ func TestRotate_AutoGeneratesDifferentSecretsEachTime(t *testing.T) {
 	}
 }
 
+func TestRotate_IncrementsVersionNumberEachTime(t *testing.T) {
+	// Pins the fix for a real bug: storeVersion used to compute the next
+	// version number by calling CurrentVersion AFTER SupersedeCurrent had
+	// already cleared every row's superseded_at — so it always recomputed
+	// version 1, on every rotation. InMemoryStore's AddVersion just
+	// appends with no uniqueness check, so this was invisible here; only
+	// PostgresStore's UNIQUE (privileged_account_id, version) constraint
+	// ever surfaced it (see NOTES_SANDBOX.md). This test pins the correct
+	// behavior directly, independent of which storage engine enforces it.
+	kms, err := infrastructure.NewLocalKMS()
+	if err != nil {
+		t.Fatalf("kms: %v", err)
+	}
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	ctx := context.Background()
+
+	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("v1")); err != nil {
+		t.Fatalf("OnboardAccount: %v", err)
+	}
+	v1, err := store.CurrentVersion(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("CurrentVersion after onboarding: %v", err)
+	}
+	if v1.Version != 1 {
+		t.Fatalf("expected version 1 after onboarding, got %d", v1.Version)
+	}
+
+	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("v2")); err != nil {
+		t.Fatalf("Rotate (1st): %v", err)
+	}
+	v2, err := store.CurrentVersion(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("CurrentVersion after 1st rotation: %v", err)
+	}
+	if v2.Version != 2 {
+		t.Fatalf("expected version 2 after the first rotation, got %d", v2.Version)
+	}
+
+	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("v3")); err != nil {
+		t.Fatalf("Rotate (2nd): %v", err)
+	}
+	v3, err := store.CurrentVersion(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("CurrentVersion after 2nd rotation: %v", err)
+	}
+	if v3.Version != 3 {
+		t.Fatalf("expected version 3 after the second rotation, got %d", v3.Version)
+	}
+}
+
 func TestOnboardAccount_EncryptedMaterialNeverContainsPlaintext(t *testing.T) {
 	kms, err := infrastructure.NewLocalKMS()
 	if err != nil {

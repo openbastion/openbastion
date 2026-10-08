@@ -101,19 +101,35 @@ Rien dans `internal/domain` ou `internal/application` ne mentionne HTTP, JSON, n
 
 **Limite pratique de ce sandbox, pas du code** : le service `postgresql` ne persiste pas de façon fiable entre deux appels d'outil séparés dans cet environnement (contrairement au système de fichiers) — `service postgresql start` doit être relancé avant toute suite de tests qui en dépend. `make test-postgres` et `TEST_DATABASE_URL` existent justement pour que ce soit un geste explicite et isolé, jamais une dépendance silencieuse de `make test`.
 
+## RBAC réel sur l'Authorization Service lui-même, et PostgreSQL pour ses policies
+
+**Le dernier gap RBAC connu est comblé.** `POST /policies` (création de politique) acceptait n'importe quel appelant jusqu'ici — explicitement signalé comme tel dans le commentaire de package de l'API Gateway et dans la section précédente de ce document. `application.AuthorizationService.CreatePolicy` exige désormais un accès sur une ressource dédiée, `authz:policy-admin`, vérifié via `CheckAccess` — **en interne, sans appel réseau** : Authorization est sa propre autorité ici, contrairement à Password Vault qui appelle Authorization à travers le réseau (`AuthorizationClient`, `vault_service.go`). Une erreur du dépôt de politiques reste fail-closed (jamais traitée comme un `allow`).
+
+**Le problème de l'œuf et la poule, et comment il est résolu.** Si la création d'une politique exige déjà une politique, qui crée la toute première ? `AuthorizationService.BootstrapAdminPolicy(ctx, role, createdBy)` contourne volontairement `requirePolicyAdmin`, mais **seulement** quand le dépôt de politiques est entièrement vide (`PolicyRepository.Count() == 0`) — jamais sinon, même pour un rôle différent, pour qu'un appelant ultérieur (y compris compromis) ne puisse jamais s'octroyer un nouveau rôle admin sur un système déjà initialisé. `cmd/authorization/main.go` l'appelle à chaque démarrage (variable `BOOTSTRAP_ADMIN_ROLE`, défaut `platform-admin`) — un no-op sur tout redémarrage d'un système déjà initialisé, exactement le même principe qu'un jeton root HashiCorp Vault ou qu'un compte admin de bootstrap Keycloak, mais exprimé ici comme une politique ordinaire plutôt qu'un type de credential à part. Testé à trois niveaux, comme pour le gap Vault précédent : unitaire (refusé sans accès, refusé si l'accès ne vient que d'un rôle sans rapport, bootstrap crée la première politique sur un dépôt vide, bootstrap est un no-op dès qu'une politique existe déjà — même pour un rôle différent —, fail-closed si le dépôt erre), HTTP (la Gateway écrase désormais `actorRoles` sur `POST /policies` exactement comme elle le fait déjà pour l'onboarding/la rotation du Vault), et inter-processus réel (`admin_routes_test.go` : refus 403 explicite avant toute politique-admin, succès une fois la politique créée par `platform-admin`).
+
+**PostgreSQL pour les policies**, même patron que le Vault : `services/access/authorization/migrations/001_init.sql` (même écart assumé — identifiants `TEXT`, pas de table `roles` séparée puisque les rôles restent des attributs fédérés par l'IdP, pas une entité gérée localement en MVP), `postgres_store.go` implémentant `domain.PolicyRepository` (`Create`, `ForRoles` — via `pq.Array` pour couvrir tous les rôles de l'appelant en une seule requête —, `Count`, qui fonde `BootstrapAdminPolicy`), `cmd/authorization/main.go` bascule sur `DATABASE_URL` avec repli en mémoire. Preuve de persistance réelle inter-processus, même format que pour le Vault : `TestPostgresFlow_PolicySurvivesAuthorizationProcessRestart` crée une politique sur un premier processus, le tue, démarre un second processus séparé sur la même base, et vérifie que la politique — et le fait que le bootstrap ne se relance jamais — survivent.
+
+## Deux bugs réels trouvés en exerçant PostgreSQL pour de vrai, pas seulement « compile contre l'interface »
+
+Les deux bugs suivants étaient invisibles avec `InMemoryStore` — rien n'y imposait les contraintes que PostgreSQL impose réellement — et seule l'exécution d'un vrai redémarrage de processus contre une vraie base les a fait apparaître. Les deux sont corrigés et chacun a désormais un test qui l'épingle indépendamment du moteur de stockage.
+
+1. **Clé de chiffrement locale non stable entre redémarrages.** `infrastructure.NewLocalKMS()` générait une clé AES-256 aléatoire à chaque démarrage de processus, sans aucun moyen de la retrouver au redémarrage suivant — un `password-vault` redémarré ne pouvait donc **jamais** déchiffrer ce qu'un processus précédent avait scellé, ce qui défait entièrement l'intérêt de la persistance PostgreSQL pour les secrets. Corrigé par `NewLocalKMSFromHexKey(hexKey string)` : `cmd/password-vault/main.go` refuse désormais de démarrer si `DATABASE_URL` est défini sans `KMS_KEY_HEX` (fail-closed, pas un repli silencieux sur une clé aléatoire) — `openssl rand -hex 32` pour en générer une, à garder hors de la base, cohérent avec `encryption_key_id... référence la clé KMS/HSM, pas la clé elle-même` (doc 06 §3). `KMS_KEY_HEX` reste optionnel quand `DATABASE_URL` n'est pas défini (mémoire, tests). Testé dans `crypto_test.go` (deux instances construites avec la même clé hex peuvent déchiffrer l'une ce que l'autre a scellé ; deux instances aléatoires ne le peuvent pas) et dans `test/integration/postgres_flow_test.go` (`TestPasswordVaultMain_RefusesToStartWithDatabaseURLButNoKMSKeyHex`, qui n'a pas besoin d'une vraie base — le refus intervient avant toute tentative de connexion).
+
+2. **Le numéro de version suivant était calculé après la supersession, pas avant.** `VaultService` calculait le prochain numéro de version (`storeNewVersion`, désormais `storeVersion`) en relisant `CurrentVersion` **après** que `Rotate` avait déjà appelé `SupersedeCurrent` — qui efface `superseded_at` sur toute ligne existante. Résultat : la relecture ne trouvait plus jamais rien, et le numéro de version retombait systématiquement à 1, à **chaque** rotation, pas seulement la première. `InMemoryStore.AddVersion` se contente d'ajouter à une liste sans vérifier l'unicité — le bug y était invisible. La contrainte `UNIQUE (privileged_account_id, version)` de PostgreSQL, elle, l'a fait échouer net dès la première rotation exercée contre une vraie base (`TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart`, sous-test "rotation on the restarted process persists too" : `status 403`). Corrigé en déplaçant la lecture du prochain numéro de version **avant** l'appel à `SupersedeCurrent`. `TestRotate_IncrementsVersionNumberEachTime` épingle le comportement correct (versions 1 → 2 → 3 sur deux rotations successives) indépendamment du moteur de stockage, pour que ce bug ne puisse pas revenir silencieusement même si un futur dépôt en mémoire est ajouté.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
 
 1. `buf generate` sur `proto/` produira le code gRPC réel ; les fichiers `internal/interfaces/http.go` seront remplacés par des serveurs gRPC générés, sans toucher `internal/application`.
-2. Étendre la bascule PostgreSQL aux autres services à état (`audit-service`, `authorization`, `authentication`, `session-broker`) — le même patron (interfaces de dépôt déjà posées, implémentation Postgres satisfaisant les mêmes interfaces) s'applique directement.
+2. Étendre la bascule PostgreSQL aux services à état restants (`audit-service`, `authentication`, `session-broker`) — le même patron (interfaces de dépôt déjà posées, implémentation Postgres satisfaisant les mêmes interfaces) s'applique directement ; Password Vault et Authorization l'ont déjà.
 3. Ajouter `Username` au DDL PostgreSQL et à `proto/vault/v1/vault.proto`/`proto/proxy/v1/proxy_control.proto` — actuellement threadé au niveau du code Go uniquement.
 4. Remplacer le jeton HMAC maison par un vrai JWT une fois `google.golang.org/*` (ou une bibliothèque JWT hébergée directement sur GitHub) accessible.
-5. RBAC-gater `POST /policies` lui-même (qui peut créer une politique) — le dernier gap d'autorisation connu, distinct de celui qui vient d'être comblé.
+5. Remplacer `LocalKMS` par un vrai client KMS/HSM externe — `KMS_KEY_HEX` est une étape vers une clé stable, pas un KMS réel ; voir le commentaire de doc de `NewLocalKMS`.
 
 ## État des tests à la date de cet incrément
 
-77/77 fonctions de test unitaires passent, plus 5 tests d'intégration (dont un, `TestPostgresFlow`, conditionné à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Les 5 tests PostgreSQL dédiés (`postgres_store_test.go`) et le test de persistance inter-processus ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
+99 fonctions de test unitaires (dont 9 conditionnées à `TEST_DATABASE_URL` — 5 pour le Vault, 4 pour Authorization — qui se *skip*, pas échouent, sans elle), plus 7 tests d'intégration (dont 2 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les deux tests de persistance inter-processus (Vault et Authorization) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox, base vidée (`TRUNCATE`) avant chaque exécution complète pour ne pas laisser d'anciennes lignes fausser `Count`/les contraintes d'unicité d'une exécution à l'autre.
 
 ```
 pkg/proxycore                                                 9 tests
@@ -121,14 +137,15 @@ services/access/api-gateway/internal/application               3 tests
 services/access/api-gateway/internal/interfaces                10 tests
 services/access/authentication/internal/application             6 tests
 services/access/authentication/internal/infrastructure          10 tests
-services/access/authorization/internal/application               6 tests
+services/access/authorization/internal/application              12 tests (dont 6 RBAC/bootstrap)
+services/access/authorization/internal/infrastructure            4 tests PostgreSQL (TEST_DATABASE_URL)
 services/access/session-broker/internal/application             10 tests
 services/proxy/ssh-proxy/internal/infrastructure                 3 tests
 services/proxy/ssh-proxy/internal/sshcodec                       2 tests (vrai protocole SSH, 3 participants)
-services/vault/password-vault/internal/application               14 tests (dont 5 RBAC)
-services/vault/password-vault/internal/infrastructure             5 tests PostgreSQL (TEST_DATABASE_URL)
+services/vault/password-vault/internal/application               15 tests (dont 5 RBAC, 1 versionnement)
+services/vault/password-vault/internal/infrastructure            11 tests (dont 5 PostgreSQL TEST_DATABASE_URL, 6 LocalKMS)
 services/recording-audit/audit-service/internal/application       4 tests
-test/integration                                                  5 tests (dont TestPostgresFlow, TEST_DATABASE_URL)
+test/integration                                                  7 tests (dont 2 TEST_DATABASE_URL)
 ```
 
 Compte vérifié par `grep -c "^--- PASS"` sur la sortie `go test -v`, pas estimé.
