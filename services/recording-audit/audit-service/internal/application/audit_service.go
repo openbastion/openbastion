@@ -50,7 +50,25 @@ func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceT
 	}
 
 	e := &domain.Event{
-		ID: nextID(), Timestamp: time.Now().UTC(), ActorID: actorID,
+		// Truncated to microsecond precision — not time.Now().UTC()'s
+		// full nanosecond resolution — because computeHash below hashes
+		// Timestamp byte-for-byte (via UnixNano), and PostgreSQL's
+		// TIMESTAMPTZ column (001_init.sql) only HAS microsecond
+		// precision: a value stored and reloaded loses its last three
+		// nanosecond digits, silently. A hash computed on the
+		// full-precision value and later recomputed from the
+		// Postgres-truncated one would never match again — VerifyChain
+		// would report every single event as tampered, forever, the
+		// moment it round-tripped through a real database. This was a
+		// real, latent bug until TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart
+		// actually called verify-chain against a real Postgres-backed
+		// chain — see NOTES_SANDBOX.md. Truncating here, before the hash
+		// is ever computed, makes the hashed value identical to what any
+		// storage engine (PostgresStore included) actually persists and
+		// returns, InMemoryStore's untruncated precision notwithstanding
+		// (it never had a precision mismatch to begin with, so this is a
+		// no-op for it).
+		ID: nextID(), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: actorID,
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
 		Success: success, PrevHash: prevHash,
 	}

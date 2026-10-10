@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -43,6 +45,32 @@ func GenerateSigningKey() ([]byte, error) {
 	key := make([]byte, 32)
 	_, err := rand.Read(key)
 	return key, err
+}
+
+// SigningKeyFromHex decodes a hex-encoded 32-byte HMAC signing key,
+// typically TOKEN_SIGNING_KEY_HEX (cmd/authentication/main.go) — same
+// pattern as password-vault's NewLocalKMSFromHexKey, and for the same
+// reason: GenerateSigningKey's random, in-process-only key makes every
+// token issued by a process unverifiable the moment that process
+// restarts with a fresh random key, silently invalidating every active
+// session on every single deploy once users persist across restarts
+// (DATABASE_URL set). An empty hexKey falls back to GenerateSigningKey,
+// fine for a single process's lifetime (the in-memory store, tests) but
+// never for a deployment where DATABASE_URL is set — main.go enforces
+// that distinction by refusing to start rather than silently defaulting
+// to a key that cannot survive a restart.
+func SigningKeyFromHex(hexKey string) ([]byte, error) {
+	if hexKey == "" {
+		return GenerateSigningKey()
+	}
+	raw, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return nil, fmt.Errorf("TOKEN_SIGNING_KEY_HEX: invalid hex encoding: %w", err)
+	}
+	if len(raw) != 32 {
+		return nil, fmt.Errorf("TOKEN_SIGNING_KEY_HEX: expected 32 bytes (64 hex characters) for HMAC-SHA256, got %d bytes", len(raw))
+	}
+	return raw, nil
 }
 
 func (t *TokenIssuer) Issue(userID, username string, roles []string, expiresAt time.Time) (string, error) {

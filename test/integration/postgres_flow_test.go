@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
 )
@@ -36,6 +39,22 @@ func testKMSKeyHex(t *testing.T) string {
 	var key [32]byte
 	if _, err := rand.Read(key[:]); err != nil {
 		t.Fatalf("generating test KMS key: %v", err)
+	}
+	return hex.EncodeToString(key[:])
+}
+
+// testSigningKeyHex generates a fresh random 32-byte HMAC key, hex-
+// encoded, for TOKEN_SIGNING_KEY_HEX — same rationale as testKMSKeyHex
+// above: cmd/authentication/main.go now refuses to start with
+// DATABASE_URL set but no TOKEN_SIGNING_KEY_HEX, since a process-random
+// signing key would invalidate every token the moment the process
+// restarts (see infrastructure.SigningKeyFromHex's doc comment and
+// NOTES_SANDBOX.md).
+func testSigningKeyHex(t *testing.T) string {
+	t.Helper()
+	var key [32]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		t.Fatalf("generating test signing key: %v", err)
 	}
 	return hex.EncodeToString(key[:])
 }
@@ -219,4 +238,260 @@ func TestPasswordVaultMain_RefusesToStartWithDatabaseURLButNoKMSKeyHex(t *testin
 	if !strings.Contains(outBuf.String(), "KMS_KEY_HEX") {
 		t.Fatalf("expected the fatal log message to mention KMS_KEY_HEX, got:\n%s", outBuf.String())
 	}
+}
+
+// authLogin and authVerify call Authentication's own HTTP API directly
+// (not through the Gateway) — this file's restart tests only need to
+// prove persistence of Authentication's own state, not the Gateway's
+// identity-injection behavior, which is already covered elsewhere
+// (gateway_flow_test.go, admin_routes_test.go).
+func authLogin(t *testing.T, baseURL, username, password string) (token string, status int) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	resp, err := http.Post(baseURL+"/auth/v1/login", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", resp.StatusCode
+	}
+	var out struct {
+		AccessToken string `json:"accessToken"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	return out.AccessToken, resp.StatusCode
+}
+
+func authVerify(t *testing.T, baseURL, token string) (userID, username string, roles []string, status int) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"token": token})
+	resp, err := http.Post(baseURL+"/auth/v1/verify", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", nil, resp.StatusCode
+	}
+	var out struct {
+		UserID   string   `json:"userId"`
+		Username string   `json:"username"`
+		Roles    []string `json:"roles"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode verify response: %v", err)
+	}
+	return out.UserID, out.Username, out.Roles, resp.StatusCode
+}
+
+// TestPostgresFlow_UserAndSigningKeySurviveAuthenticationProcessRestart
+// proves Authentication's half of this increment, and closes the same
+// class of gap LocalKMS had (NOTES_SANDBOX.md): a user onboarded against
+// one process, and a token issued by that SAME process, must both still
+// work against a second, independent process restarted on the same
+// database — the user via PostgreSQL, the token's signature via
+// TOKEN_SIGNING_KEY_HEX supplied to both processes identically (never
+// derived from the database itself, exactly like KMS_KEY_HEX).
+func TestPostgresFlow_UserAndSigningKeySurviveAuthenticationProcessRestart(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed integration test (see /NOTES_SANDBOX.md)")
+	}
+
+	root := repoRoot(t)
+	authBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-pg")
+
+	signingKeyHex := testSigningKeyHex(t) // shared across both processes below
+	username := fmt.Sprintf("pg_restart_user_%d", time.Now().UnixNano())
+	const password = "pg-restart-password-123"
+
+	auth1 := startService(t, root, authBin, "18431", "DATABASE_URL="+dsn, "TOKEN_SIGNING_KEY_HEX="+signingKeyHex, "SKIP_DEMO_SEED=1")
+	authCreateUser(t, auth1.baseURL, username, "PG Restart User", password, []string{"dba"})
+
+	token, status := authLogin(t, auth1.baseURL, username, password)
+	if status != http.StatusOK {
+		t.Fatalf("login against first process: status %d", status)
+	}
+
+	// The process that onboarded the user and issued the token is gone —
+	// both the user row and the ability to verify that exact token must
+	// now depend entirely on PostgreSQL and TOKEN_SIGNING_KEY_HEX, not on
+	// anything held in that process's memory.
+	stopService(t, auth1)
+
+	auth2 := startService(t, root, authBin, "18432", "DATABASE_URL="+dsn, "TOKEN_SIGNING_KEY_HEX="+signingKeyHex, "SKIP_DEMO_SEED=1")
+
+	t.Run("a token issued by the first process verifies against the second, restarted process", func(t *testing.T) {
+		userID, verifiedUsername, roles, status := authVerify(t, auth2.baseURL, token)
+		if status != http.StatusOK {
+			t.Fatalf("verify on restarted process: status %d — TOKEN_SIGNING_KEY_HEX did not survive the restart", status)
+		}
+		if verifiedUsername != username || len(roles) != 1 || roles[0] != "dba" || userID == "" {
+			t.Fatalf("unexpected verified claims: userID=%q username=%q roles=%v", userID, verifiedUsername, roles)
+		}
+	})
+
+	t.Run("the user onboarded on the first process can log in again on the restarted process", func(t *testing.T) {
+		if _, status := authLogin(t, auth2.baseURL, username, password); status != http.StatusOK {
+			t.Fatalf("login on restarted process: status %d — the user did not survive the restart via PostgreSQL", status)
+		}
+	})
+}
+
+// TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart proves
+// Audit Service's half of this increment: an event emitted by one
+// process must correctly chain off of it from a second, independent
+// process restarted on the same database — EmitEvent's hash chaining
+// (audit_service.go) depends on Last() seeing the true, current tail of
+// the chain, not whatever a given process happens to remember.
+func TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed integration test (see /NOTES_SANDBOX.md)")
+	}
+
+	// VerifyChain (audit_service.go) walks the ENTIRE audit_events table
+	// from the very first row, unlike Count()/ForRoles() elsewhere in
+	// this project — any row written directly by
+	// postgres_store_test.go's infrastructure-level tests (which Append
+	// literal, non-computed hash values on purpose, to exercise the
+	// Store interface in isolation from the hashing logic) would
+	// otherwise make VerifyChain report tampering on data this test
+	// never wrote. Truncating first makes this test deterministic
+	// regardless of what ran against this database before it — the same
+	// practical limitation as the TRUNCATE already documented in
+	// NOTES_SANDBOX.md for Count()-based assertions, just with a lower
+	// tolerance: a hash chain breaks forever on a single bad row, where
+	// a count only breaks one assertion.
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("opening database for setup: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("TRUNCATE audit_events RESTART IDENTITY"); err != nil {
+		t.Fatalf("truncating audit_events before the test: %v", err)
+	}
+
+	root := repoRoot(t)
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-pg")
+
+	audit1 := startService(t, root, auditBin, "18421", "DATABASE_URL="+dsn)
+	emitter1 := &httpAuditEmitter{baseURL: audit1.baseURL}
+	if err := emitter1.EmitEvent(context.Background(), "session.connect", "session", "sess-pg-restart", true); err != nil {
+		t.Fatalf("EmitEvent on first process: %v", err)
+	}
+
+	// The process that emitted the first event is gone — the second
+	// process's next event must chain off of PostgreSQL's view of the
+	// tail, not an empty in-process memory that would make it look like
+	// the start of a brand new, disconnected chain.
+	stopService(t, audit1)
+
+	audit2 := startService(t, root, auditBin, "18422", "DATABASE_URL="+dsn)
+	emitter2 := &httpAuditEmitter{baseURL: audit2.baseURL}
+	if err := emitter2.EmitEvent(context.Background(), "session.terminate", "session", "sess-pg-restart", true); err != nil {
+		t.Fatalf("EmitEvent on second, restarted process: %v", err)
+	}
+
+	resp, err := http.Get(audit2.baseURL + "/audit/v1/verify-chain")
+	if err != nil {
+		t.Fatalf("verify-chain: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("verify-chain: status %d — the second process's event did not correctly chain off the first process's last event via PostgreSQL", resp.StatusCode)
+	}
+}
+
+type sessionDetails struct {
+	ID                  string `json:"id"`
+	Status              string `json:"status"`
+	Protocol            string `json:"protocol"`
+	RequestedBy         string `json:"requestedBy"`
+	PrivilegedAccountID string `json:"privilegedAccountId"`
+	Justification       string `json:"justification"`
+}
+
+func brokerGetSession(t *testing.T, baseURL, id string) (*sessionDetails, int) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/sessions/" + id)
+	if err != nil {
+		t.Fatalf("get-session: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode
+	}
+	var out sessionDetails
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode get-session response: %v", err)
+	}
+	return &out, resp.StatusCode
+}
+
+// TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart proves
+// Session Broker's half of this increment. CreateSession and GetSession
+// need only Authorization (CheckAccess) and Audit (EmitEvent) — Vault
+// and the proxy are only ever reached by Connect, which this test never
+// calls — so VAULT_URL/SSH_PROXY_URL below deliberately point nowhere
+// real; a live Vault/proxy is not needed to prove a session survives a
+// Session Broker restart via PostgreSQL.
+func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed integration test (see /NOTES_SANDBOX.md)")
+	}
+
+	root := repoRoot(t)
+	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-broker-pg")
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-broker-pg")
+	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-pg")
+
+	authz := startService(t, root, authzBin, "18441")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "dba", "vault:account:*", "allow")
+	audit := startService(t, root, auditBin, "18442") // in-memory is fine — this test only cares about session persistence
+
+	accountID := fmt.Sprintf("acc_pg_broker_restart_%d", time.Now().UnixNano())
+	unreachable := "http://127.0.0.1:1" // Connect is never called in this test
+
+	broker1 := startService(t, root, brokerBin, "18443",
+		"AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL,
+		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+unreachable, "DATABASE_URL="+dsn)
+
+	sess, status := brokerCreateSession(t, broker1.baseURL, []string{"dba"}, accountID)
+	if status != http.StatusCreated {
+		t.Fatalf("create-session on first process: status %d", status)
+	}
+
+	// The process that created the session is gone — it must live in the
+	// database, not in that process's memory.
+	stopService(t, broker1)
+
+	broker2 := startService(t, root, brokerBin, "18444",
+		"AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL,
+		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+unreachable, "DATABASE_URL="+dsn)
+
+	got, status := brokerGetSession(t, broker2.baseURL, sess.ID)
+	if status != http.StatusOK {
+		t.Fatalf("get-session on restarted process: status %d — the session did not survive the restart via PostgreSQL", status)
+	}
+	if got.Status != "active" || got.RequestedBy != "it-user1" || got.PrivilegedAccountID != accountID {
+		t.Fatalf("unexpected session after restart: %+v", got)
+	}
+
+	t.Run("terminating on the restarted process is itself an UPSERT that persists", func(t *testing.T) {
+		if status := brokerTerminateSession(t, broker2.baseURL, sess.ID); status != http.StatusOK {
+			t.Fatalf("terminate-session: status %d", status)
+		}
+		got, status := brokerGetSession(t, broker2.baseURL, sess.ID)
+		if status != http.StatusOK {
+			t.Fatalf("get-session after terminate: status %d", status)
+		}
+		if got.Status != "terminated" {
+			t.Fatalf("expected status %q after terminate, got %q", "terminated", got.Status)
+		}
+	})
 }

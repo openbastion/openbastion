@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -20,10 +21,36 @@ func main() {
 		port = "8082"
 	}
 
-	store := infrastructure.NewInMemoryStore()
+	var store application.Store
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		ctx := context.Background()
+		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		if err != nil {
+			log.Fatalf("postgres: %v", err)
+		}
+		store = infrastructure.NewPostgresStore(db)
+		log.Printf("audit-service: using PostgreSQL at %s", redactDSN(dsn))
+	} else {
+		store = infrastructure.NewInMemoryStore()
+		log.Printf("audit-service: DATABASE_URL not set, using in-memory storage (dev/test only)")
+	}
+
 	svc := application.NewAuditService(store)
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+}
+
+func redactDSN(dsn string) string {
+	at := -1
+	for i, c := range dsn {
+		if c == '@' {
+			at = i
+		}
+	}
+	if at == -1 {
+		return dsn
+	}
+	return "***@" + dsn[at+1:]
 }

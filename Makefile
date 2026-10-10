@@ -67,13 +67,34 @@ test-integration:
 ## postgres_flow_test.go). Nécessite une base PostgreSQL accessible via
 ## TEST_DATABASE_URL (voir NOTES_SANDBOX.md pour comment elle a été
 ## mise en place et vérifiée dans ce sandbox).
+##
+## Purge la base avant CHAQUE phase, systématiquement — pas une
+## suggestion dans la doc à exécuter à la main. Raison structurelle, pas
+## cosmétique, et une seule purge en tête de cible ne suffit pas : les
+## tests *_store_test.go ci-dessous écrivent eux-mêmes des lignes
+## directement (policies, users, sessions...), et ils tournent avant
+## postgres_flow_test.go dans cette même invocation. Or
+## AuthorizationService.BootstrapAdminPolicy ne bootstrape "platform-admin"
+## que sur un magasin de politiques entièrement vide, par conception
+## (voir son commentaire de doc) — une seule ligne de policies laissée
+## par TestPostgresStore_CreateThenForRoles_RoundTrips (ou n'importe quel
+## autre test *_store_test.go écrivant dans `policies`) suffit à faire
+## échouer TestPostgresFlow_PolicySurvivesAuthorizationProcessRestart sur
+## un 403 qui n'a rien à voir avec un vrai bug. D'où la seconde purge
+## juste avant la ligne `test/integration`, pas seulement une au début.
 test-postgres:
 	@if [ -z "$$TEST_DATABASE_URL" ]; then \
 		echo "TEST_DATABASE_URL non défini — voir NOTES_SANDBOX.md"; exit 1; \
 	fi
+	@command -v psql >/dev/null 2>&1 || { echo "psql introuvable — nécessaire pour purger la base avant les tests PostgreSQL (voir NOTES_SANDBOX.md)"; exit 1; }
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
 	$(GO) test ./services/vault/password-vault/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authorization/internal/infrastructure/... -run TestPostgres -v -count=1
-	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=30s
+	$(GO) test ./services/access/authentication/internal/infrastructure/... -run TestPostgres -v -count=1
+	$(GO) test ./services/access/session-broker/internal/infrastructure/... -run TestPostgres -v -count=1
+	$(GO) test ./services/recording-audit/audit-service/internal/infrastructure/... -run TestPostgres -v -count=1
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
+	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=60s
 
 ## Lance chaque service en local (ports par défaut : voir chaque cmd/main.go).
 run-vault:
