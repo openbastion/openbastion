@@ -1,38 +1,48 @@
 package infrastructure
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
-type tokenPayload struct {
-	UserID    string    `json:"sub"`
-	Username  string    `json:"username"`
-	Roles     []string  `json:"roles"`
-	ExpiresAt time.Time `json:"exp"`
+// claims is the JWT payload OpenBastion issues for an authenticated
+// session: the sub/exp/iat registered claims (RFC 7519 §4.1) plus two
+// OpenBastion-specific ones, username and roles. The API Gateway trusts
+// only these two — resolved exclusively via VerifyToken, never anything
+// a client claims about itself in a request body (doc 07 §2's
+// RequestContext.actor_user_id/actor_roles; see
+// application.AuthenticationService.VerifyToken's doc comment).
+type claims struct {
+	Username string   `json:"username"`
+	Roles    []string `json:"roles"`
+	jwt.RegisteredClaims
 }
 
-// TokenIssuer issues and verifies HMAC-SHA256 signed tokens.
+// TokenIssuer issues and verifies HS256-signed JSON Web Tokens (RFC 7519).
 //
-// SANDBOX NOTE: this stands in for JWT/OIDC-issued tokens (ADR-0007:
-// Keycloak as platform IdP) — it is deliberately NOT a JWT. No external
-// JWT library was pulled in; this project has consistently favored the
-// standard library for security-sensitive code when it suffices (AES-GCM
-// in password-vault, SHA-256 hash chaining in audit-service). The encoded
-// shape (base64 payload + "." + base64 HMAC signature) is close enough to
-// a JWT's structure that swapping in a real one later — once
-// google.golang.org's vanity domain is reachable, see /NOTES_SANDBOX.md —
-// is a change contained entirely to this file; application.TokenIssuer's
-// signature does not mention encoding at all.
+// This replaces an earlier hand-rolled HMAC token format (base64 payload
+// + "." + base64 HMAC signature) that predated
+// github.com/golang-jwt/jwt — hosted directly on GitHub, so reachable
+// under this sandbox's GOPROXY=direct — being pulled in; see
+// NOTES_SANDBOX.md. The swap changed only this file:
+// application.TokenIssuer's port never mentions encoding, by design,
+// precisely so this would be possible. ADR-0007 anticipates
+// Keycloak/OIDC-issued tokens for a full deployment; this is the
+// local-auth half of that same token shape — a real JWT, not a
+// permanent substitute for ADR-0007.
+//
+// The signing method is pinned to HS256 in two independent places —
+// WithValidMethods below, and a check inside the keyfunc itself —
+// against the well-known "alg confusion" family of attacks, where a
+// token presents "alg": "none" or an asymmetric algorithm the attacker
+// can forge a signature for using a key this service only ever intended
+// as an HMAC secret (RFC 8725 §3.1, §3.2). Defense in depth: either
+// check alone would already reject such a token.
 type TokenIssuer struct {
 	key []byte
 }
@@ -73,14 +83,32 @@ func SigningKeyFromHex(hexKey string) ([]byte, error) {
 	return raw, nil
 }
 
+// Issue mints a JWT whose exp claim carries only whole-second precision
+// (RFC 7519 §2's NumericDate, and essentially the only precision every
+// other JWT implementation in the ecosystem assumes — which will matter
+// the moment OpenBastion needs to interoperate with Keycloak/OIDC per
+// ADR-0007). expiresAt is truncated to the second here, by
+// jwt.NewNumericDate, before signing — the caller's value is never
+// silently truncated somewhere downstream and quietly stops matching
+// what was asked for. Same discipline as the audit hash-chain's
+// microsecond-precision fix (NOTES_SANDBOX.md): truncate once, at the
+// point the lossy wire format is chosen, not after. Here that boundary
+// is the JWT encoding itself rather than a datastore underneath it, so
+// it has to be handled one step earlier, in this function rather than
+// in the caller.
 func (t *TokenIssuer) Issue(userID, username string, roles []string, expiresAt time.Time) (string, error) {
-	payload, err := json.Marshal(tokenPayload{UserID: userID, Username: username, Roles: roles, ExpiresAt: expiresAt})
-	if err != nil {
-		return "", err
+	now := time.Now().UTC()
+	c := claims{
+		Username: username,
+		Roles:    roles,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+		},
 	}
-	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
-	sig := t.sign(payloadB64)
-	return payloadB64 + "." + base64.RawURLEncoding.EncodeToString(sig), nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
+	return token.SignedString(t.key)
 }
 
 var (
@@ -89,35 +117,34 @@ var (
 	ErrTokenExpired     = errors.New("token expired")
 )
 
-func (t *TokenIssuer) Verify(token string) (userID, username string, roles []string, expiresAt time.Time, err error) {
-	payloadB64, sigB64, ok := strings.Cut(token, ".")
-	if !ok {
-		return "", "", nil, time.Time{}, ErrMalformedToken
-	}
-	sig, err := base64.RawURLEncoding.DecodeString(sigB64)
-	if err != nil {
-		return "", "", nil, time.Time{}, ErrMalformedToken
-	}
-	want := t.sign(payloadB64)
-	if subtle.ConstantTimeCompare(sig, want) != 1 {
-		return "", "", nil, time.Time{}, ErrInvalidSignature
-	}
-	payloadBytes, err := base64.RawURLEncoding.DecodeString(payloadB64)
-	if err != nil {
-		return "", "", nil, time.Time{}, ErrMalformedToken
-	}
-	var payload tokenPayload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return "", "", nil, time.Time{}, ErrMalformedToken
-	}
-	if time.Now().UTC().After(payload.ExpiresAt) {
-		return "", "", nil, time.Time{}, ErrTokenExpired
-	}
-	return payload.UserID, payload.Username, payload.Roles, payload.ExpiresAt, nil
-}
+// Verify parses and validates token, translating the jwt library's error
+// taxonomy — which distinguishes several failure modes RFC 7519/8725
+// name separately — down to the three outcomes callers have always had
+// to handle. AuthenticationService.VerifyToken, and everything built on
+// it (the API Gateway's bearer-token middleware, ultimately), needed no
+// change for this swap: the mapping happens entirely here.
+//
+// WithExpirationRequired rejects a token that omits exp outright, rather
+// than treating a missing expiry as "never expires" — this service
+// never issues such a token, so one arriving here can only be forged or
+// mis-issued, and either way must not be trusted indefinitely.
+func (t *TokenIssuer) Verify(tokenString string) (userID, username string, roles []string, expiresAt time.Time, err error) {
+	var c claims
+	_, parseErr := jwt.ParseWithClaims(tokenString, &c, func(tok *jwt.Token) (interface{}, error) {
+		if _, ok := tok.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method %q, want HS256", tok.Header["alg"])
+		}
+		return t.key, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}), jwt.WithExpirationRequired())
 
-func (t *TokenIssuer) sign(payloadB64 string) []byte {
-	mac := hmac.New(sha256.New, t.key)
-	mac.Write([]byte(payloadB64))
-	return mac.Sum(nil)
+	switch {
+	case parseErr == nil:
+		return c.Subject, c.Username, c.Roles, c.ExpiresAt.Time, nil
+	case errors.Is(parseErr, jwt.ErrTokenExpired):
+		return "", "", nil, time.Time{}, ErrTokenExpired
+	case errors.Is(parseErr, jwt.ErrTokenSignatureInvalid), errors.Is(parseErr, jwt.ErrTokenUnverifiable):
+		return "", "", nil, time.Time{}, ErrInvalidSignature
+	default:
+		return "", "", nil, time.Time{}, ErrMalformedToken
+	}
 }

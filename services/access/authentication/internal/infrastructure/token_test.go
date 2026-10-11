@@ -2,10 +2,15 @@ package infrastructure_test
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/infrastructure"
 )
 
@@ -34,8 +39,98 @@ func TestTokenIssuer_IssueThenVerifyRoundTrips(t *testing.T) {
 	if userID != "user_1" || username != "jdupont" || len(roles) != 1 || roles[0] != "dba" {
 		t.Fatalf("unexpected claims: userID=%q username=%q roles=%v", userID, username, roles)
 	}
-	if !exp.Equal(expiresAt) {
-		t.Fatalf("expiresAt = %v, want %v", exp, expiresAt)
+	// A JWT's exp claim (RFC 7519 §2's NumericDate) only ever carries
+	// whole-second precision — see Issue's doc comment. Comparing
+	// against expiresAt truncated the same way is the correct
+	// expectation here, not a loosened assertion: a real caller only
+	// ever gets second precision back out, by the wire format's own
+	// design, the same way a value read back from a PostgreSQL
+	// TIMESTAMPTZ column only ever has microsecond precision
+	// (NOTES_SANDBOX.md).
+	if !exp.Equal(expiresAt.Truncate(time.Second)) {
+		t.Fatalf("expiresAt = %v, want %v", exp, expiresAt.Truncate(time.Second))
+	}
+}
+
+// TestTokenIssuer_IssuedTokenIsAStandardThreePartJWT pins the actual
+// point of this increment: that Issue now produces a real RFC 7519
+// token (header.payload.signature, each base64url), not merely
+// something shaped like one. A regression back to the old hand-rolled
+// two-part format would pass every other test in this file (they only
+// ever go through Issue/Verify as a pair) without this one.
+func TestTokenIssuer_IssuedTokenIsAStandardThreePartJWT(t *testing.T) {
+	issuer := newTestIssuer(t)
+	token, err := issuer.Issue("user_1", "jdupont", []string{"dba"}, time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("expected a standard 3-part JWT (header.payload.signature), got %d part(s): %q", len(parts), token)
+	}
+	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		t.Fatalf("decode header segment: %v", err)
+	}
+	var header map[string]string
+	if err := json.Unmarshal(headerJSON, &header); err != nil {
+		t.Fatalf("unmarshal header: %v", err)
+	}
+	if header["alg"] != "HS256" {
+		t.Fatalf(`header["alg"] = %q, want "HS256"`, header["alg"])
+	}
+	if header["typ"] != "JWT" {
+		t.Fatalf(`header["typ"] = %q, want "JWT"`, header["typ"])
+	}
+}
+
+// TestTokenIssuer_VerifyRejectsAlgNoneToken is the classic JWT "alg
+// confusion" attack (RFC 8725 §3.1): a token that declares "alg":"none"
+// and carries no signature at all, forging arbitrary claims — here,
+// platform-admin — with nothing to verify. WithValidMethods in Verify
+// must reject this before the forged claims are ever trusted.
+func TestTokenIssuer_VerifyRejectsAlgNoneToken(t *testing.T) {
+	issuer := newTestIssuer(t)
+
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	claims := fmt.Sprintf(`{"sub":"user_1","username":"jdupont","roles":["platform-admin"],"exp":%d}`,
+		time.Now().UTC().Add(time.Hour).Unix())
+	payload := base64.RawURLEncoding.EncodeToString([]byte(claims))
+	forged := header + "." + payload + "." // alg:none tokens carry an empty signature segment
+
+	if _, _, roles, _, err := issuer.Verify(forged); err == nil {
+		t.Fatalf("expected an alg:none token to be rejected, got roles=%v", roles)
+	}
+}
+
+// TestTokenIssuer_VerifyRejectsTokenSignedWithDifferentAlgorithm covers
+// the other half of alg confusion: a token signed with the *correct*
+// key but a *different* HMAC variant than this issuer ever uses. Even
+// though HS384 is just as legitimate a MAC as HS256, and even though
+// the key is the one this issuer trusts, Verify must still reject it —
+// this issuer only ever signs and accepts HS256 (TokenIssuer's doc
+// comment).
+func TestTokenIssuer_VerifyRejectsTokenSignedWithDifferentAlgorithm(t *testing.T) {
+	key, err := infrastructure.GenerateSigningKey()
+	if err != nil {
+		t.Fatalf("GenerateSigningKey: %v", err)
+	}
+	issuer := infrastructure.NewTokenIssuer(key)
+
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS384, jwt.MapClaims{
+		"sub":      "user_1",
+		"username": "jdupont",
+		"roles":    []string{"dba"},
+		"exp":      time.Now().UTC().Add(time.Hour).Unix(),
+	})
+	signed, err := tok.SignedString(key)
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+
+	if _, _, _, _, err := issuer.Verify(signed); err == nil {
+		t.Fatal("expected a token signed with HS384 to be rejected, even with the correct key")
 	}
 }
 
