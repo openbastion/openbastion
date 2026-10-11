@@ -16,9 +16,11 @@ const (
 // PrivilegedAccount mirrors the privileged_accounts table
 // (OpenBastion_06_Modele_Donnees.md §3). Username was not part of the
 // original table — a gap discovered while wiring the Session Broker to a
-// real SSH proxy (an SSH connection needs a username, doc 06 has no field
-// for it) and added here directly rather than worked around again; see
-// NOTES_SANDBOX.md for the history.
+// real SSH proxy (an SSH connection needs a username, doc 06 had no field
+// for it) and added here directly rather than worked around again. Doc 06
+// and proto/proxy/v1/proxy_control.proto's EstablishSessionRequest have
+// since been updated to formally carry it too — see NOTES_SANDBOX.md for
+// the full history.
 type PrivilegedAccount struct {
 	ID             string
 	Name           string

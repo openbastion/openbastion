@@ -52,6 +52,7 @@ erDiagram
     PRIVILEGED_ACCOUNTS {
         uuid id PK
         text name
+        text username
         text target_host
         text protocol
         text rotation_policy
@@ -136,6 +137,7 @@ CREATE TABLE policies (
 CREATE TABLE privileged_accounts (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name             TEXT NOT NULL,
+    username         TEXT NOT NULL,   -- nom du compte sur la cible ; distinct de `name`, qui identifie l'enregistrement
     target_host      TEXT NOT NULL,
     protocol         TEXT NOT NULL CHECK (protocol IN ('ssh')),   -- énumération étendue en v1.0/v2.0
     rotation_policy  TEXT NOT NULL DEFAULT 'post_use'

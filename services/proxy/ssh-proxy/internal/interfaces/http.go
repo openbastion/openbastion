@@ -40,10 +40,11 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 type establishSessionRequest struct {
 	SessionID  string `json:"session_id"`
 	TargetHost string `json:"target_host"`
-	// TargetUser is not part of doc 07's EstablishSessionRequest — a gap
-	// discovered while wiring this codec, see sshcodec.Codec's doc
-	// comment. Threaded through explicitly until the data model/proto
-	// carry it properly.
+	// TargetUser mirrors proto/proxy/v1/proxy_control.proto's
+	// EstablishSessionRequest.target_user (doc 07 §4) and
+	// privileged_accounts.username (doc 06 §3) — formalized in both
+	// after having been threaded through this codec first; see
+	// NOTES_SANDBOX.md for the history.
 	TargetUser      string `json:"target_user"`
 	VaultScopeToken string `json:"vault_scope_token"`
 	TTLSeconds      int    `json:"ttl_seconds"`

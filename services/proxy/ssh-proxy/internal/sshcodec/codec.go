@@ -33,12 +33,12 @@ import (
 // connection ticket has resolved which target/account it belongs to.
 type Codec struct {
 	// TargetUser is the account username to authenticate as on the
-	// target. OpenBastion_06_Modele_Donnees.md's privileged_accounts
-	// table does not currently carry a distinct username field (only
-	// name/target_host) — this is a real gap discovered while wiring
-	// this codec, not yet reconciled in the data model. For now the
-	// connection handler threads it through explicitly (see
-	// EstablishSessionRequest in ../interfaces/http.go).
+	// target — privileged_accounts.username (OpenBastion_06_Modele_Donnees.md
+	// §3) and proto/proxy/v1/proxy_control.proto's
+	// EstablishSessionRequest.target_user, both added after this codec
+	// first needed the value and had nowhere formal to carry it; see
+	// NOTES_SANDBOX.md. The connection handler threads it through from
+	// EstablishSessionRequest in ../interfaces/http.go.
 	TargetUser string
 
 	// Recorder receives everything the client types, for command capture

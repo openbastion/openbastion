@@ -126,6 +126,7 @@ message EstablishSessionRequest {
   string target_host = 3;
   string vault_scope_token = 4;    // jeton d'autorisation émis par le Broker — pas un secret
   google.protobuf.Timestamp expires_at = 5;
+  string target_user = 6;          // nom du compte sur la cible — voir doc 06 §3, privileged_accounts.username
 }
 
 message EstablishSessionResponse {
@@ -318,7 +319,7 @@ sequenceDiagram
     AUTHZ-->>BRK: allowed=true, requires_approval=false
     BRK->>VAULT: AuthorizeScope(session_id, account_id, proxy_service_id)
     VAULT-->>BRK: scope_token
-    BRK->>PXY: EstablishSession(session_id, target_host, scope_token)
+    BRK->>PXY: EstablishSession(session_id, target_host, target_user, scope_token)
     PXY->>CRED: FetchCredential(scope_token, calling_proxy_id)
     CRED-->>PXY: credential_material
     PXY->>TGT: Connexion SSH native
