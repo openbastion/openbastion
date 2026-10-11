@@ -466,12 +466,13 @@ components:
 
     PrivilegedAccountInput:
       type: object
-      required: [name, targetHost, protocol]
+      required: [name, username, targetHost, protocol]
       properties:
         name: { type: string }
+        username: { type: string, description: "Compte sur la cible — distinct de name, qui identifie l'enregistrement (doc 06 §3)." }
         targetHost: { type: string }
         protocol: { type: string, enum: [ssh] }
-        rotationPolicy: { type: string, enum: [manual, post_use], default: post_use }
+        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use }
 
     PrivilegedAccount:
       allOf:

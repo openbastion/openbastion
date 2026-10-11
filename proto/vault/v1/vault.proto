@@ -18,6 +18,22 @@ service VaultCredentialIssuance {
   rpc FetchCredential(FetchCredentialRequest) returns (FetchCredentialResponse);
 }
 
+// Administration du cycle de vie d'un compte privilégié — appelé par
+// l'Administration UI/API Gateway, jamais au fil d'une session (ce qui
+// distingue ce service des deux ci-dessus). Contrairement à eux,
+// PrivilegedAccount porte délibérément des métadonnées (username compris)
+// — ADR-0003 ne l'interdit pas ici : seul un secret en est protégé, et
+// aucun des trois RPC n'en renvoie un. Miroir de la surface REST
+// documentée dans OpenBastion_05_OpenAPI.md §2 (/vault/accounts,
+// .../{id}, .../{id}/rotate) et du modèle de données de doc 06 §3 —
+// formalisé ici après avoir existé un moment comme API REST sans contrat
+// gRPC propre ; voir NOTES_SANDBOX.md.
+service VaultAccountAdmin {
+  rpc OnboardAccount(OnboardAccountRequest) returns (PrivilegedAccount);
+  rpc GetAccount(GetAccountRequest) returns (PrivilegedAccount);
+  rpc RotateSecret(RotateSecretRequest) returns (RotateSecretResponse);
+}
+
 message AuthorizeScopeRequest {
   openbastion.common.v1.RequestContext context = 1;
   string session_id = 2;
@@ -40,4 +56,44 @@ message FetchCredentialResponse {
   bytes credential_material = 1;   // en mémoire uniquement côté appelant ; jamais journalisé
   string credential_type = 2;      // ex. "ssh_private_key", "password"
   google.protobuf.Timestamp valid_until = 3;
+}
+
+message OnboardAccountRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string id = 2;
+  string name = 3;
+  string username = 4;
+  string target_host = 5;
+  string protocol = 6;             // ex. "ssh" — énumération étendue en v1.0/v2.0 (doc 06 §3)
+  string rotation_policy = 7;      // "manual" | "post_use" | "scheduled"
+  bytes initial_secret = 8;        // vide = généré automatiquement (même règle que RotateSecretRequest.new_secret)
+}
+
+message GetAccountRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string id = 2;
+}
+
+// PrivilegedAccount ne porte jamais de secret, même chiffré — c'est la
+// même séparation qu'ADR-0003 impose ailleurs, ici entre métadonnées de
+// compte et matériel de credential plutôt qu'entre scope et secret.
+message PrivilegedAccount {
+  string id = 1;
+  string name = 2;
+  string username = 3;
+  string target_host = 4;
+  string protocol = 5;
+  string rotation_policy = 6;
+  google.protobuf.Timestamp last_rotated_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message RotateSecretRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string account_id = 2;
+  bytes new_secret = 3;            // vide = généré automatiquement
+}
+
+message RotateSecretResponse {
+  google.protobuf.Timestamp rotated_at = 1;
 }
