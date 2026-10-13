@@ -482,6 +482,7 @@ components:
             id: { type: string, format: uuid }
             lastRotatedAt: { type: string, format: date-time }
             createdAt: { type: string, format: date-time }
+            disabledAt: { type: string, format: date-time, description: "Absent tant que le compte est actif. Posé par DELETE /vault/accounts/{id} (suppression logique — doc 06 §3) ; un compte avec ce champ renseigné n'apparaît plus dans GET /vault/accounts et GET /vault/accounts/{id} répond 404." }
 
     PolicyInput:
       type: object

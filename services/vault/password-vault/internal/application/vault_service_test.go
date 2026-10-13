@@ -306,6 +306,123 @@ func TestOnboardAccount_SessionCreationRightsAloneDoNotGrantAdminAccess(t *testi
 	}
 }
 
+func TestListAccounts_ExcludesDisabledAccounts(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target1", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s1"))
+	_ = svc.OnboardAccount(ctx, adminRoles, "acc2", "target2", "root", "10.0.0.2:22", "ssh", domain.RotationManual, []byte("s2"))
+	if err := svc.DisableAccount(ctx, adminRoles, "acc2"); err != nil {
+		t.Fatalf("DisableAccount: %v", err)
+	}
+
+	accounts, totalItems, err := svc.ListAccounts(ctx, adminRoles, 1, 20)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if totalItems != 1 {
+		t.Fatalf("expected totalItems=1 after disabling one of two accounts, got %d", totalItems)
+	}
+	if len(accounts) != 1 || accounts[0].ID != "acc1" {
+		t.Fatalf("expected only acc1 to remain listed, got %+v", accounts)
+	}
+}
+
+func TestListAccounts_ClampsPageAndPageSize(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		id := string(rune('a' + i))
+		_ = svc.OnboardAccount(ctx, adminRoles, id, "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s"))
+	}
+	// page=0 and a pageSize far beyond the documented maximum (doc 05 §2:
+	// pageSize max 100) must not panic or bypass pagination — both are
+	// clamped by ListAccounts itself, not left to the caller.
+	accounts, totalItems, err := svc.ListAccounts(ctx, adminRoles, 0, 10000)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if totalItems != 3 {
+		t.Fatalf("expected totalItems=3, got %d", totalItems)
+	}
+	if len(accounts) != 3 {
+		t.Fatalf("expected a clamped page=0 to behave as page=1 and return all 3 accounts, got %d", len(accounts))
+	}
+}
+
+func TestListAccounts_DeniedWithoutAuthorization(t *testing.T) {
+	kms, _ := infrastructure.NewLocalKMS()
+	store := infrastructure.NewInMemoryStore()
+	authz := &fakeAuthz{allowed: false, reason: "no policy matches"}
+	svc := application.NewVaultService(store, store, store, kms, authz)
+	if _, _, err := svc.ListAccounts(context.Background(), []string{"nobody"}, 1, 20); err == nil {
+		t.Fatal("expected ListAccounts to be denied without a matching authorization policy")
+	}
+	if authz.lastResource != "vault:account-admin:*" {
+		t.Fatalf("expected the wildcard admin resource to be checked for a list, got %q", authz.lastResource)
+	}
+}
+
+func TestDisableAccount_GetAccountThenReturns404(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
+		t.Fatalf("DisableAccount: %v", err)
+	}
+	if _, err := svc.GetAccount(ctx, "acc1"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected GetAccount to report a disabled account as not found, got %v", err)
+	}
+}
+
+func TestDisableAccount_FailsForUnknownAccount(t *testing.T) {
+	svc := newTestService(t)
+	if err := svc.DisableAccount(context.Background(), adminRoles, "does-not-exist"); err == nil {
+		t.Fatal("expected DisableAccount to fail for an unknown account id")
+	}
+}
+
+func TestDisableAccount_DeniedWithoutAuthorization(t *testing.T) {
+	kms, _ := infrastructure.NewLocalKMS()
+	store := infrastructure.NewInMemoryStore()
+	permissive := &fakeAuthz{allowed: true}
+	svc := application.NewVaultService(store, store, store, kms, permissive)
+	ctx := context.Background()
+	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err != nil {
+		t.Fatalf("onboarding setup: %v", err)
+	}
+	restrictive := &fakeAuthz{allowed: false, reason: "role lost admin rights"}
+	svc2 := application.NewVaultService(store, store, store, kms, restrictive)
+	if err := svc2.DisableAccount(ctx, []string{"someone-without-rights"}, "acc1"); err == nil {
+		t.Fatal("expected DisableAccount to be denied without a matching authorization policy")
+	}
+	if restrictive.lastAction != "vault:account:delete" {
+		t.Fatalf("expected the delete action to be checked, got %q", restrictive.lastAction)
+	}
+	// Confirm the denial actually left the account enabled (no delete leaked
+	// through before the check, nor after a short-circuit).
+	if account, err := store.Get(ctx, "acc1"); err != nil || account.DisabledAt != nil {
+		t.Fatalf("expected acc1 to remain enabled after a denied DisableAccount, got account=%+v err=%v", account, err)
+	}
+}
+
+func TestDisableAccount_BlocksAuthorizeScope(t *testing.T) {
+	// This is the actual security property DisableAccount exists to
+	// provide: once disabled, a session that reaches this far (say, one
+	// whose request landed in a race with the disable) must not be able
+	// to mint a usable credential scope either. AuthorizeScope checks
+	// DisabledAt itself, independent of GetAccount's own check, as
+	// defense in depth — see its doc comment.
+	svc := newTestService(t)
+	ctx := context.Background()
+	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
+		t.Fatalf("DisableAccount: %v", err)
+	}
+	if _, _, err := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected AuthorizeScope to reject a disabled account as not found, got %v", err)
+	}
+}
+
 type sessionOnlyAuthz struct{}
 
 func (sessionOnlyAuthz) CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (bool, string, error) {

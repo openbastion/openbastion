@@ -71,6 +71,62 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	return &a, nil
 }
 
+// List mirrors InMemoryStore.List: excludes disabled accounts, orders by
+// id (doc 05 §2 names no sort order), paginates with LIMIT/OFFSET. page
+// and pageSize are already validated/capped by the caller
+// (application.VaultService.ListAccounts).
+func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain.PrivilegedAccount, int, error) {
+	var totalItems int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM privileged_accounts WHERE disabled_at IS NULL`,
+	).Scan(&totalItems); err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at
+		FROM privileged_accounts WHERE disabled_at IS NULL
+		ORDER BY id
+		LIMIT $1 OFFSET $2`, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	accounts := []*domain.PrivilegedAccount{}
+	for rows.Next() {
+		var a domain.PrivilegedAccount
+		var rotationPolicy string
+		var lastRotatedAt, disabledAt sql.NullTime
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt); err != nil {
+			return nil, 0, err
+		}
+		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
+		if lastRotatedAt.Valid {
+			a.LastRotatedAt = &lastRotatedAt.Time
+		}
+		if disabledAt.Valid {
+			a.DisabledAt = &disabledAt.Time
+		}
+		accounts = append(accounts, &a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return accounts, totalItems, nil
+}
+
+// Disable soft-deletes by setting disabled_at — see
+// domain.AccountRepository.Disable's doc comment for why. Idempotent:
+// re-disabling an already-disabled account just re-stamps the timestamp.
+// Existence is checked by the caller (application.VaultService), not here.
+func (s *PostgresStore) Disable(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE privileged_accounts SET disabled_at = now() WHERE id = $1`, id)
+	return err
+}
+
 func (s *PostgresStore) CurrentVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {
 	var v domain.SecretVersion
 	var supersededAt sql.NullTime

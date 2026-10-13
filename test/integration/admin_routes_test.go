@@ -64,6 +64,57 @@ func gatewayRotateAccount(t *testing.T, baseURL, token, id string) int {
 	return resp.StatusCode
 }
 
+func gatewayListAccounts(t *testing.T, baseURL, token string) (items []map[string]any, status int) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodGet, baseURL+"/vault/accounts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("gateway list-accounts: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode
+	}
+	var out struct {
+		Items []map[string]any `json:"items"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return out.Items, resp.StatusCode
+}
+
+func gatewayDeleteAccount(t *testing.T, baseURL, token, id string) int {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/vault/accounts/"+id, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("gateway delete-account: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+// vaultAuthorizeScopeStatus calls Password Vault's AuthorizeScope directly
+// (bypassing the Gateway/Session Broker, exactly like fetchCredentialDirectly
+// above) and returns the raw status instead of failing the test — used to
+// prove a disabled account's scope request is rejected, not to drive a
+// successful flow (ssh_flow_test.go's authorizeScope covers that case and
+// fatals on anything but 200, which would be the wrong assertion here).
+func vaultAuthorizeScopeStatus(t *testing.T, baseURL, sessionID, accountID, proxyServiceID string) int {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{
+		"session_id": sessionID, "privileged_account_id": accountID,
+		"proxy_service_id": proxyServiceID, "ttl_seconds": 60,
+	})
+	resp, err := http.Post(baseURL+"/vault/v1/authorize-scope", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("authorize-scope: %v", err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
 func gatewayCreatePolicy(t *testing.T, baseURL, token, name, role, resourcePattern, effect, claimedCreatedBy string) int {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{
@@ -219,6 +270,66 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		_ = json.NewDecoder(resp.Body).Decode(&decision)
 		if !decision.Allowed {
 			t.Fatal("expected the policy created through the Gateway to actually grant access")
+		}
+	})
+
+	t.Run("list through the Gateway includes the onboarded account", func(t *testing.T) {
+		items, status := gatewayListAccounts(t, gateway.baseURL, token)
+		if status != http.StatusOK {
+			t.Fatalf("expected 200, got %d", status)
+		}
+		found := false
+		for _, item := range items {
+			if item["id"] == accountID {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected %q among the listed accounts, got %+v", accountID, items)
+		}
+	})
+
+	// Closes the gap doc 05 §2 documented since this project's inception —
+	// GET /vault/accounts and DELETE /vault/accounts/{id} — never
+	// implemented until this increment. Soft-delete (DisabledAt), not a
+	// hard row delete: see domain.AccountRepository.Disable's doc comment
+	// for why (vault_secrets' audit history would be lost to a CASCADE).
+	t.Run("disable through the Gateway removes the account from list and get", func(t *testing.T) {
+		if status := gatewayDeleteAccount(t, gateway.baseURL, token, accountID); status != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d", status)
+		}
+
+		if _, status := gatewayGetAccount(t, gateway.baseURL, token, accountID); status != http.StatusNotFound {
+			t.Fatalf("expected GET to return 404 for a disabled account, got %d", status)
+		}
+
+		items, status := gatewayListAccounts(t, gateway.baseURL, token)
+		if status != http.StatusOK {
+			t.Fatalf("expected 200, got %d", status)
+		}
+		for _, item := range items {
+			if item["id"] == accountID {
+				t.Fatalf("expected the disabled account to be excluded from the list, got %+v", items)
+			}
+		}
+	})
+
+	t.Run("a disabled account can no longer authorize a new credential scope", func(t *testing.T) {
+		// Proves AuthorizeScope's own defense-in-depth check (not just
+		// GetAccount's 404, which Session Broker's lookup already relies
+		// on) — a request that reached this far anyway, bypassing the
+		// Gateway/Session Broker entirely, must still be rejected.
+		if status := vaultAuthorizeScopeStatus(t, vault.baseURL, "admin-routes-it-post-disable", accountID, "ssh-proxy"); status == http.StatusOK {
+			t.Fatal("expected AuthorizeScope to reject a disabled account, got 200")
+		}
+	})
+
+	t.Run("re-disabling an already-disabled account is reported not found", func(t *testing.T) {
+		// DisableAccount's not-found check runs through GetAccount, which
+		// now excludes disabled accounts — matching Rotate's existing
+		// not-found semantics for an unknown id (application.VaultService).
+		if status := gatewayDeleteAccount(t, gateway.baseURL, token, accountID); status != http.StatusNotFound {
+			t.Fatalf("expected 404 when disabling an already-disabled account, got %d", status)
 		}
 	})
 }

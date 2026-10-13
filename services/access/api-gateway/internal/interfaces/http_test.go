@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -72,12 +73,16 @@ func newCapturingSessionBroker(t *testing.T) *capturingSessionBroker {
 }
 
 // capturingVault records what the Gateway forwards to Password Vault's
-// internal endpoints, and what path GET requests hit.
+// internal endpoints, and what path/query GET, DELETE, and list requests
+// carry.
 type capturingVault struct {
-	srv           *httptest.Server
-	lastOnboard   map[string]any
-	lastRotate    map[string]any
-	lastGetPath   string
+	srv             *httptest.Server
+	lastOnboard     map[string]any
+	lastRotate      map[string]any
+	lastGetPath     string
+	lastListQuery   url.Values
+	lastDeletePath  string
+	lastDeleteQuery url.Values
 }
 
 func newCapturingVault(t *testing.T) *capturingVault {
@@ -96,7 +101,21 @@ func newCapturingVault(t *testing.T) *capturingVault {
 		c.lastRotate = body
 		w.WriteHeader(http.StatusAccepted)
 	})
+	mux.HandleFunc("/vault/v1/accounts", func(w http.ResponseWriter, r *http.Request) {
+		c.lastListQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"items": []map[string]any{{"id": "acc1", "name": "fake-account", "username": "root", "targetHost": "10.0.0.9:22"}},
+			"page":  1, "pageSize": 20, "totalItems": 1,
+		})
+	})
 	mux.HandleFunc("/vault/v1/accounts/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			c.lastDeletePath = r.URL.Path
+			c.lastDeleteQuery = r.URL.Query()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		c.lastGetPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": "acc1", "name": "fake-account", "username": "root", "targetHost": "10.0.0.9:22"})
@@ -384,6 +403,68 @@ func TestHandleVaultAccountItem_RotateTranslatesPathToBodyWithNoSecret(t *testin
 	roles, _ := vault.lastRotate["actorRoles"].([]any)
 	if len(roles) != 1 || roles[0] != "admin" {
 		t.Fatalf("expected the verified caller roles to be included so Vault can RBAC-gate the rotation, got %v", roles)
+	}
+}
+
+func TestHandleVaultAccountsCollection_GetListForwardsPageParamsAndInjectsActorRoles(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"vault-admin"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/vault/accounts?page=2&pageSize=10", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if vault.lastListQuery == nil {
+		t.Fatal("Vault never received the list request")
+	}
+	if vault.lastListQuery.Get("page") != "2" || vault.lastListQuery.Get("pageSize") != "10" {
+		t.Fatalf("expected page/pageSize to pass through unchanged, got %v", vault.lastListQuery)
+	}
+	if vault.lastListQuery.Get("actorRoles") != "vault-admin" {
+		t.Fatalf("expected the verified caller roles injected as actorRoles, got %q", vault.lastListQuery.Get("actorRoles"))
+	}
+	var out struct {
+		TotalItems int `json:"totalItems"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.TotalItems != 1 {
+		t.Fatalf("expected the paged response to be relayed, got %+v", out)
+	}
+}
+
+func TestHandleVaultAccountItem_DeleteForwardsToVaultWithActorRolesInQuery(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"vault-admin"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+
+	req := httptest.NewRequest(http.MethodDelete, "/vault/accounts/acc1", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if vault.lastDeletePath != "/vault/v1/accounts/acc1" {
+		t.Fatalf("expected Vault to receive DELETE /vault/v1/accounts/acc1, got %q", vault.lastDeletePath)
+	}
+	if vault.lastDeleteQuery.Get("actorRoles") != "vault-admin" {
+		t.Fatalf("expected the verified caller roles injected as actorRoles, got %q", vault.lastDeleteQuery.Get("actorRoles"))
 	}
 }
 

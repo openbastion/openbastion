@@ -75,8 +75,72 @@ func (s *VaultService) OnboardAccount(ctx context.Context, actorRoles []string, 
 	return s.storeVersion(ctx, id, initialSecret, 1)
 }
 
+// GetAccount returns domain.ErrNotFound for a disabled account exactly as
+// it would for an unknown one — a disabled account no longer exists from
+// any caller's point of view, admin UI and Session Broker's account
+// lookup (AccountLookupHTTPClient.GetAccount, same endpoint) alike. This
+// is what makes DisableAccount actually block new session creation
+// without touching Session Broker's own code: AuthorizeScope below
+// performs the identical check as defense in depth, since it must not
+// depend on this method's behavior to stay correct.
 func (s *VaultService) GetAccount(ctx context.Context, id string) (*domain.PrivilegedAccount, error) {
-	return s.accounts.Get(ctx, id)
+	account, err := s.accounts.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if account.DisabledAt != nil {
+		return nil, domain.ErrNotFound
+	}
+	return account, nil
+}
+
+// minPage, minPageSize, maxPageSize, and defaultPageSize mirror doc 05
+// §2's Page/PageSize parameter definitions (page: min 1, default 1;
+// pageSize: min 1, max 100, default 20) — enforced here, not at the HTTP
+// layer, so every caller of ListAccounts (today: password-vault's own
+// HTTP handler) gets the same clamping regardless of what it received.
+const (
+	minPage         = 1
+	minPageSize     = 1
+	maxPageSize     = 100
+	defaultPageSize = 20
+)
+
+// ListAccounts requires the same "vault:account-admin:*" access as
+// onboarding/rotation (resource "*" — a list is not scoped to one
+// account) — unlike GetAccount, which has never been RBAC-gated (an
+// existing, unexamined gap this increment does not expand: see
+// NOTES_SANDBOX.md). Disabled accounts are excluded by
+// domain.AccountRepository.List itself, not filtered here.
+func (s *VaultService) ListAccounts(ctx context.Context, actorRoles []string, page, pageSize int) (accounts []*domain.PrivilegedAccount, totalItems int, err error) {
+	if err := s.requireAdminAccess(ctx, actorRoles, "*", "vault:account:list"); err != nil {
+		return nil, 0, err
+	}
+	if page < minPage {
+		page = minPage
+	}
+	if pageSize < minPageSize {
+		pageSize = defaultPageSize
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+	return s.accounts.List(ctx, page, pageSize)
+}
+
+// DisableAccount soft-deletes via domain.AccountRepository.Disable — see
+// its doc comment for why not a hard delete. Returns domain.ErrNotFound
+// if the account is unknown or already disabled, matching Rotate's
+// existing not-found semantics (checked via Get, which itself now
+// excludes disabled accounts — see GetAccount above).
+func (s *VaultService) DisableAccount(ctx context.Context, actorRoles []string, id string) error {
+	if err := s.requireAdminAccess(ctx, actorRoles, id, "vault:account:delete"); err != nil {
+		return err
+	}
+	if _, err := s.GetAccount(ctx, id); err != nil {
+		return err
+	}
+	return s.accounts.Disable(ctx, id)
 }
 
 func (s *VaultService) Rotate(ctx context.Context, actorRoles []string, accountID string, newSecret []byte) error {
@@ -129,8 +193,17 @@ func (s *VaultService) storeVersion(ctx context.Context, accountID string, secre
 }
 
 func (s *VaultService) AuthorizeScope(ctx context.Context, sessionID, accountID, proxyServiceID string, ttl time.Duration) (token string, expiresAt time.Time, err error) {
-	if _, err := s.accounts.Get(ctx, accountID); err != nil {
+	// Checks DisabledAt itself (rather than calling GetAccount) so this
+	// stays correct even if GetAccount's own disabled-check were ever
+	// changed or removed — a disabled account must never be able to
+	// issue a usable credential scope, independent of the account-detail
+	// read path.
+	account, err := s.accounts.Get(ctx, accountID)
+	if err != nil {
 		return "", time.Time{}, err
+	}
+	if account.DisabledAt != nil {
+		return "", time.Time{}, domain.ErrNotFound
 	}
 	token = randomID("scope")
 	expiresAt = time.Now().UTC().Add(ttl)

@@ -13,6 +13,8 @@ package interfaces
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
@@ -33,7 +35,8 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/vault/v1/rotate", s.handleRotate)
 	mux.HandleFunc("/vault/v1/authorize-scope", s.handleAuthorizeScope)
 	mux.HandleFunc("/vault/v1/fetch-credential", s.handleFetchCredential)
-	mux.HandleFunc("/vault/v1/accounts/", s.handleGetAccount)
+	mux.HandleFunc("/vault/v1/accounts", s.handleListAccounts) // exact path — distinct ServeMux pattern from the subtree below
+	mux.HandleFunc("/vault/v1/accounts/", s.handleAccountItem) // subtree — GET and DELETE by id
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -149,36 +152,116 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, fetchCredentialResponse{CredentialType: credType, CredentialMaterial: material})
 }
 
-// -- GET /vault/v1/accounts/{id} (mirrors GET /vault/accounts/{id}, doc 05 §2) --
+// -- GET /vault/v1/accounts/{id}, DELETE /vault/v1/accounts/{id} -----------
+// (mirrors GET and DELETE /vault/accounts/{id}, doc 05 §2)
 //
 // Metadata only — target host, username, protocol — never a secret, not
-// even encrypted. This is what the Session Broker calls to resolve where
+// even encrypted. GET is what the Session Broker calls to resolve where
 // and as whom to connect, before ever touching the Vault's scope/credential
-// endpoints.
+// endpoints; it returns 404 for a disabled account exactly as for an
+// unknown one (application.VaultService.GetAccount), which is what makes
+// DELETE below actually block new sessions against the account it disabled.
 
 type accountResponse struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Username   string `json:"username"`
-	TargetHost string `json:"targetHost"`
-	Protocol   string `json:"protocol"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Username   string     `json:"username"`
+	TargetHost string     `json:"targetHost"`
+	Protocol   string     `json:"protocol"`
+	DisabledAt *time.Time `json:"disabledAt,omitempty"`
 }
 
-func (s *HTTPServer) handleGetAccount(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Path[len("/vault/v1/accounts/"):]
 	if id == "" {
 		http.Error(w, "missing account id", http.StatusBadRequest)
 		return
 	}
-	account, err := s.svc.GetAccount(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+
+	switch r.Method {
+	case http.MethodGet:
+		account, err := s.svc.GetAccount(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, accountResponse{
+			ID: account.ID, Name: account.Name, Username: account.Username,
+			TargetHost: account.TargetHost, Protocol: account.Protocol, DisabledAt: account.DisabledAt,
+		})
+
+	case http.MethodDelete:
+		// actorRoles travels in the query string, not a JSON body — a
+		// DELETE conventionally carries none, unlike onboard/rotate's
+		// POST bodies. The Gateway builds this same query parameter
+		// (api-gateway/internal/interfaces/http.go).
+		actorRoles := splitCommaList(r.URL.Query().Get("actorRoles"))
+		if err := s.svc.DisableAccount(r.Context(), actorRoles, id); err != nil {
+			if err == domain.ErrNotFound {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// -- GET /vault/v1/accounts (mirrors GET /vault/accounts, doc 05 §2) -------
+
+type listAccountsResponse struct {
+	Items      []accountResponse `json:"items"`
+	Page       int               `json:"page"`
+	PageSize   int               `json:"pageSize"`
+	TotalItems int               `json:"totalItems"`
+}
+
+func (s *HTTPServer) handleListAccounts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, accountResponse{
-		ID: account.ID, Name: account.Name, Username: account.Username,
-		TargetHost: account.TargetHost, Protocol: account.Protocol,
-	})
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
+	actorRoles := splitCommaList(q.Get("actorRoles"))
+
+	// Clamping (page < 1 → 1, pageSize out of [1,100] → defaulted) happens
+	// in application.VaultService.ListAccounts, not here — see its doc
+	// comment. A missing or unparsable query param becomes 0, which that
+	// clamping also handles correctly (0 < minPage/minPageSize).
+	accounts, totalItems, err := s.svc.ListAccounts(r.Context(), actorRoles, page, pageSize)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	items := make([]accountResponse, 0, len(accounts))
+	for _, a := range accounts {
+		items = append(items, accountResponse{
+			ID: a.ID, Name: a.Name, Username: a.Username,
+			TargetHost: a.TargetHost, Protocol: a.Protocol, DisabledAt: a.DisabledAt,
+		})
+	}
+	writeJSON(w, listAccountsResponse{Items: items, Page: page, PageSize: pageSize, TotalItems: totalItems})
+}
+
+func splitCommaList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

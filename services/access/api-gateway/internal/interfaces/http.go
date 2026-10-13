@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"strings"
 
 	"github.com/openbastion/openbastion/services/access/api-gateway/internal/application"
@@ -221,37 +222,51 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 	g.forwardPassthrough(w, r, r.Method, g.sessionBrokerURL+r.URL.Path)
 }
 
-// -- POST /vault/accounts (mirrors doc 05 §2) ------------------------------
+// -- GET/POST /vault/accounts (mirrors doc 05 §2) --------------------------
 //
-// Passthrough to Password Vault's onboard-account. Note this does not
-// (yet) check the caller's role before allowing account onboarding — see
-// package doc comment.
+// GET lists accounts; POST onboards one. Neither has (yet) been seen
+// enforcing the caller's role at this layer beyond requireAuth — real
+// RBAC is Password Vault's own job (CheckAccess against
+// "vault:account-admin:*"), consistent with the package doc comment: the
+// Gateway's role here is identity injection, not the access decision
+// itself.
 
 func (g *GatewayServer) handleVaultAccountsCollection(w http.ResponseWriter, r *http.Request, id identity) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	body["actorRoles"] = id.Roles
+	switch r.Method {
+	case http.MethodGet:
+		// List — page/pageSize pass through from the client's own query
+		// string unchanged; actorRoles is appended here since a GET
+		// carries no body for the Gateway to inject identity into (the
+		// same reasoning, and the same query-string mechanism, as the
+		// DELETE branch of handleVaultAccountItem below).
+		q := r.URL.Query()
+		q.Set("actorRoles", strings.Join(id.Roles, ","))
+		g.forwardPassthrough(w, r, http.MethodGet, g.vaultURL+"/vault/v1/accounts?"+q.Encode())
 
-	g.forwardJSON(w, r.Context(), http.MethodPost, g.vaultURL+"/vault/v1/onboard-account", body)
+	case http.MethodPost:
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		body["actorRoles"] = id.Roles
+		g.forwardJSON(w, r.Context(), http.MethodPost, g.vaultURL+"/vault/v1/onboard-account", body)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
-// -- GET /vault/accounts/{id}, POST /vault/accounts/{id}/rotate -----------
+// -- GET/DELETE /vault/accounts/{id}, POST /vault/accounts/{id}/rotate ----
 //
 // This is the one route in this increment that translates doc 05's
 // public REST shape into Password Vault's actual internal contract
 // rather than passing the path straight through: doc 05 puts the account
-// id in the URL for both of these; Password Vault's /vault/v1/rotate
-// expects it in the JSON body instead (it predates this routing work).
-// The Gateway bridges that here rather than changing Password Vault's
-// already-tested internal contract to match a REST shape that was never
-// exercised end-to-end until now.
+// id in the URL for rotate; Password Vault's /vault/v1/rotate expects it
+// in the JSON body instead (it predates this routing work). The Gateway
+// bridges that here rather than changing Password Vault's already-tested
+// internal contract to match a REST shape that was never exercised
+// end-to-end until now.
 
 func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Request, id identity) {
 	rest := strings.TrimPrefix(r.URL.Path, "/vault/accounts/")
@@ -271,11 +286,20 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		g.forwardPassthrough(w, r, http.MethodGet, g.vaultURL+"/vault/v1/accounts/"+rest)
+
+	case http.MethodDelete:
+		// Same query-string identity injection as the GET-list branch of
+		// handleVaultAccountsCollection — DELETE carries no body either.
+		q := make(neturl.Values)
+		q.Set("actorRoles", strings.Join(id.Roles, ","))
+		g.forwardPassthrough(w, r, http.MethodDelete, g.vaultURL+"/vault/v1/accounts/"+rest+"?"+q.Encode())
+
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
-	g.forwardPassthrough(w, r, http.MethodGet, g.vaultURL+"/vault/v1/accounts/"+rest)
 }
 
 // -- POST /policies — identity injection on createdBy ----------------------

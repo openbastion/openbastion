@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -44,6 +45,45 @@ func (s *InMemoryStore) Create(ctx context.Context, a *domain.PrivilegedAccount)
 	defer s.mu.Unlock()
 	a.CreatedAt = time.Now().UTC()
 	s.accounts[a.ID] = a
+	return nil
+}
+
+// List, like PostgresStore.List, orders by id — the only order a map can
+// offer deterministically without an extra field, and good enough for
+// the MVP scope this mirrors (doc 05 §2 names no sort order).
+func (s *InMemoryStore) List(ctx context.Context, page, pageSize int) ([]*domain.PrivilegedAccount, int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	active := make([]*domain.PrivilegedAccount, 0, len(s.accounts))
+	for _, a := range s.accounts {
+		if a.DisabledAt == nil {
+			active = append(active, a)
+		}
+	}
+	sort.Slice(active, func(i, j int) bool { return active[i].ID < active[j].ID })
+
+	totalItems := len(active)
+	start := (page - 1) * pageSize
+	if start >= totalItems || start < 0 {
+		return []*domain.PrivilegedAccount{}, totalItems, nil
+	}
+	end := start + pageSize
+	if end > totalItems {
+		end = totalItems
+	}
+	return active[start:end], totalItems, nil
+}
+
+func (s *InMemoryStore) Disable(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	now := time.Now().UTC()
+	a.DisabledAt = &now
 	return nil
 }
 
