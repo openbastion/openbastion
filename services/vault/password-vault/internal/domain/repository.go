@@ -34,6 +34,19 @@ type AccountRepository interface {
 	// an already-disabled (or unknown) account's existence is checked
 	// by the caller, not here; Disable itself is idempotent.
 	Disable(ctx context.Context, id string) error
+
+	// MarkRotated sets LastRotatedAt to now — the same
+	// previously-unpopulated-field shape as Disable/DisabledAt above,
+	// found while wiring lastRotatedAt into the HTTP response
+	// (interfaces/http.go's accountResponse): the column has existed in
+	// the DDL since migrations/001_init.sql and PostgresStore.Get has
+	// always scanned it, but nothing ever wrote to it — Rotate
+	// (application.VaultService) created new secret versions without
+	// ever touching the account row itself. Called by Rotate only after
+	// the new version has been stored successfully, so a failed
+	// rotation never falsely claims to have rotated. Idempotent, like
+	// Disable; existence is checked by the caller.
+	MarkRotated(ctx context.Context, id string) error
 }
 
 type SecretRepository interface {

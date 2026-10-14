@@ -189,6 +189,30 @@ func TestPostgresStore_Disable_IsIdempotentAndReflectedByGet(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_MarkRotated_SetsLastRotatedAt(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("acc")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.LastRotatedAt != nil {
+		t.Fatalf("expected a freshly created account to have no LastRotatedAt, got %+v err=%v", got, err)
+	}
+
+	if err := store.MarkRotated(ctx, id); err != nil {
+		t.Fatalf("MarkRotated: %v", err)
+	}
+	got, err := store.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("Get after MarkRotated: %v", err)
+	}
+	if got.LastRotatedAt == nil {
+		t.Fatal("expected LastRotatedAt to be populated after MarkRotated")
+	}
+}
+
 func TestPostgresStore_ScopeGrant_ConsumeIfValidIsSingleUse(t *testing.T) {
 	db := testDB(t)
 	store := infrastructure.NewPostgresStore(db)

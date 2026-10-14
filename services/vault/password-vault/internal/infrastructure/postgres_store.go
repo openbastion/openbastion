@@ -127,6 +127,15 @@ func (s *PostgresStore) Disable(ctx context.Context, id string) error {
 	return err
 }
 
+// MarkRotated sets last_rotated_at — see domain.AccountRepository.MarkRotated's
+// doc comment for why this method exists (a real, previously-undiscovered
+// gap of the same shape as Disable/disabled_at before it).
+func (s *PostgresStore) MarkRotated(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE privileged_accounts SET last_rotated_at = now() WHERE id = $1`, id)
+	return err
+}
+
 func (s *PostgresStore) CurrentVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {
 	var v domain.SecretVersion
 	var supersededAt sql.NullTime

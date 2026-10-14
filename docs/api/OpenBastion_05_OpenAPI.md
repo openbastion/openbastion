@@ -272,6 +272,17 @@ paths:
     post:
       tags: [vault]
       summary: Déclenche une rotation manuelle immédiate
+      description: >-
+        Aucun corps de requête : un secret de 32 octets aléatoires est
+        toujours généré automatiquement. Choix délibéré, pas une omission —
+        l'API Gateway ne relaie jamais vers Password Vault un secret fourni
+        par le client sur cette route (voir le handler Gateway de cette
+        route), précisément pour qu'un opérateur ne puisse jamais connaître
+        ni choisir la valeur recréée. Le contrat interne de Password Vault
+        (service VaultAccountAdmin, RPC RotateSecret — doc 07 §5) accepte
+        techniquement un secret explicite optionnel, pensé pour un futur
+        appelant interne programmatique (le Scheduler, doc 04), pas pour
+        cette surface publique, qui ne l'expose donc pas ici.
       responses:
         "202":
           description: Rotation acceptée et en cours

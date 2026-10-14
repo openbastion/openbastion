@@ -87,6 +87,18 @@ func (s *InMemoryStore) Disable(ctx context.Context, id string) error {
 	return nil
 }
 
+func (s *InMemoryStore) MarkRotated(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	now := time.Now().UTC()
+	a.LastRotatedAt = &now
+	return nil
+}
+
 func (s *InMemoryStore) CurrentVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

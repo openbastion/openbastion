@@ -163,12 +163,30 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 // DELETE below actually block new sessions against the account it disabled.
 
 type accountResponse struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Username   string     `json:"username"`
-	TargetHost string     `json:"targetHost"`
-	Protocol   string     `json:"protocol"`
-	DisabledAt *time.Time `json:"disabledAt,omitempty"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Username       string     `json:"username"`
+	TargetHost     string     `json:"targetHost"`
+	Protocol       string     `json:"protocol"`
+	RotationPolicy string     `json:"rotationPolicy"`
+	LastRotatedAt  *time.Time `json:"lastRotatedAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	DisabledAt     *time.Time `json:"disabledAt,omitempty"`
+}
+
+// toAccountResponse is the single place that maps domain.PrivilegedAccount
+// onto the wire shape — used by both handleAccountItem's GET branch and
+// handleListAccounts, so the two can never drift out of sync the way
+// rotationPolicy/lastRotatedAt/createdAt had, undetected, until this
+// increment (see NOTES_SANDBOX.md: doc 05's PrivilegedAccount schema
+// documented all three from the start; this HTTP layer never populated
+// them).
+func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
+	return accountResponse{
+		ID: a.ID, Name: a.Name, Username: a.Username,
+		TargetHost: a.TargetHost, Protocol: a.Protocol, RotationPolicy: string(a.RotationPolicy),
+		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
+	}
 }
 
 func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
@@ -185,10 +203,7 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		writeJSON(w, accountResponse{
-			ID: account.ID, Name: account.Name, Username: account.Username,
-			TargetHost: account.TargetHost, Protocol: account.Protocol, DisabledAt: account.DisabledAt,
-		})
+		writeJSON(w, toAccountResponse(account))
 
 	case http.MethodDelete:
 		// actorRoles travels in the query string, not a JSON body — a
@@ -242,10 +257,7 @@ func (s *HTTPServer) handleListAccounts(w http.ResponseWriter, r *http.Request) 
 
 	items := make([]accountResponse, 0, len(accounts))
 	for _, a := range accounts {
-		items = append(items, accountResponse{
-			ID: a.ID, Name: a.Name, Username: a.Username,
-			TargetHost: a.TargetHost, Protocol: a.Protocol, DisabledAt: a.DisabledAt,
-		})
+		items = append(items, toAccountResponse(a))
 	}
 	writeJSON(w, listAccountsResponse{Items: items, Page: page, PageSize: pageSize, TotalItems: totalItems})
 }

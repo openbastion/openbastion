@@ -178,7 +178,13 @@ func (s *VaultService) Rotate(ctx context.Context, actorRoles []string, accountI
 	if err := s.secrets.SupersedeCurrent(ctx, accountID); err != nil {
 		return err
 	}
-	return s.storeVersion(ctx, accountID, newSecret, nextVersion)
+	if err := s.storeVersion(ctx, accountID, newSecret, nextVersion); err != nil {
+		return err
+	}
+	// Only after the new version is actually stored — MarkRotated must
+	// never claim a rotation happened when it didn't (domain.AccountRepository
+	// .MarkRotated's doc comment).
+	return s.accounts.MarkRotated(ctx, accountID)
 }
 
 func (s *VaultService) storeVersion(ctx context.Context, accountID string, secret []byte, version int) error {

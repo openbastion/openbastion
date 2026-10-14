@@ -222,6 +222,69 @@ func TestRotate_IncrementsVersionNumberEachTime(t *testing.T) {
 	}
 }
 
+func TestOnboardAccount_LeavesLastRotatedAtNilBeforeAnyRotation(t *testing.T) {
+	kms, err := infrastructure.NewLocalKMS()
+	if err != nil {
+		t.Fatalf("kms: %v", err)
+	}
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	ctx := context.Background()
+	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+		t.Fatalf("OnboardAccount: %v", err)
+	}
+	account, err := store.Get(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if account.LastRotatedAt != nil {
+		t.Fatalf("expected LastRotatedAt to stay nil until an actual rotation, got %v", account.LastRotatedAt)
+	}
+}
+
+func TestRotate_SetsLastRotatedAt(t *testing.T) {
+	// Pins the fix for a real bug of the same shape as the version-number
+	// one above: last_rotated_at has existed in the DDL and been scanned
+	// by PostgresStore.Get since the start, but Rotate never wrote to it —
+	// found while wiring lastRotatedAt into the HTTP response
+	// (interfaces/http.go's accountResponse). See NOTES_SANDBOX.md.
+	kms, err := infrastructure.NewLocalKMS()
+	if err != nil {
+		t.Fatalf("kms: %v", err)
+	}
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	ctx := context.Background()
+	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+		t.Fatalf("OnboardAccount: %v", err)
+	}
+
+	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("rotated-once")); err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	afterFirst, err := store.Get(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("Get after 1st rotation: %v", err)
+	}
+	if afterFirst.LastRotatedAt == nil {
+		t.Fatal("expected LastRotatedAt to be set after a rotation")
+	}
+
+	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("rotated-twice")); err != nil {
+		t.Fatalf("Rotate (2nd): %v", err)
+	}
+	afterSecond, err := store.Get(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("Get after 2nd rotation: %v", err)
+	}
+	if afterSecond.LastRotatedAt == nil {
+		t.Fatal("expected LastRotatedAt to still be set after a second rotation")
+	}
+	if afterSecond.LastRotatedAt.Before(*afterFirst.LastRotatedAt) {
+		t.Fatalf("expected the second rotation's timestamp (%v) not to precede the first's (%v)", afterSecond.LastRotatedAt, afterFirst.LastRotatedAt)
+	}
+}
+
 func TestOnboardAccount_EncryptedMaterialNeverContainsPlaintext(t *testing.T) {
 	kms, err := infrastructure.NewLocalKMS()
 	if err != nil {

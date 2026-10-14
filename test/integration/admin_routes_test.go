@@ -219,6 +219,20 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		if account["username"] != "root" || account["targetHost"] != "10.0.0.42:22" {
 			t.Fatalf("unexpected account metadata: %+v", account)
 		}
+		// rotationPolicy/createdAt have been part of doc 05's PrivilegedAccount
+		// schema since the start but were never actually populated by this
+		// HTTP layer until this increment — see NOTES_SANDBOX.md.
+		// lastRotatedAt must still be absent: this account has not been
+		// rotated yet.
+		if account["rotationPolicy"] != "manual" {
+			t.Fatalf("expected rotationPolicy %q to be exposed, got %+v", "manual", account)
+		}
+		if account["createdAt"] == nil || account["createdAt"] == "" {
+			t.Fatalf("expected createdAt to be populated, got %+v", account)
+		}
+		if _, present := account["lastRotatedAt"]; present {
+			t.Fatalf("expected lastRotatedAt to be absent before any rotation, got %+v", account)
+		}
 		for _, secretish := range []string{"encryptedMaterial", "secret", "initialSecret", "password"} {
 			if _, present := account[secretish]; present {
 				t.Fatalf("account metadata response must never include a %q field", secretish)
@@ -242,6 +256,17 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		}
 		if after == "" {
 			t.Fatal("expected a non-empty auto-generated secret")
+		}
+
+		// The other half of the fix pinned by TestRotate_SetsLastRotatedAt
+		// (vault_service_test.go), proven here through a real rotation
+		// routed via the real Gateway.
+		account, status := gatewayGetAccount(t, gateway.baseURL, token, accountID)
+		if status != http.StatusOK {
+			t.Fatalf("expected 200, got %d", status)
+		}
+		if account["lastRotatedAt"] == nil || account["lastRotatedAt"] == "" {
+			t.Fatalf("expected lastRotatedAt to be populated after a rotation, got %+v", account)
 		}
 	})
 
