@@ -468,6 +468,46 @@ func TestDisableAccount_DeniedWithoutAuthorization(t *testing.T) {
 	}
 }
 
+func TestDisableAccount_BlocksRotate(t *testing.T) {
+	// A disabled account must behave as if it did not exist for every
+	// operation, not only for reads and scope issuance. Before this check,
+	// Rotate silently created a new secret version and stamped
+	// LastRotatedAt on a disabled account — nothing leaked (AuthorizeScope
+	// still refused it), but the row kept changing after "deletion".
+	kms, err := infrastructure.NewLocalKMS()
+	if err != nil {
+		t.Fatalf("kms: %v", err)
+	}
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	ctx := context.Background()
+	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+		t.Fatalf("OnboardAccount: %v", err)
+	}
+	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
+		t.Fatalf("DisableAccount: %v", err)
+	}
+
+	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected Rotate to reject a disabled account as not found, got %v", err)
+	}
+
+	version, err := store.CurrentVersion(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("CurrentVersion: %v", err)
+	}
+	if version.Version != 1 {
+		t.Fatalf("expected the secret to stay at version 1 after a refused rotation, got %d", version.Version)
+	}
+	account, err := store.Get(ctx, "acc1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if account.LastRotatedAt != nil {
+		t.Fatalf("expected LastRotatedAt to stay nil after a refused rotation, got %v", account.LastRotatedAt)
+	}
+}
+
 func TestDisableAccount_BlocksAuthorizeScope(t *testing.T) {
 	// This is the actual security property DisableAccount exists to
 	// provide: once disabled, a session that reaches this far (say, one

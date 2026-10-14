@@ -147,8 +147,18 @@ func (s *VaultService) Rotate(ctx context.Context, actorRoles []string, accountI
 	if err := s.requireAdminAccess(ctx, actorRoles, accountID, "vault:account:rotate"); err != nil {
 		return err
 	}
-	if _, err := s.accounts.Get(ctx, accountID); err != nil {
+	// Checks DisabledAt itself rather than calling GetAccount, for the same
+	// reason AuthorizeScope does: a disabled account must behave as if it
+	// did not exist for every operation, and this one must not depend on
+	// GetAccount's behavior to stay correct. Without this check, rotating
+	// a disabled account silently created a new secret version and stamped
+	// LastRotatedAt on a row the rest of the system treats as gone.
+	account, err := s.accounts.Get(ctx, accountID)
+	if err != nil {
 		return err
+	}
+	if account.DisabledAt != nil {
+		return domain.ErrNotFound
 	}
 	if len(newSecret) == 0 {
 		generated, err := generateRandomSecret(32)

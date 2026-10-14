@@ -349,6 +349,18 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		}
 	})
 
+	t.Run("a disabled account can no longer be rotated", func(t *testing.T) {
+		// Rotate checks DisabledAt itself, like AuthorizeScope — before
+		// this, rotating a disabled account was accepted (202) and kept
+		// creating secret versions on a row the rest of the system treats
+		// as deleted. Only "not 202" is asserted: password-vault's rotate
+		// handler maps every error to 403 (pre-existing, see
+		// NOTES_SANDBOX.md), so the exact refusal code is not pinned here.
+		if status := gatewayRotateAccount(t, gateway.baseURL, token, accountID); status == http.StatusAccepted {
+			t.Fatal("expected rotating a disabled account to be refused, got 202")
+		}
+	})
+
 	t.Run("re-disabling an already-disabled account is reported not found", func(t *testing.T) {
 		// DisableAccount's not-found check runs through GetAccount, which
 		// now excludes disabled accounts — matching Rotate's existing
