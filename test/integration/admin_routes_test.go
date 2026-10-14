@@ -185,6 +185,16 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		}
 	})
 
+	t.Run("rotation is denied with 403, not 404, before any admin policy exists", func(t *testing.T) {
+		// RBAC runs before the existence check, so an unauthorized caller
+		// gets the same 403 whether or not the account exists — the 404 that
+		// rotate now returns for unknown accounts cannot be used to probe
+		// which accounts exist. accountID is not onboarded yet at this point.
+		if status := gatewayRotateAccount(t, gateway.baseURL, token, accountID); status != http.StatusForbidden {
+			t.Fatalf("expected 403 for an unauthorized rotate on a not-yet-existing account, got %d", status)
+		}
+	})
+
 	t.Run("policy creation is denied before any policy-admin grant exists", func(t *testing.T) {
 		// The second gap this increment closes: Authorization itself now
 		// RBAC-gates its own POST /policies (authz:policy-admin), not
@@ -353,11 +363,19 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		// Rotate checks DisabledAt itself, like AuthorizeScope — before
 		// this, rotating a disabled account was accepted (202) and kept
 		// creating secret versions on a row the rest of the system treats
-		// as deleted. Only "not 202" is asserted: password-vault's rotate
-		// handler maps every error to 403 (pre-existing, see
-		// NOTES_SANDBOX.md), so the exact refusal code is not pinned here.
-		if status := gatewayRotateAccount(t, gateway.baseURL, token, accountID); status == http.StatusAccepted {
-			t.Fatal("expected rotating a disabled account to be refused, got 202")
+		// as deleted. It is refused with 404, the same answer as for an
+		// unknown account: the Vault deliberately does not distinguish them.
+		if status := gatewayRotateAccount(t, gateway.baseURL, token, accountID); status != http.StatusNotFound {
+			t.Fatalf("expected 404 when rotating a disabled account, got %d", status)
+		}
+	})
+
+	t.Run("rotating an unknown account is reported not found", func(t *testing.T) {
+		// Used to be 403 like every other error from this route — see
+		// NOTES_SANDBOX.md. An authorized caller now learns the account does
+		// not exist instead of being told it was "forbidden".
+		if status := gatewayRotateAccount(t, gateway.baseURL, token, "acc_that_was_never_onboarded"); status != http.StatusNotFound {
+			t.Fatalf("expected 404 when rotating an unknown account, got %d", status)
 		}
 	})
 

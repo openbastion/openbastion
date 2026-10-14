@@ -262,6 +262,16 @@ paths:
       responses:
         "204":
           description: Compte supprimé
+        "403":
+          description: Refusé par l'Authorization Service
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Compte introuvable ou déjà supprimé. Même ordre que pour rotate : 403 avant 404.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /vault/accounts/{accountId}/rotate:
     parameters:
@@ -286,6 +296,16 @@ paths:
       responses:
         "202":
           description: Rotation acceptée et en cours
+        "403":
+          description: Refusé par l'Authorization Service
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Compte introuvable ou désactivé (les deux cas ne sont volontairement pas distingués). Le contrôle d'accès passe avant l'existence : un appelant non autorisé reçoit 403 que le compte existe ou non.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /policies:
     get:

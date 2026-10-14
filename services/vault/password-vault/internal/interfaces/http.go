@@ -12,6 +12,7 @@ package interfaces
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -88,10 +89,24 @@ func (s *HTTPServer) handleRotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.svc.Rotate(r.Context(), req.ActorRoles, req.AccountID, req.NewSecret); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		http.Error(w, err.Error(), adminErrorStatus(err))
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// adminErrorStatus maps a failed account-admin operation (rotate, delete)
+// onto an HTTP status: domain.ErrNotFound — unknown OR disabled account, which
+// the Vault deliberately does not distinguish — is 404; everything else
+// (RBAC denial, Authorization unreachable and therefore fail-closed) stays
+// 403, exactly as before. The RBAC check runs before the existence check in
+// VaultService, so an unauthorized caller always gets 403 whether or not the
+// account exists: the 404 cannot be used to probe which accounts exist.
+func adminErrorStatus(err error) int {
+	if errors.Is(err, domain.ErrNotFound) {
+		return http.StatusNotFound
+	}
+	return http.StatusForbidden
 }
 
 // -- authorize-scope (VaultAuthorization.AuthorizeScope) -------------------
@@ -212,11 +227,7 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 		// (api-gateway/internal/interfaces/http.go).
 		actorRoles := splitCommaList(r.URL.Query().Get("actorRoles"))
 		if err := s.svc.DisableAccount(r.Context(), actorRoles, id); err != nil {
-			if err == domain.ErrNotFound {
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusForbidden)
+			http.Error(w, err.Error(), adminErrorStatus(err))
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

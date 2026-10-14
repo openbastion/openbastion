@@ -224,14 +224,25 @@ Même motif qu'`AuthorizeScope` : `Rotate` vérifie `DisabledAt` lui-même plut�
 
 Tests : `TestDisableAccount_BlocksRotate` (refus `ErrNotFound`, la version de secret reste à 1, `LastRotatedAt` reste `nil` — c'est l'absence de trace qui est vérifiée, pas seulement le refus) et un sous-test d'intégration sur quatre vrais processus (rotation d'un compte désactivé via la Gateway : refusée, pas 202). `make build/vet/test/test-postgres/test-integration` verts.
 
+## `rotate` répond 404 pour un compte introuvable ou désactivé — le dernier code de statut qui mentait
+
+Point laissé en suspens à la fin de la section précédente, tranché sur demande : `handleRotate` répondait 403 à toute erreur, y compris « compte introuvable ou désactivé », alors que `DELETE` distinguait déjà 404 de 403. Un opérateur autorisé qui se trompait d'identifiant apprenait qu'il était « interdit » plutôt que que le compte n'existait pas.
+
+`rotate` et `DELETE` passent maintenant par un seul `adminErrorStatus` : `domain.ErrNotFound` → 404, tout le reste (refus RBAC, Authorization injoignable donc fail-closed) → 403, comme avant. `DELETE` comparait l'erreur avec `==` ; `errors.Is` le remplace, pour que l'ajout d'un enrobage d'erreur plus tard ne casse pas silencieusement le 404.
+
+**Ce que ce changement ne doit pas permettre, et pourquoi il ne le permet pas** : distinguer 403 de 404 pourrait servir à sonder quels comptes existent. `VaultService` vérifie l'accès (RBAC) *avant* l'existence, donc un appelant non autorisé reçoit 403 que le compte existe ou non. Un sous-test d'intégration le fige explicitement (rotation refusée en 403, pas 404, avant toute politique d'admin — sur un compte qui n'existe pas encore) ; sans lui, un réordonnancement futur de ces deux vérifications ouvrirait cette fuite sans qu'aucun test ne bouge.
+
+Un compte désactivé reste indiscernable d'un compte inconnu (404 dans les deux cas), cohérent avec `GetAccount`. Doc 05 documente maintenant 403 et 404 sur `rotate` et `DELETE /vault/accounts/{id}`, avec cet ordre.
+
+Tests : 1 sous-test ajouté (403 avant 404), 1 resserré (désactivé : 404 exact, plus un simple « pas 202 »), 1 ajouté (compte inconnu : 404), tous sur quatre vrais processus. Aucune fonction de test top-level ajoutée : les comptes restent 134 unitaires / 10 d'intégration.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
 
 1. `buf generate` sur `proto/` produira le code gRPC réel ; les fichiers `internal/interfaces/http.go` seront remplacés par des serveurs gRPC générés, sans toucher `internal/application`.
 2. Remplacer `LocalKMS` par un vrai client KMS/HSM externe — `KMS_KEY_HEX` est une étape vers une clé stable, pas un KMS réel ; voir le commentaire de doc de `NewLocalKMS`. **Vérifié bloqué dans ce sandbox** (contrairement au pari qui a payé pour `github.com/golang-jwt/jwt/v5`) : `go get github.com/hashicorp/vault/api@v1.15.0` tire transitivement `golang.org/x/net` et `golang.org/x/time` — aucun `replace` GitHub n'existe pour eux (seuls `x/crypto` et `x/sys` en ont un) — et `go get github.com/aws/aws-sdk-go-v2/service/kms@v1.33.0` time-out de la même façon ; les deux ont été testés avec `GOPROXY=direct GOSUMDB=off`, 30s chacun, aucune sortie après le premier (`hashicorp/vault/api`) ou aucune sortie du tout (`aws-sdk-go-v2/service/kms`). Un `go get github.com/golang-jwt/jwt/v5` témoin, lancé juste après dans un module vierge, a réussi en quelques secondes — la cause est bien les dépendances transitives de ces deux SDK, pas une dégradation réseau générale du sandbox. Lever ce blocage demanderait soit un accès réseau complet, soit d'ajouter les mêmes `replace` GitHub que pour `x/crypto`/`x/sys` à `golang.org/x/net` et `golang.org/x/time` (non tenté : risque de miroir GitHub introuvable ou désynchronisé, pour un gain incertain tant que le SDK complet n'a pas pu être résolu une seule fois de bout en bout).
-3. `handleRotate` (`password-vault/interfaces/http.go`) répond 403 à toute erreur, y compris « compte introuvable ou désactivé » — alors que `DELETE` distingue déjà 404 de 403. Préexistant, non touché : changer le code de statut d'une route existante est un changement de contrat à décider pour lui-même, pas à glisser dans un correctif d'un autre ordre.
-4. Toutes les bascules PostgreSQL de ce projet reposent maintenant sur le même patron, prouvé six fois (Vault, Authorization, Authentication, Session Broker, Audit — plus `audit-service` qui ajoute la contrainte propre au chaînage de hash). `session_command_entries`, `idempotency_keys` et le partitionnement mensuel d'`audit_events` (doc 06 §3) restent les seules parties du DDL documenté qui n'ont pas encore d'équivalent dans le code — aucune n'est bloquée par le sandbox, simplement pas encore faites.
+3. Toutes les bascules PostgreSQL de ce projet reposent maintenant sur le même patron, prouvé six fois (Vault, Authorization, Authentication, Session Broker, Audit — plus `audit-service` qui ajoute la contrainte propre au chaînage de hash). `session_command_entries`, `idempotency_keys` et le partitionnement mensuel d'`audit_events` (doc 06 §3) restent les seules parties du DDL documenté qui n'ont pas encore d'équivalent dans le code — aucune n'est bloquée par le sandbox, simplement pas encore faites.
 
 ## État des tests à la date de cet incrément
 
