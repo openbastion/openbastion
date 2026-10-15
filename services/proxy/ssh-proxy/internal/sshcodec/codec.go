@@ -46,6 +46,14 @@ type Codec struct {
 	// captured — the relay itself never depends on it.
 	Recorder io.Writer
 
+	// OutputObserver receives everything the target sends back, so the
+	// Recorder side can tell when the target is asking for a secret (sudo,
+	// su, ssh prompts) and avoid storing what the operator types next —
+	// proxycore.RecordingTap.Output is the implementation. May be nil. It
+	// only ever observes: what is relayed to the client is unchanged, and
+	// it must never fail or block.
+	OutputObserver io.Writer
+
 	// DialTimeout bounds the SSH handshake to the target. Zero means
 	// ssh.ClientConfig's own default (no timeout), which is not what we
 	// want in production — cmd/ssh-proxy sets this explicitly.
@@ -99,13 +107,18 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		clientReader = io.TeeReader(client, c.Recorder)
 	}
 
+	var targetReader io.Reader = stdout
+	if c.OutputObserver != nil {
+		targetReader = io.TeeReader(stdout, c.OutputObserver)
+	}
+
 	done := make(chan error, 2)
 	go func() {
 		_, err := io.Copy(stdin, clientReader)
 		done <- err
 	}()
 	go func() {
-		_, err := io.Copy(client, stdout)
+		_, err := io.Copy(client, targetReader)
 		done <- err
 	}()
 

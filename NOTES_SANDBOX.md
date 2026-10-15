@@ -236,6 +236,26 @@ Un compte désactivé reste indiscernable d'un compte inconnu (404 dans les deux
 
 Tests : 1 sous-test ajouté (403 avant 404), 1 resserré (désactivé : 404 exact, plus un simple « pas 202 »), 1 ajouté (compte inconnu : 404), tous sur quatre vrais processus. Aucune fonction de test top-level ajoutée : les comptes restent 134 unitaires / 10 d'intégration.
 
+## Le Recording Tap ne voyait aucune commande d'une vraie session interactive — et ne protégeait pas les mots de passe saisis
+
+Avant de bâtir le Command Recorder (critère de sortie MVP : « le replay texte retrouve chaque commande exécutée »), j'ai vérifié que ce qui l'alimenterait capture bien les commandes. Ce n'était pas le cas.
+
+**Le bug.** `RecordingTap` ne coupait les lignes que sur `\n`. Or un client SSH avec PTY envoie `\r` à la touche Entrée. Les tests existants (`proxycore` et le test de bout en bout du proxy) passaient parce qu'ils envoient `\n` à la main, comme un `printf` — jamais comme un terminal. Reproduit par un test qui échouait avant la correction : `whoami\r` donnait zéro entrée. En usage réel, rien n'aurait été enregistré.
+
+**Ce que le tap fait maintenant**, comme un éditeur de ligne de terminal : `\r`, `\n` et `\r\n` terminent une ligne (un `\r\n` ne compte qu'une fois, même coupé entre deux écritures) ; retour arrière/DEL retire un caractère entier (UTF-8 compris) ; Ctrl-C et Ctrl-U abandonnent la ligne, Ctrl-W retire le dernier mot ; les séquences d'échappement (flèches, marqueurs de collage) et les autres octets de contrôle (Tab…) sont écartés, y compris quand une séquence est coupée entre deux écritures ; une ligne est tronquée à 8 Kio (un flux binaire sans terminateur ne fait plus grossir le tampon). `Record` est appelé hors du verrou : un enregistreur lent ne bloque plus l'observateur de sortie, donc l'autre moitié du relais.
+
+**Mots de passe saisis à un prompt.** Une fois les commandes réellement capturées, un `sudo` aurait stocké le mot de passe en clair dans l'enregistrement. Le tap observe maintenant la sortie de la cible (`Codec.OutputObserver`, branché sur `RecordingTap.Output()`) : quand la ligne de sortie en cours ressemble à un prompt `password`/`passphrase`/`passcode`/`verification code`/`PIN`, la ligne saisie ensuite est enregistrée comme `[redacted: input at a secret prompt]` (`proxycore.RedactedSecretInput`) au lieu de son contenu. Un nouveau retour à la ligne en sortie, ou Ctrl-C, rend le prompt caduc : un prompt resté sans réponse n'avale pas une commande ultérieure.
+
+**Pourquoi un marqueur plutôt que de ne rien enregistrer.** Le texte du prompt vient de la cible, que l'opérateur contrôle : un initié peut afficher un faux prompt (`printf 'Password: '`) pour faire masquer UNE commande suivante. Avec un marqueur, la tentative reste visible dans le replay, juste après la commande qui a affiché le prompt ; en n'enregistrant rien, elle serait invisible.
+
+**Limites assumées, pas corrigées ici.**
+- La capture se fait au clavier, pas dans le shell : une commande rappelée de l'historique (↑, Ctrl-R), complétée par Tab ou modifiée après un déplacement du curseur est enregistrée telle que **saisie**, pas telle qu'exécutée. Combler l'écart demande une reconstruction côté cible ou côté sortie.
+- La détection de prompt est une heuristique sur du texte : un prompt dans une autre langue, ou sans mot-clé reconnu, laisse passer le secret en clair.
+
+`SSHServer` accepte maintenant un `Recorder` (par défaut `StdoutRecorder`, inchangé), ce qui permet de tester l'enregistrement à travers la vraie pile SSH : `TestSSHProxy_InteractiveCommandsAreRecordedAndSecretPromptInputIsRedacted` joue un vrai `sudo` (prompt sans saut de ligne, saisie non répétée) et vérifie que le mot de passe n'apparaît nulle part.
+
+Tests : `proxycore` passe de 9 à 29 (20 nouveaux), `sshcodec` de 2 à 3 ; 155 tests unitaires au total. Stabilité vérifiée sous le détecteur de course : 40 exécutions du test de bout en bout, 20 de `proxycore`.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
@@ -246,14 +266,14 @@ Dans un environnement de développement ou de CI avec accès réseau complet :
 
 ## État des tests à la date de cet incrément
 
-134 fonctions de test unitaires (dont 24 conditionnées à `TEST_DATABASE_URL` — 8 pour le Vault, 4 pour Authorization, 5 pour Authentication, 4 pour Session Broker, 3 pour Audit — qui se *skip*, pas échouent, sans elle), plus 10 tests d'intégration (dont 5 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les cinq tests de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
+155 fonctions de test unitaires (dont 24 conditionnées à `TEST_DATABASE_URL` — 8 pour le Vault, 4 pour Authorization, 5 pour Authentication, 4 pour Session Broker, 3 pour Audit — qui se *skip*, pas échouent, sans elle), plus 10 tests d'intégration (dont 5 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les cinq tests de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
 
 **Particularité du test de redémarrage d'`audit-service`** : contrairement à `Count()`/`ForRoles()` ailleurs dans ce projet, `VerifyChain` relit la table `audit_events` **entière** depuis le tout premier événement — une seule ligne avec un hash non authentique (comme en écrivent délibérément les tests unitaires de `postgres_store_test.go`, qui exercent `Append` directement sans passer par le vrai calcul de hash) la casse **définitivement**, pas seulement le temps d'une assertion. `TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart` commence donc par un `TRUNCATE audit_events` explicite, pour rester déterministe quel que soit ce qui a tourné avant lui — un geste plus strict que le `TRUNCATE` déjà documenté pour les exécutions complètes, mais nécessaire spécifiquement ici.
 
 **Un sixième problème réel trouvé pendant ce même incrément, dans le Makefile cette fois, pas dans le code applicatif.** `make test-postgres` enchaînait déjà les suites `*_store_test.go` (qui écrivent des lignes directement dans `policies`, entre autres) puis `test/integration` dans la même invocation. Dès que cinq services y écrivent au lieu de deux, `TestPostgresFlow_PolicySurvivesAuthorizationProcessRestart` échoue systématiquement sur un 403 : `BootstrapAdminPolicy` voit un magasin non vide (à cause des lignes que les tests `*_store_test.go` viennent d'écrire dans la même exécution) et refuse — par conception — de bootstraper `platform-admin`. Une purge unique en tête de cible ne suffit pas, puisque ce sont les tests qui tournent *après* elle, dans la même invocation, qui polluent. Corrigé en purgeant une seconde fois juste avant la ligne `test/integration` — `make test-postgres` est maintenant vraiment rejouable d'affilée, sans geste manuel, vérifié par deux exécutions consécutives.
 
 ```
-pkg/proxycore                                                 9 tests
+pkg/proxycore                                                 29 tests (dont 20 Recording Tap : terminateurs, édition de ligne, échappements, prompts de secret)
 services/access/api-gateway/internal/application               3 tests
 services/access/api-gateway/internal/interfaces                12 tests
 services/access/authentication/internal/application             6 tests
@@ -263,7 +283,7 @@ services/access/authorization/internal/infrastructure            4 tests Postgre
 services/access/session-broker/internal/application             10 tests
 services/access/session-broker/internal/infrastructure           4 tests PostgreSQL (TEST_DATABASE_URL)
 services/proxy/ssh-proxy/internal/infrastructure                 3 tests
-services/proxy/ssh-proxy/internal/sshcodec                       2 tests (vrai protocole SSH, 3 participants)
+services/proxy/ssh-proxy/internal/sshcodec                       3 tests (vrai protocole SSH, 3 participants ; dont l'enregistrement interactif avec prompt `sudo`)
 services/vault/password-vault/internal/application               25 tests (dont 6 RBAC, 1 versionnement, 6 liste/désactivation de comptes, 2 lastRotatedAt)
 services/vault/password-vault/internal/infrastructure            14 tests (dont 8 PostgreSQL TEST_DATABASE_URL, 6 LocalKMS)
 services/recording-audit/audit-service/internal/application       5 tests (dont 1 précision d'horodatage)

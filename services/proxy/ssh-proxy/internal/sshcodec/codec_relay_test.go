@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -96,7 +97,19 @@ func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr strin
 						defer ch.Close()
 						scanner := bufio.NewScanner(ch)
 						for scanner.Scan() {
-							fmt.Fprintf(ch, "echo:%s\r\n", scanner.Text())
+							text := scanner.Text()
+							if text == "sudo -s" {
+								// Behave like a real sudo: a prompt with no trailing
+								// newline, then the next line is the password, which
+								// is NOT echoed (the terminal's echo is off).
+								fmt.Fprint(ch, "[sudo] password for root: ")
+								if !scanner.Scan() {
+									return
+								}
+								fmt.Fprint(ch, "\r\nroot-shell-ready\r\n")
+								continue
+							}
+							fmt.Fprintf(ch, "echo:%s\r\n", text)
 						}
 					}(ch)
 				}
@@ -225,6 +238,159 @@ func TestSSHProxy_RealClientThroughRealProxyToRealTarget(t *testing.T) {
 	}
 	if !strings.Contains(line, "echo:hello-through-the-proxy") {
 		t.Fatalf("expected echo of the command through proxy -> target -> proxy -> client, got %q (err=%v)", line, err)
+	}
+}
+
+// recordedCommands is a proxycore.Recorder that keeps what it was given.
+type recordedCommands struct {
+	mu      sync.Mutex
+	entries []proxycore.CommandEntry
+}
+
+func (r *recordedCommands) Record(ctx context.Context, e proxycore.CommandEntry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entries = append(r.entries, e)
+	return nil
+}
+
+func (r *recordedCommands) commands() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, 0, len(r.entries))
+	for _, e := range r.entries {
+		out = append(out, e.Command)
+	}
+	return out
+}
+
+// An interactive client with a PTY sends '\r' for Enter. The command must
+// reach the Recorder through the real SSH stack, attributed to the right
+// session, and what the operator types at a target's secret prompt must
+// not be stored.
+func TestSSHProxy_InteractiveCommandsAreRecordedAndSecretPromptInputIsRedacted(t *testing.T) {
+	const secretPassword = "target-real-secret-42"
+	const scopeToken = "scope-token-recording"
+
+	targetAddr := startFakeTargetSSHServer(t, secretPassword)
+
+	listener := proxycore.NewListener(
+		proxycore.NewCredentialFetcher(&fakeVault{expectedScopeToken: scopeToken, secret: secretPassword}, "ssh-proxy"),
+		proxycore.NewTerminator(&fakeAudit{}),
+	)
+	pending := infrastructure.NewPendingSessions()
+	ticket := pending.Register(&infrastructure.PendingSession{
+		SessionID: "session-recorded", TargetHost: targetAddr, TargetUser: "root",
+		ScopeToken: scopeToken, ExpiresAt: time.Now().UTC().Add(time.Minute),
+	})
+
+	_, hostPriv, _ := ed25519.GenerateKey(rand.Reader)
+	hostSigner, _ := ssh.NewSignerFromKey(hostPriv)
+	proxyLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("proxy listen: %v", err)
+	}
+	t.Cleanup(func() { _ = proxyLn.Close() })
+
+	recorder := &recordedCommands{}
+	server := &interfaces.SSHServer{
+		HostSigner: hostSigner, Pending: pending, Listener: listener,
+		DialTimeout: 5 * time.Second, Recorder: recorder,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = server.Serve(ctx, proxyLn) }()
+
+	client, err := ssh.Dial("tcp", proxyLn.Addr().String(), &ssh.ClientConfig{
+		User: "operator", Auth: []ssh.AuthMethod{ssh.Password(ticket)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("client dial to proxy: %v", err)
+	}
+	defer client.Close()
+	session, err := client.NewSession()
+	if err != nil {
+		t.Fatalf("client session: %v", err)
+	}
+	defer session.Close()
+	if err := session.RequestPty("xterm", 80, 40, ssh.TerminalModes{}); err != nil {
+		t.Fatalf("client pty: %v", err)
+	}
+	stdin, _ := session.StdinPipe()
+	stdout, _ := session.StdoutPipe()
+	if err := session.Shell(); err != nil {
+		t.Fatalf("client shell: %v", err)
+	}
+
+	// A pump goroutine accumulates the target's output, byte by byte —
+	// a prompt has no trailing newline, so line reads would never see it.
+	// Waiting on the OUTPUT is also what makes the order below
+	// deterministic: the codec feeds the secret-prompt detector before it
+	// forwards the same bytes to the client.
+	var (
+		outMu  sync.Mutex
+		outBuf strings.Builder
+	)
+	go func() {
+		one := make([]byte, 1)
+		for {
+			n, err := stdout.Read(one)
+			if n > 0 {
+				outMu.Lock()
+				outBuf.Write(one[:n])
+				outMu.Unlock()
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	waitFor := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			outMu.Lock()
+			ok := strings.Contains(outBuf.String(), want)
+			outMu.Unlock()
+			if ok {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatalf("never saw %q from the target", want)
+	}
+
+	// '\r' is what a real terminal sends; the fake target reads lines, so
+	// each is followed by '\n', as a PTY's CR-to-NL translation would.
+	fmt.Fprint(stdin, "whoami\r\n")
+	waitFor("echo:whoami")
+	fmt.Fprint(stdin, "sudo -s\r\n")
+	waitFor("[sudo] password for root: ")
+	fmt.Fprint(stdin, "hunter2\r\n")
+	waitFor("root-shell-ready")
+	fmt.Fprint(stdin, "id\r\n")
+	waitFor("echo:id")
+
+	got := recorder.commands()
+	for _, c := range got {
+		if c == "hunter2" {
+			t.Fatalf("the line typed after the prompt was stored in the clear: %q", got)
+		}
+	}
+	want := []string{"whoami", "sudo -s", proxycore.RedactedSecretInput, "id"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected %q, got %q", want, got)
+		}
+	}
+	for _, e := range recorder.entries {
+		if e.SessionID != "session-recorded" {
+			t.Fatalf("entry attributed to the wrong session: %+v", e)
+		}
 	}
 }
 

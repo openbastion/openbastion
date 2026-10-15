@@ -28,6 +28,11 @@ type SSHServer struct {
 	Pending     *infrastructure.PendingSessions
 	Listener    *proxycore.Listener // owns credential fetch + purge + audit (doc 01 §4.1)
 	DialTimeout time.Duration
+
+	// Recorder receives the commands captured from each session. Nil means
+	// infrastructure.StdoutRecorder — a log line per command, for
+	// development without a Command Recorder running.
+	Recorder proxycore.Recorder
 }
 
 // Serve accepts connections on ln until it errors or ctx is done.
@@ -95,11 +100,18 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 		ScopeToken: resolved.ScopeToken,
 		ExpiresAt:  resolved.ExpiresAt,
 	}
-	recordingTap := proxycore.NewRecordingTap(infrastructure.StdoutRecorder{}, resolved.SessionID)
+	var recorder proxycore.Recorder = infrastructure.StdoutRecorder{}
+	if s.Recorder != nil {
+		recorder = s.Recorder
+	}
+	recordingTap := proxycore.NewRecordingTap(recorder, resolved.SessionID)
 	codec := &sshcodec.Codec{
-		TargetUser:  resolved.TargetUser,
-		Recorder:    recordingTap,
-		DialTimeout: s.DialTimeout,
+		TargetUser: resolved.TargetUser,
+		Recorder:   recordingTap,
+		// The target's output feeds the tap's secret-prompt detection, so a
+		// sudo password typed next is recorded as redacted, not in the clear.
+		OutputObserver: recordingTap.Output(),
+		DialTimeout:    s.DialTimeout,
 	}
 
 	if err := s.Listener.Serve(ctx, meta, codec, clientChannel, targetConn); err != nil {
