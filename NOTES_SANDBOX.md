@@ -254,7 +254,7 @@ Avant de bâtir le Command Recorder (critère de sortie MVP : « le replay texte
 
 `SSHServer` accepte maintenant un `Recorder` (par défaut `StdoutRecorder`, inchangé), ce qui permet de tester l'enregistrement à travers la vraie pile SSH : `TestSSHProxy_InteractiveCommandsAreRecordedAndSecretPromptInputIsRedacted` joue un vrai `sudo` (prompt sans saut de ligne, saisie non répétée) et vérifie que le mot de passe n'apparaît nulle part.
 
-Tests : `proxycore` passe de 9 à 29 (20 nouveaux), `sshcodec` de 2 à 3 ; 155 tests unitaires à ce stade (180 après le Command Recorder, section suivante). Stabilité vérifiée sous le détecteur de course : 40 exécutions du test de bout en bout, 20 de `proxycore`.
+Tests : `proxycore` passe de 9 à 29 (20 nouveaux), `sshcodec` de 2 à 3 ; 155 tests unitaires à ce stade (180 après le Command Recorder, 181 après la correction de pagination du Vault). Stabilité vérifiée sous le détecteur de course : 40 exécutions du test de bout en bout, 20 de `proxycore`.
 
 ## Command Recorder : le replay texte d'une session existe enfin (critère de sortie MVP)
 
@@ -287,6 +287,12 @@ La feuille de route (doc 04 §2) exige que « le replay texte d'une session retr
 5. **La lecture d'un replay n'est pas elle-même auditée** (pas d'événement `recording.read` vers l'Audit Service), et n'est contrôlée que par rôle — pas par propriété de la session.
 6. **Capture au clavier, pas dans le shell** (voir la section du tap) : historique, complétion et déplacement du curseur ne sont pas reconstitués.
 
+## `GET /vault/accounts` rapportait la page demandée, pas la page servie
+
+Défaut de ma propre liste des comptes (ab64541), repéré en écrivant la pagination du Command Recorder : `ListAccounts` borne bien `page`/`pageSize` (page < 1 → 1 ; taille < 1 → 20 ; > 100 → 100), mais le handler HTTP répondait avec les valeurs **brutes de la requête**. Une requête sans paramètre était servie en page 1 de 20 et annonçait `page: 0, pageSize: 0`. Un client qui s'appuierait sur ces champs pour paginer aurait bouclé ou calculé n'importe quoi.
+
+Prouvé avant de corriger (sous-test d'intégration qui échouait : `reported page 0 / size 0, want 1 / 20`), puis corrigé en exposant la règle (`application.ClampPage`) pour que le handler rapporte ce qui a réellement été servi — le Command Recorder a la même fonction et le même test dès le départ. Un test unitaire couvre les bornes (0, négatifs, 100 inclus, 101, 100000) et le sous-test d'intégration quatre formes de requête. Un test qui n'aurait vérifié que les `items` ne l'aurait jamais vu.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
@@ -297,7 +303,7 @@ Dans un environnement de développement ou de CI avec accès réseau complet :
 
 ## État des tests à la date de cet incrément
 
-180 fonctions de test unitaires (dont 27 conditionnées à `TEST_DATABASE_URL` — 8 pour le Vault, 4 pour Authorization, 5 pour Authentication, 4 pour Session Broker, 3 pour Audit, 3 pour le Command Recorder — qui se *skip*, pas échouent, sans elle), plus 12 tests d'intégration (dont 6 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les six tests de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker, Command Recorder) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
+181 fonctions de test unitaires (dont 27 conditionnées à `TEST_DATABASE_URL` — 8 pour le Vault, 4 pour Authorization, 5 pour Authentication, 4 pour Session Broker, 3 pour Audit, 3 pour le Command Recorder — qui se *skip*, pas échouent, sans elle), plus 12 tests d'intégration (dont 6 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les six tests de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker, Command Recorder) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
 
 **Particularité du test de redémarrage d'`audit-service`** : contrairement à `Count()`/`ForRoles()` ailleurs dans ce projet, `VerifyChain` relit la table `audit_events` **entière** depuis le tout premier événement — une seule ligne avec un hash non authentique (comme en écrivent délibérément les tests unitaires de `postgres_store_test.go`, qui exercent `Append` directement sans passer par le vrai calcul de hash) la casse **définitivement**, pas seulement le temps d'une assertion. `TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart` commence donc par un `TRUNCATE audit_events` explicite, pour rester déterministe quel que soit ce qui a tourné avant lui — un geste plus strict que le `TRUNCATE` déjà documenté pour les exécutions complètes, mais nécessaire spécifiquement ici.
 
@@ -315,7 +321,7 @@ services/access/session-broker/internal/application             10 tests
 services/access/session-broker/internal/infrastructure           4 tests PostgreSQL (TEST_DATABASE_URL)
 services/proxy/ssh-proxy/internal/infrastructure                 10 tests (dont 7 AsyncRecorder / client du Command Recorder)
 services/proxy/ssh-proxy/internal/sshcodec                       3 tests (vrai protocole SSH, 3 participants ; dont l'enregistrement interactif avec prompt `sudo`)
-services/vault/password-vault/internal/application               25 tests (dont 6 RBAC, 1 versionnement, 6 liste/désactivation de comptes, 2 lastRotatedAt)
+services/vault/password-vault/internal/application               26 tests (dont 6 RBAC, 1 versionnement, 6 liste/désactivation de comptes, 2 lastRotatedAt, 1 bornage de pagination)
 services/vault/password-vault/internal/infrastructure            14 tests (dont 8 PostgreSQL TEST_DATABASE_URL, 6 LocalKMS)
 services/recording-audit/audit-service/internal/application       5 tests (dont 1 précision d'horodatage)
 services/recording-audit/audit-service/internal/infrastructure    3 tests PostgreSQL (TEST_DATABASE_URL)

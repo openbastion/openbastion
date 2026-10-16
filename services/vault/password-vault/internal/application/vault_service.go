@@ -116,6 +116,16 @@ func (s *VaultService) ListAccounts(ctx context.Context, actorRoles []string, pa
 	if err := s.requireAdminAccess(ctx, actorRoles, "*", "vault:account:list"); err != nil {
 		return nil, 0, err
 	}
+	page, pageSize = ClampPage(page, pageSize)
+	return s.accounts.List(ctx, page, pageSize)
+}
+
+// ClampPage is the pagination rule ListAccounts applies (page < 1 → 1;
+// pageSize < 1 → the default 20; pageSize > 100 → 100, doc 05's bounds). It
+// is exported so the HTTP layer can report the page and page size actually
+// SERVED rather than the ones the caller asked for — without it the list
+// response said "page 0, pageSize 0" for a request that sent neither.
+func ClampPage(page, pageSize int) (int, int) {
 	if page < minPage {
 		page = minPage
 	}
@@ -125,7 +135,7 @@ func (s *VaultService) ListAccounts(ctx context.Context, actorRoles []string, pa
 	if pageSize > maxPageSize {
 		pageSize = maxPageSize
 	}
-	return s.accounts.List(ctx, page, pageSize)
+	return page, pageSize
 }
 
 // DisableAccount soft-deletes via domain.AccountRepository.Disable — see

@@ -266,6 +266,10 @@ func (s *HTTPServer) handleListAccounts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Report the page that was SERVED (same rule ListAccounts applied), not
+	// the one requested: a request with no parameters is page 1, size 20.
+	page, pageSize = application.ClampPage(page, pageSize)
+
 	items := make([]accountResponse, 0, len(accounts))
 	for _, a := range accounts {
 		items = append(items, toAccountResponse(a))

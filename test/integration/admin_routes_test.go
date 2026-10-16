@@ -324,6 +324,34 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		}
 	})
 
+	// The list must report the page it SERVED, not the one that was asked
+	// for: with no query parameters it serves page 1 of size 20 (doc 05's
+	// defaults), and used to say page 0 of size 0.
+	t.Run("list reports the page and page size it actually served", func(t *testing.T) {
+		for query, want := range map[string][2]int{
+			"":                         {1, 20},
+			"?page=0&pageSize=0":       {1, 20},
+			"?page=3&pageSize=5":       {3, 5},
+			"?page=-2&pageSize=100000": {1, 100},
+		} {
+			req, _ := http.NewRequest(http.MethodGet, gateway.baseURL+"/vault/accounts"+query, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("list %q: %v", query, err)
+			}
+			var out struct {
+				Page     int `json:"page"`
+				PageSize int `json:"pageSize"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&out)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK || out.Page != want[0] || out.PageSize != want[1] {
+				t.Fatalf("list %q: status %d, reported page %d / size %d, want %d / %d", query, resp.StatusCode, out.Page, out.PageSize, want[0], want[1])
+			}
+		}
+	})
+
 	// Closes the gap doc 05 §2 documented since this project's inception —
 	// GET /vault/accounts and DELETE /vault/accounts/{id} — never
 	// implemented until this increment. Soft-delete (DisabledAt), not a

@@ -534,3 +534,19 @@ func (sessionOnlyAuthz) CheckAccess(ctx context.Context, actorRoles []string, re
 	}
 	return false, "no policy matches this resource", nil
 }
+
+func TestClampPage(t *testing.T) {
+	cases := []struct{ page, size, wantPage, wantSize int }{
+		{0, 0, 1, 20},    // nothing requested: page 1, default size
+		{-5, -1, 1, 20},  // negatives behave like absent
+		{3, 5, 3, 5},     // in range: untouched
+		{2, 100, 2, 100}, // the maximum itself is allowed
+		{1, 101, 1, 100}, // above the maximum: clamped
+		{1, 100000, 1, 100},
+	}
+	for _, c := range cases {
+		if p, s := application.ClampPage(c.page, c.size); p != c.wantPage || s != c.wantSize {
+			t.Errorf("ClampPage(%d, %d) = (%d, %d), want (%d, %d)", c.page, c.size, p, s, c.wantPage, c.wantSize)
+		}
+	}
+}
