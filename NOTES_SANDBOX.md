@@ -254,7 +254,38 @@ Avant de bâtir le Command Recorder (critère de sortie MVP : « le replay texte
 
 `SSHServer` accepte maintenant un `Recorder` (par défaut `StdoutRecorder`, inchangé), ce qui permet de tester l'enregistrement à travers la vraie pile SSH : `TestSSHProxy_InteractiveCommandsAreRecordedAndSecretPromptInputIsRedacted` joue un vrai `sudo` (prompt sans saut de ligne, saisie non répétée) et vérifie que le mot de passe n'apparaît nulle part.
 
-Tests : `proxycore` passe de 9 à 29 (20 nouveaux), `sshcodec` de 2 à 3 ; 155 tests unitaires au total. Stabilité vérifiée sous le détecteur de course : 40 exécutions du test de bout en bout, 20 de `proxycore`.
+Tests : `proxycore` passe de 9 à 29 (20 nouveaux), `sshcodec` de 2 à 3 ; 155 tests unitaires à ce stade (180 après le Command Recorder, section suivante). Stabilité vérifiée sous le détecteur de course : 40 exécutions du test de bout en bout, 20 de `proxycore`.
+
+## Command Recorder : le replay texte d'une session existe enfin (critère de sortie MVP)
+
+La feuille de route (doc 04 §2) exige que « le replay texte d'une session retrouve chaque commande exécutée, horodatée ». Il n'y avait ni service d'enregistrement ni table `session_command_entries` côté code : le proxy se contentait de journaliser les commandes sur sa sortie standard (`StdoutRecorder`). Cet incrément comble l'écart, après la correction du Recording Tap décrite juste au-dessus (sans elle, rien n'aurait été capturé en session interactive).
+
+**Le service** — `services/recording-audit/command-recorder`, port 8087, Clean Architecture comme les autres. Contrat interne `POST /recorder/v1/command-entries` (lot d'entrées `session_id`/`ts`/`command`, réponse `entries_received` : la forme de `SessionRecording.StreamCommandEntries` et de `StreamAck`) et `GET /recorder/v1/sessions/{id}/commands`. Public : `GET /sessions/{id}/recording` (doc 05, déjà documenté), routé par la Gateway — qui ne transmet que `page`/`pageSize` du client et y accole les rôles du jeton **vérifié**, jamais ceux que le client enverrait.
+
+**Décisions, et pourquoi**
+- **Ajout seul.** `domain.CommandRepository` n'a ni mise à jour ni suppression, et le service n'expose aucun endpoint qui en fasse : un enregistrement est une preuve.
+- **Pas de FK vers `sessions`** (même raison que le Session Broker : une base par service ne peut pas poser de clé étrangère inter-services). Effet voulu : supprimer une session ne détruit plus son enregistrement, contrairement au `ON DELETE CASCADE` du DDL de référence (doc 06).
+- **Lecture : RBAC d'abord**, action `recording:session:read` sur `recording:session:{id}`, fermé par défaut si Authorization est injoignable. Le refus est identique que la session existe ou non, et une session sans entrée donne un enregistrement **vide en 200**, pas un 404 : l'API ne permet pas de sonder quels identifiants de session existent. Un test d'intégration le fige.
+- **Lot tout ou rien.** Une entrée invalide (session vide, horodatage absent, commande vide) refuse le lot entier en 400, et l'insertion PostgreSQL est transactionnelle — vérifié en provoquant un échec réel au milieu d'un lot.
+- **Normaliser plutôt que perdre.** Octets UTF-8 invalides remplacés, octets NUL retirés, commande trop longue tronquée à 8 Kio sur une frontière de caractère. PostgreSQL `TEXT` refuse NUL et l'UTF-8 invalide, et un refus aurait fait perdre tout le lot : le test de redémarrage PostgreSQL envoie volontairement un `\u0000`.
+- **Un seul contrat de test, deux magasins.** `runRepositoryContract` tourne sur le magasin mémoire en permanence et sur PostgreSQL quand `TEST_DATABASE_URL` est défini : le magasin de test ne peut plus dériver du vrai en silence.
+
+**Côté proxy** — `infrastructure.AsyncRecorder` : `Record` ne fait qu'enfiler (jamais d'attente réseau, car il est appelé depuis le relais d'une session vivante) ; un unique worker envoie par lots, dans l'ordre, avec trois tentatives. Si le recorder reste indisponible et que la file (1024) se remplit, les entrées sont **perdues, comptées et journalisées** (`RECORDING GAP`) — c'est le comportement déjà documenté du tap, pas un nouveau choix. À l'arrêt (SIGTERM/SIGINT), la file est vidée avant de sortir (5 s max) pour ne pas perdre les dernières commandes des sessions en cours. Sans `RECORDER_URL`, le proxy retombe sur `StdoutRecorder` et le journalise au démarrage : *rien n'est enregistré pour replay*.
+
+**Preuves.** `recording_flow_test.go` : **huit processus réels** (Authentication, Authorization, Session Broker, Vault, Audit, ssh-proxy, Command Recorder, Gateway). Un opérateur ouvre une vraie session SSH, tape comme un vrai terminal (Entrée = `\r`, mot de passe `sudo` tapé à un vrai prompt d'une cible qui désactive l'écho) ; un auditeur relit le replay par la Gateway. Vérifié : commandes dans l'ordre pour la bonne session, mot de passe `sudo` absent de la réponse brute, pagination, 403 pour un opérateur sans le rôle (y compris avec un `actorRoles` forgé dans l'URL), 401 sans jeton, vide-pas-404. **Contre-épreuve faite** : en désactivant volontairement le masquage des secrets dans le tap, ce test échoue — il affiche alors `correct-sudo-pw` en clair dans le replay. `TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart` prouve la survie à un redémarrage du processus.
+
+**Contrats** — `proto/recording/v1/recording.proto` et doc 07 §6 gagnent `SessionRecordingQuery.GetCommandRecording` (même démarche que `VaultAccountAdmin` : le contrat avant le code) ; doc 05 : `GET /sessions/{id}/recording` gagne `page`/`pageSize`, 403, et `CommandRecording` gagne `page`/`pageSize`/`totalEntries`. Le résumé disait « d'une session terminée » ; le service sert la lecture pendant la session comme après, la description est corrigée en conséquence.
+
+**Une erreur de mon commit précédent, trouvée en revalidant.** Le bloc YAML de la doc 05 était **invalide** depuis 392c5ee : deux descriptions en texte brut contenant `: ` (« … rotate : 403 avant 404 »). Je ne l'avais pas fait parser. Corrigé (descriptions entre guillemets) et le bloc complet est maintenant parsé et contrôlé (13 chemins, 15 schémas, réponses 403/404 de rotate et DELETE, 404 ajouté sur `GET /vault/accounts/{id}`, qui n'était documenté qu'en 200).
+
+### Ce que ce service ne fait PAS — à décider, pas à découvrir
+
+1. **Pas de chiffrement au repos.** Le cahier des charges demande des sessions « chiffrées » ; les commandes sont stockées en clair dans PostgreSQL. Un chiffrement enveloppe comme celui du Vault est la suite naturelle.
+2. **Un secret peut rester dans le texte d'une commande.** Le masquage ne couvre que la saisie à un prompt (`sudo`, `su`, `ssh`…). Un secret passé en argument (`mysql -pXXXX`, `curl -H 'Authorization: …'`, `export TOKEN=…`) est enregistré tel quel. Le replay est donc une donnée sensible, et `recording:session:read` une permission privilégiée à n'accorder qu'à des auditeurs.
+3. **L'écriture n'est pas authentifiée.** `POST /recorder/v1/command-entries` n'est pas routé par la Gateway, mais quiconque l'atteint sur le réseau peut forger des entrées dans un replay. Comme les autres appels internes de ce projet, il attend le mTLS interne (Guide Sécurité) — qui n'existe pas encore.
+4. **Enregistrer ou refuser ?** Si le recorder est durablement indisponible, le proxy laisse la session continuer et perd des entrées (comptées, journalisées). Un PAM strict pourrait préférer refuser les sessions qu'il ne peut pas enregistrer (fermé par défaut). C'est une décision de politique, pas un détail technique : je ne l'ai pas tranchée.
+5. **La lecture d'un replay n'est pas elle-même auditée** (pas d'événement `recording.read` vers l'Audit Service), et n'est contrôlée que par rôle — pas par propriété de la session.
+6. **Capture au clavier, pas dans le shell** (voir la section du tap) : historique, complétion et déplacement du curseur ne sont pas reconstitués.
 
 ## Prochains incréments qui lèveront cette limite
 
@@ -262,11 +293,11 @@ Dans un environnement de développement ou de CI avec accès réseau complet :
 
 1. `buf generate` sur `proto/` produira le code gRPC réel ; les fichiers `internal/interfaces/http.go` seront remplacés par des serveurs gRPC générés, sans toucher `internal/application`.
 2. Remplacer `LocalKMS` par un vrai client KMS/HSM externe — `KMS_KEY_HEX` est une étape vers une clé stable, pas un KMS réel ; voir le commentaire de doc de `NewLocalKMS`. **Vérifié bloqué dans ce sandbox** (contrairement au pari qui a payé pour `github.com/golang-jwt/jwt/v5`) : `go get github.com/hashicorp/vault/api@v1.15.0` tire transitivement `golang.org/x/net` et `golang.org/x/time` — aucun `replace` GitHub n'existe pour eux (seuls `x/crypto` et `x/sys` en ont un) — et `go get github.com/aws/aws-sdk-go-v2/service/kms@v1.33.0` time-out de la même façon ; les deux ont été testés avec `GOPROXY=direct GOSUMDB=off`, 30s chacun, aucune sortie après le premier (`hashicorp/vault/api`) ou aucune sortie du tout (`aws-sdk-go-v2/service/kms`). Un `go get github.com/golang-jwt/jwt/v5` témoin, lancé juste après dans un module vierge, a réussi en quelques secondes — la cause est bien les dépendances transitives de ces deux SDK, pas une dégradation réseau générale du sandbox. Lever ce blocage demanderait soit un accès réseau complet, soit d'ajouter les mêmes `replace` GitHub que pour `x/crypto`/`x/sys` à `golang.org/x/net` et `golang.org/x/time` (non tenté : risque de miroir GitHub introuvable ou désynchronisé, pour un gain incertain tant que le SDK complet n'a pas pu être résolu une seule fois de bout en bout).
-3. Toutes les bascules PostgreSQL de ce projet reposent maintenant sur le même patron, prouvé six fois (Vault, Authorization, Authentication, Session Broker, Audit — plus `audit-service` qui ajoute la contrainte propre au chaînage de hash). `session_command_entries`, `idempotency_keys` et le partitionnement mensuel d'`audit_events` (doc 06 §3) restent les seules parties du DDL documenté qui n'ont pas encore d'équivalent dans le code — aucune n'est bloquée par le sandbox, simplement pas encore faites.
+3. Toutes les bascules PostgreSQL de ce projet reposent maintenant sur le même patron, prouvé six fois (Vault, Authorization, Authentication, Session Broker, Audit — plus `audit-service` qui ajoute la contrainte propre au chaînage de hash). `idempotency_keys` et le partitionnement mensuel d'`audit_events` (doc 06 §3) restent les seules parties du DDL documenté qui n'ont pas encore d'équivalent dans le code (`session_command_entries` a le sien depuis le Command Recorder) — aucune n'est bloquée par le sandbox, simplement pas encore faites.
 
 ## État des tests à la date de cet incrément
 
-155 fonctions de test unitaires (dont 24 conditionnées à `TEST_DATABASE_URL` — 8 pour le Vault, 4 pour Authorization, 5 pour Authentication, 4 pour Session Broker, 3 pour Audit — qui se *skip*, pas échouent, sans elle), plus 10 tests d'intégration (dont 5 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les cinq tests de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
+180 fonctions de test unitaires (dont 27 conditionnées à `TEST_DATABASE_URL` — 8 pour le Vault, 4 pour Authorization, 5 pour Authentication, 4 pour Session Broker, 3 pour Audit, 3 pour le Command Recorder — qui se *skip*, pas échouent, sans elle), plus 12 tests d'intégration (dont 6 conditionnés à `TEST_DATABASE_URL`), `go vet` propre, sur les 9 modules du `go.work`. Tous les tests PostgreSQL dédiés et les six tests de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker, Command Recorder) ont été vérifiés avec une vraie base PostgreSQL 16 qui tourne dans ce sandbox.
 
 **Particularité du test de redémarrage d'`audit-service`** : contrairement à `Count()`/`ForRoles()` ailleurs dans ce projet, `VerifyChain` relit la table `audit_events` **entière** depuis le tout premier événement — une seule ligne avec un hash non authentique (comme en écrivent délibérément les tests unitaires de `postgres_store_test.go`, qui exercent `Append` directement sans passer par le vrai calcul de hash) la casse **définitivement**, pas seulement le temps d'une assertion. `TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart` commence donc par un `TRUNCATE audit_events` explicite, pour rester déterministe quel que soit ce qui a tourné avant lui — un geste plus strict que le `TRUNCATE` déjà documenté pour les exécutions complètes, mais nécessaire spécifiquement ici.
 
@@ -275,20 +306,22 @@ Dans un environnement de développement ou de CI avec accès réseau complet :
 ```
 pkg/proxycore                                                 29 tests (dont 20 Recording Tap : terminateurs, édition de ligne, échappements, prompts de secret)
 services/access/api-gateway/internal/application               3 tests
-services/access/api-gateway/internal/interfaces                12 tests
+services/access/api-gateway/internal/interfaces                15 tests (dont 3 GET /sessions/{id}/recording)
 services/access/authentication/internal/application             6 tests
 services/access/authentication/internal/infrastructure          22 tests (dont 5 PostgreSQL TEST_DATABASE_URL, 4 clé de signature, 2 alg confusion JWT)
 services/access/authorization/internal/application              12 tests (dont 6 RBAC/bootstrap)
 services/access/authorization/internal/infrastructure            4 tests PostgreSQL (TEST_DATABASE_URL)
 services/access/session-broker/internal/application             10 tests
 services/access/session-broker/internal/infrastructure           4 tests PostgreSQL (TEST_DATABASE_URL)
-services/proxy/ssh-proxy/internal/infrastructure                 3 tests
+services/proxy/ssh-proxy/internal/infrastructure                 10 tests (dont 7 AsyncRecorder / client du Command Recorder)
 services/proxy/ssh-proxy/internal/sshcodec                       3 tests (vrai protocole SSH, 3 participants ; dont l'enregistrement interactif avec prompt `sudo`)
 services/vault/password-vault/internal/application               25 tests (dont 6 RBAC, 1 versionnement, 6 liste/désactivation de comptes, 2 lastRotatedAt)
 services/vault/password-vault/internal/infrastructure            14 tests (dont 8 PostgreSQL TEST_DATABASE_URL, 6 LocalKMS)
 services/recording-audit/audit-service/internal/application       5 tests (dont 1 précision d'horodatage)
 services/recording-audit/audit-service/internal/infrastructure    3 tests PostgreSQL (TEST_DATABASE_URL)
-test/integration                                                 10 tests (dont 5 TEST_DATABASE_URL — redémarrage Vault, Authorization, Authentication, Audit, Session Broker)
+services/recording-audit/command-recorder/internal/application   11 tests (ordre, lot tout ou rien, normalisation, pagination, RBAC fermé par défaut, refus identique qu'une session existe ou non)
+services/recording-audit/command-recorder/internal/infrastructure 4 tests (contrat mémoire ; contrat PostgreSQL, lot atomique et visibilité inter-connexions : 3 TEST_DATABASE_URL)
+test/integration                                                 12 tests (dont 6 TEST_DATABASE_URL — redémarrage Vault, Authorization, Authentication, Audit, Session Broker, Command Recorder)
 ```
 
 Compte vérifié par `grep -c "^--- PASS"` sur la sortie `go test -v`, pas estimé.

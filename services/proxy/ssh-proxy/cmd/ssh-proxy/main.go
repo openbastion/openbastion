@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -33,6 +35,10 @@ func main() {
 	vaultURL := mustEnv("VAULT_URL", "http://127.0.0.1:8081")
 	auditURL := mustEnv("AUDIT_URL", "http://127.0.0.1:8082")
 	proxyID := mustEnv("PROXY_SERVICE_ID", "ssh-proxy")
+	// Where captured commands go. Unset, they are only logged
+	// (infrastructure.StdoutRecorder) — fine for development, but nothing
+	// is then recorded for replay.
+	recorderURL := os.Getenv("RECORDER_URL")
 
 	// MVP: an ephemeral host key generated at process start. Production
 	// needs a persisted, rotated identity (Guide Sécurité §3) — this is a
@@ -66,6 +72,17 @@ func main() {
 		DialTimeout: 10 * time.Second,
 	}
 
+	// Commands are sent to the Command Recorder asynchronously, in batches,
+	// so a slow or unreachable recorder can never stall a live session —
+	// see infrastructure.AsyncRecorder, including what that costs.
+	var asyncRecorder *infrastructure.AsyncRecorder
+	if recorderURL != "" {
+		asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}, 1024, 100)
+		server.Recorder = asyncRecorder
+	} else {
+		log.Printf("ssh-proxy: RECORDER_URL not set — captured commands are only logged, NOT recorded for replay")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -80,5 +97,26 @@ func main() {
 	log.Printf("ssh-proxy: internal API on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", httpPort)
 	log.Printf("  -> vault: %s", vaultURL)
 	log.Printf("  -> audit: %s", auditURL)
-	log.Fatal(http.ListenAndServe(":"+httpPort, httpServer.Routes()))
+	if recorderURL != "" {
+		log.Printf("  -> command-recorder: %s", recorderURL)
+	}
+
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+httpPort, httpServer.Routes()))
+	}()
+
+	// On SIGTERM/SIGINT (a rolling update, say) flush what is still queued,
+	// so the last commands of live sessions are not lost with the process.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+	log.Printf("ssh-proxy: shutting down")
+	cancel()
+	if asyncRecorder != nil {
+		flushCtx, flushCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer flushCancel()
+		if err := asyncRecorder.Close(flushCtx); err != nil {
+			log.Printf("ssh-proxy: could not flush recorded commands before exit: %v (%d lost in total)", err, asyncRecorder.Dropped())
+		}
+	}
 }

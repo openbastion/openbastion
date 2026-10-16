@@ -31,6 +31,7 @@ func main() {
 	sessionBrokerURL := mustEnv("SESSION_BROKER_URL", "http://127.0.0.1:8084")
 	vaultURL := mustEnv("VAULT_URL", "http://127.0.0.1:8081")
 	authorizationURL := mustEnv("AUTHORIZATION_URL", "http://127.0.0.1:8083")
+	commandRecorderURL := mustEnv("COMMAND_RECORDER_URL", "http://127.0.0.1:8087")
 
 	authClient := &infrastructure.AuthenticationHTTPClient{BaseURL: authenticationURL}
 	// 60 requests/minute per client IP for authenticated traffic, 5/minute
@@ -39,12 +40,13 @@ func main() {
 	requestLimiter := application.NewRateLimiter(60, time.Minute)
 	loginLimiter := application.NewRateLimiter(5, time.Minute)
 
-	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL)
+	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL)
 
 	log.Printf("api-gateway listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authentication:  %s", authenticationURL)
 	log.Printf("  -> session-broker:  %s", sessionBrokerURL)
 	log.Printf("  -> vault:           %s", vaultURL)
 	log.Printf("  -> authorization:   %s", authorizationURL)
+	log.Printf("  -> command-recorder: %s", commandRecorderURL)
 	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
 }

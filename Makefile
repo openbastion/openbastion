@@ -6,7 +6,7 @@ export GOWORK := $(CURDIR)/go.work
 export GOPROXY := direct
 export GOFLAGS :=
 
-.PHONY: build test test-integration test-postgres vet run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-gateway clean
+.PHONY: build test test-integration test-postgres vet run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
 ## Compile tous les modules actuellement implémentés.
 build:
@@ -18,7 +18,8 @@ build:
 		./services/access/session-broker/... \
 		./services/proxy/ssh-proxy/... \
 		./services/vault/password-vault/... \
-		./services/recording-audit/audit-service/...
+		./services/recording-audit/audit-service/... \
+		./services/recording-audit/command-recorder/...
 
 ## go vet sur tous les modules.
 vet:
@@ -30,6 +31,7 @@ vet:
 	$(GO) vet ./services/proxy/ssh-proxy/...
 	$(GO) vet ./services/vault/password-vault/...
 	$(GO) vet ./services/recording-audit/audit-service/...
+	$(GO) vet ./services/recording-audit/command-recorder/...
 	$(GO) vet ./test/integration/...
 
 ## Tests unitaires de tous les services. Hermétique : les tests
@@ -45,6 +47,7 @@ test:
 		./services/proxy/ssh-proxy/... \
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
+		./services/recording-audit/command-recorder/... \
 		-count=1
 
 ## Tests d'intégration : compile et lance les services comme processus
@@ -58,6 +61,10 @@ test:
 ## - admin_routes_test.go   : QUATRE processus — routage admin via la
 ##                            Gateway, refus RBAC réel avant toute
 ##                            politique, rotation auto vérifiée
+## - recording_flow_test.go : HUIT processus — session SSH interactive
+##                            réelle (Entrée = '\r', mot de passe sudo
+##                            saisi), replay relu par un auditeur via la
+##                            Gateway, RBAC et pagination vérifiés
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
 test-integration:
@@ -93,6 +100,7 @@ test-postgres:
 	$(GO) test ./services/access/authentication/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/session-broker/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/audit-service/internal/infrastructure/... -run TestPostgres -v -count=1
+	$(GO) test ./services/recording-audit/command-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
 	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=60s
 
@@ -106,13 +114,16 @@ run-authorization:
 run-authentication:
 	$(GO) run ./services/access/authentication/cmd/authentication
 run-ssh-proxy:
-	VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 \
+	VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 RECORDER_URL=http://127.0.0.1:8087 \
 		$(GO) run ./services/proxy/ssh-proxy/cmd/ssh-proxy
+run-recorder:
+	AUTHORIZATION_URL=http://127.0.0.1:8083 \
+		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder
 run-broker:
 	AUTHORIZATION_URL=http://127.0.0.1:8083 VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 SSH_PROXY_URL=http://127.0.0.1:8085 \
 		$(GO) run ./services/access/session-broker/cmd/session-broker
 run-gateway:
-	AUTHENTICATION_URL=http://127.0.0.1:8086 SESSION_BROKER_URL=http://127.0.0.1:8084 VAULT_URL=http://127.0.0.1:8081 AUTHORIZATION_URL=http://127.0.0.1:8083 \
+	AUTHENTICATION_URL=http://127.0.0.1:8086 SESSION_BROKER_URL=http://127.0.0.1:8084 VAULT_URL=http://127.0.0.1:8081 AUTHORIZATION_URL=http://127.0.0.1:8083 COMMAND_RECORDER_URL=http://127.0.0.1:8087 \
 		$(GO) run ./services/access/api-gateway/cmd/api-gateway
 
 clean:

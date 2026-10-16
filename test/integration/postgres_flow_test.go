@@ -495,3 +495,97 @@ func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 		}
 	})
 }
+
+// -- Command Recorder ------------------------------------------------------
+
+func recorderPostEntries(t *testing.T, baseURL string, entries []map[string]any) (status int, received int) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{"entries": entries})
+	resp, err := http.Post(baseURL+"/recorder/v1/command-entries", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post command-entries: %v", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		EntriesReceived int `json:"entries_received"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out.EntriesReceived
+}
+
+func recorderGetCommands(t *testing.T, baseURL, sessionID, actorRoles string) (int, recordingPage) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/recorder/v1/sessions/" + sessionID + "/commands?actorRoles=" + actorRoles)
+	if err != nil {
+		t.Fatalf("get commands: %v", err)
+	}
+	defer resp.Body.Close()
+	var page recordingPage
+	if resp.StatusCode == http.StatusOK {
+		_ = json.NewDecoder(resp.Body).Decode(&page)
+	}
+	return resp.StatusCode, page
+}
+
+func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed integration test (see /NOTES_SANDBOX.md)")
+	}
+
+	root := repoRoot(t)
+	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-recorder-pg")
+	recorderBin := buildBinary(t, root, "./services/recording-audit/command-recorder/cmd/command-recorder", "command-recorder-pg")
+
+	authz := startService(t, root, authzBin, "18450")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "session-auditor", "recording:session:*", "allow")
+
+	sessionID := fmt.Sprintf("sess_pg_recorder_restart_%d", time.Now().UnixNano())
+	t0 := time.Now().UTC().Truncate(time.Microsecond)
+
+	recorder1 := startService(t, root, recorderBin, "18451", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn)
+	status, received := recorderPostEntries(t, recorder1.baseURL, []map[string]any{
+		{"session_id": sessionID, "ts": t0, "command": "uptime"},
+		// A NUL byte is valid JSON but PostgreSQL TEXT refuses it, and a
+		// refusal would lose the whole batch: the recorder must normalize it.
+		{"session_id": sessionID, "ts": t0.Add(time.Second), "command": "ab\u0000cd"},
+		{"session_id": sessionID, "ts": t0.Add(2 * time.Second), "command": "df -h"},
+	})
+	if status != http.StatusAccepted || received != 3 {
+		t.Fatalf("post on first process: status %d, received %d", status, received)
+	}
+
+	// The process that stored the entries is gone — they must live in the
+	// database, not in that process's memory.
+	stopService(t, recorder1)
+
+	recorder2 := startService(t, root, recorderBin, "18452", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn)
+	status, page := recorderGetCommands(t, recorder2.baseURL, sessionID, "session-auditor")
+	if status != http.StatusOK {
+		t.Fatalf("read on restarted process: status %d — the recording did not survive the restart via PostgreSQL", status)
+	}
+	got := page.commands()
+	if page.TotalEntries != 3 || len(got) != 3 || got[0] != "uptime" || got[1] != "abcd" || got[2] != "df -h" {
+		t.Fatalf("unexpected recording after restart: total=%d %q", page.TotalEntries, got)
+	}
+
+	t.Run("a role without recording:session:read is still refused after the restart", func(t *testing.T) {
+		if status, _ := recorderGetCommands(t, recorder2.baseURL, sessionID, "dba"); status != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", status)
+		}
+	})
+
+	t.Run("a batch with one invalid entry is refused whole and stores nothing", func(t *testing.T) {
+		other := sessionID + "_refused"
+		status, _ := recorderPostEntries(t, recorder2.baseURL, []map[string]any{
+			{"session_id": other, "ts": t0, "command": "valid-but-must-not-be-kept"},
+			{"session_id": "", "ts": t0, "command": "no session"},
+		})
+		if status != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", status)
+		}
+		if _, page := recorderGetCommands(t, recorder2.baseURL, other, "session-auditor"); page.TotalEntries != 0 {
+			t.Fatalf("part of a refused batch was stored: %q", page.commands())
+		}
+	})
+}

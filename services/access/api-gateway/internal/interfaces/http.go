@@ -35,14 +35,16 @@ type GatewayServer struct {
 	sessionBrokerURL  string
 	vaultURL          string
 	authorizationURL  string
-	httpClient        *http.Client
+	// commandRecorderURL is where GET /sessions/{id}/recording is routed.
+	commandRecorderURL string
+	httpClient         *http.Client
 }
 
-func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, loginLimiter *application.RateLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL string) *GatewayServer {
+func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, loginLimiter *application.RateLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL string) *GatewayServer {
 	return &GatewayServer{
 		authClient: authClient, requestLimiter: requestLimiter, loginLimiter: loginLimiter,
 		authenticationURL: authenticationURL, sessionBrokerURL: sessionBrokerURL,
-		vaultURL: vaultURL, authorizationURL: authorizationURL,
+		vaultURL: vaultURL, authorizationURL: authorizationURL, commandRecorderURL: commandRecorderURL,
 		httpClient: http.DefaultClient,
 	}
 }
@@ -213,13 +215,54 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 
 // -- GET/DELETE /sessions/{id}, POST /sessions/{id}/connect ---------------
 //
-// Pure passthrough — Session Broker itself does not yet check session
-// ownership against the caller (a scope this increment did not extend;
-// see /NOTES_SANDBOX.md), so there is nothing for the Gateway to inject
-// here beyond having already required a valid token to reach this far.
+// Pure passthrough to the Session Broker — which itself does not yet check
+// session ownership against the caller (a scope this increment did not
+// extend; see /NOTES_SANDBOX.md), so there is nothing for the Gateway to
+// inject here beyond having already required a valid token to reach this
+// far. The one exception is GET /sessions/{id}/recording below, which is
+// not the Broker's at all.
 
 func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request, id identity) {
+	if sessionID, ok := recordingSessionID(r.URL.Path); ok {
+		g.handleSessionRecording(w, r, id, sessionID)
+		return
+	}
 	g.forwardPassthrough(w, r, r.Method, g.sessionBrokerURL+r.URL.Path)
+}
+
+// recordingSessionID recognizes /sessions/{id}/recording and returns the id.
+func recordingSessionID(path string) (string, bool) {
+	rest := strings.TrimPrefix(path, "/sessions/")
+	sessionID, ok := strings.CutSuffix(rest, "/recording")
+	if !ok || sessionID == "" || strings.Contains(sessionID, "/") {
+		return "", false
+	}
+	return sessionID, true
+}
+
+// -- GET /sessions/{id}/recording (doc 05) ---------------------------------
+//
+// The text recording of a session, served by the Command Recorder. The
+// Gateway's part is the same as for the Vault's admin routes: it replaces
+// whatever roles the client may have sent with the verified ones, and the
+// access decision itself (recording:session:read, RBAC) is the Recorder's.
+// Only page and pageSize are taken from the client's query — nothing else
+// reaches the Recorder, so a client-supplied actorRoles cannot either.
+
+func (g *GatewayServer) handleSessionRecording(w http.ResponseWriter, r *http.Request, id identity, sessionID string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := neturl.Values{}
+	for _, key := range []string{"page", "pageSize"} {
+		if v := r.URL.Query().Get(key); v != "" {
+			q.Set(key, v)
+		}
+	}
+	q.Set("actorRoles", strings.Join(id.Roles, ","))
+	g.forwardPassthrough(w, r, http.MethodGet,
+		g.commandRecorderURL+"/recorder/v1/sessions/"+neturl.PathEscape(sessionID)+"/commands?"+q.Encode())
 }
 
 // -- GET/POST /vault/accounts (mirrors doc 05 §2) --------------------------

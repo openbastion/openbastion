@@ -198,13 +198,36 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     get:
       tags: [sessions]
-      summary: Récupère l'enregistrement texte (commandes) d'une session terminée
+      summary: Récupère l'enregistrement texte (commandes) d'une session
+      description: >
+        Les commandes de la session, dans l'ordre où elles ont été
+        enregistrées, paginées. Lisible pendant la session comme après.
+        Réservé aux rôles autorisés par une politique
+        `recording:session:read` sur `recording:session:{sessionId}` ; la
+        Gateway transmet les rôles du jeton vérifié, jamais ceux que le
+        client pourrait fournir. Le refus (403) est le même que la session
+        existe ou non, et une session sans commande enregistrée donne un
+        enregistrement vide (200), pas un 404 : l'API ne permet pas de
+        sonder quelles sessions existent.
+        Chaque entrée est la commande telle que l'opérateur l'a saisie, pas
+        telle que le shell de la cible l'a exécutée (historique et
+        complétion ne sont pas reconstitués). Une ligne saisie à un prompt
+        de secret (sudo, su, ssh…) apparaît sous la forme
+        `[redacted: input at a secret prompt]`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: Flux de commandes horodaté
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CommandRecording" }
+        "403":
+          description: Refusé par l'Authorization Service (ou injoignable — fermé par défaut)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /vault/accounts:
     get:
@@ -256,6 +279,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PrivilegedAccount" }
+        "404":
+          description: "Compte introuvable ou désactivé (les deux cas ne sont volontairement pas distingués)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
     delete:
       tags: [vault]
       summary: Retire un compte du coffre-fort
@@ -268,7 +296,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
-          description: Compte introuvable ou déjà supprimé. Même ordre que pour rotate : 403 avant 404.
+          description: "Compte introuvable ou déjà supprimé. Même ordre que pour rotate : 403 avant 404."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -302,7 +330,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "404":
-          description: Compte introuvable ou désactivé (les deux cas ne sont volontairement pas distingués). Le contrôle d'accès passe avant l'existence : un appelant non autorisé reçoit 403 que le compte existe ou non.
+          description: "Compte introuvable ou désactivé (les deux cas ne sont volontairement pas distingués). Le contrôle d'accès passe avant l'existence : un appelant non autorisé reçoit 403 que le compte existe ou non."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -486,7 +514,10 @@ components:
     CommandRecording:
       type: object
       properties:
-        sessionId: { type: string, format: uuid }
+        sessionId: { type: string }
+        page: { type: integer, description: "Page réellement servie (la page demandée, ramenée à 1 si < 1)" }
+        pageSize: { type: integer, description: "Taille réellement servie (défaut 20, maximum 100)" }
+        totalEntries: { type: integer, description: "Nombre total de commandes enregistrées pour la session" }
         entries:
           type: array
           items:

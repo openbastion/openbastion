@@ -9,5 +9,6 @@ use (
 	./services/proxy/ssh-proxy
 	./services/vault/password-vault
 	./services/recording-audit/audit-service
+	./services/recording-audit/command-recorder
 	./test/integration
 )

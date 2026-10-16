@@ -293,7 +293,33 @@ message VideoFrame {
 message StreamAck {
   int64 entries_received = 1;
 }
+
+// Lecture de l'enregistrement texte d'une session, par un auditeur — le
+// pendant « lecture » de StreamCommandEntries. Appelé par l'API Gateway, qui
+// transmet les rôles vérifiés du jeton (jamais ceux fournis par le client).
+// L'accès est décidé par le Command Recorder lui-même via Authorization :
+// action recording:session:read sur la ressource recording:session:{id}.
+service SessionRecordingQuery {
+  rpc GetCommandRecording(GetCommandRecordingRequest) returns (GetCommandRecordingResponse);
+}
+
+message GetCommandRecordingRequest {
+  string session_id = 1;
+  repeated string actor_roles = 2;
+  int32 page = 3;       // < 1 est ramené à 1
+  int32 page_size = 4;  // < 1 → 20 ; > 100 → 100 (comme les listes de la doc 05)
+}
+
+message GetCommandRecordingResponse {
+  string session_id = 1;
+  repeated CommandEntry entries = 2;  // dans l'ordre d'enregistrement (ts, puis insertion)
+  int32 page = 3;                     // la page réellement servie, pas la demandée
+  int32 page_size = 4;
+  int64 total_entries = 5;
+}
 ```
+
+**Ce que `StreamCommandEntries` transporte réellement.** Ce que le proxy envoie est la commande telle que l'opérateur l'a *saisie* (édition de ligne appliquée : retour arrière, Ctrl-C/U/W), pas telle que le shell de la cible l'a exécutée — historique et complétion ne sont pas reconstitués. Une ligne saisie à un prompt de secret (sudo, su, ssh…) est remplacée côté proxy par le marqueur `[redacted: input at a secret prompt]` avant tout envoi ; un marqueur plutôt qu'un silence, pour qu'un faux prompt affiché par un initié reste visible dans le replay. Le proxy envoie par lots, de façon asynchrone : un Command Recorder lent ou injoignable ne bloque jamais une session, au prix d'entrées perdues (comptées et journalisées) si la file se remplit.
 
 ## 7. Tout service → Audit Service — `AuditIngestion`
 
@@ -393,7 +419,8 @@ sequenceDiagram
 | `VaultAuthorization` | Session Broker | Vault | Non (scope token uniquement) |
 | `VaultCredentialIssuance` | Proxy protocolaire | Vault | **Oui — seul RPC concerné** |
 | `VaultAccountAdmin` | Administration UI/API Gateway | Vault | Non |
-| `SessionRecording` | Proxy protocolaire | Session Recorder | Non |
+| `SessionRecording` | Proxy protocolaire | Command Recorder | Non (mais le texte d'une commande saisie peut en contenir un — voir §6) |
+| `SessionRecordingQuery` | API Gateway | Command Recorder | Non (idem : le replay est une donnée sensible) |
 | `AuditIngestion` | Tout service | Audit Service | Non |
 | `Authorization` | Session Broker, API Gateway | Authorization Service | Non |
 

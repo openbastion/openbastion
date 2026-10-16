@@ -147,17 +147,20 @@ func newCapturingAuthorization(t *testing.T) *capturingAuthorization {
 
 func newTestGateway(t *testing.T, authURL, brokerURL string, extra ...string) *interfaces.GatewayServer {
 	t.Helper()
-	vaultURL, authorizationURL := "", ""
+	vaultURL, authorizationURL, commandRecorderURL := "", "", ""
 	if len(extra) > 0 {
 		vaultURL = extra[0]
 	}
 	if len(extra) > 1 {
 		authorizationURL = extra[1]
 	}
+	if len(extra) > 2 {
+		commandRecorderURL = extra[2]
+	}
 	authClient := &infrastructure.AuthenticationHTTPClient{BaseURL: authURL}
 	requestLimiter := application.NewRateLimiter(1000, time.Minute)
 	loginLimiter := application.NewRateLimiter(1000, time.Minute)
-	return interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authURL, brokerURL, vaultURL, authorizationURL)
+	return interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authURL, brokerURL, vaultURL, authorizationURL, commandRecorderURL)
 }
 
 func TestHandleSessionsCollection_InjectsVerifiedIdentityOverridingClientClaims(t *testing.T) {
@@ -267,7 +270,7 @@ func TestHandleLogin_RateLimited(t *testing.T) {
 	authClient := &infrastructure.AuthenticationHTTPClient{BaseURL: authSrv.URL}
 	requestLimiter := application.NewRateLimiter(1000, time.Minute)
 	loginLimiter := application.NewRateLimiter(2, time.Minute) // deliberately tiny for this test
-	gw := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authSrv.URL, broker.srv.URL, "", "")
+	gw := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authSrv.URL, broker.srv.URL, "", "", "")
 
 	body := []byte(`{"username":"u1","password":"pw"}`)
 	for i := 0; i < 2; i++ {
@@ -500,5 +503,115 @@ func TestHandlePoliciesCollection_InjectsVerifiedUsernameAsCreatedByOverridingCl
 	}
 	if authz.lastBody["createdBy"] != "real-admin" {
 		t.Fatalf("expected createdBy to be overridden to the verified username 'real-admin', got %v", authz.lastBody["createdBy"])
+	}
+}
+
+// -- GET /sessions/{id}/recording -------------------------------------------
+
+// capturingRecorder stands in for the Command Recorder and records what the
+// Gateway forwards to it.
+type capturingRecorder struct {
+	srv       *httptest.Server
+	lastPath  string
+	lastQuery url.Values
+	calls     int
+}
+
+func newCapturingRecorder(t *testing.T) *capturingRecorder {
+	t.Helper()
+	c := &capturingRecorder{}
+	c.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c.calls++
+		c.lastPath = r.URL.EscapedPath()
+		c.lastQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"sessionId": "sess-1", "entries": []any{}, "page": 1, "pageSize": 20, "totalEntries": 0})
+	}))
+	return c
+}
+
+func TestHandleSessionRecording_RoutesToTheCommandRecorderWithVerifiedRolesOnly(t *testing.T) {
+	const validToken = "tok-auditor"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_aud", "auditor1", []string{"auditor", "reader"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	recorder := newCapturingRecorder(t)
+	defer recorder.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, "", "", recorder.srv.URL)
+
+	// The client tries to smuggle its own actorRoles and an unrelated parameter.
+	req := httptest.NewRequest(http.MethodGet, "/sessions/sess-1/recording?page=2&pageSize=50&actorRoles=platform-admin&evil=1", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if recorder.lastPath != "/recorder/v1/sessions/sess-1/commands" {
+		t.Fatalf("routed to %q", recorder.lastPath)
+	}
+	if got := recorder.lastQuery.Get("actorRoles"); got != "auditor,reader" {
+		t.Fatalf("actorRoles must be the verified ones, got %q — a client-supplied value leaked through", got)
+	}
+	if recorder.lastQuery.Get("page") != "2" || recorder.lastQuery.Get("pageSize") != "50" {
+		t.Fatalf("page/pageSize were not forwarded: %v", recorder.lastQuery)
+	}
+	if recorder.lastQuery.Has("evil") {
+		t.Fatalf("an arbitrary client parameter reached the Command Recorder: %v", recorder.lastQuery)
+	}
+	if broker.lastBody != nil {
+		t.Fatal("the recording route must not reach the Session Broker")
+	}
+}
+
+func TestHandleSessionRecording_EscapesTheSessionIDInThePath(t *testing.T) {
+	const validToken = "tok-auditor"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "u", "u", []string{"auditor"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	recorder := newCapturingRecorder(t)
+	defer recorder.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, "", "", recorder.srv.URL)
+
+	req := httptest.NewRequest(http.MethodGet, "/sessions/a%3Fb%23c/recording", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(rec, req)
+
+	if recorder.lastPath != "/recorder/v1/sessions/a%3Fb%23c/commands" || recorder.lastQuery.Has("c") {
+		t.Fatalf("a session id with ? and # must stay inside the path, got path=%q query=%v", recorder.lastPath, recorder.lastQuery)
+	}
+}
+
+func TestHandleSessionRecording_OnlyGetAndRequiresAToken(t *testing.T) {
+	const validToken = "tok-auditor"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "u", "u", []string{"auditor"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	recorder := newCapturingRecorder(t)
+	defer recorder.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, "", "", recorder.srv.URL)
+
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+		req := httptest.NewRequest(method, "/sessions/sess-1/recording", nil)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s: expected 405, got %d", method, rec.Code)
+		}
+	}
+
+	noToken := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(noToken, httptest.NewRequest(http.MethodGet, "/sessions/sess-1/recording", nil))
+	if noToken.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without a token, got %d", noToken.Code)
+	}
+	if recorder.calls != 0 {
+		t.Fatalf("no refused request may reach the Command Recorder, got %d call(s)", recorder.calls)
 	}
 }
