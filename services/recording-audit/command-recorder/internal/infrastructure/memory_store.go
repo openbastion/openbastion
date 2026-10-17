@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
 )
@@ -25,6 +26,9 @@ func (s *InMemoryStore) AppendBatch(ctx context.Context, entries []domain.Comman
 	for _, e := range entries {
 		e.ID = s.nextID
 		s.nextID++
+		// Same precision as PostgreSQL's TIMESTAMPTZ, so both stores satisfy
+		// one contract.
+		e.Timestamp = e.Timestamp.UTC().Truncate(time.Microsecond)
 		s.entries = append(s.entries, e)
 	}
 	return nil

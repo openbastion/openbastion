@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
@@ -67,9 +68,12 @@ func NewRecorderService(repo domain.CommandRepository, authz AuthorizationClient
 // Sécurité), which this slice does not have yet; see NOTES_SANDBOX.md.
 //
 // Commands are normalized, not rejected, when they are merely awkward:
-// invalid UTF-8 is replaced, NUL bytes are dropped (PostgreSQL TEXT refuses
-// both, and a refusal would lose the whole batch), and an over-long command
-// is truncated on a character boundary.
+// invalid UTF-8 is replaced, NUL bytes are dropped, and an over-long command
+// is truncated on a character boundary — so a replay is always valid text,
+// and one odd command never costs the rest of its batch. Timestamps are
+// truncated to microseconds, the precision PostgreSQL stores and the
+// precision a command's ciphertext is bound to: the value sealed must be the
+// value read back.
 func (s *RecorderService) Record(ctx context.Context, entries []domain.CommandEntry) (int, error) {
 	if len(entries) == 0 {
 		return 0, fmt.Errorf("%w: empty batch", domain.ErrInvalidEntry)
@@ -92,7 +96,7 @@ func (s *RecorderService) Record(ctx context.Context, entries []domain.CommandEn
 		}
 		clean = append(clean, domain.CommandEntry{
 			SessionID: e.SessionID,
-			Timestamp: e.Timestamp.UTC(),
+			Timestamp: e.Timestamp.UTC().Truncate(time.Microsecond),
 			Command:   command,
 		})
 	}

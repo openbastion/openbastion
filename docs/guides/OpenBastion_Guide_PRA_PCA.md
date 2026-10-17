@@ -36,6 +36,7 @@ Ces quatre scénarios ne déclenchent pas la même procédure — la qualificati
 | MinIO (enregistrements de session) | Réplication de bucket cross-site native | Minutes |
 | Kafka (flux d'audit durable) | Cluster étendu multi-site ou MirrorMaker vers le site DR | Quasi temps réel — l'audit est la donnée la moins tolérante à la perte (Full Auditability, doc 00 §2) |
 | Password Vault / Secrets Manager | Réplication des blobs chiffrés (`vault_secrets.encrypted_material`) au même rythme que PostgreSQL — **la clé KMS reste dans un service de gestion de clés multi-région, jamais répliquée par le même mécanisme que les données** | Aligné sur PostgreSQL |
+| Command Recorder (replay des commandes) | Réplication des lignes chiffrées (`session_command_entries`, `session_recording_keys`) avec PostgreSQL — **sans la KEK, ces lignes sont définitivement illisibles** : la KEK (`KMS_KEY_HEX` aujourd'hui) se sauvegarde et se restaure séparément des données, jamais dans la même sauvegarde | Aligné sur PostgreSQL |
 | Keycloak | Réplication de la base partagée, ou appui sur des IdP externes déjà nativement multi-site (Entra ID, etc.) | Minutes |
 
 **Point d'attention** : répliquer le blob chiffré ne suffit pas à répliquer la capacité à le déchiffrer — la disponibilité du KMS/HSM sur le site DR est une dépendance à valider indépendamment, pas une conséquence automatique de la réplication PostgreSQL.

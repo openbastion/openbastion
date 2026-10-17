@@ -55,6 +55,7 @@ Tout le reste de ce guide explique comment ces trois invariants sont concrèteme
 ## 6. Sécurité des secrets
 
 - **Chiffrement à l'enveloppe** : `vault_secrets.encrypted_material` chiffré AES-256, la clé de déchiffrement référencée (`encryption_key_id`) et non stockée en base — dépendance à un KMS/HSM externe (doc 06 §3).
+- **Enregistrements de session chiffrés au repos** (Command Recorder, implémenté) : chaque commande est scellée en AES-256-GCM sous une clé de données propre à la session ; cette clé n'existe en base que chiffrée par la KEK (`KMS_KEY_HEX` aujourd'hui, un KMS/HSM à terme — le Recorder refuse de démarrer sans elle dès que `DATABASE_URL` est défini). L'identifiant de session et l'horodatage sont liés au chiffrement : déplacer une ligne vers une autre session ou en modifier l'heure fait échouer la lecture au lieu de produire un faux replay. **Ce que cela ne couvre pas** : un attaquant qui contrôle la base peut supprimer ou réordonner des lignes intactes (elles ne sont pas chaînées entre elles, contrairement à l'audit, §9), et il suffit de la KEK *et* de la base pour tout lire — la KEK doit donc vivre hors de la base et de ses sauvegardes.
 - **Argon2id** pour tout secret applicatif nécessitant un hash (ex. mots de passe des comptes locaux OpenBastion eux-mêmes, `users.password_hash`).
 - **Le control plane ne voit jamais le secret** : seul `VaultCredentialIssuance.FetchCredential` (doc 07 §5) transporte un credential, et seul un proxy protocolaire authentifié par mTLS peut l'appeler.
 - **Cycle de vie** : rotation manuelle, planifiée ou post-usage (doc 00, section Gestion des comptes) ; chaque rotation crée une nouvelle version dans `vault_secrets`, l'ancienne étant marquée `superseded_at` plutôt que supprimée — traçabilité complète.
@@ -110,6 +111,8 @@ C'est la zone de plus forte sensibilité du système — seul point où un secre
 | Pas de validation multi-étapes | RBAC seul avant octroi | v1.0 (Workflow/Approval Engine) |
 | Un seul protocole (SSH) | Périmètre volontairement restreint pour prouver l'invariant (doc 04 §1) | v1.0/v2.0 |
 | Pas de détection d'anomalie/score de risque | Aucune | v2.0 |
+| Enregistrement de session « au mieux » : si le Command Recorder est durablement injoignable, la session continue et des commandes sont perdues (comptées, journalisées `RECORDING GAP`) | Surveillance manuelle de ces journaux (aucune alerte automatique) | Décision de politique (enregistrer ou refuser) non tranchée |
+| Un secret passé en argument d'une commande (`mysql -pXXXX`) est enregistré tel quel ; seul un secret saisi à un prompt est masqué | Chiffrement au repos + `recording:session:read` réservé aux auditeurs | À décider |
 
 ## 13. Prochaine étape
 

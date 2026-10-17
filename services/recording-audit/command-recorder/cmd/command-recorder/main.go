@@ -30,12 +30,27 @@ func main() {
 
 	var repo domain.CommandRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
-		db, err := infrastructure.OpenPostgres(context.Background(), dsn)
+		// Fail closed, not open: with PostgreSQL every command is encrypted
+		// under a per-session key wrapped by this key, so a missing or random
+		// key would make every recording unreadable after a restart — or, if
+		// we skipped encryption instead, store commands in the clear. Generate
+		// one once (`openssl rand -hex 32`), keep it outside the database, and
+		// give this service its OWN key, not the Password Vault's.
+		kek, err := infrastructure.NewLocalKEKFromHexKey(os.Getenv("KMS_KEY_HEX"))
+		if err != nil {
+			log.Fatalf("command-recorder: DATABASE_URL is set, so recordings are encrypted at rest and a key is required — refusing to start: %v", err)
+		}
+		ctx := context.Background()
+		db, err := infrastructure.OpenPostgres(ctx, dsn)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
-		repo = infrastructure.NewPostgresStore(db)
-		log.Printf("command-recorder: using PostgreSQL at %s", redactDSN(dsn))
+		store, err := infrastructure.NewPostgresStore(ctx, db, kek)
+		if err != nil {
+			log.Fatalf("postgres store: %v", err)
+		}
+		repo = store
+		log.Printf("command-recorder: using PostgreSQL at %s — commands encrypted at rest (AES-256-GCM, key per session wrapped by %s)", redactDSN(dsn), kek.KeyID())
 	} else {
 		repo = infrastructure.NewInMemoryStore()
 		log.Printf("command-recorder: DATABASE_URL not set, using in-memory storage (dev/test only — recordings are lost on restart)")

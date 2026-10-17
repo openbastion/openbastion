@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -515,16 +516,80 @@ func recorderPostEntries(t *testing.T, baseURL string, entries []map[string]any)
 
 func recorderGetCommands(t *testing.T, baseURL, sessionID, actorRoles string) (int, recordingPage) {
 	t.Helper()
+	status, page, _ := recorderGetCommandsRaw(t, baseURL, sessionID, actorRoles)
+	return status, page
+}
+
+// recorderGetCommandsRaw also returns the raw response body, for assertions
+// about what an error response does and does not contain.
+func recorderGetCommandsRaw(t *testing.T, baseURL, sessionID, actorRoles string) (int, recordingPage, string) {
+	t.Helper()
 	resp, err := http.Get(baseURL + "/recorder/v1/sessions/" + sessionID + "/commands?actorRoles=" + actorRoles)
 	if err != nil {
 		t.Fatalf("get commands: %v", err)
 	}
 	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
 	var page recordingPage
 	if resp.StatusCode == http.StatusOK {
-		_ = json.NewDecoder(resp.Body).Decode(&page)
+		_ = json.Unmarshal(raw, &page)
 	}
-	return resp.StatusCode, page
+	return resp.StatusCode, page, string(raw)
+}
+
+// TestCommandRecorderMain_RefusesToStartWithDatabaseURLButNoKMSKeyHex is the
+// Command Recorder's twin of the Vault check above: recordings must outlive the
+// process, so with a database configured there is no random per-process key to
+// fall back on — the process must refuse to start. Unconditional, for the same
+// reason: the check runs before any database is contacted.
+func TestCommandRecorderMain_RefusesToStartWithDatabaseURLButNoKMSKeyHex(t *testing.T) {
+	root := repoRoot(t)
+	recorderBin := buildBinary(t, root, "./services/recording-audit/command-recorder/cmd/command-recorder", "command-recorder-kek-check")
+
+	cmd := exec.Command(recorderBin)
+	cmd.Env = append(buildEnv(root), "PORT=18498", "DATABASE_URL=postgres://deliberately-unreachable/db")
+	var outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &outBuf
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected a non-zero exit when DATABASE_URL is set without KMS_KEY_HEX")
+		}
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatalf("the process was still running after 5s — it must refuse to start without a key\noutput so far:\n%s", outBuf.String())
+	}
+	if !strings.Contains(outBuf.String(), "KMS_KEY_HEX") {
+		t.Fatalf("expected the fatal message to name KMS_KEY_HEX, got:\n%s", outBuf.String())
+	}
+
+	// A malformed key is refused just the same, rather than silently weakened.
+	cmd = exec.Command(recorderBin)
+	cmd.Env = append(buildEnv(root), "PORT=18498", "DATABASE_URL=postgres://deliberately-unreachable/db", "KMS_KEY_HEX=abcd")
+	outBuf.Reset()
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &outBuf
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	done = make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected a non-zero exit for a key that is not 32 bytes")
+		}
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatalf("a malformed KMS_KEY_HEX did not stop the process\noutput so far:\n%s", outBuf.String())
+	}
 }
 
 func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.T) {
@@ -543,15 +608,21 @@ func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.
 	sessionID := fmt.Sprintf("sess_pg_recorder_restart_%d", time.Now().UnixNano())
 	t0 := time.Now().UTC().Truncate(time.Microsecond)
 
-	recorder1 := startService(t, root, recorderBin, "18451", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn)
+	// One KEK for both processes, like the Vault test: a restarted recorder
+	// can only read what its predecessor sealed if it is given the same key.
+	kekHex := testKMSKeyHex(t)
+
+	const secretCommand = "mysql -pCorrectHorseBatteryStaple-it"
+	recorder1 := startService(t, root, recorderBin, "18451", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kekHex)
 	status, received := recorderPostEntries(t, recorder1.baseURL, []map[string]any{
 		{"session_id": sessionID, "ts": t0, "command": "uptime"},
-		// A NUL byte is valid JSON but PostgreSQL TEXT refuses it, and a
-		// refusal would lose the whole batch: the recorder must normalize it.
+		// A NUL byte is valid JSON; the recorder strips it so a recording
+		// never holds a byte that breaks text tooling downstream.
 		{"session_id": sessionID, "ts": t0.Add(time.Second), "command": "ab\u0000cd"},
 		{"session_id": sessionID, "ts": t0.Add(2 * time.Second), "command": "df -h"},
+		{"session_id": sessionID, "ts": t0.Add(3 * time.Second), "command": secretCommand},
 	})
-	if status != http.StatusAccepted || received != 3 {
+	if status != http.StatusAccepted || received != 4 {
 		t.Fatalf("post on first process: status %d, received %d", status, received)
 	}
 
@@ -559,15 +630,76 @@ func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.
 	// database, not in that process's memory.
 	stopService(t, recorder1)
 
-	recorder2 := startService(t, root, recorderBin, "18452", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn)
+	recorder2 := startService(t, root, recorderBin, "18452", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kekHex)
 	status, page := recorderGetCommands(t, recorder2.baseURL, sessionID, "session-auditor")
 	if status != http.StatusOK {
 		t.Fatalf("read on restarted process: status %d — the recording did not survive the restart via PostgreSQL", status)
 	}
 	got := page.commands()
-	if page.TotalEntries != 3 || len(got) != 3 || got[0] != "uptime" || got[1] != "abcd" || got[2] != "df -h" {
+	if page.TotalEntries != 4 || len(got) != 4 || got[0] != "uptime" || got[1] != "abcd" || got[2] != "df -h" || got[3] != secretCommand {
 		t.Fatalf("unexpected recording after restart: total=%d %q", page.TotalEntries, got)
 	}
+
+	t.Run("the database holds no readable command, only a wrapped key and sealed rows", func(t *testing.T) {
+		db, err := sql.Open("postgres", dsn)
+		if err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		defer db.Close()
+
+		rows, err := db.Query(`SELECT command_sealed FROM session_command_entries WHERE session_id = $1`, sessionID)
+		if err != nil {
+			t.Fatalf("select sealed rows: %v", err)
+		}
+		defer rows.Close()
+		n := 0
+		for rows.Next() {
+			var sealed []byte
+			if err := rows.Scan(&sealed); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			n++
+			for _, readable := range []string{"CorrectHorseBatteryStaple", "mysql", "uptime", "df -h"} {
+				if bytes.Contains(sealed, []byte(readable)) {
+					t.Fatalf("a stored row contains %q in the clear", readable)
+				}
+			}
+		}
+		if n != 4 {
+			t.Fatalf("expected 4 sealed rows in the database, got %d", n)
+		}
+
+		var wrapped []byte
+		if err := db.QueryRow(`SELECT wrapped_dek FROM session_recording_keys WHERE session_id = $1`, sessionID).Scan(&wrapped); err != nil {
+			t.Fatalf("no wrapped key stored for the session: %v", err)
+		}
+		if bytes.Contains(wrapped, []byte(kekHex)) {
+			t.Fatal("the KEK itself is in the database")
+		}
+	})
+
+	t.Run("a recorder started with the wrong key fails the read, it does not return garbage", func(t *testing.T) {
+		wrong := startService(t, root, recorderBin, "18453", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+testKMSKeyHex(t))
+		status, page, body := recorderGetCommandsRaw(t, wrong.baseURL, sessionID, "session-auditor")
+		if status != http.StatusInternalServerError {
+			t.Fatalf("expected 500 from a recorder holding the wrong key, got %d with %q", status, page.commands())
+		}
+		if strings.Contains(body, "CorrectHorseBatteryStaple") || strings.Contains(body, "uptime") {
+			t.Fatalf("the error response leaks recording content: %s", body)
+		}
+
+		// Nor may it extend the recording under a second, unreadable key.
+		appendStatus, _ := recorderPostEntries(t, wrong.baseURL, []map[string]any{
+			{"session_id": sessionID, "ts": t0.Add(10 * time.Second), "command": "must-not-be-stored"},
+		})
+		if appendStatus != http.StatusInternalServerError {
+			t.Fatalf("expected 500 when appending with the wrong key, got %d", appendStatus)
+		}
+		// The right recorder is unaffected.
+		if status, page := recorderGetCommands(t, recorder2.baseURL, sessionID, "session-auditor"); status != http.StatusOK || page.TotalEntries != 4 {
+			t.Fatalf("the right recorder must still read 4 entries: status %d total %d", status, page.TotalEntries)
+		}
+	})
 
 	t.Run("a role without recording:session:read is still refused after the restart", func(t *testing.T) {
 		if status, _ := recorderGetCommands(t, recorder2.baseURL, sessionID, "dba"); status != http.StatusForbidden {

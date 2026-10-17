@@ -26,6 +26,7 @@ erDiagram
     PRIVILEGED_ACCOUNTS ||--o{ SESSIONS : "is target of"
     PRIVILEGED_ACCOUNTS ||--o{ VAULT_SECRETS : "has versions"
     SESSIONS ||--o{ SESSION_COMMAND_ENTRIES : contains
+    SESSION_RECORDING_KEYS ||--o{ SESSION_COMMAND_ENTRIES : seals
     USERS ||--o{ AUDIT_EVENTS : performs
 
     USERS {
@@ -74,9 +75,14 @@ erDiagram
     }
     SESSION_COMMAND_ENTRIES {
         bigint id PK
-        uuid session_id FK
+        text session_id "pas de FK : base propre au Command Recorder"
         timestamptz ts
-        text command
+        bytea command_sealed "AES-256-GCM, clé de données par session"
+    }
+    SESSION_RECORDING_KEYS {
+        text session_id PK
+        text kek_id
+        bytea wrapped_dek "clé de données chiffrée par la KEK"
     }
     AUDIT_EVENTS {
         uuid id PK
@@ -180,13 +186,27 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_requested_by ON sessions (requested_by);
 CREATE INDEX idx_sessions_status ON sessions (status) WHERE status IN ('pending_approval','active');
 
-CREATE TABLE session_command_entries (
-    id          BIGSERIAL PRIMARY KEY,
-    session_id  UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    ts          TIMESTAMPTZ NOT NULL,
-    command     TEXT NOT NULL
+-- Command Recorder — implémenté : services/recording-audit/command-recorder/migrations.
+-- Écarts assumés par rapport à la première version de ce DDL :
+--   * pas de clé étrangère vers `sessions` (une base par service) — supprimer une session
+--     ne détruit donc plus son enregistrement, qui est une preuve ;
+--   * `session_id` est du TEXT, comme les identifiants du Session Broker ;
+--   * aucune commande n'est stockée en clair : chaque ligne est scellée en AES-256-GCM
+--     sous une clé de données (DEK) propre à la session ; la DEK n'existe en base que
+--     chiffrée par la KEK (KMS_KEY_HEX aujourd'hui, un KMS/HSM à terme).
+CREATE TABLE session_recording_keys (
+    session_id   TEXT PRIMARY KEY,
+    kek_id       TEXT NOT NULL,        -- quelle KEK a chiffré cette DEK (rotation future)
+    wrapped_dek  BYTEA NOT NULL,       -- nonce || DEK chiffrée ; AAD = kek_id + session_id
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_session_command_entries_session ON session_command_entries (session_id, ts);
+CREATE TABLE session_command_entries (
+    id              BIGSERIAL PRIMARY KEY,
+    session_id      TEXT NOT NULL,
+    ts              TIMESTAMPTZ NOT NULL,   -- précision microseconde, liée à la ligne (AAD)
+    command_sealed  BYTEA NOT NULL          -- nonce || chiffré ; AAD = session_id + ts
+);
+CREATE INDEX idx_session_command_entries_session ON session_command_entries (session_id, ts, id);
 
 -- Audit (Audit Service) ------------------------------------------------------
 
