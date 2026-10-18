@@ -2,6 +2,7 @@ package proxycore
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -54,9 +55,18 @@ const (
 	escSS3
 )
 
-// RecordingTap duplicates protocol traffic to the Session Recorder without
-// blocking the primary relay: a slow or unavailable Recorder must never
-// stall an active session.
+// RecordingTap captures what the operator types and hands it to a recorder.
+// It comes in two modes, chosen by RecordingPolicy (recording_policy.go):
+//
+//   - best-effort (NewRecordingTap): duplicates the traffic to the recorder
+//     without blocking the relay — a slow or unavailable recorder must never
+//     stall the session, and entries it cannot take are dropped (counted and
+//     logged by the Async recorder).
+//   - required (NewRequiredRecordingTap): a completed command line is
+//     recorded SYNCHRONOUSLY, and the keystrokes that completed it are only
+//     passed on to the target once the recorder has acknowledged them. If it
+//     does not, Write fails, nothing of that chunk is forwarded, and the
+//     session ends. See the note on Write for why that is enough.
 //
 // It implements io.Writer so a Codec can wrap its client stream with
 // io.TeeReader(client, tap) to capture what the operator types without a
@@ -84,7 +94,8 @@ const (
 // attempt is visible in the replay, next to the command that printed the
 // prompt.
 type RecordingTap struct {
-	recorder  Recorder
+	recorder  Recorder      // best-effort mode; nil in required mode
+	strict    BatchRecorder // required mode; nil in best-effort mode
 	sessionID string
 
 	mu         sync.Mutex
@@ -93,25 +104,76 @@ type RecordingTap struct {
 	esc        escState // escape-sequence parser state, preserved across Write calls
 	outTail    []byte   // the target's current (unterminated) output line, capped
 	secretNext bool     // the target just showed a secret prompt
+	failed     error    // required mode: the recorder refused; the tap is finished
 }
 
+// NewRecordingTap returns the best-effort tap: it never fails the relay.
 func NewRecordingTap(recorder Recorder, sessionID string) *RecordingTap {
 	return &RecordingTap{recorder: recorder, sessionID: sessionID}
 }
 
-// Write consumes the operator's keystrokes. It never fails: capture must
-// not be able to break the relay it is tapping.
+// NewRequiredRecordingTap returns the tap for RecordingRequired: it fails the
+// relay when the recorder does not acknowledge a command.
+func NewRequiredRecordingTap(strict BatchRecorder, sessionID string) *RecordingTap {
+	return &RecordingTap{strict: strict, sessionID: sessionID}
+}
+
+// Write consumes the operator's keystrokes.
+//
+// In best-effort mode it never fails: capture must not be able to break the
+// relay it is tapping.
+//
+// In required mode it fails, deliberately, when the recorder does not
+// acknowledge a completed command line — returning (0, error). That is the
+// whole enforcement mechanism, and it works because of how the relay uses the
+// tap: the SSH codec reads the client through io.TeeReader(client, tap), and
+// a TeeReader returns the tap's own (n, err) from Read, so io.Copy forwards
+// exactly n bytes to the target. n == 0 means NONE of the chunk — in
+// particular not the Enter that would have run the command — reaches the
+// target, and the error ends the copy and with it the session. A command the
+// recorder never acknowledged is therefore never executed.
+//
+// Only chunks that complete a line wait for the recorder; ordinary
+// keystrokes cost nothing, so typing stays as responsive as before and only
+// pressing Enter pays one round trip.
 func (t *RecordingTap) Write(p []byte) (int, error) {
 	now := time.Now().UTC()
 	var completed []string
 
 	t.mu.Lock()
+	if t.failed != nil {
+		err := t.failed
+		t.mu.Unlock()
+		return 0, err
+	}
 	for _, b := range p {
 		if line, done := t.consume(b); done {
 			completed = append(completed, line)
 		}
 	}
 	t.mu.Unlock()
+
+	if t.strict != nil {
+		if len(completed) == 0 {
+			return len(p), nil
+		}
+		// One batch for everything this chunk completed (a pasted script
+		// arrives as one chunk): all recorded or none, so the recording
+		// never shows commands that were then not run. Outside the lock for
+		// the same reason as below — the output observer shares it.
+		entries := make([]CommandEntry, 0, len(completed))
+		for _, command := range completed {
+			entries = append(entries, CommandEntry{SessionID: t.sessionID, Timestamp: now, Command: command})
+		}
+		if err := t.strict.RecordBatch(context.Background(), entries); err != nil {
+			err = fmt.Errorf("%w: %v", ErrRecordingUnavailable, err)
+			t.mu.Lock()
+			t.failed = err
+			t.mu.Unlock()
+			return 0, err
+		}
+		return len(p), nil
+	}
 
 	// Recorded outside the lock: Record may be slow, and holding the lock
 	// would stall the output observer (and so the other half of the relay).

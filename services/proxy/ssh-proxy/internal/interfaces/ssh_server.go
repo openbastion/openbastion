@@ -6,9 +6,11 @@ package interfaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -28,12 +30,14 @@ type SSHServer struct {
 	Pending     *infrastructure.PendingSessions
 	Listener    *proxycore.Listener // owns credential fetch + purge + audit (doc 01 §4.1)
 	DialTimeout time.Duration
-
-	// Recorder receives the commands captured from each session. Nil means
-	// infrastructure.StdoutRecorder — a log line per command, for
-	// development without a Command Recorder running.
-	Recorder proxycore.Recorder
 }
+
+// recordingRefusedMessage is what the operator reads when the recording policy
+// ends or refuses their session. It is deliberately generic — no recorder
+// address, no error text — and it says the one thing that matters: nothing
+// unrecorded was sent to the target.
+const recordingRefusedMessage = "\r\nopenbastion: session ended because recording is unavailable. " +
+	"No command that could not be recorded was sent to the target.\r\n"
 
 // Serve accepts connections on ln until it errors or ctx is done.
 func (s *SSHServer) Serve(ctx context.Context, ln net.Listener) error {
@@ -79,7 +83,7 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 	defer sshConn.Close()
 	go ssh.DiscardRequests(reqs)
 
-	clientChannel, cleanup, err := acceptSessionChannel(chans)
+	clientChannel, cleanup, shellRequested, err := acceptSessionChannel(chans)
 	if err != nil {
 		log.Printf("ssh-proxy: %v", err)
 		return
@@ -89,7 +93,7 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 	targetAddr := resolved.TargetHost
 	targetConn, err := net.Dial("tcp", targetAddr)
 	if err != nil {
-		fmt.Fprintf(clientChannel, "openbastion: cannot reach target %s: %v\r\n", targetAddr, err)
+		tell(clientChannel, shellRequested, fmt.Sprintf("openbastion: cannot reach target %s: %v\r\n", targetAddr, err))
 		return
 	}
 	defer targetConn.Close()
@@ -100,11 +104,18 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 		ScopeToken: resolved.ScopeToken,
 		ExpiresAt:  resolved.ExpiresAt,
 	}
-	var recorder proxycore.Recorder = infrastructure.StdoutRecorder{}
-	if s.Recorder != nil {
-		recorder = s.Recorder
+	// The recording policy (ADR-0008) lives on the Listener, which owns the
+	// session pipeline: it decides whether this session may start (Serve
+	// asks before it fetches the credential) and which kind of tap records it.
+	recordingTap, err := s.Listener.Recording.NewTap(resolved.SessionID)
+	if err != nil {
+		// A required policy with nothing to record to. Serve would refuse
+		// this too; ask it, so the refusal is audited like any other.
+		_ = s.Listener.Admit(ctx, resolved.SessionID)
+		log.Printf("ssh-proxy: session %s refused: %v", meta.SessionID, err)
+		tell(clientChannel, shellRequested, recordingRefusedMessage)
+		return
 	}
-	recordingTap := proxycore.NewRecordingTap(recorder, resolved.SessionID)
 	codec := &sshcodec.Codec{
 		TargetUser: resolved.TargetUser,
 		Recorder:   recordingTap,
@@ -116,7 +127,24 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 
 	if err := s.Listener.Serve(ctx, meta, codec, clientChannel, targetConn); err != nil {
 		log.Printf("ssh-proxy: session %s: %v", meta.SessionID, err)
+		if errors.Is(err, proxycore.ErrRecordingUnavailable) {
+			tell(clientChannel, shellRequested, recordingRefusedMessage)
+		}
 	}
+}
+
+// tell writes a message to the operator, once they have asked for a shell.
+// A refusal comes fast — the recorder is checked before anything else — and
+// an SSH client that is still negotiating its pty and shell when the channel
+// is closed sees "connection closed" and never the reason. So wait (briefly:
+// a client that never asks for a shell is not owed the wait) for the shell
+// request, then write.
+func tell(ch ssh.Channel, shellRequested <-chan struct{}, msg string) {
+	select {
+	case <-shellRequested:
+	case <-time.After(2 * time.Second):
+	}
+	fmt.Fprint(ch, msg)
 }
 
 // acceptSessionChannel accepts the first "session"-type channel the
@@ -124,7 +152,9 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 // `ssh host` client sends (pty-req, shell, env, window-change) — enough
 // for an interactive shell; exec and subsystem (SFTP/SCP) requests are a
 // follow-up increment (see /NOTES_SANDBOX.md).
-func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), error) {
+//
+// The returned channel is closed when the client asks for a shell.
+func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), <-chan struct{}, error) {
 	for newCh := range chans {
 		if newCh.ChannelType() != "session" {
 			_ = newCh.Reject(ssh.UnknownChannelType, "only interactive session channels are supported in this increment")
@@ -132,14 +162,19 @@ func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), err
 		}
 		ch, requests, err := newCh.Accept()
 		if err != nil {
-			return nil, nil, fmt.Errorf("accepting session channel: %w", err)
+			return nil, nil, nil, fmt.Errorf("accepting session channel: %w", err)
 		}
+		shellRequested := make(chan struct{})
+		var shellOnce sync.Once
 		go func() {
 			for req := range requests {
 				switch req.Type {
 				case "shell", "pty-req", "env", "window-change":
 					if req.WantReply {
 						_ = req.Reply(true, nil)
+					}
+					if req.Type == "shell" {
+						shellOnce.Do(func() { close(shellRequested) })
 					}
 				default:
 					if req.WantReply {
@@ -148,7 +183,7 @@ func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), err
 				}
 			}
 		}()
-		return ch, func() { _ = ch.Close() }, nil
+		return ch, func() { _ = ch.Close() }, shellRequested, nil
 	}
-	return nil, nil, fmt.Errorf("client closed connection before opening a session channel")
+	return nil, nil, nil, fmt.Errorf("client closed connection before opening a session channel")
 }

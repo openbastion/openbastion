@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
 
 // ProxyClientHTTPClient implements application.ProxyClient by calling a
@@ -34,6 +38,13 @@ func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		// The proxy answers 503 "recording unavailable" when its recording
+		// policy refuses the session (ADR-0008). Key on the body as well as the
+		// status: a bare 503 (a load balancer with no backend, say) is not that.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		if resp.StatusCode == http.StatusServiceUnavailable && strings.HasPrefix(string(body), "recording unavailable") {
+			return "", "", fmt.Errorf("%w: establish-session refused by the proxy", domain.ErrRecordingUnavailable)
+		}
 		return "", "", fmt.Errorf("establish-session: status %d", resp.StatusCode)
 	}
 	var out struct {

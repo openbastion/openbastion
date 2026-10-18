@@ -214,3 +214,186 @@ func TestCommandRecorderHTTPClient_SendsTheContractShapeAndChecksTheStatus(t *te
 		t.Fatal("a non-202 answer must be an error")
 	}
 }
+
+// -- record-or-refuse (ADR-0008) ----------------------------------------------------
+
+// classifiedSender returns scripted errors, in order, then succeeds.
+type classifiedSender struct {
+	mu    sync.Mutex
+	errs  []error
+	calls int
+	got   [][]proxycore.CommandEntry
+}
+
+func (c *classifiedSender) SendBatch(ctx context.Context, entries []proxycore.CommandEntry) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if len(c.errs) > 0 {
+		err := c.errs[0]
+		c.errs = c.errs[1:]
+		return err
+	}
+	c.got = append(c.got, entries)
+	return nil
+}
+
+func notStored() error { return &SendError{Err: errors.New("connection refused"), Retryable: true} }
+func ambiguous() error { return &SendError{Err: errors.New("EOF after sending"), Retryable: false} }
+
+func TestSyncRecorder_ReturnsOnlyAfterTheRecorderAccepted(t *testing.T) {
+	s := &classifiedSender{}
+	r := &SyncRecorder{Sender: s}
+	if err := r.RecordBatch(context.Background(), []proxycore.CommandEntry{entryFor("ls")}); err != nil {
+		t.Fatalf("RecordBatch: %v", err)
+	}
+	if s.calls != 1 || len(s.got) != 1 {
+		t.Fatalf("calls=%d stored=%d", s.calls, len(s.got))
+	}
+}
+
+// A blip of the recorder's connection costs a retry, not the operator's session.
+func TestSyncRecorder_RetriesWhenTheBatchWasProvablyNotStored(t *testing.T) {
+	s := &classifiedSender{errs: []error{notStored()}}
+	r := &SyncRecorder{Sender: s, Backoff: time.Millisecond}
+	if err := r.RecordBatch(context.Background(), []proxycore.CommandEntry{entryFor("ls")}); err != nil {
+		t.Fatalf("RecordBatch: %v", err)
+	}
+	if s.calls != 2 || len(s.got) != 1 {
+		t.Fatalf("expected one retry then success: calls=%d stored=%d", s.calls, len(s.got))
+	}
+}
+
+// The reverse matters more: when the batch MAY have been stored, sending it
+// again would record the command twice, so the failure is final.
+func TestSyncRecorder_DoesNotRetryAnAmbiguousFailure(t *testing.T) {
+	s := &classifiedSender{errs: []error{ambiguous()}}
+	r := &SyncRecorder{Sender: s, Backoff: time.Millisecond}
+	if err := r.RecordBatch(context.Background(), []proxycore.CommandEntry{entryFor("ls")}); err == nil {
+		t.Fatal("expected the failure to be reported")
+	}
+	if s.calls != 1 {
+		t.Fatalf("an ambiguous failure was retried (%d calls): the command could be recorded twice", s.calls)
+	}
+}
+
+func TestSyncRecorder_DoesNotRetryAnUnclassifiedError(t *testing.T) {
+	s := &classifiedSender{errs: []error{errors.New("something else")}}
+	r := &SyncRecorder{Sender: s, Backoff: time.Millisecond}
+	if err := r.RecordBatch(context.Background(), nil); err == nil || s.calls != 1 {
+		t.Fatalf("err=%v calls=%d", err, s.calls)
+	}
+}
+
+func TestSyncRecorder_GivesUpAfterItsAttempts(t *testing.T) {
+	s := &classifiedSender{errs: []error{notStored(), notStored(), notStored()}}
+	r := &SyncRecorder{Sender: s, Attempts: 2, Backoff: time.Millisecond}
+	if err := r.RecordBatch(context.Background(), []proxycore.CommandEntry{entryFor("ls")}); err == nil {
+		t.Fatal("expected an error once the attempts are used up")
+	}
+	if s.calls != 2 || len(s.got) != 0 {
+		t.Fatalf("calls=%d stored=%d", s.calls, len(s.got))
+	}
+}
+
+// An unresponsive recorder ends the session in seconds; it must not freeze it.
+func TestSyncRecorder_ABlockedRecorderIsCutOffByThePerAttemptTimeout(t *testing.T) {
+	r := &SyncRecorder{Sender: &fakeSender{block: make(chan struct{})}, Timeout: 50 * time.Millisecond}
+	start := time.Now()
+	err := r.RecordBatch(context.Background(), []proxycore.CommandEntry{entryFor("ls")})
+	if err == nil {
+		t.Fatal("expected a timeout error")
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("took %v", time.Since(start))
+	}
+}
+
+func TestSyncRecorder_StopsWhenTheCallerGivesUp(t *testing.T) {
+	s := &classifiedSender{errs: []error{notStored(), notStored()}}
+	r := &SyncRecorder{Sender: s, Attempts: 5, Backoff: 10 * time.Second}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := r.RecordBatch(ctx, []proxycore.CommandEntry{entryFor("ls")}); err == nil {
+		t.Fatal("expected an error")
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("the backoff ignored the caller's context (%v)", time.Since(start))
+	}
+}
+
+// What the HTTP client classifies as safe to repeat, against a real server.
+func TestCommandRecorderHTTPClient_ClassifiesFailuresBySafetyToRetry(t *testing.T) {
+	entries := []proxycore.CommandEntry{entryFor("ls")}
+	status := http.StatusAccepted
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status) }))
+	defer srv.Close()
+	c := &CommandRecorderHTTPClient{BaseURL: srv.URL}
+
+	for code, want := range map[int]bool{
+		http.StatusInternalServerError: true,  // the recorder's own "store failed, rolled back"
+		http.StatusServiceUnavailable:  true,  // nothing in front accepted it
+		http.StatusBadGateway:          false, // something in front may have forwarded it
+		http.StatusGatewayTimeout:      false, // ... and the recorder may have gone on to commit
+		http.StatusBadRequest:          false, // permanent
+		http.StatusForbidden:           false,
+	} {
+		status = code
+		err := c.SendBatch(context.Background(), entries)
+		if err == nil {
+			t.Fatalf("status %d must be an error", code)
+		}
+		if retryable(err) != want {
+			t.Errorf("status %d: retryable=%v, want %v", code, retryable(err), want)
+		}
+	}
+
+	t.Run("a refused connection is safe to repeat: nothing was sent", func(t *testing.T) {
+		dead := httptest.NewServer(http.NotFoundHandler())
+		url := dead.URL
+		dead.Close()
+		err := (&CommandRecorderHTTPClient{BaseURL: url}).SendBatch(context.Background(), entries)
+		if err == nil || !retryable(err) {
+			t.Fatalf("a failed dial must be retryable, got %v (retryable=%v)", err, retryable(err))
+		}
+	})
+
+	t.Run("a recorder that takes the request and never answers is NOT safe to repeat", func(t *testing.T) {
+		hang := make(chan struct{})
+		slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-hang }))
+		defer slow.Close()
+		defer close(hang)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		err := (&CommandRecorderHTTPClient{BaseURL: slow.URL}).SendBatch(ctx, entries)
+		if err == nil {
+			t.Fatal("expected a timeout")
+		}
+		if retryable(err) {
+			t.Fatal("a timeout after the request was sent is ambiguous — repeating it could record the command twice")
+		}
+	})
+}
+
+func TestCommandRecorderHTTPClient_Ready(t *testing.T) {
+	status := http.StatusOK
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(status)
+	}))
+	c := &CommandRecorderHTTPClient{BaseURL: srv.URL}
+
+	if err := c.Ready(context.Background()); err != nil || gotPath != "/readyz" {
+		t.Fatalf("ready recorder: err=%v path=%q", err, gotPath)
+	}
+	status = http.StatusServiceUnavailable
+	if err := c.Ready(context.Background()); err == nil {
+		t.Fatal("a 503 must mean not ready")
+	}
+	srv.Close()
+	if err := c.Ready(context.Background()); err == nil {
+		t.Fatal("an unreachable recorder must mean not ready")
+	}
+}

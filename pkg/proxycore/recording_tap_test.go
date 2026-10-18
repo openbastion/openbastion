@@ -1,7 +1,10 @@
 package proxycore
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -271,6 +274,199 @@ func TestRecordingTap_SlowRecorderDoesNotBlockTheOutputObserver(t *testing.T) {
 	case <-observed:
 	case <-time.After(2 * time.Second):
 		t.Fatal("the output observer was blocked by a slow recorder")
+	}
+	close(rec.release)
+	<-writeDone
+}
+
+// -- required mode (ADR-0008) -----------------------------------------------------
+
+// scriptedBatchRecorder records the batches it is given and can be made to
+// fail, or to hold a call until released.
+type scriptedBatchRecorder struct {
+	batches [][]CommandEntry
+	err     error
+	release chan struct{} // if set, RecordBatch blocks until it is closed
+}
+
+func (r *scriptedBatchRecorder) RecordBatch(ctx context.Context, entries []CommandEntry) error {
+	if r.release != nil {
+		<-r.release
+	}
+	if r.err != nil {
+		return r.err
+	}
+	r.batches = append(r.batches, append([]CommandEntry(nil), entries...))
+	return nil
+}
+
+func (r *scriptedBatchRecorder) commands() []string {
+	var out []string
+	for _, b := range r.batches {
+		for _, e := range b {
+			out = append(out, e.Command)
+		}
+	}
+	return out
+}
+
+// The enforcement point: the line is acknowledged BEFORE Write returns, which
+// is before the relay forwards the Enter that would run it.
+func TestRequiredTap_WaitsForTheAcknowledgementBeforeReturning(t *testing.T) {
+	rec := &scriptedBatchRecorder{release: make(chan struct{})}
+	tap := NewRequiredRecordingTap(rec, "s")
+
+	returned := make(chan struct{})
+	go func() {
+		_, _ = tap.Write([]byte("rm -rf /var/lib/app\r"))
+		close(returned)
+	}()
+
+	select {
+	case <-returned:
+		t.Fatal("Write returned before the recorder acknowledged the command — the Enter would already be on its way to the target")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(rec.release)
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Write did not return after the acknowledgement")
+	}
+	if got := rec.commands(); len(got) != 1 || got[0] != "rm -rf /var/lib/app" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRequiredTap_ARefusedChunkForwardsNothing(t *testing.T) {
+	rec := &scriptedBatchRecorder{err: errors.New("command-recorder: status 503")}
+	tap := NewRequiredRecordingTap(rec, "s")
+
+	n, err := tap.Write([]byte("rm -rf /var/lib/app\r"))
+	if n != 0 {
+		t.Fatalf("Write reported %d bytes consumed; any n > 0 lets the relay forward part of an unrecorded command", n)
+	}
+	if !errors.Is(err, ErrRecordingUnavailable) || !strings.Contains(err.Error(), "503") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// What the relay actually does with the tap: io.Copy over io.TeeReader. This
+// is the property the whole policy rests on, so it is asserted on the real
+// stdlib plumbing rather than on the tap's return value alone.
+func TestRequiredTap_ThroughATeeReaderTheTargetNeverSeesAnUnrecordedCommand(t *testing.T) {
+	rec := &scriptedBatchRecorder{}
+	tap := NewRequiredRecordingTap(rec, "s")
+	var target bytes.Buffer
+
+	// First command: recorded, so it goes through.
+	if _, err := io.Copy(&target, io.TeeReader(strings.NewReader("whoami\r"), tap)); err != nil {
+		t.Fatalf("a recorded command must be forwarded: %v", err)
+	}
+	if target.String() != "whoami\r" {
+		t.Fatalf("the target received %q", target.String())
+	}
+
+	// The recorder goes away. The next command must not reach the target.
+	rec.err = errors.New("connection refused")
+	target.Reset()
+	n, err := io.Copy(&target, io.TeeReader(strings.NewReader("cat /etc/shadow\r"), tap))
+	if !errors.Is(err, ErrRecordingUnavailable) {
+		t.Fatalf("the copy must end with the recording error, got %v", err)
+	}
+	if n != 0 || target.Len() != 0 {
+		t.Fatalf("the target received %q of a command that was never recorded", target.String())
+	}
+}
+
+func TestRequiredTap_OrdinaryKeystrokesDoNotWaitForTheRecorder(t *testing.T) {
+	rec := &scriptedBatchRecorder{err: errors.New("recorder is down")}
+	tap := NewRequiredRecordingTap(rec, "s")
+
+	// No Enter, so no completed command: nothing to acknowledge, nothing to
+	// refuse — typing still echoes while the recorder is unavailable, and the
+	// session ends only when the operator submits something.
+	for _, chunk := range []string{"l", "s", " -l", "\x7f", "a"} {
+		if n, err := tap.Write([]byte(chunk)); err != nil || n != len(chunk) {
+			t.Fatalf("Write(%q) = %d, %v", chunk, n, err)
+		}
+	}
+	if len(rec.batches) != 0 {
+		t.Fatalf("the recorder was called without a completed line: %v", rec.batches)
+	}
+}
+
+// A pasted script arrives as one chunk. Its lines are recorded together,
+// all or none, so the recording can never show commands that did not run.
+func TestRequiredTap_OneBatchPerChunkInOrder(t *testing.T) {
+	rec := &scriptedBatchRecorder{}
+	tap := NewRequiredRecordingTap(rec, "session-9")
+
+	if _, err := tap.Write([]byte("cd /srv\rls\rls\rexit")); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.batches) != 1 {
+		t.Fatalf("expected one batch for one chunk, got %d", len(rec.batches))
+	}
+	if got := rec.commands(); strings.Join(got, "|") != "cd /srv|ls|ls" {
+		t.Fatalf("got %q (identical lines are real repeats and must both be kept)", got)
+	}
+	for _, e := range rec.batches[0] {
+		if e.SessionID != "session-9" || e.Timestamp.IsZero() {
+			t.Fatalf("bad entry %+v", e)
+		}
+	}
+}
+
+func TestRequiredTap_AFailedTapStaysFailed(t *testing.T) {
+	rec := &scriptedBatchRecorder{err: errors.New("down")}
+	tap := NewRequiredRecordingTap(rec, "s")
+	_, _ = tap.Write([]byte("first\r"))
+
+	// The recorder comes back. The session is already over: a tap that
+	// resumed would let a later command through with a hole before it.
+	rec.err = nil
+	n, err := tap.Write([]byte("second\r"))
+	if n != 0 || !errors.Is(err, ErrRecordingUnavailable) {
+		t.Fatalf("a failed tap accepted more input: %d, %v", n, err)
+	}
+	if len(rec.batches) != 0 {
+		t.Fatalf("a failed tap recorded: %v", rec.batches)
+	}
+}
+
+func TestRequiredTap_SecretPromptInputIsStillRedacted(t *testing.T) {
+	rec := &scriptedBatchRecorder{}
+	tap := NewRequiredRecordingTap(rec, "s")
+	_, _ = tap.Write([]byte("sudo -s\r"))
+	_, _ = tap.Output().Write([]byte("[sudo] password for bob: "))
+	_, _ = tap.Write([]byte("hunter2\r"))
+	if got := rec.commands(); strings.Join(got, "|") != "sudo -s|"+RedactedSecretInput {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// The output observer shares the tap's lock with Write; a recorder that is
+// slow to acknowledge must not freeze what the target is sending back.
+func TestRequiredTap_SlowAcknowledgementDoesNotBlockTheOutputObserver(t *testing.T) {
+	rec := &scriptedBatchRecorder{release: make(chan struct{})}
+	tap := NewRequiredRecordingTap(rec, "s")
+
+	writeDone := make(chan struct{})
+	go func() {
+		_, _ = tap.Write([]byte("ls\r"))
+		close(writeDone)
+	}()
+	observed := make(chan struct{})
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		_, _ = tap.Output().Write([]byte("output\r\n"))
+		close(observed)
+	}()
+	select {
+	case <-observed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the output observer was blocked by a recorder that had not acknowledged yet")
 	}
 	close(rec.release)
 	<-writeDone

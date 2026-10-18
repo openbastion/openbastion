@@ -35,10 +35,21 @@ func main() {
 	vaultURL := mustEnv("VAULT_URL", "http://127.0.0.1:8081")
 	auditURL := mustEnv("AUDIT_URL", "http://127.0.0.1:8082")
 	proxyID := mustEnv("PROXY_SERVICE_ID", "ssh-proxy")
-	// Where captured commands go. Unset, they are only logged
-	// (infrastructure.StdoutRecorder) — fine for development, but nothing
-	// is then recorded for replay.
+	// Where captured commands go.
 	recorderURL := os.Getenv("RECORDER_URL")
+
+	// What happens to a session that cannot be recorded (ADR-0008). Required
+	// is the default and refuses such sessions; it needs RECORDER_URL, and the
+	// proxy will not start without it — a proxy that cannot record must not be
+	// one that quietly accepts sessions. best-effort must be asked for by name.
+	policy, err := proxycore.ParseRecordingPolicy(os.Getenv("RECORDING_POLICY"))
+	if err != nil {
+		log.Fatalf("ssh-proxy: RECORDING_POLICY: %v", err)
+	}
+	if policy == proxycore.RecordingRequired && recorderURL == "" {
+		log.Fatalf("ssh-proxy: RECORDING_POLICY is %q (the default), which refuses sessions it cannot record, but RECORDER_URL is not set — "+
+			"refusing to start. Set RECORDER_URL, or set RECORDING_POLICY=best-effort to run without recording (development only)", policy)
+	}
 
 	// MVP: an ephemeral host key generated at process start. Production
 	// needs a persisted, rotated identity (Guide Sécurité §3) — this is a
@@ -72,15 +83,32 @@ func main() {
 		DialTimeout: 10 * time.Second,
 	}
 
-	// Commands are sent to the Command Recorder asynchronously, in batches,
-	// so a slow or unreachable recorder can never stall a live session —
-	// see infrastructure.AsyncRecorder, including what that costs.
 	var asyncRecorder *infrastructure.AsyncRecorder
-	if recorderURL != "" {
-		asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}, 1024, 100)
-		server.Recorder = asyncRecorder
-	} else {
-		log.Printf("ssh-proxy: RECORDER_URL not set — captured commands are only logged, NOT recorded for replay")
+	switch policy {
+	case proxycore.RecordingRequired:
+		// Each command line is acknowledged by the Command Recorder BEFORE it
+		// is passed on to the target; a session is refused when the recorder
+		// is not ready. See proxycore.RecordingConfig and ADR-0008.
+		recorder := &infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}
+		listener.Recording = proxycore.RecordingConfig{
+			Policy: proxycore.RecordingRequired,
+			Strict: &infrastructure.SyncRecorder{Sender: recorder},
+			Gate:   recorder,
+		}
+		log.Printf("ssh-proxy: recording policy REQUIRED — sessions are refused when the Command Recorder cannot take them, " +
+			"and a command is sent to the target only after it has been recorded")
+	default:
+		// Commands are sent to the Command Recorder asynchronously, in
+		// batches, so a slow or unreachable recorder can never stall a live
+		// session — see infrastructure.AsyncRecorder, including what that costs.
+		log.Printf("ssh-proxy: recording policy BEST-EFFORT — a session whose commands cannot be recorded CONTINUES, and those commands are lost. Not for production")
+		listener.Recording = proxycore.RecordingConfig{Policy: proxycore.RecordingBestEffort, Sink: infrastructure.StdoutRecorder{}}
+		if recorderURL != "" {
+			asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}, 1024, 100)
+			listener.Recording.Sink = asyncRecorder
+		} else {
+			log.Printf("ssh-proxy: RECORDER_URL not set — captured commands are only logged, NOT recorded for replay")
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,6 +122,7 @@ func main() {
 	}()
 
 	httpServer := interfaces.NewHTTPServer(pending, "127.0.0.1:"+sshPort)
+	httpServer.Admit = listener.Admit // refuse before issuing a ticket, not after
 	log.Printf("ssh-proxy: internal API on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", httpPort)
 	log.Printf("  -> vault: %s", vaultURL)
 	log.Printf("  -> audit: %s", auditURL)

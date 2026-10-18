@@ -186,12 +186,28 @@ paths:
         Ne retourne jamais de secret cible — uniquement une adresse de proxy
         et un jeton de connexion à courte durée de vie, consommé une seule
         fois par le SSH Proxy (ADR-0003).
+
+        Une session dont l'enregistrement n'est pas possible n'est pas
+        établie (ADR-0008) : si le Command Recorder n'est pas prêt, le SSH
+        Proxy refuse et la requête répond `503`. Aucune commande n'a été
+        exécutée et aucun secret n'a été consommé ; la même requête peut
+        être renouvelée une fois le recorder rétabli. L'événement d'audit
+        `session.recording_unavailable` est émis.
       responses:
         "200":
           description: Ticket de connexion
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConnectionTicket" }
+        "503":
+          description: >
+            Enregistrement indisponible — la session n'a pas été établie.
+            Distinct de `409` (la session n'est pas dans un état où elle
+            peut être connectée) : ici l'état de la session est inchangé et
+            l'appel peut être renouvelé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /sessions/{sessionId}/recording:
     parameters:
@@ -569,7 +585,17 @@ components:
         id: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }
         actor: { type: string }
-        action: { type: string, example: "session.connect" }
+        action:
+          type: string
+          example: "session.connect"
+          description: >
+            Famille `ressource.verbe`. Pour les sessions : `session.connect`,
+            `session.terminate`, et — politique d'enregistrement obligatoire,
+            ADR-0008 — `session.recording_unavailable` (session refusée à
+            l'admission, recorder non prêt) et `session.recording_lost`
+            (session terminée en cours de route parce qu'une commande n'a pas
+            pu être enregistrée ; la commande n'a pas été exécutée). Ces deux
+            événements portent `result = failure`.
         resourceType: { type: string }
         resourceId: { type: string }
         result: { type: string, enum: [success, failure] }

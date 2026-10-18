@@ -1,10 +1,14 @@
 package interfaces
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
 )
 
@@ -18,8 +22,15 @@ import (
 // endpoint yet — it still exposes its own internal/v1/authorize-connection
 // as a stand-in — wiring the two together is the next increment.
 type HTTPServer struct {
-	pending *infrastructure.PendingSessions
+	pending       *infrastructure.PendingSessions
 	proxyEndpoint string
+
+	// Admit, when set, is asked before a ticket is issued: a session the
+	// recording policy would refuse is refused here, with a 503, rather than
+	// after the operator has been handed a ticket and opened a connection.
+	// proxycore.Listener.Admit is the implementation. It is an early refusal,
+	// not the guarantee: Serve asks again before it fetches the credential.
+	Admit func(ctx context.Context, sessionID string) error
 }
 
 func NewHTTPServer(pending *infrastructure.PendingSessions, proxyEndpoint string) *HTTPServer {
@@ -60,6 +71,19 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if s.Admit != nil {
+		if err := s.Admit(r.Context(), req.SessionID); err != nil {
+			if errors.Is(err, proxycore.ErrRecordingUnavailable) {
+				// The cause stays in this log: the response travels back to
+				// the operator, who needs the reason, not the recorder's address.
+				log.Printf("ssh-proxy: session %s refused at establish-session: %v", req.SessionID, err)
+				http.Error(w, "recording unavailable: the session was not started", http.StatusServiceUnavailable)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	ttl := time.Duration(req.TTLSeconds) * time.Second
 	if ttl <= 0 {

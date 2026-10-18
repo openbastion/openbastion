@@ -56,6 +56,17 @@ func NewRecorderService(repo domain.CommandRepository, authz AuthorizationClient
 	return &RecorderService{repo: repo, authz: authz}
 }
 
+// Ready reports whether the service could durably record a batch right now.
+// It is what GET /readyz answers, and what a proxy asks before it admits a
+// session it is required to record (ADR-0008). A store with nothing to check
+// is always ready.
+func (s *RecorderService) Ready(ctx context.Context) error {
+	if c, ok := s.repo.(domain.ReadinessChecker); ok {
+		return c.Ready(ctx)
+	}
+	return nil
+}
+
 // Record validates and stores a batch of captured commands, returning how
 // many were stored. The batch is all-or-nothing: one invalid entry refuses
 // the whole batch (domain.ErrInvalidEntry) so the caller learns about it,

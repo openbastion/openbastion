@@ -267,3 +267,34 @@ func TestGetRecording_DenialDoesNotRevealWhetherASessionHasEntries(t *testing.T)
 		t.Fatalf("both must be forbidden, got %v / %v", errExisting, errMissing)
 	}
 }
+
+// -- readiness (ADR-0008) -----------------------------------------------------------
+
+type readinessStore struct {
+	*infrastructure.InMemoryStore
+	err error
+}
+
+func (r readinessStore) Ready(ctx context.Context) error { return r.err }
+
+func TestRecorderService_Ready(t *testing.T) {
+	ctx := context.Background()
+
+	// A store with nothing to check (in-memory) is always ready.
+	svc, _, _ := newService()
+	if err := svc.Ready(ctx); err != nil {
+		t.Fatalf("an in-memory store must be ready: %v", err)
+	}
+
+	// A store that can say it is not ready is believed.
+	down := errors.New("database is read-only")
+	svc = NewRecorderService(readinessStore{InMemoryStore: infrastructure.NewInMemoryStore(), err: down}, &fakeAuthz{})
+	if err := svc.Ready(ctx); !errors.Is(err, down) {
+		t.Fatalf("readiness must come from the store, got %v", err)
+	}
+
+	svc = NewRecorderService(readinessStore{InMemoryStore: infrastructure.NewInMemoryStore()}, &fakeAuthz{})
+	if err := svc.Ready(ctx); err != nil {
+		t.Fatalf("a ready store must be ready: %v", err)
+	}
+}

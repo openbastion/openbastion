@@ -35,6 +35,15 @@ import (
 
 func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr string) {
 	t.Helper()
+	return startObservedFakeTargetSSHServer(t, expectedPassword, nil)
+}
+
+// startObservedFakeTargetSSHServer is the same target, additionally reporting
+// every line it receives — the moment the "command" reaches the target — to
+// onLine (nil means no reporting). It is how the record-or-refuse tests see
+// what the target was actually sent.
+func startObservedFakeTargetSSHServer(t *testing.T, expectedPassword string, onLine func(line string)) (addr string) {
+	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("target host key: %v", err)
@@ -98,6 +107,9 @@ func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr strin
 						scanner := bufio.NewScanner(ch)
 						for scanner.Scan() {
 							text := scanner.Text()
+							if onLine != nil {
+								onLine(text)
+							}
 							if text == "sudo -s" {
 								// Behave like a real sudo: a prompt with no trailing
 								// newline, then the next line is the password, which
@@ -154,6 +166,7 @@ func TestSSHProxy_RealClientThroughRealProxyToRealTarget(t *testing.T) {
 	fetcher := proxycore.NewCredentialFetcher(vault, "ssh-proxy")
 	terminator := proxycore.NewTerminator(audit)
 	listener := proxycore.NewListener(fetcher, terminator)
+	listener.Recording = proxycore.RecordingConfig{Policy: proxycore.RecordingBestEffort} // this test is about the relay, not recording
 
 	pending := infrastructure.NewPendingSessions()
 	ticket := pending.Register(&infrastructure.PendingSession{
@@ -293,9 +306,12 @@ func TestSSHProxy_InteractiveCommandsAreRecordedAndSecretPromptInputIsRedacted(t
 	t.Cleanup(func() { _ = proxyLn.Close() })
 
 	recorder := &recordedCommands{}
+	// This test is about WHAT is captured, not about what happens when capture
+	// fails (see strict_recording_test.go), so it runs best-effort, explicitly.
+	listener.Recording = proxycore.RecordingConfig{Policy: proxycore.RecordingBestEffort, Sink: recorder}
 	server := &interfaces.SSHServer{
 		HostSigner: hostSigner, Pending: pending, Listener: listener,
-		DialTimeout: 5 * time.Second, Recorder: recorder,
+		DialTimeout: 5 * time.Second,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

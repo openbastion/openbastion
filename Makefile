@@ -65,6 +65,11 @@ test:
 ##                            réelle (Entrée = '\r', mot de passe sudo
 ##                            saisi), replay relu par un auditeur via la
 ##                            Gateway, RBAC et pagination vérifiés
+## - record_or_refuse_test.go : HUIT processus — ADR-0008 : une panne du
+##                            Command Recorder refuse la session (503), une
+##                            commande non enregistrée n'atteint jamais la
+##                            cible, la reprise fonctionne ; un proxy sans
+##                            RECORDER_URL refuse de démarrer
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
 test-integration:
@@ -113,6 +118,8 @@ run-authorization:
 	$(GO) run ./services/access/authorization/cmd/authorization
 run-authentication:
 	$(GO) run ./services/access/authentication/cmd/authentication
+# RECORDING_POLICY vaut « required » par défaut (ADR-0008) : sans RECORDER_URL, le proxy refuse de démarrer.
+# « best-effort » (développement uniquement) doit être demandé explicitement.
 run-ssh-proxy:
 	VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 RECORDER_URL=http://127.0.0.1:8087 \
 		$(GO) run ./services/proxy/ssh-proxy/cmd/ssh-proxy

@@ -115,6 +115,10 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/openbastion/openbastion/proto/proxy/v1;proxyv1";
 
 service ProxyControl {
+  // Refuse d'établir la session (UNAVAILABLE, « recording unavailable ») si le
+  // Command Recorder n'est pas prêt : une session qui ne peut pas être
+  // enregistrée n'a pas lieu (ADR-0008). Le scope Vault n'est alors pas
+  // consommé — l'appel peut être renouvelé tel quel.
   rpc EstablishSession(EstablishSessionRequest) returns (EstablishSessionResponse);
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
   rpc StreamHealth(HealthRequest) returns (stream HealthStatus);
@@ -319,7 +323,13 @@ message GetCommandRecordingResponse {
 }
 ```
 
-**Ce que `StreamCommandEntries` transporte réellement.** Ce que le proxy envoie est la commande telle que l'opérateur l'a *saisie* (édition de ligne appliquée : retour arrière, Ctrl-C/U/W), pas telle que le shell de la cible l'a exécutée — historique et complétion ne sont pas reconstitués. Une ligne saisie à un prompt de secret (sudo, su, ssh…) est remplacée côté proxy par le marqueur `[redacted: input at a secret prompt]` avant tout envoi ; un marqueur plutôt qu'un silence, pour qu'un faux prompt affiché par un initié reste visible dans le replay. Le proxy envoie par lots, de façon asynchrone : un Command Recorder lent ou injoignable ne bloque jamais une session, au prix d'entrées perdues (comptées et journalisées) si la file se remplit.
+**Ce que `StreamCommandEntries` transporte réellement.** Ce que le proxy envoie est la commande telle que l'opérateur l'a *saisie* (édition de ligne appliquée : retour arrière, Ctrl-C/U/W), pas telle que le shell de la cible l'a exécutée — historique et complétion ne sont pas reconstitués. Une ligne saisie à un prompt de secret (sudo, su, ssh…) est remplacée côté proxy par le marqueur `[redacted: input at a secret prompt]` avant tout envoi ; un marqueur plutôt qu'un silence, pour qu'un faux prompt affiché par un initié reste visible dans le replay. **Enregistrer ou refuser (ADR-0008).** Par défaut (`RECORDING_POLICY=required`), l'enregistrement est une condition de la session, pas un canal parallèle :
+
+- *Admission* — à `EstablishSession` (avant d'émettre le ticket) puis à nouveau à la connexion du client, avant de récupérer le credential, le proxy sonde la disponibilité du recorder (`GET /readyz` dans l'implémentation HTTP/JSON actuelle : le recorder répond `200` seulement s'il pourrait écrire, c'est-à-dire base joignable **et** inscriptible — un réplica en lecture seule est « non prêt »). Non prêt ⇒ `EstablishSession` est refusé (`UNAVAILABLE` ; `503 recording unavailable` en HTTP) et `session.recording_unavailable` est audité.
+- *Acquittement* — le proxy n'envoie une ligne de commande à la cible qu'**après** que le recorder a accepté le lot (tout ou rien). Un échec d'enregistrement ⇒ la commande n'est pas exécutée, la session est terminée, l'opérateur est prévenu, `session.recording_lost` est audité.
+- *Nouvelles tentatives* — deux au plus, uniquement sur erreur de connexion ou `500`/`503` (cas où le recorder garantit n'avoir rien stocké). Le recorder étant en ajout seul, sans déduplication, un échec ambigu (`502`, `504`, délai dépassé, connexion coupée) n'est pas rejoué : il peut sur-enregistrer une commande jamais exécutée, jamais l'inverse.
+
+Le mode asynchrone — par lots, sans acquittement, où un recorder lent ou injoignable ne bloque pas la session au prix d'entrées perdues (comptées et journalisées) — n'existe plus que sous `RECORDING_POLICY=best-effort`, qui doit être demandé explicitement et dont le proxy avertit au démarrage. Il est réservé au développement.
 
 ## 7. Tout service → Audit Service — `AuditIngestion`
 
@@ -402,10 +412,19 @@ sequenceDiagram
     BRK->>VAULT: AuthorizeScope(session_id, account_id, proxy_service_id)
     VAULT-->>BRK: scope_token
     BRK->>PXY: EstablishSession(session_id, target_host, target_user, scope_token)
+    PXY->>REC: Ready ? (GET /readyz)
+    alt recorder non prêt (ADR-0008)
+        REC-->>PXY: indisponible
+        PXY->>AUD: EmitEvent(action="session.recording_unavailable", success=false)
+        PXY-->>BRK: UNAVAILABLE — session refusée, scope non consommé
+    else recorder prêt
+        REC-->>PXY: prêt
+    end
     PXY->>CRED: FetchCredential(scope_token, calling_proxy_id)
     CRED-->>PXY: credential_material
     PXY->>TGT: Connexion SSH native
     PXY->>REC: StreamCommandEntries(session_id, ts, command)
+    REC-->>PXY: acquittement — seulement alors la commande part vers TGT
     PXY->>AUD: EmitEvent(action="session.connect", success=true)
     Note over PXY,CRED: credential_material purgé après usage
 ```

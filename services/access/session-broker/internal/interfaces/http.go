@@ -14,6 +14,7 @@ package interfaces
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -140,6 +141,12 @@ type connectionTicketResponse struct {
 func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessionID string) {
 	proxyEndpoint, ticket, _, err := s.svc.Connect(r.Context(), sessionID)
 	if err != nil {
+		if errors.Is(err, domain.ErrRecordingUnavailable) {
+			// Not a conflict with the session: the platform cannot record it
+			// right now. The reason is generic on purpose; the proxy logs the cause.
+			http.Error(w, "recording unavailable: the session was not started, try again shortly", http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}

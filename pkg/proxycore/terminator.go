@@ -33,3 +33,18 @@ func (t *Terminator) Terminate(ctx context.Context, sessionID string, cred *Cred
 func (t *Terminator) EmitConnectFailure(ctx context.Context, sessionID string) error {
 	return t.audit.EmitEvent(ctx, "session.connect", "session", sessionID, false)
 }
+
+// EmitRecordingUnavailable records a session REFUSED because the recorder
+// could not take it (ADR-0008): no credential was fetched, nothing ran on the
+// target. A dedicated action, not session.connect/false, so an auditor can
+// list exactly the sessions the recording policy stopped.
+func (t *Terminator) EmitRecordingUnavailable(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.recording_unavailable", "session", sessionID, false)
+}
+
+// EmitRecordingLost records a session TERMINATED mid-way because a command
+// could not be recorded. It is emitted in addition to session.terminate, which
+// still says the session ended and that it did not end cleanly.
+func (t *Terminator) EmitRecordingLost(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.recording_lost", "session", sessionID, false)
+}

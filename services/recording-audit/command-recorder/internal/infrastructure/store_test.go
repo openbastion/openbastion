@@ -529,3 +529,45 @@ func TestPostgresStore_SealsRowsStoredBeforeEncryptionExisted(t *testing.T) {
 		t.Fatalf("after a second start: %q, %v", cmds(got), err)
 	}
 }
+
+// -- readiness (ADR-0008) -----------------------------------------------------------
+
+// Ready is what a proxy required to record asks before admitting a session, so
+// it must follow what the WRITE PATH would do, not what the server's defaults
+// say. A hot standby (the case it exists for) cannot be provoked with one
+// server, so its decision is tested in readiness_internal_test.go; here, the
+// reachable parts.
+func TestPostgresStore_ReadyFollowsTheWritePath(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed tests (see /NOTES_SANDBOX.md)")
+	}
+	ctx := context.Background()
+	db, err := infrastructure.OpenPostgres(ctx, dsn)
+	must(t, err)
+	defer db.Close()
+	db.SetMaxOpenConns(1) // one connection, so the session setting below is the one Ready sees
+	store := testPostgresStore(t, db, kekHexA)
+
+	if err := store.Ready(ctx); err != nil {
+		t.Fatalf("a healthy primary must be ready: %v", err)
+	}
+
+	// default_transaction_read_only=on does NOT stop our writes: lib/pq opens
+	// them as BEGIN READ WRITE. Ready must agree with the write, in both
+	// directions — a false "not ready" would refuse sessions that could be recorded.
+	_, err = db.Exec(`SET default_transaction_read_only = on`)
+	must(t, err)
+	writeErr := store.AppendBatch(ctx, []domain.CommandEntry{{SessionID: uniqueID("ro"), Timestamp: time.Now().UTC(), Command: "x"}})
+	readyErr := store.Ready(ctx)
+	if (writeErr == nil) != (readyErr == nil) {
+		t.Fatalf("Ready and the write path disagree: write error=%v, Ready error=%v", writeErr, readyErr)
+	}
+	_, err = db.Exec(`SET default_transaction_read_only = off`)
+	must(t, err)
+
+	db.Close()
+	if err := store.Ready(ctx); err == nil {
+		t.Fatal("a store whose database is gone was reported ready")
+	}
+}

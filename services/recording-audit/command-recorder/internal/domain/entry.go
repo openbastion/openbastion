@@ -47,3 +47,14 @@ type CommandRepository interface {
 	// A session with no entries is an empty page, not an error.
 	ListBySession(ctx context.Context, sessionID string, page, pageSize int) ([]CommandEntry, int, error)
 }
+
+// ReadinessChecker is implemented by a repository that can tell whether it
+// could take a write right now. It is separate from CommandRepository because
+// not every store has anything to check (the in-memory one never fails), and
+// because it answers a different question from liveness: a recorder whose
+// process is up but whose database is unreachable, or read-only after a
+// failover, must report NOT ready — the proxies' record-or-refuse policy
+// (ADR-0008) refuses sessions on exactly that signal.
+type ReadinessChecker interface {
+	Ready(ctx context.Context) error
+}

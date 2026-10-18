@@ -48,6 +48,7 @@ Les proxies protocolaires détiennent un état qu'aucun des autres composants n'
 | Reporting Service indisponible | Pas de rapport agrégé | Aucun impact | Aucun impact |
 | Redis indisponible | Perte de cache | Risque d'incohérence sur `Session Registry` (doc 01 §4.1) | **Bloquées** — le Broker ne peut plus garantir l'état de session |
 | Audit Service / Kafka indisponible | — | Sessions déjà établies continuent (le proxy ne dépend pas de l'audit pour fonctionner) | **Bloquées** — cohérent avec le principe fail-closed (§1) |
+| Command Recorder indisponible, ou sa base passée en lecture seule (ADR-0008) | — | **Terminées à la prochaine commande** : une commande qui ne peut pas être enregistrée n'est pas exécutée sur la cible, l'opérateur est prévenu (`session.recording_lost`) | **Bloquées** (`503 recording unavailable`, `session.recording_unavailable`) — une session non enregistrable n'a pas lieu |
 | Password Vault indisponible | — | Aucun impact (credential déjà en mémoire proxy) | **Bloquées** — aucune nouvelle session ne peut obtenir de credential |
 | PostgreSQL indisponible | — | Dépend du composant (voir ci-dessus, PostgreSQL sous-tend Vault et Audit) | **Bloquées** |
 
@@ -55,8 +56,8 @@ Les proxies protocolaires détiennent un état qu'aucun des autres composants n'
 
 | Niveau de criticité | Composants | RTO cible | RPO cible |
 |---|---|---|---|
-| Tier 0 — bloquant | Gateway, Authn, Authz, Broker, Vault, PostgreSQL, mesh mTLS | < 1 min (bascule automatisée) | 0 (réplication synchrone ou quasi-synchrone) |
-| Tier 1 — dégradable court terme | Proxies, Session Recorder, Audit/Kafka | < 5 min | < 1 min |
+| Tier 0 — bloquant | Gateway, Authn, Authz, Broker, Vault, **Command Recorder** (ADR-0008), PostgreSQL, mesh mTLS | < 1 min (bascule automatisée) | 0 (réplication synchrone ou quasi-synchrone) |
+| Tier 1 — dégradable court terme | Proxies, Audit/Kafka | < 5 min | < 1 min |
 | Tier 2 — dégradable | Search Engine, Reporting, Notification | < 30 min | best-effort |
 
 Ces chiffres sont indicatifs et devront être révisés une fois des mesures réelles disponibles post-MVP (doc 04) — ils servent de point de départ pour dimensionner l'exercice de bascule mentionné au guide PRA/PCA.
@@ -65,6 +66,7 @@ Ces chiffres sont indicatifs et devront être révisés une fois des mesures ré
 
 - Injection de panne périodique (chaos engineering) : tuer une instance de proxy avec sessions actives et vérifier que (a) l'audit enregistre la terminaison anormale, (b) aucun credential n'apparaît dans les logs post-mortem, (c) le Broker retire l'instance de son pool dans le délai attendu.
 - Bascule PostgreSQL forcée en environnement de test, mesure du temps réel de rétablissement de la création de session (Tier 0).
+- Coupure volontaire du Command Recorder (ou passage de sa base en lecture seule) pendant une charge de sessions : vérifier que les nouvelles sessions sont refusées en `503` et que les sessions en cours s'arrêtent à leur prochaine commande, **sans qu'aucune commande atteigne la cible** — à surveiller via `GET /readyz`, pas seulement `/healthz`.
 - Coupure volontaire de Kafka pendant une charge de sessions actives, vérification que les nouvelles créations sont bien refusées (fail-closed) plutôt que silencieusement non auditées.
 
 ## 7. Prochaine étape

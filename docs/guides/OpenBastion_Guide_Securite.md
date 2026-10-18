@@ -79,6 +79,7 @@ C'est la zone de plus forte sensibilité du système — seul point où un secre
 - **Isolation réseau** : chaque famille de proxy ne doit avoir de connectivité sortante que vers les cibles de sa famille (ex. le Database Proxy ne doit pas pouvoir initier de connexion SSH).
 - **Scoping Vault strict** : les droits d'un proxy auprès du Vault sont limités à son propre type de credential — vérifié par test de sécurité dédié (`test/security/`, doc 02 §9).
 - **Scope token à usage unique** : `AuthorizeScope` (doc 07 §5) émet un jeton consommable une seule fois — un rejeu doit être rejeté par le Vault.
+- **Enregistrer ou refuser** (ADR-0008) : par défaut (`RECORDING_POLICY=required`), une session que le Command Recorder ne peut pas enregistrer n'a pas lieu. Le proxy la refuse à l'admission si le recorder n'est pas prêt (injoignable, ou base en lecture seule), et ne transmet une commande à la cible qu'après que le recorder l'a acquittée : une commande non enregistrée n'est jamais exécutée, et la session s'arrête. Le mode `best-effort` n'est destiné qu'au développement ; il doit être demandé explicitement, le proxy l'annonce au démarrage, et il ne doit jamais être activé en production. Un proxy en mode `required` refuse de démarrer sans `RECORDER_URL`, et une valeur de politique inconnue est fatale — une faute de frappe ne doit pas sélectionner silencieusement le mode le plus faible.
 - **Durcissement des conteneurs proxy** : exécution non-root, filesystem racine en lecture seule, capacités Linux réduites au strict nécessaire pour ouvrir les sockets réseau requis.
 
 ## 9. Sécurité de l'audit
@@ -111,7 +112,9 @@ C'est la zone de plus forte sensibilité du système — seul point où un secre
 | Pas de validation multi-étapes | RBAC seul avant octroi | v1.0 (Workflow/Approval Engine) |
 | Un seul protocole (SSH) | Périmètre volontairement restreint pour prouver l'invariant (doc 04 §1) | v1.0/v2.0 |
 | Pas de détection d'anomalie/score de risque | Aucune | v2.0 |
-| Enregistrement de session « au mieux » : si le Command Recorder est durablement injoignable, la session continue et des commandes sont perdues (comptées, journalisées `RECORDING GAP`) | Surveillance manuelle de ces journaux (aucune alerte automatique) | Décision de politique (enregistrer ou refuser) non tranchée |
+| Le Command Recorder est une dépendance de disponibilité de **tous** les accès privilégiés (ADR-0008) : s'il est indisponible, aucune session ne s'ouvre et les sessions en cours s'arrêtent à leur prochaine commande | Déployer le recorder et sa base en haute disponibilité (guide HA), alerter sur `/readyz` | v1.0 (procédure d'urgence « break-glass » approuvée et auditée — non décidée) |
+| Le recorder reçoit ses écritures sans authentification mutuelle : un appelant ayant accès au réseau interne pourrait y écrire de fausses entrées | `NetworkPolicy` restreignant l'accès au recorder aux seuls proxies | v1.0 (mTLS interne) |
+| Un échec ambigu d'acquittement peut sur-enregistrer une commande qui n'a jamais été exécutée (le sens d'erreur inverse est exclu) | Lecture du replay à la lumière de l'audit de session | Non prévue — choix assumé (ADR-0008) |
 | Un secret passé en argument d'une commande (`mysql -pXXXX`) est enregistré tel quel ; seul un secret saisi à un prompt est masqué | Chiffrement au repos + `recording:session:read` réservé aux auditeurs | À décider |
 
 ## 13. Prochaine étape

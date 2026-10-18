@@ -12,6 +12,7 @@ package interfaces
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,7 +39,24 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/recorder/v1/command-entries", s.handleRecord)
 	mux.HandleFunc("/recorder/v1/sessions/", s.handleSession)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/readyz", s.handleReady)
 	return mux
+}
+
+// -- GET /readyz --------------------------------------------------------------
+//
+// Liveness (/healthz) says the process runs. Readiness says it could record a
+// session now. Proxies required to record ask this before admitting a session
+// (ADR-0008), so it must be false whenever a write would fail.
+func (s *HTTPServer) handleReady(w http.ResponseWriter, r *http.Request) {
+	if err := s.svc.Ready(r.Context()); err != nil {
+		// The reason stays in the log: this endpoint is reachable by every
+		// proxy, and a database error can carry addresses and schema names.
+		log.Printf("command-recorder: not ready: %v", err)
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // -- POST /recorder/v1/command-entries (SessionRecording.StreamCommandEntries) --

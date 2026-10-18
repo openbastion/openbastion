@@ -124,6 +124,10 @@ func TestGatewayFlow_LoginThroughRealSSHConnection_AcrossSevenRealProcesses(t *t
 		"VAULT_URL=http://127.0.0.1:18201",
 		"AUDIT_URL=http://127.0.0.1:18202",
 		"PROXY_SERVICE_ID=ssh-proxy",
+		// This test is about authorization and the relay, not recording, and
+		// runs no Command Recorder: opt out of the default (required) policy
+		// explicitly — without RECORDER_URL the proxy refuses to start.
+		"RECORDING_POLICY=best-effort",
 	)
 	broker := startService(t, root, brokerBin, "18204",
 		"AUTHORIZATION_URL=http://127.0.0.1:18203",

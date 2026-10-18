@@ -58,6 +58,43 @@ type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+// Ready reports whether a write could succeed now: the database answers, and it
+// accepts writes. The second part is the one a bare ping misses — a hot standby,
+// or a primary being demoted in a failover, still answers queries but refuses
+// every INSERT, and a recorder that said "ready" then would admit sessions it
+// cannot record. (Ready is a pre-flight; the per-command acknowledgement is the
+// guarantee.)
+//
+// The check runs in a transaction opened exactly as AppendBatch opens its own
+// (BeginTx with default options, which lib/pq sends as BEGIN READ WRITE), so it
+// answers "would MY write be accepted", not "is the server's default read-only":
+// a database with default_transaction_read_only=on still takes writes from a
+// READ WRITE transaction, and reporting it not ready would refuse sessions that
+// could have been recorded.
+func (s *PostgresStore) Ready(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("database not reachable: %w", err)
+	}
+	defer tx.Rollback()
+	var readOnly string
+	var inRecovery bool
+	if err := tx.QueryRowContext(ctx, `SELECT current_setting('transaction_read_only'), pg_is_in_recovery()`).Scan(&readOnly, &inRecovery); err != nil {
+		return fmt.Errorf("database not reachable: %w", err)
+	}
+	return writableOrError(readOnly, inRecovery)
+}
+
+// writableOrError is Ready's decision, apart from the query that feeds it, so
+// the branch a single-server test cannot provoke (a real standby) is still
+// tested.
+func writableOrError(transactionReadOnly string, inRecovery bool) error {
+	if inRecovery || transactionReadOnly != "off" {
+		return errors.New("database is read-only (replica, or a failover in progress)")
+	}
+	return nil
+}
+
 // loadDEK returns the unwrapped data key of a session, or found=false if the
 // session has none. The caller zeroes the key when done.
 func (s *PostgresStore) loadDEK(ctx context.Context, q querier, sessionID string) (dek []byte, found bool, err error) {

@@ -7,7 +7,8 @@
 // session's text recording back through the Gateway.
 //
 // What it exists to catch, beyond each piece working alone: the proxy's
-// asynchronous delivery really reaches the recorder; the recording is
+// acknowledged delivery (record-or-refuse, ADR-0008) really reaches the
+// recorder; the recording is
 // attributed to the right session; a secret typed at a prompt is stored
 // nowhere; and the read side enforces RBAC without leaking which sessions
 // exist.
@@ -37,6 +38,15 @@ import (
 const sudoPassword = "correct-sudo-pw"
 
 func startInteractiveTargetSSHServer(t *testing.T, expectedPassword string) (addr string) {
+	t.Helper()
+	return startObservedInteractiveTargetSSHServer(t, expectedPassword, nil)
+}
+
+// startObservedInteractiveTargetSSHServer is the same target, additionally
+// reporting every command line it receives (not the password typed at the
+// sudo prompt) to onLine. It is how the record-or-refuse tests see what the
+// target was actually sent.
+func startObservedInteractiveTargetSSHServer(t *testing.T, expectedPassword string, onLine func(line string)) (addr string) {
 	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -87,6 +97,9 @@ func startInteractiveTargetSSHServer(t *testing.T, expectedPassword string) (add
 			line, err := readLine(true)
 			if err != nil {
 				return
+			}
+			if onLine != nil {
+				onLine(line)
 			}
 			if line == "sudo -s" {
 				fmt.Fprint(ch, "[sudo] password for root: ")
@@ -205,6 +218,7 @@ func TestRecordingFlow_InteractiveSessionIsRecordedAndReadableByAnAuditor_Across
 		"AUDIT_URL=http://127.0.0.1:18502",
 		"PROXY_SERVICE_ID=ssh-proxy",
 		"RECORDER_URL=http://127.0.0.1:18509",
+		"RECORDING_POLICY=required", // the default, stated: this test runs the proxy under the strict policy
 	)
 	broker := startService(t, root, brokerBin, "18504",
 		"AUTHORIZATION_URL=http://127.0.0.1:18503",
@@ -317,7 +331,9 @@ func TestRecordingFlow_InteractiveSessionIsRecordedAndReadableByAnAuditor_Across
 	client.Close()
 
 	// -- the auditor reads the recording back, through the Gateway ----------
-	// Delivery from the proxy is asynchronous, so wait for it to arrive.
+	// Under the required policy every command was acknowledged before it was
+	// forwarded, so the recording is already complete; the loop only tolerates
+	// a slow read path.
 	var raw []byte
 	var page recordingPage
 	deadline := time.Now().Add(5 * time.Second)
