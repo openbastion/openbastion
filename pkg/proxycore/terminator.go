@@ -48,3 +48,16 @@ func (t *Terminator) EmitRecordingUnavailable(ctx context.Context, sessionID str
 func (t *Terminator) EmitRecordingLost(ctx context.Context, sessionID string) error {
 	return t.audit.EmitEvent(ctx, "session.recording_lost", "session", sessionID, false)
 }
+
+// EmitBreakGlass records that a session was admitted WITHOUT a recorder, by a
+// break-glass waiver (ADR-0009). It is emitted before the credential is fetched
+// and its failure refuses the session, so a waiver is never exercised unseen.
+func (t *Terminator) EmitBreakGlass(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.breakglass", "session", sessionID, true)
+}
+
+// EmitExpired records a session cut by the proxy at the end of its allotted
+// time. It is a normal end (success), emitted in addition to session.terminate.
+func (t *Terminator) EmitExpired(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.expire", "session", sessionID, true)
+}

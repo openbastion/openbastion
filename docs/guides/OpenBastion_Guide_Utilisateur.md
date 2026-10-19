@@ -75,6 +75,12 @@ Non, jamais, pour personne — pas même pour un administrateur. C'est le princi
 **Ma session a expiré en plein milieu de mon travail, que faire ?**
 Redemandez une session (§3). C'est volontaire : une session à durée illimitée serait un accès permanent déguisé, exactement ce qu'OpenBastion existe pour éviter.
 
+**La connexion est refusée avec « recording unavailable », que faire ?**
+Le système d'enregistrement des sessions est momentanément indisponible, et OpenBastion refuse par principe une session qu'il ne pourrait pas enregistrer. Rien n'a été consommé : renouvelez votre demande dans quelques instants. Si c'est une urgence d'incident qui ne peut pas attendre, demandez à votre administrateur si un accès d'urgence (« break-glass ») est prévu pour votre rôle sur ce compte : il est désactivé par défaut, exige une justification précise, dure peu de temps, et laisse une trace d'audit qui sera relue après coup. Une session d'urgence est enregistrée au mieux, pas garantie.
+
+**Ma session s'est coupée à l'heure indiquée, même en pleine commande ?**
+Oui : OpenBastion coupe toute session à son échéance, sans attendre. Redemandez-en une si le travail n'est pas fini (§3).
+
 **Est-ce que quelqu'un me surveille en temps réel ?**
 Votre session est enregistrée pour être rejouable en cas de besoin (audit, incident), pas nécessairement regardée en direct. Les modalités précises de revue relèvent de la politique de votre organisation, pas d'OpenBastion lui-même.
 

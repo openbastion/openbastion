@@ -34,6 +34,10 @@ message CreateSessionRequest {
   Protocol protocol = 3;
   string justification = 4;
   int32 duration_minutes = 5;
+  // Dérogation d'urgence à l'enregistrement (ADR-0009). Exige une justification
+  // d'au moins 10 caractères, une durée bornée par la plateforme et une politique
+  // RBAC sur breakglass:account:{privileged_account_id}. Refusée par défaut.
+  bool break_glass = 6;
 }
 
 message Session {
@@ -44,6 +48,7 @@ message Session {
   string privileged_account_id = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp expires_at = 7;
+  bool break_glass = 8;  // autorisée à s'exécuter sans recorder — pas « l'a fait » (audit : session.breakglass)
 }
 
 message GetSessionRequest {

@@ -103,6 +103,19 @@ type RecordingConfig struct {
 
 	// GateTimeout bounds one readiness probe. Zero means two seconds.
 	GateTimeout time.Duration
+
+	// BreakGlass lets a session that asked for it — and that the Session
+	// Broker authorised (ADR-0009) — run while the recorder is NOT ready. Off
+	// by default. It needs Sink: the non-blocking recorder that the waived
+	// session's commands are sent to (and, if it is nil, the waiver is simply
+	// unavailable, never an unrecorded session by accident).
+	BreakGlass bool
+}
+
+// canWaive says whether this proxy may run a break-glass session without a
+// recorder: switched on, and with somewhere to send the commands.
+func (c RecordingConfig) canWaive() bool {
+	return c.Policy == RecordingRequired && c.BreakGlass && c.Sink != nil
 }
 
 // Admit reports whether a session may start. Any policy other than the
@@ -144,6 +157,42 @@ func (c RecordingConfig) NewTap(sessionID string) (*RecordingTap, error) {
 		return nil, fmt.Errorf("%w: recording is required but no recorder is configured", ErrRecordingUnavailable)
 	}
 	return NewRequiredRecordingTap(c.Strict, sessionID), nil
+}
+
+// Admission is the proof that a session passed the recording policy, and how:
+// normally (the recorder was ready, every command will be acknowledged before it
+// is sent on) or by a break-glass waiver (it was not; commands are recorded on a
+// best-effort basis). Only Listener.AdmitSession makes a granted one — its fields
+// are unexported — so a caller cannot hand Serve an admission it did not earn.
+// The zero value is "not admitted".
+type Admission struct {
+	sessionID string
+	granted   bool
+	waived    bool
+}
+
+// Waived reports whether the session was admitted by a break-glass waiver
+// rather than by a ready recorder.
+func (a Admission) Waived() bool { return a.granted && a.waived }
+
+// For reports whether a is a granted admission for exactly this session.
+func (a Admission) For(sessionID string) bool { return a.granted && a.sessionID == sessionID }
+
+// NewTapFor returns the Recording Tap for an admitted session: the one that
+// acknowledges every command when the recorder was ready, the non-blocking one
+// when a break-glass waiver stands in for it. An admission that is not granted
+// gets no tap — nothing records a session that was never allowed to start.
+func (c RecordingConfig) NewTapFor(adm Admission) (*RecordingTap, error) {
+	if !adm.granted {
+		return nil, fmt.Errorf("%w: the session was not admitted", ErrRecordingUnavailable)
+	}
+	if adm.Waived() {
+		if !c.canWaive() {
+			return nil, fmt.Errorf("%w: break-glass is not available on this proxy", ErrRecordingUnavailable)
+		}
+		return NewRecordingTap(c.Sink, adm.sessionID), nil
+	}
+	return c.NewTap(adm.sessionID)
 }
 
 type discardRecorder struct{}

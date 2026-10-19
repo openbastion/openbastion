@@ -51,6 +51,16 @@ func main() {
 			"refusing to start. Set RECORDER_URL, or set RECORDING_POLICY=best-effort to run without recording (development only)", policy)
 	}
 
+	// Break-glass (ADR-0009): a recording waiver for a session the Session Broker
+	// authorised, usable only while the recorder is not ready. Off unless asked
+	// for by name, and meaningless without the required policy — best-effort
+	// already runs unrecorded sessions, for everyone.
+	breakGlass := os.Getenv("BREAKGLASS_ENABLED") == "true"
+	if breakGlass && policy != proxycore.RecordingRequired {
+		log.Printf("ssh-proxy: BREAKGLASS_ENABLED is ignored under RECORDING_POLICY=%s", policy)
+		breakGlass = false
+	}
+
 	// MVP: an ephemeral host key generated at process start. Production
 	// needs a persisted, rotated identity (Guide Sécurité §3) — this is a
 	// deliberate simplification, not an oversight.
@@ -97,6 +107,16 @@ func main() {
 		}
 		log.Printf("ssh-proxy: recording policy REQUIRED — sessions are refused when the Command Recorder cannot take them, " +
 			"and a command is sent to the target only after it has been recorded")
+		if breakGlass {
+			// What a waived session's commands go to: sent without being waited
+			// for, so an emergency session is never stalled by the recorder
+			// that is, by definition, in trouble.
+			asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}, 1024, 100)
+			listener.Recording.Sink = asyncRecorder
+			listener.Recording.BreakGlass = true
+			log.Printf("ssh-proxy: BREAK-GLASS ENABLED — a session the Session Broker authorised for break-glass runs even when the " +
+				"Command Recorder is NOT ready, with commands recorded best-effort. Every such session is audited (session.breakglass)")
+		}
 	default:
 		// Commands are sent to the Command Recorder asynchronously, in
 		// batches, so a slow or unreachable recorder can never stall a live
@@ -122,7 +142,7 @@ func main() {
 	}()
 
 	httpServer := interfaces.NewHTTPServer(pending, "127.0.0.1:"+sshPort)
-	httpServer.Admit = listener.Admit // refuse before issuing a ticket, not after
+	httpServer.Admit = listener.Probe // refuse before issuing a ticket, not after
 	log.Printf("ssh-proxy: internal API on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", httpPort)
 	log.Printf("  -> vault: %s", vaultURL)
 	log.Printf("  -> audit: %s", auditURL)

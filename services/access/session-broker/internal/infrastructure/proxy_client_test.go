@@ -2,6 +2,7 @@ package infrastructure_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func establish(t *testing.T, status int, body string) error {
 		http.Error(w, body, status)
 	}))
 	defer srv.Close()
-	_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "h", "u", "scope", time.Minute)
+	_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "h", "u", "scope", time.Minute, false)
 	return err
 }
 
@@ -45,6 +46,26 @@ func TestProxyClient_RecognisesARecordingRefusal(t *testing.T) {
 	} {
 		if err := establish(t, c.status, c.body); err == nil || errors.Is(err, domain.ErrRecordingUnavailable) {
 			t.Errorf("%s: got %v, want a plain failure", name, err)
+		}
+	}
+}
+
+// The Broker's authorisation reaches the proxy as `break_glass`, in the request
+// body — absent or false means no waiver, so a proxy never has to guess.
+func TestProxyClient_SendsTheBreakGlassAuthorisation(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		var got map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewDecoder(r.Body).Decode(&got)
+			_, _ = w.Write([]byte(`{"proxy_endpoint":"127.0.0.1:2222","connection_ticket":"ticket_x"}`))
+		}))
+		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "h", "u", "scope", time.Minute, want)
+		srv.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v, ok := got["break_glass"].(bool); !ok || v != want {
+			t.Fatalf("break_glass = %v (%v), want %v; body %v", got["break_glass"], ok, want, got)
 		}
 	}
 }

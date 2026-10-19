@@ -54,6 +54,7 @@ vault:
 2. **Vérifier la fédération OIDC** : `GET /api/v1/auth/me` après une connexion de test doit renvoyer `identitySource: "oidc"` et le mapping correct de `username`/`displayName` (doc 05 §2, schéma `User`).
 3. **Créer les premiers rôles** (§5).
 4. **Politique d'enregistrement des sessions** — voir ci-dessous.
+5. **Décider du break-glass** (désactivé par défaut) — voir « Accès d'urgence (break-glass) » ci-dessous.
 
 ### Politique d'enregistrement
 
@@ -65,6 +66,41 @@ Chaque proxy lit `RECORDING_POLICY` :
 | `best-effort` | La session continue si l'enregistrement échoue ; des commandes sont perdues. **Développement uniquement.** Le proxy le signale par un avertissement au démarrage. |
 
 En mode `required`, `RECORDER_URL` (adresse du Command Recorder) est obligatoire : sans elle, le proxy refuse de démarrer. Une valeur de `RECORDING_POLICY` inconnue est une erreur fatale, pas un repli. Le recorder expose `GET /healthz` (le processus tourne) et `GET /readyz` (il pourrait écrire : base joignable et inscriptible) ; c'est `/readyz` que doivent sonder l'orchestrateur et la supervision, car un recorder dont la base est passée en lecture seule est « vivant » mais bloque en pratique tous les accès privilégiés.
+
+### Accès d'urgence (break-glass)
+
+Quand le recorder est en panne et qu'un incident ne peut pas attendre, une session peut s'exécuter **sans enregistrement acquitté**. C'est une dérogation à l'enregistrement et rien d'autre (ADR-0009) : l'authentification, les droits `session:create`, le Vault et l'audit restent en vigueur. **Désactivé par défaut**, il se règle à deux endroits qui doivent tous deux être d'accord :
+
+| Où | Variable | Effet |
+|---|---|---|
+| Session Broker | `BREAKGLASS_MAX_MINUTES` | Durée maximale d'une session break-glass, en minutes. Absente ou `0` : désactivé. Un texte ou un négatif est une erreur fatale au démarrage. Revenir à `0` coupe la possibilité **immédiatement**, y compris pour les sessions déjà accordées mais pas encore ouvertes. |
+| SSH Proxy | `BREAKGLASS_ENABLED=true` | Autorise ce proxy à honorer une dérogation. Ignoré (avec un avertissement) hors `RECORDING_POLICY=required`. |
+
+Aucun rôle n'en dispose par défaut — pas même un administrateur. Pour l'accorder, créez une politique sur la ressource **`breakglass:account:<id du compte>`**, distincte de `vault:account:…` :
+
+```sh
+curl -X POST https://bastion.example.com/api/v1/policies \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "oncall-breakglass-prod-db-01",
+    "role": "oncall-sre",
+    "resourcePattern": "breakglass:account:<id-de-prod-db-01>",
+    "effect": "allow"
+  }'
+```
+
+Évitez les motifs génériques (`breakglass:account:*`) : ils accorderaient l'urgence sur **tous** les comptes. Une personne seule suffit — il n'y a pas encore de double validation (v1.0) ; la compensation est la revue : chaque usage laisse des événements d'audit à relire.
+
+Demande par l'opérateur (justification d'au moins 10 caractères, durée de 1 à `BREAKGLASS_MAX_MINUTES`) :
+
+```sh
+curl -X POST https://bastion.example.com/api/v1/sessions \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"targetAccountId": "<id>", "justification": "INC-4821 : base de production saturée, recorder HS", "durationMinutes": 20, "breakGlass": true}'
+```
+
+À relire après chaque usage : `session.breakglass_requested` (demande accordée ou refusée), `session.breakglass` (la dérogation a **réellement** servi : le recorder n'était pas prêt) et `session.expire` (fin de session à l'échéance). Une session demandée en break-glass alors que le recorder était prêt reste enregistrée normalement et ne laisse pas de `session.breakglass`.
 
 ## 4. Gestion des comptes privilégiés (Vault)
 
@@ -158,6 +194,9 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `POST /sessions` renvoie `403` de façon inattendue | Politique manquante ou `resourcePattern` mal formé (§5) | Lister les politiques du rôle concerné via `GET /policies` |
 | `POST /sessions/{id}/connect` renvoie `503` (« recording unavailable ») | Le Command Recorder n'est pas prêt : injoignable, ou base de données en lecture seule (basculement de réplica, disque plein). La session n'a pas été établie et aucun secret n'a été consommé | Sonder `GET /readyz` du recorder, rétablir la base, puis renouveler la même requête ; l'événement `session.recording_unavailable` figure dans l'audit |
 | Une session s'arrête en cours de route avec le message « session ended because recording is unavailable » | Le recorder a cessé d'acquitter : la commande en cours n'a **pas** été envoyée à la cible (ADR-0008) | Rechercher `session.recording_lost` dans l'audit pour la session concernée ; rétablir le recorder ; l'opérateur ouvre une nouvelle session |
+| `POST /sessions` avec `breakGlass: true` renvoie `403` | L'une des conditions n'est pas remplie ; le corps de la réponse dit laquelle : désactivé (`BREAKGLASS_MAX_MINUTES` absent ou à 0), justification trop courte, durée hors limite, ou aucune politique sur `breakglass:account:<id>` | Corriger la demande, ou créer la politique si l'accès d'urgence est légitime — ne pas la généraliser. La tentative figure dans l'audit (`session.breakglass_requested`, échec) |
+| Une session break-glass est accordée mais `connect` renvoie `503` (« recording unavailable ») | Le proxy n'a pas `BREAKGLASS_ENABLED=true`, ou tourne en `best-effort` (donc ignore la dérogation) | Activer `BREAKGLASS_ENABLED` sur ce proxy ; ne pas passer en `best-effort` |
+| Une session ordinaire s'arrête avec « session ended because its time limit was reached » | Fin normale : le proxy coupe toute session à son échéance (`session.expire`) | Redemander une session si le besoin persiste |
 | Un proxy ne démarre pas : « refusing to start » | `RECORDING_POLICY=required` (défaut) sans `RECORDER_URL` | Renseigner `RECORDER_URL` — ne pas passer en `best-effort` pour contourner |
 | Rotation d'un compte reste indéfiniment en cours | KMS/HSM externe indisponible (Guide Sécurité §6) | Vérifier la connectivité du Password Vault vers le KMS configuré en `values.yaml` |
 

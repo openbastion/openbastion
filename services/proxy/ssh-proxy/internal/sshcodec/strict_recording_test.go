@@ -156,7 +156,9 @@ type strictHarness struct {
 
 const strictScope = "scope-strict"
 
-func newStrictHarness(t *testing.T, recorder *strictRecorder) *strictHarness {
+// newStrictHarness builds the proxy under the required policy. Options adjust the
+// recording configuration (break-glass, for instance) before the proxy starts.
+func newStrictHarness(t *testing.T, recorder *strictRecorder, opts ...func(*proxycore.RecordingConfig)) *strictHarness {
 	t.Helper()
 	const secret = "target-secret-strict"
 	h := &strictHarness{t: t, recorder: recorder, log: &targetLog{}, audit: &safeAudit{},
@@ -175,6 +177,9 @@ func newStrictHarness(t *testing.T, recorder *strictRecorder) *strictHarness {
 
 	listener := proxycore.NewListener(proxycore.NewCredentialFetcher(h.vault, "ssh-proxy"), proxycore.NewTerminator(h.audit))
 	listener.Recording = proxycore.RecordingConfig{Policy: proxycore.RecordingRequired, Strict: recorder, Gate: recorder}
+	for _, opt := range opts {
+		opt(&listener.Recording)
+	}
 
 	h.pending = infrastructure.NewPendingSessions()
 	_, hostPriv, _ := ed25519.GenerateKey(rand.Reader)
@@ -201,11 +206,25 @@ type operator struct {
 	closed chan struct{}
 }
 
+// connectOpts describes the session the Session Broker would have established.
+type connectOpts struct {
+	breakGlass bool          // the Broker authorised a recording waiver (ADR-0009)
+	lasts      time.Duration // how long the session may run; zero means a minute
+}
+
 func (h *strictHarness) connect(sessionID string) *operator {
 	h.t.Helper()
+	return h.connectWith(sessionID, connectOpts{})
+}
+
+func (h *strictHarness) connectWith(sessionID string, o connectOpts) *operator {
+	h.t.Helper()
+	if o.lasts == 0 {
+		o.lasts = time.Minute
+	}
 	ticket := h.pending.Register(&infrastructure.PendingSession{
 		SessionID: sessionID, TargetHost: h.target, TargetUser: "root",
-		ScopeToken: strictScope, ExpiresAt: time.Now().UTC().Add(time.Minute),
+		ScopeToken: strictScope, ExpiresAt: time.Now().UTC().Add(o.lasts), BreakGlass: o.breakGlass,
 	})
 	client, err := ssh.Dial("tcp", h.proxy, &ssh.ClientConfig{
 		User: "operator", Auth: []ssh.AuthMethod{ssh.Password(ticket)},

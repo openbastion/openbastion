@@ -51,6 +51,11 @@ type createSessionRequest struct {
 	Protocol            string   `json:"protocol"`
 	Justification       string   `json:"justification"`
 	DurationMinutes     int      `json:"durationMinutes"`
+
+	// BreakGlass asks for the right to run while the Command Recorder is down
+	// (ADR-0009). It is a request: it needs a justification, a bounded duration and
+	// a RBAC policy on breakglass:account:{id}, or the session is refused.
+	BreakGlass bool `json:"breakGlass"`
 }
 
 type sessionResponse struct {
@@ -60,13 +65,14 @@ type sessionResponse struct {
 	RequestedBy         string `json:"requestedBy"`
 	PrivilegedAccountID string `json:"privilegedAccountId"`
 	Justification       string `json:"justification"`
+	BreakGlass          bool   `json:"breakGlass"`
 }
 
 func toSessionResponse(s *domain.Session) sessionResponse {
 	return sessionResponse{
 		ID: s.ID, Status: string(s.Status), Protocol: s.Protocol,
 		RequestedBy: s.RequestedBy, PrivilegedAccountID: s.PrivilegedAccountID,
-		Justification: s.Justification,
+		Justification: s.Justification, BreakGlass: s.BreakGlass,
 	}
 }
 
@@ -80,7 +86,11 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	sess, err := s.svc.CreateSession(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, req.DurationMinutes)
+	create := s.svc.CreateSession
+	if req.BreakGlass {
+		create = s.svc.CreateBreakGlassSession
+	}
+	sess, err := create(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, req.DurationMinutes)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return

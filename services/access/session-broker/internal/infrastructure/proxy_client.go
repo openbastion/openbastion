@@ -22,10 +22,11 @@ type ProxyClientHTTPClient struct {
 	BaseURL string
 }
 
-func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration) (string, string, error) {
+func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
 	body, _ := json.Marshal(map[string]any{
 		"session_id": sessionID, "target_host": targetHost, "target_user": targetUser,
 		"vault_scope_token": scopeToken, "ttl_seconds": int(ttl.Seconds()),
+		"break_glass": breakGlass,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/establish-session", bytes.NewReader(body))
 	if err != nil {

@@ -25,6 +25,12 @@ message EstablishSessionRequest {
   string vault_scope_token = 4;    // jeton d'autorisation émis par le Broker — pas un secret
   google.protobuf.Timestamp expires_at = 5;
   string target_user = 6;          // nom du compte sur la cible — voir doc 06 §3, privileged_accounts.username
+  // Autorisation du Broker de déroger à l'enregistrement (ADR-0009). Une demande,
+  // pas un ordre : le proxy ne l'honore que s'il a lui-même été configuré pour
+  // (BREAKGLASS_ENABLED) ET que le recorder n'est pas prêt ; sinon il refuse
+  // comme d'habitude. La dérogation est auditée (session.breakglass) avant que
+  // le credential ne soit récupéré.
+  bool break_glass = 7;
 }
 
 message EstablishSessionResponse {

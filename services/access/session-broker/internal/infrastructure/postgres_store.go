@@ -49,13 +49,13 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 // again). See 001_init.sql's doc comment.
 func (s *PostgresStore) Save(ctx context.Context, sess *domain.Session) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sessions (id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO sessions (id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			status = EXCLUDED.status,
 			terminated_at = EXCLUDED.terminated_at`,
 		sess.ID, string(sess.Status), sess.Protocol, sess.RequestedBy, sess.PrivilegedAccountID,
-		sess.Justification, sess.CreatedAt, sess.ExpiresAt, sess.TerminatedAt)
+		sess.Justification, sess.CreatedAt, sess.ExpiresAt, sess.TerminatedAt, sess.BreakGlass)
 	return err
 }
 
@@ -64,10 +64,10 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.Session, er
 	var status string
 	var terminatedAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at
+		SELECT id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass
 		FROM sessions WHERE id = $1`, id)
 	if err := row.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
-		&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt); err != nil {
+		&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}

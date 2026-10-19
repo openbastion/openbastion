@@ -9,7 +9,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
@@ -51,7 +53,9 @@ type AccountLookup interface {
 // connection_ticket — safe to hand to a client — never the scope token
 // that was used to obtain it.
 type ProxyClient interface {
-	EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration) (proxyEndpoint, connectionTicket string, err error)
+	// breakGlass is the Broker's authorisation for a recording waiver (ADR-0009).
+	// The proxy honours it only if it was itself configured to.
+	EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (proxyEndpoint, connectionTicket string, err error)
 }
 
 // ProxySelector resolves which proxy family serves a given protocol.
@@ -80,6 +84,32 @@ type SessionBrokerService struct {
 	// not a concern to solve before it exists.
 	proxy   ProxyClient
 	proxies ProxySelector
+
+	// breakGlassMaxMinutes is both the switch and the limit of break-glass
+	// (ADR-0009): zero — the default — means the platform does not grant it at all.
+	breakGlassMaxMinutes int
+}
+
+// BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
+// "breakglass:account:{accountId}". A distinct resource, not a distinct action,
+// because the Authorization Service matches policies on role and resource only.
+// Having session:create on an account, or administering policies, grants nothing
+// here: a policy on this resource has to exist, and be written for the purpose.
+const BreakGlassResourcePrefix = "breakglass:account:"
+
+// MinBreakGlassJustification is a floor against an accidental blank or a lone
+// punctuation mark, not a judgement of quality: the justification is for the human
+// who reviews the session afterwards.
+const MinBreakGlassJustification = 10
+
+// WithBreakGlass enables break-glass sessions of at most maxMinutes minutes.
+// Zero or negative leaves it disabled.
+func (s *SessionBrokerService) WithBreakGlass(maxMinutes int) *SessionBrokerService {
+	if maxMinutes < 0 {
+		maxMinutes = 0
+	}
+	s.breakGlassMaxMinutes = maxMinutes
+	return s
 }
 
 func NewSessionBrokerService(sessions domain.SessionRepository, authz AuthorizationClient, vault VaultAuthorizer, audit AuditEmitter, accounts AccountLookup, proxy ProxyClient) *SessionBrokerService {
@@ -94,6 +124,42 @@ func NewSessionBrokerService(sessions domain.SessionRepository, authz Authorizat
 // touche... à l'audit"): if the audit event cannot be recorded, the
 // session is not left active — an unauditable grant is not a valid grant.
 func (s *SessionBrokerService) CreateSession(ctx context.Context, requestedBy string, actorRoles []string, privilegedAccountID, protocol, justification string, durationMinutes int) (*domain.Session, error) {
+	return s.createSession(ctx, requestedBy, actorRoles, privilegedAccountID, protocol, justification, durationMinutes, false)
+}
+
+// CreateBreakGlassSession is CreateSession for an emergency (ADR-0009): the
+// session, if granted, may run while the Command Recorder is down. It needs
+// everything CreateSession needs, and on top of that a justification, a duration
+// within the platform's limit, and a RBAC policy on breakglass:account:{id} — each
+// refusal is audited as session.breakglass_requested, success=false.
+func (s *SessionBrokerService) CreateBreakGlassSession(ctx context.Context, requestedBy string, actorRoles []string, privilegedAccountID, protocol, justification string, durationMinutes int) (*domain.Session, error) {
+	return s.createSession(ctx, requestedBy, actorRoles, privilegedAccountID, protocol, justification, durationMinutes, true)
+}
+
+// authorizeBreakGlass says why a break-glass request is refused, or nil. The
+// cheap, local conditions come first; the Authorization Service is asked last.
+func (s *SessionBrokerService) authorizeBreakGlass(ctx context.Context, actorRoles []string, accountID, justification string, durationMinutes int) error {
+	if s.breakGlassMaxMinutes <= 0 {
+		return fmt.Errorf("break-glass is not enabled on this platform")
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(justification)) < MinBreakGlassJustification {
+		return fmt.Errorf("a justification of at least %d characters is required", MinBreakGlassJustification)
+	}
+	if durationMinutes < 1 || durationMinutes > s.breakGlassMaxMinutes {
+		return fmt.Errorf("break-glass sessions last between 1 and %d minutes", s.breakGlassMaxMinutes)
+	}
+	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, BreakGlassResourcePrefix+accountID, "session:breakglass")
+	if err != nil {
+		// Fail closed: a waiver nobody could authorise is not granted.
+		return fmt.Errorf("the Authorization Service could not be asked: %w", err)
+	}
+	if !allowed {
+		return fmt.Errorf("no break-glass policy allows this: %s", reason)
+	}
+	return nil
+}
+
+func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy string, actorRoles []string, privilegedAccountID, protocol, justification string, durationMinutes int, breakGlass bool) (*domain.Session, error) {
 	resource := "vault:account:" + privilegedAccountID
 	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, resource, "session:create")
 	if err != nil {
@@ -102,7 +168,7 @@ func (s *SessionBrokerService) CreateSession(ctx context.Context, requestedBy st
 
 	sess := &domain.Session{
 		ID: randomID("session"), Protocol: protocol, RequestedBy: requestedBy,
-		PrivilegedAccountID: privilegedAccountID, Justification: justification,
+		PrivilegedAccountID: privilegedAccountID, Justification: justification, BreakGlass: breakGlass,
 		CreatedAt: time.Now().UTC(),
 		ExpiresAt: time.Now().UTC().Add(time.Duration(durationMinutes) * time.Minute),
 	}
@@ -112,6 +178,25 @@ func (s *SessionBrokerService) CreateSession(ctx context.Context, requestedBy st
 		_ = s.sessions.Save(ctx, sess) // a denied attempt is still recorded — Full Auditability, doc 00 §2
 		_ = s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, false)
 		return nil, fmt.Errorf("access denied: %s", reason)
+	}
+
+	if breakGlass {
+		// A refused waiver is a denied session, and an audited one. It is recorded
+		// under its own action so a reviewer can list every break-glass attempt,
+		// granted or not, without sifting ordinary session.create events.
+		if err := s.authorizeBreakGlass(ctx, actorRoles, privilegedAccountID, justification, durationMinutes); err != nil {
+			sess.Status = domain.StatusDenied
+			_ = s.sessions.Save(ctx, sess)
+			_ = s.audit.EmitEvent(ctx, requestedBy, "session.breakglass_requested", "session", sess.ID, false)
+			return nil, fmt.Errorf("break-glass refused: %w", err)
+		}
+		// Fail-closed like the grant itself: an emergency access that cannot be
+		// audited is not granted.
+		if err := s.audit.EmitEvent(ctx, requestedBy, "session.breakglass_requested", "session", sess.ID, true); err != nil {
+			sess.Status = domain.StatusDenied
+			_ = s.sessions.Save(ctx, sess)
+			return nil, fmt.Errorf("cannot grant break-glass: audit emission failed (fail-closed, Guide HA §1): %w", err)
+		}
 	}
 
 	sess.Status = domain.StatusActive
@@ -197,7 +282,10 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID string) (p
 		return "", "", time.Time{}, fmt.Errorf("authorizing vault scope: %w", err)
 	}
 
-	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, targetHost, targetUser, scopeToken, ttl)
+	// The waiver is passed on only while the platform still grants break-glass:
+	// switching it off takes effect at once, even for sessions already created.
+	waiver := sess.BreakGlass && s.breakGlassMaxMinutes > 0
+	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, targetHost, targetUser, scopeToken, ttl, waiver)
 	if err != nil {
 		return "", "", time.Time{}, fmt.Errorf("establishing session on proxy: %w", err)
 	}

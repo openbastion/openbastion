@@ -39,6 +39,10 @@ type SSHServer struct {
 const recordingRefusedMessage = "\r\nopenbastion: session ended because recording is unavailable. " +
 	"No command that could not be recorded was sent to the target.\r\n"
 
+// sessionExpiredMessage is what the operator reads when the proxy cuts the
+// session at the end of its allotted time.
+const sessionExpiredMessage = "\r\nopenbastion: session ended because its time limit was reached.\r\n"
+
 // Serve accepts connections on ln until it errors or ctx is done.
 func (s *SSHServer) Serve(ctx context.Context, ln net.Listener) error {
 	go func() {
@@ -98,23 +102,35 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 	}
 	defer targetConn.Close()
 
+	// The recording policy (ADR-0008) lives on the Listener, which owns the
+	// session pipeline. Admission comes before the tap is built, because which
+	// tap records this session depends on how it was admitted: an acknowledging
+	// tap when the recorder is ready, a non-blocking one when a break-glass waiver
+	// (ADR-0009) stands in for it. The decision is handed on to Serve, which would
+	// otherwise ask again — and, for a waiver, audit it twice.
+	admission, err := s.Listener.AdmitSession(ctx, resolved.SessionID, resolved.BreakGlass)
+	if err != nil {
+		log.Printf("ssh-proxy: session %s refused: %v", resolved.SessionID, err)
+		tell(clientChannel, shellRequested, recordingRefusedMessage)
+		return
+	}
+	if admission.Waived() {
+		log.Printf("ssh-proxy: session %s runs under a BREAK-GLASS waiver: the Command Recorder is not ready, commands are recorded best-effort", resolved.SessionID)
+	}
+	recordingTap, err := s.Listener.Recording.NewTapFor(admission)
+	if err != nil {
+		log.Printf("ssh-proxy: session %s refused: %v", resolved.SessionID, err)
+		tell(clientChannel, shellRequested, recordingRefusedMessage)
+		return
+	}
+
 	meta := proxycore.SessionMetadata{
 		SessionID:  resolved.SessionID,
 		TargetHost: resolved.TargetHost,
 		ScopeToken: resolved.ScopeToken,
 		ExpiresAt:  resolved.ExpiresAt,
-	}
-	// The recording policy (ADR-0008) lives on the Listener, which owns the
-	// session pipeline: it decides whether this session may start (Serve
-	// asks before it fetches the credential) and which kind of tap records it.
-	recordingTap, err := s.Listener.Recording.NewTap(resolved.SessionID)
-	if err != nil {
-		// A required policy with nothing to record to. Serve would refuse
-		// this too; ask it, so the refusal is audited like any other.
-		_ = s.Listener.Admit(ctx, resolved.SessionID)
-		log.Printf("ssh-proxy: session %s refused: %v", meta.SessionID, err)
-		tell(clientChannel, shellRequested, recordingRefusedMessage)
-		return
+		BreakGlass: resolved.BreakGlass,
+		Admission:  admission,
 	}
 	codec := &sshcodec.Codec{
 		TargetUser: resolved.TargetUser,
@@ -127,8 +143,11 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 
 	if err := s.Listener.Serve(ctx, meta, codec, clientChannel, targetConn); err != nil {
 		log.Printf("ssh-proxy: session %s: %v", meta.SessionID, err)
-		if errors.Is(err, proxycore.ErrRecordingUnavailable) {
+		switch {
+		case errors.Is(err, proxycore.ErrRecordingUnavailable):
 			tell(clientChannel, shellRequested, recordingRefusedMessage)
+		case errors.Is(err, proxycore.ErrSessionExpired):
+			tell(clientChannel, shellRequested, sessionExpiredMessage)
 		}
 	}
 }

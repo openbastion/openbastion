@@ -26,6 +26,12 @@ type Session struct {
 	CreatedAt           time.Time
 	ExpiresAt           time.Time
 	TerminatedAt        *time.Time
+
+	// BreakGlass marks a session that was authorised to run without the
+	// recording guarantee if the recorder is down (ADR-0009). It says what the
+	// session MAY do, not that it did: only the proxy knows whether the waiver
+	// was actually used, and it says so in the audit trail (session.breakglass).
+	BreakGlass bool
 }
 
 // EffectiveStatus returns Expired if the session is still marked Active

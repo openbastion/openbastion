@@ -32,8 +32,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     justification          TEXT NOT NULL,
     created_at             TIMESTAMPTZ NOT NULL,
     expires_at             TIMESTAMPTZ NOT NULL,
-    terminated_at          TIMESTAMPTZ
+    terminated_at          TIMESTAMPTZ,
+    break_glass            BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- ADR-0009 : `break_glass` a été ajoutée après la première version de la table.
+-- Cette instruction fait monter de version une base qui a déjà été créée sans elle
+-- (CREATE TABLE IF NOT EXISTS ne touche pas à une table existante) ; les sessions
+-- antérieures valent FALSE : aucune d'elles n'a pu être autorisée à déroger.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS break_glass BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_requested_by ON sessions (requested_by);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions (status);

@@ -31,6 +31,8 @@ make run SERVICE=ssh-proxy
 
 **Le SSH Proxy refuse de démarrer sans Command Recorder** : `RECORDING_POLICY` vaut `required` par défaut (ADR-0008), donc lance d'abord le recorder (`make run-recorder`) et fournis `RECORDER_URL`. Pour travailler sur autre chose que l'enregistrement, `RECORDING_POLICY=best-effort` le laisse démarrer sans — développement uniquement, le proxy s'en plaint au démarrage, et les sessions ne sont alors pas rejouables.
 
+**Essayer le break-glass en local** (ADR-0009) : lance le Broker avec `BREAKGLASS_MAX_MINUTES=30` et le proxy avec `BREAKGLASS_ENABLED=true`, crée une politique sur `breakglass:account:<id>` (le moteur d'autorisation ne regarde que le rôle et la ressource : un motif `vault:account:…` ne suffit pas), puis arrête le recorder et demande une session avec `"breakGlass": true`. Le test `test/integration/breakglass_flow_test.go` le fait sur des processus réels, recorder tué puis relancé.
+
 ## 3. Repères dans le monorepo
 
 Rappel de l'arborescence complète : `OpenBastion_02_Arborescence_Depot.md`. Table de correspondance rapide pour une tâche donnée :

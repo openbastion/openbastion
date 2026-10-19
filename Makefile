@@ -70,6 +70,11 @@ test:
 ##                            commande non enregistrée n'atteint jamais la
 ##                            cible, la reprise fonctionne ; un proxy sans
 ##                            RECORDER_URL refuse de démarrer
+## - breakglass_flow_test.go : ADR-0009 sur des processus réels — une
+##                            session dérogée vit recorder arrêté, la
+##                            dérogation est auditée avant le credential,
+##                            une session ordinaire reste refusée, la
+##                            coupure à l'échéance est faite par le proxy
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
 test-integration:
@@ -120,12 +125,14 @@ run-authentication:
 	$(GO) run ./services/access/authentication/cmd/authentication
 # RECORDING_POLICY vaut « required » par défaut (ADR-0008) : sans RECORDER_URL, le proxy refuse de démarrer.
 # « best-effort » (développement uniquement) doit être demandé explicitement.
+# BREAKGLASS_ENABLED=true autorise ce proxy à honorer un break-glass (ADR-0009), voir run-broker.
 run-ssh-proxy:
 	VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 RECORDER_URL=http://127.0.0.1:8087 \
 		$(GO) run ./services/proxy/ssh-proxy/cmd/ssh-proxy
 run-recorder:
 	AUTHORIZATION_URL=http://127.0.0.1:8083 \
 		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder
+# BREAKGLASS_MAX_MINUTES=30 active le break-glass (ADR-0009) ; absent ou 0 : désactivé.
 run-broker:
 	AUTHORIZATION_URL=http://127.0.0.1:8083 VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 SSH_PROXY_URL=http://127.0.0.1:8085 \
 		$(GO) run ./services/access/session-broker/cmd/session-broker

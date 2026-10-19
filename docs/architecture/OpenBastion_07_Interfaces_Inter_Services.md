@@ -76,6 +76,10 @@ message CreateSessionRequest {
   Protocol protocol = 3;
   string justification = 4;
   int32 duration_minutes = 5;
+  // Dérogation d'urgence à l'enregistrement (ADR-0009). Exige une justification
+  // d'au moins 10 caractères, une durée bornée par la plateforme et une politique
+  // RBAC sur breakglass:account:{privileged_account_id}. Refusée par défaut.
+  bool break_glass = 6;
 }
 
 message Session {
@@ -86,6 +90,7 @@ message Session {
   string privileged_account_id = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp expires_at = 7;
+  bool break_glass = 8;  // autorisée à s'exécuter sans recorder — pas « l'a fait » (audit : session.breakglass)
 }
 
 message GetSessionRequest {
@@ -131,6 +136,12 @@ message EstablishSessionRequest {
   string vault_scope_token = 4;    // jeton d'autorisation émis par le Broker — pas un secret
   google.protobuf.Timestamp expires_at = 5;
   string target_user = 6;          // nom du compte sur la cible — voir doc 06 §3, privileged_accounts.username
+  // Autorisation du Broker de déroger à l'enregistrement (ADR-0009). Une demande,
+  // pas un ordre : le proxy ne l'honore que s'il a lui-même été configuré pour
+  // (BREAKGLASS_ENABLED) ET que le recorder n'est pas prêt ; sinon il refuse
+  // comme d'habitude. La dérogation est auditée (session.breakglass) avant que
+  // le credential ne soit récupéré.
+  bool break_glass = 7;
 }
 
 message EstablishSessionResponse {
@@ -329,6 +340,8 @@ message GetCommandRecordingResponse {
 - *Acquittement* — le proxy n'envoie une ligne de commande à la cible qu'**après** que le recorder a accepté le lot (tout ou rien). Un échec d'enregistrement ⇒ la commande n'est pas exécutée, la session est terminée, l'opérateur est prévenu, `session.recording_lost` est audité.
 - *Nouvelles tentatives* — deux au plus, uniquement sur erreur de connexion ou `500`/`503` (cas où le recorder garantit n'avoir rien stocké). Le recorder étant en ajout seul, sans déduplication, un échec ambigu (`502`, `504`, délai dépassé, connexion coupée) n'est pas rejoué : il peut sur-enregistrer une commande jamais exécutée, jamais l'inverse.
 
+**Break-glass (ADR-0009).** Une session que le Broker a autorisée à déroger (`break_glass` à l'établissement) est admise même si le recorder n'est pas prêt — et seulement alors : un recorder prêt garde à la session son enregistrement acquitté. La dérogation est auditée (`session.breakglass`) **avant** la récupération du credential, et si cet événement ne peut pas être écrit la session est refusée. Ses commandes partent ensuite vers le recorder sans qu'on les attende (comme en mode au mieux) : elles ne bloquent jamais l'opérateur, et une panne du recorder ne coupe plus la session.
+
 Le mode asynchrone — par lots, sans acquittement, où un recorder lent ou injoignable ne bloque pas la session au prix d'entrées perdues (comptées et journalisées) — n'existe plus que sous `RECORDING_POLICY=best-effort`, qui doit être demandé explicitement et dont le proxy avertit au démarrage. Il est réservé au développement.
 
 ## 7. Tout service → Audit Service — `AuditIngestion`
@@ -413,10 +426,13 @@ sequenceDiagram
     VAULT-->>BRK: scope_token
     BRK->>PXY: EstablishSession(session_id, target_host, target_user, scope_token)
     PXY->>REC: Ready ? (GET /readyz)
-    alt recorder non prêt (ADR-0008)
+    alt recorder non prêt, sans dérogation (ADR-0008)
         REC-->>PXY: indisponible
         PXY->>AUD: EmitEvent(action="session.recording_unavailable", success=false)
         PXY-->>BRK: UNAVAILABLE — session refusée, scope non consommé
+    else recorder non prêt, break_glass autorisé par le Broker ET activé sur ce proxy (ADR-0009)
+        PXY->>AUD: EmitEvent(action="session.breakglass", success=true)
+        Note over PXY,REC: la session s'exécute ; ses commandes vont au recorder sans acquittement
     else recorder prêt
         REC-->>PXY: prêt
     end

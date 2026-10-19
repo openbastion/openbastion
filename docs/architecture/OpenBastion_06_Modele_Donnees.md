@@ -178,6 +178,7 @@ CREATE TABLE sessions (
     status                   TEXT NOT NULL
                                 CHECK (status IN ('pending_approval','active','expired','terminated','denied')),
     justification             TEXT NOT NULL,
+    break_glass               BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0009 : autorisée à s'exécuter sans recorder
     connection_ticket_hash    TEXT,              -- hash du ticket émis ; jamais le ticket en clair
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at                TIMESTAMPTZ NOT NULL,

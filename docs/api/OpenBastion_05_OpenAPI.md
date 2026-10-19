@@ -135,6 +135,17 @@ paths:
       description: >
         En périmètre MVP, l'octroi est immédiat après vérification RBAC —
         aucune étape de validation multi-approbateurs (ajoutée en v1.0).
+
+        Avec `breakGlass: true`, la session peut s'exécuter alors que le
+        Command Recorder est indisponible (ADR-0009) — une dérogation à
+        l'enregistrement, et rien d'autre : authentification, RBAC
+        `session:create`, Vault et audit sont inchangés. Elle exige, en plus,
+        une justification d'au moins 10 caractères, une durée comprise entre
+        1 et la limite de la plateforme (`BREAKGLASS_MAX_MINUTES`) et une
+        politique RBAC sur la ressource `breakglass:account:{targetAccountId}`
+        — refusé par défaut, y compris pour un administrateur. Désactivé tant
+        que la plateforme n'a pas fixé cette limite. Chaque demande, accordée
+        ou refusée, est auditée (`session.breakglass_requested`).
       requestBody:
         required: true
         content:
@@ -147,7 +158,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
         "403":
-          description: Refusé par l'Authorization Service
+          description: >
+            Refusé par l'Authorization Service — ou, pour une demande
+            `breakGlass`, parce que l'une de ses conditions n'est pas remplie
+            (désactivé, justification trop courte, durée hors limite, aucune
+            politique sur `breakglass:account:*`). Le corps dit laquelle.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -507,6 +522,13 @@ components:
         protocol: { type: string, enum: [ssh] }
         justification: { type: string, minLength: 10 }
         durationMinutes: { type: integer, default: 60, maximum: 480 }
+        breakGlass:
+          type: boolean
+          default: false
+          description: >
+            Demande la dérogation d'urgence à l'enregistrement (ADR-0009). Pour
+            une session break-glass, `durationMinutes` est borné par la limite
+            de la plateforme (30 minutes par exemple), pas par 480.
 
     Session:
       type: object
@@ -517,6 +539,13 @@ components:
         targetHost: { type: string }
         requestedBy: { type: string, format: uuid }
         justification: { type: string }
+        breakGlass:
+          type: boolean
+          description: >
+            La session a été autorisée à s'exécuter sans le Command Recorder.
+            Cela dit ce qu'elle PEUT faire, pas ce qu'elle a fait : la
+            dérogation n'a réellement servi que si l'audit porte
+            `session.breakglass` pour cette session.
         createdAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
 
@@ -596,6 +625,13 @@ components:
             (session terminée en cours de route parce qu'une commande n'a pas
             pu être enregistrée ; la commande n'a pas été exécutée). Ces deux
             événements portent `result = failure`.
+
+            Break-glass (ADR-0009) : `session.breakglass_requested` (Broker :
+            demande accordée ou refusée), `session.breakglass` (proxy : la
+            dérogation a réellement servi — émis avant la récupération du
+            credential, et sa défaillance refuse la session) et, pour toute
+            session, `session.expire` (le proxy a coupé la session à
+            l'échéance — une fin normale, `result = success`).
         resourceType: { type: string }
         resourceId: { type: string }
         result: { type: string, enum: [success, failure] }

@@ -20,6 +20,10 @@ type PendingSession struct {
 	TargetUser string
 	ScopeToken string
 	ExpiresAt  time.Time
+
+	// BreakGlass is the Session Broker's authorisation for a recording waiver
+	// (ADR-0009). The proxy honours it only if it was itself configured to.
+	BreakGlass bool
 }
 
 // PendingSessions maps a single-use connection ticket to the session it

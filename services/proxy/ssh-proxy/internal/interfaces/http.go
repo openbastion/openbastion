@@ -30,7 +30,11 @@ type HTTPServer struct {
 	// after the operator has been handed a ticket and opened a connection.
 	// proxycore.Listener.Admit is the implementation. It is an early refusal,
 	// not the guarantee: Serve asks again before it fetches the credential.
-	Admit func(ctx context.Context, sessionID string) error
+	//
+	// breakGlass is the Broker's authorisation for a recording waiver (ADR-0009):
+	// when set, and the proxy is configured to honour it, a recorder that is not
+	// ready does not refuse the session.
+	Admit func(ctx context.Context, sessionID string, breakGlass bool) error
 }
 
 func NewHTTPServer(pending *infrastructure.PendingSessions, proxyEndpoint string) *HTTPServer {
@@ -59,6 +63,9 @@ type establishSessionRequest struct {
 	TargetUser      string `json:"target_user"`
 	VaultScopeToken string `json:"vault_scope_token"`
 	TTLSeconds      int    `json:"ttl_seconds"`
+
+	// BreakGlass mirrors EstablishSessionRequest.break_glass (doc 07 §4).
+	BreakGlass bool `json:"break_glass"`
 }
 
 type establishSessionResponse struct {
@@ -73,7 +80,7 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if s.Admit != nil {
-		if err := s.Admit(r.Context(), req.SessionID); err != nil {
+		if err := s.Admit(r.Context(), req.SessionID, req.BreakGlass); err != nil {
 			if errors.Is(err, proxycore.ErrRecordingUnavailable) {
 				// The cause stays in this log: the response travels back to
 				// the operator, who needs the reason, not the recorder's address.
@@ -95,6 +102,7 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 		TargetUser: req.TargetUser,
 		ScopeToken: req.VaultScopeToken,
 		ExpiresAt:  time.Now().UTC().Add(ttl),
+		BreakGlass: req.BreakGlass,
 	})
 
 	w.Header().Set("Content-Type", "application/json")

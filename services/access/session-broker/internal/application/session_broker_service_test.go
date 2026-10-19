@@ -79,13 +79,15 @@ type fakeProxyClient struct {
 	lastScopeToken   string
 	lastTargetHost   string
 	lastTargetUser   string
+	lastBreakGlass   bool
 	connectionTicket string
 	proxyEndpoint    string
 	establishErr     error
 }
 
-func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration) (string, string, error) {
+func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
 	f.calls++
+	f.lastBreakGlass = breakGlass
 	f.lastScopeToken = scopeToken
 	f.lastTargetHost = targetHost
 	f.lastTargetUser = targetUser

@@ -2,6 +2,7 @@ package interfaces_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -39,7 +40,7 @@ func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 
 type failingProxy struct{ err error }
 
-func (p failingProxy) EstablishSession(context.Context, string, string, string, string, time.Duration) (string, string, error) {
+func (p failingProxy) EstablishSession(context.Context, string, string, string, string, time.Duration, bool) (string, string, error) {
 	return "", "", p.err
 }
 
@@ -71,5 +72,57 @@ func TestConnect_ARecordingRefusalIsA503NotA409(t *testing.T) {
 func TestConnect_OtherProxyFailuresStayAConflict(t *testing.T) {
 	if rec := connect(t, fmt.Errorf("establish-session: status 500")); rec.Code != http.StatusConflict {
 		t.Fatalf("got %d, want 409", rec.Code)
+	}
+}
+
+// -- break-glass over HTTP (ADR-0009) --------------------------------------------
+
+func postSession(t *testing.T, svc *application.SessionBrokerService, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	interfaces.NewHTTPServer(svc).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions", strings.NewReader(body)))
+	return rec
+}
+
+func newBreakGlassService(maxMinutes int) *application.SessionBrokerService {
+	return application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(maxMinutes)
+}
+
+const bgBody = `{"requestedBy":"oncall","actorRoles":["sre"],"targetAccountId":"acc1","protocol":"ssh","justification":"recorder down, P1 incident","durationMinutes":15%s}`
+
+func TestPostSessions_BreakGlassIsAskedForByName(t *testing.T) {
+	svc := newBreakGlassService(30)
+
+	rec := postSession(t, svc, fmt.Sprintf(bgBody, `,"breakGlass":true`))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		BreakGlass bool `json:"breakGlass"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || !got.BreakGlass {
+		t.Fatalf("the response does not say the session is break-glass: %v %q", err, rec.Body.String())
+	}
+
+	// The same request without the member is an ordinary session, whatever the
+	// platform allows: break-glass is requested, never assumed.
+	rec = postSession(t, svc, fmt.Sprintf(bgBody, ``))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+	got.BreakGlass = true
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.BreakGlass {
+		t.Fatalf("an ordinary session came back marked break-glass: %q", rec.Body.String())
+	}
+}
+
+func TestPostSessions_ARefusedBreakGlassRequestIsAForbidden(t *testing.T) {
+	rec := postSession(t, newBreakGlassService(0), fmt.Sprintf(bgBody, `,"breakGlass":true`)) // not enabled
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("got %d, want 403: %q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "break-glass") {
+		t.Fatalf("the refusal does not say what was refused: %q", rec.Body.String())
 	}
 }

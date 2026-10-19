@@ -2,6 +2,7 @@ package interfaces_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,15 +16,20 @@ import (
 )
 
 func establish(srv *interfaces.HTTPServer) *httptest.ResponseRecorder {
+	return establishWith(srv, "")
+}
+
+// establishWith adds extra JSON members (each preceded by a comma) to the request.
+func establishWith(srv *interfaces.HTTPServer, extra string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	body := `{"session_id":"s1","target_host":"10.0.0.5:22","target_user":"root","vault_scope_token":"scope","ttl_seconds":60}`
+	body := `{"session_id":"s1","target_host":"10.0.0.5:22","target_user":"root","vault_scope_token":"scope","ttl_seconds":60` + extra + `}`
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/internal/v1/establish-session", strings.NewReader(body)))
 	return rec
 }
 
 func TestEstablishSession_IssuesATicketWhenRecordingIsAdmitted(t *testing.T) {
 	srv := interfaces.NewHTTPServer(infrastructure.NewPendingSessions(), "127.0.0.1:2222")
-	srv.Admit = func(context.Context, string) error { return nil }
+	srv.Admit = func(context.Context, string, bool) error { return nil }
 	if rec := establish(srv); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ticket_") {
 		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
 	}
@@ -34,7 +40,7 @@ func TestEstablishSession_IssuesATicketWhenRecordingIsAdmitted(t *testing.T) {
 func TestEstablishSession_RefusesWithA503AndNoTicketWhenRecordingIsNotAdmitted(t *testing.T) {
 	pending := infrastructure.NewPendingSessions()
 	srv := interfaces.NewHTTPServer(pending, "127.0.0.1:2222")
-	srv.Admit = func(context.Context, string) error {
+	srv.Admit = func(context.Context, string, bool) error {
 		return fmt.Errorf("%w: dial tcp 10.9.8.7:8087: connection refused", proxycore.ErrRecordingUnavailable)
 	}
 
@@ -61,5 +67,51 @@ func TestEstablishSession_WithoutAnAdmitHookKeepsItsOldBehaviour(t *testing.T) {
 	srv := interfaces.NewHTTPServer(infrastructure.NewPendingSessions(), "127.0.0.1:2222")
 	if rec := establish(srv); rec.Code != http.StatusOK {
 		t.Fatalf("got %d", rec.Code)
+	}
+}
+
+// The Broker's break-glass authorisation (ADR-0009) is asked about at the door —
+// so a waiver that this proxy would grant does not turn into a refusal — and
+// travels with the ticket, so that the SSH side, where the session really
+// starts, still knows it.
+func TestEstablishSession_CarriesTheBreakGlassRequestToTheAdmissionAndTheTicket(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		extra string
+		want  bool
+	}{
+		{"requested", `,"break_glass":true`, true},
+		{"absent means no", ``, false},
+		{"explicit no", `,"break_glass":false`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pending := infrastructure.NewPendingSessions()
+			srv := interfaces.NewHTTPServer(pending, "127.0.0.1:2222")
+			var asked []bool
+			srv.Admit = func(_ context.Context, _ string, breakGlass bool) error {
+				asked = append(asked, breakGlass)
+				return nil
+			}
+			rec := establishWith(srv, tc.extra)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+			}
+			if len(asked) != 1 || asked[0] != tc.want {
+				t.Fatalf("admission was asked with break-glass=%v, want [%v]", asked, tc.want)
+			}
+			var resp struct {
+				ConnectionTicket string `json:"connection_ticket"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			ps, err := pending.Consume(resp.ConnectionTicket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ps.BreakGlass != tc.want {
+				t.Fatalf("the pending session carries break-glass=%v, want %v", ps.BreakGlass, tc.want)
+			}
+		})
 	}
 }
