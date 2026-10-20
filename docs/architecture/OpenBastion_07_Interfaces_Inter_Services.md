@@ -11,7 +11,7 @@
 | Aspect | Convention |
 |---|---|
 | Nommage des packages | `openbastion.<domaine>.v1` — un dossier `proto/<domaine>/v1/` par contrat (arborescence, doc 02 §2) |
-| Identité de l'appelant | Jamais un champ de message : dérivée du certificat mTLS (identité SPIFFE-like du service) et propagée via `RequestContext.calling_service_id` reconstruit côté serveur |
+| Identité de l'appelant | Jamais un champ de message : dérivée du certificat mTLS et propagée via `RequestContext.calling_service_id` reconstruit côté serveur. **Implémenté (ADR-0010)** : l'identité est l'unique SAN URI `spiffe://<domaine>/<service>` ; chaque service porte une table `{méthode, chemin, appelants}` avec refus par défaut — les tables sont le contrat de qui peut appeler quoi, au même titre que les `.proto` le sont de la forme des messages. Les champs de corps qui prétendaient nommer l'appelant (`calling_proxy_id`) sont devenus facultatifs et doivent concorder avec le certificat |
 | Valeur zéro des enums | Toujours `..._UNSPECIFIED = 0`, pour distinguer un champ non renseigné d'une valeur métier |
 | Évolution de contrat | Ajout de champs/RPC uniquement sur v1 ; toute rupture (renumérotation, suppression, changement de type) impose un nouveau package `v2`, les deux coexistant pendant la migration |
 | Suppression de champ | Le numéro est réservé (`reserved`), jamais réutilisé |
@@ -32,7 +32,7 @@ message RequestContext {
   string trace_id = 1;
   string actor_user_id = 2;       // vide pour un appel système (Scheduler, ...)
   repeated string actor_roles = 3;
-  string calling_service_id = 4;  // identité mTLS du service appelant
+  string calling_service_id = 4;  // identité mTLS du service appelant — le nom de service du SAN URI, jamais une valeur du message
 }
 ```
 
@@ -224,7 +224,7 @@ message AuthorizeScopeResponse {
 
 message FetchCredentialRequest {
   string scope_token = 1;          // émis par AuthorizeScope, à usage unique
-  string calling_proxy_id = 2;     // dérivé du certificat mTLS, vérifié contre le scope
+  string calling_proxy_id = 2;     // dérivé du certificat mTLS, vérifié contre le scope ; en HTTP/JSON facultatif, et une discordance avec le certificat est un 403 (ADR-0010)
 }
 
 message FetchCredentialResponse {

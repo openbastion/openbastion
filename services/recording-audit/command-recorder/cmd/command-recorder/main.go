@@ -8,9 +8,9 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/application"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/infrastructure"
@@ -25,8 +25,14 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
+	rt, err := mtls.Setup(mtls.CommandRecorder)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	port := mustEnv("PORT", "8087")
-	authzURL := mustEnv("AUTHORIZATION_URL", "http://127.0.0.1:8083")
+	authzURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
 
 	var repo domain.CommandRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -56,12 +62,16 @@ func main() {
 		log.Printf("command-recorder: DATABASE_URL not set, using in-memory storage (dev/test only — recordings are lost on restart)")
 	}
 
-	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authzURL}
+	authzClient, err := rt.Client(mtls.Peer{URL: authzURL, Service: mtls.Authorization})
+	if err != nil {
+		log.Fatalf("command-recorder: %v", err)
+	}
+	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authzURL, Client: authzClient}
 	srv := interfaces.NewHTTPServer(application.NewRecorderService(repo, authz))
 
 	log.Printf("command-recorder listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authzURL)
-	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

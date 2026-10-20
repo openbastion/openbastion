@@ -18,12 +18,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 )
 
 type HTTPServer struct {
 	svc *application.VaultService
+
+	// CallerFromCertificate makes the identity of the proxy redeeming a scope
+	// the one in its client certificate (ADR-0010), instead of the one it writes
+	// in the request. Set when mutual TLS is on. Left unset, the claim in the
+	// body is believed — development only, where nothing authenticates anyone.
+	CallerFromCertificate bool
 }
 
 func NewHTTPServer(svc *application.VaultService) *HTTPServer {
@@ -144,7 +151,9 @@ func (s *HTTPServer) handleAuthorizeScope(w http.ResponseWriter, r *http.Request
 // ADR-0003. Called only by a proxy, never by the control plane.
 
 type fetchCredentialRequest struct {
-	ScopeToken     string `json:"scope_token"`
+	ScopeToken string `json:"scope_token"`
+	// CallingProxyID is a claim. With CallerFromCertificate it is optional, and
+	// refused if it disagrees with the certificate; without, it is all there is.
 	CallingProxyID string `json:"calling_proxy_id"`
 }
 
@@ -159,7 +168,23 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	credType, material, err := s.svc.FetchCredential(r.Context(), req.ScopeToken, req.CallingProxyID)
+	callingProxy := req.CallingProxyID
+	if s.CallerFromCertificate {
+		// Who is redeeming this scope is a fact the transport established, not a
+		// sentence in the request: holding a scope token is not enough to pass
+		// for the proxy it was issued to.
+		id, ok := mtls.CallerFrom(r.Context())
+		if !ok {
+			http.Error(w, "caller identity required", http.StatusUnauthorized)
+			return
+		}
+		if req.CallingProxyID != "" && req.CallingProxyID != id {
+			http.Error(w, "claimed identity does not match the client certificate", http.StatusForbidden)
+			return
+		}
+		callingProxy = id
+	}
+	credType, material, err := s.svc.FetchCredential(r.Context(), req.ScopeToken, callingProxy)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return

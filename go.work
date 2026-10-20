@@ -1,6 +1,7 @@
 go 1.22
 
 use (
+	./pkg/mtls
 	./pkg/proxycore
 	./services/access/api-gateway
 	./services/access/authentication

@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/interfaces"
@@ -30,11 +31,22 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
+	rt, err := mtls.Setup(mtls.SSHProxy)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	sshPort := mustEnv("SSH_PORT", "2222")
 	httpPort := mustEnv("PORT", "8085")
-	vaultURL := mustEnv("VAULT_URL", "http://127.0.0.1:8081")
-	auditURL := mustEnv("AUDIT_URL", "http://127.0.0.1:8082")
-	proxyID := mustEnv("PROXY_SERVICE_ID", "ssh-proxy")
+	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
+	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
+	proxyID := mustEnv("PROXY_SERVICE_ID", mtls.SSHProxy)
+	if rt.Enabled() && proxyID != mtls.SSHProxy {
+		// Under mutual TLS the Vault takes this proxy's identity from its
+		// certificate; a different name here could only ever be refused.
+		log.Fatalf("ssh-proxy: PROXY_SERVICE_ID=%q, but the identity of this proxy is its certificate's, %q — remove PROXY_SERVICE_ID", proxyID, mtls.SSHProxy)
+	}
 	// Where captured commands go.
 	recorderURL := os.Getenv("RECORDER_URL")
 
@@ -73,8 +85,21 @@ func main() {
 		log.Fatalf("host signer: %v", err)
 	}
 
-	vaultClient := &infrastructure.VaultCredentialHTTPClient{BaseURL: vaultURL}
-	auditClient := &infrastructure.AuditHTTPClient{BaseURL: auditURL}
+	// Each client is pinned to the identity of the one service it calls: the
+	// proxy only ever sends a scope token to the Vault, and commands to the recorder.
+	peer := func(url, service string) *http.Client {
+		c, err := rt.Client(mtls.Peer{URL: url, Service: service})
+		if err != nil {
+			log.Fatalf("ssh-proxy: %v", err)
+		}
+		return c
+	}
+	vaultClient := &infrastructure.VaultCredentialHTTPClient{BaseURL: vaultURL, Client: peer(vaultURL, mtls.PasswordVault)}
+	auditClient := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
+	var recorderHTTP *http.Client
+	if recorderURL != "" {
+		recorderHTTP = peer(recorderURL, mtls.CommandRecorder)
+	}
 	fetcher := proxycore.NewCredentialFetcher(vaultClient, proxyID)
 	terminator := proxycore.NewTerminator(auditClient)
 	listener := proxycore.NewListener(fetcher, terminator)
@@ -99,7 +124,7 @@ func main() {
 		// Each command line is acknowledged by the Command Recorder BEFORE it
 		// is passed on to the target; a session is refused when the recorder
 		// is not ready. See proxycore.RecordingConfig and ADR-0008.
-		recorder := &infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}
+		recorder := &infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL, Client: recorderHTTP}
 		listener.Recording = proxycore.RecordingConfig{
 			Policy: proxycore.RecordingRequired,
 			Strict: &infrastructure.SyncRecorder{Sender: recorder},
@@ -111,7 +136,7 @@ func main() {
 			// What a waived session's commands go to: sent without being waited
 			// for, so an emergency session is never stalled by the recorder
 			// that is, by definition, in trouble.
-			asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}, 1024, 100)
+			asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL, Client: recorderHTTP}, 1024, 100)
 			listener.Recording.Sink = asyncRecorder
 			listener.Recording.BreakGlass = true
 			log.Printf("ssh-proxy: BREAK-GLASS ENABLED — a session the Session Broker authorised for break-glass runs even when the " +
@@ -124,7 +149,7 @@ func main() {
 		log.Printf("ssh-proxy: recording policy BEST-EFFORT — a session whose commands cannot be recorded CONTINUES, and those commands are lost. Not for production")
 		listener.Recording = proxycore.RecordingConfig{Policy: proxycore.RecordingBestEffort, Sink: infrastructure.StdoutRecorder{}}
 		if recorderURL != "" {
-			asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL}, 1024, 100)
+			asyncRecorder = infrastructure.NewAsyncRecorder(&infrastructure.CommandRecorderHTTPClient{BaseURL: recorderURL, Client: recorderHTTP}, 1024, 100)
 			listener.Recording.Sink = asyncRecorder
 		} else {
 			log.Printf("ssh-proxy: RECORDER_URL not set — captured commands are only logged, NOT recorded for replay")
@@ -151,7 +176,7 @@ func main() {
 	}
 
 	go func() {
-		log.Fatal(http.ListenAndServe(":"+httpPort, httpServer.Routes()))
+		log.Fatal(rt.ListenAndServe(":"+httpPort, httpServer.Routes(), interfaces.CallerRules()))
 	}()
 
 	// On SIGTERM/SIGINT (a rolling update, say) flush what is still queued,

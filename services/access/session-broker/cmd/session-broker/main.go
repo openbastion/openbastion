@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/infrastructure"
@@ -25,11 +26,17 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
+	rt, err := mtls.Setup(mtls.SessionBroker)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	port := mustEnv("PORT", "8084")
-	authzURL := mustEnv("AUTHORIZATION_URL", "http://127.0.0.1:8083")
-	vaultURL := mustEnv("VAULT_URL", "http://127.0.0.1:8081")
-	auditURL := mustEnv("AUDIT_URL", "http://127.0.0.1:8082")
-	sshProxyURL := mustEnv("SSH_PROXY_URL", "http://127.0.0.1:8085")
+	authzURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
+	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
+	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
+	sshProxyURL := mustEnv("SSH_PROXY_URL", rt.DefaultURL("127.0.0.1:8085"))
 
 	var store domain.SessionRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -45,11 +52,22 @@ func main() {
 		log.Printf("session-broker: DATABASE_URL not set, using in-memory storage (dev/test only)")
 	}
 
-	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authzURL}
-	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL}
-	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL}
-	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL}
-	proxy := &infrastructure.ProxyClientHTTPClient{BaseURL: sshProxyURL}
+	// Each client is pinned to the identity of the one service it calls: the
+	// Broker never hands a scope to anything but the Vault, nor a break-glass
+	// flag to anything but the SSH Proxy (ADR-0009, ADR-0010).
+	peer := func(url, service string) *http.Client {
+		c, err := rt.Client(mtls.Peer{URL: url, Service: service})
+		if err != nil {
+			log.Fatalf("session-broker: %v", err)
+		}
+		return c
+	}
+	vaultClient := peer(vaultURL, mtls.PasswordVault)
+	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authzURL, Client: peer(authzURL, mtls.Authorization)}
+	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL, Client: vaultClient}
+	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
+	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL, Client: vaultClient}
+	proxy := &infrastructure.ProxyClientHTTPClient{BaseURL: sshProxyURL, Client: peer(sshProxyURL, mtls.SSHProxy)}
 
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy)
 
@@ -73,7 +91,7 @@ func main() {
 	log.Printf("  -> vault:         %s", vaultURL)
 	log.Printf("  -> audit:         %s", auditURL)
 	log.Printf("  -> ssh-proxy:     %s", sshProxyURL)
-	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

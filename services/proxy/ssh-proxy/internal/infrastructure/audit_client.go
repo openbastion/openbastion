@@ -10,6 +10,10 @@ import (
 
 type AuditHTTPClient struct {
 	BaseURL string
+
+	// Client is the HTTP client to use; nil means http.DefaultClient. Under
+	// INTERNAL_TLS it is the mutual-TLS client pinned to this peer (ADR-0010).
+	Client *http.Client
 }
 
 func (c *AuditHTTPClient) EmitEvent(ctx context.Context, action, resourceType, resourceID string, success bool) error {
@@ -22,7 +26,7 @@ func (c *AuditHTTPClient) EmitEvent(ctx context.Context, action, resourceType, r
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return err
 	}

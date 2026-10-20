@@ -10,3 +10,6 @@
 # Variables d'environnement locales
 .env
 .env.local
+
+# Autorité et identités de développement générées par `make pki` (clés privées !)
+/.pki/

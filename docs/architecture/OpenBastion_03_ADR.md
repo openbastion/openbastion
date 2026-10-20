@@ -23,6 +23,7 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | ADR-0007 | Keycloak comme IdP de plateforme, fédération externe en complément | Accepté |
 | ADR-0008 | Enregistrer ou refuser : une session qui ne peut pas être enregistrée n'a pas lieu | Accepté |
 | ADR-0009 | Break-glass : une dérogation d'urgence, bornée et auditée, à « enregistrer ou refuser » | Accepté |
+| ADR-0010 | mTLS interne : l'identité de l'appelant vient du certificat, et chaque route a sa liste d'appelants | Accepté |
 
 ---
 
@@ -210,7 +211,7 @@ Pendant une session dérogée, l'enregistrement continue **au mieux** : les comm
 - (+) La coupure à l'échéance corrige un défaut général : toute session, pas seulement break-glass, a maintenant une fin imposée par le proxy.
 - (−) **Pendant une session dérogée, des commandes peuvent ne pas être enregistrées** — c'est le coût assumé de l'exception. La traçabilité repose alors sur l'audit, la justification et les journaux de la cible ; le replay peut être incomplet, et dupliqué (le mode au mieux rejoue sur échec ambigu).
 - (−) **Une seule personne suffit** : pas de double validation (le Workflow Service et l'Approval Engine sont v1.0). Atténué par une politique étroite et la désactivation par défaut ; à compléter en v1.0 par une approbation à deux et une revue post-incident obligatoire.
-- (−) Le drapeau voyage du Broker au proxy sur le canal interne, qui attend le mTLS (comme le jeton de scope). Sans lui, un appelant atteignant le proxy pourrait l'ajouter lui-même ; il lui faudrait toujours un scope Vault valide, et le proxy doit avoir été activé (verrou 4).
+- (−) Le drapeau voyage du Broker au proxy sur le canal interne, qui attendait le mTLS (comme le jeton de scope). Sans lui, un appelant atteignant le proxy pouvait l'ajouter lui-même ; il lui fallait toujours un scope Vault valide, et le proxy doit avoir été activé (verrou 4). **Résolu par ADR-0010** : `establish-session` n'accepte que l'identité du Session Broker.
 - (−) La ressource `breakglass:account:*` est une convention de nommage, pas un type : une politique mal écrite (`*`) l'accorderait. Les guides le disent.
 
 **Alternatives envisagées**
@@ -218,6 +219,48 @@ Pendant une session dérogée, l'enregistrement continue **au mieux** : les comm
 - *Tampon local sur le proxy, rejoué au retour du recorder* : écarté pour l'instant (voir ADR-0008) — c'est un second lieu de stockage des données de session (chiffrement, purge, borne, déduplication au rejeu) ; à reconsidérer si les dérogations deviennent fréquentes.
 - *Dérogation automatique pour les administrateurs* : rejeté — le privilège de gérer les politiques n'est pas celui d'échapper à l'enregistrement.
 - *Sans limite de durée* : rejeté — une dérogation sans butoir devient un mode de fonctionnement.
+
+---
+
+## ADR-0010 — mTLS interne : l'identité de l'appelant vient du certificat, et chaque route a sa liste d'appelants
+
+**Contexte**
+Trois décisions précédentes reposent sur une chose qui n'existait pas encore. ADR-0003 : seul le proxy peut échanger un scope contre un secret — mais « le proxy » n'était qu'un champ (`calling_proxy_id`) du corps de la requête. ADR-0009 : le Broker transmet au proxy le drapeau `break_glass` — sur un canal où n'importe quel appelant pouvait l'ajouter lui-même. Et le Command Recorder acceptait des écritures de quiconque atteignait son port. Le doc 07 dit pourtant depuis le début que l'identité de l'appelant est « jamais un champ de message : dérivée du certificat mTLS ». Tant que le transport est du HTTP en clair, cette phrase est une intention : chaque service croit ce que dit le corps, et un seul service compromis (ou un seul pod hostile sur le réseau) peut se faire passer pour n'importe quel autre. L'architecture (doc 00) prévoit du mTLS via un mesh Envoy ; le sandbox n'a ni mesh ni gRPC, et la question de fond est ailleurs : *qui décide qu'un appelant a le droit d'appeler cette route ?*
+
+**Décision**
+Le service lui-même authentifie et autorise chaque appel interne, à partir du certificat — pas du réseau, pas du corps. Huit règles :
+
+1. **Une identité, un nom de service.** L'identité est l'unique SAN URI du certificat, `spiffe://<domaine>/<service>` (domaine par défaut `openbastion.local`, `TLS_TRUST_DOMAIN`). Les noms sont ceux des huit services plus `admin-cli` (outillage opérateur). Zéro ou plusieurs SAN URI, un autre schéma, un autre domaine, un chemin à plusieurs segments : refusé.
+2. **TLS 1.3, certificat client obligatoire, identité du serveur épinglée.** Le serveur exige et vérifie un certificat client de la chaîne attendue. Le client vérifie chaîne et adresse (jamais `InsecureSkipVerify`) **et** que le pair répond sous le nom de service attendu : un client n'est construit que pour des pairs déclarés (`Peer{URL, Service}`), refuse toute autre adresse, tout `http://`, et ignore les variables proxy. Une adresse détournée vers un service qui a un certificat valide mais n'est pas le Vault ne reçoit rien.
+3. **Une table d'appelants par service, refus par défaut.** Chaque service déclare des règles `{méthode, chemin ou préfixe, appelants}` ; la première règle qui correspond décide, **aucune règle ne correspond = 403**, une table mal formée empêche le démarrage, un chemin non canonique est refusé (400). Les refus de cette garde ont un corps reconnaissable (`forbidden`) : un appel stoppé à la porte se distingue d'un appel entré puis refusé par l'autorisation du service.
+4. **L'identité du certificat remplace les champs déclaratifs.** Le Vault déduit le proxy du certificat ; `calling_proxy_id` devient facultatif et une discordance est un 403 **sans consommer le jeton**. Les rôles (`actorRoles`) ne sont acceptés que d'un appelant autorisé à les affirmer — le Gateway, qui les tire du jeton de l'utilisateur ; le drapeau break-glass n'est accepté que du Broker ; les entrées du recorder que du proxy ; les événements d'audit que du Broker et du proxy ; la création d'utilisateurs et la vérification de la chaîne d'audit que de `admin-cli`.
+5. **Requis par défaut.** `INTERNAL_TLS` vaut `required` quand il est absent ; `disabled` doit être demandé par son nom et chaque service l'annonce en avertissement ; toute autre valeur est fatale (une faute de frappe ne choisit aucun des deux côtés). Un service refuse de démarrer sans certificat, clé et CA, avec un certificat expiré, d'un autre domaine, ou **appartenant à un autre service** ; le proxy SSH refuse `PROXY_SERVICE_ID` différent de son identité. (Même principe qu'ADR-0008 : un réglage oublié ne doit jamais sélectionner le comportement faible.)
+6. **Rotation sans redémarrage, sans fenêtre ouverte.** Les fichiers sont relus quand leur contenu change (au plus tous les `TLS_RELOAD_INTERVAL`, 5 s par défaut) et échangés atomiquement. Un remplacement invalide — autre autorité, autre identité, clé qui ne correspond pas, autorité retirée avant que le service ait un certificat de la nouvelle — est **refusé, l'ancien est conservé** et le refus est journalisé une fois. L'expiration est annoncée quand il reste 20 % de la durée de vie, puis à l'échéance.
+7. **Pas de liste de révocation : des certificats courts, et le remplacement de l'autorité.** Une compromission se traite en ajoutant la nouvelle autorité au bundle (recouvrement : les deux sont acceptées), en réémettant les certificats, puis en retirant l'ancienne. Aucun CRL/OCSP à distribuer, aucune fenêtre pendant laquelle un service légitime est refusé.
+8. **Le listener public du Gateway reste en HTTP.** Ses appelants sont des personnes avec un jeton, pas des services avec un certificat ; le TLS se termine à l'arête (Traefik). Le Gateway a une identité pour ses **appels sortants** — c'est lui qui affirme les rôles.
+
+Outillage : `pkg/mtls` (bibliothèque, stdlib seulement) et `openbastion-pki` (`init`, `issue`, `all`) pour une autorité de développement ou de petit déploiement. En production, l'émission est celle de l'organisation (cert-manager, Vault PKI, SPIRE…) du moment que l'identité a la forme de la règle 1.
+
+*Rapport avec le mesh Envoy du doc 00.* Les deux ne s'excluent pas, mais le mesh ne peut pas porter à lui seul cette décision. Un sidecar qui termine le mTLS livre au service une connexion locale : le service ne sait plus qui appelle, sauf à croire un en-tête (`X-Forwarded-Client-Cert`) — c'est-à-dire à refaire de l'identité un champ de message, cette fois posé par le sidecar. Le mesh reste utile pour le routage, les reprises et l'observabilité (en passthrough TCP, il laisse le TLS de bout en bout) ; si l'organisation émet les certificats avec SPIRE, il suffit d'enregistrer les identités au format `spiffe://<domaine>/<service>` (un seul segment) et de monter les fichiers là où le service les attend.
+
+**Conséquences**
+- (+) Un service compromis ne peut faire que ce que sa table lui permet. Prouvé sur 8 processus réels sous `INTERNAL_TLS=required` : le parcours complet (connexion, session, SSH, enregistrement, lecture par un auditeur) fonctionne ; 20 appels forgés par une identité valide mais *mauvaise* (un Gateway qui crée des utilisateurs ou génère des scopes, un Broker qui forge des rôles ou des entrées de recording, le Vault qui écrit dans l'audit, une demande break-glass d'un non-Broker…) sont arrêtés à la porte, et rien n'a eu lieu ; un jeton de scope volé est inutilisable par toute autre identité que le proxy (et ne brûle pas à chaque tentative) ; sans certificat, avec un certificat d'une autre autorité, d'un autre domaine ou expiré, aucun échange n'a lieu ; un Broker dont l'adresse du Vault mène à un imposteur ne lui envoie rien.
+- (+) Ferme deux limites ouvertes : les écritures non authentifiées du Command Recorder, et le canal du drapeau break-glass (ADR-0009, conséquence 4).
+- (+) La rotation d'un certificat, et le remplacement de l'autorité, se font sur des processus vivants (testé).
+- (−) **Le certificat devient une dépendance de disponibilité de rang 1** : un certificat expiré est une panne, pour ce service et pour ceux qui l'appellent. Il faut surveiller l'échéance (le service journalise l'approche et l'échéance) et renouveler bien avant ; guide HA.
+- (−) Les sondes HTTP du kubelet ne présentent pas de certificat client : sondes `tcpSocket`, ou port de santé distinct (à faire — décision ouverte).
+- (−) **Les listes d'appelants sont dans le code, pas dans la configuration.** Un changement de topologie est une livraison ; en contrepartie, personne ne peut élargir une règle par une erreur de configuration. À reconsidérer si des déploiements divergent.
+- (−) Un service compromis fait tout ce que sa table autorise : le Gateway affirme les rôles des utilisateurs, donc un Gateway compromis agit en leur nom. Le mTLS borne ce que *les autres* peuvent faire, pas ce que fait celui-là ; le RBAC en aval (Authorization) reste la limite.
+- (−) **Les événements d'audit ne sont pas encore attribués par l'identité du certificat** : `actor_id` reste déclaratif sur `emit-event`. Les deux appelants autorisés sont connus, mais l'attribution signée par appelant est un travail distinct (reporté).
+- (−) Le transport interne reste du HTTP/JSON (gRPC non disponible dans le sandbox) ; la même garde se transpose en intercepteur gRPC. Pas de CRL/OCSP (règle 7). Le mode `disabled` garde toutes les faiblesses antérieures et ne doit pas atteindre la production.
+- (−) Le Gateway recopie le corps des erreurs de ses amonts : un échec de connexion interne peut afficher une adresse interne à l'utilisateur (déjà vrai avant le mTLS ; le message d'identité s'y ajoute). À traiter à part.
+
+**Alternatives envisagées**
+- *Mesh seul (Envoy/Istio en mTLS automatique)* : rejeté comme **seul** mécanisme — voir plus haut ; compatible en complément.
+- *Jeton signé par appel (JWT de service) au lieu d'un certificat client* : rejeté — il faut quand même un canal chiffré, un secret à distribuer, et la protection contre le rejeu ; le certificat réunit les trois.
+- *Listes d'appelants en configuration* : rejeté pour le MVP (voir ci-dessus).
+- *Liste de révocation / OCSP* : rejeté — une infrastructure de plus, qui devient elle-même une dépendance critique ; les certificats courts et le remplacement de l'autorité couvrent le besoin.
+- *Identité = nom DNS dans le CN/SAN* : rejeté — un nom DNS désigne une adresse, pas un rôle ; plusieurs services peuvent partager une adresse, un même service en changer.
 
 ---
 

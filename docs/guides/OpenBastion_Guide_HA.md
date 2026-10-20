@@ -20,6 +20,7 @@ Le document 00 (§11) posait déjà l'exigence : **stateless-first**, état exte
 | Composant | Stratégie HA |
 |---|---|
 | Microservices stateless (Gateway, Authn, Authz, Broker, Workflow, Approval, connecteurs…) | Plusieurs répliques K8s, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, sondes `readiness`/`liveness` dédiées |
+| Autorité de certification interne et émission des certificats de service (ADR-0010) | Composant de rang 1 **hors ligne par défaut** : les services lisent des fichiers et ne dépendent pas de l'autorité à l'exécution, mais ne se renouvellent que si elle (ou cert-manager/SPIRE) émet à temps — l'autorité doit être sauvegardée (clé hors des services) et son émission supervisée. Une autorité tombée n'arrête rien jusqu'à la première échéance ; **c'est l'échéance qui fait la panne** (§4) |
 | PostgreSQL | Primaire + répliques en streaming replication, bascule automatisée (ex. Patroni), pooling de connexions (PgBouncer) devant chaque service |
 | Redis | Redis Sentinel (ou Cluster) — perte du cache tolérée en dégradé (§4), perte de l'état de session Broker traitée en fail-closed sur les nouvelles créations |
 | MinIO | Cluster distribué avec erasure coding — HA native du produit, pas de configuration supplémentaire requise |
@@ -49,6 +50,7 @@ Les proxies protocolaires détiennent un état qu'aucun des autres composants n'
 | Redis indisponible | Perte de cache | Risque d'incohérence sur `Session Registry` (doc 01 §4.1) | **Bloquées** — le Broker ne peut plus garantir l'état de session |
 | Audit Service / Kafka indisponible | — | Sessions déjà établies continuent (le proxy ne dépend pas de l'audit pour fonctionner) | **Bloquées** — cohérent avec le principe fail-closed (§1) |
 | Command Recorder indisponible, ou sa base passée en lecture seule (ADR-0008) | — | **Terminées à la prochaine commande** : une commande qui ne peut pas être enregistrée n'est pas exécutée sur la cible, l'opérateur est prévenu (`session.recording_lost`) | **Bloquées** (`503 recording unavailable`, `session.recording_unavailable`) — une session non enregistrable n'a pas lieu, **sauf** une session break-glass (ADR-0009) : admise si la plateforme l'autorise, auditée (`session.breakglass`) et enregistrée au mieux |
+| Certificat de service expiré (mTLS interne, ADR-0010) | Les pairs refusent ce service, et lui-même est refusé par eux : pour tout appel qui le traverse, c'est la panne du service. Se voit au journal : `mtls: the certificate of … EXPIRED` | Selon le service refusé — un proxy refusé par le Vault n'obtient plus de credential ; le Gateway refusé par le Broker ne crée plus de session | **Bloquées** si le service concerné est sur le chemin (Gateway, Broker, Vault, Authorization, recorder, audit) — le cas typique d'une panne totale sans panne de machine |
 | Password Vault indisponible | — | Aucun impact (credential déjà en mémoire proxy) | **Bloquées** — aucune nouvelle session ne peut obtenir de credential |
 | PostgreSQL indisponible | — | Dépend du composant (voir ci-dessus, PostgreSQL sous-tend Vault et Audit) | **Bloquées** |
 
@@ -56,7 +58,7 @@ Les proxies protocolaires détiennent un état qu'aucun des autres composants n'
 
 | Niveau de criticité | Composants | RTO cible | RPO cible |
 |---|---|---|---|
-| Tier 0 — bloquant | Gateway, Authn, Authz, Broker, Vault, **Command Recorder** (ADR-0008), PostgreSQL, mesh mTLS | < 1 min (bascule automatisée) | 0 (réplication synchrone ou quasi-synchrone) |
+| Tier 0 — bloquant | Gateway, Authn, Authz, Broker, Vault, **Command Recorder** (ADR-0008), PostgreSQL, **émission des certificats de service** (ADR-0010) | < 1 min (bascule automatisée) | 0 (réplication synchrone ou quasi-synchrone) |
 | Tier 1 — dégradable court terme | Proxies, Audit/Kafka | < 5 min | < 1 min |
 | Tier 2 — dégradable | Search Engine, Reporting, Notification | < 30 min | best-effort |
 
@@ -68,6 +70,8 @@ Ces chiffres sont indicatifs et devront être révisés une fois des mesures ré
 - Bascule PostgreSQL forcée en environnement de test, mesure du temps réel de rétablissement de la création de session (Tier 0).
 - Coupure volontaire du Command Recorder (ou passage de sa base en lecture seule) pendant une charge de sessions : vérifier que les nouvelles sessions sont refusées en `503` et que les sessions en cours s'arrêtent à leur prochaine commande, **sans qu'aucune commande atteigne la cible** — à surveiller via `GET /readyz`, pas seulement `/healthz`.
 - Coupure volontaire du Command Recorder **avec** une session break-glass : vérifier que (a) la session est admise et que `session.breakglass` précède l'accès au credential dans l'audit, (b) elle ne se coupe pas à la panne du recorder, (c) elle est coupée à son échéance (`session.expire`), (d) une session **ordinaire** demandée au même moment est refusée en `503`. Puis couper aussi l'Audit Service : la session break-glass doit être refusée — une dérogation que personne ne peut voir n'est pas accordée (fail-closed, §1).
+- **Échéance de certificat** (ADR-0010) : sur un environnement de test, laisser expirer — ou émettre avec une durée de quelques minutes — le certificat d'un service du chemin d'accès (le Vault, par exemple), et vérifier que (a) l'alerte d'approche d'échéance a bien été reçue **avant**, (b) l'échéance se manifeste comme prévu (nouvelles sessions refusées, jamais acceptées sans authentification), (c) le dépôt d'un certificat renouvelé rétablit le service **sans redémarrage** après au plus `TLS_RELOAD_INTERVAL`. Refaire l'exercice avec un renouvellement invalide (mauvaise autorité) : le service doit garder l'ancien certificat et le dire dans son journal.
+- **Sondes** : les sondes HTTP du kubelet ne présentent pas de certificat client et échouent sur un port mTLS. Utiliser des sondes `tcpSocket` ; ne **pas** désactiver le mTLS pour « faire passer » une sonde.
 - Coupure volontaire de Kafka pendant une charge de sessions actives, vérification que les nouvelles créations sont bien refusées (fail-closed) plutôt que silencieusement non auditées.
 
 ## 7. Prochaine étape

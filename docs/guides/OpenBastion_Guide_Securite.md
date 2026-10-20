@@ -13,7 +13,8 @@
 | Opérateur privilégié malveillant ou compte compromis | Oui | Zero Standing Privilege : aucun credential statique connu de l'opérateur (doc 00 §2) |
 | Compromission du control plane (Gateway, Broker, Workflow) | Oui | Invariant ADR-0003 : le control plane ne détient jamais de secret |
 | Compromission d'un proxy protocolaire | Oui | Scope token à usage unique, purge mémoire immédiate, droits Vault strictement scopés par type de proxy |
-| Interception réseau (MITM) inter-services | Oui | mTLS obligatoire sur tout trafic interne (§4) |
+| Interception réseau (MITM) inter-services | Oui | mTLS obligatoire sur tout trafic interne (§3, ADR-0010) |
+| Service compromis ou pod hostile se faisant passer pour un autre service interne | Oui | Identité tirée du certificat, table d'appelants par route avec refus par défaut, identité du pair épinglée côté client (§3, ADR-0010) |
 | Falsification rétroactive du journal d'audit | Oui | Chaînage par hash `prev_hash` → `hash` (doc 06 §4) |
 | Compromission du KMS/HSM externe | Hors périmètre applicatif — traité comme dépendance externe critique, cf. §7 |
 | Attaque physique sur l'infrastructure hôte | Hors périmètre de ce guide — relève de la sécurité de l'hébergeur/datacenter |
@@ -28,12 +29,16 @@ Tout le reste de ce guide explique comment ces trois invariants sont concrèteme
 
 ## 3. Sécurité du transport
 
-- **TLS externe** : terminaison chez Traefik, aucun trafic en clair au-delà de la bordure.
-- **mTLS interne obligatoire** : chaque appel gRPC inter-services (`proto/`, doc 07) est authentifié dans les deux sens par certificat de service, jamais par simple confiance réseau (Zero Trust — doc 00 §2).
-- **Identité de service** : chaque microservice porte une identité de type SPIFFE (`calling_service_id` propagé via `RequestContext`, doc 07 §2), vérifiable indépendamment du réseau d'origine.
-- **Rotation automatique des certificats** : certificats internes à courte durée de vie, réémis en continu par une CA interne (Envoy comme data plane du mesh, doc 00 §10) — un certificat volé perd sa valeur rapidement.
+- **TLS externe** : terminaison chez Traefik, aucun trafic en clair au-delà de la bordure. Le listener public de l'API Gateway reste en HTTP derrière lui : ses appelants sont des personnes munies d'un jeton, pas des services munis d'un certificat.
+- **mTLS interne obligatoire — implémenté (ADR-0010)** : chaque appel entre services est en TLS 1.3, authentifié dans les deux sens. C'est le défaut : sans `INTERNAL_TLS=disabled` (développement, annoncé en avertissement), un service **refuse de démarrer** sans certificat, clé et CA, ou avec un certificat expiré, d'un autre domaine ou **appartenant à un autre service**.
+- **Identité de service** : l'unique SAN URI du certificat, `spiffe://<domaine>/<service>`. Le client **épingle l'identité attendue du pair** (le Broker n'envoie une demande de scope qu'à quelqu'un qui répond comme `password-vault`) et ne se connecte qu'à des pairs déclarés, en `https`.
+- **Autorisation par route, refus par défaut** : chaque service déclare quels services peuvent appeler quelle route (`internal/interfaces/callers.go`) ; une route que la table ne mentionne pas est refusée à tous. Le corps d'une requête n'est jamais cru pour savoir *qui* appelle : le Vault déduit le proxy du certificat, les rôles ne sont acceptés que du Gateway, le drapeau break-glass que du Broker.
+- **Rotation automatique des certificats** : certificats à courte durée de vie, relus à chaud (`TLS_RELOAD_INTERVAL`, 5 s) sans redémarrage ; un remplacement invalide est refusé et l'ancien conservé. L'émission est celle de l'organisation (cert-manager, Vault PKI, SPIRE…) ou de `openbastion-pki` (guide administrateur §PKI).
+- **Pas de liste de révocation** : une compromission se traite en remplaçant l'autorité (recouvrement des deux, réémission, retrait de l'ancienne) — testé sur un processus vivant. Cela suppose des certificats courts : **ne pas émettre de certificats de service de plusieurs mois.**
 
-**Point de vérification pour audit** : interroger un service au hasard sans certificat client valide doit systématiquement échouer, y compris depuis l'intérieur du cluster.
+**Point de vérification pour audit** : interroger un service au hasard sans certificat client valide doit systématiquement échouer, y compris depuis l'intérieur du cluster — c'est un test automatisé (`mtls_flow_test.go`), à refaire sur un déploiement réel (`openssl s_client -connect <service>:<port>` sans `-cert` doit être refusé après le handshake).
+
+**Ce que le mTLS ne fait pas** : il ne limite pas ce que fait un service compromis *au-delà de sa table d'appelants* — le Gateway affirme les rôles des utilisateurs, donc un Gateway compromis agit en leur nom, dans les limites du RBAC d'Authorization. Il n'attribue pas non plus les événements d'audit par l'identité du certificat (`actor_id` reste déclaratif sur `emit-event` : limite §12).
 
 ## 4. Sécurité de l'authentification
 
@@ -57,7 +62,7 @@ Tout le reste de ce guide explique comment ces trois invariants sont concrèteme
 - **Chiffrement à l'enveloppe** : `vault_secrets.encrypted_material` chiffré AES-256, la clé de déchiffrement référencée (`encryption_key_id`) et non stockée en base — dépendance à un KMS/HSM externe (doc 06 §3).
 - **Enregistrements de session chiffrés au repos** (Command Recorder, implémenté) : chaque commande est scellée en AES-256-GCM sous une clé de données propre à la session ; cette clé n'existe en base que chiffrée par la KEK (`KMS_KEY_HEX` aujourd'hui, un KMS/HSM à terme — le Recorder refuse de démarrer sans elle dès que `DATABASE_URL` est défini). L'identifiant de session et l'horodatage sont liés au chiffrement : déplacer une ligne vers une autre session ou en modifier l'heure fait échouer la lecture au lieu de produire un faux replay. **Ce que cela ne couvre pas** : un attaquant qui contrôle la base peut supprimer ou réordonner des lignes intactes (elles ne sont pas chaînées entre elles, contrairement à l'audit, §9), et il suffit de la KEK *et* de la base pour tout lire — la KEK doit donc vivre hors de la base et de ses sauvegardes.
 - **Argon2id** pour tout secret applicatif nécessitant un hash (ex. mots de passe des comptes locaux OpenBastion eux-mêmes, `users.password_hash`).
-- **Le control plane ne voit jamais le secret** : seul `VaultCredentialIssuance.FetchCredential` (doc 07 §5) transporte un credential, et seul un proxy protocolaire authentifié par mTLS peut l'appeler.
+- **Le control plane ne voit jamais le secret** : seul `VaultCredentialIssuance.FetchCredential` (doc 07 §5) transporte un credential, et seul un proxy protocolaire authentifié par mTLS peut l'appeler — le Vault déduit le proxy de son certificat, pas du corps de la requête (ADR-0010).
 - **Cycle de vie** : rotation manuelle, planifiée ou post-usage (doc 00, section Gestion des comptes) ; chaque rotation crée une nouvelle version dans `vault_secrets`, l'ancienne étant marquée `superseded_at` plutôt que supprimée — traçabilité complète.
 - **Purge mémoire** : le `Credential Fetcher` de chaque proxy (doc 01 §4.2) purge le secret dès la fin de session ou en cas d'anomalie détectée — jamais persisté sur disque proxy, jamais journalisé.
 
@@ -116,10 +121,14 @@ C'est la zone de plus forte sensibilité du système — seul point où un secre
 | Pas de détection d'anomalie/score de risque | Aucune | v2.0 |
 | Le Command Recorder est une dépendance de disponibilité de **tous** les accès privilégiés (ADR-0008) : s'il est indisponible, aucune session ne s'ouvre et les sessions en cours s'arrêtent à leur prochaine commande | Déployer le recorder et sa base en haute disponibilité (guide HA), alerter sur `/readyz` ; en dernier recours, la dérogation break-glass (ADR-0009, désactivée par défaut) | Réduite par ADR-0009 ; la dépendance demeure pour toute session ordinaire |
 | Une seule personne suffit à obtenir un break-glass : pas de double validation, pas de revue après incident (le Workflow Service n'existe pas encore) | La politique sur `breakglass:account:*` à un rôle restreint, durée courte, justification obligatoire, `session.breakglass*` revu après chaque usage | v1.0 (Workflow/Approval Engine) |
-| Le drapeau `break_glass` voyage du Broker au proxy sur le canal interne, non authentifié : qui l'atteint peut demander la dérogation — sans pour autant l'obtenir, car le proxy exige `BREAKGLASS_ENABLED`, un recorder non prêt, et l'audit de la dérogation | `NetworkPolicy` restreignant `establish-session` au seul Broker | v1.0 (mTLS interne) |
 | La convention de nommage `breakglass:account:*` est la seule frontière entre la politique d'un accès ordinaire et celle d'un break-glass : un motif trop large (`*`) accorderait les deux | Revue des politiques ; ne jamais accorder de motif générique à `breakglass:` | À décider (contrôle automatique du motif) |
 | Une session dérogée peut n'être que partiellement enregistrée, voire l'être en double sur un nouvel essai ambigu | L'audit dit que la dérogation a servi (`session.breakglass`) ; le replay se lit à sa lumière | Non prévue — choix assumé (ADR-0009) |
-| Le recorder reçoit ses écritures sans authentification mutuelle : un appelant ayant accès au réseau interne pourrait y écrire de fausses entrées | `NetworkPolicy` restreignant l'accès au recorder aux seuls proxies | v1.0 (mTLS interne) |
+| Le certificat est une dépendance de disponibilité de **rang 1** : un certificat expiré met le service — et ceux qui l'appellent — hors service (ADR-0010) | Certificats courts renouvelés bien avant l'échéance ; alerte sur la journalisation d'approche d'échéance (`mtls: the certificate of … expires at`) ; guide HA | Non prévue — conséquence assumée du mTLS |
+| Les événements d'audit ne sont pas attribués par l'identité du certificat : `actor_id` reste déclaratif sur `emit-event`, dont seuls le Broker et le proxy sont appelants autorisés | Table d'appelants (un autre service ne peut pas écrire dans l'audit) | À décider (attribution signée par appelant) |
+| Les listes d'appelants sont dans le code : changer la topologie est une livraison | En contrepartie, une règle ne s'élargit pas par erreur de configuration | À reconsidérer si les déploiements divergent |
+| Les sondes HTTP du kubelet ne présentent pas de certificat client | Sondes `tcpSocket` ; un port de santé distinct reste à faire | À décider |
+| Le Gateway recopie le corps des erreurs de ses amonts : un échec de connexion interne peut montrer une adresse interne (et, sous mTLS, le nom d'identité attendu) à l'utilisateur | Aucune | À corriger (réponses génériques côté Gateway) |
+| `INTERNAL_TLS=disabled` garde toutes les faiblesses antérieures : aucune authentification entre services, n'importe quel appelant peut revendiquer n'importe quelle identité | Annoncé en avertissement au démarrage par chaque service ; ne jamais l'utiliser hors développement | — (mode de développement) |
 | Un échec ambigu d'acquittement peut sur-enregistrer une commande qui n'a jamais été exécutée (le sens d'erreur inverse est exclu) | Lecture du replay à la lumière de l'audit de session | Non prévue — choix assumé (ADR-0008) |
 | Un secret passé en argument d'une commande (`mysql -pXXXX`) est enregistré tel quel ; seul un secret saisi à un prompt est masqué | Chiffrement au repos + `recording:session:read` réservé aux auditeurs | À décider |
 

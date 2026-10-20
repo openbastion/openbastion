@@ -17,6 +17,10 @@ import (
 // FetchCredential (see session-broker/internal/application's doc comment).
 type VaultCredentialHTTPClient struct {
 	BaseURL string
+
+	// Client is the HTTP client to use; nil means http.DefaultClient. Under
+	// INTERNAL_TLS it is the mutual-TLS client pinned to this peer (ADR-0010).
+	Client *http.Client
 }
 
 func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (string, []byte, error) {
@@ -29,7 +33,7 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 		return "", nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return "", nil, err
 	}

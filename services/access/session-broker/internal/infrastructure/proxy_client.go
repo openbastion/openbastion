@@ -20,6 +20,10 @@ import (
 // enough; a registry keyed by proxyServiceID is a v1.0 concern.
 type ProxyClientHTTPClient struct {
 	BaseURL string
+
+	// Client is the HTTP client to use; nil means http.DefaultClient. Under
+	// INTERNAL_TLS it is the mutual-TLS client pinned to this peer (ADR-0010).
+	Client *http.Client
 }
 
 func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
@@ -33,7 +37,7 @@ func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID,
 		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return "", "", err
 	}

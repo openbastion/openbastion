@@ -16,6 +16,10 @@ import (
 
 type AuthorizationHTTPClient struct {
 	BaseURL string
+
+	// Client is the HTTP client to use; nil means http.DefaultClient. Under
+	// INTERNAL_TLS it is the mutual-TLS client pinned to this peer (ADR-0010).
+	Client *http.Client
 }
 
 type checkAccessRequestBody struct {
@@ -36,7 +40,7 @@ func (c *AuthorizationHTTPClient) CheckAccess(ctx context.Context, actorRoles []
 		return false, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return false, "", err
 	}

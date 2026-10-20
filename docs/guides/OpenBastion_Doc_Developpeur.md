@@ -31,6 +31,15 @@ make run SERVICE=ssh-proxy
 
 **Le SSH Proxy refuse de démarrer sans Command Recorder** : `RECORDING_POLICY` vaut `required` par défaut (ADR-0008), donc lance d'abord le recorder (`make run-recorder`) et fournis `RECORDER_URL`. Pour travailler sur autre chose que l'enregistrement, `RECORDING_POLICY=best-effort` le laisse démarrer sans — développement uniquement, le proxy s'en plaint au démarrage, et les sessions ne sont alors pas rejouables.
 
+**Le transport interne est en mTLS par défaut** (ADR-0010) : un service sans certificat refuse de démarrer. Deux façons de travailler :
+
+- **Comme en production** : `make pki` crée une autorité et l'identité de chaque service dans `.pki/` (ignoré par git — ce sont des clés privées), puis chaque `make run-<service>` s'en sert. Les certificats durent 7 jours ; relancer `make pki` les renouvelle et les services en cours les reprennent sans redémarrage.
+- **Sans certificats** : `make run-<service> INTERNAL_TLS=disabled` (ou `INTERNAL_TLS=disabled` dans l'environnement) lance en HTTP clair, sans aucune authentification entre services ; chaque service s'en plaint au démarrage. Pratique pour un `curl` direct sur un endpoint interne ; ne jamais le laisser dans une configuration partagée.
+
+Pour appeler un endpoint interne sous mTLS à la main : `curl --cacert .pki/ca.pem --cert .pki/admin-cli/cert.pem --key .pki/admin-cli/key.pem https://127.0.0.1:8082/audit/v1/verify-chain` (l'identité `admin-cli` n'ouvre que la création d'utilisateurs et la vérification de la chaîne d'audit ; pour une autre route, prendre l'identité du service qui l'appelle, comme le font les tests).
+
+**Ajouter une route interne** : l'ajouter aussi à la table `CallerRules()` du service (`internal/interfaces/callers.go`) — une route qu'aucune règle ne mentionne est refusée à tous, y compris à ses appelants légitimes. Le test `callers_test.go` du service doit dire qui peut l'appeler et qui ne le peut pas. Ne jamais lire l'identité de l'appelant dans le corps d'une requête : elle vient de `mtls.CallerFrom(ctx)`.
+
 **Essayer le break-glass en local** (ADR-0009) : lance le Broker avec `BREAKGLASS_MAX_MINUTES=30` et le proxy avec `BREAKGLASS_ENABLED=true`, crée une politique sur `breakglass:account:<id>` (le moteur d'autorisation ne regarde que le rôle et la ressource : un motif `vault:account:…` ne suffit pas), puis arrête le recorder et demande une session avec `"breakGlass": true`. Le test `test/integration/breakglass_flow_test.go` le fait sur des processus réels, recorder tué puis relancé.
 
 ## 3. Repères dans le monorepo
@@ -75,6 +84,8 @@ Les 9 proxies partagent `pkg/proxycore` (doc 01 §4.2, ADR-0006). Ajouter un dix
 | End-to-end | `test/e2e/` | `make test-e2e` |
 | Performance | `test/performance/` (k6) | `make test-perf` |
 | Sécurité | `test/security/` | `make test-security` |
+
+Les tests d'intégration actuels du dépôt (`test/integration/*_test.go`) tournent en mode `INTERNAL_TLS=disabled`, stipulé dans `buildEnv` ; `mtls_flow_test.go` et `mtls_lifecycle_test.go` font tourner les huit services sous mTLS requis avec une PKI générée par test (`mtls_helpers_test.go`), et attaquent le réseau avec des identités de toute sorte.
 
 Un service qui touche à la couche proxy ou au Vault (§5, Guide Sécurité §6-8) n'est pas mergeable sans passage vert de `test-security` — ce n'est pas laissé à l'appréciation du relecteur.
 

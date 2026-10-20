@@ -6,10 +6,10 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/domain"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/infrastructure"
@@ -17,6 +17,12 @@ import (
 )
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
+	rt, err := mtls.Setup(mtls.Authentication)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8086"
@@ -66,7 +72,7 @@ func main() {
 
 	srv := interfaces.NewHTTPServer(svc)
 	log.Printf("authentication listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
-	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

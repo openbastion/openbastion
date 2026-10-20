@@ -20,3 +20,10 @@ replace golang.org/x/sys => github.com/golang/sys v0.21.0
 // (voir services/proxy/ssh-proxy/go.mod pour le détail) : un replace local
 // explicite lève l'ambiguïté quand des replaces externes sont aussi présents.
 replace github.com/openbastion/openbastion/pkg/proxycore => ../../pkg/proxycore
+
+// Transport mTLS interne (ADR-0010). Un replace local explicite, comme pour
+// pkg/proxycore : il lève l'ambiguïté du mode workspace quand le module a aussi
+// des dépendances externes.
+require github.com/openbastion/openbastion/pkg/mtls v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/mtls => ../../pkg/mtls

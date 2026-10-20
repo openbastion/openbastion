@@ -14,6 +14,10 @@ import (
 // /vault/v1/fetch-credential — see application.VaultAuthorizer.
 type VaultAuthorizationHTTPClient struct {
 	BaseURL string
+
+	// Client is the HTTP client to use; nil means http.DefaultClient. Under
+	// INTERNAL_TLS it is the mutual-TLS client pinned to this peer (ADR-0010).
+	Client *http.Client
 }
 
 type authorizeScopeRequestBody struct {
@@ -38,7 +42,7 @@ func (c *VaultAuthorizationHTTPClient) AuthorizeScope(ctx context.Context, sessi
 		return "", time.Time{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return "", time.Time{}, err
 	}

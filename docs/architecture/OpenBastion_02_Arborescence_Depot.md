@@ -75,7 +75,10 @@ openbastion/
 │
 ├── pkg/                          # bibliothèques Go partagées, importées par les services
 │   ├── proxycore/                # pipeline proxy commun (Connection Listener, Credential Fetcher, Codec, Tap, Terminator)
-│   ├── mtls/                     # établissement et rotation des identités mTLS inter-services
+│   ├── mtls/                     # identité par certificat (SAN URI spiffe://<domaine>/<service>), garde d'appelants par route, rechargement à chaud (ADR-0010)
+│   │   ├── pki/                  #   autorité et émission de certificats de service (dev, petits sites)
+│   │   ├── mtlstest/             #   habille une requête en pair authentifié, pour tester les tables d'appelants
+│   │   └── cmd/openbastion-pki/  #   CLI : init, issue, all
 │   ├── telemetry/                # intégration OpenTelemetry commune
 │   ├── auditlog/                 # émission d'événements d'audit signés
 │   └── errors/                   # types d'erreurs partagés, mapping gRPC/HTTP

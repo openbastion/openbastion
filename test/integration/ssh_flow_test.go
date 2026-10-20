@@ -53,6 +53,12 @@ func buildEnv(root string) []string {
 		"GOWORK=" + filepath.Join(root, "go.work"),
 		"GOPROXY=off",
 		"GOFLAGS=",
+		// The flows in this package exercise the services' behaviour, not their
+		// transport: they talk to internal endpoints directly, as a developer
+		// would. They run in the development mode, stated here rather than left
+		// to a default (the default is mutual TLS, ADR-0010). The mutual-TLS mode
+		// has its own tests: mtls_flow_test.go.
+		"INTERNAL_TLS=disabled",
 	}
 }
 

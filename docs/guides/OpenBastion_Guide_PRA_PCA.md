@@ -49,7 +49,7 @@ C'est le point que la plupart des guides PRA génériques n'abordent pas, et qui
 
 - Toute clé de chiffrement (KMS) ayant été accessible depuis le site sinistré est considérée comme potentiellement exposée.
 - Une **rotation complète et forcée** de tous les comptes privilégiés (`privileged_accounts`, doc 06 §3) est déclenchée après bascule, pas seulement une reprise de service — même si cela dégrade temporairement l'expérience opérateur.
-- Les certificats de service (mTLS interne, doc Guide Sécurité §3) émis depuis l'autorité du site sinistré sont révoqués et réémis depuis le site DR.
+- Les certificats de service (mTLS interne, Guide Sécurité §3, ADR-0010) émis depuis l'autorité du site sinistré sont écartés : il n'y a pas de liste de révocation, donc on **remplace l'autorité** — une nouvelle autorité sur le site DR, l'identité de chaque service réémise depuis elle, et l'ancienne autorité retirée des bundles `TLS_CA_FILE` (procédure du guide administrateur, §3 « Remplacer l'autorité »). C'est cette étape qui rend inutilisable un certificat de service volé sur le site compromis ; sans elle, quiconque détient la clé d'un service du site sinistré reste accepté par les services du site DR.
 - La chaîne d'audit (`prev_hash` → `hash`, doc 06 §4) est vérifiée intégralement avant réouverture des accès — une rupture de chaîne est traitée comme un indicateur de compromission, pas comme une simple anomalie technique.
 
 **Si la cause est qualifiée comme non malveillante** (ex. incendie, panne électrique), cette procédure lourde peut être allégée à la seule vérification d'intégrité de la chaîne d'audit, sans rotation forcée systématique — décision qui reste de la responsabilité du RSSI, pas automatisée.
@@ -61,6 +61,7 @@ C'est le point que la plupart des guides PRA génériques n'abordent pas, et qui
 3. **Bascule du trafic** vers le site DR (DNS ou load balancer global), promotion des répliques PostgreSQL/Kafka/MinIO en écriture primaire.
 4. **Vérification d'intégrité de la chaîne d'audit** avant toute réouverture — étape bloquante, pas informative.
 5. **Rotation forcée des comptes privilégiés**, si le gate de l'étape 2 l'exige.
+   *Si le site est traité comme compromis, le remplacement de l'autorité interne (ADR-0010) se fait ici aussi — avant la réouverture : sinon un certificat de service volé reste valide face aux services du site DR.*
 6. **Réouverture progressive des accès** — un sous-ensemble restreint d'opérateurs/administrateurs d'abord, le temps de confirmer la stabilité du site DR, avant réouverture générale.
 7. **Post-mortem documenté**, injecté lui-même dans l'audit (`audit_events`, `action = "dr.failover"`) — la bascule elle-même est un événement auditable, pas une exception au principe Full Auditability.
 

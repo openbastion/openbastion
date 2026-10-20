@@ -12,6 +12,10 @@ import (
 // response has no field that could carry a secret (doc 05 §2).
 type AccountLookupHTTPClient struct {
 	BaseURL string
+
+	// Client is the HTTP client to use; nil means http.DefaultClient. Under
+	// INTERNAL_TLS it is the mutual-TLS client pinned to this peer (ADR-0010).
+	Client *http.Client
 }
 
 func (c *AccountLookupHTTPClient) GetAccount(ctx context.Context, accountID string) (targetHost, targetUser string, err error) {
@@ -19,7 +23,7 @@ func (c *AccountLookupHTTPClient) GetAccount(ctx context.Context, accountID stri
 	if err != nil {
 		return "", "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return "", "", err
 	}

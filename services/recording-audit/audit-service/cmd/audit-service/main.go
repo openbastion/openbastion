@@ -7,15 +7,21 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/interfaces"
 )
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
+	rt, err := mtls.Setup(mtls.AuditService)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8082"
@@ -39,7 +45,7 @@ func main() {
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
-	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

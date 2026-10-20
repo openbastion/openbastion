@@ -6,12 +6,27 @@ export GOWORK := $(CURDIR)/go.work
 export GOPROXY := direct
 export GOFLAGS :=
 
-.PHONY: build test test-integration test-postgres vet run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+## Transport interne (ADR-0010). Par défaut : mTLS requis — chaque service lit son
+## identité dans $(PKI_DIR) (voir `make pki`). `make run-X INTERNAL_TLS=disabled`
+## lance sans certificats, en HTTP clair : développement uniquement, annoncé en
+## avertissement par chaque service.
+INTERNAL_TLS ?= required
+PKI_DIR ?= .pki
+ifeq ($(INTERNAL_TLS),disabled)
+SCHEME := http
+tls = INTERNAL_TLS=disabled
+else
+SCHEME := https
+tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
+endif
+
+.PHONY: build test test-integration test-postgres vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
 ## Compile tous les modules actuellement implémentés.
 build:
 	$(GO) build \
 		./pkg/proxycore/... \
+		./pkg/mtls/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
@@ -24,6 +39,7 @@ build:
 ## go vet sur tous les modules.
 vet:
 	$(GO) vet ./pkg/proxycore/...
+	$(GO) vet ./pkg/mtls/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
 	$(GO) vet ./services/access/authorization/...
@@ -40,6 +56,7 @@ vet:
 test:
 	$(GO) test \
 		./pkg/proxycore/... \
+		./pkg/mtls/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
@@ -75,10 +92,18 @@ test:
 ##                            dérogation est auditée avant le credential,
 ##                            une session ordinaire reste refusée, la
 ##                            coupure à l'échéance est faite par le proxy
+## - mtls_flow_test.go     : ADR-0010 — HUIT processus sous mTLS requis : le
+##                            parcours complet, 20 appels forgés par une
+##                            identité valide mais fausse arrêtés à la porte,
+##                            jeton de scope volé inutilisable, imposteur du
+##                            Vault qui ne reçoit rien
+## - mtls_lifecycle_test.go : ADR-0010 — rotation d'un certificat et
+##                            remplacement de l'autorité sur un processus
+##                            vivant ; refus de démarrer sans identité propre
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
 test-integration:
-	$(GO) test ./test/integration/... -v -count=1 -timeout=140s
+	$(GO) test ./test/integration/... -v -count=1 -timeout=200s
 
 ## Lance les tests PostgreSQL réels (postgres_store_test.go +
 ## postgres_flow_test.go). Nécessite une base PostgreSQL accessible via
@@ -114,30 +139,42 @@ test-postgres:
 	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=60s
 
+## Crée, dans $(PKI_DIR), une autorité et l'identité de chaque service (ADR-0010).
+## Pour le développement et les petits déploiements ; en production, l'émission est
+## celle de l'organisation, avec la même forme d'identité (guide administrateur §PKI).
+## Relancer renouvelle les certificats (7 jours) et conserve l'autorité : les services
+## en cours les reprennent sans redémarrage. $(PKI_DIR) est ignoré par git.
+pki:
+	$(GO) run ./pkg/mtls/cmd/openbastion-pki all -dir $(PKI_DIR)
+
 ## Lance chaque service en local (ports par défaut : voir chaque cmd/main.go).
+## Sous mTLS (défaut), lancer d'abord `make pki`.
 run-vault:
-	$(GO) run ./services/vault/password-vault/cmd/password-vault
+	$(call tls,password-vault) $(GO) run ./services/vault/password-vault/cmd/password-vault
 run-audit:
-	$(GO) run ./services/recording-audit/audit-service/cmd/audit-service
+	$(call tls,audit-service) $(GO) run ./services/recording-audit/audit-service/cmd/audit-service
 run-authorization:
-	$(GO) run ./services/access/authorization/cmd/authorization
+	$(call tls,authorization) $(GO) run ./services/access/authorization/cmd/authorization
 run-authentication:
-	$(GO) run ./services/access/authentication/cmd/authentication
+	$(call tls,authentication) $(GO) run ./services/access/authentication/cmd/authentication
 # RECORDING_POLICY vaut « required » par défaut (ADR-0008) : sans RECORDER_URL, le proxy refuse de démarrer.
 # « best-effort » (développement uniquement) doit être demandé explicitement.
 # BREAKGLASS_ENABLED=true autorise ce proxy à honorer un break-glass (ADR-0009), voir run-broker.
+# Sous mTLS, l'identité du proxy est celle de son certificat : ne pas fixer PROXY_SERVICE_ID.
 run-ssh-proxy:
-	VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 RECORDER_URL=http://127.0.0.1:8087 \
+	$(call tls,ssh-proxy) RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
 		$(GO) run ./services/proxy/ssh-proxy/cmd/ssh-proxy
 run-recorder:
-	AUTHORIZATION_URL=http://127.0.0.1:8083 \
+	$(call tls,command-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 \
 		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder
 # BREAKGLASS_MAX_MINUTES=30 active le break-glass (ADR-0009) ; absent ou 0 : désactivé.
 run-broker:
-	AUTHORIZATION_URL=http://127.0.0.1:8083 VAULT_URL=http://127.0.0.1:8081 AUDIT_URL=http://127.0.0.1:8082 SSH_PROXY_URL=http://127.0.0.1:8085 \
+	$(call tls,session-broker) \
 		$(GO) run ./services/access/session-broker/cmd/session-broker
+# Le listener public de la Gateway reste en HTTP (le TLS se termine à l'arête) ;
+# elle a une identité pour ses appels sortants.
 run-gateway:
-	AUTHENTICATION_URL=http://127.0.0.1:8086 SESSION_BROKER_URL=http://127.0.0.1:8084 VAULT_URL=http://127.0.0.1:8081 AUTHORIZATION_URL=http://127.0.0.1:8083 COMMAND_RECORDER_URL=http://127.0.0.1:8087 \
+	$(call tls,api-gateway) COMMAND_RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
 		$(GO) run ./services/access/api-gateway/cmd/api-gateway
 
 clean:

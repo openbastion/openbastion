@@ -177,7 +177,7 @@ Kerberos et RADIUS sont supportés comme protocoles secondaires d'authentificati
 | Composant | Responsabilité |
 |---|---|
 | **REST API** | Contrat public exposé par l'API Gateway, documenté OpenAPI (livrable §16.5). |
-| **gRPC Internal API** | Contrats Protobuf inter-services, transport mTLS via mesh Envoy. |
+| **gRPC Internal API** | Contrats Protobuf inter-services, transport mTLS. L'authentification de l'appelant par route est faite **par le service lui-même** à partir du certificat (ADR-0010) ; un mesh Envoy peut s'y ajouter pour le routage et l'observabilité, mais ne la remplace pas. |
 | **Message Bus (NATS + Kafka)** | Infrastructure de coordination temps réel et de streaming durable (§7). |
 | **Scheduler** | Tâches planifiées : rotations, expirations de session, génération de rapports. |
 

@@ -7,9 +7,9 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/application"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/domain"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/infrastructure"
@@ -24,6 +24,13 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010): without a
+	// certificate of its own, this service does not start.
+	rt, err := mtls.Setup(mtls.Authorization)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	port := mustEnv("PORT", "8083")
 	bootstrapRole := mustEnv("BOOTSTRAP_ADMIN_ROLE", "platform-admin")
 
@@ -60,7 +67,7 @@ func main() {
 
 	srv := interfaces.NewHTTPServer(svc)
 	log.Printf("authorization listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
-	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

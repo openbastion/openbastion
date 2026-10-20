@@ -49,6 +49,14 @@ func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, logi
 	}
 }
 
+// WithHTTPClient sets the client the Gateway uses to reach its upstreams. Under
+// INTERNAL_TLS it is the mutual-TLS client that knows every upstream by identity
+// (ADR-0010); by default it is http.DefaultClient.
+func (g *GatewayServer) WithHTTPClient(c *http.Client) *GatewayServer {
+	g.httpClient = c
+	return g
+}
+
 func (g *GatewayServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", g.handleLogin) // public

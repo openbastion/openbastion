@@ -7,9 +7,9 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/infrastructure"
@@ -24,8 +24,14 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
+	rt, err := mtls.Setup(mtls.PasswordVault)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
 	port := mustEnv("PORT", "8081")
-	authorizationURL := mustEnv("AUTHORIZATION_URL", "http://127.0.0.1:8083")
+	authorizationURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
 	dsn := os.Getenv("DATABASE_URL")
 	kmsKeyHex := os.Getenv("KMS_KEY_HEX")
 
@@ -63,7 +69,11 @@ func main() {
 		log.Printf("password-vault: DATABASE_URL not set, using in-memory storage (dev/test only)")
 	}
 
-	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authorizationURL}
+	authzClient, err := rt.Client(mtls.Peer{URL: authorizationURL, Service: mtls.Authorization})
+	if err != nil {
+		log.Fatalf("password-vault: %v", err)
+	}
+	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authorizationURL, Client: authzClient}
 	svc := application.NewVaultService(accounts, secrets, scopes, kms, authz)
 
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
@@ -75,9 +85,11 @@ func main() {
 	}
 
 	srv := interfaces.NewHTTPServer(svc)
+	// Under mutual TLS, who redeems a scope is whoever the certificate says.
+	srv.CallerFromCertificate = rt.Enabled()
 	log.Printf("password-vault listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authorizationURL)
-	log.Fatal(http.ListenAndServe(":"+port, srv.Routes()))
+	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {
