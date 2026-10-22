@@ -52,7 +52,7 @@ func connect(t *testing.T, proxyErr error) *httptest.ResponseRecorder {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	rec := httptest.NewRecorder()
-	interfaces.NewHTTPServer(svc).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions/"+sess.ID+"/connect", nil))
+	interfaces.NewHTTPServer(svc).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions/"+sess.ID+"/connect", strings.NewReader(`{"callerId":"alice"}`)))
 	return rec
 }
 
@@ -85,7 +85,7 @@ func postSession(t *testing.T, svc *application.SessionBrokerService, body strin
 }
 
 func newBreakGlassService(maxMinutes int) *application.SessionBrokerService {
-	return application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(maxMinutes)
+	return application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(maxMinutes).WithoutBreakGlassApproval() // ADR-0009 tests: approval has its own
 }
 
 const bgBody = `{"requestedBy":"oncall","actorRoles":["sre"],"targetAccountId":"acc1","protocol":"ssh","justification":"recorder down, P1 incident","durationMinutes":15%s}`

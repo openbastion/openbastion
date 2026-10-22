@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -220,4 +221,189 @@ func TestPostgresStore_AnOlderDatabaseIsUpgradedInPlace(t *testing.T) {
 		t.Fatalf("second OpenPostgres: %v", err)
 	}
 	_ = db3.Close()
+}
+
+// -- the double validation of break-glass (ADR-0011) ---------------------------------
+
+// What a decision changes survives storage: the new end of the session, who decided, when.
+func TestPostgresStore_ADecisionRoundTrips(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+
+	req := pendingRequest(uniqueID("sess-req"))
+	req.CreatedAt = req.CreatedAt.Truncate(time.Microsecond)
+	req.ExpiresAt = req.ExpiresAt.Truncate(time.Microsecond)
+	if err := store.Save(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get(ctx, req.ID)
+	if err != nil || got.Status != domain.StatusPendingApproval || got.DurationMinutes != 20 || got.DecidedBy != "" || got.DecidedAt != nil {
+		t.Fatalf("a pending request read back as %+v (%v)", got, err)
+	}
+
+	decided := decidedAs(req, domain.StatusActive, "lead")
+	decided.DecidedAt = ptrTime(time.Now().UTC().Truncate(time.Microsecond))
+	decided.ExpiresAt = decided.DecidedAt.Add(20 * time.Minute)
+	swapped, err := store.SaveIfStatus(ctx, decided, domain.StatusPendingApproval)
+	if err != nil || !swapped {
+		t.Fatalf("SaveIfStatus: %v %v", swapped, err)
+	}
+	got, err = store.Get(ctx, req.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.StatusActive || got.DecidedBy != "lead" || got.DecidedAt == nil || !got.DecidedAt.Equal(*decided.DecidedAt) ||
+		!got.ExpiresAt.Equal(decided.ExpiresAt) || got.DurationMinutes != 20 || !got.BreakGlass || got.RequestedBy != "oncall" {
+		t.Fatalf("a decision did not survive storage: %+v", got)
+	}
+
+	// Save is the way a termination is written; it must carry the decision along, and
+	// must never rewrite who asked or for what.
+	got.Status = domain.StatusTerminated
+	if err := store.Save(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := store.Get(ctx, req.ID); again.DecidedBy != "lead" || again.DurationMinutes != 20 || again.Status != domain.StatusTerminated {
+		t.Fatalf("a termination lost the decision: %+v", again)
+	}
+}
+
+func ptrTime(t time.Time) *time.Time { return &t }
+
+// One UPDATE with the expected status in its WHERE clause: of several decisions racing
+// for the same request — from this process or another Broker replica — one lands.
+func TestPostgresStore_SaveIfStatus_OfManyRacingDecisionsExactlyOneWins(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+
+	for round := 0; round < 10; round++ {
+		req := pendingRequest(uniqueID("sess-race"))
+		req.CreatedAt, req.ExpiresAt = req.CreatedAt.Truncate(time.Microsecond), req.ExpiresAt.Truncate(time.Microsecond)
+		if err := store.Save(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		var winners []string
+		// Separate connections, as separate replicas would have.
+		for _, by := range []string{"a", "b", "c", "d", "e", "f"} {
+			by := by
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				status := domain.StatusActive
+				if by == "f" {
+					status = domain.StatusDenied
+				}
+				ok, err := store.SaveIfStatus(ctx, decidedAs(req, status, by), domain.StatusPendingApproval)
+				if err != nil {
+					t.Errorf("SaveIfStatus: %v", err)
+					return
+				}
+				if ok {
+					mu.Lock()
+					winners = append(winners, by)
+					mu.Unlock()
+				}
+			}()
+		}
+		wg.Wait()
+		if len(winners) != 1 {
+			t.Fatalf("round %d: %d decisions landed (%v), want exactly one", round, len(winners), winners)
+		}
+		if got, _ := store.Get(ctx, req.ID); got.DecidedBy != winners[0] {
+			t.Fatalf("round %d: %s won but the row says %q", round, winners[0], got.DecidedBy)
+		}
+	}
+
+	// Unknown id: nothing swapped, no error.
+	if ok, err := store.SaveIfStatus(ctx, pendingRequest(uniqueID("ghost")), domain.StatusPendingApproval); ok || err != nil {
+		t.Fatalf("unknown id: %v %v", ok, err)
+	}
+}
+
+// A database created under ADR-0009 has the break_glass column and none of the three that
+// ADR-0011 adds. Starting the new Broker against it upgrades it, and what was granted under
+// the earlier regime reads back as it was: no duration, and above all no decider.
+func TestPostgresStore_ADatabaseFromBeforeTheDoubleValidationIsUpgradedInPlace(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	store := infrastructure.NewPostgresStore(db)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	granted := &domain.Session{
+		ID: uniqueID("sess-adr9"), Status: domain.StatusActive, Protocol: "ssh", RequestedBy: "oncall",
+		PrivilegedAccountID: uniqueID("acc"), Justification: "granted by one person, as ADR-0009 had it", BreakGlass: true,
+		CreatedAt: now, ExpiresAt: now.Add(10 * time.Minute),
+	}
+	if err := store.Save(ctx, granted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `ALTER TABLE sessions DROP COLUMN duration_minutes, DROP COLUMN decided_by, DROP COLUMN decided_at`); err != nil {
+		t.Fatalf("taking the schema back to ADR-0009's: %v", err)
+	}
+
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	db2, err := infrastructure.OpenPostgres(ctx, dsn) // what the new binary does at startup
+	if err != nil {
+		t.Fatalf("OpenPostgres on an ADR-0009 database: %v", err)
+	}
+	defer db2.Close()
+	store2 := infrastructure.NewPostgresStore(db2)
+
+	got, err := store2.Get(ctx, granted.ID)
+	if err != nil {
+		t.Fatalf("reading a session that predates the columns: %v", err)
+	}
+	if got.DecidedBy != "" || got.DecidedAt != nil || got.DurationMinutes != 0 || !got.BreakGlass || got.Status != domain.StatusActive {
+		t.Fatalf("a session granted before the double validation reads back as %+v", got)
+	}
+
+	// The upgraded database does the new work, and a second start is a no-op.
+	req := pendingRequest(uniqueID("sess-new"))
+	req.CreatedAt, req.ExpiresAt = req.CreatedAt.Truncate(time.Microsecond), req.ExpiresAt.Truncate(time.Microsecond)
+	if err := store2.Save(ctx, req); err != nil {
+		t.Fatalf("saving a pending request on the upgraded database: %v", err)
+	}
+	if ok, err := store2.SaveIfStatus(ctx, decidedAs(req, domain.StatusActive, "lead"), domain.StatusPendingApproval); err != nil || !ok {
+		t.Fatalf("deciding on the upgraded database: %v %v", ok, err)
+	}
+	db3, err := infrastructure.OpenPostgres(ctx, dsn)
+	if err != nil {
+		t.Fatalf("second OpenPostgres: %v", err)
+	}
+	_ = db3.Close()
+}
+
+// A decision is written by SaveIfStatus and by nothing else: a Save — the way a
+// termination is written, from a copy read earlier — does not touch who decided, when,
+// or the end of the session, so it cannot rewrite a decision that was taken.
+func TestPostgresStore_OnlyTheCompareAndSwapWritesADecision(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+
+	req := pendingRequest(uniqueID("sess-save"))
+	req.CreatedAt, req.ExpiresAt = req.CreatedAt.Truncate(time.Microsecond), req.ExpiresAt.Truncate(time.Microsecond)
+	if err := store.Save(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	decided := decidedAs(req, domain.StatusActive, "lead")
+	decided.DecidedAt = ptrTime(time.Now().UTC().Truncate(time.Microsecond))
+	decided.ExpiresAt = decided.DecidedAt.Add(20 * time.Minute)
+	if ok, err := store.SaveIfStatus(ctx, decided, domain.StatusPendingApproval); err != nil || !ok {
+		t.Fatalf("SaveIfStatus: %v %v", ok, err)
+	}
+
+	forged := *decided
+	forged.DecidedBy = "mallory"
+	forged.DecidedAt = ptrTime(time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond))
+	forged.ExpiresAt = decided.ExpiresAt.Add(24 * time.Hour)
+	if err := store.Save(ctx, &forged); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := store.Get(ctx, req.ID)
+	if got.DecidedBy != "lead" || !got.DecidedAt.Equal(*decided.DecidedAt) || !got.ExpiresAt.Equal(decided.ExpiresAt) {
+		t.Fatalf("a Save rewrote a decision: %+v", got)
+	}
 }

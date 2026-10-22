@@ -30,7 +30,7 @@ openbastion session request \
 - `--justification` est obligatoire et doit être utile à la relecture — « accès » n'aide personne, « Investigation incident INC-4821 » si.
 - `--duration` est en minutes ; demandez ce dont vous avez réellement besoin, pas une marge large « au cas où ».
 
-Dans le périmètre actuel, l'accès est accordé immédiatement si vous en avez le droit — il n'y a pas encore d'étape de validation par un tiers (elle arrive en v1.0 pour les accès les plus sensibles).
+Dans le périmètre actuel, l'accès est accordé immédiatement si vous en avez le droit — il n'y a pas d'étape de validation par un tiers pour un accès ordinaire (elle arrive en v1.0 avec le moteur de workflow). **Une exception : l'accès d'urgence « break-glass »**, qui attend l'accord d'une autre personne (voir la FAQ §8).
 
 ## 4. Se connecter à la session
 
@@ -76,7 +76,7 @@ Non, jamais, pour personne — pas même pour un administrateur. C'est le princi
 Redemandez une session (§3). C'est volontaire : une session à durée illimitée serait un accès permanent déguisé, exactement ce qu'OpenBastion existe pour éviter.
 
 **La connexion est refusée avec « recording unavailable », que faire ?**
-Le système d'enregistrement des sessions est momentanément indisponible, et OpenBastion refuse par principe une session qu'il ne pourrait pas enregistrer. Rien n'a été consommé : renouvelez votre demande dans quelques instants. Si c'est une urgence d'incident qui ne peut pas attendre, demandez à votre administrateur si un accès d'urgence (« break-glass ») est prévu pour votre rôle sur ce compte : il est désactivé par défaut, exige une justification précise, dure peu de temps, et laisse une trace d'audit qui sera relue après coup. Une session d'urgence est enregistrée au mieux, pas garantie.
+Le système d'enregistrement des sessions est momentanément indisponible, et OpenBastion refuse par principe une session qu'il ne pourrait pas enregistrer. Rien n'a été consommé : renouvelez votre demande dans quelques instants. Si c'est une urgence d'incident qui ne peut pas attendre, demandez à votre administrateur si un accès d'urgence (« break-glass ») est prévu pour votre rôle sur ce compte : il est désactivé par défaut, exige une justification précise, **l'accord d'une seconde personne** (vous ne pouvez pas approuver votre propre demande, et vous seul pouvez ensuite ouvrir la connexion), dure peu de temps — la durée compte à partir de l'accord —, et laisse une trace d'audit qui sera relue après coup. Sans réponse dans le délai (15 minutes par défaut), la demande expire : il faudra la refaire. Une session d'urgence est enregistrée au mieux, pas garantie.
 
 **Ma session s'est coupée à l'heure indiquée, même en pleine commande ?**
 Oui : OpenBastion coupe toute session à son échéance, sans attendre. Redemandez-en une si le travail n'est pas fini (§3).

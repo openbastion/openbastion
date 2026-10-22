@@ -92,8 +92,13 @@ test:
 ##                            dérogation est auditée avant le credential,
 ##                            une session ordinaire reste refusée, la
 ##                            coupure à l'échéance est faite par le proxy
+## - breakglass_approval_test.go : ADR-0011 — HUIT processus : une demande
+##                            break-glass attend, l'auto-approbation est
+##                            refusée, une autre personne approuve, seul le
+##                            demandeur se connecte ; refus de démarrer sur
+##                            une valeur illisible
 ## - mtls_flow_test.go     : ADR-0010 — HUIT processus sous mTLS requis : le
-##                            parcours complet, 20 appels forgés par une
+##                            parcours complet, 24 appels forgés par une
 ##                            identité valide mais fausse arrêtés à la porte,
 ##                            jeton de scope volé inutilisable, imposteur du
 ##                            Vault qui ne reçoit rien
@@ -168,6 +173,9 @@ run-recorder:
 	$(call tls,command-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 \
 		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder
 # BREAKGLASS_MAX_MINUTES=30 active le break-glass (ADR-0009) ; absent ou 0 : désactivé.
+# Une demande break-glass attend l'accord d'une autre personne (ADR-0011) :
+# BREAKGLASS_APPROVAL=required (défaut) | disabled (mode faible, annoncé),
+# BREAKGLASS_APPROVAL_WINDOW_MINUTES=15 (défaut, 1 à 1440).
 run-broker:
 	$(call tls,session-broker) \
 		$(GO) run ./services/access/session-broker/cmd/session-broker

@@ -10,6 +10,12 @@ service SessionOrchestration {
   rpc CreateSession(CreateSessionRequest) returns (Session);
   rpc GetSession(GetSessionRequest) returns (Session);
   rpc TerminateSession(TerminateSessionRequest) returns (Session);
+  // Double validation du break-glass (ADR-0011). L'identité de celui qui décide est
+  // celle de context (vérifiée par le Gateway), jamais un champ du message. Approuver
+  // exige une autre personne que le demandeur et une politique RBAC sur
+  // breakglass-approve:account:{privileged_account_id} ; rejeter exige la même autorité.
+  rpc ApproveBreakGlass(DecideBreakGlassRequest) returns (Session);
+  rpc RejectBreakGlass(DecideBreakGlassRequest) returns (Session);
 }
 
 enum SessionStatus {
@@ -49,6 +55,16 @@ message Session {
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp expires_at = 7;
   bool break_glass = 8;  // autorisée à s'exécuter sans recorder — pas « l'a fait » (audit : session.breakglass)
+  // Qui a approuvé ou rejeté une demande break-glass, et quand (ADR-0011) ; vide sinon.
+  // Tant que le statut est PENDING_APPROVAL, expires_at est l'échéance de la décision ;
+  // à l'approbation il devient décision + durée demandée.
+  string decided_by = 9;
+  google.protobuf.Timestamp decided_at = 10;
+}
+
+message DecideBreakGlassRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
 }
 
 message GetSessionRequest {

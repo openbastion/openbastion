@@ -221,31 +221,73 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 	g.forwardJSON(w, r.Context(), http.MethodPost, g.sessionBrokerURL+"/sessions", body)
 }
 
-// -- GET/DELETE /sessions/{id}, POST /sessions/{id}/connect ---------------
+// -- /sessions/{id}[/connect|/approve|/reject|/recording] -------------------
 //
-// Pure passthrough to the Session Broker — which itself does not yet check
-// session ownership against the caller (a scope this increment did not
-// extend; see /NOTES_SANDBOX.md), so there is nothing for the Gateway to
-// inject here beyond having already required a valid token to reach this
-// far. The one exception is GET /sessions/{id}/recording below, which is
-// not the Broker's at all.
+// The session routes the Gateway knows, and only those. Anything else under
+// /sessions/ is a 404 that never reaches the Session Broker: a route added to the
+// Broker is therefore not relayed raw by default — it is exposed when someone
+// writes its case here, with its identity injection (ADR-0011).
+//
+//	GET|DELETE /sessions/{id}      relayed as they are: no body, nothing to inject
+//	POST       …/connect           the Gateway states who is asking (callerId)
+//	POST       …/approve|reject    the Gateway states who decides, and with which roles
+//	GET        …/recording         served by the Command Recorder
 
 func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request, id identity) {
-	if sessionID, ok := recordingSessionID(r.URL.Path); ok {
-		g.handleSessionRecording(w, r, id, sessionID)
+	sessionID, action, ok := splitSessionPath(r.URL.Path)
+	if !ok {
+		http.NotFound(w, r)
 		return
 	}
-	g.forwardPassthrough(w, r, r.Method, g.sessionBrokerURL+r.URL.Path)
+	brokerPath := g.sessionBrokerURL + "/sessions/" + neturl.PathEscape(sessionID)
+
+	switch action {
+	case "":
+		if r.Method != http.MethodGet && r.Method != http.MethodDelete {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		g.forwardPassthrough(w, r, r.Method, brokerPath)
+
+	case "recording":
+		g.handleSessionRecording(w, r, id, sessionID)
+
+	case "connect":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// Only the requester may connect (ADR-0011, rule 7). The Broker believes the
+		// callerId because only the Gateway may send it (ADR-0010); the client's own
+		// body is not read, so it cannot name another caller.
+		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/connect", map[string]any{"callerId": id.UserID})
+
+	case "approve", "reject":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// The decision is the verified user's, with the roles of the verified token.
+		// The body is built here from nothing the client sent: a client cannot decide
+		// as someone else, nor grant itself the approval role (ADR-0011, rule 5).
+		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/"+action,
+			map[string]any{"decidedBy": id.UserID, "actorRoles": id.Roles})
+
+	default:
+		http.NotFound(w, r)
+	}
 }
 
-// recordingSessionID recognizes /sessions/{id}/recording and returns the id.
-func recordingSessionID(path string) (string, bool) {
+// splitSessionPath splits "/sessions/{id}" or "/sessions/{id}/{action}". Any other
+// shape — an empty id, a third segment — is not a session route.
+func splitSessionPath(path string) (sessionID, action string, ok bool) {
 	rest := strings.TrimPrefix(path, "/sessions/")
-	sessionID, ok := strings.CutSuffix(rest, "/recording")
-	if !ok || sessionID == "" || strings.Contains(sessionID, "/") {
-		return "", false
+	sessionID, action, hasAction := strings.Cut(rest, "/")
+	// "/sessions/s1/" has a slash and no action: not a route either.
+	if sessionID == "" || strings.Contains(action, "/") || (hasAction && action == "") {
+		return "", "", false
 	}
-	return sessionID, true
+	return sessionID, action, true
 }
 
 // -- GET /sessions/{id}/recording (doc 05) ---------------------------------

@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -88,6 +89,16 @@ type SessionBrokerService struct {
 	// breakGlassMaxMinutes is both the switch and the limit of break-glass
 	// (ADR-0009): zero — the default — means the platform does not grant it at all.
 	breakGlassMaxMinutes int
+
+	// breakGlassWithoutApproval is the weak mode (ADR-0011). Its zero value is the
+	// strict one: a service wired by hand and never told anything about approval
+	// asks for a second person rather than granting break-glass to one.
+	breakGlassWithoutApproval bool
+	approvalWindow            time.Duration
+
+	// now is the clock: injectable so that the deadline of a pending request and
+	// the start of an approved session can be tested without waiting.
+	now func() time.Time
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
@@ -96,6 +107,18 @@ type SessionBrokerService struct {
 // Having session:create on an account, or administering policies, grants nothing
 // here: a policy on this resource has to exist, and be written for the purpose.
 const BreakGlassResourcePrefix = "breakglass:account:"
+
+// BreakGlassApproveResourcePrefix prefixes the RBAC resource that governs the
+// approval of a break-glass request: "breakglass-approve:account:{accountId}"
+// (ADR-0011). Its prefix differs from BreakGlassResourcePrefix on purpose: a policy
+// "breakglass:*" — the requesters' — does not cover it, so being allowed to ask is
+// not being allowed to approve.
+const BreakGlassApproveResourcePrefix = "breakglass-approve:account:"
+
+// DefaultBreakGlassApprovalWindow is how long a break-glass request waits for a
+// decision when the platform says nothing: long enough for an on-call to be
+// reached, short enough that a forgotten request does not linger as an open offer.
+const DefaultBreakGlassApprovalWindow = 15 * time.Minute
 
 // MinBreakGlassJustification is a floor against an accidental blank or a lone
 // punctuation mark, not a judgement of quality: the justification is for the human
@@ -110,6 +133,45 @@ func (s *SessionBrokerService) WithBreakGlass(maxMinutes int) *SessionBrokerServ
 	}
 	s.breakGlassMaxMinutes = maxMinutes
 	return s
+}
+
+// WithoutBreakGlassApproval is the weak mode of ADR-0011: a break-glass request that
+// passes ADR-0009's locks is granted at once, as it was before the double validation
+// existed. It has to be asked for by name, and the Broker announces it at start-up.
+func (s *SessionBrokerService) WithoutBreakGlassApproval() *SessionBrokerService {
+	s.breakGlassWithoutApproval = true
+	return s
+}
+
+// WithBreakGlassApprovalWindow sets how long a request waits for its decision.
+// Zero or negative keeps DefaultBreakGlassApprovalWindow.
+func (s *SessionBrokerService) WithBreakGlassApprovalWindow(d time.Duration) *SessionBrokerService {
+	if d > 0 {
+		s.approvalWindow = d
+	}
+	return s
+}
+
+// WithClock replaces the clock; for tests.
+func (s *SessionBrokerService) WithClock(now func() time.Time) *SessionBrokerService {
+	s.now = now
+	return s
+}
+
+func (s *SessionBrokerService) clock() time.Time {
+	if s.now != nil {
+		return s.now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+func (s *SessionBrokerService) approvalRequired() bool { return !s.breakGlassWithoutApproval }
+
+func (s *SessionBrokerService) window() time.Duration {
+	if s.approvalWindow > 0 {
+		return s.approvalWindow
+	}
+	return DefaultBreakGlassApprovalWindow
 }
 
 func NewSessionBrokerService(sessions domain.SessionRepository, authz AuthorizationClient, vault VaultAuthorizer, audit AuditEmitter, accounts AccountLookup, proxy ProxyClient) *SessionBrokerService {
@@ -166,11 +228,12 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		return nil, fmt.Errorf("checking access: %w", err)
 	}
 
+	now := s.clock()
 	sess := &domain.Session{
 		ID: randomID("session"), Protocol: protocol, RequestedBy: requestedBy,
 		PrivilegedAccountID: privilegedAccountID, Justification: justification, BreakGlass: breakGlass,
-		CreatedAt: time.Now().UTC(),
-		ExpiresAt: time.Now().UTC().Add(time.Duration(durationMinutes) * time.Minute),
+		CreatedAt: now, DurationMinutes: durationMinutes,
+		ExpiresAt: now.Add(time.Duration(durationMinutes) * time.Minute),
 	}
 
 	if !allowed {
@@ -197,6 +260,17 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 			_ = s.sessions.Save(ctx, sess)
 			return nil, fmt.Errorf("cannot grant break-glass: audit emission failed (fail-closed, Guide HA §1): %w", err)
 		}
+		if s.approvalRequired() {
+			// Not granted: waiting for a second person (ADR-0011). Nothing is
+			// audited as session.create, because nothing has been created that
+			// anyone could connect to; the approval is what grants.
+			sess.Status = domain.StatusPendingApproval
+			sess.ExpiresAt = now.Add(s.window()) // the deadline for a decision
+			if err := s.sessions.Save(ctx, sess); err != nil {
+				return nil, fmt.Errorf("saving break-glass request: %w", err)
+			}
+			return sess, nil
+		}
 	}
 
 	sess.Status = domain.StatusActive
@@ -221,7 +295,7 @@ func (s *SessionBrokerService) GetSession(ctx context.Context, id string) (*doma
 		return nil, err
 	}
 	reflected := *sess
-	reflected.Status = sess.EffectiveStatus(time.Now().UTC())
+	reflected.Status = sess.EffectiveStatus(s.clock())
 	return &reflected, nil
 }
 
@@ -231,10 +305,10 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id string) 
 	if err != nil {
 		return nil, err
 	}
-	if sess.EffectiveStatus(time.Now().UTC()) != domain.StatusActive {
-		return nil, fmt.Errorf("cannot terminate a session in status %q", sess.EffectiveStatus(time.Now().UTC()))
+	if status := sess.EffectiveStatus(s.clock()); status != domain.StatusActive {
+		return nil, fmt.Errorf("cannot terminate a session in status %q", status)
 	}
-	now := time.Now().UTC()
+	now := s.clock()
 	sess.Status = domain.StatusTerminated
 	sess.TerminatedAt = &now
 	if err := s.sessions.Save(ctx, sess); err != nil {
@@ -252,12 +326,19 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id string) 
 // it is constructed here and handed to ProxyClient.EstablishSession, and
 // nowhere else; only the connection ticket the proxy returns is safe to
 // give back to a client, and is the only thing this method returns.
-func (s *SessionBrokerService) Connect(ctx context.Context, sessionID string) (proxyEndpoint, connectionTicket string, expiresAt time.Time, err error) {
+//
+// Only the person who requested the session may connect to it (ADR-0011, rule 7):
+// callerID is the user the Gateway verified, and anyone else — the approver of a
+// break-glass included — is refused before anything about the session is said.
+func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID string) (proxyEndpoint, connectionTicket string, expiresAt time.Time, err error) {
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
-	status := sess.EffectiveStatus(time.Now().UTC())
+	if callerID == "" || callerID != sess.RequestedBy {
+		return "", "", time.Time{}, fmt.Errorf("%w: only the person who requested a session can connect to it", domain.ErrForbidden)
+	}
+	status := sess.EffectiveStatus(s.clock())
 	if status != domain.StatusActive {
 		return "", "", time.Time{}, fmt.Errorf("cannot connect a session in status %q", status)
 	}
@@ -272,7 +353,7 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID string) (p
 		return "", "", time.Time{}, fmt.Errorf("resolving account: %w", err)
 	}
 
-	ttl := time.Until(sess.ExpiresAt)
+	ttl := sess.ExpiresAt.Sub(s.clock())
 	if ttl <= 0 {
 		return "", "", time.Time{}, fmt.Errorf("session has no time remaining")
 	}
@@ -284,15 +365,119 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID string) (p
 
 	// The waiver is passed on only while the platform still grants break-glass:
 	// switching it off takes effect at once, even for sessions already created.
-	waiver := sess.BreakGlass && s.breakGlassMaxMinutes > 0
+	// The same goes for approval (ADR-0011, rule 7): where it is required, a
+	// break-glass session nobody approved — granted before the requirement, say —
+	// runs under "record or refuse" like any other.
+	approved := !s.approvalRequired() || sess.DecidedBy != ""
+	waiver := sess.BreakGlass && s.breakGlassMaxMinutes > 0 && approved
 	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, targetHost, targetUser, scopeToken, ttl, waiver)
 	if err != nil {
 		return "", "", time.Time{}, fmt.Errorf("establishing session on proxy: %w", err)
 	}
 
-	expiresAt = time.Now().UTC().Add(ttl)
+	expiresAt = s.clock().Add(ttl)
 	_ = s.audit.EmitEvent(ctx, sess.RequestedBy, "session.connect", "session", sess.ID, true)
 	return proxyEndpoint, connectionTicket, expiresAt, nil
+}
+
+// ApproveBreakGlass is the second person's yes (ADR-0011): the pending request
+// becomes an active session, for the duration asked, starting now.
+//
+// decidedBy and actorRoles are the Gateway's — the verified user, never the
+// request body's. The refusals that say something about the caller are audited
+// (session.breakglass_approved, success=false); a request that is simply not pending
+// any more is a conflict, not an event.
+func (s *SessionBrokerService) ApproveBreakGlass(ctx context.Context, sessionID, decidedBy string, actorRoles []string) (*domain.Session, error) {
+	return s.decide(ctx, sessionID, decidedBy, actorRoles, true)
+}
+
+// RejectBreakGlass is the second person's no: the request becomes denied and can
+// never be connected to. It needs the same authority as approval — a stranger must
+// not be able to kill someone's emergency request — but not a different person: to
+// withdraw one's own request is not an escalation.
+func (s *SessionBrokerService) RejectBreakGlass(ctx context.Context, sessionID, decidedBy string, actorRoles []string) (*domain.Session, error) {
+	return s.decide(ctx, sessionID, decidedBy, actorRoles, false)
+}
+
+func (s *SessionBrokerService) decide(ctx context.Context, sessionID, decidedBy string, actorRoles []string, approve bool) (*domain.Session, error) {
+	action := "session.breakglass_rejected"
+	if approve {
+		action = "session.breakglass_approved"
+	}
+	if decidedBy == "" {
+		return nil, fmt.Errorf("%w: a decision needs an authenticated user", domain.ErrForbidden)
+	}
+	sess, err := s.sessions.Get(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w (reading the session: %v)", domain.ErrUnavailable, err)
+	}
+
+	// A refusal that says something about the caller is on the record, with the
+	// caller's name on it.
+	refuse := func(reason string) error {
+		_ = s.audit.EmitEvent(ctx, decidedBy, action, "session", sess.ID, false)
+		return fmt.Errorf("%w: %s", domain.ErrForbidden, reason)
+	}
+
+	// Who the caller is comes first, and the state of the request only afterwards:
+	// a caller with no authority is told "forbidden" whatever the request is, so the
+	// answer does not describe sessions to someone who may not decide on them.
+	if approve && decidedBy == sess.RequestedBy {
+		return nil, refuse("a break-glass request cannot be approved by the person who made it")
+	}
+	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, BreakGlassApproveResourcePrefix+sess.PrivilegedAccountID, "session:approve")
+	if err != nil {
+		// Fail closed: a decision nobody could authorise is not taken.
+		return nil, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
+	}
+	if !allowed {
+		return nil, refuse("no approval policy allows this: " + reason)
+	}
+
+	now := s.clock()
+	if !sess.BreakGlass {
+		return nil, fmt.Errorf("%w: this is not a break-glass request", domain.ErrConflict)
+	}
+	if status := sess.EffectiveStatus(now); status != domain.StatusPendingApproval {
+		return nil, fmt.Errorf("%w: the request is %s, not pending approval", domain.ErrConflict, status)
+	}
+	if approve {
+		// Approval takes today's rules, not those of the day of the request: switching
+		// break-glass off, or lowering its limit, reaches the requests already waiting.
+		if s.breakGlassMaxMinutes <= 0 {
+			return nil, refuse("break-glass is not enabled on this platform")
+		}
+		if sess.DurationMinutes < 1 || sess.DurationMinutes > s.breakGlassMaxMinutes {
+			return nil, refuse(fmt.Sprintf("break-glass sessions now last at most %d minutes", s.breakGlassMaxMinutes))
+		}
+	}
+
+	// The decision is audited BEFORE it takes effect, and the audit is fail-closed:
+	// a grant nobody could record is not made (Guide HA §1).
+	if err := s.audit.EmitEvent(ctx, decidedBy, action, "session", sess.ID, true); err != nil {
+		return nil, fmt.Errorf("%w (audit: %v)", domain.ErrUnavailable, err)
+	}
+
+	decided := *sess
+	decided.DecidedBy = decidedBy
+	decided.DecidedAt = &now
+	if approve {
+		decided.Status = domain.StatusActive
+		decided.ExpiresAt = now.Add(time.Duration(sess.DurationMinutes) * time.Minute)
+	} else {
+		decided.Status = domain.StatusDenied
+	}
+	swapped, err := s.sessions.SaveIfStatus(ctx, &decided, domain.StatusPendingApproval)
+	if err != nil {
+		return nil, fmt.Errorf("%w (saving the decision: %v)", domain.ErrUnavailable, err)
+	}
+	if !swapped {
+		return nil, fmt.Errorf("%w: another decision was taken first", domain.ErrConflict)
+	}
+	return &decided, nil
 }
 
 func randomID(prefix string) string {

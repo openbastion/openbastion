@@ -267,6 +267,18 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			map[string]any{"session_id": "evil", "target_host": targetAddr, "target_user": "root", "vault_scope_token": "forged", "ttl_seconds": 60, "break_glass": true}, "an unrecorded session"},
 		{"a compromised Gateway asks the proxy for a ticket", mtls.APIGateway, http.MethodPost, proxyURL + "/internal/v1/establish-session",
 			map[string]any{"session_id": "evil", "target_host": targetAddr, "target_user": "root", "vault_scope_token": "forged", "ttl_seconds": 60, "break_glass": true}, "an unrecorded session"},
+
+		// Who may decide on a break-glass request, or connect in the requester's name (ADR-0011):
+		// only the Gateway, which states who the user is. Anyone else naming a decider or a caller
+		// is a forgery, whatever certificate they hold.
+		{"the Vault approves a break-glass request, naming a decider", mtls.PasswordVault, http.MethodPost, brokerURL + "/sessions/" + sess.ID + "/approve",
+			map[string]any{"decidedBy": "root-admin", "actorRoles": []string{"incident-lead"}}, "an approval"},
+		{"the SSH proxy approves a session, naming a decider", mtls.SSHProxy, http.MethodPost, brokerURL + "/sessions/" + sess.ID + "/approve",
+			map[string]any{"decidedBy": "root-admin", "actorRoles": []string{"incident-lead"}}, "an approval"},
+		{"the operator tooling rejects a break-glass request", mtls.AdminCLI, http.MethodPost, brokerURL + "/sessions/" + sess.ID + "/reject",
+			map[string]any{"decidedBy": "root-admin", "actorRoles": []string{"incident-lead"}}, "a rejection"},
+		{"the Vault connects to a session, naming the requester", mtls.PasswordVault, http.MethodPost, brokerURL + "/sessions/" + sess.ID + "/connect",
+			map[string]any{"callerId": "u-operator"}, "a connection ticket"},
 	}
 	for _, a := range attacks {
 		a := a
@@ -392,7 +404,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		if status != http.StatusCreated {
 			t.Fatalf("create session on the victim broker: %d %s", status, raw)
 		}
-		status, raw = mustCall(t, gw, http.MethodPost, victim.baseURL+"/sessions/"+jsonField(t, raw, "id")+"/connect", nil)
+		status, raw = mustCall(t, gw, http.MethodPost, victim.baseURL+"/sessions/"+jsonField(t, raw, "id")+"/connect", map[string]any{"callerId": "u-operator"})
 		if status == http.StatusOK || strings.Contains(raw, "ticket") {
 			t.Fatalf("a connection ticket was issued although the vault could not be reached as itself: %d %s", status, raw)
 		}

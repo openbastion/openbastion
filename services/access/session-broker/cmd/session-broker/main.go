@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
@@ -74,15 +75,44 @@ func main() {
 	// Break-glass (ADR-0009) is off unless a limit is given: the maximum number of
 	// minutes a break-glass session may last. A value that is not a number is an
 	// error, not a quiet "off" — or worse, a quiet "on".
+	breakGlassMax := 0
 	if v := os.Getenv("BREAKGLASS_MAX_MINUTES"); v != "" {
 		max, err := strconv.Atoi(v)
 		if err != nil || max < 0 {
 			log.Fatalf("session-broker: BREAKGLASS_MAX_MINUTES must be a number of minutes (0 disables break-glass), got %q", v)
 		}
+		breakGlassMax = max
 		svc.WithBreakGlass(max)
-		if max > 0 {
-			log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) — an actor with a policy on breakglass:account:* can request a session that runs while the Command Recorder is down", max)
+	}
+
+	// The double validation (ADR-0011) is required unless it is turned off by name:
+	// anything else than the two known words is an error, so that a typo does not pick
+	// a side — and it is read whether or not break-glass is on, so that a bad value
+	// is found on the day it is written, not on the day break-glass is enabled.
+	approvalWindow := application.DefaultBreakGlassApprovalWindow
+	if v := os.Getenv("BREAKGLASS_APPROVAL_WINDOW_MINUTES"); v != "" {
+		minutes, err := strconv.Atoi(v)
+		if err != nil || minutes < 1 || minutes > 1440 {
+			log.Fatalf("session-broker: BREAKGLASS_APPROVAL_WINDOW_MINUTES must be a number of minutes between 1 and 1440, got %q", v)
 		}
+		approvalWindow = time.Duration(minutes) * time.Minute
+	}
+	svc.WithBreakGlassApprovalWindow(approvalWindow)
+	approvalRequired := true
+	switch v := os.Getenv("BREAKGLASS_APPROVAL"); v {
+	case "", "required":
+	case "disabled":
+		approvalRequired = false
+		svc.WithoutBreakGlassApproval()
+	default:
+		log.Fatalf("session-broker: BREAKGLASS_APPROVAL must be %q (the default) or %q, got %q", "required", "disabled", v)
+	}
+
+	switch {
+	case breakGlassMax > 0 && approvalRequired:
+		log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) — a request needs the approval of a second user, within %s; an approved session runs while the Command Recorder is down", breakGlassMax, approvalWindow)
+	case breakGlassMax > 0:
+		log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) WITHOUT APPROVAL (BREAKGLASS_APPROVAL=disabled) — a single actor with a policy on breakglass:account:* can obtain a session that runs while the Command Recorder is down", breakGlassMax)
 	}
 	srv := interfaces.NewHTTPServer(svc)
 

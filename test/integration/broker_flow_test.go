@@ -87,7 +87,9 @@ func brokerCreateSession(t *testing.T, baseURL string, actorRoles []string, acco
 
 func brokerConnect(t *testing.T, baseURL, sessionID string) (proxyEndpoint, ticket string, status int) {
 	t.Helper()
-	resp, err := http.Post(baseURL+"/sessions/"+sessionID+"/connect", "application/json", nil)
+	// The Broker only believes the Gateway about who is asking (ADR-0010, ADR-0011): this
+	// test plays the Gateway, for the user brokerCreateSession asked as.
+	resp, err := http.Post(baseURL+"/sessions/"+sessionID+"/connect", "application/json", strings.NewReader(`{"callerId":"it-user1"}`))
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}

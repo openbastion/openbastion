@@ -13,10 +13,13 @@
 package interfaces
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
@@ -66,14 +69,28 @@ type sessionResponse struct {
 	PrivilegedAccountID string `json:"privilegedAccountId"`
 	Justification       string `json:"justification"`
 	BreakGlass          bool   `json:"breakGlass"`
+
+	// ExpiresAt is the end of the session — or, while the status is
+	// pending_approval, the deadline for a decision (ADR-0011).
+	ExpiresAt string `json:"expiresAt"`
+
+	// DecidedBy and DecidedAt say who approved or rejected a break-glass request,
+	// and when. Absent for every session that was not decided on.
+	DecidedBy string `json:"decidedBy,omitempty"`
+	DecidedAt string `json:"decidedAt,omitempty"`
 }
 
 func toSessionResponse(s *domain.Session) sessionResponse {
-	return sessionResponse{
+	r := sessionResponse{
 		ID: s.ID, Status: string(s.Status), Protocol: s.Protocol,
 		RequestedBy: s.RequestedBy, PrivilegedAccountID: s.PrivilegedAccountID,
 		Justification: s.Justification, BreakGlass: s.BreakGlass,
+		ExpiresAt: s.ExpiresAt.UTC().Format(time.RFC3339), DecidedBy: s.DecidedBy,
 	}
+	if s.DecidedAt != nil {
+		r.DecidedAt = s.DecidedAt.UTC().Format(time.RFC3339)
+	}
+	return r
 }
 
 func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +117,7 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
 }
 
-// -- GET /sessions/{id}, DELETE /sessions/{id}, POST /sessions/{id}/connect --
+// -- GET /sessions/{id}, DELETE /sessions/{id}, POST /sessions/{id}/connect|approve|reject --
 
 func (s *HTTPServer) handleSessionItem(w http.ResponseWriter, r *http.Request) {
 	rest := r.URL.Path[len("/sessions/"):]
@@ -109,13 +126,19 @@ func (s *HTTPServer) handleSessionItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if id, ok := strings.CutSuffix(rest, "/connect"); ok {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	for suffix, handle := range map[string]func(http.ResponseWriter, *http.Request, string){
+		"/connect": s.handleConnect,
+		"/approve": s.handleApprove,
+		"/reject":  s.handleReject,
+	} {
+		if id, ok := strings.CutSuffix(rest, suffix); ok {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			handle(w, r, id)
 			return
 		}
-		s.handleConnect(w, r, id)
-		return
 	}
 
 	id := rest
@@ -148,9 +171,25 @@ type connectionTicketResponse struct {
 	Ticket        string `json:"ticket"`
 }
 
+// connectRequest is what the Gateway sends: who is asking, from the verified token.
+// Without it — or with anyone but the session's requester — there is no ticket.
+type connectRequest struct {
+	CallerID string `json:"callerId"`
+}
+
 func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessionID string) {
-	proxyEndpoint, ticket, _, err := s.svc.Connect(r.Context(), sessionID)
+	var req connectRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		// No body, or not JSON: no caller. Refused like any caller who is not the
+		// requester, not described.
+		req = connectRequest{}
+	}
+	proxyEndpoint, ticket, _, err := s.svc.Connect(r.Context(), sessionID, req.CallerID)
 	if err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		if errors.Is(err, domain.ErrRecordingUnavailable) {
 			// Not a conflict with the session: the platform cannot record it
 			// right now. The reason is generic on purpose; the proxy logs the cause.
@@ -162,4 +201,47 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(connectionTicketResponse{ProxyEndpoint: proxyEndpoint, Ticket: ticket})
+}
+
+// -- POST /sessions/{id}/approve, POST /sessions/{id}/reject (ADR-0011) -------
+
+// decisionRequest is what the Gateway sends: the verified user and the roles of the
+// verified token. Whatever the client put in its own body never gets this far.
+type decisionRequest struct {
+	DecidedBy  string   `json:"decidedBy"`
+	ActorRoles []string `json:"actorRoles"`
+}
+
+func (s *HTTPServer) handleApprove(w http.ResponseWriter, r *http.Request, sessionID string) {
+	s.decide(w, r, sessionID, s.svc.ApproveBreakGlass)
+}
+
+func (s *HTTPServer) handleReject(w http.ResponseWriter, r *http.Request, sessionID string) {
+	s.decide(w, r, sessionID, s.svc.RejectBreakGlass)
+}
+
+func (s *HTTPServer) decide(w http.ResponseWriter, r *http.Request, sessionID string,
+	decide func(ctx context.Context, sessionID, decidedBy string, roles []string) (*domain.Session, error)) {
+	var req decisionRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		http.Error(w, "invalid decision request", http.StatusBadRequest)
+		return
+	}
+	sess, err := decide(r.Context(), sessionID, req.DecidedBy, req.ActorRoles)
+	switch {
+	case err == nil:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
+	case errors.Is(err, domain.ErrNotFound):
+		http.Error(w, "session not found", http.StatusNotFound)
+	case errors.Is(err, domain.ErrForbidden):
+		http.Error(w, err.Error(), http.StatusForbidden)
+	case errors.Is(err, domain.ErrConflict):
+		http.Error(w, err.Error(), http.StatusConflict)
+	default:
+		// A dependency did not answer. The decision was not taken; the cause stays
+		// in this process's log, not in what a client reads (it can name an address).
+		log.Printf("session-broker: decision on %s not taken: %v", sessionID, err)
+		http.Error(w, "the decision was not taken: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
+	}
 }

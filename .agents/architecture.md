@@ -19,9 +19,10 @@ Chacun est tenu par du code et par des tests. Si une tâche semble exiger d'en a
 | ADR-0003 | Un secret ne traverse jamais le control plane (Gateway, Broker). Seul le proxy échange un scope à usage unique contre un credential, directement auprès du Vault. | Le port `VaultAuthorizer` du Broker n'a **aucune méthode** pour lire un credential ; `pkg/proxycore` purge le secret octet par octet. |
 | ADR-0008 | Une session qui ne peut pas être enregistrée n'a pas lieu ; une commande non acquittée par le recorder n'est jamais exécutée. | `RECORDING_POLICY=required` par défaut (`pkg/proxycore`, ssh-proxy). |
 | ADR-0009 | Le break-glass ne retire que l'enregistrement acquitté, sous six verrous cumulés, et jamais en silence. | Broker + `proxycore.Admission` (preuve à champs non exportés). |
+| ADR-0011 | Une demande break-glass n'ouvre rien tant qu'une **autre** personne ne l'a pas approuvée : pas d'auto-approbation (par identifiant d'utilisateur), décideur et rôles tirés du jeton vérifié par la Gateway, décision auditée avant d'agir puis compare-and-swap, `connect` réservé au demandeur. | Session Broker (`decide`, `SaveIfStatus`) + liste blanche des routes `/sessions/...` du Gateway. |
 | ADR-0010 | L'identité de l'appelant vient du certificat, jamais du corps de la requête ; chaque route a sa liste d'appelants, refus par défaut. | `pkg/mtls`, un `internal/interfaces/callers.go` par service. |
 | — | L'audit est fail-closed : un événement qui ne peut pas être écrit empêche l'action. | Broker, proxy. |
-| — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*`. |
+| — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*` (dont `BREAKGLASS_APPROVAL`). |
 
 ## 3. Arborescence réelle
 
@@ -83,7 +84,7 @@ Les noms de service sont ceux des SAN URI `spiffe://<domaine>/<service>` : `api-
 
 ```
 utilisateur ──HTTP──► api-gateway ──► authentication   (login, verify)
-                          │──────► session-broker      (/sessions…)
+                          │──────► session-broker      (/sessions… : création, connect, approve, reject — liste blanche ; l'identité du décideur est celle du jeton)
                           │──────► password-vault      (administration des comptes, rotation)
                           │──────► authorization       (création de politiques)
                           └──────► command-recorder    (lecture d'un replay)
@@ -123,4 +124,4 @@ Ports par défaut : gateway 8080, vault 8081, audit 8082, authorization 8083, br
 
 ## 9. Écarts connus entre la cible et l'implémenté
 
-À ne pas « corriger » sans demande : transport HTTP/JSON au lieu de gRPC ; pas de Workflow/Approval Engine ni de MFA natif ; un seul protocole (SSH) ; KEK locale (`LocalKMS`) au lieu d'un vrai KMS/HSM ; Vault chiffre en un seul niveau (pas d'enveloppe) ; lignes du recorder non chaînées ; événements d'audit non attribués par l'identité du certificat ; listes d'appelants dans le code. La liste à jour est dans `NOTES_SANDBOX.md` et dans le Guide Sécurité §12.
+À ne pas « corriger » sans demande : transport HTTP/JSON au lieu de gRPC ; pas de Workflow/Approval Engine (seulement l'approbation à un décideur du break-glass, ADR-0011, dans le Broker) ni de MFA natif ; un seul protocole (SSH) ; KEK locale (`LocalKMS`) au lieu d'un vrai KMS/HSM ; Vault chiffre en un seul niveau (pas d'enveloppe) ; lignes du recorder non chaînées ; événements d'audit non attribués par l'identité du certificat ; listes d'appelants dans le code. La liste à jour est dans `NOTES_SANDBOX.md` et dans le Guide Sécurité §12.

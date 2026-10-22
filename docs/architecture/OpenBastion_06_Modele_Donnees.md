@@ -181,9 +181,14 @@ CREATE TABLE sessions (
     break_glass               BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0009 : autorisée à s'exécuter sans recorder
     connection_ticket_hash    TEXT,              -- hash du ticket émis ; jamais le ticket en clair
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at                TIMESTAMPTZ NOT NULL,
-    terminated_at              TIMESTAMPTZ
+    expires_at                TIMESTAMPTZ NOT NULL,   -- fin de session ; tant que la demande est pending_approval : échéance de la décision (ADR-0011)
+    terminated_at              TIMESTAMPTZ,
+    duration_minutes          INT NOT NULL DEFAULT 0,          -- ADR-0011 : durée demandée ; l'horloge d'un break-glass part de l'approbation
+    decided_by                UUID REFERENCES users(id),       -- ADR-0011 : qui a approuvé ou rejeté ; NULL sans décision (implémentation : TEXT '' sans FK, une base par service)
+    decided_at                TIMESTAMPTZ
 );
+-- ADR-0011 : `decided_by`, `decided_at` et `expires_at` d'une demande décidée ne s'écrivent que par un
+-- `UPDATE ... WHERE status = 'pending_approval'` (comparaison-échange) : une seule décision par demande.
 CREATE INDEX idx_sessions_requested_by ON sessions (requested_by);
 CREATE INDEX idx_sessions_status ON sessions (status) WHERE status IN ('pending_approval','active');
 

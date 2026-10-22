@@ -52,6 +52,12 @@ service SessionOrchestration {
   rpc CreateSession(CreateSessionRequest) returns (Session);
   rpc GetSession(GetSessionRequest) returns (Session);
   rpc TerminateSession(TerminateSessionRequest) returns (Session);
+  // Double validation du break-glass (ADR-0011). L'identité de celui qui décide est
+  // celle de context (vérifiée par le Gateway), jamais un champ du message. Approuver
+  // exige une autre personne que le demandeur et une politique RBAC sur
+  // breakglass-approve:account:{privileged_account_id} ; rejeter exige la même autorité.
+  rpc ApproveBreakGlass(DecideBreakGlassRequest) returns (Session);
+  rpc RejectBreakGlass(DecideBreakGlassRequest) returns (Session);
 }
 
 enum SessionStatus {
@@ -91,6 +97,16 @@ message Session {
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp expires_at = 7;
   bool break_glass = 8;  // autorisée à s'exécuter sans recorder — pas « l'a fait » (audit : session.breakglass)
+  // Qui a approuvé ou rejeté une demande break-glass, et quand (ADR-0011) ; vide sinon.
+  // Tant que le statut est PENDING_APPROVAL, expires_at est l'échéance de la décision ;
+  // à l'approbation il devient décision + durée demandée.
+  string decided_by = 9;
+  google.protobuf.Timestamp decided_at = 10;
+}
+
+message DecideBreakGlassRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
 }
 
 message GetSessionRequest {
@@ -104,6 +120,10 @@ message TerminateSessionRequest {
   string reason = 3;
 }
 ```
+
+**Double validation du break-glass (ADR-0011).** Sous la configuration par défaut (`BREAKGLASS_APPROVAL=required`), `CreateSession(break_glass=true)` qui passe les verrous d'ADR-0009 renvoie une session au statut `PENDING_APPROVAL` : pas de `session.create`, pas de scope, pas de ticket. `ApproveBreakGlass` la rend `ACTIVE` (la durée demandée court à partir de l'approbation) ; `RejectBreakGlass` la rend `DENIED`. Mise en œuvre HTTP/JSON dans le sandbox : `POST /sessions/{id}/approve|reject`, corps `{decidedBy, actorRoles}` **construit par le Gateway** à partir du jeton vérifié (le corps du client est écarté) ; réponses `200`, `403` (soi-même, politique `breakglass-approve:account:{id}` absente, dérogation coupée ou hors limite), `404`, `409` (déjà décidée, périmée, pas une demande break-glass), `503` (une dépendance ne répond pas : la décision n'est pas prise). La décision est auditée **avant** d'agir (`session.breakglass_approved` / `session.breakglass_rejected`) et passe par une comparaison-échange atomique : une seule décision par demande.
+
+**Connexion réservée au demandeur (ADR-0011).** `POST /sessions/{id}/connect` (HTTP, doc 05 §2 — hors de ce proto) porte désormais `{callerId}`, posé par le Gateway ; le Broker refuse (`403`) tout autre que `requested_by`, approbateur compris. Le Broker ne transmet la dérogation au proxy (`break_glass` de `EstablishSession`) que si la session a été approuvée, quand l'approbation est requise.
 
 ## 4. Session Broker → Proxy — `ProxyControl`
 

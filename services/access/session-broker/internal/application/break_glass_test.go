@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
@@ -18,12 +19,15 @@ import (
 // it was asked — so a test can see that break-glass is judged on ITS resource,
 // not on the one that governs ordinary sessions.
 type resourceAuthz struct {
+	mu     sync.Mutex
 	allow  map[string]bool
 	asked  []string
 	failOn string // a resource whose check errors out
 }
 
 func (a *resourceAuthz) CheckAccess(ctx context.Context, roles []string, resource, action string) (bool, string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.asked = append(a.asked, resource)
 	if resource == a.failOn {
 		return false, "", errors.New("authorization service unreachable")
@@ -35,21 +39,34 @@ func (a *resourceAuthz) CheckAccess(ctx context.Context, roles []string, resourc
 }
 
 type auditRecord struct {
-	action  string
-	success bool
+	action   string
+	success  bool
+	actor    string
+	resource string
 }
 
 type journalAudit struct {
+	mu     sync.Mutex
 	events []auditRecord
 	failOn string
 }
 
 func (a *journalAudit) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if action == a.failOn {
 		return errors.New("audit unreachable")
 	}
-	a.events = append(a.events, auditRecord{action, success})
+	a.events = append(a.events, auditRecord{action, success, actorID, resourceID})
 	return nil
+}
+
+// stopFailing lets the audit write again, to show that what a failure refused stays
+// refused only for as long as it fails.
+func (a *journalAudit) stopFailing() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failOn = ""
 }
 
 func (a *journalAudit) has(action string, success bool) bool {
@@ -98,12 +115,15 @@ type bgFixture struct {
 	store  *spyStore
 }
 
+// newBGFixture is the Broker as it was under ADR-0009: break-glass granted at once,
+// with no second person. These tests are about the six locks, which approval does not
+// touch; the double validation (ADR-0011) has its own fixture and its own file.
 func newBGFixture(maxMinutes int, allow ...string) *bgFixture {
 	f := &bgFixture{authz: &resourceAuthz{allow: map[string]bool{}}, audit: &journalAudit{}, proxy: &fakeProxyClient{}, store: &spyStore{InMemoryStore: infrastructure.NewInMemoryStore()}}
 	for _, r := range allow {
 		f.authz.allow[r] = true
 	}
-	f.broker = application.NewSessionBrokerService(f.store, f.authz, &fakeVaultAuthorizer{}, f.audit, &fakeAccountLookup{}, f.proxy).WithBreakGlass(maxMinutes)
+	f.broker = application.NewSessionBrokerService(f.store, f.authz, &fakeVaultAuthorizer{}, f.audit, &fakeAccountLookup{}, f.proxy).WithBreakGlass(maxMinutes).WithoutBreakGlassApproval()
 	return f
 }
 
@@ -298,7 +318,7 @@ func TestBreakGlass_TheProxyIsToldOnlyForABreakGlassSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := f.broker.Connect(context.Background(), bg.ID); err != nil {
+	if _, _, _, err := f.broker.Connect(context.Background(), bg.ID, bg.RequestedBy); err != nil {
 		t.Fatal(err)
 	}
 	if !f.proxy.lastBreakGlass {
@@ -309,7 +329,7 @@ func TestBreakGlass_TheProxyIsToldOnlyForABreakGlassSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := f.broker.Connect(context.Background(), plain.ID); err != nil {
+	if _, _, _, err := f.broker.Connect(context.Background(), plain.ID, plain.RequestedBy); err != nil {
 		t.Fatal(err)
 	}
 	if f.proxy.lastBreakGlass {
@@ -329,7 +349,7 @@ func TestBreakGlass_SwitchingItOffStopsTheWaiverForSessionsAlreadyGranted(t *tes
 
 	f.broker.WithBreakGlass(0) // the operator turns it off
 
-	if _, _, _, err := f.broker.Connect(context.Background(), bg.ID); err != nil {
+	if _, _, _, err := f.broker.Connect(context.Background(), bg.ID, bg.RequestedBy); err != nil {
 		t.Fatal(err)
 	}
 	if f.proxy.lastBreakGlass {

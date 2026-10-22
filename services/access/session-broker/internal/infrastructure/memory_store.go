@@ -34,3 +34,17 @@ func (s *InMemoryStore) Get(ctx context.Context, id string) (*domain.Session, er
 	cp := *sess
 	return &cp, nil
 }
+
+// SaveIfStatus is the compare-and-swap of domain.SessionRepository, under the
+// store's lock.
+func (s *InMemoryStore) SaveIfStatus(ctx context.Context, sess *domain.Session, expected domain.SessionStatus) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.sessions[sess.ID]
+	if !ok || current.Status != expected {
+		return false, nil
+	}
+	cp := *sess
+	s.sessions[sess.ID] = &cp
+	return true, nil
+}

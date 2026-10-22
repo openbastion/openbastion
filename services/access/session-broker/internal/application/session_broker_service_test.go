@@ -205,7 +205,7 @@ func TestConnect_ResolvesAccountThenVaultThenProxy_ReturnsOnlyTheTicket(t *testi
 
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
 
-	proxyEndpoint, ticket, _, err := broker.Connect(context.Background(), sess.ID)
+	proxyEndpoint, ticket, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestConnect_NeverReturnsTheScopeTokenItself(t *testing.T) {
 	broker := newTestBroker(authz, vault, audit, accounts, proxy)
 
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
-	_, ticket, _, err := broker.Connect(context.Background(), sess.ID)
+	_, ticket, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestConnect_RejectsTerminatedSession(t *testing.T) {
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
 	_, _ = broker.TerminateSession(context.Background(), sess.ID)
 
-	if _, _, _, err := broker.Connect(context.Background(), sess.ID); err == nil {
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
 		t.Fatal("expected Connect to reject a terminated session")
 	}
 }
@@ -270,7 +270,7 @@ func TestConnect_RejectsUnsupportedProtocol(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	if _, _, _, err := broker.Connect(context.Background(), sess.ID); err == nil {
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
 		t.Fatal("expected Connect to reject a protocol outside MVP scope (doc 04 §2)")
 	}
 }
@@ -281,7 +281,7 @@ func TestConnect_PropagatesProxyEstablishError(t *testing.T) {
 	broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{}, proxy)
 
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
-	if _, _, _, err := broker.Connect(context.Background(), sess.ID); err == nil {
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
 		t.Fatal("expected Connect to fail when the proxy cannot establish the session")
 	}
 }

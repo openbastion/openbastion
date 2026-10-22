@@ -33,8 +33,8 @@ Applique ces règles à chaque ligne que tu écris. Quand une règle te paraît 
 | Ports | nom du rôle, suffixe `er` ou `Repository` si pertinent | `SessionRepository`, `VaultAuthorizer` |
 | Adaptateurs | `<Technologie><Rôle>` | `PostgresStore`, `InMemoryStore`, `AuditHTTPClient` |
 | Variables d'environnement | `UPPER_SNAKE_CASE`, préfixe par domaine | `BREAKGLASS_MAX_MINUTES`, `TLS_CERT_FILE` |
-| Ressources RBAC | `<domaine>:<type>:<id ou *>` | `vault:account:acc_1`, `breakglass:account:acc_1` |
-| Actions d'audit | `<objet>.<événement>` en minuscules | `session.breakglass`, `session.recording_lost` |
+| Ressources RBAC | `<domaine>:<type>:<id ou *>` | `vault:account:acc_1`, `breakglass:account:acc_1`, `breakglass-approve:account:acc_1` |
+| Actions d'audit | `<objet>.<événement>` en minuscules | `session.breakglass`, `session.breakglass_requested`, `session.recording_lost` |
 | Tests | `Test<Sujet>_<Comportement>` (underscores) | `TestCheckAccess_DeniesByDefaultWithNoPolicy` |
 | Tests d'intégration | `Test<Fonction>_<Comportement>_<Portée>` | `…_AcrossEightRealProcesses` |
 | ADR | `ADR-NNNN`, numéro suivant, jamais réutilisé | `ADR-0011` |

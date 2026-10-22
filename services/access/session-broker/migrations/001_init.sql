@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at             TIMESTAMPTZ NOT NULL,
     expires_at             TIMESTAMPTZ NOT NULL,
     terminated_at          TIMESTAMPTZ,
-    break_glass            BOOLEAN NOT NULL DEFAULT FALSE
+    break_glass            BOOLEAN NOT NULL DEFAULT FALSE,
+    duration_minutes       INTEGER NOT NULL DEFAULT 0,
+    decided_by             TEXT NOT NULL DEFAULT '',
+    decided_at             TIMESTAMPTZ
 );
 
 -- ADR-0009 : `break_glass` a été ajoutée après la première version de la table.
@@ -41,6 +44,21 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- (CREATE TABLE IF NOT EXISTS ne touche pas à une table existante) ; les sessions
 -- antérieures valent FALSE : aucune d'elles n'a pu être autorisée à déroger.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS break_glass BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ADR-0011 : la double validation du break-glass ajoute trois colonnes, avec le même
+-- mécanisme (ALTER ... IF NOT EXISTS) pour une base créée avant elles.
+--   duration_minutes : la durée demandée ; l'horloge d'une session break-glass part de
+--                      l'approbation, pas de la demande. 0 pour les lignes antérieures.
+--   decided_by       : l'utilisateur qui a approuvé ou rejeté ; '' si aucune décision
+--                      n'a eu lieu (toute session antérieure, ou hors break-glass). C'est
+--                      ce qui distingue un break-glass approuvé d'un break-glass accordé
+--                      sous l'ancien régime à une seule personne.
+--   decided_at       : quand.
+-- Pendant qu'une demande est en `pending_approval`, `expires_at` est l'échéance de la
+-- décision ; à l'approbation il devient décision + duration_minutes.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS decided_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_requested_by ON sessions (requested_by);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions (status);

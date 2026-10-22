@@ -133,8 +133,10 @@ paths:
       tags: [sessions]
       summary: Demande une nouvelle session privilégiée
       description: >
-        En périmètre MVP, l'octroi est immédiat après vérification RBAC —
-        aucune étape de validation multi-approbateurs (ajoutée en v1.0).
+        En périmètre MVP, l'octroi d'une session ordinaire est immédiat après
+        vérification RBAC — aucune étape de validation multi-approbateurs
+        (ajoutée en v1.0). Une demande `breakGlass`, elle, attend une seconde
+        personne (ADR-0011, voir plus bas).
 
         Avec `breakGlass: true`, la session peut s'exécuter alors que le
         Command Recorder est indisponible (ADR-0009) — une dérogation à
@@ -146,6 +148,16 @@ paths:
         — refusé par défaut, y compris pour un administrateur. Désactivé tant
         que la plateforme n'a pas fixé cette limite. Chaque demande, accordée
         ou refusée, est auditée (`session.breakglass_requested`).
+
+        **Double validation (ADR-0011).** Par défaut
+        (`BREAKGLASS_APPROVAL=required`), une demande `breakGlass` qui remplit
+        ces conditions n'est **pas accordée** : elle est créée au statut
+        `pending_approval`, avec une échéance de décision
+        (`expiresAt`, `BREAKGLASS_APPROVAL_WINDOW_MINUTES`, 15 par défaut).
+        Une autre personne l'approuve ou la rejette
+        (`/sessions/{sessionId}/approve`, `/reject`). Tant qu'elle attend, elle
+        n'est pas une session : `connect` répond `409`, aucun scope n'est
+        consommé.
       requestBody:
         required: true
         content:
@@ -153,7 +165,9 @@ paths:
             schema: { $ref: "#/components/schemas/SessionRequest" }
       responses:
         "201":
-          description: Session créée
+          description: >
+            Session créée (`active`) — ou, pour une demande `breakGlass` sous
+            double validation, demande enregistrée au statut `pending_approval`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
@@ -208,12 +222,22 @@ paths:
         exécutée et aucun secret n'a été consommé ; la même requête peut
         être renouvelée une fois le recorder rétabli. L'événement d'audit
         `session.recording_unavailable` est émis.
+
+        Seul le demandeur de la session peut se connecter (ADR-0011) : la
+        Gateway dit au Broker qui appelle, à partir du jeton vérifié. Un autre
+        utilisateur — l'approbateur d'une demande break-glass compris —
+        reçoit `403`.
       responses:
         "200":
           description: Ticket de connexion
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConnectionTicket" }
+        "403":
+          description: L'appelant n'est pas le demandeur de la session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "503":
           description: >
             Enregistrement indisponible — la session n'a pas été établie.
@@ -223,6 +247,82 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+
+  /sessions/{sessionId}/approve:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [sessions]
+      summary: Approuve une demande break-glass en attente (double validation)
+      description: >
+        La demande passe de `pending_approval` à `active` ; la durée demandée
+        court **à partir de l'approbation**. Sans corps : l'identité de
+        l'approbateur et ses rôles sont ceux du jeton vérifié par la Gateway —
+        tout ce que le client écrirait dans un corps est écarté.
+
+        Conditions : l'approbateur est une **autre personne** que le demandeur
+        (comparaison d'identifiants, pas de rôles) ; il détient une politique
+        RBAC sur la ressource `breakglass-approve:account:{targetAccountId}` —
+        refusé par défaut, distincte de `breakglass:account:*` (celle des
+        demandeurs) ; la demande est en attente et non périmée ; le break-glass
+        est toujours activé et la durée demandée toujours dans la limite
+        (`BREAKGLASS_MAX_MINUTES`) au moment de l'approbation. La décision est
+        auditée **avant** d'agir (`session.breakglass_approved`) ; si l'audit
+        ne peut pas l'écrire, la demande reste en attente. Une seule décision
+        par demande.
+      responses:
+        "200":
+          description: Demande approuvée — la session est `active`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "403":
+          description: >
+            Refusé : approbation de sa propre demande, politique d'approbation
+            absente, dérogation désactivée ou durée hors limite. Le refus est
+            audité (`session.breakglass_approved`, échec).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Session inconnue.
+        "409":
+          description: >
+            Pas une demande en attente : déjà décidée, périmée, ou pas une
+            demande break-glass.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: >
+            Une dépendance (Authorization Service, audit, base) ne répond pas ;
+            la décision n'a pas été prise et peut être renouvelée. La cause
+            reste dans le journal du Broker, pas dans la réponse.
+
+  /sessions/{sessionId}/reject:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [sessions]
+      summary: Rejette une demande break-glass en attente
+      description: >
+        La demande passe à `denied` et ne pourra jamais être connectée. Même
+        autorité que l'approbation (politique sur
+        `breakglass-approve:account:{targetAccountId}`) : un tiers sans
+        autorité ne peut pas tuer la demande d'urgence de quelqu'un d'autre.
+        Pas de règle « une autre personne » : renoncer à sa propre demande
+        n'est pas une élévation. Audité (`session.breakglass_rejected`).
+        Mêmes réponses que `approve`.
+      responses:
+        "200":
+          description: Demande rejetée — le statut est `denied`, `decidedBy` dit qui.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "403": { description: Politique d'approbation absente. Audité (échec). }
+        "404": { description: Session inconnue. }
+        "409": { description: Pas une demande en attente. }
+        "503": { description: Une dépendance ne répond pas ; la décision n'a pas été prise. }
 
   /sessions/{sessionId}/recording:
     parameters:
@@ -528,7 +628,9 @@ components:
           description: >
             Demande la dérogation d'urgence à l'enregistrement (ADR-0009). Pour
             une session break-glass, `durationMinutes` est borné par la limite
-            de la plateforme (30 minutes par exemple), pas par 480.
+            de la plateforme (30 minutes par exemple), pas par 480. La demande
+            attend l'approbation d'une autre personne (ADR-0011) sauf si la
+            plateforme a désactivé la double validation par son nom.
 
     Session:
       type: object
@@ -547,7 +649,20 @@ components:
             dérogation n'a réellement servi que si l'audit porte
             `session.breakglass` pour cette session.
         createdAt: { type: string, format: date-time }
-        expiresAt: { type: string, format: date-time }
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            Fin de la session. Tant que le statut est `pending_approval`, c'est
+            l'**échéance de la décision** : passée, la demande est `expired`
+            (lecture paresseuse) et ne peut plus être décidée.
+        decidedBy:
+          type: string
+          format: uuid
+          description: >
+            Qui a approuvé ou rejeté une demande break-glass (ADR-0011) ; absent
+            pour toute session qui n'a pas fait l'objet d'une décision.
+        decidedAt: { type: string, format: date-time }
 
     ConnectionTicket:
       type: object
@@ -627,7 +742,10 @@ components:
             événements portent `result = failure`.
 
             Break-glass (ADR-0009) : `session.breakglass_requested` (Broker :
-            demande accordée ou refusée), `session.breakglass` (proxy : la
+            demande mise en attente, accordée ou refusée), `session.breakglass_approved`
+            et `session.breakglass_rejected` (Broker, ADR-0011 : la décision de la
+            seconde personne, émise **avant** d'agir ; `result = failure` pour un
+            refus — soi-même, politique absente), `session.breakglass` (proxy : la
             dérogation a réellement servi — émis avant la récupération du
             credential, et sa défaillance refuse la session) et, pour toute
             session, `session.expire` (le proxy a coupé la session à
@@ -647,7 +765,9 @@ components:
 | `/auth/me` | GET | auth | Profil courant |
 | `/sessions` | GET / POST | sessions | Lister / demander une session |
 | `/sessions/{id}` | GET / DELETE | sessions | Détail / terminaison |
-| `/sessions/{id}/connect` | POST | sessions | Ticket de connexion vers le SSH Proxy |
+| `/sessions/{id}/connect` | POST | sessions | Ticket de connexion vers le SSH Proxy (réservé au demandeur) |
+| `/sessions/{id}/approve` | POST | sessions | Approuver une demande break-glass (autre personne, politique `breakglass-approve:*`) |
+| `/sessions/{id}/reject` | POST | sessions | Rejeter une demande break-glass |
 | `/sessions/{id}/recording` | GET | sessions | Enregistrement texte de la session |
 | `/vault/accounts` | GET / POST | vault | Lister / onboarder un compte privilégié |
 | `/vault/accounts/{id}` | GET / DELETE | vault | Détail / suppression |
@@ -658,7 +778,7 @@ components:
 
 ## 4. Extensions prévues (hors MVP, non rupturantes)
 
-- v1.0 ajoutera `/sessions/{id}/approve`, `/sessions/{id}/reject` (Workflow/Approval Engine), `/mfa/*` (MFA Service natif), et des variantes de `protocol` (`rdp`, `vnc`, `database`, `kubernetes`) sur `SessionRequest`.
+- `/sessions/{id}/approve` et `/reject` existent déjà pour le break-glass (ADR-0011, dans le Session Broker). v1.0 les généralisera (Workflow/Approval Engine : quorum, N+1, ticket ITSM, fenêtre horaire) et ajoutera `/mfa/*` (MFA Service natif), et des variantes de `protocol` (`rdp`, `vnc`, `database`, `kubernetes`) sur `SessionRequest`.
 - v2.0 étendra l'énumération `protocol` aux familles restantes (`docker`, `hypervisor`, `winrm`, `telnet`, `http`) et ajoutera `/risk/scores`.
 - Toute extension se fait par ajout de champs optionnels et de nouveaux endpoints — jamais par modification d'un champ existant sur `/api/v1`, conformément à la convention de versionning (§1).
 

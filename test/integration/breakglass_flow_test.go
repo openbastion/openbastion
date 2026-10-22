@@ -102,7 +102,7 @@ func TestBreakGlass_AnEmergencyAccessWithoutARecorder_AcrossEightRealProcesses(t
 		}, extra...)
 	}
 	proxy := startServiceWithExtraPort(t, root, sshProxyBin, "18705", "18706", proxyEnv("BREAKGLASS_ENABLED=true")...)
-	broker := startService(t, root, brokerBin, "18704", brokerEnv("BREAKGLASS_MAX_MINUTES=30")...)
+	broker := startService(t, root, brokerBin, "18704", brokerEnv("BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_APPROVAL=disabled")...) // ADR-0009's locks, alone: the double validation (ADR-0011) has its own test
 	gateway := startService(t, root, gatewayBin, "18708",
 		"AUTHENTICATION_URL=http://127.0.0.1:18707",
 		"SESSION_BROKER_URL="+broker.baseURL,

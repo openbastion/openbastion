@@ -71,6 +71,7 @@ type auditSpy struct {
 }
 
 type spiedEvent struct {
+	ActorID    string `json:"actor_id"`
 	Action     string `json:"action"`
 	ResourceID string `json:"resource_id"`
 	Success    bool   `json:"success"`

@@ -8,7 +8,9 @@ import "time"
 type SessionStatus string
 
 const (
-	StatusPendingApproval SessionStatus = "pending_approval" // unused in MVP — no Workflow Service yet (doc 04 §2)
+	// StatusPendingApproval is a break-glass request waiting for a second person
+	// (ADR-0011). It is not a session yet: nothing can connect to it.
+	StatusPendingApproval SessionStatus = "pending_approval"
 	StatusActive          SessionStatus = "active"
 	StatusExpired         SessionStatus = "expired"
 	StatusTerminated      SessionStatus = "terminated"
@@ -24,8 +26,25 @@ type Session struct {
 	PrivilegedAccountID string
 	Justification       string
 	CreatedAt           time.Time
-	ExpiresAt           time.Time
-	TerminatedAt        *time.Time
+	// ExpiresAt is the end of the session once it is active. While the request is
+	// pending_approval it is instead the deadline for a decision (ADR-0011): a
+	// pending request is not a session, and nothing reads it as one — connect
+	// needs status active — so the one field serves both, and approval resets it
+	// to decision time + DurationMinutes.
+	ExpiresAt    time.Time
+	TerminatedAt *time.Time
+
+	// DurationMinutes is the length asked for. It is kept because a break-glass
+	// session's clock starts at approval, not at the request (ADR-0011); zero on
+	// rows that predate it.
+	DurationMinutes int
+
+	// DecidedBy is the user who approved or rejected a break-glass request, and
+	// DecidedAt when. Empty for every session that did not go through a decision —
+	// which is how the Broker tells an approved break-glass from one granted under
+	// the earlier, one-person regime (ADR-0011, rule 7).
+	DecidedBy string
+	DecidedAt *time.Time
 
 	// BreakGlass marks a session that was authorised to run without the
 	// recording guarantee if the recorder is down (ADR-0009). It says what the
@@ -34,13 +53,14 @@ type Session struct {
 	BreakGlass bool
 }
 
-// EffectiveStatus returns Expired if the session is still marked Active
-// but past ExpiresAt, without mutating the stored record — a lightweight
+// EffectiveStatus returns Expired if the session is still marked Active — or a
+// break-glass request still marked pending_approval — but past ExpiresAt,
+// without mutating the stored record — a lightweight
 // stand-in for the Scheduler's expiration sweep (doc 04 §2 MVP scope:
 // "Scheduler (expiration de session uniquement)"), which is not yet
 // implemented as its own service.
 func (s Session) EffectiveStatus(now time.Time) SessionStatus {
-	if s.Status == StatusActive && now.After(s.ExpiresAt) {
+	if (s.Status == StatusActive || s.Status == StatusPendingApproval) && now.After(s.ExpiresAt) {
 		return StatusExpired
 	}
 	return s.Status
