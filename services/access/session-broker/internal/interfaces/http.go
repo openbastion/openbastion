@@ -18,6 +18,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,7 +95,12 @@ func toSessionResponse(s *domain.Session) sessionResponse {
 }
 
 func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleListPending(w, r)
+		return
+	case http.MethodPost:
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -115,6 +121,58 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
+}
+
+// -- GET /sessions?status=pending_approval (ADR-0012) -------------------------
+
+// listSessionsResponse follows GET /vault/accounts: items, then the page that was
+// served and the total. Truncated appears only when it is true.
+type listSessionsResponse struct {
+	Items      []sessionResponse `json:"items"`
+	Page       int               `json:"page"`
+	PageSize   int               `json:"pageSize"`
+	TotalItems int               `json:"totalItems"`
+	Truncated  bool              `json:"truncated,omitempty"`
+}
+
+// handleListPending answers what the caller may decide. The caller is the one the
+// Gateway verified (callerId) with the roles of that token (actorRoles, comma-
+// separated like the Vault's and the Recorder's routes): the Gateway builds this
+// query itself, and only an internal caller can reach it (ADR-0010).
+func (s *HTTPServer) handleListPending(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	// Only one listing is served so far (ADR-0012, rule 2): saying so is better than
+	// answering a different question than the one that was asked.
+	if q.Get("status") != string(domain.StatusPendingApproval) {
+		http.Error(w, "only status=pending_approval is served", http.StatusBadRequest)
+		return
+	}
+	var roles []string
+	if raw := q.Get("actorRoles"); raw != "" {
+		roles = strings.Split(raw, ",")
+	}
+	page, _ := strconv.Atoi(q.Get("page"))
+	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
+
+	items, total, truncated, err := s.svc.ListPendingApprovals(r.Context(), q.Get("callerId"), roles, page, pageSize)
+	switch {
+	case err == nil:
+	case errors.Is(err, domain.ErrForbidden):
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	default:
+		// A dependency did not answer; the cause stays in this process's log.
+		log.Printf("session-broker: listing the pending requests failed: %v", err)
+		http.Error(w, "the list could not be built: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
+		return
+	}
+	page, pageSize = application.ClampPage(page, pageSize) // the page SERVED, as GET /vault/accounts
+	out := listSessionsResponse{Items: make([]sessionResponse, 0, len(items)), Page: page, PageSize: pageSize, TotalItems: total, Truncated: truncated}
+	for _, sess := range items {
+		out.Items = append(out.Items, toSessionResponse(sess))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // -- GET /sessions/{id}, DELETE /sessions/{id}, POST /sessions/{id}/connect|approve|reject --

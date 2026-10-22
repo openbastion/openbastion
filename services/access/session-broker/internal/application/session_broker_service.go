@@ -59,6 +59,16 @@ type ProxyClient interface {
 	EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (proxyEndpoint, connectionTicket string, err error)
 }
 
+// ApprovalNotifier tells whoever should know that a break-glass request is waiting,
+// or has been decided (ADR-0012). It is a courtesy, not a control: it has no return
+// value because nothing may depend on it — an implementation that cannot deliver logs
+// and goes on, and must not block the caller. The Broker calls it only once the thing
+// being announced has really happened (the request is saved; the decision has won
+// its compare-and-swap).
+type ApprovalNotifier interface {
+	Notify(ctx context.Context, n domain.ApprovalNotification)
+}
+
 // ProxySelector resolves which proxy family serves a given protocol.
 // MVP supports SSH only (doc 04 §2); v1.0 extends this switch, not the
 // callers of it.
@@ -99,6 +109,10 @@ type SessionBrokerService struct {
 	// now is the clock: injectable so that the deadline of a pending request and
 	// the start of an approved session can be tested without waiting.
 	now func() time.Time
+
+	// notifier is optional (ADR-0012): nil means nobody is told, and the approvers
+	// look at the list.
+	notifier ApprovalNotifier
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
@@ -119,6 +133,24 @@ const BreakGlassApproveResourcePrefix = "breakglass-approve:account:"
 // decision when the platform says nothing: long enough for an on-call to be
 // reached, short enough that a forgotten request does not linger as an open offer.
 const DefaultBreakGlassApprovalWindow = 15 * time.Minute
+
+// wellFormedAccountID says whether id has the shape of an identifier the platform
+// issues: letters, digits and . _ : - only, starting with a letter or a digit, at most
+// 128 characters.
+func wellFormedAccountID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for i, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case i > 0 && (r == '.' || r == '_' || r == ':' || r == '-'):
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // MinBreakGlassJustification is a floor against an accidental blank or a lone
 // punctuation mark, not a judgement of quality: the justification is for the human
@@ -150,6 +182,19 @@ func (s *SessionBrokerService) WithBreakGlassApprovalWindow(d time.Duration) *Se
 		s.approvalWindow = d
 	}
 	return s
+}
+
+// WithApprovalNotifier sets who is told of break-glass requests and decisions
+// (ADR-0012). Nil, the default, tells nobody.
+func (s *SessionBrokerService) WithApprovalNotifier(n ApprovalNotifier) *SessionBrokerService {
+	s.notifier = n
+	return s
+}
+
+func (s *SessionBrokerService) notify(ctx context.Context, n domain.ApprovalNotification) {
+	if s.notifier != nil {
+		s.notifier.Notify(ctx, n)
+	}
 }
 
 // WithClock replaces the clock; for tests.
@@ -203,6 +248,12 @@ func (s *SessionBrokerService) CreateBreakGlassSession(ctx context.Context, requ
 func (s *SessionBrokerService) authorizeBreakGlass(ctx context.Context, actorRoles []string, accountID, justification string, durationMinutes int) error {
 	if s.breakGlassMaxMinutes <= 0 {
 		return fmt.Errorf("break-glass is not enabled on this platform")
+	}
+	// The account identifier is the requester's own input, and it ends up in what
+	// approvers read — in the list, and in a chat channel (ADR-0012). A real
+	// identifier is a plain word; anything else is not a request for a real account.
+	if !wellFormedAccountID(accountID) {
+		return fmt.Errorf("the account identifier is not well-formed")
 	}
 	if utf8.RuneCountInString(strings.TrimSpace(justification)) < MinBreakGlassJustification {
 		return fmt.Errorf("a justification of at least %d characters is required", MinBreakGlassJustification)
@@ -269,6 +320,11 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 			if err := s.sessions.Save(ctx, sess); err != nil {
 				return nil, fmt.Errorf("saving break-glass request: %w", err)
 			}
+			// Told only now that the request exists to be decided (ADR-0012).
+			s.notify(ctx, domain.ApprovalNotification{
+				Event: domain.NotifyBreakGlassRequested, SessionID: sess.ID, AccountID: sess.PrivilegedAccountID,
+				RequestedBy: sess.RequestedBy, DurationMinutes: sess.DurationMinutes, ExpiresAt: sess.ExpiresAt, At: now,
+			})
 			return sess, nil
 		}
 	}
@@ -477,7 +533,100 @@ func (s *SessionBrokerService) decide(ctx context.Context, sessionID, decidedBy 
 	if !swapped {
 		return nil, fmt.Errorf("%w: another decision was taken first", domain.ErrConflict)
 	}
+	// Told only of the decision that was taken: not of one that was refused, and not
+	// of one that lost the race (ADR-0012).
+	event := domain.NotifyBreakGlassRejected
+	if approve {
+		event = domain.NotifyBreakGlassApproved
+	}
+	s.notify(ctx, domain.ApprovalNotification{
+		Event: event, SessionID: decided.ID, AccountID: decided.PrivilegedAccountID,
+		RequestedBy: decided.RequestedBy, DecidedBy: decidedBy,
+		DurationMinutes: decided.DurationMinutes, ExpiresAt: decided.ExpiresAt, At: now,
+	})
 	return &decided, nil
+}
+
+// MaxPendingScanned bounds how many pending requests one listing reads (ADR-0012):
+// each distinct account among them costs a question to the Authorization Service.
+const MaxPendingScanned = 100
+
+// The page sizes of a listing, as for GET /vault/accounts.
+const (
+	defaultPageSize = 20
+	maxPageSize     = 100
+)
+
+// ClampPage returns the page and size a listing actually serves: page at least 1, a
+// size in [1, 100] or else the default of 20.
+func ClampPage(page, pageSize int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > maxPageSize {
+		pageSize = defaultPageSize
+	}
+	return page, pageSize
+}
+
+// ListPendingApprovals is what a person who may approve break-glass requests sees
+// of them (ADR-0012): the requests that ApproveBreakGlass would not refuse for a
+// reason that is the caller's or today's rules' — still pending, not the caller's
+// own, on an account whose approval policy the caller's roles hold, with the
+// platform still granting break-glass for that long. Whoever holds no authority sees
+// an empty list, not a refusal: the answer does not say whether requests exist.
+//
+// callerID and actorRoles are the Gateway's. The Authorization Service is asked once
+// per distinct account; if it cannot answer, nothing is returned — a list that
+// silently lacks a request is worse than none. truncated says the store held more
+// pending requests than MaxPendingScanned.
+func (s *SessionBrokerService) ListPendingApprovals(ctx context.Context, callerID string, actorRoles []string, page, pageSize int) (items []*domain.Session, totalItems int, truncated bool, err error) {
+	if callerID == "" {
+		return nil, 0, false, fmt.Errorf("%w: a listing needs an authenticated user", domain.ErrForbidden)
+	}
+	page, pageSize = ClampPage(page, pageSize)
+	items = []*domain.Session{}
+	if s.breakGlassMaxMinutes <= 0 {
+		return items, 0, false, nil // nothing can be approved while the platform grants nothing
+	}
+
+	pending, more, err := s.sessions.ListPending(ctx, s.clock(), MaxPendingScanned)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("%w (listing pending requests: %v)", domain.ErrUnavailable, err)
+	}
+
+	authority := map[string]bool{} // per account: the answer of the Authorization Service
+	var visible []*domain.Session
+	for _, sess := range pending {
+		if sess.RequestedBy == callerID || !sess.BreakGlass {
+			continue
+		}
+		if sess.DurationMinutes < 1 || sess.DurationMinutes > s.breakGlassMaxMinutes {
+			continue
+		}
+		allowed, known := authority[sess.PrivilegedAccountID]
+		if !known {
+			allowed, _, err = s.authz.CheckAccess(ctx, actorRoles, BreakGlassApproveResourcePrefix+sess.PrivilegedAccountID, "session:approve")
+			if err != nil {
+				return nil, 0, false, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
+			}
+			authority[sess.PrivilegedAccountID] = allowed
+		}
+		if allowed {
+			visible = append(visible, sess)
+		}
+	}
+
+	totalItems = len(visible)
+	start := (page - 1) * pageSize
+	if start >= len(visible) {
+		return items, totalItems, more, nil
+	}
+	end := start + pageSize
+	if end > len(visible) {
+		end = len(visible)
+	}
+	return visible[start:end], totalItems, more, nil
 }
 
 func randomID(prefix string) string {

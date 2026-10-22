@@ -118,6 +118,7 @@ Quand le recorder est en panne et qu'un incident ne peut pas attendre, une sessi
 | SSH Proxy | `BREAKGLASS_ENABLED=true` | Autorise ce proxy à honorer une dérogation. Ignoré (avec un avertissement) hors `RECORDING_POLICY=required`. |
 | Session Broker | `BREAKGLASS_APPROVAL` | `required` (**défaut**) : une demande break-glass attend l'approbation d'une autre personne. `disabled` : l'ancien comportement à une seule personne (ADR-0009), à demander **par son nom** — le Broker l'annonce au démarrage (« WITHOUT APPROVAL »). Toute autre valeur est une erreur fatale. |
 | Session Broker | `BREAKGLASS_APPROVAL_WINDOW_MINUTES` | Délai laissé pour décider, de 1 à 1440 (défaut **15**). Passé ce délai la demande est `expired` et ne peut plus être décidée. Tout autre texte ou nombre est une erreur fatale. |
+| Session Broker | `BREAKGLASS_NOTIFY_URL` | URL d'un webhook (Slack, Teams, Mattermost, récepteur générique) prévenu quand une demande break-glass est déposée, approuvée ou rejetée (ADR-0012). Absente : aucune notification, les approbateurs consultent la liste. **https exigé** (http seulement vers une adresse de boucle locale) ; une URL avec identifiants, sans hôte, d'un autre schéma ou illisible est une erreur fatale au démarrage, dont le message ne la répète pas. **L'URL est un secret** (celles de Slack et de Teams en contiennent un) : traitez-la comme tel dans vos manifestes — Secret Kubernetes, pas ConfigMap. Le Broker ne journalise que son schéma et son hôte. |
 
 Aucun rôle n'en dispose par défaut — pas même un administrateur. Pour l'accorder, créez une politique sur la ressource **`breakglass:account:<id du compte>`**, distincte de `vault:account:…` :
 
@@ -154,7 +155,14 @@ curl -X POST https://bastion.example.com/api/v1/sessions \
   -d '{"targetAccountId": "<id>", "justification": "INC-4821 : base de production saturée, recorder HS", "durationMinutes": 20, "breakGlass": true}'
 ```
 
-La réponse est `201` avec `"status": "pending_approval"` : **ce n'est pas encore une session**, `connect` répond `409`. Il n'existe pas encore de liste ni de notification des demandes en attente : le demandeur transmet l'identifiant de la session (`id`) à la personne qui approuve — par l'astreinte, le canal d'incident. Cette personne relit la demande puis décide :
+La réponse est `201` avec `"status": "pending_approval"` : **ce n'est pas encore une session**, `connect` répond `409`. L'approbateur n'a pas besoin qu'on lui transmette l'identifiant : il liste ce qu'il peut décider (ADR-0012) et, si `BREAKGLASS_NOTIFY_URL` est fixée, le canal l'a prévenu :
+
+```sh
+curl "https://bastion.example.com/api/v1/sessions?status=pending_approval" -H "Authorization: Bearer $APPROVER_TOKEN"
+# {"items":[{"id":"…","status":"pending_approval","requestedBy":"…","privilegedAccountId":"…","justification":"…","breakGlass":true,"expiresAt":"…"}],"page":1,"pageSize":20,"totalItems":1}
+```
+
+La liste ne montre **que ce que l'appelant peut approuver maintenant** : pas ses propres demandes, pas les comptes que sa politique `breakglass-approve:` ne couvre pas. Elle est **vide**, jamais en erreur, pour qui n'a aucune autorité : un utilisateur ne peut pas s'en servir pour apprendre quels comptes sont sensibles. Les demandes les plus proches de leur échéance viennent d'abord ; au-delà de 100 demandes en attente la réponse porte `"truncated": true`. Seul `status=pending_approval` est servi (autre chose : `400`). Une dépendance qui ne répond pas donne `503`, jamais une liste partielle : si vous obtenez `503`, ne concluez pas qu'il n'y a rien à décider. L'approbateur relit alors la demande puis décide :
 
 ```sh
 curl https://bastion.example.com/api/v1/sessions/<id> -H "Authorization: Bearer $APPROVER_TOKEN"   # qui, quel compte, pourquoi, échéance
@@ -165,6 +173,8 @@ curl -X POST https://bastion.example.com/api/v1/sessions/<id>/reject  -H "Author
 Après `approve`, la session est `active` et la durée demandée court **à partir de l'approbation**. **Seul le demandeur** peut ouvrir la session (`connect`) : l'approbateur reçoit `403`.
 
 À relire après chaque usage : `session.breakglass_requested` (demande mise en attente, accordée ou refusée), `session.breakglass_approved` / `session.breakglass_rejected` (**qui** a décidé ; un `success=false` est un refus — auto-approbation, politique absente — à relire aussi), `session.breakglass` (la dérogation a **réellement** servi : le recorder n'était pas prêt) et `session.expire` (fin de session à l'échéance). Une session demandée en break-glass alors que le recorder était prêt reste enregistrée normalement et ne laisse pas de `session.breakglass`.
+
+**La notification est une courtoisie, pas un contrôle.** Elle part après coup, en arrière-plan, sans nouvelle tentative (5 s, 16 envois simultanés au plus) : un canal en panne, lent ou hostile ne retarde ni ne bloque aucune demande ni aucune décision, il laisse une ligne dans le journal du Broker (`notification … not delivered`). La liste est le filet. Le message nomme la session, le compte, le demandeur, la durée et l'échéance ; il **ne contient ni la justification ni rien de la cible** — le détail s'obtient en s'authentifiant, par la liste. Au démarrage le Broker dit où il notifie, ou qu'il n'a « no notification channel ». Le message n'est pas signé ; l'URL est le seul secret que le destinataire ait pour croire qu'il vient du Broker.
 
 Ce que la double validation ne fait **pas** : elle ne détecte pas deux comptes tenus par la même personne, ne remplace pas la revue après l'incident (non implémentée), n'a qu'un approbateur (pas de quorum), et n'audite pas l'expiration d'une demande non décidée (le statut se lit `expired`).
 
@@ -259,6 +269,12 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | Session en `pending_approval` | Normal pour une demande `breakGlass` : elle attend une seconde personne (ADR-0011). Une session **ordinaire** n'est jamais en attente | Faire approuver (`POST /sessions/<id>/approve`) par un utilisateur autre que le demandeur, porteur d'une politique `breakglass-approve:account:<id>`, avant l'échéance |
 | `approve` renvoie `403` « cannot be approved by the person who made it » | Le demandeur essaie d'approuver sa propre demande | Une autre personne doit approuver |
 | `approve` renvoie `403` « no approval policy allows this » | L'approbateur n'a pas de politique sur `breakglass-approve:account:<id>` (la politique `breakglass:…` des demandeurs ne suffit pas) | Créer la politique pour le rôle de l'approbateur (voir « Qui approuve ») |
+| `GET /sessions?status=pending_approval` renvoie une liste vide alors qu'une demande attend | Normal pour qui n'a pas de politique `breakglass-approve:account:<id>` sur ce compte, pour l'auteur de la demande, ou si la demande est périmée ou la dérogation coupée : la liste ne montre que ce que **cet appelant** peut décider maintenant | Vérifier la politique de l'approbateur (voir « Qui approuve ») ; le demandeur relit sa propre demande par `GET /sessions/<id>` |
+| `GET /sessions` renvoie `400` | `status` absent, ou autre que `pending_approval` : seul ce statut est servi | Ajouter `?status=pending_approval` |
+| `GET /sessions?status=pending_approval` renvoie `503` | L'Authorization Service ou la base ne répond pas ; le Broker ne renvoie jamais de liste partielle | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker (« listing the pending requests failed ») |
+| `POST /sessions` avec `breakGlass: true` renvoie `403` « … is not a valid account identifier » | L'identifiant de compte n'est pas de la forme `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$` (ADR-0012) | Corriger l'identifiant ; un identifiant qui contiendrait une mention ou un lien n'a rien à faire dans le canal d'astreinte |
+| Le journal du Broker dit « notification … not delivered » ou « refused » | Le webhook est injoignable, lent, ou répond autre chose que 2xx (une redirection compte comme un refus : elle n'est pas suivie) | Vérifier l'URL et le récepteur ; rien n'est perdu côté demande, la liste reste à jour |
+| Le Broker s'arrête avec « BREAKGLASS_NOTIFY_URL cannot be used » | L'URL n'est pas https (hors boucle locale), porte des identifiants, n'a pas d'hôte ou est illisible. Le message ne la répète pas | Corriger la variable ; mieux vaut un démarrage refusé que des approbateurs qui croient être prévenus |
 | `approve` renvoie `409` | La demande est déjà décidée, périmée (`expired`, délai `BREAKGLASS_APPROVAL_WINDOW_MINUTES`) ou n'est pas une demande break-glass | Relire la demande (`GET /sessions/<id>`) ; en cas de péremption, le demandeur en refait une |
 | `approve` renvoie `503` | L'Authorization Service, l'audit ou la base ne répond pas : la décision n'est **pas** prise (fail-closed) | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker |
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |

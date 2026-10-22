@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -22,8 +23,8 @@ type everythingBroker struct {
 }
 
 type seenRequest struct {
-	method, path string
-	body         map[string]any
+	method, path, query string
+	body                map[string]any
 }
 
 func newEverythingBroker(t *testing.T) *everythingBroker {
@@ -34,7 +35,7 @@ func newEverythingBroker(t *testing.T) *everythingBroker {
 		var body map[string]any
 		_ = json.Unmarshal(raw, &body)
 		b.mu.Lock()
-		b.seen = append(b.seen, seenRequest{r.Method, r.URL.EscapedPath(), body})
+		b.seen = append(b.seen, seenRequest{method: r.Method, path: r.URL.EscapedPath(), query: r.URL.RawQuery, body: body})
 		b.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
@@ -175,5 +176,87 @@ func TestSessionRoutes_ADecisionOrAConnectNeedsAToken(t *testing.T) {
 		if got := broker.requests(); len(got) != 0 {
 			t.Fatalf("%s without a token reached the Broker: %+v", path, got)
 		}
+	}
+}
+
+// -- GET /sessions: the requests the caller may decide (ADR-0012) -----------------------
+
+// The Broker is told who asks, and with which roles, by the Gateway alone. Of the
+// client's own query only the three parameters of the listing survive; a callerId or an
+// actorRoles it wrote — to list as someone else, or as an approver — does not.
+func TestSessionRoutes_ListingTellsTheBrokerWhoIsAsking_NotTheClient(t *testing.T) {
+	gw, broker := sessionGateway(t)
+
+	forged := "/sessions?status=pending_approval&page=2&pageSize=5" +
+		"&callerId=u-the-cto&callerId=u-another&actorRoles=breakglass-approver,platform-admin&requestedBy=u-someone&evil=1"
+	rec := do(gw, http.MethodGet, forged, `{"callerId":"u-the-cto"}`, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
+	}
+	got := broker.requests()
+	if len(got) != 1 || got[0].method != http.MethodGet || got[0].path != "/sessions" {
+		t.Fatalf("the Broker saw %+v", got)
+	}
+	q, err := neturl.ParseQuery(got[0].query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"status": {"pending_approval"}, "page": {"2"}, "pageSize": {"5"},
+		"callerId": {"u-alice"}, "actorRoles": {"sre,breakglass-requester"},
+	}
+	if len(q) != len(want) {
+		t.Fatalf("the Broker received the query %v, want exactly %v — nothing else of the client's", q, want)
+	}
+	for k, v := range want {
+		if len(q[k]) != 1 || q[k][0] != v[0] {
+			t.Fatalf("query[%s] = %v, want %v (the verified token's, not the client's)", k, q[k], v)
+		}
+	}
+	if len(got[0].body) != 0 {
+		t.Fatalf("the client's body was relayed on a GET: %v", got[0].body)
+	}
+}
+
+// A role name is data, never query syntax: one that looks like a parameter stays a role.
+func TestSessionRoutes_ListingEncodesTheRolesOfTheToken(t *testing.T) {
+	authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-alice", "alice", []string{"sre", "x&callerId=u-victim"})
+	t.Cleanup(authSrv.Close)
+	broker := newEverythingBroker(t)
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL).Routes()
+
+	if rec := do(gw, http.MethodGet, "/sessions?status=pending_approval", "", true); rec.Code != http.StatusOK {
+		t.Fatalf("%d", rec.Code)
+	}
+	q, _ := neturl.ParseQuery(broker.requests()[0].query)
+	if len(q["callerId"]) != 1 || q["callerId"][0] != "u-alice" {
+		t.Fatalf("a role name wrote into the query: callerId = %v", q["callerId"])
+	}
+	if q.Get("actorRoles") != "sre,x&callerId=u-victim" {
+		t.Fatalf("actorRoles = %q", q.Get("actorRoles"))
+	}
+}
+
+func TestSessionRoutes_ListingNeedsAToken_AndOnlyGetsThroughAsAGet(t *testing.T) {
+	gw, broker := sessionGateway(t)
+	if rec := do(gw, http.MethodGet, "/sessions?status=pending_approval", "", false); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without a token: %d, want 401", rec.Code)
+	}
+	for _, method := range []string{http.MethodPut, http.MethodDelete, http.MethodPatch} {
+		if rec := do(gw, method, "/sessions?status=pending_approval", "", true); rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s /sessions: %d, want 405", method, rec.Code)
+		}
+	}
+	if got := broker.requests(); len(got) != 0 {
+		t.Fatalf("these reached the Broker: %+v", got)
+	}
+}
+
+// The control: what the Broker answers is what the client reads, status and body.
+func TestSessionRoutes_ListingRelaysTheBrokersAnswer(t *testing.T) {
+	gw, _ := sessionGateway(t)
+	rec := do(gw, http.MethodGet, "/sessions?status=pending_approval", "", true)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 }

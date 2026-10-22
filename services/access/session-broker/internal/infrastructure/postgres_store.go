@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	_ "github.com/lib/pq"
 
@@ -110,4 +111,48 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.Session, er
 		sess.DecidedAt = &decidedAt.Time
 	}
 	return &sess, nil
+}
+
+// ListPending is domain.SessionRepository.ListPending. It asks for one row more than
+// limit: that row is how the store knows there were others, and is never returned.
+// The partial index of 001_init.sql serves exactly this query.
+func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit int) ([]*domain.Session, bool, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
+		       duration_minutes, decided_by, decided_at
+		FROM sessions
+		WHERE status = $1 AND expires_at >= $2
+		ORDER BY expires_at, id
+		LIMIT $3`, string(domain.StatusPendingApproval), now, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	var out []*domain.Session
+	for rows.Next() {
+		var sess domain.Session
+		var status string
+		var terminatedAt, decidedAt sql.NullTime
+		if err := rows.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
+			&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
+			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt); err != nil {
+			return nil, false, err
+		}
+		sess.Status = domain.SessionStatus(status)
+		if terminatedAt.Valid {
+			sess.TerminatedAt = &terminatedAt.Time
+		}
+		if decidedAt.Valid {
+			sess.DecidedAt = &decidedAt.Time
+		}
+		out = append(out, &sess)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if len(out) > limit {
+		return out[:limit], true, nil
+	}
+	return out, false, nil
 }

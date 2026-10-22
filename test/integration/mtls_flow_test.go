@@ -279,6 +279,15 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			map[string]any{"decidedBy": "root-admin", "actorRoles": []string{"incident-lead"}}, "a rejection"},
 		{"the Vault connects to a session, naming the requester", mtls.PasswordVault, http.MethodPost, brokerURL + "/sessions/" + sess.ID + "/connect",
 			map[string]any{"callerId": "u-operator"}, "a connection ticket"},
+
+		// Who may ask which break-glass requests wait (ADR-0012): the list is built for the caller
+		// the Gateway names, so only the Gateway may name one.
+		{"the Vault lists the waiting requests, naming an approver", mtls.PasswordVault, http.MethodGet,
+			brokerURL + "/sessions?status=pending_approval&callerId=u-approver&actorRoles=incident-lead", nil, "the justifications of emergency requests"},
+		{"the SSH proxy lists the waiting requests, naming an approver", mtls.SSHProxy, http.MethodGet,
+			brokerURL + "/sessions?status=pending_approval&callerId=u-approver&actorRoles=incident-lead", nil, "the justifications of emergency requests"},
+		{"the operator tooling lists the waiting requests, naming an approver", mtls.AdminCLI, http.MethodGet,
+			brokerURL + "/sessions?status=pending_approval&callerId=u-approver&actorRoles=incident-lead", nil, "the justifications of emergency requests"},
 	}
 	for _, a := range attacks {
 		a := a
@@ -317,6 +326,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			{"operator tooling verifies the audit chain", mtls.AdminCLI, auditURL + "/audit/v1/verify-chain"},
 			{"the Gateway lists accounts, on behalf of a vault admin", mtls.APIGateway, vaultURL + "/vault/v1/accounts?actorRoles=vault-admin"},
 			{"any service answers health checks", mtls.SSHProxy, vaultURL + "/healthz"},
+			{"the Gateway lists the waiting requests, on behalf of a user", mtls.APIGateway, brokerURL + "/sessions?status=pending_approval&callerId=u-x&actorRoles=sre"},
 		} {
 			if status, raw := mustCall(t, p.clientAs(t, ok.caller), http.MethodGet, ok.url, nil); status != http.StatusOK {
 				t.Errorf("%s: got %d %q", ok.name, status, raw)

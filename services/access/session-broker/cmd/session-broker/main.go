@@ -114,6 +114,26 @@ func main() {
 	case breakGlassMax > 0:
 		log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) WITHOUT APPROVAL (BREAKGLASS_APPROVAL=disabled) — a single actor with a policy on breakglass:account:* can obtain a session that runs while the Command Recorder is down", breakGlassMax)
 	}
+
+	// Who is told of a break-glass request (ADR-0012): nobody, unless a webhook is
+	// given. The URL is a secret — it is checked here, and never written: a URL that
+	// cannot be used stops the Broker, whose message does not repeat it, rather than
+	// leaving approvers to believe they would be told.
+	notifyChannel := ""
+	if v := os.Getenv("BREAKGLASS_NOTIFY_URL"); v != "" {
+		n, err := infrastructure.NewWebhookNotifier(v)
+		if err != nil {
+			log.Fatalf("session-broker: BREAKGLASS_NOTIFY_URL cannot be used: %v", err)
+		}
+		svc.WithApprovalNotifier(n)
+		notifyChannel = n.Where()
+	}
+	switch {
+	case notifyChannel != "":
+		log.Printf("session-broker: break-glass notifications are sent to %s (best effort; the rest of the URL is a secret and is not logged)", notifyChannel)
+	case breakGlassMax > 0 && approvalRequired:
+		log.Printf("session-broker: no notification channel (BREAKGLASS_NOTIFY_URL is not set): approvers have to look at GET /sessions?status=pending_approval")
+	}
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("session-broker listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)

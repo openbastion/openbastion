@@ -20,9 +20,10 @@ Chacun est tenu par du code et par des tests. Si une tâche semble exiger d'en a
 | ADR-0008 | Une session qui ne peut pas être enregistrée n'a pas lieu ; une commande non acquittée par le recorder n'est jamais exécutée. | `RECORDING_POLICY=required` par défaut (`pkg/proxycore`, ssh-proxy). |
 | ADR-0009 | Le break-glass ne retire que l'enregistrement acquitté, sous six verrous cumulés, et jamais en silence. | Broker + `proxycore.Admission` (preuve à champs non exportés). |
 | ADR-0011 | Une demande break-glass n'ouvre rien tant qu'une **autre** personne ne l'a pas approuvée : pas d'auto-approbation (par identifiant d'utilisateur), décideur et rôles tirés du jeton vérifié par la Gateway, décision auditée avant d'agir puis compare-and-swap, `connect` réservé au demandeur. | Session Broker (`decide`, `SaveIfStatus`) + liste blanche des routes `/sessions/...` du Gateway. |
+| ADR-0012 | La liste des demandes break-glass en attente ne montre que ce que l'appelant peut décider (vide, jamais 403, sans autorité ; 503 plutôt qu'une liste partielle) ; la notification est au mieux et **n'est jamais un contrôle** (port sans valeur de retour, asynchrone, après coup) ; l'URL du webhook est un secret (jamais journalisée) ; ce que le demandeur écrit (`targetAccountId`) n'atteint jamais tel quel un message lu par des tiers. | Session Broker (`ListPendingApprovals`, `ApprovalNotifier`, `infrastructure/webhook_notifier.go`, `wellFormedAccountID`) + Gateway (`handleListPending` reconstruit la requête). |
 | ADR-0010 | L'identité de l'appelant vient du certificat, jamais du corps de la requête ; chaque route a sa liste d'appelants, refus par défaut. | `pkg/mtls`, un `internal/interfaces/callers.go` par service. |
 | — | L'audit est fail-closed : un événement qui ne peut pas être écrit empêche l'action. | Broker, proxy. |
-| — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*` (dont `BREAKGLASS_APPROVAL`). |
+| — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*` (dont `BREAKGLASS_APPROVAL`) ; `BREAKGLASS_NOTIFY_URL` absente = pas de notification, annoncé au démarrage, et une valeur inutilisable est fatale. |
 
 ## 3. Arborescence réelle
 
@@ -84,12 +85,13 @@ Les noms de service sont ceux des SAN URI `spiffe://<domaine>/<service>` : `api-
 
 ```
 utilisateur ──HTTP──► api-gateway ──► authentication   (login, verify)
-                          │──────► session-broker      (/sessions… : création, connect, approve, reject — liste blanche ; l'identité du décideur est celle du jeton)
+                          │──────► session-broker      (/sessions… : création, `GET /sessions?status=pending_approval` (seul statut servi), connect, approve, reject — liste blanche ; l'identité de l'appelant est celle du jeton, la requête de liste est reconstruite)
                           │──────► password-vault      (administration des comptes, rotation)
                           │──────► authorization       (création de politiques)
                           └──────► command-recorder    (lecture d'un replay)
 session-broker ──► authorization (check-access) · password-vault (authorize-scope, métadonnées de compte)
                ──► audit-service (emit-event)   · ssh-proxy (establish-session)
+               ──► webhook de notification (BREAKGLASS_NOTIFY_URL, HORS maillage mTLS, au mieux, jamais un contrôle — ADR-0012)
 ssh-proxy ──► password-vault (fetch-credential) · audit-service · command-recorder (écriture des commandes)
 password-vault, command-recorder ──► authorization (check-access)
 admin-cli ──► authentication (POST /auth/v1/users) · audit-service (GET /audit/v1/verify-chain)
@@ -124,4 +126,4 @@ Ports par défaut : gateway 8080, vault 8081, audit 8082, authorization 8083, br
 
 ## 9. Écarts connus entre la cible et l'implémenté
 
-À ne pas « corriger » sans demande : transport HTTP/JSON au lieu de gRPC ; pas de Workflow/Approval Engine (seulement l'approbation à un décideur du break-glass, ADR-0011, dans le Broker) ni de MFA natif ; un seul protocole (SSH) ; KEK locale (`LocalKMS`) au lieu d'un vrai KMS/HSM ; Vault chiffre en un seul niveau (pas d'enveloppe) ; lignes du recorder non chaînées ; événements d'audit non attribués par l'identité du certificat ; listes d'appelants dans le code. La liste à jour est dans `NOTES_SANDBOX.md` et dans le Guide Sécurité §12.
+À ne pas « corriger » sans demande : transport HTTP/JSON au lieu de gRPC ; pas de Workflow/Approval Engine (seulement l'approbation à un décideur du break-glass, ADR-0011, dans le Broker) ni de MFA natif ; notification du break-glass sans nouvelle tentative, non signée, un seul canal ; `GET /sessions` ne sert que `pending_approval` ; un seul protocole (SSH) ; KEK locale (`LocalKMS`) au lieu d'un vrai KMS/HSM ; Vault chiffre en un seul niveau (pas d'enveloppe) ; lignes du recorder non chaînées ; événements d'audit non attribués par l'identité du certificat ; listes d'appelants dans le code. La liste à jour est dans `NOTES_SANDBOX.md` et dans le Guide Sécurité §12.

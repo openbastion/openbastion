@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 var ErrNotFound = errors.New("session not found")
@@ -33,4 +34,12 @@ type SessionRepository interface {
 	// decisions racing for the same pending request, exactly one swaps (ADR-0011).
 	// An unknown id is not an error: it swaps nothing.
 	SaveIfStatus(ctx context.Context, s *Session, expected SessionStatus) (swapped bool, err error)
+
+	// ListPending returns the break-glass requests still waiting for a decision at
+	// now — status pending_approval and a deadline (ExpiresAt) not before now, which is when
+	// Session.EffectiveStatus still reads it as pending — soonest
+	// deadline first, ties by id. At most limit are returned; more says there were
+	// others (ADR-0012). It reads no secret and decides nothing: who may see which of
+	// them is the service's question, not the store's.
+	ListPending(ctx context.Context, now time.Time, limit int) (sessions []*Session, more bool, err error)
 }

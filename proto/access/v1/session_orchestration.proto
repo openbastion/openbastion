@@ -16,6 +16,12 @@ service SessionOrchestration {
   // breakglass-approve:account:{privileged_account_id} ; rejeter exige la même autorité.
   rpc ApproveBreakGlass(DecideBreakGlassRequest) returns (Session);
   rpc RejectBreakGlass(DecideBreakGlassRequest) returns (Session);
+  // Découverte des demandes break-glass en attente (ADR-0012) : celles que l'appelant
+  // pourrait approuver MAINTENANT (pas de lui, politique breakglass-approve:account:{id}
+  // sur le compte, dérogation active, durée dans la limite du jour). Aucune autorité :
+  // liste vide, jamais une erreur (la réponse ne dit pas si des demandes existent). Une
+  // dépendance muette : erreur UNAVAILABLE, jamais une liste partielle.
+  rpc ListPendingApprovals(ListPendingApprovalsRequest) returns (ListPendingApprovalsResponse);
 }
 
 enum SessionStatus {
@@ -65,6 +71,21 @@ message Session {
 message DecideBreakGlassRequest {
   openbastion.common.v1.RequestContext context = 1;
   string session_id = 2;
+}
+
+message ListPendingApprovalsRequest {
+  openbastion.common.v1.RequestContext context = 1;  // l'identité et les rôles de l'appelant : ceux du jeton, jamais un champ
+  int32 page = 2;       // < 1 → 1
+  int32 page_size = 3;  // < 1 → 20 ; > 100 → 100 (comme les listes de la doc 05)
+}
+
+message ListPendingApprovalsResponse {
+  repeated Session items = 1;  // les plus proches de leur échéance d'abord
+  int32 page = 2;              // la page SERVIE (après bornage)
+  int32 page_size = 3;
+  int32 total_items = 4;       // de la liste déjà filtrée
+  // Vrai si le Broker a dû couper sa lecture à 100 demandes en attente : il y en avait d'autres.
+  bool truncated = 5;
 }
 
 message GetSessionRequest {

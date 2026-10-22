@@ -62,3 +62,8 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_requested_by ON sessions (requested_by);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions (status);
+
+-- ADR-0012 : la liste des demandes break-glass en attente (ListPending) ne lit que les
+-- lignes `pending_approval`, classées par échéance. Un index partiel les sert sans
+-- grossir avec l'historique des sessions ; idempotent comme le reste du fichier.
+CREATE INDEX IF NOT EXISTS sessions_pending_approval_idx ON sessions (expires_at, id) WHERE status = 'pending_approval';

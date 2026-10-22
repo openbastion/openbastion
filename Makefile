@@ -97,8 +97,14 @@ test:
 ##                            refusée, une autre personne approuve, seul le
 ##                            demandeur se connecte ; refus de démarrer sur
 ##                            une valeur illisible
+## - breakglass_discovery_test.go : ADR-0012 — CINQ processus : l'approbateur
+##                            trouve la demande par GET /sessions?status=
+##                            pending_approval, le webhook est prévenu ; puis
+##                            il refuse, bloque, disparaît sans rien changer
+##                            à la demande ni à la décision ; refus de
+##                            démarrer sur une URL inutilisable
 ## - mtls_flow_test.go     : ADR-0010 — HUIT processus sous mTLS requis : le
-##                            parcours complet, 24 appels forgés par une
+##                            parcours complet, 27 appels forgés par une
 ##                            identité valide mais fausse arrêtés à la porte,
 ##                            jeton de scope volé inutilisable, imposteur du
 ##                            Vault qui ne reçoit rien
@@ -176,6 +182,9 @@ run-recorder:
 # Une demande break-glass attend l'accord d'une autre personne (ADR-0011) :
 # BREAKGLASS_APPROVAL=required (défaut) | disabled (mode faible, annoncé),
 # BREAKGLASS_APPROVAL_WINDOW_MINUTES=15 (défaut, 1 à 1440).
+# BREAKGLASS_NOTIFY_URL=https://… prévient un canal (webhook) des demandes break-glass
+# (ADR-0012) ; absent : aucune notification. L'URL est un SECRET : jamais journalisée.
+# https exigé, sauf vers une adresse de boucle locale (développement).
 run-broker:
 	$(call tls,session-broker) \
 		$(GO) run ./services/access/session-broker/cmd/session-broker

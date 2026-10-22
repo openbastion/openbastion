@@ -196,9 +196,15 @@ func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 }
 
 // -- POST /sessions — the identity-injection case -------------------------
+// -- GET  /sessions — the requests the caller may decide (ADR-0012) ---------
 
 func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.Request, id identity) {
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodGet:
+		g.handleListPending(w, r, id)
+		return
+	case http.MethodPost:
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -219,6 +225,29 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 	body["actorRoles"] = id.Roles
 
 	g.forwardJSON(w, r.Context(), http.MethodPost, g.sessionBrokerURL+"/sessions", body)
+}
+
+// handleListPending builds the Broker's query from nothing the client sent but the
+// three parameters of the listing. Who is asking, and with which roles, is the verified
+// token's: a callerId or actorRoles in the client's own query string never gets past
+// here, so a client cannot list as an approver, nor as someone who is not its author
+// (ADR-0012, rule 3). Nothing of the client's body is relayed either.
+func (g *GatewayServer) handleListPending(w http.ResponseWriter, r *http.Request, id identity) {
+	q := neturl.Values{}
+	for _, key := range []string{"status", "page", "pageSize"} {
+		if v := r.URL.Query().Get(key); v != "" {
+			q.Set(key, v)
+		}
+	}
+	q.Set("callerId", id.UserID)
+	q.Set("actorRoles", strings.Join(id.Roles, ","))
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, g.sessionBrokerURL+"/sessions?"+q.Encode(), nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	g.doAndRelay(w, req)
 }
 
 // -- /sessions/{id}[/connect|/approve|/reject|/recording] -------------------

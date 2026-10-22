@@ -2,7 +2,9 @@ package infrastructure
 
 import (
 	"context"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
@@ -47,4 +49,27 @@ func (s *InMemoryStore) SaveIfStatus(ctx context.Context, sess *domain.Session, 
 	cp := *sess
 	s.sessions[sess.ID] = &cp
 	return true, nil
+}
+
+// ListPending is domain.SessionRepository.ListPending over the map.
+func (s *InMemoryStore) ListPending(ctx context.Context, now time.Time, limit int) ([]*domain.Session, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var pending []*domain.Session
+	for _, sess := range s.sessions {
+		if sess.Status == domain.StatusPendingApproval && !sess.ExpiresAt.Before(now) {
+			cp := *sess
+			pending = append(pending, &cp)
+		}
+	}
+	sort.Slice(pending, func(i, j int) bool {
+		if !pending[i].ExpiresAt.Equal(pending[j].ExpiresAt) {
+			return pending[i].ExpiresAt.Before(pending[j].ExpiresAt)
+		}
+		return pending[i].ID < pending[j].ID
+	})
+	if limit >= 0 && len(pending) > limit {
+		return pending[:limit], true, nil
+	}
+	return pending, false, nil
 }

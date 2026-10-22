@@ -19,20 +19,23 @@ import (
 // it was asked — so a test can see that break-glass is judged on ITS resource,
 // not on the one that governs ordinary sessions.
 type resourceAuthz struct {
-	mu     sync.Mutex
-	allow  map[string]bool
-	asked  []string
-	failOn string // a resource whose check errors out
+	mu         sync.Mutex
+	allow      map[string]bool
+	asked      []string
+	askedRoles [][]string
+	failOn     string // a resource whose check errors out
+	allowAny   bool   // every resource is allowed: for tests about what is NOT the policy's doing
 }
 
 func (a *resourceAuthz) CheckAccess(ctx context.Context, roles []string, resource, action string) (bool, string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.asked = append(a.asked, resource)
+	a.askedRoles = append(a.askedRoles, append([]string(nil), roles...))
 	if resource == a.failOn {
 		return false, "", errors.New("authorization service unreachable")
 	}
-	if a.allow[resource] {
+	if a.allowAny || a.allow[resource] {
 		return true, "allow policy matched", nil
 	}
 	return false, "no policy matches this resource for the caller's roles", nil

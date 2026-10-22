@@ -34,6 +34,8 @@ import (
 type runningService struct {
 	baseURL string
 	cmd     *exec.Cmd
+	// out is what the process has written to its standard output and error so far.
+	out *syncBuffer
 }
 
 func repoRoot(t *testing.T) string {
@@ -79,9 +81,9 @@ func startService(t *testing.T, root, binPath, port string, extraEnv ...string) 
 	t.Helper()
 	cmd := exec.Command(binPath)
 	cmd.Env = append(buildEnv(root), append([]string{"PORT=" + port}, extraEnv...)...)
-	var outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &outBuf
+	outBuf := &syncBuffer{}
+	cmd.Stdout = outBuf
+	cmd.Stderr = outBuf
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start %s: %v", binPath, err)
 	}
@@ -114,7 +116,7 @@ func startService(t *testing.T, root, binPath, port string, extraEnv ...string) 
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 	})
-	return &runningService{baseURL: baseURL, cmd: cmd}
+	return &runningService{baseURL: baseURL, cmd: cmd, out: outBuf}
 }
 
 // stopService kills a service immediately, before the test's normal

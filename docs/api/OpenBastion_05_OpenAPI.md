@@ -109,26 +109,73 @@ paths:
   /sessions:
     get:
       tags: [sessions]
-      summary: Liste les demandes/sessions de l'opérateur (ou toutes, si administrateur)
+      summary: Liste les demandes break-glass en attente que l'appelant peut décider (ADR-0012)
+      description: >
+        **Un seul statut est servi : `status=pending_approval`.** Sans `status`,
+        ou avec un autre statut : `400` (servir « les siennes » et « toutes pour
+        un administrateur » exige un modèle de visibilité que le RBAC actuel ne
+        sait pas exprimer ; ce n'est pas encore fait).
+
+        La liste est celle de **ce que l'appelant pourrait approuver maintenant**
+        — pas de ce qui existe : demandes en attente et non périmées, dont il
+        n'est pas l'auteur, pour un compte que couvre sa politique
+        `breakglass-approve:account:{id}`, tant que le break-glass est activé et
+        que la durée demandée tient dans la limite d'aujourd'hui. Qui n'a
+        aucune autorité reçoit une liste **vide** en `200`, jamais `403` : la
+        réponse ne dit pas s'il existe des demandes. Les plus proches de leur
+        échéance viennent en premier.
+
+        Le Broker lit au plus 100 demandes en attente ; s'il y en avait
+        davantage, la réponse porte `truncated: true`. La pagination porte sur
+        la liste déjà filtrée.
+
+        L'identité de l'appelant et ses rôles viennent du jeton vérifié par le
+        Gateway ; rien de ce que le client écrit à ce sujet n'est relayé.
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
         - name: status
           in: query
-          schema: { $ref: "#/components/schemas/SessionStatus" }
+          required: true
+          schema: { type: string, enum: [pending_approval] }
       responses:
         "200":
-          description: Page de sessions
+          description: Page de demandes en attente (éventuellement vide)
           content:
             application/json:
               schema:
                 allOf:
                   - $ref: "#/components/schemas/PagedResponse"
                   - type: object
+                    required: [items]
                     properties:
                       items:
                         type: array
                         items: { $ref: "#/components/schemas/Session" }
+                      truncated:
+                        type: boolean
+                        description: >
+                          Présent, et vrai, seulement si la lecture a été coupée
+                          à 100 demandes en attente : il y en avait d'autres.
+        "400":
+          description: "`status` absent, ou autre que `pending_approval`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Appelant non identifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: >
+            Une dépendance (Authorization Service, magasin) ne répond pas. Corps
+            générique ; la cause est dans le journal du Broker. **Jamais de liste
+            partielle** : une demande qui manquerait sans que l'on le dise ferait
+            croire à l'approbateur qu'il n'y a rien à décider.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
     post:
       tags: [sessions]
       summary: Demande une nouvelle session privilégiée
@@ -158,6 +205,13 @@ paths:
         (`/sessions/{sessionId}/approve`, `/reject`). Tant qu'elle attend, elle
         n'est pas une session : `connect` répond `409`, aucun scope n'est
         consommé.
+
+        Les approbateurs la trouvent par `GET /sessions?status=pending_approval`
+        (ADR-0012). Si la plateforme a un canal de notification
+        (`BREAKGLASS_NOTIFY_URL`, un webhook), il est prévenu — au mieux,
+        après coup, sans effet sur la demande ni sur son code de retour. Ce
+        webhook n'est pas une route de cette API : il sort du maillage ; son
+        message ne porte ni la justification ni rien de la cible.
       requestBody:
         required: true
         content:
@@ -175,8 +229,10 @@ paths:
           description: >
             Refusé par l'Authorization Service — ou, pour une demande
             `breakGlass`, parce que l'une de ses conditions n'est pas remplie
-            (désactivé, justification trop courte, durée hors limite, aucune
-            politique sur `breakglass:account:*`). Le corps dit laquelle.
+            (désactivé, identifiant de compte qui n'en est pas un —
+            `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, ADR-0012 —, justification
+            trop courte, durée hors limite, aucune politique sur
+            `breakglass:account:*`). Le corps dit laquelle.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -763,7 +819,7 @@ components:
 | `/auth/login` | POST | auth | Authentification locale ou fédérée OIDC |
 | `/auth/token/refresh` | POST | auth | Renouvellement de jeton |
 | `/auth/me` | GET | auth | Profil courant |
-| `/sessions` | GET / POST | sessions | Lister / demander une session |
+| `/sessions` | GET / POST | sessions | Lister les demandes break-glass en attente que l'on peut décider (`status=pending_approval` seul, ADR-0012) / demander une session |
 | `/sessions/{id}` | GET / DELETE | sessions | Détail / terminaison |
 | `/sessions/{id}/connect` | POST | sessions | Ticket de connexion vers le SSH Proxy (réservé au demandeur) |
 | `/sessions/{id}/approve` | POST | sessions | Approuver une demande break-glass (autre personne, politique `breakglass-approve:*`) |

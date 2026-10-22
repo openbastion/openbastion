@@ -191,6 +191,11 @@ CREATE TABLE sessions (
 -- `UPDATE ... WHERE status = 'pending_approval'` (comparaison-échange) : une seule décision par demande.
 CREATE INDEX idx_sessions_requested_by ON sessions (requested_by);
 CREATE INDEX idx_sessions_status ON sessions (status) WHERE status IN ('pending_approval','active');
+-- ADR-0012 : la liste des demandes en attente (« ce que l'appelant peut décider ») lit les lignes
+-- `pending_approval` par échéance croissante, id en départage, bornées à 100. Cet index partiel les sert
+-- sans grossir avec l'historique des sessions. Implémentation : `sessions_pending_approval_idx`,
+-- créé de façon idempotente (`IF NOT EXISTS`) : une base antérieure le reçoit au prochain démarrage.
+CREATE INDEX sessions_pending_approval_idx ON sessions (expires_at, id) WHERE status = 'pending_approval';
 
 -- Command Recorder — implémenté : services/recording-audit/command-recorder/migrations.
 -- Écarts assumés par rapport à la première version de ce DDL :
