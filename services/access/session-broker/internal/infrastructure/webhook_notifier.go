@@ -3,6 +3,9 @@ package infrastructure
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
@@ -23,6 +27,17 @@ const (
 	// piled up goroutines behind a dead endpoint would be a way to exhaust the Broker;
 	// past this number a notification is dropped, and said so in the log.
 	webhookMaxInFlight = 16
+
+	// WebhookMinSecretBytes is the shortest key the Broker will sign with (ADR-0013):
+	// an HMAC key shorter than its output is a weaker key than the one it stands in for.
+	WebhookMinSecretBytes = 32
+
+	// The two headers of a signed delivery (ADR-0013). The signature is
+	// "v1=" + hex(HMAC-SHA256(secret, timestamp + "." + body)); a receiver recomputes
+	// it on the bytes it received, compares in constant time, and refuses a timestamp
+	// that is too far from its own clock.
+	WebhookTimestampHeader = "X-OpenBastion-Timestamp"
+	WebhookSignatureHeader = "X-OpenBastion-Signature"
 )
 
 // WebhookNotifier implements application.ApprovalNotifier by POSTing a small JSON
@@ -44,6 +59,8 @@ type WebhookNotifier struct {
 	where   string
 	client  *http.Client
 	timeout time.Duration // bounds one delivery, through its context
+	secret  []byte        // signs each delivery when set (ADR-0013); never written anywhere
+	now     func() time.Time
 	slots   chan struct{}
 	logf    func(format string, args ...any)
 }
@@ -76,6 +93,7 @@ func NewWebhookNotifier(rawURL string) (*WebhookNotifier, error) {
 		url:     u.String(),
 		where:   u.Scheme + "://" + u.Host,
 		timeout: webhookTimeout,
+		now:     time.Now,
 		slots:   make(chan struct{}, webhookMaxInFlight),
 		logf:    log.Printf,
 		client: &http.Client{
@@ -90,6 +108,27 @@ func NewWebhookNotifier(rawURL string) (*WebhookNotifier, error) {
 // WithTimeout shortens or lengthens the bound of one delivery; for tests.
 func (w *WebhookNotifier) WithTimeout(d time.Duration) *WebhookNotifier {
 	w.timeout = d
+	return w
+}
+
+// WithSecret makes the notifier sign every delivery (ADR-0013). A secret shorter than
+// WebhookMinSecretBytes is refused, with an error that does not repeat it: the caller
+// writes that error into its log. The secret is used exactly as given — a trailing
+// newline from a file is part of the key, and the receiver's key must have it too.
+func (w *WebhookNotifier) WithSecret(secret string) (*WebhookNotifier, error) {
+	if len(secret) < WebhookMinSecretBytes {
+		return nil, fmt.Errorf("the secret must be at least %d bytes long (for example `openssl rand -hex 32`)", WebhookMinSecretBytes)
+	}
+	w.secret = []byte(secret)
+	return w, nil
+}
+
+// Signed says whether deliveries carry a signature.
+func (w *WebhookNotifier) Signed() bool { return len(w.secret) > 0 }
+
+// WithClock replaces the clock that stamps a signed delivery; for tests.
+func (w *WebhookNotifier) WithClock(now func() time.Time) *WebhookNotifier {
+	w.now = now
 	return w
 }
 
@@ -198,6 +237,17 @@ func (w *WebhookNotifier) deliver(ctx context.Context, n domain.ApprovalNotifica
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "OpenBastion-Session-Broker")
+	if w.Signed() {
+		// Stamped at the moment of sending, not of the event: the receiver's tolerance
+		// is about how fresh the delivery is.
+		ts := strconv.FormatInt(w.now().Unix(), 10)
+		mac := hmac.New(sha256.New, w.secret)
+		mac.Write([]byte(ts))
+		mac.Write([]byte("."))
+		mac.Write(body)
+		req.Header.Set(WebhookTimestampHeader, ts)
+		req.Header.Set(WebhookSignatureHeader, "v1="+hex.EncodeToString(mac.Sum(nil)))
+	}
 	resp, err := w.client.Do(req)
 	if err != nil {
 		// net/http wraps the failure in a *url.Error whose text begins with the whole

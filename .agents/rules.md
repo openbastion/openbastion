@@ -37,7 +37,7 @@ Applique ces règles à chaque ligne que tu écris. Quand une règle te paraît 
 | Actions d'audit | `<objet>.<événement>` en minuscules | `session.breakglass`, `session.breakglass_requested`, `session.recording_lost` |
 | Tests | `Test<Sujet>_<Comportement>` (underscores) | `TestCheckAccess_DeniesByDefaultWithNoPolicy` |
 | Tests d'intégration | `Test<Fonction>_<Comportement>_<Portée>` | `…_AcrossEightRealProcesses` |
-| ADR | `ADR-NNNN`, numéro suivant, jamais réutilisé | `ADR-0012` |
+| ADR | `ADR-NNNN`, numéro suivant, jamais réutilisé | `ADR-0013` |
 | Commits | voir §9 | |
 
 ## 4. HTTP/JSON interne et public

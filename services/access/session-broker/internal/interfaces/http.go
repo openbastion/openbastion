@@ -114,7 +114,19 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 		create = s.svc.CreateBreakGlassSession
 	}
 	sess, err := create(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, req.DurationMinutes)
-	if err != nil {
+	switch {
+	case err == nil:
+	case errors.Is(err, domain.ErrTooManyPending):
+		// The requester's own quota (ADR-0013): it says how many, and it frees itself.
+		http.Error(w, err.Error(), http.StatusTooManyRequests)
+		return
+	case errors.Is(err, domain.ErrUnavailable):
+		// The requests waiting could not be counted: nothing was accepted. The cause
+		// stays in this process's log, not in what a client reads.
+		log.Printf("session-broker: a break-glass request was not accepted: %v", err)
+		http.Error(w, "the request could not be accepted: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
+		return
+	default:
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}

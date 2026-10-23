@@ -119,6 +119,27 @@ Quand le recorder est en panne et qu'un incident ne peut pas attendre, une sessi
 | Session Broker | `BREAKGLASS_APPROVAL` | `required` (**défaut**) : une demande break-glass attend l'approbation d'une autre personne. `disabled` : l'ancien comportement à une seule personne (ADR-0009), à demander **par son nom** — le Broker l'annonce au démarrage (« WITHOUT APPROVAL »). Toute autre valeur est une erreur fatale. |
 | Session Broker | `BREAKGLASS_APPROVAL_WINDOW_MINUTES` | Délai laissé pour décider, de 1 à 1440 (défaut **15**). Passé ce délai la demande est `expired` et ne peut plus être décidée. Tout autre texte ou nombre est une erreur fatale. |
 | Session Broker | `BREAKGLASS_NOTIFY_URL` | URL d'un webhook (Slack, Teams, Mattermost, récepteur générique) prévenu quand une demande break-glass est déposée, approuvée ou rejetée (ADR-0012). Absente : aucune notification, les approbateurs consultent la liste. **https exigé** (http seulement vers une adresse de boucle locale) ; une URL avec identifiants, sans hôte, d'un autre schéma ou illisible est une erreur fatale au démarrage, dont le message ne la répète pas. **L'URL est un secret** (celles de Slack et de Teams en contiennent un) : traitez-la comme tel dans vos manifestes — Secret Kubernetes, pas ConfigMap. Le Broker ne journalise que son schéma et son hôte. |
+| Session Broker | `BREAKGLASS_MAX_PENDING_PER_REQUESTER` | Nombre maximal de demandes break-glass qu'**un même demandeur** peut avoir en attente, de 1 à 100 (défaut **3**) ; au-delà, `429`. Il n'existe pas de valeur « illimité » ; un texte, `0`, un négatif ou plus de 100 est une erreur fatale au démarrage. Ne s'applique qu'avec `BREAKGLASS_APPROVAL=required` (sans approbation, rien n'attend). Une place se libère quand une demande est décidée ou échue (ADR-0013). |
+| Session Broker | `BREAKGLASS_NOTIFY_SECRET` | Secret qui signe le webhook : 32 octets au moins, utilisé tel quel, sans suppression d'espaces (`openssl rand -hex 32`). Fixé, chaque envoi porte `X-OpenBastion-Timestamp` et `X-OpenBastion-Signature`. Fixé sans `BREAKGLASS_NOTIFY_URL`, ou trop court : erreur fatale au démarrage. Jamais journalisé, jamais répété dans une erreur (ADR-0013). |
+
+**Plafond et signature (ADR-0013).** Un demandeur ne peut pas avoir plus de `BREAKGLASS_MAX_PENDING_PER_REQUESTER` demandes en attente (3 par défaut). Le plafond est **par demandeur** : celui d'une personne n'ôte rien à une autre. Une demande refusée pour cette raison est un `429`, laisse un événement `session.breakglass_requested` avec `success=false`, ne prévient pas le canal et n'apparaît pas dans la liste. Un demandeur au plafond ne peut plus rien demander tant qu'une de ses demandes n'est pas décidée ou échue (15 minutes par défaut) : c'est le prix de la protection, et c'est pourquoi on ne le règle pas à 1 sans y penser.
+
+Quand `BREAKGLASS_NOTIFY_SECRET` est fixé, le récepteur du webhook peut **vérifier** ce qu'il reçoit. La signature est `HMAC-SHA256(secret, timestamp + "." + corps exact)`, écrite `v1=<hex>` ; il faut la calculer sur les octets reçus, pas sur du JSON ré-encodé :
+
+```python
+import hashlib, hmac, time
+
+def verify(secret: bytes, ts: str, sig: str, body: bytes, tolerance: int = 300) -> bool:
+    try:
+        if abs(time.time() - int(ts)) > tolerance:   # horodatage (X-OpenBastion-Timestamp) hors tolérance
+            return False
+    except ValueError:
+        return False
+    want = "v1=" + hmac.new(secret, ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(want, sig)            # sig = X-OpenBastion-Signature
+```
+
+Cela prouve l'origine, l'intégrité et la fraîcheur du message. Cela **ne** protège **pas** contre un rejeu à l'intérieur de la tolérance, ne chiffre rien, et Slack, Teams ou Mattermost ignorent ces en-têtes : avec eux, l'URL reste le seul secret.
 
 Aucun rôle n'en dispose par défaut — pas même un administrateur. Pour l'accorder, créez une politique sur la ressource **`breakglass:account:<id du compte>`**, distincte de `vault:account:…` :
 
@@ -275,6 +296,12 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `POST /sessions` avec `breakGlass: true` renvoie `403` « … is not a valid account identifier » | L'identifiant de compte n'est pas de la forme `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$` (ADR-0012) | Corriger l'identifiant ; un identifiant qui contiendrait une mention ou un lien n'a rien à faire dans le canal d'astreinte |
 | Le journal du Broker dit « notification … not delivered » ou « refused » | Le webhook est injoignable, lent, ou répond autre chose que 2xx (une redirection compte comme un refus : elle n'est pas suivie) | Vérifier l'URL et le récepteur ; rien n'est perdu côté demande, la liste reste à jour |
 | Le Broker s'arrête avec « BREAKGLASS_NOTIFY_URL cannot be used » | L'URL n'est pas https (hors boucle locale), porte des identifiants, n'a pas d'hôte ou est illisible. Le message ne la répète pas | Corriger la variable ; mieux vaut un démarrage refusé que des approbateurs qui croient être prévenus |
+| Le Broker s'arrête avec « BREAKGLASS_NOTIFY_SECRET is set but BREAKGLASS_NOTIFY_URL is not » | Un secret de signature est fixé alors qu'il n'y a pas de canal : il n'y a rien à signer, et c'est probablement une variable oubliée | Fixer `BREAKGLASS_NOTIFY_URL`, ou retirer le secret |
+| Le Broker s'arrête avec « BREAKGLASS_NOTIFY_SECRET cannot be used » | Le secret fait moins de 32 octets. Le message ne le répète pas | Générer un secret : `openssl rand -hex 32` ; le fixer des deux côtés |
+| Le Broker s'arrête avec « BREAKGLASS_MAX_PENDING_PER_REQUESTER must be a number between 1 and 100 » | Valeur non numérique, `0`, négative ou supérieure à 100 : il n'existe pas de « illimité » | Corriger la variable |
+| Le récepteur du webhook refuse la signature | Corps modifié ou ré-encodé par un intermédiaire (la signature porte sur les octets exacts), horloge décalée au-delà de la tolérance, secret différent des deux côtés | Vérifier sur le corps brut ; synchroniser l'horloge (NTP) ; comparer les secrets |
+| `POST /sessions` avec `breakGlass: true` renvoie `429` « too many break-glass requests are waiting for a decision » | Le demandeur a déjà `BREAKGLASS_MAX_PENDING_PER_REQUESTER` demandes en attente ; la tentative est enregistrée `denied` et auditée (`success=false`) | Faire décider une de ses demandes, ou attendre qu'elle échoie (15 minutes par défaut) ; relever le plafond seulement si le besoin est réel |
+| `POST /sessions` avec `breakGlass: true` renvoie `503` | Les demandes en attente du demandeur n'ont pas pu être comptées (base ou dépendance) : par défaut la demande n'est **pas** acceptée | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker (« a break-glass request was not accepted ») |
 | `approve` renvoie `409` | La demande est déjà décidée, périmée (`expired`, délai `BREAKGLASS_APPROVAL_WINDOW_MINUTES`) ou n'est pas une demande break-glass | Relire la demande (`GET /sessions/<id>`) ; en cas de péremption, le demandeur en refait une |
 | `approve` renvoie `503` | L'Authorization Service, l'audit ou la base ne répond pas : la décision n'est **pas** prise (fail-closed) | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker |
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |

@@ -196,6 +196,11 @@ CREATE INDEX idx_sessions_status ON sessions (status) WHERE status IN ('pending_
 -- sans grossir avec l'historique des sessions. Implémentation : `sessions_pending_approval_idx`,
 -- créé de façon idempotente (`IF NOT EXISTS`) : une base antérieure le reçoit au prochain démarrage.
 CREATE INDEX sessions_pending_approval_idx ON sessions (expires_at, id) WHERE status = 'pending_approval';
+-- ADR-0013 : aucun changement de schéma. Le plafond par demandeur compte les lignes `pending_approval` de ce
+-- `requested_by` dont `expires_at >= now` (`idx_sessions_requested_by`, `sessions_pending_approval_idx`), et
+-- `SaveIfUnderPendingLimit` compte puis enregistre dans UNE transaction, sous
+-- `pg_advisory_xact_lock(0x0B7A, hashtext(requested_by))` : deux réplicas du Broker se sérialisent sur le demandeur,
+-- jamais sur la table. Le verrou est levé au COMMIT/ROLLBACK ; une demande arrivée à son échéance cesse de compter.
 
 -- Command Recorder — implémenté : services/recording-audit/command-recorder/migrations.
 -- Écarts assumés par rapport à la première version de ce DDL :

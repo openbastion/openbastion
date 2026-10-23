@@ -22,6 +22,12 @@ var (
 	ErrForbidden   = errors.New("forbidden")
 	ErrConflict    = errors.New("conflict")
 	ErrUnavailable = errors.New("a dependency is unavailable")
+
+	// ErrTooManyPending is a break-glass request refused because its requester
+	// already has as many waiting for a decision as the platform allows (ADR-0013).
+	// The HTTP layer reports it as 429: it is the requester's own quota, and it
+	// frees itself when one of their requests is decided or expires.
+	ErrTooManyPending = errors.New("too many break-glass requests are waiting for a decision")
 )
 
 type SessionRepository interface {
@@ -42,4 +48,18 @@ type SessionRepository interface {
 	// others (ADR-0012). It reads no secret and decides nothing: who may see which of
 	// them is the service's question, not the store's.
 	ListPending(ctx context.Context, now time.Time, limit int) (sessions []*Session, more bool, err error)
+
+	// CountPending is how many break-glass requests requestedBy has waiting at now —
+	// the same predicate as ListPending: status pending_approval, deadline not before
+	// now (ADR-0013). It is an early, cheap answer; the limit itself is held by
+	// SaveIfUnderPendingLimit.
+	CountPending(ctx context.Context, requestedBy string, now time.Time) (int, error)
+
+	// SaveIfUnderPendingLimit stores the pending request s only if its requester has
+	// fewer than limit others waiting at now, and says whether it did. Counting and
+	// storing are ONE atomic step: of any number of requests from the same requester
+	// racing for the last place, exactly the places left are taken — whichever
+	// Broker replica they reached (ADR-0013). Refusing is not an error: nothing is
+	// written and saved is false.
+	SaveIfUnderPendingLimit(ctx context.Context, s *Session, limit int, now time.Time) (saved bool, err error)
 }

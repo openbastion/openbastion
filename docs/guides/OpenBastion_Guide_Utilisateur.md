@@ -81,6 +81,9 @@ Le système d'enregistrement des sessions est momentanément indisponible, et Op
 **Je dois approuver une demande d'accès d'urgence : où la trouver ?**
 Si l'administrateur a configuré un canal d'alerte, il vous a prévenu (le message nomme le compte, le demandeur et l'échéance, pas la justification). Dans tous les cas, la liste de ce que vous pouvez décider est `GET /sessions?status=pending_approval` : vous n'y voyez que les demandes que **vous** avez le droit d'approuver, jamais les vôtres, avec la justification. Une liste vide veut dire que rien ne vous attend — ou que vous n'avez pas ce droit ; si vous attendez une demande, vérifiez avec votre administrateur que votre rôle a l'autorité d'approuver ce compte. Une erreur 503 ne veut pas dire « rien à décider » : réessayez. Approuvez ou rejetez avec `POST /sessions/<id>/approve` ou `/reject`.
 
+**Ma demande d'accès d'urgence est refusée avec « too many break-glass requests are waiting for a decision » (429) : pourquoi ?**
+Vous avez déjà plusieurs demandes d'urgence en attente d'une décision — trois par défaut, votre administrateur peut avoir changé ce nombre (le message le dit). C'est une protection : personne ne peut noyer la liste de ses approbateurs, et le plafond est **le vôtre** — il n'empêche personne d'autre de demander. Une place se libère dès qu'une de vos demandes est approuvée, rejetée ou expirée (15 minutes par défaut) ; si l'une d'elles est devenue inutile, demandez à votre approbateur de la rejeter plutôt que d'attendre. La tentative refusée est tracée dans l'audit, comme toute demande.
+
 **Ma session s'est coupée à l'heure indiquée, même en pleine commande ?**
 Oui : OpenBastion coupe toute session à son échéance, sans attendre. Redemandez-en une si le travail n'est pas fini (§3).
 

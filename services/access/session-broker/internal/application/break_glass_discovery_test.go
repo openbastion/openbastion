@@ -205,6 +205,7 @@ func TestListPending_ARowThatIsNotABreakGlassRequestIsNeverListed(t *testing.T) 
 
 func TestListPending_TheAuthorizationServiceIsAskedOncePerAccount(t *testing.T) {
 	f := newApprovalFixture(30, twoAccounts...)
+	f.broker.WithMaxPendingPerRequester(100) // this test is not about the quota (ADR-0013)
 	f.authz.allow[approveRes2] = true
 	for i := 0; i < 3; i++ {
 		f.request(t)
@@ -277,6 +278,7 @@ func TestListPending_NeedsAnAuthenticatedCaller(t *testing.T) {
 
 func TestListPending_PaginatesTheFilteredList(t *testing.T) {
 	f := newApprovalFixture(30, everything...)
+	f.broker.WithMaxPendingPerRequester(100) // five requests from one requester: not what this test is about (ADR-0013)
 	var all []string
 	for i := 0; i < 5; i++ {
 		f.clock.advance(time.Second)

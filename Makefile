@@ -185,6 +185,10 @@ run-recorder:
 # BREAKGLASS_NOTIFY_URL=https://… prévient un canal (webhook) des demandes break-glass
 # (ADR-0012) ; absent : aucune notification. L'URL est un SECRET : jamais journalisée.
 # https exigé, sauf vers une adresse de boucle locale (développement).
+# BREAKGLASS_MAX_PENDING_PER_REQUESTER=3 (défaut, 1 à 100) : demandes break-glass en attente
+# par demandeur ; au-delà, 429 (ADR-0013). Pas de valeur « illimité ».
+# BREAKGLASS_NOTIFY_SECRET=$$(openssl rand -hex 32) signe le webhook (X-OpenBastion-Signature) ;
+# 32 octets au moins, et seulement avec BREAKGLASS_NOTIFY_URL. Jamais journalisé.
 run-broker:
 	$(call tls,session-broker) \
 		$(GO) run ./services/access/session-broker/cmd/session-broker

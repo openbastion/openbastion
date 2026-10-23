@@ -51,6 +51,37 @@ func (s *InMemoryStore) SaveIfStatus(ctx context.Context, sess *domain.Session, 
 	return true, nil
 }
 
+// pendingOf counts the requests of requestedBy waiting at now. The caller holds the lock.
+func (s *InMemoryStore) pendingOf(requestedBy string, now time.Time) int {
+	n := 0
+	for _, sess := range s.sessions {
+		if sess.Status == domain.StatusPendingApproval && sess.RequestedBy == requestedBy && !sess.ExpiresAt.Before(now) {
+			n++
+		}
+	}
+	return n
+}
+
+// CountPending is domain.SessionRepository.CountPending over the map.
+func (s *InMemoryStore) CountPending(ctx context.Context, requestedBy string, now time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pendingOf(requestedBy, now), nil
+}
+
+// SaveIfUnderPendingLimit counts and stores under one hold of the store's lock: that
+// is what makes the limit exact under concurrency.
+func (s *InMemoryStore) SaveIfUnderPendingLimit(ctx context.Context, sess *domain.Session, limit int, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingOf(sess.RequestedBy, now) >= limit {
+		return false, nil
+	}
+	cp := *sess
+	s.sessions[sess.ID] = &cp
+	return true, nil
+}
+
 // ListPending is domain.SessionRepository.ListPending over the map.
 func (s *InMemoryStore) ListPending(ctx context.Context, now time.Time, limit int) ([]*domain.Session, bool, error) {
 	s.mu.Lock()

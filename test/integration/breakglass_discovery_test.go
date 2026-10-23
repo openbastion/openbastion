@@ -24,9 +24,11 @@ import (
 )
 
 type hookDelivery struct {
-	Path string
-	Raw  string
-	Body map[string]any
+	Path      string
+	Raw       string
+	Body      map[string]any
+	Timestamp string // X-OpenBastion-Timestamp, empty when the delivery is not signed (ADR-0013)
+	Signature string // X-OpenBastion-Signature
 }
 
 // hookSpy is the messaging service. It records what it is sent, and can be made to
@@ -53,7 +55,8 @@ func newHookSpy(t *testing.T) *hookSpy {
 		var body map[string]any
 		_ = json.Unmarshal(raw, &body)
 		h.mu.Lock()
-		h.got = append(h.got, hookDelivery{Path: r.URL.Path, Raw: string(raw), Body: body})
+		h.got = append(h.got, hookDelivery{Path: r.URL.Path, Raw: string(raw), Body: body,
+			Timestamp: r.Header.Get("X-OpenBastion-Timestamp"), Signature: r.Header.Get("X-OpenBastion-Signature")})
 		h.mu.Unlock()
 		switch h.mode.Load() {
 		case hookRefuses:
@@ -230,6 +233,9 @@ func TestBreakGlassDiscovery_TheApproverFindsTheRequestAndTheChannelIsToldOfIt_A
 		}
 		if text, _ := d.Body["text"].(string); !strings.Contains(text, s1) || !strings.Contains(text, acc1) {
 			t.Fatalf("the human text does not name the request: %q", text)
+		}
+		if d.Timestamp != "" || d.Signature != "" {
+			t.Fatalf("a Broker given no secret signed its delivery: %q %q", d.Timestamp, d.Signature)
 		}
 		for _, leak := range []string{"SECRET-JUSTIFICATION", "INC-9999", "justification", "Justification"} {
 			if strings.Contains(d.Raw, leak) {

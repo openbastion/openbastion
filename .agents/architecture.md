@@ -21,9 +21,10 @@ Chacun est tenu par du code et par des tests. Si une tâche semble exiger d'en a
 | ADR-0009 | Le break-glass ne retire que l'enregistrement acquitté, sous six verrous cumulés, et jamais en silence. | Broker + `proxycore.Admission` (preuve à champs non exportés). |
 | ADR-0011 | Une demande break-glass n'ouvre rien tant qu'une **autre** personne ne l'a pas approuvée : pas d'auto-approbation (par identifiant d'utilisateur), décideur et rôles tirés du jeton vérifié par la Gateway, décision auditée avant d'agir puis compare-and-swap, `connect` réservé au demandeur. | Session Broker (`decide`, `SaveIfStatus`) + liste blanche des routes `/sessions/...` du Gateway. |
 | ADR-0012 | La liste des demandes break-glass en attente ne montre que ce que l'appelant peut décider (vide, jamais 403, sans autorité ; 503 plutôt qu'une liste partielle) ; la notification est au mieux et **n'est jamais un contrôle** (port sans valeur de retour, asynchrone, après coup) ; l'URL du webhook est un secret (jamais journalisée) ; ce que le demandeur écrit (`targetAccountId`) n'atteint jamais tel quel un message lu par des tiers. | Session Broker (`ListPendingApprovals`, `ApprovalNotifier`, `infrastructure/webhook_notifier.go`, `wellFormedAccountID`) + Gateway (`handleListPending` reconstruit la requête). |
+| ADR-0013 | Un demandeur ne peut pas avoir plus de `BREAKGLASS_MAX_PENDING_PER_REQUESTER` demandes en attente (3 par défaut ; **par demandeur**, jamais global ni par compte : un plafond partagé serait une arme) ; le plafond est tenu **atomiquement**, entre réplicas aussi ; un décompte impossible est un 503, jamais une acceptation ; il n'est demandé qu'après l'autorité ; le webhook, si `BREAKGLASS_NOTIFY_SECRET` est fixé, est signé (`v1=` HMAC-SHA256 de `horodatage.corps`) et le secret n'apparaît jamais dans un journal ni une erreur. | Session Broker (`checkPendingQuota`, `SaveIfUnderPendingLimit` dans les deux magasins — verrou consultatif PostgreSQL —, `WebhookNotifier.WithSecret`) + relais du `429` par le Gateway. |
 | ADR-0010 | L'identité de l'appelant vient du certificat, jamais du corps de la requête ; chaque route a sa liste d'appelants, refus par défaut. | `pkg/mtls`, un `internal/interfaces/callers.go` par service. |
 | — | L'audit est fail-closed : un événement qui ne peut pas être écrit empêche l'action. | Broker, proxy. |
-| — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*` (dont `BREAKGLASS_APPROVAL`) ; `BREAKGLASS_NOTIFY_URL` absente = pas de notification, annoncé au démarrage, et une valeur inutilisable est fatale. |
+| — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*` (dont `BREAKGLASS_APPROVAL`) ; `BREAKGLASS_NOTIFY_URL` absente = pas de notification, annoncé au démarrage, et une valeur inutilisable est fatale ; `BREAKGLASS_MAX_PENDING_PER_REQUESTER` (1 à 100, pas d'« illimité ») et `BREAKGLASS_NOTIFY_SECRET` (32 octets au moins, sans URL = fatal) : hors bornes, fatal. |
 
 ## 3. Arborescence réelle
 
@@ -91,7 +92,7 @@ utilisateur ──HTTP──► api-gateway ──► authentication   (login, v
                           └──────► command-recorder    (lecture d'un replay)
 session-broker ──► authorization (check-access) · password-vault (authorize-scope, métadonnées de compte)
                ──► audit-service (emit-event)   · ssh-proxy (establish-session)
-               ──► webhook de notification (BREAKGLASS_NOTIFY_URL, HORS maillage mTLS, au mieux, jamais un contrôle — ADR-0012)
+               ──► webhook de notification (BREAKGLASS_NOTIFY_URL, HORS maillage mTLS, au mieux, jamais un contrôle — ADR-0012 ; signé si BREAKGLASS_NOTIFY_SECRET — ADR-0013)
 ssh-proxy ──► password-vault (fetch-credential) · audit-service · command-recorder (écriture des commandes)
 password-vault, command-recorder ──► authorization (check-access)
 admin-cli ──► authentication (POST /auth/v1/users) · audit-service (GET /audit/v1/verify-chain)

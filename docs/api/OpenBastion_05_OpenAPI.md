@@ -212,6 +212,25 @@ paths:
         après coup, sans effet sur la demande ni sur son code de retour. Ce
         webhook n'est pas une route de cette API : il sort du maillage ; son
         message ne porte ni la justification ni rien de la cible.
+
+        **Plafond par demandeur (ADR-0013).** Un même demandeur ne peut pas
+        avoir plus de `BREAKGLASS_MAX_PENDING_PER_REQUESTER` demandes en
+        attente (3 par défaut, de 1 à 100) : au-delà, la demande est refusée
+        (`429`), auditée (`session.breakglass_requested`, `success=false`),
+        non notifiée, et absente de la liste. Le plafond est celui de chaque
+        demandeur — le sien n'ôte rien à un autre — et une place se libère
+        quand une demande est décidée ou arrive à son échéance. Il ne
+        s'applique que si l'approbation est requise.
+
+        **Signature du webhook (ADR-0013).** Si `BREAKGLASS_NOTIFY_SECRET`
+        est fixé (32 octets au moins), chaque envoi porte
+        `X-OpenBastion-Timestamp` (secondes Unix, à l'instant de l'envoi) et
+        `X-OpenBastion-Signature: v1=<hex>`, où `<hex>` est
+        `HMAC-SHA256(secret, timestamp + "." + corps exact)`. Le récepteur
+        recalcule, compare en temps constant et refuse un horodatage hors de
+        sa tolérance. Cela prouve l'origine, l'intégrité et la fraîcheur du
+        message — pas sa confidentialité, et pas l'absence de rejeu dans la
+        tolérance.
       requestBody:
         required: true
         content:
@@ -233,6 +252,26 @@ paths:
             `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, ADR-0012 —, justification
             trop courte, durée hors limite, aucune politique sur
             `breakglass:account:*`). Le corps dit laquelle.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: >
+            Demande `breakGlass` refusée parce que son demandeur a déjà le
+            nombre maximal de demandes en attente d'une décision
+            (`BREAKGLASS_MAX_PENDING_PER_REQUESTER`, ADR-0013). Le corps dit
+            le plafond ; la demande est enregistrée comme refusée et
+            auditée. Réessayer n'a de sens qu'une fois une demande décidée
+            ou échue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: >
+            Une dépendance ne répond pas — par exemple, les demandes en
+            attente du demandeur n'ont pas pu être comptées : la demande n'est
+            pas acceptée (jamais acceptée « au cas où »). Le corps ne dit pas
+            la cause ; elle est dans le journal du Broker.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

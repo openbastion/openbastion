@@ -98,6 +98,18 @@ func main() {
 		approvalWindow = time.Duration(minutes) * time.Minute
 	}
 	svc.WithBreakGlassApprovalWindow(approvalWindow)
+	// How many requests one requester may have waiting (ADR-0013). There is no value
+	// for "unlimited": a number out of range is a mistake to be found at start-up,
+	// not a way to switch the protection off.
+	maxPending := application.DefaultMaxPendingPerRequester
+	if v := os.Getenv("BREAKGLASS_MAX_PENDING_PER_REQUESTER"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 100 {
+			log.Fatalf("session-broker: BREAKGLASS_MAX_PENDING_PER_REQUESTER must be a number between 1 and 100, got %q", v)
+		}
+		maxPending = n
+	}
+	svc.WithMaxPendingPerRequester(maxPending)
 	approvalRequired := true
 	switch v := os.Getenv("BREAKGLASS_APPROVAL"); v {
 	case "", "required":
@@ -110,7 +122,7 @@ func main() {
 
 	switch {
 	case breakGlassMax > 0 && approvalRequired:
-		log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) — a request needs the approval of a second user, within %s; an approved session runs while the Command Recorder is down", breakGlassMax, approvalWindow)
+		log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) — a request needs the approval of a second user, within %s, and a requester may have at most %d waiting; an approved session runs while the Command Recorder is down", breakGlassMax, approvalWindow, maxPending)
 	case breakGlassMax > 0:
 		log.Printf("session-broker: BREAK-GLASS ENABLED (at most %d minutes) WITHOUT APPROVAL (BREAKGLASS_APPROVAL=disabled) — a single actor with a policy on breakglass:account:* can obtain a session that runs while the Command Recorder is down", breakGlassMax)
 	}
@@ -120,17 +132,34 @@ func main() {
 	// cannot be used stops the Broker, whose message does not repeat it, rather than
 	// leaving approvers to believe they would be told.
 	notifyChannel := ""
+	notifySigned := false
+	notifySecret := os.Getenv("BREAKGLASS_NOTIFY_SECRET")
+	if os.Getenv("BREAKGLASS_NOTIFY_URL") == "" && notifySecret != "" {
+		// A secret with nobody to sign for: the operator would believe a channel is
+		// protected that does not exist. Never repeated, like the URL (ADR-0013).
+		log.Fatalf("session-broker: BREAKGLASS_NOTIFY_SECRET is set but BREAKGLASS_NOTIFY_URL is not: there is nothing to sign")
+	}
 	if v := os.Getenv("BREAKGLASS_NOTIFY_URL"); v != "" {
 		n, err := infrastructure.NewWebhookNotifier(v)
 		if err != nil {
 			log.Fatalf("session-broker: BREAKGLASS_NOTIFY_URL cannot be used: %v", err)
+		}
+		if notifySecret != "" {
+			if _, err := n.WithSecret(notifySecret); err != nil {
+				log.Fatalf("session-broker: BREAKGLASS_NOTIFY_SECRET cannot be used: %v", err)
+			}
+			notifySigned = true
 		}
 		svc.WithApprovalNotifier(n)
 		notifyChannel = n.Where()
 	}
 	switch {
 	case notifyChannel != "":
-		log.Printf("session-broker: break-glass notifications are sent to %s (best effort; the rest of the URL is a secret and is not logged)", notifyChannel)
+		signing := "not signed"
+		if notifySigned {
+			signing = "signed: " + infrastructure.WebhookSignatureHeader + " is a v1 HMAC-SHA256"
+		}
+		log.Printf("session-broker: break-glass notifications are sent to %s (%s; best effort; the rest of the URL is a secret and is not logged)", notifyChannel, signing)
 	case breakGlassMax > 0 && approvalRequired:
 		log.Printf("session-broker: no notification channel (BREAKGLASS_NOTIFY_URL is not set): approvers have to look at GET /sessions?status=pending_approval")
 	}

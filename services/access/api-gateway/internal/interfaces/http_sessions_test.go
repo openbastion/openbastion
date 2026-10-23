@@ -260,3 +260,21 @@ func TestSessionRoutes_ListingRelaysTheBrokersAnswer(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// A request refused for the requester's own quota (ADR-0013) reaches the client as the
+// 429 the Broker said, with the reason: the Gateway does not turn it into something
+// else, and does not swallow what tells the requester how many places they have.
+func TestSessionRoutes_ARequestRefusedForItsQuotaIsRelayedAs429(t *testing.T) {
+	authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-alice", "alice", []string{"sre"})
+	t.Cleanup(authSrv.Close)
+	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "too many break-glass requests are waiting for a decision (at most 3 per requester)", http.StatusTooManyRequests)
+	}))
+	t.Cleanup(broker.Close)
+	gw := newTestGateway(t, authSrv.URL, broker.URL).Routes()
+
+	rec := do(gw, http.MethodPost, "/sessions", `{"targetAccountId":"acc1","protocol":"ssh","breakGlass":true}`, true)
+	if rec.Code != http.StatusTooManyRequests || !strings.Contains(rec.Body.String(), "at most 3") {
+		t.Fatalf("%d %q, want the Broker's 429 and its reason", rec.Code, rec.Body.String())
+	}
+}

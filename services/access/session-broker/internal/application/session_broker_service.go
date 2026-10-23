@@ -105,6 +105,7 @@ type SessionBrokerService struct {
 	// asks for a second person rather than granting break-glass to one.
 	breakGlassWithoutApproval bool
 	approvalWindow            time.Duration
+	maxPendingPerRequester    int
 
 	// now is the clock: injectable so that the deadline of a pending request and
 	// the start of an approved session can be tested without waiting.
@@ -128,6 +129,12 @@ const BreakGlassResourcePrefix = "breakglass:account:"
 // "breakglass:*" — the requesters' — does not cover it, so being allowed to ask is
 // not being allowed to approve.
 const BreakGlassApproveResourcePrefix = "breakglass-approve:account:"
+
+// DefaultMaxPendingPerRequester is how many break-glass requests one requester may
+// have waiting for a decision at once (ADR-0013): enough for an on-call person with a
+// few incidents at the same time, few enough that one identity cannot drown the list
+// and the channel the approvers read.
+const DefaultMaxPendingPerRequester = 3
 
 // DefaultBreakGlassApprovalWindow is how long a break-glass request waits for a
 // decision when the platform says nothing: long enough for an on-call to be
@@ -184,6 +191,24 @@ func (s *SessionBrokerService) WithBreakGlassApprovalWindow(d time.Duration) *Se
 	return s
 }
 
+// WithMaxPendingPerRequester sets how many break-glass requests one requester may
+// have waiting for a decision (ADR-0013). Zero or negative keeps
+// DefaultMaxPendingPerRequester: there is no way to ask for "no limit", and a Broker
+// built by hand without this call is strict, like it is for the approval itself.
+func (s *SessionBrokerService) WithMaxPendingPerRequester(n int) *SessionBrokerService {
+	if n > 0 {
+		s.maxPendingPerRequester = n
+	}
+	return s
+}
+
+func (s *SessionBrokerService) maxPending() int {
+	if s.maxPendingPerRequester > 0 {
+		return s.maxPendingPerRequester
+	}
+	return DefaultMaxPendingPerRequester
+}
+
 // WithApprovalNotifier sets who is told of break-glass requests and decisions
 // (ADR-0012). Nil, the default, tells nobody.
 func (s *SessionBrokerService) WithApprovalNotifier(n ApprovalNotifier) *SessionBrokerService {
@@ -211,6 +236,30 @@ func (s *SessionBrokerService) clock() time.Time {
 }
 
 func (s *SessionBrokerService) approvalRequired() bool { return !s.breakGlassWithoutApproval }
+
+// checkPendingQuota is the early answer to "has this requester room for another
+// request waiting?" (ADR-0013). It is asked after the Authorization Service, so that
+// only someone with the authority to request learns anything from it, and it only
+// applies when requests wait at all. SaveIfUnderPendingLimit holds the limit itself;
+// this makes the common refusal exact and audited before anything is written.
+func (s *SessionBrokerService) checkPendingQuota(ctx context.Context, requestedBy string, now time.Time) error {
+	if !s.approvalRequired() {
+		return nil
+	}
+	n, err := s.sessions.CountPending(ctx, requestedBy, now)
+	if err != nil {
+		// Fail closed: a request that cannot be counted is not accepted.
+		return fmt.Errorf("%w (counting the requests waiting: %v)", domain.ErrUnavailable, err)
+	}
+	if n >= s.maxPending() {
+		return s.tooManyPending()
+	}
+	return nil
+}
+
+func (s *SessionBrokerService) tooManyPending() error {
+	return fmt.Errorf("%w (at most %d per requester; one frees itself when it is decided or expires)", domain.ErrTooManyPending, s.maxPending())
+}
 
 func (s *SessionBrokerService) window() time.Duration {
 	if s.approvalWindow > 0 {
@@ -298,7 +347,11 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		// A refused waiver is a denied session, and an audited one. It is recorded
 		// under its own action so a reviewer can list every break-glass attempt,
 		// granted or not, without sifting ordinary session.create events.
-		if err := s.authorizeBreakGlass(ctx, actorRoles, privilegedAccountID, justification, durationMinutes); err != nil {
+		refusal := s.authorizeBreakGlass(ctx, actorRoles, privilegedAccountID, justification, durationMinutes)
+		if refusal == nil {
+			refusal = s.checkPendingQuota(ctx, requestedBy, now)
+		}
+		if err := refusal; err != nil {
 			sess.Status = domain.StatusDenied
 			_ = s.sessions.Save(ctx, sess)
 			_ = s.audit.EmitEvent(ctx, requestedBy, "session.breakglass_requested", "session", sess.ID, false)
@@ -317,8 +370,19 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 			// anyone could connect to; the approval is what grants.
 			sess.Status = domain.StatusPendingApproval
 			sess.ExpiresAt = now.Add(s.window()) // the deadline for a decision
-			if err := s.sessions.Save(ctx, sess); err != nil {
+			saved, err := s.sessions.SaveIfUnderPendingLimit(ctx, sess, s.maxPending(), now)
+			if err != nil {
 				return nil, fmt.Errorf("saving break-glass request: %w", err)
+			}
+			if !saved {
+				// The count said there was room, and another request of the same
+				// requester took it first (ADR-0013). Refused like any other: the
+				// event above said "requested"; this one, for the same session,
+				// says it was not, and the last one decides.
+				sess.Status = domain.StatusDenied
+				_ = s.sessions.Save(ctx, sess)
+				_ = s.audit.EmitEvent(ctx, requestedBy, "session.breakglass_requested", "session", sess.ID, false)
+				return nil, fmt.Errorf("break-glass refused: %w", s.tooManyPending())
 			}
 			// Told only now that the request exists to be decided (ADR-0012).
 			s.notify(ctx, domain.ApprovalNotification{
