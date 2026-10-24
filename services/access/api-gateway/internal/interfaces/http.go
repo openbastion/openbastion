@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	neturl "net/url"
 	"strconv"
@@ -37,7 +36,11 @@ type GatewayServer struct {
 	loginLimiter   *application.RateLimiter
 	// sessionLimiter is the per-user budget of POST /sessions (ADR-0014). It is
 	// never nil: a Gateway built by hand has the strict default.
-	sessionLimiter    *application.RateLimiter
+	sessionLimiter *application.RateLimiter
+	// proxyTrust says whose X-Forwarded-For is believed when the per-address limiters
+	// look for the client (ADR-0015). It is never nil: a Gateway built by hand trusts
+	// nobody, and keys on the address of the peer.
+	proxyTrust        *application.ProxyTrust
 	authenticationURL string
 	sessionBrokerURL  string
 	vaultURL          string
@@ -51,6 +54,7 @@ func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, logi
 	return &GatewayServer{
 		authClient: authClient, requestLimiter: requestLimiter, loginLimiter: loginLimiter,
 		sessionLimiter:    application.NewSessionRequestLimiter(0, 0),
+		proxyTrust:        &application.ProxyTrust{},
 		authenticationURL: authenticationURL, sessionBrokerURL: sessionBrokerURL,
 		vaultURL: vaultURL, authorizationURL: authorizationURL, commandRecorderURL: commandRecorderURL,
 		httpClient: http.DefaultClient,
@@ -62,6 +66,15 @@ func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, logi
 func (g *GatewayServer) WithSessionRequestLimiter(l *application.RateLimiter) *GatewayServer {
 	if l != nil {
 		g.sessionLimiter = l
+	}
+	return g
+}
+
+// WithProxyTrust declares which peers are reverse proxies whose X-Forwarded-For is
+// believed (ADR-0015). A nil value keeps the default, which trusts nobody.
+func (g *GatewayServer) WithProxyTrust(t *application.ProxyTrust) *GatewayServer {
+	if t != nil {
+		g.proxyTrust = t
 	}
 	return g
 }
@@ -101,7 +114,7 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// limiter below — brute-force protection on the login endpoint
 	// specifically (Guide Sécurité §4), since it's the one endpoint an
 	// unauthenticated attacker can hammer at all.
-	if d := g.loginLimiter.Take(clientIP(r)); !d.Allowed {
+	if d := g.loginLimiter.Take(g.clientKey(r)); !d.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(d.RetryAfterSeconds()))
 		http.Error(w, "too many login attempts", http.StatusTooManyRequests)
 		return
@@ -137,7 +150,7 @@ type identity struct {
 
 func (g *GatewayServer) requireAuth(next func(w http.ResponseWriter, r *http.Request, id identity)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if d := g.requestLimiter.Take(clientIP(r)); !d.Allowed {
+		if d := g.requestLimiter.Take(g.clientKey(r)); !d.Allowed {
 			w.Header().Set("Retry-After", strconv.Itoa(d.RetryAfterSeconds()))
 			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 			return
@@ -160,12 +173,12 @@ func (g *GatewayServer) requireAuth(next func(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
+// clientKey is what the per-address limiters call the client: the address of the peer,
+// or — when that peer is a declared reverse proxy — the first address on its
+// X-Forwarded-For chain that is not one (ADR-0015). It is never anything a client was
+// free to choose.
+func (g *GatewayServer) clientKey(r *http.Request) string {
+	return g.proxyTrust.ClientKey(r.RemoteAddr, r.Header.Values("X-Forwarded-For"))
 }
 
 // -- shared forwarding helpers ---------------------------------------------

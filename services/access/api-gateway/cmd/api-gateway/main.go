@@ -11,7 +11,7 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"time"
+	"strings"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/api-gateway/internal/application"
@@ -71,16 +71,26 @@ func main() {
 	}
 
 	authClient := &infrastructure.AuthenticationHTTPClient{BaseURL: authenticationURL, Client: upstreams}
-	// Per client address, before the token is looked at (ADR-0014 says what that
-	// address is behind a reverse proxy: the proxy's, for everybody).
-	//   - authenticated traffic: a burst of 60, then one more every second — 60 per
-	//     minute once the burst is spent. (It used to be NewRateLimiter(60,
-	//     time.Minute): a burst of 60 and then ONE per minute.)
-	//   - login: a burst of 5, then ONE per minute. Deliberately much stricter, since
-	//     login is the one endpoint reachable without already holding a token; this
-	//     is what it has always done, whatever its comment said, and it is kept.
-	requestLimiter := application.NewRateLimiter(60, time.Second)
-	loginLimiter := application.NewRateLimiter(5, time.Minute)
+	// Per client address (ADR-0015), before the token is looked at. Behind a reverse
+	// proxy the "client address" is the one TRUSTED_PROXY_CIDRS lets the Gateway read
+	// from X-Forwarded-For; with none declared it is the peer's, which for everybody
+	// is the proxy's.
+	//   - login: a burst of 5, then ONE a minute. Deliberately much stricter than the
+	//     rest, since login is the one endpoint reachable without already holding a
+	//     token; this is what it has always done, whatever its comment said.
+	//   - authenticated traffic: a burst of 60, then 60 a minute. (It used to be
+	//     NewRateLimiter(60, time.Minute): a burst of 60 and then ONE per minute.)
+	// The defaults are those; a value can be changed, never switched off.
+	trust, err := application.ParseTrustedProxies(os.Getenv("TRUSTED_PROXY_CIDRS"))
+	if err != nil {
+		log.Fatalf("api-gateway: TRUSTED_PROXY_CIDRS cannot be used: %v", err)
+	}
+	loginBurst := boundedIntEnv("CLIENT_LOGIN_BURST", application.DefaultLoginBurst, 1, application.MaxLoginBurst)
+	loginRate := boundedIntEnv("CLIENT_LOGIN_RATE_PER_MINUTE", application.DefaultLoginRatePerMinute, 1, application.MaxLoginRatePerMinute)
+	requestBurst := boundedIntEnv("CLIENT_REQUEST_BURST", application.DefaultClientRequestBurst, 1, application.MaxClientRequestBurst)
+	requestRate := boundedIntEnv("CLIENT_REQUEST_RATE_PER_MINUTE", application.DefaultClientRequestRatePerMinute, 1, application.MaxClientRequestRatePerMinute)
+	requestLimiter := application.NewClientRequestLimiter(requestBurst, requestRate)
+	loginLimiter := application.NewLoginLimiter(loginBurst, loginRate)
 
 	// Per verified user, on POST /sessions only (ADR-0014): what bounds the rows and
 	// the audit events a user can make the Broker write by being refused.
@@ -89,7 +99,8 @@ func main() {
 
 	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL).
 		WithHTTPClient(upstreams).
-		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate))
+		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate)).
+		WithProxyTrust(trust)
 
 	log.Printf("api-gateway listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authentication:  %s", authenticationURL)
@@ -98,6 +109,12 @@ func main() {
 	log.Printf("  -> authorization:   %s", authorizationURL)
 	log.Printf("  -> command-recorder: %s", commandRecorderURL)
 	log.Printf("  POST /sessions: at most %d at once per user, then %d per minute (this process only; a request refused for it never reaches the Broker)", sessionBurst, sessionRate)
+	if entries := trust.Entries(); len(entries) > 0 {
+		log.Printf("  client address: X-Forwarded-For is believed only from %s, read from the right up to the first address that is not one of them; from any other peer it is ignored", strings.Join(entries, ", "))
+	} else {
+		log.Printf("  client address: the address of the peer (TRUSTED_PROXY_CIDRS is not set): behind a reverse proxy, every user then shares one bucket of the limits below")
+	}
+	log.Printf("  per client address: login %d at once, then %d per minute; authenticated requests %d at once, then %d per minute (this process only)", loginBurst, loginRate, requestBurst, requestRate)
 	// Plain HTTP: this is the public listener, whose clients are users with bearer
 	// tokens. TLS for them ends at the reverse proxy in front of it.
 	log.Fatal(rt.ServePublic(":"+port, srv.Routes()))

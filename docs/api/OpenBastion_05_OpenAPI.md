@@ -16,6 +16,7 @@
 | Erreurs | Enveloppe unique `Error { code, message, traceId }`, `traceId` corrélé à OpenTelemetry |
 | Horodatage | ISO 8601 / RFC 3339, UTC |
 | Idempotence | Les endpoints de mutation sensibles (`POST /sessions`, `POST .../rotate`) acceptent un header `Idempotency-Key` |
+| Limitation de débit | Le Gateway répond `429` avec un `Retry-After` vrai (secondes, arrondies au-dessus). Trois limites : **par adresse de client** pour `/auth/login` (rafale 5 puis 1 par minute) et pour toute requête authentifiée (rafale 60 puis 60 par minute), **par utilisateur** pour `POST /sessions` (rafale 10 puis 6 par minute) — réglables, jamais « illimitées » (ADR-0014, ADR-0015). Derrière un reverse proxy, l'adresse du client n'est celle de `X-Forwarded-For` que si l'opérateur a déclaré le proxy (`TRUSTED_PROXY_CIDRS`) ; sinon c'est celle du pair |
 
 Ce que cette API REST **n'expose jamais** : un secret cible en clair. `POST /sessions/{id}/connect` renvoie un ticket de connexion court terme vers le proxy protocolaire, jamais un mot de passe (ADR-0003) — cohérent avec l'invariant posé dès le document 00.
 
@@ -74,6 +75,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: >
+            Trop de tentatives de connexion depuis la même adresse de client
+            (ADR-0015) : par défaut une rafale de 5 puis une par minute
+            (`CLIENT_LOGIN_BURST`, `CLIENT_LOGIN_RATE_PER_MINUTE`). La demande
+            n'atteint pas l'Authentication Service. Le corps est un texte
+            (« too many login attempts »), pas l'enveloppe `Error`.
+          headers:
+            Retry-After:
+              description: Secondes à attendre avant qu'une tentative soit de nouveau acceptée.
+              schema: { type: integer, minimum: 1 }
+          content:
+            text/plain:
+              schema: { type: string }
 
   /auth/token/refresh:
     post:

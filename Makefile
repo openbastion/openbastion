@@ -197,6 +197,12 @@ run-broker:
 # SESSION_REQUEST_BURST (défaut 10, de 1 à 1000) et SESSION_REQUEST_RATE_PER_MINUTE (défaut 6,
 # de 1 à 600) règlent le budget de POST /sessions PAR UTILISATEUR, par processus (ADR-0014) ;
 # une valeur invalide arrête la Gateway. Pas de valeur « illimité ».
+# Les limites PAR ADRESSE (login : CLIENT_LOGIN_BURST 5 / CLIENT_LOGIN_RATE_PER_MINUTE 1 ;
+# requêtes authentifiées : CLIENT_REQUEST_BURST 60 / CLIENT_REQUEST_RATE_PER_MINUTE 60) ont
+# ces défauts-là, réglables, jamais « illimités ». Derrière un reverse proxy, TRUSTED_PROXY_CIDRS
+# (adresses ou réseaux CIDR, séparés par des virgules) déclare qui peut dire quel est le client
+# par X-Forwarded-For ; absente : personne, l'adresse du pair fait foi (ADR-0015). 0.0.0.0/0 et
+# les valeurs douteuses arrêtent la Gateway.
 run-gateway:
 	$(call tls,api-gateway) COMMAND_RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
 		$(GO) run ./services/access/api-gateway/cmd/api-gateway

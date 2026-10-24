@@ -141,19 +141,52 @@ const (
 	DefaultSessionRatePerMinute = 6
 	MaxSessionBurst             = 1000
 	MaxSessionRatePerMinute     = 600
+
+	// The per-address limits (ADR-0015). Their defaults are what the two limiters
+	// have always really done — login: a burst of 5, then ONE a minute; authenticated
+	// traffic: a burst of 60, then 60 a minute — so that making them adjustable
+	// relaxes nothing until someone asks, by name.
+	DefaultLoginBurst                 = 5
+	MaxLoginBurst                     = 100
+	DefaultLoginRatePerMinute         = 1
+	MaxLoginRatePerMinute             = 60
+	DefaultClientRequestBurst         = 60
+	MaxClientRequestBurst             = 10000
+	DefaultClientRequestRatePerMinute = 60
+	MaxClientRequestRatePerMinute     = 6000
 )
 
-// NewSessionRequestLimiter is the per-user budget of POST /sessions: `burst`
-// requests at once, then `perMinute` per minute. A value that is not positive
-// gets the default — a limiter built by hand is the strict one.
-func NewSessionRequestLimiter(burst, perMinute int) *RateLimiter {
+// perMinuteLimiter is a bucket of `burst` tokens that gets `perMinute` back every
+// minute. A value that is not positive gets the default: a limiter built by hand is
+// the strict one.
+func perMinuteLimiter(burst, perMinute, defaultBurst, defaultPerMinute int) *RateLimiter {
 	if burst <= 0 {
-		burst = DefaultSessionBurst
+		burst = defaultBurst
 	}
 	if perMinute <= 0 {
-		perMinute = DefaultSessionRatePerMinute
+		perMinute = defaultPerMinute
 	}
 	return NewRateLimiter(burst, time.Minute/time.Duration(perMinute))
+}
+
+// NewSessionRequestLimiter is the per-user budget of POST /sessions: `burst`
+// requests at once, then `perMinute` per minute (ADR-0014).
+func NewSessionRequestLimiter(burst, perMinute int) *RateLimiter {
+	return perMinuteLimiter(burst, perMinute, DefaultSessionBurst, DefaultSessionRatePerMinute)
+}
+
+// NewLoginLimiter is the per-address limit of POST /auth/login: `burst` attempts at
+// once, then `perMinute` per minute (ADR-0015). It is the brute-force protection of
+// the one endpoint reachable without a token.
+func NewLoginLimiter(burst, perMinute int) *RateLimiter {
+	return perMinuteLimiter(burst, perMinute, DefaultLoginBurst, DefaultLoginRatePerMinute)
+}
+
+// NewClientRequestLimiter is the per-address limit of authenticated traffic, applied
+// before the token is looked at: `burst` requests at once, then `perMinute` per
+// minute (ADR-0015).
+func NewClientRequestLimiter(burst, perMinute int) *RateLimiter {
+	return perMinuteLimiter(burst, perMinute, DefaultClientRequestBurst, DefaultClientRequestRatePerMinute)
 }
 
 // RetryAfterSeconds is what a refused request is told to wait: the time that is

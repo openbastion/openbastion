@@ -206,10 +206,10 @@ Le Gateway applique trois limites, de natures différentes. **Aucune n'a de vale
 | Quoi | Clé | Réglage | Comportement |
 |---|---|---|---|
 | `POST /sessions` | l'**utilisateur** vérifié (jamais l'adresse, jamais le corps) | `SESSION_REQUEST_BURST` : rafale, de 1 à 1000 (défaut **10**) ; `SESSION_REQUEST_RATE_PER_MINUTE` : débit soutenu, de 1 à 600 (défaut **6**) | Chaque tentative coûte un jeton, acceptée ou non, avant la lecture du corps. Une demande refusée ici **n'atteint pas le Broker** : ni ligne `sessions`, ni événement d'audit. |
-| Requêtes authentifiées | l'adresse du pair TCP | fixe : rafale de 60, puis **60 par minute** | Voir « Ce qui reste faux » ci-dessous. |
-| `/auth/login` | l'adresse du pair TCP | fixe : rafale de **5**, puis **une par minute** | Protection contre la force brute ; volontairement stricte. |
+| Requêtes authentifiées | l'**adresse du client** (voir plus bas) | `CLIENT_REQUEST_BURST` : rafale, de 1 à 10000 (défaut **60**) ; `CLIENT_REQUEST_RATE_PER_MINUTE` : de 1 à 6000 (défaut **60**) | Comptée avant même que le jeton soit regardé. Les défauts sont ce que le Gateway faisait déjà. |
+| `/auth/login` | l'**adresse du client** (voir plus bas) | `CLIENT_LOGIN_BURST` : rafale, de 1 à 100 (défaut **5**) ; `CLIENT_LOGIN_RATE_PER_MINUTE` : de 1 à 60 (défaut **1**) | Protection contre la force brute ; volontairement stricte. Les défauts sont ce que le Gateway faisait déjà : rien n'est relâché tant que vous ne le demandez pas **par son nom**. |
 
-Une valeur invalide de `SESSION_REQUEST_BURST` ou de `SESSION_REQUEST_RATE_PER_MINUTE` (texte, `0`, négatif, hors bornes) est une erreur fatale au démarrage qui **nomme la variable**. Au démarrage, le Gateway écrit ce qu'il applique réellement (« POST /sessions: at most 10 at once per user, then 6 per minute … ») : c'est la ligne à relire après un changement de configuration.
+Une valeur invalide de l'une de ces six variables (texte, `0`, négatif, hors bornes) est une erreur fatale au démarrage qui **nomme la variable**. Au démarrage, le Gateway écrit ce qu'il applique réellement (« POST /sessions: at most 10 at once per user, then 6 per minute … ») : c'est la ligne à relire après un changement de configuration.
 
 Les trois limites répondent `429` avec un `Retry-After` **vrai** : le nombre de secondes (arrondi au-dessus, au moins 1) qui manque pour qu'un jeton se reforme. Le message de la limite de `POST /sessions` — « too many session requests from this user … retry in N s » — est distinct de celui du plafond de demandes break-glass en attente du Broker (ADR-0013, « too many break-glass requests are waiting … ») : le premier se résout en attendant quelques secondes, le second en faisant décider une demande.
 
@@ -219,10 +219,36 @@ Les trois limites répondent `429` avec un `Retry-After` **vrai** : le nombre de
 
 - **Par processus.** Le seau vit dans la mémoire du Gateway : *N* réplicas accordent *N* fois le budget.
 - **Seul `POST /sessions` est limité par identité.** `approve`, `reject`, `connect`, `terminate` et la liste des demandes en attente ne dépendent que de la limite par adresse.
-- **La limite par adresse est fausse derrière Traefik.** Le listener du Gateway est en HTTP derrière l'arête : l'adresse du pair est celle de Traefik **pour tout le monde**. Tous les utilisateurs partagent donc le seau des requêtes authentifiées (60 par minute pour toute la plateforme) et celui du login (une rafale de 5 qu'un seul utilisateur peut épuiser pour tous). Corriger demande de décider à qui faire confiance pour `X-Forwarded-For` : décision non prise, consignée dans l'ADR-0014.
+- **La limite par adresse est celle de l'adresse que le Gateway sait lire.** Tant que `TRUSTED_PROXY_CIDRS` n'est pas réglé, c'est celle du pair TCP — **celle de Traefik pour tout le monde** : un seul seau pour toute la plateforme, et une rafale de login qu'un seul utilisateur peut épuiser pour tous. Voir la sous-section suivante.
 - **Un jeton volé peut priver son titulaire de son budget** (un jeton se reforme toutes les 10 secondes avec les défauts ; il va à qui arrive le premier). Le remède est de **révoquer le jeton**, pas de relever la limite.
 - **K identités compromises, K budgets.**
 - Les limites du login et des requêtes authentifiées n'étaient pas ce que le code annonçait (le login faisait déjà « 5 puis une par minute », pas « 5 par minute » ; les requêtes authentifiées se vidaient en 60 puis une par minute). Le login **n'a pas été relâché** ; les requêtes authentifiées font désormais réellement 60 par minute.
+
+### Derrière Traefik : déclarer le proxy (ADR-0015)
+
+Les limites **par adresse** (login et requêtes authentifiées) ont besoin de l'adresse du **vrai client**. Le listener du Gateway est en HTTP derrière Traefik : sans réglage, l'adresse du pair est celle de Traefik, la même pour tous, et tous les utilisateurs partagent un seau.
+
+| Variable | Effet |
+|---|---|
+| `TRUSTED_PROXY_CIDRS` | Adresses ou réseaux CIDR (séparés par des virgules) des proxys inverses qui précèdent le Gateway, par exemple `10.42.0.0/16` ou `172.18.0.5, 172.18.0.6`. **Absente : personne n'est de confiance** et l'adresse du client est celle du pair (le comportement d'avant). |
+
+**Ce que fait le Gateway.** L'en-tête `X-Forwarded-For` n'est lu que si le **pair TCP immédiat** est dans cette liste ; venant de tout autre pair, il est ignoré. Il est lu **de droite à gauche** : une adresse de la liste est un proxy de plus à franchir, et la **première adresse qui n'y est pas est le client**. Ce que le client a écrit à gauche n'est jamais lu tant que l'adresse ajoutée par votre proxy est à sa droite. Au moindre doute (en-tête absent d'un proxy, élément illisible, plus de 32 sauts, tout est proxy), la clé est l'adresse du pair — jamais une valeur choisie par le client. Une adresse IPv4 écrite en IPv6 est ramenée à l'IPv4, une adresse IPv6 à son **/64** (un abonné en possède 2⁶⁴) ; le port et la zone sont retirés.
+
+**Une valeur douteuse empêche le Gateway de démarrer**, en nommant la variable et l'entrée : entrée vide (`a,,b`), ni adresse ni CIDR, bits d'hôte non nuls (`192.168.1.5/24` : écrivez `192.168.1.0/24` ou l'adresse seule), et tout réseau de longueur 0 (`0.0.0.0/0`, `::/0` : faire confiance à tout pair revient à laisser chacun choisir sa clé). Il n'existe pas de valeur « tout le monde ». Au démarrage, le Gateway écrit ce qu'il fait : « client address: X-Forwarded-For is believed only from … » ou « the address of the peer (TRUSTED_PROXY_CIDRS is not set) ». **Relisez cette ligne après chaque changement.**
+
+**Ce que vous devez faire de votre côté.**
+
+1. **Déclarer l'adresse de Traefik** telle que **le Gateway la voit** (l'adresse source de la connexion : adresse du pod ou du conteneur de Traefik, ou réseau qui les contient). Ce n'est pas l'adresse publique. Prenez le réseau **le plus étroit** qui convient : un réseau trop large (tout un VPC) laisse n'importe quel hôte qu'il contient choisir sa clé.
+2. **Faire en sorte que Traefik n'ajoute que ce qu'il a vu.** Le proxy doit **ajouter l'adresse dont il a reçu la connexion** à `X-Forwarded-For`, comme font les proxys usuels, et ne pas croire les `X-Forwarded-*` d'un client qui n'est pas de confiance (réglage `forwardedHeaders` de l'entrypoint Traefik : voir la documentation de **votre** version). Un proxy qui transmet l'en-tête du client sans rien ajouter rend la valeur forgeable à travers lui. **Ce réglage de Traefik n'a pas été essayé ici** : les tests tiennent le rôle du proxy.
+3. **Vérifier.** Depuis une machine, envoyez à la suite plus de tentatives de login que la rafale (6 avec les défauts) avec à chaque fois un `X-Forwarded-For` différent (`curl -H 'X-Forwarded-For: 6.6.6.N' …`) : la **sixième doit être refusée** (`429`). Si elle ne l'est pas, le proxy n'ajoute pas l'adresse qu'il voit, ou la liste est trop large : **ne mettez pas en production**.
+4. **Ne pas exposer le listener du Gateway autrement que par le proxy** : un client qui l'atteint directement n'est pas de confiance et son en-tête est ignoré, mais il n'a alors aucune raison d'y avoir accès.
+
+**Ce qui reste faux.**
+
+- **Une adresse n'est pas une personne.** Derrière un NAT d'entreprise ou d'opérateur, de nombreux utilisateurs partagent une adresse et un seau, même bien résolue ; à l'inverse, qui possède beaucoup d'adresses a beaucoup de seaux : la limite par adresse **ne borne pas une force brute distribuée**. Aucune limite par compte n'est ajoutée ici.
+- **Le /64 IPv6 est un choix, non réglable** : les utilisateurs d'un même /64 (un réseau local) partagent un seau.
+- **Par processus** : *N* réplicas, *N* fois le budget.
+- **Les refus par adresse ne sont ni dans l'audit ni dans le journal du Gateway** (une ligne par refus serait une ligne par requête pour qui change d'adresse) ; ils sont dans le **journal d'accès de Traefik**, qui connaît l'adresse.
 
 ## 4. Gestion des comptes privilégiés (Vault)
 
@@ -329,7 +355,10 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `POST /sessions` avec `breakGlass: true` renvoie `503` | Les demandes en attente du demandeur n'ont pas pu être comptées (base ou dépendance) : par défaut la demande n'est **pas** acceptée | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker (« a break-glass request was not accepted ») |
 | `POST /sessions` renvoie `429` « too many session requests from this user … retry in N s » | L'utilisateur a épuisé son budget de demandes (`SESSION_REQUEST_BURST`, puis `SESSION_REQUEST_RATE_PER_MINUTE`) ; la requête n'est **pas** parvenue au Broker (aucune ligne, aucun événement d'audit) | Attendre le `Retry-After` ; si c'est un client qui boucle, le corriger ; si la ligne de journal du Gateway revient pour un utilisateur qui n'a pas dû agir, **révoquer son jeton** (ADR-0014) |
 | Le Gateway s'arrête avec « SESSION_REQUEST_BURST must be a number between 1 and 1000 » (ou `SESSION_REQUEST_RATE_PER_MINUTE … between 1 and 600`) | Valeur non numérique, `0`, négative ou hors bornes : il n'existe pas de « illimité » | Corriger la variable |
-| Tous les utilisateurs reçoivent `429` en même temps (hors `POST /sessions`) | La limite par **adresse** : derrière Traefik, tous partagent l'adresse du pair (60 requêtes authentifiées par minute pour la plateforme ; rafale de 5 au login) | Limite connue d'ADR-0014 ; en attendant, diminuer le trafic des clients automatisés ; ne pas contourner en relâchant le login |
+| Tous les utilisateurs reçoivent `429` en même temps (login ou requêtes authentifiées) | Ils partagent un seau : `TRUSTED_PROXY_CIDRS` n'est pas réglé (le Gateway annonce « the address of the peer »), ou ne contient pas l'adresse que Traefik présente au Gateway, ou l'en-tête n'arrive pas | Régler `TRUSTED_PROXY_CIDRS` (sous-section ci-dessus) et relire la ligne d'annonce ; ne pas relâcher le login pour compenser |
+| Le Gateway s'arrête avec « TRUSTED_PROXY_CIDRS cannot be used: … » | Une entrée est vide, illisible, a des bits d'hôte non nuls, ou est un réseau de longueur 0 (« trusts every address ») ; le message nomme l'entrée | Corriger la variable ; il n'existe pas de valeur « tout le monde » |
+| Le Gateway s'arrête avec « CLIENT_LOGIN_BURST must be a number between 1 and 100 » (ou `CLIENT_LOGIN_RATE_PER_MINUTE … 1 and 60`, `CLIENT_REQUEST_BURST … 1 and 10000`, `CLIENT_REQUEST_RATE_PER_MINUTE … 1 and 6000`) | Valeur non numérique, `0`, négative ou hors bornes : il n'existe pas de « illimité » | Corriger la variable |
+| Les tentatives de login avec un `X-Forwarded-For` différent à chaque fois ne sont **pas** refusées après la rafale | Le proxy n'ajoute pas l'adresse qu'il voit, ou `TRUSTED_PROXY_CIDRS` est trop large (le client est « de confiance ») | Réduire le réseau déclaré ; régler Traefik pour qu'il ajoute le pair et ignore l'en-tête d'un client non fiable ; refaire la vérification |
 | `approve` renvoie `409` | La demande est déjà décidée, périmée (`expired`, délai `BREAKGLASS_APPROVAL_WINDOW_MINUTES`) ou n'est pas une demande break-glass | Relire la demande (`GET /sessions/<id>`) ; en cas de péremption, le demandeur en refait une |
 | `approve` renvoie `503` | L'Authorization Service, l'audit ou la base ne répond pas : la décision n'est **pas** prise (fail-closed) | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker |
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |
