@@ -222,6 +222,14 @@ paths:
         quand une demande est décidée ou arrive à son échéance. Il ne
         s'applique que si l'approbation est requise.
 
+        **Débit par utilisateur (ADR-0014).** Avant tout, le Gateway limite
+        les `POST /sessions` de **chaque utilisateur vérifié** (seau à jetons :
+        `SESSION_REQUEST_BURST` d'un coup, de 1 à 1000, défaut 10, puis
+        `SESSION_REQUEST_RATE_PER_MINUTE` par minute, de 1 à 600, défaut 6).
+        Chaque tentative compte, acceptée ou non, y compris celle dont le corps
+        est illisible ; une demande refusée ici n'atteint pas le Broker : ni
+        ligne, ni événement d'audit. La limite est par processus du Gateway.
+
         **Signature du webhook (ADR-0013).** Si `BREAKGLASS_NOTIFY_SECRET`
         est fixé (32 octets au moins), chaque envoi porte
         `X-OpenBastion-Timestamp` (secondes Unix, à l'instant de l'envoi) et
@@ -257,12 +265,24 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "429":
           description: >
-            Demande `breakGlass` refusée parce que son demandeur a déjà le
-            nombre maximal de demandes en attente d'une décision
-            (`BREAKGLASS_MAX_PENDING_PER_REQUESTER`, ADR-0013). Le corps dit
-            le plafond ; la demande est enregistrée comme refusée et
-            auditée. Réessayer n'a de sens qu'une fois une demande décidée
-            ou échue.
+            Deux causes distinctes, que le corps distingue.
+            (1) **Débit** (ADR-0014) : « too many session requests from this
+            user (at most N at once, then one every X): retry in S s » ; la
+            réponse porte `Retry-After` (secondes, arrondies au-dessus, au
+            moins 1) ; la demande n'a pas atteint le Broker et n'est ni
+            enregistrée ni auditée ; réessayer après le délai.
+            (2) **Plafond** : demande `breakGlass` refusée parce que son
+            demandeur a déjà le nombre maximal de demandes en attente d'une
+            décision (`BREAKGLASS_MAX_PENDING_PER_REQUESTER`, ADR-0013). Le
+            corps dit le plafond, il n'y a pas de `Retry-After` ; la demande
+            est enregistrée comme refusée et auditée. Réessayer n'a de sens
+            qu'une fois une demande décidée ou échue.
+          headers:
+            Retry-After:
+              description: >
+                Présent seulement pour la cause (1) : secondes à attendre
+                avant qu'un jeton se reforme.
+              schema: { type: integer, minimum: 1 }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

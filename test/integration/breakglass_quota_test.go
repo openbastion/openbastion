@@ -60,9 +60,12 @@ func TestBreakGlassQuota_ARequesterCannotDrownTheListNorTheChannel_AcrossFiveRea
 		"SSH_PROXY_URL=http://127.0.0.1:18745", "BREAKGLASS_MAX_MINUTES=30",
 		"BREAKGLASS_MAX_PENDING_PER_REQUESTER=2",
 		"BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook", "BREAKGLASS_NOTIFY_SECRET="+channelSecret)
+	// This test is about the Broker's quota, so the Gateway's rate budget (ADR-0014) is
+	// raised out of its way: twelve requests at once from one user would otherwise be
+	// refused by the budget, not by the quota, and would not be audited.
 	gateway := startService(t, root, gatewayBin, "18748",
 		"AUTHENTICATION_URL=http://127.0.0.1:18747", "SESSION_BROKER_URL="+broker.baseURL,
-		"COMMAND_RECORDER_URL=http://127.0.0.1:18749")
+		"COMMAND_RECORDER_URL=http://127.0.0.1:18749", "SESSION_REQUEST_BURST=100", "SESSION_REQUEST_RATE_PER_MINUTE=600")
 
 	const acc = "acc_quota_1"
 	const reason = "recorder down during INC-4242, database saturated"

@@ -18,19 +18,26 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	neturl "net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/openbastion/openbastion/services/access/api-gateway/internal/application"
 )
 
 type GatewayServer struct {
-	authClient        application.TokenVerifier
-	requestLimiter    *application.RateLimiter
-	loginLimiter      *application.RateLimiter
+	authClient     application.TokenVerifier
+	requestLimiter *application.RateLimiter
+	loginLimiter   *application.RateLimiter
+	// sessionLimiter is the per-user budget of POST /sessions (ADR-0014). It is
+	// never nil: a Gateway built by hand has the strict default.
+	sessionLimiter    *application.RateLimiter
 	authenticationURL string
 	sessionBrokerURL  string
 	vaultURL          string
@@ -43,10 +50,20 @@ type GatewayServer struct {
 func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, loginLimiter *application.RateLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL string) *GatewayServer {
 	return &GatewayServer{
 		authClient: authClient, requestLimiter: requestLimiter, loginLimiter: loginLimiter,
+		sessionLimiter:    application.NewSessionRequestLimiter(0, 0),
 		authenticationURL: authenticationURL, sessionBrokerURL: sessionBrokerURL,
 		vaultURL: vaultURL, authorizationURL: authorizationURL, commandRecorderURL: commandRecorderURL,
 		httpClient: http.DefaultClient,
 	}
+}
+
+// WithSessionRequestLimiter sets the per-user budget of POST /sessions (ADR-0014).
+// A nil limiter keeps the default; there is no way to switch the limit off.
+func (g *GatewayServer) WithSessionRequestLimiter(l *application.RateLimiter) *GatewayServer {
+	if l != nil {
+		g.sessionLimiter = l
+	}
+	return g
 }
 
 // WithHTTPClient sets the client the Gateway uses to reach its upstreams. Under
@@ -84,8 +101,8 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// limiter below — brute-force protection on the login endpoint
 	// specifically (Guide Sécurité §4), since it's the one endpoint an
 	// unauthenticated attacker can hammer at all.
-	if !g.loginLimiter.Allow(clientIP(r)) {
-		w.Header().Set("Retry-After", "1")
+	if d := g.loginLimiter.Take(clientIP(r)); !d.Allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(d.RetryAfterSeconds()))
 		http.Error(w, "too many login attempts", http.StatusTooManyRequests)
 		return
 	}
@@ -120,8 +137,8 @@ type identity struct {
 
 func (g *GatewayServer) requireAuth(next func(w http.ResponseWriter, r *http.Request, id identity)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !g.requestLimiter.Allow(clientIP(r)) {
-			w.Header().Set("Retry-After", "1")
+		if d := g.requestLimiter.Take(clientIP(r)); !d.Allowed {
+			w.Header().Set("Retry-After", strconv.Itoa(d.RetryAfterSeconds()))
 			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -195,6 +212,30 @@ func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
+// admitSessionRequest charges one request to the budget of the user the token
+// proves — not to the address it came from (behind the reverse proxy that is the
+// same for everybody), and not to anything the body says. A request is counted
+// whatever happens to it next: it is the attempts that cost the Broker a row and an
+// audit event, not the successes (ADR-0014).
+func (g *GatewayServer) admitSessionRequest(w http.ResponseWriter, id identity) bool {
+	d := g.sessionLimiter.Take(id.UserID)
+	if d.Allowed {
+		return true
+	}
+	wait := d.RetryAfterSeconds()
+	if d.NewEpisode {
+		// One line per episode of refusals, not one per refused request: the log
+		// must not become the thing a flood fills. %q: the identifier is not trusted
+		// to be a plain word.
+		log.Printf("api-gateway: the session requests of user %q are refused: more than %d at once, then one every %s (written once per episode, not per refused request)",
+			id.UserID, g.sessionLimiter.Capacity(), g.sessionLimiter.Refill().Round(time.Millisecond))
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(wait))
+	http.Error(w, fmt.Sprintf("too many session requests from this user (at most %d at once, then one every %s): retry in %d s",
+		g.sessionLimiter.Capacity(), g.sessionLimiter.Refill().Round(time.Millisecond), wait), http.StatusTooManyRequests)
+	return false
+}
+
 // -- POST /sessions — the identity-injection case -------------------------
 // -- GET  /sessions — the requests the caller may decide (ADR-0012) ---------
 
@@ -206,6 +247,11 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 	case http.MethodPost:
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// Before anything is read or forwarded: a request refused here never reaches the
+	// Broker, so it writes no row and no audit event (ADR-0014).
+	if !g.admitSessionRequest(w, id) {
 		return
 	}
 	var body map[string]any

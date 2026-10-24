@@ -199,6 +199,31 @@ Après `approve`, la session est `active` et la durée demandée court **à part
 
 Ce que la double validation ne fait **pas** : elle ne détecte pas deux comptes tenus par la même personne, ne remplace pas la revue après l'incident (non implémentée), n'a qu'un approbateur (pas de quorum), et n'audite pas l'expiration d'une demande non décidée (le statut se lit `expired`).
 
+### Limitation de débit du Gateway (ADR-0014)
+
+Le Gateway applique trois limites, de natures différentes. **Aucune n'a de valeur « illimité ».**
+
+| Quoi | Clé | Réglage | Comportement |
+|---|---|---|---|
+| `POST /sessions` | l'**utilisateur** vérifié (jamais l'adresse, jamais le corps) | `SESSION_REQUEST_BURST` : rafale, de 1 à 1000 (défaut **10**) ; `SESSION_REQUEST_RATE_PER_MINUTE` : débit soutenu, de 1 à 600 (défaut **6**) | Chaque tentative coûte un jeton, acceptée ou non, avant la lecture du corps. Une demande refusée ici **n'atteint pas le Broker** : ni ligne `sessions`, ni événement d'audit. |
+| Requêtes authentifiées | l'adresse du pair TCP | fixe : rafale de 60, puis **60 par minute** | Voir « Ce qui reste faux » ci-dessous. |
+| `/auth/login` | l'adresse du pair TCP | fixe : rafale de **5**, puis **une par minute** | Protection contre la force brute ; volontairement stricte. |
+
+Une valeur invalide de `SESSION_REQUEST_BURST` ou de `SESSION_REQUEST_RATE_PER_MINUTE` (texte, `0`, négatif, hors bornes) est une erreur fatale au démarrage qui **nomme la variable**. Au démarrage, le Gateway écrit ce qu'il applique réellement (« POST /sessions: at most 10 at once per user, then 6 per minute … ») : c'est la ligne à relire après un changement de configuration.
+
+Les trois limites répondent `429` avec un `Retry-After` **vrai** : le nombre de secondes (arrondi au-dessus, au moins 1) qui manque pour qu'un jeton se reforme. Le message de la limite de `POST /sessions` — « too many session requests from this user … retry in N s » — est distinct de celui du plafond de demandes break-glass en attente du Broker (ADR-0013, « too many break-glass requests are waiting … ») : le premier se résout en attendant quelques secondes, le second en faisant décider une demande.
+
+**Où lire un refus.** Le Gateway écrit **une** ligne de journal par utilisateur et par épisode de refus (« the session requests of user "…" are refused: more than 10 at once, then one every 10s »), jamais une par requête refusée, et jamais le jeton. Rien dans l'audit : le Gateway n'en est pas un émetteur autorisé (ADR-0010) et un événement par refus recréerait le flux d'écritures que la limite borne. Pour savoir **qui** sature son budget, cherchez cette ligne.
+
+**Ce qui reste faux, et que vous devez savoir.**
+
+- **Par processus.** Le seau vit dans la mémoire du Gateway : *N* réplicas accordent *N* fois le budget.
+- **Seul `POST /sessions` est limité par identité.** `approve`, `reject`, `connect`, `terminate` et la liste des demandes en attente ne dépendent que de la limite par adresse.
+- **La limite par adresse est fausse derrière Traefik.** Le listener du Gateway est en HTTP derrière l'arête : l'adresse du pair est celle de Traefik **pour tout le monde**. Tous les utilisateurs partagent donc le seau des requêtes authentifiées (60 par minute pour toute la plateforme) et celui du login (une rafale de 5 qu'un seul utilisateur peut épuiser pour tous). Corriger demande de décider à qui faire confiance pour `X-Forwarded-For` : décision non prise, consignée dans l'ADR-0014.
+- **Un jeton volé peut priver son titulaire de son budget** (un jeton se reforme toutes les 10 secondes avec les défauts ; il va à qui arrive le premier). Le remède est de **révoquer le jeton**, pas de relever la limite.
+- **K identités compromises, K budgets.**
+- Les limites du login et des requêtes authentifiées n'étaient pas ce que le code annonçait (le login faisait déjà « 5 puis une par minute », pas « 5 par minute » ; les requêtes authentifiées se vidaient en 60 puis une par minute). Le login **n'a pas été relâché** ; les requêtes authentifiées font désormais réellement 60 par minute.
+
 ## 4. Gestion des comptes privilégiés (Vault)
 
 Onboarder un compte SSH cible :
@@ -302,6 +327,9 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | Le récepteur du webhook refuse la signature | Corps modifié ou ré-encodé par un intermédiaire (la signature porte sur les octets exacts), horloge décalée au-delà de la tolérance, secret différent des deux côtés | Vérifier sur le corps brut ; synchroniser l'horloge (NTP) ; comparer les secrets |
 | `POST /sessions` avec `breakGlass: true` renvoie `429` « too many break-glass requests are waiting for a decision » | Le demandeur a déjà `BREAKGLASS_MAX_PENDING_PER_REQUESTER` demandes en attente ; la tentative est enregistrée `denied` et auditée (`success=false`) | Faire décider une de ses demandes, ou attendre qu'elle échoie (15 minutes par défaut) ; relever le plafond seulement si le besoin est réel |
 | `POST /sessions` avec `breakGlass: true` renvoie `503` | Les demandes en attente du demandeur n'ont pas pu être comptées (base ou dépendance) : par défaut la demande n'est **pas** acceptée | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker (« a break-glass request was not accepted ») |
+| `POST /sessions` renvoie `429` « too many session requests from this user … retry in N s » | L'utilisateur a épuisé son budget de demandes (`SESSION_REQUEST_BURST`, puis `SESSION_REQUEST_RATE_PER_MINUTE`) ; la requête n'est **pas** parvenue au Broker (aucune ligne, aucun événement d'audit) | Attendre le `Retry-After` ; si c'est un client qui boucle, le corriger ; si la ligne de journal du Gateway revient pour un utilisateur qui n'a pas dû agir, **révoquer son jeton** (ADR-0014) |
+| Le Gateway s'arrête avec « SESSION_REQUEST_BURST must be a number between 1 and 1000 » (ou `SESSION_REQUEST_RATE_PER_MINUTE … between 1 and 600`) | Valeur non numérique, `0`, négative ou hors bornes : il n'existe pas de « illimité » | Corriger la variable |
+| Tous les utilisateurs reçoivent `429` en même temps (hors `POST /sessions`) | La limite par **adresse** : derrière Traefik, tous partagent l'adresse du pair (60 requêtes authentifiées par minute pour la plateforme ; rafale de 5 au login) | Limite connue d'ADR-0014 ; en attendant, diminuer le trafic des clients automatisés ; ne pas contourner en relâchant le login |
 | `approve` renvoie `409` | La demande est déjà décidée, périmée (`expired`, délai `BREAKGLASS_APPROVAL_WINDOW_MINUTES`) ou n'est pas une demande break-glass | Relire la demande (`GET /sessions/<id>`) ; en cas de péremption, le demandeur en refait une |
 | `approve` renvoie `503` | L'Authorization Service, l'audit ou la base ne répond pas : la décision n'est **pas** prise (fail-closed) | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker |
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |

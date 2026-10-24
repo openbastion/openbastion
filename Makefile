@@ -114,7 +114,7 @@ test:
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
 test-integration:
-	$(GO) test ./test/integration/... -v -count=1 -timeout=200s
+	$(GO) test ./test/integration/... -v -count=1 -timeout=300s
 
 ## Lance les tests PostgreSQL réels (postgres_store_test.go +
 ## postgres_flow_test.go). Nécessite une base PostgreSQL accessible via
@@ -194,6 +194,9 @@ run-broker:
 		$(GO) run ./services/access/session-broker/cmd/session-broker
 # Le listener public de la Gateway reste en HTTP (le TLS se termine à l'arête) ;
 # elle a une identité pour ses appels sortants.
+# SESSION_REQUEST_BURST (défaut 10, de 1 à 1000) et SESSION_REQUEST_RATE_PER_MINUTE (défaut 6,
+# de 1 à 600) règlent le budget de POST /sessions PAR UTILISATEUR, par processus (ADR-0014) ;
+# une valeur invalide arrête la Gateway. Pas de valeur « illimité ».
 run-gateway:
 	$(call tls,api-gateway) COMMAND_RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
 		$(GO) run ./services/access/api-gateway/cmd/api-gateway
