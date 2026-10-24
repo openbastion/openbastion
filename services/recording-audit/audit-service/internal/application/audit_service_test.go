@@ -69,4 +69,3 @@ func TestEmitEvent_ChainsSequentialEvents(t *testing.T) {
 		t.Fatal("second event's prev_hash must equal the first event's hash")
 	}
 }
-

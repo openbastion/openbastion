@@ -29,7 +29,7 @@ type Store interface {
 // even knows the previous hash, by design (doc 06 §4).
 type AuditService struct {
 	mu    sync.Mutex // serializes chain extension; a production deployment
-	store Store       // would use a DB-level append lock instead of this
+	store Store      // would use a DB-level append lock instead of this
 }
 
 func NewAuditService(store Store) *AuditService {
