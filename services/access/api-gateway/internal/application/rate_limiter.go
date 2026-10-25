@@ -142,6 +142,13 @@ const (
 	MaxSessionBurst             = 1000
 	MaxSessionRatePerMinute     = 600
 
+	// The per-user budget of the session actions that write on every call (ADR-0016):
+	// approve, reject, connect.
+	DefaultSessionActionBurst         = 10
+	DefaultSessionActionRatePerMinute = 6
+	MaxSessionActionBurst             = 1000
+	MaxSessionActionRatePerMinute     = 600
+
 	// The per-address limits (ADR-0015). Their defaults are what the two limiters
 	// have always really done — login: a burst of 5, then ONE a minute; authenticated
 	// traffic: a burst of 60, then 60 a minute — so that making them adjustable
@@ -173,6 +180,14 @@ func perMinuteLimiter(burst, perMinute, defaultBurst, defaultPerMinute int) *Rat
 // requests at once, then `perMinute` per minute (ADR-0014).
 func NewSessionRequestLimiter(burst, perMinute int) *RateLimiter {
 	return perMinuteLimiter(burst, perMinute, DefaultSessionBurst, DefaultSessionRatePerMinute)
+}
+
+// NewSessionActionLimiter is the per-user budget of approve, reject and connect:
+// `burst` actions at once, then `perMinute` per minute (ADR-0016). It is not the
+// budget of POST /sessions: asking for a session and then connecting to it is the
+// ordinary pair, and spending one must not take the other away.
+func NewSessionActionLimiter(burst, perMinute int) *RateLimiter {
+	return perMinuteLimiter(burst, perMinute, DefaultSessionActionBurst, DefaultSessionActionRatePerMinute)
 }
 
 // NewLoginLimiter is the per-address limit of POST /auth/login: `burst` attempts at

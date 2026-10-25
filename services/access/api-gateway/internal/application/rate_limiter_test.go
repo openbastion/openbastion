@@ -171,3 +171,25 @@ func TestNewSessionRequestLimiter_TheStrictDefaults_AndTheUnitsOfAMinute(t *test
 		}
 	}
 }
+
+// ADR-0016: the budget of approve, reject and connect has its own constants and its own
+// constructor. Their values are today those of POST /sessions, so a test cannot tell which
+// constants the constructor reads; what it pins is the values themselves.
+func TestNewSessionActionLimiter_TheStrictDefaults_AndTheUnitsOfAMinute(t *testing.T) {
+	if application.DefaultSessionActionBurst != 10 || application.DefaultSessionActionRatePerMinute != 6 ||
+		application.MaxSessionActionBurst != 1000 || application.MaxSessionActionRatePerMinute != 600 {
+		t.Fatalf("the defaults or the maxima changed: %d/%d, up to %d/%d", application.DefaultSessionActionBurst,
+			application.DefaultSessionActionRatePerMinute, application.MaxSessionActionBurst, application.MaxSessionActionRatePerMinute)
+	}
+	for _, c := range []struct {
+		burst, perMinute int
+		wantBurst        int
+		wantRefill       time.Duration
+	}{{0, 0, 10, 10 * time.Second}, {-3, -1, 10, 10 * time.Second}, {3, 60, 3, time.Second}, {7, 6, 7, 10 * time.Second}, {1, 600, 1, 100 * time.Millisecond}} {
+		l := application.NewSessionActionLimiter(c.burst, c.perMinute)
+		if l.Capacity() != c.wantBurst || l.Refill() != c.wantRefill {
+			t.Fatalf("NewSessionActionLimiter(%d, %d) = burst %d, one every %v; want %d and %v",
+				c.burst, c.perMinute, l.Capacity(), l.Refill(), c.wantBurst, c.wantRefill)
+		}
+	}
+}

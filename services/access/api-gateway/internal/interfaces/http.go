@@ -37,6 +37,9 @@ type GatewayServer struct {
 	// sessionLimiter is the per-user budget of POST /sessions (ADR-0014). It is
 	// never nil: a Gateway built by hand has the strict default.
 	sessionLimiter *application.RateLimiter
+	// actionLimiter is the per-user budget of approve, reject and connect, the session
+	// actions that write on every call (ADR-0016). Never nil either.
+	actionLimiter *application.RateLimiter
 	// proxyTrust says whose X-Forwarded-For is believed when the per-address limiters
 	// look for the client (ADR-0015). It is never nil: a Gateway built by hand trusts
 	// nobody, and keys on the address of the peer.
@@ -54,6 +57,7 @@ func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, logi
 	return &GatewayServer{
 		authClient: authClient, requestLimiter: requestLimiter, loginLimiter: loginLimiter,
 		sessionLimiter:    application.NewSessionRequestLimiter(0, 0),
+		actionLimiter:     application.NewSessionActionLimiter(0, 0),
 		proxyTrust:        &application.ProxyTrust{},
 		authenticationURL: authenticationURL, sessionBrokerURL: sessionBrokerURL,
 		vaultURL: vaultURL, authorizationURL: authorizationURL, commandRecorderURL: commandRecorderURL,
@@ -66,6 +70,15 @@ func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, logi
 func (g *GatewayServer) WithSessionRequestLimiter(l *application.RateLimiter) *GatewayServer {
 	if l != nil {
 		g.sessionLimiter = l
+	}
+	return g
+}
+
+// WithSessionActionLimiter sets the per-user budget of approve, reject and connect
+// (ADR-0016). A nil limiter keeps the default; there is no way to switch the limit off.
+func (g *GatewayServer) WithSessionActionLimiter(l *application.RateLimiter) *GatewayServer {
+	if l != nil {
+		g.actionLimiter = l
 	}
 	return g
 }
@@ -231,7 +244,20 @@ func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 // whatever happens to it next: it is the attempts that cost the Broker a row and an
 // audit event, not the successes (ADR-0014).
 func (g *GatewayServer) admitSessionRequest(w http.ResponseWriter, id identity) bool {
-	d := g.sessionLimiter.Take(id.UserID)
+	return admitFromBudget(w, id, g.sessionLimiter, "session requests")
+}
+
+// admitSessionAction is the same charge for approve, reject and connect (ADR-0016),
+// to a budget of its own: it is one bucket for the three, so that changing route is
+// not a way to a new budget, and it is not the bucket of POST /sessions.
+func (g *GatewayServer) admitSessionAction(w http.ResponseWriter, id identity) bool {
+	return admitFromBudget(w, id, g.actionLimiter, "session actions")
+}
+
+// admitFromBudget takes one token of the user's bucket. What it says when it
+// refuses names the budget (`what`), so that a client knows which one it spent.
+func admitFromBudget(w http.ResponseWriter, id identity, limiter *application.RateLimiter, what string) bool {
+	d := limiter.Take(id.UserID)
 	if d.Allowed {
 		return true
 	}
@@ -240,12 +266,12 @@ func (g *GatewayServer) admitSessionRequest(w http.ResponseWriter, id identity) 
 		// One line per episode of refusals, not one per refused request: the log
 		// must not become the thing a flood fills. %q: the identifier is not trusted
 		// to be a plain word.
-		log.Printf("api-gateway: the session requests of user %q are refused: more than %d at once, then one every %s (written once per episode, not per refused request)",
-			id.UserID, g.sessionLimiter.Capacity(), g.sessionLimiter.Refill().Round(time.Millisecond))
+		log.Printf("api-gateway: the %s of user %q are refused: more than %d at once, then one every %s (written once per episode, not per refused request)",
+			what, id.UserID, limiter.Capacity(), limiter.Refill().Round(time.Millisecond))
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(wait))
-	http.Error(w, fmt.Sprintf("too many session requests from this user (at most %d at once, then one every %s): retry in %d s",
-		g.sessionLimiter.Capacity(), g.sessionLimiter.Refill().Round(time.Millisecond), wait), http.StatusTooManyRequests)
+	http.Error(w, fmt.Sprintf("too many %s from this user (at most %d at once, then one every %s): retry in %d s",
+		what, limiter.Capacity(), limiter.Refill().Round(time.Millisecond), wait), http.StatusTooManyRequests)
 	return false
 }
 
@@ -345,6 +371,12 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		// Each call by the requester of an active session makes a Vault scope, a proxy
+		// ticket and an audit event: it is charged to the user's action budget first
+		// (ADR-0016), whatever the Broker will say.
+		if !g.admitSessionAction(w, id) {
+			return
+		}
 		// Only the requester may connect (ADR-0011, rule 7). The Broker believes the
 		// callerId because only the Gateway may send it (ADR-0010); the client's own
 		// body is not read, so it cannot name another caller.
@@ -353,6 +385,11 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 	case "approve", "reject":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// A refusal that says something about the caller is an audit event: every
+		// attempt is charged to the user's action budget first (ADR-0016).
+		if !g.admitSessionAction(w, id) {
 			return
 		}
 		// The decision is the verified user's, with the roles of the verified token.

@@ -97,9 +97,15 @@ func main() {
 	sessionBurst := boundedIntEnv("SESSION_REQUEST_BURST", application.DefaultSessionBurst, 1, application.MaxSessionBurst)
 	sessionRate := boundedIntEnv("SESSION_REQUEST_RATE_PER_MINUTE", application.DefaultSessionRatePerMinute, 1, application.MaxSessionRatePerMinute)
 
+	// Per verified user, on approve, reject and connect (ADR-0016): the session actions
+	// that write — an audit event, a Vault scope, a proxy ticket — on every call.
+	actionBurst := boundedIntEnv("SESSION_ACTION_BURST", application.DefaultSessionActionBurst, 1, application.MaxSessionActionBurst)
+	actionRate := boundedIntEnv("SESSION_ACTION_RATE_PER_MINUTE", application.DefaultSessionActionRatePerMinute, 1, application.MaxSessionActionRatePerMinute)
+
 	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL).
 		WithHTTPClient(upstreams).
 		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate)).
+		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
 		WithProxyTrust(trust)
 
 	log.Printf("api-gateway listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
@@ -109,6 +115,7 @@ func main() {
 	log.Printf("  -> authorization:   %s", authorizationURL)
 	log.Printf("  -> command-recorder: %s", commandRecorderURL)
 	log.Printf("  POST /sessions: at most %d at once per user, then %d per minute (this process only; a request refused for it never reaches the Broker)", sessionBurst, sessionRate)
+	log.Printf("  approve, reject, connect: at most %d at once per user, then %d per minute, one budget for the three, not that of POST /sessions (this process only; an action refused for it never reaches the Broker)", actionBurst, actionRate)
 	if entries := trust.Entries(); len(entries) > 0 {
 		log.Printf("  client address: X-Forwarded-For is believed only from %s, read from the right up to the first address that is not one of them; from any other peer it is ignored", strings.Join(entries, ", "))
 	} else {

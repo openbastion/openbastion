@@ -16,7 +16,7 @@
 | Erreurs | Enveloppe unique `Error { code, message, traceId }`, `traceId` corrélé à OpenTelemetry |
 | Horodatage | ISO 8601 / RFC 3339, UTC |
 | Idempotence | Les endpoints de mutation sensibles (`POST /sessions`, `POST .../rotate`) acceptent un header `Idempotency-Key` |
-| Limitation de débit | Le Gateway répond `429` avec un `Retry-After` vrai (secondes, arrondies au-dessus). Trois limites : **par adresse de client** pour `/auth/login` (rafale 5 puis 1 par minute) et pour toute requête authentifiée (rafale 60 puis 60 par minute), **par utilisateur** pour `POST /sessions` (rafale 10 puis 6 par minute) — réglables, jamais « illimitées » (ADR-0014, ADR-0015). Derrière un reverse proxy, l'adresse du client n'est celle de `X-Forwarded-For` que si l'opérateur a déclaré le proxy (`TRUSTED_PROXY_CIDRS`) ; sinon c'est celle du pair |
+| Limitation de débit | Le Gateway répond `429` avec un `Retry-After` vrai (secondes, arrondies au-dessus). Trois limites : **par adresse de client** pour `/auth/login` (rafale 5 puis 1 par minute) et pour toute requête authentifiée (rafale 60 puis 60 par minute), **par utilisateur** pour `POST /sessions` (rafale 10 puis 6 par minute) et, dans un seau à part, pour `…/approve`, `…/reject` et `…/connect` (rafale 10 puis 6 par minute) — réglables, jamais « illimitées » (ADR-0014, ADR-0015, ADR-0016). Derrière un reverse proxy, l'adresse du client n'est celle de `X-Forwarded-For` que si l'opérateur a déclaré le proxy (`TRUSTED_PROXY_CIDRS`) ; sinon c'est celle du pair |
 
 Ce que cette API REST **n'expose jamais** : un secret cible en clair. `POST /sessions/{id}/connect` renvoie un ticket de connexion court terme vers le proxy protocolaire, jamais un mot de passe (ADR-0003) — cohérent avec l'invariant posé dès le document 00.
 
@@ -357,6 +357,16 @@ paths:
         Gateway dit au Broker qui appelle, à partir du jeton vérifié. Un autre
         utilisateur — l'approbateur d'une demande break-glass compris —
         reçoit `403`.
+
+        **Débit par utilisateur (ADR-0016).** Chaque appel de `connect`,
+        `approve` ou `reject` coûte un jeton au seau d'actions de
+        **l'utilisateur vérifié** (`SESSION_ACTION_BURST` d'un coup, de 1 à
+        1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute, de
+        1 à 600, défaut 6) : un seul seau pour les trois routes, distinct de
+        celui de `POST /sessions`. Le jeton est pris avant que le Broker ne
+        soit appelé : une action refusée ici n'atteint ni le Broker, ni le
+        Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode
+        non permise ne coûte rien. La limite est par processus du Gateway.
       responses:
         "200":
           description: Ticket de connexion
@@ -368,6 +378,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: >
+            Débit (ADR-0016) : « too many session actions from this user (at
+            most N at once, then one every X): retry in S s ». L'action n'a
+            pas atteint le Broker ; réessayer après le délai.
+          headers:
+            Retry-After:
+              description: Secondes à attendre avant qu'un jeton se reforme.
+              schema: { type: integer, minimum: 1 }
         "503":
           description: >
             Enregistrement indisponible — la session n'a pas été établie.
@@ -400,6 +419,16 @@ paths:
         auditée **avant** d'agir (`session.breakglass_approved`) ; si l'audit
         ne peut pas l'écrire, la demande reste en attente. Une seule décision
         par demande.
+
+        **Débit par utilisateur (ADR-0016).** Chaque appel de `connect`,
+        `approve` ou `reject` coûte un jeton au seau d'actions de
+        **l'utilisateur vérifié** (`SESSION_ACTION_BURST` d'un coup, de 1 à
+        1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute, de
+        1 à 600, défaut 6) : un seul seau pour les trois routes, distinct de
+        celui de `POST /sessions`. Le jeton est pris avant que le Broker ne
+        soit appelé : une action refusée ici n'atteint ni le Broker, ni le
+        Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode
+        non permise ne coûte rien. La limite est par processus du Gateway.
       responses:
         "200":
           description: Demande approuvée — la session est `active`.
@@ -414,6 +443,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: >
+            Débit (ADR-0016) : « too many session actions from this user (at
+            most N at once, then one every X): retry in S s ». L'action n'a
+            pas atteint le Broker ; réessayer après le délai.
+          headers:
+            Retry-After:
+              description: Secondes à attendre avant qu'un jeton se reforme.
+              schema: { type: integer, minimum: 1 }
         "404":
           description: Session inconnue.
         "409":
@@ -443,6 +481,16 @@ paths:
         Pas de règle « une autre personne » : renoncer à sa propre demande
         n'est pas une élévation. Audité (`session.breakglass_rejected`).
         Mêmes réponses que `approve`.
+
+        **Débit par utilisateur (ADR-0016).** Chaque appel de `connect`,
+        `approve` ou `reject` coûte un jeton au seau d'actions de
+        **l'utilisateur vérifié** (`SESSION_ACTION_BURST` d'un coup, de 1 à
+        1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute, de
+        1 à 600, défaut 6) : un seul seau pour les trois routes, distinct de
+        celui de `POST /sessions`. Le jeton est pris avant que le Broker ne
+        soit appelé : une action refusée ici n'atteint ni le Broker, ni le
+        Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode
+        non permise ne coûte rien. La limite est par processus du Gateway.
       responses:
         "200":
           description: Demande rejetée — le statut est `denied`, `decidedBy` dit qui.
@@ -450,6 +498,15 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
         "403": { description: Politique d'approbation absente. Audité (échec). }
+        "429":
+          description: >
+            Débit (ADR-0016) : « too many session actions from this user (at
+            most N at once, then one every X): retry in S s ». L'action n'a
+            pas atteint le Broker ; réessayer après le délai.
+          headers:
+            Retry-After:
+              description: Secondes à attendre avant qu'un jeton se reforme.
+              schema: { type: integer, minimum: 1 }
         "404": { description: Session inconnue. }
         "409": { description: Pas une demande en attente. }
         "503": { description: Une dépendance ne répond pas ; la décision n'a pas été prise. }

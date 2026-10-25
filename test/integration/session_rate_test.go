@@ -218,7 +218,8 @@ func TestLoginRate_AFailedPasswordIsAFiveAttemptBurstThenOneAMinute_NotFivePerMi
 }
 
 // A limit that is wrong is found when the Gateway starts, and what it says it applies is
-// what it applies.
+// what it applies. (Since ADR-0016 the Gateway announces two budgets with the same wording,
+// so each is looked for on its own line, named: "POST /sessions: …".)
 func TestSessionRateConfig_AWrongLimitStopsTheGateway_AndWhatIsSaidAtStartIsTrue(t *testing.T) {
 	root := repoRoot(t)
 	bin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-14c")
@@ -244,10 +245,10 @@ func TestSessionRateConfig_AWrongLimitStopsTheGateway_AndWhatIsSaidAtStartIsTrue
 			want    string
 			notWant string
 		}{
-			{"the defaults", nil, "at most 10 at once per user, then 6 per minute", "at most 4"},
-			{"a custom budget", []string{"SESSION_REQUEST_BURST=4", "SESSION_REQUEST_RATE_PER_MINUTE=30"}, "at most 4 at once per user, then 30 per minute", "at most 10"},
-			{"the smallest", []string{"SESSION_REQUEST_BURST=1", "SESSION_REQUEST_RATE_PER_MINUTE=1"}, "at most 1 at once per user, then 1 per minute", "at most 10"},
-			{"the largest", []string{"SESSION_REQUEST_BURST=1000", "SESSION_REQUEST_RATE_PER_MINUTE=600"}, "at most 1000 at once per user, then 600 per minute", "at most 10 "},
+			{"the defaults", nil, "POST /sessions: at most 10 at once per user, then 6 per minute", "POST /sessions: at most 4"},
+			{"a custom budget", []string{"SESSION_REQUEST_BURST=4", "SESSION_REQUEST_RATE_PER_MINUTE=30"}, "POST /sessions: at most 4 at once per user, then 30 per minute", "POST /sessions: at most 10"},
+			{"the smallest", []string{"SESSION_REQUEST_BURST=1", "SESSION_REQUEST_RATE_PER_MINUTE=1"}, "POST /sessions: at most 1 at once per user, then 1 per minute", "POST /sessions: at most 10"},
+			{"the largest", []string{"SESSION_REQUEST_BURST=1000", "SESSION_REQUEST_RATE_PER_MINUTE=600"}, "POST /sessions: at most 1000 at once per user, then 600 per minute", "POST /sessions: at most 10 "},
 		} {
 			t.Run(c.name, func(t *testing.T) {
 				cmd := execCommandWithEnv(bin, root, append([]string{"PORT=18768"}, c.env...))
