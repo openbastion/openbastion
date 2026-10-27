@@ -37,8 +37,8 @@ type GatewayServer struct {
 	// sessionLimiter is the per-user budget of POST /sessions (ADR-0014). It is
 	// never nil: a Gateway built by hand has the strict default.
 	sessionLimiter *application.RateLimiter
-	// actionLimiter is the per-user budget of approve, reject and connect, the session
-	// actions that write on every call (ADR-0016). Never nil either.
+	// actionLimiter is the per-user budget of approve, reject, connect and terminate, the
+	// session actions that write on every call (ADR-0016, ADR-0017). Never nil either.
 	actionLimiter *application.RateLimiter
 	// proxyTrust says whose X-Forwarded-For is believed when the per-address limiters
 	// look for the client (ADR-0015). It is never nil: a Gateway built by hand trusts
@@ -74,8 +74,8 @@ func (g *GatewayServer) WithSessionRequestLimiter(l *application.RateLimiter) *G
 	return g
 }
 
-// WithSessionActionLimiter sets the per-user budget of approve, reject and connect
-// (ADR-0016). A nil limiter keeps the default; there is no way to switch the limit off.
+// WithSessionActionLimiter sets the per-user budget of approve, reject, connect and
+// terminate (ADR-0016, ADR-0017). A nil limiter keeps the default; there is no way to switch the limit off.
 func (g *GatewayServer) WithSessionActionLimiter(l *application.RateLimiter) *GatewayServer {
 	if l != nil {
 		g.actionLimiter = l
@@ -247,9 +247,9 @@ func (g *GatewayServer) admitSessionRequest(w http.ResponseWriter, id identity) 
 	return admitFromBudget(w, id, g.sessionLimiter, "session requests")
 }
 
-// admitSessionAction is the same charge for approve, reject and connect (ADR-0016),
-// to a budget of its own: it is one bucket for the three, so that changing route is
-// not a way to a new budget, and it is not the bucket of POST /sessions.
+// admitSessionAction is the same charge for approve, reject, connect (ADR-0016) and
+// terminate (ADR-0017), to a budget of its own: it is one bucket for the four, so that
+// changing route is not a way to a new budget, and it is not the bucket of POST /sessions.
 func (g *GatewayServer) admitSessionAction(w http.ResponseWriter, id identity) bool {
 	return admitFromBudget(w, id, g.actionLimiter, "session actions")
 }
@@ -342,7 +342,10 @@ func (g *GatewayServer) handleListPending(w http.ResponseWriter, r *http.Request
 // Broker is therefore not relayed raw by default — it is exposed when someone
 // writes its case here, with its identity injection (ADR-0011).
 //
-//	GET|DELETE /sessions/{id}      relayed as they are: no body, nothing to inject
+//	GET        /sessions/{id}      relayed as it is: no body, nothing to inject (who may
+//	                               READ a session is still not decided: see ADR-0017)
+//	DELETE     /sessions/{id}      the Gateway states who is asking, and with which roles
+//	                               (ADR-0017); charged to the user's action budget
 //	POST       …/connect           the Gateway states who is asking (callerId)
 //	POST       …/approve|reject    the Gateway states who decides, and with which roles
 //	GET        …/recording         served by the Command Recorder
@@ -357,11 +360,24 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 
 	switch action {
 	case "":
-		if r.Method != http.MethodGet && r.Method != http.MethodDelete {
+		switch r.Method {
+		case http.MethodGet:
+			g.forwardPassthrough(w, r, http.MethodGet, brokerPath)
+		case http.MethodDelete:
+			// A refusal of somebody who may not end this session is an audit event, each
+			// time: it is charged to the user's action budget first (ADR-0017), like the
+			// other actions that write on every call.
+			if !g.admitSessionAction(w, id) {
+				return
+			}
+			// Who ends a session is the verified user, with the roles of that token: the
+			// body is built here from nothing the client sent, so a client cannot end a
+			// session as somebody else, nor give itself the role that may (ADR-0017).
+			g.forwardJSON(w, r.Context(), http.MethodDelete, brokerPath,
+				map[string]any{"callerId": id.UserID, "actorRoles": id.Roles})
+		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
 		}
-		g.forwardPassthrough(w, r, r.Method, brokerPath)
 
 	case "recording":
 		g.handleSessionRecording(w, r, id, sessionID)

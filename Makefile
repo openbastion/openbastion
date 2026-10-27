@@ -198,8 +198,9 @@ run-broker:
 # de 1 à 600) règlent le budget de POST /sessions PAR UTILISATEUR, par processus (ADR-0014) ;
 # une valeur invalide arrête la Gateway. Pas de valeur « illimité ».
 # SESSION_ACTION_BURST (défaut 10, de 1 à 1000) et SESSION_ACTION_RATE_PER_MINUTE (défaut 6,
-# de 1 à 600) règlent le budget, par utilisateur et par processus, de approve, reject et
-# connect — un seul seau pour les trois, distinct du précédent (ADR-0016).
+# de 1 à 600) règlent le budget, par utilisateur et par processus, de approve, reject,
+# connect et terminate (DELETE /sessions/{id}) — un seul seau pour les quatre, distinct du
+# précédent (ADR-0016, ADR-0017).
 # Les limites PAR ADRESSE (login : CLIENT_LOGIN_BURST 5 / CLIENT_LOGIN_RATE_PER_MINUTE 1 ;
 # requêtes authentifiées : CLIENT_REQUEST_BURST 60 / CLIENT_REQUEST_RATE_PER_MINUTE 60) ont
 # ces défauts-là, réglables, jamais « illimités ». Derrière un reverse proxy, TRUSTED_PROXY_CIDRS

@@ -142,8 +142,8 @@ const (
 	MaxSessionBurst             = 1000
 	MaxSessionRatePerMinute     = 600
 
-	// The per-user budget of the session actions that write on every call (ADR-0016):
-	// approve, reject, connect.
+	// The per-user budget of the session actions that write on every call (ADR-0016,
+	// ADR-0017): approve, reject, connect, terminate.
 	DefaultSessionActionBurst         = 10
 	DefaultSessionActionRatePerMinute = 6
 	MaxSessionActionBurst             = 1000
@@ -182,8 +182,8 @@ func NewSessionRequestLimiter(burst, perMinute int) *RateLimiter {
 	return perMinuteLimiter(burst, perMinute, DefaultSessionBurst, DefaultSessionRatePerMinute)
 }
 
-// NewSessionActionLimiter is the per-user budget of approve, reject and connect:
-// `burst` actions at once, then `perMinute` per minute (ADR-0016). It is not the
+// NewSessionActionLimiter is the per-user budget of approve, reject, connect and
+// terminate: `burst` actions at once, then `perMinute` per minute (ADR-0016, ADR-0017). It is not the
 // budget of POST /sessions: asking for a session and then connecting to it is the
 // ordinary pair, and spending one must not take the other away.
 func NewSessionActionLimiter(burst, perMinute int) *RateLimiter {

@@ -109,7 +109,10 @@ func brokerConnect(t *testing.T, baseURL, sessionID string) (proxyEndpoint, tick
 
 func brokerTerminateSession(t *testing.T, baseURL, sessionID string) int {
 	t.Helper()
-	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/sessions/"+sessionID, nil)
+	// The Broker only believes the Gateway about who is asking (ADR-0010, ADR-0017): this
+	// test plays the Gateway, for the user brokerCreateSession asked as — the requester.
+	req, _ := http.NewRequest(http.MethodDelete, baseURL+"/sessions/"+sessionID, strings.NewReader(`{"callerId":"it-user1","actorRoles":[]}`))
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("terminate-session: %v", err)

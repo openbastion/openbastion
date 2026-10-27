@@ -130,6 +130,12 @@ const BreakGlassResourcePrefix = "breakglass:account:"
 // not being allowed to approve.
 const BreakGlassApproveResourcePrefix = "breakglass-approve:account:"
 
+// SessionTerminateResourcePrefix prefixes the RBAC resource that lets somebody other
+// than the requester end a session: "session-terminate:account:{accountId}"
+// (ADR-0017). Its prefix differs from the others on purpose: being allowed to ask for
+// access, or to approve an emergency, is not being allowed to cut somebody's session.
+const SessionTerminateResourcePrefix = "session-terminate:account:"
+
 // DefaultMaxPendingPerRequester is how many break-glass requests one requester may
 // have waiting for a decision at once (ADR-0013): enough for an on-call person with a
 // few incidents at the same time, few enough that one identity cannot drown the list
@@ -419,23 +425,59 @@ func (s *SessionBrokerService) GetSession(ctx context.Context, id string) (*doma
 	return &reflected, nil
 }
 
-// TerminateSession implements SessionOrchestration.TerminateSession.
-func (s *SessionBrokerService) TerminateSession(ctx context.Context, id string) (*domain.Session, error) {
+// TerminateSession implements SessionOrchestration.TerminateSession (ADR-0017).
+//
+// callerID and actorRoles are the Gateway's — the verified user, never the request
+// body's. A session is ended by its requester, always, or by somebody holding a policy
+// on session-terminate:account:{accountId}; anybody else is refused, and the refusal is
+// audited under the caller's own name. The order is the session, then the caller, then
+// the state: a caller with no authority is told "forbidden" whatever the state is.
+//
+// The requester is never made to ask the Authorization Service: ending one's own access
+// does not depend on a remote service. The success event is emitted after the change, at
+// best, as it always was: this action reduces access, and refusing to reduce it because
+// the audit is down would do more harm than a missing event (the opposite of a grant,
+// ADR-0011).
+func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerID string, actorRoles []string) (*domain.Session, error) {
+	if callerID == "" {
+		return nil, fmt.Errorf("%w: ending a session needs an authenticated user", domain.ErrForbidden)
+	}
 	sess, err := s.sessions.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w (reading the session: %v)", domain.ErrUnavailable, err)
+	}
+	if callerID != sess.RequestedBy {
+		allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, SessionTerminateResourcePrefix+sess.PrivilegedAccountID, "session:terminate")
+		if err != nil {
+			// Fail closed: a termination nobody could authorise is not made.
+			return nil, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
+		}
+		if !allowed {
+			_ = s.audit.EmitEvent(ctx, callerID, "session.terminate", "session", sess.ID, false)
+			return nil, fmt.Errorf("%w: only the requester of a session, or somebody with a policy to terminate on this account, can end it: %s", domain.ErrForbidden, reason)
+		}
 	}
 	if status := sess.EffectiveStatus(s.clock()); status != domain.StatusActive {
-		return nil, fmt.Errorf("cannot terminate a session in status %q", status)
+		return nil, fmt.Errorf("%w: cannot terminate a session in status %q", domain.ErrConflict, status)
 	}
 	now := s.clock()
-	sess.Status = domain.StatusTerminated
-	sess.TerminatedAt = &now
-	if err := s.sessions.Save(ctx, sess); err != nil {
-		return nil, err
+	ended := *sess
+	ended.Status = domain.StatusTerminated
+	ended.TerminatedAt = &now
+	// A compare-and-swap, as for a decision: of two people who end the same session at
+	// once, one wins and is the one the audit names; the other is told it is already over.
+	swapped, err := s.sessions.SaveIfStatus(ctx, &ended, domain.StatusActive)
+	if err != nil {
+		return nil, fmt.Errorf("%w (saving the termination: %v)", domain.ErrUnavailable, err)
 	}
-	_ = s.audit.EmitEvent(ctx, sess.RequestedBy, "session.terminate", "session", sess.ID, true)
-	return sess, nil
+	if !swapped {
+		return nil, fmt.Errorf("%w: the session was changed first", domain.ErrConflict)
+	}
+	_ = s.audit.EmitEvent(ctx, callerID, "session.terminate", "session", ended.ID, true)
+	return &ended, nil
 }
 
 // Connect implements the flow behind POST /sessions/{id}/connect

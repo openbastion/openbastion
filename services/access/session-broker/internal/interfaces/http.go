@@ -222,15 +222,43 @@ func (s *HTTPServer) handleSessionItem(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
 	case http.MethodDelete:
-		sess, err := s.svc.TerminateSession(r.Context(), id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
+		s.handleTerminate(w, r, id)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// terminateRequest is what the Gateway sends: who is asking, and with which roles, from
+// the verified token (ADR-0017). Without a caller — or with a body that is not this —
+// there is nothing to end a session on behalf of.
+type terminateRequest struct {
+	CallerID   string   `json:"callerId"`
+	ActorRoles []string `json:"actorRoles"`
+}
+
+func (s *HTTPServer) handleTerminate(w http.ResponseWriter, r *http.Request, sessionID string) {
+	var req terminateRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		// No body, or not JSON: no caller. Refused like any caller who has no authority,
+		// not described (as for connect).
+		req = terminateRequest{}
+	}
+	sess, err := s.svc.TerminateSession(r.Context(), sessionID, req.CallerID, req.ActorRoles)
+	switch {
+	case err == nil:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
+	case errors.Is(err, domain.ErrNotFound):
+		http.Error(w, "session not found", http.StatusNotFound)
+	case errors.Is(err, domain.ErrForbidden):
+		http.Error(w, err.Error(), http.StatusForbidden)
+	case errors.Is(err, domain.ErrConflict):
+		http.Error(w, err.Error(), http.StatusConflict)
+	default:
+		// A dependency did not answer. Nothing was ended; the cause stays in this
+		// process's log, not in what a client reads (it can name an address).
+		log.Printf("session-broker: termination of %s not made: %v", sessionID, err)
+		http.Error(w, "the session was not ended: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
 	}
 }
 

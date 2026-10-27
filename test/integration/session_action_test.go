@@ -1,4 +1,4 @@
-// The per-user budget of approve, reject and connect at the Gateway (ADR-0016), on real
+// The per-user budget of approve, reject, connect and terminate at the Gateway (ADR-0016, ADR-0017), on real
 // processes: Authorization, Authentication, Audit, the Session Broker and three API Gateways
 // with different settings.
 //
@@ -116,7 +116,7 @@ func TestSessionAction_AUserWithASessionOfItsOwnCannotMakeTheBrokerWriteMoreThan
 		}
 	})
 
-	t.Run("the budget is one for the three: reject and connect are refused too, without reaching the Broker", func(t *testing.T) {
+	t.Run("the budget is one for the four: reject and connect are refused too, without reaching the Broker", func(t *testing.T) {
 		rejectedBefore := spy.anyEvent("session.breakglass_rejected", false)
 		if code, _, text := action(gwA.baseURL, malloryA, "reject"); code != http.StatusTooManyRequests {
 			t.Fatalf("reject once the approvals spent the budget: %d %s, want 429", code, text)
@@ -150,13 +150,18 @@ func TestSessionAction_AUserWithASessionOfItsOwnCannotMakeTheBrokerWriteMoreThan
 		if code, _, text := rawRequest(t, http.MethodGet, gwA.baseURL+"/sessions?status=pending_approval", malloryA, ""); code == http.StatusTooManyRequests {
 			t.Fatalf("listing the pending requests was refused for the action budget: %s", text)
 		}
-		if code, _, text := rawRequest(t, http.MethodDelete, gwA.baseURL+"/sessions/"+id, malloryA, ""); code == http.StatusTooManyRequests {
-			t.Fatalf("terminating was refused for the action budget: %s", text)
+	})
+
+	// Terminating was outside this budget until ADR-0017 made its refusals an audit event each
+	// (session_terminate_test.go proves, with a budget of its own, who may end a session).
+	t.Run("terminating shares the budget, since ADR-0017", func(t *testing.T) {
+		if code, _, text := rawRequest(t, http.MethodDelete, gwA.baseURL+"/sessions/"+id, malloryA, ""); code != http.StatusTooManyRequests {
+			t.Fatalf("terminating with the action budget spent: %d %s, want 429", code, text)
 		}
 	})
 
 	t.Run("Retry-After is the truth: waiting that long is enough", func(t *testing.T) {
-		// A fresh request of Mallory's own, since the previous one was just terminated.
+		// A fresh request of Mallory's own for this one.
 		status, body, s2 := gatewayCreateWith(t, control.baseURL, malloryControl, acc, true, "INC-16b second request", 10)
 		if status != http.StatusCreated || s2 == nil {
 			t.Fatalf("second request: %d %s", status, body)
@@ -205,7 +210,7 @@ func TestSessionActionConfig_AWrongLimitStopsTheGateway_AndWhatIsSaidAtStartIsTr
 	})
 
 	t.Run("the Gateway says what it applies, and says it truly", func(t *testing.T) {
-		const actions, requests = "approve, reject, connect: at most ", "POST /sessions: at most "
+		const actions, requests = "approve, reject, connect, terminate: at most ", "POST /sessions: at most "
 		for _, c := range []struct {
 			name    string
 			env     []string

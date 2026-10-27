@@ -331,9 +331,76 @@ paths:
     delete:
       tags: [sessions]
       summary: Termine une session active
+      description: >
+        Peut terminer une session : **son demandeur**, sans politique, ou une
+        personne qui détient une politique RBAC sur la ressource
+        `session-terminate:account:{targetAccountId}` — refusé par défaut,
+        distincte de `vault:*`, de `breakglass:*` et de `breakglass-approve:*`
+        (pouvoir approuver une urgence n'est pas pouvoir terminer une session)
+        (ADR-0017). La Gateway dit au Broker **qui** appelle et avec quels
+        rôles, à partir du jeton vérifié ; tout ce que le client écrirait dans
+        un corps est écarté.
+
+        L'ordre des vérifications est : la session existe (`404`), l'appelant
+        en a le droit (`403`, quel que soit l'état de la session), la session
+        est active (`409`). Un appelant sans droit apprend donc le même `403`
+        pour une session active ou terminée. Le refus est audité
+        (`session.terminate`, échec) **sous le nom de l'appelant** ; un succès
+        l'est aussi, sous le nom de **celui qui a terminé** — pas du demandeur.
+        Un `404` ou un `409` n'écrit aucun événement. Deux personnes qui
+        terminent la même session en même temps : une seule réussit, l'autre
+        reçoit `409`.
+
+        **Limite connue.** Terminer une session change l'état dans le Broker :
+        elle ne peut plus être connectée ni approuvée. Ce n'est pas encore une
+        coupure du SSH Proxy : une connexion déjà ouverte, et un ticket déjà
+        émis et non consommé, vivent jusqu'à leur expiration.
+
+        **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel coûte un
+        jeton au seau d'actions de **l'utilisateur vérifié**, le même que
+        `connect`, `approve` et `reject` (`SESSION_ACTION_BURST` d'un coup, de
+        1 à 1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute,
+        de 1 à 600, défaut 6), pris avant que le Broker ne soit appelé : un
+        refus répété n'écrit donc pas d'événement d'audit sans limite. La
+        lecture (`GET`) et une méthode non permise ne coûtent rien.
       responses:
-        "204":
-          description: Session terminée
+        "200":
+          description: Session terminée — le statut est `terminated`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401":
+          description: Pas de jeton valide.
+        "403":
+          description: >
+            L'appelant n'est ni le demandeur ni titulaire d'une politique
+            `session-terminate` sur ce compte. Audité (échec), sous son nom.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Session inconnue.
+        "409":
+          description: >
+            La session n'est pas active (déjà terminée, expirée, refusée ou en
+            attente d'approbation), ou quelqu'un l'a terminée avant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: >
+            Débit (ADR-0016) : « too many session actions from this user (at
+            most N at once, then one every X): retry in S s ». L'action n'a
+            pas atteint le Broker ; réessayer après le délai.
+          headers:
+            Retry-After:
+              description: Secondes à attendre avant qu'un jeton se reforme.
+              schema: { type: integer, minimum: 1 }
+        "503":
+          description: >
+            Une dépendance (Authorization Service, base) ne répond pas : rien
+            n'a été terminé et l'appel peut être renouvelé. La cause reste dans
+            le journal du Broker.
 
   /sessions/{sessionId}/connect:
     parameters:
@@ -358,11 +425,11 @@ paths:
         utilisateur — l'approbateur d'une demande break-glass compris —
         reçoit `403`.
 
-        **Débit par utilisateur (ADR-0016).** Chaque appel de `connect`,
-        `approve` ou `reject` coûte un jeton au seau d'actions de
+        **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel de `connect`,
+        `approve`, `reject` ou `DELETE /sessions/{sessionId}` coûte un jeton au seau d'actions de
         **l'utilisateur vérifié** (`SESSION_ACTION_BURST` d'un coup, de 1 à
         1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute, de
-        1 à 600, défaut 6) : un seul seau pour les trois routes, distinct de
+        1 à 600, défaut 6) : un seul seau pour les quatre routes, distinct de
         celui de `POST /sessions`. Le jeton est pris avant que le Broker ne
         soit appelé : une action refusée ici n'atteint ni le Broker, ni le
         Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode
@@ -420,11 +487,11 @@ paths:
         ne peut pas l'écrire, la demande reste en attente. Une seule décision
         par demande.
 
-        **Débit par utilisateur (ADR-0016).** Chaque appel de `connect`,
-        `approve` ou `reject` coûte un jeton au seau d'actions de
+        **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel de `connect`,
+        `approve`, `reject` ou `DELETE /sessions/{sessionId}` coûte un jeton au seau d'actions de
         **l'utilisateur vérifié** (`SESSION_ACTION_BURST` d'un coup, de 1 à
         1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute, de
-        1 à 600, défaut 6) : un seul seau pour les trois routes, distinct de
+        1 à 600, défaut 6) : un seul seau pour les quatre routes, distinct de
         celui de `POST /sessions`. Le jeton est pris avant que le Broker ne
         soit appelé : une action refusée ici n'atteint ni le Broker, ni le
         Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode
@@ -482,11 +549,11 @@ paths:
         n'est pas une élévation. Audité (`session.breakglass_rejected`).
         Mêmes réponses que `approve`.
 
-        **Débit par utilisateur (ADR-0016).** Chaque appel de `connect`,
-        `approve` ou `reject` coûte un jeton au seau d'actions de
+        **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel de `connect`,
+        `approve`, `reject` ou `DELETE /sessions/{sessionId}` coûte un jeton au seau d'actions de
         **l'utilisateur vérifié** (`SESSION_ACTION_BURST` d'un coup, de 1 à
         1000, défaut 10, puis `SESSION_ACTION_RATE_PER_MINUTE` par minute, de
-        1 à 600, défaut 6) : un seul seau pour les trois routes, distinct de
+        1 à 600, défaut 6) : un seul seau pour les quatre routes, distinct de
         celui de `POST /sessions`. Le jeton est pris avant que le Broker ne
         soit appelé : une action refusée ici n'atteint ni le Broker, ni le
         Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode

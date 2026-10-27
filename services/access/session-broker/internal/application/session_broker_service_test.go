@@ -184,10 +184,10 @@ func TestTerminateSession_EmitsAuditAndRejectsDoubleTermination(t *testing.T) {
 
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
 
-	if _, err := broker.TerminateSession(context.Background(), sess.ID); err != nil {
+	if _, err := broker.TerminateSession(context.Background(), sess.ID, sess.RequestedBy, []string{"dba"}); err != nil {
 		t.Fatalf("TerminateSession: %v", err)
 	}
-	if _, err := broker.TerminateSession(context.Background(), sess.ID); err == nil {
+	if _, err := broker.TerminateSession(context.Background(), sess.ID, sess.RequestedBy, []string{"dba"}); err == nil {
 		t.Fatal("expected terminating an already-terminated session to fail")
 	}
 	if len(audit.events) != 2 || audit.events[1] != "session.terminate" {
@@ -254,7 +254,7 @@ func TestConnect_RejectsTerminatedSession(t *testing.T) {
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{})
 
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
-	_, _ = broker.TerminateSession(context.Background(), sess.ID)
+	_, _ = broker.TerminateSession(context.Background(), sess.ID, sess.RequestedBy, []string{"dba"})
 
 	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
 		t.Fatal("expected Connect to reject a terminated session")

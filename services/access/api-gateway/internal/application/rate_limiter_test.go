@@ -172,7 +172,7 @@ func TestNewSessionRequestLimiter_TheStrictDefaults_AndTheUnitsOfAMinute(t *test
 	}
 }
 
-// ADR-0016: the budget of approve, reject and connect has its own constants and its own
+// ADR-0016, ADR-0017: the budget of approve, reject, connect and terminate has its own constants and its own
 // constructor. Their values are today those of POST /sessions, so a test cannot tell which
 // constants the constructor reads; what it pins is the values themselves.
 func TestNewSessionActionLimiter_TheStrictDefaults_AndTheUnitsOfAMinute(t *testing.T) {

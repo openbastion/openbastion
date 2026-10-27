@@ -1,8 +1,10 @@
 package interfaces_test
 
-// The per-user budget of approve, reject and connect (ADR-0016): the session actions that
+// The per-user budget of approve, reject, connect (ADR-0016) and terminate (ADR-0017): the session actions that
 // write on every call. What it is charged to, which routes it covers — and which it does not —
-// what a refused action is told, and that it is not the budget of POST /sessions.
+// what a refused action is told, and that it is not the budget of POST /sessions. Terminate
+// joined it with ADR-0017 (see http_session_terminate_test.go): it is not in the table of
+// routes below, which are the POSTs.
 
 import (
 	"bytes"
@@ -86,7 +88,7 @@ func TestSessionAction_ABurstThenRefused_ForEachOfTheThree_AndTheBrokerNeverSees
 	}
 }
 
-// One bucket for the three: changing route is not a way to a fresh budget.
+// One bucket for the four: changing route is not a way to a fresh budget.
 func TestSessionAction_IsOneBucketForTheThreeRoutes(t *testing.T) {
 	gw, broker, _ := actionGateway(t, 3, 6, 100)
 	var recs []*httptest.ResponseRecorder
@@ -146,9 +148,10 @@ func TestSessionAction_IsPerUser_NotPerAddressNorPerSession(t *testing.T) {
 	}
 }
 
-// What does not write on every call is not charged: terminate writes once per session, the
-// reads write nothing, and a route that is not allowed or not found costs nothing.
-func TestSessionAction_OnlyApproveRejectAndConnectAreCharged(t *testing.T) {
+// What does not write on every call is not charged: the reads write nothing, and a route
+// that is not allowed or not found costs nothing. (Terminate was in this list until ADR-0017
+// made its refusals an audit event each: it is charged now, and has its own test.)
+func TestSessionAction_OnlyTheActionsThatWriteOnEveryCallAreCharged(t *testing.T) {
 	gw, _, _ := actionGateway(t, 1, 6, 100)
 	doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-1/connect", "")
 	if rec := doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-1/connect", ""); rec.Code != http.StatusTooManyRequests {
@@ -158,7 +161,6 @@ func TestSessionAction_OnlyApproveRejectAndConnectAreCharged(t *testing.T) {
 		{http.MethodGet, "/sessions?status=pending_approval"},
 		{http.MethodGet, "/sessions/s-1"},
 		{http.MethodGet, "/sessions/s-1/recording"},
-		{http.MethodDelete, "/sessions/s-1"},
 	} {
 		for i := 0; i < 5; i++ { // five of each: none may be refused for the action budget
 			if rec := doAs(gw, "tok-alice", r.method, r.path, ""); rec.Code == http.StatusTooManyRequests {
