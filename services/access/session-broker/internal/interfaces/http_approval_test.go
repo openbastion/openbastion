@@ -91,7 +91,7 @@ func TestApprovalOverHTTP_TheWholeLifecycle(t *testing.T) {
 	}
 
 	// GET shows the same, so the requester can see that it was approved, and by whom.
-	if rec := send(svc, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"decidedBy":"bob"`) {
+	if rec := send(svc, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), `"decidedBy":"bob"`) {
 		t.Fatalf("GET: %s", rec.Body.String())
 	}
 
@@ -129,7 +129,7 @@ func TestApprovalOverHTTP_StatusCodes(t *testing.T) {
 	}
 
 	// Nothing above decided anything.
-	if rec := send(svc, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"status":"pending_approval"`) {
+	if rec := send(svc, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), `"status":"pending_approval"`) {
 		t.Fatalf("a refused decision changed the request: %s", rec.Body.String())
 	}
 
@@ -157,7 +157,7 @@ func TestApprovalOverHTTP_ADependencyFailureIsA503_WithoutItsMessage(t *testing.
 		rec := send(svc, http.MethodPost, "/sessions/"+id+"/approve", decisionBody("bob"))
 		assertUnavailableWithoutLeak(t, rec)
 		audit.failing = false
-		if rec := send(svc, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), "pending_approval") {
+		if rec := send(svc, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), "pending_approval") {
 			t.Fatalf("the request is not waiting any more: %s", rec.Body.String())
 		}
 	})

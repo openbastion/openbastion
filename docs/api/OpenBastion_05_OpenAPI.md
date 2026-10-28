@@ -317,17 +317,57 @@ paths:
     get:
       tags: [sessions]
       summary: Détail d'une session
+      description: >
+        Peut lire une session : **son demandeur**, sans politique ; **la
+        personne qui l'a décidée** (approbation ou rejet), pour cette session ;
+        ou une personne qui détient une politique RBAC sur la ressource
+        `session-read:account:{targetAccountId}` (action `session:read`) —
+        refusé par défaut, distincte de `vault:*`, de `breakglass:*`, de
+        `breakglass-approve:*` et de `session-terminate:*` : aucun de ces
+        pouvoirs ne donne le droit de lire (ADR-0019). Un approbateur qui n'est
+        ni le demandeur ni le décideur est refusé ; il passe par la liste des
+        demandes en attente (`GET /sessions?status=pending_approval`).
+
+        La Gateway dit au Broker **qui** lit et avec quels rôles, à partir du
+        jeton vérifié ; une requête ou un corps écrits par le client sont
+        écartés. L'ordre des vérifications est : l'appelant est identifié
+        (`403`), la session existe (`404`), l'appelant en a le droit (`403`,
+        quel que soit l'état de la session). Le refus est le même pour tous :
+        il ne contient ni le compte, ni le demandeur, ni la justification, ni
+        l'état, ni la raison donnée par l'Authorization Service.
+
+        Une lecture **n'écrit rien** : ni événement d'audit (pas même pour un
+        refus), ni ligne en base. Elle ne coûte rien au budget d'actions
+        (ADR-0016) ; seule la limite par adresse s'applique. L'état d'une
+        session échue est lu `expired` sans que l'enregistrement change.
       responses:
         "200":
           description: Session
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
-        "404":
-          description: Session introuvable
+        "401":
+          description: Pas de jeton valide.
+        "403":
+          description: >
+            L'appelant n'est ni le demandeur, ni celui qui a décidé la session,
+            ni titulaire d'une politique `session-read` sur son compte. Le
+            message ne dit rien de la session. Rien n'est audité.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Session inconnue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: >
+            Une dépendance (Authorization Service, base) ne répond pas : rien
+            n'est servi — un tiers n'est jamais servi faute de réponse, et une
+            base muette n'est pas « session inconnue » — et l'appel peut être
+            renouvelé. Le demandeur et le décideur ne dépendent pas de
+            l'Authorization Service. La cause reste dans le journal du Broker.
     delete:
       tags: [sessions]
       summary: Termine une session active
@@ -1031,7 +1071,7 @@ components:
 | `/auth/token/refresh` | POST | auth | Renouvellement de jeton |
 | `/auth/me` | GET | auth | Profil courant |
 | `/sessions` | GET / POST | sessions | Lister les demandes break-glass en attente que l'on peut décider (`status=pending_approval` seul, ADR-0012) / demander une session |
-| `/sessions/{id}` | GET / DELETE | sessions | Détail / terminaison |
+| `/sessions/{id}` | GET / DELETE | sessions | Détail (demandeur, décideur, ou politique `session-read:account:{id}`) / terminaison |
 | `/sessions/{id}/connect` | POST | sessions | Ticket de connexion vers le SSH Proxy (réservé au demandeur) |
 | `/sessions/{id}/approve` | POST | sessions | Approuver une demande break-glass (autre personne, politique `breakglass-approve:*`) |
 | `/sessions/{id}/reject` | POST | sessions | Rejeter une demande break-glass |

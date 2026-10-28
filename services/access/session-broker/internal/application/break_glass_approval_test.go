@@ -450,7 +450,7 @@ func TestApproval_ARequestExpiresUnlessDecidedInTime(t *testing.T) {
 				t.Fatalf("approving an expired request: %v, want a conflict", err)
 			}
 			// Read back, the request says what happened to it, and the stored row is untouched.
-			if seen, _ := f.broker.GetSession(context.Background(), sess.ID); seen.Status != domain.StatusExpired {
+			if seen, _ := f.broker.GetSession(context.Background(), sess.ID, sess.RequestedBy, nil); seen.Status != domain.StatusExpired {
 				t.Fatalf("GetSession says %q, want expired", seen.Status)
 			}
 			if f.stored(t, sess.ID).Status != domain.StatusPendingApproval {

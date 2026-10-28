@@ -424,14 +424,51 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 	return sess, nil
 }
 
-// GetSession implements SessionOrchestration.GetSession. The returned
+// SessionReadResourcePrefix is the Authorization Service resource a policy names to let
+// somebody READ the sessions of an account (ADR-0019): session-read:account:{accountId}.
+// It is distinct from vault:, breakglass:, breakglass-approve: and session-terminate: —
+// being allowed to open, approve or end a session is not being allowed to read the
+// justification and the requester of somebody else's.
+const SessionReadResourcePrefix = "session-read:account:"
+
+// GetSession implements SessionOrchestration.GetSession (ADR-0019). The returned
 // status reflects expiry lazily (domain.Session.EffectiveStatus) without
 // mutating the stored record — a stand-in for the Scheduler's not-yet-
 // implemented expiration sweep (doc 04 §2).
-func (s *SessionBrokerService) GetSession(ctx context.Context, id string) (*domain.Session, error) {
+//
+// callerID and actorRoles are the Gateway's — the verified user, never the request's.
+// A session is read by its requester, always; by the person who decided it, which is the
+// record of their own decision; and by somebody holding a policy on
+// session-read:account:{privilegedAccountId}, refused by default. Anybody else is refused.
+// The order is the session (ErrNotFound), then the caller (ErrForbidden): a caller with no
+// right learns nothing of the session, and the refusal does not name the account, the
+// requester or anything else in the record.
+//
+// Reading writes nothing, to the audit or anywhere: a refused read is not an event.
+// Making it one would give every unauthorised GET a write, and the budget that bounds
+// writes (ADR-0016) is not meant for interfaces that poll — see ADR-0019.
+func (s *SessionBrokerService) GetSession(ctx context.Context, id, callerID string, actorRoles []string) (*domain.Session, error) {
+	if callerID == "" {
+		return nil, fmt.Errorf("%w: reading a session needs an authenticated user", domain.ErrForbidden)
+	}
 	sess, err := s.sessions.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w (reading the session: %v)", domain.ErrUnavailable, err)
+	}
+	if callerID != sess.RequestedBy && (sess.DecidedBy == "" || callerID != sess.DecidedBy) {
+		allowed, _, err := s.authz.CheckAccess(ctx, actorRoles, SessionReadResourcePrefix+sess.PrivilegedAccountID, "session:read")
+		if err != nil {
+			// Fail closed: a read nobody could authorise is not served.
+			return nil, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
+		}
+		if !allowed {
+			// No reason from the Authorization Service: it names the resource, and the resource
+			// carries the account of a session this caller may not know exists.
+			return nil, fmt.Errorf("%w: only the requester of a session, the person who decided it, or somebody with a policy to read sessions on this account, can read it", domain.ErrForbidden)
+		}
 	}
 	reflected := *sess
 	reflected.Status = sess.EffectiveStatus(s.clock())

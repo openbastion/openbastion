@@ -68,7 +68,7 @@ func TestTerminateOverHTTP_TheCallerIsTheBodyTheGatewayBuilds_AndNothingElse(t *
 			}
 		})
 	}
-	if rec := send(svc, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
+	if rec := send(svc, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
 		t.Fatalf("a refused termination changed the session: %s", rec.Body.String())
 	}
 	if rec := send(svc, http.MethodDelete, "/sessions/"+id, ``); !strings.Contains(rec.Body.String(), "authenticated user") {
@@ -90,7 +90,7 @@ func TestTerminateOverHTTP_StatusCodes_AndWhoCan(t *testing.T) {
 	if rec := send(svc, http.MethodDelete, "/sessions/"+id, `{"callerId":"alice"}`); rec.Code != http.StatusConflict {
 		t.Fatalf("a second termination: %d, want 409", rec.Code)
 	}
-	if rec := send(svc, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"status":"terminated"`) {
+	if rec := send(svc, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), `"status":"terminated"`) {
 		t.Fatalf("the session is not shown as terminated: %s", rec.Body.String())
 	}
 
@@ -120,7 +120,7 @@ func TestTerminateOverHTTP_ADependencyFailureIsA503_WithoutItsMessage(t *testing
 	if !strings.Contains(logged.String(), "termination of "+id+" not made") || !strings.Contains(logged.String(), leak) {
 		t.Fatalf("the failure is not in the Broker's log, with its cause: %q", logged.String())
 	}
-	if rec := send(good, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
+	if rec := send(good, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
 		t.Fatalf("a termination nobody could authorise was made: %s", rec.Body.String())
 	}
 	// The requester does not need the Authorization Service to end their own session.
@@ -202,7 +202,7 @@ func TestTerminateOverHTTP_AProxyThatCannotBeToldIsA503_NothingIsEnded_AndTheCau
 	if !strings.Contains(logged.String(), "termination of "+id+" not made") || !strings.Contains(logged.String(), leak) {
 		t.Fatalf("the cause is not in the Broker's log: %q", logged.String())
 	}
-	if rec := send(good, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
+	if rec := send(good, http.MethodGet, "/sessions/"+id+"?callerId=alice", ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
 		t.Fatalf("a session the proxy could not be told about was marked ended: %s", rec.Body.String())
 	}
 	if rec := send(good, http.MethodDelete, "/sessions/"+id, `{"callerId":"alice","actorRoles":["dba"]}`); rec.Code != http.StatusOK {

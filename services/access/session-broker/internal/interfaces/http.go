@@ -214,18 +214,42 @@ func (s *HTTPServer) handleSessionItem(w http.ResponseWriter, r *http.Request) {
 	id := rest
 	switch r.Method {
 	case http.MethodGet:
-		sess, err := s.svc.GetSession(r.Context(), id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
+		s.handleGetSession(w, r, id)
 	case http.MethodDelete:
 		s.handleTerminate(w, r, id)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleGetSession answers a read of one session (ADR-0019). The caller is the one the
+// Gateway verified (callerId) with the roles of that token (actorRoles, comma-separated
+// like the list's): the Gateway builds this query itself, and only an internal caller can
+// reach it (ADR-0010). The refusal says nothing of the session: not its account, not its
+// requester.
+func (s *HTTPServer) handleGetSession(w http.ResponseWriter, r *http.Request, sessionID string) {
+	q := r.URL.Query()
+	var roles []string
+	if raw := q.Get("actorRoles"); raw != "" {
+		roles = strings.Split(raw, ",")
+	}
+	sess, err := s.svc.GetSession(r.Context(), sessionID, q.Get("callerId"), roles)
+	switch {
+	case err == nil:
+	case errors.Is(err, domain.ErrNotFound):
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	case errors.Is(err, domain.ErrForbidden):
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	default:
+		// A dependency did not answer; the cause stays in this process's log.
+		log.Printf("session-broker: reading session %s not done: %v", sessionID, err)
+		http.Error(w, "the session could not be read: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(toSessionResponse(sess))
 }
 
 // terminateRequest is what the Gateway sends: who is asking, and with which roles, from

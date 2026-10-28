@@ -185,7 +185,7 @@ func TestGetSession_ReflectsExpiryWithoutMutatingStoredStatus(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	got, err := broker.GetSession(context.Background(), sess.ID)
+	got, err := broker.GetSession(context.Background(), sess.ID, "user1", nil) // its requester
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}

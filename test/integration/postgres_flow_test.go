@@ -416,9 +416,11 @@ type sessionDetails struct {
 	Justification       string `json:"justification"`
 }
 
+// brokerGetSession reads a session as its requester (ADR-0019: the Broker is told who
+// reads by the Gateway; here the test plays the Gateway, as brokerCreateSession does).
 func brokerGetSession(t *testing.T, baseURL, id string) (*sessionDetails, int) {
 	t.Helper()
-	resp, err := http.Get(baseURL + "/sessions/" + id)
+	resp, err := http.Get(baseURL + "/sessions/" + id + "?callerId=it-user1&actorRoles=dba")
 	if err != nil {
 		t.Fatalf("get-session: %v", err)
 	}

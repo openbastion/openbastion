@@ -104,6 +104,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	if status != http.StatusOK {
 		t.Fatalf("operator login: status %d", status)
 	}
+	operatorID := userIDOf(t, operatorToken)
 	auditorToken, status := gatewayLogin(t, gatewayURL, "auditor", "aud-password-123")
 	if status != http.StatusOK {
 		t.Fatalf("auditor login: status %d", status)
@@ -283,6 +284,18 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		{"the SSH proxy terminates a session, naming a platform admin", mtls.SSHProxy, http.MethodDelete, brokerURL + "/sessions/" + sess.ID,
 			map[string]any{"callerId": "root-admin", "actorRoles": []string{"platform-admin"}}, "a terminated session"},
 
+		// Who may read a session (ADR-0019): the Broker answers for the caller the Gateway
+		// names, so only the Gateway may name one. A service that could name the caller would
+		// read the justification, the account and the requester of anybody's session.
+		{"the Vault reads a session, naming the requester", mtls.PasswordVault, http.MethodGet,
+			brokerURL + "/sessions/" + sess.ID + "?callerId=" + operatorID, nil, "the justification and account of a session"},
+		{"the SSH proxy reads a session, naming a reader with every role", mtls.SSHProxy, http.MethodGet,
+			brokerURL + "/sessions/" + sess.ID + "?callerId=root-admin&actorRoles=platform-admin,session-auditor", nil, "the justification and account of a session"},
+		{"the operator tooling reads a session, naming the requester", mtls.AdminCLI, http.MethodGet,
+			brokerURL + "/sessions/" + sess.ID + "?callerId=" + operatorID, nil, "the justification and account of a session"},
+		{"the recorder reads a session, naming the requester", mtls.CommandRecorder, http.MethodGet,
+			brokerURL + "/sessions/" + sess.ID + "?callerId=" + operatorID, nil, "the justification and account of a session"},
+
 		// Who may decide on a break-glass request, or connect in the requester's name (ADR-0011):
 		// only the Gateway, which states who the user is. Anyone else naming a decider or a caller
 		// is a forgery, whatever certificate they hold.
@@ -335,8 +348,8 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		// handler, so nothing was revoked and nothing was terminated.
 		fmt.Fprint(sh.stdin, "pwd\r")
 		sh.waitFor("out:pwd")
-		if status, raw := mustCall(t, p.clientAs(t, mtls.APIGateway), http.MethodGet, brokerURL+"/sessions/"+sess.ID, nil); status != http.StatusOK || !strings.Contains(raw, `"status":"active"`) {
-			t.Fatalf("the session after the forged cuts: %d %s", status, raw)
+		if got, _ := gatewayGetSession(t, gatewayURL, operatorToken, sess.ID)["status"].(string); got != "active" {
+			t.Fatalf("the session after the forged cuts is %q, want active", got)
 		}
 	})
 
@@ -349,6 +362,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			{"the Gateway lists accounts, on behalf of a vault admin", mtls.APIGateway, vaultURL + "/vault/v1/accounts?actorRoles=vault-admin"},
 			{"any service answers health checks", mtls.SSHProxy, vaultURL + "/healthz"},
 			{"the Gateway lists the waiting requests, on behalf of a user", mtls.APIGateway, brokerURL + "/sessions?status=pending_approval&callerId=u-x&actorRoles=sre"},
+			{"the Gateway reads a session, on behalf of its requester", mtls.APIGateway, brokerURL + "/sessions/" + sess.ID + "?callerId=" + operatorID},
 		} {
 			if status, raw := mustCall(t, p.clientAs(t, ok.caller), http.MethodGet, ok.url, nil); status != http.StatusOK {
 				t.Errorf("%s: got %d %q", ok.name, status, raw)

@@ -312,6 +312,23 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 	g.forwardJSON(w, r.Context(), http.MethodPost, g.sessionBrokerURL+"/sessions", body)
 }
 
+// forwardRead reads one session for the user the token proves (ADR-0019). The Broker's
+// query is built from nothing the client sent: a callerId or actorRoles in the client's
+// own query string never gets past here, so a client cannot read as the requester of a
+// session, nor with the roles of somebody who may read them; nothing of its body is
+// relayed either. It costs nothing: it writes nothing (ADR-0016, rule 1).
+func (g *GatewayServer) forwardRead(w http.ResponseWriter, r *http.Request, brokerPath string, id identity) {
+	q := neturl.Values{}
+	q.Set("callerId", id.UserID)
+	q.Set("actorRoles", strings.Join(id.Roles, ","))
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, brokerPath+"?"+q.Encode(), nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	g.doAndRelay(w, req)
+}
+
 // handleListPending builds the Broker's query from nothing the client sent but the
 // three parameters of the listing. Who is asking, and with which roles, is the verified
 // token's: a callerId or actorRoles in the client's own query string never gets past
@@ -342,8 +359,8 @@ func (g *GatewayServer) handleListPending(w http.ResponseWriter, r *http.Request
 // Broker is therefore not relayed raw by default — it is exposed when someone
 // writes its case here, with its identity injection (ADR-0011).
 //
-//	GET        /sessions/{id}      relayed as it is: no body, nothing to inject (who may
-//	                               READ a session is still not decided: see ADR-0017)
+//	GET        /sessions/{id}      the Gateway states who is asking, and with which roles
+//	                               (ADR-0019); reading is free of the action budget
 //	DELETE     /sessions/{id}      the Gateway states who is asking, and with which roles
 //	                               (ADR-0017); charged to the user's action budget
 //	POST       …/connect           the Gateway states who is asking (callerId)
@@ -362,7 +379,7 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 	case "":
 		switch r.Method {
 		case http.MethodGet:
-			g.forwardPassthrough(w, r, http.MethodGet, brokerPath)
+			g.forwardRead(w, r, brokerPath, id)
 		case http.MethodDelete:
 			// A refusal of somebody who may not end this session is an audit event, each
 			// time: it is charged to the user's action budget first (ADR-0017), like the
