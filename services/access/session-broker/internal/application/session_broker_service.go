@@ -57,7 +57,20 @@ type ProxyClient interface {
 	// breakGlass is the Broker's authorisation for a recording waiver (ADR-0009).
 	// The proxy honours it only if it was itself configured to.
 	EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (proxyEndpoint, connectionTicket string, err error)
+
+	// RevokeSession tells the proxy that a session is ended (ADR-0018): its open
+	// connections are cut, its unused tickets refused and it is never established
+	// again. remaining is the time the session had left — what the proxy has to
+	// remember. A nil error means the session can carry nothing any more; any other
+	// answer means it may still be open, and the Broker must not say it was ended.
+	// It is idempotent: asking again for a session already cut is not an error.
+	RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error
 }
+
+// RevocationMargin is added to the time a session has left when the Broker tells the
+// proxy to remember its revocation: a ticket issued a moment before the end of the
+// session, or a clock that is a little off, must not outlive the memory.
+const RevocationMargin = time.Minute
 
 // ApprovalNotifier tells whoever should know that a break-glass request is waiting,
 // or has been decided (ADR-0012). It is a courtesy, not a control: it has no return
@@ -463,7 +476,19 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 	if status := sess.EffectiveStatus(s.clock()); status != domain.StatusActive {
 		return nil, fmt.Errorf("%w: cannot terminate a session in status %q", domain.ErrConflict, status)
 	}
+	// Ending a session is cutting it: the proxy is told BEFORE the record changes
+	// (ADR-0018). If it cannot be told, nothing is ended and the caller is told so — a
+	// session the Broker calls terminated while a connection is still open is the
+	// lie this order exists to prevent. If it is told and the record then fails to
+	// change, the session is cut but still marked active: the safe direction, and the
+	// same call, which is idempotent, finishes it.
 	now := s.clock()
+	if err := s.proxy.RevokeSession(ctx, sess.ID, sess.ExpiresAt.Sub(now)+RevocationMargin); err != nil {
+		// The attempt is on the record, under the caller's name: it did not end the session.
+		_ = s.audit.EmitEvent(ctx, callerID, "session.terminate", "session", sess.ID, false)
+		return nil, fmt.Errorf("%w (revoking at the proxy: %v)", domain.ErrUnavailable, err)
+	}
+	now = s.clock()
 	ended := *sess
 	ended.Status = domain.StatusTerminated
 	ended.TerminatedAt = &now

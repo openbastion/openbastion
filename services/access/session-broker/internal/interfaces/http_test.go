@@ -44,6 +44,9 @@ func (p failingProxy) EstablishSession(context.Context, string, string, string, 
 	return "", "", p.err
 }
 
+// RevokeSession succeeds: the proxy of these tests has nothing open.
+func (p failingProxy) RevokeSession(context.Context, string, time.Duration) error { return nil }
+
 func connect(t *testing.T, proxyErr error) *httptest.ResponseRecorder {
 	t.Helper()
 	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{err: proxyErr})

@@ -15,6 +15,14 @@ import (
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/interfaces"
 )
 
+// newServer is the proxy's control plane as the binary builds it: with the registry of the
+// connections it serves (ADR-0018), without which it establishes nothing.
+func newServer(pending *infrastructure.PendingSessions) *interfaces.HTTPServer {
+	srv := interfaces.NewHTTPServer(pending, "127.0.0.1:2222")
+	srv.Live = proxycore.NewLiveSessions()
+	return srv
+}
+
 func establish(srv *interfaces.HTTPServer) *httptest.ResponseRecorder {
 	return establishWith(srv, "")
 }
@@ -28,7 +36,7 @@ func establishWith(srv *interfaces.HTTPServer, extra string) *httptest.ResponseR
 }
 
 func TestEstablishSession_IssuesATicketWhenRecordingIsAdmitted(t *testing.T) {
-	srv := interfaces.NewHTTPServer(infrastructure.NewPendingSessions(), "127.0.0.1:2222")
+	srv := newServer(infrastructure.NewPendingSessions())
 	srv.Admit = func(context.Context, string, bool) error { return nil }
 	if rec := establish(srv); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ticket_") {
 		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
@@ -39,7 +47,7 @@ func TestEstablishSession_IssuesATicketWhenRecordingIsAdmitted(t *testing.T) {
 // after opening a connection, and nothing is left registered for the session.
 func TestEstablishSession_RefusesWithA503AndNoTicketWhenRecordingIsNotAdmitted(t *testing.T) {
 	pending := infrastructure.NewPendingSessions()
-	srv := interfaces.NewHTTPServer(pending, "127.0.0.1:2222")
+	srv := newServer(pending)
 	srv.Admit = func(context.Context, string, bool) error {
 		return fmt.Errorf("%w: dial tcp 10.9.8.7:8087: connection refused", proxycore.ErrRecordingUnavailable)
 	}
@@ -64,7 +72,7 @@ func TestEstablishSession_RefusesWithA503AndNoTicketWhenRecordingIsNotAdmitted(t
 }
 
 func TestEstablishSession_WithoutAnAdmitHookKeepsItsOldBehaviour(t *testing.T) {
-	srv := interfaces.NewHTTPServer(infrastructure.NewPendingSessions(), "127.0.0.1:2222")
+	srv := newServer(infrastructure.NewPendingSessions())
 	if rec := establish(srv); rec.Code != http.StatusOK {
 		t.Fatalf("got %d", rec.Code)
 	}
@@ -86,7 +94,7 @@ func TestEstablishSession_CarriesTheBreakGlassRequestToTheAdmissionAndTheTicket(
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pending := infrastructure.NewPendingSessions()
-			srv := interfaces.NewHTTPServer(pending, "127.0.0.1:2222")
+			srv := newServer(pending)
 			var asked []bool
 			srv.Admit = func(_ context.Context, _ string, breakGlass bool) error {
 				asked = append(asked, breakGlass)

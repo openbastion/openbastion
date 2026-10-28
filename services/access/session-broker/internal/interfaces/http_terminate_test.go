@@ -8,10 +8,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/infrastructure"
@@ -174,5 +176,36 @@ func TestTerminateOverHTTP_AuthorizationIsAskedWithTheRolesOfTheBody_AboutTheAcc
 	id2 := openOverHTTP(t, svc2)
 	if rec := send(svc2, http.MethodDelete, "/sessions/"+id2, `{"callerId":"alice","actorRoles":["dba"]}`); rec.Code != http.StatusOK || authz2.asked != 0 {
 		t.Fatalf("the requester: %d, Authorization asked %d times, want 200 and none", rec.Code, authz2.asked)
+	}
+}
+
+// downProxy is a proxy that cannot be told (ADR-0018): its error names an address.
+type downProxy struct{ failingProxy }
+
+func (downProxy) RevokeSession(context.Context, string, time.Duration) error { return errors.New(leak) }
+
+// If the proxy cannot be told, the session is not ended: a 503 that says nothing of the proxy,
+// the cause in the Broker's log, the session still active — and the same call works when the
+// proxy is back.
+func TestTerminateOverHTTP_AProxyThatCannotBeToldIsA503_NothingIsEnded_AndTheCauseIsInTheLog(t *testing.T) {
+	previous := log.Writer()
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	store := infrastructure.NewInMemoryStore()
+	good := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{})
+	id := openOverHTTP(t, good)
+	down := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, downProxy{})
+
+	assertUnavailableWithoutLeak(t, send(down, http.MethodDelete, "/sessions/"+id, `{"callerId":"alice","actorRoles":["dba"]}`))
+	if !strings.Contains(logged.String(), "termination of "+id+" not made") || !strings.Contains(logged.String(), leak) {
+		t.Fatalf("the cause is not in the Broker's log: %q", logged.String())
+	}
+	if rec := send(good, http.MethodGet, "/sessions/"+id, ""); !strings.Contains(rec.Body.String(), `"status":"active"`) {
+		t.Fatalf("a session the proxy could not be told about was marked ended: %s", rec.Body.String())
+	}
+	if rec := send(good, http.MethodDelete, "/sessions/"+id, `{"callerId":"alice","actorRoles":["dba"]}`); rec.Code != http.StatusOK {
+		t.Fatalf("the same call with the proxy back: %d %q, want 200", rec.Code, rec.Body.String())
 	}
 }

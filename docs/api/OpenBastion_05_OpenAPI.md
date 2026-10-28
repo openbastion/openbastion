@@ -351,10 +351,22 @@ paths:
         terminent la même session en même temps : une seule réussit, l'autre
         reçoit `409`.
 
-        **Limite connue.** Terminer une session change l'état dans le Broker :
-        elle ne peut plus être connectée ni approuvée. Ce n'est pas encore une
-        coupure du SSH Proxy : une connexion déjà ouverte, et un ticket déjà
-        émis et non consommé, vivent jusqu'à leur expiration.
+        **Terminer, c'est couper (ADR-0018).** Avant de changer l'état de la
+        session, le Broker dit au SSH Proxy de la révoquer : ses connexions
+        ouvertes sont fermées (l'opérateur lit « session ended because it was
+        terminated. », sans savoir par qui), ses tickets non consommés sont
+        jetés et rien ne peut plus être établi pour elle. Le `200` n'est
+        renvoyé qu'une fois la session coupée. Si le proxy ne répond pas, ou si
+        une connexion ne se ferme pas dans les 5 secondes, la réponse est `503`,
+        **la session reste active** et la tentative est inscrite à l'audit
+        (`session.terminate`, échec, sous le nom de l'appelant) ; le même appel,
+        renouvelé, aboutit quand le proxy est revenu. Le proxy inscrit de son
+        côté `session.revoked` pour chaque connexion coupée.
+
+        **Limites connues.** Les octrois de portée du Vault ne sont pas révoqués
+        (le proxy abandonne le jeton avec le ticket ; il est à usage unique et
+        réservé à l'identité du proxy). Le proxy SSH est en instance unique
+        dans le MVP : avec plusieurs réplicas, la révocation en atteindrait un.
 
         **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel coûte un
         jeton au seau d'actions de **l'utilisateur vérifié**, le même que
@@ -398,9 +410,10 @@ paths:
               schema: { type: integer, minimum: 1 }
         "503":
           description: >
-            Une dépendance (Authorization Service, base) ne répond pas : rien
-            n'a été terminé et l'appel peut être renouvelé. La cause reste dans
-            le journal du Broker.
+            Une dépendance (Authorization Service, base, **SSH Proxy** — qui
+            doit confirmer la coupure, ADR-0018) ne répond pas : rien n'a été
+            terminé, la session reste active et l'appel peut être renouvelé.
+            La cause reste dans le journal du Broker.
 
   /sessions/{sessionId}/connect:
     parameters:

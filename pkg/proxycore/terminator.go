@@ -61,3 +61,12 @@ func (t *Terminator) EmitBreakGlass(ctx context.Context, sessionID string) error
 func (t *Terminator) EmitExpired(ctx context.Context, sessionID string) error {
 	return t.audit.EmitEvent(ctx, "session.expire", "session", sessionID, true)
 }
+
+// EmitRevoked records a connection the proxy cut because the Session Broker told
+// it the session was ended (ADR-0018). It is emitted in addition to
+// session.terminate, which says the connection ended and that its credential was
+// purged; this one says why. The person who ended the session is named by the
+// Broker's own event, not here: the proxy only knows that it was told to.
+func (t *Terminator) EmitRevoked(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.revoked", "session", sessionID, true)
+}

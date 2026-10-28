@@ -51,10 +51,18 @@ type Listener struct {
 	// refuses every session: a Listener nobody configured never runs
 	// unrecorded. Best-effort must be asked for.
 	Recording RecordingConfig
+
+	// Live is the registry of the connections this listener serves, which is what
+	// lets the Session Broker end a session that is already open (ADR-0018). The
+	// proxy's control plane shares it: the route that revokes a session and the
+	// pipeline that serves it must be talking about the same connections.
+	// NewListener creates one; a Listener without it refuses every session
+	// (ErrNotRevocable): a connection nobody could cut is not started.
+	Live *LiveSessions
 }
 
 func NewListener(fetcher *CredentialFetcher, terminator *Terminator) *Listener {
-	return &Listener{Fetcher: fetcher, Terminator: terminator}
+	return &Listener{Fetcher: fetcher, Terminator: terminator, Live: NewLiveSessions()}
 }
 
 // Admit decides whether a session may start, before anything irreversible
@@ -109,6 +117,23 @@ func (l *Listener) Probe(ctx context.Context, sessionID string, breakGlass bool)
 // already-connected client/target streams; Serve owns the credential
 // lifecycle and guarantees Purge runs exactly once, on every exit path.
 func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec, client, target io.ReadWriter) error {
+	if l.Live == nil {
+		return ErrNotRevocable
+	}
+	// A session the Broker has ended is refused first, before anything is admitted,
+	// audited or fetched: nothing of it may start (ADR-0018). Registering is what
+	// makes the connection cuttable from then on, so it comes before the credential.
+	liveCtx, cancelLive := context.WithCancelCause(ctx)
+	defer cancelLive(nil)
+	conn, err := l.Live.Begin(meta.SessionID, cancelLive)
+	if err != nil {
+		return err
+	}
+	defer conn.End()
+	// context.Cause is the first cause: a caller that stopped before the revocation
+	// arrived has its own, and it is not a revocation.
+	revoked := func() bool { return errors.Is(context.Cause(liveCtx), ErrSessionRevoked) }
+
 	// Before the credential: a Vault scope token is single-use, so fetching it
 	// for a session that is then refused would burn it for nothing.
 	if !meta.Admission.For(meta.SessionID) {
@@ -117,24 +142,43 @@ func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec,
 		}
 	}
 
-	cred, err := l.Fetcher.Fetch(ctx, meta.ScopeToken)
+	cred, err := l.Fetcher.Fetch(liveCtx, meta.ScopeToken)
 	if err != nil {
+		if revoked() {
+			// Cut while the credential was being fetched: not a failed connection.
+			return ErrSessionRevoked
+		}
 		_ = l.Terminator.EmitConnectFailure(ctx, meta.SessionID)
 		return err
+	}
+	if revoked() {
+		// Cut between the fetch and the relay: the credential is purged and the
+		// target is never contacted.
+		_ = l.Terminator.EmitRevoked(ctx, meta.SessionID)
+		_ = l.Terminator.Terminate(ctx, meta.SessionID, cred, true)
+		return ErrSessionRevoked
 	}
 
 	// The session ends when its time does. The relay runs under a deadline; the
 	// audit and the purge below do NOT — they use the caller's context, which is
 	// still alive when the deadline fires.
-	relayCtx := ctx
+	relayCtx := liveCtx
 	if !meta.ExpiresAt.IsZero() {
 		var cancel context.CancelFunc
-		relayCtx, cancel = context.WithDeadline(ctx, meta.ExpiresAt)
+		relayCtx, cancel = context.WithDeadline(liveCtx, meta.ExpiresAt)
 		defer cancel()
 	}
 
 	relayErr := codec.Relay(relayCtx, client, target, cred)
-	expired := relayErr != nil && ctx.Err() == nil && errors.Is(relayCtx.Err(), context.DeadlineExceeded)
+	// Whatever ended the relay, it has: the connection to the target is closed. This
+	// is the moment a revocation waits for.
+	conn.RelayEnded()
+	cut := revoked()
+	expired := relayErr != nil && ctx.Err() == nil && !cut && errors.Is(relayCtx.Err(), context.DeadlineExceeded)
+	if cut {
+		_ = l.Terminator.EmitRevoked(ctx, meta.SessionID)
+		relayErr = ErrSessionRevoked
+	}
 	if expired {
 		_ = l.Terminator.EmitExpired(ctx, meta.SessionID)
 		relayErr = ErrSessionExpired
@@ -142,7 +186,7 @@ func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec,
 	if errors.Is(relayErr, ErrRecordingUnavailable) {
 		_ = l.Terminator.EmitRecordingLost(ctx, meta.SessionID)
 	}
-	termErr := l.Terminator.Terminate(ctx, meta.SessionID, cred, relayErr == nil || expired)
+	termErr := l.Terminator.Terminate(ctx, meta.SessionID, cred, relayErr == nil || expired || cut)
 	if relayErr != nil {
 		return relayErr
 	}

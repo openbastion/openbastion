@@ -49,6 +49,22 @@ func (p *PendingSessions) Register(ps *PendingSession) (ticket string) {
 	return ticket
 }
 
+// RevokeSession discards every ticket not yet used for sessionID and says how
+// many (ADR-0018). A ticket is the only way to open a connection; one that is gone
+// opens nothing, and the Vault scope token it carried is dropped with it.
+func (p *PendingSessions) RevokeSession(sessionID string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for ticket, ps := range p.byTix {
+		if ps.SessionID == sessionID {
+			delete(p.byTix, ticket)
+			n++
+		}
+	}
+	return n
+}
+
 var ErrInvalidTicket = errors.New("connection ticket unknown, expired, or already used")
 
 // Consume looks up and removes ticket in one step. A client SSH

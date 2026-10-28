@@ -61,3 +61,31 @@ func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID,
 	}
 	return out.ProxyEndpoint, out.ConnectionTicket, nil
 }
+
+// RevokeSession implements application.ProxyClient by calling the proxy's
+// /internal/v1/revoke-session (ADR-0018). Only a 200 is a revocation: the proxy
+// answers 200 once the session's connections are closed, and nothing else when
+// they are not (or when it does not know the route, as an older proxy would), so
+// the Broker never calls a session ended that may still be open.
+func (c *ProxyClientHTTPClient) RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error {
+	seconds := int(remaining.Seconds()) + 1 // rounded up: never a memory shorter than asked
+	if seconds < 1 {
+		seconds = 1
+	}
+	body, _ := json.Marshal(map[string]any{"session_id": sessionID, "ttl_seconds": seconds})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/revoke-session", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := orDefault(c.Client).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("revoke-session: status %d", resp.StatusCode)
+	}
+	return nil
+}

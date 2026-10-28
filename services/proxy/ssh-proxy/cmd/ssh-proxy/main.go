@@ -168,6 +168,9 @@ func main() {
 
 	httpServer := interfaces.NewHTTPServer(pending, "127.0.0.1:"+sshPort)
 	httpServer.Admit = listener.Probe // refuse before issuing a ticket, not after
+	// The same registry as the listener's: the route that revokes a session and the
+	// pipeline that serves it must talk about the same connections (ADR-0018).
+	httpServer.Live = listener.Live
 	log.Printf("ssh-proxy: internal API on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", httpPort)
 	log.Printf("  -> vault: %s", vaultURL)
 	log.Printf("  -> audit: %s", auditURL)

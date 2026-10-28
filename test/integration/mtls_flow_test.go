@@ -268,6 +268,21 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		{"a compromised Gateway asks the proxy for a ticket", mtls.APIGateway, http.MethodPost, proxyURL + "/internal/v1/establish-session",
 			map[string]any{"session_id": "evil", "target_host": targetAddr, "target_user": "root", "vault_scope_token": "forged", "ttl_seconds": 60, "break_glass": true}, "an unrecorded session"},
 
+		// Who may cut a session (ADR-0017, ADR-0018): the Broker tells the proxy, after deciding
+		// that the caller may end it; the Gateway alone names that caller. A service that could
+		// tell the proxy to cut would end anybody's session; one that could name the caller
+		// would end it in their name.
+		{"the Vault tells the proxy to cut the session", mtls.PasswordVault, http.MethodPost, proxyURL + "/internal/v1/revoke-session",
+			map[string]any{"session_id": sess.ID, "ttl_seconds": 60}, "a session cut"},
+		{"a compromised Gateway tells the proxy to cut the session", mtls.APIGateway, http.MethodPost, proxyURL + "/internal/v1/revoke-session",
+			map[string]any{"session_id": sess.ID, "ttl_seconds": 60}, "a session cut"},
+		{"the operator tooling tells the proxy to cut the session", mtls.AdminCLI, http.MethodPost, proxyURL + "/internal/v1/revoke-session",
+			map[string]any{"session_id": sess.ID, "ttl_seconds": 60}, "a session cut"},
+		{"the Vault terminates a session, naming the requester", mtls.PasswordVault, http.MethodDelete, brokerURL + "/sessions/" + sess.ID,
+			map[string]any{"callerId": "u-operator"}, "a terminated session"},
+		{"the SSH proxy terminates a session, naming a platform admin", mtls.SSHProxy, http.MethodDelete, brokerURL + "/sessions/" + sess.ID,
+			map[string]any{"callerId": "root-admin", "actorRoles": []string{"platform-admin"}}, "a terminated session"},
+
 		// Who may decide on a break-glass request, or connect in the requester's name (ADR-0011):
 		// only the Gateway, which states who the user is. Anyone else naming a decider or a caller
 		// is a forgery, whatever certificate they hold.
@@ -315,6 +330,13 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		// The forged user does not exist.
 		if _, status := gatewayLogin(t, gatewayURL, "backdoor", "backdoor-pw-123"); status == http.StatusOK {
 			t.Fatal("the user a compromised Gateway tried to create can log in")
+		}
+		// The operator's shell is still open: none of the forged cuts reached the proxy's
+		// handler, so nothing was revoked and nothing was terminated.
+		fmt.Fprint(sh.stdin, "pwd\r")
+		sh.waitFor("out:pwd")
+		if status, raw := mustCall(t, p.clientAs(t, mtls.APIGateway), http.MethodGet, brokerURL+"/sessions/"+sess.ID, nil); status != http.StatusOK || !strings.Contains(raw, `"status":"active"`) {
+			t.Fatalf("the session after the forged cuts: %d %s", status, raw)
 		}
 	})
 

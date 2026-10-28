@@ -83,6 +83,23 @@ type fakeProxyClient struct {
 	connectionTicket string
 	proxyEndpoint    string
 	establishErr     error
+
+	// revoke records what the Broker told the proxy about ended sessions (ADR-0018).
+	revokeCalls     int
+	revokedSessions []string
+	revokedFor      []time.Duration
+	revokeErr       error
+	onRevoke        func(sessionID string) // runs inside the call, before it answers
+}
+
+func (f *fakeProxyClient) RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error {
+	if f.onRevoke != nil {
+		f.onRevoke(sessionID)
+	}
+	f.revokeCalls++
+	f.revokedSessions = append(f.revokedSessions, sessionID)
+	f.revokedFor = append(f.revokedFor, remaining)
+	return f.revokeErr
 }
 
 func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {

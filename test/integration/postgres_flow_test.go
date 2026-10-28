@@ -437,9 +437,12 @@ func brokerGetSession(t *testing.T, baseURL, id string) (*sessionDetails, int) {
 // Session Broker's half of this increment. CreateSession and GetSession
 // need only Authorization (CheckAccess) and Audit (EmitEvent) — Vault
 // and the proxy are only ever reached by Connect, which this test never
-// calls — so VAULT_URL/SSH_PROXY_URL below deliberately point nowhere
-// real; a live Vault/proxy is not needed to prove a session survives a
-// Session Broker restart via PostgreSQL.
+// calls — so VAULT_URL below deliberately points nowhere real; a live
+// Vault is not needed to prove a session survives a Session Broker
+// restart via PostgreSQL. The terminate at the end does reach the proxy
+// (ADR-0018: ending a session is telling the proxy first), so the proxy
+// is a stand-in that confirms the revocation; the real one is the
+// subject of session_revocation_test.go.
 func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
@@ -457,10 +460,17 @@ func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 
 	accountID := fmt.Sprintf("acc_pg_broker_restart_%d", time.Now().UnixNano())
 	unreachable := "http://127.0.0.1:1" // Connect is never called in this test
+	proxyURL := newLocalServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/internal/v1/revoke-session" {
+			_, _ = w.Write([]byte(`{"tickets_revoked":0,"connections_cut":0}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
 
 	broker1 := startService(t, root, brokerBin, "18443",
 		"AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL,
-		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+unreachable, "DATABASE_URL="+dsn)
+		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+proxyURL, "DATABASE_URL="+dsn)
 
 	sess, status := brokerCreateSession(t, broker1.baseURL, []string{"dba"}, accountID)
 	if status != http.StatusCreated {
@@ -473,7 +483,7 @@ func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 
 	broker2 := startService(t, root, brokerBin, "18444",
 		"AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL,
-		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+unreachable, "DATABASE_URL="+dsn)
+		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+proxyURL, "DATABASE_URL="+dsn)
 
 	got, status := brokerGetSession(t, broker2.baseURL, sess.ID)
 	if status != http.StatusOK {

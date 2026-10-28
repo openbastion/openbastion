@@ -67,6 +67,12 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		return fmt.Errorf("sshcodec: target must be a net.Conn, got %T", target)
 	}
 
+	// A session that is cut (revoked, ADR-0018) or that runs out of time closes its
+	// connection to the target at once — in the middle of the handshake too, which
+	// has no context of its own — instead of finishing a login nobody may use.
+	stopCut := context.AfterFunc(ctx, func() { _ = targetConn.Close() })
+	defer stopCut()
+
 	clientConfig := &ssh.ClientConfig{
 		User:            c.TargetUser,
 		Auth:            []ssh.AuthMethod{ssh.Password(string(credential.Material()))},

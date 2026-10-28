@@ -24,6 +24,7 @@ type terminateFixture struct {
 	audit  *journalAudit
 	store  *infrastructure.InMemoryStore
 	clock  *fakeClock
+	proxy  *fakeProxyClient
 }
 
 func newTerminateFixture(allow ...string) *terminateFixture {
@@ -34,6 +35,7 @@ func newTerminateFixtureOn(store domain.SessionRepository, allow ...string) *ter
 	f := &terminateFixture{
 		authz: &resourceAuthz{allow: map[string]bool{sessionRes: true}}, audit: &journalAudit{},
 		clock: &fakeClock{t: time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)},
+		proxy: &fakeProxyClient{},
 	}
 	for _, r := range allow {
 		f.authz.allow[r] = true
@@ -41,7 +43,7 @@ func newTerminateFixtureOn(store domain.SessionRepository, allow ...string) *ter
 	if mem, ok := store.(*infrastructure.InMemoryStore); ok {
 		f.store = mem
 	}
-	f.broker = application.NewSessionBrokerService(store, f.authz, &fakeVaultAuthorizer{}, f.audit, &fakeAccountLookup{}, &fakeProxyClient{}).
+	f.broker = application.NewSessionBrokerService(store, f.authz, &fakeVaultAuthorizer{}, f.audit, &fakeAccountLookup{}, f.proxy).
 		WithClock(f.clock.Now)
 	return f
 }

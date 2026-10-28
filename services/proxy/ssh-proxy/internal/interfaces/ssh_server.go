@@ -43,6 +43,10 @@ const recordingRefusedMessage = "\r\nopenbastion: session ended because recordin
 // session at the end of its allotted time.
 const sessionExpiredMessage = "\r\nopenbastion: session ended because its time limit was reached.\r\n"
 
+// sessionRevokedMessage is what the operator reads when the session is ended while
+// they are connected (ADR-0018). It does not say who ended it.
+const sessionRevokedMessage = "\r\nopenbastion: session ended because it was terminated.\r\n"
+
 // Serve accepts connections on ln until it errors or ctx is done.
 func (s *SSHServer) Serve(ctx context.Context, ln net.Listener) error {
 	go func() {
@@ -148,6 +152,8 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 			tell(clientChannel, shellRequested, recordingRefusedMessage)
 		case errors.Is(err, proxycore.ErrSessionExpired):
 			tell(clientChannel, shellRequested, sessionExpiredMessage)
+		case errors.Is(err, proxycore.ErrSessionRevoked):
+			tell(clientChannel, shellRequested, sessionRevokedMessage)
 		}
 	}
 }

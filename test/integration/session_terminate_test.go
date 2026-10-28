@@ -13,9 +13,11 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -32,9 +34,46 @@ func TestSessionTerminate_OnlyTheRequesterOrAnAuthorisedPersonEndsASession_Acros
 	authz := startService(t, root, authzBin, "18812")
 	authn := startService(t, root, authnBin, "18813", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	// A proxy that takes the revocation of a session and remembers it (ADR-0018): ending a
+	// session is telling the proxy first, so the Broker needs one to answer. What it is told,
+	// and when, is part of what these claims are about: a termination somebody was refused
+	// must never reach it. The real proxy is the subject of session_revocation_test.go.
+	var (
+		revokeMu sync.Mutex
+		revoked  []string
+	)
+	proxyURL := newLocalServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/internal/v1/revoke-session" {
+			http.NotFound(w, r)
+			return
+		}
+		var req struct {
+			SessionID  string `json:"session_id"`
+			TTLSeconds int    `json:"ttl_seconds"`
+		}
+		if json.NewDecoder(r.Body).Decode(&req) != nil || req.SessionID == "" || req.TTLSeconds <= 0 {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		revokeMu.Lock()
+		revoked = append(revoked, req.SessionID)
+		revokeMu.Unlock()
+		_, _ = w.Write([]byte(`{"tickets_revoked":0,"connections_cut":0}`))
+	}))
+	revocations := func(id string) int {
+		revokeMu.Lock()
+		defer revokeMu.Unlock()
+		n := 0
+		for _, r := range revoked {
+			if r == id {
+				n++
+			}
+		}
+		return n
+	}
 	broker := startService(t, root, brokerBin, "18814",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18816", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:18817")
+		"SSH_PROXY_URL="+proxyURL)
 	gatewayEnv := func(extra ...string) []string {
 		return append([]string{"AUTHENTICATION_URL=" + authn.baseURL, "SESSION_BROKER_URL=" + broker.baseURL,
 			"COMMAND_RECORDER_URL=http://127.0.0.1:18817"}, extra...)
@@ -105,6 +144,9 @@ func TestSessionTerminate_OnlyTheRequesterOrAnAuthorisedPersonEndsASession_Acros
 		if spy.has("session.terminate", s1, true) {
 			t.Fatal("a termination was audited as a success, but the session was refused")
 		}
+		if n := revocations(s1); n != 0 {
+			t.Fatalf("the proxy was told to cut a session whose termination was refused (%d times)", n)
+		}
 	})
 
 	t.Run("what the client writes in the body decides nothing", func(t *testing.T) {
@@ -135,6 +177,9 @@ func TestSessionTerminate_OnlyTheRequesterOrAnAuthorisedPersonEndsASession_Acros
 		if actor, _ := spy.actorOf("session.terminate", s1, true); actor != carolID {
 			t.Fatalf("the termination is attributed to %q, want Carol (%q): the requester did not end it", actor, carolID)
 		}
+		if n := revocations(s1); n != 1 {
+			t.Fatalf("the proxy was told to cut the session %d times, want once", n)
+		}
 	})
 
 	t.Run("that policy is for one account: Carol cannot end a session on another", func(t *testing.T) {
@@ -157,7 +202,11 @@ func TestSessionTerminate_OnlyTheRequesterOrAnAuthorisedPersonEndsASession_Acros
 		if actor, _ := spy.actorOf("session.terminate", s3, true); actor != aliceID {
 			t.Fatalf("attributed to %q, want Alice (%q)", actor, aliceID)
 		}
-		// Ending it again is a conflict, not an event: nothing more is written.
+		if n := revocations(s3); n != 1 {
+			t.Fatalf("the proxy was told to cut the session %d times, want once", n)
+		}
+		// Ending it again is a conflict, not an event: nothing more is written — and the
+		// proxy is not asked again.
 		before := spy.count("session.terminate", s3)
 		if code, _ := end(gw.baseURL, alice, s3, ""); code != http.StatusConflict {
 			t.Fatalf("ending it a second time: %d, want 409", code)
@@ -165,6 +214,9 @@ func TestSessionTerminate_OnlyTheRequesterOrAnAuthorisedPersonEndsASession_Acros
 		settle()
 		if n := spy.count("session.terminate", s3); n != before {
 			t.Fatalf("%d terminate events after the second call, was %d: a conflict is not an event", n, before)
+		}
+		if n := revocations(s3); n != 1 {
+			t.Fatalf("the proxy was told again about a session that was already ended (%d calls)", n)
 		}
 	})
 

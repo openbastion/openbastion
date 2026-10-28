@@ -35,7 +35,25 @@ type HTTPServer struct {
 	// when set, and the proxy is configured to honour it, a recorder that is not
 	// ready does not refuse the session.
 	Admit func(ctx context.Context, sessionID string, breakGlass bool) error
+
+	// Live is the registry of the connections this proxy serves and of the
+	// sessions it was told to cut (ADR-0018): the same one as its Listener's.
+	// Without it the revoke-session route answers 503 and nothing is established.
+	Live *proxycore.LiveSessions
+
+	// RevokeWait bounds how long revoke-session waits for the connections it cut to
+	// stop carrying anything; zero means DefaultRevokeWait.
+	RevokeWait time.Duration
 }
+
+// DefaultRevokeWait is how long a revocation waits for the open connections of the
+// session to close before it says it could not finish.
+const DefaultRevokeWait = 5 * time.Second
+
+// MaxRevocationMemory bounds how long the proxy remembers a revoked session,
+// whatever it is asked: the Broker sends the time the session had left, which is
+// never longer than the longest session it grants.
+const MaxRevocationMemory = 7 * 24 * time.Hour
 
 func NewHTTPServer(pending *infrastructure.PendingSessions, proxyEndpoint string) *HTTPServer {
 	return &HTTPServer{pending: pending, proxyEndpoint: proxyEndpoint}
@@ -44,6 +62,7 @@ func NewHTTPServer(pending *infrastructure.PendingSessions, proxyEndpoint string
 func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/v1/establish-session", s.handleEstablishSession)
+	mux.HandleFunc("/internal/v1/revoke-session", s.handleRevokeSession)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -79,6 +98,16 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if s.Live == nil {
+		http.Error(w, "revocation unavailable: the session was not started", http.StatusServiceUnavailable)
+		return
+	}
+	// A session the Broker has ended gets no ticket (ADR-0018): this is how a connect
+	// that was in flight when the session was ended leaves nothing behind.
+	if s.Live.Revoked(req.SessionID) {
+		http.Error(w, "session revoked: it was ended and cannot be established", http.StatusConflict)
+		return
+	}
 	if s.Admit != nil {
 		if err := s.Admit(r.Context(), req.SessionID, req.BreakGlass); err != nil {
 			if errors.Is(err, proxycore.ErrRecordingUnavailable) {
@@ -104,10 +133,84 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 		ExpiresAt:  time.Now().UTC().Add(ttl),
 		BreakGlass: req.BreakGlass,
 	})
+	// The check above and the registration are not one step; a revocation that
+	// landed between them did not see this ticket. Look again, and take it back.
+	if s.Live.Revoked(req.SessionID) {
+		s.pending.RevokeSession(req.SessionID)
+		http.Error(w, "session revoked: it was ended and cannot be established", http.StatusConflict)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(establishSessionResponse{
 		ProxyEndpoint:    s.proxyEndpoint,
 		ConnectionTicket: ticket,
 	})
+}
+
+type revokeSessionRequest struct {
+	SessionID string `json:"session_id"`
+	// TTLSeconds is how long the proxy remembers the revocation: the time the session
+	// had left. After that nothing can be established for it, and there is nothing
+	// left to refuse.
+	TTLSeconds int `json:"ttl_seconds"`
+}
+
+type revokeSessionResponse struct {
+	TicketsRevoked int `json:"tickets_revoked"`
+	ConnectionsCut int `json:"connections_cut"`
+}
+
+// handleRevokeSession is what makes a session ended at the Broker end at the proxy
+// (ADR-0018). In this order: remember the revocation and signal every open
+// connection of the session to stop, drop its unused tickets, then wait — a few
+// seconds at most — for the connections to close. 200 means the session cannot
+// carry anything any more; anything else means the Broker must not say it was ended.
+//
+// It is idempotent: a session the proxy knows nothing of is a 200 with nothing cut,
+// and a second call finishes what a first could not.
+func (s *HTTPServer) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req revokeSessionRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+		http.Error(w, "bad request: a JSON body with session_id and ttl_seconds is expected", http.StatusBadRequest)
+		return
+	}
+	if req.SessionID == "" || req.TTLSeconds <= 0 {
+		http.Error(w, "bad request: session_id and a positive ttl_seconds are expected", http.StatusBadRequest)
+		return
+	}
+	if s.Live == nil {
+		http.Error(w, "revocation unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	// Compared in seconds, before converting: a huge number of seconds overflows a Duration
+	// into a negative one, which would be a revocation that is forgotten at once.
+	memory := MaxRevocationMemory
+	if req.TTLSeconds < int(MaxRevocationMemory/time.Second) {
+		memory = time.Duration(req.TTLSeconds) * time.Second
+	}
+	wait := s.RevokeWait
+	if wait <= 0 {
+		wait = DefaultRevokeWait
+	}
+
+	// The memory of the revocation first: from this instant a connection that
+	// registers is refused, and every open one is told to stop. Then the tickets
+	// nobody used. Then wait for the connections to be closed.
+	revocation := s.Live.Revoke(req.SessionID, time.Now().Add(memory))
+	tickets := s.pending.RevokeSession(req.SessionID)
+	cut := revocation.Cut()
+	stillOpen := revocation.Wait(wait)
+	if stillOpen > 0 {
+		log.Printf("ssh-proxy: revocation of session %s: %d connection(s) were signalled but are still closing after %s", req.SessionID, stillOpen, wait)
+		http.Error(w, "the session was signalled to stop but some connections are still closing: try again", http.StatusServiceUnavailable)
+		return
+	}
+	log.Printf("ssh-proxy: session %s revoked: %d connection(s) cut, %d ticket(s) revoked", req.SessionID, cut, tickets)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(revokeSessionResponse{TicketsRevoked: tickets, ConnectionsCut: cut})
 }
