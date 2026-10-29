@@ -51,6 +51,9 @@ type auditRecord struct {
 type journalAudit struct {
 	mu     sync.Mutex
 	events []auditRecord
+	// types is the resource type of each event, in the same order: what an event is ABOUT
+	// is part of what it says.
+	types  []string
 	failOn string
 }
 
@@ -61,6 +64,7 @@ func (a *journalAudit) EmitEvent(ctx context.Context, actorID, action, resourceT
 		return errors.New("audit unreachable")
 	}
 	a.events = append(a.events, auditRecord{action, success, actorID, resourceID})
+	a.types = append(a.types, resourceType)
 	return nil
 }
 

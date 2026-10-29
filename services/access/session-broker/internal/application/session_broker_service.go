@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -127,6 +128,10 @@ type SessionBrokerService struct {
 	// notifier is optional (ADR-0012): nil means nobody is told, and the approvers
 	// look at the list.
 	notifier ApprovalNotifier
+
+	// readRefusals bounds what the refused reads of one identity write to the audit
+	// (ADR-0020). Never nil: the constructor gives the strict default.
+	readRefusals *RefusalBudget
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
@@ -244,7 +249,25 @@ func (s *SessionBrokerService) notify(ctx context.Context, n domain.ApprovalNoti
 // WithClock replaces the clock; for tests.
 func (s *SessionBrokerService) WithClock(now func() time.Time) *SessionBrokerService {
 	s.now = now
+	s.readRefusals.WithClock(now)
 	return s
+}
+
+// WithReadRefusalAudit sets the budget of what the refused reads of one identity write to
+// the audit (ADR-0020): `burst` at once, then `perMinute` a minute. Zero or negative keeps
+// the default: there is no way to ask for "everything" or for "nothing", and a Broker built
+// by hand without this call is strict.
+func (s *SessionBrokerService) WithReadRefusalAudit(burst, perMinute int) *SessionBrokerService {
+	s.readRefusals = NewRefusalBudget(burst, perMinute)
+	if s.now != nil {
+		s.readRefusals.WithClock(s.now)
+	}
+	return s
+}
+
+// ReadRefusalAudit says the budget the Broker really applies, for its start-up line.
+func (s *SessionBrokerService) ReadRefusalAudit() (burst, perMinute int) {
+	return s.readRefusals.Burst(), s.readRefusals.RatePerMinute()
 }
 
 func (s *SessionBrokerService) clock() time.Time {
@@ -288,7 +311,8 @@ func (s *SessionBrokerService) window() time.Duration {
 }
 
 func NewSessionBrokerService(sessions domain.SessionRepository, authz AuthorizationClient, vault VaultAuthorizer, audit AuditEmitter, accounts AccountLookup, proxy ProxyClient) *SessionBrokerService {
-	return &SessionBrokerService{sessions: sessions, authz: authz, vault: vault, audit: audit, accounts: accounts, proxy: proxy}
+	return &SessionBrokerService{sessions: sessions, authz: authz, vault: vault, audit: audit, accounts: accounts, proxy: proxy,
+		readRefusals: NewRefusalBudget(0, 0)}
 }
 
 // CreateSession implements SessionOrchestration.CreateSession. In MVP
@@ -465,6 +489,9 @@ func (s *SessionBrokerService) GetSession(ctx context.Context, id, callerID stri
 			return nil, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
 		}
 		if !allowed {
+			// The refusal is on the record (ADR-0020), within the caller's budget, and it is
+			// the same refusal whatever the budget says.
+			s.auditRefusedRead(ctx, callerID, sess.ID)
 			// No reason from the Authorization Service: it names the resource, and the resource
 			// carries the account of a session this caller may not know exists.
 			return nil, fmt.Errorf("%w: only the requester of a session, the person who decided it, or somebody with a policy to read sessions on this account, can read it", domain.ErrForbidden)
@@ -473,6 +500,24 @@ func (s *SessionBrokerService) GetSession(ctx context.Context, id, callerID stri
 	reflected := *sess
 	reflected.Status = sess.EffectiveStatus(s.clock())
 	return &reflected, nil
+}
+
+// auditRefusedRead writes the refusal of a read to the audit, under the name of the one who
+// asked — the verified identity the Gateway named, never the requester of the session —
+// when that identity's budget allows it (ADR-0020). It is best effort, like the refusals of
+// ADR-0017: there is nothing for an audit that is down to prevent, the read is refused
+// anyway; the failure is in the Broker's log, which the caller is not told.
+func (s *SessionBrokerService) auditRefusedRead(ctx context.Context, callerID, sessionID string) {
+	write, firstUnwritten := s.readRefusals.Take(callerID)
+	if !write {
+		if firstUnwritten {
+			log.Printf("session-broker: refused reads by user %s are no longer written to the audit one by one (budget spent)", callerID)
+		}
+		return
+	}
+	if err := s.audit.EmitEvent(ctx, callerID, "session.read", "session", sessionID, false); err != nil {
+		log.Printf("session-broker: the refusal of a read of %s by user %s could not be audited: %v", sessionID, callerID, err)
+	}
 }
 
 // TerminateSession implements SessionOrchestration.TerminateSession (ADR-0017).

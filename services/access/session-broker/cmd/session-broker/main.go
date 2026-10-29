@@ -26,6 +26,21 @@ func mustEnv(key, def string) string {
 	return def
 }
 
+// boundedIntEnv reads a number that has a default and bounds. Anything else — not a number,
+// zero, a negative, above the maximum — stops the Broker: there is no value that means
+// "unlimited" or "off", and a typo must not select one.
+func boundedIntEnv(name string, def, min, max int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < min || n > max {
+		log.Fatalf("session-broker: %s must be a number between %d and %d, got %q", name, min, max, v)
+	}
+	return n
+}
+
 func main() {
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.SessionBroker)
@@ -71,6 +86,15 @@ func main() {
 	proxy := &infrastructure.ProxyClientHTTPClient{BaseURL: sshProxyURL, Client: peer(sshProxyURL, mtls.SSHProxy)}
 
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy)
+
+	// What the refused reads of one user may write to the audit (ADR-0020): a burst, then a
+	// steady rate. Read whether or not anyone is ever refused, so that a bad value is found
+	// on the day it is written.
+	svc.WithReadRefusalAudit(
+		boundedIntEnv("SESSION_READ_AUDIT_BURST", application.DefaultReadAuditBurst, 1, application.MaxReadAuditBurst),
+		boundedIntEnv("SESSION_READ_AUDIT_RATE_PER_MINUTE", application.DefaultReadAuditRatePerMinute, 1, application.MaxReadAuditRatePerMinute))
+	readBurst, readRate := svc.ReadRefusalAudit()
+	log.Printf("session-broker: the refusals of reads of a session are written to the audit per user: a burst of %d, then %d a minute (per process; a refusal is the same whatever the budget says)", readBurst, readRate)
 
 	// Break-glass (ADR-0009) is off unless a limit is given: the maximum number of
 	// minutes a break-glass session may last. A value that is not a number is an

@@ -210,22 +210,27 @@ func (brokenReads) Get(context.Context, string) (*domain.Session, error) {
 	return nil, errors.New("connection refused")
 }
 
-// Reading writes nothing: not an event for a read, not one for a refusal, not a row.
-func TestRead_ReadingWritesNothing_NotEvenARefusal(t *testing.T) {
+// A read that is served writes nothing — no event, no row — and neither does a session that
+// is not found. The one thing a read writes is the refusal of somebody who may not read
+// (ADR-0020): one event, under the name of the one who asked, and never the record.
+func TestRead_AServedReadWritesNothing_AndOnlyARefusalIsOnTheRecord(t *testing.T) {
 	f := newTerminateFixture(readRes)
 	sess := f.open(t)
 	before := f.auditCount()
 	rec, _ := f.store.Get(context.Background(), sess.ID)
 	stored := *rec
 
-	_, _ = f.read(sess.ID, requester, "sre")       // allowed: the requester
-	_, _ = f.read(sess.ID, "auditor-1", "auditor") // allowed: a policy
+	_, _ = f.read(sess.ID, requester, "sre")       // served: the requester
+	_, _ = f.read(sess.ID, "auditor-1", "auditor") // served: a policy
+	_, _ = f.read("session_unknown", "mallory", "nope")
+	if after := f.auditCount(); after != before {
+		t.Fatalf("%d audit event(s) were written by reads that were served or found nothing", after-before)
+	}
+
 	f.authz.allow[readRes] = false
 	_, _ = f.read(sess.ID, "mallory", "nope") // refused
-	_, _ = f.read("session_unknown", "mallory", "nope")
-
-	if after := f.auditCount(); after != before {
-		t.Fatalf("%d audit event(s) were written by reading", after-before)
+	if after := f.auditCount(); after != before+1 {
+		t.Fatalf("%d audit event(s) for one refused read, want 1", after-before)
 	}
 	now, _ := f.store.Get(context.Background(), sess.ID)
 	if !reflect.DeepEqual(*now, stored) {

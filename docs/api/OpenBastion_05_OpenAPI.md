@@ -336,10 +336,19 @@ paths:
         il ne contient ni le compte, ni le demandeur, ni la justification, ni
         l'état, ni la raison donnée par l'Authorization Service.
 
-        Une lecture **n'écrit rien** : ni événement d'audit (pas même pour un
-        refus), ni ligne en base. Elle ne coûte rien au budget d'actions
-        (ADR-0016) ; seule la limite par adresse s'applique. L'état d'une
-        session échue est lu `expired` sans que l'enregistrement change.
+        Une lecture **servie n'écrit rien** : ni événement d'audit, ni ligne
+        en base. Un **refus** (`403` d'une personne sans droit) est, lui,
+        écrit à l'audit (`session.read`, `success=false`, sous le nom de
+        l'appelant vérifié — jamais celui du demandeur —, ressource
+        `session`) **dans la limite d'un budget par identité** (ADR-0020) :
+        une rafale `SESSION_READ_AUDIT_BURST` (10 par défaut), puis
+        `SESSION_READ_AUDIT_RATE_PER_MINUTE` par minute (6 par défaut), par
+        processus du Broker. Le refus est **le même** que l'événement ait été
+        écrit ou non, et une panne de l'audit ne le change pas. Ni un `404`,
+        ni un `503`, ni un appelant absent n'écrivent quoi que ce soit.
+        Une lecture ne coûte rien au budget d'actions (ADR-0016) ; seule la
+        limite par adresse s'applique. L'état d'une session échue est lu
+        `expired` sans que l'enregistrement change.
       responses:
         "200":
           description: Session
@@ -352,7 +361,10 @@ paths:
           description: >
             L'appelant n'est ni le demandeur, ni celui qui a décidé la session,
             ni titulaire d'une politique `session-read` sur son compte. Le
-            message ne dit rien de la session. Rien n'est audité.
+            message ne dit rien de la session. Le refus est audité
+            (`session.read`, échec, au nom de l'appelant) dans la limite du
+            budget par identité (ADR-0020) ; la réponse est la même que
+            l'événement soit écrit ou non.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

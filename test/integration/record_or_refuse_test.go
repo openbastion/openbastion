@@ -71,10 +71,11 @@ type auditSpy struct {
 }
 
 type spiedEvent struct {
-	ActorID    string `json:"actor_id"`
-	Action     string `json:"action"`
-	ResourceID string `json:"resource_id"`
-	Success    bool   `json:"success"`
+	ActorID      string `json:"actor_id"`
+	Action       string `json:"action"`
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+	Success      bool   `json:"success"`
 }
 
 func startAuditSpy(t *testing.T, upstream string) *auditSpy {

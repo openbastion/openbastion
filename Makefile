@@ -189,6 +189,10 @@ run-recorder:
 # par demandeur ; au-delà, 429 (ADR-0013). Pas de valeur « illimité ».
 # BREAKGLASS_NOTIFY_SECRET=$$(openssl rand -hex 32) signe le webhook (X-OpenBastion-Signature) ;
 # 32 octets au moins, et seulement avec BREAKGLASS_NOTIFY_URL. Jamais journalisé.
+# SESSION_READ_AUDIT_BURST (défaut 10, de 1 à 1000) et SESSION_READ_AUDIT_RATE_PER_MINUTE
+# (défaut 6, de 1 à 600) bornent ce que les refus de lecture d'une session écrivent à l'audit,
+# PAR UTILISATEUR et par processus (ADR-0020) ; le refus, lui, est le même. Pas de valeur
+# « illimité » ni « désactivé » : une valeur invalide arrête le Broker.
 run-broker:
 	$(call tls,session-broker) \
 		$(GO) run ./services/access/session-broker/cmd/session-broker
