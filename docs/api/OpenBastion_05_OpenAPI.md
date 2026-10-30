@@ -146,6 +146,13 @@ paths:
 
         L'identité de l'appelant et ses rôles viennent du jeton vérifié par le
         Gateway ; rien de ce que le client écrit à ce sujet n'est relayé.
+
+        **Chaque demande de la page servie est un événement d'audit**
+        `session.listed` (succès, ressource `session`, l'identifiant de la
+        demande, auteur = l'utilisateur authentifié), écrit **avant** que la
+        page soit servie ; si l'un d'eux ne s'écrit pas, la page n'est pas
+        servie (503) — ADR-0023. Pas de budget : chaque liste servie écrit à
+        nouveau. Une page vide n'écrit rien et ne dépend pas de l'audit.
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
@@ -184,7 +191,8 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "503":
           description: >
-            Une dépendance (Authorization Service, magasin) ne répond pas. Corps
+            Une dépendance (Authorization Service, magasin, ou l'audit où la
+            page doit être enregistrée — ADR-0023) ne répond pas. Corps
             générique ; la cause est dans le journal du Broker. **Jamais de liste
             partielle** : une demande qui manquerait sans que l'on le dise ferait
             croire à l'approbateur qu'il n'y a rien à décider.

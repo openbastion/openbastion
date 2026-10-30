@@ -804,6 +804,13 @@ func ClampPage(page, pageSize int) (int, int) {
 // per distinct account; if it cannot answer, nothing is returned — a list that
 // silently lacks a request is worse than none. truncated says the store held more
 // pending requests than MaxPendingScanned.
+//
+// Every request in the page served discloses what a read of it would (ADR-0021) — who
+// asked, on which account, and why — and is served on the strength of a policy: each one
+// is an event, AuditActionListed, under the caller's name, written BEFORE the page is
+// served, and a page whose events could not all be written is not served (ADR-0023).
+// Only the requests of the page served are events, not those counted in totalItems; an
+// empty page discloses nothing and writes nothing. There is no budget.
 func (s *SessionBrokerService) ListPendingApprovals(ctx context.Context, callerID string, actorRoles []string, page, pageSize int) (items []*domain.Session, totalItems int, truncated bool, err error) {
 	if callerID == "" {
 		return nil, 0, false, fmt.Errorf("%w: a listing needs an authenticated user", domain.ErrForbidden)
@@ -850,8 +857,19 @@ func (s *SessionBrokerService) ListPendingApprovals(ctx context.Context, callerI
 	if end > len(visible) {
 		end = len(visible)
 	}
-	return visible[start:end], totalItems, more, nil
+	served := visible[start:end]
+	for _, sess := range served {
+		if err := s.audit.EmitEvent(ctx, callerID, AuditActionListed, "session", sess.ID, true); err != nil {
+			return nil, 0, false, fmt.Errorf("%w (recording the listing of %s: %v)", domain.ErrUnavailable, sess.ID, err)
+		}
+	}
+	return served, totalItems, more, nil
 }
+
+// AuditActionListed is the audit action of a request served in a listing of the requests
+// that wait for a decision (ADR-0023). It is not session.read: a search for one session
+// tells whom it was shown to in a list apart from who opened it by its identifier.
+const AuditActionListed = "session.listed"
 
 func randomID(prefix string) string {
 	b := make([]byte, 8)
