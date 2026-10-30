@@ -34,6 +34,7 @@ type GatewayServer struct {
 	authClient     application.TokenVerifier
 	requestLimiter *application.RateLimiter
 	loginLimiter   *application.RateLimiter
+	ui             http.Handler
 	// sessionLimiter is the per-user budget of POST /sessions (ADR-0014). It is
 	// never nil: a Gateway built by hand has the strict default.
 	sessionLimiter *application.RateLimiter
@@ -92,6 +93,12 @@ func (g *GatewayServer) WithProxyTrust(t *application.ProxyTrust) *GatewayServer
 	return g
 }
 
+// WithUI serves the Admin UI under /ui/ (ADR-0036); nil serves nothing there.
+func (g *GatewayServer) WithUI(h http.Handler) *GatewayServer {
+	g.ui = h
+	return g
+}
+
 // WithHTTPClient sets the client the Gateway uses to reach its upstreams. Under
 // INTERNAL_TLS it is the mutual-TLS client that knows every upstream by identity
 // (ADR-0010); by default it is http.DefaultClient.
@@ -112,6 +119,9 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/vault/accounts/", g.requireAuth(g.handleVaultAccountItem))
 	mux.HandleFunc("/policies", g.requireAuth(g.handlePoliciesCollection))
 	mux.HandleFunc("/healthz", g.handleHealthz)
+	if g.ui != nil {
+		mux.Handle("/ui/", g.ui) // the Admin UI, same origin (ADR-0036)
+	}
 	return mux
 }
 

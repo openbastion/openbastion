@@ -20,7 +20,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build test test-integration test-postgres test-compose vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+.PHONY: build test test-integration test-postgres test-compose ui-build ui-test vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
 ## Compile tous les modules actuellement implémentés.
 build:
@@ -124,6 +124,12 @@ test:
 ##                            `make test-postgres`
 test-integration:
 	$(GO) test ./test/integration/... -v -count=1 -timeout=300s
+
+## L'Admin UI (web/admin-ui, ADR-0036) : dépendances depuis le lockfile, tests, construction.
+ui-test:
+	cd web/admin-ui && npm ci --no-audit --no-fund && npm test
+ui-build:
+	cd web/admin-ui && npm ci --no-audit --no-fund && npm run build
 
 ## Construit et démarre la pile docker-compose réelle (deploy/docker-compose, ADR-0033) et
 ## y joue le parcours du MVP sur les seuls ports publiés. Docker requis ; quelques minutes.

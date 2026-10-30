@@ -56,6 +56,7 @@ make test                         # tests unitaires (hermétique ; les tests Pos
 make test-integration             # scénarios sur processus réels
 make test-postgres                # tests PostgreSQL réels (TEST_DATABASE_URL requis)
 make test-compose                 # pile docker-compose réelle et parcours du MVP (Docker requis, ADR-0033)
+make ui-test ui-build             # Admin UI : tests (Vitest) et construction (web/admin-ui, ADR-0036)
 make pki                          # autorité et identités de développement dans .pki/ (jamais commité, jamais archivé)
 make run-<service>                # lance un service en local (mTLS par défaut ; INTERNAL_TLS=disabled en dev)
 ```

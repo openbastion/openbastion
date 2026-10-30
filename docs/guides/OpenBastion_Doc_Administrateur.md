@@ -56,6 +56,8 @@ echo "$MOT_DE_PASSE" | docker compose -f deploy/docker-compose/docker-compose.ym
   user create -authn https://authentication:8086 -username alice -roles platform-admin,vault-admin
 ```
 
+**L'Admin UI** est servie par la Gateway sous `http://127.0.0.1:8080/ui/` (ADR-0036) : connexion locale ou fédérée, comptes privilégiés, création de politiques, demandes d'urgence à décider, sessions, relecture des enregistrements. Le jeton reste en mémoire : recharger la page déconnecte. Pour la connexion fédérée, déclarer chez le fournisseur l'URL de retour `https://<gateway>/ui/oidc/callback` (`OIDC_REDIRECT_URL`).
+
 Ce que la pile garantit, et que `make test-compose` vérifie : mTLS entre tous les services ; une base et un rôle par service, aucun rôle n'ouvre la base d'un autre ; chaque service ne voit que son certificat et sa clé, **jamais la clé de l'autorité** (volume `pki-ca`, monté par le seul job `pki`) ; seuls l'API publique et le port SSH du proxy sont publiés, sur `127.0.0.1` (`OB_BIND` pour changer) ; aucun compte de démonstration ; aucun secret dans les journaux. **Le fichier `.env` est à sauvegarder hors de l'hôte** : ses clés rendent lisibles la chaîne d'audit, le Vault et les enregistrements. Les certificats des services sont renouvelés à chaque `up` (720 h par défaut, `OB_CERT_TTL`).
 
 ## 3. Configuration initiale

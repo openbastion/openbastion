@@ -13,6 +13,7 @@ package integration_test
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -71,6 +72,24 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		}
 		resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
+	})
+
+	t.Run("the Admin UI is served by the Gateway, under its strict policy", func(t *testing.T) {
+		resp, err := http.Get(gatewayURL + "/ui/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `src="/ui/assets/`) {
+			t.Fatalf("/ui/: %d %.200s", resp.StatusCode, body)
+		}
+		if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self';") || strings.Contains(csp, "unsafe") {
+			t.Fatalf("/ui/ policy: %q", csp)
+		}
+		if resp.Header.Get("Referrer-Policy") != "no-referrer" {
+			t.Fatal("/ui/ without Referrer-Policy: no-referrer")
+		}
 	})
 
 	t.Run("only the Gateway and the SSH proxy are published", func(t *testing.T) {

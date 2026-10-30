@@ -108,6 +108,18 @@ func main() {
 		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
 		WithProxyTrust(trust)
 
+	// The Admin UI (ADR-0036), same origin as the API: served only when given.
+	if dir := os.Getenv("ADMIN_UI_DIR"); dir != "" {
+		ui, err := interfaces.NewUIHandler(dir)
+		if err != nil {
+			log.Fatalf("api-gateway: ADMIN_UI_DIR: %v — refusing to start", err)
+		}
+		srv.WithUI(ui)
+		log.Printf("api-gateway: the Admin UI is served under /ui/ from %s (strict content security policy)", dir)
+	} else {
+		log.Printf("api-gateway: no Admin UI (ADMIN_UI_DIR unset)")
+	}
+
 	log.Printf("api-gateway listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authentication:  %s", authenticationURL)
 	log.Printf("  -> session-broker:  %s", sessionBrokerURL)

@@ -24,6 +24,14 @@ RUN mkdir -p /out && go build -ldflags="-s -w" -o /out/ \
 RUN mkdir -p /rootfs/pki /rootfs/var/lib/openbastion/anchors /rootfs/var/lib/openbastion/archives \
  && chown -R 65532:65532 /rootfs
 
+# -- ui: the Admin UI (ADR-0036), built from its lockfile ------------------------------------
+FROM node:24-alpine AS ui
+WORKDIR /ui
+COPY web/admin-ui/package.json web/admin-ui/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/admin-ui/ ./
+RUN npm run build
+
 # -- tools: the build image, with a shell, for the one-off certificate job only -------------
 FROM build AS tools
 RUN cp /out/openbastion-pki /usr/local/bin/
@@ -31,5 +39,6 @@ RUN cp /out/openbastion-pki /usr/local/bin/
 # -- runtime: no shell, no package manager, not root ------------------------------------------
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 COPY --from=build /out/ /usr/local/bin/
+COPY --from=ui /ui/dist/ /usr/local/share/openbastion/admin-ui/
 COPY --from=build --chown=65532:65532 /rootfs/ /
 USER 65532:65532

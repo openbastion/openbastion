@@ -175,6 +175,8 @@ services:
       SESSION_BROKER_URL: https://session-broker:8084
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
+      # The Admin UI under /ui/, same origin as the API (ADR-0036).
+      ADMIN_UI_DIR: /usr/local/share/openbastion/admin-ui
     ports:
       - "${OB_BIND:-127.0.0.1}:${OB_GATEWAY_PORT:-8080}:8080"
     volumes:
