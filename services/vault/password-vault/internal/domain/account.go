@@ -41,6 +41,27 @@ type PrivilegedAccount struct {
 	// authorized_keys line. Empty for an account onboarded before pinning — no session nor
 	// rotation reaches its target until one is set.
 	HostKey string
+
+	// RotationIntervalDays is how often a scheduled account rotates (ADR-0040): 1 to 365 for
+	// RotationScheduled, 0 for any other policy.
+	RotationIntervalDays int
+	// RotationAttemptedAt is when the Vault last took this account for a scheduled rotation,
+	// whatever came of it: an account is not tried again before RotationRetryAfter.
+	RotationAttemptedAt *time.Time
+}
+
+// RotationDueAt is when a scheduled account is next due: its last rotation, or its creation
+// if it never rotated, plus its interval. Nil for an account that is not scheduled.
+func (a *PrivilegedAccount) RotationDueAt() *time.Time {
+	if a.RotationPolicy != RotationScheduled || a.RotationIntervalDays <= 0 {
+		return nil
+	}
+	from := a.CreatedAt
+	if a.LastRotatedAt != nil {
+		from = *a.LastRotatedAt
+	}
+	due := from.Add(time.Duration(a.RotationIntervalDays) * 24 * time.Hour)
+	return &due
 }
 
 // SecretVersion mirrors the vault_secrets table. EncryptedMaterial is an

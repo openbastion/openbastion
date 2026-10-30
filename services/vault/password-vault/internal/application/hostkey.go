@@ -57,19 +57,32 @@ type OnboardInput struct {
 	InitialSecret                            []byte
 	ReconciliationAccountID                  string
 	HostKey                                  string
+	// RotationIntervalDays: required for a scheduled account, refused for any other (ADR-0040).
+	RotationIntervalDays int
 }
 
-// OnboardPinned onboards an account whose target's host key is given: required.
+// OnboardPinned onboards an account whose target's host key is given: required. The account
+// is written whole, in one write: key, reconciliation account and schedule included.
 func (s *VaultService) OnboardPinned(ctx context.Context, actorRoles []string, in OnboardInput) error {
 	key, _, err := NormalizeHostKey(in.HostKey)
 	if err != nil {
 		return err
 	}
-	if err := s.OnboardAccountWithReconciliation(ctx, actorRoles, in.ID, in.Name, in.Username, in.TargetHost, in.Protocol,
-		in.Policy, in.InitialSecret, in.ReconciliationAccountID); err != nil {
+	if err := checkSchedule(in.Policy, in.RotationIntervalDays); err != nil {
 		return err
 	}
-	return s.accounts.SetHostKey(ctx, in.ID, key)
+	if in.Policy == domain.RotationScheduled && in.ReconciliationAccountID == "" {
+		return fmt.Errorf("%w: a scheduled account needs one, or it would never rotate", ErrNoReconciliation)
+	}
+	if in.ReconciliationAccountID != "" {
+		if err := s.checkReconciliation(ctx, in.ID, in.TargetHost, in.ReconciliationAccountID); err != nil {
+			return err
+		}
+	}
+	return s.onboard(ctx, actorRoles, &domain.PrivilegedAccount{
+		ID: in.ID, Name: in.Name, Username: in.Username, TargetHost: in.TargetHost, Protocol: in.Protocol, RotationPolicy: in.Policy,
+		ReconciliationAccountID: in.ReconciliationAccountID, HostKey: key, RotationIntervalDays: in.RotationIntervalDays,
+	}, in.InitialSecret)
 }
 
 // SetHostKey pins (or re-pins) the host key of accountID's target, for an administrator of the

@@ -91,6 +91,9 @@ export interface Account {
   // The target's pinned host key and its SHA256 fingerprint (ADR-0039); empty: not pinned.
   hostKey?: string;
   hostKeyFingerprint?: string;
+  // A scheduled account's cadence and next rotation (ADR-0040); absent for any other.
+  rotationIntervalDays?: number;
+  nextRotationAt?: string;
 }
 
 export interface Page<T> {

@@ -297,6 +297,8 @@ message OnboardAccountRequest {
   string rotation_policy = 7;      // "manual" | "post_use" | "scheduled"
   bytes initial_secret = 8;        // vide = généré automatiquement (même règle que RotateSecretRequest.new_secret)
   string host_key = 9;             // obligatoire : la clé d'hôte publique de la cible, relevée sur la cible (ADR-0039)
+  string reconciliation_account_id = 10; // ADR-0037 ; obligatoire pour "scheduled"
+  int32 rotation_interval_days = 11;     // 1..365 pour "scheduled", 0 sinon (ADR-0040)
 }
 
 message GetAccountRequest {
@@ -318,6 +320,8 @@ message PrivilegedAccount {
   google.protobuf.Timestamp created_at = 8;
   string host_key = 9;             // clé d'hôte épinglée de la cible, vide si aucune : ni session ni rotation (ADR-0039)
   string host_key_fingerprint = 10; // son empreinte SHA256
+  int32 rotation_interval_days = 11;     // compte "scheduled" (ADR-0040)
+  google.protobuf.Timestamp next_rotation_at = 12;  // compte "scheduled" : son échéance
 }
 
 message SetHostKeyRequest {

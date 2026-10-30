@@ -73,6 +73,8 @@ type onboardAccountRequest struct {
 	ReconciliationAccountID string `json:"reconciliationAccountId"`
 	// HostKey is the target's SSH host key, required (ADR-0039).
 	HostKey string `json:"hostKey"`
+	// RotationIntervalDays: required for rotationPolicy "scheduled", refused otherwise (ADR-0040).
+	RotationIntervalDays int `json:"rotationIntervalDays"`
 }
 
 func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request) {
@@ -83,13 +85,13 @@ func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request
 	}
 	err := s.svc.OnboardPinned(r.Context(), req.ActorRoles, application.OnboardInput{ID: req.ID, Name: req.Name, Username: req.Username,
 		TargetHost: req.TargetHost, Protocol: req.Protocol, Policy: domain.RotationPolicy(req.RotationPolicy), InitialSecret: req.InitialSecret,
-		ReconciliationAccountID: req.ReconciliationAccountID, HostKey: req.HostKey})
+		ReconciliationAccountID: req.ReconciliationAccountID, HostKey: req.HostKey, RotationIntervalDays: req.RotationIntervalDays})
 	if err != nil {
 		status := http.StatusForbidden
 		switch {
 		case errors.Is(err, application.ErrNoReconciliation):
 			status = http.StatusConflict
-		case errors.Is(err, application.ErrBadHostKey):
+		case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadRotationInterval):
 			status = http.StatusBadRequest
 		}
 		http.Error(w, err.Error(), status)
@@ -282,6 +284,10 @@ type accountResponse struct {
 	// The pinned host key of the target and its fingerprint (ADR-0039); empty: not pinned.
 	HostKey            string `json:"hostKey"`
 	HostKeyFingerprint string `json:"hostKeyFingerprint"`
+	// RotationIntervalDays and NextRotationAt: a scheduled account's cadence and next due
+	// time (ADR-0040); absent for any other.
+	RotationIntervalDays int        `json:"rotationIntervalDays,omitempty"`
+	NextRotationAt       *time.Time `json:"nextRotationAt,omitempty"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -297,6 +303,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		TargetHost: a.TargetHost, Protocol: a.Protocol, RotationPolicy: string(a.RotationPolicy),
 		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
+		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(),
 	}
 }
 

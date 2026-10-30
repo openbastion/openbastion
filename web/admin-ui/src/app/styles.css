@@ -418,6 +418,14 @@ td.actions button {
   white-space: nowrap;
 }
 
+/* A line of detail under a cell's value (the next scheduled rotation, ADR-0040). */
+.cell-note {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
+
 /* An account whose target's host key is not pinned (ADR-0039): it gets no session. */
 .badge.warn {
   color: var(--danger-strong);

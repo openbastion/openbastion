@@ -70,7 +70,10 @@ export function Accounts() {
                     <td>{a.targetHost}</td>
                     <td>{a.username}</td>
                     <td>{a.hostKeyFingerprint ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code> : <span className="badge warn">non épinglée</span>}</td>
-                    <td><span className="badge">{a.rotationPolicy}</span></td>
+                    <td>
+                      <span className="badge">{a.rotationPolicy}</span>
+                      {a.rotationIntervalDays ? <span className="cell-note">tous les {a.rotationIntervalDays} j — prochaine : {a.nextRotationAt ?? "—"}</span> : null}
+                    </td>
                     <td>{a.lastRotatedAt ?? "—"}</td>
                     <td className="actions">
                       <button type="button" onClick={() => pin(a)}>{a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}</button>
@@ -98,7 +101,7 @@ export function Accounts() {
 
 function Onboard({ onDone }: { onDone: (id: string) => void }) {
   const { api } = useSignedIn();
-  const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", rotationPolicy: "manual", initialSecret: "", reconciliationAccountId: "", hostKey: "" });
+  const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", rotationPolicy: "manual", initialSecret: "", reconciliationAccountId: "", hostKey: "", rotationIntervalDays: "30" });
   const [error, setError] = useState<unknown>();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
@@ -110,7 +113,10 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
       const bytes = new TextEncoder().encode(f.initialSecret);
       let bin = "";
       bytes.forEach((b) => (bin += String.fromCharCode(b)));
-      await api.request("POST", "/vault/accounts", { ...f, protocol: "ssh", initialSecret: btoa(bin) });
+      // Only a scheduled account takes an interval (ADR-0040): the Vault refuses one elsewhere.
+      const { rotationIntervalDays, ...rest } = f;
+      const schedule = f.rotationPolicy === "scheduled" ? { rotationIntervalDays: Number(rotationIntervalDays) } : {};
+      await api.request("POST", "/vault/accounts", { ...rest, ...schedule, protocol: "ssh", initialSecret: btoa(bin) });
       setF({ ...f, id: "", name: "", initialSecret: "", hostKey: "" });
       onDone(f.id);
     } catch (err) {
@@ -134,7 +140,13 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
             <option value="scheduled">planifiée</option>
           </select>
         </label>
-        <label>Compte de réconciliation (même cible ; vide : pas de rotation)<input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} /></label>
+        {f.rotationPolicy === "scheduled" ? (
+          <label>
+            Intervalle de rotation (jours, 1 à 365)
+            <input type="number" min={1} max={365} value={f.rotationIntervalDays} onChange={set("rotationIntervalDays")} required />
+          </label>
+        ) : null}
+        <label>Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)<input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} /></label>
         <label className="wide">
           Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)
           <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />

@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrNotFound is returned by any repository when the requested entity does
@@ -53,6 +54,13 @@ type AccountRepository interface {
 
 	// SetHostKey pins the host key of id's target (ADR-0039).
 	SetHostKey(ctx context.Context, id, hostKey string) error
+
+	// ListDueForRotation is at most limit scheduled, enabled accounts due at now (ADR-0040)
+	// and not taken since now-retryAfter, the longest overdue first.
+	ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int) ([]*PrivilegedAccount, error)
+	// ClaimRotation takes id for a scheduled rotation at now — compare-and-swap: false when it
+	// is no longer due, or another taker had it since now-retryAfter.
+	ClaimRotation(ctx context.Context, id string, now time.Time, retryAfter time.Duration) (bool, error)
 }
 
 // ErrRotationInProgress: the account already has a pending rotation (ADR-0037).

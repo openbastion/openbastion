@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -197,4 +198,53 @@ func (noTarget) SetPassword(context.Context, string, string, string, []byte, str
 
 func (noTarget) Verify(context.Context, string, string, string, []byte) error {
 	panic("the target was reached")
+}
+
+// ADR-0040 over HTTP: the schedule is checked at onboarding, and an account says its cadence
+// and its next rotation; an account no schedule runs says neither.
+func TestSchedule_OverHTTP(t *testing.T) {
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"
+	kms, _ := infrastructure.NewLocalKMS()
+	store := infrastructure.NewInMemoryStore()
+	srv := interfaces.NewHTTPServer(application.NewVaultService(store, store, store, kms, allowAll{}))
+	call := func(method, path string, body any) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, httptest.NewRequest(method, path, bytes.NewReader(b)))
+		return rec
+	}
+	onboard := func(id, policy string, days int, rec string) int {
+		return call(http.MethodPost, "/vault/v1/onboard-account", map[string]any{"id": id, "name": id, "username": "root", "targetHost": "10.0.0.1:22",
+			"protocol": "ssh", "rotationPolicy": policy, "rotationIntervalDays": days, "reconciliationAccountId": rec,
+			"initialSecret": []byte("pw"), "hostKey": key, "actorRoles": []string{"vault-admin"}}).Code
+	}
+	if s := onboard("rec", "manual", 0, ""); s != http.StatusCreated {
+		t.Fatalf("rec: %d", s)
+	}
+	if s := onboard("bad", "scheduled", 0, "rec"); s != http.StatusBadRequest {
+		t.Fatalf("scheduled without an interval: %d", s)
+	}
+	if s := onboard("bad", "manual", 7, ""); s != http.StatusBadRequest {
+		t.Fatalf("manual with an interval: %d", s)
+	}
+	if s := onboard("bad", "scheduled", 7, ""); s != http.StatusConflict {
+		t.Fatalf("scheduled without a reconciliation account: %d", s)
+	}
+	if s := onboard("acc", "scheduled", 30, "rec"); s != http.StatusCreated {
+		t.Fatalf("scheduled: %d", s)
+	}
+	var got map[string]any
+	_ = json.Unmarshal(call(http.MethodGet, "/vault/v1/accounts/acc", nil).Body.Bytes(), &got)
+	next, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(got["nextRotationAt"]))
+	if got["rotationIntervalDays"] != float64(30) || time.Until(next) < 29*24*time.Hour || time.Until(next) > 30*24*time.Hour {
+		t.Fatalf("scheduled account: %v", got)
+	}
+	got = nil
+	_ = json.Unmarshal(call(http.MethodGet, "/vault/v1/accounts/rec", nil).Body.Bytes(), &got)
+	if _, has := got["rotationIntervalDays"]; has {
+		t.Fatalf("a manual account says an interval: %v", got)
+	}
+	if _, has := got["nextRotationAt"]; has {
+		t.Fatalf("a manual account says a next rotation: %v", got)
+	}
 }

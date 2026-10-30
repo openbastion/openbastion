@@ -287,6 +287,18 @@ ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS host_key TEXT NOT NULL 
 
 Une donnée publique, pas un secret : elle est rendue par `GET /vault/accounts/{id}` avec son empreinte. Les comptes existants reçoivent `''` à la migration, et restent sans session ni rotation jusqu'à leur épinglage (`PUT /vault/accounts/{id}/host-key`).
 
+### Rotation planifiée (ADR-0040)
+
+`services/vault/password-vault/migrations/004_rotation_schedule.sql` :
+
+```sql
+ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS rotation_interval_days INTEGER NOT NULL DEFAULT 0;  -- 1 à 365 pour scheduled, 0 sinon
+ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS rotation_attempted_at TIMESTAMPTZ;                 -- dernière prise par le Vault, réussie ou non
+UPDATE privileged_accounts SET rotation_interval_days = 30 WHERE rotation_policy = 'scheduled' AND rotation_interval_days = 0;
+```
+
+Échéance : `COALESCE(last_rotated_at, created_at) + rotation_interval_days jours`. Un compte est pris par un seul `UPDATE … SET rotation_attempted_at` conditionné (échu, pas pris depuis une heure) : de deux Vaults, un seul le prend.
+
 ### Connexion fédérée OIDC (ADR-0035)
 
 `services/access/authentication/migrations/002_oidc.sql` donne à `users` les colonnes du §3 (`identity_source`, `external_subject` — ici `TEXT NOT NULL DEFAULT ''` plutôt que `NULL`, avec un index unique partiel sur `(identity_source, external_subject)` quand le sujet n'est pas vide) et ajoute les connexions en cours :

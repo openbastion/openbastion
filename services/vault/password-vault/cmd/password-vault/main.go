@@ -8,6 +8,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
@@ -86,6 +88,12 @@ func main() {
 	}
 	svc.WithRotation(infrastructure.SSHTargetChanger{}, &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: auditClient})
 
+	// Scheduled accounts rotate when due (ADR-0040): a sweep, no switch to turn it off.
+	sweep := boundedIntEnv("ROTATION_SWEEP_SECONDS", 300, 1, 86400)
+	go rotateEvery(svc, time.Duration(sweep)*time.Second)
+	log.Printf("password-vault: scheduled accounts that are due are rotated every %ds (at most %d a sweep; one that failed waits %s)",
+		sweep, application.RotationsPerSweep, application.RotationRetryAfter)
+
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
 		ctx := context.Background()
 		// The demonstration target is fictitious: its pinned host key (ADR-0039) is one whose
@@ -123,3 +131,30 @@ func redactDSN(dsn string) string {
 // demoHostKey is the pinned host key of the demonstration account: its private key was
 // discarded when it was generated, so it identifies no machine.
 const demoHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+pXuNMSq8lVqUNZ0A+gFlXPmbP+09vCp5Y/mHuzYpS"
+
+func boundedIntEnv(name string, def, min, max int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < min || n > max {
+		log.Fatalf("password-vault: %s must be a number between %d and %d, got %q", name, min, max, v)
+	}
+	return n
+}
+
+// rotateEvery runs one sweep of scheduled rotations every interval, each bounded in time.
+func rotateEvery(svc *application.VaultService, every time.Duration) {
+	for range time.Tick(every) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		res, err := svc.RotateDue(ctx)
+		cancel()
+		if res.Rotated > 0 || res.Failed > 0 {
+			log.Printf("password-vault: scheduled rotations: %d rotated, %d failed", res.Rotated, res.Failed)
+		}
+		if err != nil {
+			log.Printf("password-vault: the scheduled rotation sweep stopped: %v", err)
+		}
+	}
+}

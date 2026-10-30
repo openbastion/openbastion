@@ -29,6 +29,9 @@ type AuthorizationClient interface {
 }
 
 type VaultService struct {
+	// now is the clock of the scheduled rotations (ADR-0040); time.Now unless a test sets it.
+	now func() time.Time
+
 	accounts domain.AccountRepository
 	secrets  domain.SecretRepository
 	scopes   domain.ScopeRepository
@@ -41,7 +44,7 @@ type VaultService struct {
 }
 
 func NewVaultService(accounts domain.AccountRepository, secrets domain.SecretRepository, scopes domain.ScopeRepository, kms Encryptor, authz AuthorizationClient) *VaultService {
-	return &VaultService{accounts: accounts, secrets: secrets, scopes: scopes, kms: kms, authz: authz}
+	return &VaultService{now: time.Now, accounts: accounts, secrets: secrets, scopes: scopes, kms: kms, authz: authz}
 }
 
 // adminResource is deliberately distinct from "vault:account:<id>" (what
@@ -63,11 +66,16 @@ func (s *VaultService) requireAdminAccess(ctx context.Context, actorRoles []stri
 }
 
 func (s *VaultService) OnboardAccount(ctx context.Context, actorRoles []string, id, name, username, targetHost, protocol string, policy domain.RotationPolicy, initialSecret []byte) error {
+	return s.onboard(ctx, actorRoles, &domain.PrivilegedAccount{
+		ID: id, Name: name, Username: username, TargetHost: targetHost, Protocol: protocol, RotationPolicy: policy,
+	}, initialSecret)
+}
+
+// onboard writes the account — every field of it in one write — then its first secret.
+func (s *VaultService) onboard(ctx context.Context, actorRoles []string, account *domain.PrivilegedAccount, initialSecret []byte) error {
+	id := account.ID
 	if err := s.requireAdminAccess(ctx, actorRoles, id, "vault:account:onboard"); err != nil {
 		return err
-	}
-	account := &domain.PrivilegedAccount{
-		ID: id, Name: name, Username: username, TargetHost: targetHost, Protocol: protocol, RotationPolicy: policy,
 	}
 	if err := s.accounts.Create(ctx, account); err != nil {
 		return err

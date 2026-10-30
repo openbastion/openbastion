@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/lib/pq"
 
@@ -46,20 +47,22 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Create(ctx context.Context, a *domain.PrivilegedAccount) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id, host_key)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8)`,
-		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID, a.HostKey)
+		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id, host_key, rotation_interval_days)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9)`,
+		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID, a.HostKey, a.RotationIntervalDays)
 	return err
 }
 
 func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedAccount, error) {
 	var a domain.PrivilegedAccount
 	var rotationPolicy string
-	var lastRotatedAt, disabledAt sql.NullTime
+	var lastRotatedAt, disabledAt, attemptedAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key,
+		       rotation_interval_days, rotation_attempted_at
 		FROM privileged_accounts WHERE id = $1`, id)
-	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey); err != nil {
+	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey,
+		&a.RotationIntervalDays, &attemptedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -71,6 +74,9 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	}
 	if disabledAt.Valid {
 		a.DisabledAt = &disabledAt.Time
+	}
+	if attemptedAt.Valid {
+		a.RotationAttemptedAt = &attemptedAt.Time
 	}
 	return &a, nil
 }
@@ -89,7 +95,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days
 		FROM privileged_accounts WHERE disabled_at IS NULL
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, pageSize, offset)
@@ -103,7 +109,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 		var a domain.PrivilegedAccount
 		var rotationPolicy string
 		var lastRotatedAt, disabledAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays); err != nil {
 			return nil, 0, err
 		}
 		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
@@ -131,9 +137,6 @@ func (s *PostgresStore) Disable(ctx context.Context, id string) error {
 	return err
 }
 
-// MarkRotated sets last_rotated_at — see domain.AccountRepository.MarkRotated's
-// doc comment for why this method exists (a real, previously-undiscovered
-// gap of the same shape as Disable/disabled_at before it).
 // SetHostKey is domain.AccountRepository.SetHostKey.
 func (s *PostgresStore) SetHostKey(ctx context.Context, id, hostKey string) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET host_key = $2 WHERE id = $1`, id, hostKey)
@@ -158,6 +161,9 @@ func (s *PostgresStore) SetReconciliation(ctx context.Context, id, reconciliatio
 	return nil
 }
 
+// MarkRotated sets last_rotated_at — see domain.AccountRepository.MarkRotated's
+// doc comment for why this method exists (a real, previously-undiscovered
+// gap of the same shape as Disable/disabled_at before it).
 func (s *PostgresStore) MarkRotated(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE privileged_accounts SET last_rotated_at = now() WHERE id = $1`, id)
@@ -279,4 +285,56 @@ func (s *PostgresStore) ConsumeIfValid(ctx context.Context, token, callingProxyI
 		return nil, err
 	}
 	return &g, nil
+}
+
+// dueForRotation is the condition of a scheduled account due at $1 and not taken since $2
+// (ADR-0040); its due time orders the overdue ones.
+const (
+	rotationDueAt  = `COALESCE(last_rotated_at, created_at) + rotation_interval_days * interval '1 day'`
+	dueForRotation = `rotation_policy = 'scheduled' AND disabled_at IS NULL AND rotation_interval_days > 0
+		AND ` + rotationDueAt + ` <= $1
+		AND (rotation_attempted_at IS NULL OR rotation_attempted_at <= $2)`
+)
+
+// ListDueForRotation is domain.AccountRepository.ListDueForRotation.
+func (s *PostgresStore) ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int) ([]*domain.PrivilegedAccount, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM privileged_accounts WHERE `+dueForRotation+`
+		ORDER BY `+rotationDueAt+`, id LIMIT $3`, now, now.Add(-retryAfter), limit)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	due := make([]*domain.PrivilegedAccount, 0, len(ids))
+	for _, id := range ids {
+		a, err := s.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		due = append(due, a)
+	}
+	return due, nil
+}
+
+// ClaimRotation is domain.AccountRepository.ClaimRotation: one UPDATE, so that of two Vaults
+// that list the same account, one takes it.
+func (s *PostgresStore) ClaimRotation(ctx context.Context, id string, now time.Time, retryAfter time.Duration) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET rotation_attempted_at = $1
+		WHERE id = $3 AND `+dueForRotation, now, now.Add(-retryAfter), id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }

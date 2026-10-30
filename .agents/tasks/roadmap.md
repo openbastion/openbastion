@@ -4,7 +4,7 @@ La source est `docs/architecture/OpenBastion_04_Roadmap.md` ; ce fichier n'en ga
 
 | Étape | Contenu | État |
 |---|---|---|
-| MVP | SSH (et SFTP/SCP) de bout en bout : Authentication, Authorization (RBAC), Session Broker, Password Vault (rotation sur la cible, clé d'hôte épinglée), SSH Proxy, Audit Service, Command Recorder, API Gateway, mTLS, Admin UI, OIDC, docker-compose | implémenté ; reste : rotation planifiée (`backlog.md` n° 1) |
+| MVP | SSH (et SFTP/SCP) de bout en bout : Authentication, Authorization (RBAC), Session Broker, Password Vault (rotation sur la cible, manuelle, après usage et planifiée ; clé d'hôte épinglée), SSH Proxy, Audit Service, Command Recorder, API Gateway, mTLS, Admin UI, OIDC, docker-compose | implémenté, rotation planifiée comprise (ADR-0040) ; reste : `backlog.md` |
 | v1.0 | Scheduler complet (rotation planifiée et post-usage), Workflow/Approval Engine, MFA, autres protocoles, haute disponibilité | à concevoir |
 | v2.0 | détection d'anomalies, score de risque, protocoles supplémentaires | à concevoir |
 

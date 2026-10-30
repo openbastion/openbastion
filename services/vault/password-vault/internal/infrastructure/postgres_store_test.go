@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/infrastructure"
+	"github.com/openbastion/openbastion/services/vault/password-vault/migrations"
 )
 
 func testDB(t *testing.T) *sql.DB {
@@ -340,5 +342,92 @@ func TestPostgresStore_HostKey_RoundTrips(t *testing.T) {
 	}
 	if got, _ := store.Get(ctx, id2); got.HostKey != key {
 		t.Fatalf("Create with a key stored %q", got.HostKey)
+	}
+}
+
+// Scheduled rotations (ADR-0040) on a real database: what is due is listed, the longest
+// overdue first; a claim is taken once; a taken account waits; a rotation pushes it back; a
+// scheduled account from before 004_rotation_schedule.sql gets its 30 days.
+func TestPostgresStore_ScheduledRotation_DueClaimAndUpgrade(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	mk := func(policy domain.RotationPolicy, days int, ageDays int) string {
+		id := uniqueID("sched")
+		if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh",
+			RotationPolicy: policy, RotationIntervalDays: days}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE privileged_accounts SET created_at = now() - $2 * interval '1 day' WHERE id = $1`, id, ageDays); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	older := mk(domain.RotationScheduled, 1, 10) // overdue by 9 days
+	newer := mk(domain.RotationScheduled, 1, 3)  // overdue by 2 days
+	notYet := mk(domain.RotationScheduled, 30, 3)
+	manual := mk(domain.RotationManual, 0, 400)
+	disabled := mk(domain.RotationScheduled, 1, 10)
+	if err := store.Disable(ctx, disabled); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	ids := func(now time.Time) []string {
+		due, err := store.ListDueForRotation(ctx, now, time.Hour, 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, a := range due {
+			if strings.HasPrefix(a.ID, "sched_") && (a.ID == older || a.ID == newer || a.ID == notYet || a.ID == manual || a.ID == disabled) {
+				out = append(out, a.ID)
+			}
+		}
+		return out
+	}
+	if got := ids(now); len(got) != 2 || got[0] != older || got[1] != newer {
+		t.Fatalf("due: %v, want [%s %s]", got, older, newer)
+	}
+	if a, _ := store.Get(ctx, older); a.RotationIntervalDays != 1 || a.RotationAttemptedAt != nil {
+		t.Fatalf("read back: %+v", a)
+	}
+
+	if ok, err := store.ClaimRotation(ctx, older, now, time.Hour); err != nil || !ok {
+		t.Fatalf("first claim: %v %v", ok, err)
+	}
+	if ok, _ := store.ClaimRotation(ctx, older, now, time.Hour); ok {
+		t.Fatal("a second claim within the hour was taken")
+	}
+	if ok, _ := store.ClaimRotation(ctx, notYet, now, time.Hour); ok {
+		t.Fatal("an account that is not due was taken")
+	}
+	if got := ids(now); len(got) != 1 || got[0] != newer {
+		t.Fatalf("after the claim: %v", got)
+	}
+	if ok, _ := store.ClaimRotation(ctx, older, now.Add(61*time.Minute), time.Hour); !ok {
+		t.Fatal("not taken again after the hour")
+	}
+	if err := store.MarkRotated(ctx, newer); err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(now.Add(3 * time.Hour)); len(got) != 1 || got[0] != older {
+		t.Fatalf("a rotated account is still due: %v", got)
+	}
+
+	// The upgrade: a scheduled account with no interval, as before the migration.
+	legacy := mk(domain.RotationScheduled, 0, 40)
+	sqlText, err := migrations.Files.ReadFile("004_rotation_schedule.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, string(sqlText)); err != nil {
+		t.Fatalf("004 again (idempotent): %v", err)
+	}
+	if a, _ := store.Get(ctx, legacy); a.RotationIntervalDays != 30 {
+		t.Fatalf("the legacy scheduled account has %d days", a.RotationIntervalDays)
+	}
+	if a, _ := store.Get(ctx, manual); a.RotationIntervalDays != 0 {
+		t.Fatalf("a manual account got %d days", a.RotationIntervalDays)
 	}
 }

@@ -37,14 +37,21 @@ func (s *InMemoryStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	if !ok {
 		return nil, domain.ErrNotFound
 	}
-	return a, nil
+	return copyAccount(a), nil
+}
+
+// copyAccount is what a caller gets: its own copy, as from a database, never the store's
+// record — which another goroutine (the rotation sweep, ADR-0040) may change meanwhile.
+func copyAccount(a *domain.PrivilegedAccount) *domain.PrivilegedAccount {
+	cp := *a
+	return &cp
 }
 
 func (s *InMemoryStore) Create(ctx context.Context, a *domain.PrivilegedAccount) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a.CreatedAt = time.Now().UTC()
-	s.accounts[a.ID] = a
+	s.accounts[a.ID] = copyAccount(a)
 	return nil
 }
 
@@ -58,7 +65,7 @@ func (s *InMemoryStore) List(ctx context.Context, page, pageSize int) ([]*domain
 	active := make([]*domain.PrivilegedAccount, 0, len(s.accounts))
 	for _, a := range s.accounts {
 		if a.DisabledAt == nil {
-			active = append(active, a)
+			active = append(active, copyAccount(a))
 		}
 	}
 	sort.Slice(active, func(i, j int) bool { return active[i].ID < active[j].ID })
@@ -245,4 +252,49 @@ func (s *InMemoryStore) ConsumeIfValid(ctx context.Context, token, callingProxyI
 	}
 	g.Consumed = true
 	return g, nil
+}
+
+// memoryDueForRotation is PostgresStore's condition (ADR-0040), on a record of this store.
+func memoryDueForRotation(a *domain.PrivilegedAccount, now time.Time, retryAfter time.Duration) bool {
+	due := a.RotationDueAt()
+	if a.DisabledAt != nil || due == nil || due.After(now) {
+		return false
+	}
+	return a.RotationAttemptedAt == nil || !a.RotationAttemptedAt.After(now.Add(-retryAfter))
+}
+
+// ListDueForRotation is domain.AccountRepository.ListDueForRotation.
+func (s *InMemoryStore) ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int) ([]*domain.PrivilegedAccount, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var due []*domain.PrivilegedAccount
+	for _, a := range s.accounts {
+		if memoryDueForRotation(a, now, retryAfter) {
+			due = append(due, copyAccount(a))
+		}
+	}
+	sort.Slice(due, func(i, j int) bool {
+		di, dj := due[i].RotationDueAt(), due[j].RotationDueAt()
+		if !di.Equal(*dj) {
+			return di.Before(*dj)
+		}
+		return due[i].ID < due[j].ID
+	})
+	if len(due) > limit {
+		due = due[:limit]
+	}
+	return due, nil
+}
+
+// ClaimRotation is domain.AccountRepository.ClaimRotation.
+func (s *InMemoryStore) ClaimRotation(ctx context.Context, id string, now time.Time, retryAfter time.Duration) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok || !memoryDueForRotation(a, now, retryAfter) {
+		return false, nil
+	}
+	at := now
+	a.RotationAttemptedAt = &at
+	return true, nil
 }

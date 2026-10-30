@@ -1160,8 +1160,9 @@ components:
         username: { type: string, description: "Compte sur la cible — distinct de name, qui identifie l'enregistrement (doc 06 §3)." }
         targetHost: { type: string }
         protocol: { type: string, enum: [ssh] }
-        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use, description: "post_use : renouvelé quand une session accordée se termine (ADR-0037) ; scheduled : enregistré, exécuté par rien" }
-        reconciliationAccountId: { type: string, description: "Compte du Vault, de la même cible, qui peut changer ce mot de passe (root ou sudo chpasswd) — ADR-0037 ; vide : pas de rotation" }
+        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use, description: "post_use : renouvelé quand une session accordée se termine (ADR-0037) ; scheduled : renouvelé tous les rotationIntervalDays jours par le Vault (ADR-0040)" }
+        reconciliationAccountId: { type: string, description: "Compte du Vault, de la même cible, qui peut changer ce mot de passe (root ou sudo chpasswd) — ADR-0037 ; vide : pas de rotation ; obligatoire pour scheduled (409 sinon)" }
+        rotationIntervalDays: { type: integer, minimum: 1, maximum: 365, description: "Obligatoire pour rotationPolicy scheduled, refusé pour les autres (400) — ADR-0040. Le Vault fait tourner le compte cet intervalle après sa dernière rotation (ou sa création)." }
         hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…", description: "Obligatoire à l'enregistrement (400 sans elle) : la clé d'hôte publique de la cible, relevée sur la cible (/etc/ssh/ssh_host_ed25519_key.pub, ou une ligne known_hosts). Le secret n'est envoyé qu'au serveur qui la présente — par le proxy comme par la rotation (ADR-0039)." }
 
     PrivilegedAccount:
@@ -1171,6 +1172,7 @@ components:
           properties:
             id: { type: string, format: uuid }
             lastRotatedAt: { type: string, format: date-time }
+            nextRotationAt: { type: string, format: date-time, description: "Compte scheduled seulement : quand il sera échu (ADR-0040). Le Vault balaie toutes les ROTATION_SWEEP_SECONDS : la rotation a lieu au premier balayage qui suit." }
             hostKeyFingerprint: { type: string, example: "SHA256:yghJebhOfPlVqBTuLQp+13ACAaCo+e5vLM/jNp6sJso", description: "Empreinte de hostKey ; vide pour un compte enregistré avant ADR-0039 et jamais épinglé, qui n'ouvre aucune session" }
             createdAt: { type: string, format: date-time }
             disabledAt: { type: string, format: date-time, description: "Absent tant que le compte est actif. Posé par DELETE /vault/accounts/{id} (suppression logique — doc 06 §3) ; un compte avec ce champ renseigné n'apparaît plus dans GET /vault/accounts et GET /vault/accounts/{id} répond 404." }

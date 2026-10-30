@@ -40,12 +40,13 @@ describe("Accounts", () => {
     field("Cible (hôte:port)", "web:22");
     field("Utilisateur sur la cible", "admin");
     field("Secret initial", "s3cr3t-é");
-    field("Compte de réconciliation (même cible ; vide : pas de rotation)", "acc_root");
+    field("Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)", "acc_root");
     field("Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)", "ssh-ed25519 AAAAkey");
     fireEvent.submit(form);
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts")).toBe(true));
     const sent = calls.find((c) => c.method === "POST" && c.path === "/vault/accounts")!.body as Record<string, string>;
     expect(sent).toMatchObject({ id: "acc_2", protocol: "ssh", targetHost: "web:22", reconciliationAccountId: "acc_root", hostKey: "ssh-ed25519 AAAAkey" });
+    expect(sent).not.toHaveProperty("rotationIntervalDays"); // not a scheduled account
     expect(new TextDecoder().decode(Uint8Array.from(atob(sent.initialSecret), (c) => c.charCodeAt(0)))).toBe("s3cr3t-é");
     expect((screen.getByLabelText("Secret initial") as HTMLInputElement).value).toBe("");
   });
@@ -85,6 +86,33 @@ describe("Accounts — host key (ADR-0039)", () => {
     } finally {
       window.prompt = prompt;
     }
+  });
+});
+
+describe("Accounts — scheduled rotation (ADR-0040)", () => {
+  it("asks for an interval only for a scheduled account, and sends it as a number", async () => {
+    const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
+    signedIn(api, <Accounts />);
+    const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
+    const label = "Intervalle de rotation (jours, 1 à 365)";
+    expect(screen.queryByLabelText(label)).toBeNull();
+    const field = (l: string, value: string) => fireEvent.change(screen.getByLabelText(l), { target: { value } });
+    field("Rotation", "scheduled");
+    field(label, "7");
+    for (const [l, v] of [["Identifiant", "acc_3"], ["Nom", "db"], ["Cible (hôte:port)", "db:22"], ["Utilisateur sur la cible", "app"], ["Secret initial", "s"],
+      ["Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)", "acc_root"],
+      ["Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)", "ssh-ed25519 AAAAkey"]]) field(l, v);
+    fireEvent.submit(form);
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ rotationPolicy: "scheduled", rotationIntervalDays: 7 });
+  });
+
+  it("shows a scheduled account's cadence and next rotation", async () => {
+    const acc = { id: "acc_1", name: "db", username: "app", targetHost: "db:22", protocol: "ssh", rotationPolicy: "scheduled", createdAt: "2026-10-30T10:00:00Z",
+      rotationIntervalDays: 30, nextRotationAt: "2026-11-29T10:00:00Z", hostKeyFingerprint: "SHA256:k" };
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc], page: 1, pageSize: 20, totalItems: 1 } } });
+    signedIn(api, <Accounts />);
+    expect((await screen.findByText(/tous les 30 j/)).textContent).toContain("prochaine : 2026-11-29T10:00:00Z");
   });
 });
 

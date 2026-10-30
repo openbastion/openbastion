@@ -21,7 +21,7 @@ Deux règles guident l'ordre de livraison :
 |---|---|
 | Périmètre & Accès | API Gateway, Authentication Service, Authorization Service (RBAC simple), Session Broker |
 | Proxy | **SSH/SFTP/SCP Proxy** uniquement |
-| Vault | Password Vault (rotation manuelle et post-usage ; la rotation planifiée attend le Scheduler complet) |
+| Vault | Password Vault (rotation manuelle, post-usage et planifiée — cette dernière par un balayage du Vault, ADR-0040, en attendant le Scheduler complet) |
 | Enregistrement & Audit | Session Recorder, Command Recorder, Audit Service |
 | Fédération d'identité | OIDC Connector uniquement (MFA délégué au fournisseur d'identité externe) |
 | Plateforme | Scheduler (expiration de session uniquement) |
