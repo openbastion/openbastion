@@ -100,3 +100,26 @@ func TestHTTP_TheEmitterIsTheCertificatesNotTheBodys(t *testing.T) {
 		}
 	}
 }
+
+type unreadableAnchors struct{}
+
+func (unreadableAnchors) Append(context.Context, domain.Anchor) error { return nil }
+func (unreadableAnchors) All(context.Context) ([]domain.Anchor, error) {
+	return nil, errors.New("open /secret/path/anchors.jsonl: permission denied")
+}
+
+// Anchors that cannot be read are a 503, not a verdict, and the path stays in the log (ADR-0028).
+func TestHTTP_VerifyChainWithUnreadableAnchorsIs503(t *testing.T) {
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	defer log.SetOutput(os.Stderr)
+	h := interfaces.NewHTTPServer(application.NewAuditService(infrastructure.NewInMemoryStore()).WithAnchors(unreadableAnchors{})).Routes()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/audit/v1/verify-chain", nil))
+	if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "/secret/path") {
+		t.Fatalf("%d %q, want a 503 that does not name the path", rec.Code, rec.Body)
+	}
+	if !strings.Contains(logs.String(), "/secret/path") {
+		t.Fatalf("the cause is not in the log: %q", logs.String())
+	}
+}

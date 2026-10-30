@@ -37,10 +37,20 @@ type AuditService struct {
 	// keys sign every event written (v3) and verify what earlier keys signed (ADR-0027).
 	// Never nil: a service built by hand has a key that lives as long as it does.
 	keys *ChainKeys
+
+	// anchors keeps the heads of the chain outside the database (ADR-0028); nil = none.
+	anchors      AnchorSink
+	anchorMu     sync.Mutex
+	lastAnchored string
+	now          func() time.Time
+
+	// tip is the last event THIS process appended, with the hash it computed (guarded by mu):
+	// what an anchor names, rather than what the store says at the time of the anchor.
+	tip *domain.Event
 }
 
 func NewAuditService(store Store) *AuditService {
-	return &AuditService{store: store, keys: RandomChainKeys()}
+	return &AuditService{store: store, keys: RandomChainKeys(), now: time.Now}
 }
 
 // WithChainKeys sets the keys of the chain (ADR-0027).
@@ -176,6 +186,8 @@ func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action
 	if err := s.store.Append(ctx, e); err != nil {
 		return nil, err
 	}
+	tip := *e
+	s.tip = &tip
 	return e, nil
 }
 
@@ -222,7 +234,7 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 		}
 		prevHash = e.Hash
 	}
-	return nil
+	return s.verifyAnchors(ctx, events)
 }
 
 // computeHash computes an event's hash in the unkeyed format its HashVersion names (v1, v2).

@@ -86,6 +86,13 @@ func (s *HTTPServer) handleEmitEvent(w http.ResponseWriter, r *http.Request) {
 
 func (s *HTTPServer) handleVerifyChain(w http.ResponseWriter, r *http.Request) {
 	if err := s.svc.VerifyChain(r.Context()); err != nil {
+		if errors.Is(err, domain.ErrAnchorsUnavailable) {
+			// Not a verdict of tampering: the chain cannot be vouched for (ADR-0028). The cause
+			// (a path) stays in this log.
+			log.Printf("audit-service: verifying the chain: %v", err)
+			http.Error(w, "the anchors of the chain cannot be read: the chain cannot be vouched for", http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}

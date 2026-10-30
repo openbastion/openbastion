@@ -379,6 +379,14 @@ Chaque événement d'audit est signé (HMAC-SHA256) avec la **clé de chaîne** 
 - **Une clé perdue rend l'histoire qu'elle a signée invérifiable, définitivement** : `verify-chain` répond `409` « signed with chain key …, which this service does not hold ». Sauvegarder chaque clé **hors de la base et hors des sauvegardes de la base** (§8), pour toute la durée de rétention de l'audit.
 - Chaque événement porte aussi **le service qui l'a écrit** (`emitter`), tiré de son certificat mTLS — jamais du corps de la requête ; vide quand `INTERNAL_TLS=disabled`.
 
+### Ancrage de la chaîne hors de la base (ADR-0028)
+
+L'Audit Service écrit périodiquement une **ancre** — l'identifiant et le hash du dernier événement qu'il a écrit, sous un HMAC avec la clé de chaîne — dans un fichier en ajout seul, **hors de la base**. `verify-chain` vérifie chaque ancre et exige que l'événement ancré soit encore dans la chaîne, avec le même hash : une chaîne réécrite (même entièrement, dans un format sans clé) ou tronquée avant la dernière ancre est un `409`.
+
+- **`AUDIT_ANCHOR_FILE`** — chemin **absolu** du fichier d'ancres, **obligatoire avec `DATABASE_URL`** (refus de démarrer sans lui, ou si son répertoire n'existe pas). Il doit être **là où la base n'a aucun pouvoir** : un autre volume, idéalement un montage en ajout seul (WORM) ou une destination répliquée hors de l'hôte de la base ; quelqu'un qui peut écrire à la fois dans la base et dans ce fichier peut tout réécrire. Le fichier est créé au démarrage (droits 0600) puis seulement complété ; **un fichier qui a disparu n'est jamais recréé** : `verify-chain` répond `503` (la chaîne ne peut pas être garantie).
+- **`AUDIT_ANCHOR_INTERVAL_SECONDS`** — période d'ancrage, **60** par défaut, de 1 à 3600 (hors bornes : refus de démarrer). Une ancre n'est écrite que si la tête a avancé. **Ce qui a été écrit depuis la dernière ancre** peut encore être tronqué sans être vu : la période est la fenêtre d'exposition.
+- Un échec d'écriture d'une ancre n'arrête pas l'audit (les événements restent signés) : une ligne de journal par épisode (« anchoring the head of the chain failed »), puis « works again ».
+
 ## 8. Sauvegardes
 
 | Donnée | Où | Fréquence recommandée |
@@ -386,6 +394,7 @@ Chaque événement d'audit est signé (HMAC-SHA256) avec la **clé de chaîne** 
 | PostgreSQL (comptes, politiques, sessions, audit) | Snapshot + WAL continu | Continu |
 | MinIO (enregistrements, *v1.0*) | Réplication de bucket | Continu |
 | Clé KMS/HSM | **Jamais dans la même sauvegarde que les données chiffrées** | Selon la politique du KMS externe |
+| Fichier d'ancres de la chaîne (`AUDIT_ANCHOR_FILE`, ADR-0028) | **Jamais avec les sauvegardes de la base** : restaurer les deux ensemble rendrait une réécriture indétectable ; copie en ajout seul (WORM) | Continu (réplication du fichier) |
 | Clés de la chaîne d'audit (`AUDIT_CHAIN_KEY_HEX` et les précédentes, ADR-0027) | **Hors de la base et hors de ses sauvegardes** ; une clé perdue rend invérifiable l'histoire qu'elle a signée | À chaque rotation, conservées toute la rétention de l'audit |
 
 La procédure complète de bascule en cas de sinistre, y compris la question de savoir si un site sauvegardé doit être traité comme potentiellement compromis, est couverte par `OpenBastion_Guide_PRA_PCA.md` (§4) — ce document ne couvre que la sauvegarde courante, pas la reprise.
@@ -438,6 +447,8 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `approve` renvoie `503` | L'Authorization Service, l'audit ou la base ne répond pas : la décision n'est **pas** prise (fail-closed) | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker |
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |
 | `POST /sessions` renvoie `403` de façon inattendue | Politique manquante ou `resourcePattern` mal formé (§5) | Lister les politiques du rôle concerné via `GET /policies` |
+| `verify-chain` répond `409` « anchor … names event …, which is not in the chain », « … does not have the hash it was anchored with », « reordered » ou « its MAC does not match » | La chaîne en base ne correspond plus à ce qui a été ancré hors d'elle (ADR-0028) : réécrite, tronquée, ou le fichier d'ancres a été modifié | Traiter comme une falsification : conserver la base **et** le fichier d'ancres en l'état, comparer avec la copie WORM du fichier, enquêter sur les accès en écriture |
+| `verify-chain` répond `503` « the anchors of the chain cannot be read » | Le fichier d'ancres est illisible ou a disparu (le chemin exact est dans le journal de l'Audit Service) | Restaurer le fichier depuis sa copie en ajout seul ; ne **pas** le recréer vide (ce serait renoncer aux ancres passées) |
 | `verify-chain` répond `409` « signed with chain key …, which this service does not hold » | L'Audit Service n'a pas la clé qui a signé ces événements (ADR-0027) : rotation sans garder l'ancienne clé dans `AUDIT_CHAIN_PREVIOUS_KEYS_HEX`, mauvaise clé fournie, ou événement forgé avec un identifiant de clé inventé | Redémarrer avec l'ancienne clé dans `AUDIT_CHAIN_PREVIOUS_KEYS_HEX` ; si aucune clé connue ne correspond, traiter comme une falsification |
 | L'Audit Service refuse de démarrer : « AUDIT_CHAIN_KEY_HEX is required » | `DATABASE_URL` est réglé sans clé de chaîne (ADR-0027) | Fournir la clé (`openssl rand -hex 32` pour une première installation ; la clé existante sinon — une nouvelle clé ne vérifierait pas l'histoire) |
 | `verify-chain` répond `409` « unknown hash version » ou « hash version … after version … » | Une ligne d'`audit_events` porte une `hash_version` qui n'existe pas, ou une ligne au format 1 suit une ligne au format 2 (ADR-0026) : l'Audit Service n'écrit que le format 2 depuis sa mise à niveau, une telle ligne a été écrite ou modifiée hors de lui | Traiter comme une falsification : conserver la base en l'état, identifier la ligne (le numéro et l'identifiant sont dans la réponse), enquêter sur les accès en écriture à la base |

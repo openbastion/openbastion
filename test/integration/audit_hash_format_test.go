@@ -75,7 +75,7 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 
 	root := repoRoot(t)
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-26")
-	audit := startService(t, root, auditBin, "19431", "DATABASE_URL="+dsn, "AUDIT_CHAIN_KEY_HEX="+testKMSKeyHex(t))
+	audit := startService(t, root, auditBin, "19431", "DATABASE_URL="+dsn, "AUDIT_CHAIN_KEY_HEX="+testKMSKeyHex(t), "AUDIT_ANCHOR_FILE="+t.TempDir()+"/anchors.jsonl")
 	verify := func() int {
 		t.Helper()
 		resp, err := http.Get(audit.baseURL + "/audit/v1/verify-chain")

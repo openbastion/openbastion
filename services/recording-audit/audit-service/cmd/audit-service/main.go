@@ -8,6 +8,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
@@ -63,6 +65,32 @@ func main() {
 	default:
 		log.Printf("audit-service: in-memory chain signed with a random key that lives as long as this process (dev/test only)")
 	}
+	// The head of the chain is anchored outside the database (ADR-0028). With a database the
+	// anchors are required: they are what a chain rewritten entirely, or cut at its end, cannot
+	// survive. In memory there is nothing to rewrite behind the process's back.
+	if path := os.Getenv("AUDIT_ANCHOR_FILE"); path != "" || os.Getenv("DATABASE_URL") != "" {
+		if path == "" {
+			log.Fatalf("audit-service: DATABASE_URL is set, so AUDIT_ANCHOR_FILE is required (an absolute path the database does not control: another volume, an append-only mount) — refusing to start")
+		}
+		interval := 60
+		if v := os.Getenv("AUDIT_ANCHOR_INTERVAL_SECONDS"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 1 || n > 3600 {
+				log.Fatalf("audit-service: AUDIT_ANCHOR_INTERVAL_SECONDS must be a number between 1 and 3600, got %q", v)
+			}
+			interval = n
+		}
+		sink, err := infrastructure.NewFileAnchorSink(path)
+		if err != nil {
+			log.Fatalf("audit-service: AUDIT_ANCHOR_FILE: %v — refusing to start", err)
+		}
+		svc.WithAnchors(sink)
+		go anchorEvery(svc, time.Duration(interval)*time.Second)
+		log.Printf("audit-service: the head of the chain is anchored to %s every %ds (anchors verified by verify-chain)", path, interval)
+	} else {
+		log.Printf("audit-service: in-memory chain, not anchored (dev/test only)")
+	}
+
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
@@ -80,4 +108,23 @@ func redactDSN(dsn string) string {
 		return dsn
 	}
 	return "***@" + dsn[at+1:]
+}
+
+// anchorEvery anchors the head of the chain at every tick. A failure is written once per
+// episode, not once per tick: anchoring is out of band, events are still written and signed.
+func anchorEvery(svc *application.AuditService, every time.Duration) {
+	failing := false
+	for range time.Tick(every) {
+		if _, err := svc.Anchor(context.Background()); err != nil {
+			if !failing {
+				log.Printf("audit-service: anchoring the head of the chain failed (written once until it works again): %v", err)
+			}
+			failing = true
+			continue
+		}
+		if failing {
+			log.Printf("audit-service: anchoring the head of the chain works again")
+		}
+		failing = false
+	}
 }
