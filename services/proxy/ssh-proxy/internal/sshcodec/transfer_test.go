@@ -42,7 +42,9 @@ func (j *journal) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func itoa(n int) string { return strings.TrimSpace(strings.Repeat(" ", 0) + string(rune('0'+n/100)) + string(rune('0'+n/10%10)) + string(rune('0'+n%10))) }
+func itoa(n int) string {
+	return strings.TrimSpace(strings.Repeat(" ", 0) + string(rune('0'+n/100)) + string(rune('0'+n/10%10)) + string(rune('0'+n%10)))
+}
 
 // pkt builds an SFTP packet: type, id (unless 0 for INIT/VERSION), then fields.
 func pkt(typ byte, id uint32, fields ...any) []byte {
