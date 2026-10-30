@@ -3,7 +3,8 @@ package interfaces_test
 // Reading a session through the Gateway (ADR-0019): the Broker is told who asks and with
 // which roles, by the Gateway alone; the answer of the Broker — a session, a refusal, a
 // dependency that does not answer — is relayed as it is; and reading stays free of the
-// action budget (ADR-0016, rule 1: it writes nothing).
+// action budget (ADR-0016, rule 1: the Gateway writes nothing for it; what the Broker records
+// of a read is ADR-0020's and ADR-0021's).
 
 import (
 	"net/http"

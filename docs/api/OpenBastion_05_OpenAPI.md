@@ -336,9 +336,16 @@ paths:
         il ne contient ni le compte, ni le demandeur, ni la justification, ni
         l'état, ni la raison donnée par l'Authorization Service.
 
-        Une lecture **servie n'écrit rien** : ni événement d'audit, ni ligne
-        en base. Un **refus** (`403` d'une personne sans droit) est, lui,
-        écrit à l'audit (`session.read`, `success=false`, sous le nom de
+        Une lecture **servie à un titulaire de politique** est enregistrée
+        **avant** d'être servie (ADR-0021) : événement `session.read`,
+        `success=true`, ressource `session`, sous le nom de l'appelant
+        vérifié, **sans budget** — chaque lecture en est un. Si l'événement
+        ne peut pas être écrit (l'Audit Service ne répond pas), la lecture
+        n'est **pas** servie : `503`, sans rien de la session. Une lecture
+        servie **au demandeur** ou à **celui qui a décidé** la session
+        n'écrit rien et ne dépend pas de l'audit : rien ne leur est divulgué
+        qu'ils n'avaient. Un **refus** (`403` d'une personne sans droit) est,
+        lui, écrit à l'audit (`session.read`, `success=false`, sous le nom de
         l'appelant vérifié — jamais celui du demandeur —, ressource
         `session`) **dans la limite d'un budget par identité** (ADR-0020) :
         une rafale `SESSION_READ_AUDIT_BURST` (10 par défaut), puis
@@ -375,11 +382,13 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "503":
           description: >
-            Une dépendance (Authorization Service, base) ne répond pas : rien
-            n'est servi — un tiers n'est jamais servi faute de réponse, et une
-            base muette n'est pas « session inconnue » — et l'appel peut être
-            renouvelé. Le demandeur et le décideur ne dépendent pas de
-            l'Authorization Service. La cause reste dans le journal du Broker.
+            Une dépendance (Authorization Service, base, **Audit Service**) ne
+            répond pas : rien n'est servi — un tiers n'est jamais servi faute
+            de réponse, ni sans que sa lecture ait pu être enregistrée
+            (ADR-0021), et une base muette n'est pas « session inconnue » —
+            et l'appel peut être renouvelé. Le demandeur et le décideur ne
+            dépendent ni de l'Authorization Service ni de l'audit. La cause
+            reste dans le journal du Broker.
     delete:
       tags: [sessions]
       summary: Termine une session active

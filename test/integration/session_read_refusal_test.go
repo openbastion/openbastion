@@ -11,7 +11,8 @@ package integration_test
 // verified token's, whatever the client writes in the query; it is bounded by a budget per
 // identity, so that a refusal is not a way to write without limit into the trail, while the
 // refusals themselves are never softened; the budget is each identity's own; and what is
-// not a refusal — a read that is served, a session that does not exist — writes nothing.
+// not a refusal — a read that is served, a session that does not exist — is not one (a read served
+// to a policy holder is an event of ADR-0021's, not of this one).
 
 import (
 	"net/http"
@@ -149,8 +150,11 @@ func TestSessionReadRefusal_IsOnTheRecordUnderTheNameOfWhoAsked_WithinABudget_Ac
 		}
 	})
 
-	t.Run("what is not a refusal writes nothing", func(t *testing.T) {
-		before := spy.anyEvent("session.read", false)
+	t.Run("what is not a refusal is not one", func(t *testing.T) {
+		// Refusals are the events with success=false. A read served to a policy holder IS an
+		// event since ADR-0021 — a success one, not a refusal — and the requester's own read and
+		// a session that is not found are none.
+		refusalsBefore, servedBefore := spy.anyEvent("session.read", false), spy.anyEvent("session.read", true)
 		if code := read(alice, s1, ""); code != http.StatusOK {
 			t.Fatalf("the requester: %d, want 200", code)
 		}
@@ -161,11 +165,11 @@ func TestSessionReadRefusal_IsOnTheRecordUnderTheNameOfWhoAsked_WithinABudget_Ac
 			t.Fatalf("an unknown session: %d, want 404", code)
 		}
 		settle()
-		if n := spy.anyEvent("session.read", false) - before; n != 0 {
-			t.Fatalf("%d event(s) written by reads that were served or did not find a session", n)
+		if n := spy.anyEvent("session.read", false) - refusalsBefore; n != 0 {
+			t.Fatalf("%d refusal event(s) written by reads that were served or did not find a session", n)
 		}
-		if n := spy.anyEvent("session.read", true); n != 0 {
-			t.Fatalf("%d success event(s): a read that is served is not an event", n)
+		if n := spy.anyEvent("session.read", true) - servedBefore; n != 1 {
+			t.Fatalf("%d served-read event(s), want 1: Carol's, and neither the requester's nor the unknown session's (ADR-0021)", n)
 		}
 	})
 

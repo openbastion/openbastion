@@ -316,7 +316,8 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 // query is built from nothing the client sent: a callerId or actorRoles in the client's
 // own query string never gets past here, so a client cannot read as the requester of a
 // session, nor with the roles of somebody who may read them; nothing of its body is
-// relayed either. It costs nothing: it writes nothing (ADR-0016, rule 1).
+// relayed either. It costs nothing at the Gateway, which writes nothing for it (ADR-0016,
+// rule 1); what the Broker records of a read is the Broker's (ADR-0020, ADR-0021).
 func (g *GatewayServer) forwardRead(w http.ResponseWriter, r *http.Request, brokerPath string, id identity) {
 	q := neturl.Values{}
 	q.Set("callerId", id.UserID)

@@ -148,9 +148,11 @@ func TestSessionAction_IsPerUser_NotPerAddressNorPerSession(t *testing.T) {
 	}
 }
 
-// What does not write on every call is not charged: the reads write nothing, and a route
-// that is not allowed or not found costs nothing. (Terminate was in this list until ADR-0017
-// made its refusals an audit event each: it is charged now, and has its own test.)
+// What does not write on every call is not charged: the reads are free of the per-identity
+// budget (a read served to a policy holder is an event since ADR-0021, whose volume only the
+// per-address limit bounds — a limit the ADR declares), and a route that is not allowed or
+// not found costs nothing. (Terminate was in this list until ADR-0017 made its refusals an
+// audit event each: it is charged now, and has its own test.)
 func TestSessionAction_OnlyTheActionsThatWriteOnEveryCallAreCharged(t *testing.T) {
 	gw, _, _ := actionGateway(t, 1, 6, 100)
 	doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-1/connect", "")

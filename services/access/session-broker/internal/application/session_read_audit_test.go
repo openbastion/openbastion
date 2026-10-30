@@ -28,13 +28,14 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &out
 }
 
-// readRefusals is what the audit holds about refused reads, in order.
+// readRefusals is what the audit holds about refused reads, in order (the reads that were
+// served are readsServed's, ADR-0021).
 func (f *terminateFixture) readRefusals() []auditRecord {
 	f.audit.mu.Lock()
 	defer f.audit.mu.Unlock()
 	var out []auditRecord
 	for _, e := range f.audit.events {
-		if e.action == "session.read" {
+		if e.action == "session.read" && !e.success {
 			out = append(out, e)
 		}
 	}

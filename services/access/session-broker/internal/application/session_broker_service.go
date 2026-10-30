@@ -468,9 +468,12 @@ const SessionReadResourcePrefix = "session-read:account:"
 // right learns nothing of the session, and the refusal does not name the account, the
 // requester or anything else in the record.
 //
-// Reading writes nothing, to the audit or anywhere: a refused read is not an event.
-// Making it one would give every unauthorised GET a write, and the budget that bounds
-// writes (ADR-0016) is not meant for interfaces that poll — see ADR-0019.
+// Reading changes nothing in the session store, and what it writes to the audit depends on
+// what it did. A read by the requester or by the person who decided the session writes
+// nothing: they are given nothing they did not have. A read served on the strength of a
+// policy is an event, written BEFORE it is served, and not served without it (ADR-0021). A
+// refusal is an event too, but best effort and within the caller's own budget (ADR-0020):
+// it discloses nothing, so a refusal that could not be recorded is still the same refusal.
 func (s *SessionBrokerService) GetSession(ctx context.Context, id, callerID string, actorRoles []string) (*domain.Session, error) {
 	if callerID == "" {
 		return nil, fmt.Errorf("%w: reading a session needs an authenticated user", domain.ErrForbidden)
@@ -495,6 +498,14 @@ func (s *SessionBrokerService) GetSession(ctx context.Context, id, callerID stri
 			// No reason from the Authorization Service: it names the resource, and the resource
 			// carries the account of a session this caller may not know exists.
 			return nil, fmt.Errorf("%w: only the requester of a session, the person who decided it, or somebody with a policy to read sessions on this account, can read it", domain.ErrForbidden)
+		}
+		// A read served on the strength of a policy is on the record BEFORE it is served
+		// (ADR-0021): serving it is what discloses the requester, the account and the
+		// justification of the session, so a read that could not be recorded is not served —
+		// not a refusal, a dependency that is unavailable. The requester and the person who
+		// decided the session do not come through here: they are not given anything new.
+		if err := s.audit.EmitEvent(ctx, callerID, "session.read", "session", sess.ID, true); err != nil {
+			return nil, fmt.Errorf("%w (recording the read: %v)", domain.ErrUnavailable, err)
 		}
 	}
 	reflected := *sess

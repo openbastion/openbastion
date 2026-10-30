@@ -3,7 +3,8 @@ package application_test
 // Who may read a session (ADR-0019): its requester, always; the person who decided it; or
 // somebody with a policy on session-read:account:{id}. The order is the session, then the
 // caller; a read nobody could authorise is not served; a refusal tells nothing of the
-// session; and reading writes nothing — to the audit or anywhere.
+// session; and reading changes nothing in the store — what it leaves in the audit is
+// ADR-0020's (refusals) and ADR-0021's (reads served to a policy holder).
 
 import (
 	"context"
@@ -210,27 +211,31 @@ func (brokenReads) Get(context.Context, string) (*domain.Session, error) {
 	return nil, errors.New("connection refused")
 }
 
-// A read that is served writes nothing — no event, no row — and neither does a session that
-// is not found. The one thing a read writes is the refusal of somebody who may not read
-// (ADR-0020): one event, under the name of the one who asked, and never the record.
-func TestRead_AServedReadWritesNothing_AndOnlyARefusalIsOnTheRecord(t *testing.T) {
+// A read writes no row, whatever it is; and what it writes to the audit is decided by what it
+// does: the requester's own read and a session that is not found write nothing, a read served
+// to somebody who holds a policy writes one event (ADR-0021), and a refusal writes one (ADR-0020).
+func TestRead_ARequestersReadWritesNothing_AThirdPartysServedReadAndARefusalWriteOneEach(t *testing.T) {
 	f := newTerminateFixture(readRes)
 	sess := f.open(t)
 	before := f.auditCount()
 	rec, _ := f.store.Get(context.Background(), sess.ID)
 	stored := *rec
 
-	_, _ = f.read(sess.ID, requester, "sre")       // served: the requester
-	_, _ = f.read(sess.ID, "auditor-1", "auditor") // served: a policy
+	_, _ = f.read(sess.ID, requester, "sre") // served: the requester
 	_, _ = f.read("session_unknown", "mallory", "nope")
 	if after := f.auditCount(); after != before {
-		t.Fatalf("%d audit event(s) were written by reads that were served or found nothing", after-before)
+		t.Fatalf("%d audit event(s) were written by a read of the requester's own or one that found nothing", after-before)
+	}
+
+	_, _ = f.read(sess.ID, "auditor-1", "auditor") // served: a policy
+	if after := f.auditCount(); after != before+1 {
+		t.Fatalf("%d audit event(s) for one read served to a policy holder, want 1", after-before)
 	}
 
 	f.authz.allow[readRes] = false
 	_, _ = f.read(sess.ID, "mallory", "nope") // refused
-	if after := f.auditCount(); after != before+1 {
-		t.Fatalf("%d audit event(s) for one refused read, want 1", after-before)
+	if after := f.auditCount(); after != before+2 {
+		t.Fatalf("%d audit event(s) for a served read and a refused one, want 2", after-before)
 	}
 	now, _ := f.store.Get(context.Background(), sess.ID)
 	if !reflect.DeepEqual(*now, stored) {

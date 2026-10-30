@@ -68,6 +68,21 @@ type auditSpy struct {
 	baseURL string
 	mu      sync.Mutex
 	events  []spiedEvent
+	// down makes the spy answer 503 to every emit-event, without forwarding it and without
+	// remembering it: the Audit Service, for whoever asks, is not there.
+	down bool
+}
+
+func (s *auditSpy) setDown(down bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.down = down
+}
+
+func (s *auditSpy) isDown() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.down
 }
 
 type spiedEvent struct {
@@ -88,6 +103,10 @@ func startAuditSpy(t *testing.T, upstream string) *auditSpy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	srv := newLocalServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/emit-event") {
+			if spy.isDown() {
+				http.Error(w, "audit down (the spy says so)", http.StatusServiceUnavailable)
+				return
+			}
 			body, _ := io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(body))
 			var ev spiedEvent
