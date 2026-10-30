@@ -62,4 +62,19 @@ type SessionRepository interface {
 	// Broker replica they reached (ADR-0013). Refusing is not an error: nothing is
 	// written and saved is false.
 	SaveIfUnderPendingLimit(ctx context.Context, s *Session, limit int, now time.Time) (saved bool, err error)
+
+	// ExpireDue marks expired the active sessions and pending requests whose end
+	// (ExpiresAt) is before now — at most limit, soonest end first — and returns them as
+	// they now are (ADR-0034). Each is ONE atomic step: a session is expired by exactly one
+	// call, whichever Broker replica made it, and a decision or a termination racing with
+	// it either wins its compare-and-swap or loses it. What it expires is left "to be
+	// audited" until MarkExpiryAudited.
+	ExpireDue(ctx context.Context, now time.Time, limit int) ([]*Session, error)
+
+	// ExpiriesToAudit returns the sessions expired before `before` whose expiry is not yet
+	// in the audit trail, at most limit, oldest first.
+	ExpiriesToAudit(ctx context.Context, before time.Time, limit int) ([]*Session, error)
+
+	// MarkExpiryAudited records that the expiry of session id is in the audit trail.
+	MarkExpiryAudited(ctx context.Context, id string) error
 }

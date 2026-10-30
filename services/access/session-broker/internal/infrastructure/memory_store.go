@@ -12,10 +12,75 @@ import (
 type InMemoryStore struct {
 	mu       sync.Mutex
 	sessions map[string]*domain.Session
+	// expiredAt holds, for each session the sweep expired, when; toAudit those whose
+	// expiry is not yet in the trail (ADR-0034).
+	expiredAt map[string]time.Time
+	toAudit   map[string]bool
 }
 
 func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{sessions: map[string]*domain.Session{}}
+	return &InMemoryStore{sessions: map[string]*domain.Session{}, expiredAt: map[string]time.Time{}, toAudit: map[string]bool{}}
+}
+
+// ExpireDue is domain.SessionRepository.ExpireDue, under the store's lock.
+func (s *InMemoryStore) ExpireDue(ctx context.Context, now time.Time, limit int) ([]*domain.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var due []*domain.Session
+	for _, sess := range s.sessions {
+		if (sess.Status == domain.StatusActive || sess.Status == domain.StatusPendingApproval) && sess.ExpiresAt.Before(now) {
+			due = append(due, sess)
+		}
+	}
+	sort.Slice(due, func(i, j int) bool {
+		if !due[i].ExpiresAt.Equal(due[j].ExpiresAt) {
+			return due[i].ExpiresAt.Before(due[j].ExpiresAt)
+		}
+		return due[i].ID < due[j].ID
+	})
+	if len(due) > limit {
+		due = due[:limit]
+	}
+	out := make([]*domain.Session, 0, len(due))
+	for _, sess := range due {
+		sess.Status = domain.StatusExpired
+		s.expiredAt[sess.ID] = now
+		s.toAudit[sess.ID] = true
+		cp := *sess
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
+// ExpiriesToAudit is domain.SessionRepository.ExpiriesToAudit.
+func (s *InMemoryStore) ExpiriesToAudit(ctx context.Context, before time.Time, limit int) ([]*domain.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []*domain.Session
+	for id := range s.toAudit {
+		if s.expiredAt[id].Before(before) {
+			cp := *s.sessions[id]
+			out = append(out, &cp)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := s.expiredAt[out[i].ID], s.expiredAt[out[j].ID]; !a.Equal(b) {
+			return a.Before(b)
+		}
+		return out[i].ID < out[j].ID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// MarkExpiryAudited is domain.SessionRepository.MarkExpiryAudited.
+func (s *InMemoryStore) MarkExpiryAudited(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.toAudit, id)
+	return nil
 }
 
 func (s *InMemoryStore) Save(ctx context.Context, sess *domain.Session) error {

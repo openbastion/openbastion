@@ -87,6 +87,12 @@ func main() {
 
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy)
 
+	// Sessions and requests past their end are expired, once, and each expiry is written to
+	// the audit (ADR-0034). Always on: an end is a fact, not an option.
+	sweep := boundedIntEnv("SESSION_EXPIRY_SWEEP_SECONDS", 30, 1, 3600)
+	go expireEvery(svc, time.Duration(sweep)*time.Second)
+	log.Printf("session-broker: sessions and requests past their end are expired every %ds, each expiry written to the audit", sweep)
+
 	// What the refused reads of one user may write to the audit (ADR-0020): a burst, then a
 	// steady rate. Read whether or not anyone is ever refused, so that a bad value is found
 	// on the day it is written.
@@ -208,4 +214,24 @@ func redactDSN(dsn string) string {
 		return dsn
 	}
 	return "***@" + dsn[at+1:]
+}
+
+// expireEvery runs the expiry sweep at every tick (ADR-0034). A failure is written once per
+// episode: what is expired stays expired, the expiries not written wait for the next sweep.
+func expireEvery(svc *application.SessionBrokerService, every time.Duration) {
+	failing := false
+	for range time.Tick(every) {
+		expired, written, err := svc.ExpireDue(context.Background())
+		if expired > 0 || written > 0 {
+			log.Printf("session-broker: %d session(s) expired, %d expiry event(s) written to the audit", expired, written)
+		}
+		switch {
+		case err != nil && !failing:
+			log.Printf("session-broker: writing expiries to the audit failed, they wait for the next sweep (written once until it works again): %v", err)
+			failing = true
+		case err == nil && failing:
+			log.Printf("session-broker: writing expiries to the audit works again")
+			failing = false
+		}
+	}
 }

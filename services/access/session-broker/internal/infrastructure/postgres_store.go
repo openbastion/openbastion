@@ -218,3 +218,76 @@ func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit in
 	}
 	return out, false, nil
 }
+
+const sessionColumns = `id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
+		       duration_minutes, decided_by, decided_at`
+
+// scanSessions reads rows of sessionColumns.
+func scanSessions(rows *sql.Rows) ([]*domain.Session, error) {
+	defer rows.Close()
+	var out []*domain.Session
+	for rows.Next() {
+		var sess domain.Session
+		var status string
+		var terminatedAt, decidedAt sql.NullTime
+		if err := rows.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
+			&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
+			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt); err != nil {
+			return nil, err
+		}
+		sess.Status = domain.SessionStatus(status)
+		if terminatedAt.Valid {
+			sess.TerminatedAt = &terminatedAt.Time
+		}
+		if decidedAt.Valid {
+			sess.DecidedAt = &decidedAt.Time
+		}
+		out = append(out, &sess)
+	}
+	return out, rows.Err()
+}
+
+// ExpireDue is domain.SessionRepository.ExpireDue: one UPDATE over rows locked with SKIP
+// LOCKED, so that two replicas sweeping together never expire the same session, and a
+// compare-and-swap racing with the sweep waits for its row and then finds it expired — or
+// wins first, and the sweep no longer sees it (ADR-0034).
+func (s *PostgresStore) ExpireDue(ctx context.Context, now time.Time, limit int) ([]*domain.Session, error) {
+	// RETURNING gives the rows in no particular order: the CTE sorts them as the port says.
+	rows, err := s.db.QueryContext(ctx, `
+		WITH expired AS (
+			UPDATE sessions SET status = $1, expired_at = $2, expiry_audited = FALSE
+			WHERE id IN (
+				SELECT id FROM sessions
+				WHERE status IN ($3, $4) AND expires_at < $2
+				ORDER BY expires_at, id
+				LIMIT $5
+				FOR UPDATE SKIP LOCKED)
+			RETURNING `+sessionColumns+`)
+		SELECT `+sessionColumns+` FROM expired ORDER BY expires_at, id`,
+		string(domain.StatusExpired), now, string(domain.StatusActive), string(domain.StatusPendingApproval), limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanSessions(rows)
+}
+
+// ExpiriesToAudit is domain.SessionRepository.ExpiriesToAudit; the partial index of
+// 002_session_expiry.sql serves it.
+func (s *PostgresStore) ExpiriesToAudit(ctx context.Context, before time.Time, limit int) ([]*domain.Session, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+sessionColumns+`
+		FROM sessions
+		WHERE status = $1 AND NOT expiry_audited AND expired_at < $2
+		ORDER BY expired_at, id
+		LIMIT $3`, string(domain.StatusExpired), before, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanSessions(rows)
+}
+
+// MarkExpiryAudited is domain.SessionRepository.MarkExpiryAudited.
+func (s *PostgresStore) MarkExpiryAudited(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET expiry_audited = TRUE WHERE id = $1`, id)
+	return err
+}

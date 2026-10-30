@@ -265,6 +265,19 @@ CREATE TABLE idempotency_keys (
 );
 ```
 
+### Expiration des sessions (ADR-0034)
+
+`services/access/session-broker/migrations/002_session_expiry.sql` — la première migration numérotée après `001_init.sql` — ajoute à `sessions` :
+
+```sql
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expired_at TIMESTAMPTZ;                       -- quand le balayage l'a marquée expired
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expiry_audited BOOLEAN NOT NULL DEFAULT TRUE;  -- FALSE tant que session.expire reste à écrire
+CREATE INDEX IF NOT EXISTS sessions_expiry_to_audit_idx ON sessions (expired_at) WHERE status = 'expired' AND NOT expiry_audited;
+CREATE INDEX IF NOT EXISTS sessions_expiring_idx ON sessions (expires_at) WHERE status IN ('active', 'pending_approval');
+```
+
+Le statut `expired`, prévu au `CHECK` du §3, est maintenant **écrit** en base par le balayage du Broker, et plus seulement calculé à la lecture.
+
 ### Version du schéma (ADR-0030)
 
 Chaque service porte son schéma en migrations numérotées (`services/<domaine>/<service>/migrations/NNN_nom.sql`), appliquées au démarrage par `pkg/migrate`, et en garde la trace dans une table créée par `pkg/migrate` lui-même :

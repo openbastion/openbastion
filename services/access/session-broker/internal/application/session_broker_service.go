@@ -133,6 +133,9 @@ type SessionBrokerService struct {
 	// readRefusals bounds what the refused reads of one identity write to the audit
 	// (ADR-0020). Never nil: the constructor gives the strict default.
 	readRefusals *refusalbudget.Budget
+
+	// unwritten are the expiries this process made and could not yet write (ADR-0034).
+	unwritten unwrittenExpiries
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
