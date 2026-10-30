@@ -81,7 +81,7 @@ func TestBreakGlass_AnEmergencyAccessWithoutARecorder_AcrossEightRealProcesses(t
 	audit := startService(t, root, auditBin, "18702")
 	authz := startService(t, root, authzBin, "18703")
 	authn := startService(t, root, authnBin, "18707", "SKIP_DEMO_SEED=1")
-	recorder := startService(t, root, recorderBin, "18709", "AUTHORIZATION_URL=http://127.0.0.1:18703")
+	recorder := startService(t, root, recorderBin, "18709", "AUTHORIZATION_URL=http://127.0.0.1:18703", "AUDIT_URL="+audit.baseURL)
 	spy := startAuditSpy(t, audit.baseURL)
 
 	proxyEnv := func(extra ...string) []string {

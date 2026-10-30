@@ -33,6 +33,9 @@ func main() {
 
 	port := mustEnv("PORT", "8087")
 	authzURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
+	// Every read of a recording is written here before it is served, and is not served
+	// without it (ADR-0022): there is no setting that turns this off.
+	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
 
 	var repo domain.CommandRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -67,10 +70,16 @@ func main() {
 		log.Fatalf("command-recorder: %v", err)
 	}
 	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authzURL, Client: authzClient}
-	srv := interfaces.NewHTTPServer(application.NewRecorderService(repo, authz))
+	auditClient, err := rt.Client(mtls.Peer{URL: auditURL, Service: mtls.AuditService})
+	if err != nil {
+		log.Fatalf("command-recorder: %v", err)
+	}
+	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: auditClient}
+	srv := interfaces.NewHTTPServer(application.NewRecorderService(repo, authz, audit))
 
 	log.Printf("command-recorder listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authzURL)
+	log.Printf("  -> audit: %s (every read of a recording is written there before it is served)", auditURL)
 	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 

@@ -271,7 +271,7 @@ func TestRecordOrRefuse_ARecorderOutageRefusesAndEndsSessions_AcrossEightRealPro
 	audit := startService(t, root, auditBin, "18602")
 	authz := startService(t, root, authzBin, "18603")
 	authn := startService(t, root, authnBin, "18607", "SKIP_DEMO_SEED=1")
-	recorder := startService(t, root, recorderBin, "18609", "AUTHORIZATION_URL=http://127.0.0.1:18603")
+	recorder := startService(t, root, recorderBin, "18609", "AUTHORIZATION_URL=http://127.0.0.1:18603", "AUDIT_URL="+audit.baseURL)
 	spy := startAuditSpy(t, audit.baseURL)
 	startServiceWithExtraPort(t, root, sshProxyBin, "18605", "18606",
 		"VAULT_URL=http://127.0.0.1:18601",
@@ -397,7 +397,7 @@ func TestRecordOrRefuse_ARecorderOutageRefusesAndEndsSessions_AcrossEightRealPro
 
 	// ---- 3. a ticket obtained while healthy, redeemed after the recorder fails --------
 	// Bring the recorder back, get a ticket, lose the recorder again, THEN connect.
-	recorder = startService(t, root, recorderBin, "18609", "AUTHORIZATION_URL=http://127.0.0.1:18603")
+	recorder = startService(t, root, recorderBin, "18609", "AUTHORIZATION_URL=http://127.0.0.1:18603", "AUDIT_URL="+audit.baseURL)
 	sess3 := newSession()
 	status, body, ticket3 := gatewayConnectRaw(t, gateway.baseURL, operatorToken, sess3.ID)
 	if status != http.StatusOK {
@@ -422,7 +422,7 @@ func TestRecordOrRefuse_ARecorderOutageRefusesAndEndsSessions_AcrossEightRealPro
 	})
 
 	// ---- 4. recovery: the same session connects once the recorder is back -------------
-	recorder = startService(t, root, recorderBin, "18609", "AUTHORIZATION_URL=http://127.0.0.1:18603")
+	recorder = startService(t, root, recorderBin, "18609", "AUTHORIZATION_URL=http://127.0.0.1:18603", "AUDIT_URL="+audit.baseURL)
 	t.Run("once the recorder is back the same session connects, runs and is recorded", func(t *testing.T) {
 		status, body, ticket := gatewayConnectRaw(t, gateway.baseURL, operatorToken, sess3.ID)
 		if status != http.StatusOK {

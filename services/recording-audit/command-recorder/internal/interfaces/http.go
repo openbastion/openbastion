@@ -130,11 +130,23 @@ func (s *HTTPServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	// A missing or unparsable value becomes 0, which ClampPage turns into the default.
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
+	// Who reads, and with which roles, are the Gateway's: only the Gateway may call this
+	// route (CallerRules), and it builds both from the verified token (ADR-0022).
+	callerID := q.Get("callerId")
 	actorRoles := splitCommaList(q.Get("actorRoles"))
 
-	entries, total, err := s.svc.GetRecording(r.Context(), actorRoles, sessionID, page, pageSize)
+	entries, total, err := s.svc.GetRecording(r.Context(), callerID, actorRoles, sessionID, page, pageSize)
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		status := statusFor(err)
+		if status == http.StatusForbidden {
+			http.Error(w, err.Error(), status)
+			return
+		}
+		// A dependency or the store failed: the Gateway relays this body to the client, so it
+		// says nothing of the session, of the recording or of the failure — the cause, which
+		// can name addresses and tables, stays in this log.
+		log.Printf("command-recorder: reading the recording of session %s for user %s not done: %v", sessionID, callerID, err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
 
@@ -147,15 +159,19 @@ func (s *HTTPServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// statusFor maps an application error onto an HTTP status. Anything that is
-// neither a refused batch nor a refused read is the store failing — a 500,
-// not a 403: calling a database outage "forbidden" would hide it.
+// statusFor maps an application error onto an HTTP status. A dependency that
+// did not answer (Authorization, or the audit a read must be written to) is a
+// 503; anything else that is neither a refused batch nor a refused read is the
+// store failing — a 500. Neither is a 403: calling an outage "forbidden" would
+// hide it.
 func statusFor(err error) int {
 	switch {
 	case errors.Is(err, domain.ErrInvalidEntry):
 		return http.StatusBadRequest
 	case errors.Is(err, domain.ErrForbidden):
 		return http.StatusForbidden
+	case errors.Is(err, domain.ErrUnavailable):
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError
 	}

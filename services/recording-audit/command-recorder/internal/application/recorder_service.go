@@ -19,6 +19,18 @@ type AuthorizationClient interface {
 	CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (allowed bool, reason string, err error)
 }
 
+// AuditEmitter is the port to AuditIngestion (proto/audit/v1/audit.proto): the same call the
+// Session Broker and the proxies make.
+type AuditEmitter interface {
+	EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error
+}
+
+// AuditActionRead is the audit action of a recording that was read (ADR-0022). The event is
+// about the session the recording is of (resource_type "session", resource_id its id), so a
+// search for one session finds who opened it, who read its record (session.read) and who
+// read what was typed in it.
+const AuditActionRead = "recording.read"
+
 const (
 	// ActionRead is the RBAC action required to read a session's recording.
 	ActionRead = "recording:session:read"
@@ -50,10 +62,11 @@ func RecordingResource(sessionID string) string { return "recording:session:" + 
 type RecorderService struct {
 	repo  domain.CommandRepository
 	authz AuthorizationClient
+	audit AuditEmitter
 }
 
-func NewRecorderService(repo domain.CommandRepository, authz AuthorizationClient) *RecorderService {
-	return &RecorderService{repo: repo, authz: authz}
+func NewRecorderService(repo domain.CommandRepository, authz AuthorizationClient, audit AuditEmitter) *RecorderService {
+	return &RecorderService{repo: repo, authz: authz, audit: audit}
 }
 
 // Ready reports whether the service could durably record a batch right now.
@@ -135,22 +148,48 @@ func normalizeCommand(c string) string {
 // GetRecording returns one page of a session's recording, in the order the
 // commands were recorded, and the total number of entries.
 //
-// RBAC runs first. A session with no entries is an empty page, never a
-// "not found": the recorder does not know which sessions exist, and an
-// answer that depended on it would let an unauthorized caller probe for
-// session ids — which the order of checks (403 before anything else)
-// already rules out.
-func (s *RecorderService) GetRecording(ctx context.Context, actorRoles []string, sessionID string, page, pageSize int) ([]domain.CommandEntry, int, error) {
+// callerID and actorRoles are the Gateway's — the verified user and the
+// roles of their token, never the client's (ADR-0022). The order is: a caller
+// with no name (ErrForbidden), RBAC (ErrForbidden; ErrUnavailable when the
+// Authorization Service does not answer — fail-closed, and not called a
+// refusal), the store, the audit, then the page is served.
+//
+// A recording is what was typed in a session, and every read of it is served
+// on the strength of a policy: there is no requester exception here, the
+// operator does not read their own recording. So every page served is an
+// audit event, recording.read, under the caller's name, written BEFORE it is
+// served — and a page that could not be recorded as read is not served
+// (ErrUnavailable): ADR-0021's rule for what discloses. There is no budget:
+// a suppressed event is a read nobody can prove.
+//
+// A session with no entries is an empty page, never a "not found": the
+// recorder does not know which sessions exist, and an answer that depended on
+// it would let an unauthorized caller probe for session ids — which the order
+// of checks (403 before anything else) already rules out. An empty page is a
+// read like another, and is on the record like another.
+func (s *RecorderService) GetRecording(ctx context.Context, callerID string, actorRoles []string, sessionID string, page, pageSize int) ([]domain.CommandEntry, int, error) {
+	if callerID == "" {
+		return nil, 0, fmt.Errorf("%w: reading a recording needs an authenticated user", domain.ErrForbidden)
+	}
 	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, RecordingResource(sessionID), ActionRead)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: checking access (fail-closed): %v", domain.ErrForbidden, err)
+		return nil, 0, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
 	}
 	if !allowed {
 		return nil, 0, fmt.Errorf("%w: %s", domain.ErrForbidden, reason)
 	}
 
 	page, pageSize = ClampPage(page, pageSize)
-	return s.repo.ListBySession(ctx, sessionID, page, pageSize)
+	entries, total, err := s.repo.ListBySession(ctx, sessionID, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	// The store is read first so that an event is only written for a page that is about to
+	// be served; the page is held here, not handed over, until the event is written.
+	if err := s.audit.EmitEvent(ctx, callerID, AuditActionRead, "session", sessionID, true); err != nil {
+		return nil, 0, fmt.Errorf("%w (recording the read: %v)", domain.ErrUnavailable, err)
+	}
+	return entries, total, nil
 }
 
 // ClampPage is the pagination rule GetRecording applies (page < 1 → 1;

@@ -530,7 +530,7 @@ func newCapturingRecorder(t *testing.T) *capturingRecorder {
 	return c
 }
 
-func TestHandleSessionRecording_RoutesToTheCommandRecorderWithVerifiedRolesOnly(t *testing.T) {
+func TestHandleSessionRecording_RoutesToTheCommandRecorderWithTheVerifiedUserAndRolesOnly(t *testing.T) {
 	const validToken = "tok-auditor"
 	authSrv := newFakeTokenVerifierServer(t, validToken, "user_aud", "auditor1", []string{"auditor", "reader"})
 	defer authSrv.Close()
@@ -540,8 +540,8 @@ func TestHandleSessionRecording_RoutesToTheCommandRecorderWithVerifiedRolesOnly(
 	defer recorder.srv.Close()
 	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, "", "", recorder.srv.URL)
 
-	// The client tries to smuggle its own actorRoles and an unrelated parameter.
-	req := httptest.NewRequest(http.MethodGet, "/sessions/sess-1/recording?page=2&pageSize=50&actorRoles=platform-admin&evil=1", nil)
+	// The client tries to smuggle its own callerId, actorRoles and an unrelated parameter.
+	req := httptest.NewRequest(http.MethodGet, "/sessions/sess-1/recording?page=2&pageSize=50&callerId=user_victim&actorRoles=platform-admin&evil=1", nil)
 	req.Header.Set("Authorization", "Bearer "+validToken)
 	rec := httptest.NewRecorder()
 	gw.Routes().ServeHTTP(rec, req)
@@ -551,6 +551,10 @@ func TestHandleSessionRecording_RoutesToTheCommandRecorderWithVerifiedRolesOnly(
 	}
 	if recorder.lastPath != "/recorder/v1/sessions/sess-1/commands" {
 		t.Fatalf("routed to %q", recorder.lastPath)
+	}
+	// The Recorder writes the read to the audit under this name (ADR-0022): it is the token's.
+	if got := recorder.lastQuery["callerId"]; len(got) != 1 || got[0] != "user_aud" {
+		t.Fatalf("callerId must be the verified user's, got %q — a client-supplied value leaked through", got)
 	}
 	if got := recorder.lastQuery.Get("actorRoles"); got != "auditor,reader" {
 		t.Fatalf("actorRoles must be the verified ones, got %q — a client-supplied value leaked through", got)

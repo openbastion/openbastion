@@ -43,7 +43,7 @@ func TestSessionRevocation_EndingASessionCutsItAtTheProxy_AcrossRealProcesses(t 
 	authz := startService(t, root, authzBin, "18902")
 	authn := startService(t, root, authnBin, "18903", "SKIP_DEMO_SEED=1")
 	vault := startService(t, root, vaultBin, "18904", "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authz.baseURL)
-	recorder := startService(t, root, recorderBin, "18905", "AUTHORIZATION_URL="+authz.baseURL)
+	recorder := startService(t, root, recorderBin, "18905", "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL)
 	spy := startAuditSpy(t, audit.baseURL)
 	proxyEnv := []string{
 		"VAULT_URL=" + vault.baseURL, "AUDIT_URL=" + spy.baseURL, "PROXY_SERVICE_ID=ssh-proxy",

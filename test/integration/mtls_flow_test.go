@@ -59,7 +59,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	startMTLSService(t, root, auditBin, "18802", p, mtls.AuditService)
 	startMTLSService(t, root, authzBin, "18803", p, mtls.Authorization)
 	startMTLSService(t, root, authnBin, "18807", p, mtls.Authentication, "SKIP_DEMO_SEED=1")
-	startMTLSService(t, root, recorderBin, "18809", p, mtls.CommandRecorder, "AUTHORIZATION_URL="+authzURL)
+	startMTLSService(t, root, recorderBin, "18809", p, mtls.CommandRecorder, "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
 	startMTLSService(t, root, sshProxyBin, "18805", p, mtls.SSHProxy,
 		"SSH_PORT=18806",
 		"VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "RECORDER_URL="+recorderURL,

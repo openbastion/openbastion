@@ -33,11 +33,39 @@ func (f *fakeAuthz) CheckAccess(ctx context.Context, actorRoles []string, resour
 	return false, "no matching allow policy", nil
 }
 
+// fakeAudit remembers the events it was given, and fails every one while err is set.
+type fakeAudit struct {
+	err    error
+	events []auditEvent
+}
+
+type auditEvent struct {
+	actor, action, resourceType, resourceID string
+	success                                 bool
+}
+
+func (f *fakeAudit) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.events = append(f.events, auditEvent{actorID, action, resourceType, resourceID, success})
+	return nil
+}
+
 func newService() (*RecorderService, *infrastructure.InMemoryStore, *fakeAuthz) {
+	svc, store, authz, _ := newAuditedService()
+	return svc, store, authz
+}
+
+func newAuditedService() (*RecorderService, *infrastructure.InMemoryStore, *fakeAuthz, *fakeAudit) {
 	store := infrastructure.NewInMemoryStore()
 	authz := &fakeAuthz{}
-	return NewRecorderService(store, authz), store, authz
+	audit := &fakeAudit{}
+	return NewRecorderService(store, authz, audit), store, authz, audit
 }
+
+// reader is the user the Gateway names as the one reading.
+const reader = "u_carol"
 
 var auditor = []string{"auditor"}
 
@@ -78,7 +106,7 @@ func TestRecord_StoresEntriesAndGetRecordingReturnsThemInOrder(t *testing.T) {
 		t.Fatalf("Record: n=%d err=%v", n, err)
 	}
 
-	got, total, err := svc.GetRecording(ctx, auditor, "s1", 1, 20)
+	got, total, err := svc.GetRecording(ctx, reader, auditor, "s1", 1, 20)
 	if err != nil {
 		t.Fatalf("GetRecording: %v", err)
 	}
@@ -105,7 +133,7 @@ func TestRecord_RefusesTheWholeBatchIfAnyEntryIsInvalid(t *testing.T) {
 				t.Fatalf("expected ErrInvalidEntry and 0 stored, got n=%d err=%v", n, err)
 			}
 			// All-or-nothing: the valid first entry must not have been kept.
-			got, total, _ := svc.GetRecording(context.Background(), auditor, "s1", 1, 20)
+			got, total, _ := svc.GetRecording(context.Background(), reader, auditor, "s1", 1, 20)
 			if total != 0 || len(got) != 0 {
 				t.Fatalf("part of a refused batch was stored: %q", commandsOf(got))
 			}
@@ -141,7 +169,7 @@ func TestRecord_NormalizesAwkwardCommandsInsteadOfLosingThem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	got, _, _ := svc.GetRecording(ctx, auditor, "s1", 1, 20)
+	got, _, _ := svc.GetRecording(ctx, reader, auditor, "s1", 1, 20)
 	cmds := commandsOf(got)
 	if cmds[0] != "padded" {
 		t.Fatalf("expected trimmed command, got %q", cmds[0])
@@ -168,7 +196,7 @@ func TestGetRecording_OrdersByTimestampThenInsertion(t *testing.T) {
 		entry("s1", "first-a", t0),
 		entry("s1", "first-b", t0),
 	})
-	got, _, _ := svc.GetRecording(ctx, auditor, "s1", 1, 20)
+	got, _, _ := svc.GetRecording(ctx, reader, auditor, "s1", 1, 20)
 	if want := []string{"first-a", "first-b", "third"}; !equal(commandsOf(got), want) {
 		t.Fatalf("expected %q, got %q", want, commandsOf(got))
 	}
@@ -180,7 +208,7 @@ func TestGetRecording_OnlyReturnsTheRequestedSession(t *testing.T) {
 	now := time.Now().UTC()
 	_, _ = svc.Record(ctx, []domain.CommandEntry{entry("s1", "mine", now), entry("s2", "theirs", now)})
 
-	got, total, _ := svc.GetRecording(ctx, auditor, "s1", 1, 20)
+	got, total, _ := svc.GetRecording(ctx, reader, auditor, "s1", 1, 20)
 	if total != 1 || !equal(commandsOf(got), []string{"mine"}) {
 		t.Fatalf("expected only s1's entry, got %q (total %d)", commandsOf(got), total)
 	}
@@ -188,7 +216,7 @@ func TestGetRecording_OnlyReturnsTheRequestedSession(t *testing.T) {
 
 func TestGetRecording_AnEmptySessionIsAnEmptyPageNotAnError(t *testing.T) {
 	svc, _, _ := newService()
-	got, total, err := svc.GetRecording(context.Background(), auditor, "no-such-session", 1, 20)
+	got, total, err := svc.GetRecording(context.Background(), reader, auditor, "no-such-session", 1, 20)
 	if err != nil || total != 0 || got == nil || len(got) != 0 {
 		t.Fatalf("expected an empty non-nil page, got %v total=%d err=%v", got, total, err)
 	}
@@ -204,21 +232,21 @@ func TestGetRecording_PaginatesAndClamps(t *testing.T) {
 	}
 	_, _ = svc.Record(ctx, batch)
 
-	page2, total, _ := svc.GetRecording(ctx, auditor, "s1", 2, 10)
+	page2, total, _ := svc.GetRecording(ctx, reader, auditor, "s1", 2, 10)
 	if total != 25 || len(page2) != 10 || page2[0].Command != "cmd-k" {
 		t.Fatalf("page 2 of size 10: total=%d len=%d first=%q", total, len(page2), page2[0].Command)
 	}
-	last, _, _ := svc.GetRecording(ctx, auditor, "s1", 3, 10)
+	last, _, _ := svc.GetRecording(ctx, reader, auditor, "s1", 3, 10)
 	if len(last) != 5 {
 		t.Fatalf("expected the last page to hold 5, got %d", len(last))
 	}
-	beyond, total, _ := svc.GetRecording(ctx, auditor, "s1", 9, 10)
+	beyond, total, _ := svc.GetRecording(ctx, reader, auditor, "s1", 9, 10)
 	if len(beyond) != 0 || total != 25 {
 		t.Fatalf("a page past the end must be empty with the real total, got %d entries total=%d", len(beyond), total)
 	}
 
 	// Clamping: page < 1 → 1; pageSize < 1 → 20; pageSize > 100 → 100.
-	first, _, _ := svc.GetRecording(ctx, auditor, "s1", 0, 0)
+	first, _, _ := svc.GetRecording(ctx, reader, auditor, "s1", 0, 0)
 	if len(first) != 20 || first[0].Command != "cmd-a" {
 		t.Fatalf("page 0 / size 0 must serve page 1 with the default size 20, got %d entries first=%q", len(first), first[0].Command)
 	}
@@ -233,7 +261,7 @@ func TestGetRecording_IsDeniedWithoutAuthorization(t *testing.T) {
 	_, _ = svc.Record(ctx, []domain.CommandEntry{entry("s1", "secret-ish", time.Now())})
 
 	for _, roles := range [][]string{nil, {}, {"dba"}} {
-		got, total, err := svc.GetRecording(ctx, roles, "s1", 1, 20)
+		got, total, err := svc.GetRecording(ctx, reader, roles, "s1", 1, 20)
 		if !errors.Is(err, domain.ErrForbidden) || got != nil || total != 0 {
 			t.Fatalf("roles %v: expected ErrForbidden and no data, got %v total=%d err=%v", roles, got, total, err)
 		}
@@ -243,14 +271,19 @@ func TestGetRecording_IsDeniedWithoutAuthorization(t *testing.T) {
 	}
 }
 
+// An Authorization Service that does not answer serves nothing (fail-closed), and is
+// not called a refusal: it is a 503, the same read is served once it is back (ADR-0022).
 func TestGetRecording_FailsClosedWhenAuthorizationIsUnreachable(t *testing.T) {
-	svc, _, authz := newService()
+	svc, _, authz, audit := newAuditedService()
 	_, _ = svc.Record(context.Background(), []domain.CommandEntry{entry("s1", "x", time.Now())})
 	authz.err = errors.New("connection refused")
 
-	_, _, err := svc.GetRecording(context.Background(), auditor, "s1", 1, 20)
-	if !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("an unreachable Authorization Service must deny, got %v", err)
+	got, total, err := svc.GetRecording(context.Background(), reader, auditor, "s1", 1, 20)
+	if !errors.Is(err, domain.ErrUnavailable) || errors.Is(err, domain.ErrForbidden) || got != nil || total != 0 {
+		t.Fatalf("an unreachable Authorization Service must serve nothing, as unavailable: %v total=%d err=%v", got, total, err)
+	}
+	if len(audit.events) != 0 {
+		t.Fatalf("a read that was not decided is on the record: %+v", audit.events)
 	}
 }
 
@@ -261,8 +294,8 @@ func TestGetRecording_DenialDoesNotRevealWhetherASessionHasEntries(t *testing.T)
 	ctx := context.Background()
 	_, _ = svc.Record(ctx, []domain.CommandEntry{entry("exists", "x", time.Now())})
 
-	_, _, errExisting := svc.GetRecording(ctx, []string{"dba"}, "exists", 1, 20)
-	_, _, errMissing := svc.GetRecording(ctx, []string{"dba"}, "does-not-exist", 1, 20)
+	_, _, errExisting := svc.GetRecording(ctx, reader, []string{"dba"}, "exists", 1, 20)
+	_, _, errMissing := svc.GetRecording(ctx, reader, []string{"dba"}, "does-not-exist", 1, 20)
 	if !errors.Is(errExisting, domain.ErrForbidden) || !errors.Is(errMissing, domain.ErrForbidden) {
 		t.Fatalf("both must be forbidden, got %v / %v", errExisting, errMissing)
 	}
@@ -288,13 +321,113 @@ func TestRecorderService_Ready(t *testing.T) {
 
 	// A store that can say it is not ready is believed.
 	down := errors.New("database is read-only")
-	svc = NewRecorderService(readinessStore{InMemoryStore: infrastructure.NewInMemoryStore(), err: down}, &fakeAuthz{})
+	svc = NewRecorderService(readinessStore{InMemoryStore: infrastructure.NewInMemoryStore(), err: down}, &fakeAuthz{}, &fakeAudit{})
 	if err := svc.Ready(ctx); !errors.Is(err, down) {
 		t.Fatalf("readiness must come from the store, got %v", err)
 	}
 
-	svc = NewRecorderService(readinessStore{InMemoryStore: infrastructure.NewInMemoryStore()}, &fakeAuthz{})
+	svc = NewRecorderService(readinessStore{InMemoryStore: infrastructure.NewInMemoryStore()}, &fakeAuthz{}, &fakeAudit{})
 	if err := svc.Ready(ctx); err != nil {
 		t.Fatalf("a ready store must be ready: %v", err)
+	}
+}
+
+// -- every read of a recording is on the record before it is served (ADR-0022) ------
+
+func TestGetRecording_EveryServedPageIsAnEventUnderTheReadersName(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	ctx := context.Background()
+	t0 := time.Now().UTC()
+	_, _ = svc.Record(ctx, []domain.CommandEntry{entry("s1", "whoami", t0), entry("s1", "id", t0.Add(time.Second))})
+
+	for page := 1; page <= 2; page++ {
+		if got, _, err := svc.GetRecording(ctx, reader, auditor, "s1", page, 1); err != nil || len(got) != 1 {
+			t.Fatalf("page %d: %q %v", page, commandsOf(got), err)
+		}
+	}
+	want := auditEvent{actor: reader, action: "recording.read", resourceType: "session", resourceID: "s1", success: true}
+	if len(audit.events) != 2 || audit.events[0] != want || audit.events[1] != want {
+		t.Fatalf("events for two served pages: %+v, want twice %+v", audit.events, want)
+	}
+}
+
+// The recorder does not know which sessions exist: an empty recording is served like
+// any other, and is on the record like any other.
+func TestGetRecording_AnEmptyRecordingIsAReadOnTheRecord(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	if got, total, err := svc.GetRecording(context.Background(), reader, auditor, "nothing-here", 1, 20); err != nil || total != 0 || len(got) != 0 {
+		t.Fatalf("an empty recording: %q total=%d err=%v", commandsOf(got), total, err)
+	}
+	if len(audit.events) != 1 || audit.events[0].resourceID != "nothing-here" || !audit.events[0].success {
+		t.Fatalf("events: %+v", audit.events)
+	}
+}
+
+func TestGetRecording_IsNotServedWithoutTheAudit_AndIsOnceItIsBack(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	ctx := context.Background()
+	_, _ = svc.Record(ctx, []domain.CommandEntry{entry("s1", "cat /etc/shadow", time.Now())})
+
+	audit.err = errors.New("audit service: connection refused")
+	got, total, err := svc.GetRecording(ctx, reader, auditor, "s1", 1, 20)
+	if !errors.Is(err, domain.ErrUnavailable) || errors.Is(err, domain.ErrForbidden) || got != nil || total != 0 {
+		t.Fatalf("with the audit down: %q total=%d err=%v, want nothing served and unavailable", commandsOf(got), total, err)
+	}
+
+	audit.err = nil
+	got, total, err = svc.GetRecording(ctx, reader, auditor, "s1", 1, 20)
+	if err != nil || total != 1 || len(got) != 1 {
+		t.Fatalf("with the audit back: %q total=%d err=%v", commandsOf(got), total, err)
+	}
+	if len(audit.events) != 1 {
+		t.Fatalf("%d event(s): the read that was not served must have left none", len(audit.events))
+	}
+}
+
+// Who reads is the Gateway's verified user: without one there is nobody to put on the
+// record, and nobody is asked anything.
+func TestGetRecording_IsRefusedWithoutAName(t *testing.T) {
+	svc, _, authz, audit := newAuditedService()
+	_, _ = svc.Record(context.Background(), []domain.CommandEntry{entry("s1", "x", time.Now())})
+
+	got, _, err := svc.GetRecording(context.Background(), "", auditor, "s1", 1, 20)
+	if !errors.Is(err, domain.ErrForbidden) || got != nil {
+		t.Fatalf("no name: %q %v, want forbidden", commandsOf(got), err)
+	}
+	if len(authz.resources) != 0 || len(audit.events) != 0 {
+		t.Fatalf("a read with no name reached Authorization (%q) or the audit (%+v)", authz.resources, audit.events)
+	}
+}
+
+func TestGetRecording_ARefusalIsNotAServedRead(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	_, _ = svc.Record(context.Background(), []domain.CommandEntry{entry("s1", "x", time.Now())})
+	if _, _, err := svc.GetRecording(context.Background(), reader, []string{"dba"}, "s1", 1, 20); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("want forbidden, got %v", err)
+	}
+	if len(audit.events) != 0 {
+		t.Fatalf("a refusal was written as a served read: %+v", audit.events)
+	}
+}
+
+type failingListStore struct {
+	*infrastructure.InMemoryStore
+}
+
+func (failingListStore) ListBySession(context.Context, string, int, int) ([]domain.CommandEntry, int, error) {
+	return nil, 0, errors.New("database: connection reset")
+}
+
+// A page the store could not read is not served, so it is not on the record either, and
+// is neither a refusal nor a missing dependency.
+func TestGetRecording_APageTheStoreCouldNotReadIsNotOnTheRecord(t *testing.T) {
+	audit := &fakeAudit{}
+	svc := NewRecorderService(failingListStore{infrastructure.NewInMemoryStore()}, &fakeAuthz{}, audit)
+	_, _, err := svc.GetRecording(context.Background(), reader, auditor, "s1", 1, 20)
+	if err == nil || errors.Is(err, domain.ErrForbidden) || errors.Is(err, domain.ErrUnavailable) {
+		t.Fatalf("a store failure: %v", err)
+	}
+	if len(audit.events) != 0 {
+		t.Fatalf("a page that was not read is on the record: %+v", audit.events)
 	}
 }

@@ -452,11 +452,12 @@ func splitSessionPath(path string) (sessionID, action string, ok bool) {
 // -- GET /sessions/{id}/recording (doc 05) ---------------------------------
 //
 // The text recording of a session, served by the Command Recorder. The
-// Gateway's part is the same as for the Vault's admin routes: it replaces
-// whatever roles the client may have sent with the verified ones, and the
-// access decision itself (recording:session:read, RBAC) is the Recorder's.
-// Only page and pageSize are taken from the client's query — nothing else
-// reaches the Recorder, so a client-supplied actorRoles cannot either.
+// Gateway's part is to say who reads, and with which roles: both are the
+// verified token's (ADR-0022), and the Recorder writes the read to the audit
+// under that name before it serves it. The access decision itself
+// (recording:session:read, RBAC) is the Recorder's. Only page and pageSize are
+// taken from the client's query — nothing else reaches the Recorder, so a
+// client-supplied callerId or actorRoles cannot either.
 
 func (g *GatewayServer) handleSessionRecording(w http.ResponseWriter, r *http.Request, id identity, sessionID string) {
 	if r.Method != http.MethodGet {
@@ -469,6 +470,7 @@ func (g *GatewayServer) handleSessionRecording(w http.ResponseWriter, r *http.Re
 			q.Set(key, v)
 		}
 	}
+	q.Set("callerId", id.UserID)
 	q.Set("actorRoles", strings.Join(id.Roles, ","))
 	g.forwardPassthrough(w, r, http.MethodGet,
 		g.commandRecorderURL+"/recorder/v1/sessions/"+neturl.PathEscape(sessionID)+"/commands?"+q.Encode())

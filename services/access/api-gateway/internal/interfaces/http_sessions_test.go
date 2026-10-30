@@ -126,7 +126,9 @@ func TestSessionRoutes_OnlyKnownRoutesReachTheBroker(t *testing.T) {
 		"a deeper path":     {http.MethodPost, "/sessions/s-1/approve/extra", http.StatusNotFound},
 		"a trailing slash":  {http.MethodPost, "/sessions/s-1/", http.StatusNotFound},
 		// The mux answers a non-canonical path with a redirect to the cleaned one; what
-		// matters is that the request itself is not relayed.
+		// matters is that the request itself is not relayed. Which redirect depends on the
+		// Go release (Go 1.27's mux answers 307 to a POST, keeping its method; earlier ones
+		// 301), so either is taken for the 301 written here.
 		"a double slash after the id":       {http.MethodPost, "/sessions/s-1//approve", http.StatusMovedPermanently},
 		"no id":                             {http.MethodPost, "/sessions//approve", http.StatusMovedPermanently},
 		"approve by GET":                    {http.MethodGet, "/sessions/s-1/approve", http.StatusMethodNotAllowed},
@@ -141,7 +143,8 @@ func TestSessionRoutes_OnlyKnownRoutesReachTheBroker(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			gw, broker := sessionGateway(t)
 			rec := do(gw, c.method, c.path, `{"decidedBy":"u-the-cto"}`, true)
-			if rec.Code != c.want {
+			redirected := c.want == http.StatusMovedPermanently && rec.Code == http.StatusTemporaryRedirect
+			if rec.Code != c.want && !redirected {
 				t.Fatalf("%s %s: %d, want %d", c.method, c.path, rec.Code, c.want)
 			}
 			if got := broker.requests(); len(got) != 0 {

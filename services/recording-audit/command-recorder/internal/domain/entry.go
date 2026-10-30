@@ -14,10 +14,15 @@ var (
 	// whole: an entry with no session, no command or no timestamp.
 	ErrInvalidEntry = errors.New("invalid command entry")
 
-	// ErrForbidden is returned when the caller may not read a recording —
-	// denied by RBAC, or the Authorization Service could not be asked
-	// (fail-closed).
+	// ErrForbidden is returned when the caller may not read a recording: no
+	// authenticated user was named, or RBAC denied it.
 	ErrForbidden = errors.New("access denied")
+
+	// ErrUnavailable is returned when a read could not be decided or recorded
+	// because a dependency did not answer — the Authorization Service, or the
+	// Audit Service that must hold the read before it is served (ADR-0022). It
+	// is not a refusal: the same read, once the dependency is back, is served.
+	ErrUnavailable = errors.New("unavailable")
 )
 
 // CommandEntry is one command an operator submitted in a session — the

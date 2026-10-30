@@ -176,7 +176,7 @@ run-ssh-proxy:
 	$(call tls,ssh-proxy) RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
 		$(GO) run ./services/proxy/ssh-proxy/cmd/ssh-proxy
 run-recorder:
-	$(call tls,command-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 \
+	$(call tls,command-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 AUDIT_URL=$(SCHEME)://127.0.0.1:8082 \
 		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder
 # BREAKGLASS_MAX_MINUTES=30 active le break-glass (ADR-0009) ; absent ou 0 : désactivé.
 # Une demande break-glass attend l'accord d'une autre personne (ADR-0011) :

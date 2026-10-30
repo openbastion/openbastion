@@ -663,8 +663,13 @@ paths:
         enregistrées, paginées. Lisible pendant la session comme après.
         Réservé aux rôles autorisés par une politique
         `recording:session:read` sur `recording:session:{sessionId}` ; la
-        Gateway transmet les rôles du jeton vérifié, jamais ceux que le
-        client pourrait fournir. Le refus (403) est le même que la session
+        Gateway transmet l'utilisateur et les rôles du jeton vérifié, jamais
+        ceux que le client pourrait fournir. Chaque page servie est un
+        événement d'audit `recording.read` (succès, ressource `session`,
+        auteur = l'utilisateur authentifié), écrit **avant** d'être servi ;
+        s'il ne s'écrit pas, la page n'est pas servie (503) — ADR-0022. Il
+        n'y a pas de budget : chaque page lue est un événement. Un refus
+        (403) n'est pas audité. Le refus (403) est le même que la session
         existe ou non, et une session sans commande enregistrée donne un
         enregistrement vide (200), pas un 404 : l'API ne permet pas de
         sonder quelles sessions existent.
@@ -683,10 +688,17 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CommandRecording" }
         "403":
-          description: Refusé par l'Authorization Service (ou injoignable — fermé par défaut)
+          description: Pas d'utilisateur authentifié, ou refusé par l'Authorization Service
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: >
+            L'Authorization Service ne répond pas (fermé par défaut), ou la
+            lecture n'a pas pu être enregistrée dans l'audit : rien n'est
+            servi, et la réponse ne dit rien de l'enregistrement ni de la
+            panne (ADR-0022). La même lecture aboutit une fois la dépendance
+            revenue.
 
   /vault/accounts:
     get:

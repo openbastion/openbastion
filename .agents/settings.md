@@ -82,6 +82,16 @@ psql "$TEST_DATABASE_URL" -c "TRUNCATE policies, privileged_accounts, vault_secr
 
 Si tu ajoutes une table, ajoute-la à ce `TRUNCATE` **et** à celui du `Makefile`.
 
+**Autre environnement constaté (codespace `/workspaces/openbastion`, Go 1.27, `GOPATH=/go`)** : pas de service PostgreSQL, mais Docker et `psql` sont là. Une base de test locale équivalente :
+
+```sh
+docker start obpg 2>/dev/null || docker run -d --name obpg -e POSTGRES_USER=openbastion -e POSTGRES_PASSWORD=openbastion \
+  -e POSTGRES_DB=openbastion -p 127.0.0.1:5432:5432 postgres:16
+export GOWORK=$PWD/go.work TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
+```
+
+Le cache de modules y est vide au départ : `make build` le remplit (les tests d'intégration compilent avec `GOPROXY=off`).
+
 Réseau : accès restreint à une liste de domaines (registres de paquets, GitHub). Un refus se constate et se rapporte ; ne le contourne pas (`policies.md` §4.3).
 
 ## 8. Comptage et rapport des tests

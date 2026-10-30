@@ -52,6 +52,9 @@ func buildEnv(root string) []string {
 	return []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
+		// The module cache is where GOPATH says, which is not always $HOME/go (a
+		// container image often sets GOPATH=/go); empty means Go's own default.
+		"GOPATH=" + os.Getenv("GOPATH"),
 		"GOWORK=" + filepath.Join(root, "go.work"),
 		"GOPROXY=off",
 		"GOFLAGS=",

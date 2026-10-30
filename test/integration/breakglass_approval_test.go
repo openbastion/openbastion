@@ -105,7 +105,7 @@ func TestBreakGlassApproval_TwoPeopleForAnEmergencyAccess_AcrossEightRealProcess
 	audit := startService(t, root, auditBin, "18712")
 	authz := startService(t, root, authzBin, "18713")
 	authn := startService(t, root, authnBin, "18717", "SKIP_DEMO_SEED=1")
-	recorder := startService(t, root, recorderBin, "18719", "AUTHORIZATION_URL=http://127.0.0.1:18713")
+	recorder := startService(t, root, recorderBin, "18719", "AUTHORIZATION_URL=http://127.0.0.1:18713", "AUDIT_URL="+audit.baseURL)
 	spy := startAuditSpy(t, audit.baseURL)
 
 	startServiceWithExtraPort(t, root, sshProxyBin, "18715", "18716",

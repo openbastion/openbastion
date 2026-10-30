@@ -212,7 +212,7 @@ func TestRecordingFlow_InteractiveSessionIsRecordedAndReadableByAnAuditor_Across
 	startService(t, root, auditBin, "18502")
 	authz := startService(t, root, authzBin, "18503")
 	authn := startService(t, root, authnBin, "18507", "SKIP_DEMO_SEED=1")
-	startService(t, root, recorderBin, "18509", "AUTHORIZATION_URL=http://127.0.0.1:18503")
+	startService(t, root, recorderBin, "18509", "AUTHORIZATION_URL=http://127.0.0.1:18503", "AUDIT_URL=http://127.0.0.1:18502")
 	startServiceWithExtraPort(t, root, sshProxyBin, "18505", "18506",
 		"VAULT_URL=http://127.0.0.1:18501",
 		"AUDIT_URL=http://127.0.0.1:18502",

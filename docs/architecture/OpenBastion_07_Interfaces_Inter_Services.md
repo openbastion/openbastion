@@ -362,9 +362,12 @@ message StreamAck {
 
 // Lecture de l'enregistrement texte d'une session, par un auditeur — le
 // pendant « lecture » de StreamCommandEntries. Appelé par l'API Gateway, qui
-// transmet les rôles vérifiés du jeton (jamais ceux fournis par le client).
-// L'accès est décidé par le Command Recorder lui-même via Authorization :
-// action recording:session:read sur la ressource recording:session:{id}.
+// transmet l'utilisateur et les rôles vérifiés du jeton (jamais ceux fournis
+// par le client). L'accès est décidé par le Command Recorder lui-même via
+// Authorization : action recording:session:read sur la ressource
+// recording:session:{id}. Chaque page servie est un événement d'audit
+// recording.read au nom de actor_user_id, écrit avant d'être servie ; sans
+// cet événement, la page n'est pas servie (ADR-0022).
 service SessionRecordingQuery {
   rpc GetCommandRecording(GetCommandRecordingRequest) returns (GetCommandRecordingResponse);
 }
@@ -374,6 +377,7 @@ message GetCommandRecordingRequest {
   repeated string actor_roles = 2;
   int32 page = 3;       // < 1 est ramené à 1
   int32 page_size = 4;  // < 1 → 20 ; > 100 → 100 (comme les listes de la doc 05)
+  string actor_user_id = 5;  // l'utilisateur vérifié par le Gateway ; vide ⇒ refusé (ADR-0022)
 }
 
 message GetCommandRecordingResponse {

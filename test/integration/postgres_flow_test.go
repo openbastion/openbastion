@@ -536,7 +536,9 @@ func recorderGetCommands(t *testing.T, baseURL, sessionID, actorRoles string) (i
 // about what an error response does and does not contain.
 func recorderGetCommandsRaw(t *testing.T, baseURL, sessionID, actorRoles string) (int, recordingPage, string) {
 	t.Helper()
-	resp, err := http.Get(baseURL + "/recorder/v1/sessions/" + sessionID + "/commands?actorRoles=" + actorRoles)
+	// The Recorder is called here as the Gateway calls it: with the user who reads, without
+	// whom nothing is served (ADR-0022), and the roles of their token.
+	resp, err := http.Get(baseURL + "/recorder/v1/sessions/" + sessionID + "/commands?callerId=u_pg_auditor&actorRoles=" + actorRoles)
 	if err != nil {
 		t.Fatalf("get commands: %v", err)
 	}
@@ -613,8 +615,12 @@ func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.
 	root := repoRoot(t)
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-recorder-pg")
 	recorderBin := buildBinary(t, root, "./services/recording-audit/command-recorder/cmd/command-recorder", "command-recorder-pg")
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-recorder-pg")
 
 	authz := startService(t, root, authzBin, "18450")
+	// Every read of a recording is written to the audit before it is served (ADR-0022);
+	// in-memory is fine — this test only cares about the recording's persistence.
+	audit := startService(t, root, auditBin, "18454")
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "session-auditor", "recording:session:*", "allow")
 
 	sessionID := fmt.Sprintf("sess_pg_recorder_restart_%d", time.Now().UnixNano())
@@ -625,7 +631,7 @@ func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.
 	kekHex := testKMSKeyHex(t)
 
 	const secretCommand = "mysql -pCorrectHorseBatteryStaple-it"
-	recorder1 := startService(t, root, recorderBin, "18451", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kekHex)
+	recorder1 := startService(t, root, recorderBin, "18451", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kekHex, "AUDIT_URL="+audit.baseURL)
 	status, received := recorderPostEntries(t, recorder1.baseURL, []map[string]any{
 		{"session_id": sessionID, "ts": t0, "command": "uptime"},
 		// A NUL byte is valid JSON; the recorder strips it so a recording
@@ -642,7 +648,7 @@ func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.
 	// database, not in that process's memory.
 	stopService(t, recorder1)
 
-	recorder2 := startService(t, root, recorderBin, "18452", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kekHex)
+	recorder2 := startService(t, root, recorderBin, "18452", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kekHex, "AUDIT_URL="+audit.baseURL)
 	status, page := recorderGetCommands(t, recorder2.baseURL, sessionID, "session-auditor")
 	if status != http.StatusOK {
 		t.Fatalf("read on restarted process: status %d — the recording did not survive the restart via PostgreSQL", status)
@@ -691,7 +697,7 @@ func TestPostgresFlow_RecordingSurvivesCommandRecorderProcessRestart(t *testing.
 	})
 
 	t.Run("a recorder started with the wrong key fails the read, it does not return garbage", func(t *testing.T) {
-		wrong := startService(t, root, recorderBin, "18453", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+testKMSKeyHex(t))
+		wrong := startService(t, root, recorderBin, "18453", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+testKMSKeyHex(t), "AUDIT_URL="+audit.baseURL)
 		status, page, body := recorderGetCommandsRaw(t, wrong.baseURL, sessionID, "session-auditor")
 		if status != http.StatusInternalServerError {
 			t.Fatalf("expected 500 from a recorder holding the wrong key, got %d with %q", status, page.commands())
