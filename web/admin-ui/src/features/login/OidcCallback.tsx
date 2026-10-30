@@ -27,9 +27,11 @@ export function OidcCallback({ api, onToken, location }: { api: Api; onToken: (t
   }, [api, onToken, location]);
   return (
     <main className="login">
-      <h1>OpenBastion</h1>
-      {error ? <Notice error={error} /> : <p>Connexion en cours…</p>}
-      {error ? <a href="/ui/">Recommencer</a> : null}
+      <div className="login-card">
+        <h1>OpenBastion</h1>
+        {error ? <Notice error={error} /> : <p className="hint">Connexion en cours…</p>}
+        {error ? <a href="/ui/">Recommencer</a> : null}
+      </div>
     </main>
   );
 }

@@ -84,7 +84,7 @@ make run-<service>                # lance un service en local (mTLS par défaut 
 
 ## Environnement Base44 (sandbox de prévisualisation)
 
-Cet environnement n'est **pas** un déploiement : `docker-compose.base44.yml` fait tourner le dépôt **tel quel**, comme `make run-<service>` — chaque service Go est un `go run` sur le dépôt monté (`.:/src`), l'Admin UI est le serveur de dev Vite, et PostgreSQL, la PKI interne et le mTLS mutuel sont ceux de `deploy/docker-compose/` (ADR-0010, ADR-0033). Rien n'est précompilé dans une image : une modification est exécutée au prochain `go run`.
+Cet environnement n'est **pas** un déploiement : `deploy/base44/docker-compose.yml` fait tourner le dépôt **tel quel**, comme `make run-<service>` — chaque service Go est un `go run` sur le dépôt monté (`../..:/src`), l'Admin UI est le serveur de dev Vite, et PostgreSQL, la PKI interne et le mTLS mutuel sont ceux de `deploy/docker-compose/` (ADR-0010, ADR-0033). Rien n'est précompilé dans une image : une modification est exécutée au prochain `go run`.
 
 ```sh
 docker compose -f deploy/base44/docker-compose.yml up -d --build   # première fois

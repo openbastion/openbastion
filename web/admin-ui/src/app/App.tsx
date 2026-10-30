@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Api, claims } from "../shared/api";
 import { SignedInContext } from "../shared/session";
+import { BrandMark } from "../shared/BrandMark";
 import { Login } from "../features/login/Login";
 import { OidcCallback } from "../features/login/OidcCallback";
 import { Accounts } from "../features/accounts/Accounts";
@@ -23,6 +24,7 @@ export function App({ api = new Api(), location = window.location, navigate = (u
     setToken(null);
   }, [api]);
   const who = useMemo(() => (token ? claims(token) : null), [token]);
+  const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
 
   if (!token) {
     if (location.pathname.startsWith("/ui/oidc/callback")) return <OidcCallback api={api} onToken={onToken} location={location} />;
@@ -30,15 +32,22 @@ export function App({ api = new Api(), location = window.location, navigate = (u
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
-      <header>
-        <strong>OpenBastion</strong>
-        <nav>
+      <header className="app-header">
+        <div className="brand">
+          <BrandMark />
+          <span className="brand-name">OpenBastion</span>
+          <span className="brand-tag">Admin</span>
+        </div>
+        <nav aria-label="Sections">
           {(Object.keys(tabs) as Tab[]).map((t) => (
             <button type="button" key={t} aria-current={tab === t ? "page" : undefined} onClick={() => setTab(t)}>{tabs[t]}</button>
           ))}
         </nav>
-        <span className="who">{who?.username} {who?.roles.length ? `(${who.roles.join(", ")})` : ""}</span>
-        <button type="button" onClick={signOut}>Se déconnecter</button>
+        <div className="session-chip">
+          <span className="avatar" aria-hidden="true">{initials}</span>
+          <span className="who">{who?.username} {who?.roles.length ? `(${who.roles.join(", ")})` : ""}</span>
+          <button type="button" className="ghost" onClick={signOut}>Se déconnecter</button>
+        </div>
       </header>
       <main>
         {tab === "accounts" && <Accounts />}

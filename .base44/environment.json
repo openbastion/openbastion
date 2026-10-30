@@ -1,6 +1,6 @@
 {
   "previewPort": 3000,
   "healthPath": "/",
-  "startCommand": "docker compose -f deploy/dbase44/docker-compose.yml up -d",
+  "startCommand": "docker compose -f deploy/base44/docker-compose.yml up -d",
   "secrets": []
 }
