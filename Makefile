@@ -20,13 +20,14 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build test test-integration test-postgres vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+.PHONY: build test test-integration test-postgres test-compose vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
 ## Compile tous les modules actuellement implémentés.
 build:
 	$(GO) build \
 		./pkg/proxycore/... \
 		./pkg/mtls/... \
+		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
 		./services/access/api-gateway/... \
@@ -42,6 +43,7 @@ build:
 vet:
 	$(GO) vet ./pkg/proxycore/...
 	$(GO) vet ./pkg/mtls/...
+	$(GO) vet ./cli/openbastion-cli/...
 	$(GO) vet ./pkg/migrate/...
 	$(GO) vet ./pkg/refusalbudget/...
 	$(GO) vet ./services/access/api-gateway/...
@@ -61,6 +63,7 @@ test:
 	$(GO) test \
 		./pkg/proxycore/... \
 		./pkg/mtls/... \
+		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
 		./services/access/api-gateway/... \
@@ -121,6 +124,11 @@ test:
 ##                            `make test-postgres`
 test-integration:
 	$(GO) test ./test/integration/... -v -count=1 -timeout=300s
+
+## Construit et démarre la pile docker-compose réelle (deploy/docker-compose, ADR-0033) et
+## y joue le parcours du MVP sur les seuls ports publiés. Docker requis ; quelques minutes.
+test-compose:
+	COMPOSE_TEST=1 $(GO) test ./test/integration/ -run TestCompose -v -count=1 -timeout=900s
 
 ## Lance les tests PostgreSQL réels (postgres_store_test.go +
 ## postgres_flow_test.go). Nécessite une base PostgreSQL accessible via

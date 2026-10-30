@@ -1,6 +1,7 @@
 go 1.22
 
 use (
+	./cli/openbastion-cli
 	./pkg/mtls
 	./pkg/proxycore
 	./pkg/migrate

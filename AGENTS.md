@@ -55,6 +55,7 @@ make build vet                    # compile et analyse tous les modules
 make test                         # tests unitaires (hermétique ; les tests PostgreSQL se skippent sans base)
 make test-integration             # scénarios sur processus réels
 make test-postgres                # tests PostgreSQL réels (TEST_DATABASE_URL requis)
+make test-compose                 # pile docker-compose réelle et parcours du MVP (Docker requis, ADR-0033)
 make pki                          # autorité et identités de développement dans .pki/ (jamais commité, jamais archivé)
 make run-<service>                # lance un service en local (mTLS par défaut ; INTERNAL_TLS=disabled en dev)
 ```

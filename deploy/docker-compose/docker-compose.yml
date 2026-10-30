@@ -1,0 +1,212 @@
+# OpenBastion on one host (ADR-0033): eight services under mutual TLS, one database per service,
+# two ports published on 127.0.0.1. See deploy/docker-compose/README.md.
+#
+#   deploy/docker-compose/init.sh                       # once: draws the secrets into .env
+#   docker compose -f deploy/docker-compose/docker-compose.yml up -d --build
+name: openbastion
+
+x-service: &service
+  image: openbastion:dev
+  build:
+    context: ../..
+    dockerfile: deploy/docker-compose/Dockerfile
+    target: runtime
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [internal]
+  depends_on:
+    pki:
+      condition: service_completed_successfully
+    postgres:
+      condition: service_healthy
+
+x-tls: &tls
+  INTERNAL_TLS: required
+  TLS_CERT_FILE: /pki/cert.pem
+  TLS_KEY_FILE: /pki/key.pem
+  TLS_CA_FILE: /pki/ca.pem
+
+services:
+  # The certificate job: runs at every `up`, keeps the authority, renews the services'.
+  pki:
+    image: openbastion-tools:dev
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/Dockerfile
+      target: tools
+    entrypoint: ["/bin/sh", "/deploy/pki.sh"]
+    environment:
+      OB_CERT_TTL: ${OB_CERT_TTL:-720h}
+    volumes:
+      - pki-ca:/ca
+      - pki:/pki
+      - ./pki.sh:/deploy/pki.sh:ro
+    network_mode: none
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openbastion
+      POSTGRES_PASSWORD: ${PG_SUPERUSER_PASSWORD:?run deploy/docker-compose/init.sh first}
+      POSTGRES_DB: postgres
+      PG_PASSWORD_AUTHENTICATION: ${PG_PASSWORD_AUTHENTICATION:?}
+      PG_PASSWORD_AUTHORIZATION: ${PG_PASSWORD_AUTHORIZATION:?}
+      PG_PASSWORD_SESSION_BROKER: ${PG_PASSWORD_SESSION_BROKER:?}
+      PG_PASSWORD_PASSWORD_VAULT: ${PG_PASSWORD_PASSWORD_VAULT:?}
+      PG_PASSWORD_AUDIT_SERVICE: ${PG_PASSWORD_AUDIT_SERVICE:?}
+      PG_PASSWORD_COMMAND_RECORDER: ${PG_PASSWORD_COMMAND_RECORDER:?}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "openbastion", "-d", "postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  authentication:
+    <<: *service
+    entrypoint: ["/usr/local/bin/authentication"]
+    environment:
+      <<: *tls
+      PORT: "8086"
+      SKIP_DEMO_SEED: "1"
+      DATABASE_URL: postgres://authentication:${PG_PASSWORD_AUTHENTICATION}@postgres:5432/authentication?sslmode=disable
+      TOKEN_SIGNING_KEY_HEX: ${TOKEN_SIGNING_KEY_HEX:?}
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
+
+  authorization:
+    <<: *service
+    entrypoint: ["/usr/local/bin/authorization"]
+    environment:
+      <<: *tls
+      PORT: "8083"
+      DATABASE_URL: postgres://authorization:${PG_PASSWORD_AUTHORIZATION}@postgres:5432/authorization?sslmode=disable
+      BOOTSTRAP_ADMIN_ROLE: ${BOOTSTRAP_ADMIN_ROLE:-platform-admin}
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authorization}}
+
+  password-vault:
+    <<: *service
+    entrypoint: ["/usr/local/bin/password-vault"]
+    environment:
+      <<: *tls
+      PORT: "8081"
+      SKIP_DEMO_SEED: "1"
+      AUTHORIZATION_URL: https://authorization:8083
+      DATABASE_URL: postgres://password_vault:${PG_PASSWORD_PASSWORD_VAULT}@postgres:5432/password_vault?sslmode=disable
+      KMS_KEY_HEX: ${VAULT_KMS_KEY_HEX:?}
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: password-vault}}
+
+  audit-service:
+    <<: *service
+    entrypoint: ["/usr/local/bin/audit-service"]
+    environment:
+      <<: *tls
+      PORT: "8082"
+      DATABASE_URL: postgres://audit_service:${PG_PASSWORD_AUDIT_SERVICE}@postgres:5432/audit_service?sslmode=disable
+      AUDIT_CHAIN_KEY_HEX: ${AUDIT_CHAIN_KEY_HEX:?}
+      AUDIT_ANCHOR_FILE: /var/lib/openbastion/anchors/anchors.jsonl
+      # Retention (ADR-0032) is off unless both are set, e.g. AUDIT_RETENTION_MONTHS=12.
+      AUDIT_ARCHIVE_DIR: ${AUDIT_ARCHIVE_DIR:-}
+      AUDIT_RETENTION_MONTHS: ${AUDIT_RETENTION_MONTHS:-}
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: audit-service}}
+      - anchors:/var/lib/openbastion/anchors
+      - archives:/var/lib/openbastion/archives
+
+  command-recorder:
+    <<: *service
+    entrypoint: ["/usr/local/bin/command-recorder"]
+    environment:
+      <<: *tls
+      PORT: "8087"
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+      DATABASE_URL: postgres://command_recorder:${PG_PASSWORD_COMMAND_RECORDER}@postgres:5432/command_recorder?sslmode=disable
+      KMS_KEY_HEX: ${RECORDER_KMS_KEY_HEX:?}
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: command-recorder}}
+
+  ssh-proxy:
+    <<: *service
+    entrypoint: ["/usr/local/bin/ssh-proxy"]
+    environment:
+      <<: *tls
+      PORT: "8085"
+      SSH_PORT: "2222"
+      VAULT_URL: https://password-vault:8081
+      AUDIT_URL: https://audit-service:8082
+      RECORDER_URL: https://command-recorder:8087
+      RECORDING_POLICY: required
+    ports:
+      - "${OB_BIND:-127.0.0.1}:${OB_SSH_PORT:-2222}:2222"
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
+
+  session-broker:
+    <<: *service
+    entrypoint: ["/usr/local/bin/session-broker"]
+    environment:
+      <<: *tls
+      PORT: "8084"
+      AUTHORIZATION_URL: https://authorization:8083
+      VAULT_URL: https://password-vault:8081
+      AUDIT_URL: https://audit-service:8082
+      SSH_PROXY_URL: https://ssh-proxy:8085
+      DATABASE_URL: postgres://session_broker:${PG_PASSWORD_SESSION_BROKER}@postgres:5432/session_broker?sslmode=disable
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
+
+  api-gateway:
+    <<: *service
+    entrypoint: ["/usr/local/bin/api-gateway"]
+    environment:
+      <<: *tls
+      PORT: "8080"
+      AUTHENTICATION_URL: https://authentication:8086
+      AUTHORIZATION_URL: https://authorization:8083
+      SESSION_BROKER_URL: https://session-broker:8084
+      VAULT_URL: https://password-vault:8081
+      COMMAND_RECORDER_URL: https://command-recorder:8087
+    ports:
+      - "${OB_BIND:-127.0.0.1}:${OB_GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: api-gateway}}
+
+  # The operator's tool, under the admin-cli identity: docker compose run --rm cli …
+  cli:
+    <<: *service
+    restart: "no"
+    profiles: [cli]
+    entrypoint: ["/usr/local/bin/openbastion-cli"]
+    environment:
+      <<: *tls
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: admin-cli}}
+
+  # A pretend SSH target for the demonstration (profile demo): nothing typed is executed.
+  demo-ssh-target:
+    <<: *service
+    profiles: [demo]
+    entrypoint: ["/usr/local/bin/demo-ssh-target"]
+    depends_on: []
+    environment:
+      DEMO_TARGET_PASSWORD: ${DEMO_TARGET_PASSWORD:?}
+      DEMO_TARGET_PORT: "2022"
+
+volumes:
+  postgres:
+  pki:
+  pki-ca:
+  anchors:
+  archives:
+
+networks:
+  internal:

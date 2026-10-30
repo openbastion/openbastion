@@ -40,6 +40,7 @@ Chacun est tenu par du code et par des tests. Si une tâche semble exiger d'en a
 | ADR-0029 | **Pas d'ORM** : les magasins restent en `database/sql` et SQL écrit à la main, derrière les ports de domaine ; aucun ORM ni constructeur de requêtes (décision de Bony Kiss, option A de `OpenBastion_08_Analyse_ORM.md`). | Tous les magasins PostgreSQL. |
 | ADR-0031 | **`audit_events` n'est pas partitionné** (mesuré : plus d'unicité globale de l'id, insertion hors partition = audit arrêté, 41 s/M de conversion, lecture 2,3×) ; le DDL du doc 06 est une cible. | Audit Service (schéma). |
 | ADR-0032 | **Rétention par point de contrôle**, désactivée par défaut (`AUDIT_ARCHIVE_DIR` absolu + `AUDIT_RETENTION_MONTHS` 1–120, l'un sans l'autre fatal, demande `AUDIT_ANCHOR_FILE`) ; au démarrage puis toutes les heures, **mois civils entiers** plus vieux que la rétention, le plus ancien d'abord : `VerifyChain` complet (échec ⇒ rien ne bouge) → archive `audit-AAAA-MM.jsonl` (temporaire, `fsync`, `link` — jamais écrasée —, relue, SHA-256) → `Checkpoint` dans le fichier d'ancres (`kind: checkpoint`, MAC `openbastion.audit.checkpoint.v1`, `PrevHash` = `LastHash` du précédent, `AnchorsCovered`) → événement `audit.archived` (émetteur `audit-service`) → `DeleteThrough` (transaction, nombre exact). `VerifyChain` repart du point de contrôle dont `LastHash` = `prev_hash` du premier événement (sinon `409` « start of the chain was cut ») ; les `AnchorsCovered` premières ancres peuvent manquer ; reprise d'un point de contrôle aux événements encore présents. Les ancres gardent leur format. | Audit Service (`archive.go`, `archive_file.go`, `anchor_file.go`, `DeleteThrough`, `main.go` `archiveEvery`). |
+| ADR-0033 | **Déploiement `docker-compose`** : une image (`golang:1.23-alpine` → `distroless/static-debian12:nonroot`, 65532), **mTLS obligatoire**, conteneurs nommés comme leur identité (le certificat porte ce nom DNS) ; **autorité et sa clé dans le volume `pki-ca`, monté par le seul job `pki`** ; chaque service ne monte que **son** sous-répertoire du volume `pki` (`subpath`, lecture seule) ; une base et un rôle par service (`REVOKE … FROM PUBLIC`, identifiants entre guillemets : `authorization` est réservé) ; `SKIP_DEMO_SEED=1` partout ; seuls la Gateway et le port SSH du proxy publiés, sur `127.0.0.1` ; premiers utilisateurs par `cli user create` (mot de passe sur l'entrée standard). Le test `compose_test.go` est le critère de sortie n° 3 du MVP. | `deploy/docker-compose/`, `cli/openbastion-cli/`, `test/integration/cmd/demo-ssh-target`. |
 | ADR-0010 | L'identité de l'appelant vient du certificat, jamais du corps de la requête ; chaque route a sa liste d'appelants, refus par défaut. | `pkg/mtls`, un `internal/interfaces/callers.go` par service. |
 | — | L'audit est fail-closed : un événement qui ne peut pas être écrit empêche l'action. | Broker, proxy. |
 | — | Les défauts sont les plus stricts ; le comportement faible se demande **par son nom**, et une valeur inconnue est fatale. | `RECORDING_POLICY`, `INTERNAL_TLS`, `BREAKGLASS_*` (dont `BREAKGLASS_APPROVAL`) ; `BREAKGLASS_NOTIFY_URL` absente = pas de notification, annoncé au démarrage, et une valeur inutilisable est fatale ; `BREAKGLASS_MAX_PENDING_PER_REQUESTER` (1 à 100, pas d'« illimité ») et `BREAKGLASS_NOTIFY_SECRET` (32 octets au moins, sans URL = fatal) : hors bornes, fatal ; `SESSION_REQUEST_BURST` (1 à 1000) et `SESSION_REQUEST_RATE_PER_MINUTE` (1 à 600) du Gateway : pas d'« illimité », hors bornes fatal, annoncés au démarrage ; `SESSION_ACTION_BURST` (1 à 1000) et `SESSION_ACTION_RATE_PER_MINUTE` (1 à 600) : idem, pour `approve`, `reject`, `connect` ; `CLIENT_LOGIN_BURST` (1 à 100), `CLIENT_LOGIN_RATE_PER_MINUTE` (1 à 60), `CLIENT_REQUEST_BURST` (1 à 10000), `CLIENT_REQUEST_RATE_PER_MINUTE` (1 à 6000) : idem ; `TRUSTED_PROXY_CIDRS` absente = personne n'est de confiance (annoncé), une valeur douteuse est fatale. |
@@ -48,7 +49,7 @@ Chacun est tenu par du code et par des tests. Si une tâche semble exiger d'en a
 
 ```
 go.work                          workspace Go : un module par composant (ADR-0002)
-Makefile                         build, vet, test, test-integration, test-postgres, pki, run-*
+Makefile                         build, vet, test, test-integration, test-postgres, test-compose, pki, run-*
 NOTES_SANDBOX.md                 journal des écarts, découvertes, limites, état des tests — à tenir à jour
 README.md
 .agents/  AGENTS.md              ce dossier
@@ -70,7 +71,9 @@ services/
     audit-service/               journal chaîné par hash, signé
     command-recorder/            replay texte, chiffrement enveloppe AES-256-GCM
 proto/                           contrats Protobuf (doc 07) — la forme des messages
-test/integration/                scénarios sur processus réels (binaires compilés, ports 18xxx)
+cli/openbastion-cli/             outil d'exploitation sous l'identité admin-cli : user create, audit verify-chain (ADR-0033) ; stdlib + pkg/mtls
+deploy/docker-compose/           Dockerfile (une image, tous les binaires, distroless non root), docker-compose.yml (mTLS, une base par service, 2 ports sur 127.0.0.1), init.sh (secrets → .env 0600, jamais écrasé), pki.sh, postgres-init.sh — ADR-0033
+test/integration/                scénarios sur processus réels (binaires compilés, ports 18xxx) ; compose_test.go sous COMPOSE_TEST=1 ; cmd/demo-ssh-target (cible SSH de démonstration)
 docs/
   architecture/                  docs 00–07 numérotés ; les ADR sont consolidés dans le doc 03
   api/                           OpenAPI (doc 05)

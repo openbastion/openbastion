@@ -92,6 +92,8 @@ export GOWORK=$PWD/go.work TEST_DATABASE_URL="postgres://openbastion:openbastion
 
 Le cache de modules y est vide au départ : `make build` le remplit (les tests d'intégration compilent avec `GOPROXY=off`).
 
+**Docker Compose dans ce codespace (constaté le 30 octobre 2026, ADR-0033)** : les images se construisent et les conteneurs démarrent, mais **deux conteneurs d'un même réseau Compose ne se joignent pas** (`pg_isready -h postgres` depuis un autre conteneur : « no response »). Cause mesurée : une table `iptables-legacy` restée active a la politique `FORWARD DROP` et n'accepte que `docker0`, alors que Docker gère ses réseaux `br-…` en nftables. Rendre le trafic possible demande de toucher au pare-feu de l'hôte (`iptables-legacy -I FORWARD 1 -i br-+ -o br-+ -j ACCEPT`) : **c'est à l'utilisateur de le décider**, ne le fais pas de toi-même. Sans cela, `COMPOSE_TEST=1` ne peut pas passer ici.
+
 Réseau : accès restreint à une liste de domaines (registres de paquets, GitHub). Un refus se constate et se rapporte ; ne le contourne pas (`policies.md` §4.3).
 
 ## 8. Comptage et rapport des tests

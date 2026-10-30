@@ -47,7 +47,16 @@ vault:
   kmsKeyRef: "arn:aws:kms:eu-west-3:xxx:key/xxx"   # ou équivalent HSM on-premise
 ```
 
-**Docker Compose (petit site on-premise, développement)** : voir `deploy/docker-compose/docker-compose.yml` (doc 02 §6) — non recommandé pour un environnement de production au-delà d'un pilote.
+**Docker Compose (petit site on-premise, développement)** : `deploy/docker-compose/` (ADR-0033, mode d'emploi dans son `README.md`) — non recommandé pour un environnement de production au-delà d'un pilote. **C'est aujourd'hui le seul déploiement qui existe dans le dépôt** : les charts Helm ci-dessus sont la cible, pas encore écrits.
+
+```sh
+deploy/docker-compose/init.sh       # une fois : tire les secrets dans deploy/docker-compose/.env (0600) ; refuse d'écraser
+docker compose -f deploy/docker-compose/docker-compose.yml up -d --build --wait
+echo "$MOT_DE_PASSE" | docker compose -f deploy/docker-compose/docker-compose.yml run --rm -T cli \
+  user create -authn https://authentication:8086 -username alice -roles platform-admin,vault-admin
+```
+
+Ce que la pile garantit, et que `make test-compose` vérifie : mTLS entre tous les services ; une base et un rôle par service, aucun rôle n'ouvre la base d'un autre ; chaque service ne voit que son certificat et sa clé, **jamais la clé de l'autorité** (volume `pki-ca`, monté par le seul job `pki`) ; seuls l'API publique et le port SSH du proxy sont publiés, sur `127.0.0.1` (`OB_BIND` pour changer) ; aucun compte de démonstration ; aucun secret dans les journaux. **Le fichier `.env` est à sauvegarder hors de l'hôte** : ses clés rendent lisibles la chaîne d'audit, le Vault et les enregistrements. Les certificats des services sont renouvelés à chaque `up` (720 h par défaut, `OB_CERT_TTL`).
 
 ## 3. Configuration initiale
 
@@ -405,6 +414,7 @@ L'Audit Service écrit périodiquement une **ancre** — l'identifiant et le has
 | PostgreSQL (comptes, politiques, sessions, audit) | Snapshot + WAL continu | Continu |
 | MinIO (enregistrements, *v1.0*) | Réplication de bucket | Continu |
 | Clé KMS/HSM | **Jamais dans la même sauvegarde que les données chiffrées** | Selon la politique du KMS externe |
+| Le fichier `deploy/docker-compose/.env` d'une installation Compose (ADR-0033) | **Hors de l'hôte**, chiffré, jamais dans git : il porte les clés du Vault, du Recorder, de la chaîne et de signature des jetons | À l'installation, puis à chaque rotation |
 | Archives de l'audit (`AUDIT_ARCHIVE_DIR`, ADR-0032) | Un stockage en ajout seul (WORM), avec la durée de conservation légale, **pas avec les sauvegardes de la base** ; ce qu'elles contiennent n'est plus en base | À chaque archive (horaire au plus) |
 | Fichier d'ancres de la chaîne (`AUDIT_ANCHOR_FILE`, ADR-0028) | **Jamais avec les sauvegardes de la base** : restaurer les deux ensemble rendrait une réécriture indétectable ; copie en ajout seul (WORM) | Continu (réplication du fichier) |
 | Clés de la chaîne d'audit (`AUDIT_CHAIN_KEY_HEX` et les précédentes, ADR-0027) | **Hors de la base et hors de ses sauvegardes** ; une clé perdue rend invérifiable l'histoire qu'elle a signée | À chaque rotation, conservées toute la rétention de l'audit |

@@ -1,0 +1,4 @@
+.git
+.pki
+**/.env
+deploy/docker-compose/.env
