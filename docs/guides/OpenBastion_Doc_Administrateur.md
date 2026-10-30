@@ -387,6 +387,17 @@ L'Audit Service écrit périodiquement une **ancre** — l'identifiant et le has
 - **`AUDIT_ANCHOR_INTERVAL_SECONDS`** — période d'ancrage, **60** par défaut, de 1 à 3600 (hors bornes : refus de démarrer). Une ancre n'est écrite que si la tête a avancé. **Ce qui a été écrit depuis la dernière ancre** peut encore être tronqué sans être vu : la période est la fenêtre d'exposition.
 - Un échec d'écriture d'une ancre n'arrête pas l'audit (les événements restent signés) : une ligne de journal par épisode (« anchoring the head of the chain failed »), puis « works again ».
 
+### Rétention : archiver les vieux mois hors de la base (ADR-0032)
+
+**Désactivée par défaut** : sans les deux variables suivantes, rien ne quitte jamais `audit_events`. Activée, l'Audit Service archive, au démarrage puis toutes les heures, les **mois civils entiers** plus vieux que la rétention, le plus ancien d'abord, un à la fois. Pour chaque mois, il **vérifie toute la chaîne** (événements et ancres), écrit l'archive, la **relit**, ajoute un **point de contrôle** sous la clé de chaîne au fichier d'ancres, écrit l'événement `audit.archived` dans la chaîne, puis seulement supprime le mois de la base. `verify-chain` repart ensuite du dernier point de contrôle.
+
+- **`AUDIT_ARCHIVE_DIR`** — répertoire **absolu**, existant, où sont écrites les archives `audit-AAAA-MM.jsonl` (un événement par ligne, tous les champs, droits 0600, jamais écrasées). Comme le fichier d'ancres, **hors de la portée de la base** : un autre volume, idéalement un stockage objet ou un montage en ajout seul (WORM) avec la durée de conservation légale.
+- **`AUDIT_RETENTION_MONTHS`** — nombre de mois gardés en base, **de 1 à 120** (hors bornes : refus de démarrer). Avec 12 au 15 mars 2027, les mois jusqu'à février 2026 inclus sont archivés.
+- Les deux vont ensemble (l'une sans l'autre : refus de démarrer), et demandent `AUDIT_ANCHOR_FILE` (les points de contrôle y sont gardés).
+- **Si la chaîne ne se vérifie pas, rien n'est archivé ni supprimé** : une ligne de journal par épisode (« archiving stopped, nothing more leaves the database »), réessai à l'heure suivante.
+- **Détruire une archive** à la fin de la durée légale se fait par le stockage (cycle de vie, rétention WORM), jamais par le service. La chaîne en base reste vérifiable sans elle ; ce qu'elle contenait n'est plus consultable.
+- **Un retour à un binaire d'avant ADR-0032** sur un fichier d'ancres qui contient des points de contrôle fait répondre `verify-chain` en `409` (« not an anchor ») : ce binaire ne connaît pas ces lignes.
+
 ## 8. Sauvegardes
 
 | Donnée | Où | Fréquence recommandée |
@@ -394,6 +405,7 @@ L'Audit Service écrit périodiquement une **ancre** — l'identifiant et le has
 | PostgreSQL (comptes, politiques, sessions, audit) | Snapshot + WAL continu | Continu |
 | MinIO (enregistrements, *v1.0*) | Réplication de bucket | Continu |
 | Clé KMS/HSM | **Jamais dans la même sauvegarde que les données chiffrées** | Selon la politique du KMS externe |
+| Archives de l'audit (`AUDIT_ARCHIVE_DIR`, ADR-0032) | Un stockage en ajout seul (WORM), avec la durée de conservation légale, **pas avec les sauvegardes de la base** ; ce qu'elles contiennent n'est plus en base | À chaque archive (horaire au plus) |
 | Fichier d'ancres de la chaîne (`AUDIT_ANCHOR_FILE`, ADR-0028) | **Jamais avec les sauvegardes de la base** : restaurer les deux ensemble rendrait une réécriture indétectable ; copie en ajout seul (WORM) | Continu (réplication du fichier) |
 | Clés de la chaîne d'audit (`AUDIT_CHAIN_KEY_HEX` et les précédentes, ADR-0027) | **Hors de la base et hors de ses sauvegardes** ; une clé perdue rend invérifiable l'histoire qu'elle a signée | À chaque rotation, conservées toute la rétention de l'audit |
 
@@ -451,6 +463,9 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |
 | `POST /sessions` renvoie `403` de façon inattendue | Politique manquante ou `resourcePattern` mal formé (§5) | Lister les politiques du rôle concerné via `GET /policies` |
 | `verify-chain` répond `409` « anchor … names event …, which is not in the chain », « … does not have the hash it was anchored with », « reordered » ou « its MAC does not match » | La chaîne en base ne correspond plus à ce qui a été ancré hors d'elle (ADR-0028) : réécrite, tronquée, ou le fichier d'ancres a été modifié | Traiter comme une falsification : conserver la base **et** le fichier d'ancres en l'état, comparer avec la copie WORM du fichier, enquêter sur les accès en écriture |
+| `verify-chain` répond `409` « the chain starts at event …, which follows an event no checkpoint vouches for » | Les premiers événements en base ont été supprimés sans être archivés (ADR-0032), ou le point de contrôle qui les justifie a été retiré du fichier d'ancres | Incident de sécurité : comparer la base à la dernière sauvegarde et le fichier d'ancres à sa réplique |
+| `verify-chain` répond `409` « checkpoint … its MAC does not match » ou « does not follow the checkpoint before it » | Un point de contrôle du fichier d'ancres a été modifié, retiré ou déplacé | Incident de sécurité : restaurer le fichier d'ancres depuis sa réplique |
+| Le journal dit « archiving stopped, nothing more leaves the database » | La chaîne ne se vérifie pas, ou l'archive ne peut pas être écrite ou relue telle qu'écrite, ou une archive de même nom existe avec un autre contenu | Lire la cause sur la même ligne ; rien n'a été supprimé. Réessai automatique toutes les heures |
 | Un service refuse de démarrer : « migration NNN_….sql of … was changed after it was applied » | Le texte d'une migration déjà appliquée diffère de celui du binaire (fichier modifié après publication), ou la ligne de `schema_migrations` a été modifiée (ADR-0030) | Ne pas « corriger » le checksum à la main : revenir au binaire dont la migration a été appliquée, et signaler le défaut ; une correction de schéma est toujours une **nouvelle** migration |
 | Un service refuse de démarrer : « migration NNN_….sql of …: … » (une erreur SQL) | Cette migration a échoué ; elle a été annulée en entier (transaction), les précédentes restent appliquées | Lire l'erreur SQL, corriger la cause (droits, données), redémarrer : la migration est rejouée |
 | Une requête échoue sur « column … does not exist » ou « relation … does not exist » alors que le service a démarré | Une table, une colonne ou un index a été supprimé à la main : depuis ADR-0030, `001_init.sql` n'est plus rejoué à chaque démarrage et ne le recrée plus | Restaurer ; ou supprimer la ligne du service dans `schema_migrations` (`DELETE … WHERE component = '<service>'`) et redémarrer : `001_init.sql`, idempotent, est rejoué |

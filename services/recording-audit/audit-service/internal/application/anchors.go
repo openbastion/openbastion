@@ -13,9 +13,13 @@ import (
 
 // AnchorSink is where anchors are kept (ADR-0028): somewhere the database does not control.
 // Append adds one at the end and nothing else; All returns them in the order they were added.
+//
+// The same place keeps the checkpoints of the archives (ADR-0032), in the same order.
 type AnchorSink interface {
 	Append(ctx context.Context, a domain.Anchor) error
 	All(ctx context.Context) ([]domain.Anchor, error)
+	AppendCheckpoint(ctx context.Context, c domain.Checkpoint) error
+	Checkpoints(ctx context.Context) ([]domain.Checkpoint, error)
 }
 
 // WithAnchors makes the service anchor its chain to sink and verify the chain against it.
@@ -81,14 +85,10 @@ func anchorMAC(key []byte, a domain.Anchor) []byte {
 // is genuine, names an event that is still in the chain with the same hash, and the anchors
 // follow the chain's order. A chain rewritten — even entirely, in a format with no key — or
 // cut before an anchored event fails here.
-func (s *AuditService) verifyAnchors(ctx context.Context, events []*domain.Event) error {
-	if s.anchors == nil {
-		return nil
-	}
-	anchors, err := s.anchors.All(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrAnchorsUnavailable, err)
-	}
+//
+// The first `archived` anchors name events that a checkpoint says were archived (ADR-0032):
+// they may be absent from the chain; when present (not yet deleted) they are checked as any.
+func (s *AuditService) verifyAnchors(ctx context.Context, events []*domain.Event, anchors []domain.Anchor, archived int) error {
 	position := make(map[string]int, len(events))
 	for i, e := range events {
 		position[e.ID] = i
@@ -103,6 +103,9 @@ func (s *AuditService) verifyAnchors(ctx context.Context, events []*domain.Event
 			return fmt.Errorf("anchor %d: its MAC does not match — the anchor was tampered with", i)
 		}
 		at, present := position[a.EventID]
+		if !present && i < archived {
+			continue
+		}
 		if !present {
 			return fmt.Errorf("anchor %d names event %s, which is not in the chain — the chain was cut or rewritten", i, a.EventID)
 		}

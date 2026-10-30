@@ -2,14 +2,14 @@ package infrastructure
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
 )
 
-// InMemoryStore is an append-only in-memory log for local development and
-// tests. A PostgreSQL-backed implementation against the partitioned
-// audit_events table (doc 06 §3) is the natural next increment.
+// InMemoryStore is an in-memory log for local development and tests: append-only, except that
+// archived events leave from its start (ADR-0032).
 type InMemoryStore struct {
 	mu     sync.Mutex
 	events []*domain.Event
@@ -39,4 +39,20 @@ func (s *InMemoryStore) All(ctx context.Context) ([]*domain.Event, error) {
 	out := make([]*domain.Event, len(s.events))
 	copy(out, s.events)
 	return out, nil
+}
+
+// DeleteThrough removes the events from the first through lastID, if they are exactly expected.
+func (s *InMemoryStore) DeleteThrough(ctx context.Context, lastID string, expected int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, e := range s.events {
+		if e.ID == lastID {
+			if i+1 != expected {
+				return fmt.Errorf("deleting through %s would remove %d events, not %d: nothing deleted", lastID, i+1, expected)
+			}
+			s.events = append([]*domain.Event(nil), s.events[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("event %s is not in the chain: nothing deleted", lastID)
 }

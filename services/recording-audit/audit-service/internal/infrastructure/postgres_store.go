@@ -11,6 +11,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 
 	_ "github.com/lib/pq"
@@ -92,6 +93,31 @@ func (s *PostgresStore) All(ctx context.Context) ([]*domain.Event, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// DeleteThrough removes, in one transaction, the events from the first through lastID — and
+// only if they are exactly `expected` events (ADR-0032): otherwise nothing is deleted.
+func (s *PostgresStore) DeleteThrough(ctx context.Context, lastID string, expected int) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var seq int64
+	if err := tx.QueryRowContext(ctx, `SELECT seq FROM audit_events WHERE id = $1`, lastID).Scan(&seq); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("event %s is not in the chain: nothing deleted", lastID)
+		}
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM audit_events WHERE seq <= $1`, seq)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != int64(expected) {
+		return fmt.Errorf("deleting through %s would remove %d events, not %d: nothing deleted", lastID, n, expected)
+	}
+	return tx.Commit()
 }
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.

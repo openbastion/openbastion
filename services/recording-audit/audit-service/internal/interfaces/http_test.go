@@ -107,6 +107,10 @@ func (unreadableAnchors) Append(context.Context, domain.Anchor) error { return n
 func (unreadableAnchors) All(context.Context) ([]domain.Anchor, error) {
 	return nil, errors.New("open /secret/path/anchors.jsonl: permission denied")
 }
+func (unreadableAnchors) AppendCheckpoint(context.Context, domain.Checkpoint) error { return nil }
+func (unreadableAnchors) Checkpoints(context.Context) ([]domain.Checkpoint, error) {
+	return nil, errors.New("open /secret/path/anchors.jsonl: permission denied")
+}
 
 // Anchors that cannot be read are a 503, not a verdict, and the path stays in the log (ADR-0028).
 func TestHTTP_VerifyChainWithUnreadableAnchorsIs503(t *testing.T) {

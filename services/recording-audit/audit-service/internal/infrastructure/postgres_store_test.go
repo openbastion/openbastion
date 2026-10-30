@@ -202,3 +202,51 @@ func TestPostgresStore_HashVersionEmitterAndKeyRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// DeleteThrough removes the start of the chain through an event, in one transaction, and only
+// the number of events the caller expects (ADR-0032) — otherwise nothing.
+func TestPostgresStore_DeleteThrough_TheStartExactlyOrNothing(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	// The whole table is the chain: start from an empty one, as the integration tests do.
+	if _, err := db.ExecContext(ctx, `TRUNCATE audit_events RESTART IDENTITY`); err != nil {
+		t.Fatal(err)
+	}
+	store := infrastructure.NewPostgresStore(db)
+	run := uniqueID("delete")
+	ids := make([]string, 4)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("%s-evt-%d", run, i)
+		if err := store.Append(ctx, &domain.Event{ID: ids[i], Timestamp: time.Now().UTC(), Action: "test.delete",
+			ResourceType: "chain-test", ResourceID: run, Success: true, Hash: []byte{byte(i)}, HashVersion: domain.HashV3}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func() int {
+		all, err := store.All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(all)
+	}
+	for name, try := range map[string]func() error{
+		"fewer expected than there are": func() error { return store.DeleteThrough(ctx, ids[2], 2) },
+		"more expected than there are":  func() error { return store.DeleteThrough(ctx, ids[2], 4) },
+		"an event that is not there":    func() error { return store.DeleteThrough(ctx, "evt_nowhere", 1) },
+	} {
+		if err := try(); err == nil {
+			t.Fatalf("%s: no error", name)
+		}
+		if n := count(); n != 4 {
+			t.Fatalf("%s: %d events left, want 4 — nothing deleted", name, n)
+		}
+	}
+	if err := store.DeleteThrough(ctx, ids[2], 3); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := store.All(ctx)
+	if len(all) != 1 || all[0].ID != ids[3] {
+		t.Fatalf("left %v, want only the last event", all)
+	}
+	_, _ = db.ExecContext(ctx, `TRUNCATE audit_events RESTART IDENTITY`)
+}

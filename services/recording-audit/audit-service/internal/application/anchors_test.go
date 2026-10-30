@@ -15,8 +15,24 @@ import (
 )
 
 type memoryAnchors struct {
-	list []domain.Anchor
-	err  error
+	list        []domain.Anchor
+	checkpoints []domain.Checkpoint
+	err         error
+}
+
+func (m *memoryAnchors) AppendCheckpoint(_ context.Context, c domain.Checkpoint) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.checkpoints = append(m.checkpoints, c)
+	return nil
+}
+
+func (m *memoryAnchors) Checkpoints(context.Context) ([]domain.Checkpoint, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return append([]domain.Checkpoint(nil), m.checkpoints...), nil
 }
 
 func (m *memoryAnchors) Append(_ context.Context, a domain.Anchor) error {

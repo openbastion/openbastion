@@ -19,13 +19,15 @@ import (
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
 )
 
-// Store is the append-only persistence port. A PostgreSQL-backed
-// implementation matching the partitioned audit_events table (doc 06 §3)
-// is the natural next increment; nothing here depends on it directly.
+// Store is the persistence port: append-only, except that what has been verified and archived
+// (ADR-0032) leaves from the start of the chain.
 type Store interface {
 	Append(ctx context.Context, e *domain.Event) error
 	Last(ctx context.Context) (*domain.Event, error) // nil, nil if the chain is empty
 	All(ctx context.Context) ([]*domain.Event, error)
+	// DeleteThrough removes the events from the first one through lastID, in one transaction,
+	// and only if they are exactly `expected` events — otherwise nothing (ADR-0032).
+	DeleteThrough(ctx context.Context, lastID string, expected int) error
 }
 
 // AuditService computes the hash chain itself — a caller never supplies or
@@ -47,6 +49,9 @@ type AuditService struct {
 	// tip is the last event THIS process appended, with the hash it computed (guarded by mu):
 	// what an anchor names, rather than what the store says at the time of the anchor.
 	tip *domain.Event
+
+	// archive moves verified months out of the database (ADR-0032); nil = never.
+	archive *archiving
 }
 
 func NewAuditService(store Store) *AuditService {
@@ -176,7 +181,7 @@ func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action
 		// returns, InMemoryStore's untruncated precision notwithstanding
 		// (it never had a precision mismatch to begin with, so this is a
 		// no-op for it).
-		ID: nextID(), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: actorID,
+		ID: nextID(), Timestamp: s.now().UTC().Truncate(time.Microsecond), ActorID: actorID,
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
 		Success: success, PrevHash: prevHash, HashVersion: domain.HashV3,
 		Emitter: emitter, KeyID: s.keys.current,
@@ -200,8 +205,25 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var prevHash []byte
+	var anchors []domain.Anchor
+	var checkpoints []domain.Checkpoint
+	if s.anchors != nil {
+		if anchors, err = s.anchors.All(ctx); err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrAnchorsUnavailable, err)
+		}
+		if checkpoints, err = s.anchors.Checkpoints(ctx); err != nil {
+			return fmt.Errorf("%w: %v", domain.ErrAnchorsUnavailable, err)
+		}
+	}
+	start, err := s.startOfChain(events, checkpoints)
+	if err != nil {
+		return err
+	}
+	prevHash := start.LastHash
 	version := domain.HashV1
+	if start.LastVersion > version {
+		version = start.LastVersion
+	}
 	for i, e := range events {
 		// Versions only move forward (ADR-0026): once an event is v2, every later one is, so
 		// that a later event cannot be passed off in the weaker format.
@@ -234,7 +256,10 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 		}
 		prevHash = e.Hash
 	}
-	return s.verifyAnchors(ctx, events)
+	if err := s.checkpointsAgree(events, checkpoints); err != nil {
+		return err
+	}
+	return s.verifyAnchors(ctx, events, anchors, start.AnchorsCovered)
 }
 
 // computeHash computes an event's hash in the unkeyed format its HashVersion names (v1, v2).

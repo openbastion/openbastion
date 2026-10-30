@@ -91,6 +91,30 @@ func main() {
 		log.Printf("audit-service: in-memory chain, not anchored (dev/test only)")
 	}
 
+	// Months older than the retention leave the database, verified, archived and checkpointed
+	// (ADR-0032). Off unless both variables are set: nothing is ever taken out by default.
+	archiveDir, retention := os.Getenv("AUDIT_ARCHIVE_DIR"), os.Getenv("AUDIT_RETENTION_MONTHS")
+	switch {
+	case archiveDir == "" && retention == "":
+		log.Printf("audit-service: no retention — nothing ever leaves the audit database (AUDIT_ARCHIVE_DIR and AUDIT_RETENTION_MONTHS unset)")
+	case archiveDir == "" || retention == "":
+		log.Fatalf("audit-service: AUDIT_ARCHIVE_DIR and AUDIT_RETENTION_MONTHS go together (one is set without the other) — refusing to start")
+	case os.Getenv("AUDIT_ANCHOR_FILE") == "":
+		log.Fatalf("audit-service: AUDIT_ARCHIVE_DIR needs AUDIT_ANCHOR_FILE: the checkpoints of the archives are kept with the anchors — refusing to start")
+	default:
+		months, err := strconv.Atoi(retention)
+		if err != nil || months < 1 || months > 120 {
+			log.Fatalf("audit-service: AUDIT_RETENTION_MONTHS must be a number of months between 1 and 120, got %q", retention)
+		}
+		archiver, err := infrastructure.NewFileArchiver(archiveDir)
+		if err != nil {
+			log.Fatalf("audit-service: AUDIT_ARCHIVE_DIR: %v — refusing to start", err)
+		}
+		svc.WithArchive(archiver, months)
+		go archiveEvery(svc, time.Hour)
+		log.Printf("audit-service: months older than %d are archived to %s, hourly (verified first; a checkpoint is kept with the anchors)", months, archiveDir)
+	}
+
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
@@ -126,5 +150,26 @@ func anchorEvery(svc *application.AuditService, every time.Duration) {
 			log.Printf("audit-service: anchoring the head of the chain works again")
 		}
 		failing = false
+	}
+}
+
+// archiveEvery archives what is due at start and at every tick. A refusal is written once per
+// episode: the events stay in the database, verified again next time.
+func archiveEvery(svc *application.AuditService, every time.Duration) {
+	failing := false
+	for {
+		names, err := svc.ArchiveDue(context.Background())
+		for _, name := range names {
+			log.Printf("audit-service: archived %s (verified, written, read back, checkpointed, then deleted from the database)", name)
+		}
+		switch {
+		case err != nil && !failing:
+			log.Printf("audit-service: archiving stopped, nothing more leaves the database (written once until it works again): %v", err)
+			failing = true
+		case err == nil && failing:
+			log.Printf("audit-service: archiving works again")
+			failing = false
+		}
+		time.Sleep(every)
 	}
 }
