@@ -21,7 +21,8 @@ name: openbastion
 x-go: &go
   image: openbastion:base44-dev
   build:
-    context: .
+    # Paths in this file are relative to its own directory (deploy/base44/).
+    context: ../..
     dockerfile: deploy/base44/Dockerfile
   restart: on-failure
   working_dir: /src
@@ -54,10 +55,10 @@ services:
     environment:
       OB_CERT_TTL: 720h
     volumes:
-      - .:/src
+      - ../..:/src
       - pki-ca:/ca
       - pki:/pki
-      - ./deploy/docker-compose/pki.sh:/deploy/pki.sh:ro
+      - ../../deploy/docker-compose/pki.sh:/deploy/pki.sh:ro
     # The certificate job touches no network at all (it inherits `networks` from the anchor).
     networks: []
     network_mode: none
@@ -72,7 +73,7 @@ services:
       <<: *db-passwords
     volumes:
       - postgres:/var/lib/postgresql/data
-      - ./deploy/docker-compose/postgres-init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+      - ../../deploy/docker-compose/postgres-init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "openbastion", "-d", "postgres"]
       interval: 3s
@@ -89,7 +90,7 @@ services:
       DATABASE_URL: postgres://authentication:ob-dev-authentication@postgres:5432/authentication?sslmode=disable
       TOKEN_SIGNING_KEY_HEX: 2239acb116a20ab72fe698d0fbf018a7180072508ab7ce0ab7e9040615956892
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
     depends_on:
       postgres: {condition: service_healthy}
@@ -110,7 +111,7 @@ services:
       DATABASE_URL: postgres://authorization:ob-dev-authorization@postgres:5432/authorization?sslmode=disable
       BOOTSTRAP_ADMIN_ROLE: platform-admin
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authorization}}
     depends_on:
       postgres: {condition: service_healthy}
@@ -132,7 +133,7 @@ services:
       AUDIT_CHAIN_KEY_HEX: d9ca615ccfc46eeac66997c9a31d89c164228270b0d1ab311368d3f1bd994687
       AUDIT_ANCHOR_FILE: /var/lib/openbastion/anchors/anchors.jsonl
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: audit-service}}
       - anchors:/var/lib/openbastion/anchors
     depends_on:
@@ -159,7 +160,7 @@ services:
       # onboards the demonstration account through the public API instead.
       SKIP_DEMO_SEED: "1"
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: password-vault}}
     depends_on:
       postgres: {condition: service_healthy}
@@ -184,7 +185,7 @@ services:
       AUTHORIZATION_URL: https://authorization:8083
       AUDIT_URL: https://audit-service:8082
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: command-recorder}}
     depends_on:
       postgres: {condition: service_healthy}
@@ -210,7 +211,7 @@ services:
       RECORDER_URL: https://command-recorder:8087
       RECORDING_POLICY: required
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
     depends_on:
       pki: {condition: service_completed_successfully}
@@ -236,7 +237,7 @@ services:
       AUDIT_URL: https://audit-service:8082
       SSH_PROXY_URL: https://ssh-proxy:8085
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
     depends_on:
       postgres: {condition: service_healthy}
@@ -270,7 +271,7 @@ services:
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: api-gateway}}
     ports:
       - "8080:8080"
@@ -309,7 +310,7 @@ services:
       - BASE44_SANDBOX_HOST_DOMAIN
       - BASE44_PUBLIC_HOST_SUFFIX
     volumes:
-      - ./web/admin-ui:/app
+      - ../../web/admin-ui:/app
       - node_modules:/app/node_modules
     ports:
       - "3000:3000"
@@ -343,7 +344,7 @@ services:
       OPERATOR_USERNAME: operator
       OPERATOR_PASSWORD: openbastion-demo
     volumes:
-      - .:/src
+      - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: admin-cli}}
     depends_on:
       pki: {condition: service_completed_successfully}

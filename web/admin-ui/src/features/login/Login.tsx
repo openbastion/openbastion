@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Api } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
+import { BrandMark } from "../../shared/BrandMark";
 
 // Login: a local account (POST /auth/login), or the organisation's provider (ADR-0035).
 export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: string) => void; navigate: (url: string) => void }) {
@@ -38,21 +39,29 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
 
   return (
     <main className="login">
-      <h1>OpenBastion</h1>
-      <form onSubmit={local} aria-label="Connexion locale">
-        <label>
-          Utilisateur
-          <input name="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
-        </label>
-        <label>
-          Mot de passe
-          <input name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-        </label>
-        <button type="submit" disabled={busy}>Se connecter</button>
-      </form>
-      <p className="or">ou</p>
-      <button type="button" onClick={federated} disabled={busy}>Se connecter avec le fournisseur d'identité</button>
-      <Notice error={error} />
+      <div className="login-card">
+        <div className="login-head">
+          <BrandMark />
+          <div>
+            <h1>OpenBastion</h1>
+            <p className="login-sub">Console d'administration des accès privilégiés</p>
+          </div>
+        </div>
+        <form onSubmit={local} aria-label="Connexion locale">
+          <label>
+            Utilisateur
+            <input name="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          </label>
+          <label>
+            Mot de passe
+            <input name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </label>
+          <button type="submit" className="primary" disabled={busy}>Se connecter</button>
+        </form>
+        <p className="or">ou</p>
+        <button type="button" onClick={federated} disabled={busy}>Se connecter avec le fournisseur d'identité</button>
+        <Notice error={error} />
+      </div>
     </main>
   );
 }
