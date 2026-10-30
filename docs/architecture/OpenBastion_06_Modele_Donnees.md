@@ -271,6 +271,8 @@ CREATE TABLE idempotency_keys (
 | `connection_ticket_hash` et non le ticket lui-même | Le Session Broker ne doit pouvoir vérifier qu'un ticket a été émis, jamais le rejouer — cohérent avec ADR-0003. |
 | Clé étrangère `actor_id` nullable sur `audit_events` | Les actions systèmes (rotation planifiée par le Scheduler, expiration automatique) doivent être auditées même sans acteur humain. |
 
+**Accès aux données** : chaque magasin est écrit en `database/sql` et SQL explicite, derrière un port de domaine. L'opportunité d'un ORM est analysée dans `OpenBastion_08_Analyse_ORM.md` (recommandation : pas d'ORM complet ; sqlc ou sqlx en option ; des migrations versionnées d'abord).
+
 ## 5. Extensions prévues (v1.0, hors périmètre de ce document)
 
 Ces tables seront détaillées dans une révision ultérieure de ce document, au moment de leur implémentation — elles sont esquissées ici pour anticiper les clés étrangères et éviter une migration douloureuse :
