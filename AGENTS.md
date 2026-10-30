@@ -96,7 +96,7 @@ docker compose -f docker-compose.base44.yml restart authentication   # après un
 |---|---|
 | Entrée de la prévisualisation | `http://localhost:3000` — serveur Vite, qui relaie `/auth`, `/sessions`, `/vault`, `/policies`, `/healthz` vers la Gateway : l'UI reste sur **une seule origine**, comme en production |
 | API publique | `http://localhost:8080` (Gateway, HTTP clair pour les porteurs de jeton ; mTLS vers les autres services) |
-| Compte créé au premier démarrage | `operator` / `openbastion-demo` (rôles `platform-admin,vault-admin`) — service `seed`, qui suit le parcours documenté dans `deploy/docker-compose/README.md` : utilisateur par la CLI, puis une politique et un compte privilégié par l'API publique. Idempotent : si `operator` peut se connecter, il ne fait rien |
+| Compte créé au premier démarrage | `operator` / `openbastion-demo` (rôles `platform-admin,vault-admin`) — service `seed`, qui suit le parcours documenté dans `deploy/docker-compose/README.md` : utilisateur par la CLI, puis une politique et un compte privilégié par l'API publique. Idempotent : si `operator` peut se connecter, il ne fait rien. Il ne s'arrête pas après le seed (une sortie de service compte comme un service arrêté pour la supervision du sandbox) : il reste vivant, `docker compose -f docker-compose.base44.yml restart seed` rejoue le seed |
 | Clés et mots de passe de base | valeurs de **développement locales**, écrites en clair dans le fichier compose ; une vraie installation tire les siennes avec `deploy/docker-compose/init.sh` |
 | Services externes | aucun : ni OIDC, ni fournisseur tiers — rien à demander à l'utilisateur |
 

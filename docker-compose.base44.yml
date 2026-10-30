@@ -9,7 +9,7 @@
 #
 # Entry point: the Admin UI on host port 3000 (it proxies /auth, /sessions, /vault, /policies to
 # the API Gateway, so the UI keeps ONE origin as in production). The public API itself is on
-# host port 8080. The one-shot `seed` service creates the first operator (no user exists on a
+# host port 8080. The idempotent `seed` service creates the first operator (no user exists on a
 # new installation) — its credentials are OPERATOR_USERNAME/OPERATOR_PASSWORD below.
 #
 # The keys and database passwords below are LOCAL DEVELOPMENT VALUES generated for this sandbox.
@@ -329,10 +329,13 @@ services:
 
   # First run only: the operator account (CLI), then one policy and one privileged account
   # through the public API, so the preview shows a live installation rather than an empty one.
+  # The script is idempotent, so this service seeds and then idles: the sandbox health check
+  # reads a service that exits as a stopped one, so it marks its work done in /tmp and stays up
+  # (a plain `docker compose restart seed` seeds again).
   seed:
     <<: *go
-    restart: "no"
-    command: ["sh", "/src/deploy/base44/seed.sh"]
+    command:
+      ["sh", "-ec", "sh /src/deploy/base44/seed.sh && touch /tmp/openbastion-seeded && exec sleep infinity"]
     environment:
       <<: *go-env
       GATEWAY_URL: http://api-gateway:8080
@@ -346,6 +349,13 @@ services:
       pki: {condition: service_completed_successfully}
       authentication: {condition: service_healthy}
       api-gateway: {condition: service_healthy}
+    healthcheck:
+      # The only state this job has: its seeding ran to completion.
+      test: ["CMD", "test", "-f", "/tmp/openbastion-seeded"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 240s
 
 volumes:
   postgres:
