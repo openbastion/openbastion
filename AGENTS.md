@@ -87,16 +87,16 @@ make run-<service>                # lance un service en local (mTLS par défaut 
 Cet environnement n'est **pas** un déploiement : `docker-compose.base44.yml` fait tourner le dépôt **tel quel**, comme `make run-<service>` — chaque service Go est un `go run` sur le dépôt monté (`.:/src`), l'Admin UI est le serveur de dev Vite, et PostgreSQL, la PKI interne et le mTLS mutuel sont ceux de `deploy/docker-compose/` (ADR-0010, ADR-0033). Rien n'est précompilé dans une image : une modification est exécutée au prochain `go run`.
 
 ```sh
-docker compose -f docker-compose.base44.yml up -d --build   # première fois
-docker compose -f docker-compose.base44.yml up -d           # ensuite
-docker compose -f docker-compose.base44.yml restart authentication   # après une modification Go
+docker compose -f deploy/base44/docker-compose.yml up -d --build   # première fois
+docker compose -f deploy/base44/docker-compose.yml up -d           # ensuite
+docker compose -f deploy/base44/docker-compose.yml restart authentication   # après une modification Go
 ```
 
 | Élément | Valeur |
 |---|---|
 | Entrée de la prévisualisation | `http://localhost:3000` — serveur Vite, qui relaie `/auth`, `/sessions`, `/vault`, `/policies`, `/healthz` vers la Gateway : l'UI reste sur **une seule origine**, comme en production |
 | API publique | `http://localhost:8080` (Gateway, HTTP clair pour les porteurs de jeton ; mTLS vers les autres services) |
-| Compte créé au premier démarrage | `operator` / `openbastion-demo` (rôles `platform-admin,vault-admin`) — service `seed`, qui suit le parcours documenté dans `deploy/docker-compose/README.md` : utilisateur par la CLI, puis une politique et un compte privilégié par l'API publique. Idempotent : si `operator` peut se connecter, il ne fait rien. Il ne s'arrête pas après le seed (une sortie de service compte comme un service arrêté pour la supervision du sandbox) : il reste vivant, `docker compose -f docker-compose.base44.yml restart seed` rejoue le seed |
+| Compte créé au premier démarrage | `operator` / `openbastion-demo` (rôles `platform-admin,vault-admin`) — service `seed`, qui suit le parcours documenté dans `deploy/docker-compose/README.md` : utilisateur par la CLI, puis une politique et un compte privilégié par l'API publique. Idempotent : si `operator` peut se connecter, il ne fait rien. Il ne s'arrête pas après le seed (une sortie de service compte comme un service arrêté pour la supervision du sandbox) : il reste vivant, `docker compose -f deploy/base44/docker-compose.yml restart seed` rejoue le seed |
 | Clés et mots de passe de base | valeurs de **développement locales**, écrites en clair dans le fichier compose ; une vraie installation tire les siennes avec `deploy/docker-compose/init.sh` |
 | Services externes | aucun : ni OIDC, ni fournisseur tiers — rien à demander à l'utilisateur |
 
