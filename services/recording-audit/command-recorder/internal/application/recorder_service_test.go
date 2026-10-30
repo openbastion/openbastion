@@ -559,7 +559,7 @@ func TestGetRecording_OnlyARefusalOfPolicyIsARefusalOnTheRecord(t *testing.T) {
 	_, _, _ = svc.GetRecording(ctx, "u_bob", []string{"dba"}, "s1", 1, 20)
 	authz.err = nil
 	asked := len(authz.resources)
-	for _, bad := range []string{"", strings.Repeat("x", maxSessionIDBytes+1), "s\xff1"} {
+	for _, bad := range []string{"", strings.Repeat("x", maxSessionIDBytes+1), "s\xff1", "s\n1", "s\x1b1"} {
 		for _, roles := range [][]string{{"dba"}, auditor} {
 			if _, _, err := svc.GetRecording(ctx, "u_bob", roles, bad, 1, 20); !errors.Is(err, domain.ErrNotASessionID) {
 				t.Fatalf("%q: want ErrNotASessionID, got %v", bad, err)

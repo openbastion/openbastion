@@ -682,7 +682,7 @@ paths:
         `RECORDING_READ_AUDIT_BURST`, 10, puis
         `RECORDING_READ_AUDIT_RATE_PER_MINUTE`, 6 par minute) ; la réponse ne
         dépend jamais du budget ni de l'audit. Un identifiant qui ne peut pas
-        être celui d'une session (vide, plus de 256 octets, pas UTF-8) est un
+        être celui d'une session (vide, plus de 256 octets, pas UTF-8, un caractère de contrôle — ADR-0025) est un
         400, avant toute question et sans événement. Le refus (403) est le même que la session
         existe ou non, et une session sans commande enregistrée donne un
         enregistrement vide (200), pas un 404 : l'API ne permet pas de

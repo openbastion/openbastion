@@ -12,6 +12,11 @@ service AuditIngestion {
   rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
 }
 
+// Bornes (ADR-0025) : action 1 à 64 octets [a-z0-9_.] ; resource_type 1 à 64
+// octets [a-z0-9_] ; resource_id 1 à 256 octets, l'auteur (actor_user_id du
+// contexte) 0 à 256 octets, UTF-8 sans caractère de contrôle ; corps HTTP
+// d'au plus 16 Kio. Hors bornes : INVALID_ARGUMENT (400 ; 413 pour le corps),
+// rien n'est ajouté à la chaîne, et la réponse ne répète pas la valeur.
 message EmitEventRequest {
   openbastion.common.v1.RequestContext context = 1;
   string action = 2;              // ex. "session.connect", "vault.rotate"

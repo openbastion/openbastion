@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
 )
@@ -36,7 +38,67 @@ func NewAuditService(store Store) *AuditService {
 	return &AuditService{store: store}
 }
 
+// The bounds of what an event may hold (ADR-0025). They are wider than anything an emitter
+// writes today — actions such as session.breakglass_requested, the resource type "session",
+// identifiers the Broker makes or the Recorder bounds to 256 bytes — and narrow enough that
+// the trail is not a place to store what one likes.
+const (
+	MaxNameBytes = 64  // action, resource type
+	MaxIDBytes   = 256 // actor, resource id
+)
+
+// validate says why an event cannot be taken, naming the field and the rule — never the value,
+// which is the caller's and may be anything.
+func validate(actorID, action, resourceType, resourceID string) error {
+	if err := checkName("action", action, true); err != nil {
+		return err
+	}
+	if err := checkName("resource_type", resourceType, false); err != nil {
+		return err
+	}
+	if err := checkID("resource_id", resourceID, true); err != nil {
+		return err
+	}
+	// An empty actor is a system action (a proxy, the Scheduler): allowed.
+	return checkID("actor_id", actorID, false)
+}
+
+// checkName: 1 to 64 bytes of a-z, 0-9 and _, with dots too when dotted is set.
+func checkName(field, v string, dotted bool) error {
+	if v == "" || len(v) > MaxNameBytes {
+		return fmt.Errorf("%w: %s must be 1 to %d bytes", domain.ErrInvalidEvent, field, MaxNameBytes)
+	}
+	for _, c := range v {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || dotted && c == '.') {
+			return fmt.Errorf("%w: %s may hold only a-z, 0-9, _%s", domain.ErrInvalidEvent, field, map[bool]string{true: " and .", false: ""}[dotted])
+		}
+	}
+	return nil
+}
+
+// checkID: at most 256 bytes of UTF-8 without control characters (a newline in an identifier
+// is a forged line in whatever log prints it).
+func checkID(field, v string, required bool) error {
+	if required && v == "" || len(v) > MaxIDBytes {
+		return fmt.Errorf("%w: %s must be %s to %d bytes", domain.ErrInvalidEvent, field, map[bool]string{true: "1", false: "0"}[required], MaxIDBytes)
+	}
+	if !utf8.ValidString(v) {
+		return fmt.Errorf("%w: %s must be UTF-8", domain.ErrInvalidEvent, field)
+	}
+	for _, c := range v {
+		if unicode.IsControl(c) {
+			return fmt.Errorf("%w: %s may not hold a control character", domain.ErrInvalidEvent, field)
+		}
+	}
+	return nil
+}
+
+// EmitEvent appends one event to the chain. An event no emitter can mean is refused
+// (domain.ErrInvalidEvent) before the chain is touched (ADR-0025).
 func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) (*domain.Event, error) {
+	if err := validate(actorID, action, resourceType, resourceID); err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

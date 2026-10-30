@@ -9,6 +9,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/pkg/refusalbudget"
@@ -208,7 +209,7 @@ func (s *RecorderService) GetRecording(ctx context.Context, callerID string, act
 	// What cannot be a session — the bound Record applies — is refused before anything: it
 	// is the same answer for everyone, and no read of it, served or refused, may write a
 	// string the caller chose into the signed trail (ADR-0024).
-	if sessionID == "" || len(sessionID) > maxSessionIDBytes || !utf8.ValidString(sessionID) {
+	if !usableSessionID(sessionID) {
 		return nil, 0, domain.ErrNotASessionID
 	}
 	if callerID == "" {
@@ -236,6 +237,21 @@ func (s *RecorderService) GetRecording(ctx context.Context, callerID string, act
 		return nil, 0, fmt.Errorf("%w (recording the read: %v)", domain.ErrUnavailable, err)
 	}
 	return entries, total, nil
+}
+
+// usableSessionID is what a read may name (ADR-0024, ADR-0025): 1 to 256 bytes of UTF-8
+// without a control character — the bounds the Audit Service holds an identifier to, so that
+// nothing the Recorder would write is refused there.
+func usableSessionID(id string) bool {
+	if id == "" || len(id) > maxSessionIDBytes || !utf8.ValidString(id) {
+		return false
+	}
+	for _, c := range id {
+		if unicode.IsControl(c) {
+			return false
+		}
+	}
+	return true
 }
 
 // auditRefusedRead writes the refusal of a read to the audit, under the name of the one who
