@@ -990,6 +990,17 @@ Bony Kiss a choisi l'option A de l'analyse ORM (`docs/architecture/OpenBastion_0
 5. **Un schéma abîmé à la main n'est plus réparé au démarrage** (une table, une colonne ou un index supprimés) : la version 1 est enregistrée et n'est plus rejouée. Trouvé par la vérification complète : 25 tests PostgreSQL du Session Broker et un test d'intégration de l'Audit Service fabriquaient une « ancienne base » en retirant une colonne ou un index **sans** retirer la ligne de `schema_migrations` — ce qu'aucune vraie base d'avant ADR-0030 n'a. Ils retirent maintenant aussi cette ligne ; leurs affirmations n'ont pas changé.
 6. Le partitionnement mensuel d'`audit_events` et `idempotency_keys` (doc 06 §3) n'ont toujours pas d'équivalent dans le code ; ils ont maintenant une place (une migration numérotée).
 
+## Pas de partitionnement d'`audit_events` (ADR-0031), la rétention d'abord (ADR-0032, proposé)
+
+J'avais proposé comme étape suivante le partitionnement mensuel d'`audit_events` (doc 06 §3). Je l'ai mesuré avant de l'écrire, sur PostgreSQL 16, dans un schéma jetable :
+- `UNIQUE (id)` et `PRIMARY KEY (seq)` sont refusés sur une table partitionnée par `ts` ; avec `UNIQUE (id, ts)`, le même identifiant entre deux fois, dans deux mois ;
+- une insertion hors de toute partition échoue, et l'audit est fail-closed ;
+- la conversion prend 41 s par million d'événements, sous le verrou de migration ;
+- `verify-chain` lit la chaîne 2,3 fois plus lentement (1,0 s → 2,3 s pour un million d'événements) ;
+- et retirer une vieille partition casse la chaîne et les ancres, exactement comme retirer des lignes.
+
+J'ai donc arrêté et demandé. Bony Kiss a choisi « la rétention d'abord » : ADR-0031 (Accepté) écarte le partitionnement ; ADR-0032 (**Proposé**, aucun code) conçoit une rétention par mois entiers vérifiés, archivés hors de la base, avec un point de contrôle sous la clé de chaîne ajouté au fichier d'ancres, d'où `verify-chain` repart. Deux documents étaient faux et sont corrigés (barrés) : le Guide Sécurité §9 (« archiver par partition plutôt que par ligne n'affaiblit pas la chaîne » — les deux la cassent ; et « la chaîne n'a pas de clé », périmé depuis ADR-0027) ; le doc 06 dit maintenant que son DDL d'`audit_events` est une cible, pas le schéma réel. Le commentaire en tête de `001_init.sql` annonce encore le partitionnement : il **n'est pas corrigé**, parce que ce fichier est figé (ADR-0030, son checksum est en base) — c'est l'ADR qui fait foi.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

@@ -113,10 +113,10 @@ C'est la zone de plus forte sensibilité du système — seul point où un secre
 
 ## 9. Sécurité de l'audit
 
-- **Immutabilité** : chaînage par hash (doc 06 §4) — une altération d'un événement passé casse la chaîne, détectable par vérification périodique, **à deux conditions** : l'attaquant ne recalcule pas tous les événements suivants (la chaîne n'a pas de clé, §12), et l'événement a été écrit au format 2 (ADR-0026 ; un événement antérieur reste sensible à un déplacement d'octets entre deux champs voisins).
+- **Immutabilité** : chaînage par hash (doc 06 §4) — une altération d'un événement passé casse la chaîne, détectable par vérification périodique, **à deux conditions** : l'attaquant ne recalcule pas tous les événements suivants (~~la chaîne n'a pas de clé, §12~~ — elle en a une depuis ADR-0027, et sa tête est ancrée hors de la base depuis ADR-0028), et l'événement a été écrit au format 2 (ADR-0026 ; un événement antérieur reste sensible à un déplacement d'octets entre deux champs voisins).
 - **Signature** : chaque événement est signé par la clé de service de l'émetteur (`AuditIngestion.EmitEvent`, doc 07 §7), permettant de prouver *qui* a émis l'événement, indépendamment de la base de données elle-même.
 - **Séparation des droits** : le service qui écrit dans `audit_events` ne doit pas être le même compte technique que celui qui peut modifier un rôle ou une politique — évite qu'un même compromis puisse à la fois agir et effacer ses traces.
-- **Rétention** : partitionnement mensuel (doc 06 §3) permettant un archivage réglementaire par partition entière plutôt qu'une purge ligne à ligne, qui affaiblirait la chaîne de hash.
+- **Rétention** : ~~partitionnement mensuel (doc 06 §3) permettant un archivage réglementaire par partition entière plutôt qu'une purge ligne à ligne, qui affaiblirait la chaîne de hash.~~ Faux : retirer une partition casse la chaîne exactement comme retirer des lignes (ADR-0031, qui écarte le partitionnement). **Aujourd'hui, rien n'est jamais retiré d'`audit_events`** ; la rétention proposée (ADR-0032) archive des mois entiers vérifiés hors de la base et ajoute au fichier d'ancres un point de contrôle sous la clé de chaîne, d'où `verify-chain` repart.
 
 ## 10. Durcissement du déploiement
 

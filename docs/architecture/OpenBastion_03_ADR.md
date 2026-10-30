@@ -44,6 +44,8 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | ADR-0028 | La tête de la chaîne d'audit est ancrée hors de la base, et la chaîne se vérifie contre ses ancres | Accepté |
 | ADR-0029 | L'accès aux données reste en `database/sql` et SQL écrit à la main ; pas d'ORM | Accepté |
 | ADR-0030 | Des migrations de schéma versionnées, appliquées une fois, sous verrou, et dont le texte appliqué ne change plus | Accepté |
+| ADR-0031 | `audit_events` n'est pas partitionné tant qu'une rétention ne garde pas la chaîne vérifiable | Accepté |
+| ADR-0032 | Archiver la chaîne d'audit hors de la base sans la rendre invérifiable : un point de contrôle ancré | Proposé |
 
 ---
 
@@ -1154,6 +1156,68 @@ Chacun des six services applique à **chaque démarrage** la totalité de son `m
 - **golang-migrate, goose** : éprouvés, mais une dépendance par service, et rien qu'ils apportent ici ne manque à une centaine de lignes de bibliothèque standard (`policies.md` §4.1).
 - **Garder `001_init.sql` rejoué à chaque démarrage** : laisse la course mesurée et l'absence de version.
 - **Appliquer les migrations par un outil séparé, avant le déploiement** : plus de contrôle pour l'exploitant, mais un service qui démarrerait sur un schéma en retard ; possible plus tard en ajoutant un mode « vérifier seulement » au même code.
+
+---
+
+## ADR-0031 — `audit_events` n'est pas partitionné tant qu'une rétention ne garde pas la chaîne vérifiable
+
+**Contexte**
+Le doc 06 §3 prévoit `audit_events` partitionné par mois (`PARTITION BY RANGE (ts)`), pour garder les index performants et pour archiver « par partition entière ». `001_init.sql` ne l'a jamais fait. ADR-0030 donnait enfin sa place à une migration non additive ; avant de l'écrire, j'ai mesuré sur PostgreSQL 16, dans un schéma jetable :
+
+- **Plus d'unicité globale** : `UNIQUE (id)` et `PRIMARY KEY (seq)` sont refusés sur une table partitionnée par `ts` (« unique constraint on partitioned table must include all partitioning columns ») ; avec `UNIQUE (id, ts)`, **le même identifiant est accepté deux fois**, dans deux mois.
+- **Une insertion hors de toute partition échoue** (« no partition of relation … found for row »). L'audit est fail-closed : une partition manquante arrêterait toute action auditée de la plateforme.
+- **La conversion d'une table existante** : **41 s par million d'événements**, en une transaction, sous le verrou de migration — l'Audit Service, donc l'audit de toute la plateforme, est indisponible pendant ce temps.
+- **Lire toute la chaîne** (`ORDER BY seq`, ce que fait `verify-chain`) : **1,0 s → 2,3 s** pour un million d'événements ; `Last` (`ORDER BY seq DESC LIMIT 1`) devient un `Merge Append` sur toutes les partitions, parce que `seq` n'est pas la clé de partition.
+- **Le bénéfice attendu n'existe pas encore** : supprimer une vieille partition casse `verify-chain` (le premier événement restant a un `prev_hash` que plus rien ne justifie) et les ancres d'ADR-0028 qui nomment les événements supprimés. Partitionner ne sert à archiver qu'une fois une rétention qui garde la chaîne vérifiable conçue — ce qui manque.
+
+Bony Kiss a choisi « la rétention d'abord ».
+
+**Décision**
+1. `audit_events` reste une table non partitionnée ; aucune migration de partitionnement n'est écrite.
+2. La rétention est conçue d'abord (ADR-0032), sans dépendre du partitionnement.
+3. Le partitionnement reviendra si un volume **mesuré** le justifie, avec ce que cet ADR a trouvé : unicité de l'identifiant gardée à part, partition par défaut ou partitions créées à l'avance, conversion hors du chemin de démarrage.
+
+**Conséquences**
+- (+) Aucune des quatre régressions mesurées.
+- (−) Le doc 06 §3 décrit un DDL cible qui n'est pas le schéma réel : il le dit maintenant.
+- (−) Le volume d'`audit_events` n'est pas borné tant qu'ADR-0032 n'est pas implémenté.
+
+**Alternatives envisagées**
+- **Partitionner quand même** (clé `(seq, ts)`, table d'identifiants pour l'unicité, partition par défaut, partitions créées par le service) : écarté par le propriétaire — tout le coût, aucun bénéfice avant la rétention.
+- **Partitionner par `seq`** : garderait `PRIMARY KEY (seq)` et `Last`, mais une partition par plage de numéros ne correspond à aucune durée de rétention.
+
+---
+
+## ADR-0032 — Archiver la chaîne d'audit hors de la base sans la rendre invérifiable : un point de contrôle ancré
+
+**Contexte**
+Une rétention est un besoin réglementaire (garder N ans, puis détruire) et un besoin d'exploitation (borner la base). Aujourd'hui, retirer des événements d'`audit_events` — par ligne ou par partition — rend la chaîne invérifiable : `verify-chain` part du premier événement, dont `prev_hash` doit être vide, et les ancres d'ADR-0028 doivent nommer des événements présents. Le Guide Sécurité §9 dit qu'archiver par partition plutôt que par ligne évite d'« affaiblir la chaîne » : c'est faux, les deux la cassent de la même façon. Il manque un moyen de dire, hors de la base et sous la clé : « tout ce qui précède tel événement a été vérifié puis archivé là ».
+
+**Décision** *(proposée)*
+1. **Désactivé par défaut.** Activé par `AUDIT_ARCHIVE_DIR` (chemin absolu, répertoire existant, idéalement un autre volume en ajout seul / WORM) et `AUDIT_RETENTION_MONTHS` (durée gardée en base, de 1 à 120, obligatoire avec le répertoire ; hors bornes, fatal). Sans eux, rien n'est jamais retiré de la base, comme aujourd'hui.
+2. **Ce qui s'archive** : des **mois civils entiers**, les plus anciens, plus vieux que la rétention, un mois à la fois, dans l'ordre de la chaîne (`seq`) — jamais un trou au milieu.
+3. **Rien ne s'archive sans être vérifié** : avant chaque mois, `VerifyChain` complet (événements et ancres) ; s'il échoue, rien n'est archivé ni supprimé, une ligne de journal par épisode, et l'on réessaie à la période suivante.
+4. **L'archive** : un fichier `audit-AAAA-MM.jsonl` par mois (un événement par ligne, tous les champs tels qu'en base, hash compris), écrit dans un fichier temporaire, `fsync`, renommé, répertoire `fsync`, **relu et son SHA-256 recalculé** avant d'aller plus loin. Jamais écrasé : un fichier de même nom déjà présent et différent arrête l'archivage.
+5. **Le point de contrôle** est ajouté au **fichier d'ancres** (ADR-0028 : hors de la base, que la base ne contrôle pas) : `{kind: "checkpoint", archive, sha256, count, first_id, last_id, last_hash, last_version, anchors_covered, key_id, at, mac}`, `mac = HMAC(clé de chaîne, "openbastion.audit.checkpoint.v1" 0x00 ‖ champs encadrés)`. `anchors_covered` est le nombre d'ancres qui nomment des événements archivés : elles forment un préfixe de la liste des ancres, puisque les ancres suivent l'ordre de la chaîne et que l'archive en est un préfixe.
+6. **Un événement `audit.archived`** (`resource_type = audit`, `resource_id` = nom de l'archive, émetteur l'Audit Service) est écrit dans la chaîne **avant** la suppression : l'archivage lui-même est audité.
+7. **Puis la suppression**, en une transaction : `DELETE … WHERE seq <= <seq du dernier événement archivé>`.
+8. **`verify-chain` repart du dernier point de contrôle** : le premier événement en base doit avoir `prev_hash` = `last_hash` du dernier point de contrôle (ou être vide s'il n'y en a pas) ; la règle « une version ne recule pas » repart de `last_version` ; les `anchors_covered` premières ancres peuvent nommer des événements absents (archivés), les suivantes doivent être dans la chaîne. Un premier événement que rien ne justifie → `409` (« the chain starts at … which no checkpoint vouches for »).
+9. **Reprise après une panne** : un point de contrôle dont les événements sont encore en base (panne entre 5 et 7) est repris — archive relue et comparée, puis suppression ; ces événements se vérifient normalement en attendant.
+10. **Détruire une archive** (fin de la durée légale) relève du stockage (rétention WORM, cycle de vie), pas du service : la chaîne en base reste vérifiable sans elle, grâce au point de contrôle. Une archive se vérifie hors ligne avec la clé, du `last_hash` du point de contrôle précédent au sien (un outil, incrément suivant).
+
+**Conséquences** *(attendues, à prouver)*
+- (+) La base est bornée à la rétention, et la chaîne restante reste vérifiable contre ses ancres.
+- (+) Tronquer le **début** de la chaîne en base reste détecté : sans point de contrôle authentique qui le justifie, un premier événement au `prev_hash` non vide est un `409`, comme aujourd'hui.
+- (−) La clé de chaîne signe aussi les points de contrôle : la perdre rend leur vérification impossible, comme pour les ancres.
+- (−) Écrire un faux point de contrôle demande la clé : tenir la base et le fichier d'ancres ne suffit pas. Qui tient l'hôte de l'Audit Service (donc la clé) le peut : même limite qu'ADR-0028.
+- (−) Une archive détruite ne se vérifie plus, par construction ; ce qu'elle contenait n'est plus consultable.
+- (−) L'archivage d'un mois lit et vérifie toute la chaîne restante : son coût croît avec la rétention gardée en base.
+
+**Alternatives envisagées**
+- **Supprimer sans point de contrôle** : rend la chaîne invérifiable — c'est ce que le Guide Sécurité promettait d'éviter.
+- **Point de contrôle dans la base** : la base aurait un pouvoir sur ce qui la contredit (même motif qu'ADR-0028).
+- **Archiver par une commande d'exploitant** plutôt que périodiquement : possible, mais un deuxième processus qui écrit `audit.archived` ferait bifurquer la chaîne (Audit Service en instance unique) ; il faudrait une route interne et une identité d'exploitant qui n'existent pas.
+- **Garder tout en base** : simple, mais ni borné ni conforme à une obligation de destruction.
 
 ---
 
