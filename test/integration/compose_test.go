@@ -169,7 +169,21 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		}
 	}
 	targetSecret := secrets["DEMO_TARGET_PASSWORD"]
-	if status := gatewayOnboardAccount(t, gatewayURL, adminToken, accountID, "compose-account", "root", "demo-ssh-target:2022", targetSecret); status != http.StatusCreated {
+	// The target's host key, read where an administrator reads it — out of band, here the
+	// target's own log — and pinned at onboarding (ADR-0039).
+	var demoHostKey string
+	for _, line := range strings.Split(run("", "logs", "--no-color", "demo-ssh-target"), "\n") {
+		if _, k, ok := strings.Cut(line, "demo-ssh-target host key: "); ok {
+			demoHostKey = strings.TrimSpace(k)
+		}
+	}
+	if demoHostKey == "" {
+		t.Fatal("the demonstration target printed no host key")
+	}
+	if status := gatewayOnboardAccountWith(t, gatewayURL, adminToken, map[string]any{
+		"id": accountID, "name": "compose-account", "username": "root", "targetHost": "demo-ssh-target:2022",
+		"protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte(targetSecret), "hostKey": demoHostKey,
+	}); status != http.StatusCreated {
 		t.Fatalf("onboarding: %d", status)
 	}
 	operatorToken, _ := gatewayLogin(t, gatewayURL, "operator", "op-password-123")

@@ -47,12 +47,14 @@ curl -sS -o /dev/null -w 'seed: policy -> HTTP %{http_code}\n' -X POST "$GATEWAY
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"vault-admin-accounts","role":"vault-admin","resourcePattern":"vault:account-admin:*","effect":"allow"}'
 
-# One privileged account, so the admin UI has something real to show.
+# One privileged account, so the admin UI has something real to show. Its target is fictitious:
+# the pinned host key (ADR-0039) is one whose private half was discarded — no machine has it.
 log "onboarding the demonstration account"
 curl -sS -o /dev/null -w 'seed: account -> HTTP %{http_code}\n' -X POST "$GATEWAY/vault/accounts" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"id\":\"acc_demo\",\"name\":\"prod-db-01-root\",\"username\":\"root\",
        \"targetHost\":\"10.0.4.12:22\",\"protocol\":\"ssh\",\"rotationPolicy\":\"manual\",
-       \"initialSecret\":\"$(printf '%s' 'demo-only-do-not-use-in-prod' | base64 | tr -d '\n')\"}"
+       \"initialSecret\":\"$(printf '%s' 'demo-only-do-not-use-in-prod' | base64 | tr -d '\n')\",
+       \"hostKey\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+pXuNMSq8lVqUNZ0A+gFlXPmbP+09vCp5Y/mHuzYpS\"}"
 
 log "done — log in as $USER_NAME"

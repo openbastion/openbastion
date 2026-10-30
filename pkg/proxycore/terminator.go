@@ -49,6 +49,13 @@ func (t *Terminator) EmitRecordingLost(ctx context.Context, sessionID string) er
 	return t.audit.EmitEvent(ctx, "session.recording_lost", "session", sessionID, false)
 }
 
+// EmitHostKeyMismatch records a session refused because the target did not present the host
+// key the Vault pinned for it (ADR-0039) — what someone taking the target's place looks like.
+// Nothing of the secret was sent. Emitted in addition to session.terminate.
+func (t *Terminator) EmitHostKeyMismatch(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.host_key_mismatch", "session", sessionID, false)
+}
+
 // EmitBreakGlass records that a session was admitted WITHOUT a recorder, by a
 // break-glass waiver (ADR-0009). It is emitted before the credential is fetched
 // and its failure refuses the session, so a waiver is never exercised unseen.

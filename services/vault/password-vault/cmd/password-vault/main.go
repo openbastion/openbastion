@@ -88,8 +88,12 @@ func main() {
 
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
 		ctx := context.Background()
-		if err := svc.OnboardAccount(ctx, []string{"vault-admin"}, "acc_demo", "prod-db-01-root", "root", "10.0.4.12:22", "ssh",
-			domain.RotationPostUse, []byte("demo-only-do-not-use-in-prod")); err != nil {
+		// The demonstration target is fictitious: its pinned host key (ADR-0039) is one whose
+		// private half was thrown away, so no machine can ever be sent this secret.
+		if err := svc.OnboardPinned(ctx, []string{"vault-admin"}, application.OnboardInput{
+			ID: "acc_demo", Name: "prod-db-01-root", Username: "root", TargetHost: "10.0.4.12:22", Protocol: "ssh",
+			Policy: domain.RotationPostUse, InitialSecret: []byte("demo-only-do-not-use-in-prod"), HostKey: demoHostKey,
+		}); err != nil {
 			log.Printf("demo seed skipped (non-fatal): %v", err)
 		}
 	}
@@ -99,7 +103,7 @@ func main() {
 	srv.CallerFromCertificate = rt.Enabled()
 	log.Printf("password-vault listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authorizationURL)
-	log.Printf("  -> audit:         %s (rotations; the targets are reached over SSH, host keys not verified — ADR-0037)", auditURL)
+	log.Printf("  -> audit:         %s (rotations; the targets are reached over SSH, their pinned host keys verified — ADR-0037, ADR-0039)", auditURL)
 	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
@@ -115,3 +119,7 @@ func redactDSN(dsn string) string {
 	}
 	return "***@" + dsn[at+1:]
 }
+
+// demoHostKey is the pinned host key of the demonstration account: its private key was
+// discarded when it was generated, so it identifies no machine.
+const demoHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+pXuNMSq8lVqUNZ0A+gFlXPmbP+09vCp5Y/mHuzYpS"

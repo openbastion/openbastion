@@ -116,7 +116,7 @@ type countingVault struct {
 	fetches atomic.Int32
 }
 
-func (v *countingVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (string, []byte, error) {
+func (v *countingVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
 	v.fetches.Add(1)
 	return v.fakeVault.FetchCredential(ctx, scopeToken, callingProxyID)
 }

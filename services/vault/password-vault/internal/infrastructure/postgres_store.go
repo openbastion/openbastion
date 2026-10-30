@@ -46,9 +46,9 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Create(ctx context.Context, a *domain.PrivilegedAccount) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7)`,
-		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID)
+		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id, host_key)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8)`,
+		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID, a.HostKey)
 	return err
 }
 
@@ -57,9 +57,9 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	var rotationPolicy string
 	var lastRotatedAt, disabledAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key
 		FROM privileged_accounts WHERE id = $1`, id)
-	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID); err != nil {
+	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -89,7 +89,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key
 		FROM privileged_accounts WHERE disabled_at IS NULL
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, pageSize, offset)
@@ -103,7 +103,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 		var a domain.PrivilegedAccount
 		var rotationPolicy string
 		var lastRotatedAt, disabledAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey); err != nil {
 			return nil, 0, err
 		}
 		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
@@ -134,6 +134,18 @@ func (s *PostgresStore) Disable(ctx context.Context, id string) error {
 // MarkRotated sets last_rotated_at — see domain.AccountRepository.MarkRotated's
 // doc comment for why this method exists (a real, previously-undiscovered
 // gap of the same shape as Disable/disabled_at before it).
+// SetHostKey is domain.AccountRepository.SetHostKey.
+func (s *PostgresStore) SetHostKey(ctx context.Context, id, hostKey string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET host_key = $2 WHERE id = $1`, id, hostKey)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // SetReconciliation is domain.AccountRepository.SetReconciliation.
 func (s *PostgresStore) SetReconciliation(ctx context.Context, id, reconciliationID string) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET reconciliation_account_id = $2 WHERE id = $1`, id, reconciliationID)

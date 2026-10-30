@@ -44,15 +44,24 @@ func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr strin
 // what the target was actually sent.
 func startObservedFakeTargetSSHServer(t *testing.T, expectedPassword string, onLine func(line string)) (addr string) {
 	t.Helper()
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("target host key: %v", err)
-	}
-	signer, err := ssh.NewSignerFromKey(priv)
-	if err != nil {
-		t.Fatalf("target signer: %v", err)
-	}
+	return startKeyedFakeTargetSSHServer(t, targetHostSigner, expectedPassword, onLine)
+}
 
+// targetHostSigner is the host key of every fake target, the one fakeVault pins (ADR-0039).
+var targetHostSigner = func() ssh.Signer {
+	s, err := ssh.NewSignerFromKey(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)))
+	if err != nil {
+		panic(err)
+	}
+	return s
+}()
+
+// targetHostKey is targetHostSigner's public key as the Vault stores it.
+var targetHostKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(targetHostSigner.PublicKey())))
+
+// startKeyedFakeTargetSSHServer is the same target presenting the host key signer.
+func startKeyedFakeTargetSSHServer(t *testing.T, signer ssh.Signer, expectedPassword string, onLine func(line string)) (addr string) {
+	t.Helper()
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 			if string(password) != expectedPassword {
@@ -137,13 +146,25 @@ func startObservedFakeTargetSSHServer(t *testing.T, expectedPassword string, onL
 type fakeVault struct {
 	expectedScopeToken string
 	secret             string
+	// hostKey is the key the Vault pinned for the target: empty means targetHostKey,
+	// noHostKey that the Vault gives none; targetHost the address it gives the secret for.
+	hostKey    string
+	noHostKey  bool
+	targetHost string
 }
 
-func (f *fakeVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (string, []byte, error) {
+func (f *fakeVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
 	if scopeToken != f.expectedScopeToken {
-		return "", nil, fmt.Errorf("unexpected scope token")
+		return proxycore.Fetched{}, fmt.Errorf("unexpected scope token")
 	}
-	return "password", []byte(f.secret), nil
+	key := f.hostKey
+	if key == "" {
+		key = targetHostKey
+	}
+	if f.noHostKey {
+		key = ""
+	}
+	return proxycore.Fetched{Type: "password", Material: []byte(f.secret), TargetHost: f.targetHost, HostKey: key}, nil
 }
 
 type fakeAudit struct{ events []string }

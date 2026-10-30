@@ -186,6 +186,9 @@ func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec,
 	if errors.Is(relayErr, ErrRecordingUnavailable) {
 		_ = l.Terminator.EmitRecordingLost(ctx, meta.SessionID)
 	}
+	if errors.Is(relayErr, ErrHostKeyMismatch) {
+		_ = l.Terminator.EmitHostKeyMismatch(ctx, meta.SessionID)
+	}
 	termErr := l.Terminator.Terminate(ctx, meta.SessionID, cred, relayErr == nil || expired || cut)
 	if relayErr != nil {
 		return relayErr

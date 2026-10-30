@@ -50,6 +50,9 @@ type AccountRepository interface {
 
 	// SetReconciliation names the reconciliation account of id (ADR-0037).
 	SetReconciliation(ctx context.Context, id, reconciliationID string) error
+
+	// SetHostKey pins the host key of id's target (ADR-0039).
+	SetHostKey(ctx context.Context, id, hostKey string) error
 }
 
 // ErrRotationInProgress: the account already has a pending rotation (ADR-0037).

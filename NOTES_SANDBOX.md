@@ -1125,7 +1125,7 @@ Bony Kiss a choisi le modèle du compte de réconciliation. Un défaut de plus t
 **Preuves.** `test/integration/rotation_flow_test.go` (huit processus, cible SSH à mots de passe changeants : rotation manuelle, après usage, sans réconciliation, audit coupé, acteurs) ; Vault application +8, infrastructure +3 (dont 1 PostgreSQL) ; Broker +1 ; Admin UI +1. **17 mutations, 17 tuées.** Compose relancé (trois passes vertes, règle de pare-feu posée puis retirée). Vérifié : 670 unitaires Go sans base (52 ignorés), 722 avec ; 65 PostgreSQL ; 66 d'intégration (65 avec la base, Compose à part — vert) ; 18 tests de l'Admin UI ; `-race` propre sur le Vault, le Broker et le test de rotation ; `gofmt -l` vide.
 
 **Ce que cela ne fait PAS :**
-1. **La clé d'hôte de la cible n'est pas vérifiée** (comme par le proxy).
+1. ~~**La clé d'hôte de la cible n'est pas vérifiée** (comme par le proxy).~~ **Refermé par ADR-0039** : le Vault ne se connecte qu'à la clé épinglée du compte (`ssh.FixedHostKey`), et un compte sans clé n'est pas renouvelé.
 2. **`scheduled` n'est exécuté par rien.**
 3. **Une rotation après usage échouée n'est pas réessayée.**
 4. **Quelques secondes** entre la pose et la promotion où une nouvelle connexion reçoit l'ancien secret.
@@ -1150,7 +1150,68 @@ Bony Kiss a choisi d'enregistrer chaque transfert (sens, chemin, taille, SHA-256
 2. **Un téléchargement est enregistré à la fermeture**, ses octets déjà chez le client (l'ouverture l'est avant).
 3. **Pas d'empreinte pour un transfert non contigu** (parallèle) — la taille, si.
 4. **Pas d'`exec` arbitraire, pas de `rsync`, pas de redirection de ports** : refusés.
-5. **La clé d'hôte de la cible n'est toujours pas vérifiée.**
+5. ~~**La clé d'hôte de la cible n'est toujours pas vérifiée.**~~ **Refermé par ADR-0039** (section suivante) : le proxy n'envoie le mot de passe qu'à la clé épinglée au Vault.
+
+## La clé d'hôte de chaque cible est épinglée (ADR-0039)
+
+Demandé par Bony Kiss : « épingler la clé d'hôte de chaque cible (enregistrée au Vault, vérifiée par le proxy et le Vault), car c'est la seule protection contre quelqu'un qui s'interpose et lit les secrets en transit ».
+
+**Mesuré avant** (rouge, sur 2e9166f) :
+- un serveur qui présente une autre clé à l'adresse de la cible reçoit le mot de passe `the-target-root-password`, et le relais répond `nil` ;
+- `SSHTargetChanger` (rotation) se connecte en `root` à des cibles dont il n'a jamais vu la clé : son propre test le faisait, avec une clé aléatoire par cible.
+
+**Livré** :
+- Vault :
+  - `application/hostkey.go` : `NormalizeHostKey`, `OnboardPinned`, `SetHostKey` (RBAC `vault:account:pin`, `vault.host_key_set` avant le changement), `Delivered` ;
+  - `AuthorizeScope`, `FetchCredential` et la rotation refusent un compte sans clé (`ErrNoHostKey`, `409`) ;
+  - `ssh_target.go` : `ssh.FixedHostKey` ;
+  - `migrations/003_host_key.sql` et les deux magasins ;
+  - `PUT /vault/v1/accounts/{id}/host-key` ; `fetch-credential` rend `target_host` et `host_key` ; le compte rend `hostKey` et `hostKeyFingerprint`.
+- `pkg/proxycore` : `Fetched`, `Credential.TargetHost` et `HostKey`, `ErrHostKeyMismatch`, `EmitHostKeyMismatch` (`session.host_key_mismatch`).
+- ssh-proxy :
+  - `codec.go` : le mot de passe ne part qu'à la clé épinglée, et l'adresse de session doit être celle du Vault ;
+  - `ssh_server.go` : l'adresse passée au codec, et le message à l'opérateur ;
+  - `vault_client.go`.
+- Gateway : `PUT /vault/accounts/{id}/host-key`, où seule la clé vient du client.
+- Admin UI : colonne « Clé d'hôte » (empreinte, ou « non épinglée »), « Épingler / Changer la clé d'hôte », champ obligatoire à l'enregistrement.
+- Démonstration : `demo-ssh-target` a une clé stable, dérivée de son mot de passe, et l'écrit dans son journal ; le test Compose l'y relève. Les seeds (`acc_demo`, Vault et Base44) épinglent une clé dont la moitié privée a été jetée à sa création : la cible est fictive, aucune machine ne recevra ce secret.
+
+**Trouvé en chemin** :
+- Le repli `known_hosts` de `NormalizeHostKey` était du **code mort** : une mutation l'a montré. `ParseAuthorizedKey` lit déjà les noms d'hôtes en tête de ligne comme des « options ». Je l'ai retiré, et j'ai ajouté le refus de `@revoked` / `@cert-authority` : `@revoked <clé>` était accepté.
+- Le journal du ré-épinglage affichait la **nouvelle** empreinte comme ancienne : le magasin mémoire rend son propre enregistrement, et l'ancienne valeur était lue après l'écriture. Elle est maintenant lue avant.
+- La rotation d'un compte sans clé répondait `403` au lieu de `409` (`adminErrorStatus` ne connaissait pas l'erreur), et `authorize-scope` aussi.
+- `TestPostgresStore_PendingVersion_Lifecycle` (ADR-0037, de moi) utilisait un nom et un hôte fixes : il échouait au deuxième passage sur une base qui garde ses lignes (unicité `(target_host, name)`). Il prend maintenant l'identifiant comme nom.
+
+**Choix renversables** :
+- La comparaison d'adresse est une égalité de chaînes : le Broker transmet l'adresse que le Vault lui a donnée.
+- L'enregistrement et l'épinglage sont deux écritures. Si la seconde échoue, le compte reste sans clé : inutilisable, donc sûr.
+- Le motif d'un `409` n'est pas relayé par le Broker : l'opérateur lit « authorize-scope: status 409 ».
+
+**Preuves** :
+- `test/integration/hostkey_flow_test.go`, huit processus et le vrai client OpenSSH :
+  - un imposteur à l'adresse de la cible reçoit **zéro** mot de passe ;
+  - l'opérateur est prévenu et `session.host_key_mismatch` est audité ;
+  - un opérateur ne ré-épingle pas (`403`) ;
+  - un administrateur ré-épingle, l'audit l'attribue au nom du jeton, et la session suivante passe ;
+  - un enregistrement sans clé, avec une clé vide, illisible ou privée : `400`.
+- Tests unitaires ajoutés :
+  - Vault application +4 ;
+  - Vault infrastructure +2, dont 1 PostgreSQL ;
+  - Vault interfaces +1 ;
+  - `pkg/proxycore` +1 ;
+  - `sshcodec` +4, dont un à travers le vrai `SSHServer` ;
+  - Gateway +1 ;
+  - Admin UI +2.
+- **25 mutations, 25 tuées.** Deux survivaient d'abord :
+  - le repli `known_hosts`, code mort, retiré ;
+  - « rotation sans clé = `403` » : mon test HTTP passait par un compte sans réconciliation, qui répond déjà `409` pour cette raison. Il a maintenant un compte de réconciliation et exige le motif.
+- Une race dans **mon** test (un même `bytes.Buffer` lu et écrit par les deux goroutines du relais), trouvée par `-race` et corrigée ; le paquet passe sous `-race`.
+
+**Ce que cela ne fait PAS :**
+1. **La clé vaut ce que vaut la façon dont on l'a relevée** : relevée par le réseau qu'on veut protéger, elle peut déjà être celle de l'imposteur. Le guide d'administration dit de la relever sur la cible.
+2. **Une seule clé par compte**, et pas d'autorité de certificats SSH.
+3. **Une cible qui change de clé refuse les sessions** jusqu'au ré-épinglage : c'est voulu, et c'est une panne si personne ne la prévoit.
+4. **Les comptes enregistrés avant ADR-0039 n'ouvrent plus de session** tant qu'ils ne sont pas épinglés : c'est une opération de mise à jour.
 
 ## Prochains incréments qui lèveront cette limite
 
@@ -1162,7 +1223,7 @@ Dans un environnement de développement ou de CI avec accès réseau complet :
 
 ## État des tests à la date de cet incrément
 
-732 fonctions de test unitaires Go (dont 52 conditionnées à `TEST_DATABASE_URL` — 9 pour le Vault, 4 pour Authorization, 6 pour Authentication, 18 pour Session Broker, 5 pour Audit, 10 pour le Command Recorder — qui se *skip*, pas échouent, sans elle : 680 passent et 52 sont ignorées sans base, 732 passent avec, 0 échec), plus 19 tests de l'Admin UI (Vitest, `make ui-test`), plus 67 tests d'intégration (dont 20 conditionnés à `TEST_DATABASE_URL` et 1 à `COMPOSE_TEST` : 46 passent et 21 sont ignorés sans base, 66 passent avec et le test Compose passe à part, `make test-compose`), `go vet` propre, `gofmt -l` vide sur les fichiers modifiés, `go test -race` propre — **pour ADR-0022 à ADR-0038, sur les modules touchés seulement** (Command Recorder, Audit Service, Gateway ; puis Session Broker ; puis `pkg/refusalbudget`) et sur leurs tests d'intégration ; les 11 modules l'avaient été à ADR-0021. 65 tests PostgreSQL dédiés (`make test-postgres`), dont ceux de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker, Command Recorder), vérifiés avec une vraie base PostgreSQL 16 — pour cet incrément, dans un conteneur Docker du codespace (`settings.md` §7). Avant SFTP et SCP (ADR-0038) : 722 unitaires, 65 PostgreSQL, 66 d'intégration. Avant la rotation sur la cible (ADR-0037) : 710 unitaires, 64 PostgreSQL, 65 d'intégration. Avant l'Admin UI (ADR-0036) : 706 unitaires, 64 PostgreSQL, 65 d'intégration. Avant la connexion fédérée (ADR-0035) : 694 unitaires, 62 PostgreSQL, 64 d'intégration. Avant l'expiration écrite (ADR-0034) : 687 unitaires, 59 PostgreSQL, 63 d'intégration. Avant le déploiement Compose (ADR-0033) : 685 unitaires, 59 PostgreSQL, 62 d'intégration. Avant la rétention (ADR-0032) : 664 unitaires, 57 PostgreSQL, 61 d'intégration. Avant les migrations versionnées (ADR-0030) : 659 unitaires, 56 PostgreSQL, 53 d'intégration. Avant l'ancrage (ADR-0028) : 649 unitaires, 55 PostgreSQL, 52 d'intégration. Avant la chaîne à clé (ADR-0027) : 641 unitaires, 54 PostgreSQL, 51 d'intégration. Avant le hash canonique (ADR-0026) : 632 unitaires, 52 PostgreSQL, 50 d'intégration. Avant les bornes de l'Audit Service (ADR-0025) : 628 unitaires, 52 PostgreSQL, 49 d'intégration. Avant l'audit des refus de lecture d'un enregistrement (ADR-0024) : 621 unitaires, 52 PostgreSQL, 47 d'intégration. Avant l'audit de la liste (ADR-0023) : 616 unitaires, 52 PostgreSQL, 46 d'intégration. Avant l'audit des lectures d'enregistrement (ADR-0022) : 607 unitaires, 52 PostgreSQL, 45 d'intégration. Avant l'audit des lectures servies (ADR-0021) : 598 unitaires, 52 PostgreSQL, 44 d'intégration. Avant l'audit des refus de lecture (ADR-0020) : 573 unitaires, 52 PostgreSQL, 42 d'intégration. Avant la lecture contrôlée (ADR-0019) : 547 unitaires, 52 PostgreSQL, 41 d'intégration. Avant la terminaison réelle (ADR-0018) : 495 unitaires, 52 PostgreSQL, 40 d'intégration. Avant le contrôle de la terminaison (ADR-0017) : 473 unitaires, 52 PostgreSQL, 39 d'intégration ; avant le budget d'actions de session (ADR-0016) : 463 unitaires, 52 PostgreSQL, 37 d'intégration ; avant l'adresse du client derrière l'arête (ADR-0015) : 450 unitaires, 52 PostgreSQL, 33 d'intégration ; avant la limitation de débit par identité (ADR-0014) : 434 unitaires, 52 PostgreSQL, 29 d'intégration ; avant le plafond par demandeur (ADR-0013) : 405 unitaires, 49 PostgreSQL, 27 d'intégration ; avant la découverte des demandes (ADR-0012) : 360 unitaires, 46 PostgreSQL, 23 d'intégration ; avant la double validation : 326 unitaires, 42 PostgreSQL, 20 d'intégration ; avant l'incrément mTLS : 274 unitaires, 42 PostgreSQL, 17 d'intégration ; avant le break-glass : 234 unitaires, 40 PostgreSQL, 15 d'intégration ; avant « enregistrer ou refuser » : 193 unitaires, 39 PostgreSQL, 13 d'intégration. (Comptage : `grep -c '^--- PASS'` sur `go test -v`, tests de premier niveau seulement — les sous-tests ne comptent pas.)
+745 tests unitaires Go passés avec base (comptés `--- PASS` de premier niveau ; dont 53 conditionnés à `TEST_DATABASE_URL` — 10 pour le Vault, 4 pour Authorization, 6 pour Authentication, 18 pour Session Broker, 5 pour Audit, 10 pour le Command Recorder — qui se *skip*, pas échouent, sans elle : 692 passent et 53 sont ignorés sans base, 745 passent avec, 0 échec — mesuré après ADR-0039), plus 21 tests de l'Admin UI (Vitest, `make ui-test`), plus 68 tests d'intégration (dont 20 conditionnés à `TEST_DATABASE_URL` et 1 à `COMPOSE_TEST` : 47 passent et 21 sont ignorés sans base, 67 passent avec et le test Compose passe à part, `make test-compose`), `go vet` propre, `gofmt -l` vide sur les fichiers modifiés, `go test -race` propre — **pour ADR-0022 à ADR-0039, sur les modules touchés seulement** (ADR-0039 : `pkg/proxycore`, ssh-proxy, Password Vault) (Command Recorder, Audit Service, Gateway ; puis Session Broker ; puis `pkg/refusalbudget`) et sur leurs tests d'intégration ; les 11 modules l'avaient été à ADR-0021. 65 tests PostgreSQL dédiés (`make test-postgres`), dont ceux de persistance inter-processus (Vault, Authorization, Authentication, Audit, Session Broker, Command Recorder), vérifiés avec une vraie base PostgreSQL 16 — pour cet incrément, dans un conteneur Docker du codespace (`settings.md` §7). Avant SFTP et SCP (ADR-0038) : 722 unitaires, 65 PostgreSQL, 66 d'intégration. Avant la rotation sur la cible (ADR-0037) : 710 unitaires, 64 PostgreSQL, 65 d'intégration. Avant l'Admin UI (ADR-0036) : 706 unitaires, 64 PostgreSQL, 65 d'intégration. Avant la connexion fédérée (ADR-0035) : 694 unitaires, 62 PostgreSQL, 64 d'intégration. Avant l'expiration écrite (ADR-0034) : 687 unitaires, 59 PostgreSQL, 63 d'intégration. Avant le déploiement Compose (ADR-0033) : 685 unitaires, 59 PostgreSQL, 62 d'intégration. Avant la rétention (ADR-0032) : 664 unitaires, 57 PostgreSQL, 61 d'intégration. Avant les migrations versionnées (ADR-0030) : 659 unitaires, 56 PostgreSQL, 53 d'intégration. Avant l'ancrage (ADR-0028) : 649 unitaires, 55 PostgreSQL, 52 d'intégration. Avant la chaîne à clé (ADR-0027) : 641 unitaires, 54 PostgreSQL, 51 d'intégration. Avant le hash canonique (ADR-0026) : 632 unitaires, 52 PostgreSQL, 50 d'intégration. Avant les bornes de l'Audit Service (ADR-0025) : 628 unitaires, 52 PostgreSQL, 49 d'intégration. Avant l'audit des refus de lecture d'un enregistrement (ADR-0024) : 621 unitaires, 52 PostgreSQL, 47 d'intégration. Avant l'audit de la liste (ADR-0023) : 616 unitaires, 52 PostgreSQL, 46 d'intégration. Avant l'audit des lectures d'enregistrement (ADR-0022) : 607 unitaires, 52 PostgreSQL, 45 d'intégration. Avant l'audit des lectures servies (ADR-0021) : 598 unitaires, 52 PostgreSQL, 44 d'intégration. Avant l'audit des refus de lecture (ADR-0020) : 573 unitaires, 52 PostgreSQL, 42 d'intégration. Avant la lecture contrôlée (ADR-0019) : 547 unitaires, 52 PostgreSQL, 41 d'intégration. Avant la terminaison réelle (ADR-0018) : 495 unitaires, 52 PostgreSQL, 40 d'intégration. Avant le contrôle de la terminaison (ADR-0017) : 473 unitaires, 52 PostgreSQL, 39 d'intégration ; avant le budget d'actions de session (ADR-0016) : 463 unitaires, 52 PostgreSQL, 37 d'intégration ; avant l'adresse du client derrière l'arête (ADR-0015) : 450 unitaires, 52 PostgreSQL, 33 d'intégration ; avant la limitation de débit par identité (ADR-0014) : 434 unitaires, 52 PostgreSQL, 29 d'intégration ; avant le plafond par demandeur (ADR-0013) : 405 unitaires, 49 PostgreSQL, 27 d'intégration ; avant la découverte des demandes (ADR-0012) : 360 unitaires, 46 PostgreSQL, 23 d'intégration ; avant la double validation : 326 unitaires, 42 PostgreSQL, 20 d'intégration ; avant l'incrément mTLS : 274 unitaires, 42 PostgreSQL, 17 d'intégration ; avant le break-glass : 234 unitaires, 40 PostgreSQL, 15 d'intégration ; avant « enregistrer ou refuser » : 193 unitaires, 39 PostgreSQL, 13 d'intégration. (Comptage : `grep -c '^--- PASS'` sur `go test -v`, tests de premier niveau seulement — les sous-tests ne comptent pas.)
 
 Rappel d'ordre d'exécution (déjà documenté plus haut, mais je l'ai retrouvé en vérifiant ce lot) : lancer `make test` avec `TEST_DATABASE_URL` puis `make test-integration` **sans purge entre les deux** fait échouer `TestPostgresFlow_PolicySurvivesAuthorizationProcessRestart` sur un 403 — les tests unitaires PostgreSQL ont laissé des lignes dans `policies`, et le bootstrap de `platform-admin` ne s'exécute que sur un magasin vide. Ce n'est pas une régression : purger (`TRUNCATE policies, … RESTART IDENTITY CASCADE`) avant chaque suite, ou passer par `make test-postgres`, qui le fait.
 

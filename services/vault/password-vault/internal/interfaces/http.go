@@ -71,6 +71,8 @@ type onboardAccountRequest struct {
 	// ReconciliationAccountID: the account of the same target that can change this one's
 	// password (ADR-0037); empty — the account cannot be rotated.
 	ReconciliationAccountID string `json:"reconciliationAccountId"`
+	// HostKey is the target's SSH host key, required (ADR-0039).
+	HostKey string `json:"hostKey"`
 }
 
 func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request) {
@@ -79,12 +81,16 @@ func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	err := s.svc.OnboardAccountWithReconciliation(r.Context(), req.ActorRoles, req.ID, req.Name, req.Username, req.TargetHost, req.Protocol,
-		domain.RotationPolicy(req.RotationPolicy), req.InitialSecret, req.ReconciliationAccountID)
+	err := s.svc.OnboardPinned(r.Context(), req.ActorRoles, application.OnboardInput{ID: req.ID, Name: req.Name, Username: req.Username,
+		TargetHost: req.TargetHost, Protocol: req.Protocol, Policy: domain.RotationPolicy(req.RotationPolicy), InitialSecret: req.InitialSecret,
+		ReconciliationAccountID: req.ReconciliationAccountID, HostKey: req.HostKey})
 	if err != nil {
 		status := http.StatusForbidden
-		if errors.Is(err, application.ErrNoReconciliation) {
+		switch {
+		case errors.Is(err, application.ErrNoReconciliation):
 			status = http.StatusConflict
+		case errors.Is(err, application.ErrBadHostKey):
+			status = http.StatusBadRequest
 		}
 		http.Error(w, err.Error(), status)
 		return
@@ -153,7 +159,7 @@ func adminErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress):
+	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrNoHostKey):
 		return http.StatusConflict
 	case errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
 		return http.StatusBadGateway
@@ -189,7 +195,11 @@ func (s *HTTPServer) handleAuthorizeScope(w http.ResponseWriter, r *http.Request
 	ttl := time.Duration(req.TTLSeconds) * time.Second
 	token, expiresAt, err := s.svc.AuthorizeScope(r.Context(), req.SessionID, req.PrivilegedAccountID, req.ProxyServiceID, ttl)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		status := http.StatusForbidden
+		if errors.Is(err, application.ErrNoHostKey) {
+			status = http.StatusConflict // the account exists, but must be pinned first (ADR-0039)
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	writeJSON(w, authorizeScopeResponse{ScopeToken: token, ExpiresAt: expiresAt})
@@ -210,6 +220,9 @@ type fetchCredentialRequest struct {
 type fetchCredentialResponse struct {
 	CredentialType     string `json:"credential_type"`
 	CredentialMaterial []byte `json:"credential_material"`
+	// The target the secret is for (ADR-0039): its address and its pinned host key.
+	TargetHost string `json:"target_host"`
+	HostKey    string `json:"host_key"`
 }
 
 func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Request) {
@@ -234,12 +247,16 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 		}
 		callingProxy = id
 	}
-	credType, material, err := s.svc.FetchCredential(r.Context(), req.ScopeToken, callingProxy)
+	d, err := s.svc.FetchCredential(r.Context(), req.ScopeToken, callingProxy)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		status := http.StatusForbidden
+		if errors.Is(err, application.ErrNoHostKey) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, fetchCredentialResponse{CredentialType: credType, CredentialMaterial: material})
+	writeJSON(w, fetchCredentialResponse{CredentialType: d.Type, CredentialMaterial: d.Material, TargetHost: d.TargetHost, HostKey: d.HostKey})
 }
 
 // -- GET /vault/v1/accounts/{id}, DELETE /vault/v1/accounts/{id} -----------
@@ -262,6 +279,9 @@ type accountResponse struct {
 	LastRotatedAt  *time.Time `json:"lastRotatedAt,omitempty"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	DisabledAt     *time.Time `json:"disabledAt,omitempty"`
+	// The pinned host key of the target and its fingerprint (ADR-0039); empty: not pinned.
+	HostKey            string `json:"hostKey"`
+	HostKeyFingerprint string `json:"hostKeyFingerprint"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -276,6 +296,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		ID: a.ID, Name: a.Name, Username: a.Username,
 		TargetHost: a.TargetHost, Protocol: a.Protocol, RotationPolicy: string(a.RotationPolicy),
 		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
+		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
 	}
 }
 
@@ -283,6 +304,10 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Path[len("/vault/v1/accounts/"):]
 	if id == "" {
 		http.Error(w, "missing account id", http.StatusBadRequest)
+		return
+	}
+	if accountID, ok := strings.CutSuffix(id, "/host-key"); ok {
+		s.handleSetHostKey(w, r, accountID)
 		return
 	}
 
@@ -369,4 +394,34 @@ func splitCommaList(s string) []string {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// -- PUT /vault/v1/accounts/{id}/host-key (ADR-0039), from the Gateway ---------
+
+type setHostKeyRequest struct {
+	HostKey    string   `json:"hostKey"`
+	ActorRoles []string `json:"actorRoles"`
+	ActorID    string   `json:"actorId"`
+}
+
+func (s *HTTPServer) handleSetHostKey(w http.ResponseWriter, r *http.Request, accountID string) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req setHostKeyRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
+		http.Error(w, "the body is not a host key", http.StatusBadRequest)
+		return
+	}
+	fp, err := s.svc.SetHostKey(r.Context(), req.ActorID, req.ActorRoles, accountID, req.HostKey)
+	if err != nil {
+		status := adminErrorStatus(err)
+		if errors.Is(err, application.ErrBadHostKey) {
+			status = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, map[string]string{"hostKeyFingerprint": fp})
 }

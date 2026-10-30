@@ -12,17 +12,17 @@ type fakeVault struct {
 	err      error
 }
 
-func (f *fakeVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (string, []byte, error) {
+func (f *fakeVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (Fetched, error) {
 	f.calls++
 	if f.err != nil {
-		return "", nil, f.err
+		return Fetched{}, f.err
 	}
 	// Return a copy, as a real Vault would over the wire — the test holds
 	// its own reference so it can assert on original vs. purged bytes
 	// independently.
 	cp := make([]byte, len(f.material))
 	copy(cp, f.material)
-	return "password", cp, nil
+	return Fetched{Type: "password", Material: cp, TargetHost: "10.0.0.5:22", HostKey: "ssh-ed25519 AAAA"}, nil
 }
 
 func TestCredentialFetcher_PurgeZeroesMemory(t *testing.T) {

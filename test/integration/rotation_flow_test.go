@@ -9,8 +9,6 @@ package integration_test
 import (
 	"bufio"
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -35,8 +33,7 @@ type rotatableTarget struct {
 func startRotatableTarget(t *testing.T, passwords map[string]string) *rotatableTarget {
 	t.Helper()
 	tgt := &rotatableTarget{pw: passwords}
-	_, priv, _ := ed25519.GenerateKey(rand.Reader)
-	signer, _ := ssh.NewSignerFromKey(priv)
+	signer := targetHostSigner // the key every account is pinned to (ADR-0039)
 	cfg := &ssh.ServerConfig{PasswordCallback: func(m ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
 		if tgt.password(m.User()) == string(p) && p != nil {
 			return &ssh.Permissions{Extensions: map[string]string{"user": m.User()}}, nil
@@ -149,7 +146,7 @@ func canLogIn(addr, user, password string) bool {
 
 func vaultOnboard(t *testing.T, vaultURL string, body map[string]any) int {
 	t.Helper()
-	b, _ := json.Marshal(body)
+	b, _ := json.Marshal(withHostKey(body))
 	resp, err := http.Post(vaultURL+"/vault/v1/onboard-account", "application/json", bytes.NewReader(b))
 	if err != nil {
 		t.Fatal(err)

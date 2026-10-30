@@ -600,6 +600,31 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// PUT /vault/accounts/{id}/host-key pins (or re-pins) the target's host key (ADR-0039).
+	// Only the key is taken from the client: who pins, and with which roles, are the
+	// verified token's — the Vault audits the change under that name.
+	if accountID, ok := strings.CutSuffix(rest, "/host-key"); ok {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if accountID == "" || strings.Contains(accountID, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			HostKey string `json:"hostKey"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
+			http.Error(w, "the body is not a host key", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/host-key", map[string]any{
+			"hostKey": body.HostKey, "actorRoles": id.Roles, "actorId": id.UserID,
+		})
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		g.forwardPassthrough(w, r, http.MethodGet, g.vaultURL+"/vault/v1/accounts/"+rest)

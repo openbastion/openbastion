@@ -16,9 +16,10 @@ import (
 type TargetChanger interface {
 	// SetPassword logs in to host as admin with adminSecret and sets user's password to
 	// newSecret.
-	SetPassword(ctx context.Context, host, admin string, adminSecret []byte, user string, newSecret []byte) error
+	// The target must present hostKey (ADR-0039).
+	SetPassword(ctx context.Context, host, hostKey, admin string, adminSecret []byte, user string, newSecret []byte) error
 	// Verify logs in to host as user with secret, and says whether the target took it.
-	Verify(ctx context.Context, host, user string, secret []byte) error
+	Verify(ctx context.Context, host, hostKey, user string, secret []byte) error
 }
 
 // AuditEmitter writes to the audit trail.
@@ -132,6 +133,9 @@ func (s *VaultService) rotate(ctx context.Context, actorID, accountID string, ne
 	if account.ReconciliationAccountID == "" {
 		return ErrNoReconciliation
 	}
+	if account.HostKey == "" {
+		return ErrNoHostKey
+	}
 	if err := s.checkReconciliation(ctx, accountID, account.TargetHost, account.ReconciliationAccountID); err != nil {
 		return err
 	}
@@ -174,12 +178,12 @@ func (s *VaultService) rotate(ctx context.Context, actorID, accountID string, ne
 	if err := s.secrets.AddPending(ctx, pending); err != nil {
 		return err
 	}
-	if err := s.targets.SetPassword(ctx, account.TargetHost, admin.Username, adminSecret, account.Username, newSecret); err != nil {
+	if err := s.targets.SetPassword(ctx, account.TargetHost, account.HostKey, admin.Username, adminSecret, account.Username, newSecret); err != nil {
 		_ = s.secrets.DiscardPending(ctx, accountID, pending.Version)
 		s.auditOutcome(ctx, actorID, accountID, false)
 		return fmt.Errorf("%w: %v", ErrRotationRefused, err)
 	}
-	if err := s.targets.Verify(ctx, account.TargetHost, account.Username, newSecret); err != nil {
+	if err := s.targets.Verify(ctx, account.TargetHost, account.HostKey, account.Username, newSecret); err != nil {
 		// Set, maybe; not verified: kept pending, settled by the next rotation.
 		s.auditOutcome(ctx, actorID, accountID, false)
 		return fmt.Errorf("%w: %v", ErrRotationUnverified, err)
@@ -204,7 +208,7 @@ func (s *VaultService) settlePending(ctx context.Context, actorID string, accoun
 	if err != nil {
 		return err
 	}
-	if s.targets.Verify(ctx, account.TargetHost, account.Username, newSecret) == nil {
+	if s.targets.Verify(ctx, account.TargetHost, account.HostKey, account.Username, newSecret) == nil {
 		if err := s.secrets.PromotePending(ctx, account.ID, pending.Version); err != nil {
 			return err
 		}
@@ -216,7 +220,7 @@ func (s *VaultService) settlePending(ctx context.Context, actorID string, accoun
 	if err != nil {
 		return err
 	}
-	if s.targets.Verify(ctx, account.TargetHost, account.Username, old) == nil {
+	if s.targets.Verify(ctx, account.TargetHost, account.HostKey, account.Username, old) == nil {
 		return s.secrets.DiscardPending(ctx, account.ID, pending.Version)
 	}
 	return fmt.Errorf("%w: neither the current nor the pending secret opens the target — a human must look", ErrRotationUnverified)

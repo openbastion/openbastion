@@ -277,6 +277,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS vault_secrets_one_pending_idx ON vault_secrets
 
 La version courante est celle dont `superseded_at` est vide **et qui n'est pas en attente** ; la promotion d'une version en attente remplace l'ancienne dans la même transaction.
 
+### Clé d'hôte épinglée (ADR-0039)
+
+`services/vault/password-vault/migrations/003_host_key.sql` :
+
+```sql
+ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS host_key TEXT NOT NULL DEFAULT '';  -- "ssh-ed25519 AAAA…", normalisée ; vide : ni session ni rotation
+```
+
+Une donnée publique, pas un secret : elle est rendue par `GET /vault/accounts/{id}` avec son empreinte. Les comptes existants reçoivent `''` à la migration, et restent sans session ni rotation jusqu'à leur épinglage (`PUT /vault/accounts/{id}/host-key`).
+
 ### Connexion fédérée OIDC (ADR-0035)
 
 `services/access/authentication/migrations/002_oidc.sql` donne à `users` les colonnes du §3 (`identity_source`, `external_subject` — ici `TEXT NOT NULL DEFAULT ''` plutôt que `NULL`, avec un index unique partiel sur `(identity_source, external_subject)` quand le sujet n'est pas vide) et ajoute les connexions en cours :

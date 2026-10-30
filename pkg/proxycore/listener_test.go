@@ -233,6 +233,37 @@ func TestListener_Serve_DoesNotReportOrdinaryFailuresAsRecordingLoss(t *testing.
 	}
 }
 
+// The target did not present its pinned host key (ADR-0039): the Listener audits it under its
+// own action — what an interposition looks like — and the session does not end cleanly.
+// Counter-proof: an ordinary failure is not reported as one.
+func TestListener_Serve_AuditsAHostKeyMismatch(t *testing.T) {
+	audit := &fakeAudit{}
+	listener := requiredListener(&fakeVault{material: []byte("x")}, audit, &fakeGate{})
+	var client, target buf
+	err := listener.Serve(context.Background(), SessionMetadata{SessionID: "s", ScopeToken: "t"}, hostKeyCodec{}, &client, &target)
+	if !errors.Is(err, ErrHostKeyMismatch) {
+		t.Fatalf("Serve must surface the mismatch, got %v", err)
+	}
+	if len(audit.events) != 2 || audit.events[0] != "session.host_key_mismatch" || audit.events[1] != "session.terminate" {
+		t.Fatalf("expected [session.host_key_mismatch session.terminate], got %v", audit.events)
+	}
+
+	audit = &fakeAudit{}
+	listener = requiredListener(&fakeVault{material: []byte("x")}, audit, &fakeGate{})
+	_ = listener.Serve(context.Background(), SessionMetadata{SessionID: "s", ScopeToken: "t"}, failingCodec{}, &client, &target)
+	for _, e := range audit.events {
+		if e == "session.host_key_mismatch" {
+			t.Fatalf("an ordinary failure was reported as a host key mismatch: %v", audit.events)
+		}
+	}
+}
+
+type hostKeyCodec struct{}
+
+func (hostKeyCodec) Relay(ctx context.Context, client, target io.ReadWriter, cred *Credential) error {
+	return fmt.Errorf("target ssh handshake: %w: 10.0.0.5:22 presented SHA256:x, pinned SHA256:y", ErrHostKeyMismatch)
+}
+
 func TestListener_Admit_CanBeCalledAheadOfServe(t *testing.T) {
 	audit := &fakeAudit{}
 	listener := requiredListener(&fakeVault{}, audit, &fakeGate{err: errors.New("down")})

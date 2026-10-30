@@ -43,10 +43,10 @@ type hookVault struct {
 	onFetch func(ctx context.Context) error
 }
 
-func (v *hookVault) FetchCredential(ctx context.Context, scope, proxyID string) (string, []byte, error) {
+func (v *hookVault) FetchCredential(ctx context.Context, scope, proxyID string) (Fetched, error) {
 	if v.onFetch != nil {
 		if err := v.onFetch(ctx); err != nil {
-			return "", nil, err
+			return Fetched{}, err
 		}
 	}
 	return v.fakeVault.FetchCredential(ctx, scope, proxyID)
@@ -280,10 +280,10 @@ type afterFetchRevoke struct {
 	live  *LiveSessions
 }
 
-func (v *afterFetchRevoke) FetchCredential(ctx context.Context, scope, proxyID string) (string, []byte, error) {
-	kind, material, err := v.inner.FetchCredential(ctx, scope, proxyID)
+func (v *afterFetchRevoke) FetchCredential(ctx context.Context, scope, proxyID string) (Fetched, error) {
+	fetched, err := v.inner.FetchCredential(ctx, scope, proxyID)
 	v.live.Revoke("A", time.Now().Add(time.Hour))
-	return kind, material, err
+	return fetched, err
 }
 
 // What a revocation waits for is the end of the connection to the target, not the end of the

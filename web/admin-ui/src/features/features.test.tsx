@@ -41,12 +41,50 @@ describe("Accounts", () => {
     field("Utilisateur sur la cible", "admin");
     field("Secret initial", "s3cr3t-é");
     field("Compte de réconciliation (même cible ; vide : pas de rotation)", "acc_root");
+    field("Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)", "ssh-ed25519 AAAAkey");
     fireEvent.submit(form);
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts")).toBe(true));
     const sent = calls.find((c) => c.method === "POST" && c.path === "/vault/accounts")!.body as Record<string, string>;
-    expect(sent).toMatchObject({ id: "acc_2", protocol: "ssh", targetHost: "web:22", reconciliationAccountId: "acc_root" });
+    expect(sent).toMatchObject({ id: "acc_2", protocol: "ssh", targetHost: "web:22", reconciliationAccountId: "acc_root", hostKey: "ssh-ed25519 AAAAkey" });
     expect(new TextDecoder().decode(Uint8Array.from(atob(sent.initialSecret), (c) => c.charCodeAt(0)))).toBe("s3cr3t-é");
     expect((screen.getByLabelText("Secret initial") as HTMLInputElement).value).toBe("");
+  });
+});
+
+describe("Accounts — host key (ADR-0039)", () => {
+  const pinned = { id: "acc_1", name: "prod db", username: "root", targetHost: "db:22", protocol: "ssh", rotationPolicy: "manual", createdAt: "2026-10-30T10:00:00Z", hostKey: "ssh-ed25519 AAAAold", hostKeyFingerprint: "SHA256:old" };
+  const unpinned = { ...pinned, id: "acc_2", hostKey: "", hostKeyFingerprint: "" };
+
+  it("shows each account's fingerprint, and the accounts that are not pinned", async () => {
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [pinned, unpinned], page: 1, pageSize: 20, totalItems: 2 } } });
+    signedIn(api, <Accounts />);
+    expect(await screen.findByText("SHA256:old")).toBeTruthy();
+    expect(screen.getByText("non épinglée")).toBeTruthy();
+    expect(screen.getByText("Épingler la clé d'hôte")).toBeTruthy();
+    expect(screen.getByText("Changer la clé d'hôte")).toBeTruthy();
+  });
+
+  it("re-pins with the key typed, and says the new fingerprint; cancelled, it sends nothing", async () => {
+    const { api, calls } = fakeApi({
+      "GET /vault/accounts": { body: { items: [pinned], page: 1, pageSize: 20, totalItems: 1 } },
+      "PUT /vault/accounts/acc_1/host-key": { body: { hostKeyFingerprint: "SHA256:new" } },
+    });
+    const prompt = window.prompt;
+    try {
+      window.prompt = () => null;
+      signedIn(api, <Accounts />);
+      fireEvent.click(await screen.findByText("Changer la clé d'hôte"));
+      expect(calls.some((c) => c.method === "PUT")).toBe(false);
+
+      let asked = "";
+      window.prompt = (msg?: string) => { asked = msg ?? ""; return "ssh-ed25519 AAAAnew"; };
+      fireEvent.click(screen.getByText("Changer la clé d'hôte"));
+      expect((await screen.findByRole("status")).textContent).toContain("Clé d'hôte de acc_1 épinglée : SHA256:new");
+      expect(asked).toContain("Elle remplace SHA256:old");
+      expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ hostKey: "ssh-ed25519 AAAAnew" });
+    } finally {
+      window.prompt = prompt;
+    }
   });
 });
 

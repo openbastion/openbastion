@@ -258,6 +258,7 @@ service VaultAccountAdmin {
   rpc OnboardAccount(OnboardAccountRequest) returns (PrivilegedAccount);
   rpc GetAccount(GetAccountRequest) returns (PrivilegedAccount);
   rpc RotateSecret(RotateSecretRequest) returns (RotateSecretResponse);
+  rpc SetHostKey(SetHostKeyRequest) returns (SetHostKeyResponse);   // épingle ou ré-épingle la clé d'hôte (ADR-0039), audité avant
 }
 
 message AuthorizeScopeRequest {
@@ -282,6 +283,8 @@ message FetchCredentialResponse {
   bytes credential_material = 1;   // en mémoire uniquement côté appelant ; jamais journalisé
   string credential_type = 2;      // ex. "ssh_private_key", "password"
   google.protobuf.Timestamp valid_until = 3;
+  string target_host = 4;          // la cible pour laquelle le secret est donné : le proxy refuse une session qui en nomme une autre (ADR-0039)
+  string host_key = 5;             // clé d'hôte épinglée de la cible ("ssh-ed25519 AAAA…") : le secret n'est envoyé qu'à qui la présente (ADR-0039)
 }
 
 message OnboardAccountRequest {
@@ -293,6 +296,7 @@ message OnboardAccountRequest {
   string protocol = 6;             // ex. "ssh" — énumération étendue en v1.0/v2.0 (doc 06 §3)
   string rotation_policy = 7;      // "manual" | "post_use" | "scheduled"
   bytes initial_secret = 8;        // vide = généré automatiquement (même règle que RotateSecretRequest.new_secret)
+  string host_key = 9;             // obligatoire : la clé d'hôte publique de la cible, relevée sur la cible (ADR-0039)
 }
 
 message GetAccountRequest {
@@ -312,6 +316,18 @@ message PrivilegedAccount {
   string rotation_policy = 6;
   google.protobuf.Timestamp last_rotated_at = 7;
   google.protobuf.Timestamp created_at = 8;
+  string host_key = 9;             // clé d'hôte épinglée de la cible, vide si aucune : ni session ni rotation (ADR-0039)
+  string host_key_fingerprint = 10; // son empreinte SHA256
+}
+
+message SetHostKeyRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string account_id = 2;
+  string host_key = 3;             // "ssh-ed25519 AAAA…", ou une ligne known_hosts ; normalisée
+}
+
+message SetHostKeyResponse {
+  string host_key_fingerprint = 1;
 }
 
 message RotateSecretRequest {
@@ -497,8 +513,12 @@ sequenceDiagram
         REC-->>PXY: prêt
     end
     PXY->>CRED: FetchCredential(scope_token, calling_proxy_id)
-    CRED-->>PXY: credential_material
-    PXY->>TGT: Connexion SSH native
+    CRED-->>PXY: credential_material, target_host, host_key (ADR-0039)
+    PXY->>TGT: Connexion SSH native — la clé d'hôte présentée doit être host_key
+    alt clé d'hôte différente, ou target_host autre que celui du Broker
+        PXY->>AUD: EmitEvent(action="session.host_key_mismatch", success=false)
+        Note over PXY,TGT: aucun octet du secret n'est envoyé ; la session se termine
+    end
     PXY->>REC: StreamCommandEntries(session_id, ts, command)
     REC-->>PXY: acquittement — seulement alors la commande part vers TGT
     PXY->>AUD: EmitEvent(action="session.connect", success=true)

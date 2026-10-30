@@ -23,6 +23,8 @@ import (
 
 type sshTarget struct {
 	addr     string
+	hostKey  string   // its public host key, as pinned (ADR-0039)
+	logins   []string // every password it was offered
 	mu       sync.Mutex
 	pw       map[string]string
 	sudoers  map[string]bool
@@ -34,9 +36,11 @@ func startSSHTarget(t *testing.T) *sshTarget {
 	tgt := &sshTarget{pw: map[string]string{"root": "root-pw", "ops": "ops-pw", "app": "old-pw", "nobody": "n-pw"}, sudoers: map[string]bool{"ops": true}}
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := ssh.NewSignerFromKey(priv)
+	tgt.hostKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
 	cfg := &ssh.ServerConfig{PasswordCallback: func(m ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
 		tgt.mu.Lock()
 		defer tgt.mu.Unlock()
+		tgt.logins = append(tgt.logins, string(p))
 		if want, ok := tgt.pw[m.User()]; ok && want == string(p) {
 			return &ssh.Permissions{Extensions: map[string]string{"user": m.User()}}, nil
 		}
@@ -126,19 +130,19 @@ func TestSSHTargetChanger_SetsThePasswordAsRootOrThroughSudo_AndVerifies(t *test
 	tgt := startSSHTarget(t)
 	c := infrastructure.SSHTargetChanger{}
 	ctx := context.Background()
-	if err := c.SetPassword(ctx, tgt.addr, "root", []byte("root-pw"), "app", []byte("new-1")); err != nil {
+	if err := c.SetPassword(ctx, tgt.addr, tgt.hostKey, "root", []byte("root-pw"), "app", []byte("new-1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Verify(ctx, tgt.addr, "app", []byte("new-1")); err != nil {
+	if err := c.Verify(ctx, tgt.addr, tgt.hostKey, "app", []byte("new-1")); err != nil {
 		t.Fatalf("verify the new secret: %v", err)
 	}
-	if err := c.Verify(ctx, tgt.addr, "app", []byte("old-pw")); err == nil {
+	if err := c.Verify(ctx, tgt.addr, tgt.hostKey, "app", []byte("old-pw")); err == nil {
 		t.Fatal("the old secret still opens the target")
 	}
-	if err := c.SetPassword(ctx, tgt.addr, "ops", []byte("ops-pw"), "app", []byte("new-2")); err != nil {
+	if err := c.SetPassword(ctx, tgt.addr, tgt.hostKey, "ops", []byte("ops-pw"), "app", []byte("new-2")); err != nil {
 		t.Fatalf("through sudo: %v", err)
 	}
-	if err := c.Verify(ctx, tgt.addr, "app", []byte("new-2")); err != nil {
+	if err := c.Verify(ctx, tgt.addr, tgt.hostKey, "app", []byte("new-2")); err != nil {
 		t.Fatal(err)
 	}
 	for _, cmd := range tgt.commands {
@@ -153,10 +157,16 @@ func TestSSHTargetChanger_ARefusalIsAnError(t *testing.T) {
 	c := infrastructure.SSHTargetChanger{}
 	ctx := context.Background()
 	for name, try := range map[string]func() error{
-		"a wrong reconciliation secret": func() error { return c.SetPassword(ctx, tgt.addr, "root", []byte("nope"), "app", []byte("x")) },
-		"an account that may not sudo":  func() error { return c.SetPassword(ctx, tgt.addr, "nobody", []byte("n-pw"), "app", []byte("x")) },
-		"nothing listening":             func() error { return c.SetPassword(ctx, "127.0.0.1:1", "root", []byte("root-pw"), "app", []byte("x")) },
-		"a secret the target refuses":   func() error { return c.Verify(ctx, tgt.addr, "app", []byte("wrong")) },
+		"a wrong reconciliation secret": func() error {
+			return c.SetPassword(ctx, tgt.addr, tgt.hostKey, "root", []byte("nope"), "app", []byte("x"))
+		},
+		"an account that may not sudo": func() error {
+			return c.SetPassword(ctx, tgt.addr, tgt.hostKey, "nobody", []byte("n-pw"), "app", []byte("x"))
+		},
+		"nothing listening": func() error {
+			return c.SetPassword(ctx, "127.0.0.1:1", tgt.hostKey, "root", []byte("root-pw"), "app", []byte("x"))
+		},
+		"a secret the target refuses": func() error { return c.Verify(ctx, tgt.addr, tgt.hostKey, "app", []byte("wrong")) },
 	} {
 		if err := try(); err == nil {
 			t.Fatalf("%s: no error", name)
@@ -164,5 +174,28 @@ func TestSSHTargetChanger_ARefusalIsAnError(t *testing.T) {
 	}
 	if tgt.pw["app"] != "old-pw" {
 		t.Fatal("the password changed after refusals")
+	}
+}
+
+// ADR-0039: a server that does not present the pinned host key — someone in between — is
+// offered no secret at all: neither the reconciliation account's nor the new one.
+func TestSSHTargetChanger_AnotherHostKeyIsOfferedNoSecret(t *testing.T) {
+	tgt := startSSHTarget(t)
+	impostor := startSSHTarget(t) // same accounts, another host key
+	c := infrastructure.SSHTargetChanger{}
+	ctx := context.Background()
+	if err := c.SetPassword(ctx, impostor.addr, tgt.hostKey, "root", []byte("root-pw"), "app", []byte("new-secret")); err == nil {
+		t.Fatal("a server with another host key took the change")
+	}
+	if err := c.Verify(ctx, impostor.addr, tgt.hostKey, "app", []byte("old-pw")); err == nil {
+		t.Fatal("a server with another host key was verified")
+	}
+	impostor.mu.Lock()
+	defer impostor.mu.Unlock()
+	if len(impostor.logins) != 0 || impostor.pw["app"] != "old-pw" {
+		t.Fatalf("the impostor was offered %d password(s): %q", len(impostor.logins), impostor.logins)
+	}
+	if err := c.SetPassword(ctx, tgt.addr, "not a key", "root", []byte("root-pw"), "app", []byte("x")); err == nil {
+		t.Fatal("no usable pinned key, and the change went through")
 	}
 }

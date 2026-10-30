@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/openbastion/openbastion/pkg/proxycore"
 	"net/http"
 )
 
@@ -23,30 +24,32 @@ type VaultCredentialHTTPClient struct {
 	Client *http.Client
 }
 
-func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (string, []byte, error) {
+func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
 	body, _ := json.Marshal(map[string]string{
 		"scope_token":      scopeToken,
 		"calling_proxy_id": callingProxyID,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/fetch-credential", bytes.NewReader(body))
 	if err != nil {
-		return "", nil, err
+		return proxycore.Fetched{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
-		return "", nil, err
+		return proxycore.Fetched{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("fetch-credential: status %d", resp.StatusCode)
+		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: status %d", resp.StatusCode)
 	}
 	var out struct {
 		CredentialType     string `json:"credential_type"`
 		CredentialMaterial []byte `json:"credential_material"`
+		TargetHost         string `json:"target_host"`
+		HostKey            string `json:"host_key"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", nil, err
+		return proxycore.Fetched{}, err
 	}
-	return out.CredentialType, out.CredentialMaterial, nil
+	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey}, nil
 }

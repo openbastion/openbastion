@@ -24,11 +24,12 @@ func rotationService(t *testing.T, policy domain.RotationPolicy) (*application.V
 	target, audit := newFakeTarget(), &fakeAudit{}
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(target, audit)
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, adminRoles, "rec", "reconciliation", "root", host, "ssh", domain.RotationManual, []byte("root-pw")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "rec", "reconciliation", "root", host, "ssh", domain.RotationManual, []byte("root-pw")); err != nil {
 		t.Fatal(err)
 	}
 	target.passwords[host+"|root"], target.passwords[host+"|app"] = "root-pw", "old-pw"
-	if err := svc.OnboardAccountWithReconciliation(ctx, adminRoles, "acc", "app", "app", host, "ssh", policy, []byte("old-pw"), "rec"); err != nil {
+	if err := svc.OnboardPinned(ctx, adminRoles, application.OnboardInput{ID: "acc", Name: "app", Username: "app", TargetHost: host, Protocol: "ssh",
+		Policy: policy, InitialSecret: []byte("old-pw"), ReconciliationAccountID: "rec", HostKey: testHostKey}); err != nil {
 		t.Fatal(err)
 	}
 	return svc, store, target, audit
@@ -41,7 +42,7 @@ func injected(t *testing.T, svc *application.VaultService) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, secret, err := svc.FetchCredential(context.Background(), tok, "ssh-proxy")
+	secret, err := fetchMaterial(svc, context.Background(), tok, "ssh-proxy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,14 +73,14 @@ func TestRotate_ReachesTheTarget_AndWhatIsInjectedIsWhatTheTargetTakes(t *testin
 func TestRotate_WithoutAReconciliationAccountIsRefused_AndNothingChanges(t *testing.T) {
 	svc, _, target, audit := rotationService(t, domain.RotationManual)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "lonely", "lonely", "lonely", host, "ssh", domain.RotationManual, []byte("l-pw"))
+	_ = onboardTest(svc, ctx, adminRoles, "lonely", "lonely", "lonely", host, "ssh", domain.RotationManual, []byte("l-pw"))
 	if err := svc.Rotate(ctx, adminRoles, "lonely", nil); !errors.Is(err, application.ErrNoReconciliation) {
 		t.Fatalf("got %v, want ErrNoReconciliation", err)
 	}
 	if target.sets != 0 || len(audit.events) != 0 {
 		t.Fatalf("%d changes on the target, events %v", target.sets, audit.events)
 	}
-	_ = svc.OnboardAccount(ctx, adminRoles, "elsewhere", "e", "root", "10.0.0.99:22", "ssh", domain.RotationManual, []byte("x"))
+	_ = onboardTest(svc, ctx, adminRoles, "elsewhere", "e", "root", "10.0.0.99:22", "ssh", domain.RotationManual, []byte("x"))
 	for name, rec := range map[string]string{"itself": "lonely", "another target": "elsewhere", "no such account": "ghost"} {
 		if err := svc.SetReconciliationAccount(ctx, adminRoles, "lonely", rec); !errors.Is(err, application.ErrNoReconciliation) {
 			t.Fatalf("%s: %v", name, err)
@@ -192,7 +193,7 @@ func TestRotate_RefusedWhenTheTargetsCannotBeReached_AndForASecretThatCannotBeAP
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
-	_ = svc.OnboardAccount(context.Background(), adminRoles, "acc", "a", "app", host, "ssh", domain.RotationManual, []byte("x"))
+	_ = onboardTest(svc, context.Background(), adminRoles, "acc", "a", "app", host, "ssh", domain.RotationManual, []byte("x"))
 	if err := svc.Rotate(context.Background(), adminRoles, "acc", nil); !errors.Is(err, application.ErrRotationOff) {
 		t.Fatalf("got %v, want ErrRotationOff — no rotation that changes the Vault only", err)
 	}

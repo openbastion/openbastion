@@ -47,6 +47,10 @@ const sessionExpiredMessage = "\r\nopenbastion: session ended because its time l
 // they are connected (ADR-0018). It does not say who ended it.
 const sessionRevokedMessage = "\r\nopenbastion: session ended because it was terminated.\r\n"
 
+// hostKeyMismatchMessage is what the operator reads when the target is not the one pinned
+// (ADR-0039): the secret was not sent. The fingerprints are in the proxy's log and the audit.
+const hostKeyMismatchMessage = "\r\nopenbastion: refused: the target did not present its pinned host key; nothing was sent to it. Report this to an administrator.\r\n"
+
 // Serve accepts connections on ln until it errors or ctx is done.
 func (s *SSHServer) Serve(ctx context.Context, ln net.Listener) error {
 	go func() {
@@ -153,6 +157,8 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 		// sudo password typed next is recorded as redacted, not in the clear.
 		OutputObserver: recordingTap.Output(),
 		DialTimeout:    s.DialTimeout,
+		// The address the session names: it must be the Vault's for this secret (ADR-0039).
+		TargetHost: resolved.TargetHost,
 		// SFTP and SCP: each transfer recorded before it is relayed (ADR-0038).
 		Mode:   started.mode,
 		SCP:    started.scp,
@@ -168,6 +174,8 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 			tell(clientChannel, shellRequested, sessionExpiredMessage)
 		case errors.Is(err, proxycore.ErrSessionRevoked):
 			tell(clientChannel, shellRequested, sessionRevokedMessage)
+		case errors.Is(err, proxycore.ErrHostKeyMismatch):
+			tell(clientChannel, shellRequested, hostKeyMismatchMessage)
 		}
 	}
 }

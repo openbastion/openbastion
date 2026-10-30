@@ -846,6 +846,49 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /vault/accounts/{accountId}/host-key:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [vault]
+      summary: Épingle (ou ré-épingle) la clé d'hôte de la cible du compte
+      description: >-
+        Réservé aux administrateurs du compte (vault:account-admin:{id}).
+        Seule la clé vient du client ; l'auteur est celui du jeton vérifié,
+        et le changement est écrit dans l'audit (vault.host_key_set) avant
+        d'avoir lieu : sans audit, pas de changement. Celui qui change une
+        clé décide du serveur qui recevra le secret : la relever sur la
+        cible elle-même, jamais par le réseau qu'on veut protéger (ADR-0039).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostKey]
+              properties:
+                hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…" }
+      responses:
+        "200":
+          description: Clé épinglée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hostKeyFingerprint: { type: string, example: "SHA256:…" }
+        "400":
+          description: Ce n'est pas une clé publique SSH (vide, illisible, deux lignes, marqueur @revoked / @cert-authority)
+        "403":
+          description: L'appelant n'administre pas ce compte
+        "404":
+          description: Compte inconnu ou désactivé
+        "503":
+          description: L'Audit Service ne répond pas — aucun changement de clé sans trace
+
   /vault/accounts/{accountId}/rotate:
     parameters:
       - name: accountId
@@ -873,7 +916,7 @@ paths:
         "202":
           description: Le nouveau secret est posé et vérifié sur la cible, et courant
         "409":
-          description: Le compte n'a pas de compte de réconciliation utilisable, ou une rotation est déjà en cours
+          description: Le compte n'a pas de compte de réconciliation utilisable, ou pas de clé d'hôte épinglée (ADR-0039), ou une rotation est déjà en cours
         "502":
           description: La cible a refusé le nouveau secret (rien n'a changé), ou il n'a pas pu être vérifié (gardé en attente, réglé à la rotation suivante)
         "503":
@@ -1119,6 +1162,7 @@ components:
         protocol: { type: string, enum: [ssh] }
         rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use, description: "post_use : renouvelé quand une session accordée se termine (ADR-0037) ; scheduled : enregistré, exécuté par rien" }
         reconciliationAccountId: { type: string, description: "Compte du Vault, de la même cible, qui peut changer ce mot de passe (root ou sudo chpasswd) — ADR-0037 ; vide : pas de rotation" }
+        hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…", description: "Obligatoire à l'enregistrement (400 sans elle) : la clé d'hôte publique de la cible, relevée sur la cible (/etc/ssh/ssh_host_ed25519_key.pub, ou une ligne known_hosts). Le secret n'est envoyé qu'au serveur qui la présente — par le proxy comme par la rotation (ADR-0039)." }
 
     PrivilegedAccount:
       allOf:
@@ -1127,6 +1171,7 @@ components:
           properties:
             id: { type: string, format: uuid }
             lastRotatedAt: { type: string, format: date-time }
+            hostKeyFingerprint: { type: string, example: "SHA256:yghJebhOfPlVqBTuLQp+13ACAaCo+e5vLM/jNp6sJso", description: "Empreinte de hostKey ; vide pour un compte enregistré avant ADR-0039 et jamais épinglé, qui n'ouvre aucune session" }
             createdAt: { type: string, format: date-time }
             disabledAt: { type: string, format: date-time, description: "Absent tant que le compte est actif. Posé par DELETE /vault/accounts/{id} (suppression logique — doc 06 §3) ; un compte avec ce champ renseigné n'apparaît plus dans GET /vault/accounts et GET /vault/accounts/{id} répond 404." }
 
@@ -1197,6 +1242,7 @@ components:
 | `/sessions/{id}/recording` | GET | sessions | Enregistrement texte de la session |
 | `/vault/accounts` | GET / POST | vault | Lister / onboarder un compte privilégié |
 | `/vault/accounts/{id}` | GET / DELETE | vault | Détail / suppression |
+| `/vault/accounts/{id}/host-key` | PUT | vault | Épingler la clé d'hôte de la cible (ADR-0039) |
 | `/vault/accounts/{id}/rotate` | POST | vault | Rotation manuelle |
 | `/policies` | GET / POST | policies | Politiques RBAC |
 | `/audit/events` | GET | audit | Recherche d'événements d'audit |

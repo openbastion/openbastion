@@ -37,6 +37,18 @@ recordings — goes through the public API at `http://127.0.0.1:8080` (`docs/api
 executed) whose password is `DEMO_TARGET_PASSWORD` in `.env`: onboard it in the Vault, open a
 session, connect to `127.0.0.1:2222` with the ticket as password.
 
+Onboarding needs the target's host key (ADR-0039): the proxy sends the password only to the
+server that presents it. The demonstration target prints its key when it starts, and keeps
+it across restarts:
+
+```sh
+$C logs demo-ssh-target | grep 'host key'
+# demo-ssh-target host key: ssh-ed25519 AAAA…   -> "hostKey" when onboarding the account
+```
+
+For a real target, read the key on the target itself (`/etc/ssh/ssh_host_ed25519_key.pub`),
+not over the network the pin protects.
+
 ## What lives where
 
 | Volume | Holds | Mounted in |

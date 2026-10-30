@@ -36,6 +36,11 @@ type PrivilegedAccount struct {
 	// one's password (ADR-0037): root, or an account allowed to `sudo chpasswd`. Empty: the
 	// account cannot be rotated.
 	ReconciliationAccountID string
+
+	// HostKey is the target's SSH host key, pinned (ADR-0039): one normalized
+	// authorized_keys line. Empty for an account onboarded before pinning — no session nor
+	// rotation reaches its target until one is set.
+	HostKey string
 }
 
 // SecretVersion mirrors the vault_secrets table. EncryptedMaterial is an

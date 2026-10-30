@@ -281,11 +281,32 @@ curl -X POST https://bastion.example.com/api/v1/vault/accounts \
   -H "Content-Type: application/json" \
   -d '{
     "name": "prod-db-01-root",
-    "targetHost": "10.0.4.12",
+    "targetHost": "10.0.4.12:22",
     "protocol": "ssh",
-    "rotationPolicy": "post_use"
+    "rotationPolicy": "post_use",
+    "hostKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…"
   }'
 ```
+
+**La clé d'hôte de la cible est obligatoire (ADR-0039).** C'est la seule chose qui empêche une machine placée à l'adresse de la cible (ARP, DNS, route, machine arrêtée remplacée) de recevoir le mot de passe : le proxy et la rotation n'envoient le secret qu'au serveur qui présente **exactement** cette clé.
+
+- **Relevez-la sur la cible elle-même** (console, outil de gestion de configuration, image qui l'a générée), pas par le réseau que l'épinglage doit protéger. Exemple sur la cible : `cat /etc/ssh/ssh_host_ed25519_key.pub`, et vérifiez son empreinte avec `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Une ligne de `known_hosts` est acceptée aussi : les noms d'hôtes sont retirés.
+- `ssh-keyscan` depuis le bastion donne la clé que **le réseau** présente : c'est acceptable seulement si vous en comparez l'empreinte à celle relevée sur la cible.
+- Le bastion négocie le type de clé épinglé : si la cible a plusieurs clés (`ed25519`, `ecdsa`, `rsa`), épinglez-en une, de préférence `ed25519`.
+- `GET /vault/accounts/{id}` rend la clé et son empreinte (`hostKeyFingerprint`) ; l'Admin UI les affiche dans la liste des comptes.
+
+**Changer la clé** (réinstallation de la cible, rotation de ses clés d'hôte) — l'ancienne refuse les sessions jusque-là :
+
+```sh
+curl -X PUT https://bastion.example.com/api/v1/vault/accounts/{accountId}/host-key \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"hostKey": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…"}'
+# -> {"hostKeyFingerprint":"SHA256:…"}
+```
+
+Réservé aux administrateurs du compte, et écrit dans l'audit avant d'avoir lieu (`vault.host_key_set`, sous votre nom) ; le journal du Vault garde l'ancienne et la nouvelle empreinte. **Celui qui change une clé décide du serveur qui reçoit le secret** : une demande de changement non prévue est un incident, pas un ticket.
+
+**Mise à jour vers ADR-0039** : les comptes enregistrés avant n'ont pas de clé. La migration `003_host_key.sql` les laisse vides, et ils n'ouvrent **aucune session** et ne sont **pas renouvelés** tant que vous ne les avez pas épinglés (`PUT …/host-key` ci-dessus, ou le bouton « Épingler la clé d'hôte » de l'Admin UI, qui les marque « non épinglée »). Épinglez-les avant la mise à jour si les sessions ne doivent pas s'interrompre.
 
 `rotationPolicy` accepte `manual`, `post_use` ou `scheduled` (doc 06 §3). ~~**Attention — limite constatée le 30 octobre 2026** : aujourd'hui, une rotation ne change le secret que dans le Vault, pas sur la cible…~~ **Refermé par ADR-0037** : une rotation **change le mot de passe sur la cible**, par le **compte de réconciliation** du compte (`reconciliationAccountId` à l'enregistrement : un autre compte du Vault, **de la même cible**, `root` ou autorisé à `sudo chpasswd`). Le Vault pose le nouveau secret par SSH, **se connecte avec lui**, et seulement alors le rend courant ; la cible refuse : rien ne change. Un compte **sans** compte de réconciliation ne peut pas être renouvelé (`409`). `post_use` : le secret est renouvelé quand une session accordée se termine (terminaison ou expiration). `scheduled` : enregistré, **exécuté par rien** (pas de Scheduler de rotation). Le Vault ouvre des connexions SSH vers les cibles (à autoriser au pare-feu) et **ne vérifie pas leur clé d'hôte** (comme le proxy). Une rotation manuelle se déclenche via :
 
@@ -507,6 +528,9 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `…/rotate` répond `502` « the target refused the new secret: nothing changed » | Le compte de réconciliation ne s'est pas connecté, ou `chpasswd` a échoué ; l'ancien secret reste courant | Lire la cause dans le journal du Vault ; vérifier le secret et les droits du compte de réconciliation |
 | `…/rotate` répond `502` « could not be verified » | Le mot de passe a été posé mais le nouveau secret n'ouvre pas la cible ; il est gardé en attente | Relancer la rotation : elle commence par réconcilier (le nouveau ouvre ? il devient courant ; l'ancien ? l'attente est jetée) ; « neither … a human must look » : remettre le mot de passe de la cible à la main |
 | `…/rotate` répond `503` | L'Audit Service ne répond pas : aucune rotation sans trace (ADR-0037) | Rétablir l'audit |
+| `POST /vault/accounts` répond `400` « not an SSH public key » | `hostKey` absent, vide, sur deux lignes, illisible, ou un marqueur `@revoked` / `@cert-authority` (ADR-0039) | Fournir la ligne de `/etc/ssh/ssh_host_ed25519_key.pub` de la cible |
+| `connect` répond `409` « authorize-scope: status 409 », ou `…/rotate` répond `409` « no pinned host key » | Le compte n'a pas de clé d'hôte épinglée : il date d'avant ADR-0039 | Relever la clé sur la cible et l'épingler (`PUT /vault/accounts/{id}/host-key`) |
+| L'opérateur lit « refused: the target did not present its pinned host key; nothing was sent to it » ; l'audit porte `session.host_key_mismatch` | La machine qui répond à l'adresse de la cible n'a pas la clé épinglée : **soit quelqu'un s'interpose, soit la cible a changé de clé**. Le journal du proxy donne l'empreinte vue et l'empreinte épinglée. Rien du secret n'a été envoyé | Vérifier **sur la cible** si sa clé a changé (réinstallation). Si oui, ré-épingler ; sinon, traiter comme une interposition. Ne jamais ré-épingler la clé vue sans cette vérification |
 | Un transfert s'arrête avec « Connection closed » au milieu | Le Command Recorder n'a pas acquitté l'enregistrement du transfert (ADR-0038) : rien de plus n'est transmis | Rétablir le Command Recorder ; le transfert recommence de zéro |
 | `sftp upload … sha256 not computed: non-sequential` dans un enregistrement | Le client a écrit par blocs non contigus (transferts parallèles) : la taille est enregistrée, pas l'empreinte | Normal ; pour une empreinte, transférer sans parallélisme |
 | `verify-chain` répond `409` « the chain starts at event …, which follows an event no checkpoint vouches for » | Les premiers événements en base ont été supprimés sans être archivés (ADR-0032), ou le point de contrôle qui les justifie a été retiré du fichier d'ancres | Incident de sécurité : comparer la base à la dernière sauvegarde et le fichier d'ancres à sa réplique |

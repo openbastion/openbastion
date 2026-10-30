@@ -27,6 +27,8 @@ func CallerRules() []mtls.Rule {
 		// Account metadata: the Broker resolves where and as whom to connect.
 		{Method: http.MethodGet, Path: "/vault/v1/accounts/", Prefix: true, Callers: []string{mtls.APIGateway, mtls.SessionBroker}},
 		{Method: http.MethodDelete, Path: "/vault/v1/accounts/", Prefix: true, Callers: []string{mtls.APIGateway}},
+		// Pinning a target's host key (ADR-0039): an administrator, through the Gateway.
+		{Method: http.MethodPut, Path: "/vault/v1/accounts/", Prefix: true, Callers: []string{mtls.APIGateway}},
 
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}

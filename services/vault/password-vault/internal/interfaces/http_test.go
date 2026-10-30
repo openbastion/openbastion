@@ -32,7 +32,8 @@ func vaultWithScope(t *testing.T, fromCert bool) (*interfaces.HTTPServer, string
 	store := infrastructure.NewInMemoryStore()
 	svc := application.NewVaultService(store, store, store, kms, allowAll{})
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, []string{"vault-admin"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err != nil {
+	if err := svc.OnboardPinned(ctx, []string{"vault-admin"}, application.OnboardInput{ID: "acc1", Name: "target", Username: "root", TargetHost: "10.0.0.1:22",
+		Protocol: "ssh", Policy: domain.RotationManual, InitialSecret: []byte("s3cret"), HostKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"}); err != nil {
 		t.Fatal(err)
 	}
 	token, _, err := svc.AuthorizeScope(ctx, "sess1", "acc1", "ssh-proxy", time.Minute)
@@ -111,4 +112,89 @@ func TestFetchCredential_WithoutCertificates_TheClaimIsAllThereIs(t *testing.T) 
 	if rec := fetch(srv, "", token, "ssh-proxy"); rec.Code != http.StatusOK {
 		t.Fatalf("the right claim: %d", rec.Code)
 	}
+}
+
+// ADR-0039 over HTTP: fetch-credential hands the proxy the target with the secret; an
+// unpinned account is a 409 at authorize-scope and fetch-credential; PUT host-key pins it.
+func TestHostKey_OverHTTP(t *testing.T) {
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"
+	kms, _ := infrastructure.NewLocalKMS()
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, allowAll{}).WithRotation(noTarget{}, &okAudit{})
+	ctx := context.Background()
+	if err := svc.OnboardPinned(ctx, []string{"vault-admin"}, application.OnboardInput{ID: "rec", Name: "rec", Username: "root", TargetHost: "10.0.0.1:22",
+		Protocol: "ssh", Policy: domain.RotationManual, InitialSecret: []byte("r"), HostKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.OnboardPinned(ctx, []string{"vault-admin"}, application.OnboardInput{ID: "acc1", Name: "target", Username: "app", TargetHost: "10.0.0.1:22",
+		Protocol: "ssh", Policy: domain.RotationManual, InitialSecret: []byte("s3cret"), ReconciliationAccountID: "rec", HostKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	srv := interfaces.NewHTTPServer(svc)
+	call := func(method, path string, body any) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, path, bytes.NewReader(b))
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	scope := func() (*httptest.ResponseRecorder, string) {
+		rec := call(http.MethodPost, "/vault/v1/authorize-scope", map[string]any{"session_id": "s", "privileged_account_id": "acc1", "proxy_service_id": "ssh-proxy", "ttl_seconds": 60})
+		var out struct {
+			Token string `json:"scope_token"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec, out.Token
+	}
+
+	_, token := scope()
+	rec := fetch(srv, "", token, "ssh-proxy")
+	var got map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if rec.Code != http.StatusOK || got["target_host"] != "10.0.0.1:22" || got["host_key"] != key {
+		t.Fatalf("fetch-credential: %d %v", rec.Code, got)
+	}
+
+	_, token = scope()
+	_ = store.SetHostKey(ctx, "acc1", "") // as an account onboarded before ADR-0039
+	if rec, _ := scope(); rec.Code != http.StatusConflict {
+		t.Fatalf("authorize-scope of an unpinned account: %d", rec.Code)
+	}
+	if rec := fetch(srv, "", token, "ssh-proxy"); rec.Code != http.StatusConflict || bytes.Contains(rec.Body.Bytes(), []byte("s3cret")) {
+		t.Fatalf("fetch-credential of an unpinned account: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(http.MethodPost, "/vault/v1/rotate", map[string]any{"accountId": "acc1", "actorRoles": []string{"vault-admin"}}); rec.Code != http.StatusConflict || !bytes.Contains(rec.Body.Bytes(), []byte("no pinned host key")) {
+		t.Fatalf("rotate of an unpinned account: %d %s", rec.Code, rec.Body)
+	}
+
+	if rec := call(http.MethodPut, "/vault/v1/accounts/acc1/host-key", map[string]any{"hostKey": "nonsense", "actorId": "u", "actorRoles": []string{"vault-admin"}}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("a key that does not read: %d", rec.Code)
+	}
+	rec = call(http.MethodPut, "/vault/v1/accounts/acc1/host-key", map[string]any{"hostKey": "10.0.0.1 " + key, "actorId": "u", "actorRoles": []string{"vault-admin"}})
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("SHA256:")) {
+		t.Fatalf("PUT host-key: %d %s", rec.Code, rec.Body)
+	}
+	rec = call(http.MethodGet, "/vault/v1/accounts/acc1", nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got["hostKey"] != key || got["hostKeyFingerprint"] == "" {
+		t.Fatalf("GET after the pin: %v", got)
+	}
+	if rec, _ := scope(); rec.Code != http.StatusOK {
+		t.Fatalf("authorize-scope after the pin: %d", rec.Code)
+	}
+}
+
+type okAudit struct{}
+
+func (okAudit) EmitEvent(context.Context, string, string, string, string, bool) error { return nil }
+
+// noTarget is a target that is never reached: every use is a failure of the test.
+type noTarget struct{}
+
+func (noTarget) SetPassword(context.Context, string, string, string, []byte, string, []byte) error {
+	panic("the target was reached")
+}
+
+func (noTarget) Verify(context.Context, string, string, string, []byte) error {
+	panic("the target was reached")
 }

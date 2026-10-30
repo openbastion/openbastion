@@ -17,6 +17,7 @@
 package sshcodec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -60,6 +61,10 @@ type Codec struct {
 	// want in production — cmd/ssh-proxy sets this explicitly.
 	DialTimeout time.Duration
 
+	// TargetHost is the address the session names (from the Broker): it must be the one the
+	// Vault gave the secret for (ADR-0039). Empty: not compared.
+	TargetHost string
+
 	// Mode is what the client asked for on its session channel (ADR-0038): an interactive
 	// shell (the zero value), the SFTP subsystem, or a legacy scp sink or source (SCP).
 	Mode Mode
@@ -91,10 +96,19 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 	stopCut := context.AfterFunc(ctx, func() { _ = targetConn.Close() })
 	defer stopCut()
 
+	// The target must present the host key the Vault pinned for this secret (ADR-0039), and
+	// be the target the Vault gave it for: otherwise not one byte of the secret is sent.
+	pinned, err := pinnedHostKey(credential)
+	if err != nil {
+		return err
+	}
+	if credential.TargetHost != "" && c.TargetHost != "" && credential.TargetHost != c.TargetHost {
+		return fmt.Errorf("%w: the session names %s, the Vault gave the secret for %s", ErrHostKeyMismatch, c.TargetHost, credential.TargetHost)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            c.TargetUser,
 		Auth:            []ssh.AuthMethod{ssh.Password(string(credential.Material()))},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // MVP: no host key pinning yet — see NOTES_SANDBOX.md
+		HostKeyCallback: checkHostKey(pinned),
 		Timeout:         c.DialTimeout,
 	}
 
@@ -236,4 +250,28 @@ func (c *Codec) relayTransfer(ctx context.Context, client io.ReadWriter, session
 		return downErr
 	}
 	return nil
+}
+
+// ErrHostKeyMismatch is proxycore.ErrHostKeyMismatch (ADR-0039): nothing of the secret was sent.
+var ErrHostKeyMismatch = proxycore.ErrHostKeyMismatch
+
+func pinnedHostKey(credential *proxycore.Credential) (ssh.PublicKey, error) {
+	if credential.HostKey == "" {
+		return nil, fmt.Errorf("%w: the Vault gave no pinned host key", ErrHostKeyMismatch)
+	}
+	k, _, _, _, err := ssh.ParseAuthorizedKey([]byte(credential.HostKey))
+	if err != nil {
+		return nil, fmt.Errorf("%w: the pinned host key does not read: %v", ErrHostKeyMismatch, err)
+	}
+	return k, nil
+}
+
+// checkHostKey accepts exactly the pinned key, and says what was seen otherwise.
+func checkHostKey(pinned ssh.PublicKey) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if bytes.Equal(key.Marshal(), pinned.Marshal()) {
+			return nil
+		}
+		return fmt.Errorf("%w: %s presented %s, pinned %s", ErrHostKeyMismatch, hostname, ssh.FingerprintSHA256(key), ssh.FingerprintSHA256(pinned))
+	}
 }

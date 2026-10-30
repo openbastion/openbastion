@@ -181,6 +181,10 @@ func (s *VaultService) AuthorizeScope(ctx context.Context, sessionID, accountID,
 	if account.DisabledAt != nil {
 		return "", time.Time{}, domain.ErrNotFound
 	}
+	// A session that could never be given its secret is not authorized at all (ADR-0039).
+	if account.HostKey == "" {
+		return "", time.Time{}, ErrNoHostKey
+	}
 	token = randomID("scope")
 	expiresAt = time.Now().UTC().Add(ttl)
 	grant := &domain.ScopeGrant{Token: token, SessionID: sessionID, PrivilegedAccountID: accountID, ProxyServiceID: proxyServiceID, ExpiresAt: expiresAt}
@@ -190,20 +194,28 @@ func (s *VaultService) AuthorizeScope(ctx context.Context, sessionID, accountID,
 	return token, expiresAt, nil
 }
 
-func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (credType string, material []byte, err error) {
+func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (Delivered, error) {
 	grant, err := s.scopes.ConsumeIfValid(ctx, scopeToken, callingProxyID)
 	if err != nil {
-		return "", nil, err
+		return Delivered{}, err
+	}
+	// The secret goes only with the target it is for (ADR-0039): no pin, no secret.
+	account, err := s.accounts.Get(ctx, grant.PrivilegedAccountID)
+	if err != nil {
+		return Delivered{}, err
+	}
+	if account.HostKey == "" {
+		return Delivered{}, ErrNoHostKey
 	}
 	version, err := s.secrets.CurrentVersion(ctx, grant.PrivilegedAccountID)
 	if err != nil {
-		return "", nil, err
+		return Delivered{}, err
 	}
 	plaintext, err := s.kms.Open(version.EncryptedMaterial)
 	if err != nil {
-		return "", nil, err
+		return Delivered{}, err
 	}
-	return "password", plaintext, nil
+	return Delivered{Type: "password", Material: plaintext, TargetHost: account.TargetHost, HostKey: account.HostKey}, nil
 }
 
 func randomID(prefix string) string {

@@ -14,14 +14,16 @@ import (
 
 // SSHTargetChanger is application.TargetChanger over SSH, with password authentication.
 //
-// The target's host key is NOT verified (ssh.InsecureIgnoreHostKey), exactly as the SSH proxy
-// does today (MVP): whoever stands between the Vault and the target sees the new secret and the
-// reconciliation account's. ADR-0037 states it.
+// The target must present its pinned host key (ADR-0039) before any secret is sent.
 type SSHTargetChanger struct {
 	Timeout time.Duration // per connection; 15 s when zero
 }
 
-func (c SSHTargetChanger) dial(ctx context.Context, host, user string, secret []byte) (*ssh.Client, error) {
+func (c SSHTargetChanger) dial(ctx context.Context, host, hostKey, user string, secret []byte) (*ssh.Client, error) {
+	pinned, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hostKey))
+	if err != nil {
+		return nil, fmt.Errorf("no usable pinned host key for %s: %w", host, err)
+	}
 	timeout := c.Timeout
 	if timeout == 0 {
 		timeout = 15 * time.Second
@@ -35,7 +37,7 @@ func (c SSHTargetChanger) dial(ctx context.Context, host, user string, secret []
 	sc, chans, reqs, err := ssh.NewClientConn(conn, host, &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.Password(string(secret))},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // MVP, as the proxy: see the type
+		HostKeyCallback: ssh.FixedHostKey(pinned), // ADR-0039: the pinned key or nothing
 		Timeout:         timeout,
 	})
 	if err != nil {
@@ -49,8 +51,8 @@ func (c SSHTargetChanger) dial(ctx context.Context, host, user string, secret []
 // SetPassword runs chpasswd on host as admin — through `sudo -S` when admin is not root, the
 // admin's secret first on standard input — with "user:newSecret" as its only input line. The
 // secret never appears on a command line.
-func (c SSHTargetChanger) SetPassword(ctx context.Context, host, admin string, adminSecret []byte, user string, newSecret []byte) error {
-	client, err := c.dial(ctx, host, admin, adminSecret)
+func (c SSHTargetChanger) SetPassword(ctx context.Context, host, hostKey, admin string, adminSecret []byte, user string, newSecret []byte) error {
+	client, err := c.dial(ctx, host, hostKey, admin, adminSecret)
 	if err != nil {
 		return fmt.Errorf("the reconciliation account cannot log in to %s: %w", host, err)
 	}
@@ -84,8 +86,8 @@ func (c SSHTargetChanger) SetPassword(ctx context.Context, host, admin string, a
 }
 
 // Verify logs in to host as user with secret.
-func (c SSHTargetChanger) Verify(ctx context.Context, host, user string, secret []byte) error {
-	client, err := c.dial(ctx, host, user, secret)
+func (c SSHTargetChanger) Verify(ctx context.Context, host, hostKey, user string, secret []byte) error {
+	client, err := c.dial(ctx, host, hostKey, user, secret)
 	if err != nil {
 		return err
 	}

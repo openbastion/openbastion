@@ -30,7 +30,7 @@ func gatewayOnboardAccount(t *testing.T, baseURL, token, id, name, username, tar
 // reconciliationAccountId, ADR-0037).
 func gatewayOnboardAccountWith(t *testing.T, baseURL, token string, fields map[string]any) int {
 	t.Helper()
-	body, _ := json.Marshal(fields)
+	body, _ := json.Marshal(withHostKey(fields))
 	req, _ := http.NewRequest(http.MethodPost, baseURL+"/vault/accounts", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")

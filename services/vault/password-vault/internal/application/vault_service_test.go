@@ -53,7 +53,7 @@ func reconcilable(t *testing.T, svc *application.VaultService, accountID string)
 	}
 	recID := "rec_" + accountID
 	if _, err := svc.GetAccount(ctx, recID); err != nil {
-		if err := svc.OnboardAccount(ctx, adminRoles, recID, "reconciliation", "reconciler", a.TargetHost, "ssh", domain.RotationManual, []byte("root-secret")); err != nil {
+		if err := onboardTest(svc, ctx, adminRoles, recID, "reconciliation", "reconciler", a.TargetHost, "ssh", domain.RotationManual, []byte("root-secret")); err != nil {
 			t.Fatalf("reconcilable: %v", err)
 		}
 	}
@@ -67,8 +67,8 @@ var adminRoles = []string{"vault-admin"}
 func TestFetchCredential_RequiresPriorAuthorization(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
-	if _, _, err := svc.FetchCredential(ctx, "never-issued-token", "ssh-proxy-1"); err == nil {
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	if _, err := svc.FetchCredential(ctx, "never-issued-token", "ssh-proxy-1"); err == nil {
 		t.Fatal("expected FetchCredential to fail without a prior AuthorizeScope")
 	}
 }
@@ -76,12 +76,12 @@ func TestFetchCredential_RequiresPriorAuthorization(t *testing.T) {
 func TestFetchCredential_RejectsWrongProxyIdentity(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	token, _, err := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute)
 	if err != nil {
 		t.Fatalf("AuthorizeScope: %v", err)
 	}
-	if _, _, err := svc.FetchCredential(ctx, token, "database-proxy-1"); err == nil {
+	if _, err := svc.FetchCredential(ctx, token, "database-proxy-1"); err == nil {
 		t.Fatal("expected FetchCredential to reject a proxy identity different from the one authorized")
 	}
 }
@@ -89,12 +89,12 @@ func TestFetchCredential_RejectsWrongProxyIdentity(t *testing.T) {
 func TestFetchCredential_ScopeTokenIsSingleUse(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	token, _, _ := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute)
-	if _, _, err := svc.FetchCredential(ctx, token, "ssh-proxy-1"); err != nil {
+	if _, err := svc.FetchCredential(ctx, token, "ssh-proxy-1"); err != nil {
 		t.Fatalf("first FetchCredential should succeed: %v", err)
 	}
-	if _, _, err := svc.FetchCredential(ctx, token, "ssh-proxy-1"); err == nil {
+	if _, err := svc.FetchCredential(ctx, token, "ssh-proxy-1"); err == nil {
 		t.Fatal("expected a replayed scope token to be rejected (single-use)")
 	}
 }
@@ -102,9 +102,9 @@ func TestFetchCredential_ScopeTokenIsSingleUse(t *testing.T) {
 func TestFetchCredential_ReturnsPlaintextMatchingOnboarded(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret-value"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret-value"))
 	token, _, _ := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute)
-	_, material, err := svc.FetchCredential(ctx, token, "ssh-proxy-1")
+	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy-1")
 	if err != nil {
 		t.Fatalf("FetchCredential: %v", err)
 	}
@@ -116,13 +116,13 @@ func TestFetchCredential_ReturnsPlaintextMatchingOnboarded(t *testing.T) {
 func TestRotate_SupersedesPreviousVersion(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("old-secret-value"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("old-secret-value"))
 	reconcilable(t, svc, "acc1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("new-secret-value")); err != nil {
 		t.Fatalf("Rotate: %v", err)
 	}
 	token, _, _ := svc.AuthorizeScope(ctx, "session2", "acc1", "ssh-proxy-1", time.Minute)
-	_, material, err := svc.FetchCredential(ctx, token, "ssh-proxy-1")
+	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy-1")
 	if err != nil {
 		t.Fatalf("FetchCredential: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestRotate_SupersedesPreviousVersion(t *testing.T) {
 func TestGetAccount_ReturnsMetadataOnly(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "prod-db-01-root", "root", "10.0.4.12:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "prod-db-01-root", "root", "10.0.4.12:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	account, err := svc.GetAccount(ctx, "acc1")
 	if err != nil {
 		t.Fatalf("GetAccount: %v", err)
@@ -157,13 +157,13 @@ func TestGetAccount_FailsForUnknownAccount(t *testing.T) {
 func TestRotate_AutoGeneratesSecretWhenNoneProvided(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("old-secret-value"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("old-secret-value"))
 	reconcilable(t, svc, "acc1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate with no explicit secret: %v", err)
 	}
 	token, _, _ := svc.AuthorizeScope(ctx, "session2", "acc1", "ssh-proxy-1", time.Minute)
-	_, material, err := svc.FetchCredential(ctx, token, "ssh-proxy-1")
+	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy-1")
 	if err != nil {
 		t.Fatalf("FetchCredential: %v", err)
 	}
@@ -178,18 +178,18 @@ func TestRotate_AutoGeneratesSecretWhenNoneProvided(t *testing.T) {
 func TestRotate_AutoGeneratesDifferentSecretsEachTime(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial"))
 	reconcilable(t, svc, "acc1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate 1: %v", err)
 	}
 	token1, _, _ := svc.AuthorizeScope(ctx, "s1", "acc1", "ssh-proxy-1", time.Minute)
-	_, first, _ := svc.FetchCredential(ctx, token1, "ssh-proxy-1")
+	first, _ := fetchMaterial(svc, ctx, token1, "ssh-proxy-1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate 2: %v", err)
 	}
 	token2, _, _ := svc.AuthorizeScope(ctx, "s2", "acc1", "ssh-proxy-1", time.Minute)
-	_, second, _ := svc.FetchCredential(ctx, token2, "ssh-proxy-1")
+	second, _ := fetchMaterial(svc, ctx, token2, "ssh-proxy-1")
 	if string(first) == string(second) {
 		t.Fatal("expected two successive auto-generated rotations to produce different secrets")
 	}
@@ -212,7 +212,7 @@ func TestRotate_IncrementsVersionNumberEachTime(t *testing.T) {
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("v1")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("v1")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
 	reconcilable(t, svc, "acc1")
@@ -255,7 +255,7 @@ func TestOnboardAccount_LeavesLastRotatedAtNilBeforeAnyRotation(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
 	account, err := store.Get(ctx, "acc1")
@@ -280,7 +280,7 @@ func TestRotate_SetsLastRotatedAt(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
 	reconcilable(t, svc, "acc1")
@@ -320,7 +320,7 @@ func TestOnboardAccount_EncryptedMaterialNeverContainsPlaintext(t *testing.T) {
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	plaintext := []byte("a-very-identifiable-plaintext-marker")
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, plaintext); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, plaintext); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
 	version, err := store.CurrentVersion(ctx, "acc1")
@@ -340,7 +340,7 @@ func TestOnboardAccount_DeniedWithoutAuthorization(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
 	authz := &fakeAuthz{allowed: false, reason: "no policy matches"}
 	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
-	err := svc.OnboardAccount(context.Background(), []string{"nobody"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	err := onboardTest(svc, context.Background(), []string{"nobody"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	if err == nil {
 		t.Fatal("expected OnboardAccount to be denied without a matching authorization policy")
 	}
@@ -360,7 +360,7 @@ func TestOnboardAccount_FailsClosedWhenAuthorizationUnreachable(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
 	authz := &fakeAuthz{err: errors.New("authorization service unreachable")}
 	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
-	if err := svc.OnboardAccount(context.Background(), adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err == nil {
+	if err := onboardTest(svc, context.Background(), adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err == nil {
 		t.Fatal("expected OnboardAccount to fail closed when Authorization is unreachable")
 	}
 }
@@ -371,7 +371,7 @@ func TestRotate_DeniedWithoutAuthorization(t *testing.T) {
 	permissive := &fakeAuthz{allowed: true}
 	svc := application.NewVaultService(store, store, store, kms, permissive).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("onboarding setup: %v", err)
 	}
 	restrictive := &fakeAuthz{allowed: false, reason: "role lost admin rights"}
@@ -389,7 +389,7 @@ func TestOnboardAccount_SessionCreationRightsAloneDoNotGrantAdminAccess(t *testi
 	store := infrastructure.NewInMemoryStore()
 	authz := &sessionOnlyAuthz{}
 	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
-	err := svc.OnboardAccount(context.Background(), []string{"dba"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	err := onboardTest(svc, context.Background(), []string{"dba"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	if err == nil {
 		t.Fatal("expected onboarding to be denied for a role with only session-creation rights")
 	}
@@ -398,8 +398,8 @@ func TestOnboardAccount_SessionCreationRightsAloneDoNotGrantAdminAccess(t *testi
 func TestListAccounts_ExcludesDisabledAccounts(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target1", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s1"))
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc2", "target2", "root", "10.0.0.2:22", "ssh", domain.RotationManual, []byte("s2"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target1", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s1"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc2", "target2", "root", "10.0.0.2:22", "ssh", domain.RotationManual, []byte("s2"))
 	if err := svc.DisableAccount(ctx, adminRoles, "acc2"); err != nil {
 		t.Fatalf("DisableAccount: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestListAccounts_ClampsPageAndPageSize(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
 		id := string(rune('a' + i))
-		_ = svc.OnboardAccount(ctx, adminRoles, id, "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s"))
+		_ = onboardTest(svc, ctx, adminRoles, id, "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s"))
 	}
 	// page=0 and a pageSize far beyond the documented maximum (doc 05 §2:
 	// pageSize max 100) must not panic or bypass pagination — both are
@@ -454,7 +454,7 @@ func TestListAccounts_DeniedWithoutAuthorization(t *testing.T) {
 func TestDisableAccount_GetAccountThenReturns404(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
 		t.Fatalf("DisableAccount: %v", err)
 	}
@@ -476,7 +476,7 @@ func TestDisableAccount_DeniedWithoutAuthorization(t *testing.T) {
 	permissive := &fakeAuthz{allowed: true}
 	svc := application.NewVaultService(store, store, store, kms, permissive).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err != nil {
 		t.Fatalf("onboarding setup: %v", err)
 	}
 	restrictive := &fakeAuthz{allowed: false, reason: "role lost admin rights"}
@@ -507,7 +507,7 @@ func TestDisableAccount_BlocksRotate(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
 	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
-	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
+	if err := onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
 	reconcilable(t, svc, "acc1")
@@ -544,7 +544,7 @@ func TestDisableAccount_BlocksAuthorizeScope(t *testing.T) {
 	// defense in depth — see its doc comment.
 	svc := newTestService(t)
 	ctx := context.Background()
-	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
+	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
 		t.Fatalf("DisableAccount: %v", err)
 	}

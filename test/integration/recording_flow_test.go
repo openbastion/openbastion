@@ -16,8 +16,6 @@ package integration_test
 
 import (
 	"bufio"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,14 +46,7 @@ func startInteractiveTargetSSHServer(t *testing.T, expectedPassword string) (add
 // target was actually sent.
 func startObservedInteractiveTargetSSHServer(t *testing.T, expectedPassword string, onLine func(line string)) (addr string) {
 	t.Helper()
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("target host key: %v", err)
-	}
-	signer, err := ssh.NewSignerFromKey(priv)
-	if err != nil {
-		t.Fatalf("target signer: %v", err)
-	}
+	signer := targetHostSigner // the key every account is pinned to (ADR-0039)
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 			if string(password) != expectedPassword {

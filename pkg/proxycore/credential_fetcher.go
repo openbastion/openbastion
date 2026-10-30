@@ -1,6 +1,9 @@
 package proxycore
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // Credential holds secret material in memory for the lifetime of a single
 // session. It is the ONLY structure in the entire system allowed to hold
@@ -14,6 +17,20 @@ type Credential struct {
 	Type     string // e.g. "ssh_private_key", "password"
 	material []byte
 	purged   bool
+
+	// TargetHost and HostKey are the target the Vault gave the secret for (ADR-0039): its
+	// address, and its pinned SSH host key (an authorized_keys line). A codec connects only to
+	// a target that presents exactly this key, and refuses an address that is not this one.
+	TargetHost string
+	HostKey    string
+}
+
+// Fetched is what the Vault delivers for one session (ADR-0039).
+type Fetched struct {
+	Type       string
+	Material   []byte
+	TargetHost string
+	HostKey    string
 }
 
 func newCredential(credType string, material []byte) *Credential {
@@ -56,7 +73,7 @@ func (c *Credential) Purged() bool {
 // abstracted here so pkg/proxycore has zero dependency on transport, or
 // on the Vault service itself — only on this contract.
 type VaultClient interface {
-	FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (credType string, material []byte, err error)
+	FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (Fetched, error)
 }
 
 // CredentialFetcher retrieves an ephemeral credential directly from the
@@ -76,9 +93,16 @@ func NewCredentialFetcher(vault VaultClient, callingProxyID string) *CredentialF
 // actual credential material. The scope token is single-use; a replayed
 // call is expected to be rejected by the Vault.
 func (f *CredentialFetcher) Fetch(ctx context.Context, scopeToken string) (*Credential, error) {
-	credType, material, err := f.vault.FetchCredential(ctx, scopeToken, f.callingProxyID)
+	got, err := f.vault.FetchCredential(ctx, scopeToken, f.callingProxyID)
 	if err != nil {
 		return nil, err
 	}
-	return newCredential(credType, material), nil
+	c := newCredential(got.Type, got.Material)
+	c.TargetHost, c.HostKey = got.TargetHost, got.HostKey
+	return c, nil
 }
+
+// ErrHostKeyMismatch: the target is not the one the Vault pinned for the secret (ADR-0039) —
+// another host key, no pinned key, or another address. A codec returns it (wrapped) before
+// it sends anything of the secret; the Listener audits it as session.host_key_mismatch.
+var ErrHostKeyMismatch = errors.New("the target did not present its pinned host key")

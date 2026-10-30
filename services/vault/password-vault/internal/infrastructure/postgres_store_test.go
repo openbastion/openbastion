@@ -258,7 +258,7 @@ func TestPostgresStore_PendingVersion_Lifecycle(t *testing.T) {
 	store := infrastructure.NewPostgresStore(testDB(t))
 	ctx := context.Background()
 	id := fmt.Sprintf("acc_pending_%d", time.Now().UnixNano())
-	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: "n", Username: "u", TargetHost: "h:22", Protocol: "ssh", RotationPolicy: domain.RotationManual, ReconciliationAccountID: "rec_x"}); err != nil {
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: "h:22", Protocol: "ssh", RotationPolicy: domain.RotationManual, ReconciliationAccountID: "rec_x"}); err != nil {
 		t.Fatal(err)
 	}
 	if a, _ := store.Get(ctx, id); a.ReconciliationAccountID != "rec_x" {
@@ -294,5 +294,51 @@ func TestPostgresStore_PendingVersion_Lifecycle(t *testing.T) {
 	}
 	if cur, _ := store.CurrentVersion(ctx, id); cur.Version != 2 {
 		t.Fatalf("current after a discard: %d", cur.Version)
+	}
+}
+
+// The pinned host key (ADR-0039): an account created without one has none (as one migrated
+// from before 003_host_key.sql does), SetHostKey stores it, Get and List read it back.
+func TestPostgresStore_HostKey_RoundTrips(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("acc")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.HostKey != "" {
+		t.Fatalf("a new account without a key: %+v err=%v", got, err)
+	}
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"
+	if err := store.SetHostKey(ctx, id, key); err != nil {
+		t.Fatalf("SetHostKey: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.HostKey != key {
+		t.Fatalf("Get after SetHostKey: %q err=%v", got.HostKey, err)
+	}
+	accounts, _, err := store.List(ctx, 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range accounts {
+		if a.ID == id {
+			found = a.HostKey == key
+		}
+	}
+	if !found {
+		t.Fatal("List does not read the pinned key back")
+	}
+	if err := store.SetHostKey(ctx, uniqueID("nobody"), key); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("SetHostKey of an unknown account: %v", err)
+	}
+	// Created with a key: stored at once.
+	id2 := uniqueID("acc")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id2, Name: id2, Username: "u", TargetHost: id2 + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual, HostKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.Get(ctx, id2); got.HostKey != key {
+		t.Fatalf("Create with a key stored %q", got.HostKey)
 	}
 }

@@ -14,8 +14,6 @@ package integration_test
 import (
 	"bufio"
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -128,14 +126,7 @@ func brokerTerminateSession(t *testing.T, baseURL, sessionID string) int {
 // in — and echoes back whatever line it receives on a shell session.
 func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr string) {
 	t.Helper()
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("target host key: %v", err)
-	}
-	signer, err := ssh.NewSignerFromKey(priv)
-	if err != nil {
-		t.Fatalf("target signer: %v", err)
-	}
+	signer := targetHostSigner // the key every account is pinned to (ADR-0039)
 	config := &ssh.ServerConfig{
 		PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 			if string(password) != expectedPassword {

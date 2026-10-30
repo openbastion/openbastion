@@ -7,8 +7,6 @@ package integration_test
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -31,8 +29,7 @@ import (
 // both on the local filesystem.
 func startTransferTarget(t *testing.T, user, password string) string {
 	t.Helper()
-	_, priv, _ := ed25519.GenerateKey(rand.Reader)
-	signer, _ := ssh.NewSignerFromKey(priv)
+	signer := targetHostSigner // the key every account is pinned to (ADR-0039)
 	cfg := &ssh.ServerConfig{PasswordCallback: func(m ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
 		if m.User() == user && string(p) == password {
 			return nil, nil

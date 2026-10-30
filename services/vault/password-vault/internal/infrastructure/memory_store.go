@@ -87,6 +87,18 @@ func (s *InMemoryStore) Disable(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetHostKey is domain.AccountRepository.SetHostKey.
+func (s *InMemoryStore) SetHostKey(ctx context.Context, id, hostKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	a.HostKey = hostKey
+	return nil
+}
+
 // SetReconciliation is domain.AccountRepository.SetReconciliation.
 func (s *InMemoryStore) SetReconciliation(ctx context.Context, id, reconciliationID string) error {
 	s.mu.Lock()

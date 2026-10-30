@@ -88,6 +88,9 @@ export interface Account {
   lastRotatedAt?: string;
   createdAt: string;
   disabledAt?: string;
+  // The target's pinned host key and its SHA256 fingerprint (ADR-0039); empty: not pinned.
+  hostKey?: string;
+  hostKeyFingerprint?: string;
 }
 
 export interface Page<T> {

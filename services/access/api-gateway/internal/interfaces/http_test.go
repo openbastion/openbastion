@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,6 +84,8 @@ type capturingVault struct {
 	lastListQuery   url.Values
 	lastDeletePath  string
 	lastDeleteQuery url.Values
+	lastPinPath     string
+	lastPin         map[string]any
 }
 
 func newCapturingVault(t *testing.T) *capturingVault {
@@ -110,6 +113,13 @@ func newCapturingVault(t *testing.T) *capturingVault {
 		})
 	})
 	mux.HandleFunc("/vault/v1/accounts/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			c.lastPinPath = r.URL.Path
+			_ = json.NewDecoder(r.Body).Decode(&c.lastPin)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"hostKeyFingerprint": "SHA256:fake"})
+			return
+		}
 		if r.Method == http.MethodDelete {
 			c.lastDeletePath = r.URL.Path
 			c.lastDeleteQuery = r.URL.Query()
@@ -406,6 +416,54 @@ func TestHandleVaultAccountItem_RotateTranslatesPathToBodyWithNoSecret(t *testin
 	roles, _ := vault.lastRotate["actorRoles"].([]any)
 	if len(roles) != 1 || roles[0] != "admin" {
 		t.Fatalf("expected the verified caller roles to be included so Vault can RBAC-gate the rotation, got %v", roles)
+	}
+}
+
+// PUT /vault/accounts/{id}/host-key (ADR-0039): the key is the client's, who pins it is the
+// verified token's. Attack: a client that names another actor and grants itself a role in the
+// body. Counter-proof: the key it sent is forwarded as it is.
+func TestHandleVaultAccountItem_PinHostKeyTakesOnlyTheKeyFromTheClient(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"operator"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+
+	body := `{"hostKey":"ssh-ed25519 AAAAkey","actorId":"user_root","actorRoles":["vault-admin"]}`
+	req := httptest.NewRequest(http.MethodPut, "/vault/accounts/acc1/host-key", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if vault.lastPinPath != "/vault/v1/accounts/acc1/host-key" {
+		t.Fatalf("forwarded to %q", vault.lastPinPath)
+	}
+	if vault.lastPin["hostKey"] != "ssh-ed25519 AAAAkey" {
+		t.Fatalf("the key was not forwarded as sent: %v", vault.lastPin)
+	}
+	if vault.lastPin["actorId"] != "user_admin" {
+		t.Fatalf("the actor is the client's claim, not the token's: %v", vault.lastPin["actorId"])
+	}
+	roles, _ := vault.lastPin["actorRoles"].([]any)
+	if len(roles) != 1 || roles[0] != "operator" {
+		t.Fatalf("the roles are the client's claim, not the token's: %v", roles)
+	}
+
+	for _, path := range []string{"/vault/accounts//host-key", "/vault/accounts/a/b/host-key"} {
+		vault.lastPinPath = ""
+		req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(`{"hostKey":"k"}`))
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		if vault.lastPinPath != "" {
+			t.Fatalf("%s was forwarded to %s", path, vault.lastPinPath)
+		}
 	}
 }
 

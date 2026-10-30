@@ -8,11 +8,12 @@ package main
 import (
 	"bufio"
 	"crypto/ed25519"
-	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -23,11 +24,11 @@ func main() {
 		log.Fatal("demo-ssh-target: DEMO_TARGET_PASSWORD is required")
 	}
 	addr := ":" + envOr("DEMO_TARGET_PORT", "2022")
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		log.Fatal(err)
-	}
-	signer, err := ssh.NewSignerFromKey(priv)
+	// The host key stays the same across restarts, as a real server's does, and is printed:
+	// the administrator pins it in the Vault (ADR-0039). Derived from the demonstration's own
+	// password — this is a demonstration target, not a way to keep a key.
+	seed := sha256.Sum256([]byte("openbastion demo-ssh-target host key\x00" + password))
+	signer, err := ssh.NewSignerFromKey(ed25519.NewKeyFromSeed(seed[:]))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -45,6 +46,7 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("demo-ssh-target listening on %s (a pretend shell: nothing typed is executed)", addr)
+	log.Printf("demo-ssh-target host key: %s", strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))))
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
