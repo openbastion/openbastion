@@ -34,6 +34,25 @@ type AuthenticationService struct {
 	hasher PasswordHasher
 	tokens TokenIssuer
 	ttl    time.Duration
+
+	// Federated login (ADR-0035); nil oidc = off.
+	oidc     OIDCProvider
+	roleMap  RoleMap
+	attempts domain.LoginAttemptRepository
+	now      func() time.Time
+}
+
+// WithClock replaces the clock; for tests.
+func (s *AuthenticationService) WithClock(now func() time.Time) *AuthenticationService {
+	s.now = now
+	return s
+}
+
+func (s *AuthenticationService) clock() time.Time {
+	if s.now != nil {
+		return s.now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 func NewAuthenticationService(users domain.UserRepository, hasher PasswordHasher, tokens TokenIssuer, ttl time.Duration) *AuthenticationService {
@@ -50,7 +69,7 @@ func (s *AuthenticationService) CreateUser(ctx context.Context, username, displa
 	if err != nil {
 		return nil, err
 	}
-	u := &domain.User{ID: randomID("user"), Username: username, DisplayName: displayName, PasswordHash: hash, Roles: roles}
+	u := &domain.User{ID: randomID("user"), Username: username, DisplayName: displayName, PasswordHash: hash, Roles: roles, IdentitySource: domain.SourceLocal}
 	if err := s.users.Create(ctx, u); err != nil {
 		return nil, err
 	}
@@ -64,6 +83,10 @@ func (s *AuthenticationService) CreateUser(ctx context.Context, username, displa
 func (s *AuthenticationService) Login(ctx context.Context, username, password string) (token string, expiresIn time.Duration, err error) {
 	u, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
+		return "", 0, ErrInvalidCredentials
+	}
+	// An account the provider vouches for has no password here (ADR-0035).
+	if u.IdentitySource == domain.SourceOIDC || u.PasswordHash == "" {
 		return "", 0, ErrInvalidCredentials
 	}
 	if err := s.hasher.Verify(u.PasswordHash, password); err != nil {

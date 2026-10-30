@@ -103,6 +103,9 @@ func (g *GatewayServer) WithHTTPClient(c *http.Client) *GatewayServer {
 func (g *GatewayServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", g.handleLogin) // public
+	// Federated login (ADR-0035), public and in the login budget.
+	mux.HandleFunc("/auth/oidc/start", g.handleOIDC("/auth/v1/oidc/start"))
+	mux.HandleFunc("/auth/oidc/callback", g.handleOIDC("/auth/v1/oidc/callback"))
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	mux.HandleFunc("/sessions/", g.requireAuth(g.handleSessionItem))
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))
@@ -148,6 +151,52 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// -- POST /auth/oidc/start, /auth/oidc/callback (public, ADR-0035) -------
+
+// handleOIDC forwards one end of a federated login to the Authentication Service. Each call
+// takes from the same per-address budget as a password login: both are what an attacker who
+// holds nothing can hammer. Only code and state are forwarded, rebuilt, never the raw body.
+func (g *GatewayServer) handleOIDC(upstream string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if d := g.loginLimiter.Take(g.clientKey(r)); !d.Allowed {
+			w.Header().Set("Retry-After", strconv.Itoa(d.RetryAfterSeconds()))
+			http.Error(w, "too many login attempts", http.StatusTooManyRequests)
+			return
+		}
+		body := []byte("{}")
+		if strings.HasSuffix(upstream, "/callback") {
+			var in struct {
+				Code  string `json:"code"`
+				State string `json:"state"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&in); err != nil {
+				http.Error(w, "the body is not a callback", http.StatusBadRequest)
+				return
+			}
+			body, _ = json.Marshal(in)
+		}
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, g.authenticationURL+upstream, bytes.NewReader(body))
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := g.httpClient.Do(req)
+		if err != nil {
+			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, io.LimitReader(resp.Body, 64<<10))
+	}
 }
 
 // -- auth middleware -------------------------------------------------------

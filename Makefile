@@ -154,14 +154,14 @@ test-postgres:
 		echo "TEST_DATABASE_URL non défini — voir NOTES_SANDBOX.md"; exit 1; \
 	fi
 	@command -v psql >/dev/null 2>&1 || { echo "psql introuvable — nécessaire pour purger la base avant les tests PostgreSQL (voir NOTES_SANDBOX.md)"; exit 1; }
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events RESTART IDENTITY CASCADE;"
 	$(GO) test ./services/vault/password-vault/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authorization/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authentication/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/session-broker/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/audit-service/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/command-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=60s
 
 ## Crée, dans $(PKI_DIR), une autorité et l'identité de chaque service (ADR-0010).

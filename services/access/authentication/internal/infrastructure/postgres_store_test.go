@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -143,4 +144,78 @@ func TestPostgresStore_GetByUsername_UnknownUserReturnsTheSameSentinelAsInMemory
 	if !errors.Is(err, infrastructure.ErrUserNotFound) {
 		t.Fatalf("expected ErrUserNotFound for an unknown username, got %v", err)
 	}
+}
+
+// ADR-0035: a federated account is found by its provider's subject, its identity replaced at
+// each login, and a login attempt is taken once — of twenty callbacks racing with the same
+// state, one gets it.
+func TestPostgresStore_FederatedAccountsAndLoginAttempts(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	store := infrastructure.NewPostgresStore(db)
+	sub := uniqueID("sub")
+	u := &domain.User{ID: uniqueID("user"), Username: "oidc:" + sub, DisplayName: "A", Roles: []string{"dba"},
+		IdentitySource: domain.SourceOIDC, ExternalSubject: sub}
+	if err := store.Create(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	twin := &domain.User{ID: uniqueID("user"), Username: "oidc:twin-" + sub, DisplayName: "B", IdentitySource: domain.SourceOIDC, ExternalSubject: sub}
+	if err := store.Create(ctx, twin); err == nil {
+		t.Fatal("two accounts for the same subject")
+	}
+	got, err := store.GetByExternalSubject(ctx, domain.SourceOIDC, sub)
+	if err != nil || got.ID != u.ID || got.IdentitySource != domain.SourceOIDC {
+		t.Fatalf("by subject: %+v %v", got, err)
+	}
+	if _, err := store.GetByExternalSubject(ctx, domain.SourceLocal, sub); err == nil {
+		t.Fatal("found under another source")
+	}
+	if err := store.UpdateIdentity(ctx, u.ID, "Alice", []string{"platform-admin"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = store.GetByID(ctx, u.ID)
+	if got.DisplayName != "Alice" || len(got.Roles) != 1 || got.Roles[0] != "platform-admin" {
+		t.Fatalf("after the update: %+v", got)
+	}
+	local := &domain.User{ID: uniqueID("user"), Username: uniqueID("local"), DisplayName: "L", PasswordHash: "x"}
+	if err := store.Create(ctx, local); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetByID(ctx, local.ID); got.IdentitySource != domain.SourceLocal || got.ExternalSubject != "" {
+		t.Fatalf("a local account: %+v", got)
+	}
+
+	state := uniqueID("state")
+	exp := time.Now().UTC().Add(10 * time.Minute).Truncate(time.Microsecond)
+	if err := store.SaveAttempt(ctx, domain.LoginAttempt{State: state, Verifier: "v", Nonce: "n", ExpiresAt: exp}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	won := 0
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a, err := store.TakeAttempt(ctx, state)
+			if err == nil {
+				mu.Lock()
+				won++
+				mu.Unlock()
+				if a.Verifier != "v" || a.Nonce != "n" || !a.ExpiresAt.Equal(exp) {
+					t.Errorf("attempt read back %+v", a)
+				}
+			} else if !errors.Is(err, domain.ErrAttemptNotFound) {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if won != 1 {
+		t.Fatalf("%d callbacks took the same attempt, want 1", won)
+	}
+}
+
+func uniqueID(prefix string) string {
+	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
 }

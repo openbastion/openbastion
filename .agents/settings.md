@@ -77,7 +77,7 @@ service postgresql start && sudo -u postgres psql -c "ALTER ROLE openbastion WIT
 export TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
 
 # avant une suite PostgreSQL complète (make test-postgres le fait seul)
-psql "$TEST_DATABASE_URL" -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, sessions, audit_events RESTART IDENTITY CASCADE;"
+psql "$TEST_DATABASE_URL" -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events RESTART IDENTITY CASCADE;"
 ```
 
 Si tu ajoutes une table, ajoute-la à ce `TRUNCATE` **et** à celui du `Makefile`.

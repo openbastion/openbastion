@@ -314,7 +314,20 @@ Le comportement est **deny-by-default** (Guide Sécurité §5) : un rôle sans p
 
 ## 6. Fédération d'identité
 
-**Périmètre MVP — OIDC uniquement.** La connexion à un fournisseur OIDC se configure via `oidc.issuerUrl`, `oidc.clientId` et `oidc.clientSecretRef` (§2). Le mapping des claims vers `username`/`displayName` suit la convention standard OIDC (`preferred_username`, `name`) — personnalisable via `oidc.claimsMapping` si votre IdP diverge.
+**Périmètre MVP — OIDC uniquement.** ~~La connexion à un fournisseur OIDC se configure via `oidc.issuerUrl`, `oidc.clientId` et `oidc.clientSecretRef` (§2). Le mapping des claims vers `username`/`displayName` suit la convention standard OIDC (`preferred_username`, `name`) — personnalisable via `oidc.claimsMapping` si votre IdP diverge.~~ Ce qui existe réellement (ADR-0035) :
+
+| Variable (Authentication Service) | Rôle |
+|---|---|
+| `OIDC_ISSUER` | L'émetteur, **exactement** tel que le fournisseur le dit dans `/.well-known/openid-configuration` ; `https` (ou `http` vers une adresse de boucle locale) |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Le client déclaré chez le fournisseur ; **le secret n'est jamais journalisé** |
+| `OIDC_REDIRECT_URL` | L'URL de retour déclarée chez le fournisseur : la page qui reçoit `code` et `state` et les renvoie à `POST /auth/oidc/callback` |
+| `OIDC_ROLE_MAP_FILE` | La table des groupes vers les rôles, JSON : `{"bastion-admins": ["platform-admin", "vault-admin"], "dbas": ["dba"]}` |
+| `OIDC_GROUPS_CLAIM` | Le claim des groupes (`groups` par défaut) |
+
+- **Tout ou rien** : une partie seulement des cinq premières variables, une table illisible ou mal formée, un fournisseur injoignable ou qui donne un autre émetteur — **refus de démarrer**. Sans aucune : connexion fédérée désactivée, annoncé au démarrage.
+- **Le fournisseur ne décide pas des rôles** : un groupe absent de la table ne donne rien, même s'il porte le nom d'un rôle ; une identité sans rôle est refusée (`403`) et aucun compte n'est créé. Les rôles sont recalculés à chaque connexion : retirer quelqu'un d'un groupe chez le fournisseur lui retire le rôle **à sa prochaine connexion** — le jeton déjà émis vaut jusqu'à son expiration (1 h).
+- **Le compte** s'appelle `oidc:<sub>` (jamais le nom choisi chez le fournisseur, qui pourrait être celui d'un compte local) ; il n'a pas de mot de passe ici. Les politiques visent des rôles : rien à créer par utilisateur.
+- **Chaque connexion fédérée compte deux fois** dans le budget de connexion par adresse de la Gateway (`/auth/oidc/start` puis `/auth/oidc/callback`, ADR-0014) : derrière un proxy, déclarer `TRUSTED_PROXY_CIDRS`, sinon tous les utilisateurs partagent le budget du proxy.
 
 *v1.0* — LDAP, Active Directory, Entra ID, SAML et SCIM seront configurables via des sections dédiées de `values.yaml`, chacune correspondant à son connecteur (doc 00 §4.7). Ce document sera mis à jour à leur livraison.
 
@@ -475,6 +488,8 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `POST /sessions` renvoie `403` de façon inattendue | Politique manquante ou `resourcePattern` mal formé (§5) | Lister les politiques du rôle concerné via `GET /policies` |
 | `verify-chain` répond `409` « anchor … names event …, which is not in the chain », « … does not have the hash it was anchored with », « reordered » ou « its MAC does not match » | La chaîne en base ne correspond plus à ce qui a été ancré hors d'elle (ADR-0028) : réécrite, tronquée, ou le fichier d'ancres a été modifié | Traiter comme une falsification : conserver la base **et** le fichier d'ancres en l'état, comparer avec la copie WORM du fichier, enquêter sur les accès en écriture |
 | Le journal du Broker dit « writing expiries to the audit failed, they wait for the next sweep » | L'Audit Service ne répond pas ; les sessions échues sont **déjà** marquées `expired`, leurs événements `session.expire` attendent (ADR-0034) | Rétablir l'audit : ils sont écrits au balayage suivant (`SESSION_EXPIRY_SWEEP_SECONDS`, 30 s par défaut), une seule fois |
+| `/auth/oidc/callback` répond `401` « the federated login was refused » | État inconnu, déjà utilisé ou de plus de 10 minutes ; code refusé par le fournisseur ; jeton d'identité invalide (émetteur, audience, `azp`, `nonce`, expiration, signature) — la cause exacte est dans le journal de l'Authentication Service | Recommencer la connexion ; si cela se répète, lire la cause dans le journal (horloge décalée de plus de 60 s, client mal déclaré) |
+| `/auth/oidc/callback` répond `403` « this identity has no OpenBastion role » | Aucun groupe de l'utilisateur n'est dans `OIDC_ROLE_MAP_FILE` (ou le claim des groupes n'est pas émis : `OIDC_GROUPS_CLAIM`, portée demandée) | Ajouter le groupe à la table, ou l'utilisateur au groupe ; redémarrer l'Authentication Service pour relire la table |
 | `verify-chain` répond `409` « the chain starts at event …, which follows an event no checkpoint vouches for » | Les premiers événements en base ont été supprimés sans être archivés (ADR-0032), ou le point de contrôle qui les justifie a été retiré du fichier d'ancres | Incident de sécurité : comparer la base à la dernière sauvegarde et le fichier d'ancres à sa réplique |
 | `verify-chain` répond `409` « checkpoint … its MAC does not match » ou « does not follow the checkpoint before it » | Un point de contrôle du fichier d'ancres a été modifié, retiré ou déplacé | Incident de sécurité : restaurer le fichier d'ancres depuis sa réplique |
 | Le journal dit « archiving stopped, nothing more leaves the database » | La chaîne ne se vérifie pas, ou l'archive ne peut pas être écrite ou relue telle qu'écrite, ou une archive de même nom existe avec un autre contenu | Lire la cause sur la même ligne ; rien n'a été supprimé. Réessai automatique toutes les heures |

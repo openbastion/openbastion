@@ -14,6 +14,9 @@ func CallerRules() []mtls.Rule {
 		// whether a bearer token is valid.
 		{Method: http.MethodPost, Path: "/auth/v1/login", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/verify", Callers: []string{mtls.APIGateway}},
+		// Federated login (ADR-0035): the Gateway forwards both ends of it.
+		{Method: http.MethodPost, Path: "/auth/v1/oidc/start", Callers: []string{mtls.APIGateway}},
+		{Method: http.MethodPost, Path: "/auth/v1/oidc/callback", Callers: []string{mtls.APIGateway}},
 		// Creating a local user has no public surface yet: it is operator tooling.
 		{Method: http.MethodPost, Path: "/auth/v1/users", Callers: []string{mtls.AdminCLI}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},

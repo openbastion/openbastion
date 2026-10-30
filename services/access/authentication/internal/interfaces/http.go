@@ -6,6 +6,9 @@ package interfaces
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log"
 	"net/http"
 
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
@@ -24,6 +27,8 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/users", s.handleCreateUser)
 	mux.HandleFunc("/auth/v1/login", s.handleLogin)
 	mux.HandleFunc("/auth/v1/verify", s.handleVerify)
+	mux.HandleFunc("/auth/v1/oidc/start", s.handleOIDCStart)
+	mux.HandleFunc("/auth/v1/oidc/callback", s.handleOIDCCallback)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -113,4 +118,61 @@ func (s *HTTPServer) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(verifyResponse{UserID: userID, Username: username, Roles: roles})
+}
+
+// -- POST /auth/v1/oidc/start and /auth/v1/oidc/callback (ADR-0035) ----
+
+func (s *HTTPServer) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, err := s.svc.StartOIDC(r.Context())
+	if err != nil {
+		oidcError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"authorizationUrl": u})
+}
+
+type oidcCallbackRequest struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+func (s *HTTPServer) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req oidcCallbackRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
+		http.Error(w, "the body is not a callback", http.StatusBadRequest)
+		return
+	}
+	token, ttl, err := s.svc.FinishOIDC(r.Context(), req.Code, req.State)
+	if err != nil {
+		oidcError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(loginResponse{AccessToken: token, ExpiresIn: int(ttl.Seconds())})
+}
+
+// oidcError says as little as is useful: why a login is refused stays in this log.
+func oidcError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, application.ErrOIDCOff):
+		http.Error(w, "federated login is not configured", http.StatusNotFound)
+	case errors.Is(err, application.ErrNoRole):
+		log.Printf("authentication: federated login refused: %v", err)
+		http.Error(w, "this identity has no OpenBastion role", http.StatusForbidden)
+	case errors.Is(err, application.ErrOIDCRejected):
+		log.Printf("authentication: federated login refused: %v", err)
+		http.Error(w, "the federated login was refused", http.StatusUnauthorized)
+	default:
+		log.Printf("authentication: federated login failed: %v", err)
+		http.Error(w, "the federated login cannot be completed now", http.StatusServiceUnavailable)
+	}
 }

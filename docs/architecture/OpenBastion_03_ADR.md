@@ -48,6 +48,7 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | ADR-0032 | Archiver la chaîne d'audit hors de la base sans la rendre invérifiable : un point de contrôle ancré | Accepté |
 | ADR-0033 | Un déploiement `docker-compose` reproductible, sous mTLS, une base par service, et le premier outil du CLI | Accepté |
 | ADR-0034 | Une session ou une demande arrivée à échéance est marquée expirée, une fois, et l'expiration est écrite dans la trace | Accepté |
+| ADR-0035 | Le connecteur OIDC : un code d'autorisation avec PKCE, un jeton d'identité vérifié champ par champ, des rôles tirés d'une table de groupes déclarée | Accepté |
 
 ---
 
@@ -1299,6 +1300,40 @@ Le Scheduler du MVP n'a qu'une tâche : l'expiration des sessions (doc 04 §2). 
 - **Un service Scheduler à part** : doc 00 le prévoit ; pour une seule tâche qui touche les seules lignes du Broker, un processus de plus et un appel réseau de plus n'apportent rien — il viendra avec les rotations planifiées.
 - **Écrire l'événement puis marquer** (audit d'abord) : deux réplicas écriraient chacun l'expiration de la même session.
 - **Expirer à la lecture** (écrire en base dans `Get`) : une session que personne ne relit n'expirerait jamais.
+
+---
+
+## ADR-0035 — Le connecteur OIDC : un code d'autorisation avec PKCE, un jeton d'identité vérifié champ par champ, des rôles tirés d'une table de groupes déclarée
+
+**Contexte**
+Le MVP fédère l'identité par OIDC seulement, la MFA restant chez le fournisseur (doc 04 §2) ; le modèle de données prévoit `identity_source` (`local`, `oidc`) et `external_subject` sur `users` (doc 06), l'OpenAPI une connexion « locale ou fédérée OIDC ». **Rien n'existe** : seule la connexion par mot de passe local fonctionne. ADR-0007 fait de Keycloak l'IdP de plateforme qui fédère les annuaires ; ce connecteur ne le contredit pas — il fait de l'Authentication Service un **client OIDC** (Relying Party) de *n'importe quel* fournisseur conforme, Keycloak compris, et l'Authentication Service reste le seul émetteur des jetons OpenBastion. Bony Kiss a choisi la règle des rôles : **une table déclarée des groupes du fournisseur vers les rôles d'OpenBastion**, et une implémentation sans dépendance nouvelle (bibliothèque standard et `golang-jwt`, déjà présent).
+
+Le point de sécurité central est que **le fournisseur ne décide pas des rôles** : il dit qui est l'utilisateur et à quels groupes il appartient ; OpenBastion seul décide de ce que chaque groupe vaut, et ne croit un jeton qu'après l'avoir vérifié entièrement.
+
+**Décision** *(acceptée par Bony Kiss le 30 octobre 2026 — la règle des rôles et « sans dépendance nouvelle » sont son choix ; le reste est renversable)*
+1. **Désactivé par défaut.** Activé par `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`, `OIDC_ROLE_MAP_FILE` — **tous ou aucun** (sinon refus de démarrer) ; `OIDC_GROUPS_CLAIM` (`groups` par défaut). L'émetteur et l'URL de retour sont en `https`, sauf vers une adresse de boucle locale (développement). Le secret n'est jamais journalisé.
+2. **Découverte au démarrage** : `<issuer>/.well-known/openid-configuration` ; l'`issuer` du document doit être **exactement** `OIDC_ISSUER` ; les points d'entrée d'autorisation, de jeton et de clés (`jwks_uri`) sont en `https` (même exception). Fournisseur injoignable au démarrage : refus de démarrer.
+3. **Flux par code d'autorisation avec PKCE (S256)**, `state` et `nonce` tirés au hasard (32 octets), gardés en base (`oidc_login_attempts`, migration `002`), **à usage unique** et valables **10 minutes**. Deux routes publiques de la Gateway, sans cookie : `POST /auth/oidc/start` rend l'URL d'autorisation ; `POST /auth/oidc/callback {code, state}` rend le jeton OpenBastion. Elles comptent dans le budget de connexion par adresse (ADR-0014).
+4. **Le jeton d'identité est vérifié champ par champ** : signature par une clé du `jwks_uri` désignée par son `kid`, algorithmes **RS256 et ES256 seulement**, l'algorithme imposé par le type de la clé (pas de `none`, pas de HS256 avec une clé publique) ; `iss` = l'émetteur ; `aud` contient l'identifiant client, et `azp`, s'il est là, l'est aussi ; `exp` dans le futur, `iat` et `nbf` pas dans le futur, à 60 s près ; `nonce` = celui de la tentative ; `sub` non vide. Un `kid` inconnu fait relire les clés au plus une fois par minute.
+5. **Les rôles viennent de la table**, fichier JSON `{"groupe": ["rôle", …]}`, lu au démarrage (fichier illisible ou mal formé : refus de démarrer). Un groupe absent de la table ne donne rien ; **une identité sans aucun rôle est refusée** (`403`, sans dire quels groupes elle avait). Les rôles sont **recalculés à chaque connexion** : quitter un groupe chez le fournisseur retire le rôle à la connexion suivante.
+6. **Le compte** est créé à la première connexion, retrouvé ensuite par `(identity_source = 'oidc', external_subject = sub)`. Son nom est `oidc:<sub>` — **jamais** le `preferred_username` du fournisseur, qui pourrait prendre le nom d'un compte local ; le nom affiché vient de `name` ou `preferred_username`. Un compte OIDC n'a pas de mot de passe : la connexion locale le refuse.
+7. Le jeton émis est le même que celui d'une connexion locale (HS256, ADR-0007 inchangé sur ce point), avec les rôles calculés.
+
+**Conséquences**
+- (+) **Mesuré** : avant (rouge, sur `HEAD`), une configuration OIDC à moitié faite était ignorée et aucune connexion fédérée n'existait. Après, sur une vraie Gateway et un vrai Authentication Service avec PostgreSQL, face à un fournisseur joué par le test : la connexion donne `[platform-admin vault-admin]` pour le groupe `bastion-admins` et **rien** pour les groupes `platform-admin` et `marketing`, qui ne sont pas dans la table ; un retour rejoué ou un `state` forgé donne `401` ; quitter le groupe retire le rôle à la connexion suivante, en base aussi ; une identité sans groupe connu donne `403` et aucun compte ; le compte fédéré ne se connecte pas par mot de passe ; une connexion commencée avant un redémarrage de l'Authentication Service se termine après (l'état est en base) ; les deux routes prennent dans le budget de connexion ; le secret du client n'est dans aucun journal. Au niveau du client OIDC, **20 jetons forgés ou mal adressés, tous refusés** (`none`, HS256 avec la clé publique, algorithme contraire au type de la clé, autre clé, clé RSA de 1024 bits, sans `kid`, charge modifiée, autre émetteur, audience, `azp`, expiré, sans `exp`, émis dans le futur, `nbf` futur, autre `nonce`, sans `nonce`, sans `sub`, groupes qui ne sont pas une liste, pas un JWT). **21 mutations, 21 tuées** (une survivante, « rôles non enregistrés », a révélé que le magasin mémoire rendait l'objet qu'il garde — il rend maintenant des copies — et que le test ne regardait pas les rôles en base).
+- (+) Une connexion fédérée de bout en bout, la MFA chez le fournisseur.
+- (+) Un fournisseur compromis ou mal configuré ne donne aucun rôle que la table ne prévoit pas.
+- (−) Un rôle retiré chez le fournisseur reste dans le jeton OpenBastion jusqu'à son expiration (1 h) : pas de révocation par le fournisseur.
+- (−) Ni déconnexion fédérée, ni jeton de rafraîchissement du fournisseur.
+- (−) Les connexions, locales ou fédérées, ne sont toujours pas des événements d'audit.
+- (−) **Une connexion fédérée prend deux fois dans le budget de connexion par adresse** (début et retour) : derrière un proxy non déclaré (`TRUSTED_PROXY_CIDRS`), tous les utilisateurs partagent le budget du proxy.
+- (−) Deux contrôles sont doublés par construction et ne se prouvent pas séparément : l'algorithme imposé par le type de la clé et la liste RS256/ES256 (golang-jwt refuse aussi une clé du mauvais type) ; le refus explicite de la connexion locale d'un compte OIDC et son mot de passe vide (Argon2 le refuse aussi).
+
+**Alternatives envisagées**
+- **Comptes pré-créés seulement** : écarté par le propriétaire (chaque utilisateur à la main).
+- **`coreos/go-oidc` et `golang.org/x/oauth2`** : écartés par le propriétaire (dépendances nouvelles, `golang.org/x/*`).
+- **Flux implicite ou jeton dans l'URL** : déconseillé par l'OAuth 2.0 Security BCP (RFC 9700) ; le code avec PKCE est le seul flux retenu.
+- **Prendre les rôles directement d'un claim du fournisseur** : le fournisseur déciderait de ce qu'un utilisateur peut faire dans le bastion.
 
 ---
 

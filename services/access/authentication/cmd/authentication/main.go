@@ -7,6 +7,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
@@ -44,7 +46,10 @@ func main() {
 		log.Fatalf("signing key: %v", err)
 	}
 
-	var store domain.UserRepository
+	var store interface {
+		domain.UserRepository
+		domain.LoginAttemptRepository
+	}
 	if dsn != "" {
 		ctx := context.Background()
 		db, err := infrastructure.OpenPostgres(ctx, dsn)
@@ -61,6 +66,48 @@ func main() {
 	hasher := infrastructure.Argon2Hasher{}
 	tokens := infrastructure.NewTokenIssuer(key)
 	svc := application.NewAuthenticationService(store, hasher, tokens, time.Hour)
+
+	// Federated login (ADR-0035): off unless every variable is set — all or none.
+	oidcVars := map[string]string{}
+	for _, name := range []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_ROLE_MAP_FILE"} {
+		oidcVars[name] = os.Getenv(name)
+	}
+	set := 0
+	for _, v := range oidcVars {
+		if v != "" {
+			set++
+		}
+	}
+	switch set {
+	case 0:
+		log.Printf("authentication: federated login (OIDC) off — local accounts only")
+	case len(oidcVars):
+		roles, err := application.LoadRoleMap(oidcVars["OIDC_ROLE_MAP_FILE"])
+		if err != nil {
+			log.Fatalf("authentication: OIDC_ROLE_MAP_FILE: %v — refusing to start", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		provider, err := infrastructure.NewOIDCProvider(ctx, infrastructure.OIDCConfig{
+			Issuer: oidcVars["OIDC_ISSUER"], ClientID: oidcVars["OIDC_CLIENT_ID"], ClientSecret: oidcVars["OIDC_CLIENT_SECRET"],
+			RedirectURL: oidcVars["OIDC_REDIRECT_URL"], GroupsClaim: os.Getenv("OIDC_GROUPS_CLAIM"),
+		}, nil)
+		cancel()
+		if err != nil {
+			// Never the secret: the errors name variables and URLs, not values of the secret.
+			log.Fatalf("authentication: OIDC: %v — refusing to start", err)
+		}
+		svc.WithOIDC(provider, roles, store)
+		log.Printf("authentication: federated login (OIDC) with %s, %d group(s) in the role map; a user with no mapped role is refused", oidcVars["OIDC_ISSUER"], len(roles))
+	default:
+		var missing []string
+		for name, v := range oidcVars {
+			if v == "" {
+				missing = append(missing, name)
+			}
+		}
+		sort.Strings(missing)
+		log.Fatalf("authentication: OIDC is half configured, %s missing — set all of OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL, OIDC_ROLE_MAP_FILE, or none — refusing to start", strings.Join(missing, ", "))
+	}
 
 	// Demo seed — real onboarding goes through POST /auth/v1/users.
 	if os.Getenv("SKIP_DEMO_SEED") == "" {

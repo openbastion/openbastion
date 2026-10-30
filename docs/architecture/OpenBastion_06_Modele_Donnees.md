@@ -265,6 +265,21 @@ CREATE TABLE idempotency_keys (
 );
 ```
 
+### Connexion fédérée OIDC (ADR-0035)
+
+`services/access/authentication/migrations/002_oidc.sql` donne à `users` les colonnes du §3 (`identity_source`, `external_subject` — ici `TEXT NOT NULL DEFAULT ''` plutôt que `NULL`, avec un index unique partiel sur `(identity_source, external_subject)` quand le sujet n'est pas vide) et ajoute les connexions en cours :
+
+```sql
+CREATE TABLE IF NOT EXISTS oidc_login_attempts (
+    state       TEXT PRIMARY KEY,   -- aléatoire, 32 octets ; pris une fois (DELETE … RETURNING)
+    verifier    TEXT NOT NULL,      -- le code_verifier PKCE
+    nonce       TEXT NOT NULL,      -- comparé au nonce du jeton d'identité
+    expires_at  TIMESTAMPTZ NOT NULL -- 10 minutes après le début
+);
+```
+
+Un compte OIDC a `password_hash` vide (la connexion locale le refuse) et s'appelle `oidc:<sub>`.
+
 ### Expiration des sessions (ADR-0034)
 
 `services/access/session-broker/migrations/002_session_expiry.sql` — la première migration numérotée après `001_init.sql` — ajoute à `sessions` :

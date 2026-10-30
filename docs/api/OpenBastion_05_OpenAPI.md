@@ -90,6 +90,61 @@ paths:
             text/plain:
               schema: { type: string }
 
+  /auth/oidc/start:
+    post:
+      tags: [auth]
+      summary: Commence une connexion fédérée OIDC (ADR-0035)
+      description: >
+        Rend l'URL du fournisseur où envoyer le navigateur : flux par code
+        d'autorisation avec PKCE (S256), `state` et `nonce` tirés au hasard,
+        valables 10 minutes et à usage unique. Sans corps. Compte dans le budget
+        de connexion par adresse, comme `/auth/login`.
+      security: []
+      responses:
+        "200":
+          description: L'URL d'autorisation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorizationUrl]
+                properties:
+                  authorizationUrl: { type: string, format: uri }
+        "404": { description: La connexion fédérée n'est pas configurée }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+
+  /auth/oidc/callback:
+    post:
+      tags: [auth]
+      summary: Termine une connexion fédérée OIDC (ADR-0035)
+      description: >
+        Le client renvoie le `code` et le `state` que le fournisseur a ajoutés à
+        l'URL de retour. Le jeton d'identité est vérifié champ par champ ; les
+        rôles viennent de la table des groupes déclarée (`OIDC_ROLE_MAP_FILE`),
+        jamais du fournisseur. Le compte s'appelle `oidc:<sub>`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+      responses:
+        "200":
+          description: Le jeton OpenBastion, comme `/auth/login`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { description: Connexion refusée (état inconnu ou déjà utilisé, code refusé, jeton d'identité invalide) — sans détail }
+        "403": { description: L'identité est authentique, et aucun de ses groupes ne donne de rôle OpenBastion }
+        "404": { description: La connexion fédérée n'est pas configurée }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+        "503": { description: Le fournisseur ou la base ne répond pas — la cause reste dans le journal }
+
   /auth/token/refresh:
     post:
       tags: [auth]
@@ -1119,7 +1174,9 @@ components:
 
 | Endpoint | Méthode | Domaine | Description |
 |---|---|---|---|
-| `/auth/login` | POST | auth | Authentification locale ou fédérée OIDC |
+| `/auth/login` | POST | auth | Authentification locale (mot de passe) |
+| `/auth/oidc/start` | POST | auth | Commence une connexion fédérée OIDC : URL du fournisseur (ADR-0035) |
+| `/auth/oidc/callback` | POST | auth | Termine une connexion fédérée OIDC : `code` et `state` → jeton (ADR-0035) |
 | `/auth/token/refresh` | POST | auth | Renouvellement de jeton |
 | `/auth/me` | GET | auth | Profil courant |
 | `/sessions` | GET / POST | sessions | Lister les demandes break-glass en attente que l'on peut décider (`status=pending_approval` seul, ADR-0012) / demander une session |
