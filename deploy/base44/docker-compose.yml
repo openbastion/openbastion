@@ -5,7 +5,7 @@
 # server (HMR on the files you edit), and PostgreSQL / the internal PKI / mutual TLS are the
 # real ones from deploy/docker-compose/docker-compose.yml (ADR-0010, ADR-0033).
 #
-#   docker compose -f docker-compose.base44.yml up -d --build
+#   docker compose -f deploy/base44/docker-compose.yml up -d --build
 #
 # Entry point: the Admin UI on host port 3000 (it proxies /auth, /sessions, /vault, /policies to
 # the API Gateway, so the UI keeps ONE origin as in production). The public API itself is on
