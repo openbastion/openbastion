@@ -11,7 +11,9 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("session-broker", "POST", "/audit/v1/emit-event"),
 		mtlstest.Allow("ssh-proxy", "POST", "/audit/v1/emit-event"),
 		// a compromised service that is not an emitter cannot write the trail
-		mtlstest.Deny("password-vault", "POST", "/audit/v1/emit-event"),
+		// The Vault writes its rotations since ADR-0037; Authorization still has nothing to write.
+		mtlstest.Allow("password-vault", "POST", "/audit/v1/emit-event"),
+		mtlstest.Deny("authorization", "POST", "/audit/v1/emit-event"),
 		// it writes the reads of a recording before it serves them (ADR-0022)
 		mtlstest.Allow("command-recorder", "POST", "/audit/v1/emit-event"),
 		mtlstest.Deny("command-recorder", "GET", "/audit/v1/emit-event"),

@@ -14,7 +14,7 @@ import (
 func CallerRules() []mtls.Rule {
 	return []mtls.Rule{
 		// The Command Recorder writes the reads of a recording, before it serves them (ADR-0022).
-		{Method: http.MethodPost, Path: "/audit/v1/emit-event", Callers: []string{mtls.SessionBroker, mtls.SSHProxy, mtls.CommandRecorder}},
+		{Method: http.MethodPost, Path: "/audit/v1/emit-event", Callers: []string{mtls.SessionBroker, mtls.SSHProxy, mtls.CommandRecorder, mtls.PasswordVault}},
 		// Verifying the chain is an operator's act.
 		{Path: "/audit/v1/verify-chain", Callers: []string{mtls.AdminCLI}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},

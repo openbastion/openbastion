@@ -13,6 +13,8 @@ package interfaces
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,6 +43,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/vault/v1/onboard-account", s.handleOnboardAccount)
 	mux.HandleFunc("/vault/v1/rotate", s.handleRotate)
+	mux.HandleFunc("/vault/v1/rotate-after-use", s.handleRotateAfterUse)
 	mux.HandleFunc("/vault/v1/authorize-scope", s.handleAuthorizeScope)
 	mux.HandleFunc("/vault/v1/fetch-credential", s.handleFetchCredential)
 	mux.HandleFunc("/vault/v1/accounts", s.handleListAccounts) // exact path — distinct ServeMux pattern from the subtree below
@@ -64,6 +67,10 @@ type onboardAccountRequest struct {
 	RotationPolicy string   `json:"rotationPolicy"`
 	InitialSecret  []byte   `json:"initialSecret"`
 	ActorRoles     []string `json:"actorRoles"`
+
+	// ReconciliationAccountID: the account of the same target that can change this one's
+	// password (ADR-0037); empty — the account cannot be rotated.
+	ReconciliationAccountID string `json:"reconciliationAccountId"`
 }
 
 func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request) {
@@ -72,10 +79,14 @@ func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	err := s.svc.OnboardAccount(r.Context(), req.ActorRoles, req.ID, req.Name, req.Username, req.TargetHost, req.Protocol,
-		domain.RotationPolicy(req.RotationPolicy), req.InitialSecret)
+	err := s.svc.OnboardAccountWithReconciliation(r.Context(), req.ActorRoles, req.ID, req.Name, req.Username, req.TargetHost, req.Protocol,
+		domain.RotationPolicy(req.RotationPolicy), req.InitialSecret, req.ReconciliationAccountID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		status := http.StatusForbidden
+		if errors.Is(err, application.ErrNoReconciliation) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -87,6 +98,8 @@ type rotateRequest struct {
 	AccountID  string   `json:"accountId"`
 	NewSecret  []byte   `json:"newSecret"`
 	ActorRoles []string `json:"actorRoles"`
+	// ActorID is who asked, as the Gateway verified it: the actor of the audit events.
+	ActorID string `json:"actorId"`
 }
 
 func (s *HTTPServer) handleRotate(w http.ResponseWriter, r *http.Request) {
@@ -95,11 +108,38 @@ func (s *HTTPServer) handleRotate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.svc.Rotate(r.Context(), req.ActorRoles, req.AccountID, req.NewSecret); err != nil {
+	if err := s.svc.RotateAs(r.Context(), req.ActorID, req.ActorRoles, req.AccountID, req.NewSecret); err != nil {
 		http.Error(w, err.Error(), adminErrorStatus(err))
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// -- rotate-after-use: a session on the account ended (ADR-0037), from the Broker ----
+
+type rotateAfterUseRequest struct {
+	AccountID string `json:"accountId"`
+	SessionID string `json:"sessionId"`
+}
+
+func (s *HTTPServer) handleRotateAfterUse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req rotateAfterUseRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil || req.AccountID == "" {
+		http.Error(w, "the body is not a rotate-after-use request", http.StatusBadRequest)
+		return
+	}
+	rotated, err := s.svc.RotateAfterUse(r.Context(), req.AccountID)
+	if err != nil {
+		log.Printf("password-vault: rotation after session %s of account %s failed: %v", req.SessionID, req.AccountID, err)
+		http.Error(w, "the rotation after use failed", adminErrorStatus(err))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"rotated": rotated})
 }
 
 // adminErrorStatus maps a failed account-admin operation (rotate, delete)
@@ -110,8 +150,18 @@ func (s *HTTPServer) handleRotate(w http.ResponseWriter, r *http.Request) {
 // VaultService, so an unauthorized caller always gets 403 whether or not the
 // account exists: the 404 cannot be used to probe which accounts exist.
 func adminErrorStatus(err error) int {
-	if errors.Is(err, domain.ErrNotFound) {
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
 		return http.StatusNotFound
+	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress):
+		return http.StatusConflict
+	case errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
+		return http.StatusBadGateway
+	case errors.Is(err, application.ErrRotationOff):
+		return http.StatusNotImplemented
+	}
+	if strings.Contains(err.Error(), "audit is unavailable") {
+		return http.StatusServiceUnavailable
 	}
 	return http.StatusForbidden
 }

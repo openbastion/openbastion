@@ -265,6 +265,18 @@ CREATE TABLE idempotency_keys (
 );
 ```
 
+### Rotation sur la cible (ADR-0037)
+
+`services/vault/password-vault/migrations/002_rotation.sql` :
+
+```sql
+ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS reconciliation_account_id TEXT NOT NULL DEFAULT '';  -- même cible ; vide : pas de rotation
+ALTER TABLE vault_secrets ADD COLUMN IF NOT EXISTS pending BOOLEAN NOT NULL DEFAULT FALSE;                    -- posé, pas encore vérifié : jamais injecté
+CREATE UNIQUE INDEX IF NOT EXISTS vault_secrets_one_pending_idx ON vault_secrets (privileged_account_id) WHERE pending;
+```
+
+La version courante est celle dont `superseded_at` est vide **et qui n'est pas en attente** ; la promotion d'une version en attente remplace l'ancienne dans la même transaction.
+
 ### Connexion fédérée OIDC (ADR-0035)
 
 `services/access/authentication/migrations/002_oidc.sql` donne à `users` les colonnes du §3 (`identity_source`, `external_subject` — ici `TEXT NOT NULL DEFAULT ''` plutôt que `NULL`, avec un index unique partiel sur `(identity_source, external_subject)` quand le sujet n'est pas vide) et ajoute les connexions en cours :

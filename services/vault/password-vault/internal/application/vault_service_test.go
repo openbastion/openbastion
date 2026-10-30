@@ -38,7 +38,28 @@ func newTestService(t *testing.T) *application.VaultService {
 		t.Fatalf("kms: %v", err)
 	}
 	store := infrastructure.NewInMemoryStore()
-	return application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	return application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).
+		WithRotation(newFakeTarget(), &fakeAudit{})
+}
+
+// reconcilable gives accountID a reconciliation account on its target (ADR-0037): the
+// rotations of these tests reach a target, as every rotation now must.
+func reconcilable(t *testing.T, svc *application.VaultService, accountID string) {
+	t.Helper()
+	ctx := context.Background()
+	a, err := svc.GetAccount(ctx, accountID)
+	if err != nil {
+		t.Fatalf("reconcilable: %v", err)
+	}
+	recID := "rec_" + accountID
+	if _, err := svc.GetAccount(ctx, recID); err != nil {
+		if err := svc.OnboardAccount(ctx, adminRoles, recID, "reconciliation", "reconciler", a.TargetHost, "ssh", domain.RotationManual, []byte("root-secret")); err != nil {
+			t.Fatalf("reconcilable: %v", err)
+		}
+	}
+	if err := svc.SetReconciliationAccount(ctx, adminRoles, accountID, recID); err != nil {
+		t.Fatalf("reconcilable: %v", err)
+	}
 }
 
 var adminRoles = []string{"vault-admin"}
@@ -96,6 +117,7 @@ func TestRotate_SupersedesPreviousVersion(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("old-secret-value"))
+	reconcilable(t, svc, "acc1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("new-secret-value")); err != nil {
 		t.Fatalf("Rotate: %v", err)
 	}
@@ -136,6 +158,7 @@ func TestRotate_AutoGeneratesSecretWhenNoneProvided(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("old-secret-value"))
+	reconcilable(t, svc, "acc1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate with no explicit secret: %v", err)
 	}
@@ -156,6 +179,7 @@ func TestRotate_AutoGeneratesDifferentSecretsEachTime(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial"))
+	reconcilable(t, svc, "acc1")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate 1: %v", err)
 	}
@@ -185,12 +209,13 @@ func TestRotate_IncrementsVersionNumberEachTime(t *testing.T) {
 		t.Fatalf("kms: %v", err)
 	}
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("v1")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
+	reconcilable(t, svc, "acc1")
 	v1, err := store.CurrentVersion(ctx, "acc1")
 	if err != nil {
 		t.Fatalf("CurrentVersion after onboarding: %v", err)
@@ -228,7 +253,7 @@ func TestOnboardAccount_LeavesLastRotatedAtNilBeforeAnyRotation(t *testing.T) {
 		t.Fatalf("kms: %v", err)
 	}
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
@@ -253,11 +278,12 @@ func TestRotate_SetsLastRotatedAt(t *testing.T) {
 		t.Fatalf("kms: %v", err)
 	}
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
+	reconcilable(t, svc, "acc1")
 
 	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("rotated-once")); err != nil {
 		t.Fatalf("Rotate: %v", err)
@@ -291,7 +317,7 @@ func TestOnboardAccount_EncryptedMaterialNeverContainsPlaintext(t *testing.T) {
 		t.Fatalf("kms: %v", err)
 	}
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	plaintext := []byte("a-very-identifiable-plaintext-marker")
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, plaintext); err != nil {
@@ -313,7 +339,7 @@ func TestOnboardAccount_DeniedWithoutAuthorization(t *testing.T) {
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	authz := &fakeAuthz{allowed: false, reason: "no policy matches"}
-	svc := application.NewVaultService(store, store, store, kms, authz)
+	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
 	err := svc.OnboardAccount(context.Background(), []string{"nobody"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	if err == nil {
 		t.Fatal("expected OnboardAccount to be denied without a matching authorization policy")
@@ -333,7 +359,7 @@ func TestOnboardAccount_FailsClosedWhenAuthorizationUnreachable(t *testing.T) {
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	authz := &fakeAuthz{err: errors.New("authorization service unreachable")}
-	svc := application.NewVaultService(store, store, store, kms, authz)
+	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
 	if err := svc.OnboardAccount(context.Background(), adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err == nil {
 		t.Fatal("expected OnboardAccount to fail closed when Authorization is unreachable")
 	}
@@ -343,13 +369,13 @@ func TestRotate_DeniedWithoutAuthorization(t *testing.T) {
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	permissive := &fakeAuthz{allowed: true}
-	svc := application.NewVaultService(store, store, store, kms, permissive)
+	svc := application.NewVaultService(store, store, store, kms, permissive).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("onboarding setup: %v", err)
 	}
 	restrictive := &fakeAuthz{allowed: false, reason: "role lost admin rights"}
-	svc2 := application.NewVaultService(store, store, store, kms, restrictive)
+	svc2 := application.NewVaultService(store, store, store, kms, restrictive).WithRotation(newFakeTarget(), &fakeAudit{})
 	if err := svc2.Rotate(ctx, []string{"someone-without-rights"}, "acc1", nil); err == nil {
 		t.Fatal("expected Rotate to be denied without a matching authorization policy")
 	}
@@ -362,7 +388,7 @@ func TestOnboardAccount_SessionCreationRightsAloneDoNotGrantAdminAccess(t *testi
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	authz := &sessionOnlyAuthz{}
-	svc := application.NewVaultService(store, store, store, kms, authz)
+	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
 	err := svc.OnboardAccount(context.Background(), []string{"dba"}, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
 	if err == nil {
 		t.Fatal("expected onboarding to be denied for a role with only session-creation rights")
@@ -416,7 +442,7 @@ func TestListAccounts_DeniedWithoutAuthorization(t *testing.T) {
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	authz := &fakeAuthz{allowed: false, reason: "no policy matches"}
-	svc := application.NewVaultService(store, store, store, kms, authz)
+	svc := application.NewVaultService(store, store, store, kms, authz).WithRotation(newFakeTarget(), &fakeAudit{})
 	if _, _, err := svc.ListAccounts(context.Background(), []string{"nobody"}, 1, 20); err == nil {
 		t.Fatal("expected ListAccounts to be denied without a matching authorization policy")
 	}
@@ -448,13 +474,13 @@ func TestDisableAccount_DeniedWithoutAuthorization(t *testing.T) {
 	kms, _ := infrastructure.NewLocalKMS()
 	store := infrastructure.NewInMemoryStore()
 	permissive := &fakeAuthz{allowed: true}
-	svc := application.NewVaultService(store, store, store, kms, permissive)
+	svc := application.NewVaultService(store, store, store, kms, permissive).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret")); err != nil {
 		t.Fatalf("onboarding setup: %v", err)
 	}
 	restrictive := &fakeAuthz{allowed: false, reason: "role lost admin rights"}
-	svc2 := application.NewVaultService(store, store, store, kms, restrictive)
+	svc2 := application.NewVaultService(store, store, store, kms, restrictive).WithRotation(newFakeTarget(), &fakeAudit{})
 	if err := svc2.DisableAccount(ctx, []string{"someone-without-rights"}, "acc1"); err == nil {
 		t.Fatal("expected DisableAccount to be denied without a matching authorization policy")
 	}
@@ -479,11 +505,12 @@ func TestDisableAccount_BlocksRotate(t *testing.T) {
 		t.Fatalf("kms: %v", err)
 	}
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true})
+	svc := application.NewVaultService(store, store, store, kms, &fakeAuthz{allowed: true}).WithRotation(newFakeTarget(), &fakeAudit{})
 	ctx := context.Background()
 	if err := svc.OnboardAccount(ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("initial")); err != nil {
 		t.Fatalf("OnboardAccount: %v", err)
 	}
+	reconcilable(t, svc, "acc1")
 	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
 		t.Fatalf("DisableAccount: %v", err)
 	}

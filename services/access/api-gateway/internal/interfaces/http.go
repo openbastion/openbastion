@@ -594,7 +594,8 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		// the whole point of this endpoint taking no request body in
 		// doc 05: an operator triggers rotation, never invents the value.
 		g.forwardJSON(w, r.Context(), http.MethodPost, g.vaultURL+"/vault/v1/rotate", map[string]any{
-			"accountId": accountID, "actorRoles": id.Roles,
+			// Who asked, as verified here: the actor of the rotation's audit events (ADR-0037).
+			"accountId": accountID, "actorRoles": id.Roles, "actorId": id.UserID,
 		})
 		return
 	}

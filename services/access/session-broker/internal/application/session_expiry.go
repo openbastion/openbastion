@@ -78,6 +78,7 @@ func (s *SessionBrokerService) ExpireDue(ctx context.Context) (expired, written 
 		expired += len(due)
 		for _, sess := range due {
 			s.unwritten.add(sess.ID)
+			s.afterUse(sess)
 		}
 		for _, sess := range due {
 			if err := s.writeExpiry(ctx, sess.ID); err != nil {

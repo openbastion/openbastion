@@ -47,12 +47,30 @@ type AccountRepository interface {
 	// rotation never falsely claims to have rotated. Idempotent, like
 	// Disable; existence is checked by the caller.
 	MarkRotated(ctx context.Context, id string) error
+
+	// SetReconciliation names the reconciliation account of id (ADR-0037).
+	SetReconciliation(ctx context.Context, id, reconciliationID string) error
 }
 
+// ErrRotationInProgress: the account already has a pending rotation (ADR-0037).
+var ErrRotationInProgress = errors.New("a rotation of this account is already in progress")
+
 type SecretRepository interface {
+	// CurrentVersion is the secret injected: never a pending one.
 	CurrentVersion(ctx context.Context, accountID string) (*SecretVersion, error)
 	AddVersion(ctx context.Context, s *SecretVersion) error
 	SupersedeCurrent(ctx context.Context, accountID string) error
+
+	// AddPending writes a rotation's new secret beside the current one (ADR-0037); a second
+	// pending version for the same account is ErrRotationInProgress.
+	AddPending(ctx context.Context, s *SecretVersion) error
+	// PendingVersion is the account's pending version, or nil.
+	PendingVersion(ctx context.Context, accountID string) (*SecretVersion, error)
+	// PromotePending makes the pending version current and supersedes the old one, in ONE
+	// step: there is no moment without a current secret.
+	PromotePending(ctx context.Context, accountID string, version int) error
+	// DiscardPending forgets a pending version the target never took.
+	DiscardPending(ctx context.Context, accountID string, version int) error
 }
 
 type ScopeRepository interface {

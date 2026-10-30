@@ -34,6 +34,10 @@ type VaultService struct {
 	scopes   domain.ScopeRepository
 	kms      Encryptor
 	authz    AuthorizationClient
+
+	// targets and audit make rotation reach the target (ADR-0037); nil: no rotation.
+	targets TargetChanger
+	audit   AuditEmitter
 }
 
 func NewVaultService(accounts domain.AccountRepository, secrets domain.SecretRepository, scopes domain.ScopeRepository, kms Encryptor, authz AuthorizationClient) *VaultService {
@@ -151,60 +155,6 @@ func (s *VaultService) DisableAccount(ctx context.Context, actorRoles []string, 
 		return err
 	}
 	return s.accounts.Disable(ctx, id)
-}
-
-func (s *VaultService) Rotate(ctx context.Context, actorRoles []string, accountID string, newSecret []byte) error {
-	if err := s.requireAdminAccess(ctx, actorRoles, accountID, "vault:account:rotate"); err != nil {
-		return err
-	}
-	// Checks DisabledAt itself rather than calling GetAccount, for the same
-	// reason AuthorizeScope does: a disabled account must behave as if it
-	// did not exist for every operation, and this one must not depend on
-	// GetAccount's behavior to stay correct. Without this check, rotating
-	// a disabled account silently created a new secret version and stamped
-	// LastRotatedAt on a row the rest of the system treats as gone.
-	account, err := s.accounts.Get(ctx, accountID)
-	if err != nil {
-		return err
-	}
-	if account.DisabledAt != nil {
-		return domain.ErrNotFound
-	}
-	if len(newSecret) == 0 {
-		generated, err := generateRandomSecret(32)
-		if err != nil {
-			return err
-		}
-		newSecret = generated
-	}
-
-	// The next version number MUST be read before SupersedeCurrent runs:
-	// SupersedeCurrent clears superseded_at on every existing row, so a
-	// lookup made afterward always finds nothing and always computes
-	// version 1 again — on every single rotation, not just the first.
-	// InMemoryStore stayed silent about this (AddVersion just appends,
-	// with nothing enforcing version uniqueness), but PostgresStore's
-	// UNIQUE (privileged_account_id, version) correctly rejected the
-	// resulting duplicate insert outright — caught by
-	// TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart
-	// actually exercising a real rotation against Postgres. See
-	// NOTES_SANDBOX.md and TestRotate_IncrementsVersionNumberEachTime
-	// below, which pins the correct behavior independent of storage
-	// engine.
-	nextVersion := 1
-	if current, err := s.secrets.CurrentVersion(ctx, accountID); err == nil && current != nil {
-		nextVersion = current.Version + 1
-	}
-	if err := s.secrets.SupersedeCurrent(ctx, accountID); err != nil {
-		return err
-	}
-	if err := s.storeVersion(ctx, accountID, newSecret, nextVersion); err != nil {
-		return err
-	}
-	// Only after the new version is actually stored — MarkRotated must
-	// never claim a rotation happened when it didn't (domain.AccountRepository
-	// .MarkRotated's doc comment).
-	return s.accounts.MarkRotated(ctx, accountID)
 }
 
 func (s *VaultService) storeVersion(ctx context.Context, accountID string, secret []byte, version int) error {

@@ -251,3 +251,48 @@ func TestPostgresStore_ScopeGrant_ConsumeIfValidRejectsWrongProxy(t *testing.T) 
 		t.Fatal("expected ConsumeIfValid to reject a proxy identity different from the one authorized")
 	}
 }
+
+// A pending version (ADR-0037) is never the current one, there is one at most per account, and
+// promoting it supersedes the old one in one step.
+func TestPostgresStore_PendingVersion_Lifecycle(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+	id := fmt.Sprintf("acc_pending_%d", time.Now().UnixNano())
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: "n", Username: "u", TargetHost: "h:22", Protocol: "ssh", RotationPolicy: domain.RotationManual, ReconciliationAccountID: "rec_x"}); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := store.Get(ctx, id); a.ReconciliationAccountID != "rec_x" {
+		t.Fatalf("reconciliation read back %q", a.ReconciliationAccountID)
+	}
+	if err := store.AddVersion(ctx, &domain.SecretVersion{ID: id + "-v1", PrivilegedAccountID: id, EncryptedMaterial: []byte("v1"), EncryptionKeyID: "k", Version: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddPending(ctx, &domain.SecretVersion{ID: id + "-v2", PrivilegedAccountID: id, EncryptedMaterial: []byte("v2"), EncryptionKeyID: "k", Version: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddPending(ctx, &domain.SecretVersion{ID: id + "-v3", PrivilegedAccountID: id, EncryptedMaterial: []byte("v3"), EncryptionKeyID: "k", Version: 3}); !errors.Is(err, domain.ErrRotationInProgress) {
+		t.Fatalf("a second pending version: %v", err)
+	}
+	if cur, _ := store.CurrentVersion(ctx, id); cur == nil || cur.Version != 1 {
+		t.Fatalf("current while pending: %+v", cur)
+	}
+	if p, _ := store.PendingVersion(ctx, id); p == nil || p.Version != 2 || !p.Pending {
+		t.Fatalf("pending: %+v", p)
+	}
+	if err := store.PromotePending(ctx, id, 2); err != nil {
+		t.Fatal(err)
+	}
+	if cur, _ := store.CurrentVersion(ctx, id); cur == nil || cur.Version != 2 || string(cur.EncryptedMaterial) != "v2" {
+		t.Fatalf("current after promotion: %+v", cur)
+	}
+	if p, _ := store.PendingVersion(ctx, id); p != nil {
+		t.Fatal("still pending after promotion")
+	}
+	_ = store.AddPending(ctx, &domain.SecretVersion{ID: id + "-v3b", PrivilegedAccountID: id, EncryptedMaterial: []byte("v3"), EncryptionKeyID: "k", Version: 3})
+	if err := store.DiscardPending(ctx, id, 3); err != nil {
+		t.Fatal(err)
+	}
+	if cur, _ := store.CurrentVersion(ctx, id); cur.Version != 2 {
+		t.Fatalf("current after a discard: %d", cur.Version)
+	}
+}

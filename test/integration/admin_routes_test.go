@@ -20,10 +20,17 @@ import (
 
 func gatewayOnboardAccount(t *testing.T, baseURL, token, id, name, username, targetHost, initialSecret string) int {
 	t.Helper()
-	body, _ := json.Marshal(map[string]any{
+	return gatewayOnboardAccountWith(t, baseURL, token, map[string]any{
 		"id": id, "name": name, "username": username, "targetHost": targetHost,
 		"protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte(initialSecret),
 	})
+}
+
+// gatewayOnboardAccountWith onboards through the Gateway with any body (e.g. a
+// reconciliationAccountId, ADR-0037).
+func gatewayOnboardAccountWith(t *testing.T, baseURL, token string, fields map[string]any) int {
+	t.Helper()
+	body, _ := json.Marshal(fields)
 	req, _ := http.NewRequest(http.MethodPost, baseURL+"/vault/accounts", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -158,7 +165,10 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-2")
 
 	authz := startService(t, root, authzBin, "18302")
-	vault := startService(t, root, vaultBin, "18301", "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authz.baseURL)
+	// A rotation reaches the target and is audited (ADR-0037).
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-admin-routes")
+	audit := startService(t, root, auditBin, "18305")
+	vault := startService(t, root, vaultBin, "18301", "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL)
 	authn := startService(t, root, authnBin, "18303", "SKIP_DEMO_SEED=1")
 	gateway := startService(t, root, gatewayBin, "18304",
 		"AUTHENTICATION_URL="+authn.baseURL,
@@ -175,6 +185,8 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 
 	const accountID = "acc_admin_routes_it"
 	const initialSecret = "admin-routes-initial-secret"
+	// "admin" changes passwords through sudo (ADR-0037).
+	tgt := startRotatableTarget(t, map[string]string{"admin": "admin-routes-rec-pw", "root": initialSecret})
 
 	t.Run("onboarding is denied before any admin policy exists", func(t *testing.T) {
 		// The exact gap this increment closes: Password Vault itself
@@ -216,7 +228,13 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "admin", "authz:policy-admin", "allow")
 
 	t.Run("onboard account through the Gateway", func(t *testing.T) {
-		if status := gatewayOnboardAccount(t, gateway.baseURL, token, accountID, "admin-routes-account", "root", "10.0.0.42:22", initialSecret); status != http.StatusCreated {
+		if s := vaultOnboard(t, vault.baseURL, map[string]any{"id": accountID + "_rec", "name": "rec", "username": "admin", "targetHost": tgt.addr,
+			"protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte("admin-routes-rec-pw"), "actorRoles": []string{"admin"}}); s != http.StatusCreated {
+			t.Fatalf("onboard the reconciliation account: %d", s)
+		}
+		if status := gatewayOnboardAccountWith(t, gateway.baseURL, token, map[string]any{"id": accountID, "name": "admin-routes-account", "username": "root",
+			"targetHost": tgt.addr, "protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte(initialSecret),
+			"reconciliationAccountId": accountID + "_rec"}); status != http.StatusCreated {
 			t.Fatalf("expected 201, got %d", status)
 		}
 	})
@@ -226,7 +244,7 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		if status != http.StatusOK {
 			t.Fatalf("expected 200, got %d", status)
 		}
-		if account["username"] != "root" || account["targetHost"] != "10.0.0.42:22" {
+		if account["username"] != "root" || account["targetHost"] != tgt.addr {
 			t.Fatalf("unexpected account metadata: %+v", account)
 		}
 		// rotationPolicy/createdAt have been part of doc 05's PrivilegedAccount

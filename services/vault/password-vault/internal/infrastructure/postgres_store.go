@@ -11,7 +11,7 @@ import (
 	"errors"
 	"log"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 
 	"github.com/openbastion/openbastion/pkg/migrate"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
@@ -46,9 +46,9 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Create(ctx context.Context, a *domain.PrivilegedAccount) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, now())`,
-		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy))
+		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7)`,
+		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID)
 	return err
 }
 
@@ -57,9 +57,9 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	var rotationPolicy string
 	var lastRotatedAt, disabledAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id
 		FROM privileged_accounts WHERE id = $1`, id)
-	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt); err != nil {
+	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -134,6 +134,18 @@ func (s *PostgresStore) Disable(ctx context.Context, id string) error {
 // MarkRotated sets last_rotated_at — see domain.AccountRepository.MarkRotated's
 // doc comment for why this method exists (a real, previously-undiscovered
 // gap of the same shape as Disable/disabled_at before it).
+// SetReconciliation is domain.AccountRepository.SetReconciliation.
+func (s *PostgresStore) SetReconciliation(ctx context.Context, id, reconciliationID string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET reconciliation_account_id = $2 WHERE id = $1`, id, reconciliationID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func (s *PostgresStore) MarkRotated(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE privileged_accounts SET last_rotated_at = now() WHERE id = $1`, id)
@@ -145,7 +157,7 @@ func (s *PostgresStore) CurrentVersion(ctx context.Context, accountID string) (*
 	var supersededAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, privileged_account_id, encrypted_material, encryption_key_id, version, created_at, superseded_at
-		FROM vault_secrets WHERE privileged_account_id = $1 AND superseded_at IS NULL`, accountID)
+		FROM vault_secrets WHERE privileged_account_id = $1 AND superseded_at IS NULL AND NOT pending`, accountID)
 	if err := row.Scan(&v.ID, &v.PrivilegedAccountID, &v.EncryptedMaterial, &v.EncryptionKeyID, &v.Version, &v.CreatedAt, &supersededAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
@@ -169,7 +181,66 @@ func (s *PostgresStore) AddVersion(ctx context.Context, sv *domain.SecretVersion
 func (s *PostgresStore) SupersedeCurrent(ctx context.Context, accountID string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE vault_secrets SET superseded_at = now()
-		WHERE privileged_account_id = $1 AND superseded_at IS NULL`, accountID)
+		WHERE privileged_account_id = $1 AND superseded_at IS NULL AND NOT pending`, accountID)
+	return err
+}
+
+// AddPending is domain.SecretRepository.AddPending; the partial unique index of
+// 002_rotation.sql refuses a second pending version.
+func (s *PostgresStore) AddPending(ctx context.Context, sv *domain.SecretVersion) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO vault_secrets (id, privileged_account_id, encrypted_material, encryption_key_id, version, created_at, pending)
+		VALUES ($1, $2, $3, $4, $5, now(), TRUE)`,
+		sv.ID, sv.PrivilegedAccountID, sv.EncryptedMaterial, sv.EncryptionKeyID, sv.Version)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+		return domain.ErrRotationInProgress
+	}
+	return err
+}
+
+// PendingVersion is domain.SecretRepository.PendingVersion.
+func (s *PostgresStore) PendingVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {
+	var v domain.SecretVersion
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, privileged_account_id, encrypted_material, encryption_key_id, version, created_at
+		FROM vault_secrets WHERE privileged_account_id = $1 AND pending`, accountID).
+		Scan(&v.ID, &v.PrivilegedAccountID, &v.EncryptedMaterial, &v.EncryptionKeyID, &v.Version, &v.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	v.Pending = true
+	return &v, nil
+}
+
+// PromotePending is domain.SecretRepository.PromotePending: one transaction.
+func (s *PostgresStore) PromotePending(ctx context.Context, accountID string, version int) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE vault_secrets SET superseded_at = now()
+		WHERE privileged_account_id = $1 AND superseded_at IS NULL AND NOT pending`, accountID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE vault_secrets SET pending = FALSE
+		WHERE privileged_account_id = $1 AND version = $2 AND pending`, accountID, version)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return domain.ErrNotFound
+	}
+	return tx.Commit()
+}
+
+// DiscardPending is domain.SecretRepository.DiscardPending.
+func (s *PostgresStore) DiscardPending(ctx context.Context, accountID string, version int) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM vault_secrets WHERE privileged_account_id = $1 AND version = $2 AND pending`, accountID, version)
 	return err
 }
 

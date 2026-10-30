@@ -14,11 +14,20 @@ const signedIn = (api: Api, node: ReactNode) => render(<SignedInContext.Provider
 describe("Accounts", () => {
   const account = { id: "acc_1", name: "prod db", username: "root", targetHost: "db:22", protocol: "ssh", rotationPolicy: "manual", createdAt: "2026-10-30T10:00:00Z" };
 
-  it("lists the accounts — and offers no rotation, which would lock the account out", async () => {
-    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } } });
+  it("lists the accounts, and rotates one on its target", async () => {
+    const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { status: 202, body: "" } });
     signedIn(api, <Accounts />);
     expect(await screen.findByText("prod db")).toBeTruthy();
-    expect(screen.queryByText("Renouveler le secret")).toBeNull();
+    fireEvent.click(screen.getByText("Renouveler le secret"));
+    expect((await screen.findByRole("status")).textContent).toContain("Secret de acc_1 renouvelé sur la cible");
+    expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts/acc_1/rotate")).toBe(true);
+  });
+
+  it("says why a rotation is refused", async () => {
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { status: 409, body: "the account has no usable reconciliation account: it cannot be rotated" } });
+    signedIn(api, <Accounts />);
+    fireEvent.click(await screen.findByText("Renouveler le secret"));
+    expect((await screen.findByRole("alert")).textContent).toContain("409 — the account has no usable reconciliation account");
   });
 
   it("onboards an account with its secret as bytes, and never shows it again", async () => {
@@ -31,10 +40,11 @@ describe("Accounts", () => {
     field("Cible (hôte:port)", "web:22");
     field("Utilisateur sur la cible", "admin");
     field("Secret initial", "s3cr3t-é");
+    field("Compte de réconciliation (même cible ; vide : pas de rotation)", "acc_root");
     fireEvent.submit(form);
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts")).toBe(true));
     const sent = calls.find((c) => c.method === "POST" && c.path === "/vault/accounts")!.body as Record<string, string>;
-    expect(sent).toMatchObject({ id: "acc_2", protocol: "ssh", targetHost: "web:22" });
+    expect(sent).toMatchObject({ id: "acc_2", protocol: "ssh", targetHost: "web:22", reconciliationAccountId: "acc_root" });
     expect(new TextDecoder().decode(Uint8Array.from(atob(sent.initialSecret), (c) => c.charCodeAt(0)))).toBe("s3cr3t-é");
     expect((screen.getByLabelText("Secret initial") as HTMLInputElement).value).toBe("");
   });

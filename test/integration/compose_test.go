@@ -266,7 +266,10 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		}
 		readBack(t)
 		verifyChain(t)
-		if after := auditActions(t); !strings.HasPrefix(after, before+",recording.read") {
+		// The restart cuts the operator's open connection: the proxy may write its end
+		// (session.terminate) before it stops, or not — what was there before must be intact at
+		// the head of the trail, and the new read at its end.
+		if after := auditActions(t); !strings.HasPrefix(after, before+",") || !strings.HasSuffix(after, ",recording.read") {
 			t.Fatalf("the trail after the restart: %q, want what was there before, then the new read", after)
 		}
 		adminToken, _ = gatewayLogin(t, gatewayURL, "root-admin", "root-pw-123456")

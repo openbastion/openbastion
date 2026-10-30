@@ -101,8 +101,21 @@ func TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart(t *testing.T) {
 	const secretValue = "postgres-restart-it-secret"
 	kmsKeyHex := testKMSKeyHex(t) // shared across both processes below — see its doc comment
 
-	vault1 := startService(t, root, vaultBin, "18402", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kmsKeyHex, "SKIP_DEMO_SEED=1")
-	onboardAccountFull(t, vault1.baseURL, accountID, accountID, "root", accountID+":22", secretValue, []string{"vault-admin"})
+	// A rotation reaches the target and is audited (ADR-0037): a target that takes chpasswd,
+	// the account's reconciliation account on it, and an Audit Service.
+	tgt := startRotatableTarget(t, map[string]string{"root": "pg-restart-root-pw", "app": secretValue})
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-pg-vault")
+	audit := startService(t, root, auditBin, "18409")
+	vault1 := startService(t, root, vaultBin, "18402", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kmsKeyHex, "SKIP_DEMO_SEED=1", "AUDIT_URL="+audit.baseURL)
+	if s := vaultOnboard(t, vault1.baseURL, map[string]any{"id": accountID + "_rec", "name": "rec", "username": "root", "targetHost": tgt.addr,
+		"protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte("pg-restart-root-pw"), "actorRoles": []string{"vault-admin"}}); s != http.StatusCreated {
+		t.Fatalf("onboard the reconciliation account: %d", s)
+	}
+	if s := vaultOnboard(t, vault1.baseURL, map[string]any{"id": accountID, "name": accountID, "username": "app", "targetHost": tgt.addr,
+		"protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte(secretValue), "actorRoles": []string{"vault-admin"},
+		"reconciliationAccountId": accountID + "_rec"}); s != http.StatusCreated {
+		t.Fatalf("onboard: %d", s)
+	}
 
 	scopeToken := authorizeScope(t, vault1.baseURL, "pg-restart-session-1", accountID, "ssh-proxy-pg")
 	fetcher1 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault1.baseURL}, "ssh-proxy-pg")
@@ -119,7 +132,7 @@ func TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart(t *testing.T) {
 	// live in the database, not in that process's memory.
 	stopService(t, vault1)
 
-	vault2 := startService(t, root, vaultBin, "18403", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kmsKeyHex, "SKIP_DEMO_SEED=1")
+	vault2 := startService(t, root, vaultBin, "18403", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kmsKeyHex, "SKIP_DEMO_SEED=1", "AUDIT_URL="+audit.baseURL)
 
 	scopeToken2 := authorizeScope(t, vault2.baseURL, "pg-restart-session-2", accountID, "ssh-proxy-pg")
 	fetcher2 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault2.baseURL}, "ssh-proxy-pg")
@@ -148,6 +161,9 @@ func TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart(t *testing.T) {
 		cred3.Purge()
 		if rotated == secretValue || rotated == "" {
 			t.Fatalf("expected rotation to produce a new non-empty secret, got %q", rotated)
+		}
+		if tgt.password("app") != rotated {
+			t.Fatal("the secret the restarted Vault injects is not the one the target takes")
 		}
 	})
 }

@@ -31,6 +31,11 @@ type PrivilegedAccount struct {
 	LastRotatedAt  *time.Time
 	CreatedAt      time.Time
 	DisabledAt     *time.Time
+
+	// ReconciliationAccountID names the account of the same target that can change this
+	// one's password (ADR-0037): root, or an account allowed to `sudo chpasswd`. Empty: the
+	// account cannot be rotated.
+	ReconciliationAccountID string
 }
 
 // SecretVersion mirrors the vault_secrets table. EncryptedMaterial is an
@@ -45,6 +50,10 @@ type SecretVersion struct {
 	Version             int
 	CreatedAt           time.Time
 	SupersededAt        *time.Time
+
+	// Pending is a new secret written beside the current one during a rotation, not yet
+	// set and verified on the target (ADR-0037): never injected until it becomes current.
+	Pending bool
 }
 
 // ScopeGrant mirrors the authorization issued by AuthorizeScope

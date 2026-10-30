@@ -136,6 +136,11 @@ type SessionBrokerService struct {
 
 	// unwritten are the expiries this process made and could not yet write (ADR-0034).
 	unwritten unwrittenExpiries
+
+	// rotator is told when a granted session ends, for a rotation after use (ADR-0037);
+	// nil: nobody is.
+	rotator AfterUseRotator
+	logf    func(format string, args ...any)
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
@@ -608,6 +613,7 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 		return nil, fmt.Errorf("%w: the session was changed first", domain.ErrConflict)
 	}
 	_ = s.audit.EmitEvent(ctx, callerID, "session.terminate", "session", ended.ID, true)
+	s.afterUse(&ended)
 	return &ended, nil
 }
 

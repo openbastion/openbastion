@@ -99,6 +99,8 @@ services:
       PORT: "8081"
       SKIP_DEMO_SEED: "1"
       AUTHORIZATION_URL: https://authorization:8083
+      # Rotations are written to the audit before the target is touched (ADR-0037).
+      AUDIT_URL: https://audit-service:8082
       DATABASE_URL: postgres://password_vault:${PG_PASSWORD_PASSWORD_VAULT}@postgres:5432/password_vault?sslmode=disable
       KMS_KEY_HEX: ${VAULT_KMS_KEY_HEX:?}
     volumes:

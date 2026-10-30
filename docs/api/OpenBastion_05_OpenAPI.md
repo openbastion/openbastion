@@ -866,9 +866,18 @@ paths:
         techniquement un secret explicite optionnel, pensé pour un futur
         appelant interne programmatique (le Scheduler, doc 04), pas pour
         cette surface publique, qui ne l'expose donc pas ici.
+        Depuis ADR-0037, la rotation **change le mot de passe sur la cible**
+        par le compte de réconciliation du compte, le vérifie, et seulement
+        alors le rend courant ; la réponse vient une fois tout cela fait.
       responses:
         "202":
-          description: Rotation acceptée et en cours
+          description: Le nouveau secret est posé et vérifié sur la cible, et courant
+        "409":
+          description: Le compte n'a pas de compte de réconciliation utilisable, ou une rotation est déjà en cours
+        "502":
+          description: La cible a refusé le nouveau secret (rien n'a changé), ou il n'a pas pu être vérifié (gardé en attente, réglé à la rotation suivante)
+        "503":
+          description: L'Audit Service ne répond pas — aucune rotation sans trace
         "403":
           description: Refusé par l'Authorization Service
           content:
@@ -1108,7 +1117,8 @@ components:
         username: { type: string, description: "Compte sur la cible — distinct de name, qui identifie l'enregistrement (doc 06 §3)." }
         targetHost: { type: string }
         protocol: { type: string, enum: [ssh] }
-        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use }
+        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use, description: "post_use : renouvelé quand une session accordée se termine (ADR-0037) ; scheduled : enregistré, exécuté par rien" }
+        reconciliationAccountId: { type: string, description: "Compte du Vault, de la même cible, qui peut changer ce mot de passe (root ou sudo chpasswd) — ADR-0037 ; vide : pas de rotation" }
 
     PrivilegedAccount:
       allOf:

@@ -252,7 +252,8 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		{"the broker deletes an account", mtls.SessionBroker, http.MethodDelete, vaultURL + "/vault/v1/accounts/" + accountID, nil, "an account"},
 
 		// Who may write to the audit trail and the recording.
-		{"the Vault writes an audit event", mtls.PasswordVault, http.MethodPost, auditURL + "/audit/v1/emit-event",
+		// The Vault writes its rotations since ADR-0037: the service with nothing to write is Authorization.
+		{"Authorization writes an audit event", mtls.Authorization, http.MethodPost, auditURL + "/audit/v1/emit-event",
 			map[string]any{"actor_id": "root-admin", "action": "session.terminated", "resource_type": "session", "resource_id": sess.ID, "success": true}, "an audit entry"},
 		{"a compromised Gateway verifies the audit chain", mtls.APIGateway, http.MethodGet, auditURL + "/audit/v1/verify-chain", nil, "an oracle on the audit store"},
 		{"the broker forges commands into a recording", mtls.SessionBroker, http.MethodPost, recorderURL + "/recorder/v1/command-entries", forgedEntry, "a recorded command"},

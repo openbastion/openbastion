@@ -21,6 +21,8 @@ func CallerRules() []mtls.Rule {
 		// authenticated user whose roles the Vault then checks with Authorization.
 		{Method: http.MethodPost, Path: "/vault/v1/onboard-account", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/vault/v1/rotate", Callers: []string{mtls.APIGateway}},
+		// A session ended: the Broker asks for a rotation after use (ADR-0037).
+		{Method: http.MethodPost, Path: "/vault/v1/rotate-after-use", Callers: []string{mtls.SessionBroker}},
 		{Method: http.MethodGet, Path: "/vault/v1/accounts", Callers: []string{mtls.APIGateway}},
 		// Account metadata: the Broker resolves where and as whom to connect.
 		{Method: http.MethodGet, Path: "/vault/v1/accounts/", Prefix: true, Callers: []string{mtls.APIGateway, mtls.SessionBroker}},

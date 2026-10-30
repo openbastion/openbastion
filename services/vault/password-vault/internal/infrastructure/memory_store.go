@@ -87,6 +87,18 @@ func (s *InMemoryStore) Disable(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetReconciliation is domain.AccountRepository.SetReconciliation.
+func (s *InMemoryStore) SetReconciliation(ctx context.Context, id, reconciliationID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	a.ReconciliationAccountID = reconciliationID
+	return nil
+}
+
 func (s *InMemoryStore) MarkRotated(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,11 +116,76 @@ func (s *InMemoryStore) CurrentVersion(ctx context.Context, accountID string) (*
 	defer s.mu.Unlock()
 	versions := s.secrets[accountID]
 	for i := len(versions) - 1; i >= 0; i-- {
-		if versions[i].SupersededAt == nil {
+		if versions[i].SupersededAt == nil && !versions[i].Pending {
 			return versions[i], nil
 		}
 	}
 	return nil, domain.ErrNotFound
+}
+
+// AddPending is domain.SecretRepository.AddPending.
+func (s *InMemoryStore) AddPending(ctx context.Context, sv *domain.SecretVersion) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, v := range s.secrets[sv.PrivilegedAccountID] {
+		if v.Pending {
+			return domain.ErrRotationInProgress
+		}
+	}
+	cp := *sv
+	cp.Pending, cp.CreatedAt = true, time.Now().UTC()
+	s.secrets[sv.PrivilegedAccountID] = append(s.secrets[sv.PrivilegedAccountID], &cp)
+	return nil
+}
+
+// PendingVersion is domain.SecretRepository.PendingVersion.
+func (s *InMemoryStore) PendingVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, v := range s.secrets[accountID] {
+		if v.Pending {
+			cp := *v
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+// PromotePending is domain.SecretRepository.PromotePending, under the store's lock.
+func (s *InMemoryStore) PromotePending(ctx context.Context, accountID string, version int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var pending *domain.SecretVersion
+	for _, v := range s.secrets[accountID] {
+		if v.Pending && v.Version == version {
+			pending = v
+		}
+	}
+	if pending == nil {
+		return domain.ErrNotFound
+	}
+	now := time.Now().UTC()
+	for _, v := range s.secrets[accountID] {
+		if !v.Pending && v.SupersededAt == nil {
+			v.SupersededAt = &now
+		}
+	}
+	pending.Pending = false
+	return nil
+}
+
+// DiscardPending is domain.SecretRepository.DiscardPending.
+func (s *InMemoryStore) DiscardPending(ctx context.Context, accountID string, version int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.secrets[accountID][:0]
+	for _, v := range s.secrets[accountID] {
+		if !(v.Pending && v.Version == version) {
+			kept = append(kept, v)
+		}
+	}
+	s.secrets[accountID] = kept
+	return nil
 }
 
 func (s *InMemoryStore) AddVersion(ctx context.Context, sv *domain.SecretVersion) error {
@@ -124,7 +201,7 @@ func (s *InMemoryStore) SupersedeCurrent(ctx context.Context, accountID string) 
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
 	for _, v := range s.secrets[accountID] {
-		if v.SupersededAt == nil {
+		if v.SupersededAt == nil && !v.Pending {
 			v.SupersededAt = &now
 		}
 	}

@@ -5,10 +5,9 @@ import { useSignedIn } from "../../shared/session";
 
 const pageSize = 20;
 
-// Privileged accounts of the Vault: list, onboard, disable. A secret is typed once at
-// onboarding and never shown again: the API never returns one. No "rotate" button: a rotation
-// today changes the secret in the Vault only, not on the target, and would lock the account
-// out (NOTES_SANDBOX.md) — it comes back when rotation reaches the target.
+// Privileged accounts of the Vault: list, onboard, rotate, disable. A secret is typed once at
+// onboarding and never shown again: the API never returns one. A rotation changes the secret on
+// the target, through the account's reconciliation account (ADR-0037).
 export function Accounts() {
   const { api } = useSignedIn();
   const [page, setPage] = useState(1);
@@ -36,7 +35,7 @@ export function Accounts() {
   return (
     <section>
       <h2>Comptes privilégiés</h2>
-      <p className="hint">Pas de rotation depuis cette page : aujourd'hui, une rotation ne change le secret que dans le coffre, pas sur la cible.</p>
+      <p className="hint">Renouveler un secret le change sur la cible, par le compte de réconciliation du compte, et le vérifie avant de l'adopter : un compte sans compte de réconciliation ne peut pas être renouvelé.</p>
       <Notice error={error} ok={ok} />
       <table>
         <thead>
@@ -52,6 +51,7 @@ export function Accounts() {
               <td>{a.rotationPolicy}</td>
               <td>{a.lastRotatedAt ?? "—"}</td>
               <td className="actions">
+                <button type="button" onClick={() => act(`Secret de ${a.id} renouvelé sur la cible`, () => api.request("POST", `/vault/accounts/${encodeURIComponent(a.id)}/rotate`))}>Renouveler le secret</button>
                 <button type="button" className="danger" onClick={() => window.confirm(`Désactiver ${a.id} ?`) && act(`${a.id} désactivé`, () => api.request("DELETE", `/vault/accounts/${encodeURIComponent(a.id)}`))}>Désactiver</button>
               </td>
             </tr>
@@ -72,7 +72,7 @@ export function Accounts() {
 
 function Onboard({ onDone }: { onDone: (id: string) => void }) {
   const { api } = useSignedIn();
-  const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", rotationPolicy: "manual", initialSecret: "" });
+  const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", rotationPolicy: "manual", initialSecret: "", reconciliationAccountId: "" });
   const [error, setError] = useState<unknown>();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
@@ -107,6 +107,7 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
           <option value="scheduled">planifiée</option>
         </select>
       </label>
+      <label>Compte de réconciliation (même cible ; vide : pas de rotation)<input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} /></label>
       <label>Secret initial<input type="password" autoComplete="new-password" value={f.initialSecret} onChange={set("initialSecret")} required /></label>
       <button type="submit">Enregistrer</button>
       <Notice error={error} />

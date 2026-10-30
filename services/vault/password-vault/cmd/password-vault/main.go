@@ -76,6 +76,16 @@ func main() {
 	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authorizationURL, Client: authzClient}
 	svc := application.NewVaultService(accounts, secrets, scopes, kms, authz)
 
+	// Rotation reaches the target (ADR-0037): the Vault logs in over SSH with the account's
+	// reconciliation account, and writes every rotation to the audit — before it touches the
+	// target, fail-closed.
+	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
+	auditClient, err := rt.Client(mtls.Peer{URL: auditURL, Service: mtls.AuditService})
+	if err != nil {
+		log.Fatalf("password-vault: %v", err)
+	}
+	svc.WithRotation(infrastructure.SSHTargetChanger{}, &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: auditClient})
+
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
 		ctx := context.Background()
 		if err := svc.OnboardAccount(ctx, []string{"vault-admin"}, "acc_demo", "prod-db-01-root", "root", "10.0.4.12:22", "ssh",
@@ -89,6 +99,7 @@ func main() {
 	srv.CallerFromCertificate = rt.Enabled()
 	log.Printf("password-vault listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authorizationURL)
+	log.Printf("  -> audit:         %s (rotations; the targets are reached over SSH, host keys not verified — ADR-0037)", auditURL)
 	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
