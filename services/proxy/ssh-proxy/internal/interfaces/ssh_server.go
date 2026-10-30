@@ -91,12 +91,22 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 	defer sshConn.Close()
 	go ssh.DiscardRequests(reqs)
 
-	clientChannel, cleanup, shellRequested, err := acceptSessionChannel(chans)
+	clientChannel, cleanup, shellRequested, starts, err := acceptSessionChannel(chans)
 	if err != nil {
 		log.Printf("ssh-proxy: %v", err)
 		return
 	}
 	defer cleanup()
+	// Nothing is dialed, admitted or fetched before the client says what it runs.
+	var started sessionStart
+	select {
+	case started = <-starts:
+	case <-time.After(30 * time.Second):
+		log.Printf("ssh-proxy: session %s: the client asked for no shell, sftp or scp in 30 s", resolved.SessionID)
+		return
+	case <-ctx.Done():
+		return
+	}
 
 	targetAddr := resolved.TargetHost
 	targetConn, err := net.Dial("tcp", targetAddr)
@@ -143,6 +153,10 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 		// sudo password typed next is recorded as redacted, not in the clear.
 		OutputObserver: recordingTap.Output(),
 		DialTimeout:    s.DialTimeout,
+		// SFTP and SCP: each transfer recorded before it is relayed (ADR-0038).
+		Mode:   started.mode,
+		SCP:    started.scp,
+		Events: recordingTap,
 	}
 
 	if err := s.Listener.Serve(ctx, meta, codec, clientChannel, targetConn); err != nil {
@@ -172,43 +186,69 @@ func tell(ch ssh.Channel, shellRequested <-chan struct{}, msg string) {
 	fmt.Fprint(ch, msg)
 }
 
-// acceptSessionChannel accepts the first "session"-type channel the
-// client opens and answers the handful of requests a normal interactive
-// `ssh host` client sends (pty-req, shell, env, window-change) — enough
-// for an interactive shell; exec and subsystem (SFTP/SCP) requests are a
-// follow-up increment (see /NOTES_SANDBOX.md).
+// sessionStart is what the client asked its session channel to run (ADR-0038).
+type sessionStart struct {
+	mode sshcodec.Mode
+	scp  sshcodec.SCPCommand
+}
+
+// acceptSessionChannel accepts the first "session"-type channel the client opens and answers
+// its requests: pty-req, env and window-change are taken; the first of shell, the "sftp"
+// subsystem, or an exec of exactly a legacy scp sink or source (sshcodec.ParseSCPCommand)
+// starts the session — anything else (another command, another subsystem) is refused, as
+// before ADR-0038.
 //
-// The returned channel is closed when the client asks for a shell.
-func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), <-chan struct{}, error) {
+// The returned start channel delivers what was asked, once; shellRequested is closed then too
+// (tell waits on it).
+func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), <-chan struct{}, <-chan sessionStart, error) {
 	for newCh := range chans {
 		if newCh.ChannelType() != "session" {
-			_ = newCh.Reject(ssh.UnknownChannelType, "only interactive session channels are supported in this increment")
+			_ = newCh.Reject(ssh.UnknownChannelType, "only session channels are supported")
 			continue
 		}
 		ch, requests, err := newCh.Accept()
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("accepting session channel: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("accepting session channel: %w", err)
 		}
 		shellRequested := make(chan struct{})
-		var shellOnce sync.Once
+		start := make(chan sessionStart, 1)
+		var once sync.Once
+		begin := func(s sessionStart) bool {
+			started := false
+			once.Do(func() {
+				start <- s
+				close(shellRequested)
+				started = true
+			})
+			return started
+		}
 		go func() {
 			for req := range requests {
+				ok := false
 				switch req.Type {
-				case "shell", "pty-req", "env", "window-change":
-					if req.WantReply {
-						_ = req.Reply(true, nil)
+				case "pty-req", "env", "window-change":
+					ok = true
+				case "shell":
+					ok = begin(sessionStart{mode: sshcodec.ModeShell})
+				case "subsystem":
+					var p struct{ Name string }
+					if ssh.Unmarshal(req.Payload, &p) == nil && p.Name == "sftp" {
+						ok = begin(sessionStart{mode: sshcodec.ModeSFTP})
 					}
-					if req.Type == "shell" {
-						shellOnce.Do(func() { close(shellRequested) })
+				case "exec":
+					var p struct{ Command string }
+					if ssh.Unmarshal(req.Payload, &p) == nil {
+						if c, accepted := sshcodec.ParseSCPCommand(p.Command); accepted {
+							ok = begin(sessionStart{mode: sshcodec.ModeSCP, scp: c})
+						}
 					}
-				default:
-					if req.WantReply {
-						_ = req.Reply(false, nil)
-					}
+				}
+				if req.WantReply {
+					_ = req.Reply(ok, nil)
 				}
 			}
 		}()
-		return ch, func() { _ = ch.Close() }, shellRequested, nil
+		return ch, func() { _ = ch.Close() }, shellRequested, start, nil
 	}
-	return nil, nil, nil, fmt.Errorf("client closed connection before opening a session channel")
+	return nil, nil, nil, nil, fmt.Errorf("client closed connection before opening a session channel")
 }

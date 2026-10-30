@@ -471,3 +471,28 @@ func TestRequiredTap_SlowAcknowledgementDoesNotBlockTheOutputObserver(t *testing
 	close(rec.release)
 	<-writeDone
 }
+
+// ADR-0038: an event (a file transfer) is recorded before it is relayed — acknowledged in
+// required mode, or an error that finishes the tap.
+func TestRecordingTap_RecordEvent(t *testing.T) {
+	ok := &scriptedBatchRecorder{}
+	tap := NewRequiredRecordingTap(ok, "s1")
+	if err := tap.RecordEvent(context.Background(), `sftp open "/etc/x" for writing`); err != nil {
+		t.Fatal(err)
+	}
+	if got := ok.commands(); len(got) != 1 || got[0] != `sftp open "/etc/x" for writing` {
+		t.Fatalf("recorded %q", got)
+	}
+	failing := &scriptedBatchRecorder{err: errors.New("recorder down")}
+	tap = NewRequiredRecordingTap(failing, "s2")
+	if err := tap.RecordEvent(context.Background(), "e"); !errors.Is(err, ErrRecordingUnavailable) {
+		t.Fatalf("got %v, want ErrRecordingUnavailable", err)
+	}
+	if n, err := tap.Write([]byte("ls\r")); n != 0 || err == nil {
+		t.Fatal("the tap goes on after a refused event")
+	}
+	best := &captureRecorder{}
+	if err := NewRecordingTap(best, "s3").RecordEvent(context.Background(), "e"); err != nil {
+		t.Fatalf("best effort never fails: %v", err)
+	}
+}

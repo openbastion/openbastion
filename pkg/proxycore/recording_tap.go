@@ -304,3 +304,31 @@ func (t *RecordingTap) observe(p []byte) {
 		t.secretNext = true
 	}
 }
+
+// RecordEvent records one event of the session that is not a typed line — a file transfer
+// (ADR-0038) — before whatever caused it is relayed. In required mode it waits for the
+// recorder's acknowledgement and returns an error wrapping ErrRecordingUnavailable when there
+// is none: the caller must then not relay, and end the session. In best-effort mode it never
+// fails. After a refusal the tap is finished, as with a command.
+func (t *RecordingTap) RecordEvent(ctx context.Context, event string) error {
+	t.mu.Lock()
+	if t.failed != nil {
+		err := t.failed
+		t.mu.Unlock()
+		return err
+	}
+	t.mu.Unlock()
+	entry := CommandEntry{SessionID: t.sessionID, Timestamp: time.Now().UTC(), Command: event}
+	if t.strict != nil {
+		if err := t.strict.RecordBatch(ctx, []CommandEntry{entry}); err != nil {
+			err = fmt.Errorf("%w: %v", ErrRecordingUnavailable, err)
+			t.mu.Lock()
+			t.failed = err
+			t.mu.Unlock()
+			return err
+		}
+		return nil
+	}
+	_ = t.recorder.Record(ctx, entry)
+	return nil
+}

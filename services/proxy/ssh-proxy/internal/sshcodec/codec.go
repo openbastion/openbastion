@@ -18,6 +18,7 @@ package sshcodec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -58,7 +59,24 @@ type Codec struct {
 	// ssh.ClientConfig's own default (no timeout), which is not what we
 	// want in production — cmd/ssh-proxy sets this explicitly.
 	DialTimeout time.Duration
+
+	// Mode is what the client asked for on its session channel (ADR-0038): an interactive
+	// shell (the zero value), the SFTP subsystem, or a legacy scp sink or source (SCP).
+	Mode Mode
+	SCP  SCPCommand
+	// Events records the transfers of an SFTP or SCP session before they are relayed;
+	// required for those modes.
+	Events EventRecorder
 }
+
+// Mode is the kind of session relayed.
+type Mode int
+
+const (
+	ModeShell Mode = iota
+	ModeSFTP
+	ModeSCP
+)
 
 // Relay implements proxycore.Codec.
 func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credential *proxycore.Credential) error {
@@ -92,6 +110,10 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		return fmt.Errorf("target session: %w", err)
 	}
 	defer session.Close()
+
+	if c.Mode == ModeSFTP || c.Mode == ModeSCP {
+		return c.relayTransfer(ctx, client, session)
+	}
 
 	if err := session.RequestPty("xterm", 80, 40, ssh.TerminalModes{}); err != nil {
 		return fmt.Errorf("target pty request: %w", err)
@@ -137,4 +159,78 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		}
 		return nil
 	}
+}
+
+// relayTransfer relays an SFTP or SCP session (ADR-0038), each transfer recorded before it is
+// relayed. The target's exit status goes back to the client, as an SSH server would send it.
+func (c *Codec) relayTransfer(ctx context.Context, client io.ReadWriter, session *ssh.Session) error {
+	if c.Events == nil {
+		return fmt.Errorf("sshcodec: a transfer session needs an event recorder")
+	}
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	var up, down func() error
+	switch c.Mode {
+	case ModeSFTP:
+		if err := session.RequestSubsystem("sftp"); err != nil {
+			return fmt.Errorf("target sftp subsystem: %w", err)
+		}
+		w := newSFTPWatch(c.Events)
+		up = func() error { return w.clientToTarget(ctx, client, stdin) }
+		down = func() error { return w.targetToClient(stdout, client) }
+	case ModeSCP:
+		if err := c.Events.RecordEvent(ctx, fmt.Sprintf("scp %s %s", map[bool]string{true: "upload to", false: "download from"}[c.SCP.Upload], q(c.SCP.Path))); err != nil {
+			return err
+		}
+		if err := session.Start(c.SCP.Line); err != nil {
+			return fmt.Errorf("target scp: %w", err)
+		}
+		if c.SCP.Upload {
+			up = func() error { return scpStream(ctx, c.Events, c.SCP, client, stdin) }
+			down = func() error { _, err := io.Copy(client, stdout); return err }
+		} else {
+			up = func() error { _, err := io.Copy(stdin, client); return err }
+			down = func() error { return scpStream(ctx, c.Events, c.SCP, stdout, client) }
+		}
+	}
+	upDone := make(chan error, 1)
+	go func() {
+		err := up()
+		_ = stdin.Close() // the client is done: the target sees the end of its input
+		upDone <- err
+	}()
+	downErr := down()
+	exit := 0
+	if c.Mode == ModeSCP {
+		if err := session.Wait(); err != nil {
+			exit = 1
+			var ee *ssh.ExitError
+			if errors.As(err, &ee) {
+				exit = ee.ExitStatus()
+			}
+		}
+	}
+	if ch, ok := client.(ssh.Channel); ok {
+		_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{uint32(exit)}))
+		_ = ch.CloseWrite()
+	}
+	select {
+	case err := <-upDone:
+		if err != nil && err != io.EOF {
+			return err
+		}
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(5 * time.Second):
+	}
+	if downErr != nil && downErr != io.EOF {
+		return downErr
+	}
+	return nil
 }
