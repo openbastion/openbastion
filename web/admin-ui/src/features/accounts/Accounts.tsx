@@ -5,8 +5,10 @@ import { useSignedIn } from "../../shared/session";
 
 const pageSize = 20;
 
-// Privileged accounts of the Vault: list, onboard, rotate, disable. A secret is typed once at
-// onboarding and never shown again: the API never returns one.
+// Privileged accounts of the Vault: list, onboard, disable. A secret is typed once at
+// onboarding and never shown again: the API never returns one. No "rotate" button: a rotation
+// today changes the secret in the Vault only, not on the target, and would lock the account
+// out (NOTES_SANDBOX.md) — it comes back when rotation reaches the target.
 export function Accounts() {
   const { api } = useSignedIn();
   const [page, setPage] = useState(1);
@@ -34,6 +36,7 @@ export function Accounts() {
   return (
     <section>
       <h2>Comptes privilégiés</h2>
+      <p className="hint">Pas de rotation depuis cette page : aujourd'hui, une rotation ne change le secret que dans le coffre, pas sur la cible.</p>
       <Notice error={error} ok={ok} />
       <table>
         <thead>
@@ -49,7 +52,6 @@ export function Accounts() {
               <td>{a.rotationPolicy}</td>
               <td>{a.lastRotatedAt ?? "—"}</td>
               <td className="actions">
-                <button type="button" onClick={() => act(`Secret de ${a.id} renouvelé`, () => api.request("POST", `/vault/accounts/${encodeURIComponent(a.id)}/rotate`))}>Renouveler le secret</button>
                 <button type="button" className="danger" onClick={() => window.confirm(`Désactiver ${a.id} ?`) && act(`${a.id} désactivé`, () => api.request("DELETE", `/vault/accounts/${encodeURIComponent(a.id)}`))}>Désactiver</button>
               </td>
             </tr>

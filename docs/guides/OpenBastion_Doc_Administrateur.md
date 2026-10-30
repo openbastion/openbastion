@@ -287,7 +287,7 @@ curl -X POST https://bastion.example.com/api/v1/vault/accounts \
   }'
 ```
 
-`rotationPolicy` accepte `manual`, `post_use` ou `scheduled` (doc 06 §3). Une rotation manuelle immédiate se déclenche via :
+`rotationPolicy` accepte `manual`, `post_use` ou `scheduled` (doc 06 §3). **Attention — limite constatée le 30 octobre 2026** : aujourd'hui, une rotation **ne change le secret que dans le Vault, pas sur la cible**. Après `POST …/rotate`, le Vault injecte un mot de passe que la cible ne connaît pas, et **les sessions sur ce compte échouent** jusqu'à ce que le mot de passe de la cible soit remis à la main sur la valeur du Vault, qui n'est jamais lisible. Ne déclenchez pas de rotation en production. `post_use` et `scheduled` sont enregistrés mais **rien ne les exécute** (pas de rotation après usage, pas de Scheduler de rotation). Une rotation manuelle se déclenche via :
 
 ```sh
 curl -X POST https://bastion.example.com/api/v1/vault/accounts/{accountId}/rotate \

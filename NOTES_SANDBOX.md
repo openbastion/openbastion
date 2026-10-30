@@ -1106,6 +1106,12 @@ Bony Kiss a choisi React, Vite et TypeScript, et avec eux les dépendances npm. 
 3. **Pas de liste des politiques ni des événements d'audit** : l'API publique n'en a pas.
 4. **Pas de traduction** : l'interface est en français.
 
+## Constaté : la rotation d'un secret ne touche pas la cible
+
+En faisant le point sur le périmètre MVP (doc 04 : « rotation manuelle et post-usage »), j'ai lu `VaultService.Rotate` : il tire un secret, l'enregistre comme nouvelle version — **et rien ne le pose sur la cible**. Aucun composant ne change un mot de passe sur une cible (`grep passwd chpasswd` : rien). Après une rotation, le Vault injecte un mot de passe que la cible refuse : **le compte devient inutilisable**. `post_use` et `scheduled` sont acceptés et enregistrés, et rien ne les exécute. Le guide Administrateur présentait la rotation comme fonctionnelle.
+
+Fait tout de suite : le bouton « Renouveler le secret » que l'Admin UI (ADR-0036) venait d'ajouter est **retiré** (un test vérifie qu'il n'y est plus) ; le guide Administrateur (§4) et le Guide Sécurité (§12) disent la limite. **Non fait** : appliquer la rotation sur la cible — une décision de conception (avec quel compte la cible est-elle modifiée, comment on sait que c'est fait, que faire d'une rotation à moitié faite), soumise à Bony Kiss.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

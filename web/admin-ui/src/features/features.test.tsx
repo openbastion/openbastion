@@ -14,13 +14,11 @@ const signedIn = (api: Api, node: ReactNode) => render(<SignedInContext.Provider
 describe("Accounts", () => {
   const account = { id: "acc_1", name: "prod db", username: "root", targetHost: "db:22", protocol: "ssh", rotationPolicy: "manual", createdAt: "2026-10-30T10:00:00Z" };
 
-  it("lists the accounts, and rotates one", async () => {
-    const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { body: {} } });
+  it("lists the accounts — and offers no rotation, which would lock the account out", async () => {
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } } });
     signedIn(api, <Accounts />);
     expect(await screen.findByText("prod db")).toBeTruthy();
-    fireEvent.click(screen.getByText("Renouveler le secret"));
-    expect((await screen.findByRole("status")).textContent).toContain("Secret de acc_1 renouvelé");
-    expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts/acc_1/rotate")).toBe(true);
+    expect(screen.queryByText("Renouveler le secret")).toBeNull();
   });
 
   it("onboards an account with its secret as bytes, and never shows it again", async () => {
