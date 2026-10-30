@@ -147,3 +147,18 @@ func TestHTTP_AReadThatCouldNotBeRecordedOrReadIsGenericToTheClient(t *testing.T
 		})
 	}
 }
+
+// What cannot be a session is a 400 for everyone, before anything is asked (ADR-0024).
+func TestHTTP_AnIDThatCannotBeASessionIsA400(t *testing.T) {
+	audit := &spyAudit{}
+	h := interfaces.NewHTTPServer(application.NewRecorderService(infrastructure.NewInMemoryStore(), allowAll{}, audit)).Routes()
+	for _, id := range []string{strings.Repeat("x", 257), "s%FF1"} {
+		rec := get(t, h, "/recorder/v1/sessions/"+id+"/commands?callerId=u_carol&actorRoles=auditor")
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "not a session id") {
+			t.Fatalf("%q: %d %q, want 400", id, rec.Code, rec.Body)
+		}
+	}
+	if len(audit.actors) != 0 {
+		t.Fatalf("events for ids that cannot be sessions: %q", audit.actors)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/application"
@@ -22,6 +23,20 @@ func mustEnv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// boundedIntEnv reads a number that must lie within bounds: a value that is not one stops
+// the Recorder, naming the variable — there is no quiet fallback.
+func boundedIntEnv(name string, def, min, max int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < min || n > max {
+		log.Fatalf("command-recorder: %s must be a number between %d and %d, got %q", name, min, max, v)
+	}
+	return n
 }
 
 func main() {
@@ -75,11 +90,20 @@ func main() {
 		log.Fatalf("command-recorder: %v", err)
 	}
 	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: auditClient}
-	srv := interfaces.NewHTTPServer(application.NewRecorderService(repo, authz, audit))
+	svc := application.NewRecorderService(repo, authz, audit)
+	// What the refused reads of one user may write to the audit (ADR-0024): a burst, then a
+	// steady rate. Read whether or not anyone is ever refused, so that a bad value is found
+	// on the day it is written.
+	svc.WithReadRefusalAudit(
+		boundedIntEnv("RECORDING_READ_AUDIT_BURST", application.DefaultReadAuditBurst, 1, application.MaxReadAuditBurst),
+		boundedIntEnv("RECORDING_READ_AUDIT_RATE_PER_MINUTE", application.DefaultReadAuditRatePerMinute, 1, application.MaxReadAuditRatePerMinute))
+	readBurst, readRate := svc.ReadRefusalAudit()
+	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("command-recorder listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authzURL)
 	log.Printf("  -> audit: %s (every read of a recording is written there before it is served)", auditURL)
+	log.Printf("command-recorder: the refusals of reads of a recording are written to the audit per user: a burst of %d, then %d a minute (per process; a refusal is the same whatever the budget says)", readBurst, readRate)
 	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 

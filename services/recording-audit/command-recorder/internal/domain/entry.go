@@ -14,6 +14,11 @@ var (
 	// whole: an entry with no session, no command or no timestamp.
 	ErrInvalidEntry = errors.New("invalid command entry")
 
+	// ErrNotASessionID is returned for a read of an id that cannot be a session's: empty,
+	// longer than a stored session id may be, or not UTF-8 (ADR-0024). The answer is the
+	// same for everyone, before anything is asked or written.
+	ErrNotASessionID = errors.New("not a session id")
+
 	// ErrForbidden is returned when the caller may not read a recording: no
 	// authenticated user was named, or RBAC denied it.
 	ErrForbidden = errors.New("access denied")

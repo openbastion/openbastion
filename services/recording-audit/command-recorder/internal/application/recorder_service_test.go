@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"errors"
+	"log"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -405,8 +407,11 @@ func TestGetRecording_ARefusalIsNotAServedRead(t *testing.T) {
 	if _, _, err := svc.GetRecording(context.Background(), reader, []string{"dba"}, "s1", 1, 20); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("want forbidden, got %v", err)
 	}
-	if len(audit.events) != 0 {
-		t.Fatalf("a refusal was written as a served read: %+v", audit.events)
+	// A refusal is an event of its own since ADR-0024 (success=false); it is never a served read.
+	for _, e := range audit.events {
+		if e.success {
+			t.Fatalf("a refusal was written as a served read: %+v", audit.events)
+		}
 	}
 }
 
@@ -429,5 +434,146 @@ func TestGetRecording_APageTheStoreCouldNotReadIsNotOnTheRecord(t *testing.T) {
 	}
 	if len(audit.events) != 0 {
 		t.Fatalf("a page that was not read is on the record: %+v", audit.events)
+	}
+}
+
+// -- a refused read is on the record, within a budget per identity (ADR-0024) -------
+
+type testClock struct{ t time.Time }
+
+func (c *testClock) Now() time.Time          { return c.t }
+func (c *testClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+func refusals(a *fakeAudit, actor string) int {
+	n := 0
+	for _, e := range a.events {
+		if e.action == "recording.read" && !e.success && e.actor == actor {
+			n++
+		}
+	}
+	return n
+}
+
+func TestGetRecording_ARefusalIsAnEventUnderTheCallersName(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	_, _ = svc.Record(context.Background(), []domain.CommandEntry{entry("s1", "x", time.Now())})
+	if _, _, err := svc.GetRecording(context.Background(), "u_bob", []string{"dba"}, "s1", 1, 20); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("want forbidden, got %v", err)
+	}
+	want := auditEvent{actor: "u_bob", action: "recording.read", resourceType: "session", resourceID: "s1", success: false}
+	if len(audit.events) != 1 || audit.events[0] != want {
+		t.Fatalf("events %+v, want %+v", audit.events, want)
+	}
+}
+
+func TestGetRecording_RefusalsAreWrittenWithinTheIdentitysBudget(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	clock := &testClock{t: time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)}
+	svc.WithClock(clock.Now)
+	ctx := context.Background()
+
+	var first error
+	for i := 0; i < 25; i++ {
+		_, _, err := svc.GetRecording(ctx, "u_mallory", []string{"dba"}, "s"+string(rune('a'+i%5)), 1, 20)
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("refusal %d: %v", i, err)
+		}
+		if first == nil {
+			first = err
+		}
+	}
+	if n := refusals(audit, "u_mallory"); n != DefaultReadAuditBurst {
+		t.Fatalf("%d of 25 refusals written, want the burst of %d", n, DefaultReadAuditBurst)
+	}
+	// Another identity's budget is its own.
+	_, _, _ = svc.GetRecording(ctx, "u_bob", []string{"dba"}, "sa", 1, 20)
+	if n := refusals(audit, "u_bob"); n != 1 {
+		t.Fatalf("%d refusal(s) of Bob's written, want 1", n)
+	}
+	// 6 a minute: one more ten seconds later.
+	clock.advance(10 * time.Second)
+	_, _, _ = svc.GetRecording(ctx, "u_mallory", []string{"dba"}, "sa", 1, 20)
+	if n := refusals(audit, "u_mallory"); n != DefaultReadAuditBurst+1 {
+		t.Fatalf("%d written 10 s later, want %d", n, DefaultReadAuditBurst+1)
+	}
+}
+
+// The answer never depends on the budget, nor on the audit: the same refusal, written,
+// suppressed or lost.
+func TestGetRecording_ARefusalIsTheSameWhateverTheBudgetOrTheAuditSays(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	svc.WithReadRefusalAudit(1, 1)
+	ctx := context.Background()
+	_, _, written := svc.GetRecording(ctx, "u_bob", []string{"dba"}, "s1", 1, 20)
+	_, _, suppressed := svc.GetRecording(ctx, "u_bob", []string{"dba"}, "s1", 1, 20)
+	audit.err = errors.New("audit down")
+	_, _, lost := svc.GetRecording(ctx, "u_alice", []string{"dba"}, "s1", 1, 20)
+	if written == nil || written.Error() != suppressed.Error() || written.Error() != lost.Error() || !errors.Is(lost, domain.ErrForbidden) {
+		t.Fatalf("refusals differ: %v / %v / %v", written, suppressed, lost)
+	}
+}
+
+func TestGetRecording_ASpentBudgetIsOneLogLinePerEpisode_AndALostRefusalIsLogged(t *testing.T) {
+	var logs strings.Builder
+	log.SetOutput(&logs)
+	defer log.SetOutput(os.Stderr)
+
+	svc, _, _, audit := newAuditedService()
+	svc.WithReadRefusalAudit(2, 1)
+	for i := 0; i < 6; i++ {
+		_, _, _ = svc.GetRecording(context.Background(), "u_mallory", []string{"dba"}, "s1", 1, 20)
+	}
+	if n := strings.Count(logs.String(), "are no longer written to the audit one by one"); n != 1 {
+		t.Fatalf("%d log line(s) for one episode, want 1:\n%s", n, logs.String())
+	}
+	audit.err = errors.New("dial tcp 10.0.0.9:8082: connection refused")
+	_, _, _ = svc.GetRecording(context.Background(), "u_bob", []string{"dba"}, "s1", 1, 20)
+	if !strings.Contains(logs.String(), "could not be audited") || !strings.Contains(logs.String(), "10.0.0.9:8082") {
+		t.Fatalf("a refusal that could not be written is not in the log:\n%s", logs.String())
+	}
+}
+
+// Served reads are not refusals: they spend nothing of the budget (ADR-0022 still holds).
+func TestGetRecording_ServedReadsSpendNothingOfTheRefusalBudget(t *testing.T) {
+	svc, _, _, audit := newAuditedService()
+	for i := 0; i < 3*DefaultReadAuditBurst; i++ {
+		if _, _, err := svc.GetRecording(context.Background(), "u_carol", auditor, "s1", 1, 20); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < DefaultReadAuditBurst; i++ {
+		_, _, _ = svc.GetRecording(context.Background(), "u_carol", []string{"dba"}, "s1", 1, 20)
+	}
+	if n := refusals(audit, "u_carol"); n != DefaultReadAuditBurst {
+		t.Fatalf("%d refusal(s) written, want the full burst: served reads must not have spent it", n)
+	}
+}
+
+// What did not reach a refusal of policy writes no refusal: no name, an Authorization
+// Service that does not answer, an id that cannot be a session.
+func TestGetRecording_OnlyARefusalOfPolicyIsARefusalOnTheRecord(t *testing.T) {
+	svc, _, authz, audit := newAuditedService()
+	ctx := context.Background()
+	_, _, _ = svc.GetRecording(ctx, "", []string{"dba"}, "s1", 1, 20)
+	authz.err = errors.New("connection refused")
+	_, _, _ = svc.GetRecording(ctx, "u_bob", []string{"dba"}, "s1", 1, 20)
+	authz.err = nil
+	asked := len(authz.resources)
+	for _, bad := range []string{"", strings.Repeat("x", maxSessionIDBytes+1), "s\xff1"} {
+		for _, roles := range [][]string{{"dba"}, auditor} {
+			if _, _, err := svc.GetRecording(ctx, "u_bob", roles, bad, 1, 20); !errors.Is(err, domain.ErrNotASessionID) {
+				t.Fatalf("%q: want ErrNotASessionID, got %v", bad, err)
+			}
+		}
+	}
+	if len(authz.resources) != asked {
+		t.Fatalf("an id that cannot be a session reached the Authorization Service")
+	}
+	if len(audit.events) != 0 {
+		t.Fatalf("events %+v, want none", audit.events)
+	}
+	// The longest id that can be a session is still read.
+	if _, _, err := svc.GetRecording(ctx, "u_carol", auditor, strings.Repeat("x", maxSessionIDBytes), 1, 20); err != nil {
+		t.Fatalf("a %d-byte id: %v", maxSessionIDBytes, err)
 	}
 }

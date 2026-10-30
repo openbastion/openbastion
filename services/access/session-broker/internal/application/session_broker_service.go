@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/openbastion/openbastion/pkg/refusalbudget"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
 
@@ -131,7 +132,7 @@ type SessionBrokerService struct {
 
 	// readRefusals bounds what the refused reads of one identity write to the audit
 	// (ADR-0020). Never nil: the constructor gives the strict default.
-	readRefusals *RefusalBudget
+	readRefusals *refusalbudget.Budget
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
@@ -253,12 +254,21 @@ func (s *SessionBrokerService) WithClock(now func() time.Time) *SessionBrokerSer
 	return s
 }
 
+// What a user's refused reads of a session may write to the audit (ADR-0020): the shared
+// budget's strict defaults and bounds (pkg/refusalbudget).
+const (
+	DefaultReadAuditBurst         = refusalbudget.DefaultBurst
+	DefaultReadAuditRatePerMinute = refusalbudget.DefaultRatePerMinute
+	MaxReadAuditBurst             = refusalbudget.MaxBurst
+	MaxReadAuditRatePerMinute     = refusalbudget.MaxRatePerMinute
+)
+
 // WithReadRefusalAudit sets the budget of what the refused reads of one identity write to
 // the audit (ADR-0020): `burst` at once, then `perMinute` a minute. Zero or negative keeps
 // the default: there is no way to ask for "everything" or for "nothing", and a Broker built
 // by hand without this call is strict.
 func (s *SessionBrokerService) WithReadRefusalAudit(burst, perMinute int) *SessionBrokerService {
-	s.readRefusals = NewRefusalBudget(burst, perMinute)
+	s.readRefusals = refusalbudget.New(burst, perMinute)
 	if s.now != nil {
 		s.readRefusals.WithClock(s.now)
 	}
@@ -312,7 +322,7 @@ func (s *SessionBrokerService) window() time.Duration {
 
 func NewSessionBrokerService(sessions domain.SessionRepository, authz AuthorizationClient, vault VaultAuthorizer, audit AuditEmitter, accounts AccountLookup, proxy ProxyClient) *SessionBrokerService {
 	return &SessionBrokerService{sessions: sessions, authz: authz, vault: vault, audit: audit, accounts: accounts, proxy: proxy,
-		readRefusals: NewRefusalBudget(0, 0)}
+		readRefusals: refusalbudget.New(0, 0)}
 }
 
 // CreateSession implements SessionOrchestration.CreateSession. In MVP

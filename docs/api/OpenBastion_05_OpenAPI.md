@@ -677,7 +677,13 @@ paths:
         auteur = l'utilisateur authentifié), écrit **avant** d'être servi ;
         s'il ne s'écrit pas, la page n'est pas servie (503) — ADR-0022. Il
         n'y a pas de budget : chaque page lue est un événement. Un refus
-        (403) n'est pas audité. Le refus (403) est le même que la session
+        (403) est un événement `recording.read` en échec, sous le nom de
+        l'appelant, dans la limite d'un budget par identité (ADR-0024 :
+        `RECORDING_READ_AUDIT_BURST`, 10, puis
+        `RECORDING_READ_AUDIT_RATE_PER_MINUTE`, 6 par minute) ; la réponse ne
+        dépend jamais du budget ni de l'audit. Un identifiant qui ne peut pas
+        être celui d'une session (vide, plus de 256 octets, pas UTF-8) est un
+        400, avant toute question et sans événement. Le refus (403) est le même que la session
         existe ou non, et une session sans commande enregistrée donne un
         enregistrement vide (200), pas un 404 : l'API ne permet pas de
         sonder quelles sessions existent.
@@ -695,8 +701,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CommandRecording" }
+        "400":
+          description: "L'identifiant ne peut pas être celui d'une session (ADR-0024)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "403":
-          description: Pas d'utilisateur authentifié, ou refusé par l'Authorization Service
+          description: Pas d'utilisateur authentifié, ou refusé par l'Authorization Service (refus audité dans la limite du budget, ADR-0024)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

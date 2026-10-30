@@ -1,4 +1,4 @@
-package application_test
+package refusalbudget_test
 
 // The budget of what refused reads write to the audit (ADR-0020): a token bucket per
 // identity — a burst, then a steady rate — that is each identity's own, that is forgotten
@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
+	"github.com/openbastion/openbastion/pkg/refusalbudget"
 )
 
-func budgetAt(burst, perMinute int) (*application.RefusalBudget, *fakeClock) {
+func budgetAt(burst, perMinute int) (*refusalbudget.Budget, *fakeClock) {
 	clock := &fakeClock{t: time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)}
-	return application.NewRefusalBudget(burst, perMinute).WithClock(clock.Now), clock
+	return refusalbudget.New(burst, perMinute).WithClock(clock.Now), clock
 }
 
 // written counts how many of n refusals of key are written, and the first-unwritten flags.
-func written(b *application.RefusalBudget, key string, n int) (w int, firsts int) {
+func written(b *refusalbudget.Budget, key string, n int) (w int, firsts int) {
 	for i := 0; i < n; i++ {
 		write, first := b.Take(key)
 		if write {
@@ -145,27 +145,27 @@ func TestRefusalBudget_TheFirstUnwrittenRefusalIsTold_OncePerEpisode(t *testing.
 
 func TestRefusalBudget_AValueThatIsNotPositiveIsTheStrictDefault(t *testing.T) {
 	for _, c := range [][2]int{{0, 0}, {-1, -5}, {0, 7}, {5, 0}} {
-		b := application.NewRefusalBudget(c[0], c[1])
+		b := refusalbudget.New(c[0], c[1])
 		burst, rate := c[0], c[1]
 		if burst <= 0 {
-			burst = application.DefaultReadAuditBurst
+			burst = refusalbudget.DefaultBurst
 		}
 		if rate <= 0 {
-			rate = application.DefaultReadAuditRatePerMinute
+			rate = refusalbudget.DefaultRatePerMinute
 		}
 		if b.Burst() != burst || b.RatePerMinute() != rate {
 			t.Fatalf("NewRefusalBudget(%d, %d) is %d and %d a minute, want %d and %d", c[0], c[1], b.Burst(), b.RatePerMinute(), burst, rate)
 		}
 	}
-	if application.DefaultReadAuditBurst != 10 || application.DefaultReadAuditRatePerMinute != 6 ||
-		application.MaxReadAuditBurst != 1000 || application.MaxReadAuditRatePerMinute != 600 {
+	if refusalbudget.DefaultBurst != 10 || refusalbudget.DefaultRatePerMinute != 6 ||
+		refusalbudget.MaxBurst != 1000 || refusalbudget.MaxRatePerMinute != 600 {
 		t.Fatal("the defaults and bounds are 10, 6, 1000 and 600 (the same as the budgets of ADR-0014 and ADR-0016)")
 	}
 }
 
 func TestRefusalBudget_SaysTheRateItReallyAppliesPerMinute(t *testing.T) {
 	for _, n := range []int{1, 3, 7, 13, 59, 600} {
-		if got := application.NewRefusalBudget(5, n).RatePerMinute(); got != n {
+		if got := refusalbudget.New(5, n).RatePerMinute(); got != n {
 			t.Fatalf("a budget of %d a minute says %d", n, got)
 		}
 	}
@@ -231,7 +231,7 @@ func TestRefusalBudget_AClockThatGoesBackBendsNothing(t *testing.T) {
 }
 
 func TestRefusalBudget_IsSafeForConcurrentUse(t *testing.T) {
-	b := application.NewRefusalBudget(50, 6)
+	b := refusalbudget.New(50, 6)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	total := 0
@@ -249,4 +249,22 @@ func TestRefusalBudget_IsSafeForConcurrentUse(t *testing.T) {
 	if total != 50 {
 		t.Fatalf("%d written by 800 concurrent refusals, want exactly the burst of 50", total)
 	}
+}
+
+// fakeClock is a clock the test moves by hand.
+type fakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
 }

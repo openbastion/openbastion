@@ -3,6 +3,7 @@ go 1.22
 use (
 	./pkg/mtls
 	./pkg/proxycore
+	./pkg/refusalbudget
 	./services/access/api-gateway
 	./services/access/authentication
 	./services/access/authorization

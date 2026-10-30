@@ -138,7 +138,7 @@ func (s *HTTPServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	entries, total, err := s.svc.GetRecording(r.Context(), callerID, actorRoles, sessionID, page, pageSize)
 	if err != nil {
 		status := statusFor(err)
-		if status == http.StatusForbidden {
+		if status == http.StatusForbidden || status == http.StatusBadRequest {
 			http.Error(w, err.Error(), status)
 			return
 		}
@@ -166,7 +166,7 @@ func (s *HTTPServer) handleSession(w http.ResponseWriter, r *http.Request) {
 // hide it.
 func statusFor(err error) int {
 	switch {
-	case errors.Is(err, domain.ErrInvalidEntry):
+	case errors.Is(err, domain.ErrInvalidEntry), errors.Is(err, domain.ErrNotASessionID):
 		return http.StatusBadRequest
 	case errors.Is(err, domain.ErrForbidden):
 		return http.StatusForbidden

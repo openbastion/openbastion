@@ -10,3 +10,9 @@ require github.com/lib/pq v1.10.9
 require github.com/openbastion/openbastion/pkg/mtls v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
+
+// Budget des refus écrits dans l'audit (ADR-0020, ADR-0024), partagé avec le
+// Command Recorder ; bibliothèque standard seulement.
+require github.com/openbastion/openbastion/pkg/refusalbudget v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/refusalbudget

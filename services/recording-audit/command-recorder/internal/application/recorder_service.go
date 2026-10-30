@@ -6,10 +6,12 @@ package application
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/openbastion/openbastion/pkg/refusalbudget"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
 )
 
@@ -59,14 +61,47 @@ const (
 // recording; a narrower pattern limits it to some.
 func RecordingResource(sessionID string) string { return "recording:session:" + sessionID }
 
+// What the refused reads of a recording by one user may write to the audit (ADR-0024): the
+// shared budget's strict defaults and bounds (pkg/refusalbudget).
+const (
+	DefaultReadAuditBurst         = refusalbudget.DefaultBurst
+	DefaultReadAuditRatePerMinute = refusalbudget.DefaultRatePerMinute
+	MaxReadAuditBurst             = refusalbudget.MaxBurst
+	MaxReadAuditRatePerMinute     = refusalbudget.MaxRatePerMinute
+)
+
 type RecorderService struct {
 	repo  domain.CommandRepository
 	authz AuthorizationClient
 	audit AuditEmitter
+
+	// readRefusals bounds what the refused reads of one identity write to the audit
+	// (ADR-0024). Never nil: the constructor gives the strict default.
+	readRefusals *refusalbudget.Budget
 }
 
 func NewRecorderService(repo domain.CommandRepository, authz AuthorizationClient, audit AuditEmitter) *RecorderService {
-	return &RecorderService{repo: repo, authz: authz, audit: audit}
+	return &RecorderService{repo: repo, authz: authz, audit: audit, readRefusals: refusalbudget.New(0, 0)}
+}
+
+// WithReadRefusalAudit sets the budget of what the refused reads of one identity write to
+// the audit (ADR-0024): `burst` at once, then `perMinute` a minute. Zero or negative keeps
+// the default: there is no way to ask for "everything" or for "nothing", and a Recorder
+// built by hand without this call is strict.
+func (s *RecorderService) WithReadRefusalAudit(burst, perMinute int) *RecorderService {
+	s.readRefusals = refusalbudget.New(burst, perMinute)
+	return s
+}
+
+// WithClock replaces the clock of the refusal budget; for tests.
+func (s *RecorderService) WithClock(now func() time.Time) *RecorderService {
+	s.readRefusals.WithClock(now)
+	return s
+}
+
+// ReadRefusalAudit says the budget really applied, for the line written at start-up.
+func (s *RecorderService) ReadRefusalAudit() (burst, perMinute int) {
+	return s.readRefusals.Burst(), s.readRefusals.RatePerMinute()
 }
 
 // Ready reports whether the service could durably record a batch right now.
@@ -149,10 +184,12 @@ func normalizeCommand(c string) string {
 // commands were recorded, and the total number of entries.
 //
 // callerID and actorRoles are the Gateway's — the verified user and the
-// roles of their token, never the client's (ADR-0022). The order is: a caller
-// with no name (ErrForbidden), RBAC (ErrForbidden; ErrUnavailable when the
-// Authorization Service does not answer — fail-closed, and not called a
-// refusal), the store, the audit, then the page is served.
+// roles of their token, never the client's (ADR-0022). The order is: an id that
+// cannot be a session (ErrNotASessionID), a caller with no name (ErrForbidden),
+// RBAC (ErrForbidden, and a refusal is an event within the caller's budget —
+// ADR-0024; ErrUnavailable when the Authorization Service does not answer —
+// fail-closed, and not called a refusal), the store, the audit, then the page
+// is served.
 //
 // A recording is what was typed in a session, and every read of it is served
 // on the strength of a policy: there is no requester exception here, the
@@ -168,6 +205,12 @@ func normalizeCommand(c string) string {
 // of checks (403 before anything else) already rules out. An empty page is a
 // read like another, and is on the record like another.
 func (s *RecorderService) GetRecording(ctx context.Context, callerID string, actorRoles []string, sessionID string, page, pageSize int) ([]domain.CommandEntry, int, error) {
+	// What cannot be a session — the bound Record applies — is refused before anything: it
+	// is the same answer for everyone, and no read of it, served or refused, may write a
+	// string the caller chose into the signed trail (ADR-0024).
+	if sessionID == "" || len(sessionID) > maxSessionIDBytes || !utf8.ValidString(sessionID) {
+		return nil, 0, domain.ErrNotASessionID
+	}
 	if callerID == "" {
 		return nil, 0, fmt.Errorf("%w: reading a recording needs an authenticated user", domain.ErrForbidden)
 	}
@@ -176,6 +219,9 @@ func (s *RecorderService) GetRecording(ctx context.Context, callerID string, act
 		return nil, 0, fmt.Errorf("%w (asking the Authorization Service: %v)", domain.ErrUnavailable, err)
 	}
 	if !allowed {
+		// The refusal is on the record (ADR-0024), within the caller's budget, and it is the
+		// same refusal whatever the budget or the audit says.
+		s.auditRefusedRead(ctx, callerID, sessionID)
 		return nil, 0, fmt.Errorf("%w: %s", domain.ErrForbidden, reason)
 	}
 
@@ -190,6 +236,24 @@ func (s *RecorderService) GetRecording(ctx context.Context, callerID string, act
 		return nil, 0, fmt.Errorf("%w (recording the read: %v)", domain.ErrUnavailable, err)
 	}
 	return entries, total, nil
+}
+
+// auditRefusedRead writes the refusal of a read to the audit, under the name of the one who
+// asked — the verified identity the Gateway named — when that identity's budget allows it
+// (ADR-0024, the rule of ADR-0020). It is best effort: there is nothing for an audit that is
+// down to prevent, the read is refused anyway; the failure is in this log, which the caller
+// is not told.
+func (s *RecorderService) auditRefusedRead(ctx context.Context, callerID, sessionID string) {
+	write, firstUnwritten := s.readRefusals.Take(callerID)
+	if !write {
+		if firstUnwritten {
+			log.Printf("command-recorder: refused reads of recordings by user %s are no longer written to the audit one by one (budget spent)", callerID)
+		}
+		return
+	}
+	if err := s.audit.EmitEvent(ctx, callerID, AuditActionRead, "session", sessionID, false); err != nil {
+		log.Printf("command-recorder: the refusal of a read of the recording of %s by user %s could not be audited: %v", sessionID, callerID, err)
+	}
 }
 
 // ClampPage is the pagination rule GetRecording applies (page < 1 → 1;
