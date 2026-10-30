@@ -44,9 +44,9 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO audit_events (id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		e.ID, e.Timestamp, nullIfEmpty(e.ActorID), e.Action, e.ResourceType, e.ResourceID, e.Success, e.PrevHash, e.Hash)
+		INSERT INTO audit_events (id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash, hash_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		e.ID, e.Timestamp, nullIfEmpty(e.ActorID), e.Action, e.ResourceType, e.ResourceID, e.Success, e.PrevHash, e.Hash, e.HashVersion)
 	return err
 }
 
@@ -56,7 +56,7 @@ func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 // when the chain is empty, matching InMemoryStore.
 func (s *PostgresStore) Last(ctx context.Context) (*domain.Event, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash
+		SELECT id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash, hash_version
 		FROM audit_events ORDER BY seq DESC LIMIT 1`)
 	e, err := scanEvent(row)
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *PostgresStore) Last(ctx context.Context) (*domain.Event, error) {
 // order VerifyChain depends on to re-derive the chain correctly.
 func (s *PostgresStore) All(ctx context.Context) ([]*domain.Event, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash
+		SELECT id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash, hash_version
 		FROM audit_events ORDER BY seq ASC`)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ type rowScanner interface {
 func scanEvent(row rowScanner) (*domain.Event, error) {
 	var e domain.Event
 	var actorID sql.NullString
-	if err := row.Scan(&e.ID, &e.Timestamp, &actorID, &e.Action, &e.ResourceType, &e.ResourceID, &e.Success, &e.PrevHash, &e.Hash); err != nil {
+	if err := row.Scan(&e.ID, &e.Timestamp, &actorID, &e.Action, &e.ResourceType, &e.ResourceID, &e.Success, &e.PrevHash, &e.Hash, &e.HashVersion); err != nil {
 		return nil, err
 	}
 	if actorID.Valid {

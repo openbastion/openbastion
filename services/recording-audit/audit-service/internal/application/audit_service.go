@@ -132,7 +132,7 @@ func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceT
 		// no-op for it).
 		ID: nextID(), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: actorID,
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
-		Success: success, PrevHash: prevHash,
+		Success: success, PrevHash: prevHash, HashVersion: domain.HashV2,
 	}
 	e.Hash = computeHash(e)
 
@@ -152,7 +152,17 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 		return err
 	}
 	var prevHash []byte
+	version := domain.HashV1
 	for i, e := range events {
+		// Versions only move forward (ADR-0026): once an event is v2, every later one is, so
+		// that a later event cannot be passed off in the weaker format.
+		if e.HashVersion != domain.HashV1 && e.HashVersion != domain.HashV2 {
+			return fmt.Errorf("event %d (%s): unknown hash version %d — tampered", i, e.ID, e.HashVersion)
+		}
+		if e.HashVersion < version {
+			return fmt.Errorf("event %d (%s): hash version %d after version %d — tampered", i, e.ID, e.HashVersion, version)
+		}
+		version = e.HashVersion
 		if want := computeHash(e); string(want) != string(e.Hash) {
 			return fmt.Errorf("event %d (%s): hash does not match its own fields — tampered", i, e.ID)
 		}
@@ -164,7 +174,50 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 	return nil
 }
 
+// computeHash computes an event's hash in the format its HashVersion names. An unknown
+// version has no hash: nil never matches a stored one, so VerifyChain reports it.
 func computeHash(e *domain.Event) []byte {
+	switch e.HashVersion {
+	case domain.HashV1:
+		return computeHashV1(e)
+	case domain.HashV2:
+		return computeHashV2(e)
+	default:
+		return nil
+	}
+}
+
+// hashV2Tag starts every v2 hash: a v2 hash can never be taken for a hash of another format
+// or of another kind of record.
+const hashV2Tag = "openbastion.audit.event.v2\x00"
+
+// computeHashV2 (ADR-0026) frames each variable-length field by its length, so that moving
+// bytes from a field to its neighbour changes the hash: what is hashed is a sequence of
+// fields, not a string that several sequences could spell.
+func computeHashV2(e *domain.Event) []byte {
+	h := sha256.New()
+	h.Write([]byte(hashV2Tag))
+	var n [4]byte
+	for _, field := range [][]byte{e.PrevHash, []byte(e.ID), []byte(e.ActorID), []byte(e.Action), []byte(e.ResourceType), []byte(e.ResourceID)} {
+		binary.BigEndian.PutUint32(n[:], uint32(len(field)))
+		h.Write(n[:])
+		h.Write(field)
+	}
+	var successByte [1]byte
+	if e.Success {
+		successByte[0] = 1
+	}
+	h.Write(successByte[:])
+	var tsBuf [8]byte
+	binary.BigEndian.PutUint64(tsBuf[:], uint64(e.Timestamp.UnixNano()))
+	h.Write(tsBuf[:])
+	return h.Sum(nil)
+}
+
+// computeHashV1 is the format of the events written before ADR-0026: the fields concatenated
+// as they are. It is kept only to verify them — moving bytes between two neighbouring fields
+// of a v1 event is not detected, and nothing is written in this format any more.
+func computeHashV1(e *domain.Event) []byte {
 	h := sha256.New()
 	h.Write(e.PrevHash)
 	h.Write([]byte(e.ID))

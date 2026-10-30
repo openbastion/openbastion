@@ -38,6 +38,12 @@ CREATE TABLE IF NOT EXISTS audit_events (
     hash           BYTEA NOT NULL
 );
 
+-- ADR-0026 : le format du hash de chaque événement. Les lignes écrites avant
+-- (champs concaténés tels quels) reçoivent 1 à la mise à niveau ; toute
+-- ligne écrite depuis porte 2 (chaque champ précédé de sa longueur).
+-- Additif et idempotent.
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS hash_version SMALLINT NOT NULL DEFAULT 1;
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events (actor_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events (action, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_events_resource ON audit_events (resource_type, resource_id, ts DESC);

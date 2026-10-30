@@ -19,7 +19,18 @@ type Event struct {
 	Success      bool
 	PrevHash     []byte
 	Hash         []byte
+
+	// HashVersion says how Hash was computed (ADR-0026): HashV1 for the events written
+	// before ADR-0026 (fields concatenated as they are), HashV2 for every event written
+	// since (each field framed by its length). It is stored with the event and covered by
+	// the v2 hash itself.
+	HashVersion int
 }
+
+const (
+	HashV1 = 1 // legacy: fields concatenated without framing — verified, never written
+	HashV2 = 2 // current: a domain tag, then each field framed by its length
+)
 
 // ErrInvalidEvent is returned for an event no emitter can mean (ADR-0025): a field that is
 // missing, too long, not UTF-8, carrying a control character, or an action or resource type

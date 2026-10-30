@@ -168,3 +168,21 @@ func TestPostgresStore_All_ReturnsEventsInInsertionOrder(t *testing.T) {
 		}
 	}
 }
+
+// The format of an event's hash is stored with it, and read back as written (ADR-0026).
+func TestPostgresStore_HashVersionRoundTrips(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	for _, v := range []int{domain.HashV1, domain.HashV2} {
+		e := &domain.Event{ID: uniqueID("evt-version"), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: "u",
+			Action: "session.read", ResourceType: "session", ResourceID: "s", Success: true, Hash: []byte{1}, HashVersion: v}
+		if err := store.Append(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.Last(ctx)
+		if err != nil || got.ID != e.ID || got.HashVersion != v {
+			t.Fatalf("version %d: read back %+v, %v", v, got, err)
+		}
+	}
+}
