@@ -42,6 +42,8 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | ADR-0026 | Le hash d'un événement d'audit couvre chaque champ comme un champ : un format versionné, et l'ancien seulement pour vérifier | Accepté |
 | ADR-0027 | La chaîne d'audit est à clé (HMAC), et chaque événement dit quel service l'a écrit | Accepté |
 | ADR-0028 | La tête de la chaîne d'audit est ancrée hors de la base, et la chaîne se vérifie contre ses ancres | Accepté |
+| ADR-0029 | L'accès aux données reste en `database/sql` et SQL écrit à la main ; pas d'ORM | Accepté |
+| ADR-0030 | Des migrations de schéma versionnées, appliquées une fois, sous verrou, et dont le texte appliqué ne change plus | Proposé |
 
 ---
 
@@ -1089,6 +1091,63 @@ Neuf règles.
 - *Bloquer l'audit quand l'ancrage échoue* : rejeté — l'ancrage est une défense de la preuve passée, pas une condition pour en écrire de nouvelles.
 - *Recréer le fichier s'il manque* : rejeté — ce serait renoncer en silence aux ancres passées.
 - *Une destination distante (stockage objet WORM, journal de transparence)* : repoussé — dépendance réseau et SDK (bloqués dans le sandbox d'origine) ; le port `AnchorSink` est fait pour l'accueillir.
+
+---
+
+## ADR-0029 — L'accès aux données reste en `database/sql` et SQL écrit à la main ; pas d'ORM
+
+**Contexte**
+Bony Kiss a demandé une analyse de l'intégration d'un ORM dans le modèle de données (`OpenBastion_08_Analyse_ORM.md`). Mesuré : 1 077 lignes de magasins PostgreSQL, 54 appels SQL, 10 tables, 2 clés étrangères, 0 jointure, une base par service. Les garanties de concurrence et d'usage unique tiennent au SQL lui-même (verrou consultatif d'ADR-0013, comparer-échanger d'ADR-0011, `RETURNING` d'ADR-0003). Quatre options ont été présentées (A : rester en `database/sql` ; B : pilote sqlc ; C : sqlx ; D : ORM complet). **Bony Kiss a choisi l'option A.**
+
+**Décision**
+1. Les magasins restent écrits en `database/sql` avec du SQL explicite, derrière les ports de domaine existants.
+2. Aucun ORM ni constructeur de requêtes n'est ajouté ; aucune dépendance n'est ajoutée.
+3. Le manque réel relevé par l'analyse, les migrations versionnées, est traité à part (ADR-0030).
+
+**Conséquences**
+- (+) Les verrous, comparer-échanger et `RETURNING` restent lisibles dans le diff, là où porte la revue de sécurité.
+- (+) Aucun arbre de dépendances supplémentaire dans six modules.
+- (−) Le code de lecture des lignes (19 `Scan`) reste écrit à la main.
+- (−) Décision renversable : sqlc (option B) reste possible plus tard derrière les mêmes ports, sans toucher domaine ni application.
+
+**Alternatives envisagées**
+Options B, C et D de l'analyse, écartées par le choix du propriétaire ; leurs motifs sont dans `OpenBastion_08_Analyse_ORM.md` §4 à §6.
+
+---
+
+## ADR-0030 — Des migrations de schéma versionnées, appliquées une fois, sous verrou, et dont le texte appliqué ne change plus
+
+**Contexte**
+Chacun des six services applique à **chaque démarrage** la totalité de son `migrations/001_init.sql`, idempotent (`CREATE … IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`), et les évolutions passées ont été ajoutées **dans ce même fichier** (`tasks.md` §4). Ce qui a été **mesuré** ou constaté :
+
+- **Deux réplicas qui démarrent en même temps sur une base neuve** : le schéma du Session Broker appliqué par deux processus simultanés sur une vraie PostgreSQL 16 → **dans 14 essais sur 20, l'un des deux échoue** (`duplicate key value violates unique constraint "pg_type_typname_nsp_index"`, 13 fois ; `pg_class_relname_nsp_index`, 1 fois). `IF NOT EXISTS` ne protège pas d'une création concurrente.
+- **Rien ne dit quelle version du schéma une base a atteinte** : ni l'exploitant, ni le service, ni une procédure de reprise (PRA).
+- **Une évolution qui n'est pas purement additive n'a pas de place** : un `NOT NULL` posé après un remplissage, un index reconstruit, une donnée transformée une seule fois — rejoués à chaque démarrage, ils seraient faux ou coûteux.
+- **Le texte d'un schéma déjà appliqué peut être modifié** sans que rien ne le voie : la base d'une installation existante diverge alors en silence d'une installation neuve.
+
+**Décision** *(proposée)*
+1. **Une migration** = un fichier `migrations/NNN_nom.sql` embarqué (`embed.FS`), `NNN` sur trois chiffres, continu à partir de `001`. Les fichiers sont lus dans l'ordre ; un trou ou un doublon de numéro refuse le démarrage (et un test unitaire de chaque service le dit avant).
+2. **Une table `schema_migrations`** dans chaque base : `version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum BYTEA NOT NULL` (SHA-256 du texte), `applied_at TIMESTAMPTZ NOT NULL`.
+3. **Sous verrou** : tout le passage se fait sous `pg_advisory_lock` d'une clé propre à OpenBastion ; un second réplica attend, puis trouve tout appliqué. Ferme la course mesurée ci-dessus.
+4. **Une fois, en transaction** : chaque migration manquante est appliquée dans sa propre transaction, avec sa ligne dans `schema_migrations` ; un échec annule la migration et refuse le démarrage, en nommant la version.
+5. **Le texte appliqué ne change plus** : si le checksum d'une version déjà appliquée diffère du fichier embarqué, le service **refuse de démarrer** en nommant la version. Corriger une migration publiée, c'est en écrire une nouvelle.
+6. **Une base plus récente que le binaire** (une version appliquée que le binaire ne connaît pas) : le service démarre et le journal le dit, parce que les migrations restent additives par défaut et qu'un retour arrière du binaire (PRA) doit rester possible. Une migration qui casse les anciens binaires doit le dire dans son ADR.
+7. **Bases existantes** : `001_init.sql` est figé tel qu'il est aujourd'hui. Sur une base qui le porte déjà sans `schema_migrations`, il est rejoué une fois (il est idempotent, c'est déjà ce qui se passe à chaque démarrage) et enregistré comme version 1. Aucune autre reprise manuelle.
+8. **Un seul code** : `pkg/migrate`, bibliothèque standard et `database/sql` seulement (comme `pkg/refusalbudget`), utilisé par les six magasins PostgreSQL. Aucune dépendance ajoutée.
+9. **Le workflow change** : `tasks.md` §4 dit « une nouvelle migration numérotée », plus « dans le même `InitSQL` » ; le doc 06, le guide Administrateur et le PRA disent comment lire la version d'une base.
+
+**Conséquences** *(attendues, à prouver)*
+- (+) Deux réplicas qui démarrent ensemble ne se gênent plus (test : N démarrages concurrents sur une base neuve, 0 échec ; contre-épreuve : sans le verrou, le test échoue).
+- (+) La version d'une base se lit dans une table ; une migration modifiée après publication est refusée.
+- (+) Une migration non additive a sa place, appliquée une seule fois.
+- (−) Une migration longue bloque le démarrage de tous les réplicas sous le verrou.
+- (−) Pas de migration descendante (`down`) : revenir en arrière, c'est restaurer une sauvegarde ou écrire une migration montante.
+- (−) Le verrou consultatif est par base : deux services sur la même base (non prévu, ADR-0002) partageraient la clé et s'attendraient l'un l'autre, sans risque mais sans utilité.
+
+**Alternatives envisagées**
+- **golang-migrate, goose** : éprouvés, mais une dépendance par service, et rien qu'ils apportent ici ne manque à une centaine de lignes de bibliothèque standard (`policies.md` §4.1).
+- **Garder `001_init.sql` rejoué à chaque démarrage** : laisse la course mesurée et l'absence de version.
+- **Appliquer les migrations par un outil séparé, avant le déploiement** : plus de contrôle pour l'exploitant, mais un service qui démarrerait sur un schéma en retard ; possible plus tard en ajoutant un mode « vérifier seulement » au même code.
 
 ---
 
