@@ -1,0 +1,13 @@
+postgresql:
+  version: "15+ (16 dans les tests)"
+  migrations: pkg/migrate, migrations/NNN_nom.sql par service, jamais modifiées une fois appliquées (ADR-0030)
+  orm: none                  # ADR-0029
+  test_database_url: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+  truncate_before_full_suite: >-
+    TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts,
+    sessions, audit_events RESTART IDENTITY CASCADE;
+  truncate_note: une table ajoutée s'ajoute ici ET au TRUNCATE du Makefile (make test-postgres)
+  order_pitfall: >-
+    make test avec base puis test/integration sans purge entre les deux fait échouer
+    TestPostgresFlow_PolicySurvivesAuthorizationProcessRestart (NOTES_SANDBOX.md) : purger entre les deux.
+  rules: rules/postgresql.md

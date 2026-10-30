@@ -1213,6 +1213,29 @@ Demandé par Bony Kiss : « épingler la clé d'hôte de chaque cible (enregistr
 3. **Une cible qui change de clé refuse les sessions** jusqu'au ré-épinglage : c'est voulu, et c'est une panne si personne ne la prévoit.
 4. **Les comptes enregistrés avant ADR-0039 n'ouvrent plus de session** tant qu'ils ne sont pas épinglés : c'est une opération de mise à jour.
 
+## Instructions des agents réorganisées par thème
+
+Demandé par Bony Kiss, qui a donné l'arborescence. Les sept fichiers plats de `.agents/` (`architecture.md`, `personas.md`, `policies.md`, `rules.md`, `settings.md`, `tasks.md`, et `skills.md`, qui avait remplacé `.agents/skills/open-bastion/SKILL.md` dans sa copie de travail) sont répartis en un fichier par sujet :
+
+| Ancien | Nouveau |
+|---|---|
+| `architecture.md` §1–§9 | `.agents/architecture/` : `README.md` (produit, où est la vérité), `invariants.md`, `repository-layout.md`, `service-pattern.md`, `service-identities.md`, `transport-and-contracts.md`, `data.md`, `known-gaps.md` — découpés section par section, sans perte |
+| `policies.md` (+ `rules.md` §5) | `.agents/policies/` : onze fichiers (sécurité, développement sûr et fichiers protégés, secrets, autorisation, cryptographie, audit, données, tests et honnêteté, dépendances, licence, livraison) ; « quand demander » et le vocabulaire dans `AGENTS.md` |
+| `rules.md` | `.agents/rules/` : dix fichiers, dont `completion-gates.md` (« terminé » et format du rapport, ancien `tasks.md` §0 et `rules.md` §10) et `frontend.md` (nouveau : les règles de l'Admin UI d'ADR-0036) |
+| `personas.md` | posture commune dans `AGENTS.md` ; dix personas dans `.agents/personas/` |
+| `settings.md` + `skills.md` | `.agents/settings/*.yaml` (dont l'usage des outils dans `development.yaml`) et `environments/{local,ci,production}.yaml` |
+| `tasks.md` | `.agents/tasks/` : `README.md` (index, reprise), `backlog.md`, `roadmap.md`, workflows par domaine |
+| — | dix compétences par domaine dans `.agents/skills/<nom>/SKILL.md` ; les compétences génériques `better-*` et autres restent |
+
+**Emplacement** : l'arborescence donnée plaçait les dossiers à la racine, hors de `.agents/` ; je les y ai d'abord créés, puis le propriétaire les a déplacés sous `.agents/` pendant le travail. C'est cet emplacement qui est retenu.
+
+**Faits corrigés en chemin** : l'ancien `architecture.md` disait que l'UI « n'existe pas encore » (elle existe depuis ADR-0036) et citait `.agents/` comme « ce dossier ». `settings/security.yaml` reprend les bornes des variables de sécurité, vérifiées dans les `main.go` (`BREAKGLASS_APPROVAL_WINDOW_MINUTES` manquait).
+
+**Ce que cela ne fait PAS :**
+1. **Pas de CI** : `settings/ci-cd.yaml` et `environments/ci.yaml` décrivent ce qu'elle devra lancer, pas une CI qui tourne.
+2. **Aucun outil ne lit les YAML** : ce sont des réglages pour les agents ; les valeurs réelles restent celles des `main.go`, qui font foi.
+3. Les YAML ont été validés par `gopkg.in/yaml.v3`, depuis le cache de modules et hors du dépôt : PyYAML n'est pas installé dans le codespace.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

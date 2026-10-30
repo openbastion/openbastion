@@ -1,0 +1,32 @@
+# Environnements de développement constatés. Vérifie avant de supposer : le répertoire courant peut changer.
+codespace:
+  root: /workspaces/openbastion
+  go: "1.27 installé (modules en go 1.22), GOPATH=/go"
+  setup: |
+    export GOWORK=$PWD/go.work
+    docker start obpg 2>/dev/null || docker run -d --name obpg -e POSTGRES_USER=openbastion -e POSTGRES_PASSWORD=openbastion \
+      -e POSTGRES_DB=openbastion -p 127.0.0.1:5432:5432 postgres:16
+    export TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
+  module_cache: vide au départ ; make build le remplit (les tests d'intégration compilent avec GOPROXY=off)
+  compose_firewall: |
+    Deux conteneurs d'un même réseau Compose ne se joignent pas (iptables-legacy FORWARD DROP, ADR-0033).
+    Pour make test-compose, l'utilisateur a autorisé une règle temporaire, posée puis retirée dans la même commande :
+      sudo -n iptables-legacy -I FORWARD 1 -i br-+ -o br-+ -j ACCEPT
+      ... make test-compose ...
+      sudo -n iptables-legacy -D FORWARD -i br-+ -o br-+ -j ACCEPT
+    Ne la laisse jamais en place.
+cloud_sandbox:
+  root: /home/claude/openbastion
+  setup: |
+    export GOWORK=/home/claude/openbastion/go.work GOPROXY=direct
+    service postgresql start && sudo -u postgres psql -c "ALTER ROLE openbastion WITH PASSWORD 'openbastion';"
+    export TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
+  network: restreint à une liste de domaines ; un refus se constate et se rapporte
+  milestone_archive: zip sans .git, node_modules ni clés ; unzip -l … | grep -c '\.pem' = 0
+base44_preview:
+  compose: deploy/base44/docker-compose.yml   # le dépôt tel quel, go run, Vite en dev (AGENTS.md, Base44)
+  entry: http://localhost:3000
+  gateway: http://localhost:8080
+  demo_account: operator / openbastion-demo   # valeur de développement locale, écrite dans le compose
+  after_go_change: docker compose -f deploy/base44/docker-compose.yml restart <service>
+  rate_limit_pitfall: la Gateway limite les connexions par adresse (5 puis 1/min) ; l'UI arrive d'une seule adresse

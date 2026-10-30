@@ -1,0 +1,26 @@
+# Ce qui doit être vert, et quand. Les nombres rapportés se mesurent : go test -v … | grep -c '^--- PASS'.
+before_every_commit:
+  - make build vet
+  - tests des modules touchés (go test -count=1 <modules>)
+  - gofmt -l sur les fichiers .go modifiés ou nouveaux → vide
+  - make ui-test ui-build si web/admin-ui est touché
+  - les YAML modifiés passent un vrai analyseur (rules/documentation.md §5)
+before_a_milestone:
+  - make build vet
+  - tests unitaires sans TEST_DATABASE_URL, puis avec (base purgée avant)
+  - make test-postgres            # se purge lui-même
+  - tests d'intégration sans base, puis avec (base purgée avant)
+  - go test -race -count=1 sur les modules touchés (et leurs tests d'intégration PostgreSQL concernés)
+  - make test-compose si deploy/, un main.go ou la démonstration change (settings/environments/local.yaml)
+security_features:
+  attack_test: obligatoire
+  red_before: mesuré sur le commit précédent quand c'est possible (git worktree)
+  mutations: toutes tuées ; une survivante est corrigée (test ou code mort), pas ignorée
+report:
+  - unitaires (passés / ignorés sans base ; passés avec)
+  - intégration (idem)
+  - PostgreSQL dédiés
+  - -race
+  - Admin UI (Vitest)
+  - mutations (N tuées sur N)
+  - Compose (vert / non lancé, et pourquoi)

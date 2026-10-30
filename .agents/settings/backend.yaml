@@ -1,0 +1,13 @@
+go:
+  version: "1.22"            # dans chaque go.mod
+  workspace: go.work         # export GOWORK=$PWD/go.work
+  formatting: gofmt sur les fichiers modifiés seulement
+  vet: obligatoire
+  dependencies:
+    policy: stdlib d'abord ; demander avant toute dépendance externe
+    stdlib_only: [pkg/mtls, pkg/migrate, pkg/refusalbudget]
+    golang.org/x/crypto: v0.24.0 (par le miroir github.com/golang/crypto, replace à garder)
+    test_only: [github.com/pkg/sftp v1.13.7 dans test/integration]
+    go_sum: régénéré par go mod tidy, jamais à la main
+  transport: HTTP/JSON avec les noms de champs du proto (architecture/transport-and-contracts.md)
+  rules: rules/backend-go.md

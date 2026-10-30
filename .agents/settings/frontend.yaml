@@ -1,0 +1,15 @@
+admin_ui:
+  path: web/admin-ui
+  adr: ADR-0036
+  runtime_dependencies: [react, react-dom]   # rien d'autre à l'exécution
+  node: "24 constaté dans le codespace"
+  install: npm ci                             # versions exactes, lockfile commité
+  commands:
+    test: make ui-test        # vitest run
+    build: make ui-build      # tsc --noEmit puis vite build
+    typecheck: npm run typecheck
+  served_by: api-gateway sous /ui/ (ADMIN_UI_DIR absolu contenant index.html)
+  csp: stricte, aucun script en ligne ni origine tierce, frame-ancestors 'none'
+  token_storage: mémoire seulement
+  preview_flag: BASE44_PREVIEW_MODE=1     # seul drapeau qui change vite.config.ts (base / et relais vers la Gateway)
+  rules: rules/frontend.md

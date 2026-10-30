@@ -1,0 +1,19 @@
+# Il n'y a PAS de pipeline de CI dans le dépôt aujourd'hui (pas de .github/workflows).
+# Ce fichier dit ce qu'une CI devra lancer quand elle existera ; ne prétends pas qu'elle tourne.
+ci:
+  exists: false
+  must_run:
+    - make build vet
+    - make test                         # sans base : les tests PostgreSQL se skippent
+    - make test-postgres                # avec un service PostgreSQL 16 et TEST_DATABASE_URL
+    - make test-integration
+    - make ui-test ui-build
+    - gofmt -l sur tout le dépôt Go     # aujourd'hui, certains fichiers anciens ne sont pas formatés : à régler avant d'en faire une porte
+  optional:
+    - make test-compose                 # Docker requis
+  never_in_ci:
+    - secrets réels ; la PKI se génère dans le job (make pki) et ne sort pas du job
+cd:
+  exists: false
+  deployment_reference: deploy/docker-compose (ADR-0033) ; deploy/helm et deploy/k8s sont des squelettes
+  delivery: commit et push sur main, vérifiés (policies/release-management.md) ; tags et releases sur demande seulement

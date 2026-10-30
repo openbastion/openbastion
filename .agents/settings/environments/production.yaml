@@ -1,0 +1,13 @@
+# Ce qu'une installation réelle exige. Référence : deploy/docker-compose (ADR-0033) et les guides (docs/guides/).
+production:
+  internal_tls: required                 # jamais disabled
+  recording_policy: required             # jamais best-effort par défaut
+  breakglass: désactivé tant que l'exploitant ne l'a pas réglé (BREAKGLASS_MAX_MINUTES)
+  secrets: tirés par deploy/docker-compose/init.sh (.env en 0600, jamais écrasé) ; jamais les valeurs de développement de deploy/base44
+  pki: autorité hors des services (volume pki-ca, job pki) ; chaque service ne lit que sa propre identité
+  databases: une base PostgreSQL par service à état
+  network: gateway et proxy SSH liés à 127.0.0.1 derrière un reverse proxy qui termine le TLS ; TRUSTED_PROXY_CIDRS réglé
+  ssh_proxy: instance unique (la révocation n'atteint qu'une instance, architecture/known-gaps.md)
+  host_keys: chaque compte privilégié épinglé à la clé relevée sur sa cible (ADR-0039)
+  audit: AUDIT_CHAIN_KEY_HEX et AUDIT_ANCHOR_FILE obligatoires avec une base ; rétention optionnelle (ADR-0032)
+  guides: [docs/guides/OpenBastion_Doc_Administrateur.md, docs/guides/OpenBastion_Guide_Securite.md, docs/guides/OpenBastion_Guide_HA.md]

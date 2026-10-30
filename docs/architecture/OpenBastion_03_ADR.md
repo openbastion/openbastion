@@ -1265,7 +1265,7 @@ Mesuré dans cet environnement : Docker Compose v5, les images `golang:1.23-alpi
 - (−) Une seule instance de chaque service : ce fichier n'est pas une installation HA (guide HA).
 - (−) Le CLI ne fait que l'amorçage ; les comptes, politiques et sessions passent encore par l'API publique (`curl`).
 - (−) Deux défauts trouvés en le faisant tourner : `authorization` est un mot réservé de PostgreSQL (identifiants maintenant entre guillemets) ; un test qui sondait la disponibilité par des connexions épuisait le budget de connexion par adresse (ADR-0014) — il attend maintenant les lignes « listening ».
-- (−) **Dans le codespace de développement**, deux conteneurs d'un même réseau Compose ne se joignaient pas (une table `iptables-legacy` en `FORWARD DROP`) ; le test n'y a tourné qu'avec une règle temporaire posée sur autorisation explicite de Bony Kiss, puis retirée (`.agents/settings.md` §7).
+- (−) **Dans le codespace de développement**, deux conteneurs d'un même réseau Compose ne se joignaient pas (une table `iptables-legacy` en `FORWARD DROP`) ; le test n'y a tourné qu'avec une règle temporaire posée sur autorisation explicite de Bony Kiss, puis retirée (`.agents/settings/environments/local.yaml`).
 
 **Alternatives envisagées**
 - **Binaires construits sur l'hôte puis copiés** : plus rapide, mais l'image dépendrait de la chaîne d'outils de l'hôte.

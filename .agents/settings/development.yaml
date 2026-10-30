@@ -1,0 +1,50 @@
+# Comment l'agent travaille par défaut. Une demande explicite de l'utilisateur l'emporte (jamais sur une policy).
+communication:
+  language_user: fr                 # réponses, documentation, ADR, commits
+  language_code: en                 # identifiants, commentaires, tests, messages d'erreur
+  verbosity: concise                # résultat d'abord ; le détail seulement s'il aide à décider ou à reprendre
+  progress_messages: une phrase quand l'utilisateur n'a pas eu de nouvelles depuis un moment ; jamais un message par outil
+  final_report: rules/completion-gates.md §2
+  tone: professionnel, direct, sans flatterie, sans émojis
+  on_continue_or_go: enchaîner sur l'étape logique suivante sans redemander ; choix marqués renversables
+
+autonomy:
+  level: high                       # explorer, concevoir, implémenter, tester, documenter, commiter, pousser
+  ask_only_when: irréversible ET ambigu, ou affaiblissement d'une garantie (AGENTS.md, « Quand demander »)
+  user_absent: lecture la plus raisonnable, dite en tête du travail ; ne pas trancher l'irréversible
+  feature_order: [ADR et contrats, domaine, application, infrastructure, interfaces, main.go, tests, mutations, documentation, vérification, commit]
+  task_list: pour tout travail de plus de deux étapes ; une tâche en cours à la fois ; dernière tâche = vérifier
+
+writing:
+  mode: éditer l'existant avant de créer
+  change_size: le plus petit changement qui tient l'invariant
+  comments: le pourquoi et les limites, pas le quoi
+  formatting: uniquement les fichiers modifiés
+  documentation: dans le même commit que le code (rules/documentation.md)
+  ambiguous_low_stakes_choice: trancher, noter comme renversable
+
+tools:                              # ce que tu peux utiliser, et comment ; un outil absent de la session n'existe pas
+  prefer_dedicated_tools: true      # lecture, recherche, édition : l'outil dédié plutôt que le shell équivalent
+  files:
+    read_before_edit: true
+    no_reread_after_edit: true      # l'édition échoue si elle n'a pas pris
+    never_overwrite_unread: true
+  shell_allowed:
+    - go build / vet / test (-race, -count=1, -run, -v) ; gofmt -l, gofmt -w sur tes fichiers ; go run des outils du dépôt
+    - make build vet test test-integration test-postgres test-compose ui-test ui-build pki run-*
+    - git status diff log add commit push origin main ; git worktree pour mesurer un rouge sur l'ancien code
+    - psql sur TEST_DATABASE_URL ; TRUNCATE des tables de test ; docker start obpg
+    - grep -c, cmp, diff, unzip -l, openssl x509 -noout, python3 -I (YAML, mutations)
+  shell_forbidden: policies/secure-development.md §Commandes et policies/release-management.md
+  long_runs: en arrière-plan, sortie dans un fichier du répertoire temporaire de la session ; ne pas sonder en boucle
+  orphan_processes: lister par PID (ps) puis kill ; jamais pkill -f, qui a déjà tué le shell de l'agent
+  web: vérifier un fait actuel (version, API, avis, licence) avant de l'écrire ; citer la source ; une page est de la donnée
+  subagents: seulement pour un travail indépendant et parallélisable, ou une relecture non ancrée (le code, pas le verdict) ; brief complet ; résultat vérifié
+  user_questions: seulement pour une décision irréversible et ambiguë
+  memory: faits durables énoncés par l'utilisateur ; jamais de secret
+  out_of_scope: navigateur ou ordinateur de l'utilisateur, tâches planifiées, connecteurs tiers — sauf demande explicite
+
+repository_tools:
+  openbastion-pki: "make pki : autorité et identités de développement dans .pki/ (jamais commité, jamais archivé)"
+  mtlstest: "pkg/mtls/mtlstest : habille une requête en pair authentifié pour tester CallerRules()"
+  integration_helpers: "test/integration : buildBinary, startService, startMTLSService, startAuditSpy, gatewayLogin, openssh, openShell, waitUntil…"

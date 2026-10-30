@@ -1,0 +1,39 @@
+# Le projet tel qu'il est. Réglage : une demande explicite de l'utilisateur l'emporte (jamais sur une policy).
+# Un fait qui change dans le dépôt se corrige ici dans le même commit.
+project:
+  name: OpenBastion
+  kind: PAM (Privileged Access Management) open source, cloud-native
+  license: Apache-2.0
+  original: true            # aucun code ni texte d'un produit PAM commercial (policies/licensing-apache-2.0.md)
+  owner: Bony Kiss          # s'exprime en français ; valide les ADR et les choix irréversibles
+  repository: github.com/openbastion/openbastion
+  default_branch: main
+  languages:
+    backend: Go 1.22 (un module par composant, go.work)
+    frontend: TypeScript + React + Vite (web/admin-ui, ADR-0036)
+  mvp_protocols: [ssh, sftp, scp]   # SFTP et SCP depuis ADR-0038 ; le reste du périmètre est sur la feuille de route
+  roadmap: docs/architecture/OpenBastion_04_Roadmap.md
+  truth:
+    decisions: docs/architecture/OpenBastion_03_ADR.md
+    public_api: docs/api/OpenBastion_05_OpenAPI.md
+    data_model: docs/architecture/OpenBastion_06_Modele_Donnees.md
+    internal_messages: docs/architecture/OpenBastion_07_Interfaces_Inter_Services.md
+    state_and_limits: NOTES_SANDBOX.md
+
+services:                    # identité mTLS = nom ; ports par défaut (architecture/service-pattern.md)
+  api-gateway:      {path: services/access/api-gateway,              port: 8080, public: true}
+  password-vault:   {path: services/vault/password-vault,            port: 8081}
+  audit-service:    {path: services/recording-audit/audit-service,   port: 8082}
+  authorization:    {path: services/access/authorization,            port: 8083}
+  session-broker:   {path: services/access/session-broker,           port: 8084}
+  ssh-proxy:        {path: services/proxy/ssh-proxy,                 port: 8085, ssh_port: 2222, single_instance: true}
+  authentication:   {path: services/access/authentication,           port: 8086}
+  command-recorder: {path: services/recording-audit/command-recorder, port: 8087}
+
+libraries:
+  pkg/proxycore: pipeline proxy commun (ADR-0006)
+  pkg/mtls: identité par certificat (ADR-0010) — stdlib seulement
+  pkg/migrate: migrations versionnées (ADR-0030) — stdlib seulement
+  pkg/refusalbudget: budget des refus audités (ADR-0020, ADR-0024) — stdlib seulement
+tools:
+  cli/openbastion-cli: exploitation sous l'identité admin-cli (ADR-0033)

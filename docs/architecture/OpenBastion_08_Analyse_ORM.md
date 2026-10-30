@@ -1,7 +1,7 @@
 # OpenBastion — Analyse : intégrer un ORM dans le modèle de données ?
 
 **Version** 0.2 · **Statut** Décidé le 30 octobre 2026 : **option A** (Bony Kiss), consignée en ADR-0029 ; migrations versionnées proposées en ADR-0030
-**Documents liés** `OpenBastion_06_Modele_Donnees.md` (tables), `OpenBastion_03_ADR.md` (ADR-0002, ADR-0003, ADR-0008, ADR-0013, ADR-0018, ADR-0026 à ADR-0028), `.agents/policies.md` §4 (dépendances)
+**Documents liés** `OpenBastion_06_Modele_Donnees.md` (tables), `OpenBastion_03_ADR.md` (ADR-0002, ADR-0003, ADR-0008, ADR-0013, ADR-0018, ADR-0026 à ADR-0028), `.agents/policies/dependencies-and-supply-chain.md` (dépendances)
 
 ---
 
