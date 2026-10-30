@@ -1,0 +1,358 @@
+# OpenBastion in the Base44 sandbox — a DEVELOPMENT stack, not a deployment.
+#
+# It runs the CLONED SOURCE, exactly like the repository's own `make run-<service>`: every Go
+# service is a plain `go run` over the bind-mounted repository, the Admin UI is the Vite dev
+# server (HMR on the files you edit), and PostgreSQL / the internal PKI / mutual TLS are the
+# real ones from deploy/docker-compose/docker-compose.yml (ADR-0010, ADR-0033).
+#
+#   docker compose -f docker-compose.base44.yml up -d --build
+#
+# Entry point: the Admin UI on host port 3000 (it proxies /auth, /sessions, /vault, /policies to
+# the API Gateway, so the UI keeps ONE origin as in production). The public API itself is on
+# host port 8080. The one-shot `seed` service creates the first operator (no user exists on a
+# new installation) — its credentials are OPERATOR_USERNAME/OPERATOR_PASSWORD below.
+#
+# The keys and database passwords below are LOCAL DEVELOPMENT VALUES generated for this sandbox.
+# They protect nothing outside it: a real installation draws its own with
+# deploy/docker-compose/init.sh (ADR-0033). No external service is involved — nothing to ask the
+# user for.
+name: openbastion
+
+x-go: &go
+  image: openbastion:base44-dev
+  build:
+    context: .
+    dockerfile: deploy/base44/Dockerfile
+  restart: on-failure
+  working_dir: /src
+  networks: [internal]
+  environment: &go-env
+    GOWORK: /src/go.work
+    # Mutual TLS between services, as in every other environment (ADR-0010): each service reads
+    # its own identity under /pki/<service>.
+    INTERNAL_TLS: required
+    TLS_CERT_FILE: /pki/cert.pem
+    TLS_KEY_FILE: /pki/key.pem
+    TLS_CA_FILE: /pki/ca.pem
+
+x-db-passwords: &db-passwords
+  PG_PASSWORD_AUTHENTICATION: ob-dev-authentication
+  PG_PASSWORD_AUTHORIZATION: ob-dev-authorization
+  PG_PASSWORD_SESSION_BROKER: ob-dev-session-broker
+  PG_PASSWORD_PASSWORD_VAULT: ob-dev-password-vault
+  PG_PASSWORD_AUDIT_SERVICE: ob-dev-audit-service
+  PG_PASSWORD_COMMAND_RECORDER: ob-dev-command-recorder
+
+services:
+  # The certificate job, at every `up`: it keeps the authority and renews the services'
+  # certificates (deploy/docker-compose/pki.sh, unchanged).
+  pki:
+    <<: *go
+    restart: "no"
+    command:
+      ["sh", "-ec", "go build -o /usr/local/bin/openbastion-pki github.com/openbastion/openbastion/pkg/mtls/cmd/openbastion-pki && exec sh /deploy/pki.sh"]
+    environment:
+      OB_CERT_TTL: 720h
+    volumes:
+      - .:/src
+      - pki-ca:/ca
+      - pki:/pki
+      - ./deploy/docker-compose/pki.sh:/deploy/pki.sh:ro
+    # The certificate job touches no network at all (it inherits `networks` from the anchor).
+    networks: []
+    network_mode: none
+
+  postgres:
+    image: postgres:16
+    restart: on-failure
+    environment:
+      POSTGRES_USER: openbastion
+      POSTGRES_PASSWORD: ob-dev-superuser
+      POSTGRES_DB: postgres
+      <<: *db-passwords
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./deploy/docker-compose/postgres-init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "openbastion", "-d", "postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  authentication:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/access/authentication/cmd/authentication"]
+    environment:
+      <<: *go-env
+      PORT: "8086"
+      DATABASE_URL: postgres://authentication:ob-dev-authentication@postgres:5432/authentication?sslmode=disable
+      TOKEN_SIGNING_KEY_HEX: 2239acb116a20ab72fe698d0fbf018a7180072508ab7ce0ab7e9040615956892
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8086"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  authorization:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/access/authorization/cmd/authorization"]
+    environment:
+      <<: *go-env
+      PORT: "8083"
+      DATABASE_URL: postgres://authorization:ob-dev-authorization@postgres:5432/authorization?sslmode=disable
+      BOOTSTRAP_ADMIN_ROLE: platform-admin
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authorization}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8083"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  audit-service:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/recording-audit/audit-service/cmd/audit-service"]
+    environment:
+      <<: *go-env
+      PORT: "8082"
+      DATABASE_URL: postgres://audit_service:ob-dev-audit-service@postgres:5432/audit_service?sslmode=disable
+      AUDIT_CHAIN_KEY_HEX: d9ca615ccfc46eeac66997c9a31d89c164228270b0d1ab311368d3f1bd994687
+      AUDIT_ANCHOR_FILE: /var/lib/openbastion/anchors/anchors.jsonl
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: audit-service}}
+      - anchors:/var/lib/openbastion/anchors
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  password-vault:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/vault/password-vault/cmd/password-vault"]
+    environment:
+      <<: *go-env
+      PORT: "8081"
+      DATABASE_URL: postgres://password_vault:ob-dev-password-vault@postgres:5432/password_vault?sslmode=disable
+      KMS_KEY_HEX: b883e7a9a40351f519ffec706bcb39cb9fefc3f2157e66cc79d816f943512fc7
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+      # The Vault's own demo seed needs a policy that does not exist yet: the `seed` service
+      # onboards the demonstration account through the public API instead.
+      SKIP_DEMO_SEED: "1"
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: password-vault}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+      authorization: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  command-recorder:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/recording-audit/command-recorder/cmd/command-recorder"]
+    environment:
+      <<: *go-env
+      PORT: "8087"
+      DATABASE_URL: postgres://command_recorder:ob-dev-command-recorder@postgres:5432/command_recorder?sslmode=disable
+      KMS_KEY_HEX: 9b1e3a563bbd8ca0ae8c348e591df45186e6aa7a29d0fc8d9292eb18b92068a6
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: command-recorder}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+      authorization: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8087"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  ssh-proxy:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/proxy/ssh-proxy/cmd/ssh-proxy"]
+    environment:
+      <<: *go-env
+      PORT: "8085"
+      SSH_PORT: "2222"
+      VAULT_URL: https://password-vault:8081
+      AUDIT_URL: https://audit-service:8082
+      RECORDER_URL: https://command-recorder:8087
+      RECORDING_POLICY: required
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      password-vault: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+      command-recorder: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  session-broker:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/access/session-broker/cmd/session-broker"]
+    environment:
+      <<: *go-env
+      PORT: "8084"
+      DATABASE_URL: postgres://session_broker:ob-dev-session-broker@postgres:5432/session_broker?sslmode=disable
+      AUTHORIZATION_URL: https://authorization:8083
+      VAULT_URL: https://password-vault:8081
+      AUDIT_URL: https://audit-service:8082
+      SSH_PROXY_URL: https://ssh-proxy:8085
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+      authorization: {condition: service_healthy}
+      password-vault: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+      ssh-proxy: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  # The public API (doc 05): plain HTTP for callers holding a bearer token, mutual TLS for the
+  # services it calls (ADR-0010).
+  api-gateway:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/access/api-gateway/cmd/api-gateway"]
+    labels:
+      base44.project: API
+      base44.kind: api
+      base44.port: 8080
+    environment:
+      <<: *go-env
+      PORT: "8080"
+      AUTHENTICATION_URL: https://authentication:8086
+      AUTHORIZATION_URL: https://authorization:8083
+      SESSION_BROKER_URL: https://session-broker:8084
+      VAULT_URL: https://password-vault:8081
+      COMMAND_RECORDER_URL: https://command-recorder:8087
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: api-gateway}}
+    ports:
+      - "8080:8080"
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      authentication: {condition: service_healthy}
+      authorization: {condition: service_healthy}
+      password-vault: {condition: service_healthy}
+      session-broker: {condition: service_healthy}
+      command-recorder: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  # The Admin UI, in development: the Vite dev server on port 3000, forwarding the public API
+  # paths to the Gateway (vite.config.ts, only when BASE44_PREVIEW_MODE=1).
+  web:
+    image: node:22
+    restart: on-failure
+    working_dir: /app
+    labels:
+      base44.project: Admin UI
+      base44.kind: web
+      base44.port: 3000
+    command: ["sh", "-ec", "npm ci --no-audit --no-fund && exec npx vite"]
+    # List form: the bare `BASE44_PREVIEW_MODE` entry is passed through from the platform's
+    # environment (the compose parser here rejects it in map form next to other keys).
+    environment:
+      - BASE44_PREVIEW_MODE
+      - BASE44_GATEWAY_URL=http://api-gateway:8080
+      # The preview reaches this server as 3000-<sandbox id>.<sandbox domain>: vite.config.ts
+      # allows exactly those two host suffixes, and only when BASE44_PREVIEW_MODE=1.
+      - BASE44_SANDBOX_HOST_DOMAIN
+      - BASE44_PUBLIC_HOST_SUFFIX
+    volumes:
+      - ./web/admin-ui:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    networks: [internal]
+    depends_on:
+      api-gateway: {condition: service_started}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
+  # First run only: the operator account (CLI), then one policy and one privileged account
+  # through the public API, so the preview shows a live installation rather than an empty one.
+  seed:
+    <<: *go
+    restart: "no"
+    command: ["sh", "/src/deploy/base44/seed.sh"]
+    environment:
+      <<: *go-env
+      GATEWAY_URL: http://api-gateway:8080
+      AUTHENTICATION_URL: https://authentication:8086
+      OPERATOR_USERNAME: operator
+      OPERATOR_PASSWORD: openbastion-demo
+    volumes:
+      - .:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: admin-cli}}
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      authentication: {condition: service_healthy}
+      api-gateway: {condition: service_healthy}
+
+volumes:
+  postgres:
+  pki:
+  pki-ca:
+  anchors:
+  node_modules:
+
+networks:
+  internal:
