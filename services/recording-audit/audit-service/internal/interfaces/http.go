@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
 )
@@ -65,7 +66,9 @@ func (s *HTTPServer) handleEmitEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid event: not a JSON event", http.StatusBadRequest)
 		return
 	}
-	event, err := s.svc.EmitEvent(r.Context(), req.ActorID, req.Action, req.ResourceType, req.ResourceID, req.Success)
+	// Who wrote it is the certificate's, never the body's (ADR-0027): empty without internal TLS.
+	emitter, _ := mtls.CallerFrom(r.Context())
+	event, err := s.svc.EmitEventAs(r.Context(), emitter, req.ActorID, req.Action, req.ResourceType, req.ResourceID, req.Success)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidEvent) {
 			// Names the field and the rule, never the value.

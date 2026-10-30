@@ -25,11 +25,20 @@ type Event struct {
 	// since (each field framed by its length). It is stored with the event and covered by
 	// the v2 hash itself.
 	HashVersion int
+
+	// Emitter is the service that wrote the event, as its mutual-TLS certificate names it
+	// (ADR-0027) — never what the request says. Empty when internal TLS is disabled (dev) and
+	// for events written before ADR-0027.
+	Emitter string
+
+	// KeyID names the chain key whose HMAC is Hash (HashV3, ADR-0027); empty before.
+	KeyID string
 }
 
 const (
 	HashV1 = 1 // legacy: fields concatenated without framing — verified, never written
-	HashV2 = 2 // current: a domain tag, then each field framed by its length
+	HashV2 = 2 // ADR-0026: a domain tag, then each field framed by its length — verified, never written
+	HashV3 = 3 // current, ADR-0027: v2's framing, plus emitter and key id, under an HMAC with the chain key
 )
 
 // ErrInvalidEvent is returned for an event no emitter can mean (ADR-0025): a field that is

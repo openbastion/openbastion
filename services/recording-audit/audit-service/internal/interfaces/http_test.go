@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/infrastructure"
@@ -75,5 +76,27 @@ func TestHTTP_AStoreFailureIsGenericToTheEmitter_AndInTheLog(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "10.0.0.5") {
 		t.Fatalf("the cause is not in the log: %q", logs.String())
+	}
+}
+
+// Who wrote an event is the certificate's (ADR-0027): an "emitter" in the body is not read.
+func TestHTTP_TheEmitterIsTheCertificatesNotTheBodys(t *testing.T) {
+	store := infrastructure.NewInMemoryStore()
+	h := interfaces.NewHTTPServer(application.NewAuditService(store)).Routes()
+	body := `{"actor_id":"u_1","action":"session.read","resource_type":"session","resource_id":"s1","success":true,"emitter":"session-broker"}`
+	for _, caller := range []string{"command-recorder", ""} {
+		req := httptest.NewRequest(http.MethodPost, "/audit/v1/emit-event", strings.NewReader(body))
+		if caller != "" {
+			req = req.WithContext(mtls.WithCaller(req.Context(), caller))
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		last, _ := store.Last(context.Background())
+		if last.Emitter != caller {
+			t.Fatalf("emitter %q, want the certificate's %q", last.Emitter, caller)
+		}
 	}
 }

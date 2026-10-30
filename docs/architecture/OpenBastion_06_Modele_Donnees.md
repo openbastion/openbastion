@@ -237,7 +237,9 @@ CREATE TABLE audit_events (
     signature      BYTEA NOT NULL,                 -- signature de l'événement par le service émetteur
     prev_hash      BYTEA NOT NULL,                 -- hash de l'événement précédent de la chaîne
     hash           BYTEA NOT NULL,                 -- hash de cet événement (inclut prev_hash)
-    hash_version   SMALLINT NOT NULL DEFAULT 1,    -- format du hash (ADR-0026) : 1 = hérité, 2 = champs encadrés par leur longueur
+    hash_version   SMALLINT NOT NULL DEFAULT 1,    -- format du hash (ADR-0026, ADR-0027) : 1 = hérité, 2 = champs encadrés, 3 = HMAC à clé
+    emitter        TEXT NOT NULL DEFAULT '',       -- service qui a écrit l'événement, d'après son certificat mTLS (ADR-0027)
+    chain_key_id   TEXT NOT NULL DEFAULT '',       -- identifiant de la clé de chaîne du HMAC (format 3), jamais la clé
     PRIMARY KEY (id, ts)
 ) PARTITION BY RANGE (ts);
 
@@ -265,7 +267,7 @@ CREATE TABLE idempotency_keys (
 |---|---|
 | `vault_secrets` versionné plutôt qu'un champ mutable sur `privileged_accounts` | Conserve l'historique de rotation (obligatoire pour l'audit) tout en gardant une requête O(1) de la version courante via l'index partiel `idx_vault_secrets_current`. |
 | `audit_events` partitionné par mois | Le volume d'audit croît en continu et sans purge (Full Auditability) ; le partitionnement garde les index performants et simplifie une politique de rétention/archivage par partition entière plutôt que par ligne. |
-| Chaînage `prev_hash` → `hash` | Rend une falsification rétroactive détectable sans dépendre uniquement des permissions applicatives — défense en profondeur sur l'invariant d'audit. **Depuis ADR-0026**, le hash (format 2) encadre chaque champ par sa longueur, après une étiquette de domaine : déplacer des octets d'un champ au voisin est une modification détectée ; les lignes antérieures (format 1, champs concaténés) se vérifient toujours mais restent sensibles à ce déplacement ; une version ne recule jamais dans la chaîne. **Limite** : la chaîne n'a pas de clé — qui peut écrire en base peut recalculer toute la fin de la chaîne ; seule une modification qui ne recalcule pas les événements suivants est détectée. |
+| Chaînage `prev_hash` → `hash` | Rend une falsification rétroactive détectable sans dépendre uniquement des permissions applicatives — défense en profondeur sur l'invariant d'audit. **Depuis ADR-0026**, le hash (format 2) encadre chaque champ par sa longueur, après une étiquette de domaine : déplacer des octets d'un champ au voisin est une modification détectée ; les lignes antérieures (format 1, champs concaténés) se vérifient toujours mais restent sensibles à ce déplacement ; une version ne recule jamais dans la chaîne. ~~**Limite** : la chaîne n'a pas de clé~~ — **depuis ADR-0027**, le format 3 est un HMAC-SHA256 sous une clé tenue hors de la base : sans elle, une fin de chaîne recalculée ne se vérifie pas. Il reste qu'une chaîne **entièrement** réécrite dans un format sans clé (1 ou 2) ne se contredit pas elle-même : c'est l'ancrage hors de la base (ADR-0028) qui la trahit. |
 | `connection_ticket_hash` et non le ticket lui-même | Le Session Broker ne doit pouvoir vérifier qu'un ticket a été émis, jamais le rejouer — cohérent avec ADR-0003. |
 | Clé étrangère `actor_id` nullable sur `audit_events` | Les actions systèmes (rotation planifiée par le Scheduler, expiration automatique) doivent être auditées même sans acteur humain. |
 

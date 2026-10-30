@@ -41,7 +41,28 @@ func main() {
 		log.Printf("audit-service: DATABASE_URL not set, using in-memory storage (dev/test only)")
 	}
 
+	// The chain is keyed (ADR-0027). With a database the key is required: a chain that
+	// outlives the process must be verifiable by the next one, and a key made up at start
+	// would make yesterday's chain unverifiable. In memory the chain dies with the process,
+	// and so may its key.
 	svc := application.NewAuditService(store)
+	keyHex, previousHex := os.Getenv("AUDIT_CHAIN_KEY_HEX"), os.Getenv("AUDIT_CHAIN_PREVIOUS_KEYS_HEX")
+	switch {
+	case keyHex != "":
+		keys, err := application.ParseChainKeys(keyHex, previousHex)
+		if err != nil {
+			// The error never repeats the value.
+			log.Fatalf("audit-service: AUDIT_CHAIN_KEY_HEX / AUDIT_CHAIN_PREVIOUS_KEYS_HEX: %v — refusing to start", err)
+		}
+		svc.WithChainKeys(keys)
+		log.Printf("audit-service: the chain is signed with key %s (%d key(s) held for verification)", keys.CurrentID(), keys.Count())
+	case os.Getenv("DATABASE_URL") != "":
+		log.Fatalf("audit-service: DATABASE_URL is set, so the chain outlives this process and AUDIT_CHAIN_KEY_HEX is required (64 hex digits, kept outside the database; `openssl rand -hex 32`) — refusing to start")
+	case previousHex != "":
+		log.Fatalf("audit-service: AUDIT_CHAIN_PREVIOUS_KEYS_HEX is set without AUDIT_CHAIN_KEY_HEX — refusing to start")
+	default:
+		log.Printf("audit-service: in-memory chain signed with a random key that lives as long as this process (dev/test only)")
+	}
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)

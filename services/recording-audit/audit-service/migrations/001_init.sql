@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS audit_events (
 -- Additif et idempotent.
 ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS hash_version SMALLINT NOT NULL DEFAULT 1;
 
+-- ADR-0027 : qui a écrit l'événement (le service que nomme son certificat mTLS)
+-- et quelle clé de chaîne en signe le HMAC (format 3). Vides pour les lignes
+-- antérieures, qui ne couvrent ni l'un ni l'autre. Additif et idempotent.
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS emitter TEXT NOT NULL DEFAULT '';
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS chain_key_id TEXT NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events (actor_id, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events (action, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_events_resource ON audit_events (resource_type, resource_id, ts DESC);

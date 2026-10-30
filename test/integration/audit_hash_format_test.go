@@ -75,7 +75,7 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 
 	root := repoRoot(t)
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-26")
-	audit := startService(t, root, auditBin, "19431", "DATABASE_URL="+dsn)
+	audit := startService(t, root, auditBin, "19431", "DATABASE_URL="+dsn, "AUDIT_CHAIN_KEY_HEX="+testKMSKeyHex(t))
 	verify := func() int {
 		t.Helper()
 		resp, err := http.Get(audit.baseURL + "/audit/v1/verify-chain")
@@ -110,22 +110,23 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 		}
 	})
 
-	t.Run("the chain grows in the new format and still verifies", func(t *testing.T) {
+	// Since ADR-0027 the format written is v3 (keyed), which frames fields as v2 does.
+	t.Run("the chain grows in the current format and still verifies", func(t *testing.T) {
 		emitter := &httpAuditEmitter{baseURL: audit.baseURL}
 		for i := 0; i < 2; i++ {
 			if err := emitter.EmitEvent(context.Background(), "session.read", "session", "session_new", true); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if v := versions(); fmt.Sprint(v) != "[1 1 1 2 2]" {
-			t.Fatalf("versions %v, want [1 1 1 2 2]", v)
+		if v := versions(); fmt.Sprint(v) != "[1 1 1 3 3]" {
+			t.Fatalf("versions %v, want [1 1 1 3 3]", v)
 		}
 		if code := verify(); code != http.StatusOK {
-			t.Fatalf("verify-chain, v1 then v2: %d", code)
+			t.Fatalf("verify-chain, v1 then v3: %d", code)
 		}
 	})
 
-	t.Run("in the new format, a byte moved between two fields in the database is found", func(t *testing.T) {
+	t.Run("in the current format, a byte moved between two fields in the database is found", func(t *testing.T) {
 		exec(`UPDATE audit_events SET action = 'session.rea', resource_type = 'dsession' WHERE seq = 4`)
 		if code := verify(); code != http.StatusConflict {
 			t.Fatalf("verify-chain after moving a byte from action to resource_type: %d, want 409", code)
@@ -139,9 +140,9 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 	t.Run("a version relabelled in the database is found", func(t *testing.T) {
 		exec(`UPDATE audit_events SET hash_version = 1 WHERE seq = 5`)
 		if code := verify(); code != http.StatusConflict {
-			t.Fatalf("verify-chain after relabelling a v2 row as v1: %d, want 409", code)
+			t.Fatalf("verify-chain after relabelling a v3 row as v1: %d, want 409", code)
 		}
-		exec(`UPDATE audit_events SET hash_version = 2 WHERE seq = 5`)
+		exec(`UPDATE audit_events SET hash_version = 3 WHERE seq = 5`)
 		if code := verify(); code != http.StatusOK {
 			t.Fatalf("verify-chain once restored: %d", code)
 		}

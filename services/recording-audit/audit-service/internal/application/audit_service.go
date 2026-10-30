@@ -7,6 +7,7 @@ package application
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -32,10 +33,20 @@ type Store interface {
 type AuditService struct {
 	mu    sync.Mutex // serializes chain extension; a production deployment
 	store Store      // would use a DB-level append lock instead of this
+
+	// keys sign every event written (v3) and verify what earlier keys signed (ADR-0027).
+	// Never nil: a service built by hand has a key that lives as long as it does.
+	keys *ChainKeys
 }
 
 func NewAuditService(store Store) *AuditService {
-	return &AuditService{store: store}
+	return &AuditService{store: store, keys: RandomChainKeys()}
+}
+
+// WithChainKeys sets the keys of the chain (ADR-0027).
+func (s *AuditService) WithChainKeys(k *ChainKeys) *AuditService {
+	s.keys = k
+	return s
 }
 
 // The bounds of what an event may hold (ADR-0025). They are wider than anything an emitter
@@ -76,6 +87,20 @@ func checkName(field, v string, dotted bool) error {
 	return nil
 }
 
+// checkEmitter: a service name as pkg/mtls knows them — 0 to 64 bytes of a-z, 0-9 and -.
+// It comes from a verified certificate, not from the request; it is bounded all the same.
+func checkEmitter(v string) error {
+	if len(v) > MaxNameBytes {
+		return fmt.Errorf("%w: emitter must be 0 to %d bytes", domain.ErrInvalidEvent, MaxNameBytes)
+	}
+	for _, c := range v {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			return fmt.Errorf("%w: emitter may hold only a-z, 0-9 and -", domain.ErrInvalidEvent)
+		}
+	}
+	return nil
+}
+
 // checkID: at most 256 bytes of UTF-8 without control characters (a newline in an identifier
 // is a forged line in whatever log prints it).
 func checkID(field, v string, required bool) error {
@@ -93,10 +118,21 @@ func checkID(field, v string, required bool) error {
 	return nil
 }
 
-// EmitEvent appends one event to the chain. An event no emitter can mean is refused
-// (domain.ErrInvalidEvent) before the chain is touched (ADR-0025).
+// EmitEvent appends one event to the chain with no emitter named (internal TLS disabled, or a
+// caller in this process); see EmitEventAs.
 func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) (*domain.Event, error) {
+	return s.EmitEventAs(ctx, "", actorID, action, resourceType, resourceID, success)
+}
+
+// EmitEventAs appends one event to the chain, written by `emitter` — the service its
+// certificate names (ADR-0027). An event no emitter can mean is refused
+// (domain.ErrInvalidEvent) before the chain is touched (ADR-0025). The event is signed with
+// the current chain key (v3).
+func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action, resourceType, resourceID string, success bool) (*domain.Event, error) {
 	if err := validate(actorID, action, resourceType, resourceID); err != nil {
+		return nil, err
+	}
+	if err := checkEmitter(emitter); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
@@ -132,9 +168,10 @@ func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceT
 		// no-op for it).
 		ID: nextID(), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: actorID,
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
-		Success: success, PrevHash: prevHash, HashVersion: domain.HashV2,
+		Success: success, PrevHash: prevHash, HashVersion: domain.HashV3,
+		Emitter: emitter, KeyID: s.keys.current,
 	}
-	e.Hash = computeHash(e)
+	e.Hash = computeHashV3(s.keys.keys[s.keys.current], e)
 
 	if err := s.store.Append(ctx, e); err != nil {
 		return nil, err
@@ -156,14 +193,28 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 	for i, e := range events {
 		// Versions only move forward (ADR-0026): once an event is v2, every later one is, so
 		// that a later event cannot be passed off in the weaker format.
-		if e.HashVersion != domain.HashV1 && e.HashVersion != domain.HashV2 {
+		if e.HashVersion < domain.HashV1 || e.HashVersion > domain.HashV3 {
 			return fmt.Errorf("event %d (%s): unknown hash version %d — tampered", i, e.ID, e.HashVersion)
 		}
 		if e.HashVersion < version {
 			return fmt.Errorf("event %d (%s): hash version %d after version %d — tampered", i, e.ID, e.HashVersion, version)
 		}
 		version = e.HashVersion
-		if want := computeHash(e); string(want) != string(e.Hash) {
+		var want []byte
+		if e.HashVersion == domain.HashV3 {
+			key, held := s.keys.keys[e.KeyID]
+			if !held {
+				return fmt.Errorf("event %d (%s): signed with chain key %q, which this service does not hold — it cannot vouch for it", i, e.ID, e.KeyID)
+			}
+			want = computeHashV3(key, e)
+		} else {
+			// The unkeyed formats cover neither field: one that carries them was not written so.
+			if e.Emitter != "" || e.KeyID != "" {
+				return fmt.Errorf("event %d (%s): an emitter or a key in a version %d event, which covers neither — tampered", i, e.ID, e.HashVersion)
+			}
+			want = computeHash(e)
+		}
+		if !hmac.Equal(want, e.Hash) || len(want) == 0 {
 			return fmt.Errorf("event %d (%s): hash does not match its own fields — tampered", i, e.ID)
 		}
 		if string(e.PrevHash) != string(prevHash) {
@@ -174,8 +225,8 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 	return nil
 }
 
-// computeHash computes an event's hash in the format its HashVersion names. An unknown
-// version has no hash: nil never matches a stored one, so VerifyChain reports it.
+// computeHash computes an event's hash in the unkeyed format its HashVersion names (v1, v2).
+// Any other version — v3 included, which needs a key — has no hash here: nil.
 func computeHash(e *domain.Event) []byte {
 	switch e.HashVersion {
 	case domain.HashV1:

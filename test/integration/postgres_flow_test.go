@@ -378,8 +378,10 @@ func TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart(t *testing.T)
 
 	root := repoRoot(t)
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-pg")
+	// One chain key for both processes (ADR-0027): the second verifies what the first signed.
+	chainKey := testKMSKeyHex(t)
 
-	audit1 := startService(t, root, auditBin, "18421", "DATABASE_URL="+dsn)
+	audit1 := startService(t, root, auditBin, "18421", "DATABASE_URL="+dsn, "AUDIT_CHAIN_KEY_HEX="+chainKey)
 	emitter1 := &httpAuditEmitter{baseURL: audit1.baseURL}
 	if err := emitter1.EmitEvent(context.Background(), "session.connect", "session", "sess-pg-restart", true); err != nil {
 		t.Fatalf("EmitEvent on first process: %v", err)
@@ -391,7 +393,7 @@ func TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart(t *testing.T)
 	// the start of a brand new, disconnected chain.
 	stopService(t, audit1)
 
-	audit2 := startService(t, root, auditBin, "18422", "DATABASE_URL="+dsn)
+	audit2 := startService(t, root, auditBin, "18422", "DATABASE_URL="+dsn, "AUDIT_CHAIN_KEY_HEX="+chainKey)
 	emitter2 := &httpAuditEmitter{baseURL: audit2.baseURL}
 	if err := emitter2.EmitEvent(context.Background(), "session.terminate", "session", "sess-pg-restart", true); err != nil {
 		t.Fatalf("EmitEvent on second, restarted process: %v", err)

@@ -169,20 +169,36 @@ func TestPostgresStore_All_ReturnsEventsInInsertionOrder(t *testing.T) {
 	}
 }
 
-// The format of an event's hash is stored with it, and read back as written (ADR-0026).
-func TestPostgresStore_HashVersionRoundTrips(t *testing.T) {
+// The format of an event's hash, who wrote it and the key that signs it are stored with it,
+// and read back as written (ADR-0026, ADR-0027).
+func TestPostgresStore_HashVersionEmitterAndKeyRoundTrip(t *testing.T) {
 	db := testDB(t)
 	store := infrastructure.NewPostgresStore(db)
 	ctx := context.Background()
-	for _, v := range []int{domain.HashV1, domain.HashV2} {
+	for _, c := range []struct {
+		v            int
+		emitter, key string
+	}{{domain.HashV1, "", ""}, {domain.HashV2, "", ""}, {domain.HashV3, "command-recorder", "b6e88eca7f335c67"}} {
 		e := &domain.Event{ID: uniqueID("evt-version"), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: "u",
-			Action: "session.read", ResourceType: "session", ResourceID: "s", Success: true, Hash: []byte{1}, HashVersion: v}
+			Action: "session.read", ResourceType: "session", ResourceID: "s", Success: true, Hash: []byte{1},
+			HashVersion: c.v, Emitter: c.emitter, KeyID: c.key}
 		if err := store.Append(ctx, e); err != nil {
 			t.Fatal(err)
 		}
-		got, err := store.Last(ctx)
-		if err != nil || got.ID != e.ID || got.HashVersion != v {
-			t.Fatalf("version %d: read back %+v, %v", v, got, err)
+		for _, read := range []func() (*domain.Event, error){
+			func() (*domain.Event, error) { return store.Last(ctx) },
+			func() (*domain.Event, error) {
+				all, err := store.All(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return all[len(all)-1], nil
+			},
+		} {
+			got, err := read()
+			if err != nil || got.ID != e.ID || got.HashVersion != c.v || got.Emitter != c.emitter || got.KeyID != c.key {
+				t.Fatalf("%+v: read back %+v, %v", c, got, err)
+			}
 		}
 	}
 }

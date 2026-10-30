@@ -76,8 +76,11 @@ func TestEmitEvent_WritesTheCurrentFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.HashVersion != domain.HashV2 || string(e.Hash) != string(computeHashV2(e)) || string(e.Hash) == string(computeHashV1(e)) {
-		t.Fatalf("a new event is not hashed in v2: version %d", e.HashVersion)
+	// The current format is v3 since ADR-0027: keyed, and neither unkeyed format.
+	key := svc.keys.keys[svc.keys.current]
+	if e.HashVersion != domain.HashV3 || e.KeyID != svc.keys.current || string(e.Hash) != string(computeHashV3(key, e)) ||
+		string(e.Hash) == string(computeHashV2(e)) || string(e.Hash) == string(computeHashV1(e)) {
+		t.Fatalf("a new event is not signed in v3 with the current key: version %d, key %q", e.HashVersion, e.KeyID)
 	}
 }
 
@@ -99,8 +102,8 @@ func TestVerifyChain_ALegacyChainVerifies_AndGrowsInTheNewFormat(t *testing.T) {
 		t.Fatalf("v1 then v2: %v", err)
 	}
 	events, _ := store.All(ctx)
-	if events[2].HashVersion != domain.HashV1 || events[3].HashVersion != domain.HashV2 || string(events[3].PrevHash) != string(events[2].Hash) {
-		t.Fatal("the first v2 event does not continue the v1 chain")
+	if events[2].HashVersion != domain.HashV1 || events[3].HashVersion != domain.HashV3 || string(events[3].PrevHash) != string(events[2].Hash) {
+		t.Fatal("the first event in the current format does not continue the v1 chain")
 	}
 }
 
@@ -115,7 +118,8 @@ func TestVerifyChain_RefusesAVersionThatGoesBack_OrIsUnknown(t *testing.T) {
 		"v1 v1 v2 v2":      {[]int{1, 1, 2, 2}, true},
 		"v2 v1":            {[]int{2, 1}, false},
 		"v1 v2 v1 v2":      {[]int{1, 2, 1, 2}, false},
-		"an unknown 3":     {[]int{2, 3}, false},
+		"an unknown 4":     {[]int{2, 4}, false},
+		"a v3 with no key": {[]int{2, 3}, false},
 		"a version of 0":   {[]int{0}, false},
 		"a negative value": {[]int{2, -1}, false},
 	} {
@@ -143,7 +147,7 @@ func TestVerifyChain_RefusesAVersionThatGoesBack_OrIsUnknown(t *testing.T) {
 // Changing an event's version, and nothing else, is an edit.
 func TestVerifyChain_DetectsAChangedVersion(t *testing.T) {
 	ctx := context.Background()
-	for _, to := range []int{domain.HashV1, 3} {
+	for _, to := range []int{domain.HashV1, domain.HashV2, 4} {
 		store := infrastructure.NewInMemoryStore()
 		svc := NewAuditService(store)
 		for i := 0; i < 3; i++ {
@@ -152,7 +156,7 @@ func TestVerifyChain_DetectsAChangedVersion(t *testing.T) {
 		events, _ := store.All(ctx)
 		events[2].HashVersion = to // the last one: no later version to contradict it
 		if err := svc.VerifyChain(ctx); err == nil {
-			t.Fatalf("a v2 event relabelled %d went unnoticed", to)
+			t.Fatalf("a v3 event relabelled %d went unnoticed", to)
 		}
 	}
 	store := infrastructure.NewInMemoryStore()
@@ -188,9 +192,10 @@ const (
 	wantV2 = "1c4cd3f0e745236cb372e8a2f1f55672bbd72554d9221fb93ef434e32adb99a0"
 )
 
-// An unknown version has no hash at all: neither format may stand in for it.
+// An unknown version has no unkeyed hash at all, and v3 has none without its key: neither
+// unkeyed format may stand in for them.
 func TestComputeHash_AnUnknownVersionHasNoHash(t *testing.T) {
-	for _, v := range []int{0, -1, 3, 99} {
+	for _, v := range []int{0, -1, 3, 4, 99} {
 		e := &domain.Event{ID: "evt", Action: "session.read", ResourceType: "session", ResourceID: "s", HashVersion: v}
 		if h := computeHash(e); h != nil {
 			t.Fatalf("version %d hashed to %x", v, h)

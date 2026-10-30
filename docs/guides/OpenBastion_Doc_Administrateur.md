@@ -370,6 +370,15 @@ Ce qui se passe : si l'Authorization Service ne répond pas, un tiers reçoit `5
 - Une terminaison **refusée** (`403`), d'une session inconnue (`404`) ou qui n'est pas active (`409`) ne contacte pas le proxy.
 - Le proxy se souvient de la révocation pendant le temps qu'il restait à la session (plus une minute, au plus 7 jours), **en mémoire** : s'il redémarre, il oublie — sans conséquence, puisque le Broker n'émet plus de ticket pour une session terminée.
 
+### Clé de la chaîne d'audit (ADR-0027)
+
+Chaque événement d'audit est signé (HMAC-SHA256) avec la **clé de chaîne** de l'Audit Service : sans elle, personne ne peut réécrire la chaîne en base de façon qu'elle se vérifie encore.
+
+- **`AUDIT_CHAIN_KEY_HEX`** — 64 chiffres hexadécimaux (32 octets ; `openssl rand -hex 32`). **Obligatoire avec `DATABASE_URL`** : sans elle, ou avec une valeur qui n'est pas une clé, l'Audit Service refuse de démarrer en nommant la variable (jamais la valeur). En mémoire (sans base), une clé aléatoire est tirée au démarrage et l'annonce le dit.
+- **`AUDIT_CHAIN_PREVIOUS_KEYS_HEX`** — clés précédentes, séparées par des virgules, gardées **pour vérifier** ce qu'elles ont signé, jamais pour signer. **Rotation** : mettre la nouvelle clé dans `AUDIT_CHAIN_KEY_HEX`, l'ancienne dans `AUDIT_CHAIN_PREVIOUS_KEYS_HEX`, redémarrer ; la ligne de démarrage dit l'identifiant de la clé courante et le nombre de clés tenues (« signed with key b6e8…, 2 key(s) held »). Chaque événement porte l'identifiant (`chain_key_id`) de la clé qui l'a signé, jamais la clé.
+- **Une clé perdue rend l'histoire qu'elle a signée invérifiable, définitivement** : `verify-chain` répond `409` « signed with chain key …, which this service does not hold ». Sauvegarder chaque clé **hors de la base et hors des sauvegardes de la base** (§8), pour toute la durée de rétention de l'audit.
+- Chaque événement porte aussi **le service qui l'a écrit** (`emitter`), tiré de son certificat mTLS — jamais du corps de la requête ; vide quand `INTERNAL_TLS=disabled`.
+
 ## 8. Sauvegardes
 
 | Donnée | Où | Fréquence recommandée |
@@ -377,6 +386,7 @@ Ce qui se passe : si l'Authorization Service ne répond pas, un tiers reçoit `5
 | PostgreSQL (comptes, politiques, sessions, audit) | Snapshot + WAL continu | Continu |
 | MinIO (enregistrements, *v1.0*) | Réplication de bucket | Continu |
 | Clé KMS/HSM | **Jamais dans la même sauvegarde que les données chiffrées** | Selon la politique du KMS externe |
+| Clés de la chaîne d'audit (`AUDIT_CHAIN_KEY_HEX` et les précédentes, ADR-0027) | **Hors de la base et hors de ses sauvegardes** ; une clé perdue rend invérifiable l'histoire qu'elle a signée | À chaque rotation, conservées toute la rétention de l'audit |
 
 La procédure complète de bascule en cas de sinistre, y compris la question de savoir si un site sauvegardé doit être traité comme potentiellement compromis, est couverte par `OpenBastion_Guide_PRA_PCA.md` (§4) — ce document ne couvre que la sauvegarde courante, pas la reprise.
 
@@ -428,6 +438,8 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `approve` renvoie `503` | L'Authorization Service, l'audit ou la base ne répond pas : la décision n'est **pas** prise (fail-closed) | Rétablir la dépendance et renouveler ; la cause est dans le journal du Broker |
 | `connect` renvoie `403` sur une session accordée | L'appelant n'est pas le demandeur de la session (l'approbateur, par exemple) | Le demandeur se connecte lui-même |
 | `POST /sessions` renvoie `403` de façon inattendue | Politique manquante ou `resourcePattern` mal formé (§5) | Lister les politiques du rôle concerné via `GET /policies` |
+| `verify-chain` répond `409` « signed with chain key …, which this service does not hold » | L'Audit Service n'a pas la clé qui a signé ces événements (ADR-0027) : rotation sans garder l'ancienne clé dans `AUDIT_CHAIN_PREVIOUS_KEYS_HEX`, mauvaise clé fournie, ou événement forgé avec un identifiant de clé inventé | Redémarrer avec l'ancienne clé dans `AUDIT_CHAIN_PREVIOUS_KEYS_HEX` ; si aucune clé connue ne correspond, traiter comme une falsification |
+| L'Audit Service refuse de démarrer : « AUDIT_CHAIN_KEY_HEX is required » | `DATABASE_URL` est réglé sans clé de chaîne (ADR-0027) | Fournir la clé (`openssl rand -hex 32` pour une première installation ; la clé existante sinon — une nouvelle clé ne vérifierait pas l'histoire) |
 | `verify-chain` répond `409` « unknown hash version » ou « hash version … after version … » | Une ligne d'`audit_events` porte une `hash_version` qui n'existe pas, ou une ligne au format 1 suit une ligne au format 2 (ADR-0026) : l'Audit Service n'écrit que le format 2 depuis sa mise à niveau, une telle ligne a été écrite ou modifiée hors de lui | Traiter comme une falsification : conserver la base en l'état, identifier la ligne (le numéro et l'identifiant sont dans la réponse), enquêter sur les accès en écriture à la base |
 | Un service journalise un échec d'écriture d'audit avec « status 400 » ou « status 413 » | L'Audit Service a refusé un événement hors de ses bornes (ADR-0025) : action ou type hors alphabet, identifiant de plus de 256 octets ou avec un caractère de contrôle, corps de plus de 16 Kio. Aucun émetteur du projet n'en écrit : c'est un défaut de l'émetteur, ou un émetteur qui n'est pas celui qu'on croit | Lire le journal de l'émetteur (le champ et la règle sont nommés) ; l'action refusée a échoué comme pour une panne de l'audit (fermé là où elle l'est) |
 | `GET /sessions/{id}/recording` renvoie `503` | L'Audit Service ne répond pas au Command Recorder (la lecture n'a pas pu être enregistrée, ADR-0022), ou l'Authorization Service ne répond pas. Rien n'a été servi | Lire le journal du Recorder (« reading the recording of session … not done » et la cause), vérifier `AUDIT_URL` et l'Audit Service (sous mTLS, sa règle `emit-event` doit nommer `command-recorder`), puis renouveler la même requête |
