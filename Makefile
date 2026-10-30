@@ -27,6 +27,7 @@ build:
 	$(GO) build \
 		./pkg/proxycore/... \
 		./pkg/mtls/... \
+		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
@@ -41,6 +42,7 @@ build:
 vet:
 	$(GO) vet ./pkg/proxycore/...
 	$(GO) vet ./pkg/mtls/...
+	$(GO) vet ./pkg/migrate/...
 	$(GO) vet ./pkg/refusalbudget/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
@@ -59,6 +61,7 @@ test:
 	$(GO) test \
 		./pkg/proxycore/... \
 		./pkg/mtls/... \
+		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \

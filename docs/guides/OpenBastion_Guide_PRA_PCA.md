@@ -62,6 +62,7 @@ C'est le point que la plupart des guides PRA génériques n'abordent pas, et qui
 2. **Qualification de la cause** (§2) — gate décisionnel : détermine si la procédure allégée ou la procédure « site potentiellement compromis » (§4) s'applique. En cas de doute, la procédure la plus stricte s'applique par défaut.
 3. **Bascule du trafic** vers le site DR (DNS ou load balancer global), promotion des répliques PostgreSQL/Kafka/MinIO en écriture primaire.
 4. **Vérification d'intégrité de la chaîne d'audit** avant toute réouverture — étape bloquante, pas informative.
+   *La version du schéma de chaque base restaurée se lit dans `schema_migrations` (ADR-0030). Des binaires plus anciens que la base démarrent (journal `WARNING`) ; une base plus ancienne que les binaires est mise à niveau à leur démarrage. Un service qui refuse de démarrer avec « changed after it was applied » signale une base ou un binaire qui n'est pas celui que l'on croit : à traiter comme un indice au gate de l'étape 2.*
 5. **Rotation forcée des comptes privilégiés**, si le gate de l'étape 2 l'exige.
    *Si le site est traité comme compromis, le remplacement de l'autorité interne (ADR-0010) se fait ici aussi — avant la réouverture : sinon un certificat de service volé reste valide face aux services du site DR.*
 6. **Réouverture progressive des accès** — un sous-ensemble restreint d'opérateurs/administrateurs d'abord, le temps de confirmer la stabilité du site DR, avant réouverture générale.

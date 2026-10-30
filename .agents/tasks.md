@@ -51,7 +51,7 @@ Un travail est terminé quand **tout** ce qui suit est vrai :
 
 ## 4. Modifier le schéma PostgreSQL
 
-1. Reste **additif et idempotent** : `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE … ADD COLUMN IF NOT EXISTS … DEFAULT …` dans le même `InitSQL`.
+1. **Une nouvelle migration numérotée** `migrations/NNN_nom.sql` (le numéro suivant, sans trou) — **jamais** une modification d'un fichier existant : un fichier appliqué a son checksum dans `schema_migrations`, et le service refuserait de démarrer (ADR-0030). Reste **additif par défaut** (un ancien binaire doit tourner sur la nouvelle base) ; une migration qui ne l'est pas le dit dans son ADR. Elle s'exécute en transaction : pas de `CREATE INDEX CONCURRENTLY`.
 2. Test PostgreSQL d'aller-retour de la nouvelle colonne/table **et** test de mise à niveau sur place d'une table créée avant ton changement.
 3. Si une table est ajoutée : mets à jour les `TRUNCATE` (`Makefile`, `settings.md` §7) ; mets à jour le doc 06.
 4. Lance la suite PostgreSQL avec une vraie base (`settings.md` §7), purgée avant.

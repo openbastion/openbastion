@@ -63,6 +63,9 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 		prev_hash BYTEA, hash BYTEA NOT NULL)`)
 	exec(`TRUNCATE audit_events RESTART IDENTITY`)
 	exec(`ALTER TABLE audit_events DROP COLUMN IF EXISTS hash_version`)
+	// Such a deployment predates versioned migrations too (ADR-0030): no row in schema_migrations.
+	exec(`DO $$ BEGIN IF to_regclass('schema_migrations') IS NOT NULL THEN
+		DELETE FROM schema_migrations WHERE component = 'audit-service'; END IF; END $$`)
 	var prev []byte
 	t0 := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
 	for i, actor := range []string{"user_ab", "user_cd", "user_ef"} {

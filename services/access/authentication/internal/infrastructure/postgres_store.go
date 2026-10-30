@@ -10,9 +10,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 
 	"github.com/lib/pq"
 
+	"github.com/openbastion/openbastion/pkg/migrate"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/domain"
 	"github.com/openbastion/openbastion/services/access/authentication/migrations"
 )
@@ -26,10 +28,12 @@ func OpenPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.ExecContext(ctx, migrations.InitSQL); err != nil {
+	res, err := migrate.Apply(ctx, db, "authentication", migrations.Files)
+	if err != nil {
 		db.Close()
 		return nil, err
 	}
+	res.Log("authentication", log.Printf)
 	return db, nil
 }
 

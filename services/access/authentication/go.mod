@@ -22,3 +22,9 @@ replace golang.org/x/sys => github.com/golang/sys v0.21.0
 require github.com/openbastion/openbastion/pkg/mtls v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
+
+// Migrations de schéma versionnées (ADR-0030). Un replace local explicite, comme
+// pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/migrate v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate

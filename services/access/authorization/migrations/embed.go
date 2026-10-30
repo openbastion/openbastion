@@ -1,9 +1,11 @@
-// Package migrations embeds the Authorization Service's SQL schema so
-// cmd/authorization can apply it at startup without a separate migration
-// tool — mirrors services/vault/password-vault/migrations/embed.go.
+// Package migrations embeds the schema migrations of the Authorization Service, applied at
+// startup by pkg/migrate (ADR-0030): each NNN_name.sql once, in order, under a lock.
+// A file that has been applied is never edited: a change is a new, numbered file.
 package migrations
 
-import _ "embed"
+import "embed"
 
-//go:embed 001_init.sql
-var InitSQL string
+// Files holds every migration of the Authorization Service.
+//
+//go:embed *.sql
+var Files embed.FS

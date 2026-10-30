@@ -80,7 +80,7 @@ Rappel de l'arborescence complète : `OpenBastion_02_Arborescence_Depot.md`. Tab
 | Modifier la logique d'octroi de session | `services/access/session-broker/internal/application/` |
 | Ajouter un protocole de proxy | `services/proxy/<nouveau>/`, en réutilisant `pkg/proxycore/` (§5) |
 | Modifier un contrat gRPC interne | `proto/<domaine>/v1/`, puis `make proto-gen` |
-| Ajouter une table | migration dans `services/<domaine>/<service>/migrations/`, mettre à jour `OpenBastion_06_Modele_Donnees.md` |
+| Ajouter une table ou une colonne | **nouvelle** migration numérotée `services/<domaine>/<service>/migrations/NNN_nom.sql` (jamais un fichier existant modifié, ADR-0030 ; additive par défaut, en transaction), mettre à jour `OpenBastion_06_Modele_Donnees.md` |
 | Toucher à l'Admin UI | `web/admin-ui/src/features/<domaine>/` |
 
 ## 4. Structure d'un microservice — rappel

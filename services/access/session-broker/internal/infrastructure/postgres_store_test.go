@@ -201,6 +201,11 @@ func TestPostgresStore_AnOlderDatabaseIsUpgradedInPlace(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `ALTER TABLE sessions DROP COLUMN break_glass`); err != nil {
 		t.Fatalf("dropping the column to simulate an older database: %v", err)
 	}
+	// A deployment that old predates versioned migrations too (ADR-0030): it has no row in
+	// schema_migrations, so the next start runs 001_init.sql, which brings it up to date.
+	if _, err := db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE component = 'session-broker'`); err != nil {
+		t.Fatal(err)
+	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	db2, err := infrastructure.OpenPostgres(ctx, dsn) // what the new binary does at startup
 	if err != nil {
@@ -342,6 +347,11 @@ func TestPostgresStore_ADatabaseFromBeforeTheDoubleValidationIsUpgradedInPlace(t
 	}
 	if _, err := db.ExecContext(ctx, `ALTER TABLE sessions DROP COLUMN duration_minutes, DROP COLUMN decided_by, DROP COLUMN decided_at`); err != nil {
 		t.Fatalf("taking the schema back to ADR-0009's: %v", err)
+	}
+	// A deployment that old predates versioned migrations too (ADR-0030): it has no row in
+	// schema_migrations, so the next start runs 001_init.sql, which brings it up to date.
+	if _, err := db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE component = 'session-broker'`); err != nil {
+		t.Fatal(err)
 	}
 
 	dsn := os.Getenv("TEST_DATABASE_URL")

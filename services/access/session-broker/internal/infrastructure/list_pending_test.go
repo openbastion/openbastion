@@ -156,6 +156,11 @@ func TestPostgresStore_ThePendingIndexIsCreatedOnAnExistingDatabase_AndIdempoten
 	if _, err := db.ExecContext(ctx, `DROP INDEX IF EXISTS sessions_pending_approval_idx`); err != nil {
 		t.Fatal(err)
 	}
+	// A deployment that old predates versioned migrations too (ADR-0030): it has no row in
+	// schema_migrations, so the next start runs 001_init.sql, which brings it up to date.
+	if _, err := db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE component = 'session-broker'`); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 2; i++ { // twice: a restart is not an error
 		db2, err := infrastructure.OpenPostgres(ctx, testDSN(t))
 		if err != nil {

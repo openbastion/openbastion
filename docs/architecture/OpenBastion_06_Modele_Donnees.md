@@ -261,6 +261,23 @@ CREATE TABLE idempotency_keys (
 );
 ```
 
+### Version du schéma (ADR-0030)
+
+Chaque service porte son schéma en migrations numérotées (`services/<domaine>/<service>/migrations/NNN_nom.sql`), appliquées au démarrage par `pkg/migrate`, et en garde la trace dans une table créée par `pkg/migrate` lui-même :
+
+```sql
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    component  TEXT        NOT NULL,   -- authentication, authorization, session-broker, password-vault, audit-service, command-recorder
+    version    INTEGER     NOT NULL,   -- NNN du fichier
+    name       TEXT        NOT NULL,   -- nom du fichier, ex. 001_init.sql
+    checksum   BYTEA       NOT NULL,   -- SHA-256 du texte appliqué : un fichier modifié ensuite est refusé
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (component, version)
+);
+```
+
+La clé inclut le service parce qu'une même base peut en porter plusieurs (c'est le cas en développement et en test). `001_init.sql` est figé tel qu'il était à ADR-0030 : il est idempotent et met à niveau les bases d'avant ; tout changement ultérieur est un nouveau fichier.
+
 ## 4. Rationale des choix clés
 
 | Choix | Pourquoi |

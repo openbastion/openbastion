@@ -16,3 +16,9 @@ replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 require github.com/openbastion/openbastion/pkg/refusalbudget v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/refusalbudget
+
+// Migrations de schéma versionnées (ADR-0030). Un replace local explicite, comme
+// pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/migrate v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
