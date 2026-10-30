@@ -6,12 +6,14 @@ package integration_test
 // written first and seen to fail.
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -76,11 +78,19 @@ func startTransferTarget(t *testing.T, user, password string) string {
 							case "exec":
 								_ = r.Reply(true, nil)
 								args := strings.Fields(string(r.Payload[4:]))
+								// A pipe for stdin: Wait then returns when scp exits, not when the
+								// channel ends (an sshd sends the exit status as soon as it exits).
 								cmd := exec.Command("scp", args[1:]...)
-								cmd.Stdin, cmd.Stdout, cmd.Stderr = ch, ch, ch.Stderr()
+								cmd.Stdout, cmd.Stderr = ch, ch.Stderr()
+								stdin, _ := cmd.StdinPipe()
 								status := uint32(0)
-								if err := cmd.Run(); err != nil {
+								if err := cmd.Start(); err != nil {
 									status = 1
+								} else {
+									go func() { _, _ = io.Copy(stdin, ch); _ = stdin.Close() }()
+									if err := cmd.Wait(); err != nil {
+										status = 1
+									}
 								}
 								_, _ = ch.SendRequest("exit-status", false, binary.BigEndian.AppendUint32(nil, status))
 								return
@@ -99,6 +109,11 @@ func startTransferTarget(t *testing.T, user, password string) string {
 // openssh runs an OpenSSH client against the proxy, with the connection ticket as password.
 func openssh(t *testing.T, ticket string, name string, args ...string) (string, error) {
 	t.Helper()
+	return opensshIn(t, ticket, "", name, args...)
+}
+
+func opensshIn(t *testing.T, ticket, stdin string, name string, args ...string) (string, error) {
+	t.Helper()
 	dir := t.TempDir()
 	askpass := filepath.Join(dir, "askpass.sh")
 	if err := os.WriteFile(askpass, []byte("#!/bin/sh\necho '"+ticket+"'\n"), 0o700); err != nil {
@@ -106,8 +121,15 @@ func openssh(t *testing.T, ticket string, name string, args ...string) (string, 
 	}
 	common := []string{"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "PreferredAuthentications=password",
 		"-o", "PubkeyAuthentication=no", "-o", "LogLevel=ERROR"}
-	cmd := exec.Command(name, append(common, args...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, append(common, args...)...)
 	cmd.Env = append(os.Environ(), "SSH_ASKPASS="+askpass, "SSH_ASKPASS_REQUIRE=force", "DISPLAY=none")
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	// scp starts an ssh that may hold the output open after the context kills scp: bound the wait.
+	cmd.WaitDelay = 5 * time.Second
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -172,14 +194,12 @@ func TestTransferFlow_SFTPAndSCPThroughTheProxy_EachTransferRecordedWithItsHash(
 	if err := os.WriteFile(upload, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	dest := "-P 19606"
-	_ = dest
 
 	t.Run("sftp: a put and a get go through, and the target has the file", func(t *testing.T) {
-		batch := filepath.Join(work, "batch")
-		_ = os.WriteFile(batch, []byte(fmt.Sprintf("put %s %s/report.txt\nget %s/report.txt %s/back.txt\nmkdir %s/d\nrename %s/report.txt %s/d/r.txt\n",
-			upload, remote, remote, work, remote, remote, remote)), 0o600)
-		out, err := openssh(t, ticket(t), "sftp", "-P", "19606", "-b", batch, "operator@127.0.0.1")
+		// Commands on standard input, not -b: batch mode turns password authentication off.
+		stdin := fmt.Sprintf("put %s %s/report.txt\nget %s/report.txt %s/back.txt\nmkdir %s/d\nrename %s/report.txt %s/d/r.txt\nbye\n",
+			upload, remote, remote, work, remote, remote, remote)
+		out, err := opensshIn(t, ticket(t), stdin, "sftp", "-P", "19606", "operator@127.0.0.1")
 		if err != nil {
 			t.Fatalf("sftp: %v\n%s", err, out)
 		}
@@ -230,8 +250,9 @@ func TestTransferFlow_SFTPAndSCPThroughTheProxy_EachTransferRecordedWithItsHash(
 			fmt.Sprintf("sftp mkdir %q", remote+"/d"),
 			fmt.Sprintf("sftp upload %q (%d bytes, sha256 %s)", remote+"/via-scp.txt", len(content), sum),
 			fmt.Sprintf("scp upload to %q", remote+"/via-legacy.txt"),
-			fmt.Sprintf("(%d bytes, sha256 %s)", len(content), sum),
+			fmt.Sprintf("scp upload \"report.txt\" into %q (%d bytes, sha256 %s)", remote+"/via-legacy.txt", len(content), sum),
 			fmt.Sprintf("scp download from %q", remote+"/via-legacy.txt"),
+			fmt.Sprintf("scp download \"via-legacy.txt\" from %q (%d bytes, sha256 %s)", remote+"/via-legacy.txt", len(content), sum),
 		} {
 			if !strings.Contains(all, want) {
 				t.Fatalf("the recording lacks %q:\n%s", want, all)

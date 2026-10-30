@@ -216,9 +216,12 @@ func (c *Codec) relayTransfer(ctx context.Context, client io.ReadWriter, session
 			}
 		}
 	}
+	// As an sshd does: the exit status, then the channel closed — which also ends the copy
+	// of whatever the client still sends.
 	if ch, ok := client.(ssh.Channel); ok {
 		_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{uint32(exit)}))
 		_ = ch.CloseWrite()
+		_ = ch.Close()
 	}
 	select {
 	case err := <-upDone:

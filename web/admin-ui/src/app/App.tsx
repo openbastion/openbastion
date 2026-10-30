@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Api, claims } from "../shared/api";
 import { SignedInContext } from "../shared/session";
 import { Login } from "../features/login/Login";
@@ -11,7 +11,13 @@ import { Recording } from "../features/audit/Recording";
 const tabs = { accounts: "Comptes", policies: "Politiques", sessions: "Sessions", audit: "Enregistrements" } as const;
 type Tab = keyof typeof tabs;
 
-export function App({ api = new Api(), location = window.location, navigate = (u: string) => window.location.assign(u) }: { api?: Api; location?: Location; navigate?: (u: string) => void }) {
+export function App({ api: given, location = window.location, navigate = (u: string) => window.location.assign(u) }: { api?: Api; location?: Location; navigate?: (u: string) => void }) {
+  // ONE client for the life of the page: a default made at each render would lose the token set
+  // at login, and every call after it would go out without one (found and fixed in main.tsx by
+  // Bony Kiss's environment work; kept here so that the component cannot fall into it again).
+  const own = useRef<Api | null>(null);
+  if (!given && !own.current) own.current = new Api();
+  const api = given ?? own.current!;
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("accounts");
   const onToken = useCallback((t: string) => {

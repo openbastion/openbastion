@@ -4,6 +4,24 @@ import { App } from "./App";
 import { fakeApi, fakeToken } from "../test-helpers";
 
 describe("App", () => {
+  it("keeps the token across renders when no client is given — the next call is authenticated", async () => {
+    const token = fakeToken("alice", ["platform-admin"]);
+    const auth: (string | null)[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      auth.push(headers["Authorization"] ?? null);
+      if (String(input) === "/auth/login") return new Response(JSON.stringify({ accessToken: token, expiresIn: 3600 }));
+      return new Response(JSON.stringify({ items: [], page: 1, pageSize: 20, totalItems: 0 }));
+    });
+    render(<App location={{ pathname: "/ui/", search: "" } as Location} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    await waitFor(() => expect(auth.length).toBeGreaterThanOrEqual(2));
+    expect(auth[1]).toBe(`Bearer ${token}`);
+    fetchSpy.mockRestore();
+  });
+
   it("shows the login, then the tabs once signed in, and forgets the token on sign-out", async () => {
     const token = fakeToken("alice", ["platform-admin"]);
     const { api } = fakeApi({ "POST /auth/login": { body: { accessToken: token, expiresIn: 3600 } }, "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } } });

@@ -91,8 +91,11 @@ func scpStream(ctx context.Context, events EventRecorder, cmd SCPCommand, from i
 			if err != nil || size < 0 {
 				return fmt.Errorf("scp: a file size that does not read")
 			}
-			name := path.Join(append(append([]string{cmd.Path}, dirs...), parts[2])...)
-			if err := events.RecordEvent(ctx, fmt.Sprintf("scp %s %s (%d bytes)", way, q(name), size)); err != nil {
+			// What the protocol names is the file; where it goes (or comes from) is the command's
+			// path — a file or a directory, which the proxy cannot tell: both are written.
+			name := path.Join(append(append([]string{}, dirs...), parts[2])...)
+			where := map[bool]string{true: "into", false: "from"}[cmd.Upload]
+			if err := events.RecordEvent(ctx, fmt.Sprintf("scp %s %s %s %s (%d bytes)", way, q(name), where, q(cmd.Path), size)); err != nil {
 				return err
 			}
 			if _, err := to.Write(line); err != nil {
@@ -106,7 +109,7 @@ func scpStream(ctx context.Context, events EventRecorder, cmd SCPCommand, from i
 			if err != nil {
 				return err
 			}
-			if err := events.RecordEvent(ctx, fmt.Sprintf("scp %s %s (%d bytes, sha256 %s)", way, q(name), size, hex.EncodeToString(sum.Sum(nil)))); err != nil {
+			if err := events.RecordEvent(ctx, fmt.Sprintf("scp %s %s %s %s (%d bytes, sha256 %s)", way, q(name), where, q(cmd.Path), size, hex.EncodeToString(sum.Sum(nil)))); err != nil {
 				return err
 			}
 			if _, err := to.Write([]byte{end}); err != nil {
@@ -119,7 +122,7 @@ func scpStream(ctx context.Context, events EventRecorder, cmd SCPCommand, from i
 				return fmt.Errorf("scp: a directory header that does not read")
 			}
 			dirs = append(dirs, parts[2])
-			if err := events.RecordEvent(ctx, fmt.Sprintf("scp %s directory %s", way, q(path.Join(append([]string{cmd.Path}, dirs...)...)))); err != nil {
+			if err := events.RecordEvent(ctx, fmt.Sprintf("scp %s directory %s %s %s", way, q(path.Join(dirs...)), map[bool]string{true: "into", false: "from"}[cmd.Upload], q(cmd.Path))); err != nil {
 				return err
 			}
 		case text == "E":

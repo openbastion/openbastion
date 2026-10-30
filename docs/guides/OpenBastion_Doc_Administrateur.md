@@ -296,6 +296,17 @@ curl -X POST https://bastion.example.com/api/v1/vault/accounts/{accountId}/rotat
 
 **Rappel** : l'API ne renvoie jamais le secret lui-même, à aucun moment, pour aucun rôle — cohérent avec ADR-0003. Un administrateur configure des comptes, il n'en consulte jamais les mots de passe.
 
+### Transferts de fichiers : SFTP et SCP (ADR-0038)
+
+Le proxy accepte, à côté du shell, le sous-système **SFTP** (et donc `scp` d'OpenSSH ≥ 9, qui passe par SFTP) et l'**ancien protocole SCP** (`scp -O`). Le ticket de connexion sert de mot de passe, comme pour le shell :
+
+```sh
+sftp -P 2222 operator@bastion        # puis le ticket
+scp -P 2222 rapport.pdf operator@bastion:/srv/depot/
+```
+
+**Chaque transfert est enregistré avant d'être transmis**, dans l'enregistrement de la session (le même que les commandes, relu par `GET /sessions/{id}/recording`) : l'ouverture d'un fichier (`sftp open "…" for writing`), chaque modification (`remove`, `rename`, `mkdir`, `rmdir`, `setstat`, `symlink`, `hardlink`, requêtes étendues), et à la fermeture le sens, la taille et le **SHA-256** du contenu (`sftp upload "…" (n bytes, sha256 …)`). Le **contenu n'est pas gardé**. Si le Command Recorder n'acquitte pas, le paquet n'est pas transmis et la session s'arrête. Toute autre commande (`ssh bastion id`, `rsync`…) est refusée.
+
 ## 5. Gestion des politiques RBAC
 
 Une politique lie un rôle à un motif de ressource (doc 06 §3). Exemple : autoriser le rôle `dba` à ouvrir des sessions sur les comptes préfixés `prod-db-` :
@@ -496,6 +507,8 @@ La procédure complète de bascule en cas de sinistre, y compris la question de 
 | `…/rotate` répond `502` « the target refused the new secret: nothing changed » | Le compte de réconciliation ne s'est pas connecté, ou `chpasswd` a échoué ; l'ancien secret reste courant | Lire la cause dans le journal du Vault ; vérifier le secret et les droits du compte de réconciliation |
 | `…/rotate` répond `502` « could not be verified » | Le mot de passe a été posé mais le nouveau secret n'ouvre pas la cible ; il est gardé en attente | Relancer la rotation : elle commence par réconcilier (le nouveau ouvre ? il devient courant ; l'ancien ? l'attente est jetée) ; « neither … a human must look » : remettre le mot de passe de la cible à la main |
 | `…/rotate` répond `503` | L'Audit Service ne répond pas : aucune rotation sans trace (ADR-0037) | Rétablir l'audit |
+| Un transfert s'arrête avec « Connection closed » au milieu | Le Command Recorder n'a pas acquitté l'enregistrement du transfert (ADR-0038) : rien de plus n'est transmis | Rétablir le Command Recorder ; le transfert recommence de zéro |
+| `sftp upload … sha256 not computed: non-sequential` dans un enregistrement | Le client a écrit par blocs non contigus (transferts parallèles) : la taille est enregistrée, pas l'empreinte | Normal ; pour une empreinte, transférer sans parallélisme |
 | `verify-chain` répond `409` « the chain starts at event …, which follows an event no checkpoint vouches for » | Les premiers événements en base ont été supprimés sans être archivés (ADR-0032), ou le point de contrôle qui les justifie a été retiré du fichier d'ancres | Incident de sécurité : comparer la base à la dernière sauvegarde et le fichier d'ancres à sa réplique |
 | `verify-chain` répond `409` « checkpoint … its MAC does not match » ou « does not follow the checkpoint before it » | Un point de contrôle du fichier d'ancres a été modifié, retiré ou déplacé | Incident de sécurité : restaurer le fichier d'ancres depuis sa réplique |
 | Le journal dit « archiving stopped, nothing more leaves the database » | La chaîne ne se vérifie pas, ou l'archive ne peut pas être écrite ou relue telle qu'écrite, ou une archive de même nom existe avec un autre contenu | Lire la cause sur la même ligne ; rien n'a été supprimé. Réessai automatique toutes les heures |

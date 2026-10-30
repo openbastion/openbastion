@@ -186,8 +186,12 @@ func TestSFTP_ANameCannotForgeALine_AndAnOversizedPacketEndsTheSession(t *testin
 	if len(j.log) == 0 || strings.Contains(j.log[0], "\n") {
 		t.Fatalf("a name broke the line: %q", j.log)
 	}
-	huge := binary.BigEndian.AppendUint32(nil, MaxSFTPPacket+1)
-	if err := w.clientToTarget(context.Background(), bytes.NewReader(append(huge, 6)), j); err == nil {
+	// A whole, well-formed packet one byte over the limit: refused for its size, not its form.
+	huge := pkt(fxpWrite, 1, "h", uint64(0), make([]byte, MaxSFTPPacket-21))
+	if n := binary.BigEndian.Uint32(huge); n != MaxSFTPPacket+1 {
+		t.Fatalf("the test packet is %d bytes, want %d", n, MaxSFTPPacket+1)
+	}
+	if err := w.clientToTarget(context.Background(), bytes.NewReader(huge), j); err == nil {
 		t.Fatal("a packet over the limit was taken")
 	}
 	if err := w.clientToTarget(context.Background(), bytes.NewReader(pkt(fxpOpen, 1)), j); err == nil {
@@ -223,11 +227,11 @@ func TestSCP_EachFileIsRecordedBeforeItsHeaderAndBeforeItsEnd(t *testing.T) {
 	}
 	got := strings.Join(j.log, "\n")
 	want := strings.Join([]string{
-		`event: scp upload directory "/srv/conf"`, "relay: D0755 0 conf\n",
-		`event: scp upload "/srv/conf/a.txt" (5 bytes)`, "relay: C0644 5 a.txt\n", "relay: hello",
-		`event: scp upload "/srv/conf/a.txt" (5 bytes, sha256 ` + sha([]byte("hello")) + ")", "relay: \x00", "relay: E\n",
-		`event: scp upload "/srv/b" (3 bytes)`, "relay: C0600 3 b\n", "relay: abc",
-		`event: scp upload "/srv/b" (3 bytes, sha256 ` + sha([]byte("abc")) + ")", "relay: \x00",
+		`event: scp upload directory "conf" into "/srv"`, "relay: D0755 0 conf\n",
+		`event: scp upload "conf/a.txt" into "/srv" (5 bytes)`, "relay: C0644 5 a.txt\n", "relay: hello",
+		`event: scp upload "conf/a.txt" into "/srv" (5 bytes, sha256 ` + sha([]byte("hello")) + ")", "relay: \x00", "relay: E\n",
+		`event: scp upload "b" into "/srv" (3 bytes)`, "relay: C0600 3 b\n", "relay: abc",
+		`event: scp upload "b" into "/srv" (3 bytes, sha256 ` + sha([]byte("abc")) + ")", "relay: \x00",
 	}, "\n")
 	if got != want {
 		t.Fatalf("journal:\n%q\nwant:\n%q", got, want)
