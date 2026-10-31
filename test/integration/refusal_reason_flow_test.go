@@ -5,8 +5,10 @@ package integration_test
 // Vault does not answer, the operator reads a 503 that names no address.
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,22 +76,53 @@ func TestPostgresFlow_TheOperatorIsToldWhyASessionCannotStart_AndNeverWhereAServ
 	authCreateUser(t, authn.baseURL, "operator", "Operator", "op-password-123", []string{"dba"})
 	token, _ := gatewayLogin(t, gateway.baseURL, "operator", "op-password-123")
 
-	t.Run("an unpinned account: 409, and the operator reads what to do", func(t *testing.T) {
-		sess, status := gatewayCreateSession(t, gateway.baseURL, token, "", nil, account)
-		if status != http.StatusCreated {
-			t.Fatalf("create: %d", status)
-		}
-		code, body := gatewayConnectBody(t, gateway.baseURL, token, sess.ID)
+	pinned := account + "_pinned"
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "dba", "vault:account:"+pinned, "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "dba", "vault:account:acc_nobody_"+account, "allow")
+	if s := vaultOnboard(t, vault.baseURL, map[string]any{"id": pinned, "name": pinned, "username": "root", "targetHost": "10.0.0.43:22",
+		"protocol": "ssh", "rotationPolicy": "manual", "initialSecret": []byte("x"), "actorRoles": []string{"vault-admin"}}); s != http.StatusCreated {
+		t.Fatalf("onboard: %d", s)
+	}
+	authCreateUser(t, authn.baseURL, "admin", "Admin", "admin-password-123", []string{"vault-admin"})
+	adminToken, _ := gatewayLogin(t, gateway.baseURL, "admin", "admin-password-123")
+
+	t.Run("an unpinned account: no session is created, and the operator reads what to do (ADR-0043)", func(t *testing.T) {
+		code, body := gatewayPostSession(t, gateway.baseURL, token, account)
 		if code != http.StatusConflict || !strings.Contains(body, "no pinned host key") || !strings.Contains(body, "host-key") {
-			t.Fatalf("connect: %d %q", code, body)
-		}
-		if strings.Contains(body, "status 409") {
-			t.Fatalf("the operator reads a status, not a reason: %q", body)
+			t.Fatalf("create: %d %q", code, body)
 		}
 	})
 
-	t.Run("the Vault down: 503, and no address in what the operator reads", func(t *testing.T) {
-		sess, status := gatewayCreateSession(t, gateway.baseURL, token, "", nil, account)
+	t.Run("an account the Vault does not have: 404", func(t *testing.T) {
+		if code, body := gatewayPostSession(t, gateway.baseURL, token, "acc_nobody_"+account); code != http.StatusNotFound || !strings.Contains(body, "privileged account not found") {
+			t.Fatalf("create: %d %q", code, body)
+		}
+	})
+
+	t.Run("Authorization down: onboarding through the Gateway is a 503 that names nothing", func(t *testing.T) {
+		_ = authz.cmd.Process.Kill()
+		_ = authz.cmd.Wait()
+		body, _ := json.Marshal(map[string]any{"id": "acc_x_" + account, "name": "x", "username": "root", "targetHost": "10.0.0.44:22", "protocol": "ssh",
+			"rotationPolicy": "manual", "initialSecret": []byte("x"), "hostKey": targetHostKey})
+		req, _ := http.NewRequest(http.MethodPost, gateway.baseURL+"/vault/accounts", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable || strings.Contains(string(got), "127.0.0.1") || strings.Contains(string(got), "18483") || strings.Contains(string(got), "dial tcp") {
+			t.Fatalf("onboarding with Authorization down: %d %q", resp.StatusCode, got)
+		}
+	})
+
+	t.Run("the Vault down at connect: 503, and no address in what the operator reads", func(t *testing.T) {
+		// The session was granted while everything answered.
+		// Authorization back (a fresh one, in memory: its policies are given again).
+		authz2 := startService(t, root, bins["authz"], "18483")
+		authzCreatePolicy(t, authz2.baseURL, []string{"platform-admin"}, "dba", "vault:account:"+pinned, "allow")
+		sess, status := gatewayCreateSession(t, gateway.baseURL, token, "", nil, pinned)
 		if status != http.StatusCreated {
 			t.Fatalf("create: %d", status)
 		}
@@ -100,4 +133,18 @@ func TestPostgresFlow_TheOperatorIsToldWhyASessionCannotStart_AndNeverWhereAServ
 			t.Fatalf("connect with the Vault down: %d %q", code, body)
 		}
 	})
+}
+
+func gatewayPostSession(t *testing.T, gatewayURL, token, accountID string) (int, string) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{"targetAccountId": accountID, "protocol": "ssh", "justification": "incident", "durationMinutes": 30})
+	req, _ := http.NewRequest(http.MethodPost, gatewayURL+"/sessions", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
 }

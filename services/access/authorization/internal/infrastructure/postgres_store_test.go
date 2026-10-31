@@ -6,6 +6,7 @@ package infrastructure_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -124,5 +125,22 @@ func TestPostgresStore_Count_ReflectsRowsAcrossConnections(t *testing.T) {
 	}
 	if after != before+1 {
 		t.Fatalf("expected Count to increase by exactly 1, got before=%d after=%d", before, after)
+	}
+}
+
+// ADR-0043: the same role, pattern and effect twice is ErrAlreadyExists, not the database's
+// message (which names its constraint).
+func TestPostgresStore_Create_ADuplicateIsErrAlreadyExists(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+	role := uniqueID("dup-role")
+	p := &domain.Policy{ID: uniqueID("p"), Name: "n", Role: role, ResourcePattern: "vault:account:x", Effect: domain.EffectAllow, CreatedBy: "u"}
+	if err := store.Create(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	q := *p
+	q.ID = uniqueID("p")
+	if err := store.Create(ctx, &q); !errors.Is(err, domain.ErrAlreadyExists) {
+		t.Fatalf("a duplicate: %v", err)
 	}
 }

@@ -677,3 +677,30 @@ func TestHandleSessionRecording_OnlyGetAndRequiresAToken(t *testing.T) {
 		t.Fatalf("no refused request may reach the Command Recorder, got %d call(s)", recorder.calls)
 	}
 }
+
+// ADR-0043: a path that cannot become an internal request (a control character) is a generic
+// 500 — the error of building it names the internal URL, which the client must never read.
+func TestGateway_ARequestItCannotBuild_NamesNoInternalURL(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"vault-admin"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+
+	for _, path := range []string{"/vault/accounts/acc%0a1", "/vault/accounts/acc%7f"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		host := strings.TrimPrefix(vault.srv.URL, "http://")
+		if strings.Contains(rec.Body.String(), host) || strings.Contains(rec.Body.String(), "/vault/v1/") {
+			t.Fatalf("%s: the internal URL reached the client: %d %q", path, rec.Code, rec.Body.String())
+		}
+		if rec.Code != http.StatusInternalServerError && rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {
+			t.Fatalf("%s: %d", path, rec.Code)
+		}
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -264,4 +265,76 @@ func TestSchedule_OverHTTP(t *testing.T) {
 	if got["rotationFailures"] != float64(2) {
 		t.Fatalf("failures not said: %v", got)
 	}
+}
+
+// leakyAuthz fails like a real network would: with an address in its error.
+type leakyAuthz struct{}
+
+const leak = "dial tcp 10.9.8.3:8083: connect: connection refused"
+
+func (leakyAuthz) CheckAccess(context.Context, []string, string, string) (bool, string, error) {
+	return false, "", errors.New(leak)
+}
+
+type leakyAudit struct{}
+
+func (leakyAudit) EmitEvent(context.Context, string, string, string, string, bool) error {
+	return errors.New("emit-event: dial tcp 10.9.8.2:8082: connection refused")
+}
+
+// ADR-0043: an administrative route answers a refusal with its reason, and a failing
+// dependency with a 503 that names nothing of it.
+func TestAdminRoutes_ADependencyDownIsA503_ThatNamesNothing_AndARefusalSaysWhy(t *testing.T) {
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"
+	call := func(srv *interfaces.HTTPServer, method, path string, body any) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, httptest.NewRequest(method, path, bytes.NewReader(b)))
+		return rec
+	}
+	onboard := func(id string) map[string]any {
+		return map[string]any{"id": id, "name": id, "username": "root", "targetHost": "10.0.0.1:22", "protocol": "ssh",
+			"rotationPolicy": "manual", "initialSecret": []byte("pw"), "hostKey": key, "actorRoles": []string{"vault-admin"}}
+	}
+	noLeak := func(t *testing.T, what string, rec *httptest.ResponseRecorder, want int) {
+		t.Helper()
+		if rec.Code != want || strings.Contains(rec.Body.String(), "10.9.8.") || strings.Contains(rec.Body.String(), "dial tcp") {
+			t.Fatalf("%s: %d %q", what, rec.Code, rec.Body.String())
+		}
+	}
+
+	kms, _ := infrastructure.NewLocalKMS()
+	down := infrastructure.NewInMemoryStore()
+	srvDown := interfaces.NewHTTPServer(application.NewVaultService(down, down, down, kms, leakyAuthz{}))
+	noLeak(t, "onboarding, Authorization down", call(srvDown, http.MethodPost, "/vault/v1/onboard-account", onboard("a")), http.StatusServiceUnavailable)
+	noLeak(t, "listing, Authorization down", call(srvDown, http.MethodGet, "/vault/v1/accounts?actorRoles=vault-admin", nil), http.StatusServiceUnavailable)
+
+	store := infrastructure.NewInMemoryStore()
+	srv := interfaces.NewHTTPServer(application.NewVaultService(store, store, store, kms, allowAll{}).WithRotation(noTarget{}, leakyAudit{}))
+	if rec := call(srv, http.MethodPost, "/vault/v1/onboard-account", onboard("acc")); rec.Code != http.StatusCreated {
+		t.Fatalf("onboard: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(srv, http.MethodPost, "/vault/v1/onboard-account", onboard("acc")); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "already exists") {
+		t.Fatalf("the same id twice: %d %q", rec.Code, rec.Body.String())
+	}
+	rec := call(srv, http.MethodPut, "/vault/v1/accounts/acc/host-key", map[string]any{"hostKey": key, "actorId": "u", "actorRoles": []string{"vault-admin"}})
+	noLeak(t, "pinning, audit down", rec, http.StatusServiceUnavailable)
+	if !strings.Contains(rec.Body.String(), "the audit is unavailable") {
+		t.Fatalf("the operator is not told the audit is down: %q", rec.Body.String())
+	}
+	if rec := call(srv, http.MethodGet, "/vault/v1/accounts/nobody", nil); rec.Code != http.StatusNotFound || strings.TrimSpace(rec.Body.String()) != "account not found" {
+		t.Fatalf("unknown account: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// Counter-proof: a refusal says why.
+	deny := interfaces.NewHTTPServer(application.NewVaultService(store, store, store, kms, denyAll{}))
+	if rec := call(deny, http.MethodPost, "/vault/v1/onboard-account", onboard("b")); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "access denied: no policy") {
+		t.Fatalf("a refusal: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+type denyAll struct{}
+
+func (denyAll) CheckAccess(context.Context, []string, string, string) (bool, string, error) {
+	return false, "no policy grants it", nil
 }

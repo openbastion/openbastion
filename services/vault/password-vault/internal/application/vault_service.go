@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,6 +25,14 @@ type Encryptor interface {
 // gated on it: this project deliberately does not rely on the Gateway
 // alone to keep unauthorized callers out (NOTES_SANDBOX.md). Fail-closed:
 // if Authorization cannot be reached, the write is refused.
+// ErrAccessDenied: Authorization refused the administrative write (ADR-0043: its message, the
+// refusal's reason, is what a client reads). ErrAuditUnavailable: a write that must be on the
+// record first was not made, the audit being unreachable.
+var (
+	ErrAccessDenied     = errors.New("access denied")
+	ErrAuditUnavailable = errors.New("the audit is unavailable: nothing was changed")
+)
+
 type AuthorizationClient interface {
 	CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (allowed bool, reason string, err error)
 }
@@ -62,10 +71,10 @@ func adminResource(accountID string) string {
 func (s *VaultService) requireAdminAccess(ctx context.Context, actorRoles []string, accountID, action string) error {
 	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, adminResource(accountID), action)
 	if err != nil {
-		return fmt.Errorf("checking access (fail-closed): %w", err)
+		return fmt.Errorf("checking access (fail-closed): %w", err) // a dependency: never shown to a client
 	}
 	if !allowed {
-		return fmt.Errorf("access denied: %s", reason)
+		return fmt.Errorf("%w: %s", ErrAccessDenied, reason)
 	}
 	return nil
 }

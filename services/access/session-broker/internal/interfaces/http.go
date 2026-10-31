@@ -116,6 +116,12 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	sess, err := create(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, req.DurationMinutes)
 	switch {
 	case err == nil:
+	case errors.Is(err, domain.ErrAccountNotFound):
+		http.Error(w, domain.ErrAccountNotFound.Error(), http.StatusNotFound)
+		return
+	case errors.Is(err, domain.ErrAccountNotPinned):
+		http.Error(w, domain.ErrAccountNotPinned.Error(), http.StatusConflict)
+		return
 	case errors.Is(err, domain.ErrTooManyPending):
 		// The requester's own quota (ADR-0013): it says how many, and it frees itself.
 		http.Error(w, err.Error(), http.StatusTooManyRequests)

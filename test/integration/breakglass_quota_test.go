@@ -55,6 +55,7 @@ func TestBreakGlassQuota_ARequesterCannotDrownTheListNorTheChannel_AcrossFiveRea
 
 	hook := newHookSpy(t)
 	const channelSecret = "quota-test-HMAC-KEY-0123456789abcdef-NEVERLOG"
+	playVaultAccounts(t, "18741") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18744",
 		"AUTHORIZATION_URL=http://127.0.0.1:18743", "VAULT_URL=http://127.0.0.1:18741", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18745", "BREAKGLASS_MAX_MINUTES=30",

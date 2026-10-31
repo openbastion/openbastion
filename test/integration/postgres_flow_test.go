@@ -481,7 +481,9 @@ func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 	audit := startService(t, root, auditBin, "18442") // in-memory is fine — this test only cares about session persistence
 
 	accountID := fmt.Sprintf("acc_pg_broker_restart_%d", time.Now().UnixNano())
-	unreachable := "http://127.0.0.1:1" // Connect is never called in this test
+	// Connect is never called in this test; creating a session reads the account (ADR-0043).
+	playVaultAccounts(t, "18446")
+	playedVault := "http://127.0.0.1:18446"
 	proxyURL := newLocalServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/internal/v1/revoke-session" {
 			_, _ = w.Write([]byte(`{"tickets_revoked":0,"connections_cut":0}`))
@@ -492,7 +494,7 @@ func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 
 	broker1 := startService(t, root, brokerBin, "18443",
 		"AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL,
-		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+proxyURL, "DATABASE_URL="+dsn)
+		"VAULT_URL="+playedVault, "SSH_PROXY_URL="+proxyURL, "DATABASE_URL="+dsn)
 
 	sess, status := brokerCreateSession(t, broker1.baseURL, []string{"dba"}, accountID)
 	if status != http.StatusCreated {
@@ -505,7 +507,7 @@ func TestPostgresFlow_SessionSurvivesSessionBrokerProcessRestart(t *testing.T) {
 
 	broker2 := startService(t, root, brokerBin, "18444",
 		"AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL,
-		"VAULT_URL="+unreachable, "SSH_PROXY_URL="+proxyURL, "DATABASE_URL="+dsn)
+		"VAULT_URL="+playedVault, "SSH_PROXY_URL="+proxyURL, "DATABASE_URL="+dsn)
 
 	got, status := brokerGetSession(t, broker2.baseURL, sess.ID)
 	if status != http.StatusOK {

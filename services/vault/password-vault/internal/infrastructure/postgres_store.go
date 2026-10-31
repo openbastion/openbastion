@@ -50,6 +50,10 @@ func (s *PostgresStore) Create(ctx context.Context, a *domain.PrivilegedAccount)
 		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id, host_key, rotation_interval_days)
 		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9)`,
 		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID, a.HostKey, a.RotationIntervalDays)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unique_violation
+		return domain.ErrAlreadyExists
+	}
 	return err
 }
 

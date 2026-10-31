@@ -12,6 +12,10 @@ import (
 // on a specific storage engine's error type.
 var ErrNotFound = errors.New("not found")
 
+// ErrAlreadyExists: an account with this id — or this name on this target — exists already
+// (ADR-0043). Both stores return it; the database's own message never reaches a client.
+var ErrAlreadyExists = errors.New("an account with this id, or with this name on this target, already exists")
+
 type AccountRepository interface {
 	Get(ctx context.Context, id string) (*PrivilegedAccount, error)
 	Create(ctx context.Context, a *PrivilegedAccount) error

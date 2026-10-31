@@ -34,6 +34,7 @@ func TestSessionReadServed_IsOnTheRecordBeforeItIsServed_AndWithoutTheAuditItIsN
 	spy := startAuditSpy(t, audit.baseURL)
 	authz := startService(t, root, authzBin, "18982")
 	authn := startService(t, root, authnBin, "18983", "SKIP_DEMO_SEED=1")
+	playVaultAccounts(t, "18986") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18984",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18986", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18987")

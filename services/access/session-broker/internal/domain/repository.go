@@ -32,6 +32,9 @@ var (
 	// ErrAccountNotPinned is the Vault's refusal of a session on an account whose target's
 	// host key is not pinned (ADR-0039), read from its stable code (ADR-0042). The message is
 	// what the operator reads: what is wrong, and who can fix it.
+	// ErrAccountNotFound: the Vault has no such (enabled) privileged account (ADR-0043).
+	ErrAccountNotFound = errors.New("privileged account not found")
+
 	ErrAccountNotPinned = errors.New("the privileged account has no pinned host key: an administrator must pin it (PUT /vault/accounts/{id}/host-key) before any session")
 )
 

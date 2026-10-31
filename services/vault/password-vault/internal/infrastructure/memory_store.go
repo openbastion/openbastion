@@ -50,6 +50,12 @@ func copyAccount(a *domain.PrivilegedAccount) *domain.PrivilegedAccount {
 func (s *InMemoryStore) Create(ctx context.Context, a *domain.PrivilegedAccount) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The same uniqueness as the database (ADR-0043): this store used to overwrite.
+	for _, other := range s.accounts {
+		if other.ID == a.ID || (other.TargetHost == a.TargetHost && other.Name == a.Name) {
+			return domain.ErrAlreadyExists
+		}
+	}
 	a.CreatedAt = time.Now().UTC()
 	s.accounts[a.ID] = copyAccount(a)
 	return nil

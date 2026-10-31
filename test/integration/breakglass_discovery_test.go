@@ -163,6 +163,7 @@ func TestBreakGlassDiscovery_TheApproverFindsTheRequestAndTheChannelIsToldOfIt_A
 
 	// The Vault is not part of this scenario: a request is judged by the Authorization
 	// Service and audited; the target account is only looked up at connect time.
+	playVaultAccounts(t, "18721") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18724",
 		"AUTHORIZATION_URL=http://127.0.0.1:18723", "VAULT_URL=http://127.0.0.1:18721", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18725", "BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_NOTIFY_URL="+hookURL)
@@ -438,6 +439,7 @@ func TestBreakGlassDiscovery_AnAccountIdentifierThatIsNotOneIsRefusedBeforeItRea
 	authn := startService(t, root, authnBin, "18737", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
 	hook := newHookSpy(t)
+	playVaultAccounts(t, "18731") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18734",
 		"AUTHORIZATION_URL=http://127.0.0.1:18733", "VAULT_URL=http://127.0.0.1:18731", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18735", "BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook")

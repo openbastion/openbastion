@@ -71,6 +71,7 @@ func TestSessionTerminate_OnlyTheRequesterOrAnAuthorisedPersonEndsASession_Acros
 		}
 		return n
 	}
+	playVaultAccounts(t, "18816") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18814",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18816", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL="+proxyURL)

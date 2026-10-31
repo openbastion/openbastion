@@ -441,19 +441,15 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		victim := startMTLSService(t, root, brokerBin, "18810", p, mtls.SessionBroker,
 			"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+impostor.URL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL="+proxyURL)
 
-		// The test plays the Gateway, which is the broker's only caller. Creating the
-		// session asks Authorization, not the Vault; it is connecting that asks the
-		// Vault for a scope on the secret — the call that must never go astray.
+		// The test plays the Gateway, which is the broker's only caller. Since ADR-0043 it is
+		// creating the session that first asks the Vault (the account, before any scope): the
+		// call that must never go astray.
 		gw := p.clientAs(t, mtls.APIGateway)
 		status, raw := mustCall(t, gw, http.MethodPost, victim.baseURL+"/sessions",
 			map[string]any{"requestedBy": "u-operator", "actorRoles": []string{"dba"}, "targetAccountId": accountID,
 				"protocol": "ssh", "justification": "it", "durationMinutes": 60})
-		if status != http.StatusCreated {
-			t.Fatalf("create session on the victim broker: %d %s", status, raw)
-		}
-		status, raw = mustCall(t, gw, http.MethodPost, victim.baseURL+"/sessions/"+jsonField(t, raw, "id")+"/connect", map[string]any{"callerId": "u-operator"})
-		if status == http.StatusOK || strings.Contains(raw, "ticket") {
-			t.Fatalf("a connection ticket was issued although the vault could not be reached as itself: %d %s", status, raw)
+		if status == http.StatusCreated || strings.Contains(raw, "ticket") {
+			t.Fatalf("a session was created although the vault could not be reached as itself: %d %s", status, raw)
 		}
 		if n := hits.Load(); n != 0 {
 			t.Fatalf("the impostor received %d request(s): the broker sent a vault request to a service that is not the vault", n)

@@ -1,6 +1,13 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrAlreadyExists: a policy for this role, resource pattern and effect exists already
+// (ADR-0043); the database's own message, which names its constraint, never reaches a client.
+var ErrAlreadyExists = errors.New("a policy for this role, resource pattern and effect already exists")
 
 type PolicyRepository interface {
 	Create(ctx context.Context, p *Policy) error

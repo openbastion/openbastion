@@ -29,6 +29,7 @@ func TestSessionRead_OnlyTheRequesterOrAnAuthorisedPersonReadsASession_AcrossRea
 	audit := startService(t, root, auditBin, "18951")
 	authz := startService(t, root, authzBin, "18952")
 	authn := startService(t, root, authnBin, "18953", "SKIP_DEMO_SEED=1")
+	playVaultAccounts(t, "18956") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18954",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18956", "AUDIT_URL="+audit.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18957")

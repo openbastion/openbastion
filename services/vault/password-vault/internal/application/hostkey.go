@@ -106,7 +106,7 @@ func (s *VaultService) SetHostKey(ctx context.Context, actorID string, actorRole
 		return "", ErrRotationOff
 	}
 	if err := s.audit.EmitEvent(ctx, actorID, "vault.host_key_set", "account", accountID, true); err != nil {
-		return "", fmt.Errorf("the audit is unavailable, the host key was not changed: %w", err)
+		return "", fmt.Errorf("%w (the host key was not changed): %w", ErrAuditUnavailable, err)
 	}
 	was := HostKeyFingerprint(a.HostKey) // read before the change: a store may hand out its own record
 	if err := s.accounts.SetHostKey(ctx, accountID, key); err != nil {

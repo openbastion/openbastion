@@ -36,6 +36,7 @@ func TestPendingListRead_EachRequestServedIsOnTheRecordBeforeItIsServed_AndWitho
 	spy := startAuditSpy(t, audit.baseURL)
 	authz := startService(t, root, authzBin, "19402")
 	authn := startService(t, root, authnBin, "19403", "SKIP_DEMO_SEED=1")
+	playVaultAccounts(t, "19406") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "19404",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:19406", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:19407", "BREAKGLASS_MAX_MINUTES=30")

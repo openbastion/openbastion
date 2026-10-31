@@ -30,6 +30,7 @@ func TestSessionAction_AUserWithASessionOfItsOwnCannotMakeTheBrokerWriteMoreThan
 	authz := startService(t, root, authzBin, "18780")
 	authn := startService(t, root, authnBin, "18781", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	playVaultAccounts(t, "18786") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18782",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18786", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18787", "BREAKGLASS_MAX_MINUTES=30")

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,10 +44,14 @@ func (s *AuthorizationService) requirePolicyAdmin(ctx context.Context, actorRole
 		return fmt.Errorf("checking access (fail-closed): %w", err)
 	}
 	if !decision.Allowed {
-		return fmt.Errorf("access denied: %s", decision.Reason)
+		return fmt.Errorf("%w: %s", ErrAccessDenied, decision.Reason)
 	}
 	return nil
 }
+
+// ErrAccessDenied: the caller may not create policies (ADR-0043: its message, the reason, is
+// what a client reads; any other error is a failure, never shown).
+var ErrAccessDenied = errors.New("access denied")
 
 // CreatePolicy mirrors POST /policies (doc 05 §2). Closes the RBAC gap
 // this increment addresses: creating a policy — the platform's own

@@ -470,3 +470,21 @@ func TestPostgresStore_RotationFailures_CountedAndReset(t *testing.T) {
 		t.Fatalf("an unknown account: %v", err)
 	}
 }
+
+// ADR-0043: a second account with the same id, or the same name on the same target, is
+// ErrAlreadyExists — not the database's message, which names its constraint.
+func TestPostgresStore_Create_ADuplicateIsErrAlreadyExists(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+	id := uniqueID("dup")
+	a := &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual}
+	if err := store.Create(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: "other", Username: "u", TargetHost: "other:22", Protocol: "ssh", RotationPolicy: domain.RotationManual}); !errors.Is(err, domain.ErrAlreadyExists) {
+		t.Fatalf("the same id: %v", err)
+	}
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: uniqueID("dup"), Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual}); !errors.Is(err, domain.ErrAlreadyExists) {
+		t.Fatalf("the same name on the same target: %v", err)
+	}
+}

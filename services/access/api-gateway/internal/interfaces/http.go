@@ -148,7 +148,7 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, g.authenticationURL+"/auth/v1/login", r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -260,12 +260,12 @@ func (g *GatewayServer) clientKey(r *http.Request) string {
 func (g *GatewayServer) forwardJSON(w http.ResponseWriter, ctx context.Context, method, url string, body any) {
 	encoded, err := json.Marshal(body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, err)
 		return
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(encoded))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -278,11 +278,19 @@ func (g *GatewayServer) forwardJSON(w http.ResponseWriter, ctx context.Context, 
 func (g *GatewayServer) forwardPassthrough(w http.ResponseWriter, r *http.Request, method, url string) {
 	req, err := http.NewRequestWithContext(r.Context(), method, url, r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 	g.doAndRelay(w, req)
+}
+
+// internalError answers an error of the Gateway's own (ADR-0043): a request it could not
+// build — its message names the internal URL, which may hold what the client put in its path.
+// The client reads a generic 500; the cause stays in this log.
+func internalError(w http.ResponseWriter, err error) {
+	log.Printf("api-gateway: internal error: %v", err)
+	http.Error(w, "internal error", http.StatusInternalServerError)
 }
 
 func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
@@ -383,7 +391,7 @@ func (g *GatewayServer) forwardRead(w http.ResponseWriter, r *http.Request, brok
 	q.Set("actorRoles", strings.Join(id.Roles, ","))
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, brokerPath+"?"+q.Encode(), nil)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, err)
 		return
 	}
 	g.doAndRelay(w, req)
@@ -406,7 +414,7 @@ func (g *GatewayServer) handleListPending(w http.ResponseWriter, r *http.Request
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, g.sessionBrokerURL+"/sessions?"+q.Encode(), nil)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, err)
 		return
 	}
 	g.doAndRelay(w, req)

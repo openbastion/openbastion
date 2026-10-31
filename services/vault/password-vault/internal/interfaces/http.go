@@ -87,14 +87,7 @@ func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request
 		TargetHost: req.TargetHost, Protocol: req.Protocol, Policy: domain.RotationPolicy(req.RotationPolicy), InitialSecret: req.InitialSecret,
 		ReconciliationAccountID: req.ReconciliationAccountID, HostKey: req.HostKey, RotationIntervalDays: req.RotationIntervalDays})
 	if err != nil {
-		status := http.StatusForbidden
-		switch {
-		case errors.Is(err, application.ErrNoReconciliation):
-			status = http.StatusConflict
-		case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadRotationInterval):
-			status = http.StatusBadRequest
-		}
-		http.Error(w, err.Error(), status)
+		writeAdminError(w, "onboarding account "+req.ID, err)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -117,7 +110,7 @@ func (s *HTTPServer) handleRotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.svc.RotateAs(r.Context(), req.ActorID, req.ActorRoles, req.AccountID, req.NewSecret); err != nil {
-		http.Error(w, err.Error(), adminErrorStatus(err))
+		writeAdminError(w, "rotating account "+req.AccountID, err)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
@@ -150,6 +143,35 @@ func (s *HTTPServer) handleRotateAfterUse(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(map[string]bool{"rotated": rotated})
 }
 
+// writeAdminError answers a failed administrative operation (ADR-0043): a refusal with its own
+// reason, a failure of a dependency — Authorization, a store — with a generic 503 and its
+// cause in this log. What a client reads never carries a dependency's text.
+func writeAdminError(w http.ResponseWriter, what string, err error) {
+	status := adminErrorStatus(err)
+	var msg string
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		msg = "account not found"
+	case errors.Is(err, domain.ErrAlreadyExists):
+		msg = domain.ErrAlreadyExists.Error()
+	case errors.Is(err, application.ErrAuditUnavailable):
+		msg = application.ErrAuditUnavailable.Error()
+	case errors.Is(err, application.ErrAccessDenied),
+		errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadRotationInterval),
+		errors.Is(err, application.ErrNoReconciliation), errors.Is(err, application.ErrNoHostKey),
+		errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrRotationOff),
+		// What the target answered: an administrator configured it, and needs it to act.
+		errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
+		msg = err.Error()
+	default:
+		status, msg = http.StatusServiceUnavailable, "a dependency of the Vault is unavailable: nothing was changed, try again shortly"
+	}
+	if status >= 500 {
+		log.Printf("password-vault: %s: %v", what, err)
+	}
+	http.Error(w, msg, status)
+}
+
 // adminErrorStatus maps a failed account-admin operation (rotate, delete)
 // onto an HTTP status: domain.ErrNotFound — unknown OR disabled account, which
 // the Vault deliberately does not distinguish — is 404; everything else
@@ -167,11 +189,16 @@ func adminErrorStatus(err error) int {
 		return http.StatusBadGateway
 	case errors.Is(err, application.ErrRotationOff):
 		return http.StatusNotImplemented
-	}
-	if strings.Contains(err.Error(), "audit is unavailable") {
+	case errors.Is(err, application.ErrAuditUnavailable):
 		return http.StatusServiceUnavailable
+	case errors.Is(err, domain.ErrAlreadyExists):
+		return http.StatusConflict
+	case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadRotationInterval):
+		return http.StatusBadRequest
+	case errors.Is(err, application.ErrAccessDenied):
+		return http.StatusForbidden
 	}
-	return http.StatusForbidden
+	return http.StatusServiceUnavailable
 }
 
 // -- authorize-scope (VaultAuthorization.AuthorizeScope) -------------------
@@ -326,7 +353,7 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		account, err := s.svc.GetAccount(r.Context(), id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			writeAdminError(w, "reading account "+id, err)
 			return
 		}
 		writeJSON(w, toAccountResponse(account))
@@ -338,7 +365,7 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 		// (api-gateway/internal/interfaces/http.go).
 		actorRoles := splitCommaList(r.URL.Query().Get("actorRoles"))
 		if err := s.svc.DisableAccount(r.Context(), actorRoles, id); err != nil {
-			http.Error(w, err.Error(), adminErrorStatus(err))
+			writeAdminError(w, "disabling account "+id, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -373,7 +400,7 @@ func (s *HTTPServer) handleListAccounts(w http.ResponseWriter, r *http.Request) 
 	// clamping also handles correctly (0 < minPage/minPageSize).
 	accounts, totalItems, err := s.svc.ListAccounts(r.Context(), actorRoles, page, pageSize)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		writeAdminError(w, "listing accounts", err)
 		return
 	}
 
@@ -427,11 +454,7 @@ func (s *HTTPServer) handleSetHostKey(w http.ResponseWriter, r *http.Request, ac
 	}
 	fp, err := s.svc.SetHostKey(r.Context(), req.ActorID, req.ActorRoles, accountID, req.HostKey)
 	if err != nil {
-		status := adminErrorStatus(err)
-		if errors.Is(err, application.ErrBadHostKey) {
-			status = http.StatusBadRequest
-		}
-		http.Error(w, err.Error(), status)
+		writeAdminError(w, "pinning the host key of account "+accountID, err)
 		return
 	}
 	writeJSON(w, map[string]string{"hostKeyFingerprint": fp})

@@ -1316,8 +1316,42 @@ Go de Bony Kiss pour l'étape proposée : relayer le motif d'un `409` du Vault.
 **Preuves** : `test/integration/refusal_reason_flow_test.go` ; tests unitaires ajoutés : Broker interfaces +3 (et un remplacé), infrastructure +1 ; Vault interfaces : une assertion de plus. **11 mutations, 11 tuées.**
 
 **Ce que cela ne fait PAS :**
-1. **Une session peut encore être créée** sur un compte non épinglé ; c'est `connect` qui la refuse.
-2. **Les autres routes publiques** n'ont pas été passées en revue de la même façon.
+1. ~~**Une session peut encore être créée** sur un compte non épinglé ; c'est `connect` qui la refuse.~~ Refermé par ADR-0043.
+2. ~~**Les autres routes publiques** n'ont pas été passées en revue de la même façon.~~ Refermé par ADR-0043 (section suivante).
+
+## Aucune route publique ne rend une erreur interne ; une session ne se crée que sur un compte utilisable (ADR-0043)
+
+Go de Bony Kiss pour l'étape proposée : revoir les autres routes publiques, refuser dès `POST /sessions` un compte non épinglé.
+
+**La revue** (chaque `err.Error()` qui part vers un client, dans les services que relaie la Gateway) :
+- Vault, routes d'administration (enregistrer, lister, lire, supprimer, renouveler, épingler) : le texte de toute erreur, y compris Authorization injoignable, audit coupé (son adresse), erreur PostgreSQL (le nom de la contrainte) ; `GET` d'un compte répondait `404` à une panne de la base ;
+- Authorization, `POST /policies` : `403` avec le texte de toute erreur du magasin ; `check-access` : `500` avec le texte (route interne) ;
+- Broker : break-glass, Authorization injoignable : `403` avec son adresse ;
+- Gateway : six `500` avec le texte de ses propres erreurs ;
+- Command Recorder : déjà protégé (ADR-0022) ; Authentication : seulement des `400` de lecture de corps.
+
+**Mesuré avant** (rouge, sur `3fe3d4c`, processus réels, vraie base, à travers la Gateway) : sessions créées sur un compte non épinglé et sur un compte inexistant ; Authorization arrêtée, `403` « checking access (fail-closed): Post "http://127.0.0.1:18483/authz/v1/check-access": dial tcp … ». **Trouvé en écrivant le test de la Gateway** : `GET /vault/accounts/acc%0a1`, par n'importe quel utilisateur authentifié, renvoyait l'URL interne du Vault (`parse "http://127.0.0.1:…/vault/v1/accounts/acc\n1": net/url: invalid control character in URL`).
+
+**Livré** :
+- Vault : `ErrAccessDenied`, `ErrAuditUnavailable`, `domain.ErrAlreadyExists` (code PostgreSQL `23505` ; le magasin mémoire refuse aussi, au lieu d'**écraser**) ; `writeAdminError` sur toutes les routes d'administration ;
+- Authorization : `ErrAccessDenied`, `domain.ErrAlreadyExists` (`409`), `503` générique ;
+- Broker : `AccountLookup.CheckAccount` (lit au Vault l'existence et la présence d'une empreinte, jamais la clé) ; `POST /sessions` refuse `ErrAccountNotFound` (`404`) et `ErrAccountNotPinned` (`409`), enregistrés et audités ; Vault injoignable `503` ; break-glass, Authorization coupée `503` ;
+- Gateway : `internalError` (`500` « internal error », cause au journal).
+
+**Tests changés, et pourquoi** :
+- `TestListAccounts_ClampsPageAndPageSize` enregistrait trois comptes du même nom sur la même cible, ce que la base refuse depuis toujours : il passait parce que le magasin mémoire était plus lâche. Corrigé (un nom par compte).
+- L'attaque du Vault imposteur (`TestMTLS…`) a lieu maintenant à la création de la session, premier appel au Vault ; la garantie (l'imposteur ne reçoit rien, la cause est au journal, pas dans la réponse) est intacte.
+- Neuf scénarios qui ne testent que le Broker (break-glass, lectures, terminaisons, budgets) pointaient vers un Vault qui n'existait pas : la création d'une session ne l'interrogeait pas. Ils jouent maintenant la lecture de compte du Vault (`playVaultAccounts`, `test/integration/hostkey_helpers_test.go`), qui ne répond qu'à cette lecture.
+- Trois de mes tests HTTP du Broker (ADR-0042 compris) envoyaient `privilegedAccountId` au lieu de `targetAccountId` : ils passaient sans compte. Corrigés.
+
+**Choix renversables** : la réponse d'une cible qui refuse une rotation reste relayée à l'administrateur (`502`) ; la lecture du compte se fait après la décision d'accès, pour qu'un appelant refusé n'apprenne rien ; le magasin mémoire d'Authorization accepte un doublon de politique (sans effet).
+
+**Preuves** : `test/integration/refusal_reason_flow_test.go` (réécrit) ; unitaires ajoutés : Vault interfaces +1, infrastructure +2 (dont 1 PostgreSQL) ; Authorization interfaces +1, infrastructure +1 PostgreSQL ; Broker application +2, interfaces +2, infrastructure +1 ; Gateway +1 (rouge mesuré sur l'ancien handler). **18 mutations, 18 tuées.**
+
+**Ce que cela ne fait PAS :**
+1. **Le Vault est une dépendance de la création d'une session** (il l'était de la connexion).
+2. **Les scénarios du Broker seul** jouent la lecture de compte du Vault.
+3. **Pas de garde à la Gateway** sur les corps qu'elle relaie : la règle se tient dans chaque service.
 
 ## Prochains incréments qui lèveront cette limite
 

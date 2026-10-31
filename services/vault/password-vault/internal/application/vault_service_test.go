@@ -421,7 +421,11 @@ func TestListAccounts_ClampsPageAndPageSize(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
 		id := string(rune('a' + i))
-		_ = onboardTest(svc, ctx, adminRoles, id, "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s"))
+		// A name of its own: the database refuses one name twice on one target, and the memory
+		// store now does too (ADR-0043).
+		if err := onboardTest(svc, ctx, adminRoles, id, "target-"+id, "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s")); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// page=0 and a pageSize far beyond the documented maximum (doc 05 §2:
 	// pageSize max 100) must not panic or bypass pagination — both are

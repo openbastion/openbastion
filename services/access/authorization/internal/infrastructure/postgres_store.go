@@ -49,10 +49,11 @@ func (s *PostgresStore) Create(ctx context.Context, p *domain.Policy) error {
 		INSERT INTO policies (id, name, role, resource_pattern, effect, created_by, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, now())`,
 		p.ID, p.Name, p.Role, p.ResourcePattern, string(p.Effect), p.CreatedBy)
-	if err != nil {
-		return err
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unique_violation
+		return domain.ErrAlreadyExists
 	}
-	return nil
+	return err
 }
 
 // ForRoles uses pq.Array so a single query covers every role in roles,

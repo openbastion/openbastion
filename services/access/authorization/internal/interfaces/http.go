@@ -6,6 +6,8 @@ package interfaces
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/openbastion/openbastion/services/access/authorization/internal/application"
@@ -55,11 +57,17 @@ func (s *HTTPServer) handleCreatePolicy(w http.ResponseWriter, r *http.Request) 
 	}
 	p, err := s.svc.CreatePolicy(r.Context(), req.ActorRoles, req.Name, req.Role, req.ResourcePattern, domain.Effect(req.Effect), req.CreatedBy)
 	if err != nil {
-		// Mirrors password-vault/internal/interfaces/http.go: every
-		// CreatePolicy error — RBAC denial or otherwise — surfaces as 403,
-		// not 400, since the dominant failure mode on this endpoint is now
-		// an access decision, not malformed input.
-		http.Error(w, err.Error(), http.StatusForbidden)
+		// A refusal says why; a duplicate is a conflict; anything else is the store failing —
+		// a 503 whose cause stays in this log (ADR-0043): the Gateway relays this body.
+		switch {
+		case errors.Is(err, application.ErrAccessDenied):
+			http.Error(w, err.Error(), http.StatusForbidden)
+		case errors.Is(err, domain.ErrAlreadyExists):
+			http.Error(w, domain.ErrAlreadyExists.Error(), http.StatusConflict)
+		default:
+			log.Printf("authorization: creating a policy failed: %v", err)
+			http.Error(w, "the policy was not created: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
+		}
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -89,7 +97,8 @@ func (s *HTTPServer) handleCheckAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	decision, err := s.svc.CheckAccess(r.Context(), req.ActorRoles, req.Resource, req.Action)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("authorization: check-access failed: %v", err)
+		http.Error(w, "the access decision could not be made", http.StatusServiceUnavailable)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

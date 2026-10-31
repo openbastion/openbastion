@@ -58,7 +58,10 @@ type fakeAccountLookup struct {
 	targetHost string
 	targetUser string
 	err        error
+	checkErr   error // what CheckAccount answers (ADR-0043); nil: the account exists, pinned
 }
+
+func (f *fakeAccountLookup) CheckAccount(context.Context, string) error { return f.checkErr }
 
 func (f *fakeAccountLookup) GetAccount(ctx context.Context, accountID string) (string, string, error) {
 	if f.err != nil {

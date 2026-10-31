@@ -167,7 +167,7 @@ func (s *VaultService) rotate(ctx context.Context, actorID, accountID string, ne
 
 	// Fail-closed: nothing touches the target unless the trail says it was asked.
 	if err := s.audit.EmitEvent(ctx, actorID, "vault.rotate_requested", "account", accountID, true); err != nil {
-		return fmt.Errorf("the audit is unavailable, nothing was rotated: %w", err)
+		return fmt.Errorf("%w (nothing was rotated): %w", ErrAuditUnavailable, err)
 	}
 	sealed, err := s.kms.Seal(newSecret)
 	if err != nil {

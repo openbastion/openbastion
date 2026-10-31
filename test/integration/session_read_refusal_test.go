@@ -34,6 +34,7 @@ func TestSessionReadRefusal_IsOnTheRecordUnderTheNameOfWhoAsked_WithinABudget_Ac
 	authz := startService(t, root, authzBin, "18962")
 	authn := startService(t, root, authnBin, "18963", "SKIP_DEMO_SEED=1")
 	// A budget of 3 refusals at once, then one a minute: small enough to spend in a test.
+	playVaultAccounts(t, "18966") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18964",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18966", "AUDIT_URL="+spy.baseURL,
 		"SSH_PROXY_URL=http://127.0.0.1:18967",

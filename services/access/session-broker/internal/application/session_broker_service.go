@@ -49,6 +49,9 @@ type AuditEmitter interface {
 // construction (its return type has no field for it).
 type AccountLookup interface {
 	GetAccount(ctx context.Context, accountID string) (targetHost, targetUser string, err error)
+	// CheckAccount says whether a session on accountID could ever start (ADR-0043): nil, or
+	// domain.ErrAccountNotFound, domain.ErrAccountNotPinned, or the Vault's failure.
+	CheckAccount(ctx context.Context, accountID string) error
 }
 
 // ProxyClient is the port to a single proxy's ProxyControl.EstablishSession
@@ -374,7 +377,7 @@ func (s *SessionBrokerService) authorizeBreakGlass(ctx context.Context, actorRol
 	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, BreakGlassResourcePrefix+accountID, "session:breakglass")
 	if err != nil {
 		// Fail closed: a waiver nobody could authorise is not granted.
-		return fmt.Errorf("the Authorization Service could not be asked: %w", err)
+		return fmt.Errorf("%w: the Authorization Service could not be asked: %w", domain.ErrUnavailable, err)
 	}
 	if !allowed {
 		return fmt.Errorf("no break-glass policy allows this: %s", reason)
@@ -402,6 +405,19 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		_ = s.sessions.Save(ctx, sess) // a denied attempt is still recorded — Full Auditability, doc 00 §2
 		_ = s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, false)
 		return nil, fmt.Errorf("access denied: %s", reason)
+	}
+
+	// A session on an account that does not exist, or whose target's host key is not pinned,
+	// could never start (ADR-0039): refused now, recorded and audited like any refusal, rather
+	// than granted — or approved, for a break-glass — to fail at connect (ADR-0043).
+	if err := s.accounts.CheckAccount(ctx, privilegedAccountID); err != nil {
+		if !errors.Is(err, domain.ErrAccountNotFound) && !errors.Is(err, domain.ErrAccountNotPinned) {
+			return nil, fmt.Errorf("%w: checking the account: %w", domain.ErrUnavailable, err)
+		}
+		sess.Status = domain.StatusDenied
+		_ = s.sessions.Save(ctx, sess)
+		_ = s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, false)
+		return nil, err
 	}
 
 	if breakGlass {

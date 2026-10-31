@@ -3,6 +3,7 @@ package interfaces_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,8 @@ type quietAudit struct{}
 func (quietAudit) EmitEvent(context.Context, string, string, string, string, bool) error { return nil }
 
 type oneAccount struct{}
+
+func (oneAccount) CheckAccount(context.Context, string) error { return nil }
 
 func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 	return "10.0.0.5:22", "root", nil
@@ -139,14 +142,14 @@ func TestCreateSession_ADependencyDownIsA503_WithoutItsCause(t *testing.T) {
 		"authorization down": application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), downAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}),
 		"audit down":         application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, failingAudit{}, oneAccount{}, failingProxy{}),
 	} {
-		rec := postSession(t, svc, `{"requestedBy":"alice","actorRoles":["dba"],"privilegedAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`)
+		rec := postSession(t, svc, `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`)
 		if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "10.9.8.") || strings.Contains(rec.Body.String(), leak) {
 			t.Fatalf("%s: %d %q", name, rec.Code, rec.Body.String())
 		}
 	}
 	// Counter-proof: a refusal is a 403 that says why.
 	rec := postSession(t, application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), denyAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}),
-		`{"requestedBy":"alice","actorRoles":["dba"],"privilegedAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`)
+		`{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`)
 	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "access denied") {
 		t.Fatalf("a refusal: %d %q", rec.Code, rec.Body.String())
 	}
@@ -208,4 +211,53 @@ func TestPostSessions_ARefusedBreakGlassRequestIsAForbidden(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "break-glass") {
 		t.Fatalf("the refusal does not say what was refused: %q", rec.Body.String())
 	}
+}
+
+// checkedAccount answers CheckAccount with err.
+type checkedAccount struct {
+	oneAccount
+	err error
+}
+
+func (c checkedAccount) CheckAccount(context.Context, string) error { return c.err }
+
+// ADR-0043 over HTTP: POST /sessions says an unknown account (404) and an unpinned one (409);
+// a Vault that cannot be asked is a 503 that names nothing of it.
+func TestCreateSession_TheAccountIsCheckedFirst_OverHTTP(t *testing.T) {
+	body := `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`
+	for name, c := range map[string]struct {
+		err    error
+		status int
+		says   string
+	}{
+		"unknown":    {domain.ErrAccountNotFound, http.StatusNotFound, "privileged account not found"},
+		"unpinned":   {domain.ErrAccountNotPinned, http.StatusConflict, "no pinned host key"},
+		"Vault down": {fmt.Errorf("Get \"http://10.9.8.4:8081/vault/v1/accounts/acc1\": %s", leak), http.StatusServiceUnavailable, "try again shortly"},
+	} {
+		svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, checkedAccount{err: c.err}, failingProxy{})
+		rec := postSession(t, svc, body)
+		if rec.Code != c.status || !strings.Contains(rec.Body.String(), c.says) || strings.Contains(rec.Body.String(), "10.9.8.") {
+			t.Fatalf("%s: %d %q", name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// ADR-0043: the Authorization Service unreachable while a break-glass is asked is a 503 that
+// names nothing of it (it was a 403 with its address).
+func TestCreateBreakGlass_AuthorizationDownIsA503_ThatNamesNothing(t *testing.T) {
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), breakGlassDownAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(60)
+	rec := postSession(t, svc, `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"the database is down, incident 42","durationMinutes":30,"breakGlass":true}`)
+	if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "10.9.8.") || strings.Contains(rec.Body.String(), "dial tcp") {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// breakGlassDownAuthz allows sessions, and cannot be reached for a break-glass decision.
+type breakGlassDownAuthz struct{}
+
+func (breakGlassDownAuthz) CheckAccess(_ context.Context, _ []string, resource, _ string) (bool, string, error) {
+	if strings.HasPrefix(resource, "breakglass:") {
+		return false, "", errors.New(leak)
+	}
+	return true, "", nil
 }

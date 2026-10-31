@@ -341,6 +341,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Le Vault n'a pas ce compte privilégié (ADR-0043) — vérifié après la décision d'accès, jamais avant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Le compte privilégié n'a pas de clé d'hôte épinglée (ADR-0039) — aucune session ne pourrait s'y ouvrir ; la demande est refusée et auditée (ADR-0043).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "429":
           description: >
             Deux causes distinctes, que le corps distingue.
@@ -826,6 +836,15 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PrivilegedAccount" }
 
+        "400":
+          description: hostKey absente ou illisible, intervalle de rotation hors bornes ou sur une politique qui n'en prend pas.
+        "403":
+          description: Refusé par l'Authorization Service ; le corps dit pourquoi.
+        "409":
+          description: Un compte de cet identifiant, ou de ce nom sur cette cible, existe déjà — ou le compte de réconciliation n'est pas utilisable (ADR-0043, ADR-0037).
+        "503":
+          description: Une dépendance du Vault (Authorization Service, base) ne répond pas ; rien n'est enregistré. Le corps ne dit pas la cause (ADR-0043).
+
   /vault/accounts/{accountId}:
     parameters:
       - name: accountId
@@ -980,6 +999,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Policy" }
+
+        "403":
+          description: L'appelant ne peut pas créer de politique ; le corps dit pourquoi.
+        "409":
+          description: Une politique pour ce rôle, ce motif de ressource et cet effet existe déjà (ADR-0043).
+        "503":
+          description: Le magasin des politiques ne répond pas ; rien n'est créé. Le corps ne dit pas la cause (ADR-0043).
 
   /audit/events:
     get:
