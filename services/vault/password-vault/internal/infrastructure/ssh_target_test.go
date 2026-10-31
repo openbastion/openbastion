@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -31,11 +32,18 @@ type sshTarget struct {
 	commands []string
 }
 
-func startSSHTarget(t *testing.T) *sshTarget {
-	t.Helper()
-	tgt := &sshTarget{pw: map[string]string{"root": "root-pw", "ops": "ops-pw", "app": "old-pw", "nobody": "n-pw"}, sudoers: map[string]bool{"ops": true}}
+func newSigner() ssh.Signer {
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := ssh.NewSignerFromKey(priv)
+	return signer
+}
+
+func startSSHTarget(t *testing.T) *sshTarget { return startSSHTargetWith(t, newSigner()) }
+
+// startSSHTargetWith serves with signer as its host key — a plain key, or a certificate.
+func startSSHTargetWith(t *testing.T, signer ssh.Signer) *sshTarget {
+	t.Helper()
+	tgt := &sshTarget{pw: map[string]string{"root": "root-pw", "ops": "ops-pw", "app": "old-pw", "nobody": "n-pw"}, sudoers: map[string]bool{"ops": true}}
 	tgt.hostKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
 	cfg := &ssh.ServerConfig{PasswordCallback: func(m ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) {
 		tgt.mu.Lock()
@@ -197,5 +205,55 @@ func TestSSHTargetChanger_AnotherHostKeyIsOfferedNoSecret(t *testing.T) {
 	}
 	if err := c.SetPassword(ctx, tgt.addr, "not a key", "root", []byte("root-pw"), "app", []byte("x")); err == nil {
 		t.Fatal("no usable pinned key, and the change went through")
+	}
+}
+
+// hostCertSigner is a fresh host key certified by ca for name, valid an hour around now.
+func hostCertSigner(t *testing.T, ca ssh.Signer, name string) ssh.Signer {
+	t.Helper()
+	host := newSigner()
+	cert := &ssh.Certificate{Key: host.PublicKey(), CertType: ssh.HostCert, ValidPrincipals: []string{name},
+		ValidAfter: uint64(time.Now().Add(-time.Hour).Unix()), ValidBefore: uint64(time.Now().Add(time.Hour).Unix())}
+	if err := cert.SignCert(rand.Reader, ca); err != nil {
+		t.Fatal(err)
+	}
+	s, err := ssh.NewCertSigner(cert, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// ADR-0048: an account recognising its target by an authority rotates against a target that
+// presents a certificate of that authority for the account's name, and offers no secret to one
+// certified by another authority, or for another name.
+func TestSSHTargetChanger_ByAuthority_TheCertifiedTargetRotates_NoImpostorIsOfferedASecret(t *testing.T) {
+	ca, rogue := newSigner(), newSigner()
+	authority := "@cert-authority target.example " + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(ca.PublicKey())))
+	c := infrastructure.SSHTargetChanger{}
+	ctx := context.Background()
+
+	tgt := startSSHTargetWith(t, hostCertSigner(t, ca, "target.example"))
+	if err := c.SetPassword(ctx, tgt.addr, authority, "root", []byte("root-pw"), "app", []byte("new-1")); err != nil {
+		t.Fatalf("the certified target refused the change: %v", err)
+	}
+	if err := c.Verify(ctx, tgt.addr, authority, "app", []byte("new-1")); err != nil {
+		t.Fatalf("the certified target: %v", err)
+	}
+	for name, signer := range map[string]ssh.Signer{
+		"a plain key":                 newSigner(),
+		"another authority":           hostCertSigner(t, rogue, "target.example"),
+		"the authority, another name": hostCertSigner(t, ca, "other.example"),
+	} {
+		imp := startSSHTargetWith(t, signer)
+		if err := c.SetPassword(ctx, imp.addr, authority, "root", []byte("root-pw"), "app", []byte("x")); err == nil {
+			t.Fatalf("%s: the change went through", name)
+		}
+		imp.mu.Lock()
+		n := len(imp.logins)
+		imp.mu.Unlock()
+		if n != 0 {
+			t.Fatalf("%s: the impostor was offered %d password(s)", name, n)
+		}
 	}
 }

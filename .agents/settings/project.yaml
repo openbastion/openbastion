@@ -36,5 +36,6 @@ libraries:
   pkg/migrate: migrations versionnées (ADR-0030) — stdlib seulement
   pkg/refusalbudget: budget des refus audités (ADR-0020, ADR-0024) — stdlib seulement
   pkg/webhook: webhook sortant signé — URL vérifiée et jamais écrite, pas de redirection (ADR-0013, ADR-0045) — stdlib seulement
+  pkg/hostkey: reconnaître une cible SSH — clé épinglée ou autorité de certificats pour un nom (ADR-0039, ADR-0048) ; golang.org/x/crypto/ssh, comme le Vault et le proxy
 tools:
   cli/openbastion-cli: exploitation sous l'identité admin-cli (ADR-0033)

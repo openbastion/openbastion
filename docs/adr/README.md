@@ -57,3 +57,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0045](0045-une-alerte-ecrite-a-l-audit-est-poussee-par-un-webhook-signe.md) | Une alerte écrite à l'audit est poussée par un webhook signé, et seulement si celui qui l'écrit a le droit de la dire | Accepté |
 | [ADR-0046](0046-plusieurs-instances-du-proxy-ssh-le-broker-les-connait-toutes.md) | Plusieurs instances du proxy SSH : le Broker les connaît toutes, émet un ticket chez l'une, et fait révoquer chez toutes | Accepté |
 | [ADR-0047](0047-une-ci-github-actions-qui-rejoue-la-verification-complete.md) | Une CI GitHub Actions qui rejoue la vérification complète, sur des actions et une image épinglées par empreinte | Accepté |
+| [ADR-0048](0048-une-cible-peut-etre-reconnue-par-une-autorite-de-certificats-ssh.md) | Une cible peut être reconnue par une autorité de certificats SSH épinglée au compte, à la place de sa clé | Accepté |

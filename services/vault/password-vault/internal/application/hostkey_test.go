@@ -42,16 +42,16 @@ func TestNormalizeHostKey_ReadsAKeyLineOrAKnownHostsLine_AndNothingElse(t *testi
 		}
 	}
 	for name, in := range map[string]string{
-		"empty":             "",
-		"blanks":            "   ",
-		"not base64":        "ssh-ed25519 not-a-key",
-		"a fingerprint":     fp,
-		"two keys":          testHostKey + "\n" + testHostKey,
-		"a private key":     "-----BEGIN OPENSSH PRIVATE KEY-----",
-		"a type, no bytes":  "ssh-ed25519",
-		"a revoked key":     "@revoked * " + testHostKey,
-		"a CA key":          "@cert-authority *.example " + testHostKey,
-		"a marker, no host": "@revoked " + testHostKey,
+		"empty":                      "",
+		"blanks":                     "   ",
+		"not base64":                 "ssh-ed25519 not-a-key",
+		"a fingerprint":              fp,
+		"two keys":                   testHostKey + "\n" + testHostKey,
+		"a private key":              "-----BEGIN OPENSSH PRIVATE KEY-----",
+		"a type, no bytes":           "ssh-ed25519",
+		"a revoked key":              "@revoked * " + testHostKey,
+		"an authority for a pattern": "@cert-authority *.example " + testHostKey,
+		"a marker, no host":          "@revoked " + testHostKey,
 	} {
 		if _, _, err := application.NormalizeHostKey(in); !errors.Is(err, application.ErrBadHostKey) {
 			t.Fatalf("%s: accepted (%v)", name, err)

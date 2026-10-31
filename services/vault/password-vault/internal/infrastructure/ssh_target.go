@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/openbastion/openbastion/pkg/hostkey"
 )
 
 // SSHTargetChanger is application.TargetChanger over SSH, with password authentication.
@@ -20,7 +22,7 @@ type SSHTargetChanger struct {
 }
 
 func (c SSHTargetChanger) dial(ctx context.Context, host, hostKey, user string, secret []byte) (*ssh.Client, error) {
-	pinned, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hostKey))
+	trust, err := hostkey.Parse(hostKey)
 	if err != nil {
 		return nil, fmt.Errorf("no usable pinned host key for %s: %w", host, err)
 	}
@@ -34,12 +36,15 @@ func (c SSHTargetChanger) dial(ctx context.Context, host, hostKey, user string, 
 		return nil, err
 	}
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	sc, chans, reqs, err := ssh.NewClientConn(conn, host, &ssh.ClientConfig{
-		User:            user,
-		Auth:            []ssh.AuthMethod{ssh.Password(string(secret))},
-		HostKeyCallback: ssh.FixedHostKey(pinned), // ADR-0039: the pinned key or nothing
-		Timeout:         timeout,
-	})
+	cfg := &ssh.ClientConfig{
+		User:    user,
+		Auth:    []ssh.AuthMethod{ssh.Password(string(secret))},
+		Timeout: timeout,
+	}
+	// The pinned key, or a certificate of the pinned authority for its name (ADR-0039, ADR-0048):
+	// what the proxy checks too, by the same code.
+	trust.Configure(cfg, nil)
+	sc, chans, reqs, err := ssh.NewClientConn(conn, host, cfg)
 	if err != nil {
 		conn.Close()
 		return nil, err

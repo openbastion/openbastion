@@ -7,9 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 
-	"golang.org/x/crypto/ssh"
+	"github.com/openbastion/openbastion/pkg/hostkey"
 
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 )
@@ -19,23 +18,20 @@ var (
 	// target until one is set (ADR-0039).
 	ErrNoHostKey = errors.New("the account has no pinned host key: pin one before any session or rotation")
 	// ErrBadHostKey: what was given is not an SSH public key.
-	ErrBadHostKey = errors.New("not an SSH public key (expected a line such as \"ssh-ed25519 AAAA…\")")
+	ErrBadHostKey = errors.New("not an SSH public key (expected a line such as \"ssh-ed25519 AAAA…\") nor an authority line (\"@cert-authority host.example ssh-ed25519 AAAA…\")")
 )
 
-// NormalizeHostKey reads one public key ("type base64 [comment]", as in a .pub file, or a
-// known_hosts line: the host names before the key are read as authorized_keys options and
-// dropped) and returns it as "type base64" with its SHA256 fingerprint. A known_hosts marker
-// (@revoked, @cert-authority) is refused: neither line is the key of one host.
+// NormalizeHostKey reads what an administrator pins (pkg/hostkey): one public key ("type base64
+// [comment]", as in a .pub file, or a known_hosts line whose host names are dropped), or one
+// authority line, "@cert-authority <host name> <key>" (ADR-0048). It returns the line to store
+// and the fingerprint to show — the authority's for an authority line. A @revoked line, two
+// lines, a pattern or a list for the name, or a key that does not read is ErrBadHostKey.
 func NormalizeHostKey(s string) (key, fingerprint string, err error) {
-	line := strings.TrimSpace(s)
-	if line == "" || strings.ContainsAny(line, "\r\n") || strings.HasPrefix(line, "@") {
-		return "", "", ErrBadHostKey
-	}
-	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
+	line, fp, err := hostkey.Normalize(s)
 	if err != nil {
 		return "", "", ErrBadHostKey
 	}
-	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))), ssh.FingerprintSHA256(pub), nil
+	return line, fp, nil
 }
 
 // HostKeyFingerprint is the SHA256 fingerprint of a stored key, or "" for none.

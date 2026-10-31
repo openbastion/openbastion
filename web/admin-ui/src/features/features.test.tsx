@@ -41,7 +41,7 @@ describe("Accounts", () => {
     field("Utilisateur sur la cible", "admin");
     field("Secret initial", "s3cr3t-é");
     field("Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)", "acc_root");
-    field("Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)", "ssh-ed25519 AAAAkey");
+    field("Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub), ou autorité : @cert-authority <nom> <clé de l'autorité>", "ssh-ed25519 AAAAkey");
     fireEvent.submit(form);
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts")).toBe(true));
     const sent = calls.find((c) => c.method === "POST" && c.path === "/vault/accounts")!.body as Record<string, string>;
@@ -101,7 +101,7 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
     field(label, "7");
     for (const [l, v] of [["Identifiant", "acc_3"], ["Nom", "db"], ["Cible (hôte:port)", "db:22"], ["Utilisateur sur la cible", "app"], ["Secret initial", "s"],
       ["Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)", "acc_root"],
-      ["Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)", "ssh-ed25519 AAAAkey"]]) field(l, v);
+      ["Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub), ou autorité : @cert-authority <nom> <clé de l'autorité>", "ssh-ed25519 AAAAkey"]]) field(l, v);
     fireEvent.submit(form);
     await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ rotationPolicy: "scheduled", rotationIntervalDays: 7 });

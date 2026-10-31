@@ -22,6 +22,14 @@ curl -X POST https://bastion.example.com/api/v1/vault/accounts \
 - Le bastion négocie le type de clé épinglé : si la cible a plusieurs clés (`ed25519`, `ecdsa`, `rsa`), épinglez-en une, de préférence `ed25519`.
 - `GET /vault/accounts/{id}` rend la clé et son empreinte (`hostKeyFingerprint`) ; l'Admin UI les affiche dans la liste des comptes.
 
+**Ou une autorité de certificats SSH (ADR-0048).** Si votre organisation signe les clés d'hôte de ses serveurs (`ssh-keygen -s ca_hôtes -h -I cible -n cible.example -V +4w ssh_host_ed25519_key.pub`, puis `HostCertificate` dans `sshd_config`), un compte peut reconnaître sa cible par cette autorité plutôt que par sa clé : `hostKey` reçoit alors une ligne `@cert-authority <nom> <clé publique de l'autorité>`, par exemple `@cert-authority cible.example ssh-ed25519 AAAA…`. Une cible réinstallée et re-certifiée garde ses sessions, sans ré-épinglage.
+
+- **Un compte a une clé ou une autorité, jamais les deux.** Passer de l'une à l'autre est un ré-épinglage (`PUT …/host-key`), réservé aux administrateurs du compte et audité.
+- **Le nom** est celui que le certificat doit porter (`-n` de `ssh-keygen`) : un seul nom d'hôte ou une seule adresse, sans `*`, `?`, `!`, liste ni port. Ce n'est pas l'adresse de connexion : une cible jointe par `10.0.0.9:22` peut être certifiée `cible.example`.
+- **Refusés** : un certificat d'utilisateur, d'une autre autorité, sans ce nom, avec une liste de noms vide (« tout hôte » pour OpenSSH), expiré ou pas encore valable, **sans date de fin**, ou avec une option critique ; une clé nue. Rien n'est envoyé, et l'audit écrit `session.host_key_mismatch`.
+- **L'empreinte rendue** (`hostKeyFingerprint`) est celle **de l'autorité**.
+- **Ce que vous acceptez** : qui détient la clé privée de l'autorité peut se faire passer pour toutes les cibles qui lui font confiance, et OpenBastion n'a pas de liste de révocation : un certificat volé vaut jusqu'à sa date de fin. Préférez des certificats de courte durée, et une autorité réservée aux hôtes.
+
 **Changer la clé** (réinstallation de la cible, rotation de ses clés d'hôte) — l'ancienne refuse les sessions jusque-là :
 
 ```sh

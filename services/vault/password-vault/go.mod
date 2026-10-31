@@ -26,3 +26,9 @@ require golang.org/x/crypto v0.24.0
 replace golang.org/x/crypto => github.com/golang/crypto v0.24.0
 
 replace golang.org/x/sys => github.com/golang/sys v0.21.0
+
+// Reconnaître une cible : clé épinglée ou autorité de certificats (ADR-0039, ADR-0048).
+// Un replace local explicite, comme pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/hostkey v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/hostkey => ../../../pkg/hostkey

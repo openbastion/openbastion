@@ -82,7 +82,7 @@ Pour tout le reste — nommage, découpage interne, forme d'un test, texte de do
 ## Les cinq règles à ne jamais oublier
 
 1. **Prouve ce que tu affirmes** : lance les tests, lis la sortie, mesure les chiffres avant de les écrire. Toute garantie de sécurité a un test d'attaque **et** une contre-épreuve.
-2. **N'affaiblis aucun invariant** (secrets jamais dans le control plane, enregistrer ou refuser, break-glass borné, identité tirée du certificat, audit fail-closed, secret envoyé seulement à la clé d'hôte épinglée) pour faire passer quoi que ce soit.
+2. **N'affaiblis aucun invariant** (secrets jamais dans le control plane, enregistrer ou refuser, break-glass borné, identité tirée du certificat, audit fail-closed, secret envoyé seulement à la cible que le compte reconnaît — sa clé d'hôte épinglée ou un certificat de l'autorité épinglée pour son nom, ADR-0039 et ADR-0048) pour faire passer quoi que ce soit.
 3. **Conçois avant de coder** : ADR et contrats d'abord ; documentation dans le même commit que le code.
 4. **Commite et pousse chaque incrément vérifié** sur `main`, sans secret, sans force-push ; termine le commit par les lignes d'attribution de la session.
 5. **Sois honnête dans ton rapport** : en français, résultat d'abord, chiffres mesurés, choix renversables, limites restantes, une seule prochaine étape.

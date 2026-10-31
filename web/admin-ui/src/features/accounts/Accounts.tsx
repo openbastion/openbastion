@@ -150,7 +150,7 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
         ) : null}
         <label>Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)<input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} /></label>
         <label className="wide">
-          Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub)
+          Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub), ou autorité : @cert-authority &lt;nom&gt; &lt;clé de l'autorité&gt;
           <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
         </label>
         <label>Secret initial<input type="password" autoComplete="new-password" value={f.initialSecret} onChange={set("initialSecret")} required /></label>

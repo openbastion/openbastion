@@ -33,7 +33,7 @@ Le proxy (depuis le MVP) et le Vault (depuis ADR-0037) se connectaient aux cible
 - (+) Celui qui s'interpose entre le bastion et une cible ne reçoit plus aucun secret ; un Broker compromis ne peut plus envoyer le proxy vers un serveur qu'il contrôle.
 - (−) **Les comptes existants doivent être épinglés** avant leur prochaine session : c'est une opération d'exploitation, décrite dans le guide d'administration.
 - (−) Une cible qui change de clé (réinstallation) refuse les sessions jusqu'à un nouvel épinglage. C'est le comportement voulu, et c'est une panne si personne ne la prévoit.
-- (−) Une seule clé par compte : pas de liste de clés acceptées, pas d'autorité de certificats SSH. Une cible qui présente plusieurs types de clé n'est acceptée que par celui qui est épinglé, et le client SSH du bastion négocie ce type-là.
+- (−) ~~Une seule clé par compte : pas de liste de clés acceptées, pas d'autorité de certificats SSH. Une cible qui présente plusieurs types de clé n'est acceptée que par celui qui est épinglé, et le client SSH du bastion négocie ce type-là.~~ **Levé par ADR-0048** pour l'autorité : un compte peut reconnaître sa cible par une autorité de certificats, pour un nom.
 - (−) ~~L'enregistrement et l'épinglage sont deux écritures. Si la seconde échoue, le compte reste sans clé : inutilisable, donc sûr, et réparable par `PUT host-key`.~~ Refermé par ADR-0040 : le compte est écrit en une fois, clé, réconciliation et intervalle compris.
 
 **Alternatives envisagées**

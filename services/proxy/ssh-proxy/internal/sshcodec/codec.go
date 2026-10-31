@@ -17,7 +17,6 @@
 package sshcodec
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -27,6 +26,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/openbastion/openbastion/pkg/hostkey"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 )
 
@@ -98,7 +98,7 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 
 	// The target must present the host key the Vault pinned for this secret (ADR-0039), and
 	// be the target the Vault gave it for: otherwise not one byte of the secret is sent.
-	pinned, err := pinnedHostKey(credential)
+	trust, err := pinnedTrust(credential)
 	if err != nil {
 		return err
 	}
@@ -106,10 +106,19 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		return fmt.Errorf("%w: the session names %s, the Vault gave the secret for %s", ErrHostKeyMismatch, c.TargetHost, credential.TargetHost)
 	}
 	clientConfig := &ssh.ClientConfig{
-		User:            c.TargetUser,
-		Auth:            []ssh.AuthMethod{ssh.Password(string(credential.Material()))},
-		HostKeyCallback: checkHostKey(pinned),
-		Timeout:         c.DialTimeout,
+		User:    c.TargetUser,
+		Auth:    []ssh.AuthMethod{ssh.Password(string(credential.Material()))},
+		Timeout: c.DialTimeout,
+	}
+	// The pinned key, or a certificate of the pinned authority for its name (ADR-0048); every
+	// refusal is an ErrHostKeyMismatch, and nothing is sent.
+	trust.Configure(clientConfig, nil)
+	verify := clientConfig.HostKeyCallback
+	clientConfig.HostKeyCallback = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if err := verify(hostname, remote, key); err != nil {
+			return fmt.Errorf("%w: %v", ErrHostKeyMismatch, err)
+		}
+		return nil
 	}
 
 	targetSSHConn, chans, reqs, err := ssh.NewClientConn(targetConn, targetConn.RemoteAddr().String(), clientConfig)
@@ -268,23 +277,13 @@ func (c *Codec) relayTransfer(ctx context.Context, client io.ReadWriter, session
 // ErrHostKeyMismatch is proxycore.ErrHostKeyMismatch (ADR-0039): nothing of the secret was sent.
 var ErrHostKeyMismatch = proxycore.ErrHostKeyMismatch
 
-func pinnedHostKey(credential *proxycore.Credential) (ssh.PublicKey, error) {
+func pinnedTrust(credential *proxycore.Credential) (hostkey.Trust, error) {
 	if credential.HostKey == "" {
-		return nil, fmt.Errorf("%w: the Vault gave no pinned host key", ErrHostKeyMismatch)
+		return hostkey.Trust{}, fmt.Errorf("%w: the Vault gave no pinned host key", ErrHostKeyMismatch)
 	}
-	k, _, _, _, err := ssh.ParseAuthorizedKey([]byte(credential.HostKey))
+	t, err := hostkey.Parse(credential.HostKey)
 	if err != nil {
-		return nil, fmt.Errorf("%w: the pinned host key does not read: %v", ErrHostKeyMismatch, err)
+		return hostkey.Trust{}, fmt.Errorf("%w: the pinned host key does not read: %v", ErrHostKeyMismatch, err)
 	}
-	return k, nil
-}
-
-// checkHostKey accepts exactly the pinned key, and says what was seen otherwise.
-func checkHostKey(pinned ssh.PublicKey) ssh.HostKeyCallback {
-	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		if bytes.Equal(key.Marshal(), pinned.Marshal()) {
-			return nil
-		}
-		return fmt.Errorf("%w: %s presented %s, pinned %s", ErrHostKeyMismatch, hostname, ssh.FingerprintSHA256(key), ssh.FingerprintSHA256(pinned))
-	}
+	return t, nil
 }

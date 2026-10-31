@@ -30,3 +30,9 @@ replace github.com/openbastion/openbastion/pkg/proxycore => ../../../pkg/proxyco
 require github.com/openbastion/openbastion/pkg/mtls v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
+
+// Reconnaître une cible : clé épinglée ou autorité de certificats (ADR-0039, ADR-0048).
+// Un replace local explicite, comme pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/hostkey v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/hostkey => ../../../pkg/hostkey
