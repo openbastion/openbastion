@@ -29,6 +29,7 @@ x-go: &go
   networks: [internal]
   environment: &go-env
     GOWORK: /src/go.work
+    GOFLAGS: -buildvcs=false
     # Mutual TLS between services, as in every other environment (ADR-0010): each service reads
     # its own identity under /pki/<service>.
     INTERNAL_TLS: required
@@ -53,6 +54,7 @@ services:
     command:
       ["sh", "-ec", "go build -o /usr/local/bin/openbastion-pki github.com/openbastion/openbastion/pkg/mtls/cmd/openbastion-pki && exec sh /deploy/pki.sh"]
     environment:
+      <<: *go-env
       OB_CERT_TTL: 720h
     volumes:
       - ../..:/src
