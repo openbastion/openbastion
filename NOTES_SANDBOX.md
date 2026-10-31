@@ -1553,6 +1553,10 @@ Les clients internes construisaient neuf corps et réponses par une `map` ou une
 
 Un jeton périodique (la procédure recommandée) expirait sous le Vault et le Recorder au bout de sa période : panne programmée. **Mesuré avant** (sur `3ff50c0`, vrai OpenBao) : jeton périodique de 4 s, au bout de 10 s, `fetch-credential` → `503`. **Livré** : `pkg/transit` `TokenLife` (`lookup-self`), `RenewSelf` (`renew-self`), `KeepAlive` (à mi-vie ; échec retenté au quart du temps restant, au moins toutes les 5 s ; jeton sans fin ou non renouvelable laissé tel quel et annoncé) ; lancé par le Vault et le Recorder après l'aller-retour d'essai ; politique minimale documentée + `lookup-self` et `renew-self`. **Après** : le secret est livré au bout de 10 s, les deux services annoncent le renouvellement. `pkg/transit` +4 tests ; **6 mutations, 6 tuées**. **Reste** : pas d'AppRole ; le fichier du jeton n'est pas relu à chaud ; un jeton à sa durée maximale se remplace à la main.
 
+## Reliquat d'ADR-0048 : une clé d'hôte certifiée se révoque (ADR-0054)
+
+Un certificat d'hôte volé valait jusqu'à sa fin. **Mesuré avant** (sur `10dc071`) : la ligne `@revoked` est refusée à l'épinglage (`400`). **Livré** : `pkg/hostkey` lit, sous une ligne `@cert-authority`, 0 à 64 lignes `@revoked <nom ou *> <clé>` (format de `known_hosts`) ; une clé révoquée est refusée même certifiée, par le proxy et par la rotation ; refusés : sous une clé épinglée, avant l'autorité, pour un autre nom, de l'autorité elle-même, d'un certificat, au-delà de 64 ; doublons fondus, liste rangée. Même champ, même route, même audit. **Après**, sur processus réels et OpenSSH : clé révoquée = aucun mot de passe, `session.host_key_mismatch` ; révocation levée = la session tourne. `pkg/hostkey` +4 tests ; **6 mutations, 6 tuées** (une survivait : mon test d'ordre, avec deux clés seulement). **Reste** : par clé, pas par numéro de série (pas de KRL) ; compte par compte.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

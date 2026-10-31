@@ -28,7 +28,12 @@ curl -X POST https://bastion.example.com/api/v1/vault/accounts \
 - **Le nom** est celui que le certificat doit porter (`-n` de `ssh-keygen`) : un seul nom d'hôte ou une seule adresse, sans `*`, `?`, `!`, liste ni port. Ce n'est pas l'adresse de connexion : une cible jointe par `10.0.0.9:22` peut être certifiée `cible.example`.
 - **Refusés** : un certificat d'utilisateur, d'une autre autorité, sans ce nom, avec une liste de noms vide (« tout hôte » pour OpenSSH), expiré ou pas encore valable, **sans date de fin**, ou avec une option critique ; une clé nue. Rien n'est envoyé, et l'audit écrit `session.host_key_mismatch`.
 - **L'empreinte rendue** (`hostKeyFingerprint`) est celle **de l'autorité**.
-- **Ce que vous acceptez** : qui détient la clé privée de l'autorité peut se faire passer pour toutes les cibles qui lui font confiance, et OpenBastion n'a pas de liste de révocation : un certificat volé vaut jusqu'à sa date de fin. Préférez des certificats de courte durée, et une autorité réservée aux hôtes.
+- **Révoquer une clé d'hôte certifiée** (ADR-0054) : si la clé privée d'hôte d'une cible a pu être volée, ajoutez sous la ligne d'autorité une ligne `@revoked * <clé publique d'hôte>` (ou `@revoked <nom du compte> …`), par le même `PUT …/host-key`. Cette clé est refusée même avec un certificat valable ; les autres continuent de passer. Jusqu'à 64 lignes par compte ; révoquer l'autorité elle-même est refusé (ré-épinglez une autre autorité). Exemple :
+  ```
+  @cert-authority cible.example ssh-ed25519 AAAA…autorité
+  @revoked * ssh-ed25519 AAAA…clé-volée
+  ```
+- **Ce que vous acceptez** : qui détient la clé privée de l'autorité peut se faire passer pour toutes les cibles qui lui font confiance. La révocation porte sur une clé d'hôte, compte par compte, pas sur un numéro de série de certificat. Préférez des certificats de courte durée, et une autorité réservée aux hôtes.
 
 **Changer la clé** (réinstallation de la cible, rotation de ses clés d'hôte) — l'ancienne refuse les sessions jusque-là :
 

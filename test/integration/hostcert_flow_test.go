@@ -112,7 +112,8 @@ func TestHostCertFlow_AnAccountRecognisesItsTargetByAuthority_AndNoImpostorIsSen
 		}
 	})
 
-	good := startRecordingTarget(t, certifiedSigner(t, ca, []string{"target.example"}, hour(-1), hour(1)), secret)
+	goodSigner := certifiedSigner(t, ca, []string{"target.example"}, hour(-1), hour(1))
+	good := startRecordingTarget(t, goodSigner, secret)
 	t.Run("the target certified by the account's authority for its name opens the session", func(t *testing.T) {
 		if s := onboard("acc_by_authority", good.addr, authority); s != http.StatusCreated {
 			t.Fatalf("onboarding by authority answered %d", s)
@@ -154,4 +155,30 @@ func TestHostCertFlow_AnAccountRecognisesItsTargetByAuthority_AndNoImpostorIsSen
 			spy.waitFor(t, "session.host_key_mismatch", sessionID, false)
 		})
 	}
+
+	t.Run("ADR-0054: the certified target's key revoked, it is sent nothing; the revocation lifted, it is again", func(t *testing.T) {
+		stolen := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(goodSigner.PublicKey().(*ssh.Certificate).Key)))
+		if s, fp := gatewayPinHostKey(t, gateway.baseURL, adminToken, "acc_by_authority", authority+"\n@revoked target.example "+stolen); s != http.StatusOK || fp != ssh.FingerprintSHA256(ca.PublicKey()) {
+			t.Fatalf("pinning the revocation: %d %q", s, fp)
+		}
+		if s, _ := gatewayPinHostKey(t, gateway.baseURL, adminToken, "acc_by_authority", authority+"\n@revoked * "+strings.TrimSpace(string(ssh.MarshalAuthorizedKey(ca.PublicKey())))); s != http.StatusBadRequest {
+			t.Fatalf("revoking the authority itself: %d, want 400", s)
+		}
+		before := len(good.passwords())
+		sessionID, out := session(t, "acc_by_authority")
+		if got := good.passwords(); len(got) != before {
+			t.Fatalf("the target whose key is revoked was sent %d more password(s)", len(got)-before)
+		}
+		if strings.Contains(out, "target-shell-ready") {
+			t.Fatalf("the operator reached a shell on a revoked key:\n%s", out)
+		}
+		spy.waitFor(t, "session.host_key_mismatch", sessionID, false)
+
+		if s, _ := gatewayPinHostKey(t, gateway.baseURL, adminToken, "acc_by_authority", authority); s != http.StatusOK {
+			t.Fatalf("lifting the revocation: %d", s)
+		}
+		if _, out := session(t, "acc_by_authority"); !strings.Contains(out, "target-shell-ready") {
+			t.Fatalf("the revocation lifted, the session did not run:\n%s", out)
+		}
+	})
 }

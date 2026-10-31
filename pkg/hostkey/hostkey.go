@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,13 @@ const AuthorityMarker = "@cert-authority"
 // MaxNameBytes bounds the host name an authority's certificate must carry.
 const MaxNameBytes = 253
 
+// RevokedMarker starts a line that revokes a host key under an authority line, as in known_hosts
+// (ADR-0054).
+const RevokedMarker = "@revoked"
+
+// MaxRevoked bounds the revoked host keys of one account (ADR-0054).
+const MaxRevoked = 64
+
 // ErrBadLine: what was given is neither one public key nor one authority line.
 var ErrBadLine = errors.New("not an SSH host key (\"ssh-ed25519 AAAA…\") nor an authority line (\"@cert-authority host.example ssh-ed25519 AAAA…\")")
 
@@ -33,6 +41,7 @@ type Trust struct {
 	pinned    ssh.PublicKey
 	authority ssh.PublicKey
 	name      string
+	revoked   map[string]ssh.PublicKey // marshalled key → key: never accepted, even certified (ADR-0054)
 }
 
 // Normalize reads what an administrator gives and returns the line to store and the fingerprint
@@ -51,8 +60,52 @@ func Normalize(s string) (line, fingerprint string, err error) {
 // Parse reads a stored line (what Normalize returned).
 func Parse(line string) (Trust, error) { return parse(line) }
 
+// parse reads one key or one authority line, and, under an authority line, up to MaxRevoked
+// "@revoked <name or *> <key>" lines (ADR-0054).
 func parse(s string) (Trust, error) {
-	line := strings.TrimSpace(s)
+	var lines []string
+	for _, l := range strings.Split(strings.TrimSpace(s), "\n") {
+		if l = strings.TrimSpace(strings.TrimSuffix(l, "\r")); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) == 0 {
+		return Trust{}, ErrBadLine
+	}
+	t, err := parseOne(lines[0])
+	if err != nil || len(lines) == 1 {
+		return t, err
+	}
+	// A pinned key accepts only itself: a revocation under it means nothing, and is refused.
+	if !t.IsAuthority() || len(lines)-1 > MaxRevoked {
+		return Trust{}, ErrBadLine
+	}
+	t.revoked = map[string]ssh.PublicKey{}
+	for _, l := range lines[1:] {
+		fields := strings.Fields(l)
+		if len(fields) < 3 || fields[0] != RevokedMarker {
+			return Trust{}, ErrBadLine
+		}
+		if n := strings.ToLower(fields[1]); n != "*" && n != t.name {
+			return Trust{}, ErrBadLine
+		}
+		pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(strings.Join(fields[2:], " ")))
+		if err != nil {
+			return Trust{}, ErrBadLine
+		}
+		if _, isCert := pub.(*ssh.Certificate); isCert {
+			return Trust{}, ErrBadLine
+		}
+		// Revoking the authority itself is not a revocation: it is re-pinning the account.
+		if bytes.Equal(pub.Marshal(), t.authority.Marshal()) {
+			return Trust{}, ErrBadLine
+		}
+		t.revoked[string(pub.Marshal())] = pub
+	}
+	return t, nil
+}
+
+func parseOne(line string) (Trust, error) {
 	if line == "" || strings.ContainsAny(line, "\r\n") {
 		return Trust{}, ErrBadLine
 	}
@@ -104,13 +157,25 @@ func validName(n string) bool {
 // IsAuthority says whether the account recognises its target by an authority.
 func (t Trust) IsAuthority() bool { return t.authority != nil }
 
+// Revoked is the number of host keys revoked under the authority (ADR-0054).
+func (t Trust) Revoked() int { return len(t.revoked) }
+
 // Name is the host name an authority's certificate must carry ("" for a pinned key).
 func (t Trust) Name() string { return t.name }
 
 // String is the line to store.
 func (t Trust) String() string {
 	if t.authority != nil {
-		return AuthorityMarker + " " + t.name + " " + marshal(t.authority)
+		out := AuthorityMarker + " " + t.name + " " + marshal(t.authority)
+		var revoked []string
+		for _, k := range t.revoked {
+			revoked = append(revoked, RevokedMarker+" * "+marshal(k))
+		}
+		sort.Strings(revoked) // the same revocations are always written the same way
+		for _, r := range revoked {
+			out += "\n" + r
+		}
+		return out
 	}
 	if t.pinned != nil {
 		return marshal(t.pinned)
@@ -178,6 +243,9 @@ func (t Trust) checkCertificate(hostname string, key ssh.PublicKey, at time.Time
 	}
 	if cert.CertType != ssh.HostCert {
 		return fmt.Errorf("%w: %s presented a user certificate", ErrMismatch, hostname)
+	}
+	if t.revoked[string(cert.Key.Marshal())] != nil {
+		return fmt.Errorf("%w: %s presented the revoked host key %s (ADR-0054), however certified", ErrMismatch, hostname, ssh.FingerprintSHA256(cert.Key))
 	}
 	if !bytes.Equal(cert.SignatureKey.Marshal(), t.authority.Marshal()) {
 		return fmt.Errorf("%w: %s presented a certificate of authority %s, the account recognises %s",

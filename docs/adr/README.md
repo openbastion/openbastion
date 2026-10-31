@@ -63,3 +63,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0051](0051-les-images-tirees-sont-epinglees-par-empreinte.md) | Toute image tirée d'un registre est épinglée par son empreinte, et un test refuse celle qui ne l'est pas | Accepté |
 | [ADR-0052](0052-les-vulnerabilites-connues-se-cherchent-a-chaque-commit-et-chaque-semaine.md) | Les vulnérabilités connues se cherchent à chaque commit et chaque semaine, sur les modules sous leur vrai nom | Accepté |
 | [ADR-0053](0053-le-jeton-transit-se-renouvelle-de-lui-meme.md) | Le jeton Transit se renouvelle de lui-même, à mi-vie, et le dit quand il ne le peut pas | Accepté |
+| [ADR-0054](0054-une-cle-d-hote-certifiee-peut-etre-revoquee.md) | Une clé d'hôte certifiée peut être révoquée au compte, comme dans `known_hosts`, et ne reçoit plus rien même avec un certificat valable | Accepté |

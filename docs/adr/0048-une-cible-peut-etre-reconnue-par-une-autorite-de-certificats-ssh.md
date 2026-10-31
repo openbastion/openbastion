@@ -24,7 +24,7 @@ L'invariant en jeu, « le secret n'est envoyé qu'à la clé d'hôte épinglée 
 - (+) **16 mutations, 16 tuées par un test** (aucune par un simple échec de compilation).
 - (+) **Trouvé en chemin** : ne proposer que les algorithmes de certificats faisait échouer la négociation avec une cible sans certificat, **avant** la vérification — rien n'était envoyé, mais le refus n'était ni dit à l'opérateur ni écrit à l'audit. Les clés nues sont désormais proposées après les certificats, pour être refusées par la vérification (point 3).
 - (−) **La clé privée de l'autorité vaut toutes les cibles** qui lui font confiance. Sa garde est l'affaire de l'exploitant ; OpenBastion ne la voit jamais.
-- (−) **Pas de liste de révocation** (KRL) : un certificat volé vaut jusqu'à sa date de fin. Des certificats de courte durée sont la seule défense ; OpenBastion n'en impose pas la durée.
+- (−) ~~**Pas de liste de révocation** (KRL) : un certificat volé vaut jusqu'à sa date de fin.~~ **Levé par ADR-0054** : des lignes `@revoked` sous l'autorité refusent une clé, même certifiée (par clé, pas par numéro de série). OpenBastion n'impose toujours pas la durée des certificats.
 - (−) Un compte n'a qu'une autorité, et une autorité qui change se ré-épingle compte par compte.
 - (−) Le nom attendu est déclaré par l'administrateur : un nom faux refuse toutes les sessions (sûr), un nom partagé par plusieurs serveurs les rend interchangeables pour ce compte.
 
