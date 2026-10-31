@@ -92,7 +92,7 @@ make run-gateway          # :8080 — point d'entrée public unique
 
 ## Une remarque avant de lire le code
 
-Le transport inter-services documenté est gRPC (`docs/api/grpc/README.md`). Ce dépôt, construit dans un environnement au réseau restreint, expose HTTP/JSON à la place — avec exactement les mêmes noms de champs que les messages Protobuf, dans la seule couche `internal/interfaces/`. **Lire `NOTES_SANDBOX.md` avant de s'étonner de ce choix** : il explique précisément la contrainte rencontrée, comment `golang.org/x/crypto/ssh` et `golang.org/x/crypto/argon2` ont malgré tout pu être utilisés (un `replace` vers leur mirroir GitHub officiel), et l'historique du câblage Broker/ssh-proxy/Gateway.
+Le transport entre services est HTTP/JSON sous mTLS, avec les noms de champs des messages de `proto/` (`docs/api/grpc/README.md`) : d'abord une contrainte du réseau de construction, c'est depuis ADR-0050 une décision, et `test/integration/contract_test.go` empêche les routes de diverger de leurs messages sans le dire. gRPC reviendrait avec un flux réel, des clients dans un autre langage, ou une mesure de performance.
 
 ## Structure
 

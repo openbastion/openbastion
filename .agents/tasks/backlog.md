@@ -14,6 +14,6 @@ Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source déta
 | 5 | ~~Pipeline de CI~~ — **fait** (ADR-0047) | ~~aucune porte automatique aujourd'hui~~ ; reste : exiger ses jobs dans la protection de `main`, `govulncheck`/`npm audit` | ADR-0047 |
 | 6 | ~~Certificats d'hôte SSH (autorité) à côté de l'épinglage~~ — **fait** (ADR-0048) | ~~une seule clé par compte~~ ; reste : pas de liste de révocation (KRL), une autorité par compte | ADR-0048 |
 | 7 | ~~Vrai KMS/HSM à la place de `LocalKMS`~~ — **fait** (ADR-0049, Transit d'OpenBao) | ~~la KEK est locale~~ ; reste : AppRole et renouvellement du jeton, ré-enveloppement en masse | ADR-0049 |
-| 8 | gRPC à la place de HTTP/JSON | écart assumé, réseau du sandbox | `architecture/transport-and-contracts.md` |
+| 8 | ~~gRPC à la place de HTTP/JSON~~ — **écarté** (ADR-0050) : HTTP/JSON sous mTLS décidé, test de contrat ; à rouvrir avec un flux réel, des clients non Go ou une mesure | — | ADR-0050 |
 | 9 | Images de base épinglées par empreinte | reproductible pour le code, pas pour les images | NOTES (ADR-0033) |
 | 10 | Feuille de route v1.0 (RDP, Workflow/Approval Engine, MFA natif…) | hors MVP | `roadmap.md` |

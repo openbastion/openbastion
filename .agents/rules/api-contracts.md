@@ -2,7 +2,7 @@
 
 > Règle : applique-la à chaque ligne que tu écris. Si elle te paraît fausse pour un cas précis, ne l'enfreins pas en silence : suis-la, ou signale l'exception dans le rapport. Les interdictions absolues sont dans `policies/`.
 
-1. Les champs JSON d'une route interne **reprennent ceux du `proto`** (`snake_case`, ex. `fetch-credential`) ; les routes d'administration relayées par la Gateway gardent la forme de l'OpenAPI de `docs/api/rest/openapi.yaml` (`camelCase`). La traduction public → interne se fait dans la Gateway, nulle part ailleurs.
+1. Les champs JSON d'une route interne **reprennent ceux du `proto`** (`snake_case`, ex. `fetch-credential`) ; les routes d'administration relayées par la Gateway gardent la forme de l'OpenAPI de `docs/api/rest/openapi.yaml` (`camelCase`). La traduction public → interne se fait dans la Gateway, nulle part ailleurs. `test/integration/contract_test.go` le prouve (ADR-0050) : une structure interne nouvelle, ou un champ qui s'écarte de son message, s'y déclare avec sa raison, sinon le test échoue.
 2. Contrats **additifs** : ne renomme ni ne supprime un champ ; un numéro Protobuf supprimé est `reserved` ; une rupture exige un `v2`.
 3. Codes honnêtes : `400` entrée invalide, `401` non authentifié, `403` interdit, `404` introuvable, `409` conflit d'état, `429` budget, `503` dépendance indisponible. Un `403` qui masque une panne est un défaut ; exception voulue : même `403` que la ressource existe ou non.
 4. Toute route interne a une entrée dans `CallerRules()` **et** un cas dans `callers_test.go` (appelants autorisés ; au moins un refusé ; route inconnue refusée).

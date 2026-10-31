@@ -1,6 +1,6 @@
 # Interfaces inter-services (gRPC/Protobuf)
 
-Contrats internes du périmètre MVP, entre Session Broker, Proxy protocolaire, Vault, Session Recorder, Audit Service et Authorization Service. Les messages sont ceux de `proto/` ; le transport réel du MVP est HTTP/JSON sous mTLS (écart assumé, décrit section par section ci-dessous).
+Contrats internes du périmètre MVP, entre Session Broker, Proxy protocolaire, Vault, Session Recorder, Audit Service et Authorization Service. Les messages sont ceux de `proto/` ; le transport est HTTP/JSON sous mTLS, avec les noms de ces messages (ADR-0050 : une décision, plus un écart) ; chaque divergence d'une route avec son message est décrite section par section ci-dessous, et déclarée avec sa raison dans `test/integration/contract_test.go`, qui échoue sur toute autre.
 
 ## 1. Conventions
 

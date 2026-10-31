@@ -1495,11 +1495,25 @@ Go de Bony Kiss (31 octobre 2026) pour le point 7, et choix de « Transit OpenBa
 
 **Choix renversables** : l'enveloppe côté Vault plutôt qu'un chiffrement direct par Transit ; le jeton seulement par fichier ; l'identifiant `transit:<montage>/<clé>` ; le refus d'un fichier de jeton lisible par le groupe ; `503` pour une clé que le service ne tient plus.
 
+## Le transport entre services reste HTTP/JSON sous mTLS (ADR-0050)
+
+Go de Bony Kiss (31 octobre 2026) pour le point 8, après la mesure de son coût, et choix de « clore par un ADR » (parmi un pilote sur `EmitEvent`, la migration complète, le report).
+
+**Mesuré avant de décider** : 6 contrats `proto/`, 19 RPC ; 29 routes internes dans 8 services ; 29 fichiers de tests d'intégration qui les appellent ; `google.golang.org/grpc` v1.85.0 apporte `protobuf`, `genproto`, `x/net`, `x/text`, exige Go 1.26 dans les modules et `x/sys` v0.48 (forcé à v0.21 aujourd'hui) ; aucun `protoc` ni `buf` installé.
+
+**Livré** : `test/integration/contract_test.go` — 17 paires route ↔ message vérifiées dans les deux sens par lecture des sources (`go/parser`) et des `.proto`, chaque divergence déclarée avec sa raison (pas de `RequestContext`, durées plutôt qu'échéances, pas de `signature` ni de `valid_until`, la révocation qui répond par ses compteurs) ; une raison périmée échoue ; toute structure interne aux champs `snake_case` est dans la table ou déclarée sans contrat (7). ADR-0050 ; `.agents/architecture/transport-and-contracts.md` et `rules/api-contracts.md` (une nouvelle route se déclare dans ce test) ; `docs/api/grpc/README.md`, `README.md`, écarts connus, backlog.
+
+**Preuves** : 2 tests ; **6 mutations, 6 tuées**. Trouvé en écrivant le test : une divergence que j'avais mal déclarée (`reason` n'est pas un champ du `TerminateSessionRequest` du proxy), refusée par le contrôle des déclarations périmées.
+
+**Ce que cela ne fait PAS** : les noms sont vérifiés, pas les types ; les corps construits par une `map` côté client (dix appels, listés dans l'ADR) ne le sont pas ; pas de code généré, pas de flux, `buf breaking` ne garde pas les numéros de champs.
+
+**Choix renversables** : la vérification par lecture des sources plutôt qu'un test par service ; les sept structures déclarées sans contrat ; les critères de reprise de gRPC.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
 
-1. `buf generate` sur `proto/` produira le code gRPC réel ; les fichiers `internal/interfaces/http.go` seront remplacés par des serveurs gRPC générés, sans toucher `internal/application`.
+1. ~~`buf generate` sur `proto/` produira le code gRPC réel~~ — écarté par ADR-0050 (HTTP/JSON décidé, test de contrat) ; les fichiers `internal/interfaces/http.go` seront remplacés par des serveurs gRPC générés, sans toucher `internal/application`.
 2. ~~Remplacer `LocalKMS` par un vrai client KMS/HSM externe~~ — fait pour Transit (ADR-0049) — `KMS_KEY_HEX` est une étape vers une clé stable, pas un KMS réel ; voir le commentaire de doc de `NewLocalKMS`. **Vérifié bloqué dans ce sandbox** (contrairement au pari qui a payé pour `github.com/golang-jwt/jwt/v5`) : `go get github.com/hashicorp/vault/api@v1.15.0` tire transitivement `golang.org/x/net` et `golang.org/x/time` — aucun `replace` GitHub n'existe pour eux (seuls `x/crypto` et `x/sys` en ont un) — et `go get github.com/aws/aws-sdk-go-v2/service/kms@v1.33.0` time-out de la même façon ; les deux ont été testés avec `GOPROXY=direct GOSUMDB=off`, 30s chacun, aucune sortie après le premier (`hashicorp/vault/api`) ou aucune sortie du tout (`aws-sdk-go-v2/service/kms`). Un `go get github.com/golang-jwt/jwt/v5` témoin, lancé juste après dans un module vierge, a réussi en quelques secondes — la cause est bien les dépendances transitives de ces deux SDK, pas une dégradation réseau générale du sandbox. Lever ce blocage demanderait soit un accès réseau complet, soit d'ajouter les mêmes `replace` GitHub que pour `x/crypto`/`x/sys` à `golang.org/x/net` et `golang.org/x/time` (non tenté : risque de miroir GitHub introuvable ou désynchronisé, pour un gain incertain tant que le SDK complet n'a pas pu être résolu une seule fois de bout en bout).
 3. Toutes les bascules PostgreSQL de ce projet reposent maintenant sur le même patron, prouvé six fois (Vault, Authorization, Authentication, Session Broker, Audit — plus `audit-service` qui ajoute la contrainte propre au chaînage de hash). `idempotency_keys` et le partitionnement mensuel d'`audit_events` (`docs/architecture/data-architecture.md` §3) restent les seules parties du DDL documenté qui n'ont pas encore d'équivalent dans le code (`session_command_entries` a le sien depuis le Command Recorder) — aucune n'est bloquée par le sandbox, simplement pas encore faites.
 
