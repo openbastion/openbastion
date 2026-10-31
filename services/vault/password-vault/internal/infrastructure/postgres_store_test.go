@@ -431,3 +431,42 @@ func TestPostgresStore_ScheduledRotation_DueClaimAndUpgrade(t *testing.T) {
 		t.Fatalf("a manual account got %d days", a.RotationIntervalDays)
 	}
 }
+
+// ADR-0041: failures are counted one UPDATE at a time, read back by Get and List, and a
+// rotation sets them back to 0.
+func TestPostgresStore_RotationFailures_CountedAndReset(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("fail")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh",
+		RotationPolicy: domain.RotationScheduled, RotationIntervalDays: 1}); err != nil {
+		t.Fatal(err)
+	}
+	for want := 1; want <= 3; want++ {
+		if n, err := store.RecordRotationFailure(ctx, id); err != nil || n != want {
+			t.Fatalf("failure %d: %d %v", want, n, err)
+		}
+	}
+	if a, _ := store.Get(ctx, id); a.RotationFailures != 3 {
+		t.Fatalf("Get: %d", a.RotationFailures)
+	}
+	all, _, err := store.List(ctx, 1, 100000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range all {
+		if a.ID == id && a.RotationFailures != 3 {
+			t.Fatalf("List: %d", a.RotationFailures)
+		}
+	}
+	if err := store.MarkRotated(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := store.Get(ctx, id); a.RotationFailures != 0 {
+		t.Fatalf("after a rotation: %d", a.RotationFailures)
+	}
+	if _, err := store.RecordRotationFailure(ctx, uniqueID("nobody")); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("an unknown account: %v", err)
+	}
+}

@@ -299,6 +299,14 @@ UPDATE privileged_accounts SET rotation_interval_days = 30 WHERE rotation_policy
 
 Échéance : `COALESCE(last_rotated_at, created_at) + rotation_interval_days jours`. Un compte est pris par un seul `UPDATE … SET rotation_attempted_at` conditionné (échu, pas pris depuis une heure) : de deux Vaults, un seul le prend.
 
+### Échecs de la rotation planifiée (ADR-0041)
+
+`services/vault/password-vault/migrations/005_rotation_failures.sql` :
+
+```sql
+ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS rotation_failures INTEGER NOT NULL DEFAULT 0;  -- d'affilée ; remis à 0 par toute rotation réussie
+```
+
 ### Connexion fédérée OIDC (ADR-0035)
 
 `services/access/authentication/migrations/002_oidc.sql` donne à `users` les colonnes du §3 (`identity_source`, `external_subject` — ici `TEXT NOT NULL DEFAULT ''` plutôt que `NULL`, avec un index unique partiel sur `(identity_source, external_subject)` quand le sujet n'est pas vide) et ajoute les connexions en cours :

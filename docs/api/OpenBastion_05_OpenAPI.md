@@ -1172,6 +1172,7 @@ components:
           properties:
             id: { type: string, format: uuid }
             lastRotatedAt: { type: string, format: date-time }
+            rotationFailures: { type: integer, description: "Rotations planifiées échouées d'affilée (ADR-0041) ; absent à 0. Tous les ROTATION_ALERT_AFTER_FAILURES échecs, vault.rotation_overdue est écrit à l'audit." }
             nextRotationAt: { type: string, format: date-time, description: "Compte scheduled seulement : quand il sera échu (ADR-0040). Le Vault balaie toutes les ROTATION_SWEEP_SECONDS : la rotation a lieu au premier balayage qui suit." }
             hostKeyFingerprint: { type: string, example: "SHA256:yghJebhOfPlVqBTuLQp+13ACAaCo+e5vLM/jNp6sJso", description: "Empreinte de hostKey ; vide pour un compte enregistré avant ADR-0039 et jamais épinglé, qui n'ouvre aucune session" }
             createdAt: { type: string, format: date-time }

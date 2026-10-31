@@ -41,6 +41,11 @@ type VaultService struct {
 	// targets and audit make rotation reach the target (ADR-0037); nil: no rotation.
 	targets TargetChanger
 	audit   AuditEmitter
+
+	// window and alertAfter shape the scheduled rotations (ADR-0041); zero values: any time,
+	// an alert every DefaultRotationAlertAfter failures.
+	window     RotationWindow
+	alertAfter int
 }
 
 func NewVaultService(accounts domain.AccountRepository, secrets domain.SecretRepository, scopes domain.ScopeRepository, kms Encryptor, authz AuthorizationClient) *VaultService {

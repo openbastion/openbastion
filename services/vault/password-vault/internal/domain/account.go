@@ -48,6 +48,9 @@ type PrivilegedAccount struct {
 	// RotationAttemptedAt is when the Vault last took this account for a scheduled rotation,
 	// whatever came of it: an account is not tried again before RotationRetryAfter.
 	RotationAttemptedAt *time.Time
+	// RotationFailures counts the scheduled rotations that failed in a row (ADR-0041); any
+	// rotation that succeeds sets it back to 0.
+	RotationFailures int
 }
 
 // RotationDueAt is when a scheduled account is next due: its last rotation, or its creation

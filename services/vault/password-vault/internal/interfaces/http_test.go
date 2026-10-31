@@ -247,4 +247,17 @@ func TestSchedule_OverHTTP(t *testing.T) {
 	if _, has := got["nextRotationAt"]; has {
 		t.Fatalf("a manual account says a next rotation: %v", got)
 	}
+	if _, has := got["rotationFailures"]; has {
+		t.Fatalf("an account with no failure says some: %v", got)
+	}
+
+	// ADR-0041: failures in a row are said.
+	for i := 0; i < 2; i++ {
+		_, _ = store.RecordRotationFailure(context.Background(), "acc")
+	}
+	got = nil
+	_ = json.Unmarshal(call(http.MethodGet, "/vault/v1/accounts/acc", nil).Body.Bytes(), &got)
+	if got["rotationFailures"] != float64(2) {
+		t.Fatalf("failures not said: %v", got)
+	}
 }

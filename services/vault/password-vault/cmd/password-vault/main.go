@@ -88,11 +88,20 @@ func main() {
 	}
 	svc.WithRotation(infrastructure.SSHTargetChanger{}, &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: auditClient})
 
-	// Scheduled accounts rotate when due (ADR-0040): a sweep, no switch to turn it off.
+	// Scheduled accounts rotate when due (ADR-0040): a sweep, no switch to turn it off; within
+	// ROTATION_WINDOW_UTC if set, and failures in a row raise an alert to the audit (ADR-0041).
+	window, err := application.ParseRotationWindow(os.Getenv("ROTATION_WINDOW_UTC"))
+	if err != nil {
+		log.Fatalf("password-vault: ROTATION_WINDOW_UTC: %v", err)
+	}
+	alertAfter := boundedIntEnv("ROTATION_ALERT_AFTER_FAILURES", application.DefaultRotationAlertAfter, 1, application.MaxRotationAlertAfter)
+	if _, err := svc.WithRotationSchedule(window, alertAfter); err != nil {
+		log.Fatalf("password-vault: %v", err)
+	}
 	sweep := boundedIntEnv("ROTATION_SWEEP_SECONDS", 300, 1, 86400)
 	go rotateEvery(svc, time.Duration(sweep)*time.Second)
-	log.Printf("password-vault: scheduled accounts that are due are rotated every %ds (at most %d a sweep; one that failed waits %s)",
-		sweep, application.RotationsPerSweep, application.RotationRetryAfter)
+	log.Printf("password-vault: scheduled accounts that are due are rotated every %ds, %s (at most %d a sweep; one that failed waits %s; %d failures in a row write vault.rotation_overdue)",
+		sweep, window, application.RotationsPerSweep, application.RotationRetryAfter, alertAfter)
 
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
 		ctx := context.Background()

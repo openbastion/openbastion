@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
@@ -21,7 +23,77 @@ const (
 	RotationRetryAfter = time.Hour
 	// RotationsPerSweep bounds one sweep: rotations reach targets one at a time.
 	RotationsPerSweep = 20
+	// DefaultRotationAlertAfter is how many scheduled rotations of an account fail in a row
+	// before vault.rotation_overdue is written (ADR-0041), and again every as many after.
+	DefaultRotationAlertAfter = 3
+	MaxRotationAlertAfter     = 100
 )
+
+// RotationWindow is the time of day, in UTC, when scheduled rotations may run (ADR-0041):
+// from start to end, in minutes after midnight; end before start crosses midnight.
+type RotationWindow struct {
+	start, end int
+	set        bool
+}
+
+// ParseRotationWindow reads "HH:MM-HH:MM" (UTC). Empty: any time. A window that does not
+// read, or lasts no time, is an error — the Vault refuses to start on it.
+func ParseRotationWindow(s string) (RotationWindow, error) {
+	if s == "" {
+		return RotationWindow{}, nil
+	}
+	from, to, ok := strings.Cut(s, "-")
+	start, err1 := minuteOfDay(from)
+	end, err2 := minuteOfDay(to)
+	if !ok || err1 != nil || err2 != nil {
+		return RotationWindow{}, fmt.Errorf("a rotation window is HH:MM-HH:MM in UTC, got %q", s)
+	}
+	if start == end {
+		return RotationWindow{}, fmt.Errorf("the rotation window %q lasts no time", s)
+	}
+	return RotationWindow{start: start, end: end, set: true}, nil
+}
+
+func minuteOfDay(s string) (int, error) {
+	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
+	hh, err1 := strconv.Atoi(h)
+	mm, err2 := strconv.Atoi(m)
+	if !ok || err1 != nil || err2 != nil || len(h) != 2 || len(m) != 2 || hh < 0 || hh > 23 || mm < 0 || mm > 59 {
+		return 0, fmt.Errorf("not a time of day: %q", s)
+	}
+	return hh*60 + mm, nil
+}
+
+// Contains says whether t falls in the window; an unset window contains every moment.
+func (w RotationWindow) Contains(t time.Time) bool {
+	if !w.set {
+		return true
+	}
+	u := t.UTC()
+	m := u.Hour()*60 + u.Minute()
+	if w.start < w.end {
+		return m >= w.start && m < w.end
+	}
+	return m >= w.start || m < w.end // across midnight
+}
+
+// String is the window as configured, or "any time".
+func (w RotationWindow) String() string {
+	if !w.set {
+		return "any time"
+	}
+	return fmt.Sprintf("%02d:%02d-%02d:%02d UTC", w.start/60, w.start%60, w.end/60, w.end%60)
+}
+
+// WithRotationSchedule sets the window of the scheduled rotations and how many failures in a
+// row raise an alert (ADR-0041). alertAfter outside 1..MaxRotationAlertAfter is an error.
+func (s *VaultService) WithRotationSchedule(window RotationWindow, alertAfter int) (*VaultService, error) {
+	if alertAfter < 1 || alertAfter > MaxRotationAlertAfter {
+		return nil, fmt.Errorf("the alert threshold of failed rotations is between 1 and %d, got %d", MaxRotationAlertAfter, alertAfter)
+	}
+	s.window, s.alertAfter = window, alertAfter
+	return s, nil
+}
 
 // ErrBadRotationInterval: a scheduled account without an interval in 1..365 days, or an
 // interval on an account no schedule runs.
@@ -50,6 +122,8 @@ func (s *VaultService) WithClock(now func() time.Time) *VaultService {
 type SweepResult struct {
 	Rotated int
 	Failed  int
+	// OutsideWindow: the sweep took nothing, the time of day being outside the window.
+	OutsideWindow bool
 }
 
 // RotateDue rotates the scheduled accounts that are due, at most RotationsPerSweep of them,
@@ -61,6 +135,10 @@ func (s *VaultService) RotateDue(ctx context.Context) (SweepResult, error) {
 		return res, ErrRotationOff
 	}
 	now := s.now()
+	if !s.window.Contains(now) {
+		res.OutsideWindow = true
+		return res, nil
+	}
 	due, err := s.accounts.ListDueForRotation(ctx, now, RotationRetryAfter, RotationsPerSweep)
 	if err != nil {
 		return res, fmt.Errorf("listing the accounts due for rotation: %w", err)
@@ -79,9 +157,33 @@ func (s *VaultService) RotateDue(ctx context.Context) (SweepResult, error) {
 		if err := s.rotate(ctx, "", a.ID, nil); err != nil {
 			res.Failed++
 			log.Printf("password-vault: scheduled rotation of account %s failed, tried again in %s: %v", a.ID, RotationRetryAfter, err)
+			s.countFailure(ctx, a.ID)
 			continue
 		}
 		res.Rotated++
 	}
 	return res, nil
+}
+
+// countFailure counts a failed scheduled rotation and, at every alertAfter-th in a row, writes
+// vault.rotation_overdue to the audit (ADR-0041): the secret is getting older than its policy.
+// Best effort — the rotation has failed whatever the audit answers; a lost alert is written
+// again alertAfter failures later.
+func (s *VaultService) countFailure(ctx context.Context, accountID string) {
+	n, err := s.accounts.RecordRotationFailure(ctx, accountID)
+	if err != nil {
+		log.Printf("password-vault: counting the failed rotation of account %s: %v", accountID, err)
+		return
+	}
+	alertAfter := s.alertAfter
+	if alertAfter == 0 {
+		alertAfter = DefaultRotationAlertAfter
+	}
+	if n%alertAfter != 0 {
+		return
+	}
+	log.Printf("password-vault: ALERT the scheduled rotation of account %s has failed %d time(s) in a row", accountID, n)
+	if err := s.audit.EmitEvent(ctx, "", "vault.rotation_overdue", "account", accountID, false); err != nil {
+		log.Printf("password-vault: the alert for account %s could not be written to the audit (written again in %d failures): %v", accountID, alertAfter, err)
+	}
 }

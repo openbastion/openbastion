@@ -46,7 +46,8 @@ type AccountRepository interface {
 	// ever touching the account row itself. Called by Rotate only after
 	// the new version has been stored successfully, so a failed
 	// rotation never falsely claims to have rotated. Idempotent, like
-	// Disable; existence is checked by the caller.
+	// Disable; existence is checked by the caller. It also sets the
+	// count of failed scheduled rotations back to 0 (ADR-0041).
 	MarkRotated(ctx context.Context, id string) error
 
 	// SetReconciliation names the reconciliation account of id (ADR-0037).
@@ -61,6 +62,9 @@ type AccountRepository interface {
 	// ClaimRotation takes id for a scheduled rotation at now — compare-and-swap: false when it
 	// is no longer due, or another taker had it since now-retryAfter.
 	ClaimRotation(ctx context.Context, id string, now time.Time, retryAfter time.Duration) (bool, error)
+	// RecordRotationFailure counts one more scheduled rotation of id that failed, and returns
+	// how many have failed in a row (ADR-0041). MarkRotated sets the count back to 0.
+	RecordRotationFailure(ctx context.Context, id string) (int, error)
 }
 
 // ErrRotationInProgress: the account already has a pending rotation (ADR-0037).

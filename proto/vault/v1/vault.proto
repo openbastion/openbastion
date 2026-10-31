@@ -96,6 +96,7 @@ message PrivilegedAccount {
   string host_key_fingerprint = 10; // son empreinte SHA256
   int32 rotation_interval_days = 11;     // compte "scheduled" (ADR-0040)
   google.protobuf.Timestamp next_rotation_at = 12;  // compte "scheduled" : son échéance
+  int32 rotation_failures = 13;          // rotations planifiées échouées d'affilée (ADR-0041)
 }
 
 message SetHostKeyRequest {

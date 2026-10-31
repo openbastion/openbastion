@@ -127,7 +127,20 @@ func (s *InMemoryStore) MarkRotated(ctx context.Context, id string) error {
 	}
 	now := time.Now().UTC()
 	a.LastRotatedAt = &now
+	a.RotationFailures = 0
 	return nil
+}
+
+// RecordRotationFailure is domain.AccountRepository.RecordRotationFailure.
+func (s *InMemoryStore) RecordRotationFailure(ctx context.Context, id string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return 0, domain.ErrNotFound
+	}
+	a.RotationFailures++
+	return a.RotationFailures, nil
 }
 
 func (s *InMemoryStore) CurrentVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {

@@ -94,6 +94,8 @@ export interface Account {
   // A scheduled account's cadence and next rotation (ADR-0040); absent for any other.
   rotationIntervalDays?: number;
   nextRotationAt?: string;
+  // Scheduled rotations failed in a row (ADR-0041); absent at 0.
+  rotationFailures?: number;
 }
 
 export interface Page<T> {

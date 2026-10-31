@@ -59,10 +59,10 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	var lastRotatedAt, disabledAt, attemptedAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key,
-		       rotation_interval_days, rotation_attempted_at
+		       rotation_interval_days, rotation_attempted_at, rotation_failures
 		FROM privileged_accounts WHERE id = $1`, id)
 	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey,
-		&a.RotationIntervalDays, &attemptedAt); err != nil {
+		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -95,7 +95,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures
 		FROM privileged_accounts WHERE disabled_at IS NULL
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, pageSize, offset)
@@ -109,7 +109,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 		var a domain.PrivilegedAccount
 		var rotationPolicy string
 		var lastRotatedAt, disabledAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures); err != nil {
 			return nil, 0, err
 		}
 		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
@@ -166,8 +166,20 @@ func (s *PostgresStore) SetReconciliation(ctx context.Context, id, reconciliatio
 // gap of the same shape as Disable/disabled_at before it).
 func (s *PostgresStore) MarkRotated(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE privileged_accounts SET last_rotated_at = now() WHERE id = $1`, id)
+		UPDATE privileged_accounts SET last_rotated_at = now(), rotation_failures = 0 WHERE id = $1`, id)
 	return err
+}
+
+// RecordRotationFailure is domain.AccountRepository.RecordRotationFailure: one UPDATE, so two
+// Vaults never count the same failure as one.
+func (s *PostgresStore) RecordRotationFailure(ctx context.Context, id string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `UPDATE privileged_accounts SET rotation_failures = rotation_failures + 1
+		WHERE id = $1 RETURNING rotation_failures`, id).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, domain.ErrNotFound
+	}
+	return n, err
 }
 
 func (s *PostgresStore) CurrentVersion(ctx context.Context, accountID string) (*domain.SecretVersion, error) {

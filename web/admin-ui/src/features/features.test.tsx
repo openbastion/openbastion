@@ -113,6 +113,15 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc], page: 1, pageSize: 20, totalItems: 1 } } });
     signedIn(api, <Accounts />);
     expect((await screen.findByText(/tous les 30 j/)).textContent).toContain("prochaine : 2026-11-29T10:00:00Z");
+    expect(screen.queryByText(/en échec/)).toBeNull();
+  });
+
+  it("shows an account whose scheduled rotations keep failing (ADR-0041)", async () => {
+    const acc = { id: "acc_1", name: "db", username: "app", targetHost: "db:22", protocol: "ssh", rotationPolicy: "scheduled", createdAt: "2026-10-30T10:00:00Z",
+      rotationIntervalDays: 30, nextRotationAt: "2026-11-29T10:00:00Z", hostKeyFingerprint: "SHA256:k", rotationFailures: 4 };
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc], page: 1, pageSize: 20, totalItems: 1 } } });
+    signedIn(api, <Accounts />);
+    expect((await screen.findByText("en échec (4)")).className).toContain("warn");
   });
 });
 

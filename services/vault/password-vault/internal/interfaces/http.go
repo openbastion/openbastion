@@ -288,6 +288,8 @@ type accountResponse struct {
 	// time (ADR-0040); absent for any other.
 	RotationIntervalDays int        `json:"rotationIntervalDays,omitempty"`
 	NextRotationAt       *time.Time `json:"nextRotationAt,omitempty"`
+	// RotationFailures: scheduled rotations failed in a row (ADR-0041); absent at 0.
+	RotationFailures int `json:"rotationFailures,omitempty"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -303,7 +305,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		TargetHost: a.TargetHost, Protocol: a.Protocol, RotationPolicy: string(a.RotationPolicy),
 		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
-		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(),
+		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures,
 	}
 }
 
