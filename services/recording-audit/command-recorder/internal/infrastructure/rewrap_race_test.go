@@ -6,7 +6,6 @@ package infrastructure
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"os"
 	"testing"
 	"time"
@@ -36,12 +35,12 @@ func TestRewrapDue_AKeyChangedBetweenTheReadAndTheWriteIsLeftToTheOtherWriter(t 
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed tests (see /NOTES_SANDBOX.md)")
 	}
-	db, err := sql.Open("postgres", dsn)
+	ctx := context.Background()
+	db, err := OpenPostgres(ctx, dsn) // with its migrations: on a fresh database this test may run first
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	ctx := context.Background()
 	run := time.Now().Format("150405.000000000")
 	a, b, c := newLocalWrapper("race-a-"+run), newLocalWrapper("race-b-"+run), newLocalWrapper("race-c-"+run)
 	session := "race-session-" + run
