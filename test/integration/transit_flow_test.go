@@ -28,7 +28,8 @@ import (
 const openBaoImage = "openbao/openbao@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f" // v2.7.2
 
 type openBao struct {
-	addr, name string
+	addr, name  string
+	createToken func(t *testing.T, period string) string // a token of the key's policy; periodic if period is set
 }
 
 // startOpenBao runs OpenBao in development mode, mounts Transit, creates key, and returns the
@@ -78,12 +79,23 @@ func startOpenBao(t *testing.T, key string) (*openBao, string) {
 	call(http.MethodPost, "/v1/sys/mounts/transit", map[string]string{"type": "transit"})
 	call(http.MethodPost, "/v1/transit/keys/"+key, map[string]string{"type": "aes256-gcm96"})
 	call(http.MethodPost, "/v1/transit/keys/other-key", map[string]string{"type": "aes256-gcm96"})
+	// The documented minimal policy (docs/security/key-management.md): the key both ways, and the
+	// token's own life (ADR-0053).
 	policy := fmt.Sprintf(`path "transit/encrypt/%s" { capabilities = ["update"] }
-path "transit/decrypt/%s" { capabilities = ["update"] }`, key, key)
+path "transit/decrypt/%s" { capabilities = ["update"] }
+path "auth/token/lookup-self" { capabilities = ["read"] }
+path "auth/token/renew-self" { capabilities = ["update"] }`, key, key)
 	call(http.MethodPut, "/v1/sys/policies/acl/openbastion-"+key, map[string]string{"policy": policy})
-	tok := call(http.MethodPost, "/v1/auth/token/create", map[string]any{"policies": []string{"openbastion-" + key}, "ttl": "1h", "no_default_policy": true})
-	token := tok["auth"].(map[string]any)["client_token"].(string)
-	return b, writeToken(t, token, 0o600)
+	b.createToken = func(t *testing.T, period string) string {
+		t.Helper()
+		req := map[string]any{"policies": []string{"openbastion-" + key}, "ttl": "1h", "no_default_policy": true}
+		if period != "" {
+			req = map[string]any{"policies": []string{"openbastion-" + key}, "period": period, "no_default_policy": true}
+		}
+		tok := call(http.MethodPost, "/v1/auth/token/create", req)
+		return writeToken(t, tok["auth"].(map[string]any)["client_token"].(string), 0o600)
+	}
+	return b, b.createToken(t, "")
 }
 
 func writeToken(t *testing.T, token string, mode os.FileMode) string {
@@ -268,10 +280,25 @@ func TestPostgresFlow_TransitKeepsTheKeys_WhatWasSealedBeforeStaysReadable(t *te
 		}
 	})
 
+	t.Run("a periodic token outlives its period: the Vault renews it at half its life (ADR-0053)", func(t *testing.T) {
+		short := bao.createToken(t, "4s")
+		v5 := startService(t, root, vaultBin, "19748", vaultEnv("TRANSIT_ADDR="+bao.addr, "TRANSIT_KEY=openbastion-vault", "TRANSIT_TOKEN_FILE="+short)...)
+		time.Sleep(10 * time.Second) // two and a half periods: without a renewal, the token has ended
+		if got, err := fetchSecret(t, v5.baseURL, after); err != nil || got != "secret-sealed-after" {
+			t.Fatalf("after 10 s with a 4 s periodic token: %q, %v", got, err)
+		}
+		if !strings.Contains(v5.out.String(), "renewed at half its life") {
+			t.Fatalf("the Vault does not say it renews its token:\n%s", v5.out.String())
+		}
+	})
+
 	t.Run("the Recorder starts with Transit, after its round trip", func(t *testing.T) {
 		rec := startService(t, root, recorderBin, "19747", vaultEnv(withTransit("AUDIT_URL=http://127.0.0.1:1")...)...)
 		if !strings.Contains(rec.out.String(), "wrapped by transit:transit/openbastion-vault") {
 			t.Fatalf("the Recorder does not say Transit wraps its keys:\n%s", rec.out.String())
 		}
+		waitUntil(t, 5*time.Second, "the Recorder to renew its token (ADR-0053)", func() bool {
+			return strings.Contains(rec.out.String(), "command-recorder: transit: the token is renewed at half its life")
+		})
 	})
 }

@@ -26,7 +26,7 @@ Le Password Vault scelle chaque secret, et le Command Recorder enveloppe la clé
 - (+) **Trouvé en chemin** : la route interne `fetch-credential` rendait `403` pour toute erreur, en recopiant son texte : une clé indisponible passait pour un refus, et l'adresse de Transit partait dans la réponse. Une panne des clés est désormais `ErrKeysUnavailable` : `503`, un message fixe, la cause au seul journal.
 - (−) **Transit devient une dépendance de disponibilité** de tout accès privilégié (le Vault ne livre plus aucun secret sans lui) et de tout enregistrement : il doit être au moins aussi disponible que le Vault (tier 0).
 - (−) Le jeton Transit est un secret de plus, sur disque : qui lit son fichier **et** la base, **pendant que** le jeton est valable, lit encore tout. Le gain est qu'un jeton se révoque, se limite (une politique `encrypt`/`decrypt` sur une seule clé) et s'audite dans OpenBao, et que la clé, elle, ne se copie pas.
-- (−) Pas de renouvellement du jeton par OpenBastion ni d'authentification AppRole : l'exploitant donne un jeton périodique ou le renouvelle lui-même.
+- (−) ~~Pas de renouvellement du jeton par OpenBastion~~ (**levé par ADR-0053** : renouvelé à mi-vie) ni d'authentification AppRole : l'exploitant donne un jeton périodique.
 - (−) Les lignes d'avant restent sous `KMS_KEY_HEX` tant qu'elles ne sont pas réécrites : pas de ré-enveloppement en masse dans cet incrément.
 - (−) Un appel réseau par secret scellé ou ouvert, et par clé d'enregistrement.
 

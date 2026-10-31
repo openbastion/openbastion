@@ -21,6 +21,8 @@ bao write -f transit/keys/openbastion-vault type=aes256-gcm96
 bao policy write openbastion-vault - <<'EOF'
 path "transit/encrypt/openbastion-vault" { capabilities = ["update"] }
 path "transit/decrypt/openbastion-vault" { capabilities = ["update"] }
+path "auth/token/lookup-self" { capabilities = ["read"] }
+path "auth/token/renew-self" { capabilities = ["update"] }
 EOF
 bao token create -policy=openbastion-vault -no-default-policy -period=24h -field=token > vault-transit.token
 chmod 600 vault-transit.token
@@ -40,7 +42,7 @@ Puis, pour chaque service :
 
 Les trois premières vont ensemble. Au démarrage, le service enveloppe puis désenveloppe une valeur d'essai : une adresse injoignable, un jeton refusé, une clé absente ou interdite au jeton, et le service **refuse de démarrer**, en disant pourquoi sans répéter le jeton. Il annonce ensuite la clé utilisée (`transit:<montage>/<clé>`) et l'hôte, jamais le jeton.
 
-**Le jeton se renouvelle** : OpenBastion ne le renouvelle pas, et ne connaît pas encore AppRole. Avec `-period=24h`, renouvelez-le avant échéance (`bao token renew`, ou l'agent OpenBao qui écrit le fichier) ; un jeton expiré se voit comme Transit injoignable.
+**Le jeton se renouvelle de lui-même** (ADR-0053) : le service lit sa durée de vie au démarrage et le renouvelle à mi-vie, puis à mi-vie de chaque nouvelle durée ; un échec est retenté au quart du temps restant (au moins toutes les 5 s) et écrit au journal. Il lui faut les deux derniers chemins de la politique ci-dessus. Un jeton sans fin (racine) ou non renouvelable n'est pas renouvelé, et le démarrage le dit. Un jeton qui a atteint sa durée maximale (`explicit_max_ttl`), ou révoqué, ne se renouvelle plus : remplacez-le dans le fichier et redémarrez le service — le fichier n'est pas relu à chaud, et il n'y a pas encore d'AppRole.
 
 ## Passer de la clé locale à Transit
 

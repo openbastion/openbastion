@@ -49,6 +49,7 @@ type Client struct {
 	base, mount, key string
 	token            string
 	http             *http.Client
+	renewFloor       time.Duration // the shortest wait before a renewal is tried again (ADR-0053)
 }
 
 // FromEnv reads TRANSIT_ADDR, TRANSIT_KEY and TRANSIT_TOKEN_FILE, which go together, and
@@ -116,7 +117,7 @@ func New(cfg Config) (*Client, error) {
 		tlsConfig.RootCAs = pool
 	}
 	return &Client{
-		base: u.Scheme + "://" + u.Host, mount: mount, key: cfg.Key, token: token,
+		base: u.Scheme + "://" + u.Host, mount: mount, key: cfg.Key, token: token, renewFloor: DefaultRenewFloor,
 		http: &http.Client{
 			Timeout: Timeout,
 			// The token goes to this server and nowhere else: no redirect, no egress proxy.
@@ -230,8 +231,16 @@ func (c *Client) Probe(ctx context.Context) error {
 }
 
 func (c *Client) call(ctx context.Context, op string, body map[string]string, out any) error {
-	b, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/v1/"+c.mount+"/"+op+"/"+c.key, bytes.NewReader(b))
+	return c.do(ctx, op, http.MethodPost, "/v1/"+c.mount+"/"+op+"/"+c.key, body, out)
+}
+
+func (c *Client) do(ctx context.Context, op, method, path string, body any, out any) error {
+	var rd io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		rd = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
 	if err != nil {
 		return fmt.Errorf("transit %s: the request could not be built", op)
 	}
@@ -270,4 +279,86 @@ func (c *Client) call(ctx context.Context, op string, body map[string]string, ou
 func sorted(s []string) []string {
 	sort.Strings(s)
 	return s
+}
+
+// DefaultRenewFloor is the shortest wait before a failed renewal is tried again (ADR-0053).
+const DefaultRenewFloor = 5 * time.Second
+
+// WithRenewFloor changes the shortest wait between two attempts at renewing; for tests.
+func (c *Client) WithRenewFloor(d time.Duration) *Client {
+	c.renewFloor = d
+	return c
+}
+
+// TokenLife reads what is left of the token (auth/token/lookup-self): its time to live — zero for
+// a token without an end — and whether it may be renewed.
+func (c *Client) TokenLife(ctx context.Context) (ttl time.Duration, renewable bool, err error) {
+	var out struct {
+		Data struct {
+			TTL       int64 `json:"ttl"`
+			Renewable bool  `json:"renewable"`
+		} `json:"data"`
+	}
+	if err := c.do(ctx, "lookup-self", http.MethodGet, "/v1/auth/token/lookup-self", nil, &out); err != nil {
+		return 0, false, err
+	}
+	return time.Duration(out.Data.TTL) * time.Second, out.Data.Renewable, nil
+}
+
+// RenewSelf renews the token (auth/token/renew-self) and returns its new time to live.
+func (c *Client) RenewSelf(ctx context.Context) (time.Duration, error) {
+	var out struct {
+		Auth struct {
+			LeaseDuration int64 `json:"lease_duration"`
+		} `json:"auth"`
+	}
+	if err := c.do(ctx, "renew-self", http.MethodPost, "/v1/auth/token/renew-self", map[string]string{}, &out); err != nil {
+		return 0, err
+	}
+	if out.Auth.LeaseDuration <= 0 {
+		return 0, errors.New("transit renew-self: the answer holds no lease duration")
+	}
+	return time.Duration(out.Auth.LeaseDuration) * time.Second, nil
+}
+
+// KeepAlive keeps the token alive until ctx ends (ADR-0053): a renewable token is renewed at half
+// its life, then at half of each new one; a renewal that fails is tried again at a quarter of the
+// time left (never sooner than the floor), and every failure is said. A token without an end, or
+// that may not be renewed, is left as it is — and that is said once. The token is never written.
+func (c *Client) KeepAlive(ctx context.Context, logf func(format string, args ...any)) {
+	ttl, renewable, err := c.TokenLife(ctx)
+	switch {
+	case err != nil:
+		logf("transit: the token's life cannot be read (%v): it is not renewed; give its policy auth/token/lookup-self and auth/token/renew-self", err)
+		return
+	case ttl <= 0:
+		logf("transit: the token has no end: it is not renewed")
+		return
+	case !renewable:
+		logf("transit: the token may not be renewed: it ends in %s", ttl)
+		return
+	}
+	logf("transit: the token is renewed at half its life (now %s left)", ttl)
+	deadline := time.Now().Add(ttl)
+	wait := ttl / 2
+	for {
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		next, err := c.RenewSelf(ctx)
+		if err == nil {
+			deadline = time.Now().Add(next)
+			wait = next / 2
+			continue
+		}
+		wait = time.Until(deadline) / 4
+		if wait < c.renewFloor {
+			wait = c.renewFloor
+		}
+		logf("transit: the token could not be renewed (%v): tried again in %s; it ends at %s", err, wait.Round(time.Second), deadline.UTC().Format(time.RFC3339))
+	}
 }

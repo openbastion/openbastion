@@ -141,6 +141,8 @@ func recordingKeys() (infrastructure.KeyWrapper, []infrastructure.KeyWrapper) {
 	if err := client.Probe(ctx); err != nil {
 		log.Fatalf("command-recorder: Transit cannot wrap and unwrap with %s: %v — refusing to start", client.KeyID(), err)
 	}
+	// The token renews itself at half its life (ADR-0053).
+	go client.KeepAlive(context.Background(), func(f string, a ...any) { log.Printf("command-recorder: "+f, a...) })
 	var previous []infrastructure.KeyWrapper
 	if hexKey != "" {
 		local, err := infrastructure.NewLocalKEKFromHexKey(hexKey)

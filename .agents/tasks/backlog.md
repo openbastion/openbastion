@@ -13,7 +13,7 @@ Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source déta
 | 4 | ~~Proxy SSH en plusieurs instances~~ — **fait** (ADR-0046) | ~~la révocation n'atteint qu'une instance~~ ; reste : une instance injoignable empêche toute terminaison | ADR-0046 |
 | 5 | ~~Pipeline de CI~~ — **fait** (ADR-0047) | ~~aucune porte automatique aujourd'hui~~ ; reste : ~~exiger ses jobs dans la protection de `main`~~ (règle posée, non appliquée sur l'offre gratuite), ~~`govulncheck`/`npm audit`~~ (ADR-0052) | ADR-0047, ADR-0052 |
 | 6 | ~~Certificats d'hôte SSH (autorité) à côté de l'épinglage~~ — **fait** (ADR-0048) | ~~une seule clé par compte~~ ; reste : pas de liste de révocation (KRL), une autorité par compte | ADR-0048 |
-| 7 | ~~Vrai KMS/HSM à la place de `LocalKMS`~~ — **fait** (ADR-0049, Transit d'OpenBao) | ~~la KEK est locale~~ ; reste : AppRole et renouvellement du jeton, ré-enveloppement en masse | ADR-0049 |
+| 7 | ~~Vrai KMS/HSM à la place de `LocalKMS`~~ — **fait** (ADR-0049, Transit d'OpenBao) | ~~la KEK est locale~~ ; reste : ~~renouvellement du jeton~~ (ADR-0053), AppRole, ré-enveloppement en masse | ADR-0049, ADR-0053 |
 | 8 | ~~gRPC à la place de HTTP/JSON~~ — **écarté** (ADR-0050) : HTTP/JSON sous mTLS décidé, test de contrat ; à rouvrir avec un flux réel, des clients non Go ou une mesure | — | ADR-0050 |
 | 9 | ~~Images de base épinglées par empreinte~~ — **fait** (ADR-0051) | ~~reproductible pour le code, pas pour les images~~ ; reste : mise à jour manuelle des empreintes ; images de construction sur Go 1.27.1 depuis le même jour | ADR-0051 |
 | 10 | Feuille de route v1.0 (RDP, Workflow/Approval Engine, MFA natif…) | hors MVP | `roadmap.md` |

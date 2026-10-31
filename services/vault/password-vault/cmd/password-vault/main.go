@@ -183,6 +183,9 @@ func keyring(dsn, kmsKeyHex string) *infrastructure.Keyring {
 	if err := client.Probe(ctx); err != nil {
 		log.Fatalf("password-vault: Transit cannot wrap and unwrap with %s: %v — refusing to start", client.KeyID(), err)
 	}
+	// The token renews itself at half its life (ADR-0053): a periodic token would otherwise end,
+	// and with it every secret's delivery.
+	go client.KeepAlive(context.Background(), func(f string, a ...any) { log.Printf("password-vault: "+f, a...) })
 	current := infrastructure.NewTransitKMS(client)
 	var previous []infrastructure.Sealer
 	if kmsKeyHex != "" {

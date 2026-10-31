@@ -1549,6 +1549,10 @@ Demande de Bony Kiss (31 octobre 2026) : « traite d'abord les reliquats et fais
 
 Les clients internes construisaient neuf corps et réponses par une `map` ou une structure anonyme (le Broker vers le proxy, le proxy vers le Vault et l'audit, le Vault vers l'audit et l'Authorization, le Recorder vers l'Authorization) : le test de contrat ne les voyait pas. Ce sont désormais des structures nommées, ajoutées à la table (**24 paires**, contre 17), et le test **refuse** toute structure anonyme ou `map` littérale à champs `snake_case` dans `internal/interfaces` et `internal/infrastructure` (seul `oidc_provider.go` en est exempté : formats d'un fournisseur tiers). Le JSON envoyé ne change pas. **3 contre-épreuves, 3 tuées** ; unitaires des quatre services verts ; intégration sans base verte (178 s).
 
+## Reliquat d'ADR-0049 : le jeton Transit se renouvelle de lui-même (ADR-0053)
+
+Un jeton périodique (la procédure recommandée) expirait sous le Vault et le Recorder au bout de sa période : panne programmée. **Mesuré avant** (sur `3ff50c0`, vrai OpenBao) : jeton périodique de 4 s, au bout de 10 s, `fetch-credential` → `503`. **Livré** : `pkg/transit` `TokenLife` (`lookup-self`), `RenewSelf` (`renew-self`), `KeepAlive` (à mi-vie ; échec retenté au quart du temps restant, au moins toutes les 5 s ; jeton sans fin ou non renouvelable laissé tel quel et annoncé) ; lancé par le Vault et le Recorder après l'aller-retour d'essai ; politique minimale documentée + `lookup-self` et `renew-self`. **Après** : le secret est livré au bout de 10 s, les deux services annoncent le renouvellement. `pkg/transit` +4 tests ; **6 mutations, 6 tuées**. **Reste** : pas d'AppRole ; le fichier du jeton n'est pas relu à chaud ; un jeton à sa durée maximale se remplace à la main.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
