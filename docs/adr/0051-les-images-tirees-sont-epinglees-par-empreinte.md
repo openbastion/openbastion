@@ -13,7 +13,7 @@ ADR-0033 l'avait noté : « les images ne sont pas épinglées par empreinte (`@
 - (+) **Mesuré, avant** : le test échoue sur les huit références (rouge). **Après** : il passe ; l'empreinte de `postgres:16` relevée est celle que la CI épinglait déjà.
 - (+) **Les images se construisent encore** avec leurs bases épinglées : l'image de déploiement (106 Mo, distroless), l'image d'outils et l'image Base44 ; un binaire de l'image distroless démarre et refuse, comme attendu, de tourner sans ses certificats.
 - (+) **3 mutations, 3 tuées** : une empreinte retirée, une empreinte tronquée, une image ajoutée sans empreinte au workflow.
-- (−) **`make test-compose` n'a pas tourné** pour cet incrément : il pose une règle de pare-feu temporaire que le mode de permission de la session a refusée. Les images ont été construites, la pile n'a pas été démarrée.
+- (+) **`make test-compose` passe** sur les images épinglées en Go 1.27.1 : 9 scénarios sur la vraie pile en 147 s (lancé après autorisation explicite de sa règle de pare-feu temporaire, retirée ensuite).
 - (−) **Une empreinte ne se met pas à jour seule** : un correctif de sécurité publié sous la même étiquette n'entre qu'au prochain épinglage. La mise à jour se fait à la main, image par image (relever l'empreinte, la remplacer, construire, tester).
 - (−) ~~**Les images de construction sont sur Go 1.23**, qui ne reçoit plus de correctifs de sécurité, quand la CI et le développement sont sur Go 1.27 : l'épinglage fige cette version.~~ **Levé le même jour** : `golang:1.27.1` et `golang:1.27.1-alpine`, épinglées, la version de la CI.
 - (−) Les images tirées par les tests eux-mêmes (`openBaoImage` dans le code Go) ne sont pas lues par ce test ; l'une l'est par construction, et il faudra la garder épinglée à la main.

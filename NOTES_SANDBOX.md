@@ -1521,9 +1521,9 @@ Go de Bony Kiss (31 octobre 2026) pour le point 9.
 
 **Pas lancé** : `make test-compose` — sa règle de pare-feu temporaire a été refusée par le mode de permission de cette session ; la pile n'a donc pas été démarrée avec les nouvelles images.
 
-**Puis, le même jour** : les images de construction passent de Go 1.23 (plus corrigé) à `golang:1.27.1` et `golang:1.27.1-alpine`, épinglées par empreinte — la version de la CI. Les trois images se construisent, `go version` y dit `go1.27.1`, un binaire démarre dans l'image distroless. `make test-compose` a de nouveau été refusé (règle de pare-feu temporaire) : la pile n'a pas été démarrée. La pile Base44 qui tourne garde son ancienne image jusqu'à `docker compose -f deploy/base44/docker-compose.yml up -d --build`.
+**Puis, le même jour** : les images de construction passent de Go 1.23 (plus corrigé) à `golang:1.27.1` et `golang:1.27.1-alpine`, épinglées par empreinte — la version de la CI. Les trois images se construisent, `go version` y dit `go1.27.1`, un binaire démarre dans l'image distroless. `make test-compose` a d'abord été refusé deux fois (règle de pare-feu temporaire) ; autorisé ensuite explicitement par Bony Kiss, il passe sur ces images : **9 scénarios sur la vraie pile, 147 s** (Admin UI sous sa politique, seuls la Gateway et le proxy publiés, clés par service, bases cloisonnées, pas de compte de démonstration, l'auditeur relit ce que l'opérateur a tapé, chaîne vérifiée par le CLI, aucun secret dans les journaux, tout survit au redémarrage de la pile) ; règle retirée après (0 restante). La pile Base44 qui tourne garde son ancienne image jusqu'à `docker compose -f deploy/base44/docker-compose.yml up -d --build`.
 
-**Ce que cela ne fait PAS** : pas de mise à jour automatique des empreintes ; l'image OpenBao des tests (dans le code Go) n'est pas lue par le test ; `make test-compose` reste à lancer avec ces images.
+**Ce que cela ne fait PAS** : pas de mise à jour automatique des empreintes ; l'image OpenBao des tests (dans le code Go) n'est pas lue par le test ; rien de plus.
 
 ## Prochains incréments qui lèveront cette limite
 
