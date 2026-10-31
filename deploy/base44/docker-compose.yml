@@ -77,9 +77,22 @@ services:
       - postgres:/var/lib/postgresql/data
       - ../../deploy/docker-compose/postgres-init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "openbastion", "-d", "postgres"]
+      test:
+        - CMD-SHELL
+        - >
+          for user in authentication authorization session_broker password_vault audit_service command_recorder; do
+            case "$$user" in
+              authentication) pw='ob-dev-authentication' ;;
+              authorization) pw='ob-dev-authorization' ;;
+              session_broker) pw='ob-dev-session-broker' ;;
+              password_vault) pw='ob-dev-password-vault' ;;
+              audit_service) pw='ob-dev-audit-service' ;;
+              command_recorder) pw='ob-dev-command-recorder' ;;
+            esac
+            PGPASSWORD="$$pw" pg_isready -h 127.0.0.1 -U "$$user" -d "$$user" >/dev/null || exit 1;
+          done
       interval: 3s
-      timeout: 3s
+      timeout: 5s
       retries: 30
     networks: [internal]
 
@@ -302,10 +315,8 @@ services:
       base44.kind: web
       base44.port: 3000
     command: ["sh", "-ec", "cd /openbastion-icons && npm ci --no-audit --no-fund && npm run build && cd /app && npm ci --no-audit --no-fund && exec npx vite"]
-    # List form: the bare `BASE44_PREVIEW_MODE` entry is passed through from the platform's
-    # environment (the compose parser here rejects it in map form next to other keys).
     environment:
-      - BASE44_PREVIEW_MODE
+      - BASE44_PREVIEW_MODE=1
       - BASE44_GATEWAY_URL=http://api-gateway:8080
       # The preview reaches this server as 3000-<sandbox id>.<sandbox domain>: vite.config.ts
       # allows exactly those two host suffixes, and only when BASE44_PREVIEW_MODE=1.
