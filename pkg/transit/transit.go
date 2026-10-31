@@ -43,6 +43,10 @@ type Config struct {
 	Key       string // the key's name in the mount
 	TokenFile string // a file holding the token, readable by its owner only
 	CAFile    string // optional: the authority that signs the server's certificate
+
+	// AppRole (ADR-0058), instead of TokenFile: the two files, readable by their owner only, read
+	// again at each login; the mount is "approle" when empty.
+	RoleIDFile, SecretIDFile, AppRoleMount string
 }
 
 // Client wraps and unwraps with one Transit key.
@@ -51,28 +55,43 @@ type Client struct {
 	tokenMu          sync.RWMutex
 	token            string // the token in use; replaced by ReloadToken once a new one is checked (ADR-0056)
 	tokenFile        string
+	approle          *appRole // set when the service logs in by AppRole (ADR-0058); tokenFile is then empty
 	http             *http.Client
 	renewFloor       time.Duration // the shortest wait before a renewal is tried again (ADR-0053)
 }
 
-// FromEnv reads TRANSIT_ADDR, TRANSIT_KEY and TRANSIT_TOKEN_FILE, which go together, and
-// TRANSIT_MOUNT and TRANSIT_CA_FILE. None set: (nil, false, nil) — Transit is not configured.
-// Some but not all, or any value that cannot be used: an error that names the variable and never
-// repeats the token.
+// FromEnv reads TRANSIT_ADDR and TRANSIT_KEY, which go together with one way to log in —
+// TRANSIT_TOKEN_FILE, or TRANSIT_ROLE_ID_FILE and TRANSIT_SECRET_ID_FILE (AppRole, ADR-0058, with
+// TRANSIT_APPROLE_MOUNT) —, and TRANSIT_MOUNT and TRANSIT_CA_FILE. None set: (nil, false, nil) —
+// Transit is not configured. Some but not all, both ways, or any value that cannot be used: an
+// error that names the variable and never repeats what it holds.
 func FromEnv(getenv func(string) string) (*Client, bool, error) {
 	cfg := Config{Addr: getenv("TRANSIT_ADDR"), Mount: getenv("TRANSIT_MOUNT"), Key: getenv("TRANSIT_KEY"),
-		TokenFile: getenv("TRANSIT_TOKEN_FILE"), CAFile: getenv("TRANSIT_CA_FILE")}
-	if cfg.Addr == "" && cfg.Key == "" && cfg.TokenFile == "" && cfg.Mount == "" && cfg.CAFile == "" {
+		TokenFile: getenv("TRANSIT_TOKEN_FILE"), CAFile: getenv("TRANSIT_CA_FILE"),
+		RoleIDFile: getenv("TRANSIT_ROLE_ID_FILE"), SecretIDFile: getenv("TRANSIT_SECRET_ID_FILE"), AppRoleMount: getenv("TRANSIT_APPROLE_MOUNT")}
+	approle := cfg.RoleIDFile != "" || cfg.SecretIDFile != "" || cfg.AppRoleMount != ""
+	if cfg.Addr == "" && cfg.Key == "" && cfg.TokenFile == "" && cfg.Mount == "" && cfg.CAFile == "" && !approle {
 		return nil, false, nil
 	}
+	if cfg.TokenFile != "" && approle {
+		return nil, true, errors.New("TRANSIT_TOKEN_FILE and AppRole (TRANSIT_ROLE_ID_FILE, TRANSIT_SECRET_ID_FILE, TRANSIT_APPROLE_MOUNT) are two ways to log in to Transit: give one")
+	}
+	required := map[string]string{"TRANSIT_ADDR": cfg.Addr, "TRANSIT_KEY": cfg.Key}
+	way := "TRANSIT_TOKEN_FILE (or AppRole: TRANSIT_ROLE_ID_FILE and TRANSIT_SECRET_ID_FILE)"
+	if approle {
+		required["TRANSIT_ROLE_ID_FILE"], required["TRANSIT_SECRET_ID_FILE"] = cfg.RoleIDFile, cfg.SecretIDFile
+		way = "AppRole (TRANSIT_ROLE_ID_FILE and TRANSIT_SECRET_ID_FILE)"
+	} else {
+		required["TRANSIT_TOKEN_FILE"] = cfg.TokenFile
+	}
 	var missing []string
-	for name, v := range map[string]string{"TRANSIT_ADDR": cfg.Addr, "TRANSIT_KEY": cfg.Key, "TRANSIT_TOKEN_FILE": cfg.TokenFile} {
+	for name, v := range required {
 		if v == "" {
 			missing = append(missing, name)
 		}
 	}
 	if len(missing) > 0 {
-		return nil, true, fmt.Errorf("TRANSIT_ADDR, TRANSIT_KEY and TRANSIT_TOKEN_FILE go together; missing: %s", strings.Join(sorted(missing), ", "))
+		return nil, true, fmt.Errorf("TRANSIT_ADDR, TRANSIT_KEY and %s go together; missing: %s", way, strings.Join(sorted(missing), ", "))
 	}
 	c, err := New(cfg)
 	return c, true, err
@@ -103,9 +122,27 @@ func New(cfg Config) (*Client, error) {
 	if !namePattern.MatchString(cfg.Key) {
 		return nil, errors.New("TRANSIT_KEY must be a key name of 1 to 128 letters, digits, '-' and '_'")
 	}
-	token, err := readToken(cfg.TokenFile)
-	if err != nil {
-		return nil, err
+	var token string
+	var approle *appRole
+	switch {
+	case cfg.TokenFile != "" && (cfg.RoleIDFile != "" || cfg.SecretIDFile != ""):
+		return nil, errors.New("TRANSIT_TOKEN_FILE and AppRole are two ways to log in to Transit: give one")
+	case cfg.TokenFile == "" && (cfg.RoleIDFile != "" || cfg.SecretIDFile != ""):
+		approleMount := cfg.AppRoleMount
+		if approleMount == "" {
+			approleMount = "approle"
+		}
+		if !mountPattern.MatchString(approleMount) {
+			return nil, errors.New("TRANSIT_APPROLE_MOUNT must be a mount path of letters, digits, '-', '_' and '/'")
+		}
+		approle = &appRole{mount: approleMount, roleIDFile: cfg.RoleIDFile, secretIDFile: cfg.SecretIDFile}
+		if _, _, err := approle.read(); err != nil { // both files are usable now, not at the first login only
+			return nil, err
+		}
+	default:
+		if token, err = readToken(cfg.TokenFile); err != nil {
+			return nil, err
+		}
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if cfg.CAFile != "" {
@@ -120,7 +157,7 @@ func New(cfg Config) (*Client, error) {
 		tlsConfig.RootCAs = pool
 	}
 	return &Client{
-		base: u.Scheme + "://" + u.Host, mount: mount, key: cfg.Key, token: token, tokenFile: cfg.TokenFile, renewFloor: DefaultRenewFloor,
+		base: u.Scheme + "://" + u.Host, mount: mount, key: cfg.Key, token: token, tokenFile: cfg.TokenFile, approle: approle, renewFloor: DefaultRenewFloor,
 		http: &http.Client{
 			Timeout: Timeout,
 			// The token goes to this server and nowhere else: no redirect, no egress proxy.
@@ -133,25 +170,31 @@ func New(cfg Config) (*Client, error) {
 // readToken reads the token from a file only its owner can read: a token others can read is a
 // token others can use.
 func readToken(path string) (string, error) {
+	return readSecretFile("TRANSIT_TOKEN_FILE", "token", path)
+}
+
+// readSecretFile reads one value from a file only its owner can read (the token's rule, also the
+// AppRole files'). Its errors name the variable, never what the file holds.
+func readSecretFile(variable, what, path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("TRANSIT_TOKEN_FILE cannot be read: %v", err)
+		return "", fmt.Errorf("%s cannot be read: %v", variable, err)
 	}
 	if !info.Mode().IsRegular() {
-		return "", errors.New("TRANSIT_TOKEN_FILE must be a regular file")
+		return "", fmt.Errorf("%s must be a regular file", variable)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		return "", fmt.Errorf("TRANSIT_TOKEN_FILE is readable by its group or by others (mode %#o): make it 0600 or 0400", info.Mode().Perm())
+		return "", fmt.Errorf("%s is readable by its group or by others (mode %#o): make it 0600 or 0400", variable, info.Mode().Perm())
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("TRANSIT_TOKEN_FILE cannot be read: %v", err)
+		return "", fmt.Errorf("%s cannot be read: %v", variable, err)
 	}
-	token := strings.TrimSpace(string(b))
-	if token == "" || strings.ContainsAny(token, " \t\r\n") {
-		return "", errors.New("TRANSIT_TOKEN_FILE must hold one token on one line")
+	v := strings.TrimSpace(string(b))
+	if v == "" || strings.ContainsAny(v, " \t\r\n") {
+		return "", fmt.Errorf("%s must hold one %s on one line", variable, what)
 	}
-	return token, nil
+	return v, nil
 }
 
 func loopback(host string) bool {
@@ -217,6 +260,11 @@ func (c *Client) Decrypt(ctx context.Context, ciphertext string, aad []byte) ([]
 
 // Probe wraps and unwraps a test value: the key exists, the token may use it both ways.
 func (c *Client) Probe(ctx context.Context) error {
+	if c.approle != nil && c.currentToken() == "" {
+		if _, err := c.Login(ctx); err != nil {
+			return err
+		}
+	}
 	want := []byte("openbastion transit probe")
 	aad := []byte("openbastion.transit.probe")
 	ct, err := c.Encrypt(ctx, want, aad)
@@ -257,7 +305,9 @@ func (c *Client) doAs(ctx context.Context, token, op, method, path string, body 
 	if err != nil {
 		return fmt.Errorf("transit %s: the request could not be built", op)
 	}
-	req.Header.Set("X-Vault-Token", token)
+	if token != "" {
+		req.Header.Set("X-Vault-Token", token)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -281,7 +331,10 @@ func (c *Client) doAs(ctx context.Context, token, op, method, path string, body 
 				msg = msg[:200]
 			}
 		}
-		return fmt.Errorf("transit %s at %s: status %d: %s", op, c.base, resp.StatusCode, strings.ReplaceAll(msg, token, "[token]"))
+		if token != "" { // a login carries no token: replacing "" would put "[token]" between every letter
+			msg = strings.ReplaceAll(msg, token, "[token]")
+		}
+		return fmt.Errorf("transit %s at %s: status %d: %s", op, c.base, resp.StatusCode, msg)
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return fmt.Errorf("transit %s: the answer is not JSON", op)
@@ -339,6 +392,10 @@ func (c *Client) RenewSelf(ctx context.Context) (time.Duration, error) {
 // time left (never sooner than the floor), and every failure is said. A token without an end, or
 // that may not be renewed, is left as it is — and that is said once. The token is never written.
 func (c *Client) KeepAlive(ctx context.Context, logf func(format string, args ...any)) {
+	if c.approle != nil {
+		c.keepLoggedIn(ctx, logf)
+		return
+	}
 	ttl, renewable, err := c.TokenLife(ctx)
 	switch {
 	case err != nil:
@@ -384,6 +441,9 @@ const DefaultTokenReload = 30 * time.Second
 // a token Transit refuses, leaves the token in use as it is — the error says why, and holds
 // neither token.
 func (c *Client) ReloadToken(ctx context.Context) (changed bool, err error) {
+	if c.approle != nil {
+		return false, errors.New("there is no token file: the service logs in by AppRole")
+	}
 	next, err := readToken(c.tokenFile)
 	if err != nil {
 		return false, err
@@ -409,6 +469,10 @@ func (c *Client) ReloadToken(ctx context.Context) (changed bool, err error) {
 // WatchTokenFile reads the token file every period until ctx ends, and takes a new token once
 // Transit has accepted it (ADR-0056). Each change is said once; the tokens never are.
 func (c *Client) WatchTokenFile(ctx context.Context, every time.Duration, logf func(format string, args ...any)) {
+	if c.approle != nil {
+		logf("transit: AppRole: no token file to read again; the role and secret files are read at each login")
+		return
+	}
 	last := ""
 	logf("transit: the token file is read again every %s; a new token is taken once Transit accepts it", every)
 	ticker := time.NewTicker(every)

@@ -37,12 +37,27 @@ Puis, pour chaque service :
 | `TRANSIT_ADDR` | `https://openbao.example:8200` ; `http` seulement vers une adresse de bouclage (développement). Ni identifiants, ni chemin. |
 | `TRANSIT_KEY` | Le nom de la clé (`openbastion-vault`, `openbastion-recorder`). |
 | `TRANSIT_TOKEN_FILE` | Le fichier du jeton, lisible par son seul propriétaire (`0600` ou `0400`) : un fichier lisible par le groupe ou les autres est refusé. Le jeton n'est jamais pris dans une variable d'environnement, ni écrit dans un journal. |
+| `TRANSIT_ROLE_ID_FILE`, `TRANSIT_SECRET_ID_FILE` | **À la place de `TRANSIT_TOKEN_FILE`** (ADR-0058) : les fichiers du `role_id` et du `secret_id` d'un rôle AppRole, même règle que le jeton (`0600` ou `0400`, une valeur sur une ligne). Ensemble, et jamais avec `TRANSIT_TOKEN_FILE`. |
+| `TRANSIT_APPROLE_MOUNT` | Le montage d'AppRole, `approle` par défaut. |
 | `TRANSIT_MOUNT` | Le montage, `transit` par défaut. |
 | `TRANSIT_CA_FILE` | Facultatif : l'autorité qui signe le certificat du serveur Transit. |
 
-Les trois premières vont ensemble. Au démarrage, le service enveloppe puis désenveloppe une valeur d'essai : une adresse injoignable, un jeton refusé, une clé absente ou interdite au jeton, et le service **refuse de démarrer**, en disant pourquoi sans répéter le jeton. Il annonce ensuite la clé utilisée (`transit:<montage>/<clé>`) et l'hôte, jamais le jeton.
+`TRANSIT_ADDR`, `TRANSIT_KEY` et une façon de se connecter — le fichier du jeton, ou les deux fichiers d'AppRole — vont ensemble. Au démarrage, le service enveloppe puis désenveloppe une valeur d'essai : une adresse injoignable, un jeton refusé, une clé absente ou interdite au jeton, et le service **refuse de démarrer**, en disant pourquoi sans répéter le jeton. Il annonce ensuite la clé utilisée (`transit:<montage>/<clé>`) et l'hôte, jamais le jeton.
 
 **Le jeton se renouvelle de lui-même** (ADR-0053) : le service lit sa durée de vie au démarrage et le renouvelle à mi-vie, puis à mi-vie de chaque nouvelle durée ; un échec est retenté au quart du temps restant (au moins toutes les 5 s) et écrit au journal. Il lui faut les deux derniers chemins de la politique ci-dessus. Un jeton sans fin (racine) ou non renouvelable n'est pas renouvelé, et le démarrage le dit. Un jeton qui a atteint sa durée maximale (`explicit_max_ttl`), ou révoqué, ne se renouvelle plus : remplacez-le dans le fichier, **sans redémarrer** (ADR-0056). Le fichier est relu toutes les `TRANSIT_TOKEN_RELOAD_SECONDS` (30 par défaut) ; un nouveau jeton n'est pris qu'une fois accepté par Transit (`lookup-self`), sinon l'ancien reste et le journal le dit. **L'ordre sûr** : écrivez le nouveau jeton, attendez la ligne « the token file changed: the new token, accepted by Transit, is used from now on », puis révoquez l'ancien.
+
+**Par AppRole** (ADR-0058), le service se connecte lui-même et n'a plus besoin qu'on lui écrive un jeton. Un rôle par service, de la même politique :
+
+```sh
+bao auth enable approle
+bao write auth/approle/role/openbastion-vault token_policies=openbastion-vault token_no_default_policy=true \
+    token_ttl=1h token_max_ttl=24h
+bao read -field=role_id auth/approle/role/openbastion-vault/role-id > vault-transit.role-id
+bao write -f -field=secret_id auth/approle/role/openbastion-vault/secret-id > vault-transit.secret-id
+chmod 600 vault-transit.role-id vault-transit.secret-id
+```
+
+Le service se connecte au démarrage (une connexion refusée l'empêche de démarrer), renouvelle son jeton à mi-vie, et **se reconnecte** quand le renouvellement est refusé ou rend moins que la vie qu'avait le jeton — il a atteint `token_max_ttl` : « transit: AppRole: a new token is logged in ». Une connexion qui échoue est retentée au quart du temps restant et dite (« no new token »), le jeton en usage restant valable jusqu'à sa fin. Les deux fichiers sont relus à chaque connexion : pour changer de `secret_id`, écrivez le nouveau dans le fichier. Le jeton précédent n'est pas révoqué : il finit à sa date. Un `secret_id` à usage limité (`secret_id_num_uses`) s'épuise au fil des reconnexions ; un `secret_id` emballé (*response wrapping*) n'est pas déballé par le service.
 
 ## Passer de la clé locale à Transit
 

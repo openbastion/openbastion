@@ -32,7 +32,7 @@ strict_defaults:
   ROTATION_ALERT_AFTER_FAILURES: {default: 3, min: 1, max: 100, service: password-vault, note: "ADR-0041"}
   AUDIT_RETENTION_MONTHS:  {default: "désactivé", min: 1, max: 120, note: "ADR-0032, avec AUDIT_ARCHIVE_DIR"}
 startup_keys:              # obligatoires avec DATABASE_URL ; jamais dans le dépôt
-  - KMS_KEY_HEX             # password-vault, command-recorder — ou Transit (ADR-0049) : TRANSIT_ADDR + TRANSIT_KEY + TRANSIT_TOKEN_FILE (fichier 0600), aller-retour au démarrage ; avec les deux, KMS_KEY_HEX ne fait plus que lire
+  - KMS_KEY_HEX             # password-vault, command-recorder — ou Transit (ADR-0049) : TRANSIT_ADDR + TRANSIT_KEY + TRANSIT_TOKEN_FILE (fichier 0600) ou AppRole TRANSIT_ROLE_ID_FILE + TRANSIT_SECRET_ID_FILE (fichiers 0600, ADR-0058 ; jamais les deux), aller-retour au démarrage ; avec les deux, KMS_KEY_HEX ne fait plus que lire
   - TOKEN_SIGNING_KEY_HEX   # authentication
   - AUDIT_CHAIN_KEY_HEX     # audit-service (ADR-0027)
 never:

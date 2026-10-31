@@ -132,7 +132,7 @@ func redactDSN(dsn string) string {
 
 // recordingKeys returns the key that wraps each session's data key, and the earlier keys held to
 // read what they wrapped (ADR-0049). With Transit configured (TRANSIT_ADDR, TRANSIT_KEY,
-// TRANSIT_TOKEN_FILE), the key lives there, after a real round trip proves the key and the token
+// and TRANSIT_TOKEN_FILE or AppRole, ADR-0058), the key lives there, after a real round trip proves the key and the token
 // work; KMS_KEY_HEX, if still given, reads the recordings wrapped before and wraps nothing.
 // Without Transit, KMS_KEY_HEX is the key, as before.
 func recordingKeys() (infrastructure.KeyWrapper, []infrastructure.KeyWrapper) {
@@ -153,9 +153,11 @@ func recordingKeys() (infrastructure.KeyWrapper, []infrastructure.KeyWrapper) {
 	if err := client.Probe(ctx); err != nil {
 		log.Fatalf("command-recorder: Transit cannot wrap and unwrap with %s: %v — refusing to start", client.KeyID(), err)
 	}
-	// The token renews itself at half its life (ADR-0053).
+	// The token renews itself at half its life (ADR-0053); with AppRole, a new one is logged in
+	// once it reaches its maximum (ADR-0058).
 	go client.KeepAlive(context.Background(), func(f string, a ...any) { log.Printf("command-recorder: "+f, a...) })
-	// A token replaced on disk is taken once Transit accepts it (ADR-0056).
+	// A token replaced on disk is taken once Transit accepts it (ADR-0056); with AppRole there is no
+	// token file, and that is said.
 	reload := boundedIntEnv("TRANSIT_TOKEN_RELOAD_SECONDS", int(transit.DefaultTokenReload/time.Second), 1, 3600)
 	go client.WatchTokenFile(context.Background(), time.Duration(reload)*time.Second, func(f string, a ...any) { log.Printf("command-recorder: "+f, a...) })
 	var previous []infrastructure.KeyWrapper

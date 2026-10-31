@@ -165,7 +165,7 @@ func rotateEvery(svc *application.VaultService, every time.Duration) {
 }
 
 // keyring builds what seals the secrets (ADR-0049). With Transit configured (TRANSIT_ADDR,
-// TRANSIT_KEY, TRANSIT_TOKEN_FILE), new secrets are sealed under it, after a real round trip
+// TRANSIT_KEY, and TRANSIT_TOKEN_FILE or AppRole, ADR-0058), new secrets are sealed under it, after a real round trip
 // proves the key and the token work; KMS_KEY_HEX, if still given, opens what was sealed before
 // and seals nothing. Without Transit, KMS_KEY_HEX is the key, as before — required with a
 // database: a random per-process key would make every secret unreadable after a restart.
@@ -176,7 +176,7 @@ func keyring(dsn, kmsKeyHex string) *infrastructure.Keyring {
 	}
 	if !configured {
 		if dsn != "" && kmsKeyHex == "" {
-			log.Fatalf("password-vault: DATABASE_URL is set but neither Transit (TRANSIT_ADDR, TRANSIT_KEY, TRANSIT_TOKEN_FILE) nor KMS_KEY_HEX is — refusing to start with a random, per-process encryption key that would make every secret unreadable after a restart")
+			log.Fatalf("password-vault: DATABASE_URL is set but neither Transit (TRANSIT_ADDR, TRANSIT_KEY, and TRANSIT_TOKEN_FILE or AppRole) nor KMS_KEY_HEX is — refusing to start with a random, per-process encryption key that would make every secret unreadable after a restart")
 		}
 		local, err := infrastructure.NewLocalKMSFromHexKey(kmsKeyHex)
 		if err != nil {
@@ -191,10 +191,12 @@ func keyring(dsn, kmsKeyHex string) *infrastructure.Keyring {
 	if err := client.Probe(ctx); err != nil {
 		log.Fatalf("password-vault: Transit cannot wrap and unwrap with %s: %v — refusing to start", client.KeyID(), err)
 	}
-	// The token renews itself at half its life (ADR-0053): a periodic token would otherwise end,
+	// The token renews itself at half its life (ADR-0053); with AppRole, a new one is logged in
+	// once it reaches its maximum (ADR-0058): a periodic token would otherwise end,
 	// and with it every secret's delivery.
 	go client.KeepAlive(context.Background(), func(f string, a ...any) { log.Printf("password-vault: "+f, a...) })
-	// A token replaced on disk is taken once Transit accepts it (ADR-0056).
+	// A token replaced on disk is taken once Transit accepts it (ADR-0056); with AppRole there is no
+	// token file, and that is said.
 	reload := boundedIntEnv("TRANSIT_TOKEN_RELOAD_SECONDS", int(transit.DefaultTokenReload/time.Second), 1, 3600)
 	go client.WatchTokenFile(context.Background(), time.Duration(reload)*time.Second, func(f string, a ...any) { log.Printf("password-vault: "+f, a...) })
 	current := infrastructure.NewTransitKMS(client)

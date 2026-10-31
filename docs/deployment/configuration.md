@@ -69,5 +69,5 @@ Un ticket ne vaut que sur l'instance qui l'a émis : **ne mettez pas d'équilibr
 
 ## Clés de chiffrement : Transit (ADR-0049)
 
-Le Password Vault et le Command Recorder peuvent faire garder leur clé maîtresse par le moteur Transit d'OpenBao (ou de HashiCorp Vault) plutôt que par `KMS_KEY_HEX` : `TRANSIT_ADDR`, `TRANSIT_KEY`, `TRANSIT_TOKEN_FILE` (fichier `0600`), et en option `TRANSIT_MOUNT` et `TRANSIT_CA_FILE`. La mise en place, la politique minimale du jeton, la migration depuis la clé locale et le comportement en panne sont décrits dans [`../security/key-management.md`](../security/key-management.md).
+Le Password Vault et le Command Recorder peuvent faire garder leur clé maîtresse par le moteur Transit d'OpenBao (ou de HashiCorp Vault) plutôt que par `KMS_KEY_HEX` : `TRANSIT_ADDR`, `TRANSIT_KEY`, et soit `TRANSIT_TOKEN_FILE` (fichier `0600`), soit AppRole — `TRANSIT_ROLE_ID_FILE` et `TRANSIT_SECRET_ID_FILE` (fichiers `0600`, `TRANSIT_APPROLE_MOUNT` en option, ADR-0058) —, et en option `TRANSIT_MOUNT` et `TRANSIT_CA_FILE`. La mise en place, la politique minimale du jeton, la migration depuis la clé locale et le comportement en panne sont décrits dans [`../security/key-management.md`](../security/key-management.md).
 

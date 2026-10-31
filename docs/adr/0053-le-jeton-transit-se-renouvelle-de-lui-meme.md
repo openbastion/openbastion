@@ -15,7 +15,7 @@ ADR-0049 a confié les clés du Vault et du Command Recorder au moteur Transit d
 - (+) **Mesuré, après** : le même scénario livre le secret au bout de 10 s ; le Vault et le Recorder annoncent le renouvellement ; la politique minimale (le chiffrement et le déchiffrement de la clé, `lookup-self` et `renew-self`) suffit. En unitaire (`pkg/transit`, 4 tests) : renouvellements répétés à mi-vie d'un jeton de 2 s, jeton sans fin et non renouvelable laissés tels quels et annoncés, échec retenté et dit, politique sans `lookup-self` dite avec ce qu'il faut lui donner, jamais le jeton dans le journal.
 - (+) **6 mutations, 6 tuées.**
 - (−) Un jeton périodique renouvelé sans fin dure autant que le service : le révoquer reste le geste de l'exploitant (`bao token revoke`), et le service le voit au renouvellement suivant.
-- (−) Pas d'AppRole : un jeton qui a atteint sa durée maximale (`explicit_max_ttl`) ne se renouvelle plus, et il faut le remplacer dans le fichier, puis redémarrer le service.
+- (−) ~~Pas d'AppRole : un jeton qui a atteint sa durée maximale (`explicit_max_ttl`) ne se renouvelle plus, et il faut le remplacer dans le fichier, puis redémarrer le service.~~ Remplacé sur disque, il est pris sans redémarrer (ADR-0056) ; avec AppRole, le service se reconnecte de lui-même (ADR-0058).
 - (−) ~~Le fichier n'est pas relu : un jeton remplacé sur disque n'est pris qu'au redémarrage.~~ **Levé par ADR-0056** : relu, vérifié, pris.
 
 **Alternatives envisagées**

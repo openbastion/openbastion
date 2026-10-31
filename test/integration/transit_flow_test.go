@@ -31,6 +31,9 @@ type openBao struct {
 	addr, name  string
 	createToken func(t *testing.T, period string) string // a token of the key's policy; periodic if period is set
 	revoke      func(t *testing.T, token string)
+	// appRole creates a role of the key's policy whose tokens live ttl and at most max (ADR-0058),
+	// and returns its role_id and secret_id files.
+	appRole func(t *testing.T, name, ttl, max string) (roleIDFile, secretIDFile string)
 }
 
 // startOpenBao runs OpenBao in development mode, mounts Transit, creates key, and returns the
@@ -95,6 +98,15 @@ path "auth/token/renew-self" { capabilities = ["update"] }`, key, key)
 		}
 		tok := call(http.MethodPost, "/v1/auth/token/create", req)
 		return writeToken(t, tok["auth"].(map[string]any)["client_token"].(string), 0o600)
+	}
+	call(http.MethodPost, "/v1/sys/auth/approle", map[string]string{"type": "approle"})
+	b.appRole = func(t *testing.T, name, ttl, max string) (string, string) {
+		t.Helper()
+		call(http.MethodPost, "/v1/auth/approle/role/"+name, map[string]any{"token_policies": []string{"openbastion-" + key},
+			"token_ttl": ttl, "token_max_ttl": max, "token_no_default_policy": true})
+		roleID := call(http.MethodGet, "/v1/auth/approle/role/"+name+"/role-id", nil)["data"].(map[string]any)["role_id"].(string)
+		secretID := call(http.MethodPost, "/v1/auth/approle/role/"+name+"/secret-id", map[string]any{})["data"].(map[string]any)["secret_id"].(string)
+		return writeToken(t, roleID, 0o600), writeToken(t, secretID, 0o600)
 	}
 	b.revoke = func(t *testing.T, token string) {
 		t.Helper()
@@ -348,6 +360,43 @@ func TestPostgresFlow_TransitKeepsTheKeys_WhatWasSealedBeforeStaysReadable(t *te
 		}
 		if out := v8.out.String(); strings.Contains(out, strings.TrimSpace(string(old))) || strings.Contains(out, strings.TrimSpace(string(fresh))) {
 			t.Fatal("a token is in the Vault's log")
+		}
+	})
+
+	t.Run("ADR-0058: by AppRole, the Vault and the Recorder log in, and log in again once their token reaches its maximum", func(t *testing.T) {
+		roleFile, secretFile := bao.appRole(t, "openbastion-vault", "3s", "5s")
+		role, _ := os.ReadFile(roleFile)
+		secret, _ := os.ReadFile(secretFile)
+		byAppRole := []string{"TRANSIT_ADDR=" + bao.addr, "TRANSIT_KEY=openbastion-vault", "TRANSIT_ROLE_ID_FILE=" + roleFile, "TRANSIT_SECRET_ID_FILE=" + secretFile}
+		for name, env := range map[string][]string{
+			"both ways":                   append([]string{"TRANSIT_TOKEN_FILE=" + tokenFile}, byAppRole...),
+			"the role without its secret": {"TRANSIT_ADDR=" + bao.addr, "TRANSIT_KEY=openbastion-vault", "TRANSIT_ROLE_ID_FILE=" + roleFile},
+			"a secret_id OpenBao refuses": {"TRANSIT_ADDR=" + bao.addr, "TRANSIT_KEY=openbastion-vault", "TRANSIT_ROLE_ID_FILE=" + roleFile, "TRANSIT_SECRET_ID_FILE=" + writeToken(t, "0f0f0f0f-not-a-secret-id", 0o600)},
+		} {
+			for bin, port := range map[string]string{vaultBin: "19753", recorderBin: "19754"} {
+				out := runUntilExit(t, root, bin, append(vaultEnv("PORT="+port, "AUDIT_URL=http://127.0.0.1:1"), env...)...)
+				if !strings.Contains(out, "refusing to start") || !strings.Contains(out, "TRANSIT") && !strings.Contains(out, "Transit") {
+					t.Fatalf("%s (%s): not refused, or the refusal does not name Transit:\n%s", name, filepath.Base(bin), out)
+				}
+				if strings.Contains(out, strings.TrimSpace(string(secret))) || strings.Contains(out, strings.TrimSpace(string(role))) {
+					t.Fatalf("%s (%s): the role_id or the secret_id is in the output", name, filepath.Base(bin))
+				}
+			}
+		}
+
+		v9 := startService(t, root, vaultBin, "19755", vaultEnv(byAppRole...)...)
+		rec := startService(t, root, recorderBin, "19756", vaultEnv(append(byAppRole, "AUDIT_URL=http://127.0.0.1:1")...)...)
+		time.Sleep(12 * time.Second) // more than twice the tokens' maximum: without a new login, the keys are gone
+		if got, err := fetchSecret(t, v9.baseURL, after); err != nil || got != "secret-sealed-after" {
+			t.Fatalf("after 12 s with tokens of at most 5 s: %q, %v\n%s", got, err, v9.out.String())
+		}
+		for name, out := range map[string]string{"the Vault": v9.out.String(), "the Recorder": rec.out.String()} {
+			if !strings.Contains(out, "transit: AppRole: a new token is logged in") {
+				t.Fatalf("%s does not say it logged in again:\n%s", name, out)
+			}
+			if strings.Contains(out, strings.TrimSpace(string(secret))) || strings.Contains(out, strings.TrimSpace(string(role))) {
+				t.Fatalf("%s's log holds the role_id or the secret_id", name)
+			}
 		}
 	})
 
