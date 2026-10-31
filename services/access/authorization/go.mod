@@ -2,7 +2,7 @@ module github.com/openbastion/openbastion/services/access/authorization
 
 go 1.22
 
-require github.com/lib/pq v1.10.9
+require github.com/lib/pq v1.12.3
 
 // Transport mTLS interne (ADR-0010). Un replace local explicite, comme pour
 // pkg/proxycore : il lève l'ambiguïté du mode workspace quand le module a aussi
