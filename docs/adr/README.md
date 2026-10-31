@@ -68,3 +68,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0056](0056-un-jeton-transit-remplace-sur-disque-est-pris-sans-redemarrer.md) | Un jeton Transit remplacé sur disque est pris sans redémarrer, après avoir été vérifié auprès de Transit | Accepté |
 | [ADR-0057](0057-les-alertes-en-attente-survivent-a-un-redemarrage.md) | Avec une base, les alertes en attente d'un renvoi survivent à un redémarrage de l'Audit Service | Accepté |
 | [ADR-0058](0058-le-vault-et-le-recorder-se-connectent-a-transit-par-approle.md) | Le Vault et le Recorder peuvent se connecter à Transit par AppRole, et reprennent un jeton neuf quand le leur atteint sa fin | Accepté |
+| [ADR-0059](0059-dependabot-propose-une-dependance-a-la-fois-la-ci-decide.md) | Dependabot propose les mises à jour, une dépendance à la fois et après sept jours ; la CI décide | Accepté |

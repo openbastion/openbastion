@@ -16,6 +16,13 @@ ci:
     actions/setup-node: v7.1.0
     postgres: "16 (empreinte d'index)"
   permissions: "contents: read ; persist-credentials: false"
+  dependabot:                           # .github/dependabot.yml, ADR-0059
+    sources: [gomod (17 modules), npm (2), github-actions, docker (Dockerfile), docker-compose]
+    rythme: chaque lundi ; une version n'est proposée qu'à 7 jours (cooldown), sauf mise à jour de sécurité
+    forme: une pull request par dépendance, la même dans tous les modules (group-by dependency-name) ; jamais en masse
+    fusion: humaine, après la CI entière ; un module Go ajouté s'ajoute à la liste des répertoires
+    hors_portee: [go.work, GO_VERSION de la CI, empreintes écrites dans les tests (OpenBao de transit_flow_test.go)]
+    reglage_du_depot: "alertes et mises à jour de sécurité Dependabot : Settings → Code security, à activer par le propriétaire"
   not_in_ci:
     - make test-compose                 # Docker requis ; vérification avant un jalon (ADR-0033)
     - construction et analyse des images (Trivy, Grype) : à décider

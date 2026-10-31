@@ -1,0 +1,82 @@
+# ADR-0059: Dependabot proposes, the CI decides. Every update is a pull request that runs the whole
+# CI (govulncheck and npm audit included, ADR-0052); nothing is merged on its own.
+#
+# - One pull request per dependency, never a mass update (policies/dependencies-and-supply-chain.md
+#   item 3): the same dependency moves in every module at once (group-by: dependency-name), so that
+#   x/crypto is one pull request, not seventeen.
+# - A version is proposed once it is 7 days old (cooldown): a malicious release is usually pulled
+#   within days. A security update is not delayed: Dependabot's security updates ignore cooldown.
+# - Actions (ADR-0047) and images (ADR-0051) stay pinned by digest: Dependabot moves the digest and
+#   the version in its comment or tag; images_test.go still refuses an image without a digest.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - /cli/openbastion-cli
+      - /pkg/hostkey
+      - /pkg/migrate
+      - /pkg/mtls
+      - /pkg/proxycore
+      - /pkg/refusalbudget
+      - /pkg/transit
+      - /pkg/webhook
+      - /services/access/api-gateway
+      - /services/access/authentication
+      - /services/access/authorization
+      - /services/access/session-broker
+      - /services/proxy/ssh-proxy
+      - /services/recording-audit/audit-service
+      - /services/recording-audit/command-recorder
+      - /services/vault/password-vault
+      - /test/integration
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    groups:
+      go:
+        patterns: ["*"]
+        group-by: dependency-name
+    commit-message: {prefix: "build(deps)"}
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directories:
+      - /web/admin-ui
+      - /web/openbastion-icons
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    groups:
+      npm:
+        patterns: ["*"]
+        group-by: dependency-name
+    commit-message: {prefix: "build(deps)"}
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    commit-message: {prefix: "ci(deps)"}
+
+  - package-ecosystem: docker
+    directories:
+      - /deploy/docker-compose
+      - /deploy/base44
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    groups:
+      images:
+        patterns: ["*"]
+        group-by: dependency-name
+    commit-message: {prefix: "build(deps)"}
+
+  - package-ecosystem: docker-compose
+    directories:
+      - /deploy/docker-compose
+      - /deploy/base44
+    schedule: {interval: weekly, day: monday}
+    cooldown: {default-days: 7}
+    groups:
+      compose-images:
+        patterns: ["*"]
+        group-by: dependency-name
+    commit-message: {prefix: "build(deps)"}
