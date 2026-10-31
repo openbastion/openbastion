@@ -1,9 +1,10 @@
-# Aucune CI n'existe aujourd'hui (settings/ci-cd.yaml). Ce que son environnement devra fournir :
+# L'environnement de la CI (ADR-0047, .github/workflows/ci.yml).
 ci:
-  exists: false
-  go: "1.22 ou plus"
-  node: "24 (constaté en local)"
-  postgresql: "16, en service du job ; TEST_DATABASE_URL vers lui ; base jetable"
-  internal_tls: required   # la PKI de test se génère dans le job (make pki)
-  network: accès aux registres de modules Go et npm
+  exists: true
+  runner: ubuntu-24.04
+  go: "1.27.1 (celle de la vérification locale ; les modules déclarent go 1.22)"
+  node: "24.21.0"
+  postgresql: "16, en service du job postgres, épinglé par empreinte ; TEST_DATABASE_URL vers lui ; base jetable"
+  internal_tls: "les tests sous mTLS génèrent leur PKI eux-mêmes"
+  network: "GOPROXY=direct comme le Makefile ; registre npm pour npm ci"
   secrets: aucun secret réel ; uniquement des valeurs générées dans le job

@@ -13,6 +13,8 @@ Pour contribuer à OpenBastion : construire, tester, étendre. Le *pourquoi* des
 
 Les commandes réellement disponibles sont celles du `Makefile` (`make build vet`, `make test`, `make test-integration`, `make test-postgres`, `make test-compose`, `make ui-test ui-build`, `make pki`, `make run-<service>`). Certaines pages citent encore des cibles de la conception initiale qui n'existent pas dans le `Makefile` ; c'est une limite connue de cette documentation.
 
+La CI (ADR-0047, `.github/workflows/ci.yml`) rejoue ces commandes sur chaque `push` vers `main` et chaque pull request ; voir [`contributing.md`](contributing.md).
+
 ## Pages prévues
 
 | Page | État |

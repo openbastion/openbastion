@@ -1,19 +1,27 @@
-# Il n'y a PAS de pipeline de CI dans le dépôt aujourd'hui (pas de .github/workflows).
-# Ce fichier dit ce qu'une CI devra lancer quand elle existera ; ne prétends pas qu'elle tourne.
+# La CI existe depuis ADR-0047 : .github/workflows/ci.yml (GitHub Actions), sur chaque push vers main
+# et chaque pull request. Ce fichier dit ce qu'elle lance ; la vérité est le workflow.
 ci:
-  exists: false
-  must_run:
-    - make build vet
-    - make test                         # sans base : les tests PostgreSQL se skippent
-    - make test-postgres                # avec un service PostgreSQL 16 et TEST_DATABASE_URL
-    - make test-integration
-    - make ui-test ui-build
-    - gofmt -l sur tout le dépôt Go     # aujourd'hui, certains fichiers anciens ne sont pas formatés : à régler avant d'en faire une porte
-  optional:
-    - make test-compose                 # Docker requis
+  exists: true
+  workflow: .github/workflows/ci.yml
+  jobs:
+    go: [make build vet, "gofmt -l sur tout le dépôt → vide", make test]          # sans base
+    race: ["make test GOFLAGS=-race"]
+    integration: ["make build", "go test ./test/integration/... -timeout=900s"]  # sans base
+    postgres: ["make test (avec TEST_DATABASE_URL)", make test-postgres, "intégration avec base, purgée avant"]
+    ui: [make ui-test ui-build]
+  pinned:                               # par empreinte, l'étiquette en commentaire dans le workflow
+    actions/checkout: v7.0.1
+    actions/setup-go: v7.0.0
+    actions/setup-node: v7.1.0
+    postgres: "16 (empreinte d'index)"
+  permissions: "contents: read ; persist-credentials: false"
+  not_in_ci:
+    - make test-compose                 # Docker requis ; vérification avant un jalon (ADR-0033)
+    - govulncheck, npm audit, construction d'images : à décider
   never_in_ci:
-    - secrets réels ; la PKI se génère dans le job (make pki) et ne sort pas du job
+    - secrets réels ; la PKI et les clés des tests se génèrent dans le job et n'en sortent pas
+  required_checks: "à poser par le propriétaire dans la protection de main ; tant que ce n'est pas fait, la CI signale sans bloquer"
 cd:
   exists: false
-  deployment_reference: deploy/docker-compose (ADR-0033) ; deploy/helm et deploy/k8s sont des squelettes
+  deployment_reference: deploy/docker-compose (ADR-0033) ; pas de Helm ni de Kubernetes dans le dépôt
   delivery: commit et push sur main, vérifiés (policies/release-management.md) ; tags et releases sur demande seulement

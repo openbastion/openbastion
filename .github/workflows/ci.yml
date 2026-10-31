@@ -1,0 +1,129 @@
+# La vérification complète de .agents/tasks/releases/full-verification.md, sans le test Compose
+# (ADR-0047). Chaque dépendance du workflow est épinglée par empreinte, l'étiquette en
+# commentaire : une étiquette se déplace, une empreinte non. Aucun secret du dépôt n'est lu ;
+# la PKI et les clés des tests sont générées dans le job.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.27.1"
+  NODE_VERSION: "24.21.0"
+  # Comme le Makefile : le workspace, et les modules tirés de leur source (go.sum fait foi).
+  GOPROXY: direct
+
+jobs:
+  go:
+    name: build, vet, gofmt, unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+      - run: make build vet
+      - name: gofmt -l (must print nothing)
+        run: |
+          unformatted=$(git ls-files '*.go' | xargs gofmt -l)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: unit tests without a database
+        run: make test
+
+  race:
+    name: unit tests under -race
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+      - run: make test GOFLAGS=-race
+
+  integration:
+    name: integration on real processes, without a database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+      # The integration tests build the services with GOPROXY=off: the module cache comes first.
+      - run: make build
+      - run: GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
+
+  postgres:
+    name: PostgreSQL 16 — unit, dedicated, integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c # postgres:16
+        env:
+          POSTGRES_USER: openbastion
+          POSTGRES_PASSWORD: openbastion # a throwaway database of the job, never a real secret
+          POSTGRES_DB: openbastion
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U openbastion" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+      PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events RESTART IDENTITY CASCADE;
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+      - name: psql
+        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - run: make build
+      # The tables exist once a service has migrated them; the unit tests of each store do.
+      - name: unit tests with the database
+        run: make test
+      - name: dedicated PostgreSQL tests (they purge first)
+        run: make test-postgres
+      - name: integration with the database (purged first)
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$PURGE"
+          GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
+
+  ui:
+    name: Admin UI — Vitest and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            web/admin-ui/package-lock.json
+            web/openbastion-icons/package-lock.json
+      - run: make ui-test ui-build
