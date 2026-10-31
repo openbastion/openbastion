@@ -1,6 +1,6 @@
 # Feuille de route (résumé)
 
-La source est `docs/architecture/OpenBastion_04_Roadmap.md` ; ce fichier n'en garde que ce qui oriente le travail d'un agent. **Ce qui n'est pas implémenté n'existe pas** : ne fais pas comme si.
+La source est `docs/roadmap.md` ; ce fichier n'en garde que ce qui oriente le travail d'un agent. **Ce qui n'est pas implémenté n'existe pas** : ne fais pas comme si.
 
 | Étape | Contenu | État |
 |---|---|---|

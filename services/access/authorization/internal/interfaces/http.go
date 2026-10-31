@@ -34,7 +34,7 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// -- policies (mirrors POST /policies, doc 05 §2) ---------------------
+// -- policies (mirrors POST /policies, docs/api/rest/openapi.yaml) ---------------------
 
 type createPolicyRequest struct {
 	Name            string   `json:"name"`
@@ -75,7 +75,7 @@ func (s *HTTPServer) handleCreatePolicy(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(createPolicyResponse{ID: p.ID})
 }
 
-// -- check-access (Authorization.CheckAccess, doc 07 §8) ---------------
+// -- check-access (Authorization.CheckAccess, docs/api/grpc/README.md §8) ---------------
 
 type checkAccessRequest struct {
 	ActorRoles []string `json:"actor_roles"`

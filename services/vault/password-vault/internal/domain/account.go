@@ -1,6 +1,6 @@
 // Package domain holds the Password Vault's entities and repository ports.
 // It has no dependency on transport, storage engine, or crypto library —
-// those live in infrastructure/. See OpenBastion_02_Arborescence_Depot.md §3.
+// those live in infrastructure/. See docs/development/repository-structure.md §3.
 package domain
 
 import "time"
@@ -14,10 +14,10 @@ const (
 )
 
 // PrivilegedAccount mirrors the privileged_accounts table
-// (OpenBastion_06_Modele_Donnees.md §3). Username was not part of the
+// (docs/architecture/data-architecture.md §3). Username was not part of the
 // original table — a gap discovered while wiring the Session Broker to a
-// real SSH proxy (an SSH connection needs a username, doc 06 had no field
-// for it) and added here directly rather than worked around again. Doc 06
+// real SSH proxy (an SSH connection needs a username, docs/architecture/data-architecture.md had no field
+// for it) and added here directly rather than worked around again. docs/architecture/data-architecture.md
 // and proto/proxy/v1/proxy_control.proto's EstablishSessionRequest have
 // since been updated to formally carry it too — see NOTES_SANDBOX.md for
 // the full history.
@@ -88,7 +88,7 @@ func (a *PrivilegedAccount) RotationDueAt() *time.Time {
 
 // SecretVersion mirrors the vault_secrets table. EncryptedMaterial is an
 // AES-256-GCM envelope; the plaintext exists only transiently, inside
-// application's Rotate/FetchCredential use cases (doc 06 §3, Guide
+// application's Rotate/FetchCredential use cases (docs/architecture/data-architecture.md §3, Guide
 // Sécurité §6).
 type SecretVersion struct {
 	ID                  string

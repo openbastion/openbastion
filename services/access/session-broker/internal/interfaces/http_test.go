@@ -77,7 +77,7 @@ func TestConnect_ARecordingRefusalIsA503NotA409(t *testing.T) {
 
 // A dependency that fails is not a state of the session (ADR-0042): 503, and its own text —
 // which can name an address — never reaches the client. (This was a 409 with the cause until
-// ADR-0042; doc 05 keeps 409 for a session that cannot be connected in its state.)
+// ADR-0042; docs/api/rest/openapi.yaml keeps 409 for a session that cannot be connected in its state.)
 func TestConnect_AFailingDependencyIsA503_WithoutItsCause(t *testing.T) {
 	rec := connect(t, fmt.Errorf("establish-session: Post \"https://10.9.8.7:8085/internal\": dial tcp 10.9.8.7:8085: connection refused"))
 	if rec.Code != http.StatusServiceUnavailable {
@@ -135,7 +135,7 @@ func (failingAudit) EmitEvent(context.Context, string, string, string, string, b
 	return fmt.Errorf("emit-event: dial tcp 10.9.8.5:8082: connection refused")
 }
 
-// POST /sessions with a dependency down is the 503 doc 05 promises, without the cause; a refusal
+// POST /sessions with a dependency down is the 503 docs/api/rest/openapi.yaml promises, without the cause; a refusal
 // stays a 403 (ADR-0042).
 func TestCreateSession_ADependencyDownIsA503_WithoutItsCause(t *testing.T) {
 	for name, svc := range map[string]*application.SessionBrokerService{

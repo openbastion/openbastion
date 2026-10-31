@@ -1,4 +1,4 @@
-// The client of the public API of the Gateway (doc 05), with the bearer token held in memory
+// The client of the public API of the Gateway (docs/api/rest/openapi.yaml), with the bearer token held in memory
 // only (ADR-0036 rule 5): never in localStorage, sessionStorage or a cookie — a script injected
 // into the page finds nothing to read back.
 

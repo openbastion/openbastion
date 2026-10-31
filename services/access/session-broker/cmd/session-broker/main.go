@@ -1,4 +1,4 @@
-// Command session-broker runs the Session Broker (doc 00 §4.1) — the
+// Command session-broker runs the Session Broker (docs/architecture/system-overview.md) — the
 // orchestrator that never sees a secret (ADR-0003).
 //
 // SANDBOX NOTE: serves HTTP/JSON rather than gRPC — see /NOTES_SANDBOX.md.

@@ -1,4 +1,4 @@
-// Command authorization runs the Authorization Service (doc 00 §4.1) — the
+// Command authorization runs the Authorization Service (docs/architecture/system-overview.md) — the
 // single policy decision point every other service defers to.
 //
 // SANDBOX NOTE: serves HTTP/JSON rather than gRPC — see /NOTES_SANDBOX.md.

@@ -1,4 +1,4 @@
-// Command authentication runs the Authentication Service (doc 00 §4.1).
+// Command authentication runs the Authentication Service (docs/architecture/system-overview.md).
 //
 // SANDBOX NOTE: serves HTTP/JSON rather than gRPC — see /NOTES_SANDBOX.md.
 package main

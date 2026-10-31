@@ -247,7 +247,7 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		if account["username"] != "root" || account["targetHost"] != tgt.addr {
 			t.Fatalf("unexpected account metadata: %+v", account)
 		}
-		// rotationPolicy/createdAt have been part of doc 05's PrivilegedAccount
+		// rotationPolicy/createdAt have been part of docs/api/rest/openapi.yaml's PrivilegedAccount
 		// schema since the start but were never actually populated by this
 		// HTTP layer until this increment — see NOTES_SANDBOX.md.
 		// lastRotatedAt must still be absent: this account has not been
@@ -343,7 +343,7 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 	})
 
 	// The list must report the page it SERVED, not the one that was asked
-	// for: with no query parameters it serves page 1 of size 20 (doc 05's
+	// for: with no query parameters it serves page 1 of size 20 (docs/api/rest/openapi.yaml's
 	// defaults), and used to say page 0 of size 0.
 	t.Run("list reports the page and page size it actually served", func(t *testing.T) {
 		for query, want := range map[string][2]int{
@@ -370,7 +370,7 @@ func TestAdminRoutes_OnboardGetRotatePolicy_ThroughGatewayAcrossRealProcesses(t 
 		}
 	})
 
-	// Closes the gap doc 05 §2 documented since this project's inception —
+	// Closes the gap docs/api/rest/openapi.yaml documented since this project's inception —
 	// GET /vault/accounts and DELETE /vault/accounts/{id} — never
 	// implemented until this increment. Soft-delete (DisabledAt), not a
 	// hard row delete: see domain.AccountRepository.Disable's doc comment

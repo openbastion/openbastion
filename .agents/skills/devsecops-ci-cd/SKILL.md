@@ -15,6 +15,6 @@ Réglages : `settings/ci-cd.yaml`, `settings/quality-gates.yaml`, `settings/envi
 
 ## Gestes
 
-- Une variable ajoutée à un service : dans les deux fichiers compose si elle y est nécessaire, et dans le guide Administrateur.
+- Une variable ajoutée à un service : dans les deux fichiers compose si elle y est nécessaire, et dans `docs/administration/`.
 - Le test Compose : `tasks/devsecops/compose-test.md` (règle de pare-feu temporaire, posée puis retirée dans la même commande).
 - Aucune valeur de `deploy/base44` ne devient un défaut ailleurs.

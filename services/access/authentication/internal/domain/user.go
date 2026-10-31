@@ -1,7 +1,7 @@
 // Package domain holds the Authentication Service's entities. See
-// OpenBastion_06_Modele_Donnees.md §3 (users, user_roles).
+// docs/architecture/data-architecture.md §3 (users, user_roles).
 //
-// Simplification documented here rather than hidden: doc 06 models
+// Simplification documented here rather than hidden: docs/architecture/data-architecture.md models
 // user_roles as a separate join table against a standalone roles table.
 // This increment folds role *names* directly onto User (a user simply
 // has a list of role strings) rather than standing up a full roles CRUD
@@ -24,7 +24,7 @@ type User struct {
 	PasswordHash string // Argon2id encoded string, never the plaintext; empty for an OIDC account
 	Roles        []string
 
-	// IdentitySource says who vouches for the user (doc 06): "local" (a password here) or
+	// IdentitySource says who vouches for the user (docs/architecture/data-architecture.md): "local" (a password here) or
 	// "oidc" (a provider, ADR-0035). ExternalSubject is the provider's `sub` for an OIDC
 	// account, empty for a local one.
 	IdentitySource  string

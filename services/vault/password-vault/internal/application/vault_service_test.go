@@ -427,7 +427,7 @@ func TestListAccounts_ClampsPageAndPageSize(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// page=0 and a pageSize far beyond the documented maximum (doc 05 §2:
+	// page=0 and a pageSize far beyond the documented maximum (docs/api/rest/openapi.yaml:
 	// pageSize max 100) must not panic or bypass pagination — both are
 	// clamped by ListAccounts itself, not left to the caller.
 	accounts, totalItems, err := svc.ListAccounts(ctx, adminRoles, 0, 10000)

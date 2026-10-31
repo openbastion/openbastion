@@ -1,4 +1,4 @@
-// Command command-recorder runs the Command Recorder (doc 00 §4.4): the
+// Command command-recorder runs the Command Recorder (docs/architecture/system-overview.md): the
 // service that stores, command by command, what operators ran in a session,
 // so a session can be replayed as text.
 //

@@ -6,5 +6,5 @@
 2. Pour chaque entrée et chaque canal : qui l'appelle ? L'identité vient-elle d'une preuve (certificat, jeton vérifié) ou d'une déclaration ? Que se passe-t-il en cas de panne (fail-closed) ?
 3. Un test par attaque plausible ; vérifie qu'il échoue sans la défense.
 4. Les canaux oubliés : journaux, messages d'erreur, réponses recopiées par la Gateway, arguments de commande, sauvegardes, enregistrements.
-5. Classe les constats (bloquant / à corriger / limite acceptée) ; consigne les limites au Guide Sécurité §12.
+5. Classe les constats (bloquant / à corriger / limite acceptée) ; consigne les limites dans `docs/security/known-limitations.md`.
 6. Pour une relecture indépendante, persona `personas/independent-security-auditor.md`.

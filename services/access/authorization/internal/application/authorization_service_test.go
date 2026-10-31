@@ -110,7 +110,7 @@ func TestCheckAccess_ExplicitDenyOverridesAllow(t *testing.T) {
 
 	// A broad allow for the role, and a narrower explicit deny that should
 	// win even though it's evaluated after the allow in creation order —
-	// order of policy creation must not matter (Guide Sécurité §5).
+	// order of policy creation must not matter (docs/security/authorization-rbac-abac.md).
 	_, _ = svc.CreatePolicy(ctx, []string{testAdminRole}, "dba-all-db", "dba", "vault:account:*", domain.EffectAllow, "admin1")
 	_, _ = svc.CreatePolicy(ctx, []string{testAdminRole}, "dba-no-payments-db", "dba", "vault:account:payments-db-*", domain.EffectDeny, "admin1")
 
@@ -133,7 +133,7 @@ func TestCheckAccess_ExplicitDenyOverridesAllow(t *testing.T) {
 }
 
 func TestCheckAccess_NewRoleWithNoPoliciesHasZeroAccess(t *testing.T) {
-	// Guide Sécurité §5's explicit example: a newly created role must not
+	// docs/security/authorization-rbac-abac.md's explicit example: a newly created role must not
 	// inherit any implicit access, including from other roles' policies.
 	svc := newTestService()
 	ctx := context.Background()

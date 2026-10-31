@@ -49,7 +49,7 @@ type KeyWrapper interface {
 }
 
 // LocalKEK stands in for an external KMS/HSM, exactly as the Password Vault's
-// LocalKMS does (Guide Sécurité §6). Swapping it for a real client touches
+// LocalKMS does (docs/security/secrets-management.md). Swapping it for a real client touches
 // only this file.
 type LocalKEK struct {
 	keyID string

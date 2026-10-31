@@ -1,4 +1,4 @@
-# Ce qu'une installation réelle exige. Référence : deploy/docker-compose (ADR-0033) et les guides (docs/guides/).
+# Ce qu'une installation réelle exige. Référence : deploy/docker-compose (ADR-0033) et la documentation (docs/deployment/, docs/administration/, docs/security/).
 production:
   internal_tls: required                 # jamais disabled
   recording_policy: required             # jamais best-effort par défaut
@@ -10,4 +10,4 @@ production:
   ssh_proxy: instance unique (la révocation n'atteint qu'une instance, architecture/known-gaps.md)
   host_keys: chaque compte privilégié épinglé à la clé relevée sur sa cible (ADR-0039)
   audit: AUDIT_CHAIN_KEY_HEX et AUDIT_ANCHOR_FILE obligatoires avec une base ; rétention optionnelle (ADR-0032)
-  guides: [docs/guides/OpenBastion_Doc_Administrateur.md, docs/guides/OpenBastion_Guide_Securite.md, docs/guides/OpenBastion_Guide_HA.md]
+  guides: [docs/deployment/, docs/administration/, docs/security/, docs/deployment/high-availability.md]

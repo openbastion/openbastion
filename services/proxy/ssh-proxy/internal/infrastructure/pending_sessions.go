@@ -12,7 +12,7 @@ import (
 )
 
 // PendingSession is what EstablishSession (proto/proxy/v1/proxy_control.proto,
-// doc 07 §4) stashes for a session the Broker has authorized but whose
+// docs/api/grpc/README.md §4) stashes for a session the Broker has authorized but whose
 // client has not connected yet.
 type PendingSession struct {
 	SessionID  string

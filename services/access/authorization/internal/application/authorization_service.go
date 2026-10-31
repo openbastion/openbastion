@@ -1,6 +1,6 @@
 // Package application implements Authorization.CheckAccess
-// (proto/authz/v1/authorization.proto, doc 07 §8) — the single decision
-// point every other service defers to (doc 00 §9, Guide Sécurité §5).
+// (proto/authz/v1/authorization.proto, docs/api/grpc/README.md §8) — the single decision
+// point every other service defers to (docs/security/security-overview.md, docs/security/authorization-rbac-abac.md).
 package application
 
 import (
@@ -53,11 +53,11 @@ func (s *AuthorizationService) requirePolicyAdmin(ctx context.Context, actorRole
 // what a client reads; any other error is a failure, never shown).
 var ErrAccessDenied = errors.New("access denied")
 
-// CreatePolicy mirrors POST /policies (doc 05 §2). Closes the RBAC gap
+// CreatePolicy mirrors POST /policies (docs/api/rest/openapi.yaml). Closes the RBAC gap
 // this increment addresses: creating a policy — the platform's own
 // access-control configuration — now requires the caller to hold
 // PolicyAdminResource itself, exactly like any other administrative
-// write in the system (Guide Sécurité §5: "aucun service ne réimplémente
+// write in the system (docs/security/authorization-rbac-abac.md: "aucun service ne réimplémente
 // sa propre logique d'autorisation" — this service is no exception to
 // its own rule, even for its own writes).
 func (s *AuthorizationService) CreatePolicy(ctx context.Context, actorRoles []string, name, role, resourcePattern string, effect domain.Effect, createdBy string) (*domain.Policy, error) {
@@ -110,17 +110,17 @@ func (s *AuthorizationService) BootstrapAdminPolicy(ctx context.Context, role, c
 	return true, nil
 }
 
-// Decision mirrors CheckAccessResponse (doc 07 §8).
+// Decision mirrors CheckAccessResponse (docs/api/grpc/README.md §8).
 type Decision struct {
 	Allowed          bool
-	RequiresApproval bool // always false in MVP — no Workflow Service yet (doc 04 §2)
+	RequiresApproval bool // always false in MVP — no Workflow Service yet (docs/roadmap.md §2)
 	Reason           string
 }
 
 // CheckAccess evaluates every policy attached to any of the caller's roles
 // against resource. The rule, in order:
 //
-//  1. No matching policy at all -> deny (deny-by-default, Guide Sécurité §5:
+//  1. No matching policy at all -> deny (deny-by-default, docs/security/authorization-rbac-abac.md:
 //     "un rôle sans politique associée n'ouvre l'accès à rien").
 //  2. Any matching policy with Effect == deny -> deny, even if another
 //     matching policy allows it. An explicit deny always wins.

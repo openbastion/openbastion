@@ -49,7 +49,7 @@ const (
 
 	maxSessionIDBytes = 256
 
-	// Pagination mirrors doc 05's Page/PageSize parameters
+	// Pagination mirrors docs/api/rest/openapi.yaml's Page/PageSize parameters
 	// (pageSize: min 1, max 100, default 20).
 	minPage         = 1
 	minPageSize     = 1

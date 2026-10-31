@@ -1,5 +1,5 @@
 // Package domain holds the Audit Service's entities. See
-// OpenBastion_06_Modele_Donnees.md §3 (audit_events) and §4 (hash chaining
+// docs/architecture/data-architecture.md §3 (audit_events) and §4 (hash chaining
 // rationale).
 package domain
 

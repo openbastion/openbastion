@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/openbastion/openbastion/proto/vault/v1;vaultv1";
 
 // Appelé par le Session Broker. Ne renvoie jamais de secret.
-// Voir OpenBastion_07_Interfaces_Inter_Services.md §5, ADR-0003.
+// Voir docs/api/grpc/README.md §5, ADR-0003.
 service VaultAuthorization {
   rpc AuthorizeScope(AuthorizeScopeRequest) returns (AuthorizeScopeResponse);
 }
@@ -24,8 +24,8 @@ service VaultCredentialIssuance {
 // PrivilegedAccount porte délibérément des métadonnées (username compris)
 // — ADR-0003 ne l'interdit pas ici : seul un secret en est protégé, et
 // aucun des trois RPC n'en renvoie un. Miroir de la surface REST
-// documentée dans OpenBastion_05_OpenAPI.md §2 (/vault/accounts,
-// .../{id}, .../{id}/rotate) et du modèle de données de doc 06 §3 —
+// documentée dans docs/api/rest/openapi.yaml (/vault/accounts,
+// .../{id}, .../{id}/rotate) et du modèle de données de docs/architecture/data-architecture.md §3 —
 // formalisé ici après avoir existé un moment comme API REST sans contrat
 // gRPC propre ; voir NOTES_SANDBOX.md.
 service VaultAccountAdmin {
@@ -71,7 +71,7 @@ message OnboardAccountRequest {
   string name = 3;
   string username = 4;
   string target_host = 5;
-  string protocol = 6;             // ex. "ssh" — énumération étendue en v1.0/v2.0 (doc 06 §3)
+  string protocol = 6;             // ex. "ssh" — énumération étendue en v1.0/v2.0 (docs/architecture/data-architecture.md §3)
   string rotation_policy = 7;      // "manual" | "post_use" | "scheduled"
   bytes initial_secret = 8;        // vide = généré automatiquement (même règle que RotateSecretRequest.new_secret)
   string host_key = 9;             // obligatoire : la clé d'hôte publique de la cible, relevée sur la cible (ADR-0039)

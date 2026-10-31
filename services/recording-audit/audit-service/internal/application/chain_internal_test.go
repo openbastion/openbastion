@@ -14,7 +14,7 @@ import (
 // internally consistent — but does not (cannot, without also rewriting
 // every later event) update event N+1's prev_hash to match. VerifyChain's
 // link check, not just its self-hash check, is what catches this
-// (OpenBastion_06_Modele_Donnees.md §4).
+// (docs/architecture/data-architecture.md §4).
 func TestVerifyChain_DetectsBrokenLinkEvenWhenSelfHashIsRecomputed(t *testing.T) {
 	ctx := context.Background()
 	store := infrastructure.NewInMemoryStore()

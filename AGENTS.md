@@ -4,7 +4,7 @@ Tu es un agent IA qui travaille sur **OpenBastion**. Ce fichier est ton point d'
 
 ## Le projet en cinq lignes
 
-OpenBastion est un PAM (Privileged Access Management) open source, cloud-native, écrit en Go, sous licence Apache 2.0 et entièrement original. Il centralise les accès privilégiés : l'opérateur n'a jamais le mot de passe de la cible, toutes les connexions passent par un proxy, toutes les sessions sont enregistrées et auditées. Le dépôt est un monorepo multi-module Go (`go.work`). Le MVP implémenté couvre SSH de bout en bout ; le reste du périmètre est sur la feuille de route (`docs/architecture/OpenBastion_04_Roadmap.md`), pas dans le code. Le propriétaire du projet est Bony Kiss ; il s'exprime en français.
+OpenBastion est un PAM (Privileged Access Management) open source, cloud-native, écrit en Go, sous licence Apache 2.0 et entièrement original. Il centralise les accès privilégiés : l'opérateur n'a jamais le mot de passe de la cible, toutes les connexions passent par un proxy, toutes les sessions sont enregistrées et auditées. Le dépôt est un monorepo multi-module Go (`go.work`). Le MVP implémenté couvre SSH de bout en bout ; le reste du périmètre est sur la feuille de route (`docs/roadmap.md`), pas dans le code. Le propriétaire du projet est Bony Kiss ; il s'exprime en français.
 
 ## Comment utiliser `.agents/`
 
@@ -104,12 +104,13 @@ make run-<service>                # lance un service en local (mTLS par défaut 
 
 | Besoin | Fichier |
 |---|---|
-| Pourquoi cette décision | `docs/architecture/OpenBastion_03_ADR.md` |
+| Pourquoi cette décision | `docs/adr/` (un fichier par ADR, index dans `docs/adr/README.md`) |
 | Ce qui est fait, les limites, les écarts, les chiffres de tests | `NOTES_SANDBOX.md` |
 | Ce qui reste à faire | `.agents/tasks/backlog.md` |
 | Structure du dépôt, patron d'un service | `.agents/architecture/` |
-| API publique / messages internes / tables | `docs/api/…05_OpenAPI.md` · `docs/architecture/…07_Interfaces…md` + `proto/` · `…06_Modele_Donnees.md` |
-| Exploitation, sécurité, HA, reprise | `docs/guides/` |
+| API publique / messages internes / tables | `docs/api/rest/openapi.yaml` · `docs/api/grpc/README.md` + `proto/` · `docs/architecture/data-architecture.md` |
+| Installation, administration, sécurité, HA, reprise | `docs/deployment/` · `docs/administration/` · `docs/security/` (limites connues : `docs/security/known-limitations.md`) |
+| Plan de la documentation, ancien nom → nouveau fichier | `docs/README.md` |
 
 ## Tenir ce dossier à jour
 

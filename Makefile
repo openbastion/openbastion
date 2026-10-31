@@ -174,7 +174,7 @@ test-postgres:
 
 ## Crée, dans $(PKI_DIR), une autorité et l'identité de chaque service (ADR-0010).
 ## Pour le développement et les petits déploiements ; en production, l'émission est
-## celle de l'organisation, avec la même forme d'identité (guide administrateur §PKI).
+## celle de l'organisation, avec la même forme d'identité (docs/administration/ §PKI).
 ## Relancer renouvelle les certificats (7 jours) et conserve l'autorité : les services
 ## en cours les reprennent sans redémarrage. $(PKI_DIR) est ignoré par git.
 pki:

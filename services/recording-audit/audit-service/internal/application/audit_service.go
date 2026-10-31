@@ -1,6 +1,6 @@
 // Package application implements AuditIngestion.EmitEvent
-// (proto/audit/v1/audit.proto, doc 07 §7) with the hash-chaining scheme
-// described in OpenBastion_06_Modele_Donnees.md §4 and Guide Sécurité §9:
+// (proto/audit/v1/audit.proto, docs/api/grpc/README.md §7) with the hash-chaining scheme
+// described in docs/architecture/data-architecture.md §4 and docs/security/audit-integrity.md:
 // each event's hash covers its own fields plus the previous event's hash,
 // so a retroactive edit anywhere in the chain is detectable.
 package application
@@ -31,7 +31,7 @@ type Store interface {
 }
 
 // AuditService computes the hash chain itself — a caller never supplies or
-// even knows the previous hash, by design (doc 06 §4).
+// even knows the previous hash, by design (docs/architecture/data-architecture.md §4).
 type AuditService struct {
 	mu    sync.Mutex // serializes chain extension; a production deployment
 	store Store      // would use a DB-level append lock instead of this
@@ -199,7 +199,7 @@ func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action
 // VerifyChain re-derives every event's hash from its own fields and
 // prev_hash, and confirms each event correctly links to the next. This is
 // the runnable form of "toute altération rétroactive... devient
-// détectable" (doc 06 §4, Guide Sécurité §9) — not just a design claim.
+// détectable" (docs/architecture/data-architecture.md §4, docs/security/audit-integrity.md) — not just a design claim.
 func (s *AuditService) VerifyChain(ctx context.Context) error {
 	events, err := s.store.All(ctx)
 	if err != nil {

@@ -120,7 +120,7 @@ func (s *VaultService) GetAccount(ctx context.Context, id string) (*domain.Privi
 	return account, nil
 }
 
-// minPage, minPageSize, maxPageSize, and defaultPageSize mirror doc 05
+// minPage, minPageSize, maxPageSize, and defaultPageSize mirror docs/api/rest/openapi.yaml
 // §2's Page/PageSize parameter definitions (page: min 1, default 1;
 // pageSize: min 1, max 100, default 20) — enforced here, not at the HTTP
 // layer, so every caller of ListAccounts (today: password-vault's own
@@ -147,7 +147,7 @@ func (s *VaultService) ListAccounts(ctx context.Context, actorRoles []string, pa
 }
 
 // ClampPage is the pagination rule ListAccounts applies (page < 1 → 1;
-// pageSize < 1 → the default 20; pageSize > 100 → 100, doc 05's bounds). It
+// pageSize < 1 → the default 20; pageSize > 100 → 100, docs/api/rest/openapi.yaml's bounds). It
 // is exported so the HTTP layer can report the page and page size actually
 // SERVED rather than the ones the caller asked for — without it the list
 // response said "page 0, pageSize 0" for a request that sent neither.

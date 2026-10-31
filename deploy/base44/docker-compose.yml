@@ -268,7 +268,7 @@ services:
       retries: 24
       start_period: 120s
 
-  # The public API (doc 05): plain HTTP for callers holding a bearer token, mutual TLS for the
+  # The public API (docs/api/rest/openapi.yaml): plain HTTP for callers holding a bearer token, mutual TLS for the
   # services it calls (ADR-0010).
   api-gateway:
     <<: *go

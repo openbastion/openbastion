@@ -7,7 +7,7 @@ import (
 
 // Credential holds secret material in memory for the lifetime of a single
 // session. It is the ONLY structure in the entire system allowed to hold
-// a target credential — see ADR-0003 (OpenBastion_03_ADR.md).
+// a target credential — see ADR-0003 (docs/adr/).
 //
 // Callers MUST call Purge as soon as the credential is no longer needed
 // (session end, error, or termination). Purge overwrites the backing byte

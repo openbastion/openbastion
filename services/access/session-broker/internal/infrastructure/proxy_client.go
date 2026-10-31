@@ -16,7 +16,7 @@ import (
 // ProxyClientHTTPClient implements application.ProxyClient by calling a
 // proxy's /internal/v1/establish-session — the HTTP stand-in for
 // ProxyControl.EstablishSession (proto/proxy/v1/proxy_control.proto,
-// doc 07 §4). MVP has exactly one proxy family (SSH), so one BaseURL is
+// docs/api/grpc/README.md §4). MVP has exactly one proxy family (SSH), so one BaseURL is
 // enough; a registry keyed by proxyServiceID is a v1.0 concern.
 type ProxyClientHTTPClient struct {
 	BaseURL string

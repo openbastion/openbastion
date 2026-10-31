@@ -1,5 +1,5 @@
 // Package infrastructure implements the Authentication Service's password
-// hashing (Argon2id, Guide Sécurité §4) and token issuance/verification.
+// hashing (Argon2id, docs/security/authentication.md) and token issuance/verification.
 package infrastructure
 
 import (
@@ -31,7 +31,7 @@ var ErrInvalidPassword = errors.New("invalid password")
 // Hash returns a self-contained PHC-style encoded string ($argon2id$v=..
 // $m=..,t=..,p=..$salt$hash) — the same convention most Argon2 tooling
 // uses, so no separate salt column is needed alongside password_hash
-// (doc 06 §3).
+// (docs/architecture/data-architecture.md §3).
 func (Argon2Hasher) Hash(password string) (string, error) {
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {

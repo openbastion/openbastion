@@ -28,7 +28,7 @@ import (
 type SSHServer struct {
 	HostSigner  ssh.Signer
 	Pending     *infrastructure.PendingSessions
-	Listener    *proxycore.Listener // owns credential fetch + purge + audit (doc 01 §4.1)
+	Listener    *proxycore.Listener // owns credential fetch + purge + audit (docs/architecture/components.md)
 	DialTimeout time.Duration
 }
 

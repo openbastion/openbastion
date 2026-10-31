@@ -27,16 +27,18 @@ services/
   recording-audit/
     audit-service/               journal chaîné par hash, signé
     command-recorder/            replay texte, chiffrement enveloppe AES-256-GCM
-proto/                           contrats Protobuf (doc 07) — la forme des messages
+proto/                           contrats Protobuf (`docs/api/grpc/README.md`) — la forme des messages
 cli/openbastion-cli/             outil d'exploitation sous l'identité admin-cli : user create, audit verify-chain (ADR-0033) ; stdlib + pkg/mtls
 web/admin-ui/                    Admin UI React + TypeScript + Vite, servie par la Gateway sous /ui/ (ADMIN_UI_DIR) ; API publique seulement ; jeton en mémoire — ADR-0036
 deploy/docker-compose/           Dockerfile (une image, tous les binaires, distroless non root), docker-compose.yml (mTLS, une base par service, 2 ports sur 127.0.0.1), init.sh (secrets → .env 0600, jamais écrasé), pki.sh, postgres-init.sh — ADR-0033
 test/integration/                scénarios sur processus réels (binaires compilés, ports 18xxx) ; compose_test.go sous COMPOSE_TEST=1 ; cmd/demo-ssh-target (cible SSH de démonstration)
-docs/
-  architecture/                  docs 00–07 numérotés ; les ADR sont consolidés dans le doc 03
-  api/                           OpenAPI (doc 05)
-  guides/                        administrateur, développeur, sécurité, HA, PRA/PCA, utilisateur
-deploy/                          docker-compose, helm, k8s (squelettes)
+docs/                            plan et table « ancien nom → nouveau fichier » : docs/README.md
+  architecture/                  vue d'ensemble, principes, C4 (contexte, conteneurs, composants), modèle de données
+  adr/                           un fichier par ADR (NNNN-titre-kebab-case.md), index README.md, template.md
+  api/                           conventions.md, rest/openapi.yaml (API publique), grpc/README.md (contrats internes)
+  security/                      modèle de menace, une page par domaine, known-limitations.md (les limites du MVP)
+  development/ deployment/ administration/ user-guide/   un sujet par fichier ; operations/ et compliance/ : index seulement
+deploy/                          base44 (prévisualisation), docker-compose (ADR-0033)
 ```
 
-`docs/adr/` est vide : tant que les ADR ne sont pas éclatés en fichiers, **ils vivent dans `docs/architecture/OpenBastion_03_ADR.md`**.
+Une page de la documentation n'existe que si son contenu est réel ; ce qui est prévu est listé dans le `README.md` de la section, avec le point de la feuille de route qui le couvre.

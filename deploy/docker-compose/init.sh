@@ -3,7 +3,7 @@
 #   deploy/docker-compose/init.sh [path]        (default: deploy/docker-compose/.env)
 # It refuses to overwrite an existing file: the keys in it are what makes the audit chain, the
 # vault and the recordings readable — draw new ones and yesterday's data is lost for good.
-# Keep a copy of this file outside the host (guide Administrateur §8), never in git.
+# Keep a copy of this file outside the host (docs/deployment/backup-restore.md), never in git.
 set -eu
 out="${1:-$(dirname "$0")/.env}"
 if [ -e "$out" ]; then

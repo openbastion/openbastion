@@ -1,6 +1,6 @@
 // Package domain holds the Session Broker's entities. See
-// OpenBastion_06_Modele_Donnees.md §3 (sessions) and
-// OpenBastion_07_Interfaces_Inter_Services.md §3 (SessionOrchestration).
+// docs/architecture/data-architecture.md §3 (sessions) and
+// docs/api/grpc/README.md §3 (SessionOrchestration).
 package domain
 
 import "time"
@@ -60,7 +60,7 @@ type Session struct {
 // EffectiveStatus returns Expired if the session is still marked Active — or a
 // break-glass request still marked pending_approval — but past ExpiresAt,
 // without mutating the stored record — a lightweight
-// stand-in for the Scheduler's expiration sweep (doc 04 §2 MVP scope:
+// stand-in for the Scheduler's expiration sweep (docs/roadmap.md §2 MVP scope:
 // "Scheduler (expiration de session uniquement)"), which is not yet
 // implemented as its own service.
 func (s Session) EffectiveStatus(now time.Time) SessionStatus {

@@ -10,8 +10,8 @@ import (
 	"io"
 )
 
-// LocalKMS stands in for an external KMS/HSM (Guide Sécurité §6,
-// OpenBastion_06_Modele_Donnees.md §3: "encryption_key_id... référence à
+// LocalKMS stands in for an external KMS/HSM (docs/security/secrets-management.md,
+// docs/architecture/data-architecture.md §3: "encryption_key_id... référence à
 // la clé KMS/HSM, pas la clé elle-même"). It exists so this service runs
 // end-to-end without a real KMS dependency; swapping it for a real KMS
 // client touches only this file — application/ depends on the Encryptor
@@ -47,7 +47,7 @@ func NewLocalKMS() (*LocalKMS, error) {
 // restarting a second process — see NOTES_SANDBOX.md. A persistent
 // deployment (DATABASE_URL set) MUST supply KMS_KEY_HEX, generated once
 // (e.g. `openssl rand -hex 32`) and kept outside the database — exactly
-// the separation doc 06 §3 already documents for encryption_key_id. A
+// the separation docs/architecture/data-architecture.md §3 already documents for encryption_key_id. A
 // real external KMS/HSM client would replace this file entirely; this
 // is still only ever a stand-in for one.
 func NewLocalKMSFromHexKey(hexKey string) (*LocalKMS, error) {

@@ -12,6 +12,6 @@
 - Le fail-closed en cas de panne de chaque dépendance de sécurité.
 - Le test d'attaque, son rouge sur l'ancien code, les mutations.
 
-**Tu livres** : le modèle d'attaque, un test par attaque plausible, les constats classés (bloquant / à corriger / limite acceptée), les limites écrites au Guide Sécurité §12.
+**Tu livres** : le modèle d'attaque, un test par attaque plausible, les constats classés (bloquant / à corriger / limite acceptée), les limites écrites dans `docs/security/known-limitations.md`.
 
 **À relire** : `policies/`, `tasks/security/`. **Compétences** : `.agents/skills/go-api-security`, `web-application-security`.

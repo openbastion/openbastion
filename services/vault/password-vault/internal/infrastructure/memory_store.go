@@ -12,7 +12,7 @@ import (
 
 // InMemoryStore backs all three repository ports for local development and
 // tests. A PostgreSQL-backed implementation following the same interfaces
-// and the DDL in OpenBastion_06_Modele_Donnees.md §3 is the natural next
+// and the DDL in docs/architecture/data-architecture.md §3 is the natural next
 // increment (github.com/lib/pq is reachable from this build environment) —
 // nothing in internal/application depends on this file directly.
 type InMemoryStore struct {
@@ -63,7 +63,7 @@ func (s *InMemoryStore) Create(ctx context.Context, a *domain.PrivilegedAccount)
 
 // List, like PostgresStore.List, orders by id — the only order a map can
 // offer deterministically without an extra field, and good enough for
-// the MVP scope this mirrors (doc 05 §2 names no sort order).
+// the MVP scope this mirrors (docs/api/rest/openapi.yaml names no sort order).
 func (s *InMemoryStore) List(ctx context.Context, page, pageSize int) ([]*domain.PrivilegedAccount, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

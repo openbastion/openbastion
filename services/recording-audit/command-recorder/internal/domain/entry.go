@@ -32,7 +32,7 @@ var (
 
 // CommandEntry is one command an operator submitted in a session — the
 // record behind proto/recording/v1/recording.proto's CommandEntry and the
-// session_command_entries table (doc 06 §3).
+// session_command_entries table (docs/architecture/data-architecture.md §3).
 type CommandEntry struct {
 	// ID is assigned by the store, in insertion order. It breaks ties
 	// between entries with the same timestamp, so a replay keeps the order

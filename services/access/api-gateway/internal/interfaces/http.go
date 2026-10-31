@@ -1,5 +1,5 @@
 // Package interfaces implements the API Gateway's HTTP surface — the
-// single public entry point (doc 00 §4.1) in front of Authentication,
+// single public entry point (docs/architecture/system-overview.md) in front of Authentication,
 // Session Broker, Password Vault, and Authorization.
 //
 // Every route requires a valid bearer token except /auth/login. Password
@@ -129,7 +129,7 @@ func (g *GatewayServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// -- POST /auth/login (public, mirrors doc 05 §2) ------------------------
+// -- POST /auth/login (public, mirrors docs/api/rest/openapi.yaml) ------------------------
 
 func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -138,7 +138,7 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	// Rate limited by IP, independently of the authenticated-request
 	// limiter below — brute-force protection on the login endpoint
-	// specifically (Guide Sécurité §4), since it's the one endpoint an
+	// specifically (docs/security/authentication.md), since it's the one endpoint an
 	// unauthenticated attacker can hammer at all.
 	if d := g.loginLimiter.Take(g.clientKey(r)); !d.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(d.RetryAfterSeconds()))
@@ -368,7 +368,7 @@ func (g *GatewayServer) handleSessionsCollection(w http.ResponseWriter, r *http.
 
 	// The whole point of doing this at the Gateway: whatever the client
 	// put in these two fields is discarded and replaced with the
-	// Gateway's own verified identity (doc 00 §4.1, "injection de
+	// Gateway's own verified identity (docs/architecture/system-overview.md, "injection de
 	// contexte d'identité"). A client cannot request a session on behalf
 	// of another user or grant itself extra roles by editing its request
 	// body — see http_test.go's
@@ -516,7 +516,7 @@ func splitSessionPath(path string) (sessionID, action string, ok bool) {
 	return sessionID, action, true
 }
 
-// -- GET /sessions/{id}/recording (doc 05) ---------------------------------
+// -- GET /sessions/{id}/recording (docs/api/rest/openapi.yaml) ---------------------------------
 //
 // The text recording of a session, served by the Command Recorder. The
 // Gateway's part is to say who reads, and with which roles: both are the
@@ -543,7 +543,7 @@ func (g *GatewayServer) handleSessionRecording(w http.ResponseWriter, r *http.Re
 		g.commandRecorderURL+"/recorder/v1/sessions/"+neturl.PathEscape(sessionID)+"/commands?"+q.Encode())
 }
 
-// -- GET/POST /vault/accounts (mirrors doc 05 §2) --------------------------
+// -- GET/POST /vault/accounts (mirrors docs/api/rest/openapi.yaml) --------------------------
 //
 // GET lists accounts; POST onboards one. Neither has (yet) been seen
 // enforcing the caller's role at this layer beyond requireAuth — real
@@ -580,9 +580,9 @@ func (g *GatewayServer) handleVaultAccountsCollection(w http.ResponseWriter, r *
 
 // -- GET/DELETE /vault/accounts/{id}, POST /vault/accounts/{id}/rotate ----
 //
-// This is the one route in this increment that translates doc 05's
+// This is the one route in this increment that translates docs/api/rest/openapi.yaml's
 // public REST shape into Password Vault's actual internal contract
-// rather than passing the path straight through: doc 05 puts the account
+// rather than passing the path straight through: docs/api/rest/openapi.yaml puts the account
 // id in the URL for rotate; Password Vault's /vault/v1/rotate expects it
 // in the JSON body instead (it predates this routing work). The Gateway
 // bridges that here rather than changing Password Vault's already-tested
@@ -600,7 +600,7 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		// No secret is forwarded — Password Vault auto-generates one when
 		// none is supplied (application.VaultService.Rotate), which is
 		// the whole point of this endpoint taking no request body in
-		// doc 05: an operator triggers rotation, never invents the value.
+		// docs/api/rest/openapi.yaml: an operator triggers rotation, never invents the value.
 		g.forwardJSON(w, r.Context(), http.MethodPost, g.vaultURL+"/vault/v1/rotate", map[string]any{
 			// Who asked, as verified here: the actor of the rotation's audit events (ADR-0037).
 			"accountId": accountID, "actorRoles": id.Roles, "actorId": id.UserID,
@@ -662,7 +662,7 @@ func (g *GatewayServer) handlePoliciesCollection(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Same principle as session creation (doc 00 §4.1): who created a
+	// Same principle as session creation (docs/architecture/system-overview.md): who created a
 	// policy is an audit-relevant fact, and it comes from the Gateway's
 	// verified identity, never from what the client's own request body
 	// claims. actorRoles is the same identity injection already applied

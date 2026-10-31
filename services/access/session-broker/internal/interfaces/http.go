@@ -1,6 +1,6 @@
 // Package interfaces exposes SessionOrchestration
 // (proto/access/v1/session_orchestration.proto) plus the Connect flow
-// (doc 05 §2, POST /sessions/{id}/connect) over JSON/HTTP — see
+// (docs/api/rest/openapi.yaml, POST /sessions/{id}/connect) over JSON/HTTP — see
 // /NOTES_SANDBOX.md for why HTTP stands in for gRPC here.
 //
 // Every route under /sessions/* is safe to expose through the API Gateway
@@ -46,7 +46,7 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// -- POST /sessions (mirrors doc 05 §2) ---------------------------------
+// -- POST /sessions (mirrors docs/api/rest/openapi.yaml) ---------------------------------
 
 type createSessionRequest struct {
 	RequestedBy         string   `json:"requestedBy"`
@@ -292,7 +292,7 @@ func (s *HTTPServer) handleTerminate(w http.ResponseWriter, r *http.Request, ses
 	}
 }
 
-// -- POST /sessions/{id}/connect (mirrors doc 05 §2, ConnectionTicket) --
+// -- POST /sessions/{id}/connect (mirrors docs/api/rest/openapi.yaml, ConnectionTicket) --
 
 type connectionTicketResponse struct {
 	ProxyEndpoint string `json:"proxyEndpoint"`

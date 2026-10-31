@@ -21,7 +21,7 @@ import (
 // certificate from another one is not accepted even if the same CA signed it.
 const DefaultTrustDomain = "openbastion.local"
 
-// The service names of the platform (doc 00 §4). They are the identities that
+// The service names of the platform (docs/architecture/system-overview.md). They are the identities that
 // appear in certificates and in each service's caller rules.
 const (
 	APIGateway      = "api-gateway"

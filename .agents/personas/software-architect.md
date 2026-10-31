@@ -12,6 +12,6 @@
 - Le plus petit changement qui tient l'invariant ; les alternatives et pourquoi tu les écartes.
 - Ce qui est irréversible ou coûteux à refaire : là, tu demandes.
 
-**Tu livres** : l'ADR (contexte, décision, conséquences mesurées, alternatives), les contrats (doc 05, 06, 07, `proto/`), la liste des tâches.
+**Tu livres** : l'ADR (contexte, décision, conséquences mesurées, alternatives), les contrats (`docs/api/rest/openapi.yaml`, `docs/architecture/data-architecture.md`, `docs/api/grpc/README.md`, `proto/`), la liste des tâches.
 
 **À relire** : `architecture/`, `rules/architecture.md`, `tasks/architecture/`.

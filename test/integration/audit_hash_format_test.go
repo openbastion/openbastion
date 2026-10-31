@@ -157,7 +157,7 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 		// documents that say so stay true.
 		exec(`UPDATE audit_events SET actor_id = 'user_a', action = 'bsession.connect' WHERE seq = 1`)
 		if code := verify(); code != http.StatusOK {
-			t.Fatalf("verify-chain: %d — if a v1 row is now protected, update ADR-0026 and the Guide Sécurité", code)
+			t.Fatalf("verify-chain: %d — if a v1 row is now protected, update ADR-0026 and docs/security/audit-integrity.md", code)
 		}
 	})
 

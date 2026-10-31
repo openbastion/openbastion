@@ -10,8 +10,8 @@
 - La migration numérotée suivante, additive, idempotente ; jamais une migration appliquée modifiée (`rules/postgresql.md`).
 - La concurrence entre réplicas : comparer-échanger, `SKIP LOCKED`, verrous consultatifs, index uniques partiels.
 - La mise à niveau d'une base existante (lignes d'avant, valeurs par défaut).
-- Les `TRUNCATE` de test et le doc 06.
+- Les `TRUNCATE` de test et `docs/architecture/data-architecture.md`.
 
-**Tu livres** : la migration, le magasin, le test PostgreSQL d'aller-retour et de mise à niveau, la mise à jour du doc 06.
+**Tu livres** : la migration, le magasin, le test PostgreSQL d'aller-retour et de mise à niveau, la mise à jour de `docs/architecture/data-architecture.md`.
 
 **Compétences** : `.agents/skills/postgresql-data-engineering`.

@@ -1,14 +1,14 @@
 // Package integration_test proves the MVP invariant (ADR-0003) across real,
 // independently running processes — password-vault and audit-service —
 // communicating exactly as documented in
-// OpenBastion_07_Interfaces_Inter_Services.md, over HTTP/JSON instead of
+// docs/api/grpc/README.md, over HTTP/JSON instead of
 // gRPC (see /NOTES_SANDBOX.md for why).
 //
 // This test only imports pkg/proxycore (a public module) and the standard
 // library — never a service's internal/ packages — because that is
 // exactly the boundary the real system enforces: a proxy talks to the
 // Vault and the Audit Service over the network, never by reaching into
-// their implementation (OpenBastion_Doc_Developpeur.md §4).
+// their implementation (docs/development/contributing.md).
 package integration_test
 
 import (
@@ -149,7 +149,7 @@ func postJSON(t *testing.T, url string, body any) int {
 
 // ---------------------------------------------------------------------
 // HTTP adapters satisfying pkg/proxycore's ports — the production
-// equivalent of these would be generated gRPC clients (doc 07).
+// equivalent of these would be generated gRPC clients (docs/api/grpc/README.md).
 // ---------------------------------------------------------------------
 
 type httpVaultClient struct{ baseURL string }
@@ -327,7 +327,7 @@ func TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses(t *testing.T) {
 
 		// A scope authorized for ssh-proxy-1 must not be redeemable by
 		// database-proxy-1 — the least-privilege scoping guarantee
-		// underlying ADR-0003 (Guide Sécurité §8).
+		// underlying ADR-0003 (docs/security/session-security.md).
 		wrongProxyFetcher := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault.baseURL}, "database-proxy-1")
 		if _, err := wrongProxyFetcher.Fetch(ctx, scopeToken); err == nil {
 			t.Fatal("expected a scope authorized for ssh-proxy-1 to be rejected when redeemed by database-proxy-1")

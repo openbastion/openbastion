@@ -1,4 +1,4 @@
-// Command password-vault runs the Password Vault service (doc 00 §4.3).
+// Command password-vault runs the Password Vault service (docs/architecture/system-overview.md).
 //
 // SANDBOX NOTE: serves HTTP/JSON rather than gRPC — see
 // internal/interfaces/http.go and /NOTES_SANDBOX.md.

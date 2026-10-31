@@ -14,7 +14,7 @@ import (
 // session: the sub/exp/iat registered claims (RFC 7519 §4.1) plus two
 // OpenBastion-specific ones, username and roles. The API Gateway trusts
 // only these two — resolved exclusively via VerifyToken, never anything
-// a client claims about itself in a request body (doc 07 §2's
+// a client claims about itself in a request body (docs/api/grpc/README.md §2's
 // RequestContext.actor_user_id/actor_roles; see
 // application.AuthenticationService.VerifyToken's doc comment).
 type claims struct {

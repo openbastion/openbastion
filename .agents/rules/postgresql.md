@@ -8,4 +8,4 @@
 4. SQL écrit à la main dans `database/sql`, derrière les ports de domaine ; **pas d'ORM** ni de constructeur de requêtes (ADR-0029). Paramètres `$1`, jamais de concaténation.
 5. Concurrence entre réplicas : comparer-échanger (`UPDATE … WHERE status = …`), `FOR UPDATE SKIP LOCKED` pour un balayage, verrou consultatif pour un plafond ; un index unique partiel quand une seule ligne d'un état est permise.
 6. Un test PostgreSQL d'aller-retour pour chaque colonne ou table nouvelle, et un test de mise à niveau d'une ligne créée avant ; il se **skippe** sans `TEST_DATABASE_URL` et choisit des identifiants uniques (une base de test garde ses lignes).
-7. Une table nouvelle s'ajoute aux `TRUNCATE` du `Makefile` et de `settings/postgresql.yaml`, et au doc 06.
+7. Une table nouvelle s'ajoute aux `TRUNCATE` du `Makefile` et de `settings/postgresql.yaml`, et dans `docs/architecture/data-architecture.md`.

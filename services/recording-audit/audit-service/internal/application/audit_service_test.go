@@ -36,7 +36,7 @@ func TestVerifyChain_DetectsRetroactiveTampering(t *testing.T) {
 	}
 
 	// Simulate an attacker rewriting history directly in storage — exactly
-	// the scenario doc 06 §4 and Guide Sécurité §9 claim is detectable.
+	// the scenario docs/architecture/data-architecture.md §4 and docs/security/audit-integrity.md claim is detectable.
 	events, err := store.All(ctx)
 	if err != nil {
 		t.Fatalf("All: %v", err)

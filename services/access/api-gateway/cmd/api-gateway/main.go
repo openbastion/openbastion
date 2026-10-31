@@ -1,10 +1,10 @@
-// Command api-gateway runs the API Gateway (doc 00 §4.1) — the single
+// Command api-gateway runs the API Gateway (docs/architecture/system-overview.md) — the single
 // public entry point in front of Authentication and Session Broker.
 //
 // SANDBOX NOTE: serves HTTP/JSON, same as every other service in this
 // project — see /NOTES_SANDBOX.md. This is arguably the one service
 // where that's simply correct rather than a stand-in: the Gateway is
-// documented as an HTTP/gRPC edge in the first place (doc 00 §4.1).
+// documented as an HTTP/gRPC edge in the first place (docs/architecture/system-overview.md).
 package main
 
 import (

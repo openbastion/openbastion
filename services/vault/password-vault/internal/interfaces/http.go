@@ -2,7 +2,7 @@
 // (proto/vault/v1/vault.proto) over JSON/HTTP.
 //
 // SANDBOX NOTE: this project's internal transport is specified as gRPC
-// (OpenBastion_07_Interfaces_Inter_Services.md). google.golang.org/grpc and
+// (docs/api/grpc/README.md). google.golang.org/grpc and
 // google.golang.org/protobuf could not be fetched in this build sandbox —
 // see /NOTES_SANDBOX.md at the repo root for the exact network constraint.
 // This HTTP/JSON layer implements the same request/response shapes as the
@@ -56,7 +56,7 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// -- onboard-account (mirrors POST /vault/accounts, doc 05 §2) -------------
+// -- onboard-account (mirrors POST /vault/accounts, docs/api/rest/openapi.yaml) -------------
 
 type onboardAccountRequest struct {
 	ID             string   `json:"id"`
@@ -93,7 +93,7 @@ func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusCreated)
 }
 
-// -- rotate (mirrors POST /vault/accounts/{id}/rotate, doc 05 §2) ---------
+// -- rotate (mirrors POST /vault/accounts/{id}/rotate, docs/api/rest/openapi.yaml) ---------
 
 type rotateRequest struct {
 	AccountID  string   `json:"accountId"`
@@ -305,7 +305,7 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 }
 
 // -- GET /vault/v1/accounts/{id}, DELETE /vault/v1/accounts/{id} -----------
-// (mirrors GET and DELETE /vault/accounts/{id}, doc 05 §2)
+// (mirrors GET and DELETE /vault/accounts/{id}, docs/api/rest/openapi.yaml)
 //
 // Metadata only — target host, username, protocol — never a secret, not
 // even encrypted. GET is what the Session Broker calls to resolve where
@@ -341,7 +341,7 @@ type accountResponse struct {
 // onto the wire shape — used by both handleAccountItem's GET branch and
 // handleListAccounts, so the two can never drift out of sync the way
 // rotationPolicy/lastRotatedAt/createdAt had, undetected, until this
-// increment (see NOTES_SANDBOX.md: doc 05's PrivilegedAccount schema
+// increment (see NOTES_SANDBOX.md: docs/api/rest/openapi.yaml's PrivilegedAccount schema
 // documented all three from the start; this HTTP layer never populated
 // them).
 func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
@@ -391,7 +391,7 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// -- GET /vault/v1/accounts (mirrors GET /vault/accounts, doc 05 §2) -------
+// -- GET /vault/v1/accounts (mirrors GET /vault/accounts, docs/api/rest/openapi.yaml) -------
 
 type listAccountsResponse struct {
 	Items      []accountResponse `json:"items"`

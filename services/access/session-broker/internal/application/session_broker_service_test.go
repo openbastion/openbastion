@@ -166,7 +166,7 @@ func TestCreateSession_GrantsImmediatelyWhenAllowed(t *testing.T) {
 }
 
 func TestCreateSession_FailClosedWhenAuditUnreachable(t *testing.T) {
-	// Guide HA §1: audit is fail-closed. An unauditable grant must not
+	// docs/deployment/high-availability.md §1: audit is fail-closed. An unauditable grant must not
 	// leave the session active.
 	authz := &fakeAuthz{allowed: true}
 	audit := &fakeAudit{failing: true}
@@ -291,7 +291,7 @@ func TestConnect_RejectsUnsupportedProtocol(t *testing.T) {
 	}
 
 	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
-		t.Fatal("expected Connect to reject a protocol outside MVP scope (doc 04 §2)")
+		t.Fatal("expected Connect to reject a protocol outside MVP scope (docs/roadmap.md §2)")
 	}
 }
 

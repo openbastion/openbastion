@@ -1,6 +1,6 @@
 package integration_test
 
-// The MVP's third exit criterion (doc 04 §2) — a reproducible docker-compose deployment —
+// The MVP's third exit criterion (docs/roadmap.md §2) — a reproducible docker-compose deployment —
 // as a test (ADR-0033). It builds the real image, starts the real stack (eight services
 // under mutual TLS, one database per service), creates the first users with the CLI, and goes
 // through the journey on the published ports only: policies, an account, a session, an SSH

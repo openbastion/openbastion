@@ -99,7 +99,7 @@ func (s *HTTPServer) handleRecord(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(recordResponse{EntriesReceived: n})
 }
 
-// -- GET /recorder/v1/sessions/{id}/commands (mirrors GET /sessions/{id}/recording, doc 05) --
+// -- GET /recorder/v1/sessions/{id}/commands (mirrors GET /sessions/{id}/recording, docs/api/rest/openapi.yaml) --
 
 type recordedCommand struct {
 	Timestamp time.Time `json:"timestamp"`

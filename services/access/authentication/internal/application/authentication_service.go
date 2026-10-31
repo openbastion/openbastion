@@ -1,6 +1,6 @@
 // Package application implements the Authentication Service's use cases.
-// See OpenBastion_05_OpenAPI.md §2 (POST /auth/login) and
-// OpenBastion_07_Interfaces_Inter_Services.md's RequestContext (§2),
+// See docs/api/rest/openapi.yaml (POST /auth/login) and
+// docs/api/grpc/README.md's RequestContext (§2),
 // whose actor_user_id/actor_roles are resolved from VerifyToken.
 package application
 
@@ -60,8 +60,8 @@ func NewAuthenticationService(users domain.UserRepository, hasher PasswordHasher
 }
 
 // CreateUser onboards a local account. Real deployments delegate identity
-// to LDAP/AD/Entra ID/OIDC/SAML or SCIM provisioning (doc 00 §4.7); MVP
-// scope is OIDC-or-local (doc 04 §2) — this covers the local half, which
+// to LDAP/AD/Entra ID/OIDC/SAML or SCIM provisioning (docs/architecture/system-overview.md); MVP
+// scope is OIDC-or-local (docs/roadmap.md §2) — this covers the local half, which
 // this sandbox exercises directly since no external OIDC provider is
 // reachable here either.
 func (s *AuthenticationService) CreateUser(ctx context.Context, username, displayName, password string, roles []string) (*domain.User, error) {
@@ -76,7 +76,7 @@ func (s *AuthenticationService) CreateUser(ctx context.Context, username, displa
 	return u, nil
 }
 
-// Login implements POST /auth/login (doc 05 §2). It returns the same
+// Login implements POST /auth/login (docs/api/rest/openapi.yaml). It returns the same
 // ErrInvalidCredentials whether the username doesn't exist or the
 // password is wrong — never revealing which, a basic enumeration
 // defense.
@@ -103,7 +103,7 @@ func (s *AuthenticationService) Login(ctx context.Context, username, password st
 // VerifyToken is what the API Gateway calls on every authenticated
 // request to resolve the caller's identity — the Gateway trusts only
 // this, never anything a client claims about itself in a request body
-// (doc 07 §2, RequestContext.actor_user_id/actor_roles).
+// (docs/api/grpc/README.md §2, RequestContext.actor_user_id/actor_roles).
 func (s *AuthenticationService) VerifyToken(ctx context.Context, token string) (userID, username string, roles []string, err error) {
 	userID, username, roles, _, err = s.tokens.Verify(token)
 	return userID, username, roles, err

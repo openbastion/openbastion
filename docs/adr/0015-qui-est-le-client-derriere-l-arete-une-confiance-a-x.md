@@ -1,0 +1,46 @@
+# ADR-0015 — Qui est « le client » derrière l'arête : une confiance à `X-Forwarded-For` limitée aux proxys déclarés, et des limites par adresse réglables
+
+
+**Contexte**
+ADR-0014 a laissé deux limites écrites : la limite **par adresse** du Gateway est fausse derrière Traefik, et ses valeurs ne se règlent pas. Le Gateway clé deux limiteurs sur `clientIP(r)`, l'hôte de `r.RemoteAddr` : le **login** (rafale de 5, puis une par minute) et les **requêtes authentifiées** (rafale de 60, puis 60 par minute), ce dernier avant même que le jeton soit regardé. Le listener public est en HTTP derrière Traefik, où le TLS se termine : l'adresse du pair est celle de Traefik **pour tout le monde**. Conséquences déjà consignées : un seul seau pour toute la plateforme (60 requêtes authentifiées par minute en tout), et une rafale de login qu'un seul utilisateur peut épuiser pour tous.
+
+L'évidence est de lire `X-Forwarded-For`. Mais cet en-tête est écrit par **qui veut** : un client peut l'envoyer lui-même, et un limiteur qui prend la première valeur offre à l'attaquant une clé neuve à chaque requête — c'est-à-dire qu'il **supprime** la protection contre la force brute qu'il devait fournir. La question n'est donc pas « lire l'en-tête ou non » mais **la parole de qui on prend**. Et aucun fichier de déploiement Traefik n'existe encore dans le dépôt (`deploy/*` est vide) : la règle ne peut vivre que dans le Gateway et dans les guides.
+
+Deux questions : (1) **comment trouver l'adresse du vrai client sans la laisser choisir par lui** ; (2) **que faire des valeurs figées des deux limiteurs**, qui devenaient par client réel et non plus par plateforme.
+
+**Décision**
+Sept règles.
+
+1. **La confiance se déclare, par adresse de pair.** `TRUSTED_PROXY_CIDRS` liste (séparés par des virgules) les adresses ou réseaux CIDR des proxys inverses devant le Gateway. **Par défaut, personne n'est de confiance** : la clé est l'adresse du pair, comme aujourd'hui, et le Gateway annonce au démarrage ce qu'il fait. Un en-tête n'est lu que si le **pair TCP immédiat** est dans cette liste ; venant de tout autre pair, il est ignoré.
+2. **On remonte la chaîne par la droite et on s'arrête au premier inconnu.** Seul `X-Forwarded-For` est lu (plusieurs lignes de l'en-tête sont lues comme une seule, dans l'ordre). Du dernier élément vers le premier : une adresse de confiance est un saut de plus à franchir ; la **première adresse qui n'est pas de confiance est le client**. La partie gauche — celle qu'un client écrit — n'est jamais lue tant qu'un élément non fiable plus à droite l'arrête.
+3. **Au moindre doute, la clé est celle du pair — jamais une valeur choisie par le client.** Pair de confiance sans en-tête, élément illisible rencontré, chaîne de plus de 32 sauts, tous les éléments de confiance : la clé est l'adresse du pair, c'est-à-dire exactement le comportement d'aujourd'hui, pas un comportement plus faible.
+4. **Les clés sont normalisées.** Une adresse IPv4 écrite en IPv6 (`::ffff:a.b.c.d`) devient l'IPv4 ; une adresse IPv6 est ramenée à son **/64**, car un seul abonné en possède 2⁶⁴ et un seau par adresse lui donnerait une clé neuve à volonté ; la zone (`%eth0`) et le port (`ip:port`, `[ipv6]:port`) sont retirés. La même normalisation vaut pour le pair et pour le client.
+5. **Une configuration douteuse empêche de démarrer.** Entrée vide (`a,,b`), texte qui n'est ni adresse ni CIDR, préfixe hors bornes, **bits d'hôte non nuls** (`192.168.1.5/24` : le préfixe visé est ambigu et une confiance élargie sans le dire est le mauvais sens d'erreur), et **tout réseau de longueur 0** (`0.0.0.0/0`, `::/0` : faire confiance à tout pair revient à laisser chacun choisir sa clé) arrêtent le Gateway, en nommant la variable et l'entrée. Il n'existe pas de valeur « tout le monde ». Les entrées répétées sont acceptées.
+6. **Les quatre valeurs figées deviennent réglables, avec des défauts qui sont ce que le code fait vraiment, et des bornes.** `CLIENT_LOGIN_BURST` (défaut **5**, de 1 à 100) et `CLIENT_LOGIN_RATE_PER_MINUTE` (défaut **1**, de 1 à 60) ; `CLIENT_REQUEST_BURST` (défaut **60**, de 1 à 10000) et `CLIENT_REQUEST_RATE_PER_MINUTE` (défaut **60**, de 1 à 6000). Pas d'« illimité » ; valeur invalide fatale en nommant la variable ; annonce au démarrage. Les défauts reproduisent à l'identique les limiteurs de l'ADR-0014 : rien n'est relâché, ni le login, ni le reste, tant qu'on ne le demande pas **par son nom**.
+7. **Les refus par adresse ne sont pas journalisés ligne à ligne.** Contrairement au budget par utilisateur (ADR-0014), dont la clé est une identité authentifiée donc bornée, la clé d'adresse peut tourner librement pour qui possède beaucoup d'adresses : une ligne par épisode deviendrait une ligne par requête. Le refus est visible dans le journal d'accès de l'arête, qui connaît la vraie adresse.
+
+Ni les réponses, ni le schéma, ni les autres services ne changent. Ce que le Gateway transmet en amont n'est pas touché : il ne forge ni ne propage d'adresse cliente.
+
+**Conséquences**
+- (+) Avec `TRUSTED_PROXY_CIDRS` réglé sur l'arête, **chaque client réel a son seau** : l'un ne peut plus épuiser la rafale de login des autres, et les 60 requêtes authentifiées par minute sont par client, non par plateforme.
+- (+) **Forger l'en-tête ne rapporte rien** : d'un pair non fiable, il est ignoré ; derrière un pair fiable, les éléments de gauche ne sont jamais lus tant que l'adresse que le proxy a ajoutée à droite est inconnue de la liste.
+- (+) Les limites se règlent sans toucher au code, avec des bornes, sans « illimité ».
+- (+) **Mesuré** : 66 mutations de la résolution d'adresse, de la lecture de la configuration, des limiteurs, du Gateway et de son câblage — 65 détectées, 1 équivalente (une confiance `nil` qui répond « oui » saute tous les éléments et laisse la clé au pair) ; 13 tests unitaires et 4 d'intégration sur processus réels ajoutés (463 unitaires avec base, 52 PostgreSQL, 37 d'intégration au total), dont un attaquant qui se connecte depuis `127.0.0.2` en écrivant l'adresse d'un autre et n'épuise que sa propre rafale. Cinq mutations ont survécu à la première passe : quatre étaient de vraies lacunes de tests, comblées.
+- (−) **Tant que l'opérateur n'a pas réglé `TRUSTED_PROXY_CIDRS`, rien ne change** : toute la plateforme partage encore un seau, et l'annonce du démarrage est la seule trace. Choisi plutôt que de deviner : un défaut qui ferait confiance aux réseaux privés ferait confiance à tout pod du cluster.
+- (−) **La confiance est celle de l'opérateur.** Un réseau trop large (tout un VPC) laisse n'importe quel hôte qu'il contient choisir sa clé ; seule la longueur 0 est refusée. Et le proxy doit **ajouter l'adresse dont il a reçu la connexion** à `X-Forwarded-For`, comme le font les proxys usuels : un proxy qui transmet l'en-tête du client sans rien ajouter rend la valeur forgeable par le client à travers lui.
+- (−) **Traefik n'a pas été essayé.** Les tests tiennent le rôle du proxy ; la configuration de `forwardedHeaders` de l'arête (ne pas croire les `X-Forwarded-*` d'un client non fiable) est un prérequis documenté, non vérifié ici. L'algorithme est choisi pour ne pas dépendre de ce détail — que Traefik écrase l'en-tête ou y ajoute son pair, la clé est la même — mais cela reste à voir sur un vrai déploiement.
+- (−) **Une adresse n'est pas une personne** : derrière un NAT d'entreprise ou d'opérateur, de nombreux utilisateurs partagent une adresse et un seau, même bien résolue. À l'inverse, un attaquant qui possède beaucoup d'adresses obtient beaucoup de seaux : la limite par adresse ne borne pas une force brute **distribuée** (aucune limite par compte n'est ajoutée ici).
+- (−) **Le /64 IPv6 est un choix, non réglable** : des utilisateurs d'un même /64 (un réseau local) partagent un seau ; un attaquant qui possède plusieurs /64 en a plusieurs.
+- (−) **Par processus**, comme ADR-0014 : N réplicas, N fois le budget.
+- (−) **Les refus par adresse ne sont ni dans l'audit ni dans le journal du Gateway.**
+- (−) Les défauts n'ont pas été éprouvés sur un usage réel ; ils reproduisent ceux de l'ADR-0014.
+
+**Alternatives envisagées**
+- *Prendre la première adresse de `X-Forwarded-For`* : rejeté — c'est celle que le client écrit : une clé neuve par requête supprime la limite de login.
+- *Lire l'en-tête dès qu'il est présent* : rejeté — même défaut, avec l'accès direct au Gateway en plus.
+- *Faire confiance par défaut aux réseaux privés* : rejeté — tout pod compromis du cluster choisirait sa clé, et un défaut qui devine un réseau est un défaut faux dans certains déploiements.
+- *Un nombre fixe de proxys à sauter (compter à partir de la droite)* : rejeté — il fait confiance à une **position**, pas à un qui ; il se casse en silence quand la chaîne change de longueur.
+- *`X-Real-IP` ou `Forwarded` (RFC 7239)* : rejeté pour l'instant — un seul en-tête à analyser, une seule règle à auditer.
+- *Le protocole PROXY entre Traefik et le Gateway* : écarté — il évite les en-têtes mais change le listener et demande un arrêt côté arête ; décision à part, non essayée.
+- *Une clé IPv6 par adresse complète* : rejeté — rotation gratuite à l'intérieur d'un /64.
+- *Remplacer la limite par adresse par une limite par compte de login* : rejeté ici — protection d'une autre nature (verrouillage d'un compte par un tiers) ; à traiter à part.

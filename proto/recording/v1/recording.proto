@@ -45,7 +45,7 @@ message GetCommandRecordingRequest {
   string session_id = 1;
   repeated string actor_roles = 2;
   int32 page = 3;       // < 1 est ramené à 1
-  int32 page_size = 4;  // < 1 → 20 ; > 100 → 100 (comme les listes de la doc 05)
+  int32 page_size = 4;  // < 1 → 20 ; > 100 → 100 (comme les listes de docs/api/rest/openapi.yaml)
   string actor_user_id = 5;  // l'utilisateur vérifié par le Gateway ; vide ⇒ refusé (ADR-0022)
 }
 

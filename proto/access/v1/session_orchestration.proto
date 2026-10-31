@@ -76,7 +76,7 @@ message DecideBreakGlassRequest {
 message ListPendingApprovalsRequest {
   openbastion.common.v1.RequestContext context = 1;  // l'identité et les rôles de l'appelant : ceux du jeton, jamais un champ
   int32 page = 2;       // < 1 → 1
-  int32 page_size = 3;  // < 1 → 20 ; > 100 → 100 (comme les listes de la doc 05)
+  int32 page_size = 3;  // < 1 → 20 ; > 100 → 100 (comme les listes de docs/api/rest/openapi.yaml)
 }
 
 message ListPendingApprovalsResponse {

@@ -14,7 +14,7 @@ import (
 )
 
 // TokenVerifier is the port to Authentication's token verification
-// (doc 07's RequestContext.actor_user_id/actor_roles are resolved from
+// (docs/api/grpc/README.md's RequestContext.actor_user_id/actor_roles are resolved from
 // this — the Gateway trusts only this, never a client's own claims).
 type TokenVerifier interface {
 	VerifyToken(ctx context.Context, token string) (userID, username string, roles []string, err error)
@@ -22,10 +22,10 @@ type TokenVerifier interface {
 
 // RateLimiter is an in-memory token bucket per key — the client IP for the
 // requests that have not been authenticated yet, the verified user for what an
-// authenticated user may do (ADR-0014): doc 00 §9's brute-force protection and
+// authenticated user may do (ADR-0014): docs/security/security-overview.md's brute-force protection and
 // general abuse protection, one of the Gateway's stated responsibilities
-// (doc 00 §4.1: "rate-limiting"). Per-process only; a multi-replica Gateway
-// needs a shared store (Redis, doc 00 §10) — a v1.0 concern.
+// (docs/architecture/system-overview.md: "rate-limiting"). Per-process only; a multi-replica Gateway
+// needs a shared store (Redis, docs/architecture/system-overview.md) — a v1.0 concern.
 //
 // The two parameters are a burst and a refill interval: a key may make `capacity`
 // requests at once, and then one more every `refillEvery`. NewRateLimiter(60,

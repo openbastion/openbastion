@@ -35,7 +35,7 @@ import (
 // connection ticket has resolved which target/account it belongs to.
 type Codec struct {
 	// TargetUser is the account username to authenticate as on the
-	// target — privileged_accounts.username (OpenBastion_06_Modele_Donnees.md
+	// target — privileged_accounts.username (docs/architecture/data-architecture.md
 	// §3) and proto/proxy/v1/proxy_control.proto's
 	// EstablishSessionRequest.target_user, both added after this codec
 	// first needed the value and had nowhere formal to carry it; see
@@ -44,7 +44,7 @@ type Codec struct {
 	TargetUser string
 
 	// Recorder receives everything the client types, for command capture
-	// (doc 00's Command Recorder). May be nil, in which case nothing is
+	// (docs/architecture/system-overview.md's Command Recorder). May be nil, in which case nothing is
 	// captured — the relay itself never depends on it.
 	Recorder io.Writer
 

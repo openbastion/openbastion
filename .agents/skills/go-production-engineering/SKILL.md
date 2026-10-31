@@ -11,7 +11,7 @@ Règles : `rules/backend-go.md`, `rules/architecture.md`. Patron : `architecture
 
 - `export GOWORK=$PWD/go.work` ; `make build vet` ; les motifs `./...` ne traversent pas les modules : le `Makefile` les liste.
 - Un nouveau port : dans `domain/` ; ses deux implémentations (mémoire, PostgreSQL) ; les fakes de test à la main.
-- Une nouvelle variable : lue dans `main.go`, défaut strict, bornes, `log.Fatalf` hors bornes, annoncée au démarrage ; ajoutée à `settings/security.yaml` si elle touche la sécurité et au guide Administrateur.
+- Une nouvelle variable : lue dans `main.go`, défaut strict, bornes, `log.Fatalf` hors bornes, annoncée au démarrage ; ajoutée à `settings/security.yaml` si elle touche la sécurité et dans `docs/administration/`.
 - Une boucle de fond : `time.Ticker` borné, délai par passage (`context.WithTimeout`), arrêt sur le contexte du processus, journal d'une ligne par passage utile.
 - `go.sum` : `GOWORK=off GOFLAGS=-mod=mod go mod tidy` dans le module, jamais à la main.
 

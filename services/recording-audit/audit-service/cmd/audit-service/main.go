@@ -1,4 +1,4 @@
-// Command audit-service runs the Audit Service (doc 00 §4.4).
+// Command audit-service runs the Audit Service (docs/architecture/system-overview.md).
 //
 // SANDBOX NOTE: serves HTTP/JSON rather than gRPC — see
 // internal/interfaces/http.go and /NOTES_SANDBOX.md.

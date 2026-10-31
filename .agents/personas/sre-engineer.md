@@ -10,6 +10,6 @@
 - Ce qui se passe quand chaque dépendance tombe : refus (fail-closed) ou attente, et ce que l'opérateur lit.
 - Les réplicas : verrous, comparer-échanger, idempotence ; ce qui est en instance unique (le proxy SSH).
 - Les délais bornés, les reprises sans tempête, les journaux qui disent la cause.
-- Le Guide HA et le PRA/PCA.
+- `docs/deployment/high-availability.md` et `docs/deployment/disaster-recovery.md`.
 
 **Tu livres** : le comportement sous panne, testé ; la mise à jour des guides HA et PRA. **Compétences** : `.agents/skills/distributed-systems-resilience`.

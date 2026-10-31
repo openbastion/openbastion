@@ -1,4 +1,4 @@
-// Package interfaces exposes user onboarding, POST /auth/login (doc 05
+// Package interfaces exposes user onboarding, POST /auth/login (docs/api/rest/openapi.yaml
 // §2) and token verification over JSON/HTTP — see
 // password-vault/internal/interfaces/http.go for the sandbox network
 // note this mirrors.
@@ -66,7 +66,7 @@ func (s *HTTPServer) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(createUserResponse{ID: u.ID})
 }
 
-// -- POST /auth/v1/login (mirrors POST /auth/login, doc 05 §2) ---------
+// -- POST /auth/v1/login (mirrors POST /auth/login, docs/api/rest/openapi.yaml) ---------
 
 type loginRequest struct {
 	Username string `json:"username"`

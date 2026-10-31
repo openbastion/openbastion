@@ -19,7 +19,7 @@ web/admin-ui/src/
 
 ## À faire
 
-- Un type TypeScript par ressource de l'API dans `shared/api.ts`, aligné sur l'OpenAPI (doc 05) ; un champ ajouté côté API s'ajoute ici, optionnel s'il peut manquer (comptes antérieurs).
+- Un type TypeScript par ressource de l'API dans `shared/api.ts`, aligné sur l'OpenAPI (`docs/api/rest/openapi.yaml`) ; un champ ajouté côté API s'ajoute ici, optionnel s'il peut manquer (comptes antérieurs).
 - L'accès à l'API passe par `useSignedIn().api.request(method, path, body?)` ; les identifiants dans un chemin passent par `encodeURIComponent`.
 - Un geste qui écrit passe par une fonction `act(message, run)` locale à l'écran : efface les notices, attend, affiche succès ou erreur, recharge.
 - État local (`useState`), chargement par `useCallback` + `useEffect` ; pas de bibliothèque d'état, pas de routeur tiers.

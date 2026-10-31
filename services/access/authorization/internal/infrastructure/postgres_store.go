@@ -58,7 +58,7 @@ func (s *PostgresStore) Create(ctx context.Context, p *domain.Policy) error {
 
 // ForRoles uses pq.Array so a single query covers every role in roles,
 // rather than one round trip per role — ForRoles is on CheckAccess's hot
-// path (doc 06 §3), called on essentially every write and session request
+// path (docs/architecture/data-architecture.md §3), called on essentially every write and session request
 // in the system.
 func (s *PostgresStore) ForRoles(ctx context.Context, roles []string) ([]*domain.Policy, error) {
 	if len(roles) == 0 {

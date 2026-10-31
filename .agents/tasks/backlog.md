@@ -1,6 +1,6 @@
 # Backlog
 
-Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source détaillée et datée des limites est `NOTES_SANDBOX.md` (« Ce que cela ne fait PAS ») et le Guide Sécurité §12 ; une ligne refermée se barre ici et là-bas, avec ce qui l'a refermée.
+Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source détaillée et datée des limites est `NOTES_SANDBOX.md` (« Ce que cela ne fait PAS ») et `docs/security/known-limitations.md` ; une ligne refermée se barre ici et là-bas, avec ce qui l'a refermée.
 
 | # | Sujet | Pourquoi | Où c'est écrit |
 |---|---|---|---|

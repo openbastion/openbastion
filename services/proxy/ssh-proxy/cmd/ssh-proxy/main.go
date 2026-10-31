@@ -1,4 +1,4 @@
-// Command ssh-proxy runs the SSH Proxy (doc 00 §4.2) — the first proxy
+// Command ssh-proxy runs the SSH Proxy (docs/architecture/system-overview.md) — the first proxy
 // with a real protocol implementation, using golang.org/x/crypto/ssh (see
 // /NOTES_SANDBOX.md for how it's fetched in this build sandbox).
 package main
@@ -74,7 +74,7 @@ func main() {
 	}
 
 	// MVP: an ephemeral host key generated at process start. Production
-	// needs a persisted, rotated identity (Guide Sécurité §3) — this is a
+	// needs a persisted, rotated identity (docs/security/network-security.md) — this is a
 	// deliberate simplification, not an oversight.
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

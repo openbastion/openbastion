@@ -13,7 +13,7 @@ import (
 )
 
 // HTTPServer exposes ProxyControl.EstablishSession
-// (proto/proxy/v1/proxy_control.proto, doc 07 §4) over JSON/HTTP — see
+// (proto/proxy/v1/proxy_control.proto, docs/api/grpc/README.md §4) over JSON/HTTP — see
 // /NOTES_SANDBOX.md for why HTTP stands in for gRPC here.
 //
 // This is the endpoint the Session Broker calls once it has already
@@ -75,15 +75,15 @@ type establishSessionRequest struct {
 	SessionID  string `json:"session_id"`
 	TargetHost string `json:"target_host"`
 	// TargetUser mirrors proto/proxy/v1/proxy_control.proto's
-	// EstablishSessionRequest.target_user (doc 07 §4) and
-	// privileged_accounts.username (doc 06 §3) — formalized in both
+	// EstablishSessionRequest.target_user (docs/api/grpc/README.md §4) and
+	// privileged_accounts.username (docs/architecture/data-architecture.md §3) — formalized in both
 	// after having been threaded through this codec first; see
 	// NOTES_SANDBOX.md for the history.
 	TargetUser      string `json:"target_user"`
 	VaultScopeToken string `json:"vault_scope_token"`
 	TTLSeconds      int    `json:"ttl_seconds"`
 
-	// BreakGlass mirrors EstablishSessionRequest.break_glass (doc 07 §4).
+	// BreakGlass mirrors EstablishSessionRequest.break_glass (docs/api/grpc/README.md §4).
 	BreakGlass bool `json:"break_glass"`
 }
 

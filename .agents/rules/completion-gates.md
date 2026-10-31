@@ -8,7 +8,7 @@
 2. Chaque comportement nouveau a un test ; chaque garantie de sécurité a un test d'attaque, un rouge mesuré sur l'ancien code quand c'est possible, et des mutations toutes tuées.
 3. Les tests des modules touchés passent, `-race` propre ; avant un jalon, les suites complètes passent (`settings/quality-gates.yaml`).
 4. La documentation est à jour **dans le même commit**, les chiffres mesurés (`rules/documentation.md`).
-5. Les limites laissées sont écrites (`NOTES_SANDBOX.md`, Guide Sécurité §12).
+5. Les limites laissées sont écrites (`NOTES_SANDBOX.md`, `docs/security/known-limitations.md`).
 6. Le commit est fait **et poussé** ; aucun fichier sensible ; rien de ce que l'utilisateur avait en cours n'y est entré sans demande.
 7. Le rapport suit §2.
 

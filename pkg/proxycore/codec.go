@@ -2,7 +2,7 @@
 // proxies (SSH, RDP/VNC, Database, Kubernetes, ...): credential fetch,
 // protocol relay, recording, and termination.
 //
-// See OpenBastion_01_Diagrammes_C4.md §4.2 and ADR-0006. Factoring this
+// See docs/architecture/components.md, « Couche Proxy », and ADR-0006. Factoring this
 // pipeline once means the most security-sensitive logic — fetching a
 // credential and purging it — is implemented and tested a single time,
 // not duplicated nine times with room to drift (ADR-0003, ADR-0006).

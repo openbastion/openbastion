@@ -1,0 +1,37 @@
+# ADR-0026 — Le hash d'un événement d'audit couvre chaque champ comme un champ : un format versionné, et l'ancien seulement pour vérifier
+
+
+**Contexte**
+En lisant `computeHash` pendant ADR-0025, j'ai trouvé que le hash de chaque événement était le SHA-256 de ses champs **concaténés tels quels** : `prev_hash ‖ id ‖ actor_id ‖ action ‖ resource_type ‖ resource_id ‖ success ‖ ts`. Deux suites de champs qui s'écrivent avec les mêmes octets ont donc le même hash. J'ai écrit le test d'abord, et constaté qu'il échouait. Ce qui a été **mesuré** :
+
+- **Un octet déplacé entre deux champs voisins n'est pas vu.** Sur les cinq frontières (`id`/`actor_id`, `actor_id`/`action`, `action`/`resource_type`, `resource_type`/`resource_id`, un champ vidé dans son voisin), un événement stocké modifié ainsi laisse `VerifyChain` dire la chaîne intègre : **5 sur 5 non détectés**. Exemple : `actor_id = user_ab`, `action = session.read` réécrits en `user_a` / `bsession.read`, ou `action = session.rea`, `resource_type = dsession` : même hash, même lien.
+- **Ce que les documents affirmaient** : « toute altération rétroactive d'un événement casse la chaîne » (`docs/architecture/data-architecture.md`, `docs/security/`). C'était faux pour cette forme d'altération — qui ne demande même pas de recalculer un hash.
+- **Ce que les documents ne disaient pas** : la chaîne n'a **pas de clé**. Quelqu'un qui peut écrire dans `audit_events` peut modifier un événement et recalculer **toute la fin** de la chaîne : `verify-chain` la dira intègre. Seule une modification qui laisse intacts les événements suivants est détectée. Cette limite n'était écrite nulle part (le README disait « même quand l'attaquant recalcule le hash de l'événement modifié », sans dire « et pas les suivants »).
+- **Des chaînes existent déjà** au format actuel, en PostgreSQL : les re-hacher détruirait la preuve qu'elles portent ; un nouveau format doit coexister avec l'ancien.
+
+**Décision**
+Sept règles.
+
+1. **Format 2** : `SHA-256( "openbastion.audit.event.v2" 0x00 ‖ L(prev_hash) ‖ L(id) ‖ L(actor_id) ‖ L(action) ‖ L(resource_type) ‖ L(resource_id) ‖ success (1 octet) ‖ ts en nanosecondes (8 octets, gros-boutiste) )`, où `L(x)` est la longueur de `x` sur 4 octets gros-boutistes suivie de `x`. L'étiquette de domaine empêche qu'un hash d'un format soit pris pour celui d'un autre format ou d'un autre type d'enregistrement.
+2. **Seul le format 2 s'écrit.** Le format 1 (la concaténation) est gardé **pour vérifier** les événements écrits avant, et jamais pour en écrire.
+3. **La version est stockée avec l'événement** : colonne `hash_version SMALLINT NOT NULL DEFAULT 1`, ajoutée en place (`ADD COLUMN IF NOT EXISTS`) — les lignes existantes reçoivent 1, ce qui est vrai ; toute ligne écrite depuis porte 2. La version est couverte par le hash v2 lui-même (l'étiquette) : changer la version d'une ligne v2 change le hash qu'elle doit avoir.
+4. **Une version ne recule jamais dans la chaîne** : après une ligne v2, une ligne v1 est une falsification (on ne peut pas faire passer un événement récent pour un événement de l'ancien format, plus faible).
+5. **Une version inconnue n'a pas de hash** (`nil`) et est refusée par `VerifyChain` avant même la comparaison — une ligne au hash vide (`''`, que `BYTEA NOT NULL` accepte) sous une version inventée « correspondrait » sinon à ce `nil`.
+6. **Les formats sont figés** par des vecteurs de référence calculés indépendamment du code (Python, à partir de la description de chaque format) ; le vecteur v1 prouve que l'ancien format n'a pas bougé. Changer un format, c'est créer une version 3.
+7. **Pas de clé dans cet ADR** (*fait par ADR-0027*). Rendre la chaîne résistante à un recalcul complet demande une clé hors de la base (HMAC) ou un ancrage du dernier hash hors de la base : c'est une autre décision (gestion de clé, rotation, vérification par l'outil d'exploitation), repoussée ; la limite est écrite partout où l'intégrité est promise.
+
+**Conséquences**
+- (+) **Tout événement écrit depuis ADR-0026 est protégé contre le déplacement d'octets entre champs**, et contre le changement de sa version.
+- (+) **Les chaînes existantes se vérifient toujours** et continuent au format 2, sans migration de données.
+- (+) **Les documents disent maintenant la vérité** sur ce que la chaîne détecte, et sur ce qu'elle ne détecte pas.
+- (+) **Mesuré** : *Avant* (unitaire, rouge) : un octet déplacé sur chacune des cinq frontières — 5 sur 5 non détectés. *Après* : 5 sur 5 détectés ; un nouvel événement est au format 2 (et son hash diffère du format 1) ; une chaîne v1 se vérifie, continue en v2 (le premier v2 chaîne sur le dernier v1) et se vérifie ; v1-v1-v2-v2 accepté, v2-v1, v1-v2-v1-v2, une version 3, 0 ou négative refusés même avec hashes et liens recalculés ; une ligne v2 relabellisée 1 ou 3 et une ligne v1 relabellisée 2 sont détectées ; une version inconnue n'a pas de hash ; une ligne au hash vide sous une version inventée est refusée ; vecteurs v1 et v2 figés, recalculés en Python à partir de la description. Sur processus réel et vraie PostgreSQL 16 : une table sans `hash_version` portant une chaîne v1 écrite en SQL est mise à niveau en place (versions [1 1 1]), se vérifie, grandit en v2 ([1 1 1 2 2]) et se vérifie ; un octet déplacé d'`action` vers `resource_type` dans une ligne v2 donne `409`, puis `200` une fois restauré ; une ligne v2 relabellisée 1 donne `409` ; le même déplacement dans une ligne v1 n'est pas vu (la limite écrite, assertée) ; le test de redémarrage existant passe. **14 mutations** (nouveaux événements en v1 ; v2 sans encadrement, sans étiquette, sans le dernier champ encadré, sans `prev_hash`, longueur sur un octet ; v1 modifié ; version inconnue hachée en v1 ou en v2, ou acceptée ; version qui recule ; version non stockée ou non relue en PostgreSQL ; lignes anciennes marquées 2) : 8 tuées d'emblée, **3 survivantes réelles** (version inconnue hachée en v1, en v2, ou acceptée — chacune masquée par l'autre défense) **closes par deux tests**, 3 réécrites pour compiler et tuées. Tests : 594 unitaires sans base (47 ignorés), 641 avec ; 54 PostgreSQL ; 44 d'intégration sans base (7 ignorés), 51 avec ; `go test -race` propre sur l'Audit Service.
+- (−) **Les événements écrits avant restent au format 1**, sensibles au déplacement d'octets (asserté par le test sur PostgreSQL, pour que les documents qui le disent restent vrais).
+- (−) **La chaîne n'a pas de clé** : un attaquant qui peut écrire en base et recalculer toute la fin de la chaîne n'est pas détecté.
+- (−) **Un octet de plus par événement** en base (la colonne) et seize octets de plus hachés.
+
+**Alternatives envisagées**
+- *Re-hacher toute l'histoire au format 2* : rejeté — ce serait réécrire la preuve, et un attaquant passé serait blanchi par la réécriture.
+- *Un séparateur (`\x00`) entre les champs plutôt qu'une longueur* : rejeté — un champ qui contient le séparateur recrée l'ambiguïté ; les bornes d'ADR-0025 l'interdisent aujourd'hui, mais l'encodage ne doit pas dépendre d'une validation faite ailleurs.
+- *Hacher une sérialisation JSON* : rejeté — le JSON de Go n'est pas canonique par contrat (ordre, échappements) ; un encodage défini octet par octet se vérifie dans n'importe quel langage.
+- *Déduire la version de la date de l'événement* (avant/après une date de mise à niveau) : rejeté — la date est elle-même une donnée de la ligne, et la mise à niveau n'a pas lieu au même moment partout.
+- *Une chaîne à clé (HMAC) dès maintenant* : repoussé — voir la règle 7.

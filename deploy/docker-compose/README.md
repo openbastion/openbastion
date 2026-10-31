@@ -3,7 +3,7 @@
 One host, eight services under mutual TLS, one PostgreSQL database per service, two ports
 published on `127.0.0.1`: the public API of the Gateway and the SSH port of the proxy.
 For development and small on-premise installations; not a high-availability setup
-(`docs/guides/OpenBastion_Guide_HA.md`).
+(`docs/deployment/high-availability.md`).
 
 ## Start
 

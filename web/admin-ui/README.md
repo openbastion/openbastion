@@ -2,7 +2,7 @@
 
 React and TypeScript, built by Vite, served by the API Gateway under `/ui/` — the same origin
 as the public API, so that nothing is opened to another origin. It talks to the public API only
-(`docs/api/OpenBastion_05_OpenAPI.md`) and asks the services for nothing they do not already
+(`docs/api/rest/openapi.yaml`) and asks the services for nothing they do not already
 answer.
 
 ```sh

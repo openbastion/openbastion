@@ -208,7 +208,7 @@ func (c *Credentials) refresh() {
 		}
 	}
 
-	// Expiry is an outage for a Tier-0 component (Guide HA): say so before and when it happens.
+	// Expiry is an outage for a Tier-0 component (docs/deployment/high-availability.md): say so before and when it happens.
 	lifetime := old.leaf.NotAfter.Sub(old.leaf.NotBefore)
 	left := old.leaf.NotAfter.Sub(now)
 	switch {

@@ -49,7 +49,7 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 // Save is an UPSERT, unlike every other store's Create in this project —
 // SessionBrokerService genuinely reuses it to both create a session
 // (including a denied attempt, which is still recorded — Full
-// Auditability, doc 00 §2) and later update the same row in place
+// Auditability, docs/architecture/principles.md) and later update the same row in place
 // (TerminateSession reads it back, flips Status/TerminatedAt, and saves
 // again). See 001_init.sql's doc comment.
 //

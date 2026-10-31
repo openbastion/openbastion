@@ -11,8 +11,8 @@ type AuditEmitter interface {
 // Terminator ends a session deterministically: it always purges the
 // credential first, then emits the audit event — in that order, so an
 // audit failure can never leave a credential un-purged, and a purge can
-// never happen without a corresponding audit trail entry (doc 06 §4,
-// Guide Sécurité §8).
+// never happen without a corresponding audit trail entry (docs/architecture/data-architecture.md §4,
+// docs/security/session-security.md).
 type Terminator struct {
 	audit AuditEmitter
 }
@@ -29,7 +29,7 @@ func (t *Terminator) Terminate(ctx context.Context, sessionID string, cred *Cred
 
 // EmitConnectFailure records a session that never obtained a credential —
 // there is nothing to purge, but the failed attempt is still audited
-// (Full Auditability, doc 00 §2 — a failure is never a silent gap).
+// (Full Auditability, docs/architecture/principles.md — a failure is never a silent gap).
 func (t *Terminator) EmitConnectFailure(ctx context.Context, sessionID string) error {
 	return t.audit.EmitEvent(ctx, "session.connect", "session", sessionID, false)
 }

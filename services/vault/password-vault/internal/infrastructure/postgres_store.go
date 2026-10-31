@@ -89,7 +89,7 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 }
 
 // List mirrors InMemoryStore.List: excludes disabled accounts, orders by
-// id (doc 05 §2 names no sort order), paginates with LIMIT/OFFSET. page
+// id (docs/api/rest/openapi.yaml names no sort order), paginates with LIMIT/OFFSET. page
 // and pageSize are already validated/capped by the caller
 // (application.VaultService.ListAccounts).
 func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain.PrivilegedAccount, int, error) {

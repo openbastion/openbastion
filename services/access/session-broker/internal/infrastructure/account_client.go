@@ -13,7 +13,7 @@ import (
 
 // AccountLookupHTTPClient implements application.AccountLookup by calling
 // password-vault's GET /vault/v1/accounts/{id} — metadata only, the
-// response has no field that could carry a secret (doc 05 §2).
+// response has no field that could carry a secret (docs/api/rest/openapi.yaml).
 type AccountLookupHTTPClient struct {
 	BaseURL string
 
