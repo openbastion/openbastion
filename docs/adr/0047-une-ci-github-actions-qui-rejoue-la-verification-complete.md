@@ -30,7 +30,7 @@ Aucune porte automatique ne protège `main` : la vérification complète (`.agen
 - (−) La CI dit ce qui casse ; elle n'empêche rien tant qu'une règle de protection de `main` n'exige pas ses jobs. Poser cette règle est un réglage du dépôt sur GitHub, qui revient au propriétaire.
 - (−) Les empreintes épinglées ne se mettent pas à jour seules : une version corrigée d'une action ou de l'image PostgreSQL attend qu'on change l'empreinte.
 - (−) Les tests sur processus réels qui attendent avec un délai fixe (dont celui d'ADR-0034, vu échouer une fois sous charge) peuvent échouer sur un runner lent ; un échec isolé se relance, et sa sortie se garde.
-- (−) Pas de test Compose, pas d'analyse de vulnérabilités des dépendances (`govulncheck`, `npm audit`), pas de construction d'images : à décider.
+- (−) Pas de test Compose, ~~pas d'analyse de vulnérabilités des dépendances (`govulncheck`, `npm audit`)~~ (**levé par ADR-0052** : job `vulnerabilities`, chaque commit et chaque lundi), pas de construction d'images : à décider.
 - (−) Les actions ont accès au code du dépôt pendant le job ; c'est le prix de les utiliser, réduit par l'épinglage et les permissions en lecture seule.
 
 **Alternatives envisagées**

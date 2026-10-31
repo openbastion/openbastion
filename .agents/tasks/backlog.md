@@ -11,7 +11,7 @@ Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source déta
 | 3 | ~~Relayer le motif d'un `409` du Vault à l'opérateur~~ — **fait** (ADR-0042) | ~~`connect` dit « authorize-scope: status 409 » sans dire pourquoi~~ | ADR-0042 |
 | 3 bis | ~~Revoir les autres routes publiques ; refuser dès `POST /sessions` un compte non épinglé~~ — **fait** (ADR-0043) | ~~les routes d'administration relaient encore le texte des refus d'écriture du Vault~~ | ADR-0043 |
 | 4 | ~~Proxy SSH en plusieurs instances~~ — **fait** (ADR-0046) | ~~la révocation n'atteint qu'une instance~~ ; reste : une instance injoignable empêche toute terminaison | ADR-0046 |
-| 5 | ~~Pipeline de CI~~ — **fait** (ADR-0047) | ~~aucune porte automatique aujourd'hui~~ ; reste : exiger ses jobs dans la protection de `main`, `govulncheck`/`npm audit` | ADR-0047 |
+| 5 | ~~Pipeline de CI~~ — **fait** (ADR-0047) | ~~aucune porte automatique aujourd'hui~~ ; reste : ~~exiger ses jobs dans la protection de `main`~~ (règle posée, non appliquée sur l'offre gratuite), ~~`govulncheck`/`npm audit`~~ (ADR-0052) | ADR-0047, ADR-0052 |
 | 6 | ~~Certificats d'hôte SSH (autorité) à côté de l'épinglage~~ — **fait** (ADR-0048) | ~~une seule clé par compte~~ ; reste : pas de liste de révocation (KRL), une autorité par compte | ADR-0048 |
 | 7 | ~~Vrai KMS/HSM à la place de `LocalKMS`~~ — **fait** (ADR-0049, Transit d'OpenBao) | ~~la KEK est locale~~ ; reste : AppRole et renouvellement du jeton, ré-enveloppement en masse | ADR-0049 |
 | 8 | ~~gRPC à la place de HTTP/JSON~~ — **écarté** (ADR-0050) : HTTP/JSON sous mTLS décidé, test de contrat ; à rouvrir avec un flux réel, des clients non Go ou une mesure | — | ADR-0050 |

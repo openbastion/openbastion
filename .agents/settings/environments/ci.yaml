@@ -2,7 +2,7 @@
 ci:
   exists: true
   runner: ubuntu-24.04
-  go: "1.27.1 (celle de la vérification locale et des images de construction, ADR-0051 ; les modules déclarent go 1.22)"
+  go: "1.27.3 (celle des images de construction, ADR-0052 ; les modules déclarent go 1.26.0, exigé par x/crypto v0.58.0)"
   node: "24.21.0"
   postgresql: "16, en service du job postgres, épinglé par empreinte ; TEST_DATABASE_URL vers lui ; base jetable"
   internal_tls: "les tests sous mTLS génèrent leur PKI eux-mêmes"

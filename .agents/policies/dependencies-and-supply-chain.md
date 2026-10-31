@@ -7,4 +7,5 @@
 3. Versions exactes : `go.sum` et `package-lock.json` commités, `npm ci` (jamais `npm install` qui réécrit le lockfile sans raison) ; pas de mise à jour en masse.
 4. **JAMAIS** de commande qui contourne un refus du réseau (miroir, cache, `curl` vers un site non autorisé) : un refus se constate et se rapporte ; si un fichier manque, demande-le.
 5. Une dépendance de test reste dans le module de test (`github.com/pkg/sftp` dans `test/integration` seulement, ADR-0038).
+5 bis. **JAMAIS** remplacer un module externe par un autre chemin (`replace golang.org/x/… => github.com/…`) sans ADR : sous un autre nom, `govulncheck` ne reconnaît plus le module et ne signale rien (constaté pour `x/crypto` v0.24.0, ADR-0052). `make vuln` passe avant un jalon et en CI.
 6. **TOUJOURS** épingler une image tirée d'un registre par son empreinte (`name:tag@sha256:…`, ADR-0051) — `test/integration/images_test.go` refuse sinon. **JAMAIS** remplacer une empreinte par une étiquette seule ; mettre une image à jour, c'est relever la nouvelle empreinte, construire et tester.

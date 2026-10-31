@@ -1525,6 +1525,26 @@ Go de Bony Kiss (31 octobre 2026) pour le point 9.
 
 **Ce que cela ne fait PAS** : pas de mise à jour automatique des empreintes ; l'image OpenBao des tests (dans le code Go) n'est pas lue par le test ; rien de plus.
 
+## Les vulnérabilités connues, cherchées et corrigées (ADR-0052)
+
+Demande de Bony Kiss (31 octobre 2026) : « traite d'abord les reliquats et fais un check sur les vulnérabilités ».
+
+**Trouvé** (`govulncheck` v1.9.0, mode symboles, 17 modules ; `npm audit` sur deux lockfiles) :
+- 12 vulnérabilités **appelées** de la bibliothèque standard de Go 1.27.1 (HTTP/2, `net/http`, `crypto/tls`, `crypto/x509`, `net/textproto`), corrigées en 1.27.2 et 1.27.3 ;
+- 1 appelée dans `golang-jwt/jwt/v5` v5.2.1 (GO-2025-3553, Authentication) ;
+- **un angle mort** : `golang.org/x/crypto` v0.24.0 était remplacé par le miroir `github.com/golang/crypto` (posé quand `golang.org` était injoignable du bac à sable) ; sous ce nom, le scan ne le reconnaissait pas et ne disait rien. Sous son vrai nom, la même version a 21 vulnérabilités publiées avec correctif (et `openpgp`, abandonné), dont une dizaine touchent un serveur SSH (le proxy) et un contournement des restrictions de certificat (GO-2026-5014, ADR-0048) ;
+- npm : 1 de gravité faible, `esbuild` 0.27.7 (construction de la bibliothèque d'icônes, serveur de développement sous Windows). Un premier relevé l'avait manquée (sortie mal lue).
+
+**Corrigé** : Go 1.27.3 (CI, images `golang:1.27.3` et `golang:1.27.3-alpine` épinglées) ; `x/crypto` v0.58.0, `x/sys` v0.49.0, `jwt/v5` v5.3.1 ; directive `go 1.26.0` dans les cinq modules concernés et `go.work` (exigée par `x/crypto`) ; miroir retiré (les modules viennent de `golang.org`, `GOPROXY=direct`) ; `esbuild` ramené à 0.27.2 par `npm audit fix`. **Aucune dépendance nouvelle.**
+
+**Mis en place** : `make vuln` (`govulncheck` épinglé sur chaque module du `go.work`, `npm audit` sur les deux lockfiles) ; job `vulnerabilities` dans la CI, à chaque commit et **chaque lundi** ; policy des dépendances : plus de remplacement d'un module externe par un autre chemin sans ADR ; portes de qualité d'un jalon.
+
+**Mesuré après** : `make vuln` sous Go 1.27.3 — 0 vulnérabilité appelée sur 17 modules, 0 sur npm ; contre-épreuve : `jwt` remis en v5.2.1, le scan échoue sur GO-2025-3553. Vérification complète sur la nouvelle chaîne : unitaires 778 sans base, 838 avec ; `make test-postgres` 78 ; intégration 54 sans base, 79 avec ; `-race` 34 paquets, aucune course ; Admin UI 25 ; `gofmt` vide ; **`make test-compose` vert (172 s)**.
+
+**Trouvé en chemin** : sous `-race`, un test du proxy (`TestStrictRecording_ASessionIsRefusedBeforeTheCredentialIsFetched`) échouait environ une fois sur vingt : le proxy ferme une session refusée avant que le client ait la réponse à sa demande de shell (`EOF`). Comportement correct ; l'aide du test le tenait pour impossible. Corrigée, 100 passages sous `-race`.
+
+**Ce que cela ne fait PAS** : pas d'analyse des images (paquets Alpine, Debian, Node) ; pas de mise à jour automatique (Dependabot ouvrirait des pull requests) ; la base de Go et celle de npm seulement.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

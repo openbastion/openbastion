@@ -244,7 +244,10 @@ func (h *strictHarness) connectWith(sessionID string, o connectOpts) *operator {
 	}
 	stdin, _ := session.StdinPipe()
 	stdout, _ := session.StdoutPipe()
-	if err := session.Shell(); err != nil {
+	// A session the proxy refuses (recorder down) may be closed before the shell request is
+	// answered: the request then reads io.EOF. That is the refusal, not a failure of the
+	// harness — what the operator was sent is still read below, and asserted by the test.
+	if err := session.Shell(); err != nil && !errors.Is(err, io.EOF) {
 		h.t.Fatalf("client shell: %v", err)
 	}
 	op := &operator{t: h.t, stdin: stdin, closed: make(chan struct{})}

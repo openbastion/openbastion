@@ -9,6 +9,7 @@ ci:
     integration: ["make build", "go test ./test/integration/... -timeout=900s"]  # sans base
     postgres: ["make test (avec TEST_DATABASE_URL)", make test-postgres, "intégration avec base, purgée avant"]
     ui: [make ui-test ui-build]
+    vulnerabilities: [make vuln]          # govulncheck v1.9.0 sur chaque module + npm audit ; aussi chaque lundi (cron), ADR-0052
   pinned:                               # par empreinte, l'étiquette en commentaire dans le workflow
     actions/checkout: v7.0.1
     actions/setup-go: v7.0.0
@@ -17,7 +18,7 @@ ci:
   permissions: "contents: read ; persist-credentials: false"
   not_in_ci:
     - make test-compose                 # Docker requis ; vérification avant un jalon (ADR-0033)
-    - govulncheck, npm audit, construction d'images : à décider
+    - construction et analyse des images (Trivy, Grype) : à décider
   never_in_ci:
     - secrets réels ; la PKI et les clés des tests se génèrent dans le job et n'en sortent pas
   required_checks:                      # NON appliqués aujourd'hui : la CI signale sans bloquer

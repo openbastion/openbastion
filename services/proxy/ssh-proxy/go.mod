@@ -1,27 +1,17 @@
 module github.com/openbastion/openbastion/services/proxy/ssh-proxy
 
-go 1.22
+go 1.26.0
 
 require (
 	github.com/openbastion/openbastion/pkg/proxycore v0.0.0
-	golang.org/x/crypto v0.24.0
+	golang.org/x/crypto v0.58.0
 )
 
-require golang.org/x/sys v0.21.0 // indirect
+require golang.org/x/sys v0.49.0 // indirect
 
-// golang.org's vanity import domain is unreachable in this build sandbox;
-// the GitHub mirrors are the actual upstream source for these modules and
-// are reachable. See /NOTES_SANDBOX.md.
-replace golang.org/x/crypto => github.com/golang/crypto v0.24.0
-
-replace golang.org/x/sys => github.com/golang/sys v0.21.0
-
-// Contournement d'un comportement du mode workspace observé empiriquement :
-// quand un module a AUSSI des dépendances externes avec replace (x/crypto,
-// x/sys), la résolution locale de pkg/proxycore via go.work seul échoue
-// ("module lookup disabled by GOPROXY=off") alors qu'elle réussit pour tout
-// module qui n'a QUE des dépendances locales. Un replace explicite vers le
-// chemin local lève l'ambiguïté, quel que soit le mode.
+// Un replace local explicite vers pkg/proxycore : il lève l'ambiguïté du mode
+// workspace pour un module qui a aussi des dépendances externes (observé quand
+// x/crypto passait par un miroir ; gardé, il ne coûte rien).
 replace github.com/openbastion/openbastion/pkg/proxycore => ../../../pkg/proxycore
 
 // Transport mTLS interne (ADR-0010). Un replace local explicite, comme pour

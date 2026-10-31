@@ -7,6 +7,7 @@ before_every_commit:
   - les YAML modifiés passent un vrai analyseur (rules/documentation.md §5)
 before_a_milestone:
   - make build vet
+  - make vuln                     # aucune vulnérabilité appelée, rien dans npm audit (ADR-0052)
   - tests unitaires sans TEST_DATABASE_URL, puis avec (base purgée avant)
   - make test-postgres            # se purge lui-même
   - tests d'intégration sans base, puis avec (base purgée avant)

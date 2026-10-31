@@ -20,7 +20,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build test test-integration test-postgres test-compose ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+.PHONY: build test test-integration test-postgres test-compose vuln ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
 ## Compile tous les modules actuellement implémentés.
 build:
@@ -141,6 +141,16 @@ ui-test: ui-icons
 	cd web/admin-ui && npm ci --no-audit --no-fund && npm test
 ui-build: ui-icons
 	cd web/admin-ui && npm ci --no-audit --no-fund && npm run build
+
+## Les vulnérabilités connues (ADR-0052) : govulncheck, épinglé, sur chaque module du go.work
+## (une vulnérabilité dont le code est appelé fait échouer), puis npm audit sur les deux lockfiles.
+GOVULNCHECK ?= golang.org/x/vuln/cmd/govulncheck@v1.9.0
+vuln:
+	@set -e; for m in $$(awk '/^use \(/{f=1;next} f&&/\)/{exit} f{print $$1}' go.work); do \
+		echo "govulncheck $$m"; $(GO) run $(GOVULNCHECK) -C $$m ./...; \
+	done
+	cd web/admin-ui && npm audit
+	cd web/openbastion-icons && npm audit
 
 ## Construit et démarre la pile docker-compose réelle (deploy/docker-compose, ADR-0033) et
 ## y joue le parcours du MVP sur les seuls ports publiés. Docker requis ; quelques minutes.
