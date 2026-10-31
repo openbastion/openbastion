@@ -33,6 +33,7 @@ func main() {
 	}
 
 	var store application.Store
+	var alertQueue infrastructure.AlertQueue = infrastructure.NewMemoryAlertQueue()
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		ctx := context.Background()
 		db, err := infrastructure.OpenPostgres(ctx, dsn)
@@ -40,6 +41,7 @@ func main() {
 			log.Fatalf("postgres: %v", err)
 		}
 		store = infrastructure.NewPostgresStore(db)
+		alertQueue = infrastructure.NewPostgresAlertQueue(db) // ADR-0057: what waits survives a restart
 		log.Printf("audit-service: using PostgreSQL at %s", redactDSN(dsn))
 	} else {
 		store = infrastructure.NewInMemoryStore()
@@ -118,7 +120,7 @@ func main() {
 		log.Printf("audit-service: months older than %d are archived to %s, hourly (verified first; a checkpoint is kept with the anchors)", months, archiveDir)
 	}
 
-	configureAlerts(svc, rt.Enabled())
+	configureAlerts(svc, rt.Enabled(), alertQueue)
 
 	srv := interfaces.NewHTTPServer(svc)
 
@@ -182,8 +184,9 @@ func archiveEvery(svc *application.AuditService, every time.Duration) {
 // configureAlerts pushes the alerts written to the chain to ALERT_NOTIFY_URL, signed with
 // ALERT_NOTIFY_SECRET (ADR-0045). The two go together, and neither is ever written: a URL that
 // cannot be used, a secret too short, or one without the other stops the service, with a
-// message that repeats neither.
-func configureAlerts(svc *application.AuditService, internalTLS bool) {
+// message that repeats neither. The alerts wait in queue: alert_outbox with a database, so that
+// a restart does not lose them (ADR-0057), memory without one.
+func configureAlerts(svc *application.AuditService, internalTLS bool, queue infrastructure.AlertQueue) {
 	rawURL, secret, retry := os.Getenv("ALERT_NOTIFY_URL"), os.Getenv("ALERT_NOTIFY_SECRET"), os.Getenv("ALERT_NOTIFY_RETRY_SECONDS")
 	switch {
 	case rawURL == "" && secret == "" && retry == "":
@@ -209,7 +212,7 @@ func configureAlerts(svc *application.AuditService, internalTLS bool) {
 	if _, err := endpoint.WithSecret(secret); err != nil {
 		log.Fatalf("audit-service: ALERT_NOTIFY_SECRET cannot be used: %v — refusing to start", err)
 	}
-	notifier, err := infrastructure.NewAlertWebhook(endpoint, wait)
+	notifier, err := infrastructure.NewAlertWebhookWithQueue(endpoint, wait, queue)
 	if err != nil {
 		log.Fatalf("audit-service: the alert channel cannot be used: %v — refusing to start", err)
 	}
@@ -222,6 +225,11 @@ func configureAlerts(svc *application.AuditService, internalTLS bool) {
 	sort.Strings(alerts)
 	log.Printf("audit-service: alerts (%s) are pushed to %s once written, signed (%s, v1 HMAC-SHA256), up to %d attempts from %s; best effort, the rest of the URL is a secret and is not logged",
 		strings.Join(alerts, ", "), notifier.Where(), webhook.SignatureHeader, infrastructure.AlertMaxAttempts, wait)
+	if _, durable := queue.(*infrastructure.PostgresAlertQueue); durable {
+		log.Printf("audit-service: the alerts waiting for a retry are kept in alert_outbox: a restart delivers them")
+	} else {
+		log.Printf("audit-service: the alerts waiting for a retry are kept in memory: a restart loses them (no DATABASE_URL)")
+	}
 	if !internalTLS {
 		log.Printf("audit-service: internal TLS is disabled, so no emitter is named: an alert is pushed whoever writes it (dev only)")
 	}

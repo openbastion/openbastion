@@ -51,7 +51,7 @@ Rien d'autre que ce que la chaîne contient déjà : pas d'acteur (une alerte es
 
 Chaque échec et chaque abandon sont une ligne du journal, avec l'identifiant de l'événement. Au plus **256 alertes** sont en cours (en file ou en attente d'un renvoi) ; au-delà, une alerte n'est pas poussée, et le journal le dit. L'écriture dans la chaîne n'attend jamais le canal.
 
-**La file est en mémoire** : une alerte en attente d'un renvoi est perdue si l'Audit Service s'arrête. Elle reste dans la chaîne, et le Vault la réécrit `ROTATION_ALERT_AFTER_FAILURES` échecs plus tard. Un renvoi porte le même corps : écartez les doublons par `eventId`.
+**Où attendent les alertes** (ADR-0057) : avec `DATABASE_URL`, dans la table `alert_outbox` — une alerte en attente d'un renvoi survit à un redémarrage de l'Audit Service, et le suivant la livre à l'heure prévue, à la tentative atteinte ; le journal du démarrage le dit (« kept in alert_outbox »). Sans base, en mémoire : elle est perdue à l'arrêt ; elle reste dans la chaîne, et le Vault la réécrit `ROTATION_ALERT_AFTER_FAILURES` échecs plus tard. Dans les deux cas, une alerte n'est gardée qu'une fois par événement, et elle est gardée **après** l'écriture de l'événement : un arrêt entre les deux perd la poussée, pas l'événement. Un renvoi porte le même corps : écartez les doublons par `eventId`.
 
 ## Break-glass (Session Broker)
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/webhook"
@@ -31,44 +32,48 @@ const (
 type AlertWebhook struct {
 	endpoint *webhook.Endpoint
 	retry    time.Duration
-	slots    chan struct{} // one per alert outstanding, queued or waiting
-	queue    chan alertDelivery
+	queue    AlertQueue    // where the alerts wait (ADR-0057)
+	wake     chan struct{} // a new alert: look at the queue now
+	logMu    sync.Mutex    // the worker may write before WithLogf returns: a queue kept in a database starts full
 	logf     func(format string, args ...any)
-	after    func(time.Duration, func())
+	now      func() time.Time
 }
 
-type alertDelivery struct {
-	event   domain.Event
-	body    []byte
-	attempt int // the attempt about to be made, from 1
-}
-
-// NewAlertWebhook returns a notifier that delivers to endpoint, whose secret must be set: an
-// alert channel that anyone could imitate teaches its receiver to ignore alerts (ADR-0045).
+// NewAlertWebhook returns a notifier that delivers to endpoint, its alerts waiting in memory
+// (ADR-0045). The endpoint's secret must be set: an alert channel that anyone could imitate
+// teaches its receiver to ignore alerts.
 func NewAlertWebhook(endpoint *webhook.Endpoint, retry time.Duration) (*AlertWebhook, error) {
+	return NewAlertWebhookWithQueue(endpoint, retry, NewMemoryAlertQueue())
+}
+
+// NewAlertWebhookWithQueue is NewAlertWebhook with the alerts waiting in queue — alert_outbox when
+// the Audit Service has a database, so that a restart does not lose them (ADR-0057). What the
+// queue already holds is delivered.
+func NewAlertWebhookWithQueue(endpoint *webhook.Endpoint, retry time.Duration, queue AlertQueue) (*AlertWebhook, error) {
 	if !endpoint.Signed() {
 		return nil, fmt.Errorf("an alert channel is signed: its secret is required")
 	}
 	if retry <= 0 || retry > MaxAlertRetry {
 		return nil, fmt.Errorf("the wait before a retry is between 1s and %s, got %s", MaxAlertRetry, retry)
 	}
-	a := &AlertWebhook{
-		endpoint: endpoint,
-		retry:    retry,
-		slots:    make(chan struct{}, AlertMaxOutstanding),
-		// As many places as slots: a retry put back never waits for room.
-		queue: make(chan alertDelivery, AlertMaxOutstanding),
-		logf:  log.Printf,
-		after: func(d time.Duration, f func()) { time.AfterFunc(d, f) },
-	}
+	a := &AlertWebhook{endpoint: endpoint, retry: retry, queue: queue, wake: make(chan struct{}, 1), logf: log.Printf, now: time.Now}
 	go a.work()
 	return a, nil
 }
 
 // WithLogf replaces the logger; for tests.
 func (a *AlertWebhook) WithLogf(logf func(format string, args ...any)) *AlertWebhook {
+	a.logMu.Lock()
+	defer a.logMu.Unlock()
 	a.logf = logf
 	return a
+}
+
+func (a *AlertWebhook) log(format string, args ...any) {
+	a.logMu.Lock()
+	logf := a.logf
+	a.logMu.Unlock()
+	logf(format, args...)
 }
 
 // Where is the only part of the URL that may be written down: scheme and host.
@@ -98,24 +103,53 @@ func alertText(e domain.Event) string {
 	}
 }
 
-// Notify queues e and returns at once.
-func (a *AlertWebhook) Notify(_ context.Context, e domain.Event) {
-	select {
-	case a.slots <- struct{}{}:
-	default:
-		a.logf("audit-service: alert %s (event %s) not pushed: %d alerts are already waiting", e.Action, webhook.SafeText(e.ID), AlertMaxOutstanding)
-		return
-	}
+// Notify keeps e in the queue and returns at once.
+func (a *AlertWebhook) Notify(ctx context.Context, e domain.Event) {
 	body, _ := json.Marshal(alertMessage{ // strings and a boolean only: it cannot fail
 		Event: e.Action, EventID: e.ID, Emitter: e.Emitter, ResourceType: e.ResourceType, ResourceID: e.ResourceID,
 		Success: e.Success, At: e.Timestamp.UTC().Format(time.RFC3339Nano), Text: alertText(e),
 	})
-	a.queue <- alertDelivery{event: e, body: body, attempt: 1}
+	kept, err := a.queue.Put(context.WithoutCancel(ctx), QueuedAlert{EventID: e.ID, Action: e.Action, Body: body, Attempt: 1, Due: a.now()})
+	switch {
+	case err != nil:
+		a.log("audit-service: alert %s (event %s) not pushed: it could not be kept (%v)", e.Action, webhook.SafeText(e.ID), err)
+		return
+	case !kept:
+		a.log("audit-service: alert %s (event %s) not pushed: %d alerts are already waiting", e.Action, webhook.SafeText(e.ID), AlertMaxOutstanding)
+		return
+	}
+	select {
+	case a.wake <- struct{}{}:
+	default:
+	}
 }
 
+// work delivers what is due, then waits for the next one due, or a new alert.
 func (a *AlertWebhook) work() {
-	for d := range a.queue {
-		a.deliver(d)
+	ctx := context.Background()
+	for {
+		due, err := a.queue.Due(ctx, a.now(), 16)
+		if err != nil {
+			a.log("audit-service: the alerts waiting cannot be read: %v", err)
+		}
+		for _, d := range due {
+			a.deliver(ctx, d)
+		}
+		if len(due) == 16 {
+			continue
+		}
+		wait := time.Minute
+		if next, err := a.queue.Next(ctx); err == nil && !next.IsZero() {
+			if wait = time.Until(next); wait < 0 {
+				wait = 0
+			}
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-a.wake:
+		case <-timer.C:
+		}
+		timer.Stop()
 	}
 }
 
@@ -124,24 +158,30 @@ func retryable(status int) bool {
 	return status == 0 || status == 408 || status == 429 || status >= 500
 }
 
-func (a *AlertWebhook) deliver(d alertDelivery) {
-	// The request that wrote the alert has long ended: a delivery has its own bound only.
-	status, err := a.endpoint.Post(context.Background(), "OpenBastion-Audit-Service", d.body)
+func (a *AlertWebhook) deliver(ctx context.Context, d QueuedAlert) {
+	status, err := a.endpoint.Post(ctx, "OpenBastion-Audit-Service", d.Body)
 	if err == nil && status >= 200 && status <= 299 {
-		<-a.slots
+		a.forget(ctx, d)
 		return
 	}
 	what := fmt.Sprintf("status %d", status)
 	if err != nil {
 		what, status = err.Error(), 0
 	}
-	if !retryable(status) || d.attempt >= AlertMaxAttempts {
-		a.logf("audit-service: alert %s (event %s) given up after %d attempt(s) to %s: %s", d.event.Action, webhook.SafeText(d.event.ID), d.attempt, a.Where(), what)
-		<-a.slots
+	if !retryable(status) || d.Attempt >= AlertMaxAttempts {
+		a.log("audit-service: alert %s (event %s) given up after %d attempt(s) to %s: %s", d.Action, webhook.SafeText(d.EventID), d.Attempt, a.Where(), what)
+		a.forget(ctx, d)
 		return
 	}
-	wait := a.retry << (d.attempt - 1)
-	a.logf("audit-service: alert %s (event %s) not delivered to %s (%s): attempt %d of %d in %s", d.event.Action, webhook.SafeText(d.event.ID), a.Where(), what, d.attempt+1, AlertMaxAttempts, wait)
-	d.attempt++
-	a.after(wait, func() { a.queue <- d })
+	wait := a.retry << (d.Attempt - 1)
+	a.log("audit-service: alert %s (event %s) not delivered to %s (%s): attempt %d of %d in %s", d.Action, webhook.SafeText(d.EventID), a.Where(), what, d.Attempt+1, AlertMaxAttempts, wait)
+	if err := a.queue.Later(ctx, d.EventID, d.Attempt+1, a.now().Add(wait)); err != nil {
+		a.log("audit-service: alert %s (event %s) could not be put back: %v", d.Action, webhook.SafeText(d.EventID), err)
+	}
+}
+
+func (a *AlertWebhook) forget(ctx context.Context, d QueuedAlert) {
+	if err := a.queue.Done(ctx, d.EventID); err != nil {
+		a.log("audit-service: alert %s (event %s) could not be removed from the queue: %v", d.Action, webhook.SafeText(d.EventID), err)
+	}
 }

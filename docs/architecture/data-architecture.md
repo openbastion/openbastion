@@ -330,6 +330,22 @@ CREATE TABLE IF NOT EXISTS oidc_login_attempts (
 
 Un compte OIDC a `password_hash` vide (la connexion locale le refuse) et s'appelle `oidc:<sub>`.
 
+### File des alertes à pousser (ADR-0057)
+
+`services/recording-audit/audit-service/migrations/002_alert_outbox.sql` : les alertes qui attendent d'être poussées (ADR-0045), pour qu'un redémarrage de l'Audit Service ne les perde pas. Une ligne par événement ; 256 au plus (borne tenue par le service) ; la ligne disparaît une fois l'alerte livrée ou abandonnée. Le corps est ce que la chaîne contient déjà, sans secret ; la signature est faite à chaque tentative, sa clé n'est pas en base.
+
+```sql
+CREATE TABLE IF NOT EXISTS alert_outbox (
+    event_id   TEXT PRIMARY KEY,                      -- l'événement de la chaîne : une alerte n'est gardée qu'une fois
+    action     TEXT NOT NULL,
+    body       BYTEA NOT NULL,
+    attempt    INTEGER NOT NULL,                      -- la tentative à venir, de 1 à 5
+    due_at     TIMESTAMPTZ NOT NULL,                  -- son heure
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_alert_outbox_due ON alert_outbox (due_at);
+```
+
 ### Expiration des sessions (ADR-0034)
 
 `services/access/session-broker/migrations/002_session_expiry.sql` — la première migration numérotée après `001_init.sql` — ajoute à `sessions` :
