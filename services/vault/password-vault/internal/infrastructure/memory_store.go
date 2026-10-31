@@ -344,3 +344,45 @@ func (s *InMemoryStore) ClaimRotation(ctx context.Context, id string, now time.T
 	a.RotationAttemptedAt = &at
 	return true, nil
 }
+
+// SealedUnder is domain.SecretRepository.SealedUnder.
+func (s *InMemoryStore) SealedUnder(ctx context.Context, keyIDs []string, afterID string, limit int) ([]*domain.SecretVersion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	want := map[string]bool{}
+	for _, k := range keyIDs {
+		want[k] = true
+	}
+	var out []*domain.SecretVersion
+	for _, versions := range s.secrets {
+		for _, v := range versions {
+			if want[v.EncryptionKeyID] && v.ID > afterID {
+				c := *v
+				out = append(out, &c)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// ResealIf is domain.SecretRepository.ResealIf.
+func (s *InMemoryStore) ResealIf(ctx context.Context, versionID, oldKeyID string, material []byte, newKeyID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, versions := range s.secrets {
+		for _, v := range versions {
+			if v.ID == versionID {
+				if v.EncryptionKeyID != oldKeyID {
+					return false, nil
+				}
+				v.EncryptedMaterial, v.EncryptionKeyID = append([]byte(nil), material...), newKeyID
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}

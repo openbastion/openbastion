@@ -162,6 +162,7 @@ func TestPostgresFlow_TransitKeepsTheKeys_WhatWasSealedBeforeStaysReadable(t *te
 	vaultBin := buildBinary(t, root, "./services/vault/password-vault/cmd/password-vault", "password-vault-49")
 	recorderBin := buildBinary(t, root, "./services/recording-audit/command-recorder/cmd/command-recorder", "command-recorder-49")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-49")
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-49")
 	authz := startService(t, root, authzBin, "19741")
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "vault:account-admin:*", "allow")
 	kms := testKMSKeyHex(t)
@@ -289,6 +290,35 @@ func TestPostgresFlow_TransitKeepsTheKeys_WhatWasSealedBeforeStaysReadable(t *te
 		}
 		if !strings.Contains(v5.out.String(), "renewed at half its life") {
 			t.Fatalf("the Vault does not say it renews its token:\n%s", v5.out.String())
+		}
+	})
+
+	t.Run("ADR-0055: with both keys, what the local key protects is re-sealed under Transit; then Transit alone reads it", func(t *testing.T) {
+		// Each re-seal is written to the audit before it is made: the Vault needs one.
+		audit := startService(t, root, auditBin, "19751")
+		spy := startAuditSpy(t, audit.baseURL)
+		v6 := startService(t, root, vaultBin, "19749", vaultEnv(withTransit("KMS_KEY_HEX="+kms, "KEY_REWRAP_SWEEP_SECONDS=1", "AUDIT_URL="+spy.baseURL)...)...)
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			if id, _ := keyIDOf(before); id == "transit:transit/openbastion-vault" {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the old secret was not re-sealed under Transit in 30 s; the Vault said:\n%s", v6.out.String())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		spy.waitFor(t, "vault.secret_rewrapped", before, true)
+		if _, material := keyIDOf(before); !bytes.HasPrefix(material, []byte("OBT1")) || bytes.Contains(material, []byte("secret-sealed-before")) {
+			t.Fatalf("the re-sealed secret is not a Transit envelope: %q", material)
+		}
+		if out := v6.out.String(); !strings.Contains(out, "re-sealed under the current key") {
+			t.Fatalf("the Vault does not say it re-seals:\n%s", out)
+		}
+		stopService(t, v6)
+		v7 := startService(t, root, vaultBin, "19750", vaultEnv(withTransit()...)...)
+		if got, err := fetchSecret(t, v7.baseURL, before); err != nil || got != "secret-sealed-before" {
+			t.Fatalf("Transit alone, after the rewrap: %q, %v", got, err)
 		}
 	})
 

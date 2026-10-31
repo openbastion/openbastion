@@ -50,9 +50,9 @@ Rien de ce qui a été chiffré avant ne devient illisible, à condition de gard
 
 1. Configurez Transit **et gardez `KMS_KEY_HEX`**. Les nouveaux secrets et les nouveaux enregistrements vont à Transit ; ceux d'avant se lisent avec la clé locale, qui ne scelle plus rien. Le démarrage le dit (« still read (KMS_KEY_HEX); nothing new is sealed under it »).
 2. Chaque ligne nomme la clé qui l'a protégée (`vault_secrets.encryption_key_id`, `session_recording_keys.kek_id`) : `local-dev-key-v1` et `local-recorder-kek-v1` pour la clé locale.
-3. Retirez `KMS_KEY_HEX` seulement quand plus aucune ligne utile ne la nomme. Une ligne qui nomme une clé que le service ne tient plus est refusée (`503` à qui la demande, la cause au journal du service) ; elle redevient lisible dès qu'on redonne la clé.
+3. Retirez `KMS_KEY_HEX` quand le journal l'annonce (ou quand plus aucune ligne utile ne la nomme). Une ligne qui nomme une clé que le service ne tient plus est refusée (`503` à qui la demande, la cause au journal du service) ; elle redevient lisible dès qu'on redonne la clé.
 
-Il n'y a pas de ré-enveloppement en masse : une rotation d'un secret le scelle à nouveau sous Transit ; un enregistrement reste sous la clé qui l'a protégé.
+**Le ré-enveloppement est automatique** (ADR-0055) : tant que `KMS_KEY_HEX` est gardé, le Vault rescelle sous Transit chaque version qu'il protège encore (courante, en attente, ancienne ; chaque rescellement écrit `vault.secret_rewrapped` à l'audit avant d'être fait), et le Recorder renveloppe la clé de chaque session — une passe toutes les `KEY_REWRAP_SWEEP_SECONDS` (60 par défaut), par pages de 50. Quand une passe ne trouve plus rien, le journal le dit : « nothing is sealed under local-dev-key-v1 any more: KMS_KEY_HEX can be removed » (et `local-recorder-kek-v1` pour le Recorder). Une ligne qui ne s'ouvre pas avec la clé tenue est sautée, comptée et signalée : la clé ne peut pas partir tant qu'elle existe.
 
 ## Quand Transit ne répond pas
 

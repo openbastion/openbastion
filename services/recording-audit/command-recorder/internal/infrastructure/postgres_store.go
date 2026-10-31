@@ -12,7 +12,7 @@ import (
 	"log"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/lib/pq" // the driver, and pq.Array
 
 	"github.com/openbastion/openbastion/pkg/migrate"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
@@ -369,4 +369,86 @@ func (s *PostgresStore) sealLegacyPlaintext(ctx context.Context) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// RewrapBatch is how many session keys one sweep re-wraps at most (ADR-0055).
+const RewrapBatch = 50
+
+// rewrapRace is nil, except in a test that plays another process re-wrapping the same key between
+// RewrapDue's read and its write: what the compare-and-swap is for.
+var rewrapRace func(sessionID string)
+
+// Rewrapped is what one call to RewrapDue did.
+type Rewrapped struct {
+	Rewrapped int    // session keys now under the current key
+	Skipped   int    // keys the earlier key does not unwrap: they stay as they are
+	Found     int    // keys on this page
+	Next      string // where the next call starts; "" when this page was the last
+}
+
+// RewrapDue re-wraps under the current key a page of up to RewrapBatch session keys still
+// wrapped under an earlier key this store holds, after the session id after (ADR-0055). The
+// data key itself does not change — the recording is not touched — and each re-wrap is a
+// compare-and-swap on the old key; a key that does not unwrap is skipped and counted, never a
+// reason to stop the others.
+func (s *PostgresStore) RewrapDue(ctx context.Context, after string) (Rewrapped, error) {
+	var out Rewrapped
+	if len(s.previous) == 0 {
+		return out, nil
+	}
+	var ids []string
+	for id := range s.previous {
+		ids = append(ids, id)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT session_id, kek_id, wrapped_dek FROM session_recording_keys
+		WHERE kek_id = ANY($1) AND session_id > $2 ORDER BY session_id LIMIT $3`, pq.Array(ids), after, RewrapBatch)
+	if err != nil {
+		return out, err
+	}
+	type row struct {
+		session, kek string
+		wrapped      []byte
+	}
+	var due []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.session, &r.kek, &r.wrapped); err != nil {
+			rows.Close()
+			return out, err
+		}
+		due = append(due, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	out.Found = len(due)
+	if len(due) == RewrapBatch {
+		out.Next = due[len(due)-1].session
+	}
+	for _, r := range due {
+		dek, err := s.previous[r.kek].Unwrap(r.wrapped, dekAAD(r.kek, r.session))
+		if err != nil {
+			out.Skipped++
+			log.Printf("command-recorder: the recording key of session %s does not unwrap under %s: left as it is (%v)", r.session, r.kek, err)
+			continue
+		}
+		wrapped, err := s.kek.Wrap(dek, dekAAD(s.kek.KeyID(), r.session))
+		zero(dek)
+		if err != nil {
+			return out, err
+		}
+		if rewrapRace != nil {
+			rewrapRace(r.session) // tests only: what another process does between the read and the write
+		}
+		res, err := s.db.ExecContext(ctx, `UPDATE session_recording_keys SET kek_id = $3, wrapped_dek = $4
+			WHERE session_id = $1 AND kek_id = $2`, r.session, r.kek, s.kek.KeyID(), wrapped)
+		if err != nil {
+			return out, err
+		}
+		if c, _ := res.RowsAffected(); c == 1 {
+			out.Rewrapped++
+		}
+	}
+	return out, nil
 }

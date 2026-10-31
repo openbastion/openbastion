@@ -24,6 +24,7 @@ strict_defaults:
   TRUSTED_PROXY_CIDRS:     {default: "personne", note: "ADR-0015 ; une confiance trop large est fatale"}
   SSH_PROXY_URLS:          {default: "SSH_PROXY_URL, une instance", min: 1, max: 16, service: session-broker, note: "ADR-0046 ; avec SSH_PROXY_URL, doublon ou entrée illisible : fatal ; révocation confirmée par toutes"}
   SSH_PUBLIC_ENDPOINT:     {default: "127.0.0.1:SSH_PORT", format: "hôte:port", service: ssh-proxy, note: "ADR-0046 ; illisible : fatal"}
+  KEY_REWRAP_SWEEP_SECONDS: {default: 60, min: 1, max: 3600, service: "password-vault, command-recorder", note: "ADR-0055 ; seulement avec Transit et KMS_KEY_HEX gardé"}
   SESSION_EXPIRY_SWEEP_SECONDS: {default: 30, min: 1, max: 3600, note: "ADR-0034"}
   ROTATION_SWEEP_SECONDS:  {default: 300, min: 1, max: 86400, service: password-vault, note: "ADR-0040 ; sans interrupteur"}
   ROTATION_WINDOW_UTC:     {default: "à toute heure", format: "HH:MM-HH:MM", service: password-vault, note: "ADR-0041 ; illisible ou nulle : fatal"}

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
@@ -90,6 +91,13 @@ func main() {
 	go rotateEvery(svc, time.Duration(sweep)*time.Second)
 	log.Printf("password-vault: scheduled accounts that are due are rotated every %ds, %s (at most %d a sweep; one that failed waits %s; %d failures in a row write vault.rotation_overdue)",
 		sweep, window, application.RotationsPerSweep, application.RotationRetryAfter, alertAfter)
+
+	// What an earlier key still protects is re-sealed under the current one (ADR-0055).
+	if previous := kms.PreviousKeyIDs(); len(previous) > 0 {
+		every := boundedIntEnv("KEY_REWRAP_SWEEP_SECONDS", 60, 1, 3600)
+		go rewrapEvery(svc, time.Duration(every)*time.Second, previous)
+		log.Printf("password-vault: secrets under %s are re-sealed under %s, %d a batch, every %ds", strings.Join(previous, ", "), kms.KeyID(), application.RewrapBatch, every)
+	}
 
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
 		ctx := context.Background()
@@ -201,7 +209,44 @@ func keyring(dsn, kmsKeyHex string) *infrastructure.Keyring {
 	}
 	log.Printf("password-vault: secrets are sealed under %s at %s (Transit; the token is not logged)", current.KeyID(), client.Where())
 	for _, id := range ring.PreviousKeyIDs() {
-		log.Printf("password-vault: secrets sealed under %s are still read (KMS_KEY_HEX); nothing new is sealed under it", id)
+		log.Printf("password-vault: secrets sealed under %s are still read (KMS_KEY_HEX), and re-sealed under %s in the background (ADR-0055); nothing new is sealed under it", id, current.KeyID())
 	}
 	return ring
+}
+
+// rewrapEvery re-seals under the current key what the earlier keys still protect (ADR-0055):
+// page after page, a pass every period. A pass that finds nothing says, once, that the earlier
+// keys protect nothing any more; versions that do not open are said at the end of each pass.
+func rewrapEvery(svc *application.VaultService, every time.Duration, previous []string) {
+	time.Sleep(every) // a first period first: a Vault just started has other work
+	said := false
+	for {
+		found, skipped, cursor := 0, 0, ""
+		for {
+			r, err := svc.RewrapDue(context.Background(), cursor)
+			if err != nil {
+				log.Printf("password-vault: re-sealing paused until the next pass: %v", err)
+				found = -1
+				break
+			}
+			found, skipped = found+r.Found, skipped+r.Skipped
+			if r.Resealed > 0 {
+				log.Printf("password-vault: %d secret version(s) re-sealed under the current key", r.Resealed)
+			}
+			if cursor = r.Next; cursor == "" {
+				break
+			}
+		}
+		switch {
+		case found == 0 && !said:
+			said = true
+			log.Printf("password-vault: nothing is sealed under %s any more: KMS_KEY_HEX can be removed", strings.Join(previous, ", "))
+		case found > 0:
+			said = false
+			if skipped > 0 {
+				log.Printf("password-vault: %d version(s) under %s do not open with the key held: they stay, and KMS_KEY_HEX cannot be removed yet", skipped, strings.Join(previous, ", "))
+			}
+		}
+		time.Sleep(every)
+	}
 }

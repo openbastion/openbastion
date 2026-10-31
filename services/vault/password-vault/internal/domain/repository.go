@@ -101,6 +101,14 @@ type SecretRepository interface {
 	PromotePending(ctx context.Context, accountID string, version int) error
 	// DiscardPending forgets a pending version the target never took.
 	DiscardPending(ctx context.Context, accountID string, version int) error
+
+	// SealedUnder lists, by id, up to limit versions — current, pending or superseded — whose id
+	// comes after afterID and that are sealed under one of keyIDs (ADR-0055): what an earlier key
+	// still protects, a page at a time.
+	SealedUnder(ctx context.Context, keyIDs []string, afterID string, limit int) ([]*SecretVersion, error)
+	// ResealIf replaces a version's material and key, only if it is still sealed under oldKeyID:
+	// a compare-and-swap, so that nothing written meanwhile is overwritten. It says whether it did.
+	ResealIf(ctx context.Context, versionID, oldKeyID string, material []byte, newKeyID string) (bool, error)
 }
 
 type ScopeRepository interface {

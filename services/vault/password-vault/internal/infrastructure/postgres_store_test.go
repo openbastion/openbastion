@@ -556,3 +556,43 @@ func TestPostgresStore_RotationOwed(t *testing.T) {
 		t.Fatalf("an unknown account: %v", err)
 	}
 }
+
+// ADR-0055 on PostgreSQL: the versions under the given keys are found, and a re-seal is a
+// compare-and-swap on the old key.
+func TestPostgresStore_SealedUnderAndResealIf(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("rewrap")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual}); err != nil {
+		t.Fatal(err)
+	}
+	oldKey := "old-key-" + id
+	v := &domain.SecretVersion{ID: id + "-v1", PrivilegedAccountID: id, EncryptedMaterial: []byte("sealed-old"), EncryptionKeyID: oldKey, Version: 1}
+	if err := store.AddVersion(ctx, v); err != nil {
+		t.Fatal(err)
+	}
+	found, err := store.SealedUnder(ctx, []string{oldKey}, "", 10)
+	if err != nil || len(found) != 1 || found[0].ID != v.ID || string(found[0].EncryptedMaterial) != "sealed-old" {
+		t.Fatalf("SealedUnder = %+v, %v", found, err)
+	}
+	if after, _ := store.SealedUnder(ctx, []string{oldKey}, v.ID, 10); len(after) != 0 {
+		t.Fatalf("%d versions after the cursor, want none", len(after))
+	}
+	if none, _ := store.SealedUnder(ctx, []string{"no-such-key"}, "", 10); len(none) != 0 {
+		t.Fatalf("%d versions under a key nothing uses", len(none))
+	}
+	if ok, err := store.ResealIf(ctx, v.ID, "another-key", []byte("x"), "new"); ok || err != nil {
+		t.Fatalf("a re-seal on the wrong old key: %v, %v", ok, err)
+	}
+	if ok, err := store.ResealIf(ctx, v.ID, oldKey, []byte("sealed-new"), "new-key"); !ok || err != nil {
+		t.Fatalf("a re-seal on the right old key: %v, %v", ok, err)
+	}
+	cur, _ := store.CurrentVersion(ctx, id)
+	if cur.EncryptionKeyID != "new-key" || string(cur.EncryptedMaterial) != "sealed-new" || cur.Version != 1 {
+		t.Fatalf("after the re-seal: %+v", cur)
+	}
+	if ok, _ := store.ResealIf(ctx, v.ID, oldKey, []byte("again"), "new-key"); ok {
+		t.Fatal("a second re-seal on the old key went through")
+	}
+}

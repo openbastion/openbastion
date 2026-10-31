@@ -10,6 +10,8 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
@@ -72,6 +74,16 @@ func main() {
 			log.Fatalf("postgres store: %v", err)
 		}
 		repo = store
+		// What an earlier key still wraps is re-wrapped under the current one (ADR-0055).
+		if len(previous) > 0 {
+			every := boundedIntEnv("KEY_REWRAP_SWEEP_SECONDS", 60, 1, 3600)
+			var ids []string
+			for _, p := range previous {
+				ids = append(ids, p.KeyID())
+			}
+			go rewrapEvery(store, time.Duration(every)*time.Second, ids)
+			log.Printf("command-recorder: session keys under %s are re-wrapped under %s, %d a batch, every %ds", strings.Join(ids, ", "), kek.KeyID(), infrastructure.RewrapBatch, every)
+		}
 		log.Printf("command-recorder: using PostgreSQL at %s — commands encrypted at rest (AES-256-GCM, key per session wrapped by %s)", redactDSN(dsn), kek.KeyID())
 	} else {
 		repo = infrastructure.NewInMemoryStore()
@@ -154,4 +166,41 @@ func recordingKeys() (infrastructure.KeyWrapper, []infrastructure.KeyWrapper) {
 	}
 	log.Printf("command-recorder: session keys are wrapped by %s at %s (Transit; the token is not logged)", client.KeyID(), client.Where())
 	return infrastructure.NewTransitKEK(client), previous
+}
+
+// rewrapEvery re-wraps under the current key the session keys an earlier key still wraps
+// (ADR-0055): page after page, a pass every period; a pass that finds nothing says, once, that
+// the earlier key wraps nothing any more.
+func rewrapEvery(store *infrastructure.PostgresStore, every time.Duration, previous []string) {
+	time.Sleep(every)
+	said := false
+	for {
+		found, skipped, cursor := 0, 0, ""
+		for {
+			r, err := store.RewrapDue(context.Background(), cursor)
+			if err != nil {
+				log.Printf("command-recorder: re-wrapping paused until the next pass: %v", err)
+				found = -1
+				break
+			}
+			found, skipped = found+r.Found, skipped+r.Skipped
+			if r.Rewrapped > 0 {
+				log.Printf("command-recorder: %d session key(s) re-wrapped under the current key", r.Rewrapped)
+			}
+			if cursor = r.Next; cursor == "" {
+				break
+			}
+		}
+		switch {
+		case found == 0 && !said:
+			said = true
+			log.Printf("command-recorder: nothing is wrapped under %s any more: KMS_KEY_HEX can be removed", strings.Join(previous, ", "))
+		case found > 0:
+			said = false
+			if skipped > 0 {
+				log.Printf("command-recorder: %d session key(s) under %s do not unwrap with the key held: they stay, and KMS_KEY_HEX cannot be removed yet", skipped, strings.Join(previous, ", "))
+			}
+		}
+		time.Sleep(every)
+	}
 }

@@ -27,7 +27,7 @@ Le Password Vault scelle chaque secret, et le Command Recorder enveloppe la clé
 - (−) **Transit devient une dépendance de disponibilité** de tout accès privilégié (le Vault ne livre plus aucun secret sans lui) et de tout enregistrement : il doit être au moins aussi disponible que le Vault (tier 0).
 - (−) Le jeton Transit est un secret de plus, sur disque : qui lit son fichier **et** la base, **pendant que** le jeton est valable, lit encore tout. Le gain est qu'un jeton se révoque, se limite (une politique `encrypt`/`decrypt` sur une seule clé) et s'audite dans OpenBao, et que la clé, elle, ne se copie pas.
 - (−) ~~Pas de renouvellement du jeton par OpenBastion~~ (**levé par ADR-0053** : renouvelé à mi-vie) ni d'authentification AppRole : l'exploitant donne un jeton périodique.
-- (−) Les lignes d'avant restent sous `KMS_KEY_HEX` tant qu'elles ne sont pas réécrites : pas de ré-enveloppement en masse dans cet incrément.
+- (−) ~~Les lignes d'avant restent sous `KMS_KEY_HEX` tant qu'elles ne sont pas réécrites : pas de ré-enveloppement en masse dans cet incrément.~~ **Levé par ADR-0055** : rescellées en tâche de fond.
 - (−) Un appel réseau par secret scellé ou ouvert, et par clé d'enregistrement.
 
 **Alternatives envisagées**

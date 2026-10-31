@@ -381,3 +381,39 @@ func (s *PostgresStore) ClaimRotation(ctx context.Context, id string, now time.T
 	n, err := res.RowsAffected()
 	return n == 1, err
 }
+
+// SealedUnder is domain.SecretRepository.SealedUnder.
+func (s *PostgresStore) SealedUnder(ctx context.Context, keyIDs []string, afterID string, limit int) ([]*domain.SecretVersion, error) {
+	if len(keyIDs) == 0 || limit <= 0 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, privileged_account_id, encrypted_material, encryption_key_id, version
+		FROM vault_secrets WHERE encryption_key_id = ANY($1) AND id > $2 ORDER BY id LIMIT $3`, pq.Array(keyIDs), afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*domain.SecretVersion
+	for rows.Next() {
+		var v domain.SecretVersion
+		if err := rows.Scan(&v.ID, &v.PrivilegedAccountID, &v.EncryptedMaterial, &v.EncryptionKeyID, &v.Version); err != nil {
+			return nil, err
+		}
+		out = append(out, &v)
+	}
+	return out, rows.Err()
+}
+
+// ResealIf is domain.SecretRepository.ResealIf: one UPDATE, conditional on the key still being
+// the old one.
+func (s *PostgresStore) ResealIf(ctx context.Context, versionID, oldKeyID string, material []byte, newKeyID string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE vault_secrets SET encrypted_material = $3, encryption_key_id = $4
+		WHERE id = $1 AND encryption_key_id = $2`, versionID, oldKeyID, material, newKeyID)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
