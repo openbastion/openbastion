@@ -25,7 +25,7 @@ func imageRefs(t *testing.T, root string) map[string][]string {
 		}
 	}
 	var files []string
-	for _, pattern := range []string{"deploy/*/Dockerfile*", "deploy/*/docker-compose*.yml", ".github/workflows/*.yml"} {
+	for _, pattern := range []string{"deploy/*/Dockerfile*", "deploy/*/docker-compose*.yml", ".github/workflows/*.yml", "test/integration/testdata/*/*/Dockerfile*"} {
 		m, _ := filepath.Glob(filepath.Join(root, pattern))
 		files = append(files, m...)
 	}

@@ -29,6 +29,8 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/verify", s.handleVerify)
 	mux.HandleFunc("/auth/v1/oidc/start", s.handleOIDCStart)
 	mux.HandleFunc("/auth/v1/oidc/callback", s.handleOIDCCallback)
+	mux.HandleFunc("/auth/v1/ldap", s.handleLDAPInfo)
+	mux.HandleFunc("/auth/v1/ldap/login", s.handleLDAPLogin)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -174,5 +176,56 @@ func oidcError(w http.ResponseWriter, err error) {
 	default:
 		log.Printf("authentication: federated login failed: %v", err)
 		http.Error(w, "the federated login cannot be completed now", http.StatusServiceUnavailable)
+	}
+}
+
+// -- GET /auth/v1/ldap and POST /auth/v1/ldap/login (ADR-0061) ----
+
+type ldapInfoResponse struct {
+	Enabled bool `json:"enabled"`
+}
+
+func (s *HTTPServer) handleLDAPInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(ldapInfoResponse{Enabled: s.svc.DirectoryEnabled()})
+}
+
+func (s *HTTPServer) handleLDAPLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req loginRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
+		http.Error(w, "the body is not a login", http.StatusBadRequest)
+		return
+	}
+	token, ttl, err := s.svc.LoginLDAP(r.Context(), req.Username, req.Password)
+	if err != nil {
+		ldapError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(loginResponse{AccessToken: token, ExpiresIn: int(ttl.Seconds())})
+}
+
+// ldapError says as little as is useful: why a login is refused stays in this log, which names
+// neither the password nor the login name.
+func ldapError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, application.ErrDirectoryOff):
+		http.Error(w, "directory login is not configured", http.StatusNotFound)
+	case errors.Is(err, application.ErrNoRole):
+		log.Printf("authentication: directory login refused: the user's groups give no OpenBastion role")
+		http.Error(w, "this identity has no OpenBastion role", http.StatusForbidden)
+	case errors.Is(err, application.ErrDirectoryRejected):
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+	default:
+		log.Printf("authentication: directory login failed: %v", err)
+		http.Error(w, "the directory cannot be asked now", http.StatusServiceUnavailable)
 	}
 }

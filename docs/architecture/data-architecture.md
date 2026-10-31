@@ -101,8 +101,8 @@ CREATE TABLE users (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username          TEXT NOT NULL UNIQUE,
     display_name      TEXT NOT NULL,
-    identity_source   TEXT NOT NULL CHECK (identity_source IN ('local','oidc')),
-    external_subject  TEXT,                    -- sub OIDC ; NULL si identity_source = 'local'
+    identity_source   TEXT NOT NULL CHECK (identity_source IN ('local','oidc','ldap')),  -- 'ldap' : ADR-0061
+    external_subject  TEXT,                    -- sub OIDC, ou objectGUID/entryUUID de l'annuaire ; NULL si identity_source = 'local'
     password_hash     TEXT,                    -- Argon2id ; NULL si identity_source = 'oidc'
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),

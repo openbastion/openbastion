@@ -185,14 +185,20 @@ func (s *AuthenticationService) FinishOIDC(ctx context.Context, code, state stri
 	return token, s.ttl, nil
 }
 
-// federatedUser finds the account of id's subject and gives it today's roles, or makes it. Its
-// name is oidc:<sub> — never a name the provider chooses, which could be a local account's.
+// federatedUser finds the account of id's subject and gives it today's roles, or makes it.
 func (s *AuthenticationService) federatedUser(ctx context.Context, id OIDCIdentity, roles []string) (*domain.User, error) {
 	display := id.Name
 	if display == "" {
 		display = id.Subject
 	}
-	u, err := s.users.GetByExternalSubject(ctx, domain.SourceOIDC, id.Subject)
+	return s.externalUser(ctx, domain.SourceOIDC, id.Subject, display, roles)
+}
+
+// externalUser finds the account that source vouches for as subject and gives it today's roles, or
+// makes it. Its name is <source>:<subject> — never a name the provider or the directory chooses,
+// which could be a local account's.
+func (s *AuthenticationService) externalUser(ctx context.Context, source, subject, display string, roles []string) (*domain.User, error) {
+	u, err := s.users.GetByExternalSubject(ctx, source, subject)
 	if err == nil {
 		if err := s.users.UpdateIdentity(ctx, u.ID, display, roles); err != nil {
 			return nil, err
@@ -200,11 +206,11 @@ func (s *AuthenticationService) federatedUser(ctx context.Context, id OIDCIdenti
 		u.DisplayName, u.Roles = display, roles
 		return u, nil
 	}
-	u = &domain.User{ID: randomID("user"), Username: "oidc:" + id.Subject, DisplayName: display, Roles: roles,
-		IdentitySource: domain.SourceOIDC, ExternalSubject: id.Subject}
+	u = &domain.User{ID: randomID("user"), Username: source + ":" + subject, DisplayName: display, Roles: roles,
+		IdentitySource: source, ExternalSubject: subject}
 	if err := s.users.Create(ctx, u); err != nil {
 		// Two first logins at once: the other made it.
-		if again, err2 := s.users.GetByExternalSubject(ctx, domain.SourceOIDC, id.Subject); err2 == nil {
+		if again, err2 := s.users.GetByExternalSubject(ctx, source, subject); err2 == nil {
 			if err := s.users.UpdateIdentity(ctx, again.ID, display, roles); err != nil {
 				return nil, err
 			}

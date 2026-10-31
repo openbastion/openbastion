@@ -21,12 +21,12 @@ type User struct {
 	ID           string
 	Username     string
 	DisplayName  string
-	PasswordHash string // Argon2id encoded string, never the plaintext; empty for an OIDC account
+	PasswordHash string // Argon2id encoded string, never the plaintext; empty for an OIDC or a directory account
 	Roles        []string
 
-	// IdentitySource says who vouches for the user (docs/architecture/data-architecture.md): "local" (a password here) or
-	// "oidc" (a provider, ADR-0035). ExternalSubject is the provider's `sub` for an OIDC
-	// account, empty for a local one.
+	// IdentitySource says who vouches for the user (docs/architecture/data-architecture.md): "local" (a password here),
+	// "oidc" (a provider, ADR-0035) or "ldap" (a directory, ADR-0061). ExternalSubject is the
+	// provider's `sub`, or the directory's stable identifier; empty for a local account.
 	IdentitySource  string
 	ExternalSubject string
 }
@@ -38,6 +38,7 @@ var ErrAttemptNotFound = errors.New("no such login attempt")
 const (
 	SourceLocal = "local"
 	SourceOIDC  = "oidc"
+	SourceLDAP  = "ldap" // a directory (LDAP or Active Directory) checks the password, ADR-0061
 )
 
 type UserRepository interface {

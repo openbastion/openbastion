@@ -40,6 +40,10 @@ type AuthenticationService struct {
 	roleMap  RoleMap
 	attempts domain.LoginAttemptRepository
 	now      func() time.Time
+
+	// Directory login (ADR-0061); nil directory = off.
+	directory   Directory
+	ldapRoleMap RoleMap
 }
 
 // WithClock replaces the clock; for tests.
@@ -85,8 +89,9 @@ func (s *AuthenticationService) Login(ctx context.Context, username, password st
 	if err != nil {
 		return "", 0, ErrInvalidCredentials
 	}
-	// An account the provider vouches for has no password here (ADR-0035).
-	if u.IdentitySource == domain.SourceOIDC || u.PasswordHash == "" {
+	// An account a provider or a directory vouches for has no password here (ADR-0035, ADR-0061).
+	// An empty source is a local account of before ADR-0035.
+	if (u.IdentitySource != "" && u.IdentitySource != domain.SourceLocal) || u.PasswordHash == "" {
 		return "", 0, ErrInvalidCredentials
 	}
 	if err := s.hasher.Verify(u.PasswordHash, password); err != nil {

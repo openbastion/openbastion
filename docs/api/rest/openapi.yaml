@@ -120,6 +120,55 @@ paths:
         "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
         "503": { description: Le fournisseur ou la base ne répond pas — la cause reste dans le journal }
 
+  /auth/ldap:
+    get:
+      tags: [auth]
+      summary: Dit si la connexion par annuaire est activée (ADR-0061)
+      description: >
+        Pour la page de connexion. Publique ; la Gateway garde la réponse 30 s.
+      security: []
+      responses:
+        "200":
+          description: Activée ou non
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled]
+                properties:
+                  enabled: { type: boolean }
+        "502": { description: L'Authentication Service ne répond pas }
+
+  /auth/ldap/login:
+    post:
+      tags: [auth]
+      summary: Connexion avec le mot de passe de l'annuaire, LDAP ou Active Directory (ADR-0061)
+      description: >
+        Même corps que `/auth/login`. L'annuaire vérifie le mot de passe (un compte
+        de service cherche l'utilisateur, une connexion à part se lie en son nom) ;
+        les rôles viennent de la table des groupes déclarée (`LDAP_ROLE_MAP_FILE`),
+        jamais de l'annuaire. Le compte s'appelle `ldap:<objectGUID ou entryUUID>`.
+        Un mot de passe vide est refusé avant l'annuaire (ce serait un bind anonyme).
+        Compte dans le budget de connexion par adresse, comme `/auth/login`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Le jeton OpenBastion, comme `/auth/login`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "400": { description: Le corps n'est pas une connexion }
+        "401": { description: Connexion refusée (nom inconnu, plusieurs entrées, mot de passe faux ou vide, compte désactivé) — sans détail }
+        "403": { description: L'annuaire répond de l'utilisateur, et aucun de ses groupes ne donne de rôle OpenBastion }
+        "404": { description: La connexion par annuaire n'est pas configurée }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+        "503": { description: L'annuaire ne répond pas, refuse le compte de service, ou son certificat n'est pas reconnu — la cause reste dans le journal ; jamais de repli sur un compte local }
+
   /auth/token/refresh:
     post:
       tags: [auth]

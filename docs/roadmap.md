@@ -100,8 +100,8 @@ Deux règles guident l'ordre de livraison :
 | MFA Service | | ✅ | |
 | Anomaly Detection / Risk Engine | | | ✅ |
 | OIDC Connector | ✅ | | |
-| LDAP Connector | | ✅ | |
-| Active Directory Connector | | ✅ | |
+| LDAP Connector | | ✅ (livré, ADR-0061) | |
+| Active Directory Connector | | ✅ (livré, ADR-0061) | |
 | Entra ID Connector | | ✅ | |
 | SAML Connector | | ✅ | |
 | SCIM Provisioning | | ✅ | |

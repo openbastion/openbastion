@@ -6,10 +6,11 @@ import { fakeApi, fakeToken } from "../test-helpers";
 describe("App", () => {
   it("keeps the token across renders when no client is given — the next call is authenticated", async () => {
     const token = fakeToken("alice", ["platform-admin"]);
-    const auth: (string | null)[] = [];
+    // Each call with the header it carried; the login page asks GET /auth/ldap first (ADR-0061).
+    const calls: { path: string; auth: string | null }[] = [];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const headers = (init?.headers ?? {}) as Record<string, string>;
-      auth.push(headers["Authorization"] ?? null);
+      calls.push({ path: String(input), auth: headers["Authorization"] ?? null });
       if (String(input) === "/auth/login") return new Response(JSON.stringify({ accessToken: token, expiresIn: 3600 }));
       return new Response(JSON.stringify({ items: [], page: 1, pageSize: 20, totalItems: 0 }));
     });
@@ -17,8 +18,9 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
-    await waitFor(() => expect(auth.length).toBeGreaterThanOrEqual(2));
-    expect(auth[1]).toBe(`Bearer ${token}`);
+    const login = () => calls.findIndex((c) => c.path === "/auth/login");
+    await waitFor(() => expect(login() >= 0 && calls.length > login() + 1).toBe(true));
+    expect(calls[login() + 1].auth).toBe(`Bearer ${token}`);
     fetchSpy.mockRestore();
   });
 

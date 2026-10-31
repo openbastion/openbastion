@@ -109,6 +109,8 @@ func main() {
 		log.Fatalf("authentication: OIDC is half configured, %s missing — set all of OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL, OIDC_ROLE_MAP_FILE, or none — refusing to start", strings.Join(missing, ", "))
 	}
 
+	configureDirectory(svc)
+
 	// Demo seed — real onboarding goes through POST /auth/v1/users.
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
 		ctx := context.Background()
@@ -133,4 +135,53 @@ func redactDSN(dsn string) string {
 		return dsn
 	}
 	return "***@" + dsn[at+1:]
+}
+
+// configureDirectory turns directory login on (ADR-0061): off unless every variable is set — all or
+// none, LDAP_CA_FILE optional. A directory that does not answer at start does not stop the service
+// (local login, the administrator's way in, stays): it is said, and the directory login answers 503.
+func configureDirectory(svc *application.AuthenticationService) {
+	required := []string{"LDAP_URL", "LDAP_SCHEMA", "LDAP_BIND_DN", "LDAP_BIND_PASSWORD_FILE", "LDAP_USER_BASE_DN", "LDAP_GROUP_BASE_DN", "LDAP_ROLE_MAP_FILE"}
+	var missing []string
+	set := 0
+	for _, name := range required {
+		if os.Getenv(name) == "" {
+			missing = append(missing, name)
+		} else {
+			set++
+		}
+	}
+	switch {
+	case set == 0 && os.Getenv("LDAP_CA_FILE") == "":
+		log.Printf("authentication: directory login (LDAP) off")
+		return
+	case len(missing) > 0:
+		log.Fatalf("authentication: LDAP is half configured, %s missing — set all of %s (and LDAP_CA_FILE if needed), or none — refusing to start",
+			strings.Join(missing, ", "), strings.Join(required, ", "))
+	}
+	raw, err := application.LoadRoleMap(os.Getenv("LDAP_ROLE_MAP_FILE"))
+	if err != nil {
+		log.Fatalf("authentication: LDAP_ROLE_MAP_FILE: %v — refusing to start", err)
+	}
+	roles, err := infrastructure.NormalizeRoleMap(raw)
+	if err != nil {
+		log.Fatalf("authentication: LDAP_ROLE_MAP_FILE: %v — refusing to start", err)
+	}
+	dir, err := infrastructure.NewLDAPDirectory(infrastructure.LDAPConfig{
+		URL: os.Getenv("LDAP_URL"), CAFile: os.Getenv("LDAP_CA_FILE"), Schema: os.Getenv("LDAP_SCHEMA"),
+		BindDN: os.Getenv("LDAP_BIND_DN"), BindPasswordFile: os.Getenv("LDAP_BIND_PASSWORD_FILE"),
+		UserBaseDN: os.Getenv("LDAP_USER_BASE_DN"), GroupBaseDN: os.Getenv("LDAP_GROUP_BASE_DN"),
+	})
+	if err != nil {
+		log.Fatalf("authentication: LDAP: %v — refusing to start", err)
+	}
+	svc.WithDirectory(dir, roles)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*infrastructure.LDAPTimeout)
+	defer cancel()
+	if err := dir.Probe(ctx); err != nil {
+		log.Printf("authentication: directory login (LDAP) configured, but the directory does not answer now (%v): POST /auth/ldap/login answers 503 until it does; local login is not affected", err)
+	} else {
+		log.Printf("authentication: directory login (LDAP, schema %s) with %s over TLS, the service account accepted", os.Getenv("LDAP_SCHEMA"), dir.Where())
+	}
+	log.Printf("authentication: %d group(s) in the LDAP role map; a user with no mapped group is refused", len(roles))
 }

@@ -52,6 +52,8 @@ type GatewayServer struct {
 	// commandRecorderURL is where GET /sessions/{id}/recording is routed.
 	commandRecorderURL string
 	httpClient         *http.Client
+	// ldapInfo remembers, a short while, whether directory login is on (ADR-0061).
+	ldapInfo ldapInfoCache
 }
 
 func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, loginLimiter *application.RateLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL string) *GatewayServer {
@@ -113,6 +115,10 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	// Federated login (ADR-0035), public and in the login budget.
 	mux.HandleFunc("/auth/oidc/start", g.handleOIDC("/auth/v1/oidc/start"))
 	mux.HandleFunc("/auth/oidc/callback", g.handleOIDC("/auth/v1/oidc/callback"))
+	// Directory login (ADR-0061): the login is public and in the login budget; whether it is on,
+	// public, answered from a short cache.
+	mux.HandleFunc("/auth/ldap/login", g.handleLDAPLogin)
+	mux.HandleFunc("/auth/ldap", g.handleLDAPInfo)
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	mux.HandleFunc("/sessions/", g.requireAuth(g.handleSessionItem))
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))

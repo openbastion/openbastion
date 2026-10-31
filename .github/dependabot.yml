@@ -67,6 +67,8 @@ updates:
     directories:
       - /deploy/docker-compose
       - /deploy/base44
+      - /test/integration/testdata/ldap/openldap
+      - /test/integration/testdata/ldap/samba
     schedule: {interval: weekly, day: monday}
     cooldown: {default-days: 7}
     groups:

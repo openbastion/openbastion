@@ -9,6 +9,8 @@ L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification 
 | `/auth/login` | POST | auth | Authentification locale (mot de passe) |
 | `/auth/oidc/start` | POST | auth | Commence une connexion fédérée OIDC : URL du fournisseur (ADR-0035) |
 | `/auth/oidc/callback` | POST | auth | Termine une connexion fédérée OIDC : `code` et `state` → jeton (ADR-0035) |
+| `/auth/ldap` | GET | auth | Dit si la connexion par annuaire est activée (ADR-0061) |
+| `/auth/ldap/login` | POST | auth | Connexion avec le mot de passe de l'annuaire LDAP ou Active Directory → jeton (ADR-0061) |
 | `/auth/token/refresh` | POST | auth | Renouvellement de jeton |
 | `/auth/me` | GET | auth | Profil courant |
 | `/sessions` | GET / POST | sessions | Lister les demandes break-glass en attente que l'on peut décider (`status=pending_approval` seul, ADR-0012) / demander une session |

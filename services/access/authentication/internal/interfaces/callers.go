@@ -17,6 +17,9 @@ func CallerRules() []mtls.Rule {
 		// Federated login (ADR-0035): the Gateway forwards both ends of it.
 		{Method: http.MethodPost, Path: "/auth/v1/oidc/start", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/oidc/callback", Callers: []string{mtls.APIGateway}},
+		// Directory login (ADR-0061): the Gateway forwards it, and asks whether it is on.
+		{Method: http.MethodGet, Path: "/auth/v1/ldap", Callers: []string{mtls.APIGateway}},
+		{Method: http.MethodPost, Path: "/auth/v1/ldap/login", Callers: []string{mtls.APIGateway}},
 		// Creating a local user has no public surface yet: it is operator tooling.
 		{Method: http.MethodPost, Path: "/auth/v1/users", Callers: []string{mtls.AdminCLI}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},

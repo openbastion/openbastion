@@ -5,7 +5,7 @@ La source est `docs/roadmap.md` ; ce fichier n'en garde que ce qui oriente le tr
 | Étape | Contenu | État |
 |---|---|---|
 | MVP | SSH (et SFTP/SCP) de bout en bout : Authentication, Authorization (RBAC), Session Broker, Password Vault (rotation sur la cible, manuelle, après usage et planifiée ; clé d'hôte épinglée), SSH Proxy, Audit Service, Command Recorder, API Gateway, mTLS, Admin UI, OIDC, docker-compose | implémenté, rotation planifiée comprise (ADR-0040) ; reste : `backlog.md` |
-| v1.0 | Scheduler complet (rotation planifiée et post-usage), Workflow/Approval Engine, MFA, autres protocoles, haute disponibilité | à concevoir |
+| v1.0 | LDAP/Active Directory (fait, ADR-0061), Scheduler complet (rotation planifiée et post-usage), Workflow/Approval Engine, MFA, autres protocoles, haute disponibilité | en cours : premier lot LDAP/AD livré (choisi par Bony Kiss le 31 octobre 2026) |
 | v2.0 | détection d'anomalies, score de risque, protocoles supplémentaires | à concevoir |
 
 Une étape de la feuille de route commence par un ADR (`architecture/write-adr.md`) et la validation du propriétaire.

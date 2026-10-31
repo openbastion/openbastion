@@ -1,13 +1,14 @@
 go:
-  version: "1.22"            # dans chaque go.mod
+  version: "go.mod : 1.22 (12 modules) ou 1.26.0 (5) ; chaîne de la CI 1.27.3 (GO_VERSION de ci.yml) — la chaîne locale peut être plus ancienne : make vuln avec GOTOOLCHAIN=go1.27.3, sinon govulncheck signale la bibliothèque standard locale"
   workspace: go.work         # export GOWORK=$PWD/go.work
   formatting: gofmt sur les fichiers modifiés seulement
   vet: obligatoire
   dependencies:
     policy: stdlib d'abord ; demander avant toute dépendance externe
     stdlib_only: [pkg/mtls, pkg/migrate, pkg/refusalbudget, pkg/webhook, pkg/transit]
-    golang.org/x/crypto: v0.24.0 (par le miroir github.com/golang/crypto, replace à garder)
-    test_only: [github.com/pkg/sftp v1.13.7 dans test/integration]
+    golang.org/x/crypto: v0.58.0, sans replace (le miroir cachait 21 vulnérabilités à govulncheck, ADR-0052)
+    external: [github.com/golang-jwt/jwt/v5 v5.3.1 (authentication), github.com/lib/pq v1.12.3 (services à état), "github.com/go-ldap/ldap/v3 v3.4.15 (authentication seulement, ADR-0061 ; tire asn1-ber, go-ntlmssp, google/uuid)"]
+    test_only: [github.com/pkg/sftp v1.13.12 dans test/integration]
     go_sum: régénéré par go mod tidy, jamais à la main
   transport: HTTP/JSON avec les noms de champs du proto (architecture/transport-and-contracts.md)
   rules: rules/backend-go.md
