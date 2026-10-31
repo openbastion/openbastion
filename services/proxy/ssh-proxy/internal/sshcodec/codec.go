@@ -154,24 +154,37 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		targetReader = io.TeeReader(stdout, c.OutputObserver)
 	}
 
-	done := make(chan error, 2)
+	// The operator's input ending (`ssh … < /dev/null`, `echo cmd | ssh …`) is not a hang-up:
+	// the target is told (its input closes) and what it still answers is relayed, until it
+	// ends the shell — as sshd does. An error on that side — a command that could not be
+	// recorded above all (ADR-0008) — still ends the session at once.
+	fromClient := make(chan error, 1)
+	toClient := make(chan error, 1)
 	go func() {
 		_, err := io.Copy(stdin, clientReader)
-		done <- err
+		fromClient <- err
 	}()
 	go func() {
 		_, err := io.Copy(client, targetReader)
-		done <- err
+		toClient <- err
 	}()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-done:
-		if err != nil && err != io.EOF {
-			return err
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-fromClient:
+			if err != nil && err != io.EOF {
+				return err
+			}
+			_ = stdin.Close()
+			fromClient = nil // nothing more from the operator; wait for the target
+		case err := <-toClient:
+			if err != nil && err != io.EOF {
+				return err
+			}
+			return nil
 		}
-		return nil
 	}
 }
 
