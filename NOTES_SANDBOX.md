@@ -1443,6 +1443,18 @@ Go de Bony Kiss (31 octobre 2026) pour l'étape proposée : le point 4 du backlo
 
 **Choix renversables** : révoquer chez toutes plutôt que retenir l'instance de chaque ticket (pas de migration, pas de course à fermer) ; 16 instances au plus ; tour de rôle plutôt qu'aléatoire ; le repli sur l'instance suivante pour tout échec d'`establish-session`.
 
+## Une CI GitHub Actions (ADR-0047)
+
+Go de Bony Kiss (31 octobre 2026) pour le point 5 du backlog ; choix des « actions officielles épinglées » (actions/checkout v7.0.1, actions/setup-go v7.0.0, actions/setup-node v7.1.0, par empreinte de commit vérifiée auprès de GitHub ; `postgres:16` par son empreinte d'index, `sha256:1beaa308…`).
+
+**Livré** : `.github/workflows/ci.yml` — cinq jobs en parallèle (`go`, `race`, `integration`, `postgres`, `ui`), sur chaque `push` vers `main` et chaque pull request ; `permissions: contents: read`, `persist-credentials: false`, aucun secret lu ; Go 1.27.1 et Node 24.21.0. `.agents/settings/ci-cd.yaml` et `environments/ci.yaml` décrivent la CI réelle ; `docs/development/contributing.md` barre la CI imaginée de la conception initiale (`buf breaking`, filtrage par chemins).
+
+**Mesuré** : première exécution (run `41212800565`, `cf95a4f`) verte en 8 min 24 s ; intégration 50 sans base, 74 avec, `make test-postgres` 76 — les mêmes comptes que la vérification locale ; 32 paquets unitaires `ok` sans base, sous `-race` et avec base ; Admin UI 25.
+
+**Ce que cela ne fait PAS** : la CI ne bloque rien tant que la protection de `main` n'exige pas ses jobs (réglage du dépôt, au propriétaire) ; pas de test Compose, pas de `govulncheck` ni de `npm audit`, pas de construction d'images ; les empreintes ne se mettent pas à jour seules ; les tests à délai fixe peuvent échouer sur un runner lent.
+
+**Choix renversables** : cinq jobs plutôt qu'un ; `ubuntu-24.04` ; Go 1.27.1 (les modules déclarent 1.22, aucune CI ne prouve ce minimum) ; `GOPROXY=direct` comme le Makefile, sans cache de proxy.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

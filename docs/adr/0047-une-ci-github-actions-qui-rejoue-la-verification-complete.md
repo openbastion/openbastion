@@ -17,7 +17,16 @@ Aucune porte automatique ne protège `main` : la vérification complète (`.agen
 5. **Le test Compose** (`make test-compose`, ADR-0033) n'est pas dans la CI : il construit les images et monte la pile entière ; il reste une vérification avant un jalon.
 
 **Conséquences**
-- (+) *À mesurer : la première exécution sur GitHub, ses durées et ses comptes.*
+- (+) **Mesuré, première exécution** (run `41212800565`, commit `cf95a4f`, 31 octobre 2026) : les cinq jobs verts, en parallèle, 8 min 24 s de bout en bout.
+  | Job | Durée | Résultat |
+  |---|---|---|
+  | `ui` | 31 s | Vitest 25 tests, construction verte |
+  | `go` | 1 min 55 s | build, vet, `gofmt -l` vide, 32 paquets de tests unitaires `ok` sans base |
+  | `race` | 2 min 23 s | 32 paquets `ok` sous `-race` |
+  | `integration` | 3 min 35 s | 50 tests sur processus réels, sans base |
+  | `postgres` | 8 min 24 s | 32 paquets unitaires `ok` avec base, `make test-postgres` 76, intégration avec base 74 |
+
+  Les comptes d'intégration et de PostgreSQL sont ceux de la vérification locale du même jour (50, 76, 74).
 - (−) La CI dit ce qui casse ; elle n'empêche rien tant qu'une règle de protection de `main` n'exige pas ses jobs. Poser cette règle est un réglage du dépôt sur GitHub, qui revient au propriétaire.
 - (−) Les empreintes épinglées ne se mettent pas à jour seules : une version corrigée d'une action ou de l'image PostgreSQL attend qu'on change l'empreinte.
 - (−) Les tests à délai fixe (une vingtaine de scénarios sur processus réels, dont celui d'ADR-0034 vu échouer une fois sous charge) peuvent échouer sur un runner lent ; un échec isolé se relance, et sa sortie se garde.
