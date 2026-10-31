@@ -13,7 +13,9 @@ ADR-0052 cherche les vulnérabilités **connues** à chaque commit et chaque lun
 
 **Conséquences**
 - (+) Une version plus récente devient une pull request vérifiée, au lieu d'attendre qu'on y pense.
-- (−) **Pas de test local possible** : la configuration est lue par GitHub après le push ; elle est vérifiée par la première passe de Dependabot (état noté dans `NOTES_SANDBOX.md`).
+- (+) **Constaté à la première passe** (31 octobre 2026, `3d9f7b7`) : la configuration est acceptée, les cinq passes réussissent et ouvrent 6 pull requests, chacune passée par la CI. Pour Go, le regroupement tient : `github.com/lib/pq` 1.10.9 → 1.12.3 est **une** pull request sur les 7 modules qui l'utilisent (son titre ne nomme que le premier).
+- (−) **Constaté** : pour les images, le regroupement ne joue pas entre dossiers — `node` arrive en deux pull requests, une par `Dockerfile` (`deploy/docker-compose`, `deploy/base44`). À fusionner ensemble.
+- (−) **Pas de test local possible** : la configuration est lue par GitHub après le push ; la première passe l'a vérifiée (ci-dessus).
 - (−) Les **alertes et mises à jour de sécurité** de Dependabot sont un réglage du dépôt (Settings → Code security), pas de ce fichier : à activer par le propriétaire.
 - (−) Dependabot ne met pas à jour `go.work`, ni la version de Go de la CI (`GO_VERSION`), ni les empreintes écrites dans les tests (l'image OpenBao de `transit_flow_test.go`) : elles restent manuelles.
 - (−) Les pull requests de Dependabot n'ont pas accès aux secrets du dépôt — la CI n'en utilise aucun.
