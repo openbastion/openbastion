@@ -25,10 +25,7 @@ type VaultCredentialHTTPClient struct {
 }
 
 func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
-	body, _ := json.Marshal(map[string]string{
-		"scope_token":      scopeToken,
-		"calling_proxy_id": callingProxyID,
-	})
+	body, _ := json.Marshal(fetchCredentialRequestBody{ScopeToken: scopeToken, CallingProxyID: callingProxyID})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/fetch-credential", bytes.NewReader(body))
 	if err != nil {
 		return proxycore.Fetched{}, err
@@ -42,14 +39,23 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	if resp.StatusCode != http.StatusOK {
 		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: status %d", resp.StatusCode)
 	}
-	var out struct {
-		CredentialType     string `json:"credential_type"`
-		CredentialMaterial []byte `json:"credential_material"`
-		TargetHost         string `json:"target_host"`
-		HostKey            string `json:"host_key"`
-	}
+	var out fetchCredentialResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return proxycore.Fetched{}, err
 	}
 	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey}, nil
+}
+
+// The bodies of the Vault's fetch-credential, with the field names of VaultCredentialIssuance's
+// messages (test/integration/contract_test.go holds them to it, ADR-0050).
+type fetchCredentialRequestBody struct {
+	ScopeToken     string `json:"scope_token"`
+	CallingProxyID string `json:"calling_proxy_id"`
+}
+
+type fetchCredentialResponseBody struct {
+	CredentialType     string `json:"credential_type"`
+	CredentialMaterial []byte `json:"credential_material"`
+	TargetHost         string `json:"target_host"`
+	HostKey            string `json:"host_key"`
 }

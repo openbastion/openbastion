@@ -27,10 +27,9 @@ type ProxyClientHTTPClient struct {
 }
 
 func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
-	body, _ := json.Marshal(map[string]any{
-		"session_id": sessionID, "target_host": targetHost, "target_user": targetUser,
-		"vault_scope_token": scopeToken, "ttl_seconds": int(ttl.Seconds()),
-		"break_glass": breakGlass,
+	body, _ := json.Marshal(establishSessionRequestBody{
+		SessionID: sessionID, TargetHost: targetHost, TargetUser: targetUser,
+		VaultScopeToken: scopeToken, TTLSeconds: int(ttl.Seconds()), BreakGlass: breakGlass,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/establish-session", bytes.NewReader(body))
 	if err != nil {
@@ -52,10 +51,7 @@ func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID,
 		}
 		return "", "", fmt.Errorf("establish-session: status %d", resp.StatusCode)
 	}
-	var out struct {
-		ProxyEndpoint    string `json:"proxy_endpoint"`
-		ConnectionTicket string `json:"connection_ticket"`
-	}
+	var out establishSessionResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", "", err
 	}
@@ -72,7 +68,7 @@ func (c *ProxyClientHTTPClient) RevokeSession(ctx context.Context, sessionID str
 	if seconds < 1 {
 		seconds = 1
 	}
-	body, _ := json.Marshal(map[string]any{"session_id": sessionID, "ttl_seconds": seconds})
+	body, _ := json.Marshal(revokeSessionRequestBody{SessionID: sessionID, TTLSeconds: seconds})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/revoke-session", bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -88,4 +84,25 @@ func (c *ProxyClientHTTPClient) RevokeSession(ctx context.Context, sessionID str
 		return fmt.Errorf("revoke-session: status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// The bodies of the proxy's internal routes, with the field names of ProxyControl's messages
+// (test/integration/contract_test.go holds them to it, ADR-0050).
+type establishSessionRequestBody struct {
+	SessionID       string `json:"session_id"`
+	TargetHost      string `json:"target_host"`
+	TargetUser      string `json:"target_user"`
+	VaultScopeToken string `json:"vault_scope_token"`
+	TTLSeconds      int    `json:"ttl_seconds"`
+	BreakGlass      bool   `json:"break_glass"`
+}
+
+type establishSessionResponseBody struct {
+	ProxyEndpoint    string `json:"proxy_endpoint"`
+	ConnectionTicket string `json:"connection_ticket"`
+}
+
+type revokeSessionRequestBody struct {
+	SessionID  string `json:"session_id"`
+	TTLSeconds int    `json:"ttl_seconds"`
 }

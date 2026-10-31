@@ -20,7 +20,7 @@ type AuthorizationHTTPClient struct {
 }
 
 func (c *AuthorizationHTTPClient) CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (bool, string, error) {
-	body, _ := json.Marshal(map[string]any{"actor_roles": actorRoles, "resource": resource, "action": action})
+	body, _ := json.Marshal(checkAccessRequestBody{ActorRoles: actorRoles, Resource: resource, Action: action})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/authz/v1/check-access", bytes.NewReader(body))
 	if err != nil {
 		return false, "", err
@@ -34,12 +34,22 @@ func (c *AuthorizationHTTPClient) CheckAccess(ctx context.Context, actorRoles []
 	if resp.StatusCode != http.StatusOK {
 		return false, "", fmt.Errorf("check-access: status %d", resp.StatusCode)
 	}
-	var out struct {
-		Allowed        bool   `json:"allowed"`
-		DecisionReason string `json:"decision_reason"`
-	}
+	var out checkAccessResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return false, "", err
 	}
 	return out.Allowed, out.DecisionReason, nil
+}
+
+// The bodies of the Authorization Service's check-access (docs/api/grpc/README.md §8; not yet in
+// proto/, declared as such in test/integration/contract_test.go).
+type checkAccessRequestBody struct {
+	ActorRoles []string `json:"actor_roles"`
+	Resource   string   `json:"resource"`
+	Action     string   `json:"action"`
+}
+
+type checkAccessResponseBody struct {
+	Allowed        bool   `json:"allowed"`
+	DecisionReason string `json:"decision_reason"`
 }

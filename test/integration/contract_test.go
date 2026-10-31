@@ -11,6 +11,7 @@ package integration_test
 // are unexported and live in internal packages, which this module may not import.
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -69,14 +70,31 @@ var contractPairs = []contractPair{
 	{"services/proxy/ssh-proxy/internal/infrastructure/command_recorder_client.go", "wireEntry", "proto/recording/v1/recording.proto", "CommandEntry", nil, nil},
 	{"services/recording-audit/command-recorder/internal/interfaces/http.go", "commandEntryRequest", "proto/recording/v1/recording.proto", "CommandEntry", nil, nil},
 	{"services/recording-audit/command-recorder/internal/interfaces/http.go", "recordResponse", "proto/recording/v1/recording.proto", "StreamAck", nil, nil},
+	// The clients' side of the same routes (they built their bodies as maps before).
+	{"services/access/session-broker/internal/infrastructure/proxy_client.go", "establishSessionRequestBody", "proto/proxy/v1/proxy_control.proto", "EstablishSessionRequest",
+		map[string]string{"ttl_seconds": whyTTL}, map[string]string{"context": whyContext, "expires_at": whyExpiresAt}},
+	{"services/access/session-broker/internal/infrastructure/proxy_client.go", "establishSessionResponseBody", "proto/proxy/v1/proxy_control.proto", "EstablishSessionResponse", nil, nil},
+	{"services/access/session-broker/internal/infrastructure/proxy_client.go", "revokeSessionRequestBody", "proto/proxy/v1/proxy_control.proto", "TerminateSessionRequest",
+		map[string]string{"ttl_seconds": "how long the proxy must remember the revocation (ADR-0018)"}, map[string]string{"context": whyContext}},
+	{"services/proxy/ssh-proxy/internal/infrastructure/vault_client.go", "fetchCredentialRequestBody", "proto/vault/v1/vault.proto", "FetchCredentialRequest", nil, nil},
+	{"services/proxy/ssh-proxy/internal/infrastructure/vault_client.go", "fetchCredentialResponseBody", "proto/vault/v1/vault.proto", "FetchCredentialResponse",
+		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed"}},
+	{"services/proxy/ssh-proxy/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
+	{"services/vault/password-vault/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 }
 
 // notMirrored are internal JSON structs with no message in proto/, each with its reason.
 var notMirrored = map[string]string{
-	"authorization/checkAccessRequest":       "the Authorization contract is described in docs/api/grpc/README.md §8, not yet in proto/",
-	"authorization/checkAccessResponse":      "idem",
-	"session-broker/checkAccessRequestBody":  "idem — the Broker's client of it",
-	"session-broker/checkAccessResponseBody": "idem",
+	"authorization/checkAccessRequest":         "the Authorization contract is described in docs/api/grpc/README.md §8, not yet in proto/",
+	"authorization/checkAccessResponse":        "idem",
+	"session-broker/checkAccessRequestBody":    "idem — the Broker's client of it",
+	"session-broker/checkAccessResponseBody":   "idem",
+	"password-vault/checkAccessRequestBody":    "idem — the Vault's client of it",
+	"password-vault/checkAccessResponseBody":   "idem",
+	"command-recorder/checkAccessRequestBody":  "idem — the Recorder's client of it",
+	"command-recorder/checkAccessResponseBody": "idem",
 	// Not routes between services: formats of a third party, or of a file.
 	"authentication/idClaims":   "the claims of an OIDC identity token: the provider's format (ADR-0035)",
 	"audit-service/anchorLine":  "a line of the anchor file (ADR-0028), not a message",
@@ -171,6 +189,63 @@ func TestContract_EveryInternalRouteCarriesTheFieldsOfItsProtoMessage_OrSaysWhyN
 	}
 }
 
+// anonymousAllowed are files whose anonymous snake_case shapes are not routes between services.
+var anonymousAllowed = map[string]string{
+	"services/access/authentication/internal/infrastructure/oidc_provider.go": "the OIDC provider's discovery document and token response (ADR-0035)",
+}
+
+// anonymousJSON lists, in a Go file, the anonymous structs with snake_case json tags and the map
+// literals with snake_case keys: the shapes the table cannot name, so that a body built that way
+// would escape the check.
+func anonymousJSON(t *testing.T, root, file string) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filepath.Join(root, file), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := map[*ast.StructType]bool{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		if ts, ok := n.(*ast.TypeSpec); ok {
+			if st, ok := ts.Type.(*ast.StructType); ok {
+				named[st] = true
+			}
+		}
+		return true
+	})
+	var out []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.StructType:
+			if named[x] {
+				return true
+			}
+			for _, field := range x.Fields.List {
+				if field.Tag != nil && strings.Contains(strings.Split(reflect.StructTag(strings.Trim(field.Tag.Value, "`")).Get("json"), ",")[0], "_") {
+					out = append(out, fmt.Sprintf("%s:%d anonymous struct", file, fset.Position(x.Pos()).Line))
+					return true
+				}
+			}
+		case *ast.CompositeLit:
+			if _, ok := x.Type.(*ast.MapType); !ok {
+				return true
+			}
+			for _, el := range x.Elts {
+				kv, ok := el.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				if lit, ok := kv.Key.(*ast.BasicLit); ok && lit.Kind == token.STRING && strings.Contains(lit.Value, "_") {
+					out = append(out, fmt.Sprintf("%s:%d map literal", file, fset.Position(x.Pos()).Line))
+					return true
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
 func TestContract_NoInternalJSONStructEscapesTheTable(t *testing.T) {
 	root := repoRoot(t)
 	covered := map[string]bool{}
@@ -190,6 +265,9 @@ func TestContract_NoInternalJSONStructEscapesTheTable(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(root, abs)
 		service := strings.Split(rel, string(filepath.Separator))[2]
+		if anonymousAllowed[rel] == "" {
+			escaped = append(escaped, anonymousJSON(t, root, rel)...)
+		}
 		for name, fields := range goJSONFields(t, root, rel) {
 			snake := false
 			for _, f := range fields {

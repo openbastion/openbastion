@@ -1545,6 +1545,10 @@ Demande de Bony Kiss (31 octobre 2026) : « traite d'abord les reliquats et fais
 
 **Ce que cela ne fait PAS** : pas d'analyse des images (paquets Alpine, Debian, Node) ; pas de mise à jour automatique (Dependabot ouvrirait des pull requests) ; la base de Go et celle de npm seulement.
 
+## Reliquat d'ADR-0050 : les corps construits par une `map` sont vérifiés
+
+Les clients internes construisaient neuf corps et réponses par une `map` ou une structure anonyme (le Broker vers le proxy, le proxy vers le Vault et l'audit, le Vault vers l'audit et l'Authorization, le Recorder vers l'Authorization) : le test de contrat ne les voyait pas. Ce sont désormais des structures nommées, ajoutées à la table (**24 paires**, contre 17), et le test **refuse** toute structure anonyme ou `map` littérale à champs `snake_case` dans `internal/interfaces` et `internal/infrastructure` (seul `oidc_provider.go` en est exempté : formats d'un fournisseur tiers). Le JSON envoyé ne change pas. **3 contre-épreuves, 3 tuées** ; unitaires des quatre services verts ; intégration sans base verte (178 s).
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :
