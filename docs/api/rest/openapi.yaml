@@ -474,8 +474,9 @@ paths:
 
         **Limites connues.** Les octrois de portée du Vault ne sont pas révoqués
         (le proxy abandonne le jeton avec le ticket ; il est à usage unique et
-        réservé à l'identité du proxy). Le proxy SSH est en instance unique
-        dans le MVP : avec plusieurs réplicas, la révocation en atteindrait un.
+        réservé à l'identité du proxy). Avec plusieurs instances du proxy SSH
+        (ADR-0046), la session est révoquée chez toutes : une seule qui ne
+        confirme pas, et la réponse est `503`, rien n'est terminé.
 
         **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel coûte un
         jeton au seau d'actions de **l'utilisateur vérifié**, le même que

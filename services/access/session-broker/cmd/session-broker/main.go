@@ -8,8 +8,10 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
@@ -52,7 +54,7 @@ func main() {
 	authzURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
-	sshProxyURL := mustEnv("SSH_PROXY_URL", rt.DefaultURL("127.0.0.1:8085"))
+	sshProxyURLs := proxyURLs(rt.DefaultURL("127.0.0.1:8085"))
 
 	var store domain.SessionRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -83,7 +85,20 @@ func main() {
 	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
 	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL, Client: vaultClient}
-	proxy := &infrastructure.ProxyClientHTTPClient{BaseURL: sshProxyURL, Client: peer(sshProxyURL, mtls.SSHProxy)}
+	// Every instance of the SSH proxy, each addressed directly and pinned to the proxy's
+	// identity (ADR-0046): a ticket is issued by one, a revocation is asked of all.
+	var instances []infrastructure.ProxyInstance
+	for _, u := range sshProxyURLs {
+		instances = append(instances, infrastructure.ProxyInstance{Name: hostOf(u),
+			Client: &infrastructure.ProxyClientHTTPClient{BaseURL: u, Client: peer(u, mtls.SSHProxy)}})
+	}
+	proxy, err := infrastructure.NewProxyPool(instances)
+	if err != nil {
+		log.Fatalf("session-broker: SSH_PROXY_URLS: %v", err)
+	}
+	if proxy.Size() > 1 {
+		log.Printf("session-broker: %d SSH proxy instances: a ticket is issued by one, in turn; a termination is confirmed by all of them or by none", proxy.Size())
+	}
 
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy).
 		// A granted session ended: the Vault rotates the account if it is post_use (ADR-0037).
@@ -201,7 +216,7 @@ func main() {
 	log.Printf("  -> authorization: %s", authzURL)
 	log.Printf("  -> vault:         %s", vaultURL)
 	log.Printf("  -> audit:         %s", auditURL)
-	log.Printf("  -> ssh-proxy:     %s", sshProxyURL)
+	log.Printf("  -> ssh-proxy:     %s", strings.Join(sshProxyURLs, ", "))
 	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
 }
 
@@ -240,4 +255,48 @@ func expireEvery(svc *application.SessionBrokerService, every time.Duration) {
 			failing = false
 		}
 	}
+}
+
+// proxyURLs reads the SSH proxy instances (ADR-0046): SSH_PROXY_URLS, a comma-separated list of
+// 1 to 16 distinct URLs, each one instance addressed directly; or SSH_PROXY_URL, one instance;
+// never both. Anything else stops the Broker: a list it read wrong would leave an instance
+// it never revokes at.
+func proxyURLs(def string) []string {
+	list, one := os.Getenv("SSH_PROXY_URLS"), os.Getenv("SSH_PROXY_URL")
+	switch {
+	case list != "" && one != "":
+		log.Fatalf("session-broker: SSH_PROXY_URL and SSH_PROXY_URLS are both set: give every instance in SSH_PROXY_URLS, and only there")
+	case list == "" && one != "":
+		return []string{one}
+	case list == "":
+		return []string{def}
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, raw := range strings.Split(list, ",") {
+		u := strings.TrimSpace(raw)
+		parsed, err := url.Parse(u)
+		if u == "" || err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			log.Fatalf("session-broker: SSH_PROXY_URLS must be URLs of the proxy instances separated by commas (https://host:port,…); %q is not one", u)
+		}
+		key := strings.TrimSuffix(strings.ToLower(parsed.Scheme+"://"+parsed.Host+parsed.Path), "/")
+		if seen[key] {
+			log.Fatalf("session-broker: SSH_PROXY_URLS names %s twice: each instance once", hostOf(u))
+		}
+		seen[key] = true
+		out = append(out, u)
+	}
+	if len(out) > infrastructure.MaxProxyInstances {
+		log.Fatalf("session-broker: SSH_PROXY_URLS names %d instances, at most %d: every termination asks each of them", len(out), infrastructure.MaxProxyInstances)
+	}
+	return out
+}
+
+// hostOf is the scheme and host of an internal URL, which is what the log says of an instance.
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "?"
+	}
+	return u.Scheme + "://" + u.Host
 }

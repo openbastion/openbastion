@@ -57,3 +57,13 @@ Les limites **par adresse** (login et requêtes authentifiées) ont besoin de l'
 - **Le /64 IPv6 est un choix, non réglable** : les utilisateurs d'un même /64 (un réseau local) partagent un seau.
 - **Par processus** : *N* réplicas, *N* fois le budget.
 - **Les refus par adresse ne sont ni dans l'audit ni dans le journal du Gateway** (une ligne par refus serait une ligne par requête pour qui change d'adresse) ; ils sont dans le **journal d'accès de Traefik**, qui connaît l'adresse.
+
+## Plusieurs instances du proxy SSH (ADR-0046)
+
+| Service | Variable | Rôle |
+|---|---|---|
+| SSH Proxy | `SSH_PUBLIC_ENDPOINT` | L'adresse (`hôte:port`) où les opérateurs joignent **cette** instance ; elle est rendue avec chaque ticket. Absente : `127.0.0.1:SSH_PORT`. Illisible, ou port hors de 1 à 65535 : le proxy refuse de démarrer. |
+| Session Broker | `SSH_PROXY_URLS` | Les URL de contrôle de toutes les instances (`https://ssh-proxy-0:8085,https://ssh-proxy-1:8085`), chacune adressée directement, 1 à 16, sans doublon. Remplace `SSH_PROXY_URL` (une instance) ; les deux ensemble : le Broker refuse de démarrer. |
+
+Un ticket ne vaut que sur l'instance qui l'a émis : **ne mettez pas d'équilibreur TCP devant les ports SSH**, donnez à chaque instance son adresse. Le Broker répartit les tickets à tour de rôle et passe une instance qui ne répond pas. Une terminaison doit être confirmée par **toutes** les instances : une seule injoignable, et `DELETE /sessions/{id}` répond `503` sans rien terminer. Une instance définitivement arrêtée se retire de `SSH_PROXY_URLS`, Broker redémarré : c'est à vous de savoir qu'elle est arrêtée, le Broker ne peut pas le distinguer d'une coupure réseau.
+

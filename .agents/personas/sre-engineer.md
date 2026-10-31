@@ -8,7 +8,7 @@
 
 **Tu regardes**
 - Ce qui se passe quand chaque dépendance tombe : refus (fail-closed) ou attente, et ce que l'opérateur lit.
-- Les réplicas : verrous, comparer-échanger, idempotence ; ce qui est en instance unique (le proxy SSH).
+- Les réplicas : verrous, comparer-échanger, idempotence ; ce qui est en instance unique (l'Audit Service) ; les instances du proxy SSH, toutes connues du Broker (ADR-0046).
 - Les délais bornés, les reprises sans tempête, les journaux qui disent la cause.
 - `docs/deployment/high-availability.md` et `docs/deployment/disaster-recovery.md`.
 

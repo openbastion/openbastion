@@ -10,7 +10,7 @@ Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source déta
 | 2 | ~~Réessayer une rotation après usage échouée~~ — **fait** (ADR-0044) | ~~un échec laisse l'ancien secret en place jusqu'à la prochaine fin de session~~ | ADR-0044 |
 | 3 | ~~Relayer le motif d'un `409` du Vault à l'opérateur~~ — **fait** (ADR-0042) | ~~`connect` dit « authorize-scope: status 409 » sans dire pourquoi~~ | ADR-0042 |
 | 3 bis | ~~Revoir les autres routes publiques ; refuser dès `POST /sessions` un compte non épinglé~~ — **fait** (ADR-0043) | ~~les routes d'administration relaient encore le texte des refus d'écriture du Vault~~ | ADR-0043 |
-| 4 | Proxy SSH en plusieurs instances | la révocation n'atteint qu'une instance | ADR-0018, `architecture/known-gaps.md` |
+| 4 | ~~Proxy SSH en plusieurs instances~~ — **fait** (ADR-0046) | ~~la révocation n'atteint qu'une instance~~ ; reste : une instance injoignable empêche toute terminaison | ADR-0046 |
 | 5 | Pipeline de CI | aucune porte automatique aujourd'hui | `settings/ci-cd.yaml` |
 | 6 | Certificats d'hôte SSH (autorité) à côté de l'épinglage | une seule clé par compte | ADR-0039 |
 | 7 | Vrai KMS/HSM à la place de `LocalKMS` | la KEK est locale | NOTES (prochains incréments) |

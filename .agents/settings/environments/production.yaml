@@ -7,7 +7,7 @@ production:
   pki: autorité hors des services (volume pki-ca, job pki) ; chaque service ne lit que sa propre identité
   databases: une base PostgreSQL par service à état
   network: gateway et proxy SSH liés à 127.0.0.1 derrière un reverse proxy qui termine le TLS ; TRUSTED_PROXY_CIDRS réglé
-  ssh_proxy: instance unique (la révocation n'atteint qu'une instance, architecture/known-gaps.md)
+  ssh_proxy: une ou plusieurs instances, toutes dans SSH_PROXY_URLS du Broker, chacune avec son SSH_PUBLIC_ENDPOINT, sans équilibreur devant les ports SSH (ADR-0046)
   host_keys: chaque compte privilégié épinglé à la clé relevée sur sa cible (ADR-0039)
   audit: AUDIT_CHAIN_KEY_HEX et AUDIT_ANCHOR_FILE obligatoires avec une base ; rétention optionnelle (ADR-0032)
   guides: [docs/deployment/, docs/administration/, docs/security/, docs/deployment/high-availability.md]

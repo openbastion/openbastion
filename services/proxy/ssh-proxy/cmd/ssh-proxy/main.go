@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -38,6 +39,10 @@ func main() {
 	}
 
 	sshPort := mustEnv("SSH_PORT", "2222")
+	// The address operators reach THIS instance at (ADR-0046): a ticket is good here and nowhere
+	// else, so with several instances each says its own. Read first: a wrong one stops the proxy
+	// before anything else is done.
+	endpoint := publicEndpoint(sshPort)
 	httpPort := mustEnv("PORT", "8085")
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
@@ -166,7 +171,8 @@ func main() {
 		}
 	}()
 
-	httpServer := interfaces.NewHTTPServer(pending, "127.0.0.1:"+sshPort)
+	log.Printf("ssh-proxy: tickets issued here send the operator to %s (SSH_PUBLIC_ENDPOINT)", endpoint)
+	httpServer := interfaces.NewHTTPServer(pending, endpoint)
 	httpServer.Admit = listener.Probe // refuse before issuing a ticket, not after
 	// The same registry as the listener's: the route that revokes a session and the
 	// pipeline that serves it must talk about the same connections (ADR-0018).
@@ -196,4 +202,20 @@ func main() {
 			log.Printf("ssh-proxy: could not flush recorded commands before exit: %v (%d lost in total)", err, asyncRecorder.Dropped())
 		}
 	}
+}
+
+// publicEndpoint reads SSH_PUBLIC_ENDPOINT, host:port with a port from 1 to 65535; absent, the
+// loopback address of the SSH listener, as before ADR-0046. Anything else stops the proxy: an
+// operator sent to an address that is not this instance holds a ticket that opens nothing.
+func publicEndpoint(sshPort string) string {
+	v := os.Getenv("SSH_PUBLIC_ENDPOINT")
+	if v == "" {
+		return "127.0.0.1:" + sshPort
+	}
+	host, port, err := net.SplitHostPort(v)
+	n, perr := strconv.Atoi(port)
+	if err != nil || host == "" || perr != nil || n < 1 || n > 65535 {
+		log.Fatalf("ssh-proxy: SSH_PUBLIC_ENDPOINT must be host:port (the address operators reach this instance at), got %q — refusing to start", v)
+	}
+	return v
 }
