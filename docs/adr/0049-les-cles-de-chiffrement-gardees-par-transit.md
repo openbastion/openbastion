@@ -1,0 +1,38 @@
+# ADR-0049 — Les clés de chiffrement du Vault et du Command Recorder sont gardées par le moteur Transit d'OpenBao, et les anciennes lignes restent lisibles
+
+**Contexte**
+Le Password Vault scelle chaque secret, et le Command Recorder enveloppe la clé de données de chaque enregistrement, avec une clé AES-256 que le processus tient en mémoire : `KMS_KEY_HEX`, tirée par `init.sh` et gardée hors de la base (`LocalKMS`, `LocalKEK`). Qui lit la variable d'environnement d'un de ces processus — ou son disque, ou une sauvegarde de sa configuration — et la base, a **tous** les secrets et **tous** les enregistrements. `docs/security/known-limitations.md` et le backlog (point 7) le notent : « la KEK est locale ». Les deux interfaces ont été écrites pour être remplacées (`Encryptor`, `KeyWrapper`), mais aucune ne sait relire une ligne chiffrée sous une **autre** clé : le Recorder refuse un `kek_id` qui n'est pas le sien, le Vault déchiffre sans regarder `encryption_key_id`. Changer de clé aujourd'hui rendrait illisible tout ce qui existe.
+
+**Décision** *(acceptée par Bony Kiss le 31 octobre 2026 — « Transit OpenBao/Vault », parmi AWS KMS, PKCS#11 et « reporter » ; la forme est renversable)*
+
+1. **La clé maîtresse vit dans Transit** (OpenBao, ou HashiCorp Vault : même API), et n'en sort jamais. Le Vault et le Recorder lui envoient des **clés de données** à envelopper et à désenvelopper, rien d'autre : ni secret, ni enregistrement. Le Vault passe donc lui aussi à l'enveloppe — une clé de données neuve par secret scellé — pour que le texte d'un mot de passe ne quitte jamais son processus.
+2. **Un client écrit avec la stdlib**, `pkg/transit` : `encrypt` et `decrypt` d'une clé nommée, en-tête `X-Vault-Token`, données associées (`associated_data`) obligatoires. `https`, ou `http` vers une adresse de bouclage (développement) ; une autorité propre possible (`TRANSIT_CA_FILE`) ; 5 s par appel ; jamais le jeton dans une erreur ni un journal.
+3. **Chaque clé de données est liée à ce qu'elle protège** par les données associées : pour le Recorder, l'identifiant de clé et la session (comme aujourd'hui) ; pour le Vault, une étiquette du service. Une clé enveloppée déplacée vers une autre ligne ne se désenveloppe pas.
+4. **La configuration** : `TRANSIT_ADDR`, `TRANSIT_KEY` et `TRANSIT_TOKEN_FILE` vont ensemble (`TRANSIT_MOUNT`, `transit` par défaut ; `TRANSIT_CA_FILE`, facultatif). Le jeton est lu **dans un fichier**, jamais dans une variable d'environnement, et un fichier lisible par le groupe ou les autres est refusé. Une configuration incomplète ou illisible arrête le service ; au démarrage, un aller-retour réel (envelopper puis désenvelopper une valeur d'essai) prouve que la clé et le jeton servent, sinon le service refuse de démarrer.
+5. **Un trousseau, pour que rien ne devienne illisible** : chaque ligne garde l'identifiant de la clé qui l'a protégée (`encryption_key_id`, `kek_id`, déjà en base) ; on scelle toujours avec la clé **courante**, et on ouvre avec la clé que la ligne **nomme**. Avec Transit configuré, `KMS_KEY_HEX`, s'il est encore donné, devient une clé **précédente, en lecture seule** : les lignes d'avant se lisent, les nouvelles vont à Transit. Une ligne qui nomme une clé que le service ne tient pas est refusée, avec un message qui le dit. L'identifiant d'une clé Transit est `transit:<montage>/<clé>` : il ne change pas avec l'adresse du serveur, et une rotation de la clé dans Transit (`bao write -f transit/keys/<clé>/rotate`) n'invalide rien de ce qui existe.
+6. **Fail-closed** : Transit injoignable, jeton refusé, clé absente, ou une ligne qui nomme une clé que le service ne tient pas — rien n'est scellé, rien n'est ouvert, l'appel échoue (`503` à qui l'a fait, cause au journal ; `domain.ErrKeysUnavailable`), et le service ne démarre pas s'il ne peut pas faire son aller-retour.
+
+**Conséquences**
+- (+) **Mesuré, avant** (sur `02e7ad8`, binaire du Vault construit dans un worktree, vrai OpenBao) : les variables `TRANSIT_*` sont ignorées — sans `KMS_KEY_HEX`, le Vault refuse de démarrer ; avec, il démarre sans un mot et scelle tout sous la clé locale.
+- (+) **Mesuré, après**, contre un vrai OpenBao 2.7.2 en conteneur, des processus réels et une vraie PostgreSQL (`test/integration/transit_flow_test.go`) :
+  - une configuration incomplète, un jeton lisible par d'autres, un jeton que Transit refuse, une clé que le jeton ne peut pas utiliser, une clé absente, `http` vers un hôte distant : le Vault **et** le Recorder refusent de démarrer, en nommant Transit, sans le jeton dans leur sortie ;
+  - avec Transit et `KMS_KEY_HEX` : un secret scellé avant nomme `local-dev-key-v1` et se lit encore ; un nouveau nomme `transit:transit/openbastion-vault`, sa matière commence par `OBT1` et ne contient pas le secret ;
+  - Transit en pause : `fetch-credential` d'un secret scellé sous Transit répond `503`, l'enregistrement d'un compte `503` ; le secret scellé sous la clé locale se lit encore ; Transit revenu, tout se lit, sans redémarrage ;
+  - avec Transit seul : le secret d'avant est refusé (`503`, une clé manque, pas un refus de l'appelant), le nouveau se lit ;
+  - un jeton limité à `encrypt`/`decrypt` sur sa clé est refusé (`403`) sur une autre clé ;
+  - le Recorder démarre avec Transit après son aller-retour.
+- (+) **Mesuré en unitaire** : `pkg/transit` (6 tests, contre un faux Transit qui chiffre pour de vrai) ; l'enveloppe du Vault (le secret ne va jamais à Transit, seule une clé de données neuve de 32 octets, une par secret ; une enveloppe altérée, tronquée ou d'un autre Transit ne s'ouvre pas ; Transit en panne = `ErrKeysUnavailable`) et le trousseau ; sur PostgreSQL, le passage du Recorder de la clé locale à Transit sans qu'un enregistrement devienne illisible.
+- (+) **19 mutations, 19 tuées par un test.**
+- (+) **Trouvé en chemin** : la route interne `fetch-credential` rendait `403` pour toute erreur, en recopiant son texte : une clé indisponible passait pour un refus, et l'adresse de Transit partait dans la réponse. Une panne des clés est désormais `ErrKeysUnavailable` : `503`, un message fixe, la cause au seul journal.
+- (−) **Transit devient une dépendance de disponibilité** de tout accès privilégié (le Vault ne livre plus aucun secret sans lui) et de tout enregistrement : il doit être au moins aussi disponible que le Vault (tier 0).
+- (−) Le jeton Transit est un secret de plus, sur disque : qui lit son fichier **et** la base, **pendant que** le jeton est valable, lit encore tout. Le gain est qu'un jeton se révoque, se limite (une politique `encrypt`/`decrypt` sur une seule clé) et s'audite dans OpenBao, et que la clé, elle, ne se copie pas.
+- (−) Pas de renouvellement du jeton par OpenBastion ni d'authentification AppRole : l'exploitant donne un jeton périodique ou le renouvelle lui-même.
+- (−) Les lignes d'avant restent sous `KMS_KEY_HEX` tant qu'elles ne sont pas réécrites : pas de ré-enveloppement en masse dans cet incrément.
+- (−) Un appel réseau par secret scellé ou ouvert, et par clé d'enregistrement.
+
+**Alternatives envisagées**
+- **AWS KMS** (SDK officiel, ou SigV4 à la main) : une dépendance importante ou un code de signature à maintenir, et un déploiement lié à AWS.
+- **HSM par PKCS#11** : cgo et une bibliothèque native, ce qui casse les images statiques distroless (ADR-0033).
+- **Chiffrer le secret directement par Transit** (sans enveloppe côté Vault) : plus simple, mais le texte de chaque mot de passe traverserait le réseau jusqu'au serveur Transit.
+- **Basculer sans trousseau** : tout ce qui a été chiffré avant deviendrait illisible le jour de la bascule.
+- **Reporter** : écarté par Bony Kiss.

@@ -294,6 +294,13 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 	}
 	d, err := s.svc.FetchCredential(r.Context(), req.ScopeToken, callingProxy)
 	if err != nil {
+		if errors.Is(err, domain.ErrKeysUnavailable) {
+			// A dependency, not a refusal (ADR-0049): the cause — an address, a status — stays
+			// in this log.
+			log.Printf("password-vault: fetch-credential: %v", err)
+			http.Error(w, "the keys that seal the secrets are unavailable: nothing was opened, try again shortly", http.StatusServiceUnavailable)
+			return
+		}
 		status := http.StatusForbidden
 		if errors.Is(err, application.ErrNoHostKey) {
 			status = http.StatusConflict

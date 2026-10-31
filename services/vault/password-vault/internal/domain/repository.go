@@ -12,6 +12,11 @@ import (
 // on a specific storage engine's error type.
 var ErrNotFound = errors.New("not found")
 
+// ErrKeysUnavailable: the keys that seal the secrets cannot be reached (Transit, ADR-0049) — a
+// failure of a dependency, never a refusal: nothing was sealed nor opened, and the same call may
+// succeed once they are back.
+var ErrKeysUnavailable = errors.New("the keys that seal the secrets are unavailable")
+
 // ErrAlreadyExists: an account with this id — or this name on this target — exists already
 // (ADR-0043). Both stores return it; the database's own message never reaches a client.
 var ErrAlreadyExists = errors.New("an account with this id, or with this name on this target, already exists")

@@ -13,7 +13,7 @@ Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source déta
 | 4 | ~~Proxy SSH en plusieurs instances~~ — **fait** (ADR-0046) | ~~la révocation n'atteint qu'une instance~~ ; reste : une instance injoignable empêche toute terminaison | ADR-0046 |
 | 5 | ~~Pipeline de CI~~ — **fait** (ADR-0047) | ~~aucune porte automatique aujourd'hui~~ ; reste : exiger ses jobs dans la protection de `main`, `govulncheck`/`npm audit` | ADR-0047 |
 | 6 | ~~Certificats d'hôte SSH (autorité) à côté de l'épinglage~~ — **fait** (ADR-0048) | ~~une seule clé par compte~~ ; reste : pas de liste de révocation (KRL), une autorité par compte | ADR-0048 |
-| 7 | Vrai KMS/HSM à la place de `LocalKMS` | la KEK est locale | NOTES (prochains incréments) |
+| 7 | ~~Vrai KMS/HSM à la place de `LocalKMS`~~ — **fait** (ADR-0049, Transit d'OpenBao) | ~~la KEK est locale~~ ; reste : AppRole et renouvellement du jeton, ré-enveloppement en masse | ADR-0049 |
 | 8 | gRPC à la place de HTTP/JSON | écart assumé, réseau du sandbox | `architecture/transport-and-contracts.md` |
 | 9 | Images de base épinglées par empreinte | reproductible pour le code, pas pour les images | NOTES (ADR-0033) |
 | 10 | Feuille de route v1.0 (RDP, Workflow/Approval Engine, MFA natif…) | hors MVP | `roadmap.md` |

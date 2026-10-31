@@ -40,6 +40,9 @@ func OpenPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
 type PostgresStore struct {
 	db  *sql.DB
 	kek KeyWrapper
+	// previous are the keys held for reading only (ADR-0049): recordings whose key was wrapped
+	// under one of them stay readable; nothing new is wrapped under them.
+	previous map[string]KeyWrapper
 }
 
 // NewPostgresStore returns a store that seals every command under a
@@ -47,8 +50,17 @@ type PostgresStore struct {
 // left by a version of this service that predated encryption are sealed and
 // their plaintext column dropped — "nothing is stored in the clear" is made
 // true by construction, not by hoping no old row remains.
-func NewPostgresStore(ctx context.Context, db *sql.DB, kek KeyWrapper) (*PostgresStore, error) {
-	s := &PostgresStore{db: db, kek: kek}
+//
+// previous are earlier keys, held to read what they wrapped (ADR-0049); none may share an id
+// with kek or with each other.
+func NewPostgresStore(ctx context.Context, db *sql.DB, kek KeyWrapper, previous ...KeyWrapper) (*PostgresStore, error) {
+	s := &PostgresStore{db: db, kek: kek, previous: map[string]KeyWrapper{}}
+	for _, p := range previous {
+		if p.KeyID() == kek.KeyID() || s.previous[p.KeyID()] != nil {
+			return nil, fmt.Errorf("the key %q is given twice", p.KeyID())
+		}
+		s.previous[p.KeyID()] = p
+	}
 	if err := s.sealLegacyPlaintext(ctx); err != nil {
 		return nil, fmt.Errorf("sealing rows stored before encryption: %w", err)
 	}
@@ -111,12 +123,17 @@ func (s *PostgresStore) loadDEK(ctx context.Context, q querier, sessionID string
 	if err != nil {
 		return nil, false, err
 	}
+	kek := s.kek
 	if kekID != s.kek.KeyID() {
-		return nil, false, fmt.Errorf("the recording key of session %q was wrapped under KEK %q, but this process holds %q", sessionID, kekID, s.kek.KeyID())
+		p, held := s.previous[kekID]
+		if !held {
+			return nil, false, fmt.Errorf("the recording key of session %q was wrapped under KEK %q, which this process does not hold (it holds %q)", sessionID, kekID, s.kek.KeyID())
+		}
+		kek = p
 	}
-	dek, err = s.kek.Unwrap(wrapped, dekAAD(kekID, sessionID))
+	dek, err = kek.Unwrap(wrapped, dekAAD(kekID, sessionID))
 	if err != nil {
-		return nil, false, fmt.Errorf("cannot unwrap the recording key of session %q (wrong KMS_KEY_HEX, or the row was altered)", sessionID)
+		return nil, false, fmt.Errorf("cannot unwrap the recording key of session %q under %q (the wrong key, Transit unreachable, or the row was altered): %w", sessionID, kekID, err)
 	}
 	return dek, true, nil
 }

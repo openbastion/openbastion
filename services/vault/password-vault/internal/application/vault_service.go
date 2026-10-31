@@ -14,10 +14,13 @@ import (
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 )
 
+// Encryptor seals secrets under the current key, and opens each under the key that sealed it
+// (ADR-0049): keyID is what the version stored next to its material. A key the encryptor does
+// not hold is an error, never a guess.
 type Encryptor interface {
 	KeyID() string
 	Seal(plaintext []byte) ([]byte, error)
-	Open(ciphertext []byte) ([]byte, error)
+	Open(keyID string, ciphertext []byte) ([]byte, error)
 }
 
 // AuthorizationClient is the port to Authorization.CheckAccess. Write
@@ -233,7 +236,7 @@ func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingP
 	if err != nil {
 		return Delivered{}, err
 	}
-	plaintext, err := s.kms.Open(version.EncryptedMaterial)
+	plaintext, err := s.kms.Open(version.EncryptionKeyID, version.EncryptedMaterial)
 	if err != nil {
 		return Delivered{}, err
 	}

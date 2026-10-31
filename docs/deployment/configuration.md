@@ -67,3 +67,7 @@ Les limites **par adresse** (login et requêtes authentifiées) ont besoin de l'
 
 Un ticket ne vaut que sur l'instance qui l'a émis : **ne mettez pas d'équilibreur TCP devant les ports SSH**, donnez à chaque instance son adresse. Le Broker répartit les tickets à tour de rôle et passe une instance qui ne répond pas. Une terminaison doit être confirmée par **toutes** les instances : une seule injoignable, et `DELETE /sessions/{id}` répond `503` sans rien terminer. Une instance définitivement arrêtée se retire de `SSH_PROXY_URLS`, Broker redémarré : c'est à vous de savoir qu'elle est arrêtée, le Broker ne peut pas le distinguer d'une coupure réseau.
 
+## Clés de chiffrement : Transit (ADR-0049)
+
+Le Password Vault et le Command Recorder peuvent faire garder leur clé maîtresse par le moteur Transit d'OpenBao (ou de HashiCorp Vault) plutôt que par `KMS_KEY_HEX` : `TRANSIT_ADDR`, `TRANSIT_KEY`, `TRANSIT_TOKEN_FILE` (fichier `0600`), et en option `TRANSIT_MOUNT` et `TRANSIT_CA_FILE`. La mise en place, la politique minimale du jeton, la migration depuis la clé locale et le comportement en panne sont décrits dans [`../security/key-management.md`](../security/key-management.md).
+

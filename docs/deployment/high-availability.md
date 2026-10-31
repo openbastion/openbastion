@@ -59,7 +59,7 @@ Les proxies protocolaires détiennent un état qu'aucun des autres composants n'
 
 | Niveau de criticité | Composants | RTO cible | RPO cible |
 |---|---|---|---|
-| Tier 0 — bloquant | Gateway, Authn, Authz, Broker, Vault, **Command Recorder** (ADR-0008), PostgreSQL, **émission des certificats de service** (ADR-0010) | < 1 min (bascule automatisée) | 0 (réplication synchrone ou quasi-synchrone) |
+| Tier 0 — bloquant | Gateway, Authn, Authz, Broker, Vault, **Command Recorder** (ADR-0008), PostgreSQL, **émission des certificats de service** (ADR-0010), **Transit** quand il garde les clés (ADR-0049) | < 1 min (bascule automatisée) | 0 (réplication synchrone ou quasi-synchrone) |
 | Tier 1 — dégradable court terme | Proxies, Audit/Kafka | < 5 min | < 1 min |
 | Tier 2 — dégradable | Search Engine, Reporting, Notification | < 30 min | best-effort |
 

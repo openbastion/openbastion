@@ -32,3 +32,8 @@ replace golang.org/x/sys => github.com/golang/sys v0.21.0
 require github.com/openbastion/openbastion/pkg/hostkey v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/hostkey => ../../../pkg/hostkey
+
+// Clés gardées par Transit (ADR-0049). Un replace local explicite, comme pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/transit v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/transit => ../../../pkg/transit

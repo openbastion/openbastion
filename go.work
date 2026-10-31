@@ -8,6 +8,7 @@ use (
 	./pkg/refusalbudget
 	./pkg/webhook
 	./pkg/hostkey
+	./pkg/transit
 	./services/access/api-gateway
 	./services/access/authentication
 	./services/access/authorization

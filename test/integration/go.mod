@@ -37,3 +37,8 @@ replace github.com/openbastion/openbastion/pkg/mtls => ../../pkg/mtls
 require github.com/openbastion/openbastion/pkg/migrate v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/migrate => ../../pkg/migrate
+
+// Le client Transit, essayé contre un vrai OpenBao (ADR-0049).
+require github.com/openbastion/openbastion/pkg/transit v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/transit => ../../pkg/transit

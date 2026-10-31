@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/infrastructure"
@@ -37,20 +38,7 @@ func main() {
 	dsn := os.Getenv("DATABASE_URL")
 	kmsKeyHex := os.Getenv("KMS_KEY_HEX")
 
-	// Fail closed, not open: a random per-process key (NewLocalKMS's
-	// fallback) silently makes every secret unreadable the moment this
-	// process restarts, which is exactly the failure mode PostgreSQL
-	// persistence exists to avoid. A real deployment generates this once
-	// (`openssl rand -hex 32`) and keeps it outside the database — see
-	// infrastructure.NewLocalKMSFromHexKey's doc comment and
-	// NOTES_SANDBOX.md for the bug this closes.
-	if dsn != "" && kmsKeyHex == "" {
-		log.Fatalf("password-vault: DATABASE_URL is set but KMS_KEY_HEX is not — refusing to start with a random, per-process encryption key that would make every secret unreadable after a restart. Generate one with `openssl rand -hex 32` and set KMS_KEY_HEX.")
-	}
-	kms, err := infrastructure.NewLocalKMSFromHexKey(kmsKeyHex)
-	if err != nil {
-		log.Fatalf("kms: %v", err)
-	}
+	kms := keyring(dsn, kmsKeyHex)
 
 	var accounts domain.AccountRepository
 	var secrets domain.SecretRepository
@@ -166,4 +154,51 @@ func rotateEvery(svc *application.VaultService, every time.Duration) {
 			log.Printf("password-vault: the scheduled rotation sweep stopped: %v", err)
 		}
 	}
+}
+
+// keyring builds what seals the secrets (ADR-0049). With Transit configured (TRANSIT_ADDR,
+// TRANSIT_KEY, TRANSIT_TOKEN_FILE), new secrets are sealed under it, after a real round trip
+// proves the key and the token work; KMS_KEY_HEX, if still given, opens what was sealed before
+// and seals nothing. Without Transit, KMS_KEY_HEX is the key, as before — required with a
+// database: a random per-process key would make every secret unreadable after a restart.
+func keyring(dsn, kmsKeyHex string) *infrastructure.Keyring {
+	client, configured, err := transit.FromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("password-vault: %v — refusing to start", err)
+	}
+	if !configured {
+		if dsn != "" && kmsKeyHex == "" {
+			log.Fatalf("password-vault: DATABASE_URL is set but neither Transit (TRANSIT_ADDR, TRANSIT_KEY, TRANSIT_TOKEN_FILE) nor KMS_KEY_HEX is — refusing to start with a random, per-process encryption key that would make every secret unreadable after a restart")
+		}
+		local, err := infrastructure.NewLocalKMSFromHexKey(kmsKeyHex)
+		if err != nil {
+			log.Fatalf("kms: %v", err)
+		}
+		ring, _ := infrastructure.NewKeyring(local)
+		log.Printf("password-vault: secrets are sealed under the local key %s (KMS_KEY_HEX; no Transit configured)", local.KeyID())
+		return ring
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*transit.Timeout)
+	defer cancel()
+	if err := client.Probe(ctx); err != nil {
+		log.Fatalf("password-vault: Transit cannot wrap and unwrap with %s: %v — refusing to start", client.KeyID(), err)
+	}
+	current := infrastructure.NewTransitKMS(client)
+	var previous []infrastructure.Sealer
+	if kmsKeyHex != "" {
+		local, err := infrastructure.NewLocalKMSFromHexKey(kmsKeyHex)
+		if err != nil {
+			log.Fatalf("kms: %v", err)
+		}
+		previous = append(previous, local)
+	}
+	ring, err := infrastructure.NewKeyring(current, previous...)
+	if err != nil {
+		log.Fatalf("password-vault: %v", err)
+	}
+	log.Printf("password-vault: secrets are sealed under %s at %s (Transit; the token is not logged)", current.KeyID(), client.Where())
+	for _, id := range ring.PreviousKeyIDs() {
+		log.Printf("password-vault: secrets sealed under %s are still read (KMS_KEY_HEX); nothing new is sealed under it", id)
+	}
+	return ring
 }

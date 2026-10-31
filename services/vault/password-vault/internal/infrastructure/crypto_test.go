@@ -17,7 +17,7 @@ func TestLocalKMS_SealThenOpen_RoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	opened, err := kms.Open(sealed)
+	opened, err := kms.Open(kms.KeyID(), sealed)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestNewLocalKMS_GeneratesADifferentKeyEachTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	if _, err := kms2.Open(sealed); err == nil {
+	if _, err := kms2.Open(kms2.KeyID(), sealed); err == nil {
 		t.Fatal("expected a second, independently generated LocalKMS to be unable to open the first's sealed material")
 	}
 }
@@ -72,7 +72,7 @@ func TestNewLocalKMSFromHexKey_SameKeyAcrossInstancesCanDecryptEachOthers(t *tes
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	opened, err := kms2.Open(sealed)
+	opened, err := kms2.Open(kms2.KeyID(), sealed)
 	if err != nil {
 		t.Fatalf("expected the second instance, built from the same hex key, to open the first's sealed material: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestNewLocalKMSFromHexKey_EmptyKeyFallsBackToRandomPerInstance(t *testing.T
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	if _, err := kms2.Open(sealed); err == nil {
+	if _, err := kms2.Open(kms2.KeyID(), sealed); err == nil {
 		t.Fatal("expected two empty-key instances to each get their own random key, unable to open one another's material")
 	}
 }

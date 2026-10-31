@@ -58,3 +58,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0046](0046-plusieurs-instances-du-proxy-ssh-le-broker-les-connait-toutes.md) | Plusieurs instances du proxy SSH : le Broker les connaît toutes, émet un ticket chez l'une, et fait révoquer chez toutes | Accepté |
 | [ADR-0047](0047-une-ci-github-actions-qui-rejoue-la-verification-complete.md) | Une CI GitHub Actions qui rejoue la vérification complète, sur des actions et une image épinglées par empreinte | Accepté |
 | [ADR-0048](0048-une-cible-peut-etre-reconnue-par-une-autorite-de-certificats-ssh.md) | Une cible peut être reconnue par une autorité de certificats SSH épinglée au compte, à la place de sa clé | Accepté |
+| [ADR-0049](0049-les-cles-de-chiffrement-gardees-par-transit.md) | Les clés de chiffrement du Vault et du Command Recorder sont gardées par le moteur Transit d'OpenBao, et les anciennes lignes restent lisibles | Accepté |

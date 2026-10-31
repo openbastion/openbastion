@@ -22,3 +22,8 @@ replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/ref
 require github.com/openbastion/openbastion/pkg/migrate v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
+
+// Clé d'enveloppe gardée par Transit (ADR-0049). Un replace local explicite, comme pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/transit v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/transit => ../../../pkg/transit

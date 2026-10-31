@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/application"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/infrastructure"
@@ -60,16 +61,13 @@ func main() {
 		// we skipped encryption instead, store commands in the clear. Generate
 		// one once (`openssl rand -hex 32`), keep it outside the database, and
 		// give this service its OWN key, not the Password Vault's.
-		kek, err := infrastructure.NewLocalKEKFromHexKey(os.Getenv("KMS_KEY_HEX"))
-		if err != nil {
-			log.Fatalf("command-recorder: DATABASE_URL is set, so recordings are encrypted at rest and a key is required — refusing to start: %v", err)
-		}
+		kek, previous := recordingKeys()
 		ctx := context.Background()
 		db, err := infrastructure.OpenPostgres(ctx, dsn)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
-		store, err := infrastructure.NewPostgresStore(ctx, db, kek)
+		store, err := infrastructure.NewPostgresStore(ctx, db, kek, previous...)
 		if err != nil {
 			log.Fatalf("postgres store: %v", err)
 		}
@@ -118,4 +116,40 @@ func redactDSN(dsn string) string {
 		return dsn
 	}
 	return "***@" + dsn[at+1:]
+}
+
+// recordingKeys returns the key that wraps each session's data key, and the earlier keys held to
+// read what they wrapped (ADR-0049). With Transit configured (TRANSIT_ADDR, TRANSIT_KEY,
+// TRANSIT_TOKEN_FILE), the key lives there, after a real round trip proves the key and the token
+// work; KMS_KEY_HEX, if still given, reads the recordings wrapped before and wraps nothing.
+// Without Transit, KMS_KEY_HEX is the key, as before.
+func recordingKeys() (infrastructure.KeyWrapper, []infrastructure.KeyWrapper) {
+	client, configured, err := transit.FromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("command-recorder: %v — refusing to start", err)
+	}
+	hexKey := os.Getenv("KMS_KEY_HEX")
+	if !configured {
+		kek, err := infrastructure.NewLocalKEKFromHexKey(hexKey)
+		if err != nil {
+			log.Fatalf("command-recorder: DATABASE_URL is set, so recordings are encrypted at rest and a key is required (Transit, or KMS_KEY_HEX) — refusing to start: %v", err)
+		}
+		return kek, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*transit.Timeout)
+	defer cancel()
+	if err := client.Probe(ctx); err != nil {
+		log.Fatalf("command-recorder: Transit cannot wrap and unwrap with %s: %v — refusing to start", client.KeyID(), err)
+	}
+	var previous []infrastructure.KeyWrapper
+	if hexKey != "" {
+		local, err := infrastructure.NewLocalKEKFromHexKey(hexKey)
+		if err != nil {
+			log.Fatalf("command-recorder: %v", err)
+		}
+		previous = append(previous, local)
+		log.Printf("command-recorder: recordings wrapped under %s are still read (KMS_KEY_HEX); nothing new is wrapped under it", local.KeyID())
+	}
+	log.Printf("command-recorder: session keys are wrapped by %s at %s (Transit; the token is not logged)", client.KeyID(), client.Where())
+	return infrastructure.NewTransitKEK(client), previous
 }

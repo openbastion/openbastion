@@ -32,6 +32,7 @@ build:
 		./pkg/refusalbudget/... \
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
+		./pkg/transit/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
@@ -50,6 +51,7 @@ vet:
 	$(GO) vet ./pkg/refusalbudget/...
 	$(GO) vet ./pkg/webhook/...
 	$(GO) vet ./pkg/hostkey/...
+	$(GO) vet ./pkg/transit/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
 	$(GO) vet ./services/access/authorization/...
@@ -72,6 +74,7 @@ test:
 		./pkg/refusalbudget/... \
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
+		./pkg/transit/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \

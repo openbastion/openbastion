@@ -235,7 +235,7 @@ func (s *VaultService) settlePending(ctx context.Context, actorID string, accoun
 	if err != nil || pending == nil {
 		return err
 	}
-	newSecret, err := s.kms.Open(pending.EncryptedMaterial)
+	newSecret, err := s.kms.Open(pending.EncryptionKeyID, pending.EncryptedMaterial)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (s *VaultService) currentSecret(ctx context.Context, accountID string) ([]b
 	if err != nil {
 		return nil, err
 	}
-	return s.kms.Open(v.EncryptedMaterial)
+	return s.kms.Open(v.EncryptionKeyID, v.EncryptedMaterial)
 }
 
 // auditOutcome writes how a rotation ended. Best effort: the outcome has happened on the

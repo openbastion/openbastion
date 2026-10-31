@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 )
 
 // LocalKMS stands in for an external KMS/HSM (docs/security/secrets-management.md,
@@ -90,7 +92,14 @@ func (k *LocalKMS) Seal(plaintext []byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-func (k *LocalKMS) Open(ciphertext []byte) ([]byte, error) {
+// ErrUnknownKey: a version names a key this Vault does not hold (ADR-0049) — a configuration that
+// lacks a previous key, not a refusal of whoever asked: it is one of the keys being unavailable.
+var ErrUnknownKey = fmt.Errorf("%w: the secret was sealed under a key this Vault does not hold", domain.ErrKeysUnavailable)
+
+func (k *LocalKMS) Open(keyID string, ciphertext []byte) ([]byte, error) {
+	if keyID != k.keyID {
+		return nil, fmt.Errorf("%w: %q (this key is %q)", ErrUnknownKey, keyID, k.keyID)
+	}
 	block, err := aes.NewCipher(k.key[:])
 	if err != nil {
 		return nil, err

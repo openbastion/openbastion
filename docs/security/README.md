@@ -10,6 +10,7 @@ Pour le responsable sécurité, l'auditeur et le contributeur qui touche à une 
 | [`authentication.md`](authentication.md) | Authentification |
 | [`authorization-rbac-abac.md`](authorization-rbac-abac.md) | Autorisation (RBAC dans le MVP) |
 | [`secrets-management.md`](secrets-management.md) | Secrets : chiffrement, scopes, purge |
+| [`key-management.md`](key-management.md) | Clés de chiffrement : clé locale ou Transit d'OpenBao, mise en place, migration, pannes (ADR-0049) |
 | [`secure-development.md`](secure-development.md) | Sécurité applicative |
 | [`session-security.md`](session-security.md) | Couche proxy : clé d'hôte, enregistrement, révocation |
 | [`audit-integrity.md`](audit-integrity.md) | Intégrité de l'audit : chaîne à clé, ancrage, archives |
@@ -22,6 +23,6 @@ Pour le responsable sécurité, l'auditeur et le contributeur qui touche à une 
 | Page | État |
 |---|---|
 | `zero-trust.md` | Les principes sont dans [`../architecture/principles.md`](../architecture/principles.md), leur mise en œuvre dans [`network-security.md`](network-security.md) (ADR-0010). |
-| `cryptography.md`, `key-management.md`, `certificate-management.md` | Couverts aujourd'hui par [`secrets-management.md`](secrets-management.md), [`audit-integrity.md`](audit-integrity.md) et [`../deployment/tls-certificates.md`](../deployment/tls-certificates.md) ; la KEK est locale (`LocalKMS`), un vrai KMS/HSM est au backlog. |
+| `cryptography.md`, `certificate-management.md` | Couverts aujourd'hui par [`secrets-management.md`](secrets-management.md), [`audit-integrity.md`](audit-integrity.md) et [`../deployment/tls-certificates.md`](../deployment/tls-certificates.md) ; la KEK est locale (`LocalKMS`), un vrai KMS/HSM est au backlog. |
 | `security-testing.md` | Voir [`../development/testing.md`](../development/testing.md). |
 | `incident-response.md`, `security-advisories.md`, `vulnerability-disclosure.md` | Aucun avis publié ; la divulgation est décrite dans [`vulnerability-management.md`](vulnerability-management.md). |
