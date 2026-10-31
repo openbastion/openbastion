@@ -9,7 +9,7 @@ Aucune porte automatique ne protège `main` : la vérification complète (`.agen
 2. **Cinq jobs, la vérification complète sans le test Compose** :
    - `go` : `make build vet`, `gofmt -l` sur **tout** le dépôt (vide, sinon échec), `make test` sans base ;
    - `race` : `go test -race` sur tous les modules du `Makefile` ;
-   - `integration` : `make test-integration` sans base ;
+   - `integration` : les tests d'intégration sans base (`go test ./test/integration/...`, délai de 900 s : les 300 s de `make test-integration` sont trop courts pour toute la suite) ;
    - `postgres` : PostgreSQL 16 en service du job ; tests unitaires avec base (purgée avant), `make test-postgres`, puis l'intégration avec base (purgée avant) ;
    - `ui` : `make ui-test ui-build` (`npm ci` sur les lockfiles).
 3. **Les dépendances du workflow sont épinglées par empreinte**, jamais par une étiquette qu'on peut déplacer : `actions/checkout`, `actions/setup-go`, `actions/setup-node` (maintenues par GitHub) par empreinte de commit, l'étiquette en commentaire ; l'image `postgres:16` par son empreinte d'index. Les versions de Go (1.27.1) et de Node (24.21.0) sont celles où la vérification locale a été mesurée.
@@ -29,7 +29,7 @@ Aucune porte automatique ne protège `main` : la vérification complète (`.agen
   Les comptes d'intégration et de PostgreSQL sont ceux de la vérification locale du même jour (50, 76, 74).
 - (−) La CI dit ce qui casse ; elle n'empêche rien tant qu'une règle de protection de `main` n'exige pas ses jobs. Poser cette règle est un réglage du dépôt sur GitHub, qui revient au propriétaire.
 - (−) Les empreintes épinglées ne se mettent pas à jour seules : une version corrigée d'une action ou de l'image PostgreSQL attend qu'on change l'empreinte.
-- (−) Les tests à délai fixe (une vingtaine de scénarios sur processus réels, dont celui d'ADR-0034 vu échouer une fois sous charge) peuvent échouer sur un runner lent ; un échec isolé se relance, et sa sortie se garde.
+- (−) Les tests sur processus réels qui attendent avec un délai fixe (dont celui d'ADR-0034, vu échouer une fois sous charge) peuvent échouer sur un runner lent ; un échec isolé se relance, et sa sortie se garde.
 - (−) Pas de test Compose, pas d'analyse de vulnérabilités des dépendances (`govulncheck`, `npm audit`), pas de construction d'images : à décider.
 - (−) Les actions ont accès au code du dépôt pendant le job ; c'est le prix de les utiliser, réduit par l'épinglage et les permissions en lecture seule.
 
