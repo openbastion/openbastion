@@ -46,6 +46,10 @@ type Session struct {
 	DecidedBy string
 	DecidedAt *time.Time
 
+	// AfterUseOwed: the session ended while active, and the Vault has not yet been told
+	// (ADR-0044) — written with the end, cleared once the Vault has it.
+	AfterUseOwed bool
+
 	// BreakGlass marks a session that was authorised to run without the
 	// recording guarantee if the recorder is down (ADR-0009). It says what the
 	// session MAY do, not that it did: only the proxy knows whether the waiver

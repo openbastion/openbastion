@@ -123,6 +123,14 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
     signedIn(api, <Accounts />);
     expect((await screen.findByText("en échec (4)")).className).toContain("warn");
   });
+
+  it("shows an account that owes a rotation after use (ADR-0044)", async () => {
+    const acc = { id: "acc_1", name: "db", username: "app", targetHost: "db:22", protocol: "ssh", rotationPolicy: "post_use", createdAt: "2026-10-30T10:00:00Z",
+      hostKeyFingerprint: "SHA256:k", rotationOwedSince: "2026-10-31T09:00:00Z" };
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc, { ...acc, id: "acc_2", name: "web", rotationOwedSince: undefined }], page: 1, pageSize: 20, totalItems: 2 } } });
+    signedIn(api, <Accounts />);
+    expect((await screen.findAllByText("renouvellement dû")).length).toBe(1);
+  });
 });
 
 describe("Recording", () => {

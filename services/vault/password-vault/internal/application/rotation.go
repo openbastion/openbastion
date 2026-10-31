@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
 )
@@ -106,17 +108,46 @@ func (s *VaultService) RotateAs(ctx context.Context, actorID string, actorRoles 
 	return s.rotate(ctx, actorID, accountID, newSecret)
 }
 
-// RotateAfterUse rotates accountID because a session on it ended — only if its policy is
-// post_use; any other account is left alone. A system action: no actor.
-func (s *VaultService) RotateAfterUse(ctx context.Context, accountID string) (rotated bool, err error) {
+// AfterUse is what a rotation after use came to (ADR-0044).
+type AfterUse struct {
+	// Owed: the account owes a rotation for this use — recorded, so the Vault pays it, now or at
+	// a sweep. False for an account that is not post_use, or already rotated since endedAt.
+	Owed bool
+	// Rotated: it was paid at once.
+	Rotated bool
+}
+
+// RotateAfterUse is told that a session on accountID ended at endedAt. A post_use account owes a
+// rotation for it — unless it has rotated since, which makes a repeated notice (two Brokers, a
+// resend) harmless (ADR-0044). The debt is recorded BEFORE it is paid: once this returns
+// without error, the Vault — not the Broker — sees it through. A failed rotation is not an
+// error here: it is retried by RotateDue, counted and alerted on (ADR-0041). A system action:
+// no actor.
+func (s *VaultService) RotateAfterUse(ctx context.Context, accountID string, endedAt time.Time) (AfterUse, error) {
 	a, err := s.accounts.Get(ctx, accountID)
 	if err != nil {
-		return false, err
+		return AfterUse{}, err
 	}
 	if a.DisabledAt != nil || a.RotationPolicy != domain.RotationPostUse {
-		return false, nil
+		return AfterUse{}, nil
 	}
-	return true, s.rotate(ctx, "", accountID, nil)
+	if a.LastRotatedAt != nil && !a.LastRotatedAt.Before(endedAt) {
+		return AfterUse{}, nil // already rotated since that use
+	}
+	now := s.now()
+	if err := s.accounts.MarkRotationOwed(ctx, accountID, now); err != nil {
+		return AfterUse{}, fmt.Errorf("recording the rotation owed: %w", err)
+	}
+	taken, err := s.accounts.ClaimRotation(ctx, accountID, now, RotationRetryAfter)
+	if err != nil || !taken {
+		return AfterUse{Owed: true}, nil // recorded; a sweep — or whoever holds it — pays it
+	}
+	if err := s.rotate(ctx, "", accountID, nil); err != nil {
+		log.Printf("password-vault: rotation after use of account %s failed, tried again in %s: %v", accountID, RotationRetryAfter, err)
+		s.countFailure(ctx, accountID)
+		return AfterUse{Owed: true}, nil
+	}
+	return AfterUse{Owed: true, Rotated: true}, nil
 }
 
 func (s *VaultService) rotate(ctx context.Context, actorID, accountID string, newSecret []byte) error {

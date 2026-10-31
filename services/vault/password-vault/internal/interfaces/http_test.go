@@ -338,3 +338,42 @@ type denyAll struct{}
 func (denyAll) CheckAccess(context.Context, []string, string, string) (bool, string, error) {
 	return false, "no policy grants it", nil
 }
+
+// ADR-0044 over HTTP: rotate-after-use answers once the debt is recorded, says what came of it,
+// 404 for an account the Vault does not have; a repeated notice owes nothing.
+func TestRotateAfterUse_OverHTTP(t *testing.T) {
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"
+	kms, _ := infrastructure.NewLocalKMS()
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, allowAll{}).WithRotation(noTarget{}, &okAudit{})
+	if err := svc.OnboardPinned(context.Background(), []string{"vault-admin"}, application.OnboardInput{ID: "acc", Name: "acc", Username: "app", TargetHost: "10.0.0.1:22",
+		Protocol: "ssh", Policy: domain.RotationPostUse, InitialSecret: []byte("pw"), HostKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	srv := interfaces.NewHTTPServer(svc)
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/vault/v1/rotate-after-use", strings.NewReader(body)))
+		return rec
+	}
+	// No reconciliation account: the rotation fails, the debt stays — still a 200.
+	if rec := post(`{"accountId":"acc","sessionId":"s1","endedAt":"2026-10-31T10:00:00Z"}`); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"owed":true`) || !strings.Contains(rec.Body.String(), `"rotated":false`) {
+		t.Fatalf("a recorded debt: %d %s", rec.Code, rec.Body)
+	}
+	if a, _ := store.Get(context.Background(), "acc"); a.RotationOwedSince == nil {
+		t.Fatal("the debt is not recorded")
+	}
+	if rec := post(`{"accountId":"nobody","sessionId":"s1"}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("an unknown account: %d", rec.Code)
+	}
+	if rec := post(`{"sessionId":"s1"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("no account: %d", rec.Code)
+	}
+	var got map[string]any
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/vault/v1/accounts/acc", nil))
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got["rotationOwedSince"] == nil {
+		t.Fatalf("the account does not say it owes a rotation: %v", got)
+	}
+}

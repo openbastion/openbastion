@@ -51,6 +51,25 @@ type PrivilegedAccount struct {
 	// RotationFailures counts the scheduled rotations that failed in a row (ADR-0041); any
 	// rotation that succeeds sets it back to 0.
 	RotationFailures int
+	// RotationOwedSince is when a session on this account ended and left a rotation owed
+	// (ADR-0044); nil: nothing is owed. Any rotation that succeeds clears it.
+	RotationOwedSince *time.Time
+}
+
+// RotationDue says whether the account is to be rotated at now (ADR-0040, ADR-0044): it owes a
+// rotation, or — when scheduled is true — its schedule is due. Never for a disabled account.
+// The second value orders the accounts that are: the longest waiting first.
+func (a *PrivilegedAccount) RotationDue(now time.Time, scheduled bool) (bool, time.Time) {
+	if a.DisabledAt != nil {
+		return false, time.Time{}
+	}
+	if a.RotationOwedSince != nil {
+		return true, *a.RotationOwedSince
+	}
+	if due := a.RotationDueAt(); scheduled && due != nil && !due.After(now) {
+		return true, *due
+	}
+	return false, time.Time{}
 }
 
 // RotationDueAt is when a scheduled account is next due: its last rotation, or its creation

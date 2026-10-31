@@ -134,6 +134,7 @@ func (s *InMemoryStore) MarkRotated(ctx context.Context, id string) error {
 	now := time.Now().UTC()
 	a.LastRotatedAt = &now
 	a.RotationFailures = 0
+	a.RotationOwedSince = nil
 	return nil
 }
 
@@ -273,36 +274,62 @@ func (s *InMemoryStore) ConsumeIfValid(ctx context.Context, token, callingProxyI
 	return g, nil
 }
 
-// memoryDueForRotation is PostgresStore's condition (ADR-0040), on a record of this store.
-func memoryDueForRotation(a *domain.PrivilegedAccount, now time.Time, retryAfter time.Duration) bool {
-	due := a.RotationDueAt()
-	if a.DisabledAt != nil || due == nil || due.After(now) {
-		return false
+// memoryDue is PostgresStore's condition (ADR-0040, ADR-0044), on a record of this store.
+func memoryDue(a *domain.PrivilegedAccount, now time.Time, retryAfter time.Duration, scheduled bool) (bool, time.Time) {
+	due, at := a.RotationDue(now, scheduled)
+	if !due {
+		return false, at
 	}
-	return a.RotationAttemptedAt == nil || !a.RotationAttemptedAt.After(now.Add(-retryAfter))
+	return a.RotationAttemptedAt == nil || !a.RotationAttemptedAt.After(now.Add(-retryAfter)), at
 }
 
 // ListDueForRotation is domain.AccountRepository.ListDueForRotation.
-func (s *InMemoryStore) ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int) ([]*domain.PrivilegedAccount, error) {
+func (s *InMemoryStore) ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int, scheduled bool) ([]*domain.PrivilegedAccount, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var due []*domain.PrivilegedAccount
+	type waiting struct {
+		a  *domain.PrivilegedAccount
+		at time.Time
+	}
+	var due []waiting
 	for _, a := range s.accounts {
-		if memoryDueForRotation(a, now, retryAfter) {
-			due = append(due, copyAccount(a))
+		if ok, at := memoryDue(a, now, retryAfter, scheduled); ok {
+			due = append(due, waiting{copyAccount(a), at})
 		}
 	}
 	sort.Slice(due, func(i, j int) bool {
-		di, dj := due[i].RotationDueAt(), due[j].RotationDueAt()
-		if !di.Equal(*dj) {
-			return di.Before(*dj)
+		if !due[i].at.Equal(due[j].at) {
+			return due[i].at.Before(due[j].at)
 		}
-		return due[i].ID < due[j].ID
+		return due[i].a.ID < due[j].a.ID
 	})
 	if len(due) > limit {
 		due = due[:limit]
 	}
-	return due, nil
+	out := make([]*domain.PrivilegedAccount, len(due))
+	for i, d := range due {
+		out[i] = d.a
+	}
+	return out, nil
+}
+
+// MarkRotationOwed is domain.AccountRepository.MarkRotationOwed.
+func (s *InMemoryStore) MarkRotationOwed(ctx context.Context, id string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if a.RotationOwedSince == nil {
+		// A new debt is a reason to try now: the delay after an attempt is for failures.
+		a.RotationAttemptedAt = nil
+	}
+	if a.RotationOwedSince == nil || at.Before(*a.RotationOwedSince) {
+		since := at
+		a.RotationOwedSince = &since
+	}
+	return nil
 }
 
 // ClaimRotation is domain.AccountRepository.ClaimRotation.
@@ -310,7 +337,7 @@ func (s *InMemoryStore) ClaimRotation(ctx context.Context, id string, now time.T
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a, ok := s.accounts[id]
-	if !ok || !memoryDueForRotation(a, now, retryAfter) {
+	if due, _ := memoryDue(a, now, retryAfter, true); !ok || !due {
 		return false, nil
 	}
 	at := now

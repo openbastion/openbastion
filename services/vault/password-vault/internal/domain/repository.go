@@ -51,7 +51,8 @@ type AccountRepository interface {
 	// the new version has been stored successfully, so a failed
 	// rotation never falsely claims to have rotated. Idempotent, like
 	// Disable; existence is checked by the caller. It also sets the
-	// count of failed scheduled rotations back to 0 (ADR-0041).
+	// count of failed scheduled rotations back to 0 (ADR-0041), and
+	// clears a rotation owed (ADR-0044).
 	MarkRotated(ctx context.Context, id string) error
 
 	// SetReconciliation names the reconciliation account of id (ADR-0037).
@@ -60,9 +61,14 @@ type AccountRepository interface {
 	// SetHostKey pins the host key of id's target (ADR-0039).
 	SetHostKey(ctx context.Context, id, hostKey string) error
 
-	// ListDueForRotation is at most limit scheduled, enabled accounts due at now (ADR-0040)
-	// and not taken since now-retryAfter, the longest overdue first.
-	ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int) ([]*PrivilegedAccount, error)
+	// ListDueForRotation is at most limit enabled accounts to be rotated at now and not taken
+	// since now-retryAfter, the longest waiting first: those that owe a rotation (ADR-0044) and,
+	// when scheduled is true, those whose schedule is due (ADR-0040).
+	ListDueForRotation(ctx context.Context, now time.Time, retryAfter time.Duration, limit int, scheduled bool) ([]*PrivilegedAccount, error)
+	// MarkRotationOwed records that id owes a rotation since at (ADR-0044); an earlier date
+	// already recorded is kept. A NEW debt lifts the delay after an attempt (that delay is for
+	// failures); a debt already owed keeps it. MarkRotated clears it.
+	MarkRotationOwed(ctx context.Context, id string, at time.Time) error
 	// ClaimRotation takes id for a scheduled rotation at now — compare-and-swap: false when it
 	// is no longer due, or another taker had it since now-retryAfter.
 	ClaimRotation(ctx context.Context, id string, now time.Time, retryAfter time.Duration) (bool, error)

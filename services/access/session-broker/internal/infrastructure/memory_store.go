@@ -43,6 +43,7 @@ func (s *InMemoryStore) ExpireDue(ctx context.Context, now time.Time, limit int)
 	}
 	out := make([]*domain.Session, 0, len(due))
 	for _, sess := range due {
+		sess.AfterUseOwed = sess.Status == domain.StatusActive // ADR-0044
 		sess.Status = domain.StatusExpired
 		s.expiredAt[sess.ID] = now
 		s.toAudit[sess.ID] = true
@@ -168,4 +169,46 @@ func (s *InMemoryStore) ListPending(ctx context.Context, now time.Time, limit in
 		return pending[:limit], true, nil
 	}
 	return pending, false, nil
+}
+
+// AfterUseOwed is domain.SessionRepository.AfterUseOwed.
+func (s *InMemoryStore) AfterUseOwed(ctx context.Context, endedBefore time.Time, limit int) ([]domain.AfterUseNotice, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []domain.AfterUseNotice
+	for _, sess := range s.sessions {
+		if !sess.AfterUseOwed {
+			continue
+		}
+		ended := sess.ExpiresAt
+		if at, ok := s.expiredAt[sess.ID]; ok {
+			ended = at
+		}
+		if sess.TerminatedAt != nil {
+			ended = *sess.TerminatedAt
+		}
+		if ended.Before(endedBefore) {
+			out = append(out, domain.AfterUseNotice{SessionID: sess.ID, AccountID: sess.PrivilegedAccountID, EndedAt: ended})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].EndedAt.Equal(out[j].EndedAt) {
+			return out[i].EndedAt.Before(out[j].EndedAt)
+		}
+		return out[i].SessionID < out[j].SessionID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// MarkAfterUseDelivered is domain.SessionRepository.MarkAfterUseDelivered.
+func (s *InMemoryStore) MarkAfterUseDelivered(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess, ok := s.sessions[id]; ok {
+		sess.AfterUseOwed = false
+	}
+	return nil
 }

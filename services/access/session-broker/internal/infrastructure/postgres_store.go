@@ -136,9 +136,9 @@ func (s *PostgresStore) SaveIfUnderPendingLimit(ctx context.Context, sess *domai
 func (s *PostgresStore) SaveIfStatus(ctx context.Context, sess *domain.Session, expected domain.SessionStatus) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE sessions SET
-			status = $2, expires_at = $3, terminated_at = $4, decided_by = $5, decided_at = $6
+			status = $2, expires_at = $3, terminated_at = $4, decided_by = $5, decided_at = $6, after_use_owed = $8
 		WHERE id = $1 AND status = $7`,
-		sess.ID, string(sess.Status), sess.ExpiresAt, sess.TerminatedAt, sess.DecidedBy, sess.DecidedAt, string(expected))
+		sess.ID, string(sess.Status), sess.ExpiresAt, sess.TerminatedAt, sess.DecidedBy, sess.DecidedAt, string(expected), sess.AfterUseOwed)
 	if err != nil {
 		return false, err
 	}
@@ -155,11 +155,11 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.Session, er
 	var terminatedAt, decidedAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
-		       duration_minutes, decided_by, decided_at
+		       duration_minutes, decided_by, decided_at, after_use_owed
 		FROM sessions WHERE id = $1`, id)
 	if err := row.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
 		&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
-		&sess.DurationMinutes, &sess.DecidedBy, &decidedAt); err != nil {
+		&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.AfterUseOwed); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -220,7 +220,7 @@ func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit in
 }
 
 const sessionColumns = `id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
-		       duration_minutes, decided_by, decided_at`
+		       duration_minutes, decided_by, decided_at, after_use_owed`
 
 // scanSessions reads rows of sessionColumns.
 func scanSessions(rows *sql.Rows) ([]*domain.Session, error) {
@@ -232,7 +232,7 @@ func scanSessions(rows *sql.Rows) ([]*domain.Session, error) {
 		var terminatedAt, decidedAt sql.NullTime
 		if err := rows.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
 			&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
-			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt); err != nil {
+			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.AfterUseOwed); err != nil {
 			return nil, err
 		}
 		sess.Status = domain.SessionStatus(status)
@@ -255,7 +255,9 @@ func (s *PostgresStore) ExpireDue(ctx context.Context, now time.Time, limit int)
 	// RETURNING gives the rows in no particular order: the CTE sorts them as the port says.
 	rows, err := s.db.QueryContext(ctx, `
 		WITH expired AS (
-			UPDATE sessions SET status = $1, expired_at = $2, expiry_audited = FALSE
+			-- An active session that ends leaves the Vault to be told (ADR-0044); a request that was
+			-- never granted, nothing. SET reads the row before the update: status is the old one.
+			UPDATE sessions SET status = $1, expired_at = $2, expiry_audited = FALSE, after_use_owed = (status = $3)
 			WHERE id IN (
 				SELECT id FROM sessions
 				WHERE status IN ($3, $4) AND expires_at < $2
@@ -289,5 +291,36 @@ func (s *PostgresStore) ExpiriesToAudit(ctx context.Context, before time.Time, l
 // MarkExpiryAudited is domain.SessionRepository.MarkExpiryAudited.
 func (s *PostgresStore) MarkExpiryAudited(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET expiry_audited = TRUE WHERE id = $1`, id)
+	return err
+}
+
+// AfterUseOwed is domain.SessionRepository.AfterUseOwed; the partial index of
+// 003_after_use_owed.sql serves it. A session ended by termination or by expiry: its end is
+// the one or the other.
+func (s *PostgresStore) AfterUseOwed(ctx context.Context, endedBefore time.Time, limit int) ([]domain.AfterUseNotice, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, privileged_account_id, COALESCE(terminated_at, expired_at, expires_at) AS ended_at
+		FROM sessions
+		WHERE after_use_owed AND COALESCE(terminated_at, expired_at, expires_at) < $1
+		ORDER BY ended_at, id
+		LIMIT $2`, endedBefore, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.AfterUseNotice
+	for rows.Next() {
+		var n domain.AfterUseNotice
+		if err := rows.Scan(&n.SessionID, &n.AccountID, &n.EndedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// MarkAfterUseDelivered is domain.SessionRepository.MarkAfterUseDelivered.
+func (s *PostgresStore) MarkAfterUseDelivered(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET after_use_owed = FALSE WHERE id = $1`, id)
 	return err
 }

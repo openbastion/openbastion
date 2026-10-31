@@ -223,6 +223,10 @@ func redactDSN(dsn string) string {
 func expireEvery(svc *application.SessionBrokerService, every time.Duration) {
 	failing := false
 	for range time.Tick(every) {
+		// Notices of sessions that ended, owed to the Vault and not yet delivered (ADR-0044).
+		if delivered, failed, err := svc.DeliverAfterUse(context.Background()); delivered > 0 || failed > 0 || err != nil {
+			log.Printf("session-broker: rotation-after-use notices sent again: %d delivered, %d still owed (%v)", delivered, failed, err)
+		}
 		expired, written, err := svc.ExpireDue(context.Background())
 		if expired > 0 || written > 0 {
 			log.Printf("session-broker: %d session(s) expired, %d expiry event(s) written to the audit", expired, written)

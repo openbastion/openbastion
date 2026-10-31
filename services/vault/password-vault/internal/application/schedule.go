@@ -135,11 +135,11 @@ func (s *VaultService) RotateDue(ctx context.Context) (SweepResult, error) {
 		return res, ErrRotationOff
 	}
 	now := s.now()
-	if !s.window.Contains(now) {
-		res.OutsideWindow = true
-		return res, nil
-	}
-	due, err := s.accounts.ListDueForRotation(ctx, now, RotationRetryAfter, RotationsPerSweep)
+	// The window holds the scheduled rotations only: a rotation owed after use (ADR-0044) — a
+	// secret a human has just used — does not wait for the night.
+	scheduled := s.window.Contains(now)
+	res.OutsideWindow = !scheduled
+	due, err := s.accounts.ListDueForRotation(ctx, now, RotationRetryAfter, RotationsPerSweep, scheduled)
 	if err != nil {
 		return res, fmt.Errorf("listing the accounts due for rotation: %w", err)
 	}

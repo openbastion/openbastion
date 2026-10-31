@@ -175,17 +175,20 @@ func TestRotate_TheAuditDown_TheTargetIsNotTouched(t *testing.T) {
 
 func TestRotateAfterUse_OnlyAPostUseAccount(t *testing.T) {
 	ctx := context.Background()
-	svc, _, target, audit := rotationService(t, domain.RotationPostUse)
-	rotated, err := svc.RotateAfterUse(ctx, "acc")
-	if err != nil || !rotated || target.has(host, "app") == "old-pw" {
-		t.Fatalf("post_use: %v %v", rotated, err)
+	svc, store, target, audit := rotationService(t, domain.RotationPostUse)
+	res, err := svc.RotateAfterUse(ctx, "acc", time.Now())
+	if err != nil || !res.Owed || !res.Rotated || target.has(host, "app") == "old-pw" {
+		t.Fatalf("post_use: %+v %v", res, err)
+	}
+	if a, _ := store.Get(ctx, "acc"); a.RotationOwedSince != nil {
+		t.Fatalf("a paid rotation is still owed: %v", a.RotationOwedSince)
 	}
 	if !strings.HasPrefix(fmt.Sprint(audit.events), "[|vault.rotate_requested|acc|true") {
 		t.Fatalf("a rotation after use is a system action: %v", audit.events)
 	}
 	manual, _, target2, _ := rotationService(t, domain.RotationManual)
-	if rotated, err := manual.RotateAfterUse(ctx, "acc"); err != nil || rotated || target2.sets != 0 {
-		t.Fatalf("manual: %v %v, %d changes", rotated, err, target2.sets)
+	if res, err := manual.RotateAfterUse(ctx, "acc", time.Now()); err != nil || res.Owed || target2.sets != 0 {
+		t.Fatalf("manual: %+v %v, %d changes", res, err, target2.sets)
 	}
 }
 

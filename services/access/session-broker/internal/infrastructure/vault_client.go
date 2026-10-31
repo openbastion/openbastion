@@ -71,8 +71,8 @@ func (c *VaultAuthorizationHTTPClient) AuthorizeScope(ctx context.Context, sessi
 
 // RotateAfterUse tells the Vault that a session on accountID ended (ADR-0037): it rotates the
 // secret if the account's policy is post_use.
-func (c *VaultAuthorizationHTTPClient) RotateAfterUse(ctx context.Context, accountID, sessionID string) error {
-	body, _ := json.Marshal(map[string]string{"accountId": accountID, "sessionId": sessionID})
+func (c *VaultAuthorizationHTTPClient) RotateAfterUse(ctx context.Context, accountID, sessionID string, endedAt time.Time) error {
+	body, _ := json.Marshal(map[string]any{"accountId": accountID, "sessionId": sessionID, "endedAt": endedAt.UTC()})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/rotate-after-use", bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -83,8 +83,12 @@ func (c *VaultAuthorizationHTTPClient) RotateAfterUse(ctx context.Context, accou
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil // the Vault has it: recorded there, rotated or to be (ADR-0044)
+	case http.StatusNotFound:
+		return nil // an account the Vault does not have owes nothing
+	default:
 		return fmt.Errorf("rotate-after-use: status %d", resp.StatusCode)
 	}
-	return nil
 }

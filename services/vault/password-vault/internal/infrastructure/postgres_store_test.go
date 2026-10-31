@@ -374,7 +374,7 @@ func TestPostgresStore_ScheduledRotation_DueClaimAndUpgrade(t *testing.T) {
 
 	now := time.Now()
 	ids := func(now time.Time) []string {
-		due, err := store.ListDueForRotation(ctx, now, time.Hour, 1000)
+		due, err := store.ListDueForRotation(ctx, now, time.Hour, 1000, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -486,5 +486,73 @@ func TestPostgresStore_Create_ADuplicateIsErrAlreadyExists(t *testing.T) {
 	}
 	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: uniqueID("dup"), Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual}); !errors.Is(err, domain.ErrAlreadyExists) {
 		t.Fatalf("the same name on the same target: %v", err)
+	}
+}
+
+// ADR-0044 on a real database: a debt keeps its earliest date, a new one lifts the delay after
+// an attempt, a debt is due whatever the schedule (and alone when scheduled is false), and a
+// rotation clears it.
+func TestPostgresStore_RotationOwed(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("owed")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationPostUse}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	listed := func(scheduled bool) bool {
+		due, err := store.ListDueForRotation(ctx, now, time.Hour, 100000, scheduled)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range due {
+			if a.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+	if listed(true) {
+		t.Fatal("an account that owes nothing is due")
+	}
+	early := now.Add(-2 * time.Hour).Truncate(time.Microsecond)
+	// The earliest first, then a later one: the earliest is kept.
+	if err := store.MarkRotationOwed(ctx, id, early); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkRotationOwed(ctx, id, now); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := store.Get(ctx, id); a.RotationOwedSince == nil || !a.RotationOwedSince.Equal(early) {
+		t.Fatalf("owed since %v, want %v", a.RotationOwedSince, early)
+	}
+	if !listed(true) || !listed(false) {
+		t.Fatal("a debt is not due, or not due outside the window")
+	}
+	if ok, _ := store.ClaimRotation(ctx, id, now, time.Hour); !ok {
+		t.Fatal("a debt could not be taken")
+	}
+	if listed(true) {
+		t.Fatal("a debt just taken is listed again within the hour")
+	}
+	// Still owed (the attempt failed): another notice keeps the delay.
+	_ = store.MarkRotationOwed(ctx, id, now)
+	if listed(true) {
+		t.Fatal("a failing debt lost its delay")
+	}
+	if err := store.MarkRotated(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := store.Get(ctx, id); a.RotationOwedSince != nil {
+		t.Fatal("a rotation did not clear the debt")
+	}
+	// A new debt, after the rotation, lifts the delay of the last attempt.
+	_ = store.MarkRotationOwed(ctx, id, now)
+	if !listed(true) {
+		t.Fatal("a new debt waited for the delay of a past attempt")
+	}
+	if err := store.MarkRotationOwed(ctx, uniqueID("nobody"), now); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("an unknown account: %v", err)
 	}
 }

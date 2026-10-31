@@ -619,6 +619,7 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 	ended := *sess
 	ended.Status = domain.StatusTerminated
 	ended.TerminatedAt = &now
+	ended.AfterUseOwed = true // it was active: the Vault is to be told (ADR-0044)
 	// A compare-and-swap, as for a decision: of two people who end the same session at
 	// once, one wins and is the one the audit names; the other is told it is already over.
 	swapped, err := s.sessions.SaveIfStatus(ctx, &ended, domain.StatusActive)
@@ -629,7 +630,7 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 		return nil, fmt.Errorf("%w: the session was changed first", domain.ErrConflict)
 	}
 	_ = s.audit.EmitEvent(ctx, callerID, "session.terminate", "session", ended.ID, true)
-	s.afterUse(&ended)
+	s.afterUse(&ended, now)
 	return &ended, nil
 }
 

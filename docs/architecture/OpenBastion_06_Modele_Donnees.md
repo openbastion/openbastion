@@ -307,6 +307,18 @@ UPDATE privileged_accounts SET rotation_interval_days = 30 WHERE rotation_policy
 ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS rotation_failures INTEGER NOT NULL DEFAULT 0;  -- d'affilée ; remis à 0 par toute rotation réussie
 ```
 
+### Rotation après usage : une dette des deux côtés (ADR-0044)
+
+`services/vault/password-vault/migrations/006_rotation_owed.sql` et `services/access/session-broker/migrations/003_after_use_owed.sql` :
+
+```sql
+-- Vault : depuis quand le compte doit une rotation ; effacée par toute rotation réussie.
+ALTER TABLE privileged_accounts ADD COLUMN IF NOT EXISTS rotation_owed_since TIMESTAMPTZ;
+-- Broker : la fin d'une session active doit encore être dite au Vault.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS after_use_owed BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS sessions_after_use_owed_idx ON sessions (id) WHERE after_use_owed;
+```
+
 ### Connexion fédérée OIDC (ADR-0035)
 
 `services/access/authentication/migrations/002_oidc.sql` donne à `users` les colonnes du §3 (`identity_source`, `external_subject` — ici `TEXT NOT NULL DEFAULT ''` plutôt que `NULL`, avec un index unique partiel sur `(identity_source, external_subject)` quand le sujet n'est pas vide) et ajoute les connexions en cours :

@@ -85,4 +85,17 @@ type SessionRepository interface {
 
 	// MarkExpiryAudited records that the expiry of session id is in the audit trail.
 	MarkExpiryAudited(ctx context.Context, id string) error
+
+	// AfterUseOwed returns the sessions that ended before endedBefore and whose end the Vault
+	// has not yet been told (ADR-0044), at most limit, oldest end first. ExpireDue sets the
+	// debt of an active session it expires; a termination sets it with SaveIfStatus.
+	AfterUseOwed(ctx context.Context, endedBefore time.Time, limit int) ([]AfterUseNotice, error)
+	// MarkAfterUseDelivered records that the Vault has the end of session id.
+	MarkAfterUseDelivered(ctx context.Context, id string) error
+}
+
+// AfterUseNotice is what the Vault is told when a session ends (ADR-0044).
+type AfterUseNotice struct {
+	SessionID, AccountID string
+	EndedAt              time.Time
 }

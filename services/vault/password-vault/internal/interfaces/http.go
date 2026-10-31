@@ -121,8 +121,14 @@ func (s *HTTPServer) handleRotate(w http.ResponseWriter, r *http.Request) {
 type rotateAfterUseRequest struct {
 	AccountID string `json:"accountId"`
 	SessionID string `json:"sessionId"`
+	// EndedAt is when the session ended (ADR-0044): an account rotated since owes nothing, so a
+	// repeated notice is harmless. Absent (an older Broker): now.
+	EndedAt *time.Time `json:"endedAt"`
 }
 
+// handleRotateAfterUse answers 200 once the rotation owed is RECORDED — paid or not, the Vault
+// sees it through (ADR-0044); 404 for an account it does not have (nothing is owed); 503 if it
+// could not even record it, for the Broker to tell it again.
 func (s *HTTPServer) handleRotateAfterUse(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -133,14 +139,22 @@ func (s *HTTPServer) handleRotateAfterUse(w http.ResponseWriter, r *http.Request
 		http.Error(w, "the body is not a rotate-after-use request", http.StatusBadRequest)
 		return
 	}
-	rotated, err := s.svc.RotateAfterUse(r.Context(), req.AccountID)
+	endedAt := time.Now()
+	if req.EndedAt != nil {
+		endedAt = *req.EndedAt
+	}
+	res, err := s.svc.RotateAfterUse(r.Context(), req.AccountID, endedAt)
+	if errors.Is(err, domain.ErrNotFound) {
+		http.Error(w, "account not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
-		log.Printf("password-vault: rotation after session %s of account %s failed: %v", req.SessionID, req.AccountID, err)
-		http.Error(w, "the rotation after use failed", adminErrorStatus(err))
+		log.Printf("password-vault: the rotation after session %s of account %s could not be recorded: %v", req.SessionID, req.AccountID, err)
+		http.Error(w, "the rotation after use could not be recorded, tell it again", http.StatusServiceUnavailable)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]bool{"rotated": rotated})
+	_ = json.NewEncoder(w).Encode(map[string]bool{"owed": res.Owed, "rotated": res.Rotated})
 }
 
 // writeAdminError answers a failed administrative operation (ADR-0043): a refusal with its own
@@ -319,6 +333,8 @@ type accountResponse struct {
 	NextRotationAt       *time.Time `json:"nextRotationAt,omitempty"`
 	// RotationFailures: scheduled rotations failed in a row (ADR-0041); absent at 0.
 	RotationFailures int `json:"rotationFailures,omitempty"`
+	// RotationOwedSince: a session ended and left a rotation owed (ADR-0044); absent: none.
+	RotationOwedSince *time.Time `json:"rotationOwedSince,omitempty"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -334,7 +350,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		TargetHost: a.TargetHost, Protocol: a.Protocol, RotationPolicy: string(a.RotationPolicy),
 		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
-		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures,
+		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures, RotationOwedSince: a.RotationOwedSince,
 	}
 }
 

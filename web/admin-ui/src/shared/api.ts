@@ -96,6 +96,8 @@ export interface Account {
   nextRotationAt?: string;
   // Scheduled rotations failed in a row (ADR-0041); absent at 0.
   rotationFailures?: number;
+  // A session on the account ended and left a rotation owed (ADR-0044); absent: none.
+  rotationOwedSince?: string;
 }
 
 export interface Page<T> {

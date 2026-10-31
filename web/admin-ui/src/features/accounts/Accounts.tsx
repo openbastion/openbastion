@@ -73,6 +73,7 @@ export function Accounts() {
                     <td>
                       <span className="badge">{a.rotationPolicy}</span>
                       {a.rotationIntervalDays ? <span className="cell-note">tous les {a.rotationIntervalDays} j — prochaine : {a.nextRotationAt ?? "—"}</span> : null}
+                      {a.rotationOwedSince ? <span className="badge warn" title={`Une session s'est terminée le ${a.rotationOwedSince} : le Vault fait tourner ce secret, et réessaie tant qu'il n'y arrive pas.`}>renouvellement dû</span> : null}
                       {a.rotationFailures ? <span className="badge warn" title="Rotations planifiées échouées d'affilée : le secret n'a pas changé. Voir le journal du Vault.">en échec ({a.rotationFailures})</span> : null}
                     </td>
                     <td>{a.lastRotatedAt ?? "—"}</td>

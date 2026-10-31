@@ -417,3 +417,61 @@ func TestPostgresStore_OnlyTheCompareAndSwapWritesADecision(t *testing.T) {
 		t.Fatalf("a Save rewrote a decision: %+v", got)
 	}
 }
+
+// ADR-0044 on a real database: an active session that expires owes the Vault its notice, a
+// request that was never granted does not; a termination writes the debt with its swap; the
+// debts come back with the end of each session; a delivered one is no longer owed.
+func TestPostgresStore_AfterUseOwed(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	active, pending, ended := uniqueID("s_active"), uniqueID("s_pending"), uniqueID("s_term")
+	for _, s := range []*domain.Session{
+		{ID: active, Status: domain.StatusActive, RequestedBy: "u", PrivilegedAccountID: "acc_a", CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour)},
+		{ID: pending, Status: domain.StatusPendingApproval, BreakGlass: true, RequestedBy: "u", PrivilegedAccountID: "acc_b", CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour)},
+		{ID: ended, Status: domain.StatusActive, RequestedBy: "u", PrivilegedAccountID: "acc_c", CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(time.Hour)},
+	} {
+		if err := store.Save(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expiredAt := now.Add(-30 * time.Minute)
+	if _, err := store.ExpireDue(ctx, expiredAt, 100000); err != nil {
+		t.Fatal(err)
+	}
+	termAt := now.Add(-20 * time.Minute)
+	s, _ := store.Get(ctx, ended)
+	s.Status, s.TerminatedAt, s.AfterUseOwed = domain.StatusTerminated, &termAt, true
+	if ok, err := store.SaveIfStatus(ctx, s, domain.StatusActive); err != nil || !ok {
+		t.Fatalf("terminate: %v %v", ok, err)
+	}
+	if s, _ := store.Get(ctx, pending); s.AfterUseOwed {
+		t.Fatal("a request never granted owes a notice")
+	}
+	owed := func(before time.Time) map[string]time.Time {
+		list, err := store.AfterUseOwed(ctx, before, 100000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]time.Time{}
+		for _, n := range list {
+			if n.SessionID == active || n.SessionID == pending || n.SessionID == ended {
+				out[n.SessionID] = n.EndedAt
+			}
+		}
+		return out
+	}
+	got := owed(now)
+	if len(got) != 2 || !got[active].Equal(expiredAt) || !got[ended].Equal(termAt) {
+		t.Fatalf("owed: %v (expired at %v, terminated at %v)", got, expiredAt, termAt)
+	}
+	if got := owed(now.Add(-25 * time.Minute)); len(got) != 1 {
+		t.Fatalf("ended before -25 min: %v", got)
+	}
+	if err := store.MarkAfterUseDelivered(ctx, active); err != nil {
+		t.Fatal(err)
+	}
+	if got := owed(now); len(got) != 1 || got[ended].IsZero() {
+		t.Fatalf("after delivery: %v", got)
+	}
+}
