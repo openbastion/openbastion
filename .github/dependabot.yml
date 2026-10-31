@@ -8,6 +8,10 @@
 #   within days. A security update is not delayed: Dependabot's security updates ignore cooldown.
 # - Actions (ADR-0047) and images (ADR-0051) stay pinned by digest: Dependabot moves the digest and
 #   the version in its comment or tag; images_test.go still refuses an image without a digest.
+# - Not proposed (a major is a decision, not an update; first pass, 31 October 2026):
+#   node and postgres majors — node 25 was proposed, a release without long-term support and past its
+#   end of life (1 June 2026); a postgres major is a data migration. TypeScript majors — 7 has no
+#   compiler API, which the icons' declaration build (tsup, rollup-plugin-dts) needs.
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -48,6 +52,8 @@ updates:
       npm:
         patterns: ["*"]
         group-by: dependency-name
+    ignore:
+      - {dependency-name: typescript, update-types: ["version-update:semver-major"]}
     commit-message: {prefix: "build(deps)"}
     open-pull-requests-limit: 5
 
@@ -67,6 +73,9 @@ updates:
       images:
         patterns: ["*"]
         group-by: dependency-name
+    ignore:
+      - {dependency-name: node, update-types: ["version-update:semver-major"]}
+      - {dependency-name: postgres, update-types: ["version-update:semver-major"]}
     commit-message: {prefix: "build(deps)"}
 
   - package-ecosystem: docker-compose
@@ -79,4 +88,7 @@ updates:
       compose-images:
         patterns: ["*"]
         group-by: dependency-name
+    ignore:
+      - {dependency-name: node, update-types: ["version-update:semver-major"]}
+      - {dependency-name: postgres, update-types: ["version-update:semver-major"]}
     commit-message: {prefix: "build(deps)"}

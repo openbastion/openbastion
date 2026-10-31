@@ -9,6 +9,7 @@ ADR-0052 cherche les vulnérabilités **connues** à chaque commit et chaque lun
 2. **Une pull request par dépendance**, jamais une mise à jour en masse (policy des dépendances, point 3) : la même dépendance avance dans tous les modules à la fois (`group-by: dependency-name`) — `x/crypto` fait une pull request, pas dix-sept, et les modules de `go.work` restent d'accord.
 3. **Une version n'est proposée qu'à sept jours** (`cooldown`) : une version piégée est le plus souvent retirée en quelques jours. Les mises à jour **de sécurité** de Dependabot ne sont pas retardées.
 4. **Les empreintes restent** : Dependabot déplace l'empreinte d'une action ou d'une image avec sa version ; `images_test.go` refuse toujours une image sans empreinte.
+5 bis. **Une version majeure est une décision, pas une mise à jour** (ajouté après la première passe) : ne sont pas proposées les majeures de `node` (Dependabot a proposé Node 25, sans support long et en fin de vie depuis le 1ᵉʳ juin 2026 ; une LTS plus récente se choisit), de `postgres` (une majeure est une migration de données) et de `typescript` (la 7 n'a plus l'API du compilateur dont la génération des déclarations des icônes a besoin — mesuré, avec `tsup` 8 et 9).
 5. **Rien n'est fusionné de soi-même** : chaque pull request passe la CI entière (dont `make vuln`) ; la fusion est un geste humain.
 
 **Conséquences**
