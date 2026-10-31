@@ -274,6 +274,10 @@ message AuthorizeScopeResponse {
   google.protobuf.Timestamp expires_at = 2;
 }
 
+// Un refus d'AuthorizeScope porte un code stable (ADR-0042) — en HTTP/JSON, le corps
+// {"code": …, "error": …} : "no_pinned_host_key" (409, ADR-0039), "refused" (403). Le code est
+// le contrat ; le texte ne l'est pas, et ne va jamais jusqu'à un client.
+
 message FetchCredentialRequest {
   string scope_token = 1;          // émis par AuthorizeScope, à usage unique
   string calling_proxy_id = 2;     // dérivé du certificat mTLS, vérifié contre le scope ; en HTTP/JSON facultatif, et une discordance avec le certificat est un 403 (ADR-0010)

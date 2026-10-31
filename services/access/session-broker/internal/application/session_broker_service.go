@@ -386,7 +386,7 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 	resource := "vault:account:" + privilegedAccountID
 	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, resource, "session:create")
 	if err != nil {
-		return nil, fmt.Errorf("checking access: %w", err)
+		return nil, fmt.Errorf("%w: checking access: %w", domain.ErrUnavailable, err)
 	}
 
 	now := s.clock()
@@ -423,7 +423,7 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		if err := s.audit.EmitEvent(ctx, requestedBy, "session.breakglass_requested", "session", sess.ID, true); err != nil {
 			sess.Status = domain.StatusDenied
 			_ = s.sessions.Save(ctx, sess)
-			return nil, fmt.Errorf("cannot grant break-glass: audit emission failed (fail-closed, Guide HA §1): %w", err)
+			return nil, fmt.Errorf("%w: cannot grant break-glass: audit emission failed (fail-closed, Guide HA §1): %w", domain.ErrUnavailable, err)
 		}
 		if s.approvalRequired() {
 			// Not granted: waiting for a second person (ADR-0011). Nothing is
@@ -433,7 +433,7 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 			sess.ExpiresAt = now.Add(s.window()) // the deadline for a decision
 			saved, err := s.sessions.SaveIfUnderPendingLimit(ctx, sess, s.maxPending(), now)
 			if err != nil {
-				return nil, fmt.Errorf("saving break-glass request: %w", err)
+				return nil, fmt.Errorf("%w: saving break-glass request: %w", domain.ErrUnavailable, err)
 			}
 			if !saved {
 				// The count said there was room, and another request of the same
@@ -458,10 +458,10 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 	if err := s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, true); err != nil {
 		sess.Status = domain.StatusDenied
 		_ = s.sessions.Save(ctx, sess)
-		return nil, fmt.Errorf("cannot grant session: audit emission failed (fail-closed, Guide HA §1): %w", err)
+		return nil, fmt.Errorf("%w: cannot grant session: audit emission failed (fail-closed, Guide HA §1): %w", domain.ErrUnavailable, err)
 	}
 	if err := s.sessions.Save(ctx, sess); err != nil {
-		return nil, fmt.Errorf("saving session: %w", err)
+		return nil, fmt.Errorf("%w: saving session: %w", domain.ErrUnavailable, err)
 	}
 	return sess, nil
 }
@@ -639,7 +639,7 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID 
 	}
 	status := sess.EffectiveStatus(s.clock())
 	if status != domain.StatusActive {
-		return "", "", time.Time{}, fmt.Errorf("cannot connect a session in status %q", status)
+		return "", "", time.Time{}, fmt.Errorf("%w: cannot connect a session in status %q", domain.ErrConflict, status)
 	}
 
 	proxyServiceID, err := s.proxies.Select(sess.Protocol)
@@ -654,7 +654,7 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID 
 
 	ttl := sess.ExpiresAt.Sub(s.clock())
 	if ttl <= 0 {
-		return "", "", time.Time{}, fmt.Errorf("session has no time remaining")
+		return "", "", time.Time{}, fmt.Errorf("%w: session has no time remaining", domain.ErrConflict)
 	}
 
 	scopeToken, _, err := s.vault.AuthorizeScope(ctx, sess.ID, sess.PrivilegedAccountID, proxyServiceID, ttl)

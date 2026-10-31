@@ -72,10 +72,90 @@ func TestConnect_ARecordingRefusalIsA503NotA409(t *testing.T) {
 	}
 }
 
-func TestConnect_OtherProxyFailuresStayAConflict(t *testing.T) {
-	if rec := connect(t, fmt.Errorf("establish-session: status 500")); rec.Code != http.StatusConflict {
-		t.Fatalf("got %d, want 409", rec.Code)
+// A dependency that fails is not a state of the session (ADR-0042): 503, and its own text —
+// which can name an address — never reaches the client. (This was a 409 with the cause until
+// ADR-0042; doc 05 keeps 409 for a session that cannot be connected in its state.)
+func TestConnect_AFailingDependencyIsA503_WithoutItsCause(t *testing.T) {
+	rec := connect(t, fmt.Errorf("establish-session: Post \"https://10.9.8.7:8085/internal\": dial tcp 10.9.8.7:8085: connection refused"))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d, want 503", rec.Code)
 	}
+	if strings.Contains(rec.Body.String(), "10.9.8.7") || strings.Contains(rec.Body.String(), "dial tcp") {
+		t.Fatalf("the cause reached the client: %q", rec.Body.String())
+	}
+}
+
+// pinlessVault refuses every scope as the Vault does for an account with no pinned host key.
+type pinlessVault struct{}
+
+func (pinlessVault) AuthorizeScope(context.Context, string, string, string, time.Duration) (string, time.Time, error) {
+	return "", time.Time{}, fmt.Errorf("authorize-scope: %w", domain.ErrAccountNotPinned)
+}
+
+// The Vault's reason reaches the operator as what to do (ADR-0042, ADR-0039).
+func TestConnect_AnUnpinnedAccountIsA409_ThatSaysWhatToDo(t *testing.T) {
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, pinlessVault{}, quietAudit{}, oneAccount{}, failingProxy{})
+	sess, err := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	interfaces.NewHTTPServer(svc).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions/"+sess.ID+"/connect", strings.NewReader(`{"callerId":"alice"}`)))
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "no pinned host key") || !strings.Contains(rec.Body.String(), "host-key") {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestConnect_UnknownSessionIs404_AndAStateIs409(t *testing.T) {
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{})
+	srv := interfaces.NewHTTPServer(svc).Routes()
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions/session_nope/connect", strings.NewReader(`{"callerId":"alice"}`)))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown session: %d", rec.Code)
+	}
+	sess, _ := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60)
+	if _, err := svc.TerminateSession(context.Background(), sess.ID, "alice", []string{"dba"}); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions/"+sess.ID+"/connect", strings.NewReader(`{"callerId":"alice"}`)))
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "cannot connect a session in status") {
+		t.Fatalf("a terminated session: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// failingAudit cannot write.
+type failingAudit struct{}
+
+func (failingAudit) EmitEvent(context.Context, string, string, string, string, bool) error {
+	return fmt.Errorf("emit-event: dial tcp 10.9.8.5:8082: connection refused")
+}
+
+// POST /sessions with a dependency down is the 503 doc 05 promises, without the cause; a refusal
+// stays a 403 (ADR-0042).
+func TestCreateSession_ADependencyDownIsA503_WithoutItsCause(t *testing.T) {
+	for name, svc := range map[string]*application.SessionBrokerService{
+		"authorization down": application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), downAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}),
+		"audit down":         application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, failingAudit{}, oneAccount{}, failingProxy{}),
+	} {
+		rec := postSession(t, svc, `{"requestedBy":"alice","actorRoles":["dba"],"privilegedAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`)
+		if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "10.9.8.") || strings.Contains(rec.Body.String(), leak) {
+			t.Fatalf("%s: %d %q", name, rec.Code, rec.Body.String())
+		}
+	}
+	// Counter-proof: a refusal is a 403 that says why.
+	rec := postSession(t, application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), denyAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}),
+		`{"requestedBy":"alice","actorRoles":["dba"],"privilegedAccountId":"acc1","protocol":"ssh","justification":"incident","durationMinutes":60}`)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "access denied") {
+		t.Fatalf("a refusal: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+type denyAuthz struct{}
+
+func (denyAuthz) CheckAccess(context.Context, []string, string, string) (bool, string, error) {
+	return false, "no policy grants it", nil
 }
 
 // -- break-glass over HTTP (ADR-0009) --------------------------------------------

@@ -197,11 +197,13 @@ func (s *HTTPServer) handleAuthorizeScope(w http.ResponseWriter, r *http.Request
 	ttl := time.Duration(req.TTLSeconds) * time.Second
 	token, expiresAt, err := s.svc.AuthorizeScope(r.Context(), req.SessionID, req.PrivilegedAccountID, req.ProxyServiceID, ttl)
 	if err != nil {
-		status := http.StatusForbidden
+		// The refusal says its reason by a stable code (ADR-0042): the Broker tells the operator
+		// what to do from the code, never from this text.
 		if errors.Is(err, application.ErrNoHostKey) {
-			status = http.StatusConflict // the account exists, but must be pinned first (ADR-0039)
+			writeRefusal(w, http.StatusConflict, RefusalNoPinnedHostKey, err.Error()) // pin it first (ADR-0039)
+			return
 		}
-		http.Error(w, err.Error(), status)
+		writeRefusal(w, http.StatusForbidden, RefusalRefused, err.Error())
 		return
 	}
 	writeJSON(w, authorizeScopeResponse{ScopeToken: token, ExpiresAt: expiresAt})
@@ -433,4 +435,17 @@ func (s *HTTPServer) handleSetHostKey(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 	writeJSON(w, map[string]string{"hostKeyFingerprint": fp})
+}
+
+// Refusal codes of authorize-scope (ADR-0042): the contract a caller reads.
+const (
+	RefusalNoPinnedHostKey = "no_pinned_host_key"
+	RefusalRefused         = "refused"
+)
+
+// writeRefusal answers status with {"code": code, "error": message}.
+func writeRefusal(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "error": message})
 }

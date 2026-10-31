@@ -123,7 +123,7 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, domain.ErrUnavailable):
 		// The requests waiting could not be counted: nothing was accepted. The cause
 		// stays in this process's log, not in what a client reads.
-		log.Printf("session-broker: a break-glass request was not accepted: %v", err)
+		log.Printf("session-broker: a session request was not accepted: %v", err)
 		http.Error(w, "the request could not be accepted: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
 		return
 	default:
@@ -308,17 +308,28 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 	}
 	proxyEndpoint, ticket, _, err := s.svc.Connect(r.Context(), sessionID, req.CallerID)
 	if err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
 			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-		if errors.Is(err, domain.ErrRecordingUnavailable) {
+		case errors.Is(err, domain.ErrRecordingUnavailable):
 			// Not a conflict with the session: the platform cannot record it
 			// right now. The reason is generic on purpose; the proxy logs the cause.
 			http.Error(w, "recording unavailable: the session was not started, try again shortly", http.StatusServiceUnavailable)
-			return
+		case errors.Is(err, domain.ErrNotFound):
+			http.Error(w, "session not found", http.StatusNotFound)
+		case errors.Is(err, domain.ErrAccountNotPinned):
+			// The account must be pinned first (ADR-0039): the operator is told, by the
+			// Vault's code, not its text (ADR-0042).
+			http.Error(w, domain.ErrAccountNotPinned.Error(), http.StatusConflict)
+		case errors.Is(err, domain.ErrConflict):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			// The Vault, the proxy or the network did not answer as they should. Nothing was
+			// started; the cause stays in this process's log, not in what a client reads (it
+			// can name an address).
+			log.Printf("session-broker: connection to %s not started: %v", sessionID, err)
+			http.Error(w, "the session was not started: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
 		}
-		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

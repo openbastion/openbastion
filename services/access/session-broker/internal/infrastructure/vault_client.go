@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
+
+	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
 
 // VaultAuthorizationHTTPClient calls ONLY the password-vault's
@@ -48,7 +51,16 @@ func (c *VaultAuthorizationHTTPClient) AuthorizeScope(ctx context.Context, sessi
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", time.Time{}, fmt.Errorf("authorize-scope: status %d", resp.StatusCode)
+		// The Vault says why by a stable code (ADR-0042); its text is not read, and never
+		// reaches a client.
+		var refusal struct {
+			Code string `json:"code"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&refusal)
+		if resp.StatusCode == http.StatusConflict && refusal.Code == "no_pinned_host_key" {
+			return "", time.Time{}, domain.ErrAccountNotPinned
+		}
+		return "", time.Time{}, fmt.Errorf("authorize-scope: status %d (%s)", resp.StatusCode, refusal.Code)
 	}
 	var out authorizeScopeResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

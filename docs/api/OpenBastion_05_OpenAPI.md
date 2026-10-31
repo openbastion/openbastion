@@ -591,12 +591,29 @@ paths:
             Retry-After:
               description: Secondes à attendre avant qu'un jeton se reforme.
               schema: { type: integer, minimum: 1 }
+        "404":
+          description: Session inconnue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            La session ne peut pas être connectée dans son état (terminée,
+            expirée, en attente…) — ou son compte privilégié n'a pas de clé
+            d'hôte épinglée (ADR-0039) : « the privileged account has no
+            pinned host key: an administrator must pin it (PUT
+            /vault/accounts/{id}/host-key) before any session » (ADR-0042).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "503":
           description: >
-            Enregistrement indisponible — la session n'a pas été établie.
-            Distinct de `409` (la session n'est pas dans un état où elle
-            peut être connectée) : ici l'état de la session est inchangé et
-            l'appel peut être renouvelé.
+            Enregistrement indisponible — ou une autre dépendance (Vault,
+            proxy) qui ne répond pas (ADR-0042) : la session n'a pas été
+            établie. Le corps ne dit pas la cause (elle est dans le journal du
+            Broker). Distinct de `409` (la session n'est pas dans un état où
+            elle peut être connectée) : ici l'état de la session est inchangé
+            et l'appel peut être renouvelé.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

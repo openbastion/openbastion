@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,8 +159,11 @@ func TestHostKey_OverHTTP(t *testing.T) {
 
 	_, token = scope()
 	_ = store.SetHostKey(ctx, "acc1", "") // as an account onboarded before ADR-0039
-	if rec, _ := scope(); rec.Code != http.StatusConflict {
-		t.Fatalf("authorize-scope of an unpinned account: %d", rec.Code)
+	if rec, _ := scope(); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"code":"no_pinned_host_key"`) {
+		t.Fatalf("authorize-scope of an unpinned account: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(http.MethodPost, "/vault/v1/authorize-scope", map[string]any{"session_id": "s", "privileged_account_id": "nobody", "proxy_service_id": "ssh-proxy", "ttl_seconds": 60}); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"refused"`) {
+		t.Fatalf("authorize-scope of an unknown account: %d %s", rec.Code, rec.Body)
 	}
 	if rec := fetch(srv, "", token, "ssh-proxy"); rec.Code != http.StatusConflict || bytes.Contains(rec.Body.Bytes(), []byte("s3cret")) {
 		t.Fatalf("fetch-credential of an unpinned account: %d %s", rec.Code, rec.Body)

@@ -459,9 +459,12 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			t.Fatalf("the impostor received %d request(s): the broker sent a vault request to a service that is not the vault", n)
 		}
 		// The refusal is explained by the client's own identity check, not by a timeout
-		// or a connection error that merely looks like one.
-		if !strings.Contains(raw, `answered as "command-recorder", expected "password-vault"`) {
-			t.Fatalf("the refusal should come from the identity pin; the broker said: %d %q", status, raw)
+		// or a connection error that merely looks like one. Since ADR-0042 the cause is in
+		// the broker's log — never in what its client reads.
+		const pin = `answered as "command-recorder", expected "password-vault"`
+		if status != http.StatusServiceUnavailable || strings.Contains(raw, pin) || strings.Contains(raw, impostor.URL) {
+			t.Fatalf("the broker's client was told %d %q", status, raw)
 		}
+		waitUntil(t, 5*time.Second, "the identity pin to be in the broker's log", func() bool { return strings.Contains(victim.out.String(), pin) })
 	})
 }
