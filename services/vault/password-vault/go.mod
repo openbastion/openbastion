@@ -2,7 +2,7 @@ module github.com/openbastion/openbastion/services/vault/password-vault
 
 go 1.26.0
 
-require github.com/lib/pq v1.10.9
+require github.com/lib/pq v1.12.3
 
 require golang.org/x/sys v0.49.0 // indirect
 

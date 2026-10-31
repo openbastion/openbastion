@@ -3,7 +3,7 @@ module github.com/openbastion/openbastion/test/integration
 go 1.26.0
 
 require (
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.12.3
 	github.com/openbastion/openbastion/pkg/proxycore v0.0.0
 	github.com/pkg/sftp v1.13.12
 	golang.org/x/crypto v0.58.0
