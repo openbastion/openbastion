@@ -79,7 +79,7 @@ certificates (`OB_CERT_TTL`, 720 h by default) — run `up` again before they ex
 - Base images are pinned by digest (ADR-0051), which means they are not updated by themselves: to
   update one, read its new index digest (`docker buildx imagetools inspect <name>:<tag>`), replace it
   in the `Dockerfile` or here, build, and run `make test-compose`. `test/integration/images_test.go`
-  refuses an image pulled without a digest. The build images are on Go 1.23, no longer patched.
+  refuses an image pulled without a digest. The build images use Go 1.27.1, the version of the CI.
 - One instance of each service.
 
 ## Test

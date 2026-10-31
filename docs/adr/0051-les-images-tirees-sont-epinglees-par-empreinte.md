@@ -15,7 +15,7 @@ ADR-0033 l'avait noté : « les images ne sont pas épinglées par empreinte (`@
 - (+) **3 mutations, 3 tuées** : une empreinte retirée, une empreinte tronquée, une image ajoutée sans empreinte au workflow.
 - (−) **`make test-compose` n'a pas tourné** pour cet incrément : il pose une règle de pare-feu temporaire que le mode de permission de la session a refusée. Les images ont été construites, la pile n'a pas été démarrée.
 - (−) **Une empreinte ne se met pas à jour seule** : un correctif de sécurité publié sous la même étiquette n'entre qu'au prochain épinglage. La mise à jour se fait à la main, image par image (relever l'empreinte, la remplacer, construire, tester).
-- (−) **Les images de construction sont sur Go 1.23**, qui ne reçoit plus de correctifs de sécurité, quand la CI et le développement sont sur Go 1.27 : l'épinglage fige cette version. La monter est l'étape suivante proposée.
+- (−) ~~**Les images de construction sont sur Go 1.23**, qui ne reçoit plus de correctifs de sécurité, quand la CI et le développement sont sur Go 1.27 : l'épinglage fige cette version.~~ **Levé le même jour** : `golang:1.27.1` et `golang:1.27.1-alpine`, épinglées, la version de la CI.
 - (−) Les images tirées par les tests eux-mêmes (`openBaoImage` dans le code Go) ne sont pas lues par ce test ; l'une l'est par construction, et il faudra la garder épinglée à la main.
 
 **Alternatives envisagées**
