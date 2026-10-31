@@ -1384,6 +1384,8 @@ Go de Bony Kiss pour l'étape proposée : réessayer une rotation après usage �
 
 **Changé en chemin** : `make test-postgres` lançait `TestPostgresFlow_*` avec `-timeout=60s` ; le nouveau scénario dure 67 s (la minute d'attente avant un renvoi) — la limite est portée à 300 s, comme celle de `make test-integration`. `TestPostgresFlow_ReplicasStartingTogether…` attend désormais les trois migrations du Broker.
 
+**Vu une fois, cause non établie** : `TestPostgresFlow_SessionsPastTheirEndAreExpiredOnce…` a échoué une fois sous `-race`, dans le lot des tests PostgreSQL, sortie non conservée ; il a passé seul, puis trois fois de suite dans le même lot (43 à 131 s : la machine était chargée par la pile de prévisualisation Base44). L'hypothèse d'un balayage du Broker ralenti par les renvois d'ADR-0044 ne tient pas dans ce test (Vault sur `127.0.0.1:1`, refus immédiat ; aucune session due en base). À surveiller.
+
 **Choix renversables** : le délai avant un renvoi (une minute) ; le Vault tourne avant de répondre (simple ; un renvoi peut donc attendre la cible) ; une session break-glass accordée sous l'ancien régime à une personne est tournée après usage.
 
 **Preuves** : `test/integration/after_use_flow_test.go` (67 s) ; unitaires ajoutés : Vault application +5, infrastructure +1 PostgreSQL, interfaces +1 ; Broker application +2, infrastructure +2 (dont 1 PostgreSQL) ; Admin UI +1. **20 mutations, 20 tuées** (une survivante d'abord : l'ordre des dates dans mon test, corrigé).
