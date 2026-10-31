@@ -20,17 +20,16 @@ ci:
     - govulncheck, npm audit, construction d'images : à décider
   never_in_ci:
     - secrets réels ; la PKI et les clés des tests se génèrent dans le job et n'en sortent pas
-  required_checks:                      # pas encore exigés : la CI signale sans bloquer
+  required_checks:                      # NON appliqués aujourd'hui : la CI signale sans bloquer
     names:                              # noms exacts des check runs (app github-actions, id 15368)
       - "build, vet, gofmt, unit"
       - "unit tests under -race"
       - "integration on real processes, without a database"
       - "PostgreSQL 16 — unit, dedicated, integration"
       - "Admin UI — Vitest and build"
-    blocked_by:                         # constaté le 31 octobre 2026
-      - "le jeton du codespace (GITHUB_TOKEN, intégration) : 403 Resource not accessible by integration sur branches/main/protection"
-      - "dépôt privé sur une offre gratuite : rulesets et protection de branche demandent GitHub Pro/Team, ou un dépôt public"
-    who: "le propriétaire, avec un compte administrateur, une fois l'offre levée : Settings → Branches (ou Rules) → main → exiger ces cinq contrôles"
+    ruleset: "posé par Bony Kiss le 31 octobre 2026 sur main ; GitHub affiche « won't be enforced on this private repository until you upgrade this organization account to GitHub Team »"
+    bypass: "Repository admin — une fois appliqué, les pushes directs sous un compte administrateur passent : la livraison commit-et-push sur main (policies/release-management.md) reste valable ; la règle protège main des autres contributeurs, pas d'un push direct raté"
+    api: "le jeton du codespace ne lit ni la protection (403 integration) ni les rulesets (403 offre) : vérifier dans l'interface"
 cd:
   exists: false
   deployment_reference: deploy/docker-compose (ADR-0033) ; pas de Helm ni de Kubernetes dans le dépôt
