@@ -28,5 +28,5 @@ Demande de Bony Kiss (31 octobre 2026) : un contrôle des vulnérabilités avant
 **Alternatives envisagées**
 - **Garder le miroir et lancer le scan quand même** : le scan dirait « rien » sur la bibliothèque la plus exposée du projet.
 - **`x/crypto` v0.56.0, la version minimale** : aussi valable ; la dernière a été prise pour ne pas repasser demain.
-- **Un scanner d'images** (Trivy, Grype) : un outil tiers de plus ; à décider à part.
+- **Un scanner d'images** (Trivy, Grype) : un outil tiers de plus ; à décider à part — **décidé par ADR-0060** (Trivy, binaire vérifié contre son empreinte).
 - **Dependabot** : ouvrirait des pull requests de lui-même (la policy demande d'en décider) ; à décider à part.

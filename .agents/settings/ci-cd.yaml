@@ -10,6 +10,11 @@ ci:
     postgres: ["make test (avec TEST_DATABASE_URL)", make test-postgres, "intégration avec base, purgée avant"]
     ui: [make ui-test ui-build]
     vulnerabilities: [make vuln]          # govulncheck v1.9.0 sur chaque module + npm audit ; aussi chaque lundi (cron), ADR-0052
+    images: ["make scan-images TRIVY=…"]  # ADR-0060 : image runtime + postgres:16 épinglée ; HIGH/CRITICAL corrigée = échec ; acceptations dans .trivyignore.yaml (chemin, date)
+  trivy:                                # jamais trivy-action ni setup-trivy (CVE-2026-33634) : l'archive, vérifiée contre TRIVY_SHA256 du workflow
+    version: 0.76.1
+    sha256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+    mise_a_jour: "à la main (Dependabot ne le fait pas) : nouvelle version d'au moins 7 jours, empreinte relevée de trois façons concordantes (GitHub, fichier d'empreintes, calcul)"
   pinned:                               # par empreinte, l'étiquette en commentaire dans le workflow
     actions/checkout: v7.0.1
     actions/setup-go: v7.0.0
@@ -25,7 +30,6 @@ ci:
     reglage_du_depot: "alertes et mises à jour de sécurité Dependabot : Settings → Code security, à activer par le propriétaire"
   not_in_ci:
     - make test-compose                 # Docker requis ; vérification avant un jalon (ADR-0033)
-    - construction et analyse des images (Trivy, Grype) : à décider
   never_in_ci:
     - secrets réels ; la PKI et les clés des tests se génèrent dans le job et n'en sortent pas
   required_checks:                      # NON appliqués aujourd'hui : la CI signale sans bloquer
@@ -35,6 +39,8 @@ ci:
       - "integration on real processes, without a database"
       - "PostgreSQL 16 — unit, dedicated, integration"
       - "Admin UI — Vitest and build"
+      - "govulncheck and npm audit"       # ajouté à ADR-0052, à ajouter au ruleset si ce n'est fait
+      - "Images — Trivy (HIGH, CRITICAL)" # ADR-0060, à ajouter au ruleset
     ruleset: "posé par Bony Kiss le 31 octobre 2026 sur main ; GitHub affiche « won't be enforced on this private repository until you upgrade this organization account to GitHub Team »"
     bypass: "Repository admin — une fois appliqué, les pushes directs sous un compte administrateur passent : la livraison commit-et-push sur main (policies/release-management.md) reste valable ; la règle protège main des autres contributeurs, pas d'un push direct raté"
     api: "le jeton du codespace ne lit ni la protection (403 integration) ni les rulesets (403 offre) : vérifier dans l'interface"

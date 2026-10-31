@@ -1577,6 +1577,10 @@ Un jeton arrivé à sa durée maximale ne se renouvelait plus : il fallait qu'un
 
 **Livré** : `.github/dependabot.yml` — 17 modules Go, 2 paquets npm, actions, `Dockerfile`, compose ; chaque lundi ; une version n'est proposée qu'à 7 jours (`cooldown`) ; une pull request par dépendance, la même dans tous les modules (`group-by: dependency-name`), jamais en masse (policy des dépendances, point 3, complétée) ; fusion humaine après la CI entière. **Pas vérifiable localement** : la configuration est lue par GitHub après le push (YAML vérifié avec Ruby : 5 sources). **Reste** : les alertes et mises à jour de sécurité de Dependabot sont un réglage du dépôt, à activer par le propriétaire ; `go.work`, `GO_VERSION` et l'image OpenBao des tests restent manuels.
 
+## Outillage : les images analysées par Trivy (ADR-0060)
+
+**Mesuré** (Trivy 0.76.1) : l'image d'OpenBastion (cible `runtime`) — 0 vulnérabilité HIGH/CRITICAL corrigée, Debian 12.15 et 11 binaires ; `postgres:16` épinglée — 0 dans Debian, 26 dans `gosu` (Go 1.24.6 ; HIGH 25, CRITICAL 1), et la dernière `postgres:16` publiée est la même empreinte. **Livré** : job `images` et `make scan-images` (échec sur HIGH/CRITICAL corrigée) ; Trivy = l'archive vérifiée contre `TRIVY_SHA256`, **jamais** `trivy-action`/`setup-trivy` (CVE-2026-33634, mars 2026 ; policy des dépendances, point 5 ter) ; `.trivyignore.yaml` : les 26 constats de `gosu`, par chemin, jusqu'au 31 janvier 2027. **Éprouvé** : telle que commitée, la porte passe ; sans le fichier, elle échoue ; `gosu` copié sous un autre nom, elle échoue malgré le fichier ; entrées expirées, elle échoue. **Reste** : « non atteignable » est jugé ; images `tools` et Base44 non analysées ; signature Sigstore non vérifiée ; version de Trivy à relever à la main ; le nom du job est à ajouter au ruleset.
+
 ## Prochains incréments qui lèveront cette limite
 
 Dans un environnement de développement ou de CI avec accès réseau complet :

@@ -20,7 +20,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build test test-integration test-postgres test-compose vuln ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+.PHONY: build test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
 ## Compile tous les modules actuellement implémentés.
 build:
@@ -190,6 +190,17 @@ test-postgres:
 	$(GO) test ./services/recording-audit/command-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
 	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=300s
+
+## Les images : celle d'OpenBastion (cible runtime) et postgres:16 telle qu'épinglée, analysées par
+## Trivy (ADR-0060) ; échoue sur toute vulnérabilité HIGH ou CRITICAL corrigée ailleurs, sauf celles
+## acceptées par écrit dans .trivyignore.yaml (par chemin, avec une date d'expiration).
+## TRIVY : le binaire, vérifié contre son empreinte (la CI le fait) ; Docker requis.
+TRIVY ?= trivy
+scan-images:
+	docker build -q -f deploy/docker-compose/Dockerfile --target runtime -t openbastion:scan .
+	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml openbastion:scan
+	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml \
+		"$$(grep -oE 'postgres:16@sha256:[0-9a-f]{64}' deploy/docker-compose/docker-compose.yml)"
 
 ## Crée, dans $(PKI_DIR), une autorité et l'identité de chaque service (ADR-0010).
 ## Pour le développement et les petits déploiements ; en production, l'émission est

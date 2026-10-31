@@ -150,3 +150,25 @@ jobs:
       # job), and both lockfiles of the Admin UI (ADR-0052).
       - run: make vuln
 
+
+  images:
+    name: Images — Trivy (HIGH, CRITICAL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # Never the trivy-action nor setup-trivy (CVE-2026-33634, March 2026: their tags were moved to
+      # a credential stealer): the release archive, checked against its digest written here (ADR-0060).
+      TRIVY_VERSION: 0.76.1
+      TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy, checked against its digest
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/trivy.tgz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
+      # The OpenBastion image (runtime target) and postgres:16 as pinned: HIGH or CRITICAL with a fix
+      # fails, except what .trivyignore.yaml accepts, by path, until its date.
+      - run: make scan-images TRIVY="$RUNNER_TEMP/trivy"
