@@ -35,5 +35,6 @@ libraries:
   pkg/mtls: identité par certificat (ADR-0010) — stdlib seulement
   pkg/migrate: migrations versionnées (ADR-0030) — stdlib seulement
   pkg/refusalbudget: budget des refus audités (ADR-0020, ADR-0024) — stdlib seulement
+  pkg/webhook: webhook sortant signé — URL vérifiée et jamais écrite, pas de redirection (ADR-0013, ADR-0045) — stdlib seulement
 tools:
   cli/openbastion-cli: exploitation sous l'identité admin-cli (ADR-0033)

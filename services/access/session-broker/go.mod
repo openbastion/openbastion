@@ -22,3 +22,9 @@ replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/ref
 require github.com/openbastion/openbastion/pkg/migrate v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
+
+// Webhook signé sortant (ADR-0012, ADR-0013, ADR-0045). Un replace local explicite,
+// comme pour pkg/refusalbudget.
+require github.com/openbastion/openbastion/pkg/webhook v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/webhook => ../../../pkg/webhook

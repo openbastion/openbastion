@@ -16,3 +16,9 @@ replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 require github.com/openbastion/openbastion/pkg/migrate v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
+
+// Webhook signé sortant pour les alertes (ADR-0045). Un replace local explicite,
+// comme pour pkg/mtls.
+require github.com/openbastion/openbastion/pkg/webhook v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/webhook => ../../../pkg/webhook

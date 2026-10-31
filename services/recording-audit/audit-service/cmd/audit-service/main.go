@@ -8,10 +8,13 @@ import (
 	"context"
 	"log"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/interfaces"
@@ -115,6 +118,8 @@ func main() {
 		log.Printf("audit-service: months older than %d are archived to %s, hourly (verified first; a checkpoint is kept with the anchors)", months, archiveDir)
 	}
 
+	configureAlerts(svc, rt.Enabled())
+
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
@@ -171,5 +176,53 @@ func archiveEvery(svc *application.AuditService, every time.Duration) {
 			failing = false
 		}
 		time.Sleep(every)
+	}
+}
+
+// configureAlerts pushes the alerts written to the chain to ALERT_NOTIFY_URL, signed with
+// ALERT_NOTIFY_SECRET (ADR-0045). The two go together, and neither is ever written: a URL that
+// cannot be used, a secret too short, or one without the other stops the service, with a
+// message that repeats neither.
+func configureAlerts(svc *application.AuditService, internalTLS bool) {
+	rawURL, secret, retry := os.Getenv("ALERT_NOTIFY_URL"), os.Getenv("ALERT_NOTIFY_SECRET"), os.Getenv("ALERT_NOTIFY_RETRY_SECONDS")
+	switch {
+	case rawURL == "" && secret == "" && retry == "":
+		log.Printf("audit-service: no alert channel (ALERT_NOTIFY_URL is not set): alerts are in the chain only, for whoever reads it")
+		return
+	case rawURL == "":
+		log.Fatalf("audit-service: ALERT_NOTIFY_SECRET or ALERT_NOTIFY_RETRY_SECONDS is set but ALERT_NOTIFY_URL is not: there is no alert channel to configure — refusing to start")
+	case secret == "":
+		log.Fatalf("audit-service: ALERT_NOTIFY_URL is set without ALERT_NOTIFY_SECRET: an alert channel is signed (at least %d bytes; `openssl rand -hex 32`) — refusing to start", webhook.MinSecretBytes)
+	}
+	wait := infrastructure.DefaultAlertRetry
+	if retry != "" {
+		n, err := strconv.Atoi(retry)
+		if err != nil || n < 1 || time.Duration(n)*time.Second > infrastructure.MaxAlertRetry {
+			log.Fatalf("audit-service: ALERT_NOTIFY_RETRY_SECONDS must be a number between 1 and %d, got %q — refusing to start", int(infrastructure.MaxAlertRetry/time.Second), retry)
+		}
+		wait = time.Duration(n) * time.Second
+	}
+	endpoint, err := webhook.New(rawURL)
+	if err != nil {
+		log.Fatalf("audit-service: ALERT_NOTIFY_URL cannot be used: %v — refusing to start", err)
+	}
+	if _, err := endpoint.WithSecret(secret); err != nil {
+		log.Fatalf("audit-service: ALERT_NOTIFY_SECRET cannot be used: %v — refusing to start", err)
+	}
+	notifier, err := infrastructure.NewAlertWebhook(endpoint, wait)
+	if err != nil {
+		log.Fatalf("audit-service: the alert channel cannot be used: %v — refusing to start", err)
+	}
+	svc.WithAlertNotifier(notifier, !internalTLS)
+
+	var alerts []string
+	for action, emitter := range application.AlertActions() {
+		alerts = append(alerts, action+" from "+emitter)
+	}
+	sort.Strings(alerts)
+	log.Printf("audit-service: alerts (%s) are pushed to %s once written, signed (%s, v1 HMAC-SHA256), up to %d attempts from %s; best effort, the rest of the URL is a secret and is not logged",
+		strings.Join(alerts, ", "), notifier.Where(), webhook.SignatureHeader, infrastructure.AlertMaxAttempts, wait)
+	if !internalTLS {
+		log.Printf("audit-service: internal TLS is disabled, so no emitter is named: an alert is pushed whoever writes it (dev only)")
 	}
 }

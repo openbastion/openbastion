@@ -458,6 +458,8 @@ message EmitEventResponse {
 }
 ```
 
+**Alertes poussées (ADR-0045).** Le contrat d'`EmitEvent` ne change pas. Après l'écriture, un événement dont le couple (action, émetteur du certificat) est une alerte déclarée — aujourd'hui `vault.rotation_overdue` écrit par `password-vault` — est poussé par l'Audit Service vers `ALERT_NOTIFY_URL`, hors de la requête : la réponse n'attend pas le canal et n'en dit rien. Le même événement écrit par un autre émetteur est enregistré et n'est pas poussé. Le message sortant est décrit dans `docs/administration/notifications.md` ; ce n'est pas un contrat gRPC.
+
 ## 8. Broker/Gateway → Authorization Service — `Authorization`
 
 ```protobuf

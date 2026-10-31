@@ -5,7 +5,7 @@ go:
   vet: obligatoire
   dependencies:
     policy: stdlib d'abord ; demander avant toute dépendance externe
-    stdlib_only: [pkg/mtls, pkg/migrate, pkg/refusalbudget]
+    stdlib_only: [pkg/mtls, pkg/migrate, pkg/refusalbudget, pkg/webhook]
     golang.org/x/crypto: v0.24.0 (par le miroir github.com/golang/crypto, replace à garder)
     test_only: [github.com/pkg/sftp v1.13.7 dans test/integration]
     go_sum: régénéré par go mod tidy, jamais à la main

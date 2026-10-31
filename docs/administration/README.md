@@ -11,6 +11,7 @@ Pour l'administrateur de la plateforme, une fois l'installation faite ([`../depl
 | [`session-recording.md`](session-recording.md) | Politique d'enregistrement : enregistrer ou refuser (ADR-0008) |
 | [`identity-providers.md`](identity-providers.md) | Fédération d'identité (OIDC, ADR-0035) |
 | [`audit-and-compliance.md`](audit-and-compliance.md) | Supervision et audit : chaîne, clé, ancrage, rétention |
+| [`notifications.md`](notifications.md) | Les webhooks signés : alertes de l'audit (ADR-0045), break-glass (ADR-0012, ADR-0013) ; vérifier une signature |
 
 ## Pages prévues
 
@@ -18,5 +19,4 @@ Pour l'administrateur de la plateforme, une fois l'installation faite ([`../depl
 |---|---|
 | `user-and-group-management.md` | Les utilisateurs locaux se créent par le CLI (`openbastion-cli user create`, voir `deploy/docker-compose/README.md`) ; pas de gestion de groupes dans le MVP. |
 | `secret-rotation.md` | La rotation est décrite dans [`privileged-accounts.md`](privileged-accounts.md) (ADR-0037, ADR-0040, ADR-0041, ADR-0044). |
-| `notifications.md` | Seule la notification du break-glass existe (webhook signé, ADR-0012 et ADR-0013, dans [`approval-workflows.md`](approval-workflows.md)). |
 | `monitoring.md` | Voir [`../operations/`](../operations/README.md). |

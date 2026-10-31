@@ -54,3 +54,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0042](0042-un-refus-dit-son-motif-a-l-operateur-par-un-code-stable-et.md) | Un refus dit son motif à l'opérateur par un code stable, et une panne ne dit jamais sa cause | Accepté |
 | [ADR-0043](0043-aucune-route-publique-ne-rend-le-texte-d-une-erreur-interne.md) | Aucune route publique ne rend le texte d'une erreur interne ; une session ne se crée que sur un compte qui existe et dont la clé est épinglée | Accepté |
 | [ADR-0044](0044-une-rotation-apres-usage-est-une-dette-enregistree-reglee.md) | Une rotation après usage est une dette enregistrée, réglée jusqu'au bout : le Broker la remet, le Vault la paie | Accepté |
+| [ADR-0045](0045-une-alerte-ecrite-a-l-audit-est-poussee-par-un-webhook-signe.md) | Une alerte écrite à l'audit est poussée par un webhook signé, et seulement si celui qui l'écrit a le droit de la dire | Accepté |

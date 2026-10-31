@@ -6,6 +6,7 @@ use (
 	./pkg/proxycore
 	./pkg/migrate
 	./pkg/refusalbudget
+	./pkg/webhook
 	./services/access/api-gateway
 	./services/access/authentication
 	./services/access/authorization

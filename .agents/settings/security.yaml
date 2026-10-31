@@ -10,6 +10,9 @@ strict_defaults:
   BREAKGLASS_MAX_PENDING_PER_REQUESTER: {default: 3, min: 1, max: 100}
   BREAKGLASS_NOTIFY_URL:   {default: "absente = pas de notification (annoncé)", secret: true}
   BREAKGLASS_NOTIFY_SECRET: {min_bytes: 32, note: "sans URL : fatal", secret: true}
+  ALERT_NOTIFY_URL:        {default: "absente = pas de poussée (annoncé)", service: audit-service, secret: true, note: "ADR-0045 ; sans ALERT_NOTIFY_SECRET : fatal"}
+  ALERT_NOTIFY_SECRET:     {min_bytes: 32, service: audit-service, secret: true, note: "obligatoire avec l'URL ; sans URL : fatal"}
+  ALERT_NOTIFY_RETRY_SECONDS: {default: 30, min: 1, max: 600, service: audit-service, note: "double à chaque renvoi, 5 tentatives ; sans URL : fatal"}
   SESSION_REQUEST_BURST:   {default: 10, min: 1, max: 1000}
   SESSION_REQUEST_RATE_PER_MINUTE: {default: 6, min: 1, max: 600}
   SESSION_ACTION_BURST:    {default: 10, min: 1, max: 1000}

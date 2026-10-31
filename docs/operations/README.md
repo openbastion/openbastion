@@ -6,6 +6,7 @@ Le MVP n'a pas encore d'outillage d'exploitation propre : pas de métriques expo
 |---|---|
 | Journaux des services, santé | [`../deployment/troubleshooting.md`](../deployment/troubleshooting.md), [`../development/debugging.md`](../development/debugging.md) |
 | Supervision par l'audit (alertes `vault.rotation_overdue`, refus, expirations) | [`../administration/audit-and-compliance.md`](../administration/audit-and-compliance.md) |
+| Alertes poussées vers une messagerie ou un outil d'astreinte (webhook signé) | [`../administration/notifications.md`](../administration/notifications.md) |
 | Panne d'un composant, dégradation gracieuse, tests de résilience | [`../deployment/high-availability.md`](../deployment/high-availability.md) |
 | Perte d'un site, squelette de runbook de bascule | [`../deployment/disaster-recovery.md`](../deployment/disaster-recovery.md) |
 | Sauvegardes | [`../deployment/backup-restore.md`](../deployment/backup-restore.md) |
@@ -14,7 +15,7 @@ Le MVP n'a pas encore d'outillage d'exploitation propre : pas de métriques expo
 
 | Page | État |
 |---|---|
-| `observability.md`, `logging.md`, `metrics.md`, `tracing.md`, `alerting.md` | Pas d'OpenTelemetry ni de métriques dans le code ; la notification poussée des alertes est l'étape suivante du backlog. |
+| `observability.md`, `logging.md`, `metrics.md`, `tracing.md`, `alerting.md` | Pas d'OpenTelemetry ni de métriques dans le code. Les alertes de l'audit sont poussées par webhook (ADR-0045, [`../administration/notifications.md`](../administration/notifications.md)). |
 | `capacity-planning.md`, `performance-testing.md` | Aucune mesure de charge à ce jour. |
 | `backup-policy.md` | Voir [`../deployment/backup-restore.md`](../deployment/backup-restore.md). |
 | `runbooks/` (service indisponible, base en panne, bus de messages, certificat expiré, compromission suspectée) | À écrire à partir des procédures réelles ; le MVP n'a pas de bus de messages. |

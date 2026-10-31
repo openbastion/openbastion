@@ -30,6 +30,7 @@ build:
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
+		./pkg/webhook/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
@@ -46,6 +47,7 @@ vet:
 	$(GO) vet ./cli/openbastion-cli/...
 	$(GO) vet ./pkg/migrate/...
 	$(GO) vet ./pkg/refusalbudget/...
+	$(GO) vet ./pkg/webhook/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
 	$(GO) vet ./services/access/authorization/...
@@ -66,6 +68,7 @@ test:
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
+		./pkg/webhook/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \

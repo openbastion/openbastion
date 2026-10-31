@@ -52,6 +52,10 @@ type AuditService struct {
 
 	// archive moves verified months out of the database (ADR-0032); nil = never.
 	archive *archiving
+
+	// alerts pushes the alerts written to the chain (ADR-0045); nil = none.
+	alerts        AlertNotifier
+	alertsUnnamed bool
 }
 
 func NewAuditService(store Store) *AuditService {
@@ -193,6 +197,10 @@ func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action
 	}
 	tip := *e
 	s.tip = &tip
+	// Only what is in the chain is pushed, and only once it is (ADR-0045).
+	if s.alerts != nil && s.isAlert(e) {
+		s.alerts.Notify(ctx, *e)
+	}
 	return e, nil
 }
 

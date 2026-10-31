@@ -1,43 +1,29 @@
 package infrastructure
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net"
-	"net/http"
-	"net/url"
-	"strconv"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
 
 const (
-	// webhookTimeout bounds one delivery, connection and answer included.
-	webhookTimeout = 5 * time.Second
 	// webhookMaxInFlight bounds the deliveries under way at once. A notifier that
 	// piled up goroutines behind a dead endpoint would be a way to exhaust the Broker;
 	// past this number a notification is dropped, and said so in the log.
 	webhookMaxInFlight = 16
 
-	// WebhookMinSecretBytes is the shortest key the Broker will sign with (ADR-0013):
-	// an HMAC key shorter than its output is a weaker key than the one it stands in for.
-	WebhookMinSecretBytes = 32
+	// WebhookMinSecretBytes is the shortest key the Broker will sign with (ADR-0013).
+	WebhookMinSecretBytes = webhook.MinSecretBytes
 
-	// The two headers of a signed delivery (ADR-0013). The signature is
-	// "v1=" + hex(HMAC-SHA256(secret, timestamp + "." + body)); a receiver recomputes
-	// it on the bytes it received, compares in constant time, and refuses a timestamp
-	// that is too far from its own clock.
-	WebhookTimestampHeader = "X-OpenBastion-Timestamp"
-	WebhookSignatureHeader = "X-OpenBastion-Signature"
+	// The two headers of a signed delivery (ADR-0013), shared with the alerts of the
+	// Audit Service (ADR-0045): see pkg/webhook.
+	WebhookTimestampHeader = webhook.TimestampHeader
+	WebhookSignatureHeader = webhook.SignatureHeader
 )
 
 // WebhookNotifier implements application.ApprovalNotifier by POSTing a small JSON
@@ -49,86 +35,45 @@ const (
 // fails (it has no result), and does not retry. A refusal, an error or a silence from
 // the endpoint is a line in the log and nothing else.
 //
-// The URL is a secret: Slack and Teams put theirs in the path. It is therefore never
-// written anywhere — Where() is its scheme and host, which is all the log says — and
-// transport errors are stripped of it before being logged (net/http puts the whole
-// URL in them). Redirects are not followed: a hostile or hijacked endpoint must not
-// be able to send the Broker, from inside the network, to another address.
+// The transport — the URL checked, never written (it is a secret: Slack and Teams put
+// theirs in the path), no redirect followed, the exact body signed — is pkg/webhook's.
 type WebhookNotifier struct {
-	url     string
-	where   string
-	client  *http.Client
-	timeout time.Duration // bounds one delivery, through its context
-	secret  []byte        // signs each delivery when set (ADR-0013); never written anywhere
-	now     func() time.Time
-	slots   chan struct{}
-	logf    func(format string, args ...any)
+	endpoint *webhook.Endpoint
+	slots    chan struct{}
+	logf     func(format string, args ...any)
 }
 
-// NewWebhookNotifier checks rawURL and returns a notifier for it. https is required,
-// except towards a loopback address (development and tests); a URL that carries
-// credentials, has no host, has another scheme or cannot be read is an error — whose
-// text never repeats the URL, because the caller writes it into the log.
+// NewWebhookNotifier checks rawURL (pkg/webhook.New) and returns a notifier for it; the
+// error never repeats the URL, because the caller writes it into the log.
 func NewWebhookNotifier(rawURL string) (*WebhookNotifier, error) {
-	u, err := url.Parse(rawURL)
+	e, err := webhook.New(rawURL)
 	if err != nil {
-		return nil, errors.New("not a valid URL")
+		return nil, err
 	}
-	if u.Hostname() == "" {
-		return nil, errors.New("the URL has no host")
-	}
-	if u.User != nil {
-		return nil, errors.New("the URL must not carry credentials (user:password@)")
-	}
-	switch u.Scheme {
-	case "https":
-	case "http":
-		if !isLoopbackHost(u.Hostname()) {
-			return nil, errors.New("http is only allowed towards a loopback address; use https")
-		}
-	default:
-		return nil, errors.New("the URL scheme must be https")
-	}
-	w := &WebhookNotifier{
-		url:     u.String(),
-		where:   u.Scheme + "://" + u.Host,
-		timeout: webhookTimeout,
-		now:     time.Now,
-		slots:   make(chan struct{}, webhookMaxInFlight),
-		logf:    log.Printf,
-		client: &http.Client{
-			// A redirect is an answer, not an instruction: the Broker does not go where an
-			// endpoint tells it to.
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		},
-	}
-	return w, nil
+	return &WebhookNotifier{endpoint: e, slots: make(chan struct{}, webhookMaxInFlight), logf: log.Printf}, nil
 }
 
 // WithTimeout shortens or lengthens the bound of one delivery; for tests.
 func (w *WebhookNotifier) WithTimeout(d time.Duration) *WebhookNotifier {
-	w.timeout = d
+	w.endpoint.WithTimeout(d)
 	return w
 }
 
 // WithSecret makes the notifier sign every delivery (ADR-0013). A secret shorter than
-// WebhookMinSecretBytes is refused, with an error that does not repeat it: the caller
-// writes that error into its log. The secret is used exactly as given — a trailing
-// newline from a file is part of the key, and the receiver's key must have it too.
+// WebhookMinSecretBytes is refused, with an error that does not repeat it.
 func (w *WebhookNotifier) WithSecret(secret string) (*WebhookNotifier, error) {
-	if len(secret) < WebhookMinSecretBytes {
-		return nil, fmt.Errorf("the secret must be at least %d bytes long (for example `openssl rand -hex 32`)", WebhookMinSecretBytes)
+	if _, err := w.endpoint.WithSecret(secret); err != nil {
+		return nil, err
 	}
-	w.secret = []byte(secret)
 	return w, nil
 }
 
 // Signed says whether deliveries carry a signature.
-func (w *WebhookNotifier) Signed() bool { return len(w.secret) > 0 }
+func (w *WebhookNotifier) Signed() bool { return w.endpoint.Signed() }
 
 // WithClock replaces the clock that stamps a signed delivery; for tests.
 func (w *WebhookNotifier) WithClock(now func() time.Time) *WebhookNotifier {
-	w.now = now
+	w.endpoint.WithClock(now)
 	return w
 }
 
@@ -139,15 +84,7 @@ func (w *WebhookNotifier) WithLogf(logf func(format string, args ...any)) *Webho
 }
 
 // Where is the only part of the URL that may be written down: scheme and host.
-func (w *WebhookNotifier) Where() string { return w.where }
-
-func isLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
+func (w *WebhookNotifier) Where() string { return w.endpoint.Where() }
 
 // webhookMessage is the body of a delivery. It is built from a
 // domain.ApprovalNotification, which has no field for the justification or for
@@ -168,7 +105,7 @@ type webhookMessage struct {
 
 func toWebhookMessage(n domain.ApprovalNotification) webhookMessage {
 	deadline := n.ExpiresAt.UTC().Format("15:04")
-	id, acc, by, dec := safeText(n.SessionID), safeText(n.AccountID), safeText(n.RequestedBy), safeText(n.DecidedBy)
+	id, acc, by, dec := webhook.SafeText(n.SessionID), webhook.SafeText(n.AccountID), webhook.SafeText(n.RequestedBy), webhook.SafeText(n.DecidedBy)
 	var text string
 	switch n.Event {
 	case domain.NotifyBreakGlassRequested:
@@ -178,7 +115,7 @@ func toWebhookMessage(n domain.ApprovalNotification) webhookMessage {
 	case domain.NotifyBreakGlassRejected:
 		text = fmt.Sprintf("OpenBastion break-glass request %s REJECTED by %s: %s asked for %d min on account %s.", id, dec, by, n.DurationMinutes, acc)
 	default:
-		text = fmt.Sprintf("OpenBastion break-glass event %s on request %s.", safeText(n.Event), id)
+		text = fmt.Sprintf("OpenBastion break-glass event %s on request %s.", webhook.SafeText(n.Event), id)
 	}
 	return webhookMessage{
 		Event: n.Event, SessionID: n.SessionID, AccountID: n.AccountID, RequestedBy: n.RequestedBy, DecidedBy: n.DecidedBy,
@@ -187,34 +124,12 @@ func toWebhookMessage(n domain.ApprovalNotification) webhookMessage {
 	}
 }
 
-// safeText makes an identifier fit to be read inside a sentence by a chat service:
-// letters, digits and . _ : - survive, anything else — the characters that make a
-// mention, a link or a line break — becomes "?", and it stops at 64 characters. The
-// account identifier is supplied by the person who asks, so it is not trusted to be
-// the plain word it normally is.
-func safeText(s string) string {
-	const max = 64
-	out := make([]rune, 0, len(s))
-	for _, r := range s {
-		if len(out) == max {
-			break
-		}
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == ':', r == '-':
-			out = append(out, r)
-		default:
-			out = append(out, '?')
-		}
-	}
-	return string(out)
-}
-
 // Notify sends n in the background and returns at once.
 func (w *WebhookNotifier) Notify(ctx context.Context, n domain.ApprovalNotification) {
 	select {
 	case w.slots <- struct{}{}:
 	default:
-		w.logf("session-broker: notification %s for %s dropped: %d deliveries are already in flight", n.Event, safeText(n.SessionID), webhookMaxInFlight)
+		w.logf("session-broker: notification %s for %s dropped: %d deliveries are already in flight", n.Event, webhook.SafeText(n.SessionID), webhookMaxInFlight)
 		return
 	}
 	body, _ := json.Marshal(toWebhookMessage(n)) // strings and integers only: it cannot fail
@@ -228,40 +143,11 @@ func (w *WebhookNotifier) Notify(ctx context.Context, n domain.ApprovalNotificat
 }
 
 func (w *WebhookNotifier) deliver(ctx context.Context, n domain.ApprovalNotification, body []byte) {
-	ctx, cancel := context.WithTimeout(ctx, w.timeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.url, bytes.NewReader(body))
-	if err != nil {
-		w.logf("session-broker: notification %s for %s not sent to %s", n.Event, safeText(n.SessionID), w.where)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "OpenBastion-Session-Broker")
-	if w.Signed() {
-		// Stamped at the moment of sending, not of the event: the receiver's tolerance
-		// is about how fresh the delivery is.
-		ts := strconv.FormatInt(w.now().Unix(), 10)
-		mac := hmac.New(sha256.New, w.secret)
-		mac.Write([]byte(ts))
-		mac.Write([]byte("."))
-		mac.Write(body)
-		req.Header.Set(WebhookTimestampHeader, ts)
-		req.Header.Set(WebhookSignatureHeader, "v1="+hex.EncodeToString(mac.Sum(nil)))
-	}
-	resp, err := w.client.Do(req)
-	if err != nil {
-		// net/http wraps the failure in a *url.Error whose text begins with the whole
-		// URL — the secret. What is logged is the cause alone.
-		var ue *url.Error
-		if errors.As(err, &ue) {
-			err = ue.Err
-		}
-		w.logf("session-broker: notification %s for %s not delivered to %s: %v", n.Event, safeText(n.SessionID), w.where, err)
-		return
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		w.logf("session-broker: notification %s for %s refused by %s: status %d", n.Event, safeText(n.SessionID), w.where, resp.StatusCode)
+	status, err := w.endpoint.Post(ctx, "OpenBastion-Session-Broker", body)
+	switch {
+	case err != nil:
+		w.logf("session-broker: notification %s for %s not delivered to %s: %v", n.Event, webhook.SafeText(n.SessionID), w.Where(), err)
+	case status < 200 || status > 299:
+		w.logf("session-broker: notification %s for %s refused by %s: status %d", n.Event, webhook.SafeText(n.SessionID), w.Where(), status)
 	}
 }
