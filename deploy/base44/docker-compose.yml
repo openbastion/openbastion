@@ -66,7 +66,7 @@ services:
     network_mode: none
 
   postgres:
-    image: postgres:16
+    image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
     restart: on-failure
     environment:
       POSTGRES_USER: openbastion
@@ -307,7 +307,7 @@ services:
   # The Admin UI, in development: the Vite dev server on port 3000, forwarding the public API
   # paths to the Gateway (vite.config.ts, only when BASE44_PREVIEW_MODE=1).
   web:
-    image: node:22
+    image: node:22@sha256:18a6d90fd60542269850c80ca03b29b1d9b14d6b221ac7ee8e35b0d33ef904bd
     restart: on-failure
     working_dir: /app
     labels:

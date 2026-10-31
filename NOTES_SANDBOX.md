@@ -1039,7 +1039,7 @@ Troisième critère de sortie du MVP (`docs/roadmap.md` §2), qui n'avait rien d
 
 **Ce que cela ne fait PAS :**
 1. **PostgreSQL en clair sur le réseau Compose** (`sslmode=disable`).
-2. **Images non épinglées par empreinte** : reproductible pour le code (`go.sum`), pas pour les images de base.
+2. ~~**Images non épinglées par empreinte** : reproductible pour le code (`go.sum`), pas pour les images de base.~~ — fermé par ADR-0051.
 3. **Une instance de chaque service** ; pas de Helm (`docs/development/repository-structure.md` §6 : cible, pas écrite).
 4. **Le CLI ne fait que l'amorçage** ; politiques, comptes, sessions passent par l'API publique.
 5. **Les certificats expirent après 720 h** si personne ne relance `up` (rien ne surveille l'échéance).
@@ -1508,6 +1508,20 @@ Go de Bony Kiss (31 octobre 2026) pour le point 8, après la mesure de son coût
 **Ce que cela ne fait PAS** : les noms sont vérifiés, pas les types ; les corps construits par une `map` côté client (dix appels, listés dans l'ADR) ne le sont pas ; pas de code généré, pas de flux, `buf breaking` ne garde pas les numéros de champs.
 
 **Choix renversables** : la vérification par lecture des sources plutôt qu'un test par service ; les sept structures déclarées sans contrat ; les critères de reprise de gRPC.
+
+## Les images tirées sont épinglées par empreinte (ADR-0051)
+
+Go de Bony Kiss (31 octobre 2026) pour le point 9.
+
+**Mesuré avant** : `test/integration/images_test.go`, écrit d'abord, échoue sur huit références épinglées par étiquette seule (`golang:1.23` ×2, `golang:1.23-alpine`, `node:24-alpine`, `gcr.io/distroless/static-debian12:nonroot`, `postgres:16` ×2, `node:22`).
+
+**Livré** : chaque image tirée porte `name:tag@sha256:<empreinte d'index>` (relevée par `docker buildx imagetools inspect`) ; le test lit `deploy/*/Dockerfile*`, `deploy/*/docker-compose*.yml` et `.github/workflows/*.yml` et refuse toute image tirée sans empreinte (exemptées : les images `openbastion*` construites par Compose, et les étapes d'un même Dockerfile). Policy des dépendances, point 6 : « TOUJOURS épingler » remplace « ne sont pas épinglées » ; ADR-0033 : limite barrée ; `deploy/docker-compose/README.md` : comment mettre une empreinte à jour.
+
+**Preuves** : rouge puis vert ; les trois images construites (déploiement, outils, Base44), un binaire démarre dans l'image distroless ; **3 mutations, 3 tuées**.
+
+**Pas lancé** : `make test-compose` — sa règle de pare-feu temporaire a été refusée par le mode de permission de cette session ; la pile n'a donc pas été démarrée avec les nouvelles images.
+
+**Ce que cela ne fait PAS** : pas de mise à jour automatique des empreintes ; les images de construction restent sur Go 1.23, qui n'est plus corrigé ; l'image OpenBao des tests (dans le code Go) n'est pas lue par le test.
 
 ## Prochains incréments qui lèveront cette limite
 

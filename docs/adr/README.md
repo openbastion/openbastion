@@ -60,3 +60,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0048](0048-une-cible-peut-etre-reconnue-par-une-autorite-de-certificats-ssh.md) | Une cible peut être reconnue par une autorité de certificats SSH épinglée au compte, à la place de sa clé | Accepté |
 | [ADR-0049](0049-les-cles-de-chiffrement-gardees-par-transit.md) | Les clés de chiffrement du Vault et du Command Recorder sont gardées par le moteur Transit d'OpenBao, et les anciennes lignes restent lisibles | Accepté |
 | [ADR-0050](0050-le-transport-interne-reste-http-json-sous-mtls.md) | Le transport entre services reste HTTP/JSON sous mTLS, avec les noms des messages de `proto/`, et un test empêche les deux de diverger | Accepté |
+| [ADR-0051](0051-les-images-tirees-sont-epinglees-par-empreinte.md) | Toute image tirée d'un registre est épinglée par son empreinte, et un test refuse celle qui ne l'est pas | Accepté |

@@ -3,7 +3,7 @@
 #   docker build -f deploy/docker-compose/Dockerfile .
 
 # -- build: every binary, static, from go.work and go.sum ----------------------------------
-FROM golang:1.23-alpine AS build
+FROM golang:1.23-alpine@sha256:383395b794dffa5b53012a212365d40c8e37109a626ca30d6151c8348d380b5f AS build
 WORKDIR /src
 COPY . .
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
@@ -25,7 +25,7 @@ RUN mkdir -p /rootfs/pki /rootfs/var/lib/openbastion/anchors /rootfs/var/lib/ope
  && chown -R 65532:65532 /rootfs
 
 # -- ui: the Admin UI (ADR-0036), built from its lockfile ------------------------------------
-FROM node:24-alpine AS ui
+FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS ui
 WORKDIR /openbastion-icons
 COPY web/openbastion-icons/package.json web/openbastion-icons/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -43,7 +43,7 @@ FROM build AS tools
 RUN cp /out/openbastion-pki /usr/local/bin/
 
 # -- runtime: no shell, no package manager, not root ------------------------------------------
-FROM gcr.io/distroless/static-debian12:nonroot AS runtime
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS runtime
 COPY --from=build /out/ /usr/local/bin/
 COPY --from=ui /ui/dist/ /usr/local/share/openbastion/admin-ui/
 COPY --from=build --chown=65532:65532 /rootfs/ /
