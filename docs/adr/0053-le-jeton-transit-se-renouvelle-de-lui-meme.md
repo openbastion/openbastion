@@ -16,7 +16,7 @@ ADR-0049 a confié les clés du Vault et du Command Recorder au moteur Transit d
 - (+) **6 mutations, 6 tuées.**
 - (−) Un jeton périodique renouvelé sans fin dure autant que le service : le révoquer reste le geste de l'exploitant (`bao token revoke`), et le service le voit au renouvellement suivant.
 - (−) Pas d'AppRole : un jeton qui a atteint sa durée maximale (`explicit_max_ttl`) ne se renouvelle plus, et il faut le remplacer dans le fichier, puis redémarrer le service.
-- (−) Le fichier n'est pas relu : un jeton remplacé sur disque n'est pris qu'au redémarrage.
+- (−) ~~Le fichier n'est pas relu : un jeton remplacé sur disque n'est pris qu'au redémarrage.~~ **Levé par ADR-0056** : relu, vérifié, pris.
 
 **Alternatives envisagées**
 - **L'agent OpenBao à côté du service** (`bao agent` qui renouvelle et réécrit le fichier) : un processus de plus à déployer et à surveiller ; reste possible.

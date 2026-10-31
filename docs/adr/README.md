@@ -65,3 +65,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0053](0053-le-jeton-transit-se-renouvelle-de-lui-meme.md) | Le jeton Transit se renouvelle de lui-même, à mi-vie, et le dit quand il ne le peut pas | Accepté |
 | [ADR-0054](0054-une-cle-d-hote-certifiee-peut-etre-revoquee.md) | Une clé d'hôte certifiée peut être révoquée au compte, comme dans `known_hosts`, et ne reçoit plus rien même avec un certificat valable | Accepté |
 | [ADR-0055](0055-ce-que-la-cle-locale-protege-encore-est-rescelle-sous-transit.md) | Ce que la clé locale protège encore est rescellé sous la clé courante, en tâche de fond, jusqu'à ce que la clé locale puisse partir | Accepté |
+| [ADR-0056](0056-un-jeton-transit-remplace-sur-disque-est-pris-sans-redemarrer.md) | Un jeton Transit remplacé sur disque est pris sans redémarrer, après avoir été vérifié auprès de Transit | Accepté |

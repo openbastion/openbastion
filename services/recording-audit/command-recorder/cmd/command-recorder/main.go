@@ -155,6 +155,9 @@ func recordingKeys() (infrastructure.KeyWrapper, []infrastructure.KeyWrapper) {
 	}
 	// The token renews itself at half its life (ADR-0053).
 	go client.KeepAlive(context.Background(), func(f string, a ...any) { log.Printf("command-recorder: "+f, a...) })
+	// A token replaced on disk is taken once Transit accepts it (ADR-0056).
+	reload := boundedIntEnv("TRANSIT_TOKEN_RELOAD_SECONDS", int(transit.DefaultTokenReload/time.Second), 1, 3600)
+	go client.WatchTokenFile(context.Background(), time.Duration(reload)*time.Second, func(f string, a ...any) { log.Printf("command-recorder: "+f, a...) })
 	var previous []infrastructure.KeyWrapper
 	if hexKey != "" {
 		local, err := infrastructure.NewLocalKEKFromHexKey(hexKey)

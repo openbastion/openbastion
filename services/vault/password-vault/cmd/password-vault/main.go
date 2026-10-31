@@ -194,6 +194,9 @@ func keyring(dsn, kmsKeyHex string) *infrastructure.Keyring {
 	// The token renews itself at half its life (ADR-0053): a periodic token would otherwise end,
 	// and with it every secret's delivery.
 	go client.KeepAlive(context.Background(), func(f string, a ...any) { log.Printf("password-vault: "+f, a...) })
+	// A token replaced on disk is taken once Transit accepts it (ADR-0056).
+	reload := boundedIntEnv("TRANSIT_TOKEN_RELOAD_SECONDS", int(transit.DefaultTokenReload/time.Second), 1, 3600)
+	go client.WatchTokenFile(context.Background(), time.Duration(reload)*time.Second, func(f string, a ...any) { log.Printf("password-vault: "+f, a...) })
 	current := infrastructure.NewTransitKMS(client)
 	var previous []infrastructure.Sealer
 	if kmsKeyHex != "" {

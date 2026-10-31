@@ -30,6 +30,7 @@ const openBaoImage = "openbao/openbao@sha256:5046911075e137e154ce49ab051502f4ec7
 type openBao struct {
 	addr, name  string
 	createToken func(t *testing.T, period string) string // a token of the key's policy; periodic if period is set
+	revoke      func(t *testing.T, token string)
 }
 
 // startOpenBao runs OpenBao in development mode, mounts Transit, creates key, and returns the
@@ -94,6 +95,10 @@ path "auth/token/renew-self" { capabilities = ["update"] }`, key, key)
 		}
 		tok := call(http.MethodPost, "/v1/auth/token/create", req)
 		return writeToken(t, tok["auth"].(map[string]any)["client_token"].(string), 0o600)
+	}
+	b.revoke = func(t *testing.T, token string) {
+		t.Helper()
+		call(http.MethodPost, "/v1/auth/token/revoke", map[string]string{"token": token})
 	}
 	return b, b.createToken(t, "")
 }
@@ -322,6 +327,30 @@ func TestPostgresFlow_TransitKeepsTheKeys_WhatWasSealedBeforeStaysReadable(t *te
 		}
 	})
 
+	t.Run("ADR-0056: a token replaced on disk is taken, and the old one can then be revoked", func(t *testing.T) {
+		file := bao.createToken(t, "")
+		old, _ := os.ReadFile(file)
+		v8 := startService(t, root, vaultBin, "19752", vaultEnv("TRANSIT_ADDR="+bao.addr, "TRANSIT_KEY=openbastion-vault", "TRANSIT_TOKEN_FILE="+file, "TRANSIT_TOKEN_RELOAD_SECONDS=1")...)
+		fresh, _ := os.ReadFile(bao.createToken(t, ""))
+		if err := os.WriteFile(file, fresh, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Give the Vault its period to take the new token — then revoke the old one, whatever it did.
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !strings.Contains(v8.out.String(), "the token file changed"); {
+			time.Sleep(100 * time.Millisecond)
+		}
+		bao.revoke(t, strings.TrimSpace(string(old)))
+		if got, err := fetchSecret(t, v8.baseURL, after); err != nil || got != "secret-sealed-after" {
+			t.Fatalf("with the old token revoked: %q, %v", got, err)
+		}
+		if !strings.Contains(v8.out.String(), "the token file changed") {
+			t.Fatalf("the Vault does not say it took the new token:\n%s", v8.out.String())
+		}
+		if out := v8.out.String(); strings.Contains(out, strings.TrimSpace(string(old))) || strings.Contains(out, strings.TrimSpace(string(fresh))) {
+			t.Fatal("a token is in the Vault's log")
+		}
+	})
+
 	t.Run("the Recorder starts with Transit, after its round trip", func(t *testing.T) {
 		rec := startService(t, root, recorderBin, "19747", vaultEnv(withTransit("AUDIT_URL=http://127.0.0.1:1")...)...)
 		if !strings.Contains(rec.out.String(), "wrapped by transit:transit/openbastion-vault") {
@@ -330,5 +359,8 @@ func TestPostgresFlow_TransitKeepsTheKeys_WhatWasSealedBeforeStaysReadable(t *te
 		waitUntil(t, 5*time.Second, "the Recorder to renew its token (ADR-0053)", func() bool {
 			return strings.Contains(rec.out.String(), "command-recorder: transit: the token is renewed at half its life")
 		})
+		if !strings.Contains(rec.out.String(), "command-recorder: transit: the token file is read again every") {
+			t.Fatalf("the Recorder does not watch its token file (ADR-0056):\n%s", rec.out.String())
+		}
 	})
 }

@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,7 +48,9 @@ type Config struct {
 // Client wraps and unwraps with one Transit key.
 type Client struct {
 	base, mount, key string
-	token            string
+	tokenMu          sync.RWMutex
+	token            string // the token in use; replaced by ReloadToken once a new one is checked (ADR-0056)
+	tokenFile        string
 	http             *http.Client
 	renewFloor       time.Duration // the shortest wait before a renewal is tried again (ADR-0053)
 }
@@ -117,7 +120,7 @@ func New(cfg Config) (*Client, error) {
 		tlsConfig.RootCAs = pool
 	}
 	return &Client{
-		base: u.Scheme + "://" + u.Host, mount: mount, key: cfg.Key, token: token, renewFloor: DefaultRenewFloor,
+		base: u.Scheme + "://" + u.Host, mount: mount, key: cfg.Key, token: token, tokenFile: cfg.TokenFile, renewFloor: DefaultRenewFloor,
 		http: &http.Client{
 			Timeout: Timeout,
 			// The token goes to this server and nowhere else: no redirect, no egress proxy.
@@ -234,7 +237,17 @@ func (c *Client) call(ctx context.Context, op string, body map[string]string, ou
 	return c.do(ctx, op, http.MethodPost, "/v1/"+c.mount+"/"+op+"/"+c.key, body, out)
 }
 
+func (c *Client) currentToken() string {
+	c.tokenMu.RLock()
+	defer c.tokenMu.RUnlock()
+	return c.token
+}
+
 func (c *Client) do(ctx context.Context, op, method, path string, body any, out any) error {
+	return c.doAs(ctx, c.currentToken(), op, method, path, body, out)
+}
+
+func (c *Client) doAs(ctx context.Context, token, op, method, path string, body any, out any) error {
 	var rd io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -244,7 +257,7 @@ func (c *Client) do(ctx context.Context, op, method, path string, body any, out 
 	if err != nil {
 		return fmt.Errorf("transit %s: the request could not be built", op)
 	}
-	req.Header.Set("X-Vault-Token", c.token)
+	req.Header.Set("X-Vault-Token", token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -268,7 +281,7 @@ func (c *Client) do(ctx context.Context, op, method, path string, body any, out 
 				msg = msg[:200]
 			}
 		}
-		return fmt.Errorf("transit %s at %s: status %d: %s", op, c.base, resp.StatusCode, strings.ReplaceAll(msg, c.token, "[token]"))
+		return fmt.Errorf("transit %s at %s: status %d: %s", op, c.base, resp.StatusCode, strings.ReplaceAll(msg, token, "[token]"))
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return fmt.Errorf("transit %s: the answer is not JSON", op)
@@ -360,5 +373,62 @@ func (c *Client) KeepAlive(ctx context.Context, logf func(format string, args ..
 			wait = c.renewFloor
 		}
 		logf("transit: the token could not be renewed (%v): tried again in %s; it ends at %s", err, wait.Round(time.Second), deadline.UTC().Format(time.RFC3339))
+	}
+}
+
+// DefaultTokenReload is how often the token file is read again (ADR-0056).
+const DefaultTokenReload = 30 * time.Second
+
+// ReloadToken reads the token file again (ADR-0056). A token that differs from the one in use is
+// taken only once Transit has accepted it (auth/token/lookup-self); a file that cannot be used, or
+// a token Transit refuses, leaves the token in use as it is — the error says why, and holds
+// neither token.
+func (c *Client) ReloadToken(ctx context.Context) (changed bool, err error) {
+	next, err := readToken(c.tokenFile)
+	if err != nil {
+		return false, err
+	}
+	current := c.currentToken()
+	if next == current {
+		return false, nil
+	}
+	var out struct {
+		Data struct {
+			TTL int64 `json:"ttl"`
+		} `json:"data"`
+	}
+	if err := c.doAs(ctx, next, "lookup-self", http.MethodGet, "/v1/auth/token/lookup-self", nil, &out); err != nil {
+		return false, fmt.Errorf("the new token is refused by Transit: %s", strings.ReplaceAll(err.Error(), next, "[token]"))
+	}
+	c.tokenMu.Lock()
+	c.token = next
+	c.tokenMu.Unlock()
+	return true, nil
+}
+
+// WatchTokenFile reads the token file every period until ctx ends, and takes a new token once
+// Transit has accepted it (ADR-0056). Each change is said once; the tokens never are.
+func (c *Client) WatchTokenFile(ctx context.Context, every time.Duration, logf func(format string, args ...any)) {
+	last := ""
+	logf("transit: the token file is read again every %s; a new token is taken once Transit accepts it", every)
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		changed, err := c.ReloadToken(ctx)
+		switch {
+		case err != nil:
+			if msg := err.Error(); msg != last {
+				last = msg
+				logf("transit: the token file cannot be taken (%v): the token in use stays", err)
+			}
+		case changed:
+			last = ""
+			logf("transit: the token file changed: the new token, accepted by Transit, is used from now on")
+		}
 	}
 }
