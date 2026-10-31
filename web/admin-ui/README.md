@@ -6,9 +6,10 @@ as the public API, so that nothing is opened to another origin. It talks to the 
 answer.
 
 ```sh
-npm ci            # from package-lock.json, exact versions
-npm test          # Vitest + Testing Library under jsdom
-npm run build     # type check, then dist/ — what ADMIN_UI_DIR points to
+(cd ../openbastion-icons && npm ci && npm run build) # local icon package
+npm ci                                               # from package-lock.json, exact versions
+npm test                                             # Vitest + Testing Library under jsdom
+npm run build                                        # type check, then dist/ — what ADMIN_UI_DIR points to
 ```
 
 Serve it locally: build, then start the Gateway with `ADMIN_UI_DIR=$PWD/web/admin-ui/dist` and
@@ -23,5 +24,6 @@ Rules it keeps (tested): the token lives in memory only — reloading signs out;
 state are wiped from the address bar before they are sent; everything shown is text, never
 markup; nothing is inlined into the page, which runs under `script-src 'self'`.
 
-Dependencies: `react` and `react-dom` at run time (3 packages with `scheduler`); 94 packages in
-all with the build and test tools; `npm audit`: 0 known vulnerabilities on 30 October 2026.
+Dependencies: `react`, `react-dom`, and the local `@openbastion/icons` package at run time;
+the icon package must be built before testing or building the UI. `npm audit`: 0 known
+vulnerabilities on 30 October 2026.

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="Server" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <style>.accent{stroke:#00D1FF;} .secondary{stroke:#0B5ED7;}</style>
+  <rect x="3" y="3.5" width="18" height="7" rx="1.5"/><rect x="3" y="13.5" width="18" height="7" rx="1.5"/><path class="accent" d="M6.5 7h.1M6.5 17h.1M10 7h7M10 17h7"/>
+  <path class="accent" d="M17 19h3"/>
+</svg>

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Api } from "../shared/api";
+import "@openbastion/icons/styles.css";
 import "./styles.css";
 
 // ONE client for the page's lifetime. App's `api = new Api()` default only applies when no prop

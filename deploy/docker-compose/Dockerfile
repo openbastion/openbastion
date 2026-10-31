@@ -26,6 +26,12 @@ RUN mkdir -p /rootfs/pki /rootfs/var/lib/openbastion/anchors /rootfs/var/lib/ope
 
 # -- ui: the Admin UI (ADR-0036), built from its lockfile ------------------------------------
 FROM node:24-alpine AS ui
+WORKDIR /openbastion-icons
+COPY web/openbastion-icons/package.json web/openbastion-icons/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/openbastion-icons/ ./
+RUN npm run build
+
 WORKDIR /ui
 COPY web/admin-ui/package.json web/admin-ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund

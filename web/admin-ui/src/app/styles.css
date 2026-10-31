@@ -11,6 +11,7 @@
   --line: #e2e8f0;
   --line-strong: #c9d3e0;
   --brand: #0f766e;
+  --ob-icon-accent: var(--brand);
   --brand-strong: #115e59;
   --brand-ink: #0b4f4a;
   --brand-soft: #e6f5f2;
@@ -176,6 +177,9 @@ code {
 }
 
 .app-header nav button {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   flex: none;
   padding: 0.44rem 0.85rem;
   border: 1px solid transparent;

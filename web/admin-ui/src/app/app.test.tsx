@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "./App";
 import { fakeApi, fakeToken } from "../test-helpers";
 
@@ -30,6 +30,11 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
     expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
+    const navigation = screen.getByRole("navigation", { name: "Sections" });
+    for (const label of ["Comptes", "Politiques", "Sessions", "Enregistrements"]) {
+      const button = within(navigation).getByRole("button", { name: label });
+      expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    }
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
     fireEvent.click(screen.getByText("Se déconnecter"));
     await waitFor(() => expect(screen.getByLabelText("Utilisateur")).toBeTruthy());

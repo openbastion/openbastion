@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { Audit, Policies as PoliciesIcon, Session, Users } from "@openbastion/icons";
 import { Api, claims } from "../shared/api";
 import { SignedInContext } from "../shared/session";
 import { BrandMark } from "../shared/BrandMark";
@@ -9,7 +10,12 @@ import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
 
-const tabs = { accounts: "Comptes", policies: "Politiques", sessions: "Sessions", audit: "Enregistrements" } as const;
+const tabs = {
+  accounts: { label: "Comptes", icon: Users },
+  policies: { label: "Politiques", icon: PoliciesIcon },
+  sessions: { label: "Sessions", icon: Session },
+  audit: { label: "Enregistrements", icon: Audit },
+} as const;
 type Tab = keyof typeof tabs;
 
 export function App({ api: given, location = window.location, navigate = (u: string) => window.location.assign(u) }: { api?: Api; location?: Location; navigate?: (u: string) => void }) {
@@ -45,9 +51,15 @@ export function App({ api: given, location = window.location, navigate = (u: str
           <span className="brand-tag">Admin</span>
         </div>
         <nav aria-label="Sections">
-          {(Object.keys(tabs) as Tab[]).map((t) => (
-            <button type="button" key={t} aria-current={tab === t ? "page" : undefined} onClick={() => setTab(t)}>{tabs[t]}</button>
-          ))}
+          {(Object.keys(tabs) as Tab[]).map((t) => {
+            const Icon = tabs[t].icon;
+            return (
+              <button type="button" key={t} aria-current={tab === t ? "page" : undefined} onClick={() => setTab(t)}>
+                <Icon size={16} />
+                {tabs[t].label}
+              </button>
+            );
+          })}
         </nav>
         <div className="session-chip">
           <span className="avatar" aria-hidden="true">{initials}</span>

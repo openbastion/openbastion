@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="Anomaly Detection" stroke="#0B1F3B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <style>.accent{stroke:#0B5ED7;} .secondary{stroke:#00D1FF;}</style>
+  <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6z"/><circle class="accent" cx="12" cy="12" r="2.5"/>
+  <circle class="accent" cx="18.5" cy="5.5" r="1.2"/>
+</svg>

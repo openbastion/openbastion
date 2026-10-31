@@ -1,0 +1,60 @@
+{
+  "name": "@openbastion/icons",
+  "version": "1.1.0",
+  "description": "OpenBastion icon system — React, TypeScript and SVG icon library.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/tokens.css",
+    "./assets/*": "./assets/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "assets",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "tsup && node scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "audit:icons": "node scripts/audit-icons.mjs",
+    "prepack": "npm run typecheck && npm run build",
+    "pack:check": "npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.0"
+  },
+  "keywords": [
+    "openbastion",
+    "icons",
+    "react",
+    "typescript",
+    "svg",
+    "security",
+    "pam",
+    "devsecops"
+  ]
+}

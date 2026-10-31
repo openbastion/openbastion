@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="Cluster" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <style>.accent{stroke:#00D1FF;} .secondary{stroke:#0B5ED7;}</style>
+  <circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="m10.8 7.2-4.5 8.5m6.9-8.5 4.5 8.5M7.5 18h9"/><path class="accent" d="M12 10v3"/>
+  <path class="accent" d="M4 4h2.5M4 4v2.5"/>
+</svg>

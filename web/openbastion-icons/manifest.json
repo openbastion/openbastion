@@ -1,0 +1,751 @@
+{
+  "brand": "OpenBastion",
+  "version": "1.0.0",
+  "viewBox": "0 0 24 24",
+  "icons": [
+    {
+      "category": "security",
+      "name": "security",
+      "component": "Security",
+      "motif": "grid"
+    },
+    {
+      "category": "security",
+      "name": "shield",
+      "component": "Shield",
+      "motif": "shieldcheck"
+    },
+    {
+      "category": "security",
+      "name": "lock",
+      "component": "Lock",
+      "motif": "lock"
+    },
+    {
+      "category": "security",
+      "name": "unlock",
+      "component": "Unlock",
+      "motif": "lock"
+    },
+    {
+      "category": "security",
+      "name": "privileged-access",
+      "component": "PrivilegedAccess",
+      "motif": "shieldlock"
+    },
+    {
+      "category": "security",
+      "name": "identity",
+      "component": "Identity",
+      "motif": "fingerprint"
+    },
+    {
+      "category": "security",
+      "name": "authentication",
+      "component": "Authentication",
+      "motif": "fingerprint"
+    },
+    {
+      "category": "security",
+      "name": "mfa",
+      "component": "Mfa",
+      "motif": "shieldnodes"
+    },
+    {
+      "category": "security",
+      "name": "passkeys",
+      "component": "Passkeys",
+      "motif": "key"
+    },
+    {
+      "category": "security",
+      "name": "password",
+      "component": "Password",
+      "motif": "key"
+    },
+    {
+      "category": "security",
+      "name": "secrets",
+      "component": "Secrets",
+      "motif": "lock"
+    },
+    {
+      "category": "security",
+      "name": "vault",
+      "component": "Vault",
+      "motif": "box"
+    },
+    {
+      "category": "security",
+      "name": "certificate",
+      "component": "Certificate",
+      "motif": "file"
+    },
+    {
+      "category": "security",
+      "name": "encryption",
+      "component": "Encryption",
+      "motif": "shieldlock"
+    },
+    {
+      "category": "security",
+      "name": "zero-trust",
+      "component": "ZeroTrust",
+      "motif": "shieldnodes"
+    },
+    {
+      "category": "security",
+      "name": "access-control",
+      "component": "AccessControl",
+      "motif": "shieldcheck"
+    },
+    {
+      "category": "security",
+      "name": "session-security",
+      "component": "SessionSecurity",
+      "motif": "monitor"
+    },
+    {
+      "category": "identity",
+      "name": "users",
+      "component": "Users",
+      "motif": "user"
+    },
+    {
+      "category": "identity",
+      "name": "user",
+      "component": "User",
+      "motif": "user"
+    },
+    {
+      "category": "identity",
+      "name": "teams",
+      "component": "Teams",
+      "motif": "users"
+    },
+    {
+      "category": "identity",
+      "name": "groups",
+      "component": "Groups",
+      "motif": "users"
+    },
+    {
+      "category": "identity",
+      "name": "roles",
+      "component": "Roles",
+      "motif": "grid"
+    },
+    {
+      "category": "identity",
+      "name": "permissions",
+      "component": "Permissions",
+      "motif": "check"
+    },
+    {
+      "category": "identity",
+      "name": "policies",
+      "component": "Policies",
+      "motif": "grid"
+    },
+    {
+      "category": "identity",
+      "name": "rules",
+      "component": "Rules",
+      "motif": "check"
+    },
+    {
+      "category": "identity",
+      "name": "approval",
+      "component": "Approval",
+      "motif": "shieldcheck"
+    },
+    {
+      "category": "identity",
+      "name": "delegation",
+      "component": "Delegation",
+      "motif": "link"
+    },
+    {
+      "category": "identity",
+      "name": "identity-provider",
+      "component": "IdentityProvider",
+      "motif": "fingerprint"
+    },
+    {
+      "category": "identity",
+      "name": "directory",
+      "component": "Directory",
+      "motif": "grid"
+    },
+    {
+      "category": "identity",
+      "name": "ldap",
+      "component": "Ldap",
+      "motif": "network"
+    },
+    {
+      "category": "identity",
+      "name": "active-directory",
+      "component": "ActiveDirectory",
+      "motif": "grid"
+    },
+    {
+      "category": "identity",
+      "name": "sso",
+      "component": "Sso",
+      "motif": "fingerprint"
+    },
+    {
+      "category": "infrastructure",
+      "name": "server",
+      "component": "Server",
+      "motif": "server"
+    },
+    {
+      "category": "infrastructure",
+      "name": "infrastructure",
+      "component": "Infrastructure",
+      "motif": "grid"
+    },
+    {
+      "category": "infrastructure",
+      "name": "database",
+      "component": "Database",
+      "motif": "database"
+    },
+    {
+      "category": "infrastructure",
+      "name": "storage",
+      "component": "Storage",
+      "motif": "box"
+    },
+    {
+      "category": "infrastructure",
+      "name": "network",
+      "component": "Network",
+      "motif": "network"
+    },
+    {
+      "category": "infrastructure",
+      "name": "firewall",
+      "component": "Firewall",
+      "motif": "shield"
+    },
+    {
+      "category": "infrastructure",
+      "name": "gateway",
+      "component": "Gateway",
+      "motif": "shieldnodes"
+    },
+    {
+      "category": "infrastructure",
+      "name": "proxy",
+      "component": "Proxy",
+      "motif": "link"
+    },
+    {
+      "category": "infrastructure",
+      "name": "load-balancer",
+      "component": "LoadBalancer",
+      "motif": "network"
+    },
+    {
+      "category": "infrastructure",
+      "name": "cloud",
+      "component": "Cloud",
+      "motif": "cloud"
+    },
+    {
+      "category": "infrastructure",
+      "name": "kubernetes",
+      "component": "Kubernetes",
+      "motif": "grid"
+    },
+    {
+      "category": "infrastructure",
+      "name": "docker",
+      "component": "Docker",
+      "motif": "box"
+    },
+    {
+      "category": "infrastructure",
+      "name": "container",
+      "component": "Container",
+      "motif": "box"
+    },
+    {
+      "category": "infrastructure",
+      "name": "terminal",
+      "component": "Terminal",
+      "motif": "terminal"
+    },
+    {
+      "category": "infrastructure",
+      "name": "linux",
+      "component": "Linux",
+      "motif": "terminal"
+    },
+    {
+      "category": "infrastructure",
+      "name": "windows",
+      "component": "Windows",
+      "motif": "grid"
+    },
+    {
+      "category": "infrastructure",
+      "name": "virtual-machine",
+      "component": "VirtualMachine",
+      "motif": "monitor"
+    },
+    {
+      "category": "infrastructure",
+      "name": "cluster",
+      "component": "Cluster",
+      "motif": "network"
+    },
+    {
+      "category": "protocols",
+      "name": "ssh",
+      "component": "Ssh",
+      "motif": "terminal"
+    },
+    {
+      "category": "protocols",
+      "name": "rdp",
+      "component": "Rdp",
+      "motif": "monitor"
+    },
+    {
+      "category": "protocols",
+      "name": "vnc",
+      "component": "Vnc",
+      "motif": "monitor"
+    },
+    {
+      "category": "protocols",
+      "name": "telnet",
+      "component": "Telnet",
+      "motif": "terminal"
+    },
+    {
+      "category": "protocols",
+      "name": "https",
+      "component": "Https",
+      "motif": "shieldlock"
+    },
+    {
+      "category": "protocols",
+      "name": "http",
+      "component": "Http",
+      "motif": "globe"
+    },
+    {
+      "category": "protocols",
+      "name": "sftp",
+      "component": "Sftp",
+      "motif": "file"
+    },
+    {
+      "category": "protocols",
+      "name": "scp",
+      "component": "Scp",
+      "motif": "file"
+    },
+    {
+      "category": "protocols",
+      "name": "winrm",
+      "component": "Winrm",
+      "motif": "monitor"
+    },
+    {
+      "category": "protocols",
+      "name": "sql",
+      "component": "Sql",
+      "motif": "database"
+    },
+    {
+      "category": "protocols",
+      "name": "postgresql",
+      "component": "Postgresql",
+      "motif": "database"
+    },
+    {
+      "category": "protocols",
+      "name": "mysql",
+      "component": "Mysql",
+      "motif": "database"
+    },
+    {
+      "category": "protocols",
+      "name": "api",
+      "component": "Api",
+      "motif": "link"
+    },
+    {
+      "category": "protocols",
+      "name": "grpc",
+      "component": "Grpc",
+      "motif": "network"
+    },
+    {
+      "category": "protocols",
+      "name": "websocket",
+      "component": "Websocket",
+      "motif": "network"
+    },
+    {
+      "category": "protocols",
+      "name": "kubernetes-api",
+      "component": "KubernetesApi",
+      "motif": "grid"
+    },
+    {
+      "category": "sessions",
+      "name": "session",
+      "component": "Session",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "session-recording",
+      "component": "SessionRecording",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "session-replay",
+      "component": "SessionReplay",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "session-monitoring",
+      "component": "SessionMonitoring",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "session-history",
+      "component": "SessionHistory",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "session-playback",
+      "component": "SessionPlayback",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "session-termination",
+      "component": "SessionTermination",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "live-session",
+      "component": "LiveSession",
+      "motif": "monitor"
+    },
+    {
+      "category": "sessions",
+      "name": "command-execution",
+      "component": "CommandExecution",
+      "motif": "terminal"
+    },
+    {
+      "category": "sessions",
+      "name": "clipboard-control",
+      "component": "ClipboardControl",
+      "motif": "file"
+    },
+    {
+      "category": "sessions",
+      "name": "file-transfer",
+      "component": "FileTransfer",
+      "motif": "file"
+    },
+    {
+      "category": "sessions",
+      "name": "session-approval",
+      "component": "SessionApproval",
+      "motif": "monitor"
+    },
+    {
+      "category": "administration",
+      "name": "dashboard",
+      "component": "Dashboard",
+      "motif": "grid"
+    },
+    {
+      "category": "administration",
+      "name": "settings",
+      "component": "Settings",
+      "motif": "gear"
+    },
+    {
+      "category": "administration",
+      "name": "configuration",
+      "component": "Configuration",
+      "motif": "gear"
+    },
+    {
+      "category": "administration",
+      "name": "system-health",
+      "component": "SystemHealth",
+      "motif": "shieldcheck"
+    },
+    {
+      "category": "administration",
+      "name": "services",
+      "component": "Services",
+      "motif": "gear"
+    },
+    {
+      "category": "administration",
+      "name": "workflows",
+      "component": "Workflows",
+      "motif": "link"
+    },
+    {
+      "category": "administration",
+      "name": "automation",
+      "component": "Automation",
+      "motif": "gear"
+    },
+    {
+      "category": "administration",
+      "name": "scheduling",
+      "component": "Scheduling",
+      "motif": "clock"
+    },
+    {
+      "category": "administration",
+      "name": "jobs",
+      "component": "Jobs",
+      "motif": "clock"
+    },
+    {
+      "category": "administration",
+      "name": "tasks",
+      "component": "Tasks",
+      "motif": "check"
+    },
+    {
+      "category": "administration",
+      "name": "integrations",
+      "component": "Integrations",
+      "motif": "link"
+    },
+    {
+      "category": "administration",
+      "name": "plugins",
+      "component": "Plugins",
+      "motif": "box"
+    },
+    {
+      "category": "administration",
+      "name": "notifications",
+      "component": "Notifications",
+      "motif": "bell"
+    },
+    {
+      "category": "administration",
+      "name": "logs",
+      "component": "Logs",
+      "motif": "file"
+    },
+    {
+      "category": "administration",
+      "name": "search",
+      "component": "Search",
+      "motif": "eye"
+    },
+    {
+      "category": "administration",
+      "name": "reporting",
+      "component": "Reporting",
+      "motif": "chart"
+    },
+    {
+      "category": "audit",
+      "name": "audit",
+      "component": "Audit",
+      "motif": "file"
+    },
+    {
+      "category": "audit",
+      "name": "audit-trail",
+      "component": "AuditTrail",
+      "motif": "file"
+    },
+    {
+      "category": "audit",
+      "name": "compliance",
+      "component": "Compliance",
+      "motif": "shieldcheck"
+    },
+    {
+      "category": "audit",
+      "name": "risk",
+      "component": "Risk",
+      "motif": "alert"
+    },
+    {
+      "category": "audit",
+      "name": "vulnerability",
+      "component": "Vulnerability",
+      "motif": "alert"
+    },
+    {
+      "category": "audit",
+      "name": "threat-detection",
+      "component": "ThreatDetection",
+      "motif": "shield"
+    },
+    {
+      "category": "audit",
+      "name": "anomaly-detection",
+      "component": "AnomalyDetection",
+      "motif": "eye"
+    },
+    {
+      "category": "audit",
+      "name": "monitoring",
+      "component": "Monitoring",
+      "motif": "monitor"
+    },
+    {
+      "category": "audit",
+      "name": "metrics",
+      "component": "Metrics",
+      "motif": "chart"
+    },
+    {
+      "category": "audit",
+      "name": "analytics",
+      "component": "Analytics",
+      "motif": "chart"
+    },
+    {
+      "category": "audit",
+      "name": "alerts",
+      "component": "Alerts",
+      "motif": "alert"
+    },
+    {
+      "category": "audit",
+      "name": "incident",
+      "component": "Incident",
+      "motif": "alert"
+    },
+    {
+      "category": "audit",
+      "name": "event",
+      "component": "Event",
+      "motif": "bell"
+    },
+    {
+      "category": "audit",
+      "name": "trace",
+      "component": "Trace",
+      "motif": "network"
+    },
+    {
+      "category": "audit",
+      "name": "evidence",
+      "component": "Evidence",
+      "motif": "file"
+    },
+    {
+      "category": "devsecops",
+      "name": "developer",
+      "component": "Developer",
+      "motif": "code"
+    },
+    {
+      "category": "devsecops",
+      "name": "code",
+      "component": "Code",
+      "motif": "code"
+    },
+    {
+      "category": "devsecops",
+      "name": "git",
+      "component": "Git",
+      "motif": "git"
+    },
+    {
+      "category": "devsecops",
+      "name": "repository",
+      "component": "Repository",
+      "motif": "box"
+    },
+    {
+      "category": "devsecops",
+      "name": "pipeline",
+      "component": "Pipeline",
+      "motif": "link"
+    },
+    {
+      "category": "devsecops",
+      "name": "ci-cd",
+      "component": "CiCd",
+      "motif": "git"
+    },
+    {
+      "category": "devsecops",
+      "name": "build",
+      "component": "Build",
+      "motif": "gear"
+    },
+    {
+      "category": "devsecops",
+      "name": "deployment",
+      "component": "Deployment",
+      "motif": "cloud"
+    },
+    {
+      "category": "devsecops",
+      "name": "release",
+      "component": "Release",
+      "motif": "box"
+    },
+    {
+      "category": "devsecops",
+      "name": "container-registry",
+      "component": "ContainerRegistry",
+      "motif": "box"
+    },
+    {
+      "category": "devsecops",
+      "name": "helm",
+      "component": "Helm",
+      "motif": "box"
+    },
+    {
+      "category": "devsecops",
+      "name": "terraform",
+      "component": "Terraform",
+      "motif": "grid"
+    },
+    {
+      "category": "devsecops",
+      "name": "ansible",
+      "component": "Ansible",
+      "motif": "terminal"
+    },
+    {
+      "category": "devsecops",
+      "name": "kubernetes-deployment",
+      "component": "KubernetesDeployment",
+      "motif": "grid"
+    },
+    {
+      "category": "devsecops",
+      "name": "api-documentation",
+      "component": "ApiDocumentation",
+      "motif": "link"
+    }
+  ]
+}

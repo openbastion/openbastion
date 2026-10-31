@@ -299,7 +299,7 @@ services:
       base44.project: Admin UI
       base44.kind: web
       base44.port: 3000
-    command: ["sh", "-ec", "npm ci --no-audit --no-fund && exec npx vite"]
+    command: ["sh", "-ec", "cd /openbastion-icons && npm ci --no-audit --no-fund && npm run build && cd /app && npm ci --no-audit --no-fund && exec npx vite"]
     # List form: the bare `BASE44_PREVIEW_MODE` entry is passed through from the platform's
     # environment (the compose parser here rejects it in map form next to other keys).
     environment:
@@ -311,7 +311,9 @@ services:
       - BASE44_PUBLIC_HOST_SUFFIX
     volumes:
       - ../../web/admin-ui:/app
+      - ../../web/openbastion-icons:/openbastion-icons
       - node_modules:/app/node_modules
+      - icons_node_modules:/openbastion-icons/node_modules
     ports:
       - "3000:3000"
     networks: [internal]
@@ -364,6 +366,7 @@ volumes:
   pki-ca:
   anchors:
   node_modules:
+  icons_node_modules:
 
 networks:
   internal:

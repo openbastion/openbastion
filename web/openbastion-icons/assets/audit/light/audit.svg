@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" role="img" aria-label="Audit" stroke="#0B1F3B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <style>.accent{stroke:#0B5ED7;} .secondary{stroke:#00D1FF;}</style>
+  <path d="M6 2.8h8l4 4V21H6z"/><path d="M14 2.8v4h4M9 12h6m-6 3h6"/><path class="accent" d="M9 18h3"/>
+  <path class="accent" d="M17 19h3"/>
+</svg>
