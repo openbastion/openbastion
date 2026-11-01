@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
@@ -32,6 +33,8 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("ssh-proxy %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.SSHProxy)
 	if err != nil {

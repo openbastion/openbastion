@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/application"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/domain"
@@ -24,6 +25,8 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("authorization %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010): without a
 	// certificate of its own, this service does not start.
 	rt, err := mtls.Setup(mtls.Authorization)

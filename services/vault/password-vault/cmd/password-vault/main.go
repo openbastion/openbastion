@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
@@ -28,6 +29,8 @@ func mustEnv(key, def string) string {
 }
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("password-vault %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.PasswordVault)
 	if err != nil {

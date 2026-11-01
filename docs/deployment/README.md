@@ -18,4 +18,4 @@ Pour l'administrateur qui installe et exploite la plateforme. La configuration f
 
 | Page | État |
 |---|---|
-| `kubernetes.md`, `helm.md`, `k3s.md`, `openshift.md` | Pas de chart Helm ni de manifeste dans `deploy/` ; v1.0 de la [feuille de route](../roadmap.md) (« Helm charts … pour un déploiement Kubernetes/K3s/OpenShift »). |
+| `kubernetes.md`, `helm.md`, `k3s.md`, `openshift.md` | Pas de chart Helm ni de manifeste dans `deploy/` ; v0.0.1 de la [feuille de route](../roadmap.md) (« Helm charts … pour un déploiement Kubernetes/K3s/OpenShift »). |

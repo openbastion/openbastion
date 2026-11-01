@@ -32,7 +32,7 @@ type Policy struct {
 // support a single trailing "*" wildcard (e.g. "vault:account:prod-*"); any
 // other pattern is matched exactly. This is deliberately the simplest rule
 // that covers docs/architecture/system-overview.md's example patterns — a richer glob/ABAC matcher is a
-// v1.0 concern (docs/security/security-overview.md), not an MVP one.
+// v0.0.1 concern (docs/security/security-overview.md), not an MVP one.
 func (p Policy) Matches(resource string) bool {
 	if strings.HasSuffix(p.ResourcePattern, "*") {
 		prefix := strings.TrimSuffix(p.ResourcePattern, "*")

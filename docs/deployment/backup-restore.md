@@ -3,7 +3,7 @@
 | Donnée | Où | Fréquence recommandée |
 |---|---|---|
 | PostgreSQL (comptes, politiques, sessions, audit) | Snapshot + WAL continu | Continu |
-| MinIO (enregistrements, *v1.0*) | Réplication de bucket | Continu |
+| MinIO (enregistrements, *v0.0.1*) | Réplication de bucket | Continu |
 | Clé KMS/HSM | **Jamais dans la même sauvegarde que les données chiffrées** | Selon la politique du KMS externe |
 | Le fichier `deploy/docker-compose/.env` d'une installation Compose (ADR-0033) | **Hors de l'hôte**, chiffré, jamais dans git : il porte les clés du Vault, du Recorder, de la chaîne et de signature des jetons | À l'installation, puis à chaque rotation |
 | Archives de l'audit (`AUDIT_ARCHIVE_DIR`, ADR-0032) | Un stockage en ajout seul (WORM), avec la durée de conservation légale, **pas avec les sauvegardes de la base** ; ce qu'elles contiennent n'est plus en base | À chaque archive (horaire au plus) |

@@ -23,6 +23,7 @@ updates:
       - /pkg/proxycore
       - /pkg/refusalbudget
       - /pkg/transit
+      - /pkg/buildinfo
       - /pkg/webhook
       - /services/access/api-gateway
       - /services/access/authentication

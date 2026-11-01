@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/domain"
@@ -19,6 +20,8 @@ import (
 )
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("authentication %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.Authentication)
 	if err != nil {

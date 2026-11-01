@@ -1,8 +1,8 @@
 # ADR-0061 — Un utilisateur d'annuaire (LDAP ou Active Directory) se connecte avec son mot de passe d'annuaire ; seuls ses groupes déclarés lui donnent des rôles
 
-**Statut** `Accepté` · 31 octobre 2026 · premier lot de la v1.0, choisi par Bony Kiss le 31 octobre 2026 (avec `go-ldap` v3.4.15 et des tests contre OpenLDAP et Samba AD) ; texte accepté par son go du 31 octobre 2026
+**Statut** `Accepté` · 31 octobre 2026 · premier lot de la v0.0.1, choisi par Bony Kiss le 31 octobre 2026 (avec `go-ldap` v3.4.15 et des tests contre OpenLDAP et Samba AD) ; texte accepté par son go du 31 octobre 2026
 
-**Contexte** — OpenBastion connaît deux sortes de comptes : locaux (un mot de passe Argon2id ici) et fédérés par OIDC (ADR-0035). Une entreprise dont les identités sont dans un annuaire — Active Directory le plus souvent, OpenLDAP ailleurs — doit aujourd'hui recréer chaque opérateur à la main, et lui donner un second mot de passe qu'aucun départ ne révoque. La feuille de route met LDAP/AD en tête de la v1.0 (`docs/roadmap.md` §6 : les pilotes en AD pur sont bloqués). La bibliothèque standard Go n'a pas de client LDAP : `github.com/go-ldap/ldap/v3` v3.4.15 (MIT ; tire `asn1-ber` MIT, `go-ntlmssp` MIT, `google/uuid` BSD-3) est accordée pour le seul module `authentication`.
+**Contexte** — OpenBastion connaît deux sortes de comptes : locaux (un mot de passe Argon2id ici) et fédérés par OIDC (ADR-0035). Une entreprise dont les identités sont dans un annuaire — Active Directory le plus souvent, OpenLDAP ailleurs — doit aujourd'hui recréer chaque opérateur à la main, et lui donner un second mot de passe qu'aucun départ ne révoque. La feuille de route met LDAP/AD en tête de la v0.0.1 (`docs/roadmap.md` §6 : les pilotes en AD pur sont bloqués). La bibliothèque standard Go n'a pas de client LDAP : `github.com/go-ldap/ldap/v3` v3.4.15 (MIT ; tire `asn1-ber` MIT, `go-ntlmssp` MIT, `google/uuid` BSD-3) est accordée pour le seul module `authentication`.
 
 Invariants touchés : l'identité qui décide est celle que le service vérifie, jamais un nom que le client choisit (comme `oidc:<sub>`, ADR-0035) ; défaut strict ; aucun secret au journal.
 
@@ -55,6 +55,6 @@ Invariants touchés : l'identité qui décide est celle que le service vérifie,
 
 - **Le même `/auth/login`, essayé en local puis dans l'annuaire** : un même nom aurait deux mots de passe valables pour deux comptes différents, et l'ordre déciderait lequel ; une route par source ne mélange rien.
 - **Lier directement avec un DN construit depuis le nom** (`uid=<nom>,<base>`) : pas de compte de service, mais le nom entre dans un DN (injection), et AD lie par `userPrincipalName`, pas par un DN prévisible.
-- **Synchroniser l'annuaire (SCIM, import)** : prévu ailleurs dans la v1.0 ; ne remplace pas la vérification du mot de passe par l'annuaire.
+- **Synchroniser l'annuaire (SCIM, import)** : prévu ailleurs dans la v0.0.1 ; ne remplace pas la vérification du mot de passe par l'annuaire.
 - **Un client LDAP maison** : écarté par Bony Kiss au profit de `go-ldap` — un analyseur BER maison dans le chemin d'authentification.
 - **Les attributs réglables** (`LDAP_USER_FILTER`, `LDAP_ID_ATTRIBUTE`…) : plus souple, mais un filtre libre est une injection écrite par l'exploitant, et un identifiant mal choisi (un nom qui change) rattache un compte à quelqu'un d'autre ; deux schémas fixes couvrent AD et OpenLDAP.

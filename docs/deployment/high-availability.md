@@ -20,7 +20,7 @@
 | PostgreSQL | Primaire + répliques en streaming replication, bascule automatisée (ex. Patroni), pooling de connexions (PgBouncer) devant chaque service |
 | Redis | Redis Sentinel (ou Cluster) — perte du cache tolérée en dégradé (§4), perte de l'état de session Broker traitée en fail-closed sur les nouvelles créations |
 | MinIO | Cluster distribué avec erasure coding — HA native du produit, pas de configuration supplémentaire requise |
-| OpenSearch (v1.0) | Cluster multi-nœuds, réplicas de shard ≥ 1 — dégradable sans impact sur l'invariant (§1) |
+| OpenSearch (v0.0.1) | Cluster multi-nœuds, réplicas de shard ≥ 1 — dégradable sans impact sur l'invariant (§1) |
 | NATS | Cluster NATS JetStream, quorum Raft ≥ 3 nœuds |
 | Kafka | Cluster multi-broker, facteur de réplication ≥ 3, répartition multi-zone |
 | Keycloak | Mode cluster (plusieurs instances derrière load balancer, base partagée) — dépendance critique signalée dès ADR-0007 |
@@ -44,7 +44,7 @@ Les proxies protocolaires détiennent un état qu'aucun des autres composants n'
 | Panne | Effet | Sessions déjà actives | Nouvelles sessions |
 |---|---|---|---|
 | Search Engine indisponible | Pas de recherche plein texte | Aucun impact | Aucun impact |
-| Notification Service indisponible | Pas d'alerte Slack/Teams | Aucun impact | Approbation possible via l'UI seule (v1.0) |
+| Notification Service indisponible | Pas d'alerte Slack/Teams | Aucun impact | Approbation possible via l'UI seule (v0.0.1) |
 | Reporting Service indisponible | Pas de rapport agrégé | Aucun impact | Aucun impact |
 | Redis indisponible | Perte de cache | Risque d'incohérence sur `Session Registry` (`docs/architecture/components.md`) | **Bloquées** — le Broker ne peut plus garantir l'état de session |
 | Audit Service / Kafka indisponible | — | Sessions déjà établies continuent (le proxy ne dépend pas de l'audit pour fonctionner) ; le demandeur et le décideur d'une session la lisent toujours | **Bloquées** — cohérent avec le principe fail-closed (§1) ; **la lecture d'une session par un titulaire de politique `session-read` est un `503`** (ADR-0021 : sans l'événement, rien n'est divulgué) ; **la lecture d'un enregistrement (`GET /sessions/{id}/recording`) aussi** (ADR-0022) — le proxy, lui, continue d'enregistrer les commandes ; **la liste des demandes en attente aussi, dès qu'elle n'est pas vide** (ADR-0023) : les approbateurs ne voient plus les urgences à décider, la notification continue |

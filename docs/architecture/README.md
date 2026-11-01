@@ -19,6 +19,6 @@ Les diagrammes (Mermaid) restent dans les pages qui les expliquent, où GitHub l
 
 | Page | Ce qu'il manque pour l'écrire |
 |---|---|
-| `identity-architecture.md`, `session-architecture.md`, `secrets-architecture.md`, `audit-architecture.md` | Leur contenu actuel tient dans le catalogue de [`system-overview.md`](system-overview.md), les composants de [`components.md`](components.md) et les ADR ; une page par domaine se justifiera quand un domaine dépassera le MVP (feuille de route, v1.0). |
+| `identity-architecture.md`, `session-architecture.md`, `secrets-architecture.md`, `audit-architecture.md` | Leur contenu actuel tient dans le catalogue de [`system-overview.md`](system-overview.md), les composants de [`components.md`](components.md) et les ADR ; une page par domaine se justifiera quand un domaine dépassera le MVP (feuille de route, v0.0.1). |
 | `network-architecture.md` | Le réseau du MVP est décrit par [`../security/network-security.md`](../security/network-security.md) et [`../deployment/tls-certificates.md`](../deployment/tls-certificates.md). |
 | `diagrams/*.mmd` | Voir ci-dessus : un diagramme a une seule source. |

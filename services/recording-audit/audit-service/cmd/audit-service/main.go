@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
@@ -21,6 +22,8 @@ import (
 )
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("audit-service %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.AuditService)
 	if err != nil {

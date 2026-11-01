@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/application"
@@ -43,6 +44,8 @@ func boundedIntEnv(name string, def, min, max int) int {
 }
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("command-recorder %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.CommandRecorder)
 	if err != nil {

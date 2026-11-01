@@ -8,7 +8,7 @@ Schéma relationnel du périmètre MVP. Chaque microservice reste propriétaire 
 |---|---|
 | Aucun secret en clair | `vault_secrets.encrypted_material` est un blob chiffré (enveloppe AES-256) ; la clé n'est jamais stockée en base, seule une référence à un KMS/HSM externe l'est (`encryption_key_id`). |
 | Audit inviolable | `audit_events` est chaîné par hash (`prev_hash` → `hash`), à la manière d'un registre append-only : toute altération rétroactive d'un événement casse la chaîne et devient détectable. |
-| Séparation stockage / index | PostgreSQL est la source de vérité des métadonnées. Les objets volumineux (vidéo, v1.0) vivent dans MinIO ; l'index de recherche plein texte (OpenSearch, v1.0) est une projection dérivée, reconstructible depuis PostgreSQL — jamais l'inverse. |
+| Séparation stockage / index | PostgreSQL est la source de vérité des métadonnées. Les objets volumineux (vidéo, v0.0.1) vivent dans MinIO ; l'index de recherche plein texte (OpenSearch, v0.0.1) est une projection dérivée, reconstructible depuis PostgreSQL — jamais l'inverse. |
 | Un schéma par service | Pas de jointure inter-services au niveau base ; toute composition de données entre domaines passe par l'API/gRPC, jamais par une requête SQL cross-schéma. |
 
 ## 2. Diagramme entité-relation (périmètre MVP)
@@ -141,7 +141,7 @@ CREATE TABLE privileged_accounts (
     name             TEXT NOT NULL,
     username         TEXT NOT NULL,   -- nom du compte sur la cible ; distinct de `name`, qui identifie l'enregistrement
     target_host      TEXT NOT NULL,
-    protocol         TEXT NOT NULL CHECK (protocol IN ('ssh')),   -- énumération étendue en v1.0/v2.0
+    protocol         TEXT NOT NULL CHECK (protocol IN ('ssh')),   -- énumération étendue en v0.0.1/v0.0.2
     rotation_policy  TEXT NOT NULL DEFAULT 'post_use'
                        CHECK (rotation_policy IN ('manual','post_use','scheduled')),
     last_rotated_at  TIMESTAMPTZ,
@@ -408,11 +408,11 @@ La clé inclut le service parce qu'une même base peut en porter plusieurs (c'es
 
 **Accès aux données** : chaque magasin est écrit en `database/sql` et SQL explicite, derrière un port de domaine. L'opportunité d'un ORM est analysée dans `docs/architecture/data-access-orm-analysis.md` (recommandation : pas d'ORM complet ; sqlc ou sqlx en option ; des migrations versionnées d'abord).
 
-## 5. Extensions prévues (v1.0, hors périmètre de ce document)
+## 5. Extensions prévues (v0.0.1, hors périmètre de ce document)
 
 Ces tables seront détaillées dans une révision ultérieure de ce document, au moment de leur implémentation — elles sont esquissées ici pour anticiper les clés étrangères et éviter une migration douloureuse :
 
-| Table (v1.0) | Service propriétaire | Objet |
+| Table (v0.0.1) | Service propriétaire | Objet |
 |---|---|---|
 | `workflow_requests`, `approvals` | Workflow Service / Approval Engine | Étapes de validation N+1, référence de ticket externe |
 | `notification_log` | Notification Service | Traçabilité des envois Slack/Teams/email |

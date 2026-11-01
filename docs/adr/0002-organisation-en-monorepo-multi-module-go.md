@@ -2,7 +2,7 @@
 
 
 **Contexte**
-L'architecture comporte ~35 microservices dont les contrats gRPC bougeront fréquemment pendant la phase pré-v1.0. Un multi-repo imposerait une coordination de versions de contrats dès le premier jour.
+L'architecture comporte ~35 microservices dont les contrats gRPC bougeront fréquemment pendant la phase pré-v0.0.1. Un multi-repo imposerait une coordination de versions de contrats dès le premier jour.
 
 **Décision**
 Un seul dépôt Git, avec un `go.mod` par service (`go.work` en racine) — monorepo au niveau du dépôt, modules isolés au niveau Go.
@@ -14,4 +14,4 @@ Un seul dépôt Git, avec un `go.mod` par service (`go.work` en racine) — mono
 - (−) Nécessite un outillage CI sélectif par chemins modifiés pour éviter de reconstruire les 35 services à chaque commit.
 
 **Alternatives envisagées**
-- *Multi-repo dès le départ* : rejeté pour la phase actuelle — coût de coordination des contrats jugé trop élevé tant que l'architecture n'est pas stabilisée en v1.0.
+- *Multi-repo dès le départ* : rejeté pour la phase actuelle — coût de coordination des contrats jugé trop élevé tant que l'architecture n'est pas stabilisée en v0.0.1.

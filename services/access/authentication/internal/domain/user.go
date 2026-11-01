@@ -7,7 +7,7 @@
 // has a list of role strings) rather than standing up a full roles CRUD
 // surface — Authorization already owns what a role can DO (policies);
 // Authentication owns which roles a user HAS. Splitting role assignment
-// into its own table/service is a straightforward v1.0 refinement that
+// into its own table/service is a straightforward v0.0.1 refinement that
 // doesn't change any caller of this package.
 package domain
 

@@ -71,7 +71,7 @@ message OnboardAccountRequest {
   string name = 3;
   string username = 4;
   string target_host = 5;
-  string protocol = 6;             // ex. "ssh" — énumération étendue en v1.0/v2.0 (docs/architecture/data-architecture.md §3)
+  string protocol = 6;             // ex. "ssh" — énumération étendue en v0.0.1/v0.0.2 (docs/architecture/data-architecture.md §3)
   string rotation_policy = 7;      // "manual" | "post_use" | "scheduled"
   bytes initial_secret = 8;        // vide = généré automatiquement (même règle que RotateSecretRequest.new_secret)
   string host_key = 9;             // obligatoire : la clé d'hôte publique de la cible, relevée sur la cible (ADR-0039)

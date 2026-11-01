@@ -74,7 +74,7 @@ enum SessionStatus {
 enum Protocol {
   PROTOCOL_UNSPECIFIED = 0;
   PROTOCOL_SSH = 1;
-  // PROTOCOL_RDP, PROTOCOL_VNC, PROTOCOL_DATABASE, ... ajoutés en v1.0
+  // PROTOCOL_RDP, PROTOCOL_VNC, PROTOCOL_DATABASE, ... ajoutés en v0.0.1
   // sans renumérotation des valeurs existantes.
 }
 
@@ -140,7 +140,7 @@ message TerminateSessionRequest {
 
 **Double validation du break-glass (ADR-0011).** Sous la configuration par défaut (`BREAKGLASS_APPROVAL=required`), `CreateSession(break_glass=true)` qui passe les verrous d'ADR-0009 renvoie une session au statut `PENDING_APPROVAL` : pas de `session.create`, pas de scope, pas de ticket. `ApproveBreakGlass` la rend `ACTIVE` (la durée demandée court à partir de l'approbation) ; `RejectBreakGlass` la rend `DENIED`. Mise en œuvre HTTP/JSON dans le sandbox : `POST /sessions/{id}/approve|reject`, corps `{decidedBy, actorRoles}` **construit par le Gateway** à partir du jeton vérifié (le corps du client est écarté) ; réponses `200`, `403` (soi-même, politique `breakglass-approve:account:{id}` absente, dérogation coupée ou hors limite), `404`, `409` (déjà décidée, périmée, pas une demande break-glass), `503` (une dépendance ne répond pas : la décision n'est pas prise). La décision est auditée **avant** d'agir (`session.breakglass_approved` / `session.breakglass_rejected`) et passe par une comparaison-échange atomique : une seule décision par demande.
 
-**Découverte des demandes en attente et notification (ADR-0012).** `ListPendingApprovals` est ce que l'approbateur appelle pour voir ce qu'il peut décider ; mise en œuvre HTTP/JSON dans le sandbox : `GET /sessions?status=pending_approval&page=&pageSize=` (`docs/api/rest/openapi.yaml`), où le Gateway ne relaie que `status`, `page` et `pageSize` et pose `callerId` et `actorRoles` (rôles séparés par des virgules) d'après le jeton vérifié. Réponses : `200` (liste, vide pour qui n'a aucune autorité), `400` (autre statut que `pending_approval`), `403` (appelant non identifié), `503` (une dépendance ne répond pas : jamais de liste partielle). Le Broker interroge l'Authorization Service une fois par compte distinct. Côté sortie, le Broker déclare un port `ApprovalNotifier` — sans valeur de retour, appelé après coup (demande enregistrée ; décision gagnée) — dont l'adaptateur est un webhook `POST` JSON (`BREAKGLASS_NOTIFY_URL`, hors maillage mTLS) portant `event` (`breakglass.requested|approved|rejected`), `sessionId`, `accountId`, `requestedBy`, `decidedBy`, `durationMinutes`, `expiresAt`, `at` et `text` ; ni justification ni rien de la cible. Ce n'est pas un contrat gRPC : le Notification Service de la v1.0 remplacera l'adaptateur sans toucher le Broker.
+**Découverte des demandes en attente et notification (ADR-0012).** `ListPendingApprovals` est ce que l'approbateur appelle pour voir ce qu'il peut décider ; mise en œuvre HTTP/JSON dans le sandbox : `GET /sessions?status=pending_approval&page=&pageSize=` (`docs/api/rest/openapi.yaml`), où le Gateway ne relaie que `status`, `page` et `pageSize` et pose `callerId` et `actorRoles` (rôles séparés par des virgules) d'après le jeton vérifié. Réponses : `200` (liste, vide pour qui n'a aucune autorité), `400` (autre statut que `pending_approval`), `403` (appelant non identifié), `503` (une dépendance ne répond pas : jamais de liste partielle). Le Broker interroge l'Authorization Service une fois par compte distinct. Côté sortie, le Broker déclare un port `ApprovalNotifier` — sans valeur de retour, appelé après coup (demande enregistrée ; décision gagnée) — dont l'adaptateur est un webhook `POST` JSON (`BREAKGLASS_NOTIFY_URL`, hors maillage mTLS) portant `event` (`breakglass.requested|approved|rejected`), `sessionId`, `accountId`, `requestedBy`, `decidedBy`, `durationMinutes`, `expiresAt`, `at` et `text` ; ni justification ni rien de la cible. Ce n'est pas un contrat gRPC : le Notification Service de la v0.0.1 remplacera l'adaptateur sans toucher le Broker.
 
 **Plafond de demandes en attente et signature du webhook (ADR-0013).** Le port `SessionRepository` gagne deux méthodes : `CountPending(requestedBy, now)` (demandes en attente, non échues, de ce demandeur) et `SaveIfUnderPendingLimit(session, limit, now)` — compter et enregistrer **en une opération atomique** (verrou de la base : `pg_advisory_xact_lock` par demandeur en PostgreSQL ; un seul verrou en mémoire), de sorte que plusieurs réplicas du Broker ne dépassent jamais le plafond. Le Broker compte d'abord (après l'Authorization Service : seul qui peut demander apprend quelque chose), puis enregistre atomiquement ; la demande qui perd la course est enregistrée `denied` et son second événement d'audit `session.breakglass_requested` dit `success=false` (le dernier décide). Sur le HTTP/JSON du sandbox : `POST /sessions` répond `429` (plafond atteint, le corps le dit) ou `503` (décompte impossible — refus par défaut, cause dans le journal seulement). Le webhook, lui, porte deux en-têtes quand `BREAKGLASS_NOTIFY_SECRET` est fixé : `X-OpenBastion-Timestamp` (secondes Unix, à l'envoi) et `X-OpenBastion-Signature: v1=<hex HMAC-SHA256(secret, timestamp "." corps exact)>`. Origine, intégrité, fraîcheur ; ni confidentialité ni anti-rejeu dans la tolérance du récepteur.
 
@@ -295,7 +295,7 @@ message OnboardAccountRequest {
   string name = 3;
   string username = 4;
   string target_host = 5;
-  string protocol = 6;             // ex. "ssh" — énumération étendue en v1.0/v2.0 (docs/architecture/data-architecture.md §3)
+  string protocol = 6;             // ex. "ssh" — énumération étendue en v0.0.1/v0.0.2 (docs/architecture/data-architecture.md §3)
   string rotation_policy = 7;      // "manual" | "post_use" | "scheduled"
   bytes initial_secret = 8;        // vide = généré automatiquement (même règle que RotateSecretRequest.new_secret)
   string host_key = 9;             // obligatoire : la clé d'hôte publique de la cible, relevée sur la cible (ADR-0039)
@@ -361,7 +361,7 @@ option go_package = "github.com/openbastion/openbastion/proto/recording/v1;recor
 
 service SessionRecording {
   rpc StreamCommandEntries(stream CommandEntry) returns (StreamAck);
-  // Signature réservée pour l'ajout du Video Recorder en v1.0 — ne rompt pas
+  // Signature réservée pour l'ajout du Video Recorder en v0.0.1 — ne rompt pas
   // le contrat existant.
   rpc StreamVideoFrames(stream VideoFrame) returns (StreamAck);
 }
@@ -485,7 +485,7 @@ message CheckAccessRequest {
 
 message CheckAccessResponse {
   bool allowed = 1;
-  bool requires_approval = 2;     // false en MVP (pas de Workflow Service) ; actif dès v1.0
+  bool requires_approval = 2;     // false en MVP (pas de Workflow Service) ; actif dès v0.0.1
   string decision_reason = 3;
 }
 ```

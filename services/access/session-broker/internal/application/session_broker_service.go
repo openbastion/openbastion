@@ -88,7 +88,7 @@ type ApprovalNotifier interface {
 }
 
 // ProxySelector resolves which proxy family serves a given protocol.
-// MVP supports SSH only (docs/roadmap.md §2); v1.0 extends this switch, not the
+// MVP supports SSH only (docs/roadmap.md §2); v0.0.1 extends this switch, not the
 // callers of it.
 type ProxySelector struct{}
 
@@ -108,7 +108,7 @@ type SessionBrokerService struct {
 	audit    AuditEmitter
 	accounts AccountLookup
 	// proxy is a single client because MVP supports exactly one proxy
-	// family (SSH, docs/roadmap.md §2). v1.0 will need a registry keyed by
+	// family (SSH, docs/roadmap.md §2). v0.0.1 will need a registry keyed by
 	// proxyServiceID once ProxySelector resolves to more than one value —
 	// not a concern to solve before it exists.
 	proxy   ProxyClient

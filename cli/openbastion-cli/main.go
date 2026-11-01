@@ -23,6 +23,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 )
 
@@ -37,9 +38,14 @@ const usage = `usage:
   openbastion-cli user create -authn URL -username NAME -roles ROLE[,ROLE…] [-display NAME] < password
   openbastion-cli audit verify-chain -audit URL
   openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME)
-  openbastion-cli mfa reset -authn URL -username NAME`
+  openbastion-cli mfa reset -authn URL -username NAME
+  openbastion-cli version`
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
+	if len(args) == 1 && args[0] == "version" {
+		fmt.Fprintln(stdout, buildinfo.String()) // ADR-0063
+		return nil
+	}
 	if len(args) < 2 {
 		return errors.New(usage)
 	}

@@ -4,6 +4,7 @@ ci:
   exists: true
   workflow: .github/workflows/ci.yml
   jobs:
+    version: [make version-check]      # ADR-0063 : VERSION est SemVer ; sur un tag v*, le tag est v+VERSION, sans pré-version
     go: [make build vet, "gofmt -l sur tout le dépôt → vide", make test]          # sans base
     race: ["make test GOFLAGS=-race"]
     integration: ["make build", "go test ./test/integration/... -timeout=900s"]  # sans base
@@ -41,6 +42,7 @@ ci:
       - "Admin UI — Vitest and build"
       - "govulncheck and npm audit"       # ajouté à ADR-0052, à ajouter au ruleset si ce n'est fait
       - "Images — Trivy (HIGH, CRITICAL)" # ADR-0060, à ajouter au ruleset
+      - "version — VERSION is SemVer, a tag is its release" # ADR-0063, à ajouter au ruleset
     ruleset: "posé par Bony Kiss le 31 octobre 2026 sur main ; GitHub affiche « won't be enforced on this private repository until you upgrade this organization account to GitHub Team »"
     bypass: "Repository admin — une fois appliqué, les pushes directs sous un compte administrateur passent : la livraison commit-et-push sur main (policies/release-management.md) reste valable ; la règle protège main des autres contributeurs, pas d'un push direct raté"
     api: "le jeton du codespace ne lit ni la protection (403 integration) ni les rulesets (403 offre) : vérifier dans l'interface"

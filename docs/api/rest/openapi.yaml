@@ -10,7 +10,7 @@ info:
     API REST de la plateforme PAM OpenBastion. Ce document ne couvre que le
     périmètre MVP (voir docs/roadmap.md). Les endpoints liés aux
     protocoles hors SSH, au Workflow Service et au MFA Service natif seront
-    ajoutés en v1.0 sans rupture de compatibilité sur ce préfixe /v1.
+    ajoutés en v0.0.1 sans rupture de compatibilité sur ce préfixe /v1.
 
 servers:
   - url: "https://{host}/api/v1"
@@ -369,7 +369,7 @@ paths:
       description: >
         En périmètre MVP, l'octroi d'une session ordinaire est immédiat après
         vérification RBAC — aucune étape de validation multi-approbateurs
-        (ajoutée en v1.0). Une demande `breakGlass`, elle, attend une seconde
+        (ajoutée en v0.0.1). Une demande `breakGlass`, elle, attend une seconde
         personne (ADR-0011, voir plus bas).
 
         Avec `breakGlass: true`, la session peut s'exécuter alors que le

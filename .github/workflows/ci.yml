@@ -7,6 +7,9 @@ name: ci
 on:
   push:
     branches: [main]
+    # A tag vX.Y.Z is a release (ADR-0063): the whole CI runs on it, and the version job checks that
+    # it names the VERSION file, without pre-release. Tags are made by the project's owner only.
+    tags: ["v*"]
   pull_request:
   # Weekly, so that a vulnerability published without a commit of ours is seen (ADR-0052).
   schedule:
@@ -26,6 +29,24 @@ env:
   GOPROXY: direct
 
 jobs:
+  version:
+    name: version — VERSION is SemVer, a tag is its release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+      - name: VERSION, and the tag when there is one
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: make version-check TAG="$TAG"
+      - run: echo "built as $(make -s version)"
+
   go:
     name: build, vet, gofmt, unit
     runs-on: ubuntu-24.04
@@ -171,4 +192,5 @@ jobs:
           tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
       # The OpenBastion image (runtime target) and postgres:16 as pinned: HIGH or CRITICAL with a fix
       # fails, except what .trivyignore.yaml accepts, by path, until its date.
-      - run: make scan-images TRIVY="$RUNNER_TEMP/trivy"
+      # On a release tag the image is stamped with the release itself; otherwise VERSION+<commit>.
+      - run: make scan-images TRIVY="$RUNNER_TEMP/trivy" ${{ github.ref_type == 'tag' && 'BUILD_VERSION=$(cat VERSION)' || '' }}

@@ -28,3 +28,8 @@ replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 require github.com/openbastion/openbastion/pkg/migrate v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
+
+// The version stamped at build (ADR-0063). A local replace, as for pkg/mtls.
+require github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildinfo

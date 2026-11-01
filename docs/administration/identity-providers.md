@@ -52,4 +52,4 @@ LDAP_GROUP_BASE_DN=DC=example,DC=com
 LDAP_ROLE_MAP_FILE=/etc/openbastion/ldap-roles.json
 ```
 
-*v1.0, à venir* — Entra ID, SAML et SCIM (`docs/architecture/system-overview.md`). Ce document sera mis à jour à leur livraison.
+*v0.0.1, à venir* — Entra ID, SAML et SCIM (`docs/architecture/system-overview.md`). Ce document sera mis à jour à leur livraison.

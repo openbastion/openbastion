@@ -31,6 +31,6 @@ L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification 
 
 ## Extensions prévues (hors MVP, non rupturantes)
 
-- `/sessions/{id}/approve` et `/reject` existent déjà pour le break-glass (ADR-0011, dans le Session Broker). v1.0 les généralisera (Workflow/Approval Engine : quorum, N+1, ticket ITSM, fenêtre horaire) et ajoutera `/mfa/*` (MFA Service natif), et des variantes de `protocol` (`rdp`, `vnc`, `database`, `kubernetes`) sur `SessionRequest`.
-- v2.0 étendra l'énumération `protocol` aux familles restantes (`docker`, `hypervisor`, `winrm`, `telnet`, `http`) et ajoutera `/risk/scores`.
+- `/sessions/{id}/approve` et `/reject` existent déjà pour le break-glass (ADR-0011, dans le Session Broker). v0.0.1 les généralisera (Workflow/Approval Engine : quorum, N+1, ticket ITSM, fenêtre horaire) et ajoutera `/mfa/*` (MFA Service natif), et des variantes de `protocol` (`rdp`, `vnc`, `database`, `kubernetes`) sur `SessionRequest`.
+- v0.0.2 étendra l'énumération `protocol` aux familles restantes (`docker`, `hypervisor`, `winrm`, `telnet`, `http`) et ajoutera `/risk/scores`.
 - Toute extension se fait par ajout de champs optionnels et de nouveaux endpoints — jamais par modification d'un champ existant sur `/api/v1`, conformément à la convention de versionning (`docs/api/conventions.md`).

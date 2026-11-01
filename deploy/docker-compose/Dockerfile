@@ -7,7 +7,10 @@ FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01b
 WORKDIR /src
 COPY . .
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
-RUN mkdir -p /out && go build -ldflags="-s -w" -o /out/ \
+# The version stamped in every binary (ADR-0063): make scan-images and the CI pass VERSION+<commit>,
+# or the release; "dev" otherwise (.git is not in the build context).
+ARG VERSION=dev
+RUN mkdir -p /out && go build -ldflags="-s -w -X github.com/openbastion/openbastion/pkg/buildinfo.Version=${VERSION}" -o /out/ \
       ./services/access/api-gateway/cmd/api-gateway \
       ./services/access/authentication/cmd/authentication \
       ./services/access/authorization/cmd/authorization \

@@ -8,6 +8,7 @@ Pour contribuer à OpenBastion : construire, tester, étendre. Le *pourquoi* des
 | [`local-environment.md`](local-environment.md) | Démarrer en local, mTLS ou non, essayer chaque fonctionnalité |
 | [`repository-structure.md`](repository-structure.md) | L'arborescence du monorepo, la structure d'un service, les conventions de nommage |
 | [`testing.md`](testing.md) | Les niveaux de tests |
+| [`versioning.md`](versioning.md) | Semantic Versioning : le fichier `VERSION`, ce qu'un binaire dit de lui, publier une version (ADR-0063) |
 | [`debugging.md`](debugging.md) | L'observabilité en développement |
 | [`contributing.md`](contributing.md) | Où faire quoi, ajouter un protocole, travailler avec `proto/`, le processus de contribution |
 

@@ -12,4 +12,4 @@ openbastion session request \
 - `--justification` est obligatoire et doit être utile à la relecture — « accès » n'aide personne, « Investigation incident INC-4821 » si.
 - `--duration` est en minutes ; demandez ce dont vous avez réellement besoin, pas une marge large « au cas où ».
 
-Dans le périmètre actuel, l'accès est accordé immédiatement si vous en avez le droit — il n'y a pas d'étape de validation par un tiers pour un accès ordinaire (elle arrive en v1.0 avec le moteur de workflow). **Une exception : l'accès d'urgence « break-glass »**, qui attend l'accord d'une autre personne (voir la FAQ §8).
+Dans le périmètre actuel, l'accès est accordé immédiatement si vous en avez le droit — il n'y a pas d'étape de validation par un tiers pour un accès ordinaire (elle arrive en v0.0.1 avec le moteur de workflow). **Une exception : l'accès d'urgence « break-glass »**, qui attend l'accord d'une autre personne (voir la FAQ §8).

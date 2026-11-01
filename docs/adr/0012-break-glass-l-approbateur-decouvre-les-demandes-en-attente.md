@@ -40,7 +40,7 @@ Mise en œuvre dans le Session Broker, qui détient déjà la demande et la déc
 
 **Alternatives envisagées**
 - *Implémenter tout `GET /sessions`* : rejeté — il faut d'abord décider qui voit quoi (« les siennes, toutes pour un administrateur »), et le RBAC ne parle pas de sujet.
-- *Un Notification Service dès maintenant* : rejeté — un service, une identité, une base pour un envoi ; le port est la couture, un service le remplacera en v1.0 sans toucher le Broker.
+- *Un Notification Service dès maintenant* : rejeté — un service, une identité, une base pour un envoi ; le port est la couture, un service le remplacera en v0.0.1 sans toucher le Broker.
 - *Notifier de façon synchrone et refuser la demande si la notification échoue* : rejeté — ferait dépendre l'accès d'urgence d'une messagerie ; c'est exactement la dépendance qu'ADR-0009 retire pour le recorder.
 - *Nouvelles tentatives avec file persistante* : rejeté pour l'instant — une file à garantir (et à purger) pour un message dont la liste est le filet.
 - *Mettre la justification dans le message* : rejeté — elle part dans un canal tiers, lu par des gens qui n'ont pas l'autorité de la lire, et conservée par lui.

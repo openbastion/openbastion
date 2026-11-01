@@ -36,7 +36,7 @@ enum SessionStatus {
 enum Protocol {
   PROTOCOL_UNSPECIFIED = 0;
   PROTOCOL_SSH = 1;
-  // PROTOCOL_RDP, PROTOCOL_VNC, PROTOCOL_DATABASE, ... ajoutés en v1.0
+  // PROTOCOL_RDP, PROTOCOL_VNC, PROTOCOL_DATABASE, ... ajoutés en v0.0.1
   // sans renumérotation des valeurs existantes.
 }
 

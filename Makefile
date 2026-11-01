@@ -6,6 +6,15 @@ export GOWORK := $(CURDIR)/go.work
 export GOPROXY := direct
 export GOFLAGS :=
 
+## La version (ADR-0063) : VERSION est la source, en Semantic Versioning. Une construction est
+## estampillée VERSION+<commit> ; une construction de release (la CI, sur un tag) passe
+## BUILD_VERSION=$(VERSION). Lue par `openbastion-cli version` et la première ligne du journal
+## de chaque service.
+VERSION := $(shell cat VERSION)
+GIT_SHA := $(shell git rev-parse --short=12 HEAD 2>/dev/null)
+BUILD_VERSION ?= $(VERSION)$(if $(GIT_SHA),+$(GIT_SHA))
+LDFLAGS := -X github.com/openbastion/openbastion/pkg/buildinfo.Version=$(BUILD_VERSION)
+
 ## Transport interne (ADR-0010). Par défaut : mTLS requis — chaque service lit son
 ## identité dans $(PKI_DIR) (voir `make pki`). `make run-X INTERNAL_TLS=disabled`
 ## lance sans certificats, en HTTP clair : développement uniquement, annoncé en
@@ -20,11 +29,24 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+.PHONY: build version version-check test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
 
-## Compile tous les modules actuellement implémentés.
+## La version qu'une construction estampille ; et sa vérification : VERSION est une version
+## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
+version:
+	@echo $(BUILD_VERSION)
+version-check:
+	$(GO) test ./pkg/buildinfo/... -count=1
+	@if [ -n "$(TAG)" ]; then \
+		[ "$(TAG)" = "v$(VERSION)" ] || { echo "le tag $(TAG) n'est pas v$(VERSION) (le fichier VERSION)"; exit 1; }; \
+		case "$(VERSION)" in *-*|*+*) echo "le tag $(TAG) nomme une pré-version ou porte une métadonnée ($(VERSION)) : une release est X.Y.Z"; exit 1;; esac; \
+		echo "le tag $(TAG) est la release $(VERSION)"; \
+	fi
+
+## Compile tous les modules actuellement implémentés, estampillés de leur version.
 build:
-	$(GO) build \
+	$(GO) build -ldflags "$(LDFLAGS)" \
+		./pkg/buildinfo/... \
 		./pkg/proxycore/... \
 		./pkg/mtls/... \
 		./cli/openbastion-cli/... \
@@ -52,6 +74,7 @@ vet:
 	$(GO) vet ./pkg/webhook/...
 	$(GO) vet ./pkg/hostkey/...
 	$(GO) vet ./pkg/transit/...
+	$(GO) vet ./pkg/buildinfo/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
 	$(GO) vet ./services/access/authorization/...
@@ -75,6 +98,7 @@ test:
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
 		./pkg/transit/... \
+		./pkg/buildinfo/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
@@ -197,7 +221,10 @@ test-postgres:
 ## TRIVY : le binaire, vérifié contre son empreinte (la CI le fait) ; Docker requis.
 TRIVY ?= trivy
 scan-images:
-	docker build -q -f deploy/docker-compose/Dockerfile --target runtime -t openbastion:scan .
+	docker build -q -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) -t openbastion:scan .
+	@got=$$(docker run --rm --entrypoint /usr/local/bin/openbastion-cli openbastion:scan version); \
+		[ "$$got" = "$(BUILD_VERSION)" ] || { echo "l'image dit être $$got, pas $(BUILD_VERSION)"; exit 1; }; \
+		echo "l'image est la version $$got"
 	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml openbastion:scan
 	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml \
 		"$$(grep -oE 'postgres:16@sha256:[0-9a-f]{64}' deploy/docker-compose/docker-compose.yml)"

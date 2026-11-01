@@ -9,6 +9,7 @@ use (
 	./pkg/webhook
 	./pkg/hostkey
 	./pkg/transit
+	./pkg/buildinfo
 	./services/access/api-gateway
 	./services/access/authentication
 	./services/access/authorization

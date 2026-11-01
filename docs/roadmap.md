@@ -1,6 +1,6 @@
-# Feuille de route MVP → v1.0 → v2.0
+# Feuille de route MVP → v0.0.1 → v0.0.2
 
-Séquencement du périmètre fonctionnel, sans estimation calendaire.
+Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
 ## 1. Principe de séquencement
 
@@ -30,7 +30,7 @@ Deux règles guident l'ordre de livraison :
 - Le replay texte d'une session retrouve chaque commande exécutée, horodatée.
 - Déploiement reproductible via `docker-compose/` en environnement de développement.
 
-## 3. v1.0 — Couverture protocolaire élargie et gouvernance complète
+## 3. v0.0.1 — Couverture protocolaire élargie et gouvernance complète
 
 **Objectif** : couvrir les scénarios d'entreprise les plus courants (serveurs Windows/Linux, bases de données, Kubernetes) avec un vrai processus d'approbation et une fédération d'identité complète.
 
@@ -45,7 +45,7 @@ Deux règles guident l'ordre de livraison :
 | Plateforme | Scheduler complet (rotation planifiée et post-usage) |
 | Clients | User Portal, Desktop Client (Tauri), SDK Go |
 
-**Explicitement hors périmètre v1.0** : Docker Proxy, Hypervisor Console Proxy, WinRM Proxy, Telnet/Serial-IPMI Proxy, HTTP/HTTPS Web Proxy, Risk Engine, Reporting Service, SDK Python/Java/JavaScript.
+**Explicitement hors périmètre v0.0.1** : Docker Proxy, Hypervisor Console Proxy, WinRM Proxy, Telnet/Serial-IPMI Proxy, HTTP/HTTPS Web Proxy, Risk Engine, Reporting Service, SDK Python/Java/JavaScript.
 
 **Critères de sortie**
 - Une demande d'accès peut être soumise à double validation avec ticket obligatoire et notification Slack/Teams, de bout en bout.
@@ -53,7 +53,7 @@ Deux règles guident l'ordre de livraison :
 - Au moins trois fournisseurs d'identité externes fédérés simultanément en environnement de test.
 - Helm charts et `docs/deployment/high-availability.md` disponibles pour un déploiement Kubernetes/K3s/OpenShift en production.
 
-## 4. v2.0 — Couverture complète, intelligence et écosystème
+## 4. v0.0.2 — Couverture complète, intelligence et écosystème
 
 **Objectif** : couvrir l'intégralité des six familles de systèmes cibles, ajouter la détection d'anomalies, et livrer l'écosystème d'intégration complet.
 
@@ -71,7 +71,7 @@ Deux règles guident l'ordre de livraison :
 
 ## 5. Matrice de couverture par microservice
 
-| Composant | MVP | v1.0 | v2.0 |
+| Composant | MVP | v0.0.1 | v0.0.2 |
 |---|:---:|:---:|:---:|
 | API Gateway | ✅ | | |
 | Authentication Service | ✅ | | |
@@ -118,5 +118,5 @@ Deux règles guident l'ordre de livraison :
 | Risque | Mitigation |
 |---|---|
 | Le MVP mono-protocole (SSH) ne convainc pas des utilisateurs déjà équipés d'un PAM commercial couvrant RDP/DB dès le premier jour | Communiquer le MVP comme une preuve d'architecture, pas comme un produit de remplacement immédiat |
-| `pkg/proxycore` (ADR-0006) conçu pour SSH seul en MVP pourrait nécessiter un refactoring lors de l'ajout de RDP en v1.0 | Concevoir l'interface `Codec` dès le MVP en anticipant au moins un second protocole (RDP), sans l'implémenter |
-| Fédération d'identité limitée à OIDC en MVP peut bloquer des pilotes en entreprise déjà en AD pur | Prioriser LDAP/AD en tout début de v1.0 plutôt qu'en fin de phase |
+| `pkg/proxycore` (ADR-0006) conçu pour SSH seul en MVP pourrait nécessiter un refactoring lors de l'ajout de RDP en v0.0.1 | Concevoir l'interface `Codec` dès le MVP en anticipant au moins un second protocole (RDP), sans l'implémenter |
+| Fédération d'identité limitée à OIDC en MVP peut bloquer des pilotes en entreprise déjà en AD pur | Prioriser LDAP/AD en tout début de v0.0.1 plutôt qu'en fin de phase |

@@ -1,7 +1,7 @@
 # ADR-0052 — Les vulnérabilités connues se cherchent à chaque commit et chaque semaine, sur les modules sous leur vrai nom
 
 **Contexte**
-Demande de Bony Kiss (31 octobre 2026) : un contrôle des vulnérabilités avant la feuille de route v1.0. Rien ne le faisait jusque-là (ADR-0047 le notait : « pas de `govulncheck` ni de `npm audit` »). Le premier passage de `govulncheck` v1.9.0 (base du 27 octobre 2026), en mode symboles, sur les 17 modules du `go.work`, a trouvé :
+Demande de Bony Kiss (31 octobre 2026) : un contrôle des vulnérabilités avant la feuille de route v0.0.1. Rien ne le faisait jusque-là (ADR-0047 le notait : « pas de `govulncheck` ni de `npm audit` »). Le premier passage de `govulncheck` v1.9.0 (base du 27 octobre 2026), en mode symboles, sur les 17 modules du `go.work`, a trouvé :
 
 - **12 vulnérabilités de la bibliothèque standard de Go 1.27.1 dont le code est appelé** (serveur et client HTTP/2, `net/http`, `crypto/tls`, `crypto/x509`, `net/textproto`), corrigées en 1.27.2 et 1.27.3 ;
 - **1 dans `github.com/golang-jwt/jwt/v5` v5.2.1**, appelée par l'Authentication Service (allocation excessive à la lecture d'un en-tête, GO-2025-3553), corrigée en v5.2.2 ;

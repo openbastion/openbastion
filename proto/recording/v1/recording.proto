@@ -7,7 +7,7 @@ option go_package = "github.com/openbastion/openbastion/proto/recording/v1;recor
 
 service SessionRecording {
   rpc StreamCommandEntries(stream CommandEntry) returns (StreamAck);
-  // Signature réservée pour l'ajout du Video Recorder en v1.0 — ne rompt pas
+  // Signature réservée pour l'ajout du Video Recorder en v0.0.1 — ne rompt pas
   // le contrat existant.
   rpc StreamVideoFrames(stream VideoFrame) returns (StreamAck);
 }

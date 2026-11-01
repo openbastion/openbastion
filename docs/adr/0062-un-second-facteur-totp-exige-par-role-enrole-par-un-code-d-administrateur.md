@@ -1,8 +1,8 @@
 # ADR-0062 — Un second facteur TOTP est exigé pour les rôles déclarés ; on l'enrôle avec un code à usage unique qu'un administrateur a émis
 
-**Statut** `Accepté` · 1ᵉʳ novembre 2026 · deuxième lot de la v1.0, choisi par Bony Kiss le 31 octobre 2026, avec deux décisions qui sont les siennes : le MFA exigé **par rôle**, et l'enrôlement par **code d'administrateur** ; texte accepté par son go du 1ᵉʳ novembre 2026
+**Statut** `Accepté` · 1ᵉʳ novembre 2026 · deuxième lot de la v0.0.1, choisi par Bony Kiss le 31 octobre 2026, avec deux décisions qui sont les siennes : le MFA exigé **par rôle**, et l'enrôlement par **code d'administrateur** ; texte accepté par son go du 1ᵉʳ novembre 2026
 
-**Contexte** — Un compte local (ADR-0001) ou d'annuaire (ADR-0061) se connecte avec un seul facteur : son mot de passe. Pour un PAM, c'est le point faible : qui vole le mot de passe d'un `platform-admin` obtient le plateau. Seuls les comptes OIDC ont un second facteur, celui de leur fournisseur (ADR-0035). `docs/security/known-limitations.md` le note : « Pas de MFA natif — v1.0 ». TOTP (RFC 6238, HMAC-SHA1 sur 30 s) se fait avec la bibliothèque standard, et toute application d'authentification le lit. WebAuthn et les passkeys demandent une bibliothèque externe : un lot à part, à décider.
+**Contexte** — Un compte local (ADR-0001) ou d'annuaire (ADR-0061) se connecte avec un seul facteur : son mot de passe. Pour un PAM, c'est le point faible : qui vole le mot de passe d'un `platform-admin` obtient le plateau. Seuls les comptes OIDC ont un second facteur, celui de leur fournisseur (ADR-0035). `docs/security/known-limitations.md` le note : « Pas de MFA natif — v0.0.1 ». TOTP (RFC 6238, HMAC-SHA1 sur 30 s) se fait avec la bibliothèque standard, et toute application d'authentification le lit. WebAuthn et les passkeys demandent une bibliothèque externe : un lot à part, à décider.
 
 Invariants touchés : défaut strict ; aucun secret au journal ; l'identité qui décide est celle que le service vérifie.
 

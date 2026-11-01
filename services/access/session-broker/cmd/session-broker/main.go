@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
@@ -44,6 +45,8 @@ func boundedIntEnv(name string, def, min, max int) int {
 }
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("session-broker %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
 	rt, err := mtls.Setup(mtls.SessionBroker)
 	if err != nil {

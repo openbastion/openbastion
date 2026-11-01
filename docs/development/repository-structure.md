@@ -4,10 +4,10 @@
 
 | Option | Avantages | Inconvénients |
 |---|---|---|
-| **Monorepo** (retenu) | Refactoring cross-service atomique pendant la phase pré-v1.0, contrats `proto/` partagés sans publication intermédiaire, CI unifiée, revue de code centralisée | Nécessite un outillage de build sélectif (changed-files) pour éviter de tout reconstruire à chaque commit |
+| **Monorepo** (retenu) | Refactoring cross-service atomique pendant la phase pré-v0.0.1, contrats `proto/` partagés sans publication intermédiaire, CI unifiée, revue de code centralisée | Nécessite un outillage de build sélectif (changed-files) pour éviter de tout reconstruire à chaque commit |
 | Multi-repo | Isolation forte, cycles de release indépendants par service | Coordination difficile des contrats inter-services tant que l'architecture bouge encore beaucoup |
 
-🔖 **Sujet ADR** : ce choix sera formalisé en ADR (document suivant), avec le critère de bascule explicite — un service pourra être extrait en dépôt indépendant une fois son contrat gRPC/REST stabilisé en v1.0, sans réécriture (les modules Go sont déjà isolés, voir §3).
+🔖 **Sujet ADR** : ce choix sera formalisé en ADR (document suivant), avec le critère de bascule explicite — un service pourra être extrait en dépôt indépendant une fois son contrat gRPC/REST stabilisé en v0.0.1, sans réécriture (les modules Go sont déjà isolés, voir §3).
 
 Le monorepo est organisé en **modules Go indépendants** (`go.work`), pas en un module unique — chaque microservice a son propre `go.mod`, ce qui préserve la possibilité d'extraction future.
 

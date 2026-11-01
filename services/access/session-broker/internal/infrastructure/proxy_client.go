@@ -17,7 +17,7 @@ import (
 // proxy's /internal/v1/establish-session — the HTTP stand-in for
 // ProxyControl.EstablishSession (proto/proxy/v1/proxy_control.proto,
 // docs/api/grpc/README.md §4). MVP has exactly one proxy family (SSH), so one BaseURL is
-// enough; a registry keyed by proxyServiceID is a v1.0 concern.
+// enough; a registry keyed by proxyServiceID is a v0.0.1 concern.
 type ProxyClientHTTPClient struct {
 	BaseURL string
 

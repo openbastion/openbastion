@@ -25,7 +25,7 @@ type TokenVerifier interface {
 // authenticated user may do (ADR-0014): docs/security/security-overview.md's brute-force protection and
 // general abuse protection, one of the Gateway's stated responsibilities
 // (docs/architecture/system-overview.md: "rate-limiting"). Per-process only; a multi-replica Gateway
-// needs a shared store (Redis, docs/architecture/system-overview.md) — a v1.0 concern.
+// needs a shared store (Redis, docs/architecture/system-overview.md) — a v0.0.1 concern.
 //
 // The two parameters are a burst and a refill interval: a key may make `capacity`
 // requests at once, and then one more every `refillEvery`. NewRateLimiter(60,

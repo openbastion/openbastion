@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/api-gateway/internal/application"
 	"github.com/openbastion/openbastion/services/access/api-gateway/internal/infrastructure"
@@ -42,6 +43,8 @@ func boundedIntEnv(name string, def, min, max int) int {
 }
 
 func main() {
+	// The version it was built as (ADR-0063): the first line of its log.
+	log.Printf("api-gateway %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010). The Gateway
 	// has an identity for what it calls; what calls it — users — does not.
 	rt, err := mtls.Setup(mtls.APIGateway)
