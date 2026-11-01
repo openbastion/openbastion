@@ -1,0 +1,40 @@
+# ADR-0062 — Un second facteur TOTP est exigé pour les rôles déclarés ; on l'enrôle avec un code à usage unique qu'un administrateur a émis
+
+**Statut** `Proposé` · 1ᵉʳ novembre 2026 · deuxième lot de la v1.0, choisi par Bony Kiss le 31 octobre 2026, avec deux décisions qui sont les siennes : le MFA exigé **par rôle**, et l'enrôlement par **code d'administrateur** ; `Accepté` seulement avec son go sur ce texte
+
+**Contexte** — Un compte local (ADR-0001) ou d'annuaire (ADR-0061) se connecte avec un seul facteur : son mot de passe. Pour un PAM, c'est le point faible : qui vole le mot de passe d'un `platform-admin` obtient le plateau. Seuls les comptes OIDC ont un second facteur, celui de leur fournisseur (ADR-0035). `docs/security/known-limitations.md` le note : « Pas de MFA natif — v1.0 ». TOTP (RFC 6238, HMAC-SHA1 sur 30 s) se fait avec la bibliothèque standard, et toute application d'authentification le lit. WebAuthn et les passkeys demandent une bibliothèque externe : un lot à part, à décider.
+
+Invariants touchés : défaut strict ; aucun secret au journal ; l'identité qui décide est celle que le service vérifie.
+
+**Décision**
+
+1. **Qui** : `MFA_REQUIRED_ROLES` (Authentication Service) liste les rôles qui exigent le second facteur, par exemple `platform-admin,vault-admin`. Un compte **local ou d'annuaire** qui porte l'un d'eux, au moment de la connexion, ne reçoit **aucun jeton** sans code valable. Les rôles d'un compte d'annuaire sont ceux que sa table lui donne à cette connexion. Les comptes OIDC ne sont pas concernés. Sans la variable, rien ne change. Avec elle, `MFA_SECRET_KEY_HEX` (64 chiffres hexadécimaux, hors de la base) est obligatoire : il chiffre les secrets TOTP en base.
+2. **La connexion en deux temps** — `POST /auth/login` et `POST /auth/ldap/login` gardent leur corps. Quand le mot de passe est bon et que le MFA est exigé, ils répondent **`401`** avec `{"mfa": "required", "challenge": "…", "expiresIn": 300}`, ou `{"mfa": "enrollment_required", …}` si le compte n'a pas encore de secret. Un client qui ne connaît pas le MFA voit un refus : rien ne passe sans lui.
+   - `POST /auth/mfa/verify` `{challenge, code}` → le jeton, comme `/auth/login`.
+   - `POST /auth/mfa/enroll` `{challenge, enrollmentCode}` → `{secret, otpauthUri}`, puis `POST /auth/mfa/enroll/confirm` `{challenge, code}` → le secret est activé, le code d'enrôlement brûlé, et le jeton émis.
+   - Le défi : 32 octets aléatoires, gardé en base **par son empreinte SHA-256** (`mfa_challenges`), lié au compte et aux rôles calculés à la vérification du mot de passe, valable **5 minutes**, **5 essais** puis détruit — il faut retaper le mot de passe. Les quatre routes sont dans le budget de connexion par adresse de la Gateway.
+3. **Le code TOTP** : 6 chiffres, pas de 30 s, une fenêtre de **±1 pas** pour l'horloge. **Un code ne sert qu'une fois** : le dernier pas accepté est gardé par compte, et un pas qui n'est pas plus grand est refusé (compare-échange en base). La comparaison est en temps constant.
+4. **L'enrôlement par un administrateur** : `openbastion-cli mfa enrollment-code -authn URL -local NOM` ou `-directory NOM` (le nom de connexion à l'annuaire, puisque le compte `ldap:<id>` n'existe qu'après la première connexion) émet un code de 128 bits, **affiché une fois**, valable **24 h**, à usage unique, gardé par son empreinte. Il se transmet à l'utilisateur par un autre canal. Un mot de passe volé ne suffit donc pas à enrôler l'appareil d'un attaquant. Route `POST /auth/v1/mfa/enrollment-codes`, réservée à `admin-cli` (ADR-0010). Un nouveau code annule le précédent.
+5. **La remise à zéro** : `openbastion-cli mfa reset -authn URL -username NOM` efface le secret d'un compte (appareil perdu) ; il faudra un nouveau code pour le réenrôler. Route `POST /auth/v1/mfa/reset`, réservée à `admin-cli`.
+6. **Le secret** : 20 octets aléatoires, rendus **une seule fois** à l'enrôlement (base32 et `otpauth://totp/OpenBastion:<compte>?…`). En base, il est chiffré par AES-256-GCM sous `MFA_SECRET_KEY_HEX`, lié à l'identifiant du compte (donnée associée) : la base seule ne le lit pas, et une ligne recopiée sur un autre compte ne s'ouvre pas. Nouvelle migration `003_mfa.sql`, idempotente : colonnes `users.totp_secret_enc`, `users.totp_last_step`, tables `mfa_challenges` et `mfa_enrollment_codes`.
+7. **Rien n'est écrit** : ni le secret, ni un code TOTP, ni un code d'enrôlement, ni un défi — pas dans une erreur, pas dans un journal.
+8. **L'Admin UI** : un second écran demande le code ; l'écran d'enrôlement demande le code de l'administrateur, puis affiche le secret et l'URI à recopier, puis demande un premier code.
+
+**Conséquences**
+
+- (+) *À mesurer : rouge avant (un `platform-admin` obtient un jeton avec son seul mot de passe), vert après sur processus réels et PostgreSQL — pas de jeton sans code ; code faux, rejoué, d'une autre fenêtre, défi expiré ou épuisé refusés ; enrôlement sans code d'administrateur, avec un code d'un autre compte, expiré ou déjà utilisé refusé ; secret illisible sans `MFA_SECRET_KEY_HEX` ; un client ignorant le MFA voit `401` ; aucun secret au journal —, contre-épreuves, mutations.*
+- (−) **L'émission d'un code d'enrôlement et la remise à zéro ne sont pas écrites à l'audit** : l'Authentication Service n'a pas encore de client d'audit. Elles sont écrites au journal du service. Ajouter l'audit est un lot à part.
+- (−) **Pas de codes de secours** : un appareil perdu demande un administrateur (`mfa reset`, puis un nouveau code).
+- (−) **Pas de QR code** dans l'Admin UI : il faut recopier le secret ou l'URI. Le dessiner demanderait une bibliothèque, ou un encodeur maison.
+- (−) Le MFA est vérifié à la connexion, pas pendant la vie du jeton (1 h) : un jeton volé après la connexion vaut jusqu'à sa fin, comme aujourd'hui.
+- (−) TOTP se laisse hameçonner : un faux site qui relaie mot de passe et code dans la minute passe. Seul WebAuthn y résiste : un lot à part, qui demande une dépendance.
+- (−) Une instance qui perd `MFA_SECRET_KEY_HEX` rend tous les secrets illisibles : chaque compte concerné doit être remis à zéro.
+
+**Alternatives envisagées**
+
+- **Le MFA exigé de tous les comptes, ou au choix de l'utilisateur** : écartés par Bony Kiss au profit du « par rôle ».
+- **Enrôlement à la première connexion** (confiance au premier usage) : écarté par Bony Kiss ; qui a le mot de passe en premier enrôle son appareil.
+- **Une réponse `200` portant un défi au lieu du jeton** : un client qui ne connaît pas le MFA croirait être connecté ; `401` le refuse.
+- **Un défi sans état** (jeton signé) : rien ne compterait les essais ni n'empêcherait le rejeu d'un défi ; la base le fait déjà pour OIDC.
+- **Dériver la clé des secrets de `TOKEN_SIGNING_KEY_HEX`** : changer la clé de signature des jetons rendrait illisibles tous les secrets TOTP ; deux usages, deux clés.
+- **WebAuthn d'abord** : plus fort, mais une dépendance externe et une cérémonie côté navigateur ; TOTP se fait sans rien ajouter, et WebAuthn s'ajoutera à côté.
