@@ -25,6 +25,8 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/verify", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/enroll", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/enroll/confirm", Callers: []string{mtls.APIGateway}},
+		{Method: http.MethodPost, Path: "/auth/v1/mfa/webauthn/verify", Callers: []string{mtls.APIGateway}},
+		{Method: http.MethodPost, Path: "/auth/v1/mfa/webauthn/enroll/confirm", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/enrollment-codes", Callers: []string{mtls.AdminCLI}},
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/reset", Callers: []string{mtls.AdminCLI}},
 		// Creating a local user has no public surface yet: it is operator tooling.

@@ -12,9 +12,10 @@ type Source = "local" | "ldap";
 // second factor (ADR-0062) — a 401 that carries it — or null for any other refusal.
 function mfaChallenge(err: unknown): Challenge | null {
   if (!(err instanceof ApiError) || err.status !== 401) return null;
-  const b = err.body as { mfa?: unknown; challenge?: unknown } | undefined;
+  const b = err.body as { mfa?: unknown; challenge?: unknown; factors?: unknown; webauthn?: unknown } | undefined;
   if ((b?.mfa === "required" || b?.mfa === "enrollment_required") && typeof b.challenge === "string") {
-    return { kind: b.mfa, challenge: b.challenge };
+    const factors = Array.isArray(b.factors) ? (b.factors as string[]) : ["totp"]; // before ADR-0065: TOTP only
+    return { kind: b.mfa, challenge: b.challenge, factors, webauthn: b.webauthn };
   }
   return null;
 }

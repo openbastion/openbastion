@@ -221,6 +221,7 @@ paths:
               properties:
                 challenge: { type: string }
                 enrollmentCode: { type: string }
+                factor: { type: string, enum: [totp, webauthn], default: totp, description: "ADR-0065 : webauthn rend les options de navigator.credentials.create" }
       responses:
         "200":
           description: Le secret, à recopier dans l'application d'authentification
@@ -228,10 +229,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [secret, otpauthUri]
                 properties:
-                  secret: { type: string, description: base32, sans remplissage }
+                  secret: { type: string, description: "TOTP : base32, sans remplissage" }
                   otpauthUri: { type: string }
+                  webauthn: { type: object, description: "WebAuthn : les options de navigator.credentials.create" }
         "401": { description: Défi inconnu, expiré, épuisé ou d'un compte déjà enrôlé ; code d'enrôlement faux, d'un autre compte, remplacé ou expiré }
         "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
 
@@ -252,6 +253,62 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TokenPair" }
         "401": { description: Défi inconnu, expiré ou épuisé ; code faux ; code d'enrôlement utilisé ou remplacé entre-temps }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+
+  /auth/mfa/webauthn/verify:
+    post:
+      tags: [auth]
+      summary: Termine une connexion par une clé de sécurité (ADR-0065)
+      description: >
+        La réponse de `navigator.credentials.get` aux options du défi, telle que le
+        navigateur la donne. Vérifiés : l'origine (dans `WEBAUTHN_ORIGINS`), le `rpId`,
+        la présence de l'utilisateur, le défi, la signature par une clé du compte ;
+        une clé dont le compteur recule est refusée. Seul facteur admis pour un rôle
+        strict. Compte dans le budget de connexion par adresse.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge, credential]
+              properties:
+                challenge: { type: string }
+                credential: { type: object, description: "PublicKeyCredential en JSON (base64url)" }
+      responses:
+        "200":
+          description: Le jeton OpenBastion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "400": { description: "credential n'est pas un objet" }
+        "401": { description: Défi inconnu, expiré ou épuisé ; origine, rpId ou signature refusés ; clé d'un autre compte ; compteur qui recule }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+
+  /auth/mfa/webauthn/enroll/confirm:
+    post:
+      tags: [auth]
+      summary: Enregistre la clé de sécurité créée par le navigateur, brûle le code d'enrôlement et termine la connexion (ADR-0065)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge, credential]
+              properties:
+                challenge: { type: string }
+                credential: { type: object, description: "La réponse de navigator.credentials.create, en JSON (base64url)" }
+      responses:
+        "200":
+          description: Le jeton OpenBastion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "400": { description: "credential n'est pas un objet" }
+        "401": { description: Défi inconnu, expiré ou épuisé ; attestation refusée ; code d'enrôlement utilisé ou remplacé entre-temps }
         "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
 
   /auth/token/refresh:
@@ -1212,6 +1269,14 @@ components:
         mfa: { type: string, enum: [required, enrollment_required] }
         challenge: { type: string, description: À usage limité (5 essais), valable expiresIn secondes }
         expiresIn: { type: integer, example: 300 }
+        factors:
+          type: array
+          description: >
+            ADR-0065 — pour `required`, les facteurs que le compte détient et que ses rôles admettent ;
+            pour `enrollment_required`, ceux qu'il peut enrôler. Un rôle strict
+            (`MFA_PHISHING_RESISTANT_ROLES`) n'admet que `webauthn`.
+          items: { type: string, enum: [totp, webauthn] }
+        webauthn: { type: object, description: Les options de `navigator.credentials.get`, quand le compte a une clé }
     MFACodeRequest:
       type: object
       required: [challenge, code]

@@ -30,13 +30,15 @@ var ErrAuditUnavailable = errors.New("the audit cannot be written now")
 
 // The actions, as they appear in the chain.
 const (
-	ActionLogin           = "auth.login"         // a token without a second factor
-	ActionLoginMFA        = "auth.login_mfa"     // a token after the second factor
-	ActionLoginRefused    = "auth.login_refused" // a password, a directory, a code or an enrollment code refused
-	ActionMFACodeIssued   = "auth.mfa_enrollment_code_issued"
-	ActionMFAEnrolled     = "auth.mfa_enrolled"
-	ActionMFAReset        = "auth.mfa_reset"
-	maxAuditedLoginLength = 256
+	ActionLogin                 = "auth.login"         // a token without a second factor
+	ActionLoginMFA              = "auth.login_mfa"     // a token after the second factor
+	ActionLoginRefused          = "auth.login_refused" // a password, a directory, a code or an enrollment code refused
+	ActionMFACodeIssued         = "auth.mfa_enrollment_code_issued"
+	ActionMFAEnrolled           = "auth.mfa_enrolled"
+	ActionMFAReset              = "auth.mfa_reset"
+	ActionLoginWebAuthn         = "auth.login_webauthn"          // a token after a security key (ADR-0065)
+	ActionMFAWebAuthnRegistered = "auth.mfa_webauthn_registered" // a security key enrolled
+	maxAuditedLoginLength       = 256
 )
 
 // WithAudit writes to audit; refusals within budget. A service built without it writes nothing:

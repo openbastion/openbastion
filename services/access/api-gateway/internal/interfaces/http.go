@@ -121,8 +121,11 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/ldap", g.handleLDAPInfo)
 	// The second factor (ADR-0062): each step is public and in the login budget.
 	mux.HandleFunc("/auth/mfa/verify", g.handleMFA("/auth/v1/mfa/verify", "challenge", "code"))
-	mux.HandleFunc("/auth/mfa/enroll", g.handleMFA("/auth/v1/mfa/enroll", "challenge", "enrollmentCode"))
+	mux.HandleFunc("/auth/mfa/enroll", g.handleMFA("/auth/v1/mfa/enroll", "challenge", "enrollmentCode", "factor"))
 	mux.HandleFunc("/auth/mfa/enroll/confirm", g.handleMFA("/auth/v1/mfa/enroll/confirm", "challenge", "code"))
+	// WebAuthn (ADR-0065): the browser's answer is an object, forwarded as it is, bounded.
+	mux.HandleFunc("/auth/mfa/webauthn/verify", g.handleMFA("/auth/v1/mfa/webauthn/verify", "challenge", "{credential}"))
+	mux.HandleFunc("/auth/mfa/webauthn/enroll/confirm", g.handleMFA("/auth/v1/mfa/webauthn/enroll/confirm", "challenge", "{credential}"))
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	mux.HandleFunc("/sessions/", g.requireAuth(g.handleSessionItem))
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))

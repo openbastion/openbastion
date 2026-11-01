@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // handleMFA forwards one step of the second factor. Each takes from the per-address login budget:
 // a code is six digits, and an address that holds a challenge should not try many. Only the named
-// string fields are forwarded, rebuilt, never the raw body.
+// fields are forwarded, rebuilt, never the raw body: a string field, or — written {name} — a JSON
+// object (the browser's WebAuthn answer, ADR-0065), forwarded as it is.
 func (g *GatewayServer) handleMFA(upstream string, fields ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -29,8 +31,18 @@ func (g *GatewayServer) handleMFA(upstream string, fields ...string) http.Handle
 			http.Error(w, "the body cannot be read", http.StatusBadRequest)
 			return
 		}
-		out := make(map[string]string, len(fields))
+		out := make(map[string]any, len(fields))
 		for _, f := range fields {
+			if strings.HasPrefix(f, "{") {
+				name := strings.Trim(f, "{}")
+				raw := in[name]
+				if len(raw) == 0 || raw[0] != '{' || !json.Valid(raw) {
+					http.Error(w, "the body cannot be read", http.StatusBadRequest)
+					return
+				}
+				out[name] = raw
+				continue
+			}
 			var v string
 			if raw, ok := in[f]; ok && json.Unmarshal(raw, &v) != nil {
 				http.Error(w, "the body cannot be read", http.StatusBadRequest)

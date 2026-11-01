@@ -28,8 +28,11 @@ type MFAChallenge struct {
 	LoginSource, LoginName string   // what an enrollment code is issued for (ADR-0062 §4)
 	PendingSecret          []byte   // enrollment: the secret given out, sealed, until a code confirms it
 	EnrollmentCodeHash     []byte   // enrollment: the code that was shown, burned at the confirmation
-	Attempts               int
-	ExpiresAt              time.Time
+	// WebAuthnSession is the ceremony under way (ADR-0065): the login's assertion options when the
+	// challenge is made, or the registration's once an enrollment code started one.
+	WebAuthnSession []byte
+	Attempts        int
+	ExpiresAt       time.Time
 }
 
 // MFARepository keeps what the second factor needs.
@@ -52,10 +55,31 @@ type MFARepository interface {
 	AdvanceTOTPStep(ctx context.Context, userID string, step int64) (bool, error)
 	ResetTOTP(ctx context.Context, userID string) error
 
+	// SetPendingWebAuthn records the registration ceremony started and the enrollment code shown,
+	// once: a challenge with a pending secret or ceremony is left as it is (false).
+	SetPendingWebAuthn(ctx context.Context, hash, session, codeHash []byte) (bool, error)
+	// WebAuthnCredentials are the account's security keys (ADR-0065).
+	WebAuthnCredentials(ctx context.Context, userID string) ([]WebAuthnCredential, error)
+	// AddWebAuthnCredential keeps a new key; false when the account holds max already, or the key
+	// is known.
+	AddWebAuthnCredential(ctx context.Context, userID string, c WebAuthnCredential, max int) (bool, error)
+	// UpdateWebAuthnCredential keeps what a login changed (its counter, its flags).
+	UpdateWebAuthnCredential(ctx context.Context, userID string, c WebAuthnCredential) error
+	// ResetWebAuthn forgets the account's keys.
+	ResetWebAuthn(ctx context.Context, userID string) error
+
 	// PutEnrollmentCode keeps the code for source/name, replacing any earlier one.
 	PutEnrollmentCode(ctx context.Context, source, name string, hash []byte, expiresAt time.Time) error
 	// EnrollmentCodeMatches says whether hash is source/name's code, still valid.
 	EnrollmentCodeMatches(ctx context.Context, source, name string, hash []byte, now time.Time) (bool, error)
 	// TakeEnrollmentCode removes source/name's code if it is hash and still valid; false otherwise.
 	TakeEnrollmentCode(ctx context.Context, source, name string, hash []byte, now time.Time) (bool, error)
+}
+
+// WebAuthnCredential is one security key of an account (ADR-0065): a public key, not a secret.
+type WebAuthnCredential struct {
+	ID        []byte // the credential ID the authenticator chose
+	Data      []byte // the verifier's record of it (public key, flags, AAGUID), as it keeps it
+	SignCount uint32
+	CreatedAt time.Time
 }

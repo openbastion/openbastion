@@ -13,6 +13,7 @@ import (
 	"crypto/subtle"
 	"encoding/base32"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -53,6 +54,10 @@ type MFAChallengeRequired struct {
 	Kind      string // domain.MFAVerify or domain.MFAEnroll
 	Challenge string
 	ExpiresIn time.Duration
+	// Factors are those that may answer it (ADR-0065): to verify, those the account holds and its
+	// roles accept; to enroll, those its roles accept. WebAuthn are the assertion options.
+	Factors  []string
+	WebAuthn json.RawMessage
 }
 
 func (e *MFAChallengeRequired) Error() string { return "a second factor is required: " + e.Kind }
@@ -67,14 +72,14 @@ func (s *AuthenticationService) WithMFA(roles []string, repo domain.MFARepositor
 	return s
 }
 
-// mfaRequired says whether roles hold one that requires the second factor.
+// mfaRequired says whether roles hold one that requires the second factor — a strict role does too.
 func (s *AuthenticationService) mfaRequired(roles []string) bool {
 	for _, r := range roles {
 		if s.mfaRoles[r] {
 			return true
 		}
 	}
-	return false
+	return s.strict(roles)
 }
 
 // tokenOrChallenge ends a login whose password was right: a token, or — when one of the roles
@@ -87,19 +92,48 @@ func (s *AuthenticationService) tokenOrChallenge(ctx context.Context, u *domain.
 	if err != nil {
 		return "", 0, err
 	}
-	kind := domain.MFAVerify
-	if sealed == nil {
-		kind = domain.MFAEnroll
+	var keys []domain.WebAuthnCredential
+	if s.webauthn != nil {
+		if keys, err = s.mfa.WebAuthnCredentials(ctx, u.ID); err != nil {
+			return "", 0, err
+		}
+	}
+	// What counts (ADR-0065): for a strict role, a security key only; otherwise TOTP, or a key.
+	strict := s.strict(roles)
+	accepted := []string{FactorWebAuthn}
+	if !strict {
+		accepted = []string{FactorTOTP}
+		if s.webauthn != nil {
+			accepted = append(accepted, FactorWebAuthn)
+		}
+	}
+	var held []string
+	if sealed != nil && !strict {
+		held = append(held, FactorTOTP)
+	}
+	if len(keys) > 0 && s.webauthn != nil {
+		held = append(held, FactorWebAuthn)
+	}
+	kind, factors := domain.MFAVerify, held
+	if len(held) == 0 { // nothing the roles accept: enroll one, with an administrator's code
+		kind, factors = domain.MFAEnroll, accepted
+	}
+	c := domain.MFAChallenge{UserID: u.ID, Roles: roles, Kind: kind, LoginSource: source, LoginName: loginName, ExpiresAt: s.clock().Add(ChallengeTTL)}
+	var options json.RawMessage
+	if kind == domain.MFAVerify && len(keys) > 0 && s.webauthn != nil {
+		if options, c.WebAuthnSession, err = s.webauthn.BeginLogin(WebAuthnUser{Handle: []byte(u.ID), Name: u.Username, Display: u.DisplayName, Keys: keys}); err != nil {
+			return "", 0, err
+		}
 	}
 	challenge, err := random32()
 	if err != nil {
 		return "", 0, err
 	}
-	if err := s.mfa.SaveChallenge(ctx, domain.MFAChallenge{Hash: digest(challenge), UserID: u.ID, Roles: roles, Kind: kind,
-		LoginSource: source, LoginName: loginName, ExpiresAt: s.clock().Add(ChallengeTTL)}); err != nil {
+	c.Hash = digest(challenge)
+	if err := s.mfa.SaveChallenge(ctx, c); err != nil {
 		return "", 0, err
 	}
-	return "", 0, &MFAChallengeRequired{Kind: kind, Challenge: challenge, ExpiresIn: ChallengeTTL}
+	return "", 0, &MFAChallengeRequired{Kind: kind, Challenge: challenge, ExpiresIn: ChallengeTTL, Factors: factors, WebAuthn: options}
 }
 
 // issue writes the login to the audit, then issues the token: no audit, no token (ADR-0064).
@@ -160,6 +194,9 @@ func (s *AuthenticationService) VerifyMFA(ctx context.Context, challenge, code s
 	if err != nil {
 		return "", 0, err
 	}
+	if s.strict(c.Roles) { // a strict role: TOTP does not count (ADR-0065)
+		return "", 0, s.fail(ctx, c)
+	}
 	sealed, last, err := s.mfa.TOTP(ctx, c.UserID)
 	if err != nil {
 		return "", 0, err
@@ -181,11 +218,11 @@ func (s *AuthenticationService) VerifyMFA(ctx context.Context, challenge, code s
 	} else if !took { // the same code, used at the same instant by another login
 		return "", 0, s.fail(ctx, c)
 	}
-	return s.finish(ctx, c)
+	return s.finish(ctx, c, ActionLoginMFA)
 }
 
 // finish deletes the challenge and issues the token, with the roles of the password's check.
-func (s *AuthenticationService) finish(ctx context.Context, c domain.MFAChallenge) (string, time.Duration, error) {
+func (s *AuthenticationService) finish(ctx context.Context, c domain.MFAChallenge, action string) (string, time.Duration, error) {
 	if err := s.mfa.DeleteChallenge(ctx, c.Hash); err != nil {
 		return "", 0, err
 	}
@@ -193,22 +230,32 @@ func (s *AuthenticationService) finish(ctx context.Context, c domain.MFAChalleng
 	if err != nil {
 		return "", 0, err
 	}
-	return s.issue(ctx, u, c.Roles, ActionLoginMFA)
+	return s.issue(ctx, u, c.Roles, action)
 }
 
 // Enrollment is what POST /auth/mfa/enroll gives out, once.
 type Enrollment struct {
 	Secret     string // base32, for an authenticator application
 	OTPAuthURI string
+	WebAuthn   json.RawMessage // the creation options, for a security key (ADR-0065)
 }
 
 // StartEnrollment implements POST /auth/mfa/enroll: with the enrollment code an administrator
 // issued for this login name, the account gets a secret to enroll — not active until a code of it
 // confirms it. Once per challenge.
-func (s *AuthenticationService) StartEnrollment(ctx context.Context, challenge, enrollmentCode string) (Enrollment, error) {
+func (s *AuthenticationService) StartEnrollment(ctx context.Context, challenge, enrollmentCode, factor string) (Enrollment, error) {
 	c, err := s.liveChallenge(ctx, challenge, domain.MFAEnroll)
 	if err != nil {
 		return Enrollment{}, err
+	}
+	switch {
+	case factor == "" || factor == FactorTOTP:
+		if s.strict(c.Roles) { // a strict role enrolls a security key, not TOTP (ADR-0065)
+			return Enrollment{}, s.fail(ctx, c)
+		}
+	case factor == FactorWebAuthn && s.webauthn != nil:
+	default:
+		return Enrollment{}, s.fail(ctx, c)
 	}
 	codeHash := digest(normalizeEnrollmentCode(enrollmentCode))
 	ok, err := s.mfa.EnrollmentCodeMatches(ctx, c.LoginSource, c.LoginName, codeHash, s.clock())
@@ -217,6 +264,24 @@ func (s *AuthenticationService) StartEnrollment(ctx context.Context, challenge, 
 	}
 	if !ok {
 		return Enrollment{}, s.fail(ctx, c)
+	}
+	if factor == FactorWebAuthn {
+		wu, _, err := s.webauthnUser(ctx, c.UserID)
+		if err != nil {
+			return Enrollment{}, err
+		}
+		options, session, err := s.webauthn.BeginRegistration(wu)
+		if err != nil {
+			return Enrollment{}, err
+		}
+		set, err := s.mfa.SetPendingWebAuthn(ctx, c.Hash, session, codeHash)
+		if err != nil {
+			return Enrollment{}, err
+		}
+		if !set {
+			return Enrollment{}, s.fail(ctx, c)
+		}
+		return Enrollment{WebAuthn: options}, nil
 	}
 	secret := make([]byte, totpSecretBytes)
 	if _, err := rand.Read(secret); err != nil {
@@ -281,7 +346,7 @@ func (s *AuthenticationService) ConfirmEnrollment(ctx context.Context, challenge
 	if err := s.mfa.SetTOTP(ctx, c.UserID, c.PendingSecret, step); err != nil {
 		return "", 0, err
 	}
-	return s.finish(ctx, c)
+	return s.finish(ctx, c, ActionLoginMFA)
 }
 
 // IssueEnrollmentCode implements the administrator's `mfa enrollment-code`: a one-time code for
@@ -341,11 +406,16 @@ func (s *AuthenticationService) ResetMFA(ctx context.Context, actor, username st
 	if err := s.record(ctx, actor, ActionMFAReset, "account", u.Username); err != nil {
 		return err
 	}
+	if err := s.mfa.ResetWebAuthn(ctx, u.ID); err != nil {
+		return err
+	}
 	return s.mfa.ResetTOTP(ctx, u.ID)
 }
 
 // MFAEnabled says whether a role requires the second factor.
-func (s *AuthenticationService) MFAEnabled() bool { return s.mfa != nil && len(s.mfaRoles) > 0 }
+func (s *AuthenticationService) MFAEnabled() bool {
+	return s.mfa != nil && (len(s.mfaRoles) > 0 || len(s.strictRoles) > 0)
+}
 
 // totpAt is the 6-digit code of secret at step (RFC 4226 §5.3, RFC 6238).
 func totpAt(secret []byte, step int64) string {

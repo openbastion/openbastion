@@ -224,7 +224,7 @@ func TestPostgresFlow_ADeclaredRoleNeedsASecondFactor_EnrolledWithAnAdministrato
 				}
 			}
 		}
-		if !strings.Contains(authn.out.String(), "second factor (TOTP) required for the roles platform-admin, vault-admin") {
+		if !strings.Contains(authn.out.String(), "second factor required for the roles platform-admin, vault-admin") {
 			t.Fatalf("the start does not say the second factor is on:\n%s", authn.out.String())
 		}
 	})

@@ -36,6 +36,8 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/mfa/verify", s.handleMFAVerify)
 	mux.HandleFunc("/auth/v1/mfa/enroll", s.handleMFAEnroll)
 	mux.HandleFunc("/auth/v1/mfa/enroll/confirm", s.handleMFAConfirm)
+	mux.HandleFunc("/auth/v1/mfa/webauthn/verify", s.handleWebAuthnVerify)
+	mux.HandleFunc("/auth/v1/mfa/webauthn/enroll/confirm", s.handleWebAuthnConfirm)
 	mux.HandleFunc("/auth/v1/mfa/enrollment-codes", s.handleMFAEnrollmentCode)
 	mux.HandleFunc("/auth/v1/mfa/reset", s.handleMFAReset)
 	mux.HandleFunc("/healthz", s.handleHealthz)
@@ -251,9 +253,11 @@ func ldapError(w http.ResponseWriter, err error) {
 // -- the second factor (ADR-0062) -------------------------------------------------------
 
 type mfaChallengeResponse struct {
-	MFA       string `json:"mfa"` // "required" or "enrollment_required"
-	Challenge string `json:"challenge"`
-	ExpiresIn int    `json:"expiresIn"`
+	MFA       string          `json:"mfa"` // "required" or "enrollment_required"
+	Challenge string          `json:"challenge"`
+	ExpiresIn int             `json:"expiresIn"`
+	Factors   []string        `json:"factors"`            // ADR-0065: "totp", "webauthn"
+	WebAuthn  json.RawMessage `json:"webauthn,omitempty"` // the assertion options, for navigator.credentials.get
 }
 
 // writeMFAChallenge answers a login whose password was right but whose roles require a second
@@ -265,7 +269,7 @@ func writeMFAChallenge(w http.ResponseWriter, err error) bool {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(mfaChallengeResponse{MFA: c.Kind, Challenge: c.Challenge, ExpiresIn: int(c.ExpiresIn.Seconds())})
+	_ = json.NewEncoder(w).Encode(mfaChallengeResponse{MFA: c.Kind, Challenge: c.Challenge, ExpiresIn: int(c.ExpiresIn.Seconds()), Factors: c.Factors, WebAuthn: c.WebAuthn})
 	return true
 }
 
@@ -277,11 +281,19 @@ type mfaCodeRequest struct {
 type mfaEnrollRequest struct {
 	Challenge      string `json:"challenge"`
 	EnrollmentCode string `json:"enrollmentCode"`
+	Factor         string `json:"factor"` // "totp" (the default) or "webauthn" (ADR-0065)
 }
 
 type mfaEnrollResponse struct {
-	Secret     string `json:"secret"`
-	OTPAuthURI string `json:"otpauthUri"`
+	Secret     string          `json:"secret,omitempty"`
+	OTPAuthURI string          `json:"otpauthUri,omitempty"`
+	WebAuthn   json.RawMessage `json:"webauthn,omitempty"` // the creation options, for navigator.credentials.create
+}
+
+// webauthnRequest is a challenge and the browser's answer, as it sent it.
+type webauthnRequest struct {
+	Challenge  string          `json:"challenge"`
+	Credential json.RawMessage `json:"credential"`
 }
 
 func decodePost(w http.ResponseWriter, r *http.Request, into any) bool {
@@ -334,14 +346,40 @@ func (s *HTTPServer) handleMFAEnroll(w http.ResponseWriter, r *http.Request) {
 	if !decodePost(w, r, &req) {
 		return
 	}
-	e, err := s.svc.StartEnrollment(r.Context(), req.Challenge, req.EnrollmentCode)
+	e, err := s.svc.StartEnrollment(r.Context(), req.Challenge, req.EnrollmentCode, req.Factor)
 	if err != nil {
 		mfaError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(mfaEnrollResponse{Secret: e.Secret, OTPAuthURI: e.OTPAuthURI})
+	_ = json.NewEncoder(w).Encode(mfaEnrollResponse{Secret: e.Secret, OTPAuthURI: e.OTPAuthURI, WebAuthn: e.WebAuthn})
+}
+
+func (s *HTTPServer) handleWebAuthnVerify(w http.ResponseWriter, r *http.Request) {
+	var req webauthnRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	token, ttl, err := s.svc.VerifyWebAuthn(r.Context(), req.Challenge, req.Credential)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	writeToken(w, token, ttl)
+}
+
+func (s *HTTPServer) handleWebAuthnConfirm(w http.ResponseWriter, r *http.Request) {
+	var req webauthnRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	token, ttl, err := s.svc.ConfirmWebAuthnEnrollment(r.Context(), req.Challenge, req.Credential)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	writeToken(w, token, ttl)
 }
 
 func (s *HTTPServer) handleMFAConfirm(w http.ResponseWriter, r *http.Request) {

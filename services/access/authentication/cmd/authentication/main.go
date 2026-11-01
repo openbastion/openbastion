@@ -211,24 +211,56 @@ func configureDirectory(svc *application.AuthenticationService) {
 // MFA_REQUIRED_ROLES; MFA_SECRET_KEY_HEX, which seals the TOTP secrets, goes with it — one without
 // the other stops the service, and neither the key nor a secret is ever written.
 func configureMFA(svc *application.AuthenticationService, repo domain.MFARepository) {
-	rolesVar, keyHex := os.Getenv("MFA_REQUIRED_ROLES"), os.Getenv("MFA_SECRET_KEY_HEX")
+	rolesVar, strictVar, keyHex := os.Getenv("MFA_REQUIRED_ROLES"), os.Getenv("MFA_PHISHING_RESISTANT_ROLES"), os.Getenv("MFA_SECRET_KEY_HEX")
+	rpID, originsVar := os.Getenv("WEBAUTHN_RP_ID"), os.Getenv("WEBAUTHN_ORIGINS")
 	switch {
-	case rolesVar == "" && keyHex == "":
-		log.Printf("authentication: second factor (TOTP) off — no role requires it (MFA_REQUIRED_ROLES not set)")
+	case rolesVar == "" && strictVar == "" && keyHex == "" && rpID == "" && originsVar == "":
+		log.Printf("authentication: second factor off — no role requires it (MFA_REQUIRED_ROLES, MFA_PHISHING_RESISTANT_ROLES not set)")
 		return
-	case rolesVar == "":
-		log.Fatalf("authentication: MFA_SECRET_KEY_HEX is set but MFA_REQUIRED_ROLES is not: no role would require the second factor — refusing to start")
+	case rolesVar == "" && strictVar == "":
+		log.Fatalf("authentication: MFA_SECRET_KEY_HEX or WEBAUTHN_* is set but neither MFA_REQUIRED_ROLES nor MFA_PHISHING_RESISTANT_ROLES is: no role would require the second factor — refusing to start")
 	case keyHex == "":
-		log.Fatalf("authentication: MFA_REQUIRED_ROLES is set without MFA_SECRET_KEY_HEX, which seals the TOTP secrets (64 hex digits, kept outside the database; `openssl rand -hex 32`) — refusing to start")
+		log.Fatalf("authentication: a second factor is required without MFA_SECRET_KEY_HEX, which seals the TOTP secrets (64 hex digits, kept outside the database; `openssl rand -hex 32`) — refusing to start")
+	case (rpID == "") != (originsVar == ""):
+		log.Fatalf("authentication: WEBAUTHN_RP_ID and WEBAUTHN_ORIGINS go together (ADR-0065) — refusing to start")
+	case strictVar != "" && rpID == "":
+		log.Fatalf("authentication: MFA_PHISHING_RESISTANT_ROLES requires WebAuthn (WEBAUTHN_RP_ID, WEBAUTHN_ORIGINS): only a security key counts for them — refusing to start")
 	}
-	roles, err := application.ParseRoleList(rolesVar)
-	if err != nil {
-		log.Fatalf("authentication: MFA_REQUIRED_ROLES: %v — refusing to start", err)
+	var roles, strict []string
+	var err error
+	if rolesVar != "" {
+		if roles, err = application.ParseRoleList(rolesVar); err != nil {
+			log.Fatalf("authentication: MFA_REQUIRED_ROLES: %v — refusing to start", err)
+		}
+	}
+	if strictVar != "" {
+		if strict, err = application.ParseRoleList(strictVar); err != nil {
+			log.Fatalf("authentication: MFA_PHISHING_RESISTANT_ROLES: %v — refusing to start", err)
+		}
 	}
 	sealer, err := infrastructure.NewMFASealer(keyHex)
 	if err != nil {
 		log.Fatalf("authentication: %v — refusing to start", err)
 	}
 	svc.WithMFA(roles, repo, sealer)
-	log.Printf("authentication: second factor (TOTP) required for the roles %s, for local and directory accounts; enrollment needs an administrator's code (openbastion-cli mfa enrollment-code)", strings.Join(roles, ", "))
+	if rpID != "" {
+		var origins []string
+		for _, o := range strings.Split(originsVar, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+		verifier, err := infrastructure.NewWebAuthnVerifier(rpID, origins)
+		if err != nil {
+			log.Fatalf("authentication: %v — refusing to start", err)
+		}
+		svc.WithWebAuthn(verifier, strict)
+		log.Printf("authentication: WebAuthn second factor for %s (origins %s)", rpID, strings.Join(origins, ", "))
+	}
+	if len(roles) > 0 {
+		log.Printf("authentication: second factor required for the roles %s, for local and directory accounts; enrollment needs an administrator's code (openbastion-cli mfa enrollment-code)", strings.Join(roles, ", "))
+	}
+	if len(strict) > 0 {
+		log.Printf("authentication: only a security key (WebAuthn) counts for the roles %s: TOTP gives them no token (ADR-0065)", strings.Join(strict, ", "))
+	}
 }

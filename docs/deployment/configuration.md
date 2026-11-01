@@ -68,6 +68,10 @@ Les limites **par adresse** (login et requêtes authentifiées) ont besoin de l'
 
 Un ticket ne vaut que sur l'instance qui l'a émis : **ne mettez pas d'équilibreur TCP devant les ports SSH**, donnez à chaque instance son adresse. Le Broker répartit les tickets à tour de rôle et passe une instance qui ne répond pas. Une terminaison doit être confirmée par **toutes** les instances : une seule injoignable, et `DELETE /sessions/{id}` répond `503` sans rien terminer. Une instance définitivement arrêtée se retire de `SSH_PROXY_URLS`, Broker redémarré : c'est à vous de savoir qu'elle est arrêtée, le Broker ne peut pas le distinguer d'une coupure réseau.
 
+## Clés de sécurité WebAuthn (ADR-0065)
+
+`WEBAUTHN_RP_ID` et `WEBAUTHN_ORIGINS` vont ensemble ; `MFA_PHISHING_RESISTANT_ROLES` les exige. Détail : [`../administration/second-factor.md`](../administration/second-factor.md).
+
 ## Second facteur TOTP (ADR-0062)
 
 `MFA_REQUIRED_ROLES` (les rôles qui l'exigent) et `MFA_SECRET_KEY_HEX` (64 chiffres hexadécimaux, hors de la base) vont ensemble. Enrôlement, remise à zéro et règles : [`../administration/second-factor.md`](../administration/second-factor.md).

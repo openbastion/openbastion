@@ -26,9 +26,10 @@ type enrollmentCode struct {
 }
 
 type memoryMFA struct {
-	challenges map[string]domain.MFAChallenge // by hex hash
-	totp       map[string]totpState           // by user id
-	codes      map[string]enrollmentCode      // by source + "\x00" + name
+	challenges map[string]domain.MFAChallenge         // by hex hash
+	totp       map[string]totpState                   // by user id
+	codes      map[string]enrollmentCode              // by source + "\x00" + name
+	keys       map[string][]domain.WebAuthnCredential // by user id (ADR-0065)
 }
 
 func codeKey(source, name string) string { return source + "\x00" + name }
@@ -74,7 +75,7 @@ func (s *InMemoryStore) SetPendingSecret(_ context.Context, hash, sealed, codeHa
 	defer s.mu.Unlock()
 	k := hex.EncodeToString(hash)
 	c, ok := s.mfa.challenges[k]
-	if !ok || c.PendingSecret != nil {
+	if !ok || c.PendingSecret != nil || (c.Kind == domain.MFAEnroll && c.WebAuthnSession != nil) {
 		return false, nil
 	}
 	c.PendingSecret, c.EnrollmentCodeHash = append([]byte(nil), sealed...), append([]byte(nil), codeHash...)
@@ -125,6 +126,62 @@ func (s *InMemoryStore) ResetTOTP(_ context.Context, userID string) error {
 	return nil
 }
 
+func (s *InMemoryStore) SetPendingWebAuthn(_ context.Context, hash, session, codeHash []byte) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := hex.EncodeToString(hash)
+	c, ok := s.mfa.challenges[k]
+	if !ok || c.PendingSecret != nil || c.WebAuthnSession != nil {
+		return false, nil
+	}
+	c.WebAuthnSession, c.EnrollmentCodeHash = append([]byte(nil), session...), append([]byte(nil), codeHash...)
+	s.mfa.challenges[k] = c
+	return true, nil
+}
+
+func (s *InMemoryStore) WebAuthnCredentials(_ context.Context, userID string) ([]domain.WebAuthnCredential, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]domain.WebAuthnCredential(nil), s.mfa.keys[userID]...), nil
+}
+
+func (s *InMemoryStore) AddWebAuthnCredential(_ context.Context, userID string, c domain.WebAuthnCredential, max int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.mfa.keys[userID]) >= max {
+		return false, nil
+	}
+	for _, keys := range s.mfa.keys {
+		for _, k := range keys {
+			if bytes.Equal(k.ID, c.ID) {
+				return false, nil
+			}
+		}
+	}
+	s.mfa.keys[userID] = append(s.mfa.keys[userID], c)
+	return true, nil
+}
+
+func (s *InMemoryStore) UpdateWebAuthnCredential(_ context.Context, userID string, c domain.WebAuthnCredential) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, k := range s.mfa.keys[userID] {
+		if bytes.Equal(k.ID, c.ID) {
+			c.CreatedAt = k.CreatedAt
+			s.mfa.keys[userID][i] = c
+			return nil
+		}
+	}
+	return errors.New("no such security key")
+}
+
+func (s *InMemoryStore) ResetWebAuthn(_ context.Context, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.mfa.keys, userID)
+	return nil
+}
+
 func (s *InMemoryStore) PutEnrollmentCode(_ context.Context, source, name string, hash []byte, expiresAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,16 +215,16 @@ func (s *PostgresStore) SaveChallenge(ctx context.Context, c domain.MFAChallenge
 	if roles == nil {
 		roles = []string{}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO mfa_challenges (challenge_hash, user_id, roles, kind, login_source, login_name, attempts, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 0, $7)`, c.Hash, c.UserID, pq.Array(roles), c.Kind, c.LoginSource, c.LoginName, c.ExpiresAt.UTC())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO mfa_challenges (challenge_hash, user_id, roles, kind, login_source, login_name, webauthn_session, attempts, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8)`, c.Hash, c.UserID, pq.Array(roles), c.Kind, c.LoginSource, c.LoginName, c.WebAuthnSession, c.ExpiresAt.UTC())
 	return err
 }
 
 func (s *PostgresStore) GetChallenge(ctx context.Context, hash []byte) (domain.MFAChallenge, error) {
 	c := domain.MFAChallenge{Hash: hash}
-	err := s.db.QueryRowContext(ctx, `SELECT user_id, roles, kind, login_source, login_name, pending_secret_enc, enrollment_code_hash, attempts, expires_at
+	err := s.db.QueryRowContext(ctx, `SELECT user_id, roles, kind, login_source, login_name, pending_secret_enc, enrollment_code_hash, webauthn_session, attempts, expires_at
 		FROM mfa_challenges WHERE challenge_hash = $1`, hash).Scan(&c.UserID, pq.Array(&c.Roles), &c.Kind, &c.LoginSource, &c.LoginName,
-		&c.PendingSecret, &c.EnrollmentCodeHash, &c.Attempts, &c.ExpiresAt)
+		&c.PendingSecret, &c.EnrollmentCodeHash, &c.WebAuthnSession, &c.Attempts, &c.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return c, domain.ErrChallengeNotFound
 	}
@@ -192,7 +249,7 @@ func (s *PostgresStore) FailChallenge(ctx context.Context, hash []byte, max int)
 
 func (s *PostgresStore) SetPendingSecret(ctx context.Context, hash, sealed, codeHash []byte) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE mfa_challenges SET pending_secret_enc = $2, enrollment_code_hash = $3
-		WHERE challenge_hash = $1 AND pending_secret_enc IS NULL`, hash, sealed, codeHash)
+		WHERE challenge_hash = $1 AND pending_secret_enc IS NULL AND NOT (kind = 'enrollment_required' AND webauthn_session IS NOT NULL)`, hash, sealed, codeHash)
 	if err != nil {
 		return false, err
 	}
@@ -263,4 +320,62 @@ func (s *PostgresStore) TakeEnrollmentCode(ctx context.Context, source, name str
 	}
 	n, err := res.RowsAffected()
 	return n == 1, err
+}
+
+func (s *PostgresStore) SetPendingWebAuthn(ctx context.Context, hash, session, codeHash []byte) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE mfa_challenges SET webauthn_session = $2, enrollment_code_hash = $3
+		WHERE challenge_hash = $1 AND pending_secret_enc IS NULL AND webauthn_session IS NULL`, hash, session, codeHash)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+func (s *PostgresStore) WebAuthnCredentials(ctx context.Context, userID string) ([]domain.WebAuthnCredential, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT credential_id, credential, sign_count, created_at FROM mfa_webauthn_credentials
+		WHERE user_id = $1 ORDER BY created_at, credential_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.WebAuthnCredential
+	for rows.Next() {
+		var c domain.WebAuthnCredential
+		var count int64
+		if err := rows.Scan(&c.ID, &c.Data, &count, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		c.SignCount = uint32(count)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) AddWebAuthnCredential(ctx context.Context, userID string, c domain.WebAuthnCredential, max int) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `INSERT INTO mfa_webauthn_credentials (credential_id, user_id, credential, sign_count)
+		SELECT $1, $2, $3, $4 WHERE (SELECT count(*) FROM mfa_webauthn_credentials WHERE user_id = $2) < $5
+		ON CONFLICT (credential_id) DO NOTHING`, c.ID, userID, c.Data, int64(c.SignCount), max)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+func (s *PostgresStore) UpdateWebAuthnCredential(ctx context.Context, userID string, c domain.WebAuthnCredential) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE mfa_webauthn_credentials SET credential = $3, sign_count = $4
+		WHERE credential_id = $1 AND user_id = $2`, c.ID, userID, c.Data, int64(c.SignCount))
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return errors.New("no such security key")
+	}
+	return nil
+}
+
+func (s *PostgresStore) ResetWebAuthn(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM mfa_webauthn_credentials WHERE user_id = $1`, userID)
+	return err
 }

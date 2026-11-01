@@ -7,7 +7,7 @@ go:
     policy: stdlib d'abord ; demander avant toute dépendance externe
     stdlib_only: [pkg/mtls, pkg/migrate, pkg/refusalbudget, pkg/webhook, pkg/transit, pkg/buildinfo]
     golang.org/x/crypto: v0.58.0, sans replace (le miroir cachait 21 vulnérabilités à govulncheck, ADR-0052)
-    external: [github.com/golang-jwt/jwt/v5 v5.3.1 (authentication), github.com/lib/pq v1.12.3 (services à état), "github.com/go-ldap/ldap/v3 v3.4.15 (authentication seulement, ADR-0061 ; tire asn1-ber, go-ntlmssp, google/uuid)"]
+    external: [github.com/golang-jwt/jwt/v5 v5.3.1 (authentication), github.com/lib/pq v1.12.3 (services à état), "github.com/go-ldap/ldap/v3 v3.4.15 (authentication seulement, ADR-0061 ; tire asn1-ber, go-ntlmssp, google/uuid)", "github.com/go-webauthn/webauthn v0.18.2 (authentication seulement, ADR-0065 ; tire go-webauthn/x, fxamacker/cbor, mapstructure, go-tpm, msgp, fwd, float16)"]
     test_only: [github.com/pkg/sftp v1.13.12 dans test/integration]
     go_sum: régénéré par go mod tidy, jamais à la main
   transport: HTTP/JSON avec les noms de champs du proto (architecture/transport-and-contracts.md)

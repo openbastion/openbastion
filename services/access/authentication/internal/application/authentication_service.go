@@ -50,6 +50,10 @@ type AuthenticationService struct {
 	mfa      domain.MFARepository
 	sealer   SecretSealer
 
+	// WebAuthn (ADR-0065); nil = TOTP only.
+	webauthn    WebAuthn
+	strictRoles map[string]bool
+
 	// The audit (ADR-0064); nil writes nothing.
 	audit    AuditEmitter
 	refusals RefusalBudget

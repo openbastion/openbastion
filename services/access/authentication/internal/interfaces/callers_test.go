@@ -29,6 +29,9 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/verify"),
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/enroll"),
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/enroll/confirm"),
+		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/webauthn/verify"), // ADR-0065
+		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/webauthn/enroll/confirm"),
+		mtlstest.Deny("admin-cli", "POST", "/auth/v1/mfa/webauthn/verify"),
 		mtlstest.Allow("admin-cli", "POST", "/auth/v1/mfa/enrollment-codes"),
 		mtlstest.Allow("admin-cli", "POST", "/auth/v1/mfa/reset"),
 		mtlstest.Deny("api-gateway", "POST", "/auth/v1/mfa/enrollment-codes"),

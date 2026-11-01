@@ -85,7 +85,7 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Code de l'application d'authentification"), { target: { value: "654321" } });
     fireEvent.click(screen.getByText("Valider"));
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("enrolled-tok"));
-    expect(calls.find((c) => c.path === "/auth/mfa/enroll")?.body).toEqual({ challenge: "ch-2", enrollmentCode: "abcd-efgh" });
+    expect(calls.find((c) => c.path === "/auth/mfa/enroll")?.body).toEqual({ challenge: "ch-2", enrollmentCode: "abcd-efgh", factor: "totp" });
     expect(calls.find((c) => c.path === "/auth/mfa/enroll/confirm")?.body).toEqual({ challenge: "ch-2", code: "654321" });
   });
 

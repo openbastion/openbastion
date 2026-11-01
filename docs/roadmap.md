@@ -97,7 +97,7 @@ Deux règles guident l'ordre de livraison :
 | Workflow Service | | ✅ | |
 | Approval Engine | | ✅ | |
 | Notification Service | | ✅ | |
-| MFA Service | | ✅ (TOTP livré dans l'Authentication Service, ADR-0062 ; WebAuthn à venir) | |
+| MFA Service | | ✅ (TOTP, ADR-0062, et WebAuthn, ADR-0065, livrés dans l'Authentication Service) | |
 | Anomaly Detection / Risk Engine | | | ✅ |
 | OIDC Connector | ✅ | | |
 | LDAP Connector | | ✅ (livré, ADR-0061) | |

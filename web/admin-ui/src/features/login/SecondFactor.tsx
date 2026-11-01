@@ -1,24 +1,40 @@
 import { FormEvent, useState } from "react";
 import { Api } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
+import { Credentials, register, sign } from "../../shared/webauthn";
 
 // The second step of a login whose password was right, when its roles require a second factor
-// (ADR-0062): the code of the authenticator application, or — not yet enrolled — the
-// administrator's enrollment code, then the secret to copy, then a first code.
-export type Challenge = { kind: "required" | "enrollment_required"; challenge: string };
+// (ADR-0062, ADR-0065): a security key or the code of the authenticator application — whichever
+// the challenge accepts; for a strict role, the key only — or, not yet enrolled, the
+// administrator's enrollment code, then the factor to enroll.
+export type Challenge = { kind: "required" | "enrollment_required"; challenge: string; factors: string[]; webauthn?: unknown };
 
-export function SecondFactor({ api, challenge, onToken, onCancel }: { api: Api; challenge: Challenge; onToken: (t: string) => void; onCancel: () => void }) {
+export function SecondFactor({
+  api,
+  challenge,
+  onToken,
+  onCancel,
+  credentials,
+}: {
+  api: Api;
+  challenge: Challenge;
+  onToken: (t: string) => void;
+  onCancel: () => void;
+  credentials?: Credentials;
+}) {
   const [code, setCode] = useState("");
   const [enrollmentCode, setEnrollmentCode] = useState("");
   const [enrollment, setEnrollment] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
+  const totp = challenge.factors.includes("totp");
+  const key = challenge.factors.includes("webauthn");
 
-  async function step<T>(path: string, body: Record<string, string>, then: (r: T) => void) {
+  async function step(run: () => Promise<void>) {
     setBusy(true);
     setError(undefined);
     try {
-      then(await api.request<T>("POST", path, { challenge: challenge.challenge, ...body }));
+      await run();
     } catch (err) {
       setError(err);
     } finally {
@@ -26,20 +42,37 @@ export function SecondFactor({ api, challenge, onToken, onCancel }: { api: Api; 
     }
   }
 
+  const post = <T,>(path: string, body: Record<string, unknown>) => api.request<T>("POST", path, { challenge: challenge.challenge, ...body });
+
   function verify(e: FormEvent) {
     e.preventDefault();
     const path = challenge.kind === "required" ? "/auth/mfa/verify" : "/auth/mfa/enroll/confirm";
-    void step<{ accessToken: string }>(path, { code }, (r) => {
+    void step(async () => {
+      const r = await post<{ accessToken: string }>(path, { code });
       setEnrollment(null); // the secret leaves the page with the login
       onToken(r.accessToken);
     });
   }
 
-  function enroll(e: FormEvent) {
-    e.preventDefault();
-    void step<{ secret: string; otpauthUri: string }>("/auth/mfa/enroll", { enrollmentCode }, (r) => {
+  function useKey() {
+    void step(async () => {
+      const credential = await sign(challenge.webauthn, credentials);
+      const r = await post<{ accessToken: string }>("/auth/mfa/webauthn/verify", { credential });
+      onToken(r.accessToken);
+    });
+  }
+
+  function enroll(factor: "totp" | "webauthn") {
+    void step(async () => {
+      const r = await post<{ secret?: string; otpauthUri?: string; webauthn?: unknown }>("/auth/mfa/enroll", { enrollmentCode, factor });
       setEnrollmentCode("");
-      setEnrollment(r);
+      if (factor === "webauthn") {
+        const credential = await register(r.webauthn, credentials);
+        const done = await post<{ accessToken: string }>("/auth/mfa/webauthn/enroll/confirm", { credential });
+        onToken(done.accessToken);
+        return;
+      }
+      setEnrollment({ secret: r.secret ?? "", otpauthUri: r.otpauthUri ?? "" });
     });
   }
 
@@ -68,20 +101,36 @@ export function SecondFactor({ api, challenge, onToken, onCancel }: { api: Api; 
     <section className="second-factor" aria-label="Second facteur">
       {challenge.kind === "required" && (
         <>
-          <p className="login-sub">Votre rôle demande un second facteur.</p>
-          {codeForm}
+          <p className="login-sub">{key && !totp ? "Votre rôle demande votre clé de sécurité." : "Votre rôle demande un second facteur."}</p>
+          {key && (
+            <button type="button" className="primary" onClick={useKey} disabled={busy}>
+              Utiliser ma clé de sécurité
+            </button>
+          )}
+          {totp && codeForm}
         </>
       )}
       {challenge.kind === "enrollment_required" && !enrollment && (
-        <form onSubmit={enroll} aria-label="Enrôlement du second facteur">
-          <p className="login-sub">Votre rôle demande un second facteur, que ce compte n'a pas encore. Un administrateur vous a remis un code d'enrôlement.</p>
+        <form onSubmit={(e) => (e.preventDefault(), enroll(totp ? "totp" : "webauthn"))} aria-label="Enrôlement du second facteur">
+          <p className="login-sub">
+            {key && !totp
+              ? "Votre rôle demande une clé de sécurité, que ce compte n'a pas encore. Un administrateur vous a remis un code d'enrôlement."
+              : "Votre rôle demande un second facteur, que ce compte n'a pas encore. Un administrateur vous a remis un code d'enrôlement."}
+          </p>
           <label>
             Code d'enrôlement
             <input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
           </label>
-          <button type="submit" className="primary" disabled={busy}>
-            Recevoir le secret
-          </button>
+          {key && (
+            <button type="button" className="primary" onClick={() => enroll("webauthn")} disabled={busy || !enrollmentCode}>
+              Enrôler une clé de sécurité
+            </button>
+          )}
+          {totp && (
+            <button type="submit" className={key ? "" : "primary"} disabled={busy}>
+              Recevoir le secret
+            </button>
+          )}
         </form>
       )}
       {challenge.kind === "enrollment_required" && enrollment && (

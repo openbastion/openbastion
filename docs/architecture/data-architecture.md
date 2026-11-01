@@ -350,6 +350,19 @@ CREATE TABLE IF NOT EXISTS mfa_enrollment_codes ( -- émis par admin-cli : 24 h,
     PRIMARY KEY (login_source, login_name));
 ```
 
+### Clés de sécurité WebAuthn (ADR-0065)
+
+`services/access/authentication/migrations/004_webauthn.sql` :
+
+```sql
+ALTER TABLE mfa_challenges ADD COLUMN IF NOT EXISTS webauthn_session BYTEA;  -- la cérémonie en cours d'un défi
+CREATE TABLE IF NOT EXISTS mfa_webauthn_credentials (    -- des clés publiques, pas des secrets
+    credential_id BYTEA PRIMARY KEY, user_id TEXT NOT NULL,
+    credential BYTEA NOT NULL,                            -- clé publique, drapeaux, AAGUID, tels que go-webauthn les garde
+    sign_count BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS mfa_webauthn_credentials_user_idx ON mfa_webauthn_credentials (user_id);
+```
+
 ### File des alertes à pousser (ADR-0057)
 
 `services/recording-audit/audit-service/migrations/002_alert_outbox.sql` : les alertes qui attendent d'être poussées (ADR-0045), pour qu'un redémarrage de l'Audit Service ne les perde pas. Une ligne par événement ; 256 au plus (borne tenue par le service) ; la ligne disparaît une fois l'alerte livrée ou abandonnée. Le corps est ce que la chaîne contient déjà, sans secret ; la signature est faite à chaque tentative, sa clé n'est pas en base.

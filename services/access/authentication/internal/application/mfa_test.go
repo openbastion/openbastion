@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/binary"
 	"errors"
@@ -94,7 +95,7 @@ func (w *mfaWorld) enroll(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err := w.svc.StartEnrollment(ctx, ch, ec)
+	e, err := w.svc.StartEnrollment(ctx, ch, ec, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,23 +122,23 @@ func TestMFA_EnrollmentNeedsTheAdministratorsCode_ForThisAccount_Valid_Once(t *t
 	w := mfaService(t)
 	ctx := context.Background()
 	ch := w.challenge(t, "root", "root-pass", domain.MFAEnroll)
-	if _, err := w.svc.StartEnrollment(ctx, ch, "no-code-was-issued"); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, "no-code-was-issued", ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("no code issued: %v", err)
 	}
 	other, _, _ := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "dba")
-	if _, err := w.svc.StartEnrollment(ctx, ch, other); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, other, ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("another account's code: %v", err)
 	}
 	stale, _, _ := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "root")
 	fresh, _, _ := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "root")
-	if _, err := w.svc.StartEnrollment(ctx, ch, stale); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, stale, ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("a code replaced by a newer one: %v", err)
 	}
 	// Four failures so far: one more and the challenge is gone; a fresh one is needed.
 	ch = w.challenge(t, "root", "root-pass", domain.MFAEnroll)
 	// The code as an administrator may read it out: upper case, in groups.
 	spoken := strings.ToUpper(fresh[:4] + " " + fresh[4:12] + "-" + fresh[12:])
-	e, err := w.svc.StartEnrollment(ctx, ch, spoken)
+	e, err := w.svc.StartEnrollment(ctx, ch, spoken, "")
 	if err != nil {
 		t.Fatalf("the right code, read out: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestMFA_EnrollmentNeedsTheAdministratorsCode_ForThisAccount_Valid_Once(t *t
 	if err != nil || u.Scheme != "otpauth" || u.Host != "totp" || u.Query().Get("secret") != e.Secret || u.Query().Get("issuer") != "OpenBastion" {
 		t.Fatalf("otpauth URI %q", e.OTPAuthURI)
 	}
-	if _, err := w.svc.StartEnrollment(ctx, ch, fresh); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, fresh, ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("a second secret for the same challenge: %v", err)
 	}
 	if _, _, err := w.svc.ConfirmEnrollment(ctx, ch, "000000"); !errors.Is(err, application.ErrMFARejected) {
@@ -165,7 +166,7 @@ func TestMFA_EnrollmentNeedsTheAdministratorsCode_ForThisAccount_Valid_Once(t *t
 		t.Fatal(err)
 	}
 	ch = w.challenge(t, "root", "root-pass", domain.MFAEnroll)
-	if _, err := w.svc.StartEnrollment(ctx, ch, fresh); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, fresh, ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("an enrollment code used twice: %v", err)
 	}
 }
@@ -199,7 +200,7 @@ func TestMFA_ACodeIsUsedOnce_WithinOneStepEitherSide_AndFiveFailuresEndTheChalle
 	}
 	// A challenge does not verify an enrollment, and the reverse.
 	ch = w.challenge(t, "root", "root-pass", domain.MFAVerify)
-	if _, err := w.svc.StartEnrollment(ctx, ch, "x"); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, "x", ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("an enrollment on a verify challenge: %v", err)
 	}
 	for i := 0; i < application.MaxChallengeAttempts; i++ {
@@ -235,7 +236,7 @@ func TestMFA_AnEnrolledAccountCannotBeReEnrolled_EvenWithAValidCode(t *testing.T
 		t.Fatal(err)
 	}
 	ch := w.challenge(t, "root", "root-pass", domain.MFAVerify)
-	if _, err := w.svc.StartEnrollment(ctx, ch, ec); !errors.Is(err, application.ErrMFARejected) {
+	if _, err := w.svc.StartEnrollment(ctx, ch, ec, ""); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("a new secret for an enrolled account: %v", err)
 	}
 	if _, _, err := w.svc.ConfirmEnrollment(ctx, ch, "123456"); !errors.Is(err, application.ErrMFARejected) {
@@ -292,7 +293,7 @@ func TestMFA_ADirectoryAccountEnrollsWithTheCodeOfItsLoginName(t *testing.T) {
 	if _, _, err := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "ldap:"+w.dir.id.ID); !errors.Is(err, application.ErrUnknownAccount) {
 		t.Fatalf("a local code for a directory account: %v", err)
 	}
-	e, err := w.svc.StartEnrollment(ctx, c.Challenge, ec)
+	e, err := w.svc.StartEnrollment(ctx, c.Challenge, ec, "")
 	if err != nil {
 		t.Fatalf("enroll: %v", err)
 	}
@@ -320,3 +321,20 @@ func TestParseRoleList_RefusesWhatIsNotARoleName(t *testing.T) {
 		}
 	}
 }
+
+func mustSealer(t *testing.T) application.SecretSealer {
+	t.Helper()
+	s, err := infrastructure.NewMFASealer(mfaKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func hashOf(challenge string) []byte {
+	h := sha256.Sum256([]byte(challenge))
+	return h[:]
+}
+
+// mfaWorldWithout is a service without WebAuthn, for its challenges.
+func mfaWorldWithout(t *testing.T) *mfaWorld { return mfaService(t) }

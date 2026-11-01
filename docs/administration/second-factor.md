@@ -1,4 +1,4 @@
-# Second facteur (TOTP, ADR-0062)
+# Second facteur (TOTP, ADR-0062 ; WebAuthn, ADR-0065)
 
 Un compte **local ou d'annuaire** qui porte un rôle déclaré ne reçoit **aucun jeton** pour son seul mot de passe : il faut aussi le code à 6 chiffres de son application d'authentification (TOTP, RFC 6238 — Google Authenticator, Microsoft Authenticator, FreeOTP, 1Password, Bitwarden…). Les comptes OIDC gardent le second facteur de leur fournisseur (ADR-0035).
 
@@ -44,3 +44,20 @@ Le secret est oublié ; l'utilisateur se réenrôle avec un nouveau code. Il n'y
 - Un code vaut **±30 s** autour de l'heure du serveur, et **ne sert qu'une fois**.
 - Les rôles du jeton sont ceux de la vérification du mot de passe.
 - Ni le secret, ni un code, ni un défi n'est écrit dans un journal. L'émission d'un code, l'enrôlement, la remise à zéro et chaque connexion sont écrits **à l'audit**, avant d'être faits (ADR-0064) : sans l'Audit Service, ni code, ni remise à zéro, ni jeton.
+
+## Clés de sécurité et passkeys (WebAuthn, ADR-0065)
+
+TOTP arrête un mot de passe volé, pas l'hameçonnage : un faux site qui relaie le mot de passe et le code dans la minute passe. Une clé de sécurité (FIDO2), une passkey, Windows Hello ou Touch ID signent pour **l'origine que le navigateur a vue** : rien pour un faux site.
+
+| Variable (Authentication Service) | Rôle |
+|---|---|
+| `WEBAUTHN_RP_ID` | Le domaine de l'Admin UI, sans schéma ni port : `bastion.example` |
+| `WEBAUTHN_ORIGINS` | Ses origines exactes, séparées par des virgules : `https://bastion.example` ; `http://localhost:<port>` seulement pour le développement ; chacune sous `WEBAUTHN_RP_ID` |
+| `MFA_PHISHING_RESISTANT_ROLES` | Les rôles pour lesquels **seule une clé compte** : `platform-admin` ; exige les deux variables ci-dessus, et vaut aussi exigence d'un second facteur |
+
+- **Un rôle non strict** se voit proposer les deux facteurs à l'enrôlement, et l'un ou l'autre suffit ensuite.
+- **Un rôle strict** n'enrôle qu'une clé ; un code TOTP ne lui donne plus de jeton. Un compte strict qui n'avait que TOTP doit enrôler une clé, avec un nouveau code d'enrôlement de l'administrateur (`openbastion-cli mfa enrollment-code`, comme pour TOTP).
+- **Une clé dont le compteur de signatures recule est refusée** (une clé clonée) ; beaucoup de passkeys gardent un compteur nul, ce qui est admis.
+- **Une seule clé par compte dans cette version** : ajouter une clé de secours n'est pas encore possible (ADR-0065, écart). Une clé perdue : `mfa reset`, puis un nouveau code.
+- WebAuthn ne vaut que dans un navigateur, sur une origine déclarée : **un rôle strict ne se connecte pas par la CLI ni par l'API directe**. Changer l'adresse publique de l'Admin UI sans changer `WEBAUTHN_ORIGINS` rend les clés inutilisables.
+- Aucune donnée d'appareil n'est demandée (attestation `none`) : n'importe quel authentificateur conforme est accepté.
