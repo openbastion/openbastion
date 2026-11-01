@@ -79,3 +79,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0067](0067-une-session-vers-un-compte-qui-l-exige-attend-l-approbation-d-une-autre-personne-avec-un-ticket.md) | Une session vers un compte qui l'exige attend l'approbation d'une autre personne, et porte un ticket au format déclaré | Accepté |
 | [ADR-0068](0068-les-details-d-un-evenement-d-audit-sont-bornes-et-proteges-par-le-hash.md) | Les détails d'un événement d'audit sont bornés et protégés par le hash | Accepté |
 | [ADR-0069](0069-le-proxy-rdp-verifie-la-cible-et-refuse-les-sessions-non-enregistrees.md) | Le proxy RDP vérifie la cible et refuse les sessions non enregistrées | Proposé |
+| [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Proposé |
