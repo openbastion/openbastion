@@ -460,10 +460,14 @@ paths:
       tags: [sessions]
       summary: Demande une nouvelle session privilégiée
       description: >
-        En périmètre MVP, l'octroi d'une session ordinaire est immédiat après
-        vérification RBAC — aucune étape de validation multi-approbateurs
-        (ajoutée en v0.0.1). Une demande `breakGlass`, elle, attend une seconde
-        personne (ADR-0011, voir plus bas).
+        Par défaut, l'octroi d'une session ordinaire est immédiat après
+        vérification RBAC. Si le compte exige une approbation (ADR-0067), le
+        demandeur fournit `ticket` : la demande attend une autre personne,
+        titulaire d'une politique sur `session-approve:account:{id}`. Le ticket
+        suit `APPROVAL_TICKET_PATTERN` et reste une référence, jamais un secret.
+        Il figure dans les événements d'audit de demande et de décision,
+        protégés par le hash v4 (ADR-0068). Une demande `breakGlass` garde ses
+        propres règles d'approbation (ADR-0011).
 
         Avec `breakGlass: true`, la session peut s'exécuter alors que le
         Command Recorder est indisponible (ADR-0009) — une dérogation à
@@ -527,8 +531,9 @@ paths:
       responses:
         "201":
           description: >
-            Session créée (`active`) — ou, pour une demande `breakGlass` sous
-            double validation, demande enregistrée au statut `pending_approval`.
+            Session créée (`active`) — ou demande enregistrée au statut
+            `pending_approval` si le compte ou la politique break-glass demande
+            une approbation.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Session" }
@@ -540,6 +545,11 @@ paths:
             `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`, ADR-0012 —, justification
             trop courte, durée hors limite, aucune politique sur
             `breakglass:account:*`). Le corps dit laquelle.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "400":
+          description: Le ticket manque, n'est pas une chaîne, ou ne respecte pas le format déclaré pour une demande d'approbation.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -836,23 +846,23 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [sessions]
-      summary: Approuve une demande break-glass en attente (double validation)
+      summary: Approuve une demande en attente
       description: >
         La demande passe de `pending_approval` à `active` ; la durée demandée
         court **à partir de l'approbation**. Sans corps : l'identité de
         l'approbateur et ses rôles sont ceux du jeton vérifié par la Gateway —
         tout ce que le client écrirait dans un corps est écarté.
 
-        Conditions : l'approbateur est une **autre personne** que le demandeur
-        (comparaison d'identifiants, pas de rôles) ; il détient une politique
-        RBAC sur la ressource `breakglass-approve:account:{targetAccountId}` —
-        refusé par défaut, distincte de `breakglass:account:*` (celle des
-        demandeurs) ; la demande est en attente et non périmée ; le break-glass
-        est toujours activé et la durée demandée toujours dans la limite
-        (`BREAKGLASS_MAX_MINUTES`) au moment de l'approbation. La décision est
-        auditée **avant** d'agir (`session.breakglass_approved`) ; si l'audit
-        ne peut pas l'écrire, la demande reste en attente. Une seule décision
-        par demande.
+        Pour une demande break-glass, l'approbateur détient une politique
+        `breakglass-approve:account:{targetAccountId}` ; le break-glass doit
+        toujours être activé et la durée rester dans sa limite. Pour une
+        demande ordinaire d'un compte soumis à approbation (ADR-0067), il
+        détient `session-approve:account:{targetAccountId}`. Dans les deux
+        cas, une autre personne doit décider (comparaison d'identifiants),
+        la demande doit être en attente et non périmée, et l'événement de
+        décision est audité avant d'agir. L'audit inclut le ticket de la
+        demande ordinaire dans les détails protégés par le hash v4 (ADR-0068).
+        Si l'audit ne répond pas, la demande reste en attente.
 
         **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel de `connect`,
         `approve`, `reject` ou `DELETE /sessions/{sessionId}` coûte un jeton au seau d'actions de
@@ -871,9 +881,9 @@ paths:
               schema: { $ref: "#/components/schemas/Session" }
         "403":
           description: >
-            Refusé : approbation de sa propre demande, politique d'approbation
+            Refusé : décision de sa propre demande, politique d'approbation
             absente, dérogation désactivée ou durée hors limite. Le refus est
-            audité (`session.breakglass_approved`, échec).
+            audité (`session.breakglass_approved` ou `session.approval_approved`, échec).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -891,7 +901,7 @@ paths:
         "409":
           description: >
             Pas une demande en attente : déjà décidée, périmée, ou pas une
-            demande break-glass.
+            demande soumise à approbation.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -906,14 +916,17 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [sessions]
-      summary: Rejette une demande break-glass en attente
+      summary: Rejette une demande en attente
       description: >
         La demande passe à `denied` et ne pourra jamais être connectée. Même
         autorité que l'approbation (politique sur
         `breakglass-approve:account:{targetAccountId}`) : un tiers sans
-        autorité ne peut pas tuer la demande d'urgence de quelqu'un d'autre.
-        Pas de règle « une autre personne » : renoncer à sa propre demande
-        n'est pas une élévation. Audité (`session.breakglass_rejected`).
+        autorité ne peut pas tuer une demande d'urgence de quelqu'un d'autre.
+        Pour une demande ordinaire, l'autorité est
+        `session-approve:account:{targetAccountId}` (ADR-0067) ; le demandeur
+        ne peut pas non plus rejeter sa propre demande. La décision est auditée
+        (`session.breakglass_rejected` ou `session.approval_rejected`) et
+        l'événement d'approbation ordinaire inclut le ticket protégé par hash v4.
         Mêmes réponses que `approve`.
 
         **Débit par utilisateur (ADR-0016, ADR-0017).** Chaque appel de `connect`,
@@ -1127,6 +1140,50 @@ paths:
           description: Compte inconnu ou désactivé
         "503":
           description: L'Audit Service ne répond pas — aucun changement de clé sans trace
+
+  /vault/accounts/{accountId}/approval:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [vault]
+      summary: Configure l'approbation des sessions d'un compte
+      description: >
+        Réservé à l'administrateur du compte. L'auteur et ses rôles viennent
+        du jeton vérifié, jamais du corps. Les changements sont audités par
+        le Vault avant d'être appliqués. La Gateway borne aussi ces écritures
+        par identité (`VAULT_ACCOUNT_ACTION_BURST` et
+        `VAULT_ACCOUNT_ACTION_RATE_PER_MINUTE`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approvalRequired]
+              properties:
+                approvalRequired: { type: boolean }
+      responses:
+        "200":
+          description: Configuration mise à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvalRequired: { type: boolean }
+        "400": { description: Le corps ne contient pas un booléen approvalRequired. }
+        "403": { description: L'appelant n'administre pas ce compte. }
+        "404": { description: Compte inconnu ou désactivé. }
+        "429":
+          description: Le budget par utilisateur de modification de compte est épuisé ; réessayer après Retry-After.
+          headers:
+            Retry-After:
+              description: Secondes avant le prochain jeton.
+              schema: { type: integer, minimum: 1 }
+        "503": { description: L'audit ou une dépendance du Vault ne répond pas ; aucun changement non audité n'est appliqué. }
 
   /vault/accounts/{accountId}/rotate:
     parameters:
@@ -1365,6 +1422,14 @@ components:
             de la plateforme (30 minutes par exemple), pas par 480. La demande
             attend l'approbation d'une autre personne (ADR-0011) sauf si la
             plateforme a désactivé la double validation par son nom.
+        ticket:
+          type: string
+          maxLength: 128
+          description: >
+            Référence obligatoire si le compte cible exige une approbation
+            (ADR-0067), validée par APPROVAL_TICKET_PATTERN ; ignorée sinon.
+            N'y placez aucun secret. Les demandes refusées pour ticket invalide
+            sont auditées sans conserver ni répéter sa valeur.
 
     Session:
       type: object
@@ -1382,6 +1447,12 @@ components:
             Cela dit ce qu'elle PEUT faire, pas ce qu'elle a fait : la
             dérogation n'a réellement servi que si l'audit porte
             `session.breakglass` pour cette session.
+        approvalRequired:
+          type: boolean
+          description: Le compte exige une approbation (ADR-0067).
+        ticket:
+          type: string
+          description: Référence de la demande d'approbation (ADR-0067).
         createdAt: { type: string, format: date-time }
         expiresAt:
           type: string
@@ -1439,6 +1510,9 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            approvalRequired:
+              type: boolean
+              description: Toute session ordinaire sur ce compte attend une seconde personne (ADR-0067).
             lastRotatedAt: { type: string, format: date-time }
             rotationOwedSince: { type: string, format: date-time, description: "Une session s'est terminée et le compte doit une rotation (ADR-0044) ; absent : il ne doit rien. Le Vault la paie, et la réessaie tant qu'il n'y arrive pas." }
             rotationFailures: { type: integer, description: "Rotations planifiées échouées d'affilée (ADR-0041) ; absent à 0. Tous les ROTATION_ALERT_AFTER_FAILURES échecs, vault.rotation_overdue est écrit à l'audit." }
@@ -1493,5 +1567,21 @@ components:
             l'échéance — une fin normale, `result = success`).
         resourceType: { type: string }
         resourceId: { type: string }
+        details:
+          type: object
+          maxProperties: 16
+          propertyNames:
+            minLength: 1
+            maxLength: 64
+            pattern: "^[a-z0-9_.]+$"
+          additionalProperties:
+            type: string
+            minLength: 1
+            maxLength: 256
+          description: >
+            Métadonnées UTF-8 sans caractère de contrôle, protégées par le hash v4
+            (ADR-0068). Au plus 16 entrées ; clés de 1 à 64 octets en a-z, 0-9,
+            _ ou . ; valeurs de 1 à 256 octets. Les événements d'approbation
+            portent le ticket ici. Une map vide est permise.
         result: { type: string, enum: [success, failure] }
         signature: { type: string, description: "Signature de l'événement, base64" }

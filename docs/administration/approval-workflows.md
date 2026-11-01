@@ -1,4 +1,16 @@
-# Accès d'urgence (break-glass)
+# Workflows d'approbation
+
+## Approbation d'une session ordinaire (ADR-0067)
+
+Un compte peut exiger une approbation indépendante avant qu'une session ordinaire s'ouvre. Le réglage appartient au compte : il se pose à sa création ou par `PUT /vault/accounts/{id}/approval` avec `{"approvalRequired":true|false}`. Seul un appelant autorisé à administrer le compte peut le modifier ; le Vault audite le changement avant de l'appliquer. Un changement ne modifie pas les demandes déjà en attente.
+
+Quand le réglage est actif, `POST /sessions` exige un `ticket` qui respecte `APPROVAL_TICKET_PATTERN`. Sans cette variable, le format par défaut autorise de 1 à 64 lettres, chiffres et caractères `-`, `_`, `.`, `:`, `/`. Le motif configuré est une expression RE2, ancrée automatiquement au début et à la fin ; par exemple `(INC|CHG)[0-9]{7}`. La valeur est toujours limitée à 128 octets. Un ticket est une référence, non un secret ; OpenBastion ne vérifie pas son existence dans un ITSM.
+
+La demande reste `pending_approval` jusqu'à décision ou expiration. L'approbateur doit détenir `session-approve:account:<id>` et être une autre personne que le demandeur. Le droit `breakglass-approve` ne suffit pas. Le ticket est affiché avec la demande et inclus dans les événements d'audit de demande et de décision, dans les détails protégés par le hash v4 (ADR-0068). Un ticket invalide est refusé et sa valeur n'est ni conservée ni recopiée dans l'audit. Sans écriture d'audit, aucune demande ni décision n'est acceptée.
+
+La fenêtre de décision et le plafond des demandes en attente partagent les réglages du break-glass (`BREAKGLASS_APPROVAL_WINDOW_MINUTES` et `BREAKGLASS_MAX_PENDING_PER_REQUESTER`). Voir [la configuration du déploiement](../deployment/configuration.md) pour le motif de ticket et les limites associées.
+
+## Accès d'urgence (break-glass)
 
 Quand le recorder est en panne et qu'un incident ne peut pas attendre, une session peut s'exécuter **sans enregistrement acquitté**. C'est une dérogation à l'enregistrement et rien d'autre (ADR-0009) : l'authentification, les droits `session:create`, le Vault et l'audit restent en vigueur. **Désactivé par défaut**, il se règle à deux endroits qui doivent tous deux être d'accord — et, une fois activé, **une demande attend l'approbation d'une seconde personne** (ADR-0011, voir plus bas) :
 

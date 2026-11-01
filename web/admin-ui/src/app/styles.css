@@ -478,6 +478,17 @@ label {
   color: var(--ink-2);
 }
 
+/* A checkbox sits before its text, on one line. */
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+label.check input {
+  width: auto;
+}
+
 input,
 select,
 textarea {

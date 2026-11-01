@@ -86,6 +86,40 @@ func TestPostgresStore_AppendThenLast_RoundTrips(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_EventDetailsRoundTrip(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	e := &domain.Event{
+		ID: uniqueID("evt-details"), Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: "it-actor",
+		Action: "session.approval_requested", ResourceType: "session", ResourceID: uniqueID("sess"),
+		Details: map[string]string{"ticket": "CHG0001234"}, Success: true, Hash: []byte{1}, HashVersion: domain.HashV4,
+	}
+	if err := store.Append(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Last(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != e.ID || got.Details["ticket"] != e.Details["ticket"] {
+		t.Fatalf("Last: details did not round-trip: %+v", got)
+	}
+	all, err := store.All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range all {
+		if event.ID == e.ID {
+			found = event.Details["ticket"] == "CHG0001234"
+		}
+	}
+	if !found {
+		t.Fatal("All: event details did not round-trip")
+	}
+}
+
 func TestPostgresStore_Append_EmptyActorIDRoundTripsAsEmptyNotError(t *testing.T) {
 	// A system action (Scheduler, bootstrap) has no actor — domain.Event
 	// explicitly documents ActorID as "empty for a system action". The

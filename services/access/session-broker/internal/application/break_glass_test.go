@@ -49,8 +49,9 @@ type auditRecord struct {
 }
 
 type journalAudit struct {
-	mu     sync.Mutex
-	events []auditRecord
+	mu      sync.Mutex
+	events  []auditRecord
+	details []map[string]string
 	// types is the resource type of each event, in the same order: what an event is ABOUT
 	// is part of what it says.
 	types  []string
@@ -58,12 +59,25 @@ type journalAudit struct {
 }
 
 func (a *journalAudit) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
+	return a.emit(ctx, actorID, action, resourceType, resourceID, nil, success)
+}
+
+func (a *journalAudit) EmitEventWithDetails(ctx context.Context, actorID, action, resourceType, resourceID string, details map[string]string, success bool) error {
+	return a.emit(ctx, actorID, action, resourceType, resourceID, details, success)
+}
+
+func (a *journalAudit) emit(_ context.Context, actorID, action, resourceType, resourceID string, details map[string]string, success bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if action == a.failOn {
 		return errors.New("audit unreachable")
 	}
-	a.events = append(a.events, auditRecord{action, success, actorID, resourceID})
+	copied := make(map[string]string, len(details))
+	for key, value := range details {
+		copied[key] = value
+	}
+	a.events = append(a.events, auditRecord{action: action, success: success, actor: actorID, resource: resourceID})
+	a.details = append(a.details, copied)
 	a.types = append(a.types, resourceType)
 	return nil
 }
@@ -93,6 +107,15 @@ func (a *journalAudit) count(action string) int {
 		}
 	}
 	return n
+}
+
+func (a *journalAudit) hasTicket(action string, success bool, ticket string) bool {
+	for i, e := range a.events {
+		if e.action == action && e.success == success && a.details[i]["ticket"] == ticket {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -304,7 +327,7 @@ func TestBreakGlass_FailsClosed(t *testing.T) {
 // had it: break-glass is asked for, never assumed.
 func TestBreakGlass_AnOrdinarySessionIsNotMarked(t *testing.T) {
 	f := newBGFixture(30, sessionRes, breakGlassRes)
-	sess, err := f.broker.CreateSession(context.Background(), "oncall", []string{"sre"}, acct, "ssh", "routine", 30)
+	sess, err := f.broker.CreateSession(context.Background(), "oncall", []string{"sre"}, acct, "ssh", "routine", "", 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +355,7 @@ func TestBreakGlass_TheProxyIsToldOnlyForABreakGlassSession(t *testing.T) {
 		t.Fatal("the proxy was not told about a break-glass session")
 	}
 
-	plain, err := f.broker.CreateSession(context.Background(), "oncall", []string{"sre"}, acct, "ssh", "routine", 10)
+	plain, err := f.broker.CreateSession(context.Background(), "oncall", []string{"sre"}, acct, "ssh", "routine", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

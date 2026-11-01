@@ -104,11 +104,14 @@ func main() {
 	// session actions that write — an audit event, a Vault scope, a proxy ticket — on every call.
 	actionBurst := boundedIntEnv("SESSION_ACTION_BURST", application.DefaultSessionActionBurst, 1, application.MaxSessionActionBurst)
 	actionRate := boundedIntEnv("SESSION_ACTION_RATE_PER_MINUTE", application.DefaultSessionActionRatePerMinute, 1, application.MaxSessionActionRatePerMinute)
+	vaultActionBurst := boundedIntEnv("VAULT_ACCOUNT_ACTION_BURST", application.DefaultVaultAccountActionBurst, 1, application.MaxVaultAccountActionBurst)
+	vaultActionRate := boundedIntEnv("VAULT_ACCOUNT_ACTION_RATE_PER_MINUTE", application.DefaultVaultAccountActionRatePerMinute, 1, application.MaxVaultAccountActionRatePerMinute)
 
 	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL).
 		WithHTTPClient(upstreams).
 		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate)).
 		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
+		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(vaultActionBurst, vaultActionRate)).
 		WithProxyTrust(trust)
 
 	// The Admin UI (ADR-0036), same origin as the API: served only when given.
@@ -131,6 +134,7 @@ func main() {
 	log.Printf("  -> command-recorder: %s", commandRecorderURL)
 	log.Printf("  POST /sessions: at most %d at once per user, then %d per minute (this process only; a request refused for it never reaches the Broker)", sessionBurst, sessionRate)
 	log.Printf("  approve, reject, connect, terminate: at most %d at once per user, then %d per minute, one budget for the four, not that of POST /sessions (this process only; an action refused for it never reaches the Broker)", actionBurst, actionRate)
+	log.Printf("  PUT /vault/accounts/{id}/approval: at most %d at once per user, then %d per minute (this process only; an action refused for it never reaches the Vault)", vaultActionBurst, vaultActionRate)
 	if entries := trust.Entries(); len(entries) > 0 {
 		log.Printf("  client address: X-Forwarded-For is believed only from %s, read from the right up to the first address that is not one of them; from any other peer it is ignored", strings.Join(entries, ", "))
 	} else {

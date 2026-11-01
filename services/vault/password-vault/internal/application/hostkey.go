@@ -55,6 +55,8 @@ type OnboardInput struct {
 	HostKey                                  string
 	// RotationIntervalDays: required for a scheduled account, refused for any other (ADR-0040).
 	RotationIntervalDays int
+	// ApprovalRequired: a session on the account waits for another person's approval (ADR-0067).
+	ApprovalRequired bool
 }
 
 // OnboardPinned onboards an account whose target's host key is given: required. The account
@@ -78,6 +80,7 @@ func (s *VaultService) OnboardPinned(ctx context.Context, actorRoles []string, i
 	return s.onboard(ctx, actorRoles, &domain.PrivilegedAccount{
 		ID: in.ID, Name: in.Name, Username: in.Username, TargetHost: in.TargetHost, Protocol: in.Protocol, RotationPolicy: in.Policy,
 		ReconciliationAccountID: in.ReconciliationAccountID, HostKey: key, RotationIntervalDays: in.RotationIntervalDays,
+		ApprovalRequired: in.ApprovalRequired,
 	}, in.InitialSecret)
 }
 
@@ -119,4 +122,39 @@ type Delivered struct {
 	Material   []byte
 	TargetHost string
 	HostKey    string
+}
+
+// SetApprovalRequired says whether a session on accountID waits for another person's approval,
+// with a ticket (ADR-0067) — for an administrator of the account, the change written to the audit
+// before it is made (without the audit, nothing changes); a refusal is written too, at best.
+func (s *VaultService) SetApprovalRequired(ctx context.Context, actorID string, actorRoles []string, accountID string, required bool) error {
+	if err := s.requireAdminAccess(ctx, actorRoles, accountID, "vault:account:approval"); err != nil {
+		if errors.Is(err, ErrAccessDenied) {
+			if s.audit == nil {
+				return fmt.Errorf("%w: cannot audit the refused approval-setting change", ErrAuditUnavailable)
+			}
+			if auditErr := s.audit.EmitEvent(ctx, actorID, "vault.approval_set", "account", accountID, false); auditErr != nil {
+				return fmt.Errorf("%w: cannot audit the refused approval-setting change: %w", ErrAuditUnavailable, auditErr)
+			}
+		}
+		return err
+	}
+	a, err := s.accounts.Get(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if a.DisabledAt != nil {
+		return domain.ErrNotFound
+	}
+	if s.audit == nil {
+		return ErrRotationOff
+	}
+	if err := s.audit.EmitEvent(ctx, actorID, "vault.approval_set", "account", accountID, true); err != nil {
+		return fmt.Errorf("%w (the approval setting was not changed): %w", ErrAuditUnavailable, err)
+	}
+	if err := s.accounts.SetApprovalRequired(ctx, accountID, required); err != nil {
+		return err
+	}
+	log.Printf("password-vault: account %s now %s an approval for its sessions (set by %s)", accountID, map[bool]string{true: "requires", false: "does not require"}[required], actorID)
+	return nil
 }

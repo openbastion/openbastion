@@ -6,6 +6,9 @@ package application
 import (
 	"context"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,6 +84,82 @@ func TestEmitEvent_WritesTheCurrentFormat(t *testing.T) {
 	if e.HashVersion != domain.HashV3 || e.KeyID != svc.keys.current || string(e.Hash) != string(computeHashV3(key, e)) ||
 		string(e.Hash) == string(computeHashV2(e)) || string(e.Hash) == string(computeHashV1(e)) {
 		t.Fatalf("a new event is not signed in v3 with the current key: version %d, key %q", e.HashVersion, e.KeyID)
+	}
+}
+
+func TestEmitEventWithDetails_UsesV4AndKeepsThatVersionForTheChain(t *testing.T) {
+	ctx := context.Background()
+	store := infrastructure.NewInMemoryStore()
+	svc := NewAuditService(store)
+	details := map[string]string{"ticket": "CHG0001234"}
+	first, err := svc.EmitEventAsWithDetails(ctx, "session-broker", "user_a", "session.approval_requested", "session", "sess_a", details, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details["ticket"] = "mutated-after-append"
+	second, err := svc.EmitEventAs(ctx, "session-broker", "user_a", "session.connect", "session", "sess_a", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.HashVersion != domain.HashV4 || first.Details["ticket"] != "CHG0001234" ||
+		string(first.Hash) != string(computeHashV4(svc.keys.keys[svc.keys.current], first)) ||
+		second.HashVersion != domain.HashV4 {
+		t.Fatalf("the ticket event and its successor are not protected in v4: first=%+v second=%+v", first, second)
+	}
+	if err := svc.VerifyChain(ctx); err != nil {
+		t.Fatalf("the v4 chain does not verify: %v", err)
+	}
+}
+
+func TestVerifyChain_DetectsChangedEventDetails(t *testing.T) {
+	ctx := context.Background()
+	store := infrastructure.NewInMemoryStore()
+	svc := NewAuditService(store)
+	_, err := svc.EmitEventAsWithDetails(ctx, "session-broker", "user_a", "session.approval_requested", "session", "sess_a", map[string]string{"ticket": "CHG0001234"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, _ := store.All(ctx)
+	events[0].Details["ticket"] = "CHG0001235"
+	if err := svc.VerifyChain(ctx); err == nil {
+		t.Fatal("changing the ticket in a stored audit event went undetected")
+	}
+}
+
+func TestComputeHashV4_DetailsMapOrderDoesNotChangeTheHash(t *testing.T) {
+	e := &domain.Event{
+		ID: "evt_1", Timestamp: time.Date(2026, 10, 30, 12, 0, 0, 123456000, time.UTC),
+		ActorID: "user_ab", Action: "session.approval_requested", ResourceType: "session", ResourceID: "session_01",
+		Emitter: "session-broker", KeyID: "key-id", Details: map[string]string{"ticket": "CHG0001234", "source": "admin-ui"},
+	}
+	first := computeHashV4([]byte("stable test key"), e)
+	e.Details = map[string]string{"source": "admin-ui", "ticket": "CHG0001234"}
+	second := computeHashV4([]byte("stable test key"), e)
+	if string(first) != string(second) {
+		t.Fatal("the v4 hash depends on Go map iteration order")
+	}
+	e.Details["source"] = "another-source"
+	if string(first) == string(computeHashV4([]byte("stable test key"), e)) {
+		t.Fatal("changing a detail did not change the v4 hash")
+	}
+}
+
+func TestEmitEventWithDetails_RejectsUnboundedOrMalformedDetails(t *testing.T) {
+	svc := NewAuditService(infrastructure.NewInMemoryStore())
+	cases := []map[string]string{
+		{"bad-key!": "value"},
+		{"ticket": strings.Repeat("x", MaxIDBytes+1)},
+		{"ticket": "contains\nnewline"},
+	}
+	many := make(map[string]string, MaxDetailsEntries+1)
+	for i := 0; i <= MaxDetailsEntries; i++ {
+		many[fmt.Sprintf("key_%02d", i)] = "value"
+	}
+	cases = append(cases, many)
+	for _, details := range cases {
+		if _, err := svc.EmitEventAsWithDetails(context.Background(), "session-broker", "user_a", "session.approval_requested", "session", "sess_a", details, true); !errors.Is(err, domain.ErrInvalidEvent) {
+			t.Fatalf("details %v: err=%v, want ErrInvalidEvent", details, err)
+		}
 	}
 }
 

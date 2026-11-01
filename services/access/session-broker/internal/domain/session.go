@@ -46,6 +46,12 @@ type Session struct {
 	DecidedBy string
 	DecidedAt *time.Time
 
+	// ApprovalRequired: an ordinary session on an account that requires another person's
+	// approval (ADR-0067) — pending until decided, like a break-glass, under its own rules.
+	// Ticket is the reference it was asked with; empty for a session that needed none.
+	ApprovalRequired bool
+	Ticket           string
+
 	// AfterUseOwed: the session ended while active, and the Vault has not yet been told
 	// (ADR-0044) — written with the end, cleared once the Vault has it.
 	AfterUseOwed bool

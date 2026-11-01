@@ -59,6 +59,22 @@ func TestHTTP_EmitEventAnswersForWhatItRefuses(t *testing.T) {
 	}
 }
 
+func TestHTTP_EmitEventPersistsProtectedDetails(t *testing.T) {
+	store := infrastructure.NewInMemoryStore()
+	h := interfaces.NewHTTPServer(application.NewAuditService(store)).Routes()
+	rec := post(h, `{"actor_id":"u_1","action":"session.approval_requested","resource_type":"session","resource_id":"s1","details":{"ticket":"CHG0001234"},"success":true}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %q", rec.Code, rec.Body.String())
+	}
+	event, err := store.Last(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.HashVersion != domain.HashV4 || event.Details["ticket"] != "CHG0001234" {
+		t.Fatalf("the event did not retain protected details: %+v", event)
+	}
+}
+
 type failingStore struct{ *infrastructure.InMemoryStore }
 
 func (failingStore) Append(context.Context, *domain.Event) error {

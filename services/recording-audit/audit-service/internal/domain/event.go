@@ -16,14 +16,13 @@ type Event struct {
 	Action       string
 	ResourceType string
 	ResourceID   string
+	Details      map[string]string
 	Success      bool
 	PrevHash     []byte
 	Hash         []byte
 
-	// HashVersion says how Hash was computed (ADR-0026): HashV1 for the events written
-	// before ADR-0026 (fields concatenated as they are), HashV2 for every event written
-	// since (each field framed by its length). It is stored with the event and covered by
-	// the v2 hash itself.
+	// HashVersion says how Hash was computed: the older formats and the current keyed
+	// format are retained so the chain remains verifiable across upgrades.
 	HashVersion int
 
 	// Emitter is the service that wrote the event, as its mutual-TLS certificate names it
@@ -39,6 +38,7 @@ const (
 	HashV1 = 1 // legacy: fields concatenated without framing — verified, never written
 	HashV2 = 2 // ADR-0026: a domain tag, then each field framed by its length — verified, never written
 	HashV3 = 3 // current, ADR-0027: v2's framing, plus emitter and key id, under an HMAC with the chain key
+	HashV4 = 4 // ADR-0068: v3 plus bounded, deterministically framed event details
 )
 
 // ErrInvalidEvent is returned for an event no emitter can mean (ADR-0025): a field that is

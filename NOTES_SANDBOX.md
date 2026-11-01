@@ -1656,3 +1656,9 @@ test/integration                                                 74 tests (dont 
 ```
 
 Compte vérifié par `grep -c "^--- PASS"` sur la sortie `go test -v`, pas estimé.
+
+## v0.0.1, sixième lot : approbation des sessions ordinaires (ADR-0067)
+
+Le compte peut exiger qu'une autre personne approuve une session ordinaire avec un ticket au format déclaré. Le réglage est audité par le Vault avant application ; le Broker attend une décision, applique la règle des quatre yeux et enregistre ticket, demande et décision avant tout effet. Le ticket est lié aux événements par le hash v4 de l'Audit Service (ADR-0068), avec détails bornés et migration additive ; les formats de hash antérieurs restent vérifiables. La Gateway borne aussi les changements du réglage par utilisateur. Les contrats REST, protobuf et les guides d'administration/configuration sont alignés.
+
+**Vérifications mesurées dans ce sandbox.** `make build vet` vert sur tous les modules ; `make test` vert ; le scénario `TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossEightRealProcesses` passe sur huit vrais processus ; `make ui-test ui-build` passe, avec 40 tests Vitest et le build TypeScript/Vite ; le YAML OpenAPI parse. Les tests ciblés de l'Audit Service et du Session Broker passent aussi. **Pas de test PostgreSQL réel pour ce lot** : `TEST_DATABASE_URL` n'est pas défini ; l'aller-retour JSONB et l'application de la migration restent à vérifier avec la base dédiée.

@@ -40,7 +40,8 @@ type GatewayServer struct {
 	sessionLimiter *application.RateLimiter
 	// actionLimiter is the per-user budget of approve, reject, connect and terminate, the
 	// session actions that write on every call (ADR-0016, ADR-0017). Never nil either.
-	actionLimiter *application.RateLimiter
+	actionLimiter             *application.RateLimiter
+	vaultAccountActionLimiter *application.RateLimiter
 	// proxyTrust says whose X-Forwarded-For is believed when the per-address limiters
 	// look for the client (ADR-0015). It is never nil: a Gateway built by hand trusts
 	// nobody, and keys on the address of the peer.
@@ -59,10 +60,11 @@ type GatewayServer struct {
 func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, loginLimiter *application.RateLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL string) *GatewayServer {
 	return &GatewayServer{
 		authClient: authClient, requestLimiter: requestLimiter, loginLimiter: loginLimiter,
-		sessionLimiter:    application.NewSessionRequestLimiter(0, 0),
-		actionLimiter:     application.NewSessionActionLimiter(0, 0),
-		proxyTrust:        &application.ProxyTrust{},
-		authenticationURL: authenticationURL, sessionBrokerURL: sessionBrokerURL,
+		sessionLimiter:            application.NewSessionRequestLimiter(0, 0),
+		actionLimiter:             application.NewSessionActionLimiter(0, 0),
+		vaultAccountActionLimiter: application.NewVaultAccountActionLimiter(0, 0),
+		proxyTrust:                &application.ProxyTrust{},
+		authenticationURL:         authenticationURL, sessionBrokerURL: sessionBrokerURL,
 		vaultURL: vaultURL, authorizationURL: authorizationURL, commandRecorderURL: commandRecorderURL,
 		httpClient: http.DefaultClient,
 	}
@@ -82,6 +84,13 @@ func (g *GatewayServer) WithSessionRequestLimiter(l *application.RateLimiter) *G
 func (g *GatewayServer) WithSessionActionLimiter(l *application.RateLimiter) *GatewayServer {
 	if l != nil {
 		g.actionLimiter = l
+	}
+	return g
+}
+
+func (g *GatewayServer) WithVaultAccountActionLimiter(l *application.RateLimiter) *GatewayServer {
+	if l != nil {
+		g.vaultAccountActionLimiter = l
 	}
 	return g
 }
@@ -334,6 +343,10 @@ func (g *GatewayServer) admitSessionRequest(w http.ResponseWriter, id identity) 
 // changing route is not a way to a new budget, and it is not the bucket of POST /sessions.
 func (g *GatewayServer) admitSessionAction(w http.ResponseWriter, id identity) bool {
 	return admitFromBudget(w, id, g.actionLimiter, "session actions")
+}
+
+func (g *GatewayServer) admitVaultAccountAction(w http.ResponseWriter, id identity) bool {
+	return admitFromBudget(w, id, g.vaultAccountActionLimiter, "vault account actions")
 }
 
 // admitFromBudget takes one token of the user's bucket. What it says when it
@@ -644,6 +657,33 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		}
 		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/host-key", map[string]any{
 			"hostKey": body.HostKey, "actorRoles": id.Roles, "actorId": id.UserID,
+		})
+		return
+	}
+
+	// PUT /vault/accounts/{id}/approval says whether a session on the account waits for another
+	// person's approval (ADR-0067). The setting only is the client's; who sets it is the token's.
+	if accountID, ok := strings.CutSuffix(rest, "/approval"); ok {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if accountID == "" || strings.Contains(accountID, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		if !g.admitVaultAccountAction(w, id) {
+			return
+		}
+		var body struct {
+			ApprovalRequired *bool `json:"approvalRequired"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil || body.ApprovalRequired == nil {
+			http.Error(w, "the body is {\"approvalRequired\": true|false}", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/approval", map[string]any{
+			"approvalRequired": *body.ApprovalRequired, "actorRoles": id.Roles, "actorId": id.UserID,
 		})
 		return
 	}

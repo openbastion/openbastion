@@ -24,6 +24,9 @@ message EmitEventRequest {
   string resource_id = 4;
   bool success = 5;
   bytes signature = 6;            // signée par la clé de service de l'émetteur
+  // 16 clés max; clés a-z/0-9/_. (1-64 octets), valeurs UTF-8 sans contrôle
+  // (1-256 octets); protégées par le hash v4 (ADR-0068).
+  map<string, string> details = 7;
 }
 
 message EmitEventResponse {

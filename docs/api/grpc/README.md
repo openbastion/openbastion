@@ -452,6 +452,9 @@ message EmitEventRequest {
   string resource_id = 4;
   bool success = 5;
   bytes signature = 6;            // signée par la clé de service de l'émetteur
+  // 16 clés max; clés a-z/0-9/_. (1-64 octets), valeurs UTF-8 sans contrôle
+  // (1-256 octets); protégées par le hash v4 (ADR-0068).
+  map<string, string> details = 7;
 }
 
 message EmitEventResponse {
@@ -459,6 +462,8 @@ message EmitEventResponse {
   google.protobuf.Timestamp ts = 2;
 }
 ```
+
+Les détails sont des métadonnées bornées (clé `a-z`, chiffres, `_` et `.` ; valeur UTF-8 sans contrôle, 256 octets au plus ; 16 entrées). Ils sont persistés et archivés avec l'événement. Leur première émission fait passer la chaîne au hash v4 ; les événements suivants restent en v4, tandis que les anciens hashes v1 à v3 restent vérifiables. Pour ADR-0067, le Broker y place la référence `ticket`, jamais un secret.
 
 **Alertes poussées (ADR-0045).** Le contrat d'`EmitEvent` ne change pas. Après l'écriture, un événement dont le couple (action, émetteur du certificat) est une alerte déclarée — aujourd'hui `vault.rotation_overdue` écrit par `password-vault` — est poussé par l'Audit Service vers `ALERT_NOTIFY_URL`, hors de la requête : la réponse n'attend pas le canal et n'en dit rien. Le même événement écrit par un autre émetteur est enregistré et n'est pas poussé. Le message sortant est décrit dans `docs/administration/notifications.md` ; ce n'est pas un contrat gRPC.
 

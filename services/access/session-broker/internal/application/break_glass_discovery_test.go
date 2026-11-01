@@ -248,12 +248,13 @@ func TestListPending_FailsClosed_NeverAPartialList(t *testing.T) {
 		t.Fatalf("a store that cannot list: err=%v, want ErrUnavailable", err)
 	}
 
-	// With break-glass switched off there is nothing to approve, so the list needs no
-	// dependency to say so: the answer does not wait for a store that is down.
+	// With break-glass switched off, requests on accounts that require approval still
+	// wait (ADR-0067): the list asks the store, and a store that is down is still an
+	// error, never an empty list.
 	off := application.NewSessionBrokerService(failing, f.authz, f.vault, f.audit, &fakeAccountLookup{}, f.proxy).
 		WithBreakGlass(0).WithClock(f.clock.Now)
-	if items, _, _, err := off.ListPendingApprovals(context.Background(), approver, []string{"lead"}, 1, 20); err != nil || len(items) != 0 {
-		t.Fatalf("switched off, store down: items=%v err=%v, want an empty list", items, err)
+	if items, _, _, err := off.ListPendingApprovals(context.Background(), approver, []string{"lead"}, 1, 20); !errors.Is(err, domain.ErrUnavailable) || items != nil {
+		t.Fatalf("switched off, store down: items=%v err=%v, want ErrUnavailable", items, err)
 	}
 }
 
@@ -568,7 +569,9 @@ func TestNotification_HasNoFieldForAJustificationOrAnythingAboutTheTarget(t *tes
 		fields = append(fields, typ.Field(i).Name)
 	}
 	sort.Strings(fields)
-	want := []string{"AccountID", "At", "DecidedBy", "DurationMinutes", "Event", "ExpiresAt", "RequestedBy", "SessionID"}
+	// Ticket (ADR-0067): a reference in the declared format, shown to the approver; the
+	// justification stays out.
+	want := []string{"AccountID", "At", "DecidedBy", "DurationMinutes", "Event", "ExpiresAt", "RequestedBy", "SessionID", "Ticket"}
 	if !reflect.DeepEqual(fields, want) {
 		t.Fatalf("ApprovalNotification has the fields %v, want %v — a new field is a new thing told to a channel (ADR-0012, rule 7)", fields, want)
 	}

@@ -100,6 +100,18 @@ func (s *InMemoryStore) Disable(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetApprovalRequired is domain.AccountRepository.SetApprovalRequired.
+func (s *InMemoryStore) SetApprovalRequired(ctx context.Context, id string, required bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	a.ApprovalRequired = required
+	return nil
+}
+
 // SetHostKey is domain.AccountRepository.SetHostKey.
 func (s *InMemoryStore) SetHostKey(ctx context.Context, id, hostKey string) error {
 	s.mu.Lock()

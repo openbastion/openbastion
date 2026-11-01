@@ -73,8 +73,9 @@ func (s *AuditService) WithChainKeys(k *ChainKeys) *AuditService {
 // identifiers the Broker makes or the Recorder bounds to 256 bytes — and narrow enough that
 // the trail is not a place to store what one likes.
 const (
-	MaxNameBytes = 64  // action, resource type
-	MaxIDBytes   = 256 // actor, resource id
+	MaxNameBytes      = 64  // action, resource type
+	MaxIDBytes        = 256 // actor, resource id
+	MaxDetailsEntries = 16
 )
 
 // validate says why an event cannot be taken, naming the field and the rule — never the value,
@@ -91,6 +92,21 @@ func validate(actorID, action, resourceType, resourceID string) error {
 	}
 	// An empty actor is a system action (a proxy, the Scheduler): allowed.
 	return checkID("actor_id", actorID, false)
+}
+
+func validateDetails(details map[string]string) error {
+	if len(details) > MaxDetailsEntries {
+		return fmt.Errorf("%w: details may contain at most %d entries", domain.ErrInvalidEvent, MaxDetailsEntries)
+	}
+	for key, value := range details {
+		if err := checkName("detail_key", key, true); err != nil {
+			return err
+		}
+		if err := checkID("detail_value", value, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkName: 1 to 64 bytes of a-z, 0-9 and _, with dots too when dotted is set.
@@ -148,7 +164,15 @@ func (s *AuditService) EmitEvent(ctx context.Context, actorID, action, resourceT
 // (domain.ErrInvalidEvent) before the chain is touched (ADR-0025). The event is signed with
 // the current chain key (v3).
 func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action, resourceType, resourceID string, success bool) (*domain.Event, error) {
+	return s.EmitEventAsWithDetails(ctx, emitter, actorID, action, resourceType, resourceID, nil, success)
+}
+
+// EmitEventAsWithDetails is EmitEventAs with bounded metadata covered by hash v4.
+func (s *AuditService) EmitEventAsWithDetails(ctx context.Context, emitter, actorID, action, resourceType, resourceID string, details map[string]string, success bool) (*domain.Event, error) {
 	if err := validate(actorID, action, resourceType, resourceID); err != nil {
+		return nil, err
+	}
+	if err := validateDetails(details); err != nil {
 		return nil, err
 	}
 	if err := checkEmitter(emitter); err != nil {
@@ -162,8 +186,14 @@ func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action
 		return nil, err
 	}
 	var prevHash []byte
+	hashVersion := domain.HashV3
 	if last != nil {
 		prevHash = last.Hash
+		if last.HashVersion >= domain.HashV4 || len(details) > 0 {
+			hashVersion = domain.HashV4
+		}
+	} else if len(details) > 0 {
+		hashVersion = domain.HashV4
 	}
 
 	e := &domain.Event{
@@ -187,10 +217,14 @@ func (s *AuditService) EmitEventAs(ctx context.Context, emitter, actorID, action
 		// no-op for it).
 		ID: nextID(), Timestamp: s.now().UTC().Truncate(time.Microsecond), ActorID: actorID,
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
-		Success: success, PrevHash: prevHash, HashVersion: domain.HashV3,
+		Details: cloneDetails(details), Success: success, PrevHash: prevHash, HashVersion: hashVersion,
 		Emitter: emitter, KeyID: s.keys.current,
 	}
-	e.Hash = computeHashV3(s.keys.keys[s.keys.current], e)
+	if e.HashVersion == domain.HashV4 {
+		e.Hash = computeHashV4(s.keys.keys[s.keys.current], e)
+	} else {
+		e.Hash = computeHashV3(s.keys.keys[s.keys.current], e)
+	}
 
 	if err := s.store.Append(ctx, e); err != nil {
 		return nil, err
@@ -235,7 +269,7 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 	for i, e := range events {
 		// Versions only move forward (ADR-0026): once an event is v2, every later one is, so
 		// that a later event cannot be passed off in the weaker format.
-		if e.HashVersion < domain.HashV1 || e.HashVersion > domain.HashV3 {
+		if e.HashVersion < domain.HashV1 || e.HashVersion > domain.HashV4 {
 			return fmt.Errorf("event %d (%s): unknown hash version %d — tampered", i, e.ID, e.HashVersion)
 		}
 		if e.HashVersion < version {
@@ -243,17 +277,28 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 		}
 		version = e.HashVersion
 		var want []byte
-		if e.HashVersion == domain.HashV3 {
+		if e.HashVersion == domain.HashV3 || e.HashVersion == domain.HashV4 {
 			key, held := s.keys.keys[e.KeyID]
 			if !held {
 				return fmt.Errorf("event %d (%s): signed with chain key %q, which this service does not hold — it cannot vouch for it", i, e.ID, e.KeyID)
 			}
-			want = computeHashV3(key, e)
+			if e.HashVersion == domain.HashV4 {
+				if err := validateDetails(e.Details); err != nil {
+					return fmt.Errorf("event %d (%s): details are invalid — tampered", i, e.ID)
+				}
+				want = computeHashV4(key, e)
+			} else {
+				if len(e.Details) != 0 {
+					return fmt.Errorf("event %d (%s): details in a version 3 event — tampered", i, e.ID)
+				}
+				want = computeHashV3(key, e)
+			}
 		} else {
 			// The unkeyed formats cover neither field: one that carries them was not written so.
-			if e.Emitter != "" || e.KeyID != "" {
+			if e.Emitter != "" || e.KeyID != "" || len(e.Details) != 0 {
 				return fmt.Errorf("event %d (%s): an emitter or a key in a version %d event, which covers neither — tampered", i, e.ID, e.HashVersion)
 			}
+
 			want = computeHash(e)
 		}
 		if !hmac.Equal(want, e.Hash) || len(want) == 0 {
@@ -268,6 +313,17 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 		return err
 	}
 	return s.verifyAnchors(ctx, events, anchors, start.AnchorsCovered)
+}
+
+func cloneDetails(details map[string]string) map[string]string {
+	if len(details) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(details))
+	for key, value := range details {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 // computeHash computes an event's hash in the unkeyed format its HashVersion names (v1, v2).

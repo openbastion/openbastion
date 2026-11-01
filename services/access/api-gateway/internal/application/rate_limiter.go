@@ -149,6 +149,11 @@ const (
 	MaxSessionActionBurst             = 1000
 	MaxSessionActionRatePerMinute     = 600
 
+	DefaultVaultAccountActionBurst         = 10
+	DefaultVaultAccountActionRatePerMinute = 6
+	MaxVaultAccountActionBurst             = 1000
+	MaxVaultAccountActionRatePerMinute     = 600
+
 	// The per-address limits (ADR-0015). Their defaults are what the two limiters
 	// have always really done — login: a burst of 5, then ONE a minute; authenticated
 	// traffic: a burst of 60, then 60 a minute — so that making them adjustable
@@ -188,6 +193,11 @@ func NewSessionRequestLimiter(burst, perMinute int) *RateLimiter {
 // ordinary pair, and spending one must not take the other away.
 func NewSessionActionLimiter(burst, perMinute int) *RateLimiter {
 	return perMinuteLimiter(burst, perMinute, DefaultSessionActionBurst, DefaultSessionActionRatePerMinute)
+}
+
+// NewVaultAccountActionLimiter bounds per-user changes to an account's approval setting.
+func NewVaultAccountActionLimiter(burst, perMinute int) *RateLimiter {
+	return perMinuteLimiter(burst, perMinute, DefaultVaultAccountActionBurst, DefaultVaultAccountActionRatePerMinute)
 }
 
 // NewLoginLimiter is the per-address limit of POST /auth/login: `burst` attempts at

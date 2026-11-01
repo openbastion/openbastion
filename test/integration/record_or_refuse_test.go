@@ -86,11 +86,12 @@ func (s *auditSpy) isDown() bool {
 }
 
 type spiedEvent struct {
-	ActorID      string `json:"actor_id"`
-	Action       string `json:"action"`
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
-	Success      bool   `json:"success"`
+	ActorID      string            `json:"actor_id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	Details      map[string]string `json:"details"`
+	Success      bool              `json:"success"`
 }
 
 func startAuditSpy(t *testing.T, upstream string) *auditSpy {

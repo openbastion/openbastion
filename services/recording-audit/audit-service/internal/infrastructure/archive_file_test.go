@@ -16,7 +16,7 @@ import (
 func archivedEvents() []*domain.Event {
 	at := time.Date(2025, 1, 3, 9, 0, 0, 123456000, time.UTC)
 	return []*domain.Event{
-		{ID: "evt_1", Timestamp: at, ActorID: "u_1", Action: "session.read", ResourceType: "session", ResourceID: "s1", Success: true, Hash: []byte{1}, HashVersion: 3, Emitter: "session-broker", KeyID: "k"},
+		{ID: "evt_1", Timestamp: at, ActorID: "u_1", Action: "session.read", ResourceType: "session", ResourceID: "s1", Details: map[string]string{"ticket": "CHG0001234"}, Success: true, Hash: []byte{1}, HashVersion: 4, Emitter: "session-broker", KeyID: "k"},
 		{ID: "evt_2", Timestamp: at.Add(time.Second), Action: "session.expire", ResourceType: "session", ResourceID: "s1", PrevHash: []byte{1}, Hash: []byte{2}, HashVersion: 3, KeyID: "k"},
 	}
 }
@@ -41,7 +41,7 @@ func TestFileArchiver_WritesEveryFieldAndReadsBack(t *testing.T) {
 	if want := sha256.Sum256(raw); string(want[:]) != string(sum) {
 		t.Fatal("the sum returned is not the sum of the file")
 	}
-	want := `{"id":"evt_1","ts":"2025-01-03T09:00:00.123456Z","actor_id":"u_1","action":"session.read","resource_type":"session","resource_id":"s1","success":true,"prev_hash":"","hash":"01","hash_version":3,"emitter":"session-broker","chain_key_id":"k"}
+	want := `{"id":"evt_1","ts":"2025-01-03T09:00:00.123456Z","actor_id":"u_1","action":"session.read","resource_type":"session","resource_id":"s1","details":{"ticket":"CHG0001234"},"success":true,"prev_hash":"","hash":"01","hash_version":4,"emitter":"session-broker","chain_key_id":"k"}
 {"id":"evt_2","ts":"2025-01-03T09:00:01.123456Z","actor_id":"","action":"session.expire","resource_type":"session","resource_id":"s1","success":false,"prev_hash":"01","hash":"02","hash_version":3,"emitter":"","chain_key_id":"k"}
 `
 	if string(raw) != want {

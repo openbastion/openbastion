@@ -142,6 +142,7 @@ CREATE TABLE privileged_accounts (
     username         TEXT NOT NULL,   -- nom du compte sur la cible ; distinct de `name`, qui identifie l'enregistrement
     target_host      TEXT NOT NULL,
     protocol         TEXT NOT NULL CHECK (protocol IN ('ssh')),   -- énumération étendue en v0.0.1/v0.0.2
+    approval_required BOOLEAN NOT NULL DEFAULT FALSE,             -- ADR-0067 : une autre personne approuve les sessions ordinaires
     rotation_policy  TEXT NOT NULL DEFAULT 'post_use'
                        CHECK (rotation_policy IN ('manual','post_use','scheduled')),
     last_rotated_at  TIMESTAMPTZ,
@@ -175,6 +176,8 @@ CREATE TABLE sessions (
                                 CHECK (status IN ('pending_approval','active','expired','terminated','denied')),
     justification             TEXT NOT NULL,
     break_glass               BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0009 : autorisée à s'exécuter sans recorder
+    approval_required         BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0067 : demande ordinaire soumise à approbation
+    ticket                    TEXT NOT NULL DEFAULT '',       -- ADR-0067 : référence non secrète, vide si aucune
     connection_ticket_hash    TEXT,              -- hash du ticket émis ; jamais le ticket en clair
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at                TIMESTAMPTZ NOT NULL,   -- fin de session ; tant que la demande est pending_approval : échéance de la décision (ADR-0011)
@@ -229,11 +232,12 @@ CREATE TABLE audit_events (
     action         TEXT NOT NULL,                  -- ex. 'session.connect', 'vault.rotate'
     resource_type  TEXT NOT NULL,
     resource_id    TEXT NOT NULL,
+    details        JSONB NOT NULL DEFAULT '{}'::jsonb, -- ADR-0068 : métadonnées bornées, couvertes par hash v4
     result         TEXT NOT NULL CHECK (result IN ('success','failure')),
     signature      BYTEA NOT NULL,                 -- signature de l'événement par le service émetteur
     prev_hash      BYTEA NOT NULL,                 -- hash de l'événement précédent de la chaîne
     hash           BYTEA NOT NULL,                 -- hash de cet événement (inclut prev_hash)
-    hash_version   SMALLINT NOT NULL DEFAULT 1,    -- format du hash (ADR-0026, ADR-0027) : 1 = hérité, 2 = champs encadrés, 3 = HMAC à clé
+    hash_version   SMALLINT NOT NULL DEFAULT 1,    -- format du hash (ADR-0026, ADR-0027, ADR-0068) : 1/2 hérités, 3 HMAC, 4 HMAC avec détails
     emitter        TEXT NOT NULL DEFAULT '',       -- service qui a écrit l'événement, d'après son certificat mTLS (ADR-0027)
     chain_key_id   TEXT NOT NULL DEFAULT '',       -- identifiant de la clé de chaîne du HMAC (format 3), jamais la clé
     PRIMARY KEY (id, ts)

@@ -39,11 +39,12 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 type emitEventRequest struct {
-	ActorID      string `json:"actor_id"`
-	Action       string `json:"action"`
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
-	Success      bool   `json:"success"`
+	ActorID      string            `json:"actor_id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	Details      map[string]string `json:"details,omitempty"`
+	Success      bool              `json:"success"`
 }
 
 type emitEventResponse struct {
@@ -68,7 +69,7 @@ func (s *HTTPServer) handleEmitEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	// Who wrote it is the certificate's, never the body's (ADR-0027): empty without internal TLS.
 	emitter, _ := mtls.CallerFrom(r.Context())
-	event, err := s.svc.EmitEventAs(r.Context(), emitter, req.ActorID, req.Action, req.ResourceType, req.ResourceID, req.Success)
+	event, err := s.svc.EmitEventAsWithDetails(r.Context(), emitter, req.ActorID, req.Action, req.ResourceType, req.ResourceID, req.Details, req.Success)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidEvent) {
 			// Names the field and the rule, never the value.

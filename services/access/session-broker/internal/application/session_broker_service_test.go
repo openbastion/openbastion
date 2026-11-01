@@ -54,14 +54,23 @@ func (f *fakeAudit) EmitEvent(ctx context.Context, actorID, action, resourceType
 	return nil
 }
 
+func (f *fakeAudit) EmitEventWithDetails(ctx context.Context, actorID, action, resourceType, resourceID string, details map[string]string, success bool) error {
+	return f.EmitEvent(ctx, actorID, action, resourceType, resourceID, success)
+}
+
 type fakeAccountLookup struct {
 	targetHost string
 	targetUser string
 	err        error
 	checkErr   error // what CheckAccount answers (ADR-0043); nil: the account exists, pinned
+
+	// approvalRequired: the account requires another person's approval (ADR-0067).
+	approvalRequired bool
 }
 
-func (f *fakeAccountLookup) CheckAccount(context.Context, string) error { return f.checkErr }
+func (f *fakeAccountLookup) CheckAccount(context.Context, string) (bool, error) {
+	return f.approvalRequired, f.checkErr
+}
 
 func (f *fakeAccountLookup) GetAccount(ctx context.Context, accountID string) (string, string, error) {
 	if f.err != nil {
@@ -139,7 +148,7 @@ func TestCreateSession_DeniedWhenAuthorizationRefuses(t *testing.T) {
 	audit := &fakeAudit{}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
 
-	_, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", 60)
+	_, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", "", 60)
 	if err == nil {
 		t.Fatal("expected CreateSession to fail when Authorization denies")
 	}
@@ -153,7 +162,7 @@ func TestCreateSession_GrantsImmediatelyWhenAllowed(t *testing.T) {
 	audit := &fakeAudit{}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
 
-	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", 60)
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", "", 60)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -172,7 +181,7 @@ func TestCreateSession_FailClosedWhenAuditUnreachable(t *testing.T) {
 	audit := &fakeAudit{failing: true}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
 
-	_, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", 60)
+	_, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "investigate incident", "", 60)
 	if err == nil {
 		t.Fatal("expected CreateSession to fail closed when audit emission fails")
 	}
@@ -183,7 +192,7 @@ func TestGetSession_ReflectsExpiryWithoutMutatingStoredStatus(t *testing.T) {
 	audit := &fakeAudit{}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
 
-	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "short-lived", -1) // already expired
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "short-lived", "", -1) // already expired
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -202,7 +211,7 @@ func TestTerminateSession_EmitsAuditAndRejectsDoubleTermination(t *testing.T) {
 	audit := &fakeAudit{}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, audit)
 
-	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", "", 60)
 
 	if _, err := broker.TerminateSession(context.Background(), sess.ID, sess.RequestedBy, []string{"dba"}); err != nil {
 		t.Fatalf("TerminateSession: %v", err)
@@ -223,7 +232,7 @@ func TestConnect_ResolvesAccountThenVaultThenProxy_ReturnsOnlyTheTicket(t *testi
 	proxy := &fakeProxyClient{connectionTicket: "tix-abc", proxyEndpoint: "127.0.0.1:2222"}
 	broker := newTestBroker(authz, vault, audit, accounts, proxy)
 
-	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", "", 60)
 
 	proxyEndpoint, ticket, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy)
 	if err != nil {
@@ -259,7 +268,7 @@ func TestConnect_NeverReturnsTheScopeTokenItself(t *testing.T) {
 	proxy := &fakeProxyClient{connectionTicket: "tix-xyz"}
 	broker := newTestBroker(authz, vault, audit, accounts, proxy)
 
-	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", "", 60)
 	_, ticket, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
@@ -273,7 +282,7 @@ func TestConnect_RejectsTerminatedSession(t *testing.T) {
 	authz := &fakeAuthz{allowed: true}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{})
 
-	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", "", 60)
 	_, _ = broker.TerminateSession(context.Background(), sess.ID, sess.RequestedBy, []string{"dba"})
 
 	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
@@ -285,7 +294,7 @@ func TestConnect_RejectsUnsupportedProtocol(t *testing.T) {
 	authz := &fakeAuthz{allowed: true}
 	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{})
 
-	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", 60)
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", "", 60)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -300,7 +309,7 @@ func TestConnect_PropagatesProxyEstablishError(t *testing.T) {
 	proxy := &fakeProxyClient{establishErr: errors.New("proxy unreachable")}
 	broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{}, proxy)
 
-	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", 60)
+	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", "", 60)
 	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
 		t.Fatal("expected Connect to fail when the proxy cannot establish the session")
 	}

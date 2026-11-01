@@ -26,7 +26,7 @@ func TestCreateSession_TheAccountMustExistAndBePinned(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			audit := &fakeAudit{}
 			broker := newTestBroker(&fakeAuthz{allowed: true}, &fakeVaultAuthorizer{}, audit, &fakeAccountLookup{checkErr: c.checkErr}, &fakeProxyClient{})
-			sess, err := broker.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60)
+			sess, err := broker.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", "", 60)
 			if sess != nil || !errors.Is(err, c.want) {
 				t.Fatalf("got %v, %v; want %v", sess, err, c.want)
 			}
@@ -40,7 +40,7 @@ func TestCreateSession_TheAccountMustExistAndBePinned(t *testing.T) {
 	}
 	// Counter-proof: a pinned account gets its session.
 	broker := newTestBroker(&fakeAuthz{allowed: true}, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{}, &fakeProxyClient{})
-	if sess, err := broker.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60); err != nil || sess.Status != domain.StatusActive {
+	if sess, err := broker.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", "", 60); err != nil || sess.Status != domain.StatusActive {
 		t.Fatalf("a pinned account: %v %v", sess, err)
 	}
 }
@@ -50,7 +50,7 @@ func TestCreateSession_TheAccountMustExistAndBePinned(t *testing.T) {
 func TestCreateSession_ARefusedCallerLearnsNothingOfTheAccount(t *testing.T) {
 	accounts := &fakeAccountLookup{checkErr: domain.ErrAccountNotFound}
 	broker := newTestBroker(&fakeAuthz{allowed: false, reason: "no policy"}, &fakeVaultAuthorizer{}, &fakeAudit{}, accounts, &fakeProxyClient{})
-	_, err := broker.CreateSession(context.Background(), "mallory", []string{"x"}, "acc1", "ssh", "incident", 60)
+	_, err := broker.CreateSession(context.Background(), "mallory", []string{"x"}, "acc1", "ssh", "incident", "", 60)
 	if err == nil || errors.Is(err, domain.ErrAccountNotFound) || !strings.Contains(err.Error(), "access denied") {
 		t.Fatalf("got %v", err)
 	}

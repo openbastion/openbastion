@@ -32,10 +32,31 @@ func (okVault) AuthorizeScope(context.Context, string, string, string, time.Dura
 type quietAudit struct{}
 
 func (quietAudit) EmitEvent(context.Context, string, string, string, string, bool) error { return nil }
+func (quietAudit) EmitEventWithDetails(context.Context, string, string, string, string, map[string]string, bool) error {
+	return nil
+}
+
+type approvalAuditEvent struct {
+	action  string
+	success bool
+	details map[string]string
+}
+
+type approvalAudit struct{ events []approvalAuditEvent }
+
+func (a *approvalAudit) EmitEvent(_ context.Context, _, action, _, _ string, success bool) error {
+	a.events = append(a.events, approvalAuditEvent{action: action, success: success})
+	return nil
+}
+
+func (a *approvalAudit) EmitEventWithDetails(_ context.Context, _, action, _, _ string, details map[string]string, success bool) error {
+	a.events = append(a.events, approvalAuditEvent{action: action, success: success, details: details})
+	return nil
+}
 
 type oneAccount struct{}
 
-func (oneAccount) CheckAccount(context.Context, string) error { return nil }
+func (oneAccount) CheckAccount(context.Context, string) (bool, error) { return false, nil }
 
 func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 	return "10.0.0.5:22", "root", nil
@@ -53,7 +74,7 @@ func (p failingProxy) RevokeSession(context.Context, string, time.Duration) erro
 func connect(t *testing.T, proxyErr error) *httptest.ResponseRecorder {
 	t.Helper()
 	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{err: proxyErr})
-	sess, err := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60)
+	sess, err := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", "", 60)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -98,7 +119,7 @@ func (pinlessVault) AuthorizeScope(context.Context, string, string, string, time
 // The Vault's reason reaches the operator as what to do (ADR-0042, ADR-0039).
 func TestConnect_AnUnpinnedAccountIsA409_ThatSaysWhatToDo(t *testing.T) {
 	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, pinlessVault{}, quietAudit{}, oneAccount{}, failingProxy{})
-	sess, err := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60)
+	sess, err := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", "", 60)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +138,7 @@ func TestConnect_UnknownSessionIs404_AndAStateIs409(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown session: %d", rec.Code)
 	}
-	sess, _ := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", 60)
+	sess, _ := svc.CreateSession(context.Background(), "alice", []string{"dba"}, "acc1", "ssh", "incident", "", 60)
 	if _, err := svc.TerminateSession(context.Background(), sess.ID, "alice", []string{"dba"}); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +153,9 @@ func TestConnect_UnknownSessionIs404_AndAStateIs409(t *testing.T) {
 type failingAudit struct{}
 
 func (failingAudit) EmitEvent(context.Context, string, string, string, string, bool) error {
+	return fmt.Errorf("emit-event: dial tcp 10.9.8.5:8082: connection refused")
+}
+func (failingAudit) EmitEventWithDetails(context.Context, string, string, string, string, map[string]string, bool) error {
 	return fmt.Errorf("emit-event: dial tcp 10.9.8.5:8082: connection refused")
 }
 
@@ -219,7 +243,7 @@ type checkedAccount struct {
 	err error
 }
 
-func (c checkedAccount) CheckAccount(context.Context, string) error { return c.err }
+func (c checkedAccount) CheckAccount(context.Context, string) (bool, error) { return false, c.err }
 
 // ADR-0043 over HTTP: POST /sessions says an unknown account (404) and an unpinned one (409);
 // a Vault that cannot be asked is a 503 that names nothing of it.
@@ -260,4 +284,47 @@ func (breakGlassDownAuthz) CheckAccess(_ context.Context, _ []string, resource, 
 		return false, "", errors.New(leak)
 	}
 	return true, "", nil
+}
+
+// gatedAccount is an account that requires approval (ADR-0067).
+type gatedAccount struct{ oneAccount }
+
+func (gatedAccount) CheckAccount(context.Context, string) (bool, error) { return true, nil }
+
+// ADR-0067 over HTTP: on an account that requires approval, a request without a ticket, or
+// with one out of format, is a 400 that says so; with one, it is a 201 pending_approval that
+// carries the ticket back.
+func TestCreateSession_AnAccountThatRequiresApproval_TakesATicket_OverHTTP(t *testing.T) {
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, gatedAccount{}, failingProxy{})
+	base := `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"patch","durationMinutes":45`
+	for _, body := range []string{base + `}`, base + `,"ticket":"INC 1; drop"}`} {
+		rec := postSession(t, svc, body)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "ticket in the declared format") {
+			t.Fatalf("%s: %d %q", body, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := postSession(t, svc, base+`,"ticket":"CHG0001234"}`)
+	var got struct {
+		Status           string `json:"status"`
+		ApprovalRequired bool   `json:"approvalRequired"`
+		Ticket           string `json:"ticket"`
+	}
+	if rec.Code != http.StatusCreated || json.Unmarshal(rec.Body.Bytes(), &got) != nil ||
+		got.Status != "pending_approval" || !got.ApprovalRequired || got.Ticket != "CHG0001234" {
+		t.Fatalf("%d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateSession_NonStringTicketIsAuditedAsARefusal(t *testing.T) {
+	audit := &approvalAudit{}
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, audit, gatedAccount{}, failingProxy{})
+	body := `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"ssh","justification":"patch","durationMinutes":45,"ticket":42}`
+	rec := postSession(t, svc, body)
+	if rec.Code != http.StatusBadRequest || len(audit.events) != 1 {
+		t.Fatalf("%d %q; audit events: %+v", rec.Code, rec.Body.String(), audit.events)
+	}
+	if got := audit.events[0]; got.action != "session.approval_requested" || got.success || len(got.details) != 0 {
+		t.Fatalf("malformed ticket audit = %+v", got)
+	}
 }

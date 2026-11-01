@@ -596,3 +596,42 @@ func TestPostgresStore_SealedUnderAndResealIf(t *testing.T) {
 		t.Fatal("a second re-seal on the old key went through")
 	}
 }
+
+// ADR-0067: the approval setting is kept at creation and changed afterwards, in Get and List.
+func TestPostgresStore_ApprovalRequired_RoundTrips(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("acc")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "u", TargetHost: id + ":22", Protocol: "ssh", RotationPolicy: domain.RotationManual, ApprovalRequired: true}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || !got.ApprovalRequired {
+		t.Fatalf("created requiring approval: %+v err=%v", got, err)
+	}
+	if err := store.SetApprovalRequired(ctx, id, false); err != nil {
+		t.Fatalf("SetApprovalRequired: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.ApprovalRequired {
+		t.Fatalf("Get after unsetting: %+v err=%v", got, err)
+	}
+	if err := store.SetApprovalRequired(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	accounts, _, err := store.List(ctx, 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range accounts {
+		if a.ID == id {
+			found = a.ApprovalRequired
+		}
+	}
+	if !found {
+		t.Fatal("List lost the setting")
+	}
+	if err := store.SetApprovalRequired(ctx, uniqueID("nobody"), true); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("an unknown account: %v", err)
+	}
+}

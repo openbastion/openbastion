@@ -136,7 +136,7 @@ func TestApproval_IsRequiredByDefault_AndARequestWaitsForIt(t *testing.T) {
 
 func TestApproval_AnOrdinarySessionIsNotAffected(t *testing.T) {
 	f := newApprovalFixture(30, everything...)
-	sess, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "routine", 20)
+	sess, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "routine", "", 20)
 	if err != nil || sess.Status != domain.StatusActive {
 		t.Fatalf("approval is for break-glass only: %v %+v", err, sess)
 	}
@@ -515,7 +515,7 @@ func TestApproval_CanBeTurnedOffOnlyByName(t *testing.T) {
 
 func TestConnect_OnlyTheRequesterMayConnect(t *testing.T) {
 	f := newApprovalFixture(30, everything...)
-	ordinary, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "routine", 20)
+	ordinary, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "routine", "", 20)
 	if err != nil {
 		t.Fatal(err)
 	}

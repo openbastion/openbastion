@@ -170,6 +170,59 @@ describe("Sessions", () => {
   });
 });
 
+describe("Approval with a ticket (ADR-0067)", () => {
+  const account = { id: "acc_1", name: "prod db", username: "root", targetHost: "db:22", protocol: "ssh", rotationPolicy: "manual", createdAt: "2026-10-30T10:00:00Z", hostKeyFingerprint: "SHA256:k" };
+
+  it("makes an account require approval, and says which accounts do", async () => {
+    const { api, calls } = fakeApi({
+      "GET /vault/accounts": { body: { items: [account, { ...account, id: "acc_2", name: "web", approvalRequired: true }], page: 1, pageSize: 20, totalItems: 2 } },
+      "PUT /vault/accounts/acc_1/approval": { body: { approvalRequired: true } },
+    });
+    signedIn(api, <Accounts />);
+    expect(await screen.findByText("requise")).toBeTruthy();
+    expect(screen.getByText("Ne plus exiger l'approbation")).toBeTruthy(); // acc_2
+    fireEvent.click(screen.getByText("Exiger l'approbation")); // acc_1
+    expect((await screen.findByRole("status")).textContent).toContain("acc_1 : approbation requise");
+    expect(calls.find((c) => c.method === "PUT")).toMatchObject({ path: "/vault/accounts/acc_1/approval", body: { approvalRequired: true } });
+  });
+
+  it("onboards an account that requires approval", async () => {
+    const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
+    signedIn(api, <Accounts />);
+    const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
+    fireEvent.click(screen.getByLabelText("Approbation requise : chaque session attend l'accord d'une autre personne, avec un ticket"));
+    fireEvent.submit(form);
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ approvalRequired: true });
+  });
+
+  it("asks for a session with its ticket, and says that it waits", async () => {
+    const waiting = { id: "sess_9", status: "pending_approval", protocol: "ssh", requestedBy: "alice", privilegedAccountId: "acc_1", justification: "patch", breakGlass: false, approvalRequired: true, ticket: "CHG0001234", expiresAt: "2026-10-30T11:15:00Z" };
+    const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /sessions": { status: 201, body: waiting } });
+    signedIn(api, <Sessions />);
+    const form = await screen.findByRole("form", { name: "Demander une session" });
+    const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    field("Compte", "acc_1");
+    field("Justification", "patch");
+    field("Durée (minutes)", "45");
+    field("Ticket (si le compte exige une approbation)", "CHG0001234");
+    fireEvent.submit(form);
+    expect((await screen.findByRole("status")).textContent).toContain("sess_9 en attente de l'approbation d'une autre personne");
+    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ targetAccountId: "acc_1", justification: "patch", durationMinutes: 45, ticket: "CHG0001234", protocol: "ssh" });
+  });
+
+  it("shows the approver the ticket of a request, and which kind of request it is", async () => {
+    const req = { id: "sess_9", status: "pending_approval", protocol: "ssh", requestedBy: "alice", privilegedAccountId: "acc_1", justification: "patch", breakGlass: false, approvalRequired: true, ticket: "CHG0001234", expiresAt: "2026-10-30T11:15:00Z" };
+    const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [req], page: 1, pageSize: 20, totalItems: 1 } }, "POST /sessions/sess_9/reject": { body: req } });
+    signedIn(api, <Sessions />);
+    expect(await screen.findByText("CHG0001234")).toBeTruthy();
+    expect(screen.getByText("approbation")).toBeTruthy();
+    fireEvent.click(screen.getByText("Refuser"));
+    expect((await screen.findByRole("status")).textContent).toContain("sess_9 refusée");
+    expect(calls.some((c) => c.method === "POST" && c.path === "/sessions/sess_9/reject")).toBe(true);
+  });
+});
+
 describe("Policies", () => {
   it("creates a policy with what the form says — the creator is the Gateway's business", async () => {
     const { api, calls } = fakeApi({ "POST /policies": { status: 201, body: {} } });

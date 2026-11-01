@@ -475,3 +475,48 @@ func TestPostgresStore_AfterUseOwed(t *testing.T) {
 		t.Fatalf("after delivery: %v", got)
 	}
 }
+
+// ADR-0067: a session on an account that requires approval keeps that mark and its ticket,
+// through a decision, in Get and in the list of the requests waiting.
+func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	sess := &domain.Session{
+		ID: uniqueID("sess-ap"), Status: domain.StatusPendingApproval, Protocol: "ssh", RequestedBy: uniqueID("user"),
+		PrivilegedAccountID: uniqueID("acc"), Justification: "patch", ApprovalRequired: true, Ticket: "CHG0001234",
+		CreatedAt: now, ExpiresAt: now.Add(15 * time.Minute), DurationMinutes: 45,
+	}
+	if saved, err := store.SaveIfUnderPendingLimit(ctx, sess, 3, now); err != nil || !saved {
+		t.Fatalf("SaveIfUnderPendingLimit: %v %v", saved, err)
+	}
+	pending, _, err := store.ListPending(ctx, now, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range pending {
+		if p.ID == sess.ID {
+			found = p.ApprovalRequired && p.Ticket == "CHG0001234"
+		}
+	}
+	if !found {
+		t.Fatal("the list of requests waiting lost the mark or the ticket")
+	}
+	decided := *sess
+	decided.Status = domain.StatusActive
+	decided.DecidedBy = "lead"
+	decided.DecidedAt = &now
+	if ok, err := store.SaveIfStatus(ctx, &decided, domain.StatusPendingApproval); err != nil || !ok {
+		t.Fatalf("SaveIfStatus: %v %v", ok, err)
+	}
+	got, err := store.Get(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.ApprovalRequired || got.Ticket != "CHG0001234" || got.Status != domain.StatusActive {
+		t.Fatalf("after the decision: %+v", got)
+	}
+}

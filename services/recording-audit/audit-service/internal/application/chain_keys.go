@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
@@ -110,5 +111,44 @@ func computeHashV3(key []byte, e *domain.Event) []byte {
 	var tsBuf [8]byte
 	binary.BigEndian.PutUint64(tsBuf[:], uint64(e.Timestamp.UnixNano()))
 	m.Write(tsBuf[:])
+	return m.Sum(nil)
+}
+
+const hashV4Tag = "openbastion.audit.event.v4\x00"
+
+// computeHashV4 keeps v3's keyed fields and adds details in sorted-key order. The
+// count and length prefixes make the map representation unambiguous and stable.
+func computeHashV4(key []byte, e *domain.Event) []byte {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte(hashV4Tag))
+	var n [4]byte
+	writeField := func(field []byte) {
+		binary.BigEndian.PutUint32(n[:], uint32(len(field)))
+		m.Write(n[:])
+		m.Write(field)
+	}
+	for _, field := range [][]byte{e.PrevHash, []byte(e.ID), []byte(e.ActorID), []byte(e.Action), []byte(e.ResourceType), []byte(e.ResourceID), []byte(e.Emitter), []byte(e.KeyID)} {
+		writeField(field)
+	}
+	var successByte [1]byte
+	if e.Success {
+		successByte[0] = 1
+	}
+	m.Write(successByte[:])
+	var tsBuf [8]byte
+	binary.BigEndian.PutUint64(tsBuf[:], uint64(e.Timestamp.UnixNano()))
+	m.Write(tsBuf[:])
+
+	keys := make([]string, 0, len(e.Details))
+	for key := range e.Details {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	binary.BigEndian.PutUint32(n[:], uint32(len(keys)))
+	m.Write(n[:])
+	for _, key := range keys {
+		writeField([]byte(key))
+		writeField([]byte(e.Details[key]))
+	}
 	return m.Sum(nil)
 }

@@ -160,6 +160,14 @@ func main() {
 		maxPending = n
 	}
 	svc.WithMaxPendingPerRequester(maxPending)
+	// The format of the ticket an account that requires approval asks for (ADR-0067). A
+	// pattern that does not compile stops the service: a typo must not turn into the
+	// default format, nor into refusing every request without saying why.
+	ticketPattern, err := application.CompileTicketPattern(os.Getenv("APPROVAL_TICKET_PATTERN"))
+	if err != nil {
+		log.Fatalf("session-broker: %v", err)
+	}
+	svc.WithApprovalTicketPattern(ticketPattern)
 	approvalRequired := true
 	switch v := os.Getenv("BREAKGLASS_APPROVAL"); v {
 	case "", "required":

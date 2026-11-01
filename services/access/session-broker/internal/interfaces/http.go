@@ -60,6 +60,10 @@ type createSessionRequest struct {
 	// (ADR-0009). It is a request: it needs a justification, a bounded duration and
 	// a RBAC policy on breakglass:account:{id}, or the session is refused.
 	BreakGlass bool `json:"breakGlass"`
+
+	// Ticket is the reference an account that requires approval asks for (ADR-0067), in
+	// the declared format; ignored on any other account.
+	Ticket json.RawMessage `json:"ticket"`
 }
 
 type sessionResponse struct {
@@ -70,6 +74,11 @@ type sessionResponse struct {
 	PrivilegedAccountID string `json:"privilegedAccountId"`
 	Justification       string `json:"justification"`
 	BreakGlass          bool   `json:"breakGlass"`
+
+	// ApprovalRequired and Ticket: an ordinary session that waited, or waits, for another
+	// person's approval (ADR-0067), and the reference it was asked with.
+	ApprovalRequired bool   `json:"approvalRequired,omitempty"`
+	Ticket           string `json:"ticket,omitempty"`
 
 	// ExpiresAt is the end of the session — or, while the status is
 	// pending_approval, the deadline for a decision (ADR-0011).
@@ -86,6 +95,7 @@ func toSessionResponse(s *domain.Session) sessionResponse {
 		ID: s.ID, Status: string(s.Status), Protocol: s.Protocol,
 		RequestedBy: s.RequestedBy, PrivilegedAccountID: s.PrivilegedAccountID,
 		Justification: s.Justification, BreakGlass: s.BreakGlass,
+		ApprovalRequired: s.ApprovalRequired, Ticket: s.Ticket,
 		ExpiresAt: s.ExpiresAt.UTC().Format(time.RFC3339), DecidedBy: s.DecidedBy,
 	}
 	if s.DecidedAt != nil {
@@ -109,13 +119,22 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	create := s.svc.CreateSession
+	var sess *domain.Session
+	var err error
 	if req.BreakGlass {
-		create = s.svc.CreateBreakGlassSession
+		sess, err = s.svc.CreateBreakGlassSession(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, req.DurationMinutes)
+	} else {
+		ticket := application.ApprovalTicketInput{IsString: len(req.Ticket) == 0}
+		if len(req.Ticket) > 0 && req.Ticket[0] == '"' {
+			ticket.IsString = json.Unmarshal(req.Ticket, &ticket.Value) == nil
+		}
+		sess, err = s.svc.CreateSessionWithTicketInput(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, ticket, req.DurationMinutes)
 	}
-	sess, err := create(r.Context(), req.RequestedBy, req.ActorRoles, req.PrivilegedAccountID, req.Protocol, req.Justification, req.DurationMinutes)
 	switch {
 	case err == nil:
+	case errors.Is(err, domain.ErrInvalidTicket):
+		http.Error(w, domain.ErrInvalidTicket.Error(), http.StatusBadRequest)
+		return
 	case errors.Is(err, domain.ErrAccountNotFound):
 		http.Error(w, domain.ErrAccountNotFound.Error(), http.StatusNotFound)
 		return

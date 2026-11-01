@@ -96,6 +96,7 @@ type webhookMessage struct {
 	RequestedBy     string `json:"requestedBy"`
 	DecidedBy       string `json:"decidedBy,omitempty"`
 	DurationMinutes int    `json:"durationMinutes"`
+	Ticket          string `json:"ticket,omitempty"` // ADR-0067
 	ExpiresAt       string `json:"expiresAt"`
 	At              string `json:"at"`
 	// Text is the same message for a human, under the key that Slack-style incoming
@@ -106,6 +107,7 @@ type webhookMessage struct {
 func toWebhookMessage(n domain.ApprovalNotification) webhookMessage {
 	deadline := n.ExpiresAt.UTC().Format("15:04")
 	id, acc, by, dec := webhook.SafeText(n.SessionID), webhook.SafeText(n.AccountID), webhook.SafeText(n.RequestedBy), webhook.SafeText(n.DecidedBy)
+	ticket := webhook.SafeText(n.Ticket)
 	var text string
 	switch n.Event {
 	case domain.NotifyBreakGlassRequested:
@@ -114,12 +116,18 @@ func toWebhookMessage(n domain.ApprovalNotification) webhookMessage {
 		text = fmt.Sprintf("OpenBastion break-glass request %s APPROVED by %s: %s has %d min on account %s, until %s UTC.", id, dec, by, n.DurationMinutes, acc, deadline)
 	case domain.NotifyBreakGlassRejected:
 		text = fmt.Sprintf("OpenBastion break-glass request %s REJECTED by %s: %s asked for %d min on account %s.", id, dec, by, n.DurationMinutes, acc)
+	case domain.NotifyApprovalRequested:
+		text = fmt.Sprintf("OpenBastion access request %s: %s asks for %d min on account %s, ticket %s. It waits for an approver until %s UTC.", id, by, n.DurationMinutes, acc, ticket, deadline)
+	case domain.NotifyApprovalApproved:
+		text = fmt.Sprintf("OpenBastion access request %s APPROVED by %s: %s has %d min on account %s, ticket %s, until %s UTC.", id, dec, by, n.DurationMinutes, acc, ticket, deadline)
+	case domain.NotifyApprovalRejected:
+		text = fmt.Sprintf("OpenBastion access request %s REJECTED by %s: %s asked for %d min on account %s, ticket %s.", id, dec, by, n.DurationMinutes, acc, ticket)
 	default:
 		text = fmt.Sprintf("OpenBastion break-glass event %s on request %s.", webhook.SafeText(n.Event), id)
 	}
 	return webhookMessage{
 		Event: n.Event, SessionID: n.SessionID, AccountID: n.AccountID, RequestedBy: n.RequestedBy, DecidedBy: n.DecidedBy,
-		DurationMinutes: n.DurationMinutes, ExpiresAt: n.ExpiresAt.UTC().Format(time.RFC3339), At: n.At.UTC().Format(time.RFC3339),
+		DurationMinutes: n.DurationMinutes, Ticket: n.Ticket, ExpiresAt: n.ExpiresAt.UTC().Format(time.RFC3339), At: n.At.UTC().Format(time.RFC3339),
 		Text: text,
 	}
 }

@@ -31,6 +31,9 @@ func (a *leakyAudit) EmitEvent(context.Context, string, string, string, string, 
 	}
 	return nil
 }
+func (a *leakyAudit) EmitEventWithDetails(ctx context.Context, actor, action, resourceType, resourceID string, _ map[string]string, success bool) error {
+	return a.EmitEvent(ctx, actor, action, resourceType, resourceID, success)
+}
 
 type downAuthz struct{}
 

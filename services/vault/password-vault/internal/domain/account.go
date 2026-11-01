@@ -42,6 +42,10 @@ type PrivilegedAccount struct {
 	// rotation reaches its target until one is set.
 	HostKey string
 
+	// ApprovalRequired: a session on this account waits for another person's approval, with a
+	// ticket (ADR-0067).
+	ApprovalRequired bool
+
 	// RotationIntervalDays is how often a scheduled account rotates (ADR-0040): 1 to 365 for
 	// RotationScheduled, 0 for any other policy.
 	RotationIntervalDays int

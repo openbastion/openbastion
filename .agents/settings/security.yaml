@@ -17,6 +17,8 @@ strict_defaults:
   SESSION_REQUEST_RATE_PER_MINUTE: {default: 6, min: 1, max: 600}
   SESSION_ACTION_BURST:    {default: 10, min: 1, max: 1000}
   SESSION_ACTION_RATE_PER_MINUTE: {default: 6, min: 1, max: 600}
+  VAULT_ACCOUNT_ACTION_BURST: {default: 10, min: 1, max: 1000, note: "PUT /vault/accounts/{id}/approval : par identité"}
+  VAULT_ACCOUNT_ACTION_RATE_PER_MINUTE: {default: 6, min: 1, max: 600, note: "PUT /vault/accounts/{id}/approval : par identité"}
   CLIENT_LOGIN_BURST:      {min: 1, max: 100}
   CLIENT_LOGIN_RATE_PER_MINUTE: {min: 1, max: 60}
   CLIENT_REQUEST_BURST:    {min: 1, max: 10000}

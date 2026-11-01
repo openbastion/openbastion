@@ -178,3 +178,62 @@ func TestSetHostKey_OnlyAnAdministrator_AuditedFirst(t *testing.T) {
 		t.Fatalf("a disabled account was re-pinned: %v", err)
 	}
 }
+
+// ADR-0067: whether sessions on an account wait for another person's approval is set at
+// onboarding or afterwards, by an administrator only, audited first — a refusal too.
+func TestSetApprovalRequired_OnlyAnAdministrator_AuditedFirst(t *testing.T) {
+	svc, store, authz, audit := pinnedService(t)
+	ctx := context.Background()
+	if err := svc.OnboardPinned(ctx, adminRoles, application.OnboardInput{ID: "gated", Name: "g", Username: "root", TargetHost: host,
+		Protocol: "ssh", Policy: domain.RotationManual, InitialSecret: []byte("pw"), HostKey: testHostKey, ApprovalRequired: true}); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := store.Get(ctx, "gated"); !a.ApprovalRequired {
+		t.Fatal("the setting given at onboarding was not kept")
+	}
+	if err := onboardTest(svc, ctx, adminRoles, "acc", "a", "root", host, "ssh", domain.RotationManual, []byte("pw")); err != nil {
+		t.Fatal(err)
+	}
+	required := func() bool { a, _ := store.Get(ctx, "acc"); return a.ApprovalRequired }
+	if required() {
+		t.Fatal("an account requires no approval unless told so")
+	}
+	audit.events = nil
+
+	authz.allowed = false
+	audit.down = true
+	if err := svc.SetApprovalRequired(ctx, "user_op", []string{"dba"}, "acc", true); !errors.Is(err, application.ErrAuditUnavailable) || required() {
+		t.Fatalf("the refusal was not fail-closed when audit was down: %v, %v", err, required())
+	}
+	audit.down = false
+	if err := svc.SetApprovalRequired(ctx, "user_op", []string{"dba"}, "acc", true); !errors.Is(err, application.ErrAccessDenied) || required() {
+		t.Fatalf("a refused caller changed the setting: %v, %v", err, required())
+	}
+	if authz.lastResource != "vault:account-admin:acc" || authz.lastAction != "vault:account:approval" {
+		t.Fatalf("checked %s %s", authz.lastResource, authz.lastAction)
+	}
+	authz.allowed = true
+
+	audit.down = true
+	if err := svc.SetApprovalRequired(ctx, "user_admin", adminRoles, "acc", true); !errors.Is(err, application.ErrAuditUnavailable) || required() {
+		t.Fatalf("changed without the audit: %v, %v", err, required())
+	}
+	audit.down = false
+
+	if err := svc.SetApprovalRequired(ctx, "user_admin", adminRoles, "acc", true); err != nil || !required() {
+		t.Fatalf("set: %v, %v", err, required())
+	}
+	if err := svc.SetApprovalRequired(ctx, "user_admin", adminRoles, "acc", false); err != nil || required() {
+		t.Fatalf("unset: %v, %v", err, required())
+	}
+	if got := strings.Join(audit.events, ","); got != "user_op|vault.approval_set|acc|false,user_admin|vault.approval_set|acc|true,user_admin|vault.approval_set|acc|true" {
+		t.Fatalf("audit: %s", got)
+	}
+
+	if err := svc.DisableAccount(ctx, adminRoles, "acc"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetApprovalRequired(ctx, "user_admin", adminRoles, "acc", true); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("a disabled account was changed: %v", err)
+	}
+}

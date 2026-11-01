@@ -7,6 +7,11 @@ const (
 	NotifyBreakGlassRequested = "breakglass.requested"
 	NotifyBreakGlassApproved  = "breakglass.approved"
 	NotifyBreakGlassRejected  = "breakglass.rejected"
+
+	// The events of an ordinary session on an account that requires approval (ADR-0067).
+	NotifyApprovalRequested = "approval.requested"
+	NotifyApprovalApproved  = "approval.approved"
+	NotifyApprovalRejected  = "approval.rejected"
 )
 
 // ApprovalNotification is what a notification may say. It names the request and the
@@ -22,6 +27,9 @@ type ApprovalNotification struct {
 	RequestedBy     string
 	DecidedBy       string // empty for a request
 	DurationMinutes int
+	// Ticket is the reference the requester gave (ADR-0067), in the format the platform
+	// declared: shown to the approver, never checked against the ticketing system.
+	Ticket string
 	// ExpiresAt is the deadline for a decision while the request is pending, and the
 	// end of the session once it has been approved.
 	ExpiresAt time.Time

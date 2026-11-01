@@ -46,32 +46,34 @@ func (c *AccountLookupHTTPClient) GetAccount(ctx context.Context, accountID stri
 }
 
 // CheckAccount is application.AccountLookup.CheckAccount: the same read of the account, its
-// pinned host key looked at — never the key itself, only whether there is one.
-func (c *AccountLookupHTTPClient) CheckAccount(ctx context.Context, accountID string) error {
+// pinned host key looked at — never the key itself, only whether there is one — and whether
+// it requires another person's approval (ADR-0067).
+func (c *AccountLookupHTTPClient) CheckAccount(ctx context.Context, accountID string) (approvalRequired bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/vault/v1/accounts/"+url.PathEscape(accountID), nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return domain.ErrAccountNotFound
+		return false, domain.ErrAccountNotFound
 	default:
-		return fmt.Errorf("get-account: status %d", resp.StatusCode)
+		return false, fmt.Errorf("get-account: status %d", resp.StatusCode)
 	}
 	var out struct {
 		HostKeyFingerprint string `json:"hostKeyFingerprint"`
+		ApprovalRequired   bool   `json:"approvalRequired"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out); err != nil {
-		return err
+		return false, err
 	}
 	if out.HostKeyFingerprint == "" {
-		return domain.ErrAccountNotPinned
+		return false, domain.ErrAccountNotPinned
 	}
-	return nil
+	return out.ApprovalRequired, nil
 }

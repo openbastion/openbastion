@@ -10,6 +10,7 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -48,10 +49,18 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 }
 
 func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO audit_events (id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash, hash_version, emitter, chain_key_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		e.ID, e.Timestamp, nullIfEmpty(e.ActorID), e.Action, e.ResourceType, e.ResourceID, e.Success, e.PrevHash, e.Hash, e.HashVersion, e.Emitter, e.KeyID)
+	eventDetails := e.Details
+	if eventDetails == nil {
+		eventDetails = map[string]string{}
+	}
+	details, err := json.Marshal(eventDetails)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO audit_events (id, ts, actor_id, action, resource_type, resource_id, details, success, prev_hash, hash, hash_version, emitter, chain_key_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		e.ID, e.Timestamp, nullIfEmpty(e.ActorID), e.Action, e.ResourceType, e.ResourceID, string(details), e.Success, e.PrevHash, e.Hash, e.HashVersion, e.Emitter, e.KeyID)
 	return err
 }
 
@@ -61,7 +70,7 @@ func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 // when the chain is empty, matching InMemoryStore.
 func (s *PostgresStore) Last(ctx context.Context) (*domain.Event, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash, hash_version, emitter, chain_key_id
+		SELECT id, ts, actor_id, action, resource_type, resource_id, details, success, prev_hash, hash, hash_version, emitter, chain_key_id
 		FROM audit_events ORDER BY seq DESC LIMIT 1`)
 	e, err := scanEvent(row)
 	if err != nil {
@@ -77,7 +86,7 @@ func (s *PostgresStore) Last(ctx context.Context) (*domain.Event, error) {
 // order VerifyChain depends on to re-derive the chain correctly.
 func (s *PostgresStore) All(ctx context.Context) ([]*domain.Event, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, ts, actor_id, action, resource_type, resource_id, success, prev_hash, hash, hash_version, emitter, chain_key_id
+		SELECT id, ts, actor_id, action, resource_type, resource_id, details, success, prev_hash, hash, hash_version, emitter, chain_key_id
 		FROM audit_events ORDER BY seq ASC`)
 	if err != nil {
 		return nil, err
@@ -128,8 +137,12 @@ type rowScanner interface {
 func scanEvent(row rowScanner) (*domain.Event, error) {
 	var e domain.Event
 	var actorID sql.NullString
-	if err := row.Scan(&e.ID, &e.Timestamp, &actorID, &e.Action, &e.ResourceType, &e.ResourceID, &e.Success, &e.PrevHash, &e.Hash, &e.HashVersion, &e.Emitter, &e.KeyID); err != nil {
+	var details []byte
+	if err := row.Scan(&e.ID, &e.Timestamp, &actorID, &e.Action, &e.ResourceType, &e.ResourceID, &details, &e.Success, &e.PrevHash, &e.Hash, &e.HashVersion, &e.Emitter, &e.KeyID); err != nil {
 		return nil, err
+	}
+	if err := json.Unmarshal(details, &e.Details); err != nil {
+		return nil, fmt.Errorf("decode audit event details: %w", err)
 	}
 	if actorID.Valid {
 		e.ActorID = actorID.String

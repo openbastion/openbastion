@@ -86,6 +86,7 @@ type capturingVault struct {
 	lastDeleteQuery url.Values
 	lastPinPath     string
 	lastPin         map[string]any
+	pinCalls        int
 }
 
 func newCapturingVault(t *testing.T) *capturingVault {
@@ -114,6 +115,7 @@ func newCapturingVault(t *testing.T) *capturingVault {
 	})
 	mux.HandleFunc("/vault/v1/accounts/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
+			c.pinCalls++
 			c.lastPinPath = r.URL.Path
 			_ = json.NewDecoder(r.Body).Decode(&c.lastPin)
 			w.Header().Set("Content-Type", "application/json")
@@ -464,6 +466,90 @@ func TestHandleVaultAccountItem_PinHostKeyTakesOnlyTheKeyFromTheClient(t *testin
 		if vault.lastPinPath != "" {
 			t.Fatalf("%s was forwarded to %s", path, vault.lastPinPath)
 		}
+	}
+}
+
+// PUT /vault/accounts/{id}/approval (ADR-0067): the setting is the client's, who sets it is
+// the verified token's. Attack: a body that names another actor, grants itself a role and
+// slips a host key in. Counter-proof: the setting is forwarded; without it, nothing is.
+func TestHandleVaultAccountItem_SetApprovalTakesOnlyTheSettingFromTheClient(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"operator"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+	put := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/vault/accounts/acc1/approval", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := put(`{"actorId":"user_root"}`); rec.Code != http.StatusBadRequest || vault.lastPinPath != "" {
+		t.Fatalf("without the setting: %d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	rec := put(`{"approvalRequired":true,"actorId":"user_root","actorRoles":["vault-admin"],"hostKey":"ssh-ed25519 AAAAevil"}`)
+	if rec.Code != http.StatusOK || vault.lastPinPath != "/vault/v1/accounts/acc1/approval" {
+		t.Fatalf("%d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	roles, _ := vault.lastPin["actorRoles"].([]any)
+	if vault.lastPin["approvalRequired"] != true || vault.lastPin["actorId"] != "user_admin" || len(roles) != 1 || roles[0] != "operator" {
+		t.Fatalf("forwarded %v", vault.lastPin)
+	}
+	if _, slipped := vault.lastPin["hostKey"]; slipped {
+		t.Fatalf("a host key rode along: %v", vault.lastPin)
+	}
+}
+
+func TestHandleVaultAccountItem_ApprovalChangesAreRateLimitedPerVerifiedUser(t *testing.T) {
+	authMux := http.NewServeMux()
+	authMux.HandleFunc("/auth/v1/verify", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Token string `json:"token"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		user := map[string]string{"alice-token": "alice", "bob-token": "bob"}[req.Token]
+		if user == "" {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"userId": user, "username": user, "roles": []string{"vault-admin"}})
+	})
+	authSrv := httptest.NewServer(authMux)
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "").
+		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(1, 6))
+	put := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/vault/accounts/acc1/approval", strings.NewReader(`{"approvalRequired":true}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := put("alice-token"); rec.Code != http.StatusOK {
+		t.Fatalf("Alice's first change: %d %q", rec.Code, rec.Body.String())
+	}
+	if rec := put("alice-token"); rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "10" {
+		t.Fatalf("Alice's second change: %d %q, Retry-After=%q", rec.Code, rec.Body.String(), rec.Header().Get("Retry-After"))
+	}
+	if vault.pinCalls != 1 {
+		t.Fatalf("%d approval changes reached the Vault after Alice's refusal, want 1", vault.pinCalls)
+	}
+	if rec := put("bob-token"); rec.Code != http.StatusOK {
+		t.Fatalf("Bob has an independent budget: %d %q", rec.Code, rec.Body.String())
+	}
+	if vault.pinCalls != 2 {
+		t.Fatalf("%d approval changes reached the Vault, want 2", vault.pinCalls)
 	}
 }
 

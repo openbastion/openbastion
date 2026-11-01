@@ -36,6 +36,10 @@ var (
 	ErrAccountNotFound = errors.New("privileged account not found")
 
 	ErrAccountNotPinned = errors.New("the privileged account has no pinned host key: an administrator must pin it (PUT /vault/accounts/{id}/host-key) before any session")
+
+	// ErrInvalidTicket: the account requires approval (ADR-0067), and the request carries no
+	// ticket, or one that does not follow the format the platform declared.
+	ErrInvalidTicket = errors.New("this account requires approval: a ticket in the declared format is required")
 )
 
 type SessionRepository interface {

@@ -3,7 +3,9 @@ import { Page, Session } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 
-// Break-glass requests waiting for this user's decision, and a session by its identifier.
+// A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
+// the requests waiting for this user's decision (break-glass, ADR-0012, and approval, ADR-0067),
+// and a session by its identifier.
 export function Sessions() {
   const { api } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
@@ -47,22 +49,25 @@ export function Sessions() {
         <h2>Sessions</h2>
       </div>
       <Notice error={error} ok={ok} />
+      <Request onDone={(s) => act(s.status === "pending_approval" ? `${s.id} en attente de l'approbation d'une autre personne, jusqu'à ${s.expiresAt}` : `${s.id} ${s.status}`, async () => undefined)} />
       <div className="card">
-        <div className="card-head"><h3>Demandes d'urgence à décider</h3></div>
+        <div className="card-head"><h3>Demandes à décider</h3></div>
         {pending && pending.items.length === 0 ? <p className="empty">Aucune demande en attente.</p> : null}
         {pending && pending.items.length > 0 ? (
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Session</th><th>Demandeur</th><th>Compte</th><th>Justification</th><th>Échéance</th><th /></tr>
+                <tr><th>Session</th><th>Type</th><th>Demandeur</th><th>Compte</th><th>Justification</th><th>Ticket</th><th>Échéance</th><th /></tr>
               </thead>
               <tbody>
                 {pending.items.map((s) => (
                   <tr key={s.id}>
                     <td><code>{s.id}</code></td>
+                    <td>{s.breakGlass ? <span className="badge warn">urgence</span> : <span className="badge">approbation</span>}</td>
                     <td>{s.requestedBy}</td>
                     <td>{s.privilegedAccountId}</td>
                     <td>{s.justification}</td>
+                    <td>{s.ticket ? <code>{s.ticket}</code> : "—"}</td>
                     <td>{s.expiresAt}</td>
                     <td className="actions">
                       <button type="button" onClick={() => act(`${s.id} approuvée`, () => api.request("POST", `/sessions/${id(s)}/approve`))}>Approuver</button>
@@ -94,6 +99,8 @@ export function Sessions() {
               <dt>Compte</dt><dd>{found.privilegedAccountId}</dd>
               <dt>Justification</dt><dd>{found.justification}</dd>
               <dt>Fin</dt><dd>{found.expiresAt}</dd>
+              {found.ticket ? (<><dt>Ticket</dt><dd><code>{found.ticket}</code></dd></>) : null}
+              {found.approvalRequired ? (<><dt>Approbation</dt><dd>{found.decidedBy ? `décidée par ${found.decidedBy}` : "en attente"}</dd></>) : null}
               {found.breakGlass ? (<><dt>Urgence</dt><dd>oui{found.decidedBy ? `, décidée par ${found.decidedBy}` : ""}</dd></>) : null}
             </dl>
             {found.status === "active" ? (
@@ -105,5 +112,43 @@ export function Sessions() {
         ) : null}
       </div>
     </section>
+  );
+}
+
+// A session request (POST /sessions). The ticket is what an account that requires approval asks
+// for (ADR-0067), in the format the platform declared; the Broker ignores it on any other account.
+function Request({ onDone }: { onDone: (s: Session) => void }) {
+  const { api } = useSignedIn();
+  const [f, setF] = useState({ targetAccountId: "", justification: "", durationMinutes: "30", ticket: "" });
+  const [error, setError] = useState<unknown>();
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(undefined);
+    try {
+      const { ticket, ...rest } = f;
+      const s = await api.request<Session>("POST", "/sessions", { ...rest, ...(ticket ? { ticket } : {}), protocol: "ssh", durationMinutes: Number(f.durationMinutes) });
+      setF({ ...f, justification: "", ticket: "" });
+      onDone(s);
+    } catch (err) {
+      setError(err);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} aria-label="Demander une session" className="card form-card">
+      <h3>Demander une session</h3>
+      <div className="fields">
+        <label>Compte<input value={f.targetAccountId} onChange={set("targetAccountId")} required /></label>
+        <label>Durée (minutes)<input type="number" min={1} value={f.durationMinutes} onChange={set("durationMinutes")} required /></label>
+        <label className="wide">Justification<input value={f.justification} onChange={set("justification")} required /></label>
+        <label>Ticket (si le compte exige une approbation)<input value={f.ticket} onChange={set("ticket")} maxLength={128} autoComplete="off" /></label>
+      </div>
+      <Notice error={error} />
+      <div className="form-actions">
+        <button type="submit" className="primary">Demander</button>
+      </div>
+    </form>
   );
 }

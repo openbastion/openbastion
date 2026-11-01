@@ -108,6 +108,8 @@ export interface Account {
   rotationFailures?: number;
   // A session on the account ended and left a rotation owed (ADR-0044); absent: none.
   rotationOwedSince?: string;
+  // Sessions on the account wait for another person's approval, with a ticket (ADR-0067).
+  approvalRequired?: boolean;
 }
 
 export interface Page<T> {
@@ -126,6 +128,9 @@ export interface Session {
   privilegedAccountId: string;
   justification: string;
   breakGlass: boolean;
+  // An ordinary session that waits, or waited, for another person's approval, and its ticket (ADR-0067).
+  approvalRequired?: boolean;
+  ticket?: string;
   expiresAt: string;
   decidedBy?: string;
   decidedAt?: string;

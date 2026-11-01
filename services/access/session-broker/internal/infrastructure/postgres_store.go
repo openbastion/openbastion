@@ -69,14 +69,14 @@ type execer interface {
 
 func upsertSession(ctx context.Context, db execer, sess *domain.Session) error {
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO sessions (id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass, duration_minutes, decided_by, decided_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO sessions (id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass, duration_minutes, decided_by, decided_at, approval_required, ticket)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (id) DO UPDATE SET
 			status = EXCLUDED.status,
 			terminated_at = EXCLUDED.terminated_at`,
 		sess.ID, string(sess.Status), sess.Protocol, sess.RequestedBy, sess.PrivilegedAccountID,
 		sess.Justification, sess.CreatedAt, sess.ExpiresAt, sess.TerminatedAt, sess.BreakGlass,
-		sess.DurationMinutes, sess.DecidedBy, sess.DecidedAt)
+		sess.DurationMinutes, sess.DecidedBy, sess.DecidedAt, sess.ApprovalRequired, sess.Ticket)
 	return err
 }
 
@@ -155,11 +155,11 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.Session, er
 	var terminatedAt, decidedAt sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
-		       duration_minutes, decided_by, decided_at, after_use_owed
+		       duration_minutes, decided_by, decided_at, after_use_owed, approval_required, ticket
 		FROM sessions WHERE id = $1`, id)
 	if err := row.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
 		&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
-		&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.AfterUseOwed); err != nil {
+		&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.AfterUseOwed, &sess.ApprovalRequired, &sess.Ticket); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -181,7 +181,7 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.Session, er
 func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit int) ([]*domain.Session, bool, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
-		       duration_minutes, decided_by, decided_at
+		       duration_minutes, decided_by, decided_at, approval_required, ticket
 		FROM sessions
 		WHERE status = $1 AND expires_at >= $2
 		ORDER BY expires_at, id
@@ -198,7 +198,7 @@ func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit in
 		var terminatedAt, decidedAt sql.NullTime
 		if err := rows.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
 			&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
-			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt); err != nil {
+			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.ApprovalRequired, &sess.Ticket); err != nil {
 			return nil, false, err
 		}
 		sess.Status = domain.SessionStatus(status)
@@ -220,7 +220,7 @@ func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit in
 }
 
 const sessionColumns = `id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,
-		       duration_minutes, decided_by, decided_at, after_use_owed`
+		       duration_minutes, decided_by, decided_at, after_use_owed, approval_required, ticket`
 
 // scanSessions reads rows of sessionColumns.
 func scanSessions(rows *sql.Rows) ([]*domain.Session, error) {
@@ -232,7 +232,7 @@ func scanSessions(rows *sql.Rows) ([]*domain.Session, error) {
 		var terminatedAt, decidedAt sql.NullTime
 		if err := rows.Scan(&sess.ID, &status, &sess.Protocol, &sess.RequestedBy, &sess.PrivilegedAccountID,
 			&sess.Justification, &sess.CreatedAt, &sess.ExpiresAt, &terminatedAt, &sess.BreakGlass,
-			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.AfterUseOwed); err != nil {
+			&sess.DurationMinutes, &sess.DecidedBy, &decidedAt, &sess.AfterUseOwed, &sess.ApprovalRequired, &sess.Ticket); err != nil {
 			return nil, err
 		}
 		sess.Status = domain.SessionStatus(status)

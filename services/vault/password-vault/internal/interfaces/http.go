@@ -75,6 +75,8 @@ type onboardAccountRequest struct {
 	HostKey string `json:"hostKey"`
 	// RotationIntervalDays: required for rotationPolicy "scheduled", refused otherwise (ADR-0040).
 	RotationIntervalDays int `json:"rotationIntervalDays"`
+	// ApprovalRequired: sessions wait for another person's approval, with a ticket (ADR-0067).
+	ApprovalRequired bool `json:"approvalRequired"`
 }
 
 func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +87,8 @@ func (s *HTTPServer) handleOnboardAccount(w http.ResponseWriter, r *http.Request
 	}
 	err := s.svc.OnboardPinned(r.Context(), req.ActorRoles, application.OnboardInput{ID: req.ID, Name: req.Name, Username: req.Username,
 		TargetHost: req.TargetHost, Protocol: req.Protocol, Policy: domain.RotationPolicy(req.RotationPolicy), InitialSecret: req.InitialSecret,
-		ReconciliationAccountID: req.ReconciliationAccountID, HostKey: req.HostKey, RotationIntervalDays: req.RotationIntervalDays})
+		ReconciliationAccountID: req.ReconciliationAccountID, HostKey: req.HostKey, RotationIntervalDays: req.RotationIntervalDays,
+		ApprovalRequired: req.ApprovalRequired})
 	if err != nil {
 		writeAdminError(w, "onboarding account "+req.ID, err)
 		return
@@ -342,6 +345,8 @@ type accountResponse struct {
 	RotationFailures int `json:"rotationFailures,omitempty"`
 	// RotationOwedSince: a session ended and left a rotation owed (ADR-0044); absent: none.
 	RotationOwedSince *time.Time `json:"rotationOwedSince,omitempty"`
+	// ApprovalRequired: a session waits for another person's approval (ADR-0067).
+	ApprovalRequired bool `json:"approvalRequired"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -358,6 +363,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
 		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures, RotationOwedSince: a.RotationOwedSince,
+		ApprovalRequired: a.ApprovalRequired,
 	}
 }
 
@@ -369,6 +375,10 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	}
 	if accountID, ok := strings.CutSuffix(id, "/host-key"); ok {
 		s.handleSetHostKey(w, r, accountID)
+		return
+	}
+	if accountID, ok := strings.CutSuffix(id, "/approval"); ok {
+		s.handleSetApproval(w, r, accountID)
 		return
 	}
 
@@ -481,6 +491,31 @@ func (s *HTTPServer) handleSetHostKey(w http.ResponseWriter, r *http.Request, ac
 		return
 	}
 	writeJSON(w, map[string]string{"hostKeyFingerprint": fp})
+}
+
+// -- PUT /vault/v1/accounts/{id}/approval (ADR-0067), from the Gateway ---------
+
+type setApprovalRequest struct {
+	ApprovalRequired *bool    `json:"approvalRequired"`
+	ActorRoles       []string `json:"actorRoles"`
+	ActorID          string   `json:"actorId"`
+}
+
+func (s *HTTPServer) handleSetApproval(w http.ResponseWriter, r *http.Request, accountID string) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req setApprovalRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil || req.ApprovalRequired == nil {
+		http.Error(w, "the body is {\"approvalRequired\": true|false}", http.StatusBadRequest)
+		return
+	}
+	if err := s.svc.SetApprovalRequired(r.Context(), req.ActorID, req.ActorRoles, accountID, *req.ApprovalRequired); err != nil {
+		writeAdminError(w, "setting the approval of account "+accountID, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"approvalRequired": *req.ApprovalRequired})
 }
 
 // Refusal codes of authorize-scope (ADR-0042): the contract a caller reads.

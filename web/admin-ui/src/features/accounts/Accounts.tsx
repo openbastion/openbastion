@@ -8,7 +8,8 @@ const pageSize = 20;
 // Privileged accounts of the Vault: list, onboard, rotate, disable. A secret is typed once at
 // onboarding and never shown again: the API never returns one. A rotation changes the secret on
 // the target, through the account's reconciliation account (ADR-0037). Each account pins its
-// target's host key (ADR-0039): the secret goes only to the server that presents it.
+// target's host key (ADR-0039): the secret goes only to the server that presents it. An account
+// may require another person's approval, with a ticket, for every session on it (ADR-0067).
 export function Accounts() {
   const { api } = useSignedIn();
   const [page, setPage] = useState(1);
@@ -60,7 +61,7 @@ export function Accounts() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Identifiant</th><th>Nom</th><th>Cible</th><th>Utilisateur</th><th>Clé d'hôte</th><th>Rotation</th><th>Dernière rotation</th><th /></tr>
+                <tr><th>Identifiant</th><th>Nom</th><th>Cible</th><th>Utilisateur</th><th>Clé d'hôte</th><th>Rotation</th><th>Dernière rotation</th><th>Approbation</th><th /></tr>
               </thead>
               <tbody>
                 {data.items.map((a) => (
@@ -77,8 +78,10 @@ export function Accounts() {
                       {a.rotationFailures ? <span className="badge warn" title="Rotations planifiées échouées d'affilée : le secret n'a pas changé. Voir le journal du Vault.">en échec ({a.rotationFailures})</span> : null}
                     </td>
                     <td>{a.lastRotatedAt ?? "—"}</td>
+                    <td>{a.approvalRequired ? <span className="badge">requise</span> : "—"}</td>
                     <td className="actions">
                       <button type="button" onClick={() => pin(a)}>{a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}</button>
+                      <button type="button" onClick={() => act(a.approvalRequired ? `${a.id} : sessions sans approbation` : `${a.id} : approbation requise`, () => api.request("PUT", `/vault/accounts/${encodeURIComponent(a.id)}/approval`, { approvalRequired: !a.approvalRequired }))}>{a.approvalRequired ? "Ne plus exiger l'approbation" : "Exiger l'approbation"}</button>
                       <button type="button" onClick={() => act(`Secret de ${a.id} renouvelé sur la cible`, () => api.request("POST", `/vault/accounts/${encodeURIComponent(a.id)}/rotate`))}>Renouveler le secret</button>
                       <button type="button" className="danger" onClick={() => window.confirm(`Désactiver ${a.id} ?`) && act(`${a.id} désactivé`, () => api.request("DELETE", `/vault/accounts/${encodeURIComponent(a.id)}`))}>Désactiver</button>
                     </td>
@@ -104,6 +107,7 @@ export function Accounts() {
 function Onboard({ onDone }: { onDone: (id: string) => void }) {
   const { api } = useSignedIn();
   const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", rotationPolicy: "manual", initialSecret: "", reconciliationAccountId: "", hostKey: "", rotationIntervalDays: "30" });
+  const [approvalRequired, setApprovalRequired] = useState(false);
   const [error, setError] = useState<unknown>();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
@@ -118,7 +122,7 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
       // Only a scheduled account takes an interval (ADR-0040): the Vault refuses one elsewhere.
       const { rotationIntervalDays, ...rest } = f;
       const schedule = f.rotationPolicy === "scheduled" ? { rotationIntervalDays: Number(rotationIntervalDays) } : {};
-      await api.request("POST", "/vault/accounts", { ...rest, ...schedule, protocol: "ssh", initialSecret: btoa(bin) });
+      await api.request("POST", "/vault/accounts", { ...rest, ...schedule, approvalRequired, protocol: "ssh", initialSecret: btoa(bin) });
       setF({ ...f, id: "", name: "", initialSecret: "", hostKey: "" });
       onDone(f.id);
     } catch (err) {
@@ -152,6 +156,10 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
         <label className="wide">
           Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub), ou autorité : @cert-authority &lt;nom&gt; &lt;clé de l'autorité&gt;
           <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
+          Approbation requise : chaque session attend l'accord d'une autre personne, avec un ticket
         </label>
         <label>Secret initial<input type="password" autoComplete="new-password" value={f.initialSecret} onChange={set("initialSecret")} required /></label>
       </div>

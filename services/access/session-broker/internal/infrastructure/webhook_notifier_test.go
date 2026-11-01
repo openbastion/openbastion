@@ -376,3 +376,22 @@ func TestWebhook_WhereIsSchemeAndHostOnly(t *testing.T) {
 		t.Fatalf("Where() = %q", n.Where())
 	}
 }
+
+// ADR-0067: an approval request names its ticket, in the message and in its text — made
+// safe like every other field the requester chose.
+func TestWebhook_AnApprovalRequestCarriesItsTicket(t *testing.T) {
+	srv, got := receiver(t)
+	n, err := infrastructure.NewWebhookNotifier(srv.URL + secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := requested
+	asked.Event = domain.NotifyApprovalRequested
+	asked.Ticket = "CHG0001234"
+	n.Notify(context.Background(), asked)
+	d := wait(t, got)
+	text, _ := d.body["text"].(string)
+	if d.body["event"] != "approval.requested" || d.body["ticket"] != "CHG0001234" || !strings.Contains(text, "ticket CHG0001234") || strings.Contains(text, "break-glass") {
+		t.Fatalf("message = %s", d.raw)
+	}
+}

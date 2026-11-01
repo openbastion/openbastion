@@ -377,3 +377,44 @@ func TestRotateAfterUse_OverHTTP(t *testing.T) {
 		t.Fatalf("the account does not say it owes a rotation: %v", got)
 	}
 }
+
+// ADR-0067 over HTTP: PUT /approval needs the field, sets it, and GET says it.
+func TestApproval_OverHTTP(t *testing.T) {
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC4DoGHWLAW6lDc2nUPEk0OinOIhont/UMnJzJUQCiKK"
+	kms, _ := infrastructure.NewLocalKMS()
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewVaultService(store, store, store, kms, allowAll{}).WithRotation(noTarget{}, &okAudit{})
+	if err := svc.OnboardPinned(context.Background(), []string{"vault-admin"}, application.OnboardInput{ID: "acc1", Name: "target", Username: "app", TargetHost: "10.0.0.1:22",
+		Protocol: "ssh", Policy: domain.RotationManual, InitialSecret: []byte("s3cret"), HostKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	srv := interfaces.NewHTTPServer(svc)
+	call := func(method, path string, body any) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, path, bytes.NewReader(b))
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	approval := func() any {
+		var got map[string]any
+		_ = json.Unmarshal(call(http.MethodGet, "/vault/v1/accounts/acc1", nil).Body.Bytes(), &got)
+		return got["approvalRequired"]
+	}
+	if approval() != false {
+		t.Fatalf("a new account: %v", approval())
+	}
+	if rec := call(http.MethodPut, "/vault/v1/accounts/acc1/approval", map[string]any{"actorId": "u", "actorRoles": []string{"vault-admin"}}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("without the field: %d", rec.Code)
+	}
+	if rec := call(http.MethodPost, "/vault/v1/accounts/acc1/approval", map[string]any{"approvalRequired": true}); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST: %d", rec.Code)
+	}
+	rec := call(http.MethodPut, "/vault/v1/accounts/acc1/approval", map[string]any{"approvalRequired": true, "actorId": "u", "actorRoles": []string{"vault-admin"}})
+	if rec.Code != http.StatusOK || approval() != true {
+		t.Fatalf("PUT: %d %s, then %v", rec.Code, rec.Body, approval())
+	}
+	if rec := call(http.MethodPut, "/vault/v1/accounts/nobody/approval", map[string]any{"approvalRequired": true, "actorId": "u", "actorRoles": []string{"vault-admin"}}); rec.Code != http.StatusNotFound {
+		t.Fatalf("an unknown account: %d", rec.Code)
+	}
+}

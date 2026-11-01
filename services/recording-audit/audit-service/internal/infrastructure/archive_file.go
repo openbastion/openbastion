@@ -26,18 +26,19 @@ type FileArchiver struct {
 
 // archiveLine is one archived event, every field as the database holds it.
 type archiveLine struct {
-	ID           string    `json:"id"`
-	Timestamp    time.Time `json:"ts"`
-	ActorID      string    `json:"actor_id"`
-	Action       string    `json:"action"`
-	ResourceType string    `json:"resource_type"`
-	ResourceID   string    `json:"resource_id"`
-	Success      bool      `json:"success"`
-	PrevHash     string    `json:"prev_hash"`
-	Hash         string    `json:"hash"`
-	HashVersion  int       `json:"hash_version"`
-	Emitter      string    `json:"emitter"`
-	KeyID        string    `json:"chain_key_id"`
+	ID           string            `json:"id"`
+	Timestamp    time.Time         `json:"ts"`
+	ActorID      string            `json:"actor_id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	Details      map[string]string `json:"details,omitempty"`
+	Success      bool              `json:"success"`
+	PrevHash     string            `json:"prev_hash"`
+	Hash         string            `json:"hash"`
+	HashVersion  int               `json:"hash_version"`
+	Emitter      string            `json:"emitter"`
+	KeyID        string            `json:"chain_key_id"`
 }
 
 var archiveName = regexp.MustCompile(`^audit-[0-9]{4}-[0-9]{2}\.jsonl$`)
@@ -72,7 +73,7 @@ func (a *FileArchiver) Write(ctx context.Context, name string, events []*domain.
 	var content bytes.Buffer
 	for _, e := range events {
 		line, err := json.Marshal(archiveLine{ID: e.ID, Timestamp: e.Timestamp, ActorID: e.ActorID, Action: e.Action,
-			ResourceType: e.ResourceType, ResourceID: e.ResourceID, Success: e.Success, PrevHash: hex.EncodeToString(e.PrevHash),
+			ResourceType: e.ResourceType, ResourceID: e.ResourceID, Details: e.Details, Success: e.Success, PrevHash: hex.EncodeToString(e.PrevHash),
 			Hash: hex.EncodeToString(e.Hash), HashVersion: e.HashVersion, Emitter: e.Emitter, KeyID: e.KeyID})
 		if err != nil {
 			return nil, err

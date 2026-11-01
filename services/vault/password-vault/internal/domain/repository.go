@@ -65,6 +65,8 @@ type AccountRepository interface {
 
 	// SetHostKey pins the host key of id's target (ADR-0039).
 	SetHostKey(ctx context.Context, id, hostKey string) error
+	// SetApprovalRequired says whether a session on id waits for an approval (ADR-0067).
+	SetApprovalRequired(ctx context.Context, id string, required bool) error
 
 	// ListDueForRotation is at most limit enabled accounts to be rotated at now and not taken
 	// since now-retryAfter, the longest waiting first: those that owe a rotation (ADR-0044) and,

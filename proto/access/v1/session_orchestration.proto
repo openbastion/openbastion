@@ -50,6 +50,8 @@ message CreateSessionRequest {
   // d'au moins 10 caractères, une durée bornée par la plateforme et une politique
   // RBAC sur breakglass:account:{privileged_account_id}. Refusée par défaut.
   bool break_glass = 6;
+  // Référence obligatoire si le compte exige une approbation (ADR-0067) ; jamais un secret.
+  string ticket = 7;
 }
 
 message Session {
@@ -66,6 +68,8 @@ message Session {
   // à l'approbation il devient décision + durée demandée.
   string decided_by = 9;
   google.protobuf.Timestamp decided_at = 10;
+  bool approval_required = 11;  // la demande attend l'approbation d'une autre personne (ADR-0067)
+  string ticket = 12;           // référence de la demande, absente si aucun ticket accepté
 }
 
 message DecideBreakGlassRequest {

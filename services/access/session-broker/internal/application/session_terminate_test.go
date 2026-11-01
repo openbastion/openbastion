@@ -51,7 +51,7 @@ func newTerminateFixtureOn(store domain.SessionRepository, allow ...string) *ter
 // open is an ordinary active session of `requester`.
 func (f *terminateFixture) open(t *testing.T) *domain.Session {
 	t.Helper()
-	sess, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "ordinary maintenance", 30)
+	sess, err := f.broker.CreateSession(context.Background(), requester, []string{"sre"}, acct, "ssh", "ordinary maintenance", "", 30)
 	if err != nil || sess.Status != domain.StatusActive {
 		t.Fatalf("CreateSession: %+v, %v", sess, err)
 	}
