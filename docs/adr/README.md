@@ -78,3 +78,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0066](0066-une-cle-de-secours-s-ajoute-avec-la-cle-actuelle-et-un-code-d-administrateur.md) | Une clé de secours s'ajoute avec la signature de la clé actuelle et un code d'administrateur ; un administrateur révoque une seule clé | Accepté |
 | [ADR-0067](0067-une-session-vers-un-compte-qui-l-exige-attend-l-approbation-d-une-autre-personne-avec-un-ticket.md) | Une session vers un compte qui l'exige attend l'approbation d'une autre personne, et porte un ticket au format déclaré | Accepté |
 | [ADR-0068](0068-les-details-d-un-evenement-d-audit-sont-bornes-et-proteges-par-le-hash.md) | Les détails d'un événement d'audit sont bornés et protégés par le hash | Accepté |
+| [ADR-0069](0069-le-proxy-rdp-verifie-la-cible-et-refuse-les-sessions-non-enregistrees.md) | Le proxy RDP vérifie la cible et refuse les sessions non enregistrées | Proposé |
