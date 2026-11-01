@@ -83,6 +83,9 @@ var contractPairs = []contractPair{
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/vault/password-vault/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
+	// ADR-0064: the Authentication Service writes logins and the second factor's gestures.
+	{"services/access/authentication/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 }
 
 // notMirrored are internal JSON structs with no message in proto/, each with its reason.

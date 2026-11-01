@@ -43,4 +43,4 @@ Le secret est oublié ; l'utilisateur se réenrôle avec un nouveau code. Il n'y
 - Le défi vaut **5 minutes** et **5 essais** ; ensuite il faut retaper le mot de passe. Chaque étape compte dans le budget de connexion par adresse de la Gateway.
 - Un code vaut **±30 s** autour de l'heure du serveur, et **ne sert qu'une fois**.
 - Les rôles du jeton sont ceux de la vérification du mot de passe.
-- Ni le secret, ni un code, ni un défi n'est écrit dans un journal. L'émission d'un code et la remise à zéro sont écrites **au journal du service** (qui, pour quel compte), **pas encore à l'audit**.
+- Ni le secret, ni un code, ni un défi n'est écrit dans un journal. L'émission d'un code, l'enrôlement, la remise à zéro et chaque connexion sont écrits **à l'audit**, avant d'être faits (ADR-0064) : sans l'Audit Service, ni code, ni remise à zéro, ni jeton.

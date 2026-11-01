@@ -25,6 +25,7 @@ func TestVersion_AStampedBinarySaysItsVersion_TheCLIWhenAsked_AServiceFirst(t *t
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("go build %s: %v\n%s", pkg, err, b)
 		}
+		builtFrom.Store(out, pkg)
 		return out
 	}
 	cli := build("./cli/openbastion-cli", "openbastion-cli-63")

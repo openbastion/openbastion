@@ -33,3 +33,9 @@ replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
 require github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildinfo
+
+// The budget of the refusals written to the audit (ADR-0064), shared with the Broker and the
+// Recorder (ADR-0020, ADR-0024). A local replace, as for pkg/mtls.
+require github.com/openbastion/openbastion/pkg/refusalbudget v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/refusalbudget

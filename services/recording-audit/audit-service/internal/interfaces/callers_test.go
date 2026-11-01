@@ -13,6 +13,8 @@ func TestCallerRules(t *testing.T) {
 		// a compromised service that is not an emitter cannot write the trail
 		// The Vault writes its rotations since ADR-0037; Authorization still has nothing to write.
 		mtlstest.Allow("password-vault", "POST", "/audit/v1/emit-event"),
+		mtlstest.Allow("authentication", "POST", "/audit/v1/emit-event"), // ADR-0064: logins and second-factor gestures
+		mtlstest.Deny("authentication", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("authorization", "POST", "/audit/v1/emit-event"),
 		// it writes the reads of a recording before it serves them (ADR-0022)
 		mtlstest.Allow("command-recorder", "POST", "/audit/v1/emit-event"),

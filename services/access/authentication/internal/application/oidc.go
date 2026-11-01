@@ -177,12 +177,8 @@ func (s *AuthenticationService) FinishOIDC(ctx context.Context, code, state stri
 	if err != nil {
 		return "", 0, err
 	}
-	expiresAt := s.clock().Add(s.ttl)
-	token, err = s.tokens.Issue(u.ID, u.Username, roles, expiresAt)
-	if err != nil {
-		return "", 0, err
-	}
-	return token, s.ttl, nil
+	// The provider's second factor is its own (ADR-0035): an auth.login, written first (ADR-0064).
+	return s.issue(ctx, u, roles, ActionLogin)
 }
 
 // federatedUser finds the account of id's subject and gives it today's roles, or makes it.

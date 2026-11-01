@@ -49,6 +49,10 @@ type AuthenticationService struct {
 	mfaRoles map[string]bool
 	mfa      domain.MFARepository
 	sealer   SecretSealer
+
+	// The audit (ADR-0064); nil writes nothing.
+	audit    AuditEmitter
+	refusals RefusalBudget
 }
 
 // WithClock replaces the clock; for tests.
@@ -92,14 +96,17 @@ func (s *AuthenticationService) CreateUser(ctx context.Context, username, displa
 func (s *AuthenticationService) Login(ctx context.Context, username, password string) (token string, expiresIn time.Duration, err error) {
 	u, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
+		s.refused(ctx, username)
 		return "", 0, ErrInvalidCredentials
 	}
 	// An account a provider or a directory vouches for has no password here (ADR-0035, ADR-0061).
 	// An empty source is a local account of before ADR-0035.
 	if (u.IdentitySource != "" && u.IdentitySource != domain.SourceLocal) || u.PasswordHash == "" {
+		s.refused(ctx, username)
 		return "", 0, ErrInvalidCredentials
 	}
 	if err := s.hasher.Verify(u.PasswordHash, password); err != nil {
+		s.refused(ctx, username)
 		return "", 0, ErrInvalidCredentials
 	}
 	// A role that requires the second factor: a challenge, not a token (ADR-0062).

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
 )
 
@@ -94,6 +95,11 @@ func (s *HTTPServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	token, ttl, err := s.svc.Login(r.Context(), req.Username, req.Password)
 	if writeMFAChallenge(w, err) {
+		return
+	}
+	if errors.Is(err, application.ErrAuditUnavailable) { // the password was right; the audit is down: 503, no token
+		log.Printf("authentication: login not completed: %v", err)
+		http.Error(w, "the login cannot be recorded now", http.StatusServiceUnavailable)
 		return
 	}
 	if err != nil {
@@ -366,7 +372,7 @@ func (s *HTTPServer) handleMFAEnrollmentCode(w http.ResponseWriter, r *http.Requ
 	if !decodePost(w, r, &req) {
 		return
 	}
-	code, expires, err := s.svc.IssueEnrollmentCode(r.Context(), req.Source, req.LoginName)
+	code, expires, err := s.svc.IssueEnrollmentCode(r.Context(), caller(r), req.Source, req.LoginName)
 	if err != nil {
 		mfaError(w, err)
 		return
@@ -387,10 +393,19 @@ func (s *HTTPServer) handleMFAReset(w http.ResponseWriter, r *http.Request) {
 	if !decodePost(w, r, &req) {
 		return
 	}
-	if err := s.svc.ResetMFA(r.Context(), req.Username); err != nil {
+	if err := s.svc.ResetMFA(r.Context(), caller(r), req.Username); err != nil {
 		mfaError(w, err)
 		return
 	}
 	log.Printf("authentication: the second factor of %q was reset", req.Username)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// caller is who calls, from its certificate (ADR-0010): the actor of an administrative gesture in
+// the audit (ADR-0064). Without internal TLS nobody is verified, and the audit says so.
+func caller(r *http.Request) string {
+	if c, ok := mtls.CallerFrom(r.Context()); ok && c != "" {
+		return c
+	}
+	return "unverified-caller"
 }

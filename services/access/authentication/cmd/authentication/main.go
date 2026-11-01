@@ -13,6 +13,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/refusalbudget"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/domain"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/infrastructure"
@@ -112,6 +113,21 @@ func main() {
 		sort.Strings(missing)
 		log.Fatalf("authentication: OIDC is half configured, %s missing — set all of OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL, OIDC_ROLE_MAP_FILE, or none — refusing to start", strings.Join(missing, ", "))
 	}
+
+	// Every token issued, and the second factor's administrative gestures, are written to the
+	// audit first (ADR-0064): the audit down, nobody logs in. Refusals at best, in a budget per
+	// login name (pkg/refusalbudget's strict defaults).
+	auditURL := os.Getenv("AUDIT_URL")
+	if auditURL == "" {
+		auditURL = rt.DefaultURL("127.0.0.1:8082")
+	}
+	auditClient, err := rt.Client(mtls.Peer{URL: auditURL, Service: mtls.AuditService})
+	if err != nil {
+		log.Fatalf("authentication: %v", err)
+	}
+	svc.WithAudit(&infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: auditClient},
+		refusalbudget.New(refusalbudget.DefaultBurst, refusalbudget.DefaultRatePerMinute))
+	log.Printf("authentication: logins are written to the audit at %s before a token is issued — the audit down, no login (ADR-0064)", auditURL)
 
 	configureDirectory(svc)
 	configureMFA(svc, store)

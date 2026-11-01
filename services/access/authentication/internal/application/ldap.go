@@ -56,9 +56,13 @@ func (s *AuthenticationService) LoginLDAP(ctx context.Context, username, passwor
 		return "", 0, ErrDirectoryOff
 	}
 	if !directoryUsername(username) || password == "" {
+		s.refused(ctx, username)
 		return "", 0, ErrDirectoryRejected
 	}
 	id, err := s.directory.Authenticate(ctx, username, password)
+	if errors.Is(err, ErrDirectoryRejected) {
+		s.refused(ctx, username)
+	}
 	if err != nil {
 		return "", 0, err
 	}

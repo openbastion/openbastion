@@ -257,8 +257,10 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 
 	t.Run("after a restart of the whole stack, everything is still there", func(t *testing.T) {
 		before := auditActions(t)
-		if before != "session.create,session.connect,recording.read" {
-			t.Fatalf("the trail before the restart: %q, want the session created, connected, its recording read", before)
+		// Since ADR-0064 the logins are in it too: the refused one first, then the administrator's,
+		// the operator's and the auditor's, before the session.
+		if before != "auth.login_refused,auth.login,auth.login,auth.login,session.create,session.connect,recording.read" {
+			t.Fatalf("the trail before the restart: %q, want a refused login, three logins, then the session created, connected, its recording read", before)
 		}
 		since := time.Now().UTC().Format(time.RFC3339)
 		run("", "restart")

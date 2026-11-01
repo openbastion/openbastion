@@ -87,3 +87,7 @@ L'Audit Service écrit périodiquement une **ancre** — l'identifiant et le has
 - **Si la chaîne ne se vérifie pas, rien n'est archivé ni supprimé** : une ligne de journal par épisode (« archiving stopped, nothing more leaves the database »), réessai à l'heure suivante.
 - **Détruire une archive** à la fin de la durée légale se fait par le stockage (cycle de vie, rétention WORM), jamais par le service. La chaîne en base reste vérifiable sans elle ; ce qu'elle contenait n'est plus consultable.
 - **Un retour à un binaire d'avant ADR-0032** sur un fichier d'ancres qui contient des points de contrôle fait répondre `verify-chain` en `409` (« not an anchor ») : ce binaire ne connaît pas ces lignes.
+
+## Les connexions (ADR-0064)
+
+Chaque jeton émis est un événement `auth.login` ou `auth.login_mfa` de la chaîne, écrit avant l'émission ; les gestes du second facteur (`auth.mfa_enrollment_code_issued`, `auth.mfa_enrolled`, `auth.mfa_reset`) avant d'être faits ; les refus (`auth.login_refused`) au mieux, dans un budget par nom de connexion. **Sans Audit Service, personne ne se connecte.** Le détail est dans [`../deployment/configuration.md`](../deployment/configuration.md).

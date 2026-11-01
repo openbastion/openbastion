@@ -104,6 +104,8 @@ services:
       PORT: "8086"
       DATABASE_URL: postgres://authentication:ob-dev-authentication@postgres:5432/authentication?sslmode=disable
       TOKEN_SIGNING_KEY_HEX: 2239acb116a20ab72fe698d0fbf018a7180072508ab7ce0ab7e9040615956892
+      # Every login is written to the audit before its token is issued (ADR-0064).
+      AUDIT_URL: https://audit-service:8082
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}

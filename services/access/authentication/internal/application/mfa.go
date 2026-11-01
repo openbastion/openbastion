@@ -81,7 +81,7 @@ func (s *AuthenticationService) mfaRequired(roles []string) bool {
 // requires it — a challenge, and no token.
 func (s *AuthenticationService) tokenOrChallenge(ctx context.Context, u *domain.User, roles []string, source, loginName string) (string, time.Duration, error) {
 	if s.mfa == nil || !s.mfaRequired(roles) {
-		return s.issue(u, roles)
+		return s.issue(ctx, u, roles, ActionLogin)
 	}
 	sealed, _, err := s.mfa.TOTP(ctx, u.ID)
 	if err != nil {
@@ -102,7 +102,11 @@ func (s *AuthenticationService) tokenOrChallenge(ctx context.Context, u *domain.
 	return "", 0, &MFAChallengeRequired{Kind: kind, Challenge: challenge, ExpiresIn: ChallengeTTL}
 }
 
-func (s *AuthenticationService) issue(u *domain.User, roles []string) (string, time.Duration, error) {
+// issue writes the login to the audit, then issues the token: no audit, no token (ADR-0064).
+func (s *AuthenticationService) issue(ctx context.Context, u *domain.User, roles []string, action string) (string, time.Duration, error) {
+	if err := s.record(ctx, u.ID, action, "account", u.Username); err != nil {
+		return "", 0, err
+	}
 	token, err := s.tokens.Issue(u.ID, u.Username, roles, s.clock().Add(s.ttl))
 	if err != nil {
 		return "", 0, err
@@ -140,11 +144,12 @@ func (s *AuthenticationService) liveChallenge(ctx context.Context, value, kind s
 	return c, nil
 }
 
-// fail counts a failed attempt on c and refuses.
+// fail counts a failed attempt on c, writes the refusal (at best), and refuses.
 func (s *AuthenticationService) fail(ctx context.Context, c domain.MFAChallenge) error {
 	if _, err := s.mfa.FailChallenge(ctx, c.Hash, MaxChallengeAttempts); err != nil {
 		return err
 	}
+	s.refused(ctx, c.LoginName)
 	return ErrMFARejected
 }
 
@@ -188,7 +193,7 @@ func (s *AuthenticationService) finish(ctx context.Context, c domain.MFAChalleng
 	if err != nil {
 		return "", 0, err
 	}
-	return s.issue(u, c.Roles)
+	return s.issue(ctx, u, c.Roles, ActionLoginMFA)
 }
 
 // Enrollment is what POST /auth/mfa/enroll gives out, once.
@@ -265,6 +270,14 @@ func (s *AuthenticationService) ConfirmEnrollment(ctx context.Context, challenge
 		_ = s.mfa.DeleteChallenge(ctx, c.Hash)
 		return "", 0, ErrMFARejected
 	}
+	u, err := s.users.GetByID(ctx, c.UserID)
+	if err != nil {
+		return "", 0, err
+	}
+	// Written before the secret becomes the account's (ADR-0064).
+	if err := s.record(ctx, u.ID, ActionMFAEnrolled, "account", u.Username); err != nil {
+		return "", 0, err
+	}
 	if err := s.mfa.SetTOTP(ctx, c.UserID, c.PendingSecret, step); err != nil {
 		return "", 0, err
 	}
@@ -274,7 +287,7 @@ func (s *AuthenticationService) ConfirmEnrollment(ctx context.Context, challenge
 // IssueEnrollmentCode implements the administrator's `mfa enrollment-code`: a one-time code for
 // source/loginName, valid EnrollmentCodeTTL, replacing any earlier one. The code is returned once
 // and kept by its hash only.
-func (s *AuthenticationService) IssueEnrollmentCode(ctx context.Context, source, loginName string) (string, time.Time, error) {
+func (s *AuthenticationService) IssueEnrollmentCode(ctx context.Context, actor, source, loginName string) (string, time.Time, error) {
 	if s.mfa == nil {
 		return "", time.Time{}, ErrMFAOff
 	}
@@ -298,6 +311,10 @@ func (s *AuthenticationService) IssueEnrollmentCode(ctx context.Context, source,
 	}
 	code := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw))
 	expires := s.clock().Add(EnrollmentCodeTTL)
+	// Written before the code exists (ADR-0064): no audit, no code.
+	if err := s.record(ctx, actor, ActionMFACodeIssued, "account", source+":"+loginName); err != nil {
+		return "", time.Time{}, err
+	}
 	if err := s.mfa.PutEnrollmentCode(ctx, source, loginName, digest(code), expires); err != nil {
 		return "", time.Time{}, err
 	}
@@ -312,13 +329,17 @@ func normalizeEnrollmentCode(c string) string {
 
 // ResetMFA implements the administrator's `mfa reset`: the account's secret is forgotten; a new
 // enrollment code is needed to enroll again.
-func (s *AuthenticationService) ResetMFA(ctx context.Context, username string) error {
+func (s *AuthenticationService) ResetMFA(ctx context.Context, actor, username string) error {
 	if s.mfa == nil {
 		return ErrMFAOff
 	}
 	u, err := s.users.GetByUsername(ctx, username)
 	if err != nil {
 		return ErrUnknownAccount
+	}
+	// Written before the secret is forgotten (ADR-0064): no audit, no reset.
+	if err := s.record(ctx, actor, ActionMFAReset, "account", u.Username); err != nil {
+		return err
 	}
 	return s.mfa.ResetTOTP(ctx, u.ID)
 }

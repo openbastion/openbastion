@@ -90,7 +90,7 @@ func (w *mfaWorld) enroll(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	ch := w.challenge(t, "root", "root-pass", domain.MFAEnroll)
-	ec, _, err := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "root")
+	ec, _, err := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "root")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,12 +124,12 @@ func TestMFA_EnrollmentNeedsTheAdministratorsCode_ForThisAccount_Valid_Once(t *t
 	if _, err := w.svc.StartEnrollment(ctx, ch, "no-code-was-issued"); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("no code issued: %v", err)
 	}
-	other, _, _ := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "dba")
+	other, _, _ := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "dba")
 	if _, err := w.svc.StartEnrollment(ctx, ch, other); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("another account's code: %v", err)
 	}
-	stale, _, _ := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "root")
-	fresh, _, _ := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "root")
+	stale, _, _ := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "root")
+	fresh, _, _ := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "root")
 	if _, err := w.svc.StartEnrollment(ctx, ch, stale); !errors.Is(err, application.ErrMFARejected) {
 		t.Fatalf("a code replaced by a newer one: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestMFA_EnrollmentNeedsTheAdministratorsCode_ForThisAccount_Valid_Once(t *t
 	}
 	// The account now asks for a code. Burned: even after a reset, the same code does not enroll.
 	w.challenge(t, "root", "root-pass", domain.MFAVerify)
-	if err := w.svc.ResetMFA(ctx, "root"); err != nil {
+	if err := w.svc.ResetMFA(ctx, "admin-cli", "root"); err != nil {
 		t.Fatal(err)
 	}
 	ch = w.challenge(t, "root", "root-pass", domain.MFAEnroll)
@@ -230,7 +230,7 @@ func TestMFA_AnEnrolledAccountCannotBeReEnrolled_EvenWithAValidCode(t *testing.T
 	w := mfaService(t)
 	ctx := context.Background()
 	w.enroll(t)
-	ec, _, err := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "root")
+	ec, _, err := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "root")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestMFA_TheSecretIsSealedForItsAccount_AndAResetAsksForANewEnrollment(t *te
 	}
 
 	ch := w.challenge(t, "root", "root-pass", domain.MFAVerify)
-	if err := w.svc.ResetMFA(ctx, "root"); err != nil {
+	if err := w.svc.ResetMFA(ctx, "admin-cli", "root"); err != nil {
 		t.Fatal(err)
 	}
 	*w.now = w.now.Add(30 * time.Second)
@@ -271,7 +271,7 @@ func TestMFA_TheSecretIsSealedForItsAccount_AndAResetAsksForANewEnrollment(t *te
 		t.Fatalf("a code of the reset secret: %v", err)
 	}
 	w.challenge(t, "root", "root-pass", domain.MFAEnroll)
-	if err := w.svc.ResetMFA(ctx, "nobody"); !errors.Is(err, application.ErrUnknownAccount) {
+	if err := w.svc.ResetMFA(ctx, "admin-cli", "nobody"); !errors.Is(err, application.ErrUnknownAccount) {
 		t.Fatalf("reset of an unknown account: %v", err)
 	}
 }
@@ -285,11 +285,11 @@ func TestMFA_ADirectoryAccountEnrollsWithTheCodeOfItsLoginName(t *testing.T) {
 		t.Fatalf("a directory admin: %v, want an enrollment challenge", err)
 	}
 	// The account ldap:<id> exists only now; the administrator names the login, in any case.
-	ec, _, err := w.svc.IssueEnrollmentCode(ctx, domain.SourceLDAP, "ALICE")
+	ec, _, err := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLDAP, "ALICE")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "ldap:"+w.dir.id.ID); !errors.Is(err, application.ErrUnknownAccount) {
+	if _, _, err := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "ldap:"+w.dir.id.ID); !errors.Is(err, application.ErrUnknownAccount) {
 		t.Fatalf("a local code for a directory account: %v", err)
 	}
 	e, err := w.svc.StartEnrollment(ctx, c.Challenge, ec)
@@ -305,7 +305,7 @@ func TestMFA_ADirectoryAccountEnrollsWithTheCodeOfItsLoginName(t *testing.T) {
 		t.Fatalf("token %s %v", username, roles)
 	}
 	// A local code does not enroll the directory login of the same name, nor the reverse.
-	if _, _, err := w.svc.IssueEnrollmentCode(ctx, domain.SourceLocal, "nobody"); !errors.Is(err, application.ErrUnknownAccount) {
+	if _, _, err := w.svc.IssueEnrollmentCode(ctx, "admin-cli", domain.SourceLocal, "nobody"); !errors.Is(err, application.ErrUnknownAccount) {
 		t.Fatalf("a local code for no account: %v", err)
 	}
 }

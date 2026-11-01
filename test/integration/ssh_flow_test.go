@@ -77,13 +77,14 @@ func buildBinary(t *testing.T, root, pkgPath, outName string) string {
 	if err != nil {
 		t.Fatalf("go build %s: %v\n%s", pkgPath, err, out)
 	}
+	builtFrom.Store(outPath, pkgPath) // what a binary is, whatever its name (audit_sink_test.go)
 	return outPath
 }
 
 func startService(t *testing.T, root, binPath, port string, extraEnv ...string) *runningService {
 	t.Helper()
 	cmd := exec.Command(binPath)
-	cmd.Env = append(buildEnv(root), append([]string{"PORT=" + port}, extraEnv...)...)
+	cmd.Env = append(buildEnv(root), append([]string{"PORT=" + port}, withAuditSink(binPath, extraEnv)...)...)
 	outBuf := &syncBuffer{}
 	cmd.Stdout = outBuf
 	cmd.Stderr = outBuf

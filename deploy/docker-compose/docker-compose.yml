@@ -77,6 +77,8 @@ services:
       SKIP_DEMO_SEED: "1"
       DATABASE_URL: postgres://authentication:${PG_PASSWORD_AUTHENTICATION}@postgres:5432/authentication?sslmode=disable
       TOKEN_SIGNING_KEY_HEX: ${TOKEN_SIGNING_KEY_HEX:?}
+      # Every login is written to the audit before its token is issued (ADR-0064).
+      AUDIT_URL: https://audit-service:8082
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
 
