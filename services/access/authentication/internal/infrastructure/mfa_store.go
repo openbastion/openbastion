@@ -175,6 +175,32 @@ func (s *InMemoryStore) UpdateWebAuthnCredential(_ context.Context, userID strin
 	return errors.New("no such security key")
 }
 
+func (s *InMemoryStore) ToRegistration(_ context.Context, hash, session, codeHash []byte) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := hex.EncodeToString(hash)
+	c, ok := s.mfa.challenges[k]
+	if !ok || c.Kind != domain.MFAVerify {
+		return false, nil
+	}
+	c.Kind, c.WebAuthnSession, c.EnrollmentCodeHash = domain.MFAEnroll, append([]byte(nil), session...), append([]byte(nil), codeHash...)
+	s.mfa.challenges[k] = c
+	return true, nil
+}
+
+func (s *InMemoryStore) RevokeWebAuthnCredential(_ context.Context, userID string, id []byte) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keys := s.mfa.keys[userID]
+	for i, k := range keys {
+		if bytes.Equal(k.ID, id) {
+			s.mfa.keys[userID] = append(keys[:i:i], keys[i+1:]...)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *InMemoryStore) ResetWebAuthn(_ context.Context, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -333,7 +359,7 @@ func (s *PostgresStore) SetPendingWebAuthn(ctx context.Context, hash, session, c
 }
 
 func (s *PostgresStore) WebAuthnCredentials(ctx context.Context, userID string) ([]domain.WebAuthnCredential, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT credential_id, credential, sign_count, created_at FROM mfa_webauthn_credentials
+	rows, err := s.db.QueryContext(ctx, `SELECT credential_id, credential, sign_count, created_at, last_used_at FROM mfa_webauthn_credentials
 		WHERE user_id = $1 ORDER BY created_at, credential_id`, userID)
 	if err != nil {
 		return nil, err
@@ -343,10 +369,11 @@ func (s *PostgresStore) WebAuthnCredentials(ctx context.Context, userID string) 
 	for rows.Next() {
 		var c domain.WebAuthnCredential
 		var count int64
-		if err := rows.Scan(&c.ID, &c.Data, &count, &c.CreatedAt); err != nil {
+		var used sql.NullTime
+		if err := rows.Scan(&c.ID, &c.Data, &count, &c.CreatedAt, &used); err != nil {
 			return nil, err
 		}
-		c.SignCount = uint32(count)
+		c.SignCount, c.LastUsedAt = uint32(count), used.Time
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -364,8 +391,12 @@ func (s *PostgresStore) AddWebAuthnCredential(ctx context.Context, userID string
 }
 
 func (s *PostgresStore) UpdateWebAuthnCredential(ctx context.Context, userID string, c domain.WebAuthnCredential) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE mfa_webauthn_credentials SET credential = $3, sign_count = $4
-		WHERE credential_id = $1 AND user_id = $2`, c.ID, userID, c.Data, int64(c.SignCount))
+	var used any
+	if !c.LastUsedAt.IsZero() {
+		used = c.LastUsedAt.UTC()
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE mfa_webauthn_credentials SET credential = $3, sign_count = $4, last_used_at = COALESCE($5, last_used_at)
+		WHERE credential_id = $1 AND user_id = $2`, c.ID, userID, c.Data, int64(c.SignCount), used)
 	if err != nil {
 		return err
 	}
@@ -378,4 +409,23 @@ func (s *PostgresStore) UpdateWebAuthnCredential(ctx context.Context, userID str
 func (s *PostgresStore) ResetWebAuthn(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM mfa_webauthn_credentials WHERE user_id = $1`, userID)
 	return err
+}
+
+func (s *PostgresStore) ToRegistration(ctx context.Context, hash, session, codeHash []byte) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE mfa_challenges SET kind = 'enrollment_required', webauthn_session = $2, enrollment_code_hash = $3
+		WHERE challenge_hash = $1 AND kind = 'required'`, hash, session, codeHash)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}
+
+func (s *PostgresStore) RevokeWebAuthnCredential(ctx context.Context, userID string, id []byte) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM mfa_webauthn_credentials WHERE user_id = $1 AND credential_id = $2`, userID, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }

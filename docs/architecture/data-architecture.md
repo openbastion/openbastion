@@ -363,6 +363,8 @@ CREATE TABLE IF NOT EXISTS mfa_webauthn_credentials (    -- des clés publiques,
 CREATE INDEX IF NOT EXISTS mfa_webauthn_credentials_user_idx ON mfa_webauthn_credentials (user_id);
 ```
 
+`005_webauthn_last_used.sql` (ADR-0066) ajoute `last_used_at TIMESTAMPTZ` : la dernière connexion signée par la clé, pour qu'un administrateur sache laquelle révoquer.
+
 ### File des alertes à pousser (ADR-0057)
 
 `services/recording-audit/audit-service/migrations/002_alert_outbox.sql` : les alertes qui attendent d'être poussées (ADR-0045), pour qu'un redémarrage de l'Audit Service ne les perde pas. Une ligne par événement ; 256 au plus (borne tenue par le service) ; la ligne disparaît une fois l'alerte livrée ou abandonnée. Le corps est ce que la chaîne contient déjà, sans secret ; la signature est faite à chaque tentative, sa clé n'est pas en base.

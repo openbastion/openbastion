@@ -27,6 +27,7 @@ export function SecondFactor({
   const [enrollment, setEnrollment] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   const totp = challenge.factors.includes("totp");
   const key = challenge.factors.includes("webauthn");
 
@@ -59,6 +60,19 @@ export function SecondFactor({
       const credential = await sign(challenge.webauthn, credentials);
       const r = await post<{ accessToken: string }>("/auth/mfa/webauthn/verify", { credential });
       onToken(r.accessToken);
+    });
+  }
+
+  // One more key (ADR-0066): the current key signs, with the administrator's code, then the new key.
+  function addKey(e: FormEvent) {
+    e.preventDefault();
+    void step(async () => {
+      const credential = await sign(challenge.webauthn, credentials);
+      const r = await post<{ webauthn: unknown }>("/auth/mfa/webauthn/keys/add", { credential, enrollmentCode });
+      setEnrollmentCode("");
+      const created = await register(r.webauthn, credentials);
+      const done = await post<{ accessToken: string }>("/auth/mfa/webauthn/enroll/confirm", { credential: created });
+      onToken(done.accessToken);
     });
   }
 
@@ -102,12 +116,29 @@ export function SecondFactor({
       {challenge.kind === "required" && (
         <>
           <p className="login-sub">{key && !totp ? "Votre rôle demande votre clé de sécurité." : "Votre rôle demande un second facteur."}</p>
-          {key && (
-            <button type="button" className="primary" onClick={useKey} disabled={busy}>
-              Utiliser ma clé de sécurité
-            </button>
+          {key && !adding && (
+            <>
+              <button type="button" className="primary" onClick={useKey} disabled={busy}>
+                Utiliser ma clé de sécurité
+              </button>
+              <button type="button" onClick={() => setAdding(true)} disabled={busy}>
+                Ajouter une clé de secours
+              </button>
+            </>
           )}
-          {totp && codeForm}
+          {key && adding && (
+            <form onSubmit={addKey} aria-label="Ajout d'une clé de secours">
+              <p className="login-sub">Votre clé actuelle signera d'abord ; puis le navigateur enregistrera la nouvelle. Il faut un code d'enrôlement d'un administrateur.</p>
+              <label>
+                Code d'enrôlement
+                <input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
+              </label>
+              <button type="submit" className="primary" disabled={busy || !enrollmentCode}>
+                Signer avec ma clé, puis ajouter la nouvelle
+              </button>
+            </form>
+          )}
+          {totp && !adding && codeForm}
         </>
       )}
       {challenge.kind === "enrollment_required" && !enrollment && (

@@ -126,6 +126,8 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	// WebAuthn (ADR-0065): the browser's answer is an object, forwarded as it is, bounded.
 	mux.HandleFunc("/auth/mfa/webauthn/verify", g.handleMFA("/auth/v1/mfa/webauthn/verify", "challenge", "{credential}"))
 	mux.HandleFunc("/auth/mfa/webauthn/enroll/confirm", g.handleMFA("/auth/v1/mfa/webauthn/enroll/confirm", "challenge", "{credential}"))
+	// One more key (ADR-0066): the current key's signature and an administrator's code.
+	mux.HandleFunc("/auth/mfa/webauthn/keys/add", g.handleMFA("/auth/v1/mfa/webauthn/keys/add", "challenge", "{credential}", "enrollmentCode"))
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	mux.HandleFunc("/sessions/", g.requireAuth(g.handleSessionItem))
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))

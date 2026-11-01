@@ -14,6 +14,7 @@ L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification 
 | `/auth/mfa/verify` | POST | auth | Second facteur : le défi d'un `401 {mfa: required}` et le code TOTP → jeton (ADR-0062) |
 | `/auth/mfa/enroll`, `/auth/mfa/enroll/confirm` | POST | auth | Enrôlement : le code d'un administrateur → le secret TOTP ou les options d'une clé ; un premier code → jeton (ADR-0062, ADR-0065) |
 | `/auth/mfa/webauthn/verify`, `/auth/mfa/webauthn/enroll/confirm` | POST | auth | Clé de sécurité (WebAuthn) : la signature du navigateur → jeton ; la clé créée → enregistrée, jeton (ADR-0065) |
+| `/auth/mfa/webauthn/keys/add` | POST | auth | Clé de secours : la signature de la clé actuelle et un code d'administrateur → les options de la nouvelle clé (ADR-0066) |
 | `/auth/token/refresh` | POST | auth | Renouvellement de jeton |
 | `/auth/me` | GET | auth | Profil courant |
 | `/sessions` | GET / POST | sessions | Lister les demandes break-glass en attente que l'on peut décider (`status=pending_approval` seul, ADR-0012) / demander une session |

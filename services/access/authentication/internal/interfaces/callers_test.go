@@ -32,6 +32,12 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/webauthn/verify"), // ADR-0065
 		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/webauthn/enroll/confirm"),
 		mtlstest.Deny("admin-cli", "POST", "/auth/v1/mfa/webauthn/verify"),
+		// ADR-0066: the user adds a key through the Gateway; only the CLI lists and revokes.
+		mtlstest.Allow("api-gateway", "POST", "/auth/v1/mfa/webauthn/keys/add"),
+		mtlstest.Allow("admin-cli", "POST", "/auth/v1/mfa/keys"),
+		mtlstest.Allow("admin-cli", "POST", "/auth/v1/mfa/revoke-key"),
+		mtlstest.Deny("api-gateway", "POST", "/auth/v1/mfa/keys"),
+		mtlstest.Deny("api-gateway", "POST", "/auth/v1/mfa/revoke-key"),
 		mtlstest.Allow("admin-cli", "POST", "/auth/v1/mfa/enrollment-codes"),
 		mtlstest.Allow("admin-cli", "POST", "/auth/v1/mfa/reset"),
 		mtlstest.Deny("api-gateway", "POST", "/auth/v1/mfa/enrollment-codes"),

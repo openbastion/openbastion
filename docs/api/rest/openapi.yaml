@@ -286,6 +286,42 @@ paths:
         "401": { description: Défi inconnu, expiré ou épuisé ; origine, rpId ou signature refusés ; clé d'un autre compte ; compteur qui recule }
         "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
 
+  /auth/mfa/webauthn/keys/add:
+    post:
+      tags: [auth]
+      summary: Commence l'ajout d'une clé de secours, avec la signature de la clé actuelle et un code d'administrateur (ADR-0066)
+      description: >
+        Sur le défi d'une connexion qui admet `webauthn` : `credential` est la signature
+        de la clé actuelle (vérifiée comme à `/auth/mfa/webauthn/verify`), `enrollmentCode`
+        un code émis par `openbastion-cli mfa enrollment-code` pour ce compte. Les deux
+        vérifiés, le défi devient l'enregistrement d'une clé (une fois ; il ne connecte
+        plus) et la réponse porte les options de création ; `/auth/mfa/webauthn/enroll/confirm`
+        termine. 5 clés au plus. Compte dans le budget de connexion par adresse.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge, credential, enrollmentCode]
+              properties:
+                challenge: { type: string }
+                credential: { type: object }
+                enrollmentCode: { type: string }
+      responses:
+        "200":
+          description: Les options de navigator.credentials.create, la clé actuelle exclue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webauthn: { type: object }
+        "400": { description: "credential n'est pas un objet" }
+        "401": { description: Signature refusée (origine, rpId, clé d'un autre compte, compteur qui recule), code d'enrôlement faux ou d'un autre compte, déjà 5 clés, défi déjà converti — sans détail }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+
   /auth/mfa/webauthn/enroll/confirm:
     post:
       tags: [auth]

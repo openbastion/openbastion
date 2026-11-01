@@ -38,6 +38,7 @@ const (
 	ActionMFAReset              = "auth.mfa_reset"
 	ActionLoginWebAuthn         = "auth.login_webauthn"          // a token after a security key (ADR-0065)
 	ActionMFAWebAuthnRegistered = "auth.mfa_webauthn_registered" // a security key enrolled
+	ActionMFAWebAuthnRevoked    = "auth.mfa_webauthn_revoked"    // one security key revoked (ADR-0066)
 	maxAuditedLoginLength       = 256
 )
 

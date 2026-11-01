@@ -1,6 +1,6 @@
 # ADR-0066 — Une clé de secours s'ajoute avec la signature de la clé actuelle et un code d'administrateur ; un administrateur révoque une seule clé
 
-**Statut** `Proposé` · 1ᵉʳ novembre 2026 · referme l'écart d'ADR-0065 ; choisi par Bony Kiss le 1ᵉʳ novembre 2026 avec deux décisions qui sont les siennes : l'ajout exige **la clé actuelle et un code d'administrateur**, et **l'administrateur** révoque une clé ; `Accepté` seulement avec son go sur ce texte
+**Statut** `Accepté` · 1ᵉʳ novembre 2026 · referme l'écart d'ADR-0065 ; choisi par Bony Kiss le 1ᵉʳ novembre 2026 avec deux décisions qui sont les siennes : l'ajout exige **la clé actuelle et un code d'administrateur**, et **l'administrateur** révoque une clé ; texte accepté par son go du 1ᵉʳ novembre 2026
 
 **Contexte** — ADR-0065 a livré une seule clé par compte : un compte qui détient un facteur admis reçoit un défi de vérification, jamais d'enrôlement — c'est ce qui empêche qu'un mot de passe et un code d'enrôlement suffisent à remplacer le second facteur (ADR-0062). Mais une seule clé, c'est une perte qui coupe l'accès : pour un rôle strict, la seule issue est `mfa reset`, qui efface tout. Et une clé perdue parmi deux ne se retire pas sans effacer l'autre.
 
@@ -14,7 +14,10 @@
 
 **Conséquences**
 
-- (+) *À mesurer : rouge avant (aucune route d'ajout ; une seconde clé refusée), vert après avec l'authentificateur logiciel d'ADR-0065 — ajout avec la clé actuelle et le code ; refus sans code, avec un code d'un autre compte, sans signature, avec une signature fausse ou d'une autre origine ; le défi d'ajout ne se reconnecte plus ; chacune des deux clés connecte ensuite ; six clés refusées ; liste ; révocation d'une clé, l'autre fonctionne, la révoquée non ; révocation refusée sans audit ; audit —, mutations.*
+- (+) **Mesuré, avant** (sur `ce4c567`, processus réels) : aucune route d'ajout, de liste ni de révocation (`404`) ; rien dans l'audit.
+- (+) **Mesuré, après**, avec l'authentificateur logiciel d'ADR-0065 : la clé actuelle sans code → `401` ; un code sans la clé actuelle (une clé de personne) → `401` ; la clé actuelle signant pour une autre origine (l'hameçonnage) → `401` ; les deux preuves → les options de création ; le défi converti ne connecte plus ; la clé de secours enregistrée ; **chacune des deux clés connecte** ensuite ; `mfa keys` en liste deux, la première avec son dernier usage ; la première révoquée ne connecte plus, la clé de secours, si ; `auth.mfa_webauthn_revoked` à l'audit sous `<compte>/<clé>`, avec un acteur. En unitaire (4 tests) : les deux preuves ; chacune seule refusée, un code d'un autre compte, une clé clonée ; le défi converti ne connecte plus et ne se convertit pas deux fois ; une sixième clé refusée ; la liste, le dernier usage posé par une connexion ; la révocation refusée sans audit (la clé reste), une clé révoquée deux fois, les autres clés intactes. Les deux magasins (mémoire et PostgreSQL) : conversion une fois, révocation d'une clé, dernier usage gardé. Admin UI : 1 test.
+- (+) **10 mutations, 10 tuées.** Deux survivaient d'abord : une mutation qui ne compilait pas, et le dernier usage — mon test le lisait sur la clé que l'ajout fait signer ; il le lit désormais sur la clé de secours, après une connexion par elle.
+- (+) La borne de 5 clés est maintenant atteinte par un chemin réel : elle est vérifiée avant de convertir le défi, et de nouveau par le magasin à l'enregistrement.
 - (−) Le dernier usage d'une clé est une écriture de plus à chaque connexion par clé.
 - (−) La liste et la révocation passent par la CLI : rien dans l'Admin UI pour l'administrateur.
 - (−) L'utilisateur ne révoque pas lui-même une clé (choix de Bony Kiss) : il demande à l'administrateur.

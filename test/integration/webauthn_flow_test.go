@@ -270,6 +270,70 @@ func TestWebAuthnFlow_AStrictRoleLogsInOnlyWithItsKey_AndWhatPhishingWouldSendIs
 		}
 	})
 
+	backup := newSoftKey(t)
+	t.Run("ADR-0066: a backup key is added with the current key and an administrator's code; either logs in", func(t *testing.T) {
+		out := login(admin)
+		ch := out["challenge"].(string)
+		add := func(cred map[string]any, code string) (int, map[string]any) {
+			return postJSONTo(t, gateway.baseURL+"/auth/mfa/webauthn/keys/add", map[string]any{"challenge": ch, "credential": cred, "enrollmentCode": code})
+		}
+		if s, _ := add(key.get(t, out["webauthn"], origin, "", 1, "", true), "not-issued"); s != http.StatusUnauthorized {
+			t.Fatalf("the current key without a code: %d", s)
+		}
+		_, issued := postJSONTo(t, authn.baseURL+"/auth/v1/mfa/enrollment-codes", map[string]string{"source": "local", "loginName": admin})
+		ec := issued["enrollmentCode"].(string)
+		if s, _ := add(newSoftKey(t).get(t, out["webauthn"], origin, "", 1, "", true), ec); s != http.StatusUnauthorized {
+			t.Fatalf("a code without the current key: %d", s)
+		}
+		if s, _ := add(key.get(t, out["webauthn"], "http://localhost:6666", "", 1, "", true), ec); s != http.StatusUnauthorized {
+			t.Fatalf("the current key, phished: %d", s)
+		}
+		s, e := add(key.get(t, out["webauthn"], origin, "", 1, "", true), ec)
+		if s != http.StatusOK || e["webauthn"] == nil {
+			t.Fatalf("both proofs: %d %v", s, e)
+		}
+		if s, _ := verify(ch, key.get(t, out["webauthn"], origin, "", 1, "", true)); s != http.StatusUnauthorized {
+			t.Fatalf("the challenge of an addition used to log in: %d", s)
+		}
+		if s, done := postJSONTo(t, gateway.baseURL+"/auth/mfa/webauthn/enroll/confirm", map[string]any{"challenge": ch, "credential": backup.create(t, e["webauthn"], origin)}); s != http.StatusOK || done["accessToken"] == nil {
+			t.Fatalf("confirm the backup key: %d %v", s, done)
+		}
+		for name, k := range map[string]*softKey{"the first key": key, "the backup key": backup} {
+			out := login(admin)
+			if s, _ := verify(out["challenge"].(string), k.get(t, out["webauthn"], origin, "", 1, "", true)); s != http.StatusOK {
+				t.Fatalf("%s: %d", name, s)
+			}
+		}
+	})
+
+	t.Run("ADR-0066: an administrator lists the keys and revokes one; the other still logs in", func(t *testing.T) {
+		s, listed := postJSONTo(t, authn.baseURL+"/auth/v1/mfa/keys", map[string]string{"username": admin})
+		keys, _ := listed["keys"].([]any)
+		if s != http.StatusOK || len(keys) != 2 {
+			t.Fatalf("mfa keys: %d %v", s, listed)
+		}
+		first := keys[0].(map[string]any)
+		if first["keyId"] != b64.EncodeToString(key.id) || first["lastUsedAt"] == nil {
+			t.Fatalf("the first key as listed: %v", first)
+		}
+		resp, err := http.Post(authn.baseURL+"/auth/v1/mfa/revoke-key", "application/json", strings.NewReader(fmt.Sprintf(`{"username": %q, "keyId": %q}`, admin, b64.EncodeToString(key.id))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("revoke-key: %d", resp.StatusCode)
+		}
+		out := login(admin)
+		if s, _ := verify(out["challenge"].(string), key.get(t, out["webauthn"], origin, "", 1, "", true)); s != http.StatusUnauthorized {
+			t.Fatalf("the revoked key: %d", s)
+		}
+		out = login(admin)
+		if s, _ := verify(out["challenge"].(string), backup.get(t, out["webauthn"], origin, "", 1, "", true)); s != http.StatusOK {
+			t.Fatalf("the backup key after the other's revocation: %d", s)
+		}
+	})
+
 	t.Run("a role that is not strict may enroll either factor", func(t *testing.T) {
 		if out := login(dba); out["mfa"] != "enrollment_required" || fmt.Sprint(out["factors"]) != "[totp webauthn]" {
 			t.Fatalf("a non-strict role: %v", out)
@@ -290,6 +354,10 @@ func TestWebAuthnFlow_AStrictRoleLogsInOnlyWithItsKey_AndWhatPhishingWouldSendIs
 			actions = append(actions, e.Action)
 		}
 		got := strings.Join(actions, " ")
+		revoked := sunk(admin + "/" + b64.EncodeToString(key.id))
+		if len(revoked) != 1 || revoked[0].Action != "auth.mfa_webauthn_revoked" || revoked[0].ActorID == "" {
+			t.Fatalf("the revocation in the audit: %+v", revoked)
+		}
 		for _, want := range []string{"auth.mfa_webauthn_registered", "auth.login_webauthn", "auth.login_refused", "auth.mfa_reset"} {
 			if !strings.Contains(got, want) {
 				t.Fatalf("the audit of %s lacks %s: %s", admin, want, got)

@@ -74,4 +74,23 @@ describe("WebAuthn in the login (ADR-0065)", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(calls).toHaveLength(0);
   });
+
+  it("a backup key: the current key signs, with the administrator's code, then the new key is sent", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/mfa/webauthn/keys/add": { body: { webauthn: { publicKey: { challenge: "Dw", rp: { id: "localhost" }, user: { id: "dXNlcl8x", name: "root", displayName: "Root" } } } } },
+      "POST /auth/mfa/webauthn/enroll/confirm": { body: { accessToken: "two-keys", expiresIn: 3600 } },
+    });
+    const { credentials } = fakeCredentials();
+    const onToken = vi.fn();
+    render(<SecondFactor api={api} challenge={{ kind: "required", challenge: "ch-b", factors: ["webauthn"], webauthn: { publicKey: { challenge: "AQ" } } }} onToken={onToken} onCancel={vi.fn()} credentials={credentials} />);
+    fireEvent.click(screen.getByText("Ajouter une clé de secours"));
+    fireEvent.change(screen.getByLabelText("Code d'enrôlement"), { target: { value: "admin-code" } });
+    fireEvent.click(screen.getByText("Signer avec ma clé, puis ajouter la nouvelle"));
+    await waitFor(() => expect(onToken).toHaveBeenCalledWith("two-keys"));
+    expect(credentials.get).toHaveBeenCalledTimes(1);
+    expect(credentials.create).toHaveBeenCalledTimes(1);
+    expect(calls[0].path).toBe("/auth/mfa/webauthn/keys/add");
+    expect(calls[0].body).toMatchObject({ challenge: "ch-b", enrollmentCode: "admin-code", credential: { response: { signature: "Aw" } } });
+    expect(calls[1].body).toMatchObject({ challenge: "ch-b", credential: { response: { attestationObject: "Bg" } } });
+  });
 });

@@ -67,6 +67,11 @@ type MFARepository interface {
 	UpdateWebAuthnCredential(ctx context.Context, userID string, c WebAuthnCredential) error
 	// ResetWebAuthn forgets the account's keys.
 	ResetWebAuthn(ctx context.Context, userID string) error
+	// ToRegistration turns a verify challenge into the registration of one more key (ADR-0066),
+	// once: false when the challenge is not a verify challenge any more.
+	ToRegistration(ctx context.Context, hash, session, codeHash []byte) (bool, error)
+	// RevokeWebAuthnCredential forgets one key of the account; false when it has no such key.
+	RevokeWebAuthnCredential(ctx context.Context, userID string, id []byte) (bool, error)
 
 	// PutEnrollmentCode keeps the code for source/name, replacing any earlier one.
 	PutEnrollmentCode(ctx context.Context, source, name string, hash []byte, expiresAt time.Time) error
@@ -78,8 +83,9 @@ type MFARepository interface {
 
 // WebAuthnCredential is one security key of an account (ADR-0065): a public key, not a secret.
 type WebAuthnCredential struct {
-	ID        []byte // the credential ID the authenticator chose
-	Data      []byte // the verifier's record of it (public key, flags, AAGUID), as it keeps it
-	SignCount uint32
-	CreatedAt time.Time
+	ID         []byte // the credential ID the authenticator chose
+	Data       []byte // the verifier's record of it (public key, flags, AAGUID), as it keeps it
+	SignCount  uint32
+	CreatedAt  time.Time
+	LastUsedAt time.Time // the last login it signed (ADR-0066); zero if none yet
 }

@@ -5,6 +5,7 @@
 package interfaces
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -38,6 +39,9 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/mfa/enroll/confirm", s.handleMFAConfirm)
 	mux.HandleFunc("/auth/v1/mfa/webauthn/verify", s.handleWebAuthnVerify)
 	mux.HandleFunc("/auth/v1/mfa/webauthn/enroll/confirm", s.handleWebAuthnConfirm)
+	mux.HandleFunc("/auth/v1/mfa/webauthn/keys/add", s.handleWebAuthnAddKey)
+	mux.HandleFunc("/auth/v1/mfa/keys", s.handleWebAuthnKeys)
+	mux.HandleFunc("/auth/v1/mfa/revoke-key", s.handleWebAuthnRevoke)
 	mux.HandleFunc("/auth/v1/mfa/enrollment-codes", s.handleMFAEnrollmentCode)
 	mux.HandleFunc("/auth/v1/mfa/reset", s.handleMFAReset)
 	mux.HandleFunc("/healthz", s.handleHealthz)
@@ -315,6 +319,8 @@ func mfaError(w http.ResponseWriter, err error) {
 		http.Error(w, "the second factor is not configured", http.StatusNotFound)
 	case errors.Is(err, application.ErrUnknownAccount):
 		http.Error(w, "no such account", http.StatusNotFound)
+	case errors.Is(err, application.ErrUnknownKey):
+		http.Error(w, "no such security key", http.StatusNotFound)
 	case errors.Is(err, application.ErrMFARejected):
 		http.Error(w, "the second factor was refused", http.StatusUnauthorized)
 	default:
@@ -446,4 +452,86 @@ func caller(r *http.Request) string {
 		return c
 	}
 	return "unverified-caller"
+}
+
+// -- one more security key, and the administrator's keys (ADR-0066) ----------------------
+
+type webauthnAddKeyRequest struct {
+	Challenge      string          `json:"challenge"`
+	Credential     json.RawMessage `json:"credential"`
+	EnrollmentCode string          `json:"enrollmentCode"`
+}
+
+func (s *HTTPServer) handleWebAuthnAddKey(w http.ResponseWriter, r *http.Request) {
+	var req webauthnAddKeyRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	options, err := s.svc.AddWebAuthnKey(r.Context(), req.Challenge, req.Credential, req.EnrollmentCode)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(mfaEnrollResponse{WebAuthn: options})
+}
+
+type webauthnKeysRequest struct {
+	Username string `json:"username"`
+}
+
+type webauthnKeyInfo struct {
+	KeyID      string `json:"keyId"` // base64url, as revoke-key takes it
+	CreatedAt  string `json:"createdAt"`
+	LastUsedAt string `json:"lastUsedAt,omitempty"`
+}
+
+type webauthnKeysResponse struct {
+	Keys []webauthnKeyInfo `json:"keys"`
+}
+
+func (s *HTTPServer) handleWebAuthnKeys(w http.ResponseWriter, r *http.Request) {
+	var req webauthnKeysRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	keys, err := s.svc.WebAuthnKeys(r.Context(), req.Username)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	out := webauthnKeysResponse{Keys: []webauthnKeyInfo{}}
+	for _, k := range keys {
+		i := webauthnKeyInfo{KeyID: base64.RawURLEncoding.EncodeToString(k.ID), CreatedAt: k.CreatedAt.UTC().Format(time.RFC3339)}
+		if !k.LastUsedAt.IsZero() {
+			i.LastUsedAt = k.LastUsedAt.UTC().Format(time.RFC3339)
+		}
+		out.Keys = append(out.Keys, i)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+type webauthnRevokeRequest struct {
+	Username string `json:"username"`
+	KeyID    string `json:"keyId"`
+}
+
+func (s *HTTPServer) handleWebAuthnRevoke(w http.ResponseWriter, r *http.Request) {
+	var req webauthnRevokeRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	id, err := base64.RawURLEncoding.DecodeString(req.KeyID)
+	if err != nil || len(id) == 0 {
+		http.Error(w, "keyId is the base64url identifier mfa keys gives", http.StatusBadRequest)
+		return
+	}
+	if err := s.svc.RevokeWebAuthnKey(r.Context(), caller(r), req.Username, id); err != nil {
+		mfaError(w, err)
+		return
+	}
+	log.Printf("authentication: a security key of %q was revoked", req.Username)
+	w.WriteHeader(http.StatusNoContent)
 }

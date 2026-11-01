@@ -58,6 +58,16 @@ TOTP arrête un mot de passe volé, pas l'hameçonnage : un faux site qui relaie
 - **Un rôle non strict** se voit proposer les deux facteurs à l'enrôlement, et l'un ou l'autre suffit ensuite.
 - **Un rôle strict** n'enrôle qu'une clé ; un code TOTP ne lui donne plus de jeton. Un compte strict qui n'avait que TOTP doit enrôler une clé, avec un nouveau code d'enrôlement de l'administrateur (`openbastion-cli mfa enrollment-code`, comme pour TOTP).
 - **Une clé dont le compteur de signatures recule est refusée** (une clé clonée) ; beaucoup de passkeys gardent un compteur nul, ce qui est admis.
-- **Une seule clé par compte dans cette version** : ajouter une clé de secours n'est pas encore possible (ADR-0065, écart). Une clé perdue : `mfa reset`, puis un nouveau code.
+- **Une clé de secours** (ADR-0066) : à l'étape de la clé, « Ajouter une clé de secours » demande **la signature de la clé actuelle et un code d'enrôlement de l'administrateur** — l'un sans l'autre ne suffit pas —, puis la nouvelle clé. 5 clés au plus par compte.
+- **Une clé perdue**, parmi plusieurs : l'administrateur la révoque seule, les autres restent ; si c'était la dernière d'un rôle strict, l'enrôlement est redemandé à la connexion suivante.
+
+```sh
+openbastion-cli mfa keys -authn https://authentication:8086 -username alice
+#   q2Lr…Xw  enrolled 2026-11-01T09:12:03Z  last used 2026-11-01T10:40:51Z
+#   9fTn…Aq  enrolled 2026-11-01T09:20:44Z  last used never
+openbastion-cli mfa revoke-key -authn https://authentication:8086 -username alice -key q2Lr…Xw
+```
+
+La révocation est écrite à l'audit (`auth.mfa_webauthn_revoked`, ressource `<compte>/<clé>`) **avant** d'être faite : sans l'Audit Service, rien n'est révoqué.
 - WebAuthn ne vaut que dans un navigateur, sur une origine déclarée : **un rôle strict ne se connecte pas par la CLI ni par l'API directe**. Changer l'adresse publique de l'Admin UI sans changer `WEBAUTHN_ORIGINS` rend les clés inutilisables.
 - Aucune donnée d'appareil n'est demandée (attestation `none`) : n'importe quel authentificateur conforme est accepté.

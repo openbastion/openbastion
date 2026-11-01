@@ -29,6 +29,10 @@ func TestRun_RefusesWhatCannotBeAskedRight(t *testing.T) {
 		"mfa code, two ways to name it": {[]string{"mfa", "enrollment-code", "-authn", "https://a:1", "-local", "a", "-directory", "a"}, "", "needs -authn and one of"},
 		"mfa reset, no account":         {[]string{"mfa", "reset", "-authn", "https://a:1"}, "", "needs -authn and -username"},
 		"mfa code, no certificate":      {[]string{"mfa", "enrollment-code", "-authn", "https://authentication:8086", "-local", "alice"}, "", "TLS_"},
+		// ADR-0066.
+		"mfa keys, no account":       {[]string{"mfa", "keys", "-authn", "https://a:1"}, "", "needs -authn and -username"},
+		"mfa revoke-key, no key":     {[]string{"mfa", "revoke-key", "-authn", "https://a:1", "-username", "a"}, "", "needs -authn, -username and -key"},
+		"mfa revoke-key, no account": {[]string{"mfa", "revoke-key", "-authn", "https://a:1", "-key", "AQ"}, "", "needs -authn, -username and -key"},
 	} {
 		err := run(c.args, strings.NewReader(c.stdin), &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), c.want) {

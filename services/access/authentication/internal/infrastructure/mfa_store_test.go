@@ -112,3 +112,49 @@ func TestPostgresMFA_AStepIsTakenOnce_AChallengeEndsAtItsLimit_ACodeIsTakenOnce(
 		})
 	}
 }
+
+// ADR-0066 on both stores: a verify challenge becomes a registration once; one key is revoked,
+// the others stay; the last use of a key is kept.
+func TestPostgresMFA_AChallengeBecomesARegistrationOnce_OneKeyIsRevoked_ItsLastUseIsKept(t *testing.T) {
+	for name, open := range mfaStores(t) {
+		t.Run(name, func(t *testing.T) {
+			s, ctx := open(t), context.Background()
+			id := fmt.Sprintf("user_keys_%d", time.Now().UnixNano())
+			if err := s.Create(ctx, &domain.User{ID: id, Username: id, DisplayName: id, PasswordHash: "x", IdentitySource: domain.SourceLocal}); err != nil {
+				t.Fatal(err)
+			}
+			hash := []byte(fmt.Sprintf("verify-%d-0123456789abcdef", time.Now().UnixNano()))
+			_ = s.SaveChallenge(ctx, domain.MFAChallenge{Hash: hash, UserID: id, Kind: domain.MFAVerify, LoginSource: "local", LoginName: id,
+				WebAuthnSession: []byte("login"), ExpiresAt: time.Now().Add(time.Minute)})
+			if ok, _ := s.ToRegistration(ctx, hash, []byte("registration"), []byte("code")); !ok {
+				t.Fatal("not converted")
+			}
+			if ok, _ := s.ToRegistration(ctx, hash, []byte("again"), []byte("code")); ok {
+				t.Fatal("converted twice")
+			}
+			c, _ := s.GetChallenge(ctx, hash)
+			if c.Kind != domain.MFAEnroll || string(c.WebAuthnSession) != "registration" || string(c.EnrollmentCodeHash) != "code" {
+				t.Fatalf("after the conversion: %+v", c)
+			}
+			for _, k := range []string{"k1", "k2"} {
+				if ok, _ := s.AddWebAuthnCredential(ctx, id, domain.WebAuthnCredential{ID: []byte(k + id), Data: []byte("{}")}, 5); !ok {
+					t.Fatalf("add %s", k)
+				}
+			}
+			used := time.Now().UTC().Truncate(time.Second)
+			if err := s.UpdateWebAuthnCredential(ctx, id, domain.WebAuthnCredential{ID: []byte("k1" + id), Data: []byte("{}"), SignCount: 7, LastUsedAt: used}); err != nil {
+				t.Fatal(err)
+			}
+			if ok, _ := s.RevokeWebAuthnCredential(ctx, id, []byte("k2"+id)); !ok {
+				t.Fatal("not revoked")
+			}
+			if ok, _ := s.RevokeWebAuthnCredential(ctx, id, []byte("k2"+id)); ok {
+				t.Fatal("revoked twice")
+			}
+			keys, _ := s.WebAuthnCredentials(ctx, id)
+			if len(keys) != 1 || string(keys[0].ID) != "k1"+id || keys[0].SignCount != 7 || !keys[0].LastUsedAt.Equal(used) {
+				t.Fatalf("keys after a revocation: %+v", keys)
+			}
+		})
+	}
+}

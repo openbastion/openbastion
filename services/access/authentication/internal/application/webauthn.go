@@ -5,8 +5,11 @@ package application
 // that counts.
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
@@ -94,10 +97,120 @@ func (s *AuthenticationService) VerifyWebAuthn(ctx context.Context, challenge st
 		log.Printf("authentication: a security key of %q answered with a counter that went back: refused, as a clone would be", c.LoginName)
 		return "", 0, s.fail(ctx, c)
 	}
+	key.LastUsedAt = s.clock()
 	if err := s.mfa.UpdateWebAuthnCredential(ctx, c.UserID, key); err != nil {
 		return "", 0, err
 	}
 	return s.finish(ctx, c, ActionLoginWebAuthn)
+}
+
+// AddWebAuthnKey implements POST /auth/mfa/webauthn/keys/add (ADR-0066): with both the signature of
+// a key the account holds, on this challenge, and an administrator's enrollment code for it, the
+// challenge becomes the registration of one more key — once, and it no longer logs in. It returns
+// the creation options; ConfirmWebAuthnEnrollment ends it. Either proof alone is refused.
+func (s *AuthenticationService) AddWebAuthnKey(ctx context.Context, challenge string, response []byte, enrollmentCode string) (json.RawMessage, error) {
+	c, err := s.liveChallenge(ctx, challenge, domain.MFAVerify)
+	if err != nil {
+		return nil, err
+	}
+	if s.webauthn == nil || c.WebAuthnSession == nil {
+		return nil, s.fail(ctx, c)
+	}
+	codeHash := digest(normalizeEnrollmentCode(enrollmentCode))
+	ok, err := s.mfa.EnrollmentCodeMatches(ctx, c.LoginSource, c.LoginName, codeHash, s.clock())
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, s.fail(ctx, c)
+	}
+	wu, _, err := s.webauthnUser(ctx, c.UserID)
+	if err != nil {
+		return nil, err
+	}
+	key, cloned, err := s.webauthn.FinishLogin(wu, c.WebAuthnSession, response)
+	if err != nil || cloned {
+		return nil, s.fail(ctx, c)
+	}
+	key.LastUsedAt = s.clock()
+	if err := s.mfa.UpdateWebAuthnCredential(ctx, c.UserID, key); err != nil {
+		return nil, err
+	}
+	if len(wu.Keys) >= MaxWebAuthnKeys {
+		return nil, s.fail(ctx, c)
+	}
+	options, session, err := s.webauthn.BeginRegistration(wu)
+	if err != nil {
+		return nil, err
+	}
+	converted, err := s.mfa.ToRegistration(ctx, c.Hash, session, codeHash)
+	if err != nil {
+		return nil, err
+	}
+	if !converted { // used meanwhile, by a login or another addition
+		return nil, ErrMFARejected
+	}
+	return options, nil
+}
+
+// KeyInfo is what an administrator sees of a security key (ADR-0066).
+type KeyInfo struct {
+	ID         []byte
+	CreatedAt  time.Time
+	LastUsedAt time.Time
+}
+
+// ErrUnknownKey: the account has no such key.
+var ErrUnknownKey = errors.New("no such security key")
+
+// WebAuthnKeys lists the security keys of an account, for the administrator's `mfa keys`.
+func (s *AuthenticationService) WebAuthnKeys(ctx context.Context, username string) ([]KeyInfo, error) {
+	if s.mfa == nil {
+		return nil, ErrMFAOff
+	}
+	u, err := s.users.GetByUsername(ctx, username)
+	if err != nil {
+		return nil, ErrUnknownAccount
+	}
+	keys, err := s.mfa.WebAuthnCredentials(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]KeyInfo, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, KeyInfo{ID: k.ID, CreatedAt: k.CreatedAt, LastUsedAt: k.LastUsedAt})
+	}
+	return out, nil
+}
+
+// RevokeWebAuthnKey implements the administrator's `mfa revoke-key`: written to the audit first
+// (no audit, no revocation), then one key is forgotten; the others stay.
+func (s *AuthenticationService) RevokeWebAuthnKey(ctx context.Context, actor, username string, id []byte) error {
+	if s.mfa == nil {
+		return ErrMFAOff
+	}
+	u, err := s.users.GetByUsername(ctx, username)
+	if err != nil {
+		return ErrUnknownAccount
+	}
+	keys, err := s.mfa.WebAuthnCredentials(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	held := false
+	for _, k := range keys {
+		held = held || bytes.Equal(k.ID, id)
+	}
+	if !held {
+		return ErrUnknownKey
+	}
+	if err := s.record(ctx, actor, ActionMFAWebAuthnRevoked, "account", u.Username+"/"+base64.RawURLEncoding.EncodeToString(id)); err != nil {
+		return err
+	}
+	if _, err := s.mfa.RevokeWebAuthnCredential(ctx, u.ID, id); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ConfirmWebAuthnEnrollment implements POST /auth/mfa/webauthn/enroll/confirm: the browser's new key,

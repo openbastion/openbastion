@@ -39,6 +39,8 @@ const usage = `usage:
   openbastion-cli audit verify-chain -audit URL
   openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME)
   openbastion-cli mfa reset -authn URL -username NAME
+  openbastion-cli mfa keys -authn URL -username NAME
+  openbastion-cli mfa revoke-key -authn URL -username NAME -key ID
   openbastion-cli version`
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
@@ -58,6 +60,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return mfaEnrollmentCode(args[2:], stdout)
 	case "mfa reset":
 		return mfaReset(args[2:], stdout)
+	case "mfa keys":
+		return mfaKeys(args[2:], stdout)
+	case "mfa revoke-key":
+		return mfaRevokeKey(args[2:], stdout)
 	default:
 		return errors.New(usage)
 	}
@@ -221,5 +227,82 @@ func mfaReset(args []string, stdout io.Writer) error {
 		return fmt.Errorf("mfa reset: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	fmt.Fprintf(stdout, "the second factor of %s was reset: it enrolls again with a new enrollment code\n", *username)
+	return nil
+}
+
+// mfaKeys lists an account's security keys (ADR-0066): which one to revoke when one is lost.
+func mfaKeys(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("mfa keys", flag.ContinueOnError)
+	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
+	username := fs.String("username", "", "the account's name (ldap:<id> for a directory account)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *authn == "" || *username == "" {
+		return errors.New("mfa keys needs -authn and -username")
+	}
+	c, err := client(*authn, mtls.Authentication)
+	if err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]string{"username": *username})
+	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/keys", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mfa keys: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var out struct {
+		Keys []struct {
+			KeyID, CreatedAt, LastUsedAt string
+		} `json:"keys"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return errors.New("mfa keys: the answer cannot be read")
+	}
+	if len(out.Keys) == 0 {
+		fmt.Fprintf(stdout, "%s has no security key\n", *username)
+		return nil
+	}
+	for _, k := range out.Keys {
+		last := k.LastUsedAt
+		if last == "" {
+			last = "never"
+		}
+		fmt.Fprintf(stdout, "%s  enrolled %s  last used %s\n", k.KeyID, k.CreatedAt, last)
+	}
+	return nil
+}
+
+// mfaRevokeKey revokes one security key of an account (ADR-0066); the others stay.
+func mfaRevokeKey(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("mfa revoke-key", flag.ContinueOnError)
+	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
+	username := fs.String("username", "", "the account's name (ldap:<id> for a directory account)")
+	key := fs.String("key", "", "the key's identifier, as mfa keys gives it")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *authn == "" || *username == "" || *key == "" {
+		return errors.New("mfa revoke-key needs -authn, -username and -key")
+	}
+	c, err := client(*authn, mtls.Authentication)
+	if err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]string{"username": *username, "keyId": *key})
+	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/revoke-key", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("mfa revoke-key: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	fmt.Fprintf(stdout, "the key %s of %s was revoked; its other keys stay\n", *key, *username)
 	return nil
 }
