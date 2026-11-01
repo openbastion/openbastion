@@ -4,8 +4,9 @@ codespace:
   go: "1.27 installé (modules en go 1.22), GOPATH=/go"
   setup: |
     export GOWORK=$PWD/go.work
-    docker start obpg 2>/dev/null || docker run -d --name obpg -e POSTGRES_USER=openbastion -e POSTGRES_PASSWORD=openbastion \
-      -e POSTGRES_DB=openbastion -p 127.0.0.1:5432:5432 postgres:16
+    # a container Docker lost (« RWLayer … unexpectedly nil », seen twice) is removed first: test data only
+    docker start obpg 2>/dev/null || { docker rm -f obpg 2>/dev/null; docker run -d --name obpg -e POSTGRES_USER=openbastion -e POSTGRES_PASSWORD=openbastion \
+      -e POSTGRES_DB=openbastion -p 127.0.0.1:5432:5432 postgres:16; }
     export TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
   module_cache: vide au départ ; make build le remplit (les tests d'intégration compilent avec GOPROXY=off)
   compose_firewall: |
