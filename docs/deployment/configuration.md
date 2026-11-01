@@ -67,6 +67,10 @@ Les limites **par adresse** (login et requêtes authentifiées) ont besoin de l'
 
 Un ticket ne vaut que sur l'instance qui l'a émis : **ne mettez pas d'équilibreur TCP devant les ports SSH**, donnez à chaque instance son adresse. Le Broker répartit les tickets à tour de rôle et passe une instance qui ne répond pas. Une terminaison doit être confirmée par **toutes** les instances : une seule injoignable, et `DELETE /sessions/{id}` répond `503` sans rien terminer. Une instance définitivement arrêtée se retire de `SSH_PROXY_URLS`, Broker redémarré : c'est à vous de savoir qu'elle est arrêtée, le Broker ne peut pas le distinguer d'une coupure réseau.
 
+## Second facteur TOTP (ADR-0062)
+
+`MFA_REQUIRED_ROLES` (les rôles qui l'exigent) et `MFA_SECRET_KEY_HEX` (64 chiffres hexadécimaux, hors de la base) vont ensemble. Enrôlement, remise à zéro et règles : [`../administration/second-factor.md`](../administration/second-factor.md).
+
 ## Connexion par annuaire LDAP ou Active Directory (ADR-0061)
 
 L'Authentication Service peut laisser un annuaire vérifier le mot de passe de ses utilisateurs : `LDAP_URL`, `LDAP_SCHEMA` (`ad` ou `rfc`), `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD_FILE` (fichier `0600`), `LDAP_USER_BASE_DN`, `LDAP_GROUP_BASE_DN` et `LDAP_ROLE_MAP_FILE` vont ensemble, `LDAP_CA_FILE` en option. Toujours sur TLS. La table des rôles, les deux schémas et les refus sont décrits dans [`../administration/identity-providers.md`](../administration/identity-providers.md).

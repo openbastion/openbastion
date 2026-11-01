@@ -49,6 +49,7 @@ func main() {
 	var store interface {
 		domain.UserRepository
 		domain.LoginAttemptRepository
+		domain.MFARepository
 	}
 	if dsn != "" {
 		ctx := context.Background()
@@ -110,6 +111,7 @@ func main() {
 	}
 
 	configureDirectory(svc)
+	configureMFA(svc, store)
 
 	// Demo seed — real onboarding goes through POST /auth/v1/users.
 	if os.Getenv("SKIP_DEMO_SEED") == "" {
@@ -184,4 +186,30 @@ func configureDirectory(svc *application.AuthenticationService) {
 		log.Printf("authentication: directory login (LDAP, schema %s) with %s over TLS, the service account accepted", os.Getenv("LDAP_SCHEMA"), dir.Where())
 	}
 	log.Printf("authentication: %d group(s) in the LDAP role map; a user with no mapped group is refused", len(roles))
+}
+
+// configureMFA turns the second factor on (ADR-0062) for the accounts that hold one of
+// MFA_REQUIRED_ROLES; MFA_SECRET_KEY_HEX, which seals the TOTP secrets, goes with it — one without
+// the other stops the service, and neither the key nor a secret is ever written.
+func configureMFA(svc *application.AuthenticationService, repo domain.MFARepository) {
+	rolesVar, keyHex := os.Getenv("MFA_REQUIRED_ROLES"), os.Getenv("MFA_SECRET_KEY_HEX")
+	switch {
+	case rolesVar == "" && keyHex == "":
+		log.Printf("authentication: second factor (TOTP) off — no role requires it (MFA_REQUIRED_ROLES not set)")
+		return
+	case rolesVar == "":
+		log.Fatalf("authentication: MFA_SECRET_KEY_HEX is set but MFA_REQUIRED_ROLES is not: no role would require the second factor — refusing to start")
+	case keyHex == "":
+		log.Fatalf("authentication: MFA_REQUIRED_ROLES is set without MFA_SECRET_KEY_HEX, which seals the TOTP secrets (64 hex digits, kept outside the database; `openssl rand -hex 32`) — refusing to start")
+	}
+	roles, err := application.ParseRoleList(rolesVar)
+	if err != nil {
+		log.Fatalf("authentication: MFA_REQUIRED_ROLES: %v — refusing to start", err)
+	}
+	sealer, err := infrastructure.NewMFASealer(keyHex)
+	if err != nil {
+		log.Fatalf("authentication: %v — refusing to start", err)
+	}
+	svc.WithMFA(roles, repo, sealer)
+	log.Printf("authentication: second factor (TOTP) required for the roles %s, for local and directory accounts; enrollment needs an administrator's code (openbastion-cli mfa enrollment-code)", strings.Join(roles, ", "))
 }

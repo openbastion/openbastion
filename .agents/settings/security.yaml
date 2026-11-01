@@ -35,6 +35,8 @@ startup_keys:              # obligatoires avec DATABASE_URL ; jamais dans le dé
   - KMS_KEY_HEX             # password-vault, command-recorder — ou Transit (ADR-0049) : TRANSIT_ADDR + TRANSIT_KEY + TRANSIT_TOKEN_FILE (fichier 0600) ou AppRole TRANSIT_ROLE_ID_FILE + TRANSIT_SECRET_ID_FILE (fichiers 0600, ADR-0058 ; jamais les deux), aller-retour au démarrage ; avec les deux, KMS_KEY_HEX ne fait plus que lire
   - TOKEN_SIGNING_KEY_HEX   # authentication
   - AUDIT_CHAIN_KEY_HEX     # audit-service (ADR-0027)
+optional_keys:             # requises seulement avec la fonction qu'elles servent ; jamais dans le dépôt
+  - MFA_SECRET_KEY_HEX      # authentication (ADR-0062) : scelle les secrets TOTP, obligatoire avec MFA_REQUIRED_ROLES (et réciproquement) ; la perdre rend tous les secrets illisibles
 optional_secrets:          # fichiers 0600, jamais une variable d'environnement qui porte la valeur
   - LDAP_BIND_PASSWORD_FILE # authentication (ADR-0061) : le compte de service de l'annuaire, relu à chaque connexion ; avec LDAP_URL, LDAP_SCHEMA, LDAP_BIND_DN, LDAP_USER_BASE_DN, LDAP_GROUP_BASE_DN, LDAP_ROLE_MAP_FILE, tout ou rien
 never:

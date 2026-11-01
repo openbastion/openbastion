@@ -3,7 +3,9 @@
 // into the page finds nothing to read back.
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  // body: the answer decoded as JSON, when it is — a login that needs a second factor carries its
+  // challenge there (ADR-0062).
+  constructor(public readonly status: number, message: string, public readonly body?: unknown) {
     super(message);
   }
 }
@@ -39,9 +41,17 @@ export class Api {
     });
     const text = await resp.text();
     if (!resp.ok) {
-      throw new ApiError(resp.status, errorMessage(resp.status, text));
+      throw new ApiError(resp.status, errorMessage(resp.status, text), parseJSON(text));
     }
     return (text ? JSON.parse(text) : undefined) as T;
+  }
+}
+
+function parseJSON(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
   }
 }
 

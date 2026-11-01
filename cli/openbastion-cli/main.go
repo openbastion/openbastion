@@ -35,7 +35,9 @@ func main() {
 
 const usage = `usage:
   openbastion-cli user create -authn URL -username NAME -roles ROLE[,ROLE…] [-display NAME] < password
-  openbastion-cli audit verify-chain -audit URL`
+  openbastion-cli audit verify-chain -audit URL
+  openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME)
+  openbastion-cli mfa reset -authn URL -username NAME`
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	if len(args) < 2 {
@@ -46,6 +48,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return userCreate(args[2:], stdin, stdout)
 	case "audit verify-chain":
 		return verifyChain(args[2:], stdout)
+	case "mfa enrollment-code":
+		return mfaEnrollmentCode(args[2:], stdout)
+	case "mfa reset":
+		return mfaReset(args[2:], stdout)
 	default:
 		return errors.New(usage)
 	}
@@ -137,5 +143,77 @@ func verifyChain(args []string, stdout io.Writer) error {
 		return fmt.Errorf("the audit chain does not verify: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	fmt.Fprintf(stdout, "the audit chain verifies: %s\n", strings.TrimSpace(string(raw)))
+	return nil
+}
+
+// mfaEnrollmentCode issues a one-time code with which an account enrolls its second factor
+// (ADR-0062): for a local account by its name, for a directory account by its login name. The
+// code is shown once, here; give it to the user by another channel than the password.
+func mfaEnrollmentCode(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("mfa enrollment-code", flag.ContinueOnError)
+	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
+	local := fs.String("local", "", "the local account's name")
+	directory := fs.String("directory", "", "the directory login name (sAMAccountName or uid)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *authn == "" || (*local == "") == (*directory == "") {
+		return errors.New("mfa enrollment-code needs -authn and one of -local or -directory")
+	}
+	source, name := "local", *local
+	if *directory != "" {
+		source, name = "ldap", *directory
+	}
+	c, err := client(*authn, mtls.Authentication)
+	if err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]string{"source": source, "loginName": name})
+	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/enrollment-codes", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mfa enrollment-code: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var out struct {
+		EnrollmentCode string `json:"enrollmentCode"`
+		ExpiresAt      string `json:"expiresAt"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil || out.EnrollmentCode == "" {
+		return errors.New("mfa enrollment-code: the answer holds no code")
+	}
+	fmt.Fprintf(stdout, "enrollment code for %s account %s, valid until %s (shown once):\n%s\n", source, name, out.ExpiresAt, out.EnrollmentCode)
+	return nil
+}
+
+// mfaReset forgets an account's second factor (a lost device); it enrolls again with a new code.
+func mfaReset(args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("mfa reset", flag.ContinueOnError)
+	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
+	username := fs.String("username", "", "the account's name (ldap:<id> for a directory account)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *authn == "" || *username == "" {
+		return errors.New("mfa reset needs -authn and -username")
+	}
+	c, err := client(*authn, mtls.Authentication)
+	if err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]string{"username": *username})
+	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/reset", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("mfa reset: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	fmt.Fprintf(stdout, "the second factor of %s was reset: it enrolls again with a new enrollment code\n", *username)
 	return nil
 }

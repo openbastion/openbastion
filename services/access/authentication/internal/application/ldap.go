@@ -6,6 +6,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 	"unicode"
 
@@ -76,12 +77,8 @@ func (s *AuthenticationService) LoginLDAP(ctx context.Context, username, passwor
 	if err != nil {
 		return "", 0, err
 	}
-	expiresAt := s.clock().Add(s.ttl)
-	token, err = s.tokens.Issue(u.ID, u.Username, roles, expiresAt)
-	if err != nil {
-		return "", 0, err
-	}
-	return token, s.ttl, nil
+	// The enrollment code of a directory account is issued for its login name (ADR-0062 §4).
+	return s.tokenOrChallenge(ctx, u, roles, domain.SourceLDAP, strings.ToLower(username))
 }
 
 // directoryUsername: 1 to MaxDirectoryUsername characters, none a control character.

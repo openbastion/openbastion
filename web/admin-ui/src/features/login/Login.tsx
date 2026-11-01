@@ -1,11 +1,23 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Api } from "../../shared/api";
+import { Api, ApiError } from "../../shared/api";
+import { Challenge, SecondFactor } from "./SecondFactor";
 import { Notice } from "../../shared/Notice";
 import { BrandMark } from "../../shared/BrandMark";
 
 // Login: a local account (POST /auth/login), the organisation's directory when the Gateway says it
 // is on (POST /auth/ldap/login, ADR-0061), or the organisation's provider (ADR-0035).
 type Source = "local" | "ldap";
+
+// mfaChallenge: the challenge a login answers when the password was right and its roles require a
+// second factor (ADR-0062) — a 401 that carries it — or null for any other refusal.
+function mfaChallenge(err: unknown): Challenge | null {
+  if (!(err instanceof ApiError) || err.status !== 401) return null;
+  const b = err.body as { mfa?: unknown; challenge?: unknown } | undefined;
+  if ((b?.mfa === "required" || b?.mfa === "enrollment_required") && typeof b.challenge === "string") {
+    return { kind: b.mfa, challenge: b.challenge };
+  }
+  return null;
+}
 const loginPath: Record<Source, string> = { local: "/auth/login", ldap: "/auth/ldap/login" };
 
 export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: string) => void; navigate: (url: string) => void }) {
@@ -17,6 +29,7 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
 
   // Whether directory login is on: when it is, it is the default, unless a choice was made.
   useEffect(() => {
@@ -41,6 +54,12 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
       setPassword("");
       onToken(r.accessToken);
     } catch (err) {
+      const mfa = mfaChallenge(err);
+      if (mfa) {
+        setPassword("");
+        setChallenge(mfa);
+        return;
+      }
       setError(err);
     } finally {
       setBusy(false);
@@ -69,6 +88,10 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
             <p className="login-sub">Console d'administration des accès privilégiés</p>
           </div>
         </div>
+        {challenge ? (
+          <SecondFactor api={api} challenge={challenge} onToken={onToken} onCancel={() => setChallenge(null)} />
+        ) : (
+        <>
         <form onSubmit={local} aria-label={source === "ldap" ? "Connexion par l'annuaire" : "Connexion locale"}>
           {directory && (
             <fieldset className="login-source">
@@ -99,6 +122,8 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
         </form>
         <p className="or">ou</p>
         <button type="button" onClick={federated} disabled={busy}>Se connecter avec le fournisseur d'identité</button>
+        </>
+        )}
         <Notice error={error} />
       </div>
     </main>

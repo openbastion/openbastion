@@ -44,6 +44,11 @@ type AuthenticationService struct {
 	// Directory login (ADR-0061); nil directory = off.
 	directory   Directory
 	ldapRoleMap RoleMap
+
+	// The second factor (ADR-0062); nil mfa = off.
+	mfaRoles map[string]bool
+	mfa      domain.MFARepository
+	sealer   SecretSealer
 }
 
 // WithClock replaces the clock; for tests.
@@ -97,12 +102,8 @@ func (s *AuthenticationService) Login(ctx context.Context, username, password st
 	if err := s.hasher.Verify(u.PasswordHash, password); err != nil {
 		return "", 0, ErrInvalidCredentials
 	}
-	expiresAt := time.Now().UTC().Add(s.ttl)
-	token, err = s.tokens.Issue(u.ID, u.Username, u.Roles, expiresAt)
-	if err != nil {
-		return "", 0, err
-	}
-	return token, s.ttl, nil
+	// A role that requires the second factor: a challenge, not a token (ADR-0062).
+	return s.tokenOrChallenge(ctx, u, u.Roles, domain.SourceLocal, u.Username)
 }
 
 // VerifyToken is what the API Gateway calls on every authenticated

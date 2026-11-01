@@ -119,6 +119,10 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	// public, answered from a short cache.
 	mux.HandleFunc("/auth/ldap/login", g.handleLDAPLogin)
 	mux.HandleFunc("/auth/ldap", g.handleLDAPInfo)
+	// The second factor (ADR-0062): each step is public and in the login budget.
+	mux.HandleFunc("/auth/mfa/verify", g.handleMFA("/auth/v1/mfa/verify", "challenge", "code"))
+	mux.HandleFunc("/auth/mfa/enroll", g.handleMFA("/auth/v1/mfa/enroll", "challenge", "enrollmentCode"))
+	mux.HandleFunc("/auth/mfa/enroll/confirm", g.handleMFA("/auth/v1/mfa/enroll/confirm", "challenge", "code"))
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	mux.HandleFunc("/sessions/", g.requireAuth(g.handleSessionItem))
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))

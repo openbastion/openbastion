@@ -50,6 +50,55 @@ describe("Login", () => {
     expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual(["/auth/login"]);
   });
 
+  it("asks for the code when the password was right and a second factor is required, then logs in", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { status: 401, body: { mfa: "required", challenge: "ch-1", expiresIn: 300 } },
+      "POST /auth/mfa/verify": { body: { accessToken: "mfa-tok", expiresIn: 3600 } },
+    });
+    const onToken = vi.fn();
+    render(<Login api={api} onToken={onToken} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    const input = await screen.findByLabelText("Code de l'application d'authentification");
+    expect(screen.queryByRole("alert")).toBeNull(); // a step, not an error
+    fireEvent.change(input, { target: { value: "12 34-56" } });
+    fireEvent.click(screen.getByText("Valider"));
+    await waitFor(() => expect(onToken).toHaveBeenCalledWith("mfa-tok"));
+    expect(calls.find((c) => c.path === "/auth/mfa/verify")?.body).toEqual({ challenge: "ch-1", code: "123456" });
+  });
+
+  it("enrolls with the administrator's code, shows the secret once, and confirms with a first code", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { status: 401, body: { mfa: "enrollment_required", challenge: "ch-2", expiresIn: 300 } },
+      "POST /auth/mfa/enroll": { body: { secret: "JBSWY3DPEHPK3PXP", otpauthUri: "otpauth://totp/OpenBastion:root?secret=JBSWY3DPEHPK3PXP" } },
+      "POST /auth/mfa/enroll/confirm": { body: { accessToken: "enrolled-tok", expiresIn: 3600 } },
+    });
+    const onToken = vi.fn();
+    render(<Login api={api} onToken={onToken} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    fireEvent.change(await screen.findByLabelText("Code d'enrôlement"), { target: { value: "abcd-efgh" } });
+    fireEvent.click(screen.getByText("Recevoir le secret"));
+    expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Code de l'application d'authentification"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByText("Valider"));
+    await waitFor(() => expect(onToken).toHaveBeenCalledWith("enrolled-tok"));
+    expect(calls.find((c) => c.path === "/auth/mfa/enroll")?.body).toEqual({ challenge: "ch-2", enrollmentCode: "abcd-efgh" });
+    expect(calls.find((c) => c.path === "/auth/mfa/enroll/confirm")?.body).toEqual({ challenge: "ch-2", code: "654321" });
+  });
+
+  it("treats a plain refusal as an error, never as a second-factor step", async () => {
+    const { api } = fakeApi({ "POST /auth/login": { status: 401, body: { mfa: "required" } } }); // no challenge: not a step
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull();
+  });
+
   it("shows no directory choice when the Gateway does not say it is on", async () => {
     const { api, calls } = fakeApi({ "GET /auth/ldap": { body: { enabled: false } } });
     render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);

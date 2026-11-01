@@ -330,6 +330,26 @@ CREATE TABLE IF NOT EXISTS oidc_login_attempts (
 
 Un compte OIDC a `password_hash` vide (la connexion locale le refuse) et s'appelle `oidc:<sub>`.
 
+### Second facteur (ADR-0062)
+
+`services/access/authentication/migrations/003_mfa.sql` — ce qui existe à la place de `mfa_factors` (§ ci-dessous, cible) pour TOTP :
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_enc BYTEA;                 -- AES-256-GCM sous MFA_SECRET_KEY_HEX, lié à users.id ; NULL : pas enrôlé
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT NOT NULL DEFAULT 0; -- un code ne sert qu'une fois (compare-échange)
+CREATE TABLE IF NOT EXISTS mfa_challenges (       -- le second temps d'une connexion : 5 min, 5 essais
+    challenge_hash BYTEA PRIMARY KEY,              -- SHA-256 du défi, jamais le défi
+    user_id TEXT NOT NULL, roles TEXT[] NOT NULL DEFAULT '{}',
+    kind TEXT NOT NULL CHECK (kind IN ('required', 'enrollment_required')),
+    login_source TEXT NOT NULL, login_name TEXT NOT NULL,
+    pending_secret_enc BYTEA, enrollment_code_hash BYTEA,
+    attempts INTEGER NOT NULL DEFAULT 0, expires_at TIMESTAMPTZ NOT NULL);
+CREATE TABLE IF NOT EXISTS mfa_enrollment_codes ( -- émis par admin-cli : 24 h, usage unique, par empreinte
+    login_source TEXT NOT NULL, login_name TEXT NOT NULL, code_hash BYTEA NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (login_source, login_name));
+```
+
 ### File des alertes à pousser (ADR-0057)
 
 `services/recording-audit/audit-service/migrations/002_alert_outbox.sql` : les alertes qui attendent d'être poussées (ADR-0045), pour qu'un redémarrage de l'Audit Service ne les perde pas. Une ligne par événement ; 256 au plus (borne tenue par le service) ; la ligne disparaît une fois l'alerte livrée ou abandonnée. Le corps est ce que la chaîne contient déjà, sans secret ; la signature est faite à chaque tentative, sa clé n'est pas en base.

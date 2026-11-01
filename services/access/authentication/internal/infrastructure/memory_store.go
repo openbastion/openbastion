@@ -16,10 +16,12 @@ type InMemoryStore struct {
 	byID       map[string]*domain.User
 	byUsername map[string]*domain.User
 	attempts   map[string]domain.LoginAttempt
+	mfa        memoryMFA // ADR-0062, in mfa_store.go
 }
 
 func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{byID: map[string]*domain.User{}, byUsername: map[string]*domain.User{}, attempts: map[string]domain.LoginAttempt{}}
+	return &InMemoryStore{byID: map[string]*domain.User{}, byUsername: map[string]*domain.User{}, attempts: map[string]domain.LoginAttempt{},
+		mfa: memoryMFA{challenges: map[string]domain.MFAChallenge{}, totp: map[string]totpState{}, codes: map[string]enrollmentCode{}}}
 }
 
 func (s *InMemoryStore) Create(ctx context.Context, u *domain.User) error {

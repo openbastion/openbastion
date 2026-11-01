@@ -46,10 +46,17 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TokenPair" }
         "401":
-          description: Identifiants invalides
+          description: >
+            Identifiants invalides — ou, quand le mot de passe est bon et qu'un rôle
+            du compte exige le second facteur (ADR-0062), le défi à présenter à
+            `/auth/mfa/verify` (ou `/auth/mfa/enroll`) : un client qui ne connaît
+            pas le second facteur voit un refus, jamais un jeton.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/Error" }
+                  - { $ref: "#/components/schemas/MFAChallenge" }
         "429":
           description: >
             Trop de tentatives de connexion depuis la même adresse de client
@@ -168,6 +175,84 @@ paths:
         "404": { description: La connexion par annuaire n'est pas configurée }
         "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
         "503": { description: L'annuaire ne répond pas, refuse le compte de service, ou son certificat n'est pas reconnu — la cause reste dans le journal ; jamais de repli sur un compte local }
+
+  /auth/mfa/verify:
+    post:
+      tags: [auth]
+      summary: Termine une connexion par le code du second facteur (ADR-0062)
+      description: >
+        Le code à 6 chiffres de l'application d'authentification, ±30 s, à usage
+        unique. Le défi vaut 5 minutes et 5 essais. Compte dans le budget de
+        connexion par adresse.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MFACodeRequest" }
+      responses:
+        "200":
+          description: Le jeton OpenBastion, comme `/auth/login`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { description: Défi inconnu, expiré ou épuisé, code faux ou déjà utilisé — sans détail }
+        "404": { description: Le second facteur n'est pas configuré }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+        "503": { description: Le secret ne s'ouvre pas (clé changée) ou la base ne répond pas }
+
+  /auth/mfa/enroll:
+    post:
+      tags: [auth]
+      summary: Donne le secret TOTP d'un compte qui n'en a pas, contre le code d'enrôlement d'un administrateur (ADR-0062)
+      description: >
+        Le défi d'un `enrollment_required` et le code émis par
+        `openbastion-cli mfa enrollment-code` pour ce compte. Le secret est rendu
+        une fois (`Cache-Control: no-store`) et n'est actif qu'après
+        `/auth/mfa/enroll/confirm`. Une fois par défi.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge, enrollmentCode]
+              properties:
+                challenge: { type: string }
+                enrollmentCode: { type: string }
+      responses:
+        "200":
+          description: Le secret, à recopier dans l'application d'authentification
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, otpauthUri]
+                properties:
+                  secret: { type: string, description: base32, sans remplissage }
+                  otpauthUri: { type: string }
+        "401": { description: Défi inconnu, expiré, épuisé ou d'un compte déjà enrôlé ; code d'enrôlement faux, d'un autre compte, remplacé ou expiré }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
+
+  /auth/mfa/enroll/confirm:
+    post:
+      tags: [auth]
+      summary: Active le secret par un premier code, brûle le code d'enrôlement et termine la connexion (ADR-0062)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MFACodeRequest" }
+      responses:
+        "200":
+          description: Le jeton OpenBastion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401": { description: Défi inconnu, expiré ou épuisé ; code faux ; code d'enrôlement utilisé ou remplacé entre-temps }
+        "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
 
   /auth/token/refresh:
     post:
@@ -1119,6 +1204,20 @@ components:
         pageSize: { type: integer }
         totalItems: { type: integer }
 
+    MFAChallenge:
+      type: object
+      description: ADR-0062 — le mot de passe était bon, un second facteur est exigé
+      required: [mfa, challenge, expiresIn]
+      properties:
+        mfa: { type: string, enum: [required, enrollment_required] }
+        challenge: { type: string, description: À usage limité (5 essais), valable expiresIn secondes }
+        expiresIn: { type: integer, example: 300 }
+    MFACodeRequest:
+      type: object
+      required: [challenge, code]
+      properties:
+        challenge: { type: string }
+        code: { type: string, pattern: "^[0-9]{6}$" }
     LoginRequest:
       type: object
       required: [username, password]

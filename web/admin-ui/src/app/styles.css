@@ -773,6 +773,45 @@ main.login {
   margin-top: 0.2rem;
 }
 
+/* The second factor (ADR-0062): the code, or the enrollment's secret to copy. */
+.second-factor {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.second-factor form button[type="submit"] {
+  width: 100%;
+}
+
+.enrollment {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 0.75rem;
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.enrollment dt {
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: var(--ink-3);
+}
+
+.enrollment dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.enrollment code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 /* Directory or local account (ADR-0061): a segmented choice above the fields. */
 .login-source {
   display: flex;

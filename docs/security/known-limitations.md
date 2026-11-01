@@ -4,7 +4,7 @@
 
 | Limite | Compensée par | Résolue en |
 |---|---|---|
-| Pas de MFA natif | MFA délégué au fournisseur OIDC externe | v1.0 |
+| ~~Pas de MFA natif~~ — **TOTP natif pour les rôles déclarés** (ADR-0062). **Il reste** : pas de WebAuthn ni de passkeys (TOTP se laisse hameçonner par un relais en temps réel) ; pas de codes de secours ; l'émission d'un code d'enrôlement et la remise à zéro ne sont pas à l'audit (journal du service seulement) ; pas de QR code dans l'Admin UI ; le second facteur est vérifié à la connexion, pas pendant la vie du jeton (1 h) ; perdre `MFA_SECRET_KEY_HEX` rend tous les secrets illisibles | `MFA_REQUIRED_ROLES` sur les rôles puissants ; codes d'enrôlement transmis par un autre canal ; sauvegarde de `MFA_SECRET_KEY_HEX` hors de la base | WebAuthn, codes de secours, audit des gestes d'administration : à décider |
 | Pas de validation multi-étapes | RBAC seul avant octroi | v1.0 (Workflow/Approval Engine) |
 | Un seul protocole (SSH) | Périmètre volontairement restreint pour prouver l'invariant (`docs/roadmap.md` §1) | v1.0/v2.0 |
 | Pas de détection d'anomalie/score de risque | Aucune | v2.0 |

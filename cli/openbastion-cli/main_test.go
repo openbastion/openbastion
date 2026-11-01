@@ -23,6 +23,12 @@ func TestRun_RefusesWhatCannotBeAskedRight(t *testing.T) {
 		"no Audit Service":     {[]string{"audit", "verify-chain"}, "", "needs -audit"},
 		"a password argument":  {[]string{"user", "create", "-authn", "https://a:1", "-username", "a", "-roles", "r", "-password", "x"}, "pw\n", "-password"},
 		"no certificate given": {[]string{"audit", "verify-chain", "-audit", "https://audit-service:8082"}, "", "TLS_"},
+		// ADR-0062: one account, named one way.
+		"mfa code, no Authentication":   {[]string{"mfa", "enrollment-code", "-local", "alice"}, "", "needs -authn and one of"},
+		"mfa code, no account":          {[]string{"mfa", "enrollment-code", "-authn", "https://a:1"}, "", "needs -authn and one of"},
+		"mfa code, two ways to name it": {[]string{"mfa", "enrollment-code", "-authn", "https://a:1", "-local", "a", "-directory", "a"}, "", "needs -authn and one of"},
+		"mfa reset, no account":         {[]string{"mfa", "reset", "-authn", "https://a:1"}, "", "needs -authn and -username"},
+		"mfa code, no certificate":      {[]string{"mfa", "enrollment-code", "-authn", "https://authentication:8086", "-local", "alice"}, "", "TLS_"},
 	} {
 		err := run(c.args, strings.NewReader(c.stdin), &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), c.want) {

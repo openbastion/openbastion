@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
 )
@@ -31,6 +32,11 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/oidc/callback", s.handleOIDCCallback)
 	mux.HandleFunc("/auth/v1/ldap", s.handleLDAPInfo)
 	mux.HandleFunc("/auth/v1/ldap/login", s.handleLDAPLogin)
+	mux.HandleFunc("/auth/v1/mfa/verify", s.handleMFAVerify)
+	mux.HandleFunc("/auth/v1/mfa/enroll", s.handleMFAEnroll)
+	mux.HandleFunc("/auth/v1/mfa/enroll/confirm", s.handleMFAConfirm)
+	mux.HandleFunc("/auth/v1/mfa/enrollment-codes", s.handleMFAEnrollmentCode)
+	mux.HandleFunc("/auth/v1/mfa/reset", s.handleMFAReset)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -87,6 +93,9 @@ func (s *HTTPServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, ttl, err := s.svc.Login(r.Context(), req.Username, req.Password)
+	if writeMFAChallenge(w, err) {
+		return
+	}
 	if err != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -216,6 +225,9 @@ func (s *HTTPServer) handleLDAPLogin(w http.ResponseWriter, r *http.Request) {
 // ldapError says as little as is useful: why a login is refused stays in this log, which names
 // neither the password nor the login name.
 func ldapError(w http.ResponseWriter, err error) {
+	if writeMFAChallenge(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, application.ErrDirectoryOff):
 		http.Error(w, "directory login is not configured", http.StatusNotFound)
@@ -228,4 +240,157 @@ func ldapError(w http.ResponseWriter, err error) {
 		log.Printf("authentication: directory login failed: %v", err)
 		http.Error(w, "the directory cannot be asked now", http.StatusServiceUnavailable)
 	}
+}
+
+// -- the second factor (ADR-0062) -------------------------------------------------------
+
+type mfaChallengeResponse struct {
+	MFA       string `json:"mfa"` // "required" or "enrollment_required"
+	Challenge string `json:"challenge"`
+	ExpiresIn int    `json:"expiresIn"`
+}
+
+// writeMFAChallenge answers a login whose password was right but whose roles require a second
+// factor: 401 — a client that does not know the second factor sees a refusal — with the challenge.
+func writeMFAChallenge(w http.ResponseWriter, err error) bool {
+	var c *application.MFAChallengeRequired
+	if !errors.As(err, &c) {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(mfaChallengeResponse{MFA: c.Kind, Challenge: c.Challenge, ExpiresIn: int(c.ExpiresIn.Seconds())})
+	return true
+}
+
+type mfaCodeRequest struct {
+	Challenge string `json:"challenge"`
+	Code      string `json:"code"`
+}
+
+type mfaEnrollRequest struct {
+	Challenge      string `json:"challenge"`
+	EnrollmentCode string `json:"enrollmentCode"`
+}
+
+type mfaEnrollResponse struct {
+	Secret     string `json:"secret"`
+	OTPAuthURI string `json:"otpauthUri"`
+}
+
+func decodePost(w http.ResponseWriter, r *http.Request, into any) bool {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(into); err != nil {
+		http.Error(w, "the body cannot be read", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+// mfaError says as little as is useful; no code, challenge or secret is ever logged.
+func mfaError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, application.ErrMFAOff):
+		http.Error(w, "the second factor is not configured", http.StatusNotFound)
+	case errors.Is(err, application.ErrUnknownAccount):
+		http.Error(w, "no such account", http.StatusNotFound)
+	case errors.Is(err, application.ErrMFARejected):
+		http.Error(w, "the second factor was refused", http.StatusUnauthorized)
+	default:
+		log.Printf("authentication: second factor failed: %v", err)
+		http.Error(w, "the second factor cannot be checked now", http.StatusServiceUnavailable)
+	}
+}
+
+func writeToken(w http.ResponseWriter, token string, ttl time.Duration) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(loginResponse{AccessToken: token, ExpiresIn: int(ttl.Seconds())})
+}
+
+func (s *HTTPServer) handleMFAVerify(w http.ResponseWriter, r *http.Request) {
+	var req mfaCodeRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	token, ttl, err := s.svc.VerifyMFA(r.Context(), req.Challenge, req.Code)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	writeToken(w, token, ttl)
+}
+
+func (s *HTTPServer) handleMFAEnroll(w http.ResponseWriter, r *http.Request) {
+	var req mfaEnrollRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	e, err := s.svc.StartEnrollment(r.Context(), req.Challenge, req.EnrollmentCode)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(mfaEnrollResponse{Secret: e.Secret, OTPAuthURI: e.OTPAuthURI})
+}
+
+func (s *HTTPServer) handleMFAConfirm(w http.ResponseWriter, r *http.Request) {
+	var req mfaCodeRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	token, ttl, err := s.svc.ConfirmEnrollment(r.Context(), req.Challenge, req.Code)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	writeToken(w, token, ttl)
+}
+
+type mfaEnrollmentCodeRequest struct {
+	Source    string `json:"source"` // "local" or "ldap"
+	LoginName string `json:"loginName"`
+}
+
+type mfaEnrollmentCodeResponse struct {
+	EnrollmentCode string `json:"enrollmentCode"`
+	ExpiresAt      string `json:"expiresAt"`
+}
+
+func (s *HTTPServer) handleMFAEnrollmentCode(w http.ResponseWriter, r *http.Request) {
+	var req mfaEnrollmentCodeRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	code, expires, err := s.svc.IssueEnrollmentCode(r.Context(), req.Source, req.LoginName)
+	if err != nil {
+		mfaError(w, err)
+		return
+	}
+	// The administrator's gesture is in this log; the code is not (ADR-0062: not yet in the audit).
+	log.Printf("authentication: an MFA enrollment code was issued for %s account %q, valid until %s", req.Source, req.LoginName, expires.UTC().Format(time.RFC3339))
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(mfaEnrollmentCodeResponse{EnrollmentCode: code, ExpiresAt: expires.UTC().Format(time.RFC3339)})
+}
+
+type mfaResetRequest struct {
+	Username string `json:"username"`
+}
+
+func (s *HTTPServer) handleMFAReset(w http.ResponseWriter, r *http.Request) {
+	var req mfaResetRequest
+	if !decodePost(w, r, &req) {
+		return
+	}
+	if err := s.svc.ResetMFA(r.Context(), req.Username); err != nil {
+		mfaError(w, err)
+		return
+	}
+	log.Printf("authentication: the second factor of %q was reset", req.Username)
+	w.WriteHeader(http.StatusNoContent)
 }

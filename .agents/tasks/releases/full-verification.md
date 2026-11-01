@@ -5,7 +5,7 @@
 ```sh
 export GOWORK=$PWD/go.work
 export TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
-T="TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox RESTART IDENTITY CASCADE;"
+T="TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes RESTART IDENTITY CASCADE;"
 
 make build vet
 (unset TEST_DATABASE_URL; go test -v <modules> -count=1)                      # unitaires sans base
