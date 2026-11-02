@@ -90,3 +90,28 @@ func TestInputRejectsUnknownTypeAndOversizedMessage(t *testing.T) {
 	wire[0], wire[1] = Version, 99
 	if _, err := DecodeInput(wire, 100, 100); !errors.Is(err, ErrUnsupported) { t.Fatalf("unknown type error = %v", err) }
 }
+
+func TestPointerWheelUsesFinalWireByte(t *testing.T) {
+	in := InputEvent{Type: InputPointer, X: 1, Y: 2, Wheel: -1}
+	wire, err := EncodeInput(in)
+	if err != nil { t.Fatal(err) }
+	if got := int8(wire[15]); got != -1 { t.Fatalf("wire wheel = %d, want -1", got) }
+	decoded, err := DecodeInput(wire, 10, 10)
+	if err != nil { t.Fatal(err) }
+	if decoded.Wheel != -1 { t.Fatalf("decoded wheel = %d, want -1", decoded.Wheel) }
+}
+
+func TestInputRejectsUnexpectedFields(t *testing.T) {
+	key, err := EncodeInput(InputEvent{Type: InputKey, Flags: KeyPressed, Keysym: 0x61})
+	if err != nil { t.Fatal(err) }
+	key[15] = 1
+	if _, err := DecodeInput(key, 100, 100); !errors.Is(err, ErrMalformedMessage) {
+		t.Fatalf("key with wheel data error = %v, want malformed message", err)
+	}
+	release, err := EncodeInput(InputEvent{Type: InputReleaseAll})
+	if err != nil { t.Fatal(err) }
+	release[15] = 1
+	if _, err := DecodeInput(release, 100, 100); !errors.Is(err, ErrMalformedMessage) {
+		t.Fatalf("release-all with wheel data error = %v, want malformed message", err)
+	}
+}
