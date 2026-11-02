@@ -10,6 +10,7 @@ use (
 	./pkg/hostkey
 	./pkg/transit
 	./pkg/buildinfo
+	./proto
 	./services/access/api-gateway
 	./services/access/authentication
 	./services/access/authorization
@@ -18,5 +19,6 @@ use (
 	./services/vault/password-vault
 	./services/recording-audit/audit-service
 	./services/recording-audit/command-recorder
+	./services/recording-audit/video-recorder
 	./test/integration
 )

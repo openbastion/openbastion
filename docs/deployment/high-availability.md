@@ -4,11 +4,11 @@
 
 ## 1. Principe directeur
 
-`docs/architecture/system-overview.md` posait déjà l'exigence : **stateless-first**, état externalisé vers PostgreSQL, Redis et MinIO. Ce guide en tire les conséquences concrètes, composant par composant, et introduit une règle qui n'était pas encore explicite : **fail-closed sur tout ce qui touche au secret ou à l'audit, fail-open sur le reste**.
+`docs/architecture/system-overview.md` posait déjà l'exigence : **stateless-first**, état externalisé vers PostgreSQL, Redis et un stockage objet S3-compatible. Ce guide en tire les conséquences concrètes, composant par composant, et introduit une règle qui n'était pas encore explicite : **fail-closed sur tout ce qui touche au secret ou à l'audit, fail-open sur le reste**.
 
 | Comportement en cas de panne | Composants concernés | Justification |
 |---|---|---|
-| **Fail-closed** (bloquer plutôt que dégrader) | Password Vault, Secrets Manager, Audit Service, PostgreSQL | Un accès privilégié non auditable ou un secret servi sans garantie d'intégrité viole les invariants (`docs/architecture/principles.md`) — mieux vaut refuser une session que la rendre non conforme |
+| **Fail-closed** (bloquer plutôt que dégrader) | Password Vault, Video Recorder, Audit Service, PostgreSQL, Transit, stockage objet | Un accès privilégié non auditable ou un secret servi sans garantie d'intégrité viole les invariants (`docs/architecture/principles.md`) — mieux vaut refuser une session que la rendre non conforme |
 | **Fail-open dégradé** (continuer avec fonctionnalité réduite) | Search Engine, Reporting Service, Notification Service | Leur indisponibilité dégrade l'expérience (pas de recherche, pas d'alerte Slack) mais ne compromet aucun invariant |
 
 ## 2. Topologie par composant
@@ -19,7 +19,8 @@
 | Autorité de certification interne et émission des certificats de service (ADR-0010) | Composant de rang 1 **hors ligne par défaut** : les services lisent des fichiers et ne dépendent pas de l'autorité à l'exécution, mais ne se renouvellent que si elle (ou cert-manager/SPIRE) émet à temps — l'autorité doit être sauvegardée (clé hors des services) et son émission supervisée. Une autorité tombée n'arrête rien jusqu'à la première échéance ; **c'est l'échéance qui fait la panne** (§4) |
 | PostgreSQL | Primaire + répliques en streaming replication, bascule automatisée (ex. Patroni), pooling de connexions (PgBouncer) devant chaque service |
 | Redis | Redis Sentinel (ou Cluster) — perte du cache tolérée en dégradé (§4), perte de l'état de session Broker traitée en fail-closed sur les nouvelles créations |
-| MinIO | Cluster distribué avec erasure coding — HA native du produit, pas de configuration supplémentaire requise |
+| Stockage objet S3-compatible | Clusterisation/réplication selon le fournisseur ; SeaweedFS du Compose mono-hôte n'est pas hautement disponible |
+| Video Recorder | Plusieurs réplicas possibles avec le même PostgreSQL, stockage objet et Transit ; indisponibilité de l'un de ces composants refuse les nouveaux segments et les replays concernés |
 | OpenSearch (v0.0.1) | Cluster multi-nœuds, réplicas de shard ≥ 1 — dégradable sans impact sur l'invariant (§1) |
 | NATS | Cluster NATS JetStream, quorum Raft ≥ 3 nœuds |
 | Kafka | Cluster multi-broker, facteur de réplication ≥ 3, répartition multi-zone |

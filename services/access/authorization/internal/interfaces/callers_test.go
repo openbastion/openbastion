@@ -18,6 +18,8 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("session-broker", "POST", "/authz/v1/check-access"),
 		mtlstest.Allow("password-vault", "POST", "/authz/v1/check-access"),
 		mtlstest.Allow("command-recorder", "POST", "/authz/v1/check-access"),
+		mtlstest.Allow("video-recorder", "POST", "/authz/v1/check-access"),
+		mtlstest.Deny("rdp-proxy", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("ssh-proxy", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("api-gateway", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("session-broker", "GET", "/authz/v1/check-access"),

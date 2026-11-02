@@ -29,7 +29,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-gateway clean
+.PHONY: build version version-check test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-video-recorder run-gateway clean
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -43,8 +43,25 @@ version-check:
 		echo "le tag $(TAG) est la release $(VERSION)"; \
 	fi
 
+## Les contrats Protobuf ne sont pas générés dans git ; buf et les deux plugins doivent être installés.
+BUF ?= buf
+PROTOBUF_GO_VERSION := v1.36.4
+PROTOBUF_GRPC_VERSION := v1.5.1
+BUF_VERSION := v1.75.0
+proto-tools:
+	GOWORK=off $(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	GOWORK=off $(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOBUF_GO_VERSION)
+	GOWORK=off $(GO) install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOBUF_GRPC_VERSION)
+proto-gen:
+	@command -v $(BUF) >/dev/null 2>&1 || { echo "buf introuvable — voir docs/development/prerequisites.md"; exit 1; }
+	@command -v protoc-gen-go >/dev/null 2>&1 || { echo "protoc-gen-go introuvable — voir docs/development/prerequisites.md"; exit 1; }
+	@command -v protoc-gen-go-grpc >/dev/null 2>&1 || { echo "protoc-gen-go-grpc introuvable — voir docs/development/prerequisites.md"; exit 1; }
+	$(BUF) generate
+proto-lint:
+	$(BUF) lint
+
 ## Compile tous les modules actuellement implémentés, estampillés de leur version.
-build:
+build: proto-gen
 	$(GO) build -ldflags "$(LDFLAGS)" \
 		./pkg/buildinfo/... \
 		./pkg/proxycore/... \
@@ -55,6 +72,7 @@ build:
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
 		./pkg/transit/... \
+		./proto/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
@@ -62,10 +80,11 @@ build:
 		./services/proxy/ssh-proxy/... \
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
-		./services/recording-audit/command-recorder/...
+		./services/recording-audit/command-recorder/... \
+		./services/recording-audit/video-recorder/...
 
 ## go vet sur tous les modules.
-vet:
+vet: proto-gen
 	$(GO) vet ./pkg/proxycore/...
 	$(GO) vet ./pkg/mtls/...
 	$(GO) vet ./cli/openbastion-cli/...
@@ -74,6 +93,7 @@ vet:
 	$(GO) vet ./pkg/webhook/...
 	$(GO) vet ./pkg/hostkey/...
 	$(GO) vet ./pkg/transit/...
+	$(GO) vet ./proto/...
 	$(GO) vet ./pkg/buildinfo/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
@@ -83,12 +103,13 @@ vet:
 	$(GO) vet ./services/vault/password-vault/...
 	$(GO) vet ./services/recording-audit/audit-service/...
 	$(GO) vet ./services/recording-audit/command-recorder/...
+	$(GO) vet ./services/recording-audit/video-recorder/...
 	$(GO) vet ./test/integration/...
 
 ## Tests unitaires de tous les services. Hermétique : les tests
 ## PostgreSQL-dépendants (postgres_store_test.go) se SKIP automatiquement
 ## sans TEST_DATABASE_URL.
-test:
+test: proto-gen
 	$(GO) test \
 		./pkg/proxycore/... \
 		./pkg/mtls/... \
@@ -98,6 +119,7 @@ test:
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
 		./pkg/transit/... \
+		./proto/... \
 		./pkg/buildinfo/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
@@ -107,6 +129,7 @@ test:
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
 		./services/recording-audit/command-recorder/... \
+		./services/recording-audit/video-recorder/... \
 		-count=1
 
 ## Tests d'intégration : compile et lance les services comme processus
@@ -155,7 +178,7 @@ test:
 ##                            vivant ; refus de démarrer sans identité propre
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
-test-integration:
+test-integration: build
 	$(GO) test ./test/integration/... -v -count=1 -timeout=300s
 
 ## L'Admin UI (web/admin-ui, ADR-0036) : dépendances depuis le lockfile, tests, construction.
@@ -169,7 +192,7 @@ ui-build: ui-icons
 ## Les vulnérabilités connues (ADR-0052) : govulncheck, épinglé, sur chaque module du go.work
 ## (une vulnérabilité dont le code est appelé fait échouer), puis npm audit sur les deux lockfiles.
 GOVULNCHECK ?= golang.org/x/vuln/cmd/govulncheck@v1.9.0
-vuln:
+vuln: proto-gen
 	@set -e; for m in $$(awk '/^use \(/{f=1;next} f&&/\)/{exit} f{print $$1}' go.work); do \
 		echo "govulncheck $$m"; $(GO) run $(GOVULNCHECK) -C $$m ./...; \
 	done
@@ -178,7 +201,7 @@ vuln:
 
 ## Construit et démarre la pile docker-compose réelle (deploy/docker-compose, ADR-0033) et
 ## y joue le parcours du MVP sur les seuls ports publiés. Docker requis ; quelques minutes.
-test-compose:
+test-compose: proto-gen
 	COMPOSE_TEST=1 $(GO) test ./test/integration/ -run TestCompose -v -count=1 -timeout=900s
 
 ## Lance les tests PostgreSQL réels (postgres_store_test.go +
@@ -200,7 +223,7 @@ test-compose:
 ## échouer TestPostgresFlow_PolicySurvivesAuthorizationProcessRestart sur
 ## un 403 qui n'a rien à voir avec un vrai bug. D'où la seconde purge
 ## juste avant la ligne `test/integration`, pas seulement une au début.
-test-postgres:
+test-postgres: proto-gen
 	@if [ -z "$$TEST_DATABASE_URL" ]; then \
 		echo "TEST_DATABASE_URL non défini — voir NOTES_SANDBOX.md"; exit 1; \
 	fi
@@ -212,7 +235,8 @@ test-postgres:
 	$(GO) test ./services/access/session-broker/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/audit-service/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/command-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials RESTART IDENTITY CASCADE;"
+	$(GO) test ./services/recording-audit/video-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, video_recording_segments, video_recordings RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=300s
 
 ## Les images : celle d'OpenBastion (cible runtime) et postgres:16 telle qu'épinglée, analysées par
@@ -257,6 +281,9 @@ run-ssh-proxy:
 run-recorder:
 	$(call tls,command-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 AUDIT_URL=$(SCHEME)://127.0.0.1:8082 \
 		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder
+run-video-recorder:
+	$(call tls,video-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 AUDIT_URL=$(SCHEME)://127.0.0.1:8082 \
+		$(GO) run ./services/recording-audit/video-recorder/cmd/video-recorder
 # BREAKGLASS_MAX_MINUTES=30 active le break-glass (ADR-0009) ; absent ou 0 : désactivé.
 # Une demande break-glass attend l'accord d'une autre personne (ADR-0011) :
 # BREAKGLASS_APPROVAL=required (défaut) | disabled (mode faible, annoncé),

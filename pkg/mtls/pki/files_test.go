@@ -80,7 +80,7 @@ func TestStandardServices_AreTheWholeDeployment(t *testing.T) {
 		}
 		seen[s] = true
 	}
-	for _, want := range []string{"api-gateway", "authentication", "authorization", "session-broker", "ssh-proxy", "password-vault", "audit-service", "command-recorder", "admin-cli"} {
+	for _, want := range []string{"api-gateway", "authentication", "authorization", "session-broker", "ssh-proxy", "password-vault", "audit-service", "command-recorder", "video-recorder", "admin-cli"} {
 		if !seen[want] {
 			t.Errorf("%q has no standard identity", want)
 		}

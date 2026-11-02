@@ -26,7 +26,9 @@ strict_defaults:
   TRUSTED_PROXY_CIDRS:     {default: "personne", note: "ADR-0015 ; une confiance trop large est fatale"}
   SSH_PROXY_URLS:          {default: "SSH_PROXY_URL, une instance", min: 1, max: 16, service: session-broker, note: "ADR-0046 ; avec SSH_PROXY_URL, doublon ou entrée illisible : fatal ; révocation confirmée par toutes"}
   SSH_PUBLIC_ENDPOINT:     {default: "127.0.0.1:SSH_PORT", format: "hôte:port", service: ssh-proxy, note: "ADR-0046 ; illisible : fatal"}
-  TRANSIT_TOKEN_RELOAD_SECONDS: {default: 30, min: 1, max: 3600, service: "password-vault, command-recorder", note: "ADR-0056 ; un nouveau jeton n'est pris qu'accepté par Transit"}
+  TRANSIT_TOKEN_RELOAD_SECONDS: {default: 30, min: 1, max: 3600, service: "password-vault, command-recorder, video-recorder", note: "ADR-0056 ; un nouveau jeton n'est pris qu'accepté par Transit"}
+  S3_ALLOW_HTTP:           {default: false, weak: true, service: video-recorder, note: "développement seulement ; HTTPS et identité SeaweedFS attendus en déploiement"}
+  S3_CREATE_BUCKET:        {default: false, service: video-recorder, note: "requiert le privilège Admin du stockage S3"}
   KEY_REWRAP_SWEEP_SECONDS: {default: 60, min: 1, max: 3600, service: "password-vault, command-recorder", note: "ADR-0055 ; seulement avec Transit et KMS_KEY_HEX gardé"}
   SESSION_EXPIRY_SWEEP_SECONDS: {default: 30, min: 1, max: 3600, note: "ADR-0034"}
   ROTATION_SWEEP_SECONDS:  {default: 300, min: 1, max: 86400, service: password-vault, note: "ADR-0040 ; sans interrupteur"}
@@ -35,10 +37,12 @@ strict_defaults:
   AUDIT_RETENTION_MONTHS:  {default: "désactivé", min: 1, max: 120, note: "ADR-0032, avec AUDIT_ARCHIVE_DIR"}
 startup_keys:              # obligatoires avec DATABASE_URL ; jamais dans le dépôt
   - KMS_KEY_HEX             # password-vault, command-recorder — ou Transit (ADR-0049) : TRANSIT_ADDR + TRANSIT_KEY + TRANSIT_TOKEN_FILE (fichier 0600) ou AppRole TRANSIT_ROLE_ID_FILE + TRANSIT_SECRET_ID_FILE (fichiers 0600, ADR-0058 ; jamais les deux), aller-retour au démarrage ; avec les deux, KMS_KEY_HEX ne fait plus que lire
+  - TRANSIT                 # video-recorder (ADR-0070 en déploiement ; clé locale réservée au développement) : TRANSIT_ADDR + TRANSIT_KEY + TRANSIT_TOKEN_FILE ou AppRole, TLS CA, aller-retour au démarrage
   - TOKEN_SIGNING_KEY_HEX   # authentication
   - AUDIT_CHAIN_KEY_HEX     # audit-service (ADR-0027)
 optional_keys:             # requises seulement avec la fonction qu'elles servent ; jamais dans le dépôt
   - MFA_SECRET_KEY_HEX      # authentication (ADR-0062) : scelle les secrets TOTP, obligatoire avec MFA_REQUIRED_ROLES (et réciproquement) ; la perdre rend tous les secrets illisibles
+  - S3_ACCESS_KEY + S3_SECRET_KEY # video-recorder : compte S3 dédié ; en Compose, identité SeaweedFS actuellement administratrice pour créer le bucket
 optional_secrets:          # fichiers 0600, jamais une variable d'environnement qui porte la valeur
   - LDAP_BIND_PASSWORD_FILE # authentication (ADR-0061) : le compte de service de l'annuaire, relu à chaque connexion ; avec LDAP_URL, LDAP_SCHEMA, LDAP_BIND_DN, LDAP_USER_BASE_DN, LDAP_GROUP_BASE_DN, LDAP_ROLE_MAP_FILE, tout ou rien
 never:

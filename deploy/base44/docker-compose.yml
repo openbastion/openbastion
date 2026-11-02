@@ -44,6 +44,7 @@ x-db-passwords: &db-passwords
   PG_PASSWORD_PASSWORD_VAULT: ob-dev-password-vault
   PG_PASSWORD_AUDIT_SERVICE: ob-dev-audit-service
   PG_PASSWORD_COMMAND_RECORDER: ob-dev-command-recorder
+  PG_PASSWORD_VIDEO_RECORDER: ob-dev-video-recorder
 
 services:
   # The certificate job, at every `up`: it keeps the authority and renews the services'
@@ -80,7 +81,7 @@ services:
       test:
         - CMD-SHELL
         - >
-          for user in authentication authorization session_broker password_vault audit_service command_recorder; do
+          for user in authentication authorization session_broker password_vault audit_service command_recorder video_recorder; do
             case "$$user" in
               authentication) pw='ob-dev-authentication' ;;
               authorization) pw='ob-dev-authorization' ;;
@@ -88,6 +89,7 @@ services:
               password_vault) pw='ob-dev-password-vault' ;;
               audit_service) pw='ob-dev-audit-service' ;;
               command_recorder) pw='ob-dev-command-recorder' ;;
+              video_recorder) pw='ob-dev-video-recorder' ;;
             esac
             PGPASSWORD="$$pw" pg_isready -h 127.0.0.1 -U "$$user" -d "$$user" >/dev/null || exit 1;
           done
@@ -216,6 +218,92 @@ services:
       retries: 24
       start_period: 120s
 
+  seaweedfs-config:
+    <<: *go
+    restart: "no"
+    command: ["sh", "/src/deploy/docker-compose/seaweedfs-config.sh"]
+    environment:
+      VIDEO_RECORDER_S3_ACCESS_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      VIDEO_RECORDER_S3_SECRET_KEY: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    volumes:
+      - ../..:/src
+      - seaweedfs-config:/config
+    networks: []
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8
+    restart: on-failure
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command:
+      - server
+      - -dir=/data
+      - -volume.max=0
+      - -s3
+      - -s3.config=/config/s3.json
+      - -s3.port=0
+      - -s3.port.https=8333
+      - -s3.cert.file=/pki/cert.pem
+      - -s3.key.file=/pki/key.pem
+      - -s3.cacert.file=/pki/ca.pem
+      - -s3.tlsVerifyClientCert=true
+    volumes:
+      - seaweedfs-data:/data
+      - {type: volume, source: seaweedfs-config, target: /config, read_only: true}
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: seaweedfs}}
+    tmpfs: ["/tmp"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "2", "http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s
+    networks: [internal]
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      seaweedfs-config: {condition: service_completed_successfully}
+
+  video-recorder:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/recording-audit/video-recorder/cmd/video-recorder"]
+    environment:
+      <<: *go-env
+      PORT: "8088"
+      GRPC_PORT: "8089"
+      DATABASE_URL: postgres://video_recorder:ob-dev-video-recorder@postgres:5432/video_recorder?sslmode=disable
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+      S3_ENDPOINT: https://seaweedfs:8333
+      S3_BUCKET: openbastion-recordings
+      S3_ACCESS_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      S3_SECRET_KEY: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      S3_CA_FILE: /pki/ca.pem
+      S3_TLS_SERVICE: seaweedfs
+      S3_CREATE_BUCKET: "true"
+      VIDEO_RECORDER_KMS_KEY_HEX: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    volumes:
+      - ../..:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: video-recorder}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      pki: {condition: service_completed_successfully}
+      authorization: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+      seaweedfs: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8088 && exec 4<>/dev/tcp/127.0.0.1/8089"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
   ssh-proxy:
     <<: *go
     command: ["go", "run", "github.com/openbastion/openbastion/services/proxy/ssh-proxy/cmd/ssh-proxy"]
@@ -287,6 +375,7 @@ services:
       SESSION_BROKER_URL: https://session-broker:8084
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
+      VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: api-gateway}}
@@ -299,6 +388,7 @@ services:
       password-vault: {condition: service_healthy}
       session-broker: {condition: service_healthy}
       command-recorder: {condition: service_healthy}
+      video-recorder: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
       interval: 5s
@@ -380,6 +470,8 @@ volumes:
   pki:
   pki-ca:
   anchors:
+  seaweedfs-config:
+  seaweedfs-data:
   node_modules:
   icons_node_modules:
 

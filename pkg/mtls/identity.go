@@ -32,6 +32,9 @@ const (
 	PasswordVault   = "password-vault"
 	AuditService    = "audit-service"
 	CommandRecorder = "command-recorder"
+	VideoRecorder   = "video-recorder"
+	SeaweedFS       = "seaweedfs"
+	RDPProxy        = "rdp-proxy"
 
 	// AdminCLI is the operator's tooling. It is allowed on the few routes that
 	// have no public surface (creating a local user, verifying the audit chain)

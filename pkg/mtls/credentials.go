@@ -79,6 +79,10 @@ func (c *Credentials) Identity() string { return c.cur.Load().identity }
 // TrustDomain is the trust domain peers must belong to.
 func (c *Credentials) TrustDomain() string { return c.settings.TrustDomain }
 
+// ClientCertificate returns the current identity for TLS clients that use a
+// transport other than the built-in HTTP and gRPC clients.
+func (c *Credentials) ClientCertificate() *tls.Certificate { return &c.current().cert }
+
 // NotAfter is when the certificate currently in use expires.
 func (c *Credentials) NotAfter() time.Time { return c.cur.Load().leaf.NotAfter }
 
@@ -224,6 +228,17 @@ func (c *Credentials) refresh() {
 // trust domain — or no connection at all. The configuration is rebuilt per
 // handshake from the current snapshot, so rotation takes effect without a restart.
 func (c *Credentials) ServerTLS() *tls.Config {
+	return c.serverTLS("http/1.1")
+}
+
+// GRPCServerTLS is the configuration for a gRPC server: TLS 1.3, a client
+// certificate that chains to the CA bundle and carries a valid identity of this
+// trust domain, and HTTP/2 ALPN.
+func (c *Credentials) GRPCServerTLS() *tls.Config {
+	return c.serverTLS("h2")
+}
+
+func (c *Credentials) serverTLS(alpn string) *tls.Config {
 	td := c.settings.TrustDomain
 	return &tls.Config{
 		// If GetConfigForClient were ever to fail, this fallback still demands a
@@ -237,7 +252,7 @@ func (c *Credentials) ServerTLS() *tls.Config {
 				Certificates: []tls.Certificate{m.cert},
 				ClientAuth:   tls.RequireAndVerifyClientCert,
 				ClientCAs:    m.cas,
-				NextProtos:   []string{"http/1.1"},
+				NextProtos:   []string{alpn},
 				VerifyConnection: func(cs tls.ConnectionState) error {
 					if len(cs.PeerCertificates) == 0 {
 						return ErrNoIdentity
@@ -331,4 +346,52 @@ func (c *Credentials) Client(peers ...Peer) (*http.Client, error) {
 		MaxIdleConnsPerHost: 4,
 	}
 	return &http.Client{Transport: tr}, nil
+}
+
+// GRPCClientTLS returns a TLS 1.3 configuration for one registered gRPC peer.
+// The peer's certificate must name the dialled host and carry the expected
+// OpenBastion service identity. The client certificate is refreshed at each
+// handshake, so service certificate rotation does not require a process restart.
+func (c *Credentials) GRPCClientTLS(peer Peer) (*tls.Config, error) {
+	u, err := url.Parse(peer.URL)
+	if err != nil || u.Host == "" {
+		return nil, fmt.Errorf("mtls: peer %q has no usable URL %q", peer.Service, peer.URL)
+	}
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("mtls: peer %q is reached at %q, but INTERNAL_TLS requires https", peer.Service, peer.URL)
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("mtls: gRPC peer %q URL must not contain credentials, a path, query, or fragment", peer.Service)
+	}
+	if !ValidServiceName(peer.Service) {
+		return nil, fmt.Errorf("mtls: %q is not a valid service name", peer.Service)
+	}
+	host := u.Hostname()
+	if host == "" {
+		return nil, fmt.Errorf("mtls: peer %q has no host", peer.Service)
+	}
+	m := c.current()
+	td := c.settings.TrustDomain
+	return &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		ServerName: host,
+		RootCAs:    m.cas,
+		NextProtos: []string{"h2"},
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &c.current().cert, nil
+		},
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return ErrNoIdentity
+			}
+			got, err := ServiceFromCertificate(cs.PeerCertificates[0], td)
+			if err != nil {
+				return err
+			}
+			if got != peer.Service {
+				return fmt.Errorf("mtls: %s answered as %q, expected %q", u.Host, got, peer.Service)
+			}
+			return nil
+		},
+	}, nil
 }

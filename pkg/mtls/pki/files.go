@@ -14,7 +14,7 @@ import (
 var StandardServices = []string{
 	mtls.APIGateway, mtls.Authentication, mtls.Authorization, mtls.SessionBroker,
 	mtls.SSHProxy, mtls.PasswordVault, mtls.AuditService, mtls.CommandRecorder,
-	mtls.AdminCLI,
+	mtls.VideoRecorder, mtls.SeaweedFS, mtls.AdminCLI,
 }
 
 // The layout of a PKI directory:

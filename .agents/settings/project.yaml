@@ -30,6 +30,7 @@ services:                    # identité mTLS = nom ; ports par défaut (archite
   ssh-proxy:        {path: services/proxy/ssh-proxy,                 port: 8085, ssh_port: 2222, single_instance: true}
   authentication:   {path: services/access/authentication,           port: 8086}
   command-recorder: {path: services/recording-audit/command-recorder, port: 8087}
+  video-recorder:   {path: services/recording-audit/video-recorder, port: 8088, grpc_port: 8089}
 
 libraries:
   pkg/proxycore: pipeline proxy commun (ADR-0006)

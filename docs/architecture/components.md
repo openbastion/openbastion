@@ -110,7 +110,7 @@ C4Component
 
     Container_Boundary(rec, "Enregistrement & Audit") {
         Component(sr, "Session Recorder", "Go", "Orchestration du cycle de vie d'un enregistrement")
-        Component(vr, "Video Recorder", "Go", "Capture pixel RDP/VNC")
+        Component(vr, "Video Recorder", "Go", "Persistance et replay de segments PNG ; producteur RDP à venir (ADR-0069)")
         Component(cr, "Command Recorder", "Go", "Capture texte SSH/DB/K8s")
         Component(aud, "Audit Service", "Go", "Journal immuable et signé")
         Component(se, "Search Engine", "Go", "Indexation et recherche")
@@ -118,16 +118,16 @@ C4Component
     }
 
     Container(proxy, "Couche Proxy")
-    ContainerDb(minio, "MinIO")
+    ContainerDb(objects, "Stockage objet S3-compatible")
     ContainerDb(search, "OpenSearch")
     Container(kafka, "Kafka")
 
     Rel(proxy, sr, "Flux clipboard / transfert fichiers / impression")
-    Rel(proxy, vr, "Flux pixel")
+    Rel(proxy, vr, "Flux pixel (producteur prévu par ADR-0069)")
     Rel(proxy, cr, "Flux commande")
     Rel(sr, aud, "Événements signés")
-    Rel(vr, minio, "Artefacts vidéo chiffrés")
-    Rel(cr, minio, "Logs commande chiffrés")
+    Rel(vr, objects, "Segments vidéo chiffrés")
+    Rel(cr, aud, "Événements de session")
     Rel(aud, kafka, "Streaming durable")
     Rel(kafka, se, "Indexation")
     Rel(se, search, "Stockage index")

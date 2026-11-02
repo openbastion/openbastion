@@ -122,7 +122,7 @@ Tous ces proxies partagent un **pipeline commun** (ADR-0006 ; l'invariant qu'il 
 | Service | Responsabilité |
 |---|---|
 | **Session Recorder** | Orchestration du cycle de vie d'un enregistrement (démarrage, métadonnées, chiffrement, indexation) ; agrège les flux clipboard/transfert de fichiers/impression capturés par les proxies. |
-| **Video Recorder** | Capture pixel (RDP/VNC/consoles graphiques) → artefacts vidéo compressés dans MinIO, rejouables. |
+| **Video Recorder** | Segments PNG ordonnés, chiffrés avant stockage S3-compatible, métadonnées PostgreSQL et replay audité. Le proxy RDP producteur et le lecteur Admin UI ne sont pas encore implémentés (ADR-0069/0070). |
 | **Command Recorder** | Capture texte (SSH/Telnet/DB/K8s exec) → log structuré recherchable commande par commande. |
 | **Audit Service** | Journal immuable et signé de toute action système (connexion, déconnexion, commande, upload/download, escalade, rotation, config, workflow, appel API). |
 | **Search Engine** | Indexation OpenSearch — recherche plein texte, par utilisateur, serveur, commande, date, à travers sessions et audit. |
@@ -232,7 +232,7 @@ sequenceDiagram
 | Recherche | OpenSearch |
 | Bus temps réel | NATS |
 | Streaming durable | Kafka |
-| Stockage objet | MinIO |
+| Stockage objet | API S3-compatible (SeaweedFS en Compose ; endpoint externe configurable) |
 | Service mesh (data plane) | Envoy |
 | Reverse proxy / edge | Traefik |
 | Observabilité | Prometheus, Grafana, Loki, Tempo, OpenTelemetry |
@@ -243,7 +243,7 @@ sequenceDiagram
 ## Exigences non fonctionnelles (aperçu)
 
 Ces points seront détaillés dans les guides `docs/deployment/high-availability.md` et `docs/deployment/disaster-recovery.md` ; à ce stade, ils orientent déjà des choix structurants :
-- **Haute disponibilité** : tous les microservices sont conçus stateless-first, état externalisé (PostgreSQL, Redis, MinIO), permettant réplication horizontale.
+- **Haute disponibilité** : tous les microservices sont conçus stateless-first, état externalisé (PostgreSQL, Redis, stockage objet S3-compatible), permettant réplication horizontale.
 - **Scalabilité** : la couche proxy est le composant le plus consommateur en ressources (sessions actives) — dimensionnement indépendant du reste du système.
 - **Reprise d'activité** : la séparation Vault / Audit / Session store permet des stratégies de sauvegarde et de restauration différenciées selon la criticité.
 
@@ -254,4 +254,4 @@ Ces points seront détaillés dans les guides `docs/deployment/high-availability
 | Complexité opérationnelle du double bus (NATS + Kafka) | Charge d'exploitation accrue | ADR dédié, runbooks d'exploitation |
 | Surface d'attaque de la couche proxy (point de détention des secrets) | Critique | Durcissement, scoping Vault strict par proxy, purge mémoire, tests de sécurité dédiés |
 | Dépendance à des connecteurs d'identité tiers hétérogènes (AD, Entra ID, SAML, OIDC) | Risque d'incohérence de mapping des identités | Modèle d'identité canonique interne + SCIM comme source de vérité de provisioning |
-| Volume de données d'enregistrement de session (vidéo + commande) | Coût de stockage, rétention | Politique de rétention configurable, compression, cycle de vie MinIO |
+| Volume de données d'enregistrement de session (vidéo + commande) | Coût de stockage, rétention | Politique de rétention configurable et cycle de vie du stockage objet |

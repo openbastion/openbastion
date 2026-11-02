@@ -361,8 +361,8 @@ option go_package = "github.com/openbastion/openbastion/proto/recording/v1;recor
 
 service SessionRecording {
   rpc StreamCommandEntries(stream CommandEntry) returns (StreamAck);
-  // Signature réservée pour l'ajout du Video Recorder en v0.0.1 — ne rompt pas
-  // le contrat existant.
+  // Ancienne signature conservée pour compatibilité, non servie. L'ingestion
+  // vidéo acquittée utilise VideoRecording.StreamVideoSegments.
   rpc StreamVideoFrames(stream VideoFrame) returns (StreamAck);
 }
 
@@ -550,9 +550,16 @@ sequenceDiagram
 | `VaultAccountAdmin` | Administration UI/API Gateway | Vault | Non |
 | `SessionRecording` | Proxy protocolaire | Command Recorder | Non (mais le texte d'une commande saisie peut en contenir un — voir §6) |
 | `SessionRecordingQuery` | API Gateway | Command Recorder | Non (idem : le replay est une donnée sensible) |
+| `VideoRecording` | Proxy RDP, API Gateway | Video Recorder | Non (les images enregistrées peuvent contenir des secrets visibles) |
 | `AuditIngestion` | Tout service | Audit Service | Non |
 | `Authorization` | Session Broker, API Gateway | Authorization Service | Non |
 
-## 11. Le seul point où un secret existe
+## 11. Le seul RPC qui transporte un credential de cible en clair
 
-`VaultCredentialIssuance.FetchCredential` matérialise, au niveau du contrat de plus bas niveau documenté, l'invariant posé dès le premier document (`docs/architecture/principles.md`) et vérifié à chaque étage depuis : c'est le seul point de tout le système, du diagramme de contexte jusqu'au champ Protobuf, où un secret existe.
+`VaultCredentialIssuance.FetchCredential` est le seul RPC qui transporte le credential de la cible en clair. Les images du Video Recorder restent des données sensibles chiffrées au repos et ne transitent pas par ce RPC.
+
+## 12. Proxy RDP / Gateway → Video Recorder — `VideoRecording`
+
+Le service gRPC est défini dans `proto/recording/v1/recording.proto`. `StreamVideoSegments` accepte un flux bidirectionnel de segments PNG ordonnés ; chaque acquittement est émis après chiffrement de l'objet, écriture S3-compatible et commit des métadonnées PostgreSQL. Seule l'identité mTLS `rdp-proxy` peut ingérer ou sonder `CheckReadiness`. Ce proxy n'est pas encore implémenté : aucune session RDP n'est actuellement enregistrée.
+
+`GetVideoSegment` est réservé à l'identité mTLS `api-gateway`. La Gateway ne transmet au Recorder que l'utilisateur et les rôles tirés du jeton vérifié. Le Recorder consulte Authorization (`recording:session:read`) et écrit `recording.read` à l'Audit Service avant de déchiffrer ou de servir un segment ; toute panne ou tout refus ferme la lecture. La route publique est `GET /sessions/{sessionId}/recording/video/segments/{firstSequence}` (voir `docs/api/rest/openapi.yaml`) ; le stockage objet et ses identifiants ne sont jamais exposés au navigateur.

@@ -59,7 +59,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: "**/go.sum"
-      - run: make build vet
+      - run: make proto-tools proto-lint build vet
       - name: gofmt -l (must print nothing)
         run: |
           unformatted=$(git ls-files '*.go' | xargs gofmt -l)
@@ -79,7 +79,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: "**/go.sum"
-      - run: make test GOFLAGS=-race
+      - run: make proto-tools test GOFLAGS=-race
 
   integration:
     name: integration on real processes, without a database
@@ -94,7 +94,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: "**/go.sum"
       # The integration tests build the services with GOPROXY=off: the module cache comes first.
-      - run: make build
+      - run: make proto-tools proto-lint build
       - run: GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
 
   postgres:
@@ -124,7 +124,7 @@ jobs:
           cache-dependency-path: "**/go.sum"
       - name: psql
         run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
-      - run: make build
+      - run: make proto-tools build
       # The tables exist once a service has migrated them; the unit tests of each store do.
       - name: unit tests with the database
         run: make test
@@ -169,7 +169,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       # Every module of go.work, symbol by symbol (a vulnerability whose code is called fails the
       # job), and both lockfiles of the Admin UI (ADR-0052).
-      - run: make vuln
+      - run: make proto-tools vuln
 
 
   images:

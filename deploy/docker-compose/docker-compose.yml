@@ -58,6 +58,7 @@ services:
       PG_PASSWORD_PASSWORD_VAULT: ${PG_PASSWORD_PASSWORD_VAULT:?}
       PG_PASSWORD_AUDIT_SERVICE: ${PG_PASSWORD_AUDIT_SERVICE:?}
       PG_PASSWORD_COMMAND_RECORDER: ${PG_PASSWORD_COMMAND_RECORDER:?}
+      PG_PASSWORD_VIDEO_RECORDER: ${PG_PASSWORD_VIDEO_RECORDER:-}
     volumes:
       - postgres:/var/lib/postgresql/data
       - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
@@ -138,6 +139,125 @@ services:
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: command-recorder}}
 
+  seaweedfs-config:
+    profiles: [recording]
+    image: openbastion-tools:dev
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/Dockerfile
+      target: tools
+    entrypoint: ["/bin/sh", "/deploy/seaweedfs-config.sh"]
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: [no-new-privileges:true]
+    environment:
+      VIDEO_RECORDER_S3_ACCESS_KEY: ${VIDEO_RECORDER_S3_ACCESS_KEY:-}
+      VIDEO_RECORDER_S3_SECRET_KEY: ${VIDEO_RECORDER_S3_SECRET_KEY:-}
+    volumes:
+      - seaweedfs-config:/config
+      - ./seaweedfs-config.sh:/deploy/seaweedfs-config.sh:ro
+    network_mode: none
+
+  video-recorder-db-init:
+    profiles: [recording]
+    image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
+    restart: "no"
+    entrypoint: ["/bin/sh", "/deploy/video-recorder-db-init.sh"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGCONNECT_TIMEOUT: "5"
+      PGUSER: openbastion
+      PGDATABASE: postgres
+      PGPASSWORD: ${PG_SUPERUSER_PASSWORD:-}
+      PG_PASSWORD_VIDEO_RECORDER: ${PG_PASSWORD_VIDEO_RECORDER:-}
+    volumes:
+      - ./video-recorder-db-init.sh:/deploy/video-recorder-db-init.sh:ro
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  seaweedfs:
+    profiles: [recording]
+    image: chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command:
+      - server
+      - -dir=/data
+      - -volume.max=0
+      - -s3
+      - -s3.config=/config/s3.json
+      - -s3.port=0
+      - -s3.port.https=8333
+      - -s3.cert.file=/pki/cert.pem
+      - -s3.key.file=/pki/key.pem
+      - -s3.cacert.file=/pki/ca.pem
+      - -s3.tlsVerifyClientCert=true
+    volumes:
+      - seaweedfs-data:/data
+      - {type: volume, source: seaweedfs-config, target: /config, read_only: true}
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: seaweedfs}}
+    tmpfs: ["/tmp"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "2", "http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s
+    networks: [internal]
+    depends_on:
+      pki:
+        condition: service_completed_successfully
+      seaweedfs-config:
+        condition: service_completed_successfully
+
+  video-recorder:
+    profiles: [recording]
+    <<: *service
+    entrypoint: ["/usr/local/bin/video-recorder"]
+    environment:
+      <<: *tls
+      PORT: "8088"
+      GRPC_PORT: "8089"
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+      DATABASE_URL: postgres://video_recorder:${PG_PASSWORD_VIDEO_RECORDER:-}@postgres:5432/video_recorder?sslmode=disable
+      S3_ENDPOINT: https://seaweedfs:8333
+      S3_BUCKET: openbastion-recordings
+      S3_ACCESS_KEY: ${VIDEO_RECORDER_S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${VIDEO_RECORDER_S3_SECRET_KEY:-}
+      S3_CA_FILE: /pki/ca.pem
+      S3_TLS_SERVICE: seaweedfs
+      S3_CREATE_BUCKET: "true"
+      TRANSIT_ADDR: ${VIDEO_RECORDER_TRANSIT_ADDR:-}
+      TRANSIT_KEY: ${VIDEO_RECORDER_TRANSIT_KEY:-}
+      TRANSIT_TOKEN_FILE: /run/secrets/video-recorder-transit-token
+      TRANSIT_CA_FILE: /run/secrets/video-recorder-transit-ca
+    secrets:
+      - video-recorder-transit-token
+      - video-recorder-transit-ca
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: video-recorder}}
+    depends_on:
+      video-recorder-db-init:
+        condition: service_completed_successfully
+      authorization:
+        condition: service_started
+      audit-service:
+        condition: service_started
+      seaweedfs:
+        condition: service_healthy
+
   ssh-proxy:
     <<: *service
     entrypoint: ["/usr/local/bin/ssh-proxy"]
@@ -179,6 +299,7 @@ services:
       SESSION_BROKER_URL: https://session-broker:8084
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
+      VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
       # The Admin UI under /ui/, same origin as the API (ADR-0036).
       ADMIN_UI_DIR: /usr/local/share/openbastion/admin-ui
     ports:
@@ -213,6 +334,14 @@ volumes:
   pki-ca:
   anchors:
   archives:
+  seaweedfs-config:
+  seaweedfs-data:
 
 networks:
   internal:
+
+secrets:
+  video-recorder-transit-token:
+    file: ${VIDEO_RECORDER_TRANSIT_TOKEN_FILE:-/dev/null}
+  video-recorder-transit-ca:
+    file: ${VIDEO_RECORDER_TRANSIT_CA_FILE:-/dev/null}

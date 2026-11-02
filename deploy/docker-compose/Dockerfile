@@ -19,6 +19,7 @@ RUN mkdir -p /out && go build -ldflags="-s -w -X github.com/openbastion/openbast
       ./services/vault/password-vault/cmd/password-vault \
       ./services/recording-audit/audit-service/cmd/audit-service \
       ./services/recording-audit/command-recorder/cmd/command-recorder \
+      ./services/recording-audit/video-recorder/cmd/video-recorder \
       ./pkg/mtls/cmd/openbastion-pki \
       ./cli/openbastion-cli \
       ./test/integration/cmd/demo-ssh-target

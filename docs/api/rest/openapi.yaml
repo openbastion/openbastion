@@ -1017,6 +1017,64 @@ paths:
             panne (ADR-0022). La même lecture aboutit une fois la dépendance
             revenue.
 
+  /sessions/{sessionId}/recording/video/segments/{firstSequence}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - name: firstSequence
+        in: path
+        required: true
+        schema: { type: integer, format: int64, minimum: 1 }
+        description: Première séquence du segment à relire.
+    get:
+      tags: [sessions]
+      summary: Récupère un segment vidéo enregistré d'une session
+      description: >
+        Le Video Recorder vérifie l'action `recording:session:read` pour
+        `recording:session:{sessionId}`, puis écrit `recording.read` à l'Audit
+        Service avant de déchiffrer et de servir le segment (ADR-0070). La
+        Gateway transmet exclusivement l'utilisateur et les rôles du jeton
+        vérifié ; les paramètres, le corps et les en-têtes du client ne peuvent
+        pas choisir cette identité. Les images sont renvoyées en base64 dans
+        `frameData`. `complete: false` indique que l'enregistrement a été
+        interrompu avant son marqueur terminal. Le stockage objet n'est jamais
+        exposé directement et la réponse est marquée `Cache-Control: no-store`.
+      responses:
+        "200":
+          description: Segment PNG horodaté et état de complétude.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VideoRecordingSegment" }
+        "400":
+          description: Identifiant de session ou séquence invalide.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Refus RBAC du Video Recorder.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Segment inexistant ou non disponible.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: État ou séquence de l'enregistrement incompatible.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Réponse amont invalide ; aucun segment n'est servi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Le Video Recorder, l'autorisation ou l'audit est indisponible ; aucun octet n'est servi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /vault/accounts:
     get:
       tags: [vault]
@@ -1490,6 +1548,31 @@ components:
             properties:
               timestamp: { type: string, format: date-time }
               command: { type: string }
+
+    VideoRecordingSegment:
+      type: object
+      required: [sessionId, firstSequence, lastSequence, frames, complete]
+      properties:
+        sessionId: { type: string }
+        firstSequence: { type: integer, format: int64, minimum: 1 }
+        lastSequence: { type: integer, format: int64, minimum: 1 }
+        complete:
+          type: boolean
+          description: Faux si la session s'est interrompue sans marqueur terminal.
+        frames:
+          type: array
+          items: { $ref: "#/components/schemas/VideoRecordingFrame" }
+
+    VideoRecordingFrame:
+      type: object
+      required: [timestamp, frameData, codec]
+      properties:
+        timestamp: { type: string, format: date-time }
+        frameData:
+          type: string
+          format: byte
+          description: Image PNG encodée en base64 ; taille brute maximale de 4 Mio par segment.
+        codec: { type: string, enum: [png] }
 
     PrivilegedAccountInput:
       type: object

@@ -1,7 +1,8 @@
 # OpenBastion with docker-compose (ADR-0033)
 
-One host, eight services under mutual TLS, one PostgreSQL database per service, two ports
-published on `127.0.0.1`: the public API of the Gateway and the SSH port of the proxy.
+One host, eight core services under mutual TLS, one PostgreSQL database per service, two ports
+published on `127.0.0.1`: the public API of the Gateway and the SSH port of the proxy. The
+Video Recorder and SeaweedFS are added by the optional `recording` profile.
 For development and small on-premise installations; not a high-availability setup
 (`docs/deployment/high-availability.md`).
 
@@ -53,14 +54,60 @@ not over the network the pin protects.
 
 | Volume | Holds | Mounted in |
 |---|---|---|
-| `postgres` | the six databases | `postgres` |
+| `postgres` | the seven service databases | `postgres` |
 | `pki-ca` | the internal authority **and its key** | the `pki` job only |
 | `pki` | each service's certificate and key, one directory each | each service: **its own directory only**, read-only |
 | `anchors` | the anchors of the audit chain (ADR-0028) | `audit-service` |
 | `archives` | the audit archives (ADR-0032), when retention is on | `audit-service` |
+| `seaweedfs-data` | encrypted Video Recorder objects (with `--profile recording`) | `seaweedfs` |
+| `seaweedfs-config` | generated S3 identities (with `--profile recording`) | `seaweedfs-config`, `seaweedfs` |
 
 The `pki` job runs at every `up`: it keeps the authority and renews the services'
 certificates (`OB_CERT_TTL`, 720 h by default) — run `up` again before they expire.
+
+## Video recordings
+
+The default stack does not enable video storage. The separate profile requires an external
+Transit endpoint and an operator-provided token/CA; it uses SeaweedFS 4.51 over HTTPS with
+client-certificate verification and stores object data in the persistent `seaweedfs-data`
+volume. Video segments are encrypted by the Recorder before they reach S3.
+
+1. Put these values in `deploy/docker-compose/.env`: `VIDEO_RECORDER_TRANSIT_ADDR` (HTTPS),
+   `VIDEO_RECORDER_TRANSIT_KEY`, `VIDEO_RECORDER_TRANSIT_TOKEN_FILE` (host path) and
+   `VIDEO_RECORDER_TRANSIT_CA_FILE` (host path). The token file must be owned by UID 65532 and
+   mode `0400`; the CA file must be readable by the service.
+2. On installations created before video recording was added, generate a separate, mode-0600
+   credentials file without changing the existing `.env`:
+
+   ```sh
+   deploy/docker-compose/init-recording.sh
+   ```
+
+   Fresh installations already have these credentials in `.env` from `init.sh`; do not create a
+   second credentials file for them. For an older installation, pass both files to Compose. The
+   profile's database-init job creates the Video Recorder role and database on an existing
+   PostgreSQL volume without changing other service databases. That one-shot job receives
+   `PG_SUPERUSER_PASSWORD` to perform the bootstrap, has no published port, and exits before the
+   Recorder starts.
+3. Ensure the Transit policy allows encrypt/decrypt with that key, then start. For an older
+   installation, include both env files:
+
+   ```sh
+   docker compose --env-file deploy/docker-compose/.env \
+     --env-file deploy/docker-compose/.env.recording \
+     -f deploy/docker-compose/docker-compose.yml --profile recording up -d --build --wait
+   ```
+
+   For a fresh installation, use the standard command with no `--env-file` options.
+
+`init.sh` creates dedicated S3 credentials in `.env`; they are mounted only into the Recorder and
+the SeaweedFS configuration job. The identity currently has `Admin` because the Recorder creates
+the bucket on startup; keep this SeaweedFS instance and its generated credentials dedicated to
+recordings. A compromised Recorder could delete or reconfigure buckets on this instance. The
+Recorder refuses to start if PostgreSQL, Authorization,
+Audit, Transit, the S3 bucket or its TLS identity is unavailable. The production Compose profile
+does not fall back to a local KEK. Back up `seaweedfs-data` together with the Video Recorder
+PostgreSQL metadata and retain the Transit key independently.
 
 ## Settings
 
@@ -71,6 +118,7 @@ certificates (`OB_CERT_TTL`, 720 h by default) — run `up` again before they ex
 | `OB_SSH_PORT` | `2222` | SSH proxy |
 | `OB_CERT_TTL` | `720h` | lifetime of the services' certificates |
 | `AUDIT_ARCHIVE_DIR`, `AUDIT_RETENTION_MONTHS` | off | audit retention (ADR-0032): `/var/lib/openbastion/archives` and a number of months |
+| `VIDEO_RECORDER_TRANSIT_ADDR`, `VIDEO_RECORDER_TRANSIT_KEY`, `VIDEO_RECORDER_TRANSIT_TOKEN_FILE`, `VIDEO_RECORDER_TRANSIT_CA_FILE` | required with `--profile recording` | Transit wrapping key and credentials for the Video Recorder (ADR-0070) |
 
 ## Limits
 

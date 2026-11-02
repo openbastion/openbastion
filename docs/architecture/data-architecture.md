@@ -8,7 +8,7 @@ Schéma relationnel du périmètre MVP. Chaque microservice reste propriétaire 
 |---|---|
 | Aucun secret en clair | `vault_secrets.encrypted_material` est un blob chiffré (enveloppe AES-256) ; la clé n'est jamais stockée en base, seule une référence à un KMS/HSM externe l'est (`encryption_key_id`). |
 | Audit inviolable | `audit_events` est chaîné par hash (`prev_hash` → `hash`), à la manière d'un registre append-only : toute altération rétroactive d'un événement casse la chaîne et devient détectable. |
-| Séparation stockage / index | PostgreSQL est la source de vérité des métadonnées. Les objets volumineux (vidéo, v0.0.1) vivent dans MinIO ; l'index de recherche plein texte (OpenSearch, v0.0.1) est une projection dérivée, reconstructible depuis PostgreSQL — jamais l'inverse. |
+| Séparation stockage / index | PostgreSQL est la source de vérité des métadonnées. Les segments vidéo chiffrés vivent dans un stockage objet compatible S3 (SeaweedFS en Compose) ; l'index de recherche plein texte (OpenSearch, v0.0.1) est une projection dérivée, reconstructible depuis PostgreSQL — jamais l'inverse. |
 | Un schéma par service | Pas de jointure inter-services au niveau base ; toute composition de données entre domaines passe par l'API/gRPC, jamais par une requête SQL cross-schéma. |
 
 ## 2. Diagramme entité-relation (périmètre MVP)
@@ -223,6 +223,30 @@ CREATE TABLE session_command_entries (
 );
 CREATE INDEX idx_session_command_entries_session ON session_command_entries (session_id, ts, id);
 
+-- Video Recorder (ADR-0070) — implémenté : services/recording-audit/video-recorder/migrations.
+-- Les images sont chiffrées avant le stockage S3-compatible ; PostgreSQL ne conserve que
+-- l'état, la DEK enveloppée et les pointeurs/checksums des objets.
+CREATE TABLE video_recordings (
+    session_id    TEXT PRIMARY KEY,
+    key_id        TEXT NOT NULL,
+    wrapped_dek   BYTEA NOT NULL,
+    status        TEXT NOT NULL CHECK (status IN ('incomplete', 'complete')),
+    last_sequence BIGINT NOT NULL DEFAULT 0 CHECK (last_sequence >= 0),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at  TIMESTAMPTZ
+);
+CREATE TABLE video_recording_segments (
+    session_id        TEXT NOT NULL REFERENCES video_recordings(session_id),
+    first_sequence    BIGINT NOT NULL CHECK (first_sequence > 0),
+    last_sequence     BIGINT NOT NULL CHECK (last_sequence >= first_sequence),
+    object_key        TEXT NOT NULL UNIQUE,
+    ciphertext_sha256 BYTEA NOT NULL CHECK (octet_length(ciphertext_sha256) = 32),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (session_id, first_sequence)
+);
+CREATE INDEX idx_video_recording_segments_session_last
+    ON video_recording_segments (session_id, last_sequence);
+
 -- Audit (Audit Service) ------------------------------------------------------
 
 CREATE TABLE audit_events (
@@ -404,7 +428,7 @@ Chaque service porte son schéma en migrations numérotées (`services/<domaine>
 
 ```sql
 CREATE TABLE IF NOT EXISTS schema_migrations (
-    component  TEXT        NOT NULL,   -- authentication, authorization, session-broker, password-vault, audit-service, command-recorder
+    component  TEXT        NOT NULL,   -- authentication, authorization, session-broker, password-vault, audit-service, command-recorder, video-recorder
     version    INTEGER     NOT NULL,   -- NNN du fichier
     name       TEXT        NOT NULL,   -- nom du fichier, ex. 001_init.sql
     checksum   BYTEA       NOT NULL,   -- SHA-256 du texte appliqué : un fichier modifié ensuite est refusé
@@ -438,4 +462,3 @@ Ces tables seront détaillées dans une révision ultérieure de ce document, au
 | `mfa_factors` | MFA Service | Facteurs enrôlés par utilisateur (TOTP, WebAuthn, PKI) |
 | `identity_provider_configs` | Connecteurs de fédération | Configuration LDAP/AD/Entra ID/SAML |
 | `secrets_manager_dynamic` | Secrets Manager | Secrets applicatifs à durée de vie courte, distincts de `vault_secrets` (ADR-0005) |
-| `video_recordings` | Video Recorder | Pointeur vers l'objet MinIO (clé, taille, checksum), pas le flux lui-même |

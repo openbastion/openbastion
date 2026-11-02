@@ -28,10 +28,11 @@ Ces quatre scénarios ne déclenchent pas la même procédure — la qualificati
 | Composant | Mécanisme | RPO indicatif |
 |---|---|---|
 | PostgreSQL | Réplication en streaming asynchrone vers le site DR | Quelques secondes à quelques minutes selon la latence inter-site |
-| MinIO (enregistrements de session) | Réplication de bucket cross-site native | Minutes |
+| Stockage objet S3-compatible (segments vidéo chiffrés) | Réplication de bucket cross-site selon le fournisseur | Minutes |
 | Kafka (flux d'audit durable) | Cluster étendu multi-site ou MirrorMaker vers le site DR | Quasi temps réel — l'audit est la donnée la moins tolérante à la perte (Full Auditability, `docs/architecture/principles.md`) |
 | Password Vault / Secrets Manager | Réplication des blobs chiffrés (`vault_secrets.encrypted_material`) au même rythme que PostgreSQL — **la clé KMS reste dans un service de gestion de clés multi-région, jamais répliquée par le même mécanisme que les données** | Aligné sur PostgreSQL |
 | Command Recorder (replay des commandes) | Réplication des lignes chiffrées (`session_command_entries`, `session_recording_keys`) avec PostgreSQL — **sans la KEK, ces lignes sont définitivement illisibles** : la KEK (`KMS_KEY_HEX` aujourd'hui) se sauvegarde et se restaure séparément des données, jamais dans la même sauvegarde | Aligné sur PostgreSQL |
+| Video Recorder | Réplication de `video_recordings` et `video_recording_segments` avec PostgreSQL, et des objets chiffrés avec le stockage S3-compatible ; l'accès au même Transit et à la même clé (ou à sa version restaurée) est nécessaire au déchiffrement | Aligné sur PostgreSQL et le bucket |
 | Audit Service (chaîne d'audit) | Réplication de `audit_events` avec PostgreSQL — **sans les clés de chaîne (`AUDIT_CHAIN_KEY_HEX` et les précédentes, ADR-0027), l'histoire répliquée n'est plus vérifiable** : elles se sauvegardent et se restaurent séparément des données, comme la KEK | Aligné sur PostgreSQL |
 | Audit Service (archives, ADR-0032) | Les archives `AUDIT_ARCHIVE_DIR` se répliquent comme les ancres, **par un autre chemin que la base** ; elles ne sont pas nécessaires pour vérifier la chaîne restante (le point de contrôle suffit), seulement pour consulter les mois archivés | À chaque archive |
 | Audit Service (ancres, ADR-0028) | Le fichier `AUDIT_ANCHOR_FILE` se réplique **par un autre chemin que la base** (stockage en ajout seul, autre site) — restaurer base et ancres depuis la même source rendrait une réécriture indétectable ; sur le site DR, `verify-chain` contre les ancres répliquées dit si la base restaurée est celle qui a été ancrée | Période d'ancrage (60 s par défaut) |
@@ -56,7 +57,7 @@ C'est le point que la plupart des guides PRA génériques n'abordent pas, et qui
 
 1. **Détection et déclaration du sinistre** — critères objectifs (ex. Tier 0 de `docs/deployment/high-availability.md` indisponible au-delà du RTO cible), déclarée par une personne désignée à l'avance, pas par consensus en temps de crise.
 2. **Qualification de la cause** (§2) — gate décisionnel : détermine si la procédure allégée ou la procédure « site potentiellement compromis » (§4) s'applique. En cas de doute, la procédure la plus stricte s'applique par défaut.
-3. **Bascule du trafic** vers le site DR (DNS ou load balancer global), promotion des répliques PostgreSQL/Kafka/MinIO en écriture primaire.
+3. **Bascule du trafic** vers le site DR (DNS ou load balancer global), promotion des répliques PostgreSQL/Kafka et du stockage objet S3-compatible en écriture primaire.
 4. **Vérification d'intégrité de la chaîne d'audit** avant toute réouverture — étape bloquante, pas informative.
    *La version du schéma de chaque base restaurée se lit dans `schema_migrations` (ADR-0030). Des binaires plus anciens que la base démarrent (journal `WARNING`) ; une base plus ancienne que les binaires est mise à niveau à leur démarrage. Un service qui refuse de démarrer avec « changed after it was applied » signale une base ou un binaire qui n'est pas celui que l'on croit : à traiter comme un indice au gate de l'étape 2.*
 5. **Rotation forcée des comptes privilégiés**, si le gate de l'étape 2 l'exige.
@@ -70,7 +71,7 @@ C'est le point que la plupart des guides PRA génériques n'abordent pas, et qui
 |---|---|---|---|
 | Tier 0 (Vault, Auth, Broker, PostgreSQL) | < 1 heure | < 5 minutes | RTO nettement plus large qu'en HA — une bascule de site implique une qualification humaine (§5, étape 2), pas une automatisation pure |
 | Tier 1 (Proxies, Audit/Kafka) | < 2 heures | < 5 minutes (Kafka quasi temps réel) | La disponibilité de l'audit conditionne la réouverture (§4) — pas de compromis possible sur son RPO |
-| Tier 2 (Search, Reporting, Notification) | < 24 heures | best-effort | Peut être reconstruit après coup depuis les sources de vérité (PostgreSQL/MinIO) |
+| Tier 2 (Search, Reporting, Notification) | < 24 heures | best-effort | Peut être reconstruit après coup depuis les sources de vérité (PostgreSQL et stockage objet S3-compatible) |
 
 ## 7. Exercice de bascule
 

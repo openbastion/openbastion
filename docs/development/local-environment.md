@@ -3,7 +3,7 @@
 ```sh
 git clone https://github.com/openbastion/openbastion.git
 cd openbastion
-make dev-up          # docker-compose : PostgreSQL, Redis, MinIO, NATS, Kafka, Keycloak
+make dev-up          # docker-compose : PostgreSQL, Redis, stockage objet S3-compatible, NATS, Kafka, Keycloak
 make proto-gen        # génère le code Go depuis proto/ via buf
 make dev-seed         # charge un jeu de données de test (un utilisateur, un compte SSH cible)
 make run SERVICE=ssh-proxy

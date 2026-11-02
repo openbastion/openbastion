@@ -20,7 +20,7 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/authz/v1/policies", Callers: []string{mtls.APIGateway}},
 		// Every service that enforces RBAC on its own routes asks here.
 		{Method: http.MethodPost, Path: "/authz/v1/check-access",
-			Callers: []string{mtls.SessionBroker, mtls.PasswordVault, mtls.CommandRecorder}},
+			Callers: []string{mtls.SessionBroker, mtls.PasswordVault, mtls.CommandRecorder, mtls.VideoRecorder}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

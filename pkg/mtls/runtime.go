@@ -1,6 +1,7 @@
 package mtls
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -75,6 +76,24 @@ func (rt *Runtime) Client(peers ...Peer) (*http.Client, error) {
 		return http.DefaultClient, nil
 	}
 	return rt.creds.Client(peers...)
+}
+
+// GRPCServerTLS returns the TLS configuration for an internal gRPC listener.
+// A caller must use it only when Enabled is true.
+func (rt *Runtime) GRPCServerTLS() *tls.Config {
+	if !rt.Enabled() {
+		return nil
+	}
+	return rt.creds.GRPCServerTLS()
+}
+
+// GRPCClientTLS returns the TLS configuration for one internal gRPC peer.
+// Plaintext gRPC is intentionally not produced by this helper.
+func (rt *Runtime) GRPCClientTLS(peer Peer) (*tls.Config, error) {
+	if !rt.Enabled() {
+		return nil, fmt.Errorf("mtls: gRPC peer %q requested while INTERNAL_TLS=disabled", peer.Service)
+	}
+	return rt.creds.GRPCClientTLS(peer)
 }
 
 // Handler wraps h so that only the services the rules allow can call it. When

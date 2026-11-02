@@ -8,3 +8,11 @@ Chaque proxy lit `RECORDING_POLICY` :
 | `best-effort` | La session continue si l'enregistrement échoue ; des commandes sont perdues. **Développement uniquement.** Le proxy le signale par un avertissement au démarrage. |
 
 En mode `required`, `RECORDER_URL` (adresse du Command Recorder) est obligatoire : sans elle, le proxy refuse de démarrer. Une valeur de `RECORDING_POLICY` inconnue est une erreur fatale, pas un repli. Le recorder expose `GET /healthz` (le processus tourne) et `GET /readyz` (il pourrait écrire : base joignable et inscriptible) ; c'est `/readyz` que doivent sonder l'orchestrateur et la supervision, car un recorder dont la base est passée en lecture seule est « vivant » mais bloque en pratique tous les accès privilégiés.
+
+## Enregistrement graphique (ADR-0070)
+
+Le Video Recorder est un service séparé. Il stocke des segments d'images PNG chiffrés dans un stockage objet S3-compatible et leurs métadonnées dans PostgreSQL. La clé de données est enveloppée par Transit en déploiement ; une KEK locale explicite n'est admise que pour le développement. Authorization décide `recording:session:read` et l'Audit Service reçoit `recording.read` avant chaque segment servi.
+
+Le contrat d'ingestion gRPC bidirectionnel est réservé à l'identité mTLS `rdp-proxy`. Ce proxy n'est pas encore implémenté, donc aucune session RDP n'est actuellement capturée. Le replay REST est disponible via `GET /sessions/{sessionId}/recording/video/segments/{firstSequence}` ; l'Admin UI n'a pas encore de lecteur vidéo.
+
+Pour l'installation Compose, les services SeaweedFS et Video Recorder sont activés par `--profile recording`. Le profil requiert un Transit HTTPS joignable, `VIDEO_RECORDER_TRANSIT_ADDR`, `VIDEO_RECORDER_TRANSIT_KEY`, un fichier de jeton lisible par l'UID 65532 en mode 0400 (`VIDEO_RECORDER_TRANSIT_TOKEN_FILE`) et le certificat CA (`VIDEO_RECORDER_TRANSIT_CA_FILE`). `deploy/docker-compose/init.sh` génère les identifiants S3 dédiés ; SeaweedFS crée le bucket au démarrage du Recorder. Le profil de prévisualisation Base44 utilise au contraire une KEK de développement explicite.

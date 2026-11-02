@@ -7,9 +7,21 @@ option go_package = "github.com/openbastion/openbastion/proto/recording/v1;recor
 
 service SessionRecording {
   rpc StreamCommandEntries(stream CommandEntry) returns (StreamAck);
-  // Signature réservée pour l'ajout du Video Recorder en v0.0.1 — ne rompt pas
-  // le contrat existant.
+  // Ancienne signature conservée pour compatibilité, non servie. L'ingestion
+  // vidéo acquittée utilise VideoRecording.StreamVideoSegments.
   rpc StreamVideoFrames(stream VideoFrame) returns (StreamAck);
+}
+
+// Ingestion et lecture des enregistrements vidéo. L'identité de service de
+// l'appelant vient exclusivement du certificat mTLS, jamais des messages.
+service VideoRecording {
+  // Le proxy ne reçoit d'accusé qu'après persistance chiffrée dans le stockage
+  // objet et validation des métadonnées en PostgreSQL.
+  rpc StreamVideoSegments(stream VideoSegment) returns (stream VideoSegmentAck);
+  // Appelé uniquement par la Gateway après vérification du jeton utilisateur.
+  rpc GetVideoSegment(GetVideoSegmentRequest) returns (GetVideoSegmentResponse);
+  // Vérifie les dépendances avant l'admission d'une session enregistrée.
+  rpc CheckReadiness(CheckVideoRecorderReadinessRequest) returns (CheckVideoRecorderReadinessResponse);
 }
 
 message CommandEntry {
@@ -27,6 +39,49 @@ message VideoFrame {
 
 message StreamAck {
   int64 entries_received = 1;
+}
+
+message VideoFrameData {
+  google.protobuf.Timestamp ts = 1;
+  bytes frame_data = 2;
+  string codec = 3;
+}
+
+message VideoSegment {
+  string session_id = 1;
+  int64 first_sequence = 2;
+  int64 last_sequence = 3;
+  repeated VideoFrameData frames = 4;
+  bool terminal = 5;
+  int64 terminal_through_sequence = 6;
+}
+
+message VideoSegmentAck {
+  string session_id = 1;
+  int64 through_sequence = 2;
+  bool complete = 3;
+}
+
+message GetVideoSegmentRequest {
+  string session_id = 1;
+  int64 first_sequence = 2;
+  // Construit par la Gateway à partir du jeton vérifié, jamais du client.
+  string actor_user_id = 3;
+  repeated string actor_roles = 4;
+}
+
+message GetVideoSegmentResponse {
+  string session_id = 1;
+  int64 first_sequence = 2;
+  int64 last_sequence = 3;
+  repeated VideoFrameData frames = 4;
+  bool complete = 5;
+}
+
+message CheckVideoRecorderReadinessRequest {}
+
+message CheckVideoRecorderReadinessResponse {
+  bool ready = 1;
 }
 
 // Lecture de l'enregistrement texte d'une session, par un auditeur — le

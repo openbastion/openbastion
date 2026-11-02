@@ -2,6 +2,7 @@
 /bin/
 *.exe
 *.test
+*.pb.go
 
 # Artefacts d'IDE / OS
 .DS_Store
@@ -10,6 +11,7 @@
 # Variables d'environnement locales
 .env
 .env.local
+deploy/docker-compose/.env.recording
 
 # Autorité et identités de développement générées par `make pki` (clés privées !)
 /.pki/

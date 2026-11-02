@@ -18,6 +18,8 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("authorization", "POST", "/audit/v1/emit-event"),
 		// it writes the reads of a recording before it serves them (ADR-0022)
 		mtlstest.Allow("command-recorder", "POST", "/audit/v1/emit-event"),
+		// the Video Recorder audits every replay segment before serving it (ADR-0070)
+		mtlstest.Allow("video-recorder", "POST", "/audit/v1/emit-event"),
 		mtlstest.Deny("command-recorder", "GET", "/audit/v1/emit-event"),
 		mtlstest.Deny("command-recorder", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("api-gateway", "POST", "/audit/v1/emit-event"),

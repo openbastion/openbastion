@@ -16,11 +16,13 @@ umask 077
   echo "# OpenBastion docker-compose secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ) by init.sh."
   echo "# Never commit this file. Losing it loses the audit chain, the vault and the recordings."
   echo "PG_SUPERUSER_PASSWORD=$(hex32)"
-  for svc in AUTHENTICATION AUTHORIZATION SESSION_BROKER PASSWORD_VAULT AUDIT_SERVICE COMMAND_RECORDER; do
+  for svc in AUTHENTICATION AUTHORIZATION SESSION_BROKER PASSWORD_VAULT AUDIT_SERVICE COMMAND_RECORDER VIDEO_RECORDER; do
     echo "PG_PASSWORD_$svc=$(hex32)"
   done
   echo "VAULT_KMS_KEY_HEX=$(hex32)"
   echo "RECORDER_KMS_KEY_HEX=$(hex32)"
+  echo "VIDEO_RECORDER_S3_ACCESS_KEY=$(hex32)"
+  echo "VIDEO_RECORDER_S3_SECRET_KEY=$(hex32)"
   echo "TOKEN_SIGNING_KEY_HEX=$(hex32)"
   echo "AUDIT_CHAIN_KEY_HEX=$(hex32)"
   echo "# The demonstration target's password (profile demo) — what the Vault holds and no one sees."

@@ -112,7 +112,7 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		out := run("", "run", "--rm", "--no-deps", "-T", "--entrypoint", "sh", "-v", "obcompose-test_pki:/look:ro", "pki",
 			"-c", "cd /look && find . -type f | sort")
 		want := ""
-		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "password-vault", "session-broker", "ssh-proxy"} {
+		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "password-vault", "seaweedfs", "session-broker", "ssh-proxy", "video-recorder"} {
 			want += "./" + svc + "/ca.pem\n./" + svc + "/cert.pem\n./" + svc + "/key.pem\n"
 		}
 		if got := out[strings.Index(out, "./"):]; got != want {
@@ -313,4 +313,139 @@ func readEnvFile(t *testing.T, path string) map[string]string {
 		t.Fatalf("the env file is not private: %v %v", info.Mode(), err)
 	}
 	return out
+}
+
+func TestComposeRecordingCredentialsUpgradeIsAdditiveAndIdempotent(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	baseEnv := filepath.Join(dir, ".env")
+	recordingEnv := filepath.Join(dir, ".env.recording")
+	original := []byte("# Existing installation\nPG_SUPERUSER_PASSWORD=preserved\n")
+	if err := os.WriteFile(baseEnv, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func() string {
+		t.Helper()
+		cmd := exec.Command(filepath.Join(root, "deploy/docker-compose/init-recording.sh"), baseEnv, recordingEnv)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("init-recording.sh: %v\n%s", err, out)
+		}
+		return string(out)
+	}
+	firstOutput := run()
+	recording := readEnvFile(t, recordingEnv)
+	wantKeys := []string{"PG_PASSWORD_VIDEO_RECORDER", "VIDEO_RECORDER_S3_ACCESS_KEY", "VIDEO_RECORDER_S3_SECRET_KEY"}
+	if len(recording) != len(wantKeys) {
+		t.Fatalf("recording env has %d values, want %d", len(recording), len(wantKeys))
+	}
+	for _, key := range wantKeys {
+		value := recording[key]
+		if len(value) != 64 || strings.Trim(value, "0123456789abcdef") != "" {
+			t.Fatalf("%s is not a 64-character lowercase hex value", key)
+		}
+		if strings.Contains(firstOutput, value) {
+			t.Fatalf("init-recording.sh printed the value of %s", key)
+		}
+	}
+	if got, err := os.ReadFile(baseEnv); err != nil || string(got) != string(original) {
+		t.Fatalf("the existing env file changed: %v", err)
+	}
+
+	before, err := os.ReadFile(recordingEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run()
+	after, err := os.ReadFile(recordingEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("a repeated init changed the recording credentials")
+	}
+
+	partialEnv := filepath.Join(dir, ".env.partial")
+	if err := os.WriteFile(partialEnv, []byte(string(original)+"PG_PASSWORD_VIDEO_RECORDER=present\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	partialOut := filepath.Join(dir, ".env.partial.recording")
+	cmd := exec.Command(filepath.Join(root, "deploy/docker-compose/init-recording.sh"), partialEnv, partialOut)
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "only some recording credentials") {
+		t.Fatalf("a partially configured env should be refused: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(partialOut); !os.IsNotExist(err) {
+		t.Fatalf("partial configuration created an output file: %v", err)
+	}
+}
+
+func TestComposeRecordingDatabaseUpgradeOnExistingVolume(t *testing.T) {
+	if os.Getenv("COMPOSE_TEST") == "" {
+		t.Skip("COMPOSE_TEST not set — this test starts an isolated PostgreSQL Compose stack")
+	}
+	root := repoRoot(t)
+	dir := t.TempDir()
+	fullEnv := filepath.Join(dir, ".env.full")
+	oldEnv := filepath.Join(dir, ".env")
+	recordingEnv := filepath.Join(dir, ".env.recording")
+	init := exec.Command("sh", filepath.Join(root, "deploy/docker-compose/init.sh"), fullEnv)
+	if out, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("init.sh: %v\n%s", err, out)
+	}
+	full, err := os.ReadFile(fullEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var old strings.Builder
+	for _, line := range strings.Split(string(full), "\n") {
+		if strings.HasPrefix(line, "PG_PASSWORD_VIDEO_RECORDER=") ||
+			strings.HasPrefix(line, "VIDEO_RECORDER_S3_ACCESS_KEY=") ||
+			strings.HasPrefix(line, "VIDEO_RECORDER_S3_SECRET_KEY=") {
+			continue
+		}
+		old.WriteString(line + "\n")
+	}
+	if err := os.WriteFile(oldEnv, []byte(old.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	initRecording := exec.Command(filepath.Join(root, "deploy/docker-compose/init-recording.sh"), oldEnv, recordingEnv)
+	if out, err := initRecording.CombinedOutput(); err != nil {
+		t.Fatalf("init-recording.sh: %v\n%s", err, out)
+	}
+
+	project := fmt.Sprintf("ob-video-db-upgrade-%d", os.Getpid())
+	compose := func(recording bool, envFiles []string, args ...string) *exec.Cmd {
+		cmdArgs := []string{"compose"}
+		for _, path := range envFiles {
+			cmdArgs = append(cmdArgs, "--env-file", path)
+		}
+		cmdArgs = append(cmdArgs, "-f", filepath.Join(root, "deploy/docker-compose/docker-compose.yml"), "-p", project)
+		if recording {
+			cmdArgs = append(cmdArgs, "--profile", "recording")
+		}
+		return exec.Command("docker", append(cmdArgs, args...)...)
+	}
+	t.Cleanup(func() {
+		out, err := compose(true, []string{oldEnv, recordingEnv}, "down", "-v", "--remove-orphans").CombinedOutput()
+		if err != nil {
+			t.Logf("temporary Compose cleanup: %v\n%s", err, out)
+		}
+	})
+	run := func(cmd *exec.Cmd) string {
+		t.Helper()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("docker compose: %v\n%s", err, out)
+		}
+		return string(out)
+	}
+	run(compose(false, []string{oldEnv}, "up", "-d", "--wait", "--wait-timeout", "120", "postgres"))
+	run(compose(true, []string{oldEnv, recordingEnv}, "run", "--rm", "video-recorder-db-init"))
+	got := strings.TrimSpace(run(compose(true, []string{oldEnv, recordingEnv}, "exec", "-T", "postgres", "psql",
+		"--no-password", "-U", "openbastion", "-d", "postgres", "-Atc",
+		"SELECT (SELECT rolname FROM pg_roles WHERE rolname='video_recorder') || ':' || (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='video_recorder')")))
+	if got != "video_recorder:video_recorder" {
+		t.Fatalf("upgraded Video Recorder database ownership: got %q", got)
+	}
 }

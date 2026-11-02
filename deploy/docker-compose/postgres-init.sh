@@ -12,3 +12,11 @@ CREATE DATABASE "$svc" OWNER "$svc";
 REVOKE ALL ON DATABASE "$svc" FROM PUBLIC;
 SQL
 done
+
+if [ -n "${PG_PASSWORD_VIDEO_RECORDER:-}" ]; then
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<SQL
+CREATE ROLE "video_recorder" LOGIN PASSWORD '$PG_PASSWORD_VIDEO_RECORDER';
+CREATE DATABASE "video_recorder" OWNER "video_recorder";
+REVOKE ALL ON DATABASE "video_recorder" FROM PUBLIC;
+SQL
+fi

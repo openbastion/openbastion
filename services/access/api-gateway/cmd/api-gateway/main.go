@@ -58,8 +58,13 @@ func main() {
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	authorizationURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
 	commandRecorderURL := mustEnv("COMMAND_RECORDER_URL", rt.DefaultURL("127.0.0.1:8087"))
+	videoRecorderGRPCURL := mustEnv("VIDEO_RECORDER_GRPC_URL", rt.DefaultURL("127.0.0.1:8089"))
+	videoRecorderClient, err := infrastructure.NewVideoRecorderGRPCClient(rt, videoRecorderGRPCURL)
+	if err != nil {
+		log.Fatalf("api-gateway: Video Recorder client: %v", err)
+	}
 
-	// One client for the five upstreams, each known by the identity it must
+	// One HTTP client for the five HTTP upstreams, each known by the identity it must
 	// answer with: the Gateway forwards a user's request, and a user's identity
 	// header, only to the service it is meant for.
 	upstreams, err := rt.Client(
@@ -112,7 +117,8 @@ func main() {
 		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate)).
 		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
 		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(vaultActionBurst, vaultActionRate)).
-		WithProxyTrust(trust)
+		WithProxyTrust(trust).
+		WithVideoRecorderClient(videoRecorderClient)
 
 	// The Admin UI (ADR-0036), same origin as the API: served only when given.
 	if dir := os.Getenv("ADMIN_UI_DIR"); dir != "" {
@@ -132,6 +138,7 @@ func main() {
 	log.Printf("  -> vault:           %s", vaultURL)
 	log.Printf("  -> authorization:   %s", authorizationURL)
 	log.Printf("  -> command-recorder: %s", commandRecorderURL)
+	log.Printf("  -> video-recorder (gRPC): %s", videoRecorderGRPCURL)
 	log.Printf("  POST /sessions: at most %d at once per user, then %d per minute (this process only; a request refused for it never reaches the Broker)", sessionBurst, sessionRate)
 	log.Printf("  approve, reject, connect, terminate: at most %d at once per user, then %d per minute, one budget for the four, not that of POST /sessions (this process only; an action refused for it never reaches the Broker)", actionBurst, actionRate)
 	log.Printf("  PUT /vault/accounts/{id}/approval: at most %d at once per user, then %d per minute (this process only; an action refused for it never reaches the Vault)", vaultActionBurst, vaultActionRate)
@@ -143,5 +150,11 @@ func main() {
 	log.Printf("  per client address: login %d at once, then %d per minute; authenticated requests %d at once, then %d per minute (this process only)", loginBurst, loginRate, requestBurst, requestRate)
 	// Plain HTTP: this is the public listener, whose clients are users with bearer
 	// tokens. TLS for them ends at the reverse proxy in front of it.
-	log.Fatal(rt.ServePublic(":"+port, srv.Routes()))
+	serveErr := rt.ServePublic(":"+port, srv.Routes())
+	if closeErr := videoRecorderClient.Close(); closeErr != nil {
+		log.Printf("api-gateway: closing Video Recorder connection: %v", closeErr)
+	}
+	if serveErr != nil {
+		log.Fatal(serveErr)
+	}
 }
