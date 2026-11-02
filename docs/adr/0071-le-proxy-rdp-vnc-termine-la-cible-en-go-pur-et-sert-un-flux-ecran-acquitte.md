@@ -38,7 +38,7 @@ Le moteur est choisi par le **protocole du compte**, transmis par le Broker, jam
 - `pkg/vnc` : client RFB 3.8 (négociation, VeNCrypt/X.509, auth, encodages, framebuffer, entrée).
 - `pkg/tlspin` : les primitives d'épinglage TLS actuelles de `pkg/rdp` y sont déplacées et partagées par les deux moteurs.
 
-Aucun code de client RDP/VNC tiers n'est importé, copié ni lié. Seules la bibliothèque standard et `golang.org/x/crypto` sont utilisées (MD4 pour NTLMv2). Aucun binding cgo ni test natif moteur RDP natif n'est conservé dans cette architecture Go pure.
+Aucun code de client RDP/VNC tiers n'est importé, copié ni lié. Seules la bibliothèque standard et `golang.org/x/crypto` sont utilisées (MD4 pour NTLMv2). Aucun binding cgo ni test natif lié à un moteur externe n'est conservé dans cette architecture Go pure.
 
 Le côté opérateur utilise le flux écran défini à la décision 4 ; aucun serveur RDP n'est exposé à l'opérateur.
 
