@@ -11,12 +11,12 @@ ADR-0069 (accepté) fixe les garanties du proxy RDP : terminaison côté cible, 
 Trois constats, vérifiés dans le dépôt, rendent une autre conception nécessaire.
 
 1. **La feuille de route demande RDP *et* VNC** (`docs/roadmap.md`, v0.0.1). ADR-0069 laisse VNC hors de son périmètre et exige une décision propre ; aucune décision ne couvre aujourd'hui VNC.
-2. **cgo contredit le mode de livraison actuel.** ADR-0033 déploie des images statiques ; FreeRDP par cgo nécessiterait un compilateur C, des en-têtes et bibliothèques natives à l'exécution, et introduirait une surface que `-race` ne couvre pas entièrement. Ce sont exactement les coûts que le dépôt évite ailleurs.
+2. **cgo contredit le mode de livraison actuel.** ADR-0033 déploie des images statiques ; moteur RDP natif par cgo nécessiterait un compilateur C, des en-têtes et bibliothèques natives à l'exécution, et introduirait une surface que `-race` ne couvre pas entièrement. Ce sont exactement les coûts que le dépôt évite ailleurs.
 3. **Un serveur RDP côté opérateur ne sert aucun client disponible.** L'Admin UI est un navigateur (ADR-0036) et le Desktop Client (Tauri) est sur la feuille de route. Il faudrait de toute façon un client RDP WASM ou desktop, explicitement hors périmètre d'ADR-0069.
 
 État réel du code au 2 novembre 2026 :
 
-- `pkg/rdp` ne contient que deux primitives Go (empreinte SHA-256 d'un DER, vérification d'une chaîne PEM) et un test derrière `//go:build freerdp && cgo` ; **aucun moteur, aucun service**.
+- `pkg/rdp` ne contient que deux primitives Go (empreinte SHA-256 d'un DER, vérification d'une chaîne PEM) et un test natif conditionnel derrière cgo ; **aucun moteur, aucun service**.
 - `pkg/mtls` réserve l'identité `rdp-proxy` ; le Video Recorder l'autorise sur `StreamVideoSegments` et `CheckReadiness`, mais aucun service ne la présente.
 - `application.ProxySelector.Select` ne connaît que `ssh` ; `pkg/proxycore.Codec` est un relais `io.ReadWriter` (pertinent pour SSH, pas pour un flux graphique).
 - `POST /sessions/{id}/connect` renvoie `proxyEndpoint`, `ticket`, `expiresAt` ; le ticket est consommé une fois par le proxy.
@@ -38,7 +38,7 @@ Le moteur est choisi par le **protocole du compte**, transmis par le Broker, jam
 - `pkg/vnc` : client RFB 3.8 (négociation, VeNCrypt/X.509, auth, encodages, framebuffer, entrée).
 - `pkg/tlspin` : les primitives d'épinglage TLS actuelles de `pkg/rdp` y sont déplacées et partagées par les deux moteurs.
 
-Aucun code de client RDP/VNC tiers n'est importé, copié ni lié. Seules la bibliothèque standard et `golang.org/x/crypto` sont utilisées (MD4 pour NTLMv2). Aucun binding cgo ni test natif FreeRDP n'est conservé dans cette architecture Go pure.
+Aucun code de client RDP/VNC tiers n'est importé, copié ni lié. Seules la bibliothèque standard et `golang.org/x/crypto` sont utilisées (MD4 pour NTLMv2). Aucun binding cgo ni test natif moteur RDP natif n'est conservé dans cette architecture Go pure.
 
 Le côté opérateur utilise le flux écran défini à la décision 4 ; aucun serveur RDP n'est exposé à l'opérateur.
 
@@ -366,8 +366,8 @@ Chaque garantie est mesurée **rouge avant** sa garde (même branche, commit pr�
 
 ## Alternatives envisagées
 
-- **FreeRDP par cgo** : écarté afin de conserver une livraison Go pure, des images statiques distroless et une surface de code couverte par les tests Go ; son intégration imposerait une chaîne C, des bibliothèques natives et un suivi d'ABI.
-- **FreeRDP en sous-processus avec Xvfb et capture d'écran** : écartée. Elle évite cgo mais introduit X11, une capture par balayage d'écran, l'injection d'entrée par XTEST, des tests non déterministes et une image lourde ; la latence et la fidélité de l'affichage ne sont pas contrôlables au niveau du pixel.
+- **moteur RDP natif par cgo** : écarté afin de conserver une livraison Go pure, des images statiques distroless et une surface de code couverte par les tests Go ; son intégration imposerait une chaîne C, des bibliothèques natives et un suivi d'ABI.
+- **Moteur RDP natif en sous-processus avec Xvfb et capture d'écran** : écarté. Elle évite cgo mais introduit X11, une capture par balayage d'écran, l'injection d'entrée par XTEST, des tests non déterministes et une image lourde ; la latence et la fidélité de l'affichage ne sont pas contrôlables au niveau du pixel.
 - **Apache Guacamole / `guacd`** : écartée. Son contrat ne documente pas l'épinglage SHA-256 de la feuille **avant** CredSSP (l'invariant d'ADR-0039) ; il ajoute une JVM et `libguac`, et fait traverser le mot de passe Vault à un démon dont le contrat n'est pas le nôtre.
 - **Un client RDP Go tiers (par exemple `grdp`) comme dépendance** : écartée. Couverture, maintenance, licence et empreinte à vérifier ; il n'offre ni le pin avant secret, ni les points d'enregistrement, ni le sous-ensemble fermé ; le corriger reviendrait à le réécrire.
 - **Terminer RDP côté opérateur (règle 2 d'ADR-0069 au pied de la lettre)** : écartée. Elle exige une seconde pile RDP complète (serveur X.224/MCS/capacités/ordres, TLS serveur, NLA serveur) et aucun navigateur ne parle RDP sans client WASM, lui-même hors périmètre.
