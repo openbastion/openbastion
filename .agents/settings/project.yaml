@@ -4,7 +4,7 @@ project:
   name: OpenBastion
   kind: PAM (Privileged Access Management) open source, cloud-native
   license: AGPL-3.0
-  original: true            # aucun code ni texte d'un produit PAM commercial (policies/licensing-AGPL-3.0.md)
+  original: true            # aucun code ni texte d'un produit PAM commercial (policies/licensing-agpl-3.0.md)
   owner: Bony Kiss          # s'exprime en français ; valide les ADR et les choix irréversibles
   repository: github.com/openbastion/openbastion
   default_branch: main
