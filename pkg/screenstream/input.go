@@ -57,7 +57,7 @@ func DecodeInput(data []byte, width, height uint32) (InputEvent, error) {
 		if e.Keysym == 0 && e.Scancode == 0 {
 			return InputEvent{}, ErrMalformedMessage
 		}
-		if e.X != 0 || e.Y != 0 || e.Buttons != 0 {
+		if e.X != 0 || e.Y != 0 || e.Buttons != 0 || e.Wheel != 0 {
 			return InputEvent{}, ErrMalformedMessage
 		}
 	case InputPointer:
@@ -68,7 +68,7 @@ func DecodeInput(data []byte, width, height uint32) (InputEvent, error) {
 		}
 	case InputReleaseAll:
 		if e.Flags != 0 || e.Keysym != 0 || e.Scancode != 0 ||
-			e.X != 0 || e.Y != 0 || e.Buttons != 0 {
+			e.X != 0 || e.Y != 0 || e.Buttons != 0 || e.Wheel != 0 {
 			return InputEvent{}, ErrMalformedMessage
 		}
 	default:
