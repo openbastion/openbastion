@@ -197,10 +197,10 @@ func TestGRPCCallerRulesAuthorizeOnlyExpectedServiceIdentities(t *testing.T) {
 		wantCode               codes.Code
 		wantCaller             string
 	}{
-		{"RDP proxy ingests", mtls.RDPProxy, "/openbastion.recording.v1.VideoRecording/StreamVideoSegments", codes.OK, mtls.RDPProxy},
+		{"RDP/VNC proxy ingests", mtls.RDPVNCProxy, "/openbastion.recording.v1.VideoRecording/StreamVideoSegments", codes.OK, mtls.RDPProxy},
 		{"Gateway cannot ingest", mtls.APIGateway, "/openbastion.recording.v1.VideoRecording/StreamVideoSegments", codes.PermissionDenied, ""},
 		{"Gateway can read", mtls.APIGateway, "/openbastion.recording.v1.VideoRecording/GetVideoSegment", codes.OK, mtls.APIGateway},
-		{"RDP proxy cannot read", mtls.RDPProxy, "/openbastion.recording.v1.VideoRecording/GetVideoSegment", codes.PermissionDenied, ""},
+		{"RDP/VNC proxy cannot read", mtls.RDPProxy, "/openbastion.recording.v1.VideoRecording/GetVideoSegment", codes.PermissionDenied, ""},
 		{"unknown method denied", mtls.RDPProxy, "/openbastion.recording.v1.VideoRecording/Unknown", codes.PermissionDenied, ""},
 	}
 	for _, test := range tests {
