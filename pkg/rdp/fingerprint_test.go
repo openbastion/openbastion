@@ -1,6 +1,7 @@
 package rdp
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"math/big"
 	"strings"
@@ -87,6 +89,40 @@ func TestVerifyPinnedCertificateRejectsInvalidDER(t *testing.T) {
 	fingerprint := mustFingerprint(t, newTargetCertificate(t))
 	if err := VerifyPinnedCertificate([]byte("not a certificate"), fingerprint); !errors.Is(err, ErrInvalidTargetCertificate) {
 		t.Fatalf("invalid certificate error = %v, want %v", err, ErrInvalidTargetCertificate)
+	}
+}
+
+func TestVerifyPinnedCertificatePEMUsesLeafFromChain(t *testing.T) {
+	leaf := newTargetCertificate(t)
+	intermediate := newTargetCertificate(t)
+	chain := append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf}),
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: intermediate})...)
+
+	if err := VerifyPinnedCertificatePEM(chain, mustFingerprint(t, leaf)); err != nil {
+		t.Fatalf("matching leaf in chain refused: %v", err)
+	}
+	if err := VerifyPinnedCertificatePEM(chain, mustFingerprint(t, intermediate)); !errors.Is(err, ErrTargetCertificateMismatch) {
+		t.Fatalf("intermediate pin error = %v, want %v", err, ErrTargetCertificateMismatch)
+	}
+}
+
+func TestVerifyPinnedCertificatePEMRejectsMalformedChain(t *testing.T) {
+	for _, chain := range [][]byte{
+		nil,
+		[]byte("not PEM"),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("private")}),
+		append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: newTargetCertificate(t)}), []byte("trailing data")...),
+	} {
+		if err := VerifyPinnedCertificatePEM(chain, mustFingerprint(t, newTargetCertificate(t))); !errors.Is(err, ErrInvalidTargetCertificate) {
+			t.Errorf("VerifyPinnedCertificatePEM(%q) error = %v, want %v", chain, err, ErrInvalidTargetCertificate)
+		}
+	}
+}
+
+func TestVerifyPinnedCertificatePEMRejectsOversizedChain(t *testing.T) {
+	chain := bytes.Repeat([]byte("x"), MaxCertificateChainBytes+1)
+	if err := VerifyPinnedCertificatePEM(chain, mustFingerprint(t, newTargetCertificate(t))); !errors.Is(err, ErrInvalidTargetCertificate) {
+		t.Fatalf("oversized chain error = %v, want %v", err, ErrInvalidTargetCertificate)
 	}
 }
 

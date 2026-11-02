@@ -9,16 +9,21 @@ import (
 )
 
 var (
+	// ErrInvalidCertificateFingerprint indicates a missing or malformed SHA-256 pin.
 	ErrInvalidCertificateFingerprint = errors.New("invalid RDP certificate fingerprint")
-	ErrInvalidTargetCertificate      = errors.New("invalid RDP target certificate")
-	ErrTargetCertificateMismatch     = errors.New("RDP target certificate does not match the pinned fingerprint")
+	// ErrInvalidTargetCertificate indicates that the target certificate cannot be parsed.
+	ErrInvalidTargetCertificate = errors.New("invalid RDP target certificate")
+	// ErrTargetCertificateMismatch indicates that the parsed target certificate differs from its pin.
+	ErrTargetCertificateMismatch = errors.New("RDP target certificate does not match the pinned fingerprint")
 )
 
+// CertificateFingerprint is the SHA-256 digest of a target's leaf certificate.
 type CertificateFingerprint struct {
 	sum [sha256.Size]byte
 	set bool
 }
 
+// ParseCertificateFingerprint parses a 64-digit hexadecimal SHA-256 digest.
 func ParseCertificateFingerprint(value string) (CertificateFingerprint, error) {
 	var fingerprint CertificateFingerprint
 	if len(value) != hex.EncodedLen(sha256.Size) {
@@ -31,6 +36,7 @@ func ParseCertificateFingerprint(value string) (CertificateFingerprint, error) {
 	return fingerprint, nil
 }
 
+// VerifyPinnedCertificate checks DER syntax and compares the leaf digest in constant time.
 func VerifyPinnedCertificate(der []byte, expected CertificateFingerprint) error {
 	if !expected.set {
 		return ErrInvalidCertificateFingerprint
