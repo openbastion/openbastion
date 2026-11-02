@@ -44,3 +44,5 @@ deploy/                          base44 (prévisualisation), docker-compose (ADR
 ```
 
 Une page de la documentation n'existe que si son contenu est réel ; ce qui est prévu est listé dans le `README.md` de la section, avec le point de la feuille de route qui le couvre.
+
+- `pkg/tlspin` : primitives de pinning TLS des cibles ; la configuration pin-only est disponible uniquement dans les builds `development`.

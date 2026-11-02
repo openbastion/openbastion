@@ -1,6 +1,6 @@
 # ADR-0071 — Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté
 
-**Statut** `Proposé` · 2 novembre 2026 · proposition d'architecture ; amende ADR-0069 (règles 1, 2 et 6)
+**Statut** `Accepté` · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
 
 Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC n'est écrit tant que cet ADR n'est pas accepté.
 
@@ -59,9 +59,9 @@ La connexion cible est un client RDP qui n'accepte que ce sous-ensemble. Tout le
 | Affichage | un moniteur, redimensionnement borné | multi-moniteurs, bureau au-delà de 16 777 216 px |
 | Fin | MCS Disconnect Provider Ultimatum, TLS `close_notify` | — |
 
-Le certificat TLS de la cible est vérifié dans `tls.Config.VerifyConnection` **avant** le premier octet CredSSP ; une empreinte absente, mal formée ou différente ferme la connexion et écrit `session.tls_certificate_mismatch` à l'audit. Le pin est la seule ancre : une redirection DNS ne suffit pas à usurper la cible, puisque l'imposteur ne peut pas présenter le certificat épinglé.
+Le certificat TLS de la cible est vérifié avant le premier octet CredSSP ; une empreinte absente, mal formée ou différente ferme la connexion et écrit `session.tls_certificate_mismatch` à l'audit. `pkg/tlspin.ServerConfig` en production exige un `RootCAs` explicitement configuré et un `ServerName` : la validation standard de chaîne et de nom reste active, et `VerifyConnection` ajoute le contrôle du pin de la feuille. Aucun recours implicite aux racines système. En conséquence, un certificat auto-signé n'est accepté en production que si sa confiance est explicitement configurée dans `RootCAs`.
 
-**Dérogation de policy, explicite.** Vérifier un certificat par empreinte impose `InsecureSkipVerify: true` avec `VerifyConnection`, ce que `.agents/policies/cryptography.md` §1 interdit sans accord nommé. La proposition demande cette levée pour **un seul constructeur** (`tlspin.ServerConfig(pin)`), qui refuse une empreinte absente et ne sert qu'au dialogue TLS de la cible. Aucun autre `tls.Config` du dépôt n'est concerné ; le dialogue interne reste en TLS 1.3 mutuel. Sans ce go, l'implémentation s'arrête.
+**Dérogation limitée au développement.** L'utilisateur autorise `InsecureSkipVerify: true` uniquement en développement. `tlspin.DevelopmentServerConfig` est donc compilé seulement avec `-tags development`, impose le contrôle du pin dans `VerifyConnection` et n'est pas disponible dans les binaires de production. Aucun autre `tls.Config` n'est concerné ; le dialogue interne reste en TLS 1.3 mutuel. Cette contrainte remplace, pour l'implémentation, la proposition initiale d'utiliser le pin comme seule ancre en production.
 
 ### 4. Le côté opérateur n'est ni RDP ni VNC : un flux écran unique
 

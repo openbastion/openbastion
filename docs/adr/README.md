@@ -80,4 +80,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0068](0068-les-details-d-un-evenement-d-audit-sont-bornes-et-proteges-par-le-hash.md) | Les détails d'un événement d'audit sont bornés et protégés par le hash | Accepté |
 | [ADR-0069](0069-le-proxy-rdp-verifie-la-cible-et-refuse-les-sessions-non-enregistrees.md) | Le proxy RDP vérifie la cible et refuse les sessions non enregistrées | Accepté |
 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté |
-| [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Proposé |
+| [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté |
