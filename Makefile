@@ -117,6 +117,7 @@ test: proto-gen
 	$(GO) test \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
+		./pkg/screenstream/... \
 		./pkg/mtls/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
