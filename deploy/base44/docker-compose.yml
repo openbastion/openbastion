@@ -66,6 +66,18 @@ services:
     networks: []
     network_mode: none
 
+  # The contracts, at every `up`: the *.pb.go packages are not generated in git (make proto-gen,
+  # .gitignore), and every Go service compiles against them — generated into the bind-mounted
+  # source so the services' `go run` sees them.
+  proto:
+    <<: *go
+    restart: "no"
+    command: ["sh", "-ec", "buf generate"]
+    volumes:
+      - ../..:/src
+    networks: []
+    network_mode: none
+
   postgres:
     image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
     restart: on-failure
@@ -113,6 +125,7 @@ services:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8086"]
@@ -134,6 +147,7 @@ services:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authorization}}
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8083"]
@@ -157,6 +171,7 @@ services:
       - anchors:/var/lib/openbastion/anchors
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082"]
@@ -183,6 +198,7 @@ services:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: password-vault}}
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authorization: {condition: service_healthy}
       audit-service: {condition: service_healthy}
@@ -208,6 +224,7 @@ services:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: command-recorder}}
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authorization: {condition: service_healthy}
       audit-service: {condition: service_healthy}
@@ -232,7 +249,9 @@ services:
     network_mode: none
     read_only: true
     cap_drop: [ALL]
-    cap_add: [CHOWN]
+    # The shared script chowns s3.json to 1000:1000, then chmods it: a root that no longer owns the
+    # file needs FOWNER for the mode, and DAC_OVERRIDE to rewrite an s3.json left by an earlier run.
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
     security_opt: [no-new-privileges:true]
 
   seaweedfs:
@@ -293,6 +312,7 @@ services:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: video-recorder}}
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authorization: {condition: service_healthy}
       audit-service: {condition: service_healthy}
@@ -319,6 +339,7 @@ services:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
     depends_on:
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       password-vault: {condition: service_healthy}
       audit-service: {condition: service_healthy}
@@ -346,6 +367,7 @@ services:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
     depends_on:
       postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authorization: {condition: service_healthy}
       password-vault: {condition: service_healthy}
@@ -382,6 +404,7 @@ services:
     ports:
       - "8080:8080"
     depends_on:
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authentication: {condition: service_healthy}
       authorization: {condition: service_healthy}
@@ -454,6 +477,7 @@ services:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: admin-cli}}
     depends_on:
+      proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authentication: {condition: service_healthy}
       api-gateway: {condition: service_healthy}
