@@ -38,17 +38,19 @@ const (
 	whyTTL       = "a duration rather than an absolute expires_at: the callee's clock decides the end"
 	whyExpiresAt = "carried as ttl_seconds"
 	whySignature = "the chain signs every event itself (HMAC, ADR-0027); an emitter's signature is not carried"
+	whyDetails   = "details carries optional metadata (ADR-0068); this emitter has none to add"
+	whyEventTime = "the event's time stays in the chain; the emitter needs only the id"
 )
 
 var contractPairs = []contractPair{
 	{"services/recording-audit/audit-service/internal/interfaces/http.go", "emitEventRequest", "proto/audit/v1/audit.proto", "EmitEventRequest",
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/recording-audit/audit-service/internal/interfaces/http.go", "emitEventResponse", "proto/audit/v1/audit.proto", "EmitEventResponse",
-		nil, map[string]string{"ts": "the event's time stays in the chain; the emitter needs only the id"}},
+		nil, map[string]string{"ts": whyEventTime}},
 	{"services/access/session-broker/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/recording-audit/command-recorder/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
 	{"services/vault/password-vault/internal/interfaces/http.go", "authorizeScopeRequest", "proto/vault/v1/vault.proto", "AuthorizeScopeRequest",
 		map[string]string{"ttl_seconds": whyTTL}, map[string]string{"context": whyContext, "expires_at": whyExpiresAt}},
 	{"services/access/session-broker/internal/infrastructure/vault_client.go", "authorizeScopeRequestBody", "proto/vault/v1/vault.proto", "AuthorizeScopeRequest",
@@ -80,12 +82,17 @@ var contractPairs = []contractPair{
 	{"services/proxy/ssh-proxy/internal/infrastructure/vault_client.go", "fetchCredentialResponseBody", "proto/vault/v1/vault.proto", "FetchCredentialResponse",
 		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed"}},
 	{"services/proxy/ssh-proxy/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
 	{"services/vault/password-vault/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
 	// ADR-0064: the Authentication Service writes logins and the second factor's gestures.
 	{"services/access/authentication/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+	// ADR-0070: the Video Recorder's clients of the Authorization and Audit routes.
+	{"services/recording-audit/video-recorder/internal/infrastructure/http_clients.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+	{"services/recording-audit/video-recorder/internal/infrastructure/http_clients.go", "emitEventResponseBody", "proto/audit/v1/audit.proto", "EmitEventResponse",
+		nil, map[string]string{"ts": whyEventTime}},
 }
 
 // notMirrored are internal JSON structs with no message in proto/, each with its reason.
@@ -98,6 +105,8 @@ var notMirrored = map[string]string{
 	"password-vault/checkAccessResponseBody":   "idem",
 	"command-recorder/checkAccessRequestBody":  "idem — the Recorder's client of it",
 	"command-recorder/checkAccessResponseBody": "idem",
+	"video-recorder/checkAccessRequestBody":    "idem — the Video Recorder's client of it",
+	"video-recorder/checkAccessResponseBody":   "idem",
 	// Not routes between services: formats of a third party, or of a file.
 	"authentication/idClaims":   "the claims of an OIDC identity token: the provider's format (ADR-0035)",
 	"audit-service/anchorLine":  "a line of the anchor file (ADR-0028), not a message",
@@ -105,7 +114,9 @@ var notMirrored = map[string]string{
 }
 
 var protoMessage = regexp.MustCompile(`(?ms)^message (\w+) \{(.*?)^\}`)
-var protoField = regexp.MustCompile(`(?m)^\s+(?:repeated\s+)?[\w.]+\s+(\w+)\s*=\s*\d+`)
+
+// A field is a scalar/message type or a map<key, value>: the map's < and , would otherwise hide it.
+var protoField = regexp.MustCompile(`(?m)^\s+(?:repeated\s+)?(?:map<[^>]+>|[\w.]+)\s+(\w+)\s*=\s*\d+`)
 
 func protoFields(t *testing.T, root, file, message string) []string {
 	t.Helper()

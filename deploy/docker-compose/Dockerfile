@@ -5,8 +5,17 @@
 # -- build: every binary, static, from go.work and go.sum ----------------------------------
 FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS build
 WORKDIR /src
-COPY . .
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
+# The generated Protobuf stubs are not in git (docs/development/contributing.md): the image
+# generates them, so a clean clone builds. Versions mirror `make proto-tools`.
+ARG BUF_VERSION=v1.75.0
+ARG PROTOC_GEN_GO_VERSION=v1.36.4
+ARG PROTOC_GEN_GO_GRPC_VERSION=v1.5.1
+RUN GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION} \
+ && GOBIN=/usr/local/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} \
+ && GOBIN=/usr/local/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
+COPY . .
+RUN buf generate
 # The version stamped in every binary (ADR-0063): make scan-images and the CI pass VERSION+<commit>,
 # or the release; "dev" otherwise (.git is not in the build context).
 ARG VERSION=dev

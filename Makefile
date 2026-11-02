@@ -254,7 +254,7 @@ scan-images:
 		echo "l'image est la version $$got"
 	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml openbastion:scan
 	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml \
-		"$$(grep -oE 'postgres:16@sha256:[0-9a-f]{64}' deploy/docker-compose/docker-compose.yml)"
+		"$$(grep -m1 -oE 'postgres:16@sha256:[0-9a-f]{64}' deploy/docker-compose/docker-compose.yml)" # une seule référence : l'image est épinglée par plusieurs services
 
 ## Crée, dans $(PKI_DIR), une autorité et l'identité de chaque service (ADR-0010).
 ## Pour le développement et les petits déploiements ; en production, l'émission est
