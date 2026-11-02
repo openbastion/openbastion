@@ -1,6 +1,6 @@
 # ADR-0069 — Le proxy RDP vérifie la cible et refuse les sessions non enregistrées
 
-**Statut** `Proposé` · 1ᵉʳ novembre 2026 · à valider avant toute implémentation
+**Statut** `Accepté` · 2 novembre 2026
 
 ## Contexte
 
