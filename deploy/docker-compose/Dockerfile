@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # One image holds every OpenBastion binary (ADR-0033): the code is built once, and each Compose
 # service runs the one it is. Built from the repository root:
 #   docker build -f deploy/docker-compose/Dockerfile .
@@ -11,15 +12,21 @@ ENV CGO_ENABLED=0 GOFLAGS=-trimpath
 ARG BUF_VERSION=v1.75.0
 ARG PROTOC_GEN_GO_VERSION=v1.36.4
 ARG PROTOC_GEN_GO_GRPC_VERSION=v1.5.1
-RUN GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION} \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@${BUF_VERSION} \
  && GOBIN=/usr/local/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@${PROTOC_GEN_GO_VERSION} \
  && GOBIN=/usr/local/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@${PROTOC_GEN_GO_GRPC_VERSION}
 COPY . .
-RUN buf generate
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    buf generate
 # The version stamped in every binary (ADR-0063): make scan-images and the CI pass VERSION+<commit>,
 # or the release; "dev" otherwise (.git is not in the build context).
 ARG VERSION=dev
-RUN mkdir -p /out && go build -ldflags="-s -w -X github.com/openbastion/openbastion/pkg/buildinfo.Version=${VERSION}" -o /out/ \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out && go build -ldflags="-s -w -X github.com/openbastion/openbastion/pkg/buildinfo.Version=${VERSION}" -o /out/ \
       ./services/access/api-gateway/cmd/api-gateway \
       ./services/access/authentication/cmd/authentication \
       ./services/access/authorization/cmd/authorization \
@@ -31,7 +38,8 @@ RUN mkdir -p /out && go build -ldflags="-s -w -X github.com/openbastion/openbast
       ./services/recording-audit/video-recorder/cmd/video-recorder \
       ./pkg/mtls/cmd/openbastion-pki \
       ./cli/openbastion-cli \
-      ./test/integration/cmd/demo-ssh-target
+      ./test/integration/cmd/demo-ssh-target \
+    && go clean -cache -modcache
 # The directories the volumes are mounted on, owned by the unprivileged user: an empty named
 # volume takes the ownership of the directory it is mounted on.
 RUN mkdir -p /rootfs/pki /rootfs/var/lib/openbastion/anchors /rootfs/var/lib/openbastion/archives \

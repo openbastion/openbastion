@@ -7,10 +7,6 @@ name: openbastion
 
 x-service: &service
   image: openbastion:dev
-  build:
-    context: ../..
-    dockerfile: deploy/docker-compose/Dockerfile
-    target: runtime
   restart: unless-stopped
   read_only: true
   cap_drop: [ALL]
@@ -71,6 +67,11 @@ services:
 
   authentication:
     <<: *service
+    # Build the shared runtime image once; every other Go service reuses this exact image.
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/Dockerfile
+      target: runtime
     entrypoint: ["/usr/local/bin/authentication"]
     environment:
       <<: *tls
@@ -142,10 +143,6 @@ services:
   seaweedfs-config:
     profiles: [recording]
     image: openbastion-tools:dev
-    build:
-      context: ../..
-      dockerfile: deploy/docker-compose/Dockerfile
-      target: tools
     entrypoint: ["/bin/sh", "/deploy/seaweedfs-config.sh"]
     restart: "no"
     read_only: true
@@ -159,6 +156,9 @@ services:
       - seaweedfs-config:/config
       - ./seaweedfs-config.sh:/deploy/seaweedfs-config.sh:ro
     network_mode: none
+    depends_on:
+      pki:
+        condition: service_completed_successfully
 
   video-recorder-db-init:
     profiles: [recording]
