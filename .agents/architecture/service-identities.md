@@ -18,7 +18,7 @@ ssh-proxy ──► password-vault (fetch-credential : le secret, l'adresse et l
 password-vault, command-recorder ──► authorization (check-access)
 command-recorder, video-recorder ──► audit-service (recording.read, avant de servir)
 video-recorder ──► authorization (recording:session:read)
-rdp-proxy ──► video-recorder (flux gRPC acquitté ; identité réservée, proxy pas encore implémenté)
+rdp-vnc-proxy ──► video-recorder (flux gRPC acquitté ; identité réservée, proxy pas encore implémenté)
 video-recorder ──mTLS──► seaweedfs (S3-compatible, profil Compose `recording`)
 admin-cli ──► authentication (POST /auth/v1/users) · audit-service (GET /audit/v1/verify-chain)
 ```
