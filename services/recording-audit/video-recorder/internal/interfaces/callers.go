@@ -22,6 +22,6 @@ func GRPCCallerRules() []GRPCRule {
 	return []GRPCRule{
 		{Method: "/openbastion.recording.v1.VideoRecording/StreamVideoSegments", Callers: []string{mtls.RDPVNCProxy}},
 		{Method: "/openbastion.recording.v1.VideoRecording/GetVideoSegment", Callers: []string{mtls.APIGateway}},
-		{Method: "/openbastion.recording.v1.VideoRecording/CheckReadiness", Callers: []string{mtls.RDPProxy}},
+		{Method: "/openbastion.recording.v1.VideoRecording/CheckReadiness", Callers: []string{mtls.RDPVNCProxy}},
 	}
 }
