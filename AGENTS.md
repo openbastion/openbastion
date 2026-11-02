@@ -4,7 +4,7 @@ Tu es un agent IA qui travaille sur **OpenBastion**. Ce fichier est ton point d'
 
 ## Le projet en cinq lignes
 
-OpenBastion est un PAM (Privileged Access Management) open source, cloud-native, écrit en Go, sous licence Apache 2.0 et entièrement original. Il centralise les accès privilégiés : l'opérateur n'a jamais le mot de passe de la cible, toutes les connexions passent par un proxy, toutes les sessions sont enregistrées et auditées. Le dépôt est un monorepo multi-module Go (`go.work`). Le MVP implémenté couvre SSH de bout en bout ; le reste du périmètre est sur la feuille de route (`docs/roadmap.md`), pas dans le code. Le propriétaire du projet est Bony Kiss ; il s'exprime en français.
+OpenBastion est un PAM (Privileged Access Management) open source, cloud-native, écrit en Go, sous licence AGPL-3.0 et entièrement original. Il centralise les accès privilégiés : l'opérateur n'a jamais le mot de passe de la cible, toutes les connexions passent par un proxy, toutes les sessions sont enregistrées et auditées. Le dépôt est un monorepo multi-module Go (`go.work`). Le MVP implémenté couvre SSH de bout en bout ; le reste du périmètre est sur la feuille de route (`docs/roadmap.md`), pas dans le code. Le propriétaire du projet est Bony Kiss ; il s'exprime en français.
 
 ## Comment utiliser `.agents/`
 

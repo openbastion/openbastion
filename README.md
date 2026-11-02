@@ -1,6 +1,6 @@
 # OpenBastion
 
-Plateforme PAM (Privileged Access Management) open source, cloud-native, écrite en Go. Licence Apache 2.0.
+Plateforme PAM (Privileged Access Management) open source, cloud-native, écrite en Go. Licence AGPL-3.0.
 
 > **État du projet** : implémentation du MVP en cours. Ce dépôt contient actuellement le premier incrément vertical — la partie du système qui prouve l'invariant de sécurité fondateur — pas encore l'ensemble des services du périmètre MVP. Voir `docs/roadmap.md` pour la feuille de route complète.
 
@@ -118,4 +118,4 @@ Toute la documentation vit sous `docs/`, une section par public : architecture, 
 
 ## Licence
 
-Apache License 2.0 — voir `LICENSE`.
+AGPL License 3.0 — voir `LICENSE`.

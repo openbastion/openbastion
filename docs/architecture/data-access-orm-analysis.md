@@ -37,7 +37,7 @@ Arbres de dépendances mesurés le 30 octobre 2026 avec `go get` dans un module 
 | Candidat | Nature | Modules tirés | Dont `golang.org/x/*` | Licence | Exprime verrous, CAS, `RETURNING`, index partiels ? |
 |---|---|---|---|---|---|
 | GORM + pilote PostgreSQL | ORM complet (réflexion) | 23 | 8 | MIT | En SQL brut (`Raw`, `Clauses`) — donc deux styles |
-| ent | ORM à génération de code (graphe) | 35 | 5 | Apache-2.0 | Partiellement, par extensions ; le schéma devient du code Go |
+| ent | ORM à génération de code (graphe) | 35 | 5 | AGPL-3.0 | Partiellement, par extensions ; le schéma devient du code Go |
 | bun | ORM léger, proche du SQL | 23 | 1 | BSD-2 | Oui, en grande partie, par le constructeur de requêtes |
 | pgx (pilote seul) | Pilote PostgreSQL natif | 19 | 8 | MIT | Oui : c'est du SQL |
 | sqlx | Extension de `database/sql` (lecture vers des structures) | 5 | 0 | MIT | Oui : c'est du SQL |

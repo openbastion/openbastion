@@ -1,6 +1,6 @@
 # Documentation OpenBastion
 
-OpenBastion est un PAM (Privileged Access Management) open source sous licence Apache 2.0 : l'opérateur n'a jamais le mot de passe de la cible, toute connexion passe par un proxy, toute session est enregistrée et auditée. Le MVP couvre SSH, SFTP et SCP de bout en bout ; le reste du périmètre est sur la [feuille de route](roadmap.md).
+OpenBastion est un PAM (Privileged Access Management) open source sous licence AGPL-3.0 : l'opérateur n'a jamais le mot de passe de la cible, toute connexion passe par un proxy, toute session est enregistrée et auditée. Le MVP couvre SSH, SFTP et SCP de bout en bout ; le reste du périmètre est sur la [feuille de route](roadmap.md).
 
 Une page de cette documentation décrit ce que fait le code. Ce qui est prévu sans être construit n'a pas de page : il est listé dans le `README.md` de la section, avec le point de la feuille de route qui le couvre. L'état réel, les chiffres de tests et les écarts connus sont tenus dans [`NOTES_SANDBOX.md`](../NOTES_SANDBOX.md) ; les limites de sécurité du MVP, dans [`security/known-limitations.md`](security/known-limitations.md).
 

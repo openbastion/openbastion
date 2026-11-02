@@ -17,7 +17,7 @@
 
 | Cible | Règle |
 |---|---|
-| `LICENSE` | **JAMAIS** modifier (`licensing-apache-2.0.md`). |
+| `LICENSE` | **JAMAIS** modifier (`licensing-AGPL-3.0.md`). |
 | Texte de décision d'un ADR au statut `Accepté` | **JAMAIS** réécrire. Pour changer une décision : nouvel ADR qui remplace l'ancien (`Remplacé par ADR-NNNN`). Un pointeur « refermé par ADR-NNNN » dans les conséquences est permis. |
 | `proto/**` | Additif uniquement ; **JAMAIS** renuméroter, supprimer sans `reserved`, changer un type. |
 | Migrations appliquées (`migrations/NNN_*.sql`) | **JAMAIS** modifier : un nouveau fichier (ADR-0030). |

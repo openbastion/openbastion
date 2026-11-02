@@ -6,7 +6,7 @@
 
 ADR-0069 exige un proxy qui termine séparément les connexions RDP côté opérateur et côté cible, impose NLA/CredSSP, vérifie l'empreinte du certificat TLS de la cible avant d'envoyer le mot de passe Vault et capture l'affichage pour le Video Recorder. Le relais d'octets `pkg/proxycore.Codec` ne peut pas, seul, remplir ces fonctions.
 
-L'utilisateur a choisi FreeRDP via cgo et confirmé que l'implémentation doit rester dans le périmètre d'ADR-0069. FreeRDP fournit une API client et une API peer serveur, est sous Apache-2.0 et peut être lié au projet sans importer de code des clients Go évalués précédemment. Le binding doit néanmoins enfermer ses états et ses allocations natives derrière une API Go étroite.
+L'utilisateur a choisi FreeRDP via cgo et confirmé que l'implémentation doit rester dans le périmètre d'ADR-0069. FreeRDP fournit une API client et une API peer serveur, est sous AGPL-3.0 et peut être lié au projet sans importer de code des clients Go évalués précédemment. Le binding doit néanmoins enfermer ses états et ses allocations natives derrière une API Go étroite.
 
 ## Décision
 
@@ -21,7 +21,7 @@ L'utilisateur a choisi FreeRDP via cgo et confirmé que l'implémentation doit r
 
 ## Conséquences
 
-- (+) Le choix demandé est compatible avec la licence Apache-2.0 du projet et fournit les rôles client et serveur nécessaires à une terminaison RDP.
+- (+) Le choix demandé est compatible avec la licence AGPL-3.0 du projet et fournit les rôles client et serveur nécessaires à une terminaison RDP.
 - (+) Les contrôles de pin TLS, de NLA sans repli, d'annulation et d'enregistrement peuvent être exercés derrière une API Go testable.
 - (−) Cette décision ne constitue pas un proxy RDP opérationnel de bout en bout ; le service, le contrat d'attachement, les métadonnées Vault et le déploiement restent à implémenter.
 - (−) cgo impose un compilateur C, les headers FreeRDP et des bibliothèques natives compatibles à la construction. Tout binaire qui lie le moteur devra aussi embarquer les bibliothèques d'exécution FreeRDP ; l'image distroless statique actuelle ne suffit pas sans évolution.

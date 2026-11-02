@@ -124,7 +124,7 @@ openbastion/
 ├── .gitlab-ci.yml                   # CI GitLab (miroir, selon plateforme d'hébergement retenue)
 ├── go.work                          # workspace Go multi-module
 ├── Makefile                         # commandes de build/test agrégées
-├── LICENSE                          # Apache 2.0
+├── LICENSE                          # AGPL-3.0
 └── README.md
 ```
 

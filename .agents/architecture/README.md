@@ -4,7 +4,7 @@ Lis ce dossier avant de toucher au code. Quand il diverge du code, **le code fai
 
 ## Le produit
 
-OpenBastion est un PAM (Privileged Access Management) open source, cloud-native, en Go, sous licence Apache 2.0, entièrement original. Il centralise les accès privilégiés : l'opérateur n'a **jamais** le mot de passe de la cible, toutes les connexions passent par un proxy, toutes les sessions sont enregistrées, tout est audité.
+OpenBastion est un PAM (Privileged Access Management) open source, cloud-native, en Go, sous licence AGPL-3.0, entièrement original. Il centralise les accès privilégiés : l'opérateur n'a **jamais** le mot de passe de la cible, toutes les connexions passent par un proxy, toutes les sessions sont enregistrées, tout est audité.
 
 Ce qui est implémenté aujourd'hui (MVP, un seul protocole : SSH) : Authentication, Authorization (RBAC), Session Broker, Password Vault, SSH Proxy, Audit Service (chaînage de hash), Command Recorder (replay texte chiffré au repos), API Gateway, mTLS interne, Admin UI (React, ADR-0036), connexion fédérée OIDC (ADR-0035), migrations versionnées (ADR-0030), déploiement docker-compose (ADR-0033). Le reste du périmètre (RDP, Workflow/Approval Engine, SDK…) est décrit dans `docs/roadmap.md` et **n'existe pas encore** : ne fais pas comme si.
 

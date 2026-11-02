@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "OpenBastion Admin UI (ADR-0036): React, served by the Gateway under /ui/, talking to the public API only.",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0",
   "scripts": {
     "build": "tsc --noEmit -p . && vite build",
     "test": "vitest run",

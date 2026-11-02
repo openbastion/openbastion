@@ -37,7 +37,7 @@ ADR-0069 exige qu'une session RDP soit enregistrée et coupée si cette garantie
 - (−) Dans le profil Compose, le compte S3 du Recorder possède actuellement `Admin` sur l'instance SeaweedFS dédiée afin de créer son bucket au démarrage ; un Recorder compromis peut donc supprimer ou reconfigurer les buckets de cette instance.
 - (−) Une indisponibilité de Transit, PostgreSQL, du stockage S3-compatible, du réseau gRPC ou de l'audit bloque l'admission ou coupe une session en cours. Ces dépendances deviennent de rang critique pour les accès RDP enregistrés.
 - (−) Le flux gRPC ajoute une dépendance et une exception de transport à maintenir ; il ne justifie pas une migration gRPC des autres contrats HTTP/JSON.
-- (−) ~~L'ajout effectif des dépendances attend la validation du présent ADR et l'approbation requise par la policy des dépendances.~~ Fermé le 1er novembre 2026 : l'utilisateur a approuvé `minio-go/v7 v7.0.84` (Apache-2.0, Go 1.22) pour le client S3.
+- (−) ~~L'ajout effectif des dépendances attend la validation du présent ADR et l'approbation requise par la policy des dépendances.~~ Fermé le 1er novembre 2026 : l'utilisateur a approuvé `minio-go/v7 v7.0.84` (AGPL-3.0, Go 1.22) pour le client S3.
 - (−) Sans politique de rétention, le volume d'objets croît sans borne temporelle ; cette proposition n'est pas suffisante, seule, pour une exploitation de production.
 
 ## Alternatives envisagées
