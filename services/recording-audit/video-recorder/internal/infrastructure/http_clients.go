@@ -15,12 +15,22 @@ type AuthorizationHTTPClient struct {
 	Client  *http.Client
 }
 
+// checkAccessRequestBody is the Broker's Authorization route as this client writes it.
+type checkAccessRequestBody struct {
+	ActorRoles []string `json:"actor_roles"`
+	Resource   string   `json:"resource"`
+	Action     string   `json:"action"`
+}
+
+// checkAccessResponseBody is what the Authorization route answers.
+type checkAccessResponseBody struct {
+	Allowed          bool   `json:"allowed"`
+	RequiresApproval bool   `json:"requires_approval"`
+	DecisionReason   string `json:"decision_reason"`
+}
+
 func (c *AuthorizationHTTPClient) CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (bool, string, error) {
-	body, err := json.Marshal(struct {
-		ActorRoles []string `json:"actor_roles"`
-		Resource   string   `json:"resource"`
-		Action     string   `json:"action"`
-	}{ActorRoles: actorRoles, Resource: resource, Action: action})
+	body, err := json.Marshal(checkAccessRequestBody{ActorRoles: actorRoles, Resource: resource, Action: action})
 	if err != nil {
 		return false, "", fmt.Errorf("encoding authorization request: %w", err)
 	}
@@ -44,11 +54,7 @@ func (c *AuthorizationHTTPClient) CheckAccess(ctx context.Context, actorRoles []
 	if resp.StatusCode != http.StatusOK {
 		return false, "", fmt.Errorf("check-access: status %d", resp.StatusCode)
 	}
-	var result struct {
-		Allowed          bool   `json:"allowed"`
-		RequiresApproval bool   `json:"requires_approval"`
-		DecisionReason   string `json:"decision_reason"`
-	}
+	var result checkAccessResponseBody
 	if err := decodeResponse(resp.Body, &result); err != nil {
 		return false, "", fmt.Errorf("decoding authorization response: %w", err)
 	}
@@ -60,14 +66,22 @@ type AuditHTTPClient struct {
 	Client  *http.Client
 }
 
+// emitEventRequestBody is the Audit ingestion route as this client writes it.
+type emitEventRequestBody struct {
+	ActorID      string `json:"actor_id"`
+	Action       string `json:"action"`
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+	Success      bool   `json:"success"`
+}
+
+// emitEventResponseBody is what the Audit ingestion route answers.
+type emitEventResponseBody struct {
+	EventID string `json:"event_id"`
+}
+
 func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
-	body, err := json.Marshal(struct {
-		ActorID      string `json:"actor_id"`
-		Action       string `json:"action"`
-		ResourceType string `json:"resource_type"`
-		ResourceID   string `json:"resource_id"`
-		Success      bool   `json:"success"`
-	}{ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success})
+	body, err := json.Marshal(emitEventRequestBody{ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success})
 	if err != nil {
 		return fmt.Errorf("encoding audit event: %w", err)
 	}
@@ -91,9 +105,7 @@ func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resour
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("emit-event: status %d", resp.StatusCode)
 	}
-	var result struct {
-		EventID string `json:"event_id"`
-	}
+	var result emitEventResponseBody
 	if err := decodeResponse(resp.Body, &result); err != nil {
 		return fmt.Errorf("decoding audit response: %w", err)
 	}
