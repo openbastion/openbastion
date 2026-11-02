@@ -69,7 +69,7 @@ openbastion/
 │
 ├── pkg/                          # bibliothèques Go partagées, importées par les services
 │   ├── proxycore/                # pipeline proxy commun (Connection Listener, Credential Fetcher, Codec, Tap, Terminator)
-│   ├── rdp/                      # primitives de pinning du certificat cible ; moteur FreeRDP à implémenter (ADR-0069/0071)
+│   ├── rdp/                      # primitives de pinning du certificat cible ; moteur moteur RDP natif à implémenter (ADR-0069/0071)
 │   ├── mtls/                     # identité par certificat (SAN URI spiffe://<domaine>/<service>), garde d'appelants par route, rechargement à chaud (ADR-0010)
 │   │   ├── pki/                  #   autorité et émission de certificats de service (dev, petits sites)
 │   │   ├── mtlstest/             #   habille une requête en pair authentifié, pour tester les tables d'appelants
