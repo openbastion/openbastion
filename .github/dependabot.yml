@@ -25,6 +25,7 @@ updates:
       - /pkg/transit
       - /pkg/buildinfo
       - /pkg/webhook
+      - /pkg/rdp
       - /services/access/api-gateway
       - /services/access/authentication
       - /services/access/authorization
