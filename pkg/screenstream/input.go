@@ -40,7 +40,7 @@ func DecodeInput(data []byte, width, height uint32) (InputEvent, error) {
 	}
 	e.Type = InputType(data[1])
 	e.Flags = data[2]
-	if data[0] != Version || data[3] != 0 || data[15] != 0 {
+	if data[0] != Version || data[3] != 0 {
 		return InputEvent{}, ErrMalformedMessage
 	}
 	e.Keysym = binary.BigEndian.Uint32(data[4:8])
@@ -48,6 +48,7 @@ func DecodeInput(data []byte, width, height uint32) (InputEvent, error) {
 	e.X = binary.BigEndian.Uint16(data[10:12])
 	e.Y = binary.BigEndian.Uint16(data[12:14])
 	e.Buttons = data[14]
+	e.Wheel = int8(data[15])
 	switch e.Type {
 	case InputKey:
 		if e.Flags != KeyPressed && e.Flags != KeyReleased {
@@ -84,6 +85,7 @@ func EncodeInput(e InputEvent) ([]byte, error) {
 	binary.BigEndian.PutUint16(out[10:12], e.X)
 	binary.BigEndian.PutUint16(out[12:14], e.Y)
 	out[14] = e.Buttons
+	out[15] = byte(e.Wheel)
 	decoded, err := DecodeInput(out, uint32(e.X)+1, uint32(e.Y)+1)
 	if err != nil {
 		return nil, err
