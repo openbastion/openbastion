@@ -558,8 +558,8 @@ sequenceDiagram
 
 `VaultCredentialIssuance.FetchCredential` est le seul RPC qui transporte le credential de la cible en clair. Les images du Video Recorder restent des données sensibles chiffrées au repos et ne transitent pas par ce RPC.
 
-## 12. Proxy RDP / Gateway → Video Recorder — `VideoRecording`
+## 12. Proxy RDP/VNC / Gateway → Video Recorder — `VideoRecording`
 
-Le service gRPC est défini dans `proto/recording/v1/recording.proto`. `StreamVideoSegments` accepte un flux bidirectionnel de segments PNG ordonnés ; chaque acquittement est émis après chiffrement de l'objet, écriture S3-compatible et commit des métadonnées PostgreSQL. Seule l'identité mTLS `rdp-proxy` peut ingérer ou sonder `CheckReadiness`. Ce proxy n'est pas encore implémenté : aucune session RDP n'est actuellement enregistrée.
+Le service gRPC est défini dans `proto/recording/v1/recording.proto`. `StreamVideoSegments` accepte un flux bidirectionnel de segments PNG ordonnés ; chaque acquittement est émis après chiffrement de l'objet, écriture S3-compatible et commit des métadonnées PostgreSQL. Seule l'identité mTLS `rdp-vnc-proxy` peut ingérer ou sonder `CheckReadiness`. Ce proxy n'est pas encore implémenté : aucune session RDP n'est actuellement enregistrée.
 
 `GetVideoSegment` est réservé à l'identité mTLS `api-gateway`. La Gateway ne transmet au Recorder que l'utilisateur et les rôles tirés du jeton vérifié. Le Recorder consulte Authorization (`recording:session:read`) et écrit `recording.read` à l'Audit Service avant de déchiffrer ou de servir un segment ; toute panne ou tout refus ferme la lecture. La route publique est `GET /sessions/{sessionId}/recording/video/segments/{firstSequence}` (voir `docs/api/rest/openapi.yaml`) ; le stockage objet et ses identifiants ne sont jamais exposés au navigateur.
