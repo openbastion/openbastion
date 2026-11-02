@@ -40,7 +40,7 @@ func TestGRPCCallerRulesAreRestrictedToRDPProxyAndGateway(t *testing.T) {
 	want := map[string][]string{
 		"/openbastion.recording.v1.VideoRecording/StreamVideoSegments": {mtls.RDPVNCProxy},
 		"/openbastion.recording.v1.VideoRecording/GetVideoSegment":     {mtls.APIGateway},
-		"/openbastion.recording.v1.VideoRecording/CheckReadiness":      {mtls.RDPProxy},
+		"/openbastion.recording.v1.VideoRecording/CheckReadiness":      {mtls.RDPVNCProxy},
 	}
 	got := make(map[string][]string)
 	for _, rule := range GRPCCallerRules() {
