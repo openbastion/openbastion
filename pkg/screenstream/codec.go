@@ -74,7 +74,8 @@ func Encode(m Message) ([]byte, error) {
 		copy(out[HeaderSize:], m.PNG)
 		return out, nil
 	case TypeHello:
-		if (m.Protocol != ProtocolRDP && m.Protocol != ProtocolVNC) ||
+		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 ||
+			(m.Protocol != ProtocolRDP && m.Protocol != ProtocolVNC) ||
 			m.SessionID == "" || len(m.SessionID) > MaxSessionIDBytes ||
 			!utf8.ValidString(m.SessionID) || m.ExpiresAt.IsZero() {
 			return nil, ErrMalformedMessage
@@ -89,7 +90,7 @@ func Encode(m Message) ([]byte, error) {
 		copy(out[HeaderSize+14:], m.SessionID)
 		return out, nil
 	case TypeEnd:
-		if len(m.Text) > MaxEndTextBytes || !utf8.ValidString(m.Text) {
+		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || len(m.Text) > MaxEndTextBytes || !utf8.ValidString(m.Text) {
 			return nil, ErrOutOfBounds
 		}
 		out := make([]byte, HeaderSize+4+len(m.Text))
@@ -126,7 +127,7 @@ func Decode(data []byte) (Message, error) {
 			return Message{}, err
 		}
 	case TypeHello:
-		if payloadLen < 14 {
+		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || payloadLen < 14 {
 			return Message{}, ErrMalformedMessage
 		}
 		p := data[HeaderSize:]
@@ -148,7 +149,7 @@ func Decode(data []byte) (Message, error) {
 			return Message{}, ErrMalformedMessage
 		}
 	case TypeEnd:
-		if payloadLen < 4 {
+		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || payloadLen < 4 {
 			return Message{}, ErrMalformedMessage
 		}
 		p := data[HeaderSize:]
