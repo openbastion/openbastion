@@ -4,6 +4,7 @@ use (
 	./cli/openbastion-cli
 	./pkg/mtls
 	./pkg/proxycore
+	./pkg/rdp
 	./pkg/migrate
 	./pkg/refusalbudget
 	./pkg/webhook

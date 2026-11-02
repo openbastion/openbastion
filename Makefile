@@ -65,6 +65,7 @@ build: proto-gen
 	$(GO) build -ldflags "$(LDFLAGS)" \
 		./pkg/buildinfo/... \
 		./pkg/proxycore/... \
+		./pkg/rdp/... \
 		./pkg/mtls/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
@@ -86,6 +87,7 @@ build: proto-gen
 ## go vet sur tous les modules.
 vet: proto-gen
 	$(GO) vet ./pkg/proxycore/...
+	$(GO) vet ./pkg/rdp/...
 	$(GO) vet ./pkg/mtls/...
 	$(GO) vet ./cli/openbastion-cli/...
 	$(GO) vet ./pkg/migrate/...
@@ -112,6 +114,7 @@ vet: proto-gen
 test: proto-gen
 	$(GO) test \
 		./pkg/proxycore/... \
+		./pkg/rdp/... \
 		./pkg/mtls/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
