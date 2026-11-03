@@ -4,6 +4,14 @@
 
 Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC n'est écrit tant que cet ADR n'est pas accepté.
 
+## Avancement d’implémentation — 3 novembre 2026
+
+Le premier socle RDP est présent mais **ne constitue pas encore un moteur RDP utilisable** : `pkg/rdp/transport.go` effectue X.224, demande exclusivement `PROTOCOL_HYBRID` et valide TLS (chaîne, nom et empreinte SHA-256) avant de retourner un transport sans aucun champ credential. `pkg/rdp/credssp.go` ajoute maintenant l’encodage/décodage borné du conteneur ASN.1 DER `TSRequest` (versions 2 à 6, jetons SPNEGO opaques, `authInfo`, `pubKeyAuth`, `errorCode`, `clientNonce`), avec rejet des longueurs BER indéfinies, des longueurs DER non canoniques, des champs dupliqués/hors ordre et des payloads hors bornes.
+
+**Limite explicite :** aucun échange CredSSP réel, SPNEGO ou NTLMv2 n’est encore exécuté ; le codec ne génère, ne chiffre ni ne valide d’identifiants. Aucun secret n’est passé à cette API. La prochaine tranche devra implémenter NTLMv2/AV_PAIR et le calcul des preuves cryptographiques avec vecteurs de test indépendants, puis le dialogue CredSSP et la preuve de liaison à la clé publique TLS. RDP reste désactivé dans le Broker/runtime jusqu’à la fin de cette chaîne et de MCS/GCC.
+
+Preuves du codec : round-trip DER, vecteur d’encodage initial, rejets ciblés de DER mal formé et fuzzing ; voir `pkg/rdp/credssp_test.go`. Ces tests de format ne prouvent pas encore l’interopérabilité avec Windows.
+
 ## Contexte
 
 ADR-0069 (accepté) fixe les garanties du proxy RDP : terminaison côté cible, NLA/CredSSP obligatoire, empreinte du certificat TLS de la cible vérifiée **avant** l'envoi du mot de passe Vault, enregistrement vidéo obligatoire, canaux secondaires fermés, révocation et expiration réelles. ADR-0070 (accepté) livre le Video Recorder et son contrat de segments acquittés.
