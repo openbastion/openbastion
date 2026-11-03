@@ -9,13 +9,12 @@ import (
 // CallerRules says which services may call which route of the Password Vault
 // (ADR-0010). A route not listed here is refused to everyone.
 //
-// The two halves of ADR-0003 are two different callers: the Session Broker
-// authorizes a scope and may never redeem it; the SSH Proxy redeems it and may
-// never authorize one. Before mutual TLS, both were only conventions.
+// The two halves of ADR-0003 are separate callers: the Session Broker authorizes
+// a scope and may never redeem it; each protocol proxy redeems only its own scope.
 func CallerRules() []mtls.Rule {
 	return []mtls.Rule{
 		{Method: http.MethodPost, Path: "/vault/v1/authorize-scope", Callers: []string{mtls.SessionBroker}},
-		{Method: http.MethodPost, Path: "/vault/v1/fetch-credential", Callers: []string{mtls.SSHProxy}},
+		{Method: http.MethodPost, Path: "/vault/v1/fetch-credential", Callers: []string{mtls.SSHProxy, mtls.RDPVNCProxy}},
 
 		// Administration of accounts goes through the Gateway, on behalf of an
 		// authenticated user whose roles the Vault then checks with Authorization.

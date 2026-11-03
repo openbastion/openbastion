@@ -31,6 +31,8 @@ message EstablishSessionRequest {
   // comme d'habitude. La dérogation est auditée (session.breakglass) avant que
   // le credential ne soit récupéré.
   bool break_glass = 7;
+  // Famille du protocole cible (ssh, vnc, rdp). Les proxies refusent les moteurs non implémentés.
+  string protocol = 8;
 }
 
 message EstablishSessionResponse {

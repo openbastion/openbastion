@@ -52,6 +52,22 @@ $C logs demo-ssh-target | grep 'host key'
 For a real target, read the key on the target itself (`/etc/ssh/ssh_host_ed25519_key.pub`),
 not over the network the pin protects.
 
+## Graphical VNC sessions (ADR-0071)
+
+The Go-native proxy is optional and currently serves **VNC only**; RDP is deliberately refused until its engine and protocol-security tests exist. It uses a separate, explicit PEM bundle for target TLS trust. Do not point it at the internal service CA unless that CA is intentionally the trust anchor for the VNC targets.
+
+1. Set `SCREEN_TARGET_CA_FILE` to a host path containing the PEM CA certificates that should trust the VNC targets.
+2. Configure the Video Recorder profile as described above, then enable both profiles:
+
+   ```sh
+   docker compose --env-file deploy/docker-compose/.env \
+     --env-file deploy/docker-compose/.env.recording \
+     -f deploy/docker-compose/docker-compose.yml \
+     --profile recording --profile rdp-vnc up -d --build --wait
+   ```
+
+The Session Broker routes a session based on its stored protocol. The Gateway returns an HttpOnly, SameSite=Strict one-use attach cookie for VNC and relays the binary screen WebSocket; the proxy ticket is never returned to browser JavaScript. The Admin UI's live screen viewer is still pending.
+
 ## What lives where
 
 | Volume | Holds | Mounted in |

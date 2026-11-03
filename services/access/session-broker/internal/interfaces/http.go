@@ -135,6 +135,12 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, domain.ErrInvalidTicket):
 		http.Error(w, domain.ErrInvalidTicket.Error(), http.StatusBadRequest)
 		return
+	case errors.Is(err, domain.ErrUnsupportedProtocol):
+		http.Error(w, domain.ErrUnsupportedProtocol.Error(), http.StatusConflict)
+		return
+	case errors.Is(err, domain.ErrProtocolMismatch):
+		http.Error(w, domain.ErrProtocolMismatch.Error(), http.StatusConflict)
+		return
 	case errors.Is(err, domain.ErrAccountNotFound):
 		http.Error(w, domain.ErrAccountNotFound.Error(), http.StatusNotFound)
 		return
@@ -317,8 +323,10 @@ func (s *HTTPServer) handleTerminate(w http.ResponseWriter, r *http.Request, ses
 // -- POST /sessions/{id}/connect (mirrors docs/api/rest/openapi.yaml, ConnectionTicket) --
 
 type connectionTicketResponse struct {
-	ProxyEndpoint string `json:"proxyEndpoint"`
-	Ticket        string `json:"ticket"`
+	ProxyEndpoint string    `json:"proxyEndpoint"`
+	Ticket        string    `json:"ticket"`
+	Protocol      string    `json:"protocol"`
+	ExpiresAt     time.Time `json:"expiresAt"`
 }
 
 // connectRequest is what the Gateway sends: who is asking, from the verified token.
@@ -334,7 +342,7 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 		// requester, not described.
 		req = connectRequest{}
 	}
-	proxyEndpoint, ticket, _, err := s.svc.Connect(r.Context(), sessionID, req.CallerID)
+	proxyEndpoint, ticket, protocol, expiresAt, err := s.svc.ConnectDetails(r.Context(), sessionID, req.CallerID)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrForbidden):
@@ -351,6 +359,8 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 			http.Error(w, domain.ErrAccountNotPinned.Error(), http.StatusConflict)
 		case errors.Is(err, domain.ErrAccountTLSNotPinned):
 			http.Error(w, domain.ErrAccountTLSNotPinned.Error(), http.StatusConflict)
+		case errors.Is(err, domain.ErrUnsupportedProtocol):
+			http.Error(w, domain.ErrUnsupportedProtocol.Error(), http.StatusConflict)
 		case errors.Is(err, domain.ErrConflict):
 			http.Error(w, err.Error(), http.StatusConflict)
 		default:
@@ -363,7 +373,7 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(connectionTicketResponse{ProxyEndpoint: proxyEndpoint, Ticket: ticket})
+	_ = json.NewEncoder(w).Encode(connectionTicketResponse{ProxyEndpoint: proxyEndpoint, Ticket: ticket, Protocol: protocol, ExpiresAt: expiresAt})
 }
 
 // -- POST /sessions/{id}/approve, POST /sessions/{id}/reject (ADR-0011) -------

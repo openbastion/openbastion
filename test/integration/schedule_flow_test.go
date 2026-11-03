@@ -77,8 +77,8 @@ func TestPostgresFlow_AScheduledAccountRotatesOnItsOwn_OnceAcrossTwoVaults(t *te
 	}
 
 	// What the Vault injects is what the target takes.
-	cred, err := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault1.baseURL}, "ssh-proxy-40").
-		Fetch(context.Background(), authorizeScope(t, vault1.baseURL, "sched-session", acc, "ssh-proxy-40"))
+	cred, err := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault1.baseURL}, "ssh-proxy").
+		Fetch(context.Background(), authorizeScope(t, vault1.baseURL, "sched-session", acc, "ssh-proxy"))
 	if err != nil {
 		t.Fatal(err)
 	}

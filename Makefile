@@ -29,7 +29,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-recorder run-video-recorder run-gateway clean
+.PHONY: build version version-check test test-integration test-postgres test-compose vuln scan-images ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -293,6 +293,11 @@ run-authentication:
 run-ssh-proxy:
 	$(call tls,ssh-proxy) RECORDER_URL=$(SCHEME)://127.0.0.1:8087 \
 		$(GO) run ./services/proxy/ssh-proxy/cmd/ssh-proxy
+# TARGET_TLS_ROOTS_FILE is an explicit trust bundle for graphical targets; no system roots are implicit.
+run-rdp-vnc-proxy:
+	$(call tls,rdp-vnc-proxy) VAULT_URL=$(SCHEME)://127.0.0.1:8081 AUDIT_URL=$(SCHEME)://127.0.0.1:8082 \
+		VIDEO_RECORDER_GRPC_URL=$(SCHEME)://127.0.0.1:8089 TARGET_TLS_ROOTS_FILE=$(TARGET_TLS_ROOTS_FILE) \
+		$(GO) run ./services/proxy/rdp-vnc-proxy/cmd/rdp-vnc-proxy
 run-recorder:
 	$(call tls,command-recorder) AUTHORIZATION_URL=$(SCHEME)://127.0.0.1:8083 AUDIT_URL=$(SCHEME)://127.0.0.1:8082 \
 		$(GO) run ./services/recording-audit/command-recorder/cmd/command-recorder

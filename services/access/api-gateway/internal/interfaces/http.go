@@ -29,8 +29,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/coder/websocket"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 	recordingv1 "github.com/openbastion/openbastion/proto/recording/v1"
 	"github.com/openbastion/openbastion/services/access/api-gateway/internal/application"
+	gatewayinfra "github.com/openbastion/openbastion/services/access/api-gateway/internal/infrastructure"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -64,6 +67,11 @@ type GatewayServer struct {
 	commandRecorderURL string
 	videoRecorder      VideoRecorderClient
 	httpClient         *http.Client
+	screenAttaches     *gatewayinfra.ScreenAttachRegistry
+	screenDialer       interface {
+		Dial(context.Context, string, string) (*websocket.Conn, error)
+	}
+	screenCookieSecure bool
 	// ldapInfo remembers, a short while, whether directory login is on (ADR-0061).
 	ldapInfo ldapInfoCache
 }
@@ -77,7 +85,8 @@ func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, logi
 		proxyTrust:                &application.ProxyTrust{},
 		authenticationURL:         authenticationURL, sessionBrokerURL: sessionBrokerURL,
 		vaultURL: vaultURL, authorizationURL: authorizationURL, commandRecorderURL: commandRecorderURL,
-		httpClient: http.DefaultClient,
+		httpClient:     http.DefaultClient,
+		screenAttaches: gatewayinfra.NewScreenAttachRegistry(), screenCookieSecure: true,
 	}
 }
 
@@ -135,6 +144,24 @@ func (g *GatewayServer) WithVideoRecorderClient(client VideoRecorderClient) *Gat
 	return g
 }
 
+// WithScreenAttach wires the one-use Gateway-to-proxy WebSocket relay. Cookie Secure
+// defaults to true; development over plain HTTP must explicitly opt out by name.
+func (g *GatewayServer) WithScreenAttach(d interface {
+	Dial(context.Context, string, string) (*websocket.Conn, error)
+}, secureCookie bool) *GatewayServer {
+	g.screenDialer = d
+	g.screenCookieSecure = secureCookie
+	return g
+}
+
+func (g *GatewayServer) handleSessionRoute(w http.ResponseWriter, r *http.Request) {
+	if sessionID, action, ok := splitSessionPath(r.URL.Path); ok && action == "screen" {
+		g.handleScreenAttach(w, r, sessionID)
+		return
+	}
+	g.requireAuth(g.handleSessionItem)(w, r)
+}
+
 func (g *GatewayServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", g.handleLogin) // public
@@ -155,7 +182,7 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	// One more key (ADR-0066): the current key's signature and an administrator's code.
 	mux.HandleFunc("/auth/mfa/webauthn/keys/add", g.handleMFA("/auth/v1/mfa/webauthn/keys/add", "challenge", "{credential}", "enrollmentCode"))
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
-	mux.HandleFunc("/sessions/", g.requireAuth(g.handleSessionItem))
+	mux.HandleFunc("/sessions/", g.handleSessionRoute)
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))
 	mux.HandleFunc("/vault/accounts/", g.requireAuth(g.handleVaultAccountItem))
 	mux.HandleFunc("/policies", g.requireAuth(g.handlePoliciesCollection))
@@ -535,7 +562,7 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 		// Only the requester may connect (ADR-0011, rule 7). The Broker believes the
 		// callerId because only the Gateway may send it (ADR-0010); the client's own
 		// body is not read, so it cannot name another caller.
-		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/connect", map[string]any{"callerId": id.UserID})
+		g.handleConnectAction(w, r, brokerPath+"/connect", sessionID, id.UserID)
 
 	case "approve", "reject":
 		if r.Method != http.MethodPost {
@@ -716,6 +743,186 @@ func writeVideoRecordingAPIError(w http.ResponseWriter, statusCode int, code, me
 
 // splitSessionPath splits "/sessions/{id}" or "/sessions/{id}/{action}". Any other
 // shape — an empty id, a third segment — is not a session route.
+type brokerConnectionTicket struct {
+	ProxyEndpoint string    `json:"proxyEndpoint"`
+	Ticket        string    `json:"ticket"`
+	Protocol      string    `json:"protocol"`
+	ExpiresAt     time.Time `json:"expiresAt"`
+}
+type screenAttachResponse struct {
+	Protocol  string    `json:"protocol"`
+	Attach    string    `json:"attach"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Request, url, sessionID, callerID string) {
+	body, _ := json.Marshal(map[string]string{"callerId": callerID})
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(data)
+		return
+	}
+	var ticket brokerConnectionTicket
+	if err := json.Unmarshal(data, &ticket); err != nil {
+		http.Error(w, "invalid connection response", http.StatusBadGateway)
+		return
+	}
+	if ticket.Protocol != "vnc" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(data)
+		return
+	}
+	if g.screenAttaches == nil || g.screenDialer == nil || ticket.Ticket == "" || ticket.ProxyEndpoint == "" || !ticket.ExpiresAt.After(time.Now()) {
+		// Do not leak a VNC ticket to the browser when the secure attach path is unavailable.
+		http.Error(w, "screen attach unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	attachPath := "/sessions/" + neturl.PathEscape(sessionID) + "/screen"
+	expires := time.Now().Add(30 * time.Second)
+	if ticket.ExpiresAt.Before(expires) {
+		expires = ticket.ExpiresAt
+	}
+	attachToken, err := g.screenAttaches.Register(gatewayinfra.ScreenAttach{SessionID: sessionID, UserID: callerID, Endpoint: ticket.ProxyEndpoint, Ticket: ticket.Ticket, ExpiresAt: expires})
+	if err != nil {
+		http.Error(w, "screen attach unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 1 {
+		http.Error(w, "screen attach expired", http.StatusConflict)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "ob_screen_attach", Value: attachToken, Path: attachPath, Expires: expires, MaxAge: maxAge, HttpOnly: true, Secure: g.screenCookieSecure, SameSite: http.SameSiteStrictMode})
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(screenAttachResponse{Protocol: "vnc", Attach: attachPath, ExpiresAt: expires})
+}
+
+func (g *GatewayServer) handleScreenAttach(w http.ResponseWriter, r *http.Request, sessionID string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.URL.RawQuery != "" {
+		http.Error(w, "query parameters are not accepted", http.StatusBadRequest)
+		return
+	}
+	cookie, err := r.Cookie("ob_screen_attach")
+	if err != nil || cookie.Value == "" {
+		http.Error(w, "screen attach expired or unavailable", http.StatusUnauthorized)
+		return
+	}
+	if g.screenAttaches == nil || g.screenDialer == nil {
+		http.Error(w, "screen attach unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"openbastion.screen.v1"}})
+	if err != nil {
+		return
+	}
+	defer client.Close(websocket.StatusNormalClosure, "screen session ended")
+	attach, err := g.screenAttaches.Consume(cookie.Value, sessionID, time.Now())
+	if err != nil {
+		writeScreenEnd(client, screenstream.EndCodeTicketInvalid, "ticket_invalid")
+		_ = client.Close(websocket.StatusPolicyViolation, "invalid attach")
+		return
+	}
+	defer g.screenAttaches.ReleaseSession(sessionID)
+	if !g.screenAttaches.AllowUpgrade(attach.UserID, time.Now()) {
+		_ = client.Close(websocket.StatusTryAgainLater, "screen upgrade rate limit")
+		return
+	}
+	upstream, err := g.screenDialer.Dial(r.Context(), attach.Endpoint, attach.Ticket)
+	if err != nil {
+		_ = client.Close(websocket.StatusTryAgainLater, "screen proxy unavailable")
+		return
+	}
+	defer upstream.Close(websocket.StatusNormalClosure, "gateway relay ended")
+	client.SetReadLimit(screenstream.MaxInputBytes)
+	upstream.SetReadLimit(screenstream.MaxPNGBytes + screenstream.HeaderSize + screenstream.MaxSessionIDBytes + 1024)
+	if err := relayScreenWebSockets(r.Context(), client, upstream); err != nil {
+		log.Printf("api-gateway: screen relay ended for session %s", sessionID)
+	}
+}
+
+func writeScreenEnd(conn *websocket.Conn, code uint16, text string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	data, err := screenstream.Encode(screenstream.Message{Type: screenstream.TypeEnd, Sequence: 1, Timestamp: time.Now().UTC(), EndCode: code, Text: text})
+	if err != nil {
+		return
+	}
+	_ = conn.Write(ctx, websocket.MessageBinary, data)
+}
+
+func relayScreenWebSockets(ctx context.Context, client, upstream *websocket.Conn) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errs := make(chan error, 2)
+	go func() {
+		for {
+			typ, data, err := client.Read(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if typ != websocket.MessageBinary || len(data) != screenstream.InputMessageSize {
+				errs <- screenstream.ErrMalformedMessage
+				return
+			}
+			if _, err := screenstream.DecodeInput(data, screenstream.MaxPixels, screenstream.MaxPixels); err != nil {
+				errs <- err
+				return
+			}
+			if err := upstream.Write(ctx, websocket.MessageBinary, data); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	go func() {
+		for {
+			typ, data, err := upstream.Read(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if typ != websocket.MessageBinary {
+				errs <- screenstream.ErrUnsupported
+				return
+			}
+			if _, err := screenstream.Decode(data); err != nil {
+				errs <- err
+				return
+			}
+			if err := client.Write(ctx, websocket.MessageBinary, data); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	err := <-errs
+	cancel()
+	return err
+}
+
 func splitSessionPath(path string) (sessionID, action string, ok bool) {
 	rest := strings.TrimPrefix(path, "/sessions/")
 	sessionID, action, hasAction := strings.Cut(rest, "/")

@@ -182,7 +182,9 @@ func TestTerminateOverHTTP_AuthorizationIsAskedWithTheRolesOfTheBody_AboutTheAcc
 // downProxy is a proxy that cannot be told (ADR-0018): its error names an address.
 type downProxy struct{ failingProxy }
 
-func (downProxy) RevokeSession(context.Context, string, time.Duration) error { return errors.New(leak) }
+func (downProxy) RevokeSession(context.Context, string, string, time.Duration) error {
+	return errors.New(leak)
+}
 
 // If the proxy cannot be told, the session is not ended: a 503 that says nothing of the proxy,
 // the cause in the Broker's log, the session still active — and the same call works when the

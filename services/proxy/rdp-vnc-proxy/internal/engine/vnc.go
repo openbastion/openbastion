@@ -26,7 +26,7 @@ var _ proxycore.ScreenCodec = (*VNCCodec)(nil)
 func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxycore.ScreenSession, error) {
 	if c == nil || c.TLSRoots == nil || cred == nil || cred.Type != "password" ||
 		cred.TargetHost == "" || cred.TargetUser == "" || cred.TLSCertificateSHA256 == "" || cred.TargetDomain == "" {
-		return nil, ErrVNCConfiguration
+		return nil, &proxycore.ScreenFailure{Code: "pin_missing", Err: ErrVNCConfiguration}
 	}
 	client := &vnc.Client{Config: vnc.Config{
 		Address:        cred.TargetHost,
@@ -37,5 +37,20 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 		TLSServerName:  cred.TargetDomain,
 		DialTimeout:    c.DialTimeout,
 	}}
-	return client.Open(ctx)
+	session, err := client.Open(ctx)
+	if err == nil {
+		return session, nil
+	}
+	code := "target_unreachable"
+	switch {
+	case errors.Is(err, vnc.ErrInvalidTarget):
+		code = "pin_missing"
+	case errors.Is(err, vnc.ErrTLSVerification):
+		code = "pin_mismatch"
+	case errors.Is(err, vnc.ErrUnsupportedProtocol):
+		code = "codec_unsupported"
+	case errors.Is(err, vnc.ErrInvalidFramebuffer):
+		code = "codec_unsupported"
+	}
+	return nil, &proxycore.ScreenFailure{Code: code, Err: err}
 }

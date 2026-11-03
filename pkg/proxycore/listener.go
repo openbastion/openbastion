@@ -199,7 +199,7 @@ func (l *Listener) serveWithRelay(ctx context.Context, meta SessionMetadata, adm
 		_ = l.Terminator.EmitExpired(ctx, meta.SessionID)
 		relayErr = ErrSessionExpired
 	}
-	if errors.Is(relayErr, ErrRecordingUnavailable) {
+	if errors.Is(relayErr, ErrRecordingUnavailable) || errors.Is(relayErr, ErrRecordingLost) {
 		_ = l.Terminator.EmitRecordingLost(ctx, meta.SessionID)
 	}
 	if errors.Is(relayErr, ErrHostKeyMismatch) {

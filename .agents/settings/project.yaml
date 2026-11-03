@@ -28,6 +28,7 @@ services:                    # identité mTLS = nom ; ports par défaut (archite
   authorization:    {path: services/access/authorization,            port: 8083}
   session-broker:   {path: services/access/session-broker,           port: 8084}
   ssh-proxy:        {path: services/proxy/ssh-proxy,                 port: 8085, ssh_port: 2222, single_instance: true}
+  rdp-vnc-proxy:    {path: services/proxy/rdp-vnc-proxy,             port: 8090, screen_protocols: [vnc], rdp_enabled: false}
   authentication:   {path: services/access/authentication,           port: 8086}
   command-recorder: {path: services/recording-audit/command-recorder, port: 8087}
   video-recorder:   {path: services/recording-audit/video-recorder, port: 8088, grpc_port: 8089}
@@ -35,7 +36,7 @@ services:                    # identité mTLS = nom ; ports par défaut (archite
 libraries:
   pkg/proxycore: pipeline proxy commun (ADR-0006)
   pkg/vnc: client RFB 3.8 borné, VeNCrypt/X.509, pin TLS et framebuffer PNG ; adapté à proxycore.ScreenCodec par le module engine RDP/VNC (ADR-0071)
-  services/proxy/rdp-vnc-proxy/internal/engine: adaptateur VNC ScreenCodec ; aucun serveur exécutable livré
+  services/proxy/rdp-vnc-proxy: runtime exécutable, tickets à usage unique, relais WebSocket binaire et cycle de vie proxycore ; VNC seulement, RDP désactivé
   pkg/mtls: identité par certificat (ADR-0010) — stdlib seulement
   pkg/migrate: migrations versionnées (ADR-0030) — stdlib seulement
   pkg/refusalbudget: budget des refus audités (ADR-0020, ADR-0024) — stdlib seulement

@@ -281,10 +281,10 @@ func TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("happy path: authorize, fetch, purge, audit", func(t *testing.T) {
-		fetcher := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault.baseURL}, "ssh-proxy-1")
+		fetcher := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault.baseURL}, "ssh-proxy")
 		terminator := proxycore.NewTerminator(&httpAuditEmitter{baseURL: audit.baseURL})
 
-		scopeToken := authorizeScope(t, vault.baseURL, "session-it-1", accountID, "ssh-proxy-1")
+		scopeToken := authorizeScope(t, vault.baseURL, "session-it-1", accountID, "ssh-proxy")
 
 		cred, err := fetcher.Fetch(ctx, scopeToken)
 		if err != nil {
@@ -312,8 +312,8 @@ func TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses(t *testing.T) {
 	})
 
 	t.Run("replayed scope token is rejected", func(t *testing.T) {
-		fetcher := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault.baseURL}, "ssh-proxy-1")
-		scopeToken := authorizeScope(t, vault.baseURL, "session-it-replay", accountID, "ssh-proxy-1")
+		fetcher := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault.baseURL}, "ssh-proxy")
+		scopeToken := authorizeScope(t, vault.baseURL, "session-it-replay", accountID, "ssh-proxy")
 
 		if _, err := fetcher.Fetch(ctx, scopeToken); err != nil {
 			t.Fatalf("first Fetch should succeed: %v", err)
@@ -324,14 +324,14 @@ func TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses(t *testing.T) {
 	})
 
 	t.Run("scope token redeemed by the wrong proxy identity is rejected", func(t *testing.T) {
-		scopeToken := authorizeScope(t, vault.baseURL, "session-it-wrong-proxy", accountID, "ssh-proxy-1")
+		scopeToken := authorizeScope(t, vault.baseURL, "session-it-wrong-proxy", accountID, "ssh-proxy")
 
-		// A scope authorized for ssh-proxy-1 must not be redeemable by
+		// A scope authorized for ssh-proxy must not be redeemable by
 		// database-proxy-1 — the least-privilege scoping guarantee
 		// underlying ADR-0003 (docs/security/session-security.md).
 		wrongProxyFetcher := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault.baseURL}, "database-proxy-1")
 		if _, err := wrongProxyFetcher.Fetch(ctx, scopeToken); err == nil {
-			t.Fatal("expected a scope authorized for ssh-proxy-1 to be rejected when redeemed by database-proxy-1")
+			t.Fatal("expected a scope authorized for ssh-proxy to be rejected when redeemed by database-proxy-1")
 		}
 	})
 }

@@ -26,9 +26,9 @@ type ProxyClientHTTPClient struct {
 	Client *http.Client
 }
 
-func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
+func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
 	body, _ := json.Marshal(establishSessionRequestBody{
-		SessionID: sessionID, TargetHost: targetHost, TargetUser: targetUser,
+		SessionID: sessionID, Protocol: protocol, TargetHost: targetHost, TargetUser: targetUser,
 		VaultScopeToken: scopeToken, TTLSeconds: int(ttl.Seconds()), BreakGlass: breakGlass,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/establish-session", bytes.NewReader(body))
@@ -90,6 +90,7 @@ func (c *ProxyClientHTTPClient) RevokeSession(ctx context.Context, sessionID str
 // (test/integration/contract_test.go holds them to it, ADR-0050).
 type establishSessionRequestBody struct {
 	SessionID       string `json:"session_id"`
+	Protocol        string `json:"protocol"`
 	TargetHost      string `json:"target_host"`
 	TargetUser      string `json:"target_user"`
 	VaultScopeToken string `json:"vault_scope_token"`

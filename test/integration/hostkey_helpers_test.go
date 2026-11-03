@@ -55,7 +55,7 @@ func playVaultAccounts(t *testing.T, port string) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"id": id, "targetHost": "10.0.0.9:22", "username": "root", "hostKeyFingerprint": "SHA256:played"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": id, "protocol": "ssh", "targetHost": "10.0.0.9:22", "username": "root", "hostKeyFingerprint": "SHA256:played"})
 	})}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })

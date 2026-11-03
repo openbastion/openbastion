@@ -8,6 +8,7 @@ go 1.25.0
 require github.com/openbastion/openbastion/pkg/mtls v0.0.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/openbastion/openbastion/proto v0.0.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
@@ -22,9 +23,14 @@ require (
 
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 
-// The version stamped at build (ADR-0063). A local replace, as for pkg/mtls.
-require github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
+require (
+	// The version stamped at build (ADR-0063). A local replace, as for pkg/mtls.
+	github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
+	github.com/openbastion/openbastion/pkg/screenstream v0.0.0
+)
 
 replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildinfo
 
 replace github.com/openbastion/openbastion/proto => ../../../proto
+
+replace github.com/openbastion/openbastion/pkg/screenstream => ../../../pkg/screenstream

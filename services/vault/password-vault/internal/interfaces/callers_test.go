@@ -13,12 +13,15 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("session-broker", "POST", "/vault/v1/fetch-credential"),
 		// ...and whoever redeems it cannot authorize one.
 		mtlstest.Allow("ssh-proxy", "POST", "/vault/v1/fetch-credential"),
+		mtlstest.Allow("rdp-vnc-proxy", "POST", "/vault/v1/fetch-credential"),
+		mtlstest.Deny("rdp-vnc-proxy", "POST", "/vault/v1/authorize-scope"),
 		mtlstest.Deny("ssh-proxy", "POST", "/vault/v1/authorize-scope"),
 		// the Gateway, the control plane's front door, is neither
 		mtlstest.Deny("api-gateway", "POST", "/vault/v1/fetch-credential"),
 		mtlstest.Deny("api-gateway", "POST", "/vault/v1/authorize-scope"),
 		mtlstest.Deny("admin-cli", "POST", "/vault/v1/fetch-credential"),
 		mtlstest.Deny("command-recorder", "POST", "/vault/v1/fetch-credential"),
+		mtlstest.Deny("rdp-vnc-proxy", "POST", "/vault/v1/authorize-scope"),
 
 		mtlstest.Allow("api-gateway", "POST", "/vault/v1/onboard-account"),
 		mtlstest.Allow("api-gateway", "POST", "/vault/v1/rotate"),

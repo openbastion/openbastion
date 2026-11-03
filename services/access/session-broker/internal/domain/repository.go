@@ -19,9 +19,11 @@ var ErrRecordingUnavailable = errors.New("recording unavailable")
 // reason, safe to show a client. A dependency's own error never travels with
 // ErrUnavailable to the client.
 var (
-	ErrForbidden   = errors.New("forbidden")
-	ErrConflict    = errors.New("conflict")
-	ErrUnavailable = errors.New("a dependency is unavailable")
+	ErrForbidden           = errors.New("forbidden")
+	ErrUnsupportedProtocol = errors.New("unsupported session protocol")
+	ErrProtocolMismatch = errors.New("session protocol does not match the privileged account")
+	ErrConflict            = errors.New("conflict")
+	ErrUnavailable         = errors.New("a dependency is unavailable")
 
 	// ErrTooManyPending is a break-glass request refused because its requester
 	// already has as many waiting for a decision as the platform allows (ADR-0013).

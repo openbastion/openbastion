@@ -74,6 +74,7 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 type establishSessionRequest struct {
 	SessionID  string `json:"session_id"`
 	TargetHost string `json:"target_host"`
+	Protocol   string `json:"protocol"`
 	// TargetUser mirrors proto/proxy/v1/proxy_control.proto's
 	// EstablishSessionRequest.target_user (docs/api/grpc/README.md §4) and
 	// privileged_accounts.username (docs/architecture/data-architecture.md §3) — formalized in both
@@ -96,6 +97,10 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 	var req establishSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Protocol != "" && req.Protocol != "ssh" {
+		http.Error(w, "unsupported session protocol", http.StatusConflict)
 		return
 	}
 	if s.Live == nil {
