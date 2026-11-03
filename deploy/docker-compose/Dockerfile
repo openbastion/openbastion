@@ -38,8 +38,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       ./services/recording-audit/video-recorder/cmd/video-recorder \
       ./pkg/mtls/cmd/openbastion-pki \
       ./cli/openbastion-cli \
-      ./test/integration/cmd/demo-ssh-target \
-    && go clean -cache -modcache
+      ./test/integration/cmd/demo-ssh-target
 # The directories the volumes are mounted on, owned by the unprivileged user: an empty named
 # volume takes the ownership of the directory it is mounted on.
 RUN mkdir -p /rootfs/pki /rootfs/var/lib/openbastion/anchors /rootfs/var/lib/openbastion/archives \

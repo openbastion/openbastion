@@ -260,7 +260,7 @@ test-postgres: proto-gen
 ## TRIVY : le binaire, vérifié contre son empreinte (la CI le fait) ; Docker requis.
 TRIVY ?= trivy
 scan-images:
-	docker build -q -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) -t openbastion:scan .
+	docker build --progress=plain -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) -t openbastion:scan .
 	@got=$$(docker run --rm --entrypoint /usr/local/bin/openbastion-cli openbastion:scan version); \
 		[ "$$got" = "$(BUILD_VERSION)" ] || { echo "l'image dit être $$got, pas $(BUILD_VERSION)"; exit 1; }; \
 		echo "l'image est la version $$got"
