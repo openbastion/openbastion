@@ -24,7 +24,7 @@ var (
 
 // SPNEGONegTokenInit is a bounded, parsed SPNEGO initial negotiation token.
 // MechanismToken and MechanismListMIC are opaque and must not be interpreted
-// as authenticated until a later NTLMv2 implementation verifies them.
+// as authenticated until the corresponding SPNEGO/NTLM MIC checks exist.
 type SPNEGONegTokenInit struct {
 	Mechanisms       []asn1.ObjectIdentifier
 	MechanismToken   []byte
