@@ -68,7 +68,7 @@ func TestFetchCredential_RequiresPriorAuthorization(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
-	if _, err := svc.FetchCredential(ctx, "never-issued-token", "ssh-proxy-1"); err == nil {
+	if _, err := svc.FetchCredential(ctx, "never-issued-token", "ssh-proxy"); err == nil {
 		t.Fatal("expected FetchCredential to fail without a prior AuthorizeScope")
 	}
 }
@@ -77,7 +77,7 @@ func TestFetchCredential_RejectsWrongProxyIdentity(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
-	token, _, err := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute)
+	token, _, err := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy", time.Minute)
 	if err != nil {
 		t.Fatalf("AuthorizeScope: %v", err)
 	}
@@ -90,11 +90,11 @@ func TestFetchCredential_ScopeTokenIsSingleUse(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret"))
-	token, _, _ := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute)
-	if _, err := svc.FetchCredential(ctx, token, "ssh-proxy-1"); err != nil {
+	token, _, _ := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy", time.Minute)
+	if _, err := svc.FetchCredential(ctx, token, "ssh-proxy"); err != nil {
 		t.Fatalf("first FetchCredential should succeed: %v", err)
 	}
-	if _, err := svc.FetchCredential(ctx, token, "ssh-proxy-1"); err == nil {
+	if _, err := svc.FetchCredential(ctx, token, "ssh-proxy"); err == nil {
 		t.Fatal("expected a replayed scope token to be rejected (single-use)")
 	}
 }
@@ -103,8 +103,8 @@ func TestFetchCredential_ReturnsPlaintextMatchingOnboarded(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	_ = onboardTest(svc, ctx, adminRoles, "acc1", "target", "root", "10.0.0.1:22", "ssh", domain.RotationManual, []byte("s3cret-value"))
-	token, _, _ := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute)
-	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy-1")
+	token, _, _ := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy", time.Minute)
+	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy")
 	if err != nil {
 		t.Fatalf("FetchCredential: %v", err)
 	}
@@ -121,8 +121,8 @@ func TestRotate_SupersedesPreviousVersion(t *testing.T) {
 	if err := svc.Rotate(ctx, adminRoles, "acc1", []byte("new-secret-value")); err != nil {
 		t.Fatalf("Rotate: %v", err)
 	}
-	token, _, _ := svc.AuthorizeScope(ctx, "session2", "acc1", "ssh-proxy-1", time.Minute)
-	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy-1")
+	token, _, _ := svc.AuthorizeScope(ctx, "session2", "acc1", "ssh-proxy", time.Minute)
+	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy")
 	if err != nil {
 		t.Fatalf("FetchCredential: %v", err)
 	}
@@ -162,8 +162,8 @@ func TestRotate_AutoGeneratesSecretWhenNoneProvided(t *testing.T) {
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate with no explicit secret: %v", err)
 	}
-	token, _, _ := svc.AuthorizeScope(ctx, "session2", "acc1", "ssh-proxy-1", time.Minute)
-	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy-1")
+	token, _, _ := svc.AuthorizeScope(ctx, "session2", "acc1", "ssh-proxy", time.Minute)
+	material, err := fetchMaterial(svc, ctx, token, "ssh-proxy")
 	if err != nil {
 		t.Fatalf("FetchCredential: %v", err)
 	}
@@ -183,13 +183,13 @@ func TestRotate_AutoGeneratesDifferentSecretsEachTime(t *testing.T) {
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate 1: %v", err)
 	}
-	token1, _, _ := svc.AuthorizeScope(ctx, "s1", "acc1", "ssh-proxy-1", time.Minute)
-	first, _ := fetchMaterial(svc, ctx, token1, "ssh-proxy-1")
+	token1, _, _ := svc.AuthorizeScope(ctx, "s1", "acc1", "ssh-proxy", time.Minute)
+	first, _ := fetchMaterial(svc, ctx, token1, "ssh-proxy")
 	if err := svc.Rotate(ctx, adminRoles, "acc1", nil); err != nil {
 		t.Fatalf("Rotate 2: %v", err)
 	}
-	token2, _, _ := svc.AuthorizeScope(ctx, "s2", "acc1", "ssh-proxy-1", time.Minute)
-	second, _ := fetchMaterial(svc, ctx, token2, "ssh-proxy-1")
+	token2, _, _ := svc.AuthorizeScope(ctx, "s2", "acc1", "ssh-proxy", time.Minute)
+	second, _ := fetchMaterial(svc, ctx, token2, "ssh-proxy")
 	if string(first) == string(second) {
 		t.Fatal("expected two successive auto-generated rotations to produce different secrets")
 	}
@@ -552,7 +552,7 @@ func TestDisableAccount_BlocksAuthorizeScope(t *testing.T) {
 	if err := svc.DisableAccount(ctx, adminRoles, "acc1"); err != nil {
 		t.Fatalf("DisableAccount: %v", err)
 	}
-	if _, _, err := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy-1", time.Minute); !errors.Is(err, domain.ErrNotFound) {
+	if _, _, err := svc.AuthorizeScope(ctx, "session1", "acc1", "ssh-proxy", time.Minute); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expected AuthorizeScope to reject a disabled account as not found, got %v", err)
 	}
 }

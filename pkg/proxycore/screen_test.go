@@ -16,6 +16,7 @@ type fakeScreenCodec struct {
 	opened   int
 	cred     *Credential
 	openedCh chan struct{}
+	openErr  error
 }
 
 func (c *fakeScreenCodec) Open(_ context.Context, cred *Credential) (ScreenSession, error) {
@@ -23,6 +24,9 @@ func (c *fakeScreenCodec) Open(_ context.Context, cred *Credential) (ScreenSessi
 	c.cred = cred
 	if c.openedCh != nil {
 		close(c.openedCh)
+	}
+	if c.openErr != nil {
+		return nil, c.openErr
 	}
 	return c.session, nil
 }
@@ -113,6 +117,27 @@ func (s *fakeScreenSink) Send(_ context.Context, m screenstream.Message) error {
 	return nil
 }
 
+type fakeInputScreenSink struct {
+	fakeScreenSink
+	input []byte
+	read  chan struct{}
+}
+
+func (s *fakeInputScreenSink) ReceiveInput(ctx context.Context) ([]byte, error) {
+	select {
+	case s.read <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if s.input != nil {
+		data := s.input
+		s.input = nil
+		return data, nil
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 func validScreenFrame(seq uint64) screenstream.Message {
 	return screenstream.Message{Type: screenstream.TypeFrame, Sequence: seq, Timestamp: time.Unix(int64(seq), 0).UTC(), Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nframe")}
 }
@@ -126,7 +151,67 @@ func screenListener(vault VaultClient) (*Listener, *fakeAudit) {
 }
 
 func screenMeta() SessionMetadata {
-	return SessionMetadata{SessionID: "screen-1", TargetHost: "target:3389", ScopeToken: "one-use", ScreenProtocol: screenstream.ProtocolRDP, ExpiresAt: time.Now().Add(time.Minute)}
+	return SessionMetadata{SessionID: "screen-1", TargetHost: "target:5900", ScopeToken: "one-use", ScreenProtocol: screenstream.ProtocolVNC, ExpiresAt: time.Now().Add(time.Minute)}
+}
+
+func TestServeScreen_DecodesAndRelaysBoundedOperatorInput(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	frames := make(chan screenstream.Message)
+	session := &fakeScreenSession{frames: frames}
+	codec := &fakeScreenCodec{session: session}
+	event := screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61}
+	encoded, err := screenstream.EncodeInput(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := &fakeInputScreenSink{input: encoded, read: make(chan struct{}, 1)}
+	done := make(chan error, 1)
+	go func() {
+		done <- l.ServeScreen(context.Background(), screenMeta(), codec, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	}()
+	select {
+	case <-sink.read:
+	case <-time.After(time.Second):
+		t.Fatal("input source was not read")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		session.mu.Lock()
+		n := len(session.inputs)
+		session.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("valid key input was not relayed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	frames <- validScreenFrame(1)
+	close(frames)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if len(session.inputs) != 1 || session.inputs[0] != event {
+		t.Fatalf("inputs %#v, want %#v", session.inputs, event)
+	}
+}
+
+func TestServeScreenSendsStableEndWhenCodecOpenFails(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	sink := &fakeScreenSink{}
+	codec := &fakeScreenCodec{openErr: errors.New("target certificate rejected")}
+	err := l.ServeScreen(context.Background(), screenMeta(), codec, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	if err == nil {
+		t.Fatal("codec-open failure was hidden")
+	}
+	if len(sink.messages) != 1 || sink.messages[0].Type != screenstream.TypeEnd || sink.messages[0].Text != "target_unreachable" {
+		t.Fatalf("terminal messages=%#v", sink.messages)
+	}
 }
 
 func TestServeScreen_OnlyDisplaysDurablyAcknowledgedFrames(t *testing.T) {
@@ -140,10 +225,10 @@ func TestServeScreen_OnlyDisplaysDurablyAcknowledgedFrames(t *testing.T) {
 	if err := l.ServeScreen(context.Background(), screenMeta(), codec, recorder, gate, sink); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorder.frames) != 2 || len(sink.messages) != 3 {
-		t.Fatalf("recorded=%d sent=%d; want 2 recorded frames plus HELLO", len(recorder.frames), len(sink.messages))
+	if len(recorder.frames) != 2 || len(sink.messages) != 4 {
+		t.Fatalf("recorded=%d sent=%d; want 2 recorded frames plus HELLO and END", len(recorder.frames), len(sink.messages))
 	}
-	if sink.messages[0].Type != screenstream.TypeHello || sink.messages[1].Sequence != 1 || sink.messages[2].Sequence != 2 {
+	if sink.messages[0].Type != screenstream.TypeHello || sink.messages[1].Sequence != 1 || sink.messages[2].Sequence != 2 || sink.messages[3].Type != screenstream.TypeEnd {
 		t.Fatalf("unexpected stream: %#v", sink.messages)
 	}
 	if got := string(sink.messages[1].PNG[8:]); got != "frame" {
@@ -171,11 +256,11 @@ func TestServeScreen_AmbiguousRecorderAcknowledgementNeverReachesOperator(t *tes
 	sink := &fakeScreenSink{}
 
 	err := l.ServeScreen(context.Background(), screenMeta(), codec, recorder, &fakeScreenGate{}, sink)
-	if !errors.Is(err, ErrRecordingUnavailable) {
-		t.Fatalf("error = %v, want ErrRecordingUnavailable", err)
+	if !errors.Is(err, ErrRecordingLost) {
+		t.Fatalf("error = %v, want ErrRecordingLost", err)
 	}
-	if len(sink.messages) != 1 || sink.messages[0].Type != screenstream.TypeHello {
-		t.Fatalf("unacknowledged frame was sent: %#v", sink.messages)
+	if len(sink.messages) != 2 || sink.messages[0].Type != screenstream.TypeHello || sink.messages[1].Type != screenstream.TypeEnd {
+		t.Fatalf("unacknowledged frame was sent or END missing: %#v", sink.messages)
 	}
 	if !reflect.DeepEqual(audit.events, []string{"session.recording_lost", "session.terminate"}) {
 		t.Fatalf("audit events %v", audit.events)
@@ -220,8 +305,8 @@ func TestServeScreen_RejectsInvalidSequenceAndSealsLastAcknowledgedFrame(t *test
 	if !errors.Is(err, ErrScreenSequence) {
 		t.Fatalf("error = %v, want ErrScreenSequence", err)
 	}
-	if len(recorder.frames) != 0 || len(sink.messages) != 1 {
-		t.Fatalf("recorded=%d sent=%d; malformed frame must not be recorded or sent", len(recorder.frames), len(sink.messages))
+	if len(recorder.frames) != 0 || len(sink.messages) != 2 || sink.messages[1].Type != screenstream.TypeEnd {
+		t.Fatalf("recorded=%d sent=%d; malformed frame must not be recorded or sent and END must be sent", len(recorder.frames), len(sink.messages))
 	}
 	if !reflect.DeepEqual(recorder.sealed, []uint64{0}) {
 		t.Fatalf("sealed %v, want [0]", recorder.sealed)
@@ -270,8 +355,8 @@ func TestServeScreen_SealFailureIsRecordingLoss(t *testing.T) {
 	recorder := &fakeFrameRecorder{sealErr: errors.New("terminal marker unavailable")}
 
 	err := l.ServeScreen(context.Background(), screenMeta(), codec, recorder, &fakeScreenGate{}, &fakeScreenSink{})
-	if !errors.Is(err, ErrRecordingUnavailable) {
-		t.Fatalf("error = %v, want ErrRecordingUnavailable", err)
+	if !errors.Is(err, ErrRecordingLost) {
+		t.Fatalf("error = %v, want ErrRecordingLost", err)
 	}
 	if !reflect.DeepEqual(audit.events, []string{"session.recording_lost", "session.terminate"}) {
 		t.Fatalf("audit events %v", audit.events)

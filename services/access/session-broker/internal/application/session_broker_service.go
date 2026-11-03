@@ -72,10 +72,9 @@ func (s *SessionBrokerService) emitAudit(ctx context.Context, actorID, action, r
 // construction (its return type has no field for it).
 type AccountLookup interface {
 	GetAccount(ctx context.Context, accountID string) (targetHost, targetUser string, err error)
-	// CheckAccount says whether a session on accountID could ever start (ADR-0043): nil, or
-	// domain.ErrAccountNotFound, domain.ErrAccountNotPinned, or the Vault's failure — and,
-	// when it could, whether the account requires another person's approval (ADR-0067).
-	CheckAccount(ctx context.Context, accountID string) (approvalRequired bool, err error)
+	// CheckAccount returns the stored protocol, checks that protocol's target identity is
+	// pinned, and reports whether another person must approve the session.
+	CheckAccount(ctx context.Context, accountID string) (approvalRequired bool, accountProtocol string, err error)
 }
 
 // ProxyClient is the port to a single proxy's ProxyControl.EstablishSession
@@ -85,7 +84,7 @@ type AccountLookup interface {
 type ProxyClient interface {
 	// breakGlass is the Broker's authorisation for a recording waiver (ADR-0009).
 	// The proxy honours it only if it was itself configured to.
-	EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (proxyEndpoint, connectionTicket string, err error)
+	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (proxyEndpoint, connectionTicket string, err error)
 
 	// RevokeSession tells the proxy that a session is ended (ADR-0018): its open
 	// connections are cut, its unused tickets refused and it is never established
@@ -93,7 +92,7 @@ type ProxyClient interface {
 	// remember. A nil error means the session can carry nothing any more; any other
 	// answer means it may still be open, and the Broker must not say it was ended.
 	// It is idempotent: asking again for a session already cut is not an error.
-	RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error
+	RevokeSession(ctx context.Context, protocol, sessionID string, remaining time.Duration) error
 }
 
 // RevocationMargin is added to the time a session has left when the Broker tells the
@@ -112,16 +111,18 @@ type ApprovalNotifier interface {
 }
 
 // ProxySelector resolves which proxy family serves a given protocol.
-// MVP supports SSH only (docs/roadmap.md §2); v0.0.1 extends this switch, not the
-// callers of it.
+// The selector resolves the proxy family. ConnectDetails refuses RDP before issuing a Vault scope
+// until the protocol engine is implemented; the family still owns revocation for that session.
 type ProxySelector struct{}
 
 func (ProxySelector) Select(protocol string) (proxyServiceID string, err error) {
 	switch protocol {
 	case "ssh":
 		return "ssh-proxy", nil
+	case "vnc", "rdp":
+		return "rdp-vnc-proxy", nil
 	default:
-		return "", fmt.Errorf("no proxy available for protocol %q (MVP scope is SSH only, docs/roadmap.md §2)", protocol)
+		return "", fmt.Errorf("no proxy available for protocol %q", protocol)
 	}
 }
 
@@ -131,10 +132,8 @@ type SessionBrokerService struct {
 	vault    VaultAuthorizer
 	audit    AuditEmitter
 	accounts AccountLookup
-	// proxy is a single client because MVP supports exactly one proxy
-	// family (SSH, docs/roadmap.md §2). v0.0.1 will need a registry keyed by
-	// proxyServiceID once ProxySelector resolves to more than one value —
-	// not a concern to solve before it exists.
+	// proxy routes each admitted protocol to its own pool; protocol is resolved from
+	// the stored session, never supplied by the operator at attach time.
 	proxy   ProxyClient
 	proxies ProxySelector
 
@@ -411,6 +410,9 @@ func (s *SessionBrokerService) authorizeBreakGlass(ctx context.Context, actorRol
 }
 
 func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy string, actorRoles []string, privilegedAccountID, protocol, justification string, ticket ApprovalTicketInput, durationMinutes int, breakGlass bool) (*domain.Session, error) {
+	if _, err := s.proxies.Select(protocol); err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrUnsupportedProtocol, protocol)
+	}
 	resource := "vault:account:" + privilegedAccountID
 	allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, resource, "session:create")
 	if err != nil {
@@ -435,15 +437,21 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 	// A session on an account that does not exist, or whose target's host key is not pinned,
 	// could never start (ADR-0039): refused now, recorded and audited like any refusal, rather
 	// than granted — or approved, for a break-glass — to fail at connect (ADR-0043).
-	accountRequiresApproval, err := s.accounts.CheckAccount(ctx, privilegedAccountID)
+	accountRequiresApproval, accountProtocol, err := s.accounts.CheckAccount(ctx, privilegedAccountID)
 	if err != nil {
-		if !errors.Is(err, domain.ErrAccountNotFound) && !errors.Is(err, domain.ErrAccountNotPinned) && !errors.Is(err, domain.ErrAccountTLSNotPinned) {
+		if !errors.Is(err, domain.ErrAccountNotFound) && !errors.Is(err, domain.ErrAccountNotPinned) && !errors.Is(err, domain.ErrAccountTLSNotPinned) && !errors.Is(err, domain.ErrUnsupportedProtocol) {
 			return nil, fmt.Errorf("%w: checking the account: %w", domain.ErrUnavailable, err)
 		}
 		sess.Status = domain.StatusDenied
 		_ = s.sessions.Save(ctx, sess)
 		_ = s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, false)
 		return nil, err
+	}
+	if protocol != accountProtocol {
+		sess.Status = domain.StatusDenied
+		_ = s.sessions.Save(ctx, sess)
+		_ = s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, false)
+		return nil, fmt.Errorf("%w: requested %s, account is %s", domain.ErrProtocolMismatch, protocol, accountProtocol)
 	}
 
 	if breakGlass {
@@ -626,7 +634,7 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 	// change, the session is cut but still marked active: the safe direction, and the
 	// same call, which is idempotent, finishes it.
 	now := s.clock()
-	if err := s.proxy.RevokeSession(ctx, sess.ID, sess.ExpiresAt.Sub(now)+RevocationMargin); err != nil {
+	if err := s.proxy.RevokeSession(ctx, sess.Protocol, sess.ID, sess.ExpiresAt.Sub(now)+RevocationMargin); err != nil {
 		// The attempt is on the record, under the caller's name: it did not end the session.
 		_ = s.audit.EmitEvent(ctx, callerID, "session.terminate", "session", sess.ID, false)
 		return nil, fmt.Errorf("%w (revoking at the proxy: %v)", domain.ErrUnavailable, err)
@@ -663,36 +671,46 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 // callerID is the user the Gateway verified, and anyone else — the approver of a
 // break-glass included — is refused before anything about the session is said.
 func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID string) (proxyEndpoint, connectionTicket string, expiresAt time.Time, err error) {
+	proxyEndpoint, connectionTicket, _, expiresAt, err = s.ConnectDetails(ctx, sessionID, callerID)
+	return
+}
+
+// ConnectDetails is Connect with the stored protocol included for the Gateway's
+// screen-attach contract. Protocol is read from the persisted session, never the request.
+func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, callerID string) (proxyEndpoint, connectionTicket, protocol string, expiresAt time.Time, err error) {
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
-		return "", "", time.Time{}, err
+		return "", "", "", time.Time{}, err
 	}
 	if callerID == "" || callerID != sess.RequestedBy {
-		return "", "", time.Time{}, fmt.Errorf("%w: only the person who requested a session can connect to it", domain.ErrForbidden)
+		return "", "", "", time.Time{}, fmt.Errorf("%w: only the person who requested a session can connect to it", domain.ErrForbidden)
 	}
 	status := sess.EffectiveStatus(s.clock())
 	if status != domain.StatusActive {
-		return "", "", time.Time{}, fmt.Errorf("%w: cannot connect a session in status %q", domain.ErrConflict, status)
+		return "", "", "", time.Time{}, fmt.Errorf("%w: cannot connect a session in status %q", domain.ErrConflict, status)
+	}
+	if sess.Protocol == "rdp" {
+		return "", "", "", time.Time{}, domain.ErrUnsupportedProtocol
 	}
 
 	proxyServiceID, err := s.proxies.Select(sess.Protocol)
 	if err != nil {
-		return "", "", time.Time{}, err
+		return "", "", "", time.Time{}, err
 	}
 
 	targetHost, targetUser, err := s.accounts.GetAccount(ctx, sess.PrivilegedAccountID)
 	if err != nil {
-		return "", "", time.Time{}, fmt.Errorf("resolving account: %w", err)
+		return "", "", "", time.Time{}, fmt.Errorf("resolving account: %w", err)
 	}
 
 	ttl := sess.ExpiresAt.Sub(s.clock())
 	if ttl <= 0 {
-		return "", "", time.Time{}, fmt.Errorf("%w: session has no time remaining", domain.ErrConflict)
+		return "", "", "", time.Time{}, fmt.Errorf("%w: session has no time remaining", domain.ErrConflict)
 	}
 
 	scopeToken, _, err := s.vault.AuthorizeScope(ctx, sess.ID, sess.PrivilegedAccountID, proxyServiceID, ttl)
 	if err != nil {
-		return "", "", time.Time{}, fmt.Errorf("authorizing vault scope: %w", err)
+		return "", "", "", time.Time{}, fmt.Errorf("authorizing vault scope: %w", err)
 	}
 
 	// The waiver is passed on only while the platform still grants break-glass:
@@ -702,14 +720,14 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID 
 	// runs under "record or refuse" like any other.
 	approved := !s.approvalRequired() || sess.DecidedBy != ""
 	waiver := sess.BreakGlass && s.breakGlassMaxMinutes > 0 && approved
-	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, targetHost, targetUser, scopeToken, ttl, waiver)
+	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, sess.Protocol, targetHost, targetUser, scopeToken, ttl, waiver)
 	if err != nil {
-		return "", "", time.Time{}, fmt.Errorf("establishing session on proxy: %w", err)
+		return "", "", "", time.Time{}, fmt.Errorf("establishing session on proxy: %w", err)
 	}
 
 	expiresAt = s.clock().Add(ttl)
 	_ = s.audit.EmitEvent(ctx, sess.RequestedBy, "session.connect", "session", sess.ID, true)
-	return proxyEndpoint, connectionTicket, expiresAt, nil
+	return proxyEndpoint, connectionTicket, sess.Protocol, expiresAt, nil
 }
 
 // ApproveBreakGlass is the second person's yes (ADR-0011): the pending request

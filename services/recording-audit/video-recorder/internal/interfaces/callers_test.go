@@ -11,9 +11,9 @@ import (
 
 func TestHTTPCallerRules(t *testing.T) {
 	mtlstest.Check(t, HTTPCallerRules(), []mtlstest.Case{
-		mtlstest.Allow("rdp-proxy", "GET", "/readyz"),
+		mtlstest.Allow("rdp-vnc-proxy", "GET", "/readyz"),
 		mtlstest.Allow("api-gateway", "GET", "/readyz"),
-		mtlstest.Deny("rdp-proxy", "POST", "/readyz"),
+		mtlstest.Deny("rdp-vnc-proxy", "POST", "/readyz"),
 		mtlstest.Allow("api-gateway", "GET", "/healthz"),
 		mtlstest.Deny("api-gateway", "POST", "/healthz"),
 		mtlstest.Deny("admin-cli", "GET", "/recordings/s1"),
@@ -36,7 +36,7 @@ func TestHealthEndpointsRejectNonGETMethods(t *testing.T) {
 	}
 }
 
-func TestGRPCCallerRulesAreRestrictedToRDPProxyAndGateway(t *testing.T) {
+func TestGRPCCallerRulesAreRestrictedToRDPVNCProxyAndGateway(t *testing.T) {
 	want := map[string][]string{
 		"/openbastion.recording.v1.VideoRecording/StreamVideoSegments": {mtls.RDPVNCProxy},
 		"/openbastion.recording.v1.VideoRecording/GetVideoSegment":     {mtls.APIGateway},

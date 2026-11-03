@@ -41,6 +41,7 @@ var (
 	ErrInvalidTarget       = errors.New("vnc: invalid target configuration")
 	ErrInvalidFramebuffer  = errors.New("vnc: invalid framebuffer update")
 	ErrAuthentication      = errors.New("vnc: target authentication failed")
+	ErrTLSVerification     = errors.New("vnc: target TLS verification failed")
 	errLastRect            = errors.New("vnc: last rectangle marker")
 )
 
@@ -126,7 +127,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	}
 	tlsConn := tls.Client(conn, tlsConfig)
 	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
-		return nil, fmt.Errorf("vnc: target TLS verification failed")
+		return nil, ErrTLSVerification
 	}
 	if subtype == vencryptX509Plain {
 		err = authenticatePlain(tlsConn, cfg.Username, password)

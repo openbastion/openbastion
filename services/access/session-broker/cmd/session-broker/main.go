@@ -57,7 +57,8 @@ func main() {
 	authzURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
-	sshProxyURLs := proxyURLs(rt.DefaultURL("127.0.0.1:8085"))
+	sshProxyURLs := proxyURLsFor("SSH_PROXY_URLS", "SSH_PROXY_URL", rt.DefaultURL("127.0.0.1:8085"))
+	vncProxyURLs := proxyURLsFor("RDP_VNC_PROXY_URLS", "RDP_VNC_PROXY_URL", rt.DefaultURL("127.0.0.1:8090"))
 
 	var store domain.SessionRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
@@ -90,18 +91,27 @@ func main() {
 	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	// Every instance of the SSH proxy, each addressed directly and pinned to the proxy's
 	// identity (ADR-0046): a ticket is issued by one, a revocation is asked of all.
-	var instances []infrastructure.ProxyInstance
+	sshInstances := make([]infrastructure.ProxyInstance, 0, len(sshProxyURLs))
 	for _, u := range sshProxyURLs {
-		instances = append(instances, infrastructure.ProxyInstance{Name: hostOf(u),
-			Client: &infrastructure.ProxyClientHTTPClient{BaseURL: u, Client: peer(u, mtls.SSHProxy)}})
+		sshInstances = append(sshInstances, infrastructure.ProxyInstance{Name: hostOf(u), Client: &infrastructure.ProxyClientHTTPClient{BaseURL: u, Client: peer(u, mtls.SSHProxy)}})
 	}
-	proxy, err := infrastructure.NewProxyPool(instances)
+	sshPool, err := infrastructure.NewProxyPool(sshInstances)
 	if err != nil {
 		log.Fatalf("session-broker: SSH_PROXY_URLS: %v", err)
 	}
-	if proxy.Size() > 1 {
-		log.Printf("session-broker: %d SSH proxy instances: a ticket is issued by one, in turn; a termination is confirmed by all of them or by none", proxy.Size())
+	vncInstances := make([]infrastructure.ProxyInstance, 0, len(vncProxyURLs))
+	for _, u := range vncProxyURLs {
+		vncInstances = append(vncInstances, infrastructure.ProxyInstance{Name: hostOf(u), Client: &infrastructure.ProxyClientHTTPClient{BaseURL: u, Client: peer(u, mtls.RDPVNCProxy)}})
 	}
+	vncPool, err := infrastructure.NewProxyPool(vncInstances)
+	if err != nil {
+		log.Fatalf("session-broker: RDP_VNC_PROXY_URLS: %v", err)
+	}
+	proxy, err := infrastructure.NewProtocolProxyRouter(map[string]*infrastructure.ProxyPool{"ssh": sshPool, "vnc": vncPool})
+	if err != nil {
+		log.Fatalf("session-broker: proxy router: %v", err)
+	}
+	log.Printf("session-broker: proxy pools configured: SSH=%d, VNC=%d; RDP is not exposed", sshPool.Size(), vncPool.Size())
 
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy).
 		// A granted session ended: the Vault rotates the account if it is post_use (ADR-0037).
@@ -268,15 +278,13 @@ func expireEvery(svc *application.SessionBrokerService, every time.Duration) {
 	}
 }
 
-// proxyURLs reads the SSH proxy instances (ADR-0046): SSH_PROXY_URLS, a comma-separated list of
-// 1 to 16 distinct URLs, each one instance addressed directly; or SSH_PROXY_URL, one instance;
-// never both. Anything else stops the Broker: a list it read wrong would leave an instance
-// it never revokes at.
-func proxyURLs(def string) []string {
-	list, one := os.Getenv("SSH_PROXY_URLS"), os.Getenv("SSH_PROXY_URL")
+// proxyURLsFor reads a proxy-family pool: the plural variable is a comma-separated list of
+// 1 to 16 distinct URLs; the singular form names one instance; never both. A typo fails startup.
+func proxyURLsFor(listName, oneName, def string) []string {
+	list, one := os.Getenv(listName), os.Getenv(oneName)
 	switch {
 	case list != "" && one != "":
-		log.Fatalf("session-broker: SSH_PROXY_URL and SSH_PROXY_URLS are both set: give every instance in SSH_PROXY_URLS, and only there")
+		log.Fatalf("session-broker: %s and %s are both set: use only %s", oneName, listName, listName)
 	case list == "" && one != "":
 		return []string{one}
 	case list == "":
@@ -288,17 +296,17 @@ func proxyURLs(def string) []string {
 		u := strings.TrimSpace(raw)
 		parsed, err := url.Parse(u)
 		if u == "" || err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			log.Fatalf("session-broker: SSH_PROXY_URLS must be URLs of the proxy instances separated by commas (https://host:port,…); %q is not one", u)
+			log.Fatalf("session-broker: %s must be URLs of the proxy instances separated by commas (https://host:port,…); %q is not one", listName, u)
 		}
 		key := strings.TrimSuffix(strings.ToLower(parsed.Scheme+"://"+parsed.Host+parsed.Path), "/")
 		if seen[key] {
-			log.Fatalf("session-broker: SSH_PROXY_URLS names %s twice: each instance once", hostOf(u))
+			log.Fatalf("session-broker: %s names %s twice: each instance once", listName, hostOf(u))
 		}
 		seen[key] = true
 		out = append(out, u)
 	}
 	if len(out) > infrastructure.MaxProxyInstances {
-		log.Fatalf("session-broker: SSH_PROXY_URLS names %d instances, at most %d: every termination asks each of them", len(out), infrastructure.MaxProxyInstances)
+		log.Fatalf("session-broker: %s names %d instances, at most %d: every termination asks each of them", listName, len(out), infrastructure.MaxProxyInstances)
 	}
 	return out
 }

@@ -117,8 +117,8 @@ func TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart(t *testing.T) {
 		t.Fatalf("onboard: %d", s)
 	}
 
-	scopeToken := authorizeScope(t, vault1.baseURL, "pg-restart-session-1", accountID, "ssh-proxy-pg")
-	fetcher1 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault1.baseURL}, "ssh-proxy-pg")
+	scopeToken := authorizeScope(t, vault1.baseURL, "pg-restart-session-1", accountID, "ssh-proxy")
+	fetcher1 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault1.baseURL}, "ssh-proxy")
 	cred1, err := fetcher1.Fetch(context.Background(), scopeToken)
 	if err != nil {
 		t.Fatalf("Fetch from first process: %v", err)
@@ -134,8 +134,8 @@ func TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart(t *testing.T) {
 
 	vault2 := startService(t, root, vaultBin, "18403", "AUTHORIZATION_URL="+authz.baseURL, "DATABASE_URL="+dsn, "KMS_KEY_HEX="+kmsKeyHex, "SKIP_DEMO_SEED=1", "AUDIT_URL="+audit.baseURL)
 
-	scopeToken2 := authorizeScope(t, vault2.baseURL, "pg-restart-session-2", accountID, "ssh-proxy-pg")
-	fetcher2 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault2.baseURL}, "ssh-proxy-pg")
+	scopeToken2 := authorizeScope(t, vault2.baseURL, "pg-restart-session-2", accountID, "ssh-proxy")
+	fetcher2 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault2.baseURL}, "ssh-proxy")
 	cred2, err := fetcher2.Fetch(context.Background(), scopeToken2)
 	if err != nil {
 		t.Fatalf("Fetch from second, restarted process: %v", err)
@@ -151,8 +151,8 @@ func TestPostgresFlow_AccountSurvivesPasswordVaultProcessRestart(t *testing.T) {
 			t.Fatalf("rotate: status %d", status)
 		}
 
-		scopeToken3 := authorizeScope(t, vault2.baseURL, "pg-restart-session-3", accountID, "ssh-proxy-pg")
-		fetcher3 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault2.baseURL}, "ssh-proxy-pg")
+		scopeToken3 := authorizeScope(t, vault2.baseURL, "pg-restart-session-3", accountID, "ssh-proxy")
+		fetcher3 := proxycore.NewCredentialFetcher(&httpVaultClient{baseURL: vault2.baseURL}, "ssh-proxy")
 		cred3, err := fetcher3.Fetch(context.Background(), scopeToken3)
 		if err != nil {
 			t.Fatalf("Fetch after rotation: %v", err)

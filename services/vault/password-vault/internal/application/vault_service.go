@@ -206,7 +206,22 @@ func (s *VaultService) AuthorizeScope(ctx context.Context, sessionID, accountID,
 	if account.DisabledAt != nil {
 		return "", time.Time{}, domain.ErrNotFound
 	}
-	// A scope is issued only when this protocol's target identity is pinned: SSH host key, or VNC/RDP TLS leaf and name.
+	// A scope is issued only to the proxy family that terminates the stored account protocol.
+	// The Broker selects the family, but the Vault independently binds its one-use scope to it.
+	expectedProxy := ""
+	switch account.Protocol {
+	case "ssh":
+		expectedProxy = "ssh-proxy"
+	case "vnc", "rdp":
+		expectedProxy = "rdp-vnc-proxy"
+	}
+	if expectedProxy == "" {
+		return "", time.Time{}, ErrUnsupportedProtocol
+	}
+	if proxyServiceID != expectedProxy {
+		return "", time.Time{}, ErrProxyProtocolMismatch
+	}
+	// The target identity must also be pinned: SSH host key, or VNC/RDP TLS leaf and name.
 	switch account.Protocol {
 	case "ssh":
 		if account.HostKey == "" {

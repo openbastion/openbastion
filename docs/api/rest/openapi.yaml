@@ -767,11 +767,11 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [sessions]
-      summary: Émet un ticket de connexion court terme vers le SSH Proxy
+      summary: Prépare une connexion SSH ou VNC
       description: >
-        Ne retourne jamais de secret cible — uniquement une adresse de proxy
-        et un jeton de connexion à courte durée de vie, consommé une seule
-        fois par le SSH Proxy (ADR-0003).
+        Ne retourne jamais de secret cible. SSH renvoie une adresse de proxy et un ticket à usage unique.
+        VNC renvoie un chemin d'attachement WebSocket ; le ticket reste côté Gateway dans un cookie
+        HttpOnly, SameSite=Strict et à usage unique, et n'est jamais exposé au navigateur (ADR-0071).
 
         Une session dont l'enregistrement n'est pas possible n'est pas
         établie (ADR-0008) : si le Command Recorder n'est pas prêt, le SSH
@@ -799,7 +799,17 @@ paths:
           description: Ticket de connexion
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ConnectionTicket" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ConnectionTicket" }
+                  - { $ref: "#/components/schemas/ScreenAttach" }
+          headers:
+            Set-Cookie:
+              description: >
+                Pour VNC uniquement : ob_screen_attach, HttpOnly, SameSite=Strict, limité au chemin
+                /sessions/{sessionId}/screen et valable au plus 30 secondes. Le ticket proxy n'est
+                pas présent dans le corps de la réponse.
+              schema: { type: string }
         "403":
           description: L'appelant n'est pas le demandeur de la session.
           content:
@@ -956,6 +966,25 @@ paths:
         "404": { description: Session inconnue. }
         "409": { description: Pas une demande en attente. }
         "503": { description: Une dépendance ne répond pas ; la décision n'a pas été prise. }
+
+  /sessions/{sessionId}/screen:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [sessions]
+      summary: Relais WebSocket du flux écran VNC
+      description: >
+        Upgrade WebSocket même origine, sous-protocole openbastion.screen.v1. Cette route utilise le
+        cookie HttpOnly à usage unique posé par POST /sessions/{sessionId}/connect et n'accepte pas
+        de bearer token ni de ticket dans l'URL. La Gateway consomme le cookie puis relaie le flux
+        binaire vers le proxy sous mTLS ; le proxy n'envoie une frame qu'après son acquittement
+        durable par Video Recorder (ADR-0071). Les frames sont limitées à 4 Mio et l'entrée à 16 octets.
+      security: []
+      responses:
+        "101": { description: Connexion WebSocket établie ; le flux transporte HELLO, FRAME et END binaires }
+        "401": { description: Cookie d'attachement absent, expiré ou déjà consommé }
+        "403": { description: Origine WebSocket refusée }
+        "503": { description: Le proxy graphique est indisponible }
 
   /sessions/{sessionId}/recording:
     parameters:
@@ -1514,7 +1543,10 @@ components:
       required: [targetAccountId, protocol, justification]
       properties:
         targetAccountId: { type: string, format: uuid, description: "Réfère un PrivilegedAccount du Vault" }
-        protocol: { type: string, enum: [ssh, vnc, rdp] }
+        protocol:
+          type: string
+          enum: [ssh, vnc, rdp]
+          description: Must match the stored account protocol. RDP sessions remain non-connectable (409) until the RDP engine is implemented; VNC is currently the only graphical protocol served.
         justification: { type: string, minLength: 10 }
         durationMinutes: { type: integer, default: 60, maximum: 480 }
         breakGlass:
@@ -1575,9 +1607,19 @@ components:
 
     ConnectionTicket:
       type: object
+      required: [proxyEndpoint, ticket, expiresAt]
       properties:
+        protocol: { type: string, enum: [ssh], default: ssh }
         proxyEndpoint: { type: string, example: "ssh-proxy.internal:2222" }
         ticket: { type: string, description: "Jeton à usage unique, consommé par le SSH Proxy" }
+        expiresAt: { type: string, format: date-time }
+
+    ScreenAttach:
+      type: object
+      required: [protocol, attach, expiresAt]
+      properties:
+        protocol: { type: string, enum: [vnc] }
+        attach: { type: string, example: "/sessions/session-id/screen", description: "Chemin WebSocket même origine ; l'authentification est le cookie HttpOnly d'attachement, pas le bearer token" }
         expiresAt: { type: string, format: date-time }
 
     CommandRecording:

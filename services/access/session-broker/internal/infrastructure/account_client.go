@@ -48,32 +48,44 @@ func (c *AccountLookupHTTPClient) GetAccount(ctx context.Context, accountID stri
 // CheckAccount is application.AccountLookup.CheckAccount: the same read of the account, its
 // pinned host key looked at — never the key itself, only whether there is one — and whether
 // it requires another person's approval (ADR-0067).
-func (c *AccountLookupHTTPClient) CheckAccount(ctx context.Context, accountID string) (approvalRequired bool, err error) {
+func (c *AccountLookupHTTPClient) CheckAccount(ctx context.Context, accountID string) (approvalRequired bool, accountProtocol string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/vault/v1/accounts/"+url.PathEscape(accountID), nil)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return false, domain.ErrAccountNotFound
+		return false, "", domain.ErrAccountNotFound
 	default:
-		return false, fmt.Errorf("get-account: status %d", resp.StatusCode)
+		return false, "", fmt.Errorf("get-account: status %d", resp.StatusCode)
 	}
 	var out struct {
-		HostKeyFingerprint string `json:"hostKeyFingerprint"`
-		ApprovalRequired   bool   `json:"approvalRequired"`
+		Protocol             string `json:"protocol"`
+		HostKeyFingerprint   string `json:"hostKeyFingerprint"`
+		TLSCertificateSHA256 string `json:"tlsCertificateSha256"`
+		TargetDomain         string `json:"targetDomain"`
+		ApprovalRequired     bool   `json:"approvalRequired"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out); err != nil {
-		return false, err
+		return false, "", err
 	}
-	if out.HostKeyFingerprint == "" {
-		return false, domain.ErrAccountNotPinned
+	switch out.Protocol {
+	case "ssh":
+		if out.HostKeyFingerprint == "" {
+			return false, "", domain.ErrAccountNotPinned
+		}
+	case "vnc", "rdp":
+		if out.TLSCertificateSHA256 == "" || out.TargetDomain == "" {
+			return false, "", domain.ErrAccountTLSNotPinned
+		}
+	default:
+		return false, "", domain.ErrUnsupportedProtocol
 	}
-	return out.ApprovalRequired, nil
+	return out.ApprovalRequired, out.Protocol, nil
 }

@@ -23,7 +23,7 @@ func establish(t *testing.T, status int, body string) error {
 		http.Error(w, body, status)
 	}))
 	defer srv.Close()
-	_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "h", "u", "scope", time.Minute, false)
+	_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false)
 	return err
 }
 
@@ -59,13 +59,16 @@ func TestProxyClient_SendsTheBreakGlassAuthorisation(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			_, _ = w.Write([]byte(`{"proxy_endpoint":"127.0.0.1:2222","connection_ticket":"ticket_x"}`))
 		}))
-		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "h", "u", "scope", time.Minute, want)
+		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, want)
 		srv.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
 		if v, ok := got["break_glass"].(bool); !ok || v != want {
 			t.Fatalf("break_glass = %v (%v), want %v; body %v", got["break_glass"], ok, want, got)
+		}
+		if got["protocol"] != "ssh" {
+			t.Fatalf("protocol=%v, want ssh", got["protocol"])
 		}
 	}
 }

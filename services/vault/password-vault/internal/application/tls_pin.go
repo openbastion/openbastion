@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	ErrNoTLSPin            = errors.New("the account has no pinned TLS certificate and target domain")
-	ErrBadTLSPin           = errors.New("invalid TLS certificate SHA-256 fingerprint")
-	ErrBadTargetDomain     = errors.New("invalid TLS target domain")
-	ErrUnsupportedProtocol = errors.New("unsupported target protocol for this Vault operation")
+	ErrNoTLSPin              = errors.New("the account has no pinned TLS certificate and target domain")
+	ErrBadTLSPin             = errors.New("invalid TLS certificate SHA-256 fingerprint")
+	ErrBadTargetDomain       = errors.New("invalid TLS target domain")
+	ErrUnsupportedProtocol   = errors.New("unsupported target protocol for this Vault operation")
+	ErrProxyProtocolMismatch = errors.New("proxy identity does not match the account protocol")
 )
 
 // NormalizeTLSPin validates a SHA-256 leaf-certificate fingerprint and a DNS/IP

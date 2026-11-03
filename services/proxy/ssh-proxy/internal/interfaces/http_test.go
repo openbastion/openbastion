@@ -30,7 +30,7 @@ func establish(srv *interfaces.HTTPServer) *httptest.ResponseRecorder {
 // establishWith adds extra JSON members (each preceded by a comma) to the request.
 func establishWith(srv *interfaces.HTTPServer, extra string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	body := `{"session_id":"s1","target_host":"10.0.0.5:22","target_user":"root","vault_scope_token":"scope","ttl_seconds":60` + extra + `}`
+	body := `{"session_id":"s1","target_host":"10.0.0.5:22","target_user":"root","protocol":"ssh","vault_scope_token":"scope","ttl_seconds":60` + extra + `}`
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/internal/v1/establish-session", strings.NewReader(body)))
 	return rec
 }

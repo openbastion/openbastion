@@ -32,6 +32,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       ./services/access/authorization/cmd/authorization \
       ./services/access/session-broker/cmd/session-broker \
       ./services/proxy/ssh-proxy/cmd/ssh-proxy \
+      ./services/proxy/rdp-vnc-proxy/cmd/rdp-vnc-proxy \
       ./services/vault/password-vault/cmd/password-vault \
       ./services/recording-audit/audit-service/cmd/audit-service \
       ./services/recording-audit/command-recorder/cmd/command-recorder \

@@ -30,7 +30,7 @@ func TestFrameRoundTrip(t *testing.T) {
 }
 
 func TestHelloRoundTrip(t *testing.T) {
-	in := Message{Type: TypeHello, Sequence: 1, Timestamp: time.Unix(100, 0).UTC(), Protocol: ProtocolVNC, ExpiresAt: time.Unix(200, 0).UTC(), SessionID: "session-1"}
+	in := Message{Type: TypeHello, Sequence: 0, Timestamp: time.Unix(100, 0).UTC(), Protocol: ProtocolVNC, ExpiresAt: time.Unix(200, 0).UTC(), SessionID: "session-1"}
 	wire, err := Encode(in)
 	if err != nil {
 		t.Fatal(err)

@@ -66,10 +66,15 @@ type fakeAccountLookup struct {
 
 	// approvalRequired: the account requires another person's approval (ADR-0067).
 	approvalRequired bool
+	protocol         string
 }
 
-func (f *fakeAccountLookup) CheckAccount(context.Context, string) (bool, error) {
-	return f.approvalRequired, f.checkErr
+func (f *fakeAccountLookup) CheckAccount(context.Context, string) (bool, string, error) {
+	protocol := f.protocol
+	if protocol == "" {
+		protocol = "ssh"
+	}
+	return f.approvalRequired, protocol, f.checkErr
 }
 
 func (f *fakeAccountLookup) GetAccount(ctx context.Context, accountID string) (string, string, error) {
@@ -104,7 +109,7 @@ type fakeProxyClient struct {
 	onRevoke        func(sessionID string) // runs inside the call, before it answers
 }
 
-func (f *fakeProxyClient) RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error {
+func (f *fakeProxyClient) RevokeSession(ctx context.Context, protocol, sessionID string, remaining time.Duration) error {
 	if f.onRevoke != nil {
 		f.onRevoke(sessionID)
 	}
@@ -114,7 +119,7 @@ func (f *fakeProxyClient) RevokeSession(ctx context.Context, sessionID string, r
 	return f.revokeErr
 }
 
-func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
+func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
 	f.calls++
 	f.lastBreakGlass = breakGlass
 	f.lastScopeToken = scopeToken
@@ -292,7 +297,8 @@ func TestConnect_RejectsTerminatedSession(t *testing.T) {
 
 func TestConnect_RejectsUnsupportedProtocol(t *testing.T) {
 	authz := &fakeAuthz{allowed: true}
-	broker := newDefaultTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{})
+	accounts := &fakeAccountLookup{protocol: "rdp"}
+	broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, accounts, &fakeProxyClient{})
 
 	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", "", 60)
 	if err != nil {
@@ -312,5 +318,33 @@ func TestConnect_PropagatesProxyEstablishError(t *testing.T) {
 	sess, _ := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "justification", "", 60)
 	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
 		t.Fatal("expected Connect to fail when the proxy cannot establish the session")
+	}
+}
+
+func TestCreateSessionRefusesProtocolMismatchBeforeIssuingScope(t *testing.T) {
+	authz := &fakeAuthz{allowed: true}
+	vault := &fakeVaultAuthorizer{}
+	audit := &fakeAudit{}
+	accounts := &fakeAccountLookup{}
+	proxy := &fakeProxyClient{}
+	svc := newTestBroker(authz, vault, audit, accounts, proxy)
+	_, err := svc.CreateSession(context.Background(), "operator", []string{"operator"}, "account-1", "vnc", "test", "", 30)
+	if !errors.Is(err, domain.ErrProtocolMismatch) {
+		t.Fatalf("CreateSession(protocol mismatch) error=%v", err)
+	}
+	if authz.calls != 1 || vault.calls != 0 || proxy.calls != 0 {
+		t.Fatalf("protocol mismatch reached scope/proxy: authz=%d vault=%d proxy=%d", authz.calls, vault.calls, proxy.calls)
+	}
+}
+
+func TestCreateSessionAllowsVNCOnlyWhenAccountProtocolMatches(t *testing.T) {
+	accounts := &fakeAccountLookup{protocol: "vnc"}
+	svc := newTestBroker(&fakeAuthz{allowed: true}, &fakeVaultAuthorizer{}, &fakeAudit{}, accounts, &fakeProxyClient{})
+	sess, err := svc.CreateSession(context.Background(), "operator", []string{"operator"}, "vnc-account", "vnc", "test", "", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.Protocol != "vnc" || sess.Status != domain.StatusActive {
+		t.Fatalf("session=%#v", sess)
 	}
 }

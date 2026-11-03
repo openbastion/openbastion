@@ -16,6 +16,7 @@ import (
 
 func TestAccountLookup_CheckAccount(t *testing.T) {
 	var approval bool
+	var protocol string
 	check := func(status int, body string) error {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.EscapedPath() != "/vault/v1/accounts/acc%2F1" {
@@ -26,18 +27,24 @@ func TestAccountLookup_CheckAccount(t *testing.T) {
 		}))
 		defer srv.Close()
 		var err error
-		approval, err = (&infrastructure.AccountLookupHTTPClient{BaseURL: srv.URL}).CheckAccount(context.Background(), "acc/1")
+		approval, protocol, err = (&infrastructure.AccountLookupHTTPClient{BaseURL: srv.URL}).CheckAccount(context.Background(), "acc/1")
 		return err
 	}
-	if err := check(http.StatusOK, `{"id":"acc/1","hostKeyFingerprint":"SHA256:k"}`); err != nil || approval {
+	if err := check(http.StatusOK, `{"id":"acc/1","protocol":"ssh","hostKeyFingerprint":"SHA256:k"}`); err != nil || approval {
 		t.Fatalf("pinned: %v, approval %v", err, approval)
 	}
 	// ADR-0067: the account says whether a session on it waits for another person.
-	if err := check(http.StatusOK, `{"id":"acc/1","hostKeyFingerprint":"SHA256:k","approvalRequired":true}`); err != nil || !approval {
+	if err := check(http.StatusOK, `{"id":"acc/1","protocol":"ssh","hostKeyFingerprint":"SHA256:k","approvalRequired":true}`); err != nil || !approval {
 		t.Fatalf("an account that requires approval: %v, approval %v", err, approval)
 	}
-	if err := check(http.StatusOK, `{"id":"acc/1","hostKeyFingerprint":""}`); !errors.Is(err, domain.ErrAccountNotPinned) {
+	if err := check(http.StatusOK, `{"id":"acc/1","protocol":"ssh","hostKeyFingerprint":""}`); !errors.Is(err, domain.ErrAccountNotPinned) {
 		t.Fatalf("not pinned: %v", err)
+	}
+	if err := check(http.StatusOK, `{"id":"vnc-1","protocol":"vnc","tlsCertificateSha256":"SHA256:cert","targetDomain":"vnc.example.test"}`); err != nil || protocol != "vnc" {
+		t.Fatalf("VNC TLS-pinned account: protocol=%q err=%v", protocol, err)
+	}
+	if err := check(http.StatusOK, `{"id":"vnc-1","protocol":"vnc","targetDomain":"vnc.example.test"}`); !errors.Is(err, domain.ErrAccountTLSNotPinned) {
+		t.Fatalf("VNC account without TLS pin: %v", err)
 	}
 	if err := check(http.StatusNotFound, "account not found"); !errors.Is(err, domain.ErrAccountNotFound) {
 		t.Fatalf("unknown: %v", err)

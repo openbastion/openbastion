@@ -30,6 +30,24 @@ const (
 	TypeEnd   MessageType = 3
 )
 
+// Stable END codes are part of the v1 screen-stream wire contract (ADR-0071).
+const (
+	EndCodeSessionEnded uint16 = iota
+	EndCodeSessionRevoked
+	EndCodeSessionExpired
+	EndCodeRecordingUnavailable
+	EndCodeInputInvalid
+	EndCodeTargetUnreachable
+	EndCodePinMissing
+	EndCodePinMismatch
+	EndCodeTLSRequired
+	EndCodeNLARequired
+	EndCodeProtocolVersionUnsupported
+	EndCodeCodecUnsupported
+	EndCodeRecordingLost
+	EndCodeTicketInvalid
+)
+
 type Protocol byte
 
 const (
@@ -74,7 +92,7 @@ func Encode(m Message) ([]byte, error) {
 		copy(out[HeaderSize:], m.PNG)
 		return out, nil
 	case TypeHello:
-		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 ||
+		if m.Sequence != 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 ||
 			(m.Protocol != ProtocolRDP && m.Protocol != ProtocolVNC) ||
 			m.SessionID == "" || len(m.SessionID) > MaxSessionIDBytes ||
 			!utf8.ValidString(m.SessionID) || m.ExpiresAt.IsZero() {
@@ -127,7 +145,7 @@ func Decode(data []byte) (Message, error) {
 			return Message{}, err
 		}
 	case TypeHello:
-		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || payloadLen < 14 {
+		if m.Sequence != 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || payloadLen < 14 {
 			return Message{}, ErrMalformedMessage
 		}
 		p := data[HeaderSize:]

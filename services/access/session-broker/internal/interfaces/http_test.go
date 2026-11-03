@@ -56,7 +56,9 @@ func (a *approvalAudit) EmitEventWithDetails(_ context.Context, _, action, _, _ 
 
 type oneAccount struct{}
 
-func (oneAccount) CheckAccount(context.Context, string) (bool, error) { return false, nil }
+func (oneAccount) CheckAccount(context.Context, string) (bool, string, error) {
+	return false, "ssh", nil
+}
 
 func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 	return "10.0.0.5:22", "root", nil
@@ -64,12 +66,12 @@ func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 
 type failingProxy struct{ err error }
 
-func (p failingProxy) EstablishSession(context.Context, string, string, string, string, time.Duration, bool) (string, string, error) {
+func (p failingProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool) (string, string, error) {
 	return "", "", p.err
 }
 
 // RevokeSession succeeds: the proxy of these tests has nothing open.
-func (p failingProxy) RevokeSession(context.Context, string, time.Duration) error { return nil }
+func (p failingProxy) RevokeSession(context.Context, string, string, time.Duration) error { return nil }
 
 func connect(t *testing.T, proxyErr error) *httptest.ResponseRecorder {
 	t.Helper()
@@ -243,7 +245,9 @@ type checkedAccount struct {
 	err error
 }
 
-func (c checkedAccount) CheckAccount(context.Context, string) (bool, error) { return false, c.err }
+func (c checkedAccount) CheckAccount(context.Context, string) (bool, string, error) {
+	return false, "ssh", c.err
+}
 
 // ADR-0043 over HTTP: POST /sessions says an unknown account (404) and an unpinned one (409);
 // a Vault that cannot be asked is a 503 that names nothing of it.
@@ -290,7 +294,9 @@ func (breakGlassDownAuthz) CheckAccess(_ context.Context, _ []string, resource, 
 // gatedAccount is an account that requires approval (ADR-0067).
 type gatedAccount struct{ oneAccount }
 
-func (gatedAccount) CheckAccount(context.Context, string) (bool, error) { return true, nil }
+func (gatedAccount) CheckAccount(context.Context, string) (bool, string, error) {
+	return true, "ssh", nil
+}
 
 // ADR-0067 over HTTP: on an account that requires approval, a request without a ticket, or
 // with one out of format, is a 400 that says so; with one, it is a 201 pending_approval that

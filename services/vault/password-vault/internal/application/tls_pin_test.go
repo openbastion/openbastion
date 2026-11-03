@@ -41,6 +41,9 @@ func TestVNCAccountNeedsAuditedTLSPinBeforeScopeAndCredentialDelivery(t *testing
 	if _, _, err := svc.AuthorizeScope(ctx, "session-before-pin", "vnc-account", "rdp-vnc-proxy", time.Minute); !errors.Is(err, application.ErrNoTLSPin) {
 		t.Fatalf("scope without pin = %v", err)
 	}
+	if _, _, err := svc.AuthorizeScope(ctx, "session-wrong-proxy", "vnc-account", "ssh-proxy", time.Minute); !errors.Is(err, application.ErrProxyProtocolMismatch) {
+		t.Fatalf("VNC account scope for SSH proxy = %v", err)
+	}
 	if _, err := svc.SetHostKey(ctx, "admin", adminRoles, "vnc-account", testHostKey); !errors.Is(err, application.ErrUnsupportedProtocol) {
 		t.Fatalf("SSH host key must not be set on a VNC account: %v", err)
 	}

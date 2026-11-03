@@ -274,6 +274,30 @@ services:
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
 
+  # Optional graphical target proxy. Enable both --profile recording and --profile rdp-vnc,
+  # and set SCREEN_TARGET_CA_FILE to an explicit PEM trust bundle for VNC targets.
+  rdp-vnc-proxy:
+    profiles: [rdp-vnc]
+    <<: *service
+    entrypoint: ["/usr/local/bin/rdp-vnc-proxy"]
+    environment:
+      <<: *tls
+      PORT: "8090"
+      VAULT_URL: https://password-vault:8081
+      AUDIT_URL: https://audit-service:8082
+      VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
+      RDP_VNC_PROXY_PUBLIC_ENDPOINT: rdp-vnc-proxy:8090
+      TARGET_TLS_ROOTS_FILE: /run/secrets/screen-target-ca
+    secrets: [screen-target-ca]
+    volumes:
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}
+    depends_on:
+      pki: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+      password-vault: {condition: service_started}
+      audit-service: {condition: service_started}
+      video-recorder: {condition: service_started}
+
   session-broker:
     <<: *service
     entrypoint: ["/usr/local/bin/session-broker"]
@@ -284,6 +308,7 @@ services:
       VAULT_URL: https://password-vault:8081
       AUDIT_URL: https://audit-service:8082
       SSH_PROXY_URL: https://ssh-proxy:8085
+      RDP_VNC_PROXY_URL: https://rdp-vnc-proxy:8090
       DATABASE_URL: postgres://session_broker:${PG_PASSWORD_SESSION_BROKER}@postgres:5432/session_broker?sslmode=disable
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
@@ -341,6 +366,8 @@ networks:
   internal:
 
 secrets:
+  screen-target-ca:
+    file: ${SCREEN_TARGET_CA_FILE:-/dev/null}
   video-recorder-transit-token:
     file: ${VIDEO_RECORDER_TRANSIT_TOKEN_FILE:-/dev/null}
   video-recorder-transit-ca:

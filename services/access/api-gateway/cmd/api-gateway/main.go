@@ -112,8 +112,20 @@ func main() {
 	vaultActionBurst := boundedIntEnv("VAULT_ACCOUNT_ACTION_BURST", application.DefaultVaultAccountActionBurst, 1, application.MaxVaultAccountActionBurst)
 	vaultActionRate := boundedIntEnv("VAULT_ACCOUNT_ACTION_RATE_PER_MINUTE", application.DefaultVaultAccountActionRatePerMinute, 1, application.MaxVaultAccountActionRatePerMinute)
 
+	screenCookieSecure := true
+	switch os.Getenv("SCREEN_ATTACH_COOKIE_SECURE") {
+	case "", "true":
+	case "false":
+		if rt.Enabled() {
+			log.Fatal("api-gateway: SCREEN_ATTACH_COOKIE_SECURE=false is permitted only with INTERNAL_TLS=disabled for local development")
+		}
+		screenCookieSecure = false
+	default:
+		log.Fatal("api-gateway: SCREEN_ATTACH_COOKIE_SECURE must be true (default) or false (development only)")
+	}
 	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL).
 		WithHTTPClient(upstreams).
+		WithScreenAttach(&infrastructure.ScreenWebSocketDialer{Runtime: rt}, screenCookieSecure).
 		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate)).
 		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
 		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(vaultActionBurst, vaultActionRate)).

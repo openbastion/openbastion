@@ -100,7 +100,7 @@ Une seule version (`openbastion.screen.v1`). Trame serveur → client :
 | 28–31 | longueur PNG | `uint32`, ≤ 4 194 304 |
 | 32… | PNG | octets acquittés par le recorder |
 
-`HELLO` porte en plus le protocole (`u8` : `1` RDP, `2` VNC), un octet réservé, l'échéance de session (`u64`, Unix), la longueur de l'identifiant (`u32`) et l'identifiant de session. `END` porte un code stable (`u16`, voir §12), la longueur du texte (`u16`) et un texte UTF-8 de 200 octets au plus, jamais une cause interne.
+`HELLO` est le préambule de contrôle de séquence `0` ; les `FRAME` commencent à `1` et sont strictement croissants ; `END` utilise le prochain numéro après la dernière frame acquittée (ou `1` si aucune frame n'a été envoyée). `HELLO` porte en plus le protocole (`u8` : `1` RDP, `2` VNC), un octet réservé, l'échéance de session (`u64`, Unix), la longueur de l'identifiant (`u32`) et l'identifiant de session. `END` porte un code stable (`u16`, voir §12), la longueur du texte (`u16`) et un texte UTF-8 de 200 octets au plus, jamais une cause interne.
 
 Entrée client → serveur, message fixe de 16 octets : version, type (`1` KEY, `2` POINTER, `3` RELEASE_ALL), drapeaux (`KEY` : appui/relâchement), `keysym` X11, scancode PS/2 set 1, coordonnées, boutons, molette. Tout message de plus de 64 octets, tout type inconnu, toute coordonnée hors trame, tout bouton hors masque, toute touche hors table **ferme la session** — l'entrée n'est jamais interprétée « au mieux ».
 
@@ -112,7 +112,7 @@ Un débit d'entrée par session est proposé (`SCREEN_INPUT_RATE_PER_SECOND=200`
 
 Le contrat exact qu'ADR-0069 laissait à définir :
 
-1. `POST /sessions/{id}/connect` (route existante, budget ADR-0016) reste le seul point d'entrée. Pour `ssh`, la réponse ne change pas. Pour `rdp`/`vnc`, elle devient `{protocol, attach, expiresAt}` — `expiresAt` est celle de l'attache, l'échéance de la session est dans `HELLO` — et l'adresse interne du proxy n'est **pas** exposée au navigateur.
+1. `POST /sessions/{id}/connect` (route existante, budget ADR-0016) reste le seul point d'entrée. Pour `ssh`, la réponse ne change pas. Pour `rdp`/`vnc`, elle devient `{protocol, attach, expiresAt}` — `expiresAt` est celle de l'attache (au plus 30 secondes), l'échéance de la session est dans `HELLO` — et l'adresse interne du proxy n'est **pas** exposée au navigateur.
 2. La Gateway garde en mémoire, pour 30 s au plus et une fois, le couple `{proxy_endpoint, connection_ticket}` du Broker, indexé par une valeur aléatoire de 256 bits liée à la session et à l'utilisateur vérifié. Cette valeur part dans un **cookie `HttpOnly`, `Secure`, `SameSite=Strict`**, de chemin `/sessions/{id}/screen` et de durée 30 s ; le corps de la réponse ne la porte jamais, donc elle n'est ni dans JavaScript, ni dans une URL, ni dans un journal applicatif.
 3. Le navigateur ouvre `GET /sessions/{id}/screen` en WebSocket avec le sous-protocole `openbastion.screen.v1` ; le navigateur envoie le cookie. La Gateway le consomme atomiquement, ouvre un WebSocket mTLS vers le proxy et y présente le `connection_ticket` dans un en-tête `Authorization`.
 4. Le proxy consomme ce ticket une fois (même registre que le proxy SSH, avec le protocole dans l'entrée), vérifie `LiveSessions` (session révoquée ⇒ refus) puis exécute le pipeline.
@@ -177,7 +177,7 @@ Le relais écran (dans `proxycore`) : image → `Record` (bloque jusqu'à l'acqu
 
 ### 12. Refus : codes stables, aucune cause interne
 
-Avant le WebSocket, `connect` répond `409`/`503` selon ADR-0042. Après le WebSocket, `END` porte l'un de ces codes : `pin_missing`, `pin_mismatch`, `tls_required`, `nla_required`, `protocol_version_unsupported`, `codec_unsupported`, `recording_unavailable`, `recording_lost`, `ticket_invalid`, `input_invalid`, `session_expired`, `session_revoked`, `target_unreachable`. Le texte est court, stable, sans adresse, sans nom interne, sans cause de panne.
+Avant le WebSocket, `connect` répond `409`/`503` selon ADR-0042. Après le WebSocket, `END` porte l'un de ces codes : `session_ended`, `pin_missing`, `pin_mismatch`, `tls_required`, `nla_required`, `protocol_version_unsupported`, `codec_unsupported`, `recording_unavailable`, `recording_lost`, `ticket_invalid`, `input_invalid`, `session_expired`, `session_revoked`, `target_unreachable`. Le texte est court, stable, sans adresse, sans nom interne, sans cause de panne.
 
 ### 13. Dépendances : deux ajouts, soumis à la policy
 
