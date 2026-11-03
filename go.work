@@ -5,6 +5,8 @@ use (
 	./pkg/mtls
 	./pkg/proxycore
 	./pkg/rdp
+	./pkg/tlspin
+	./pkg/screenstream
 	./pkg/migrate
 	./pkg/refusalbudget
 	./pkg/webhook

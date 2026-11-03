@@ -12,7 +12,7 @@ AGENTS.md                        point d'entrée des agents IA
   architecture/ personas/ policies/ rules/ settings/ tasks/ skills/<nom>/SKILL.md
 pkg/
   proxycore/                     pipeline proxy commun (listener, credential fetcher, tap, terminator) — ADR-0006
-  rdp/                           primitives de confiance RDP ; moteur FreeRDP et service proxy restent à implémenter — ADR-0069/0071
+  rdp/                           primitives de confiance RDP ; moteur RDP et service proxy restent à implémenter — ADR-0069/0071
   mtls/                          identité par certificat, Guard, rechargement, PKI de dev — ADR-0010
   migrate/                       migrations de schéma versionnées, sous verrou, une fois, checksum figé (sept magasins PostgreSQL) — ADR-0030 ; stdlib seulement
   refusalbudget/                 seau à jetons par identité des refus écrits dans l'audit (Broker, Recorder) — ADR-0020, ADR-0024 ; stdlib seulement
@@ -44,3 +44,5 @@ deploy/                          base44 (prévisualisation), docker-compose (ADR
 ```
 
 Une page de la documentation n'existe que si son contenu est réel ; ce qui est prévu est listé dans le `README.md` de la section, avec le point de la feuille de route qui le couvre.
+
+- `pkg/tlspin` : primitives de pinning TLS des cibles ; la configuration pin-only est disponible uniquement dans les builds `development`.

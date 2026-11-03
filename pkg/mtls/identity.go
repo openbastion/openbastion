@@ -34,7 +34,7 @@ const (
 	CommandRecorder = "command-recorder"
 	VideoRecorder   = "video-recorder"
 	SeaweedFS       = "seaweedfs"
-	RDPProxy        = "rdp-proxy"
+	RDPVNCProxy     = "rdp-vnc-proxy"
 
 	// AdminCLI is the operator's tooling. It is allowed on the few routes that
 	// have no public surface (creating a local user, verifying the audit chain)

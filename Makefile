@@ -66,6 +66,8 @@ build: proto-gen
 		./pkg/buildinfo/... \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
+		./pkg/tlspin/... \
+		./pkg/screenstream/... \
 		./pkg/mtls/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
@@ -88,6 +90,8 @@ build: proto-gen
 vet: proto-gen
 	$(GO) vet ./pkg/proxycore/...
 	$(GO) vet ./pkg/rdp/...
+	$(GO) vet ./pkg/tlspin/...
+	$(GO) vet ./pkg/screenstream/...
 	$(GO) vet ./pkg/mtls/...
 	$(GO) vet ./cli/openbastion-cli/...
 	$(GO) vet ./pkg/migrate/...
@@ -115,6 +119,8 @@ test: proto-gen
 	$(GO) test \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
+		./pkg/tlspin/... \
+		./pkg/screenstream/... \
 		./pkg/mtls/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \

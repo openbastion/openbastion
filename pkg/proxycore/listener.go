@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/openbastion/openbastion/pkg/screenstream"
 )
 
 // ErrSessionExpired marks a session that ran to the end of its allotted time
@@ -20,6 +22,9 @@ type SessionMetadata struct {
 	SessionID  string
 	TargetHost string
 	ScopeToken string
+
+	// ScreenProtocol is set only for ServeScreen and comes from the privileged account, never the client.
+	ScreenProtocol screenstream.Protocol
 
 	// ExpiresAt is the end of the session. The proxy cuts the session there
 	// (ErrSessionExpired); the zero value means no limit, for callers that
@@ -114,30 +119,43 @@ func (l *Listener) Probe(ctx context.Context, sessionID string, breakGlass bool)
 }
 
 // Serve runs one session end-to-end. The caller supplies the Codec and the
-// already-connected client/target streams; Serve owns the credential
-// lifecycle and guarantees Purge runs exactly once, on every exit path.
+// already-connected client/target streams; Serve owns the credential lifecycle
+// and guarantees Purge runs exactly once, on every exit path.
 func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec, client, target io.ReadWriter) error {
+	return l.serveWithRelay(ctx, meta, nil, func(relayCtx, _ context.Context, cred *Credential) error {
+		return codec.Relay(relayCtx, client, target, cred)
+	})
+}
+
+// serveWithRelay is the lifecycle shared by SSH and graphical sessions. The
+// admission hook is evaluated after Live.Begin but before fetching the single-use
+// Vault scope; relay cleanup and audit use the caller context, not the deadline.
+func (l *Listener) serveWithRelay(ctx context.Context, meta SessionMetadata, admit func(context.Context, SessionMetadata) (Admission, error), relay func(context.Context, context.Context, *Credential) error) error {
 	if l.Live == nil {
 		return ErrNotRevocable
 	}
-	// A session the Broker has ended is refused first, before anything is admitted,
-	// audited or fetched: nothing of it may start (ADR-0018). Registering is what
-	// makes the connection cuttable from then on, so it comes before the credential.
 	liveCtx, cancelLive := context.WithCancelCause(ctx)
 	defer cancelLive(nil)
+	// A session the Broker has ended is refused before admission, audit or
+	// credential fetch. Registering first makes every accepted connection cuttable.
 	conn, err := l.Live.Begin(meta.SessionID, cancelLive)
 	if err != nil {
 		return err
 	}
 	defer conn.End()
-	// context.Cause is the first cause: a caller that stopped before the revocation
-	// arrived has its own, and it is not a revocation.
+	// The first cancellation cause wins: a caller that stopped before a later
+	// revocation is not misreported as revoked.
 	revoked := func() bool { return errors.Is(context.Cause(liveCtx), ErrSessionRevoked) }
 
-	// Before the credential: a Vault scope token is single-use, so fetching it
-	// for a session that is then refused would burn it for nothing.
+	// A Vault scope is single-use. Admission must happen before fetching it, or a
+	// session refused by recording policy would burn a ticket for nothing.
 	if !meta.Admission.For(meta.SessionID) {
-		if _, err := l.AdmitSession(ctx, meta.SessionID, meta.BreakGlass); err != nil {
+		if admit != nil {
+			meta.Admission, err = admit(ctx, meta)
+		} else {
+			meta.Admission, err = l.AdmitSession(ctx, meta.SessionID, meta.BreakGlass)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -145,23 +163,22 @@ func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec,
 	cred, err := l.Fetcher.Fetch(liveCtx, meta.ScopeToken)
 	if err != nil {
 		if revoked() {
-			// Cut while the credential was being fetched: not a failed connection.
+			// A cut during fetch is not a failed connection attempt.
 			return ErrSessionRevoked
 		}
 		_ = l.Terminator.EmitConnectFailure(ctx, meta.SessionID)
 		return err
 	}
 	if revoked() {
-		// Cut between the fetch and the relay: the credential is purged and the
-		// target is never contacted.
+		// The cut landed between fetch and relay: purge the credential and never
+		// contact the target.
 		_ = l.Terminator.EmitRevoked(ctx, meta.SessionID)
 		_ = l.Terminator.Terminate(ctx, meta.SessionID, cred, true)
 		return ErrSessionRevoked
 	}
 
-	// The session ends when its time does. The relay runs under a deadline; the
-	// audit and the purge below do NOT — they use the caller's context, which is
-	// still alive when the deadline fires.
+	// The relay ends at the session deadline. Audit and purge use the caller's
+	// context so they still run after the deadline fires.
 	relayCtx := liveCtx
 	if !meta.ExpiresAt.IsZero() {
 		var cancel context.CancelFunc
@@ -169,9 +186,8 @@ func (l *Listener) Serve(ctx context.Context, meta SessionMetadata, codec Codec,
 		defer cancel()
 	}
 
-	relayErr := codec.Relay(relayCtx, client, target, cred)
-	// Whatever ended the relay, it has: the connection to the target is closed. This
-	// is the moment a revocation waits for.
+	relayErr := relay(relayCtx, ctx, cred)
+	// The relay returned and the target is closed: revocation may now complete.
 	conn.RelayEnded()
 	cut := revoked()
 	expired := relayErr != nil && ctx.Err() == nil && !cut && errors.Is(relayCtx.Err(), context.DeadlineExceeded)

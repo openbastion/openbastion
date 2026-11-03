@@ -69,7 +69,7 @@ openbastion/
 │
 ├── pkg/                          # bibliothèques Go partagées, importées par les services
 │   ├── proxycore/                # pipeline proxy commun (Connection Listener, Credential Fetcher, Codec, Tap, Terminator)
-│   ├── rdp/                      # primitives de pinning du certificat cible ; moteur FreeRDP à implémenter (ADR-0069/0071)
+│   ├── rdp/                      # primitives de pinning du certificat cible ; moteur RDP à implémenter (ADR-0069/0071)
 │   ├── mtls/                     # identité par certificat (SAN URI spiffe://<domaine>/<service>), garde d'appelants par route, rechargement à chaud (ADR-0010)
 │   │   ├── pki/                  #   autorité et émission de certificats de service (dev, petits sites)
 │   │   ├── mtlstest/             #   habille une requête en pair authentifié, pour tester les tables d'appelants
@@ -224,3 +224,5 @@ Une page n'existe que si son contenu décrit ce que fait le code ; ce qui est pr
 - **GitHub Actions** (`.github/workflows/`) : un workflow réutilisable par type de job (lint, test unitaire, build image, scan sécurité), déclenché sélectivement selon les chemins modifiés (`paths:` filter) pour ne pas reconstruire les 35 services à chaque commit.
 - **GitLab CI** (`.gitlab-ci.yml`) : miroir fonctionnel, maintenu pour compatibilité selon la plateforme d'hébergement finale du projet.
 - Les tests d'intégration/e2e/performance/sécurité (`test/`) tournent sur un sous-ensemble de la matrice CI, pas sur chaque commit de service isolé.
+
+- `pkg/tlspin` : épinglage TLS des cibles, avec validation PKI conservée en production et chemin pin-only compilé uniquement avec `-tags development`.
