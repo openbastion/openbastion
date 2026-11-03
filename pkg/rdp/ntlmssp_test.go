@@ -1,0 +1,280 @@
+package rdp
+
+import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/md5"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
+	"testing"
+)
+
+func TestMarshalNTLMSSPNegotiate_UsesStrictClientProfile(t *testing.T) {
+	message := MarshalNTLMSSPNegotiate()
+	if len(message) != ntlmSSPNegotiateHeaderSize || !bytes.Equal(message[:8], ntlmSSPSignature) {
+		t.Fatalf("unexpected NEGOTIATE_MESSAGE: %x", message)
+	}
+	if got := binary.LittleEndian.Uint32(message[8:12]); got != ntlmSSPMessageNegotiate {
+		t.Fatalf("message type = %d, want %d", got, ntlmSSPMessageNegotiate)
+	}
+	if got := binary.LittleEndian.Uint32(message[12:16]); got != ntlmSSPNegotiateFlags {
+		t.Fatalf("flags = %#08x, want %#08x", got, ntlmSSPNegotiateFlags)
+	}
+	if !allZero(message[16:20]) || !allZero(message[24:28]) {
+		t.Fatal("NEGOTIATE_MESSAGE unexpectedly supplies a domain or workstation")
+	}
+	if !allZero(message[32:40]) {
+		t.Fatal("NEGOTIATE_MESSAGE Version must be zero when VERSION was not negotiated")
+	}
+}
+
+func TestParseNTLMSSPChallenge_Valid(t *testing.T) {
+	targetInfo := ntlmSSPTestTargetInfo(t)
+	message := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo)
+	got, err := ParseNTLMSSPChallenge(message, ntlmSSPNegotiateFlags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Flags != ntlmSSPNegotiateFlags || got.ServerChallenge != mustHex8(t, "0123456789abcdef") {
+		t.Fatalf("unexpected challenge fields: %#v", got)
+	}
+	if !bytes.Equal(got.TargetInfo, targetInfo) || !bytes.Equal(got.TargetName, []byte{'D', 0, 'o', 0, 'm', 0, 'a', 0, 'i', 0, 'n', 0}) {
+		t.Fatalf("unexpected target fields: %#v", got)
+	}
+}
+
+func TestParseNTLMSSPChallenge_RejectsDowngradeAndMalformedBuffers(t *testing.T) {
+	targetInfo := ntlmSSPTestTargetInfo(t)
+	base := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo)
+	cases := map[string]func([]byte) []byte{
+		"signature":    func(b []byte) []byte { b[0] ^= 0xff; return b },
+		"message type": func(b []byte) []byte { binary.LittleEndian.PutUint32(b[8:12], ntlmSSPMessageAuthenticate); return b },
+		"missing extended session security": func(b []byte) []byte {
+			binary.LittleEndian.PutUint32(b[20:24], ntlmSSPNegotiateFlags&^ntlmSSPNegotiateExtendedSessionSecurity)
+			return b
+		},
+		"key exchange downgrade": func(b []byte) []byte {
+			binary.LittleEndian.PutUint32(b[20:24], ntlmSSPNegotiateFlags|0x40000000)
+			return b
+		},
+		"target name points into header": func(b []byte) []byte { binary.LittleEndian.PutUint32(b[16:20], 20); return b },
+		"target info out of bounds":      func(b []byte) []byte { binary.LittleEndian.PutUint32(b[44:48], uint32(len(b)+4)); return b },
+		"overlapping buffers": func(b []byte) []byte {
+			binary.LittleEndian.PutUint32(b[44:48], binary.LittleEndian.Uint32(b[16:20]))
+			return b
+		},
+		"odd unicode target name": func(b []byte) []byte {
+			binary.LittleEndian.PutUint16(b[12:14], 3)
+			binary.LittleEndian.PutUint16(b[14:16], 3)
+			return b
+		},
+		"unaligned unicode target name": func(b []byte) []byte {
+			shifted := make([]byte, len(b)+1)
+			copy(shifted, b[:ntlmSSPChallengeHeaderSize])
+			copy(shifted[ntlmSSPChallengeHeaderSize+1:], b[ntlmSSPChallengeHeaderSize:])
+			binary.LittleEndian.PutUint32(shifted[16:20], ntlmSSPChallengeHeaderSize+1)
+			binary.LittleEndian.PutUint32(shifted[44:48], uint32(ntlmSSPChallengeHeaderSize+1+12))
+			return shifted
+		},
+		"zero server challenge":      func(b []byte) []byte { clear(b[24:32]); return b },
+		"unnegotiated version field": func(b []byte) []byte { b[48] = 1; return b },
+		"malformed target info":      func(b []byte) []byte { b[len(b)-1] = 1; return b },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			input := mutate(append([]byte(nil), base...))
+			if _, err := ParseNTLMSSPChallenge(input, ntlmSSPNegotiateFlags); !errors.Is(err, ErrNTLMSSPMessage) {
+				t.Fatalf("ParseNTLMSSPChallenge() error = %v, want ErrNTLMSSPMessage", err)
+			}
+		})
+	}
+	if _, err := ParseNTLMSSPChallenge(base, ntlmSSPNegotiateFlags|0x10); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("unoffered client flags error = %v, want ErrNTLMSSPMessage", err)
+	}
+}
+
+func TestMarshalNTLMSSPAuthenticate_ComputesMICIncludesLMv2AndOmitsKeyExchange(t *testing.T) {
+	negotiate := MarshalNTLMSSPNegotiate()
+	targetInfo := ntlmSSPTestTargetInfo(t)
+	challenge := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo)
+	response := ntlmSSPTestResponse(t, targetInfo)
+	defer response.Purge()
+
+	message, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(message)
+	if len(message) < ntlmSSPAuthHeaderSize || !bytes.Equal(message[:8], ntlmSSPSignature) || binary.LittleEndian.Uint32(message[8:12]) != ntlmSSPMessageAuthenticate {
+		t.Fatalf("malformed AUTHENTICATE_MESSAGE header: %x", message[:min(len(message), ntlmSSPAuthHeaderSize)])
+	}
+	if binary.LittleEndian.Uint16(message[12:14]) != 24 || binary.LittleEndian.Uint16(message[52:54]) != 0 {
+		t.Fatal("expected a 24-byte LMv2 response and no encrypted session key")
+	}
+	lmResponse, _, err := readNTLMSSPSecurityBuffer(message, 12, ntlmSSPAuthHeaderSize)
+	if err != nil || !bytes.Equal(lmResponse, response.LMResponse[:]) {
+		t.Fatalf("LMv2 response security buffer = %x, %v", lmResponse, err)
+	}
+	if !allZero(message[64:72]) || allZero(message[72:88]) {
+		t.Fatal("expected zero Version and a populated MIC")
+	}
+	ntResponse, _, err := readNTLMSSPSecurityBuffer(message, 20, ntlmSSPAuthHeaderSize)
+	if err != nil || !bytes.Equal(ntResponse, response.NTResponse) {
+		t.Fatalf("NT response security buffer = %x, %v", ntResponse, err)
+	}
+	domain, _, err := readNTLMSSPSecurityBuffer(message, 28, ntlmSSPAuthHeaderSize)
+	if err != nil || !bytes.Equal(domain, []byte{'D', 0, 'o', 0, 'm', 0, 'a', 0, 'i', 0, 'n', 0}) {
+		t.Fatalf("domain security buffer = %x, %v", domain, err)
+	}
+	user, _, err := readNTLMSSPSecurityBuffer(message, 36, ntlmSSPAuthHeaderSize)
+	if err != nil || !bytes.Equal(user, []byte{'U', 0, 's', 0, 'e', 0, 'r', 0}) {
+		t.Fatalf("user security buffer = %x, %v", user, err)
+	}
+
+	withoutMIC := append([]byte(nil), message...)
+	defer clear(withoutMIC)
+	wantMIC := append([]byte(nil), message[72:88]...)
+	defer clear(wantMIC)
+	clear(withoutMIC[72:88])
+	mac := hmac.New(md5.New, response.SessionBaseKey[:])
+	_, _ = mac.Write(negotiate)
+	_, _ = mac.Write(challenge)
+	_, _ = mac.Write(withoutMIC)
+	if !hmac.Equal(wantMIC, mac.Sum(nil)) {
+		t.Fatal("AUTHENTICATE_MESSAGE MIC does not cover the exact negotiation transcript")
+	}
+}
+
+func TestMarshalNTLMSSPAuthenticate_RejectsTamperedTranscriptAndResponse(t *testing.T) {
+	negotiate := MarshalNTLMSSPNegotiate()
+	targetInfo := ntlmSSPTestTargetInfo(t)
+	challenge := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo)
+	response := ntlmSSPTestResponse(t, targetInfo)
+	defer response.Purge()
+	if _, err := MarshalNTLMSSPAuthenticate(append(negotiate, 0), challenge, "User", "Domain", response); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("tampered NEGOTIATE_MESSAGE error = %v", err)
+	}
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "", "Domain", response); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("empty username error = %v", err)
+	}
+	response.LMResponse[16] ^= 1
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", response); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("mismatched LMv2 client challenge error = %v", err)
+	}
+	response.LMResponse[16] ^= 1
+	response.NTResponse[0] ^= 1
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", response); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("mismatched NT proof error = %v", err)
+	}
+	response.NTResponse[0] ^= 1
+	response.NTResponse[16+28] ^= 1 // alter the first AV_PAIR ID without changing the challenge
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", response); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("mismatched TargetInfo error = %v", err)
+	}
+
+	password := []byte("Password")
+	plainResponse, err := ComputeNTLMv2Response("User", "Domain", password, mustHex8(t, "0123456789abcdef"), mustHex8(t, "aaaaaaaaaaaaaaaa"), mustHex8(t, "0000000000000000"), targetInfo)
+	clear(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plainResponse.Purge()
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", plainResponse); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("missing MIC_PRESENT flag error = %v", err)
+	}
+	zeroKeyResponse := ntlmSSPTestResponse(t, targetInfo)
+	defer zeroKeyResponse.Purge()
+	clear(zeroKeyResponse.SessionBaseKey[:])
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", zeroKeyResponse); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("zero session base key error = %v", err)
+	}
+}
+
+func FuzzParseNTLMSSPChallenge(f *testing.F) {
+	targetInfo, _ := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
+	f.Add(ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo))
+	f.Add([]byte("NTLMSSP\x00"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		challenge, err := ParseNTLMSSPChallenge(data, ntlmSSPNegotiateFlags)
+		if err == nil {
+			if len(challenge.TargetInfo) > maxNTLMv2TargetInfo || len(challenge.TargetName) == 0 || challenge.ServerChallenge == ([8]byte{}) {
+				t.Fatalf("parser returned invalid challenge: %#v", challenge)
+			}
+		}
+	})
+}
+
+func ntlmSSPTestTargetInfo(t *testing.T) []byte {
+	t.Helper()
+	value, err := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
+func ntlmSSPTestChallenge(flags uint32, targetInfo []byte) []byte {
+	targetName := []byte{'D', 0, 'o', 0, 'm', 0, 'a', 0, 'i', 0, 'n', 0}
+	message := make([]byte, ntlmSSPChallengeHeaderSize)
+	copy(message, ntlmSSPSignature)
+	binary.LittleEndian.PutUint32(message[8:12], ntlmSSPMessageChallenge)
+	binary.LittleEndian.PutUint16(message[12:14], uint16(len(targetName)))
+	binary.LittleEndian.PutUint16(message[14:16], uint16(len(targetName)))
+	binary.LittleEndian.PutUint32(message[16:20], uint32(len(message)))
+	binary.LittleEndian.PutUint32(message[20:24], flags)
+	challenge, _ := hex.DecodeString("0123456789abcdef")
+	copy(message[24:32], challenge)
+	binary.LittleEndian.PutUint16(message[40:42], uint16(len(targetInfo)))
+	binary.LittleEndian.PutUint16(message[42:44], uint16(len(targetInfo)))
+	binary.LittleEndian.PutUint32(message[44:48], uint32(len(message)+len(targetName)))
+	message = append(message, targetName...)
+	message = append(message, targetInfo...)
+	return message
+}
+
+func ntlmSSPTestResponse(t *testing.T, targetInfo []byte) NTLMv2Response {
+	t.Helper()
+	password := []byte("Password")
+	defer clear(password)
+	responseTargetInfo, err := NTLMv2TargetInfoWithMICFlag(targetInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(responseTargetInfo)
+	returnValue, err := ComputeNTLMv2Response("User", "Domain", password, mustHex8(t, "0123456789abcdef"), mustHex8(t, "aaaaaaaaaaaaaaaa"), mustHex8(t, "0000000000000000"), responseTargetInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return returnValue
+}
+
+func TestMarshalNTLMSSPAuthenticate_AlignsUnicodePayloadAfterOddTargetInfo(t *testing.T) {
+	base := ntlmSSPTestTargetInfo(t)
+	oddTargetInfo := append(append([]byte(nil), base[:len(base)-4]...), 0x34, 0x12, 1, 0, 0x7f)
+	oddTargetInfo = append(oddTargetInfo, base[len(base)-4:]...)
+	challenge := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, oddTargetInfo)
+	responseTargetInfo, err := NTLMv2TargetInfoWithMICFlag(oddTargetInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(responseTargetInfo)
+	password := []byte("Password")
+	response, err := ComputeNTLMv2Response("User", "Domain", password, mustHex8(t, "0123456789abcdef"), mustHex8(t, "aaaaaaaaaaaaaaaa"), mustHex8(t, "0000000000000000"), responseTargetInfo)
+	clear(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Purge()
+	message, err := MarshalNTLMSSPAuthenticate(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(message)
+	for _, field := range []int{28, 36} {
+		_, span, err := readNTLMSSPSecurityBuffer(message, field, ntlmSSPAuthHeaderSize)
+		if err != nil || span[0]%2 != 0 {
+			t.Fatalf("Unicode security buffer at field %d is not aligned: span=%v err=%v", field, span, err)
+		}
+	}
+}

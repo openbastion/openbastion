@@ -14,6 +14,7 @@ package integration_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -189,10 +190,10 @@ func openShell(t *testing.T, proxyAddr, ticket string) *shell {
 	}
 	stdin, _ := session.StdinPipe()
 	stdout, _ := session.StdoutPipe()
-	if err := session.Shell(); err != nil {
-		t.Fatalf("client shell: %v", err)
-	}
 	sh := &shell{t: t, stdin: stdin, closed: make(chan struct{})}
+	// Start draining stdout before requesting the shell: a strict recording
+	// refusal writes its explanation and closes the channel without accepting
+	// the shell request, so ssh.Session.Shell may return io.EOF after the text.
 	go func() {
 		defer close(sh.closed)
 		buf := make([]byte, 256)
@@ -208,6 +209,19 @@ func openShell(t *testing.T, proxyAddr, ticket string) *shell {
 			}
 		}
 	}()
+	if err := session.Shell(); err != nil {
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("client shell: %v", err)
+		}
+		select {
+		case <-sh.closed:
+		case <-time.After(1 * time.Second):
+			t.Fatalf("client shell returned EOF but the channel did not close; output: %q", sh.output())
+		}
+		if !strings.Contains(sh.output(), "recording is unavailable") {
+			t.Fatalf("client shell returned EOF without the recording refusal message: %q", sh.output())
+		}
+	}
 	return sh
 }
 

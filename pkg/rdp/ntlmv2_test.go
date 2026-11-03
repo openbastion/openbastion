@@ -2,6 +2,7 @@ package rdp
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -116,7 +117,7 @@ func TestComputeNTLMv2ResponseRejectsInvalidInputs(t *testing.T) {
 		{name: "invalid UTF-8 username", user: string([]byte{0xff}), domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: targetInfo},
 		{name: "NUL in domain", user: "User", domain: "Do\x00main", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: targetInfo},
 		{name: "timestamp requires MIC", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{7, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0}, targetInfo...)},
-		{name: "MIC flag requires MIC", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{6, 0, 4, 0, 2, 0, 0, 0}, targetInfo...)},
+		{name: "unsupported MIC flag bits", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{6, 0, 4, 0, 6, 0, 0, 0}, targetInfo...)},
 		{name: "target name requires binding", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{9, 0, 6, 0, 0x52, 0, 0x44, 0, 0x50, 0}, targetInfo...)},
 		{name: "channel binding requires TLS binding", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{10, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, targetInfo...)},
 		{name: "invalid target info", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: []byte{1, 0, 0, 0}},
@@ -215,4 +216,36 @@ func mustHex16(t *testing.T, value string) (out [16]byte) {
 	}
 	copy(out[:], decoded)
 	return out
+}
+
+func TestNTLMv2TargetInfoWithMICFlag_AddsOrSetsOnlyMICPresent(t *testing.T) {
+	base, _ := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
+	got, err := NTLMv2TargetInfoWithMICFlag(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(got)
+	pairs, err := ParseNTLMv2AVPairs(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pairs) != 3 || pairs[2].ID != ntlmAvFlags || binary.LittleEndian.Uint32(pairs[2].Value) != 2 {
+		t.Fatalf("MIC AV_PAIR = %#v", pairs)
+	}
+
+	withFlags := append([]byte{6, 0, 4, 0, 0, 0, 0, 0}, base...)
+	updated, err := NTLMv2TargetInfoWithMICFlag(withFlags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(updated)
+	updatedPairs, err := ParseNTLMv2AVPairs(updated)
+	if err != nil || len(updatedPairs) != 3 || binary.LittleEndian.Uint32(updatedPairs[0].Value) != 2 {
+		t.Fatalf("updated MIC AV_PAIR = %#v, %v", updatedPairs, err)
+	}
+
+	unsupported := append([]byte{6, 0, 4, 0, 4, 0, 0, 0}, base...)
+	if _, err := NTLMv2TargetInfoWithMICFlag(unsupported); !errors.Is(err, ErrNTLMv2Input) {
+		t.Fatalf("unsupported AV flags error = %v, want ErrNTLMv2Input", err)
+	}
 }

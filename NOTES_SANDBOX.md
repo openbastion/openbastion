@@ -1783,3 +1783,28 @@ Le vecteur Microsoft MS-NLMP §4.2.4 vérifie `NTProofStr`, la réponse LMv2 et 
 **Vérifications sous Go 1.27.3 (outil fixé par ADR-0052)** : `make build vet` et `make test` passent sur tout le workspace ; `go test -race ./pkg/rdp/...` passe ; fuzzing AV_PAIR 10 s (152 345 exécutions) passe ; `make vuln` passe sur les modules Go et les deux lockfiles npm (aucune vulnérabilité appelée ; `openpgp` demeure seulement signalé au niveau du module `x/crypto`, non importé) ; YAML parse, `gofmt` et `git diff --check` passent. Sept mutations de sécurité (unicité AV_PAIR, fail-closed MIC/timestamp/target-name/channel-binding, calcul du proof, challenge aléatoire, purge) sont toutes tuées et la source est restaurée octet par octet.
 
 **Limite** : aucune authentification NTLMv2 n'est branchée au SPNEGO/CredSSP. Le code ne lit pas encore un `CHALLENGE_MESSAGE`, ne construit pas `AUTHENTICATE_MESSAGE`, ne valide pas de MIC, ne lie pas l'identité à la cible TLS et ne transmet aucun credential. RDP reste désactivé. `make test-compose` et les tests d'interopérabilité avec une cible Windows réelle ne sont pas exécutés dans cette tranche.
+
+## 2026-11-03 — ADR-0071, incrément 9 : codecs NTLMSSP et MIC
+
+`pkg/rdp/ntlmssp.go` ajoute les codecs du profil NTLMSSP strict :
+
+- `MarshalNTLMSSPNegotiate` émet le profil Unicode/NTLM/AlwaysSign/ESS/TargetInfo, sans OEM, LM-key, NTLMv1, SIGN, SEAL, KEY_EXCH ni VERSION. Le champ Version fixe est nul ; les security buffers vides pointent sur l'offset 40.
+- `ParseNTLMSSPChallenge` valide la signature/type, les flags réellement offerts, le champ Version nul, les security buffers, leurs bornes et leur non-chevauchement, l'alignement UTF-16LE, le challenge serveur non nul et la liste AV_PAIR bornée. Le header fixe est de 56 octets.
+- `NTLMv2TargetInfoWithMICFlag` conserve les AV_PAIR et pose `MsvAvFlags.MIC_PRESENT` (`0x2`), en refusant les autres bits.
+- `MarshalNTLMSSPAuthenticate` vérifie le NTProof, le blob et le TargetInfo attendu, lie le LMv2 au client challenge, sérialise LMv2 + NTLMv2, aligne les offsets UTF-16LE, laisse Version nul et calcule le MIC HMAC-MD5 sur NEGOTIATE + CHALLENGE + AUTHENTICATE (MIC nul pendant le calcul). `EncryptedRandomSessionKey` reste vide car KEY_EXCH n'est pas négocié.
+
+Le support du timestamp serveur n'est pas encore implémenté : les challenges avec `MsvAvTimestamp`, `MsvAvTargetName` ou `MsvAvChannelBindings` sont refusés. Le support du timestamp devra utiliser `Z(24)` pour LMChallengeResponse selon MS-NLMP. La liaison TLS `pubKeyAuth`, le dialogue CredSSP, le chiffrement `authInfo`, MCS/GCC et l'affichage restent absents. Aucun credential n'est transmis et le runtime RDP reste désactivé.
+
+Tests et contrôles réalisés :
+
+- `GOTOOLCHAIN=go1.27.3 go test ./pkg/rdp/... -count=1` : OK.
+- `GOTOOLCHAIN=go1.27.3 go test -race ./pkg/rdp/... -count=1` : OK.
+- Fuzz `FuzzParseNTLMSSPChallenge` et `FuzzParseNTLMv2AVPairs`, 10 secondes chacun : OK.
+- 11 mutations ciblant downgrade, buffers, Version, alignement Unicode, proof NTLMv2, LMv2, clé de session, MIC et MIC_PRESENT : toutes tuées.
+- `make build vet test` : OK. `make vuln` : OK ; `govulncheck` ne détecte aucune vulnérabilité dans le code atteignable, mais signale des avis au niveau de modules requis non appelés ; `npm audit` retourne 0 vulnérabilité pour les deux workspaces UI.
+- `make test-integration` sans `TEST_DATABASE_URL` : OK (`test/integration`, 203,652 s). Les scénarios PostgreSQL sont donc ignorés dans ce run.
+- Le premier run d'intégration avait exposé un défaut du helper SSH de test : `Session.Shell()` peut renvoyer EOF après que le serveur a écrit le refus d'enregistrement. Le helper draine désormais stdout avant la requête shell et n'accepte EOF que si le message de refus attendu est reçu ; le test ciblé puis toute la suite d'intégration passent.
+- Une tentative locale PostgreSQL avec une base fraîche non migrée a échoué avant les assertions (`audit_events` absent) ; ce conteneur n'est pas une base de test initialisée. La validation PostgreSQL dédiée reste confiée au job GitHub Actions PostgreSQL 16.
+- Les tests Compose ne sont pas lancés localement, conformément à la consigne : ils restent dans GitHub Actions.
+
+Références de protocole : MS-NLMP §§2.2.1.1–2.2.1.3 et §3.1.5.2.1. Les messages NTLMSSP ne sont pas encore branchés à SPNEGO/CredSSP ; aucune interopérabilité avec une cible Windows réelle n'est revendiquée.

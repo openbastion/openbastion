@@ -46,9 +46,8 @@ type NTLMv2AVPair struct {
 
 // NTLMv2Response contains the client responses and the session base key.
 // Call Purge when the response is no longer needed; it clears key material held by this result.
-// The AUTHENTICATE_MESSAGE layer must apply MS-NLMP §3.1.5.2.1 before sending
-// LMResponse; this package does not serialize that message and does not authorize
-// blindly transmitting the calculated LMv2 value when TargetInfo is present.
+// LMResponse contains the LMv2 proof. The current strict profile rejects server timestamps,
+// so AUTHENTICATE_MESSAGE includes this LMv2 value; timestamp support must switch to Z(24).
 type NTLMv2Response struct {
 	NTProof        [16]byte
 	NTResponse     []byte
@@ -109,6 +108,42 @@ func ParseNTLMv2AVPairs(data []byte) ([]NTLMv2AVPair, error) {
 	return nil, ErrNTLMv2AVPair // EOL is mandatory, including for an empty list.
 }
 
+// NTLMv2TargetInfoWithMICFlag returns a copy of TargetInfo with MsvAvFlags.MIC_PRESENT set.
+// It preserves the order and bytes of all other AV pairs; unsupported flag bits fail closed.
+func NTLMv2TargetInfoWithMICFlag(targetInfo []byte) ([]byte, error) {
+	pairs, err := ParseNTLMv2AVPairs(targetInfo)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]byte, 0, len(targetInfo)+8)
+	flagsFound := false
+	for _, pair := range pairs {
+		value := pair.Value
+		if pair.ID == ntlmAvFlags {
+			flagsFound = true
+			flags := binary.LittleEndian.Uint32(value)
+			if flags&^uint32(0x00000002) != 0 {
+				return nil, ErrNTLMv2Input
+			}
+			value = []byte{2, 0, 0, 0}
+		}
+		result = append(result, byte(pair.ID), byte(pair.ID>>8), byte(len(value)), byte(len(value)>>8))
+		result = append(result, value...)
+	}
+	if !flagsFound {
+		if len(pairs) >= maxNTLMv2AVPairs {
+			return nil, ErrNTLMv2Input
+		}
+		result = append(result, byte(ntlmAvFlags), byte(ntlmAvFlags>>8), 4, 0, 2, 0, 0, 0)
+	}
+	result = append(result, 0, 0, 0, 0)
+	if len(result) > maxNTLMv2TargetInfo {
+		clear(result)
+		return nil, ErrNTLMv2Input
+	}
+	return result, nil
+}
+
 func validNTLMv2AVValue(id uint16, value []byte) bool {
 	switch id {
 	case ntlmAvNbComputerName, ntlmAvNbDomainName, ntlmAvDNSComputerName, ntlmAvDNSDomainName, ntlmAvDNSTreeName, ntlmAvTargetName:
@@ -165,7 +200,9 @@ func GenerateNTLMv2ClientChallenge() ([8]byte, error) {
 // ComputeNTLMv2Response implements the NTLMv2 response calculation. timestamp
 // is the eight-byte FILETIME value used in the NTLMv2 client-challenge blob.
 // Server-supplied timestamp, target-name and channel-binding AV pairs are rejected
-// until MIC and TLS channel/target binding exist. targetInfo must be a complete,
+// until their time and TLS target/channel binding paths are complete. MIC_PRESENT
+// is supported when targetInfo has been updated by NTLMv2TargetInfoWithMICFlag.
+// targetInfo must be a complete,
 // validated AV_PAIR list. The caller owns password and should clear
 // it after use. This function does not perform CredSSP or TLS key binding.
 func ComputeNTLMv2Response(username, domain string, password []byte, serverChallenge, clientChallenge, timestamp [8]byte, targetInfo []byte) (NTLMv2Response, error) {
@@ -180,16 +217,16 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 	for _, pair := range pairs {
 		switch pair.ID {
 		case ntlmAvTimestamp:
-			// MS-NLMP client processing calls for a MIC when the server supplies a timestamp.
-			// MIC construction/verification is deliberately deferred, so fail closed.
+			// Timestamp support also changes LMChallengeResponse to Z(24) and
+			// requires explicit server-time handling; fail closed until implemented.
 			return out, ErrNTLMv2Input
 		case ntlmAvTargetName, ntlmAvChannelBindings:
 			// These must be bound to the actual target and TLS channel, not echoed.
 			return out, ErrNTLMv2Input
 		case ntlmAvFlags:
-			// MIC_PRESENT and UNTRUSTED_SPN cannot be safely honored until
-			// the CredSSP/SPNEGO MIC and target-name binding are implemented.
-			if binary.LittleEndian.Uint32(pair.Value) != 0 {
+			// MIC_PRESENT is supported by the NTLMSSP serializer; all other
+			// flag bits remain refused until target-name binding is implemented.
+			if binary.LittleEndian.Uint32(pair.Value)&^uint32(0x00000002) != 0 {
 				return out, ErrNTLMv2Input
 			}
 		}
