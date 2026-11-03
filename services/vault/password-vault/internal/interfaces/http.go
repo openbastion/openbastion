@@ -71,7 +71,7 @@ type onboardAccountRequest struct {
 	// ReconciliationAccountID: the account of the same target that can change this one's
 	// password (ADR-0037); empty — the account cannot be rotated.
 	ReconciliationAccountID string `json:"reconciliationAccountId"`
-	// HostKey is the target's SSH host key, required (ADR-0039).
+	// HostKey is required for SSH; VNC/RDP must set a TLS pin after onboarding (ADR-0071).
 	HostKey string `json:"hostKey"`
 	// RotationIntervalDays: required for rotationPolicy "scheduled", refused otherwise (ADR-0040).
 	RotationIntervalDays int `json:"rotationIntervalDays"`
@@ -174,8 +174,8 @@ func writeAdminError(w http.ResponseWriter, what string, err error) {
 	case errors.Is(err, application.ErrAuditUnavailable):
 		msg = application.ErrAuditUnavailable.Error()
 	case errors.Is(err, application.ErrAccessDenied),
-		errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadRotationInterval),
-		errors.Is(err, application.ErrNoReconciliation), errors.Is(err, application.ErrNoHostKey),
+		errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadTLSPin), errors.Is(err, application.ErrBadTargetDomain), errors.Is(err, application.ErrUnsupportedProtocol), errors.Is(err, application.ErrBadRotationInterval),
+		errors.Is(err, application.ErrNoReconciliation), errors.Is(err, application.ErrNoHostKey), errors.Is(err, application.ErrNoTLSPin),
 		errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrRotationOff),
 		// What the target answered: an administrator configured it, and needs it to act.
 		errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
@@ -200,7 +200,7 @@ func adminErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrNoHostKey):
+	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrNoHostKey), errors.Is(err, application.ErrNoTLSPin):
 		return http.StatusConflict
 	case errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
 		return http.StatusBadGateway
@@ -210,7 +210,7 @@ func adminErrorStatus(err error) int {
 		return http.StatusServiceUnavailable
 	case errors.Is(err, domain.ErrAlreadyExists):
 		return http.StatusConflict
-	case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadRotationInterval):
+	case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadTLSPin), errors.Is(err, application.ErrBadTargetDomain), errors.Is(err, application.ErrUnsupportedProtocol), errors.Is(err, application.ErrBadRotationInterval):
 		return http.StatusBadRequest
 	case errors.Is(err, application.ErrAccessDenied):
 		return http.StatusForbidden
@@ -247,6 +247,10 @@ func (s *HTTPServer) handleAuthorizeScope(w http.ResponseWriter, r *http.Request
 			writeRefusal(w, http.StatusConflict, RefusalNoPinnedHostKey, err.Error()) // pin it first (ADR-0039)
 			return
 		}
+		if errors.Is(err, application.ErrNoTLSPin) {
+			writeRefusal(w, http.StatusConflict, RefusalNoPinnedTLSPin, err.Error()) // pin the graphical target first (ADR-0071)
+			return
+		}
 		writeRefusal(w, http.StatusForbidden, RefusalRefused, err.Error())
 		return
 	}
@@ -268,9 +272,12 @@ type fetchCredentialRequest struct {
 type fetchCredentialResponse struct {
 	CredentialType     string `json:"credential_type"`
 	CredentialMaterial []byte `json:"credential_material"`
-	// The target the secret is for (ADR-0039): its address and its pinned host key.
-	TargetHost string `json:"target_host"`
-	HostKey    string `json:"host_key"`
+	// The target identity for the secret: SSH host key or graphical TLS pin/name (ADR-0039, ADR-0071).
+	TargetHost           string `json:"target_host"`
+	HostKey              string `json:"host_key"`
+	TargetUser           string `json:"target_user"`
+	TLSCertificateSHA256 string `json:"tls_certificate_sha256"`
+	TargetDomain         string `json:"target_domain"`
 }
 
 func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Request) {
@@ -305,13 +312,13 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		status := http.StatusForbidden
-		if errors.Is(err, application.ErrNoHostKey) {
+		if errors.Is(err, application.ErrNoHostKey) || errors.Is(err, application.ErrNoTLSPin) {
 			status = http.StatusConflict
 		}
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, fetchCredentialResponse{CredentialType: d.Type, CredentialMaterial: d.Material, TargetHost: d.TargetHost, HostKey: d.HostKey})
+	writeJSON(w, fetchCredentialResponse{CredentialType: d.Type, CredentialMaterial: d.Material, TargetHost: d.TargetHost, HostKey: d.HostKey, TargetUser: d.TargetUser, TLSCertificateSHA256: d.TLSCertificateSHA256, TargetDomain: d.TargetDomain})
 }
 
 // -- GET /vault/v1/accounts/{id}, DELETE /vault/v1/accounts/{id} -----------
@@ -335,8 +342,10 @@ type accountResponse struct {
 	CreatedAt      time.Time  `json:"createdAt"`
 	DisabledAt     *time.Time `json:"disabledAt,omitempty"`
 	// The pinned host key of the target and its fingerprint (ADR-0039); empty: not pinned.
-	HostKey            string `json:"hostKey"`
-	HostKeyFingerprint string `json:"hostKeyFingerprint"`
+	HostKey              string `json:"hostKey"`
+	HostKeyFingerprint   string `json:"hostKeyFingerprint"`
+	TLSCertificateSHA256 string `json:"tlsCertificateSha256"`
+	TargetDomain         string `json:"targetDomain"`
 	// RotationIntervalDays and NextRotationAt: a scheduled account's cadence and next due
 	// time (ADR-0040); absent for any other.
 	RotationIntervalDays int        `json:"rotationIntervalDays,omitempty"`
@@ -362,6 +371,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		TargetHost: a.TargetHost, Protocol: a.Protocol, RotationPolicy: string(a.RotationPolicy),
 		LastRotatedAt: a.LastRotatedAt, CreatedAt: a.CreatedAt, DisabledAt: a.DisabledAt,
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
+		TLSCertificateSHA256: a.TLSCertificateSHA256, TargetDomain: a.TargetDomain,
 		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures, RotationOwedSince: a.RotationOwedSince,
 		ApprovalRequired: a.ApprovalRequired,
 	}
@@ -375,6 +385,10 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	}
 	if accountID, ok := strings.CutSuffix(id, "/host-key"); ok {
 		s.handleSetHostKey(w, r, accountID)
+		return
+	}
+	if accountID, ok := strings.CutSuffix(id, "/tls-pin"); ok {
+		s.handleSetTLSPin(w, r, accountID)
 		return
 	}
 	if accountID, ok := strings.CutSuffix(id, "/approval"); ok {
@@ -493,6 +507,33 @@ func (s *HTTPServer) handleSetHostKey(w http.ResponseWriter, r *http.Request, ac
 	writeJSON(w, map[string]string{"hostKeyFingerprint": fp})
 }
 
+// -- PUT /vault/v1/accounts/{id}/tls-pin (ADR-0071), from the Gateway ---------
+
+type setTLSPinRequest struct {
+	TLSCertificateSHA256 string   `json:"tlsCertificateSha256"`
+	TargetDomain         string   `json:"targetDomain"`
+	ActorRoles           []string `json:"actorRoles"`
+	ActorID              string   `json:"actorId"`
+}
+
+func (s *HTTPServer) handleSetTLSPin(w http.ResponseWriter, r *http.Request, accountID string) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req setTLSPinRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
+		http.Error(w, "invalid TLS pin request", http.StatusBadRequest)
+		return
+	}
+	pin, name, err := s.svc.SetTLSPin(r.Context(), req.ActorID, req.ActorRoles, accountID, req.TLSCertificateSHA256, req.TargetDomain)
+	if err != nil {
+		writeAdminError(w, "pinning the TLS target of account "+accountID, err)
+		return
+	}
+	writeJSON(w, map[string]string{"tlsCertificateSha256": pin, "targetDomain": name})
+}
+
 // -- PUT /vault/v1/accounts/{id}/approval (ADR-0067), from the Gateway ---------
 
 type setApprovalRequest struct {
@@ -521,6 +562,7 @@ func (s *HTTPServer) handleSetApproval(w http.ResponseWriter, r *http.Request, a
 // Refusal codes of authorize-scope (ADR-0042): the contract a caller reads.
 const (
 	RefusalNoPinnedHostKey = "no_pinned_host_key"
+	RefusalNoPinnedTLSPin  = "no_pinned_tls_pin"
 	RefusalRefused         = "refused"
 )
 

@@ -60,6 +60,9 @@ func (c *VaultAuthorizationHTTPClient) AuthorizeScope(ctx context.Context, sessi
 		if resp.StatusCode == http.StatusConflict && refusal.Code == "no_pinned_host_key" {
 			return "", time.Time{}, domain.ErrAccountNotPinned
 		}
+		if resp.StatusCode == http.StatusConflict && refusal.Code == "no_pinned_tls_pin" {
+			return "", time.Time{}, domain.ErrAccountTLSNotPinned
+		}
 		return "", time.Time{}, fmt.Errorf("authorize-scope: status %d (%s)", resp.StatusCode, refusal.Code)
 	}
 	var out authorizeScopeResponseBody

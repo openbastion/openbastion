@@ -125,6 +125,17 @@ func (s *InMemoryStore) SetHostKey(ctx context.Context, id, hostKey string) erro
 }
 
 // SetReconciliation is domain.AccountRepository.SetReconciliation.
+func (s *InMemoryStore) SetTLSPin(ctx context.Context, id, fingerprint, targetDomain string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	a.TLSCertificateSHA256, a.TargetDomain = fingerprint, targetDomain
+	return nil
+}
+
 func (s *InMemoryStore) SetReconciliation(ctx context.Context, id, reconciliationID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

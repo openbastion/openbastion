@@ -35,7 +35,8 @@ var (
 	// ErrAccountNotFound: the Vault has no such (enabled) privileged account (ADR-0043).
 	ErrAccountNotFound = errors.New("privileged account not found")
 
-	ErrAccountNotPinned = errors.New("the privileged account has no pinned host key: an administrator must pin it (PUT /vault/accounts/{id}/host-key) before any session")
+	ErrAccountNotPinned    = errors.New("the privileged account has no pinned host key: an administrator must pin it (PUT /vault/accounts/{id}/host-key) before any session")
+	ErrAccountTLSNotPinned = errors.New("the graphical account has no pinned TLS certificate and target domain: an administrator must pin them (PUT /vault/accounts/{id}/tls-pin) before any session")
 
 	// ErrInvalidTicket: the account requires approval (ADR-0067), and the request carries no
 	// ticket, or one that does not follow the format the platform declared.

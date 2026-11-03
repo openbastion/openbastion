@@ -469,6 +469,53 @@ func TestHandleVaultAccountItem_PinHostKeyTakesOnlyTheKeyFromTheClient(t *testin
 	}
 }
 
+// PUT /vault/accounts/{id}/tls-pin (ADR-0071): the fingerprint and TLS name are client input,
+// but actor identity and roles are injected from the verified token, never trusted from JSON.
+func TestHandleVaultAccountItem_PinTLSTakesOnlyTargetMetadataFromClient(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"operator"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+
+	body := `{"tlsCertificateSha256":"` + strings.Repeat("a", 64) + `","targetDomain":"desktop.internal","actorId":"user_root","actorRoles":["vault-admin"]}`
+	req := httptest.NewRequest(http.MethodPut, "/vault/accounts/vnc-account/tls-pin", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec := httptest.NewRecorder()
+	gw.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if vault.lastPinPath != "/vault/v1/accounts/vnc-account/tls-pin" {
+		t.Fatalf("forwarded to %q", vault.lastPinPath)
+	}
+	if vault.lastPin["tlsCertificateSha256"] != strings.Repeat("a", 64) || vault.lastPin["targetDomain"] != "desktop.internal" {
+		t.Fatalf("target identity not forwarded: %v", vault.lastPin)
+	}
+	if vault.lastPin["actorId"] != "user_admin" {
+		t.Fatalf("actor came from client body instead of verified token: %v", vault.lastPin["actorId"])
+	}
+	roles, _ := vault.lastPin["actorRoles"].([]any)
+	if len(roles) != 1 || roles[0] != "operator" {
+		t.Fatalf("roles came from client body instead of verified token: %v", roles)
+	}
+
+	for _, path := range []string{"/vault/accounts//tls-pin", "/vault/accounts/a/b/tls-pin"} {
+		vault.lastPinPath = ""
+		req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(`{"tlsCertificateSha256":"pin","targetDomain":"host"}`))
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		if vault.lastPinPath != "" {
+			t.Fatalf("%s was forwarded to %s", path, vault.lastPinPath)
+		}
+	}
+}
+
 // PUT /vault/accounts/{id}/approval (ADR-0067): the setting is the client's, who sets it is
 // the verified token's. Attack: a body that names another actor, grants itself a role and
 // slips a host key in. Counter-proof: the setting is forwarded; without it, nothing is.

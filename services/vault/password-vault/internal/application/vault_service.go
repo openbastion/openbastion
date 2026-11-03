@@ -206,9 +206,18 @@ func (s *VaultService) AuthorizeScope(ctx context.Context, sessionID, accountID,
 	if account.DisabledAt != nil {
 		return "", time.Time{}, domain.ErrNotFound
 	}
-	// A session that could never be given its secret is not authorized at all (ADR-0039).
-	if account.HostKey == "" {
-		return "", time.Time{}, ErrNoHostKey
+	// A scope is issued only when this protocol's target identity is pinned: SSH host key, or VNC/RDP TLS leaf and name.
+	switch account.Protocol {
+	case "ssh":
+		if account.HostKey == "" {
+			return "", time.Time{}, ErrNoHostKey
+		}
+	case "vnc", "rdp":
+		if account.TLSCertificateSHA256 == "" || account.TargetDomain == "" {
+			return "", time.Time{}, ErrNoTLSPin
+		}
+	default:
+		return "", time.Time{}, ErrUnsupportedProtocol
 	}
 	token = randomID("scope")
 	expiresAt = time.Now().UTC().Add(ttl)
@@ -224,13 +233,25 @@ func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingP
 	if err != nil {
 		return Delivered{}, err
 	}
-	// The secret goes only with the target it is for (ADR-0039): no pin, no secret.
+	// The secret goes only with a target whose protocol-specific identity is pinned.
 	account, err := s.accounts.Get(ctx, grant.PrivilegedAccountID)
 	if err != nil {
 		return Delivered{}, err
 	}
-	if account.HostKey == "" {
-		return Delivered{}, ErrNoHostKey
+	if account.DisabledAt != nil {
+		return Delivered{}, domain.ErrNotFound
+	}
+	switch account.Protocol {
+	case "ssh":
+		if account.HostKey == "" {
+			return Delivered{}, ErrNoHostKey
+		}
+	case "vnc", "rdp":
+		if account.TLSCertificateSHA256 == "" || account.TargetDomain == "" {
+			return Delivered{}, ErrNoTLSPin
+		}
+	default:
+		return Delivered{}, ErrUnsupportedProtocol
 	}
 	version, err := s.secrets.CurrentVersion(ctx, grant.PrivilegedAccountID)
 	if err != nil {
@@ -240,7 +261,7 @@ func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingP
 	if err != nil {
 		return Delivered{}, err
 	}
-	return Delivered{Type: "password", Material: plaintext, TargetHost: account.TargetHost, HostKey: account.HostKey}, nil
+	return Delivered{Type: "password", Material: plaintext, TargetHost: account.TargetHost, HostKey: account.HostKey, TargetUser: account.Username, TLSCertificateSHA256: account.TLSCertificateSHA256, TargetDomain: account.TargetDomain}, nil
 }
 
 func randomID(prefix string) string {

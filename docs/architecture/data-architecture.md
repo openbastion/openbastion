@@ -141,15 +141,19 @@ CREATE TABLE privileged_accounts (
     name             TEXT NOT NULL,
     username         TEXT NOT NULL,   -- nom du compte sur la cible ; distinct de `name`, qui identifie l'enregistrement
     target_host      TEXT NOT NULL,
-    protocol         TEXT NOT NULL CHECK (protocol IN ('ssh')),   -- énumération étendue en v0.0.1/v0.0.2
+    protocol         TEXT NOT NULL CHECK (protocol IN ('ssh','vnc','rdp')), -- ADR-0071 : clients protocolaires distincts
     approval_required BOOLEAN NOT NULL DEFAULT FALSE,             -- ADR-0067 : une autre personne approuve les sessions ordinaires
+    tls_certificate_sha256 TEXT NOT NULL DEFAULT '',               -- ADR-0071 : pin SHA-256 du certificat feuille, vide pour SSH
+    target_domain    TEXT NOT NULL DEFAULT '',                     -- ADR-0071 : nom DNS/IP vérifié, vide pour SSH
     rotation_policy  TEXT NOT NULL DEFAULT 'post_use'
                        CHECK (rotation_policy IN ('manual','post_use','scheduled')),
     last_rotated_at  TIMESTAMPTZ,
     created_by       UUID REFERENCES users(id),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     disabled_at      TIMESTAMPTZ,
-    UNIQUE (target_host, name)
+    UNIQUE (target_host, name),
+    CHECK ((tls_certificate_sha256 = '' AND target_domain = '') OR
+           (tls_certificate_sha256 <> '' AND target_domain <> ''))
 );
 
 CREATE TABLE vault_secrets (

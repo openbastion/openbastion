@@ -42,6 +42,11 @@ type PrivilegedAccount struct {
 	// rotation reaches its target until one is set.
 	HostKey string
 
+	// TLSCertificateSHA256 and TargetDomain pin the target TLS leaf and its expected name (ADR-0071).
+	// Both are empty for SSH accounts and both are required before VNC/RDP scope issuance.
+	TLSCertificateSHA256 string
+	TargetDomain         string
+
 	// ApprovalRequired: a session on this account waits for another person's approval, with a
 	// ticket (ADR-0067).
 	ApprovalRequired bool

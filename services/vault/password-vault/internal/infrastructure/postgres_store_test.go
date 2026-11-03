@@ -635,3 +635,37 @@ func TestPostgresStore_ApprovalRequired_RoundTrips(t *testing.T) {
 		t.Fatalf("an unknown account: %v", err)
 	}
 }
+
+func TestPostgresStore_SetTLSPin_RoundTripsGraphicalTargetIdentity(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("vnc")
+	pin := strings.Repeat("a", 64)
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "operator", TargetHost: id + ":5900", Protocol: "vnc", RotationPolicy: domain.RotationManual}); err != nil {
+		t.Fatalf("Create VNC account: %v", err)
+	}
+	if err := store.SetTLSPin(ctx, id, pin, "desktop.example"); err != nil {
+		t.Fatalf("SetTLSPin: %v", err)
+	}
+	got, err := store.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("Get after pin: %v", err)
+	}
+	if got.TLSCertificateSHA256 != pin || got.TargetDomain != "desktop.example" {
+		t.Fatalf("TLS target identity did not round-trip: pin=%q domain=%q", got.TLSCertificateSHA256, got.TargetDomain)
+	}
+	listed, _, err := store.List(ctx, 1, 100)
+	if err != nil {
+		t.Fatalf("List after pin: %v", err)
+	}
+	found := false
+	for _, a := range listed {
+		if a.ID == id {
+			found = a.TLSCertificateSHA256 == pin && a.TargetDomain == "desktop.example"
+		}
+	}
+	if !found {
+		t.Fatal("List did not return the pinned target identity")
+	}
+}

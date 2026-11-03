@@ -161,6 +161,9 @@ func (s *VaultService) rotate(ctx context.Context, actorID, accountID string, ne
 	if account.DisabledAt != nil {
 		return domain.ErrNotFound
 	}
+	if account.Protocol != "ssh" {
+		return ErrUnsupportedProtocol
+	}
 	if account.ReconciliationAccountID == "" {
 		return ErrNoReconciliation
 	}

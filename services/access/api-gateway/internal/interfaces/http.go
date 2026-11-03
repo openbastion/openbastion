@@ -843,6 +843,34 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// PUT /vault/accounts/{id}/tls-pin pins the graphical target certificate and TLS name (ADR-0071).
+	// The client supplies only the target identity; actor ID and roles always come from the verified token.
+	if accountID, ok := strings.CutSuffix(rest, "/tls-pin"); ok {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if accountID == "" || strings.Contains(accountID, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		var body struct {
+			TLSCertificateSHA256 string `json:"tlsCertificateSha256"`
+			TargetDomain         string `json:"targetDomain"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
+			http.Error(w, "invalid TLS pin request", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/tls-pin", map[string]any{
+			"tlsCertificateSha256": body.TLSCertificateSHA256,
+			"targetDomain":         body.TargetDomain,
+			"actorRoles":           id.Roles,
+			"actorId":              id.UserID,
+		})
+		return
+	}
+
 	// PUT /vault/accounts/{id}/approval says whether a session on the account waits for another
 	// person's approval (ADR-0067). The setting only is the client's; who sets it is the token's.
 	if accountID, ok := strings.CutSuffix(rest, "/approval"); ok {

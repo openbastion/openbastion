@@ -47,9 +47,9 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Create(ctx context.Context, a *domain.PrivilegedAccount) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id, host_key, rotation_interval_days, approval_required)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10)`,
-		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID, a.HostKey, a.RotationIntervalDays, a.ApprovalRequired)
+		INSERT INTO privileged_accounts (id, name, username, target_host, protocol, rotation_policy, created_at, reconciliation_account_id, host_key, rotation_interval_days, approval_required, tls_certificate_sha256, target_domain)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12)`,
+		a.ID, a.Name, a.Username, a.TargetHost, a.Protocol, string(a.RotationPolicy), a.ReconciliationAccountID, a.HostKey, a.RotationIntervalDays, a.ApprovalRequired, a.TLSCertificateSHA256, a.TargetDomain)
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unique_violation
 		return domain.ErrAlreadyExists
@@ -63,10 +63,10 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	var lastRotatedAt, disabledAt, attemptedAt, owedSince sql.NullTime
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key,
-		       rotation_interval_days, rotation_attempted_at, rotation_failures, rotation_owed_since, approval_required
+		       rotation_interval_days, rotation_attempted_at, rotation_failures, rotation_owed_since, approval_required, tls_certificate_sha256, target_domain
 		FROM privileged_accounts WHERE id = $1`, id)
 	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey,
-		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures, &owedSince, &a.ApprovalRequired); err != nil {
+		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures, &owedSince, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -102,7 +102,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures, approval_required
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures, approval_required, tls_certificate_sha256, target_domain
 		FROM privileged_accounts WHERE disabled_at IS NULL
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, pageSize, offset)
@@ -116,7 +116,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 		var a domain.PrivilegedAccount
 		var rotationPolicy string
 		var lastRotatedAt, disabledAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures, &a.ApprovalRequired); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain); err != nil {
 			return nil, 0, err
 		}
 		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
@@ -159,6 +159,18 @@ func (s *PostgresStore) SetApprovalRequired(ctx context.Context, id string, requ
 // SetHostKey is domain.AccountRepository.SetHostKey.
 func (s *PostgresStore) SetHostKey(ctx context.Context, id, hostKey string) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET host_key = $2 WHERE id = $1`, id, hostKey)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// SetTLSPin is domain.AccountRepository.SetTLSPin.
+func (s *PostgresStore) SetTLSPin(ctx context.Context, id, fingerprint, targetDomain string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET tls_certificate_sha256 = $2, target_domain = $3 WHERE id = $1`, id, fingerprint, targetDomain)
 	if err != nil {
 		return err
 	}

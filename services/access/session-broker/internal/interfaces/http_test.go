@@ -254,9 +254,10 @@ func TestCreateSession_TheAccountIsCheckedFirst_OverHTTP(t *testing.T) {
 		status int
 		says   string
 	}{
-		"unknown":    {domain.ErrAccountNotFound, http.StatusNotFound, "privileged account not found"},
-		"unpinned":   {domain.ErrAccountNotPinned, http.StatusConflict, "no pinned host key"},
-		"Vault down": {fmt.Errorf("Get \"http://10.9.8.4:8081/vault/v1/accounts/acc1\": %s", leak), http.StatusServiceUnavailable, "try again shortly"},
+		"unknown":                   {domain.ErrAccountNotFound, http.StatusNotFound, "privileged account not found"},
+		"unpinned SSH":              {domain.ErrAccountNotPinned, http.StatusConflict, "no pinned host key"},
+		"unpinned graphical target": {domain.ErrAccountTLSNotPinned, http.StatusConflict, "no pinned TLS certificate"},
+		"Vault down":                {fmt.Errorf("Get \"http://10.9.8.4:8081/vault/v1/accounts/acc1\": %s", leak), http.StatusServiceUnavailable, "try again shortly"},
 	} {
 		svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, okVault{}, quietAudit{}, checkedAccount{err: c.err}, failingProxy{})
 		rec := postSession(t, svc, body)
