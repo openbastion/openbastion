@@ -12,7 +12,7 @@ AGENTS.md                        point d'entrée des agents IA
   architecture/ personas/ policies/ rules/ settings/ tasks/ skills/<nom>/SKILL.md
 pkg/
   proxycore/                     pipeline proxy commun (listener, credential fetcher, tap, terminator) — ADR-0006
-  rdp/                           transport X.224 + négociation HYBRID/TLS épinglé (socle) ; CredSSP/MCS/affichage restent à implémenter — ADR-0071
+  rdp/                           transport X.224 + négociation HYBRID/TLS épinglé et codec DER TSRequest borné (pas d’authentification réelle) ; NTLMv2/CredSSP/MCS/affichage restent à implémenter — ADR-0071
   mtls/                          identité par certificat, Guard, rechargement, PKI de dev — ADR-0010
   migrate/                       migrations de schéma versionnées, sous verrou, une fois, checksum figé (sept magasins PostgreSQL) — ADR-0030 ; stdlib seulement
   refusalbudget/                 seau à jetons par identité des refus écrits dans l'audit (Broker, Recorder) — ADR-0020, ADR-0024 ; stdlib seulement
