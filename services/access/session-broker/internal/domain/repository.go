@@ -21,7 +21,7 @@ var ErrRecordingUnavailable = errors.New("recording unavailable")
 var (
 	ErrForbidden           = errors.New("forbidden")
 	ErrUnsupportedProtocol = errors.New("unsupported session protocol")
-	ErrProtocolMismatch = errors.New("session protocol does not match the privileged account")
+	ErrProtocolMismatch    = errors.New("session protocol does not match the privileged account")
 	ErrConflict            = errors.New("conflict")
 	ErrUnavailable         = errors.New("a dependency is unavailable")
 
