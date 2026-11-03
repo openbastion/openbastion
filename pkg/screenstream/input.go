@@ -8,26 +8,26 @@ import (
 type InputType byte
 
 const (
-	InputKey InputType = 1
-	InputPointer InputType = 2
+	InputKey        InputType = 1
+	InputPointer    InputType = 2
 	InputReleaseAll InputType = 3
 )
 
 const (
-	KeyPressed byte = 1
-	KeyReleased byte = 0
+	KeyPressed            byte = 1
+	KeyReleased           byte = 0
 	AllowedPointerButtons byte = 0x1f
 )
 
 type InputEvent struct {
-	Type InputType
-	Flags byte
-	Keysym uint32
+	Type     InputType
+	Flags    byte
+	Keysym   uint32
 	Scancode uint16
-	X uint16
-	Y uint16
-	Buttons byte
-	Wheel int8
+	X        uint16
+	Y        uint16
+	Buttons  byte
+	Wheel    int8
 }
 
 // DecodeInput validates the fixed 16-byte client-to-server event. Geometry is
