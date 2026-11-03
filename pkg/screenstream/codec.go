@@ -7,19 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"unicode/utf8"
 	"time"
+	"unicode/utf8"
 )
 
 const (
-	Version       byte = 1
-	HeaderSize         = 32
-	MaxPNGBytes        = 4 << 20
-	MaxPixels          = 16_777_216
-	MaxInputBytes      = 64
-	InputMessageSize   = 16
-	MaxEndTextBytes    = 200
-	MaxSessionIDBytes  = 1024
+	Version           byte = 1
+	HeaderSize             = 32
+	MaxPNGBytes            = 4 << 20
+	MaxPixels              = 16_777_216
+	MaxInputBytes          = 64
+	InputMessageSize       = 16
+	MaxEndTextBytes        = 200
+	MaxSessionIDBytes      = 1024
 )
 
 type MessageType byte
