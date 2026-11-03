@@ -8,7 +8,7 @@ Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC
 
 Le premier socle RDP est présent mais **ne constitue pas encore un moteur RDP utilisable** : `pkg/rdp/transport.go` effectue X.224, demande exclusivement `PROTOCOL_HYBRID` et valide TLS (chaîne, nom et empreinte SHA-256) avant de retourner un transport sans aucun champ credential. `pkg/rdp/credssp.go` ajoute maintenant l’encodage/décodage borné du conteneur ASN.1 DER `TSRequest` (versions 2 à 6, jetons SPNEGO opaques, `authInfo`, `pubKeyAuth`, `errorCode`, `clientNonce`), avec rejet des longueurs BER indéfinies, des longueurs DER non canoniques, des champs dupliqués/hors ordre et des payloads hors bornes.
 
-**Limite explicite :** aucun échange CredSSP réel, SPNEGO ou NTLMv2 n’est encore exécuté ; le codec ne génère, ne chiffre ni ne valide d’identifiants. Aucun secret n’est passé à cette API. Les prochaines tranches devront implémenter NTLMv2/AV_PAIR et le calcul des preuves cryptographiques avec vecteurs de test indépendants, puis le dialogue CredSSP et la preuve de liaison à la clé publique TLS. RDP reste désactivé dans le Broker/runtime jusqu’à la fin de cette chaîne et de MCS/GCC.
+**Limite explicite :** aucun échange CredSSP réel, SPNEGO ou NTLMv2 n’est encore exécuté ; le codec ne génère, ne chiffre ni ne valide d’identifiants. Aucun secret n’est passé à cette API. Les primitives NTLMv2/AV_PAIR et leur calcul cryptographique par vecteur indépendant sont maintenant disponibles mais non branchés ; restent le dialogue CredSSP, le MIC, la liaison à la clé publique TLS, puis MCS/GCC. RDP reste désactivé dans le Broker/runtime jusqu’à la fin de cette chaîne et de MCS/GCC.
 
 Preuves du codec : round-trip DER, vecteur d’encodage initial, rejets ciblés de DER mal formé et fuzzing ; voir `pkg/rdp/credssp_test.go`. Ces tests de format ne prouvent pas encore l’interopérabilité avec Windows.
 
@@ -17,6 +17,14 @@ Preuves du codec : round-trip DER, vecteur d’encodage initial, rejets ciblés 
 `pkg/rdp/spnego.go` ajoute le décodage strict des deux formes SPNEGO utilisées par CredSSP : `InitialContextToken` / `NegTokenInit` et `NegTokenResp`. Les OID proposés et sélectionnés sont limités à NTLM (`1.3.6.1.4.1.311.2.2.10`) ; Kerberos et tout mécanisme inconnu sont refusés, sans repli. Les champs sont ordonnés, uniques et bornés ; les OID doivent être canoniques DER. Les états `reject` et `request-mic` sont refusés car aucune vérification de MIC n’est encore implémentée. Les jetons NTLM et MIC restent opaques : leur présence ne prouve aucune authentification.
 
 Cette tranche n’implémente pas NTLMv2, n’accepte aucun mot de passe et ne branche pas le parseur au runtime. RDP reste désactivé. Les tests de format ne prouvent ni les preuves cryptographiques NTLMv2, ni l’interopérabilité Windows.
+
+## Avancement d’implémentation — 3 novembre 2026 (NTLMv2)
+
+`pkg/rdp/ntlmv2.go` ajoute les primitives NTLMv2 Go pures : dérivation `NTOWFv2` (MD4 du mot de passe UTF-16LE puis HMAC-MD5 de `Uppercase(username) + domain`), construction du blob de challenge, `NTProofStr`, réponse LMv2 et `SessionBaseKey`. Le challenge client de 8 octets est généré avec `crypto/rand`. `NTLMv2Response.Purge` efface les buffers et clés retournés ; les buffers intermédiaires manipulables sont effacés après usage.
+
+`ParseNTLMv2AVPairs` exige un EOL final, borne la liste à 16 Kio et 64 attributs, refuse les doublons et valide les longueurs et UTF-16 des attributs connus ; les attributs inconnus restent opaques et bornés. NTLMv1/LMv1 n'est pas implémenté. Les attributs `MsvAvTimestamp`, `MsvAvTargetName` et `MsvAvChannelBindings` sont refusés tant que le MIC et les rattachements au nom de cible/canal TLS ne sont pas implémentés ; `MsvAvFlags` non nul est également refusé. Aucun message NTLMSSP n'est encore construit ou envoyé ; aucun secret n'est transmis et le runtime RDP reste désactivé.
+
+Le calcul est vérifié par le vecteur cryptographique publié dans MS-NLMP §4.2.4 (NTProofStr, LMv2 et SessionBaseKey), plus des cas négatifs et un fuzzer AV_PAIR. `NTProofStr` est la preuve calculée par le client ; NTLMv2 n’expose pas de preuve serveur distincte à vérifier dans cette couche. Ce vecteur ne prouve pas l’interopérabilité CredSSP/Windows ni l’authentification d’une session.
 
 ## Contexte
 
