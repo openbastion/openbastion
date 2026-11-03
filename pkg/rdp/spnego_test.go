@@ -102,3 +102,17 @@ func TestParseSPNEGORejectsDuplicateAndOutOfOrderFields(t *testing.T) {
 		t.Fatalf("out-of-order field error = %v", err)
 	}
 }
+
+func TestParseSPNEGORejectsDuplicateAndOutOfOrderFields(t *testing.T) {
+	mech := wrapDERForTest(t, 0x30, marshalOIDForTest(t, ntlmOID))
+	duplicate := append(wrapDERForTest(t, 0xa0, mech), wrapDERForTest(t, 0xa0, mech)...)
+	init := wrapDERForTest(t, 0x60, append(marshalOIDForTest(t, spnegoOID), wrapDERForTest(t, 0xa0, wrapDERForTest(t, 0x30, duplicate))...))
+	if _, err := ParseSPNEGONegTokenInit(init); !errors.Is(err, ErrSPNEGOToken) {
+		t.Fatalf("duplicate field error = %v", err)
+	}
+	responseFields := append(wrapDERForTest(t, 0xa1, marshalOIDForTest(t, ntlmOID)), wrapDERForTest(t, 0xa0, wrapDERForTest(t, 0x0a, []byte{1}))...)
+	response := wrapDERForTest(t, 0xa1, wrapDERForTest(t, 0x30, responseFields))
+	if _, err := ParseSPNEGONegTokenResp(response); !errors.Is(err, ErrSPNEGOToken) {
+		t.Fatalf("out-of-order field error = %v", err)
+	}
+}
