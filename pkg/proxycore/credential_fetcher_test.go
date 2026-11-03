@@ -7,9 +7,12 @@ import (
 )
 
 type fakeVault struct {
-	material []byte
-	calls    int
-	err      error
+	material     []byte
+	calls        int
+	err          error
+	targetUser   string
+	tlsPin       string
+	targetDomain string
 }
 
 func (f *fakeVault) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (Fetched, error) {
@@ -22,7 +25,7 @@ func (f *fakeVault) FetchCredential(ctx context.Context, scopeToken, callingProx
 	// independently.
 	cp := make([]byte, len(f.material))
 	copy(cp, f.material)
-	return Fetched{Type: "password", Material: cp, TargetHost: "10.0.0.5:22", HostKey: "ssh-ed25519 AAAA"}, nil
+	return Fetched{Type: "password", Material: cp, TargetHost: "10.0.0.5:22", HostKey: "ssh-ed25519 AAAA", TargetUser: f.targetUser, TLSCertificateSHA256: f.tlsPin, TargetDomain: f.targetDomain}, nil
 }
 
 func TestCredentialFetcher_PurgeZeroesMemory(t *testing.T) {
@@ -75,4 +78,19 @@ func TestCredential_PurgeIsIdempotent(t *testing.T) {
 	cred := newCredential("password", []byte("secret"))
 	cred.Purge()
 	cred.Purge() // must not panic on double purge
+}
+
+func TestCredentialFetcher_CarriesAndPurgesScreenTargetMetadata(t *testing.T) {
+	vault := &fakeVault{material: []byte("password"), targetUser: "operator", tlsPin: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", targetDomain: "target.example"}
+	cred, err := NewCredentialFetcher(vault, "rdp-vnc-proxy").Fetch(context.Background(), "scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cred.TargetUser != "operator" || cred.TLSCertificateSHA256 != vault.tlsPin || cred.TargetDomain != "target.example" {
+		t.Fatalf("screen metadata was not carried: user=%q pin=%q domain=%q", cred.TargetUser, cred.TLSCertificateSHA256, cred.TargetDomain)
+	}
+	cred.Purge()
+	if cred.TargetUser != "" || cred.TLSCertificateSHA256 != "" || cred.TargetDomain != "" {
+		t.Fatal("screen target metadata survived credential purge")
+	}
 }
