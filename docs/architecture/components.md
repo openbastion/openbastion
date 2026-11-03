@@ -37,7 +37,7 @@ C4Component
 
     Container_Boundary(proxy, "Couche Proxy") {
         Component(ssh, "SSH/SFTP/SCP Proxy", "Go")
-        Component(rdp, "RDP/VNC Proxy", "Go")
+        Component(rdp, "RDP/VNC Proxy", "Go", "Client VNC RFB 3.8 en fondation ; service proxy à venir (ADR-0071)")
         Component(tel, "Telnet/Serial-IPMI Proxy", "Go")
         Component(winrm, "WinRM Proxy", "Go")
         Component(db, "Database Proxy", "Go")
@@ -110,7 +110,7 @@ C4Component
 
     Container_Boundary(rec, "Enregistrement & Audit") {
         Component(sr, "Session Recorder", "Go", "Orchestration du cycle de vie d'un enregistrement")
-        Component(vr, "Video Recorder", "Go", "Persistance et replay de segments PNG ; producteur RDP à venir (ADR-0069)")
+        Component(vr, "Video Recorder", "Go", "Persistance et replay de segments PNG ; producteur graphique à raccorder (ADR-0071)")
         Component(cr, "Command Recorder", "Go", "Capture texte SSH/DB/K8s")
         Component(aud, "Audit Service", "Go", "Journal immuable et signé")
         Component(se, "Search Engine", "Go", "Indexation et recherche")

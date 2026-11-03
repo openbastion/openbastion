@@ -141,6 +141,9 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, domain.ErrAccountNotPinned):
 		http.Error(w, domain.ErrAccountNotPinned.Error(), http.StatusConflict)
 		return
+	case errors.Is(err, domain.ErrAccountTLSNotPinned):
+		http.Error(w, domain.ErrAccountTLSNotPinned.Error(), http.StatusConflict)
+		return
 	case errors.Is(err, domain.ErrTooManyPending):
 		// The requester's own quota (ADR-0013): it says how many, and it frees itself.
 		http.Error(w, err.Error(), http.StatusTooManyRequests)
@@ -346,6 +349,8 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 			// The account must be pinned first (ADR-0039): the operator is told, by the
 			// Vault's code, not its text (ADR-0042).
 			http.Error(w, domain.ErrAccountNotPinned.Error(), http.StatusConflict)
+		case errors.Is(err, domain.ErrAccountTLSNotPinned):
+			http.Error(w, domain.ErrAccountTLSNotPinned.Error(), http.StatusConflict)
 		case errors.Is(err, domain.ErrConflict):
 			http.Error(w, err.Error(), http.StatusConflict)
 		default:

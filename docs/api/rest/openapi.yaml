@@ -822,10 +822,9 @@ paths:
         "409":
           description: >
             La session ne peut pas être connectée dans son état (terminée,
-            expirée, en attente…) — ou son compte privilégié n'a pas de clé
-            d'hôte épinglée (ADR-0039) : « the privileged account has no
-            pinned host key: an administrator must pin it (PUT
-            /vault/accounts/{id}/host-key) before any session » (ADR-0042).
+            expirée, en attente…) — ou l'identité de sa cible n'est pas épinglée :
+            clé SSH via PUT /vault/accounts/{id}/host-key (ADR-0039), empreinte
+            TLS et nom de cible via PUT /vault/accounts/{id}/tls-pin (ADR-0071).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1111,7 +1110,7 @@ paths:
               schema: { $ref: "#/components/schemas/PrivilegedAccount" }
 
         "400":
-          description: hostKey absente ou illisible, intervalle de rotation hors bornes ou sur une politique qui n'en prend pas.
+          description: hostKey SSH absente/illisible, protocole non pris en charge, ou rotation incompatible avec VNC/RDP.
         "403":
           description: Refusé par l'Authorization Service ; le corps dit pourquoi.
         "409":
@@ -1198,6 +1197,53 @@ paths:
           description: Compte inconnu ou désactivé
         "503":
           description: L'Audit Service ne répond pas — aucun changement de clé sans trace
+
+  /vault/accounts/{accountId}/tls-pin:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [vault]
+      summary: Épingle (ou ré-épingle) le certificat TLS et le nom de cible d'un compte VNC/RDP
+      description: >-
+        Réservé aux administrateurs du compte (`vault:account-admin:{id}`).
+        L'empreinte SHA-256 doit provenir du certificat feuille relevé sur la cible,
+        jamais d'une connexion non fiable. L'audit (`vault.tls_pin_set`) est écrit
+        avant le changement ; sans audit, aucune modification. Un compte VNC/RDP
+        sans empreinte et nom DNS/IP épinglés ne peut recevoir de scope (ADR-0071).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tlsCertificateSha256, targetDomain]
+              properties:
+                tlsCertificateSha256: { type: string, pattern: '^[A-Fa-f0-9]{64}$', description: Empreinte SHA-256 hexadécimale du certificat feuille }
+                targetDomain: { type: string, description: Nom DNS ou IP attendu dans le certificat TLS }
+      responses:
+        "200":
+          description: Identité TLS épinglée
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tlsCertificateSha256, targetDomain]
+                properties:
+                  tlsCertificateSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+                  targetDomain: { type: string }
+        "400":
+          description: Empreinte, nom de cible ou protocole invalide
+        "403":
+          description: L'appelant n'administre pas ce compte
+        "404":
+          description: Compte inconnu ou désactivé
+        "409":
+          description: Une dépendance de cible manque avant l'émission d'un scope
+        "503":
+          description: L'Audit Service ou une dépendance du Vault ne répond pas — aucun changement sans trace
 
   /vault/accounts/{accountId}/approval:
     parameters:
@@ -1468,7 +1514,7 @@ components:
       required: [targetAccountId, protocol, justification]
       properties:
         targetAccountId: { type: string, format: uuid, description: "Réfère un PrivilegedAccount du Vault" }
-        protocol: { type: string, enum: [ssh] }
+        protocol: { type: string, enum: [ssh, vnc, rdp] }
         justification: { type: string, minLength: 10 }
         durationMinutes: { type: integer, default: 60, maximum: 480 }
         breakGlass:
@@ -1581,11 +1627,11 @@ components:
         name: { type: string }
         username: { type: string, description: "Compte sur la cible — distinct de name, qui identifie l'enregistrement (docs/architecture/data-architecture.md §3)." }
         targetHost: { type: string }
-        protocol: { type: string, enum: [ssh] }
-        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use, description: "post_use : renouvelé quand une session accordée se termine (ADR-0037) ; scheduled : renouvelé tous les rotationIntervalDays jours par le Vault (ADR-0040)" }
+        protocol: { type: string, enum: [ssh, vnc, rdp] }
+        rotationPolicy: { type: string, enum: [manual, post_use, scheduled], default: post_use, description: "Rotation automatique disponible uniquement pour SSH : post_use après une session (ADR-0037) ou scheduled tous les rotationIntervalDays jours (ADR-0040). VNC/RDP exigent manual." }
         reconciliationAccountId: { type: string, description: "Compte du Vault, de la même cible, qui peut changer ce mot de passe (root ou sudo chpasswd) — ADR-0037 ; vide : pas de rotation ; obligatoire pour scheduled (409 sinon)" }
         rotationIntervalDays: { type: integer, minimum: 1, maximum: 365, description: "Obligatoire pour rotationPolicy scheduled, refusé pour les autres (400) — ADR-0040. Le Vault fait tourner le compte cet intervalle après sa dernière rotation (ou sa création)." }
-        hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…", description: "Obligatoire à l'enregistrement (400 sans elle) : la clé d'hôte publique de la cible, relevée sur la cible (/etc/ssh/ssh_host_ed25519_key.pub, ou une ligne known_hosts). Le secret n'est envoyé qu'au serveur qui la présente — par le proxy comme par la rotation (ADR-0039). Ou, à la place, une ligne d'autorité de certificats SSH, `@cert-authority <nom> <clé de l'autorité>` : le serveur doit alors présenter un certificat d'hôte de cette autorité pour ce nom, valable et avec une date de fin (ADR-0048) ; sous cette ligne, jusqu'à 64 lignes `@revoked <nom ou *> <clé>` refusent une clé d'hôte même certifiée (ADR-0054)." }
+        hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…", description: "Obligatoire pour SSH ; vide pour VNC/RDP, qui exigent ensuite PUT /vault/accounts/{accountId}/tls-pin (ADR-0071). Pour SSH : clé d'hôte publique relevée sur la cible ou ligne known_hosts (ADR-0039), ou autorité @cert-authority (ADR-0048), avec lignes @revoked possibles (ADR-0054)." }
 
     PrivilegedAccount:
       allOf:
@@ -1601,6 +1647,8 @@ components:
             rotationFailures: { type: integer, description: "Rotations planifiées échouées d'affilée (ADR-0041) ; absent à 0. Tous les ROTATION_ALERT_AFTER_FAILURES échecs, vault.rotation_overdue est écrit à l'audit." }
             nextRotationAt: { type: string, format: date-time, description: "Compte scheduled seulement : quand il sera échu (ADR-0040). Le Vault balaie toutes les ROTATION_SWEEP_SECONDS : la rotation a lieu au premier balayage qui suit." }
             hostKeyFingerprint: { type: string, example: "SHA256:yghJebhOfPlVqBTuLQp+13ACAaCo+e5vLM/jNp6sJso", description: "Empreinte de hostKey (celle de l'autorité pour une ligne @cert-authority, ADR-0048) ; vide pour un compte enregistré avant ADR-0039 et jamais épinglé, qui n'ouvre aucune session" }
+            tlsCertificateSha256: { type: string, pattern: '^[a-f0-9]{64}$', description: "Empreinte SHA-256 du certificat TLS feuille épinglé (ADR-0071), vide avant pinning" }
+            targetDomain: { type: string, description: "Nom DNS/IP vérifié dans le certificat TLS (ADR-0071), vide avant pinning" }
             createdAt: { type: string, format: date-time }
             disabledAt: { type: string, format: date-time, description: "Absent tant que le compte est actif. Posé par DELETE /vault/accounts/{id} (suppression logique — docs/architecture/data-architecture.md §3) ; un compte avec ce champ renseigné n'apparaît plus dans GET /vault/accounts et GET /vault/accounts/{id} répond 404." }
 

@@ -437,7 +437,7 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 	// than granted — or approved, for a break-glass — to fail at connect (ADR-0043).
 	accountRequiresApproval, err := s.accounts.CheckAccount(ctx, privilegedAccountID)
 	if err != nil {
-		if !errors.Is(err, domain.ErrAccountNotFound) && !errors.Is(err, domain.ErrAccountNotPinned) {
+		if !errors.Is(err, domain.ErrAccountNotFound) && !errors.Is(err, domain.ErrAccountNotPinned) && !errors.Is(err, domain.ErrAccountTLSNotPinned) {
 			return nil, fmt.Errorf("%w: checking the account: %w", domain.ErrUnavailable, err)
 		}
 		sess.Status = domain.StatusDenied

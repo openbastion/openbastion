@@ -5,6 +5,7 @@ use (
 	./pkg/mtls
 	./pkg/proxycore
 	./pkg/rdp
+	./pkg/vnc
 	./pkg/tlspin
 	./pkg/screenstream
 	./pkg/migrate
@@ -19,6 +20,7 @@ use (
 	./services/access/authorization
 	./services/access/session-broker
 	./services/proxy/ssh-proxy
+	./services/proxy/rdp-vnc-proxy
 	./services/vault/password-vault
 	./services/recording-audit/audit-service
 	./services/recording-audit/command-recorder

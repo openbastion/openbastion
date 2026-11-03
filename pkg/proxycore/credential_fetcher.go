@@ -19,18 +19,24 @@ type Credential struct {
 	purged   bool
 
 	// TargetHost and HostKey are the target the Vault gave the secret for (ADR-0039): its
-	// address, and its pinned SSH host key (an authorized_keys line). A codec connects only to
-	// a target that presents exactly this key, and refuses an address that is not this one.
-	TargetHost string
-	HostKey    string
+	// address and pinned SSH host key. TargetUser, TLSCertificateSHA256 and TargetDomain carry
+	// the target account and trust metadata for graphical protocols (ADR-0071).
+	TargetHost           string
+	HostKey              string
+	TargetUser           string
+	TLSCertificateSHA256 string
+	TargetDomain         string
 }
 
-// Fetched is what the Vault delivers for one session (ADR-0039).
+// Fetched is what the Vault delivers for one session (ADR-0039, ADR-0071).
 type Fetched struct {
-	Type       string
-	Material   []byte
-	TargetHost string
-	HostKey    string
+	Type                 string
+	Material             []byte
+	TargetHost           string
+	HostKey              string
+	TargetUser           string
+	TLSCertificateSHA256 string
+	TargetDomain         string
 }
 
 func newCredential(credType string, material []byte) *Credential {
@@ -57,6 +63,9 @@ func (c *Credential) Purge() {
 	for i := range c.material {
 		c.material[i] = 0
 	}
+	c.TargetUser = ""
+	c.TLSCertificateSHA256 = ""
+	c.TargetDomain = ""
 	c.purged = true
 }
 
@@ -99,6 +108,7 @@ func (f *CredentialFetcher) Fetch(ctx context.Context, scopeToken string) (*Cred
 	}
 	c := newCredential(got.Type, got.Material)
 	c.TargetHost, c.HostKey = got.TargetHost, got.HostKey
+	c.TargetUser, c.TLSCertificateSHA256, c.TargetDomain = got.TargetUser, got.TLSCertificateSHA256, got.TargetDomain
 	return c, nil
 }
 

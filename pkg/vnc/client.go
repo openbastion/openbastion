@@ -1,0 +1,735 @@
+// Package vnc implements the deliberately small, fail-closed RFB 3.8 client
+// described by ADR-0071. It accepts only VeNCrypt X.509 security and bounded
+// framebuffer encodings; it is not a general-purpose VNC implementation.
+package vnc
+
+import (
+	"bytes"
+	"context"
+	"crypto/des"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
+	"net"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/openbastion/openbastion/pkg/screenstream"
+	"github.com/openbastion/openbastion/pkg/tlspin"
+)
+
+const (
+	protocolVersion            = "RFB 003.008\n"
+	securityVeNCrypt           = byte(19)
+	vencryptX509VNC     uint32 = 261
+	vencryptX509Plain   uint32 = 262
+	maxDesktopName             = 4096
+	maxAuthField               = 4096
+	maxFramebufferBytes        = 64 << 20
+	maxRectangles              = 4096
+)
+
+var (
+	ErrUnsupportedProtocol = errors.New("vnc: unsupported RFB or security negotiation")
+	ErrInvalidTarget       = errors.New("vnc: invalid target configuration")
+	ErrInvalidFramebuffer  = errors.New("vnc: invalid framebuffer update")
+	ErrAuthentication      = errors.New("vnc: target authentication failed")
+	errLastRect            = errors.New("vnc: last rectangle marker")
+)
+
+// Config must be populated from the Vault-issued target identity and the
+// credential for this session. Roots are explicit; system roots are never
+// selected implicitly. Open clears the Client's reference to Password and only
+// retains a temporary copy during authentication; the caller still owns and
+// must purge the original credential.
+type Config struct {
+	Address        string
+	Username       string
+	Password       []byte
+	TLSFingerprint string
+	TLSRoots       *x509.CertPool
+	TLSServerName  string
+	DialTimeout    time.Duration
+}
+
+// Client opens one target session. A Client is intended for one session only.
+type Client struct{ Config Config }
+
+func (c *Client) Open(ctx context.Context) (*Session, error) {
+	cfg := c.Config
+	// Client is single-use; don't keep a reference to credential material after
+	// entering Open, even if validation or the network handshake later fails.
+	c.Config.Password = nil
+	host, port, err := net.SplitHostPort(cfg.Address)
+	if err != nil || host == "" || port == "" {
+		return nil, ErrInvalidTarget
+	}
+	portNumber, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || portNumber == 0 {
+		return nil, ErrInvalidTarget
+	}
+	if cfg.Username == "" || len(cfg.Username) > maxAuthField || len(cfg.Password) == 0 || len(cfg.Password) > maxAuthField || cfg.TLSRoots == nil || cfg.TLSFingerprint == "" {
+		return nil, ErrInvalidTarget
+	}
+	serverName := cfg.TLSServerName
+	if serverName == "" {
+		serverName = host
+	}
+	tlsConfig, err := tlspin.ServerConfig(cfg.TLSFingerprint, cfg.TLSRoots, serverName)
+	if err != nil {
+		return nil, fmt.Errorf("%w: TLS pin configuration", ErrInvalidTarget)
+	}
+	password := append([]byte(nil), cfg.Password...)
+	cfg.Password = nil
+	defer zero(password)
+
+	if cfg.DialTimeout < 0 {
+		return nil, ErrInvalidTarget
+	}
+	timeout := cfg.DialTimeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", cfg.Address)
+	if err != nil {
+		return nil, fmt.Errorf("vnc: target connection failed")
+	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	ok := false
+	defer func() {
+		if !ok {
+			stopCancel()
+			_ = conn.Close()
+		}
+	}()
+	if deadline, exists := dialCtx.Deadline(); exists {
+		_ = conn.SetDeadline(deadline)
+	}
+	if err := handshakeRFB(conn); err != nil {
+		return nil, err
+	}
+	subtype, err := negotiateVeNCrypt(conn)
+	if err != nil {
+		return nil, err
+	}
+	if subtype == vencryptX509VNC && len(password) > 8 {
+		return nil, ErrInvalidTarget
+	}
+	tlsConn := tls.Client(conn, tlsConfig)
+	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
+		return nil, fmt.Errorf("vnc: target TLS verification failed")
+	}
+	if subtype == vencryptX509Plain {
+		err = authenticatePlain(tlsConn, cfg.Username, password)
+	} else {
+		err = authenticateVNC(tlsConn, password)
+	}
+	if err != nil {
+		return nil, err
+	}
+	// RFB ClientInit must precede ServerInit even when VeNCrypt wraps TLS.
+	if err := writeFull(tlsConn, []byte{1}); err != nil {
+		return nil, err
+	}
+	width, height, err := readServerInit(tlsConn)
+	if err != nil {
+		return nil, err
+	}
+	if err := configurePixelFormatAndEncodings(tlsConn); err != nil {
+		return nil, err
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		return nil, err
+	}
+	s := &Session{conn: tlsConn, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{})}
+	if err := s.requestUpdate(false); err != nil {
+		return nil, err
+	}
+	stopCancel()
+	s.stopCancel = context.AfterFunc(ctx, func() { s.signalDone(); _ = conn.Close() })
+	ok = true
+	go s.readLoop()
+	return s, nil
+}
+
+// Session exposes full PNG frames and validated normalized input. Frames are
+// never dropped: backpressure propagates to the target reader and recorder.
+type Session struct {
+	conn            net.Conn
+	frames          chan screenstream.Message
+	width, height   uint32
+	framebuffer     *image.RGBA
+	writeMu         sync.Mutex
+	mu              sync.Mutex
+	closeOnce       sync.Once
+	doneOnce        sync.Once
+	done            chan struct{}
+	err             error
+	pressed         map[uint32]struct{}
+	sequence        uint64
+	updatePixels    uint64
+	forceFullUpdate bool
+	stopCancel      func() bool
+}
+
+func (s *Session) signalDone() { s.doneOnce.Do(func() { close(s.done) }) }
+
+func (s *Session) Frames() <-chan screenstream.Message { return s.frames }
+
+func (s *Session) Err() error { s.mu.Lock(); defer s.mu.Unlock(); return s.err }
+
+func (s *Session) Close() error {
+	var err error
+	s.closeOnce.Do(func() {
+		s.signalDone()
+		if s.stopCancel != nil {
+			s.stopCancel()
+		}
+		err = s.conn.Close()
+	})
+	return err
+}
+
+func (s *Session) Input(e screenstream.InputEvent) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch e.Type {
+	case screenstream.InputKey:
+		if (e.Flags != screenstream.KeyPressed && e.Flags != screenstream.KeyReleased) || e.Keysym == 0 || e.X != 0 || e.Y != 0 || e.Buttons != 0 || e.Wheel != 0 {
+			return screenstream.ErrOutOfBounds
+		}
+		if e.Flags == screenstream.KeyPressed {
+			s.pressed[e.Keysym] = struct{}{}
+		} else {
+			delete(s.pressed, e.Keysym)
+		}
+		return s.writeKey(e.Keysym, e.Flags == screenstream.KeyPressed)
+	case screenstream.InputPointer:
+		if uint32(e.X) >= s.width || uint32(e.Y) >= s.height || e.Buttons & ^screenstream.AllowedPointerButtons != 0 || e.Wheel < -1 || e.Wheel > 1 {
+			return screenstream.ErrOutOfBounds
+		}
+		mask := e.Buttons
+		if e.Wheel > 0 {
+			mask |= 1 << 3
+		}
+		if e.Wheel < 0 {
+			mask |= 1 << 4
+		}
+		if err := s.writePointer(mask, e.X, e.Y); err != nil {
+			return err
+		}
+		if e.Wheel != 0 {
+			return s.writePointer(e.Buttons, e.X, e.Y)
+		}
+		return nil
+	case screenstream.InputReleaseAll:
+		if e.Flags != 0 || e.Keysym != 0 || e.Scancode != 0 || e.X != 0 || e.Y != 0 || e.Buttons != 0 || e.Wheel != 0 {
+			return screenstream.ErrMalformedMessage
+		}
+		for key := range s.pressed {
+			if err := s.writeKey(key, false); err != nil {
+				return err
+			}
+			delete(s.pressed, key)
+		}
+		return s.writePointer(0, 0, 0)
+	default:
+		return screenstream.ErrUnsupported
+	}
+}
+
+func (s *Session) writeKey(key uint32, down bool) error {
+	var msg [8]byte
+	msg[0] = 4
+	if down {
+		msg[1] = 1
+	}
+	binary.BigEndian.PutUint32(msg[4:], key)
+	return writeFull(s.conn, msg[:])
+}
+func (s *Session) writePointer(buttons byte, x, y uint16) error {
+	var msg [6]byte
+	msg[0] = 5
+	msg[1] = buttons
+	binary.BigEndian.PutUint16(msg[2:], x)
+	binary.BigEndian.PutUint16(msg[4:], y)
+	return writeFull(s.conn, msg[:])
+}
+func (s *Session) requestUpdate(incremental bool) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	s.mu.Lock()
+	width, height := s.width, s.height
+	s.mu.Unlock()
+	var msg [10]byte
+	msg[0] = 3
+	if incremental {
+		msg[1] = 1
+	}
+	binary.BigEndian.PutUint16(msg[6:], uint16(width))
+	binary.BigEndian.PutUint16(msg[8:], uint16(height))
+	return writeFull(s.conn, msg[:])
+}
+
+func (s *Session) readLoop() {
+	defer close(s.frames)
+	for {
+		if err := s.readServerMessage(); err != nil {
+			s.mu.Lock()
+			if s.err == nil && !errors.Is(err, net.ErrClosed) {
+				s.err = err
+			}
+			s.mu.Unlock()
+			return
+		}
+	}
+}
+
+func (s *Session) readServerMessage() error {
+	var kind [1]byte
+	if _, err := io.ReadFull(s.conn, kind[:]); err != nil {
+		return err
+	}
+	switch kind[0] {
+	case 0:
+		var hdr [3]byte
+		if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
+			return err
+		}
+		rawCount := binary.BigEndian.Uint16(hdr[1:])
+		lastRectMode := rawCount == 0xffff
+		count := int(rawCount)
+		if !lastRectMode && count > maxRectangles {
+			return ErrInvalidFramebuffer
+		}
+		if lastRectMode {
+			count = maxRectangles
+		}
+		changed, sawLastRect := false, false
+		s.updatePixels = 0
+		for i := 0; i < count; i++ {
+			done, err := s.readRectangle(lastRectMode)
+			if errors.Is(err, errLastRect) {
+				sawLastRect = true
+				break
+			}
+			if err != nil {
+				return err
+			}
+			changed = changed || done
+		}
+		if lastRectMode && !sawLastRect {
+			return ErrInvalidFramebuffer
+		}
+		if changed {
+			if err := s.emitFrame(); err != nil {
+				return err
+			}
+		}
+		if s.forceFullUpdate {
+			s.forceFullUpdate = false
+			return s.requestUpdate(false)
+		}
+		return s.requestUpdate(true)
+	case 1: // Bell: intentionally ignored.
+		return nil
+	case 2: // ServerCutText: consume bounded text, never expose clipboard.
+		var hdr [7]byte
+		if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
+			return err
+		}
+		n := binary.BigEndian.Uint32(hdr[3:])
+		if n > maxAuthField {
+			return ErrUnsupportedProtocol
+		}
+		return discardN(s.conn, uint64(n))
+	default:
+		return ErrUnsupportedProtocol
+	}
+}
+
+func (s *Session) readRectangle(allowLastRect bool) (bool, error) {
+	var hdr [12]byte
+	if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
+		return false, err
+	}
+	x, y, w, h := binary.BigEndian.Uint16(hdr[0:2]), binary.BigEndian.Uint16(hdr[2:4]), binary.BigEndian.Uint16(hdr[4:6]), binary.BigEndian.Uint16(hdr[6:8])
+	enc := int32(binary.BigEndian.Uint32(hdr[8:12]))
+	switch enc {
+	case 0: // Raw, 32-bit little-endian true colour.
+		s.updatePixels += uint64(w) * uint64(h)
+		if s.updatePixels > screenstream.MaxPixels {
+			return false, ErrInvalidFramebuffer
+		}
+		if w == 0 || h == 0 || uint32(x)+uint32(w) > s.width || uint32(y)+uint32(h) > s.height || uint64(w)*uint64(h)*4 > maxFramebufferBytes {
+			return false, ErrInvalidFramebuffer
+		}
+		row := make([]byte, int(w)*4)
+		for yy := uint16(0); yy < h; yy++ {
+			if _, err := io.ReadFull(s.conn, row); err != nil {
+				return false, err
+			}
+			for xx := uint16(0); xx < w; xx++ {
+				i := int(xx) * 4
+				s.framebuffer.SetRGBA(int(x+xx), int(y+yy), color.RGBA{R: row[i+2], G: row[i+1], B: row[i], A: 255})
+			}
+		}
+		return true, nil
+	case 1: // CopyRect.
+		s.updatePixels += uint64(w) * uint64(h)
+		if s.updatePixels > screenstream.MaxPixels {
+			return false, ErrInvalidFramebuffer
+		}
+		if w == 0 || h == 0 || uint32(x)+uint32(w) > s.width || uint32(y)+uint32(h) > s.height {
+			return false, ErrInvalidFramebuffer
+		}
+		var src [4]byte
+		if _, err := io.ReadFull(s.conn, src[:]); err != nil {
+			return false, err
+		}
+		sx, sy := binary.BigEndian.Uint16(src[:2]), binary.BigEndian.Uint16(src[2:])
+		if uint32(sx)+uint32(w) > s.width || uint32(sy)+uint32(h) > s.height {
+			return false, ErrInvalidFramebuffer
+		}
+		// Copy through a temporary buffer to preserve overlapping rectangles.
+		tmp := image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
+		for yy := 0; yy < int(h); yy++ {
+			for xx := 0; xx < int(w); xx++ {
+				tmp.Set(xx, yy, s.framebuffer.At(int(sx)+xx, int(sy)+yy))
+			}
+		}
+		for yy := 0; yy < int(h); yy++ {
+			for xx := 0; xx < int(w); xx++ {
+				s.framebuffer.Set(int(x)+xx, int(y)+yy, tmp.At(xx, yy))
+			}
+		}
+		return true, nil
+	case -223: // DesktopSize.
+		if x != 0 || y != 0 {
+			return false, ErrInvalidFramebuffer
+		}
+		return s.resize(uint32(w), uint32(h))
+	case -308: // ExtendedDesktopSize, exactly one screen.
+		if x != 0 || y != 0 {
+			return false, ErrInvalidFramebuffer
+		}
+		var prefix [4]byte
+		if _, err := io.ReadFull(s.conn, prefix[:]); err != nil {
+			return false, err
+		}
+		if prefix[0] != 1 || prefix[1] != 0 || prefix[2] != 0 || prefix[3] != 0 {
+			return false, ErrUnsupportedProtocol
+		}
+		var screen [16]byte
+		if _, err := io.ReadFull(s.conn, screen[:]); err != nil {
+			return false, err
+		}
+		if binary.BigEndian.Uint16(screen[4:6]) != 0 || binary.BigEndian.Uint16(screen[6:8]) != 0 || binary.BigEndian.Uint16(screen[8:10]) != w || binary.BigEndian.Uint16(screen[10:12]) != h {
+			return false, ErrUnsupportedProtocol
+		}
+		return s.resize(uint32(w), uint32(h))
+	case -239: // Cursor shape: consume pixels and 1-bit mask, never send clipboard/cursor metadata.
+		if uint64(w)*uint64(h)*4 > maxFramebufferBytes {
+			return false, ErrInvalidFramebuffer
+		}
+		if err := discardN(s.conn, uint64(w)*uint64(h)*4+uint64((w+7)/8)*uint64(h)); err != nil {
+			return false, err
+		}
+		return false, nil
+	case -224: // LastRect.
+		if !allowLastRect {
+			return false, ErrUnsupportedProtocol
+		}
+		return false, errLastRect
+	default:
+		return false, ErrUnsupportedProtocol
+	}
+}
+
+func (s *Session) resize(w, h uint32) (bool, error) {
+	if w == 0 || h == 0 || uint64(w)*uint64(h) > screenstream.MaxPixels || uint64(w)*uint64(h)*4 > maxFramebufferBytes {
+		return false, ErrInvalidFramebuffer
+	}
+	s.mu.Lock()
+	s.width, s.height = w, h
+	s.framebuffer = image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
+	s.mu.Unlock()
+	s.forceFullUpdate = true
+	return false, nil
+}
+func (s *Session) emitFrame() error {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, s.framebuffer); err != nil {
+		return err
+	}
+	if buf.Len() == 0 || buf.Len() > screenstream.MaxPNGBytes {
+		return ErrInvalidFramebuffer
+	}
+	s.sequence++
+	msg := screenstream.Message{Type: screenstream.TypeFrame, Sequence: s.sequence, Timestamp: time.Now().UTC(), Width: s.width, Height: s.height, PNG: buf.Bytes()}
+	if _, err := screenstream.Encode(msg); err != nil {
+		return err
+	}
+	select {
+	case s.frames <- msg:
+		return nil
+	case <-s.done:
+		return net.ErrClosed
+	}
+}
+
+func handshakeRFB(conn net.Conn) error {
+	var version [12]byte
+	if _, err := io.ReadFull(conn, version[:]); err != nil {
+		return err
+	}
+	if string(version[:]) != protocolVersion {
+		return ErrUnsupportedProtocol
+	}
+	if err := writeFull(conn, []byte(protocolVersion)); err != nil {
+		return err
+	}
+	var count [1]byte
+	if _, err := io.ReadFull(conn, count[:]); err != nil {
+		return err
+	}
+	if count[0] == 0 {
+		n, err := readLength(conn, 4096)
+		if err != nil {
+			return err
+		}
+		_ = discardN(conn, uint64(n))
+		return ErrUnsupportedProtocol
+	}
+	types := make([]byte, int(count[0]))
+	if _, err := io.ReadFull(conn, types); err != nil {
+		return err
+	}
+	found := false
+	for _, v := range types {
+		if v == securityVeNCrypt {
+			found = true
+		}
+	}
+	if !found {
+		return ErrUnsupportedProtocol
+	}
+	return writeFull(conn, []byte{securityVeNCrypt})
+}
+func negotiateVeNCrypt(conn net.Conn) (uint32, error) {
+	var version [2]byte
+	if _, err := io.ReadFull(conn, version[:]); err != nil {
+		return 0, err
+	}
+	if version[0] != 0 || version[1] != 2 {
+		return 0, ErrUnsupportedProtocol
+	}
+	if err := writeFull(conn, []byte{0, 2}); err != nil {
+		return 0, err
+	}
+	var status [1]byte
+	if _, err := io.ReadFull(conn, status[:]); err != nil {
+		return 0, err
+	}
+	if status[0] != 0 {
+		return 0, ErrUnsupportedProtocol
+	}
+	var count [1]byte
+	if _, err := io.ReadFull(conn, count[:]); err != nil {
+		return 0, err
+	}
+	if count[0] == 0 {
+		return 0, ErrUnsupportedProtocol
+	}
+	raw := make([]byte, int(count[0])*4)
+	if _, err := io.ReadFull(conn, raw); err != nil {
+		return 0, err
+	}
+	supported := map[uint32]bool{}
+	for i := 0; i < len(raw); i += 4 {
+		supported[binary.BigEndian.Uint32(raw[i:i+4])] = true
+	}
+	chosen := uint32(0)
+	if supported[vencryptX509Plain] {
+		chosen = vencryptX509Plain
+	} else if supported[vencryptX509VNC] {
+		chosen = vencryptX509VNC
+	} else {
+		return 0, ErrUnsupportedProtocol
+	}
+	var out [4]byte
+	binary.BigEndian.PutUint32(out[:], chosen)
+	if err := writeFull(conn, out[:]); err != nil {
+		return 0, err
+	}
+	if _, err := io.ReadFull(conn, status[:]); err != nil {
+		return 0, err
+	}
+	if status[0] != 0 {
+		return 0, ErrUnsupportedProtocol
+	}
+	return chosen, nil
+}
+func authenticatePlain(conn net.Conn, username string, password []byte) error {
+	// VeNCrypt X509Plain sends two 32-bit length-prefixed fields inside TLS.
+	if len(username) == 0 || len(username) > maxAuthField || len(password) == 0 || len(password) > maxAuthField {
+		return ErrInvalidTarget
+	}
+	var lens [8]byte
+	binary.BigEndian.PutUint32(lens[:4], uint32(len(username)))
+	binary.BigEndian.PutUint32(lens[4:], uint32(len(password)))
+	if err := writeFull(conn, lens[:]); err != nil {
+		return err
+	}
+	if err := writeFull(conn, []byte(username)); err != nil {
+		return err
+	}
+	if err := writeFull(conn, password); err != nil {
+		return err
+	}
+	return readSecurityResult(conn)
+}
+func authenticateVNC(conn net.Conn, password []byte) error {
+	if len(password) > 8 {
+		return ErrInvalidTarget
+	}
+	var challenge [16]byte
+	if _, err := io.ReadFull(conn, challenge[:]); err != nil {
+		return err
+	}
+	var key [8]byte
+	copy(key[:], password)
+	for i := range key {
+		key[i] = reverseBits(key[i])
+	}
+	block, err := des.NewCipher(key[:])
+	zero(key[:])
+	if err != nil {
+		return err
+	}
+	var response [16]byte
+	block.Encrypt(response[:8], challenge[:8])
+	block.Encrypt(response[8:], challenge[8:])
+	if err := writeFull(conn, response[:]); err != nil {
+		return err
+	}
+	return readSecurityResult(conn)
+}
+func readSecurityResult(conn net.Conn) error {
+	var status [4]byte
+	if _, err := io.ReadFull(conn, status[:]); err != nil {
+		return err
+	}
+	if binary.BigEndian.Uint32(status[:]) == 0 {
+		return nil
+	}
+	n, err := readLength(conn, 4096)
+	if err == nil {
+		_ = discardN(conn, uint64(n))
+	}
+	return ErrAuthentication
+}
+func readServerInit(conn net.Conn) (uint32, uint32, error) {
+	var hdr [24]byte
+	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
+		return 0, 0, err
+	}
+	w, h := binary.BigEndian.Uint16(hdr[:2]), binary.BigEndian.Uint16(hdr[2:4])
+	if w == 0 || h == 0 || uint64(w)*uint64(h) > screenstream.MaxPixels || uint64(w)*uint64(h)*4 > maxFramebufferBytes {
+		return 0, 0, ErrInvalidFramebuffer
+	}
+	bpp, depth := hdr[4], hdr[5]
+	if (bpp != 8 && bpp != 16 && bpp != 32) || depth == 0 || depth > bpp || hdr[6] > 1 || hdr[7] > 1 {
+		return 0, 0, ErrUnsupportedProtocol
+	}
+	nameLen := binary.BigEndian.Uint32(hdr[20:24])
+	if nameLen > maxDesktopName {
+		return 0, 0, ErrUnsupportedProtocol
+	}
+	if err := discardN(conn, uint64(nameLen)); err != nil {
+		return 0, 0, err
+	}
+	return uint32(w), uint32(h), nil
+}
+func configurePixelFormatAndEncodings(conn net.Conn) error {
+	// SetPixelFormat: 32bpp, depth 24, little-endian true colour, RGB shifts 16/8/0.
+	var pf [20]byte
+	pf[0] = 0
+	pf[4] = 32
+	pf[5] = 24
+	pf[6] = 0
+	pf[7] = 1
+	binary.BigEndian.PutUint16(pf[8:10], 255)
+	binary.BigEndian.PutUint16(pf[10:12], 255)
+	binary.BigEndian.PutUint16(pf[12:14], 255)
+	pf[14] = 16
+	pf[15] = 8
+	pf[16] = 0
+	if err := writeFull(conn, pf[:]); err != nil {
+		return err
+	}
+	enc := []int32{0, 1, -223, -308, -239, -224}
+	var msg bytes.Buffer
+	msg.Write([]byte{2, 0})
+	var n [2]byte
+	binary.BigEndian.PutUint16(n[:], uint16(len(enc)))
+	msg.Write(n[:])
+	for _, e := range enc {
+		var b [4]byte
+		binary.BigEndian.PutUint32(b[:], uint32(e))
+		msg.Write(b[:])
+	}
+	return writeFull(conn, msg.Bytes())
+}
+func readLength(r io.Reader, max uint32) (uint32, error) {
+	var b [4]byte
+	if _, err := io.ReadFull(r, b[:]); err != nil {
+		return 0, err
+	}
+	n := binary.BigEndian.Uint32(b[:])
+	if n > max {
+		return 0, ErrUnsupportedProtocol
+	}
+	return n, nil
+}
+func discardN(r io.Reader, n uint64) error {
+	if n > maxFramebufferBytes {
+		return ErrUnsupportedProtocol
+	}
+	_, err := io.CopyN(io.Discard, r, int64(n))
+	return err
+}
+func writeFull(w io.Writer, b []byte) error {
+	for len(b) > 0 {
+		n, err := w.Write(b)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		b = b[n:]
+	}
+	return nil
+}
+func zero(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+func reverseBits(v byte) byte {
+	v = (v&0xF0)>>4 | (v&0x0F)<<4
+	v = (v&0xCC)>>2 | (v&0x33)<<2
+	return (v&0xAA)>>1 | (v&0x55)<<1
+}

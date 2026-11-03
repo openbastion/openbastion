@@ -43,7 +43,7 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return proxycore.Fetched{}, err
 	}
-	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey}, nil
+	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey, TargetUser: out.TargetUser, TLSCertificateSHA256: out.TLSCertificateSHA256, TargetDomain: out.TargetDomain}, nil
 }
 
 // The bodies of the Vault's fetch-credential, with the field names of VaultCredentialIssuance's
@@ -54,8 +54,11 @@ type fetchCredentialRequestBody struct {
 }
 
 type fetchCredentialResponseBody struct {
-	CredentialType     string `json:"credential_type"`
-	CredentialMaterial []byte `json:"credential_material"`
-	TargetHost         string `json:"target_host"`
-	HostKey            string `json:"host_key"`
+	CredentialType       string `json:"credential_type"`
+	CredentialMaterial   []byte `json:"credential_material"`
+	TargetHost           string `json:"target_host"`
+	HostKey              string `json:"host_key"`
+	TargetUser           string `json:"target_user"`
+	TLSCertificateSHA256 string `json:"tls_certificate_sha256"`
+	TargetDomain         string `json:"target_domain"`
 }

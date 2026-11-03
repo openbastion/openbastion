@@ -65,6 +65,8 @@ type AccountRepository interface {
 
 	// SetHostKey pins the host key of id's target (ADR-0039).
 	SetHostKey(ctx context.Context, id, hostKey string) error
+	// SetTLSPin atomically pins the target TLS leaf and expected DNS/IP name (ADR-0071).
+	SetTLSPin(ctx context.Context, id, fingerprint, targetDomain string) error
 	// SetApprovalRequired says whether a session on id waits for an approval (ADR-0067).
 	SetApprovalRequired(ctx context.Context, id string, required bool) error
 

@@ -1,6 +1,6 @@
 package application
 
-// Pinning the target's host key (ADR-0039).
+// Pinning SSH host keys and graphical-target TLS identities (ADR-0039, ADR-0071).
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	// ErrNoHostKey: the account has no pinned host key — no session nor rotation reaches its
+	// ErrNoHostKey: an SSH account has no pinned host key; no session nor rotation reaches its
 	// target until one is set (ADR-0039).
 	ErrNoHostKey = errors.New("the account has no pinned host key: pin one before any session or rotation")
 	// ErrBadHostKey: what was given is not an SSH public key.
@@ -46,7 +46,7 @@ func HostKeyFingerprint(key string) string {
 	return fp
 }
 
-// OnboardInput is an account to onboard, its target's host key pinned (ADR-0039).
+// OnboardInput is an account to onboard. SSH requires HostKey; VNC/RDP use a later audited TLS pin (ADR-0071).
 type OnboardInput struct {
 	ID, Name, Username, TargetHost, Protocol string
 	Policy                                   domain.RotationPolicy
@@ -59,12 +59,26 @@ type OnboardInput struct {
 	ApprovalRequired bool
 }
 
-// OnboardPinned onboards an account whose target's host key is given: required. The account
-// is written whole, in one write: key, reconciliation account and schedule included.
+// OnboardPinned validates the protocol-specific onboarding identity. SSH requires a valid host key;
+// VNC/RDP are created without a pin and cannot receive a scope until SetTLSPin succeeds.
 func (s *VaultService) OnboardPinned(ctx context.Context, actorRoles []string, in OnboardInput) error {
-	key, _, err := NormalizeHostKey(in.HostKey)
-	if err != nil {
-		return err
+	var key string
+	switch in.Protocol {
+	case "ssh":
+		var err error
+		key, _, err = NormalizeHostKey(in.HostKey)
+		if err != nil {
+			return err
+		}
+	case "vnc", "rdp":
+		if in.HostKey != "" {
+			return ErrBadHostKey
+		}
+		if in.Policy != domain.RotationManual || in.ReconciliationAccountID != "" || in.RotationIntervalDays != 0 {
+			return ErrUnsupportedProtocol
+		}
+	default:
+		return ErrUnsupportedProtocol
 	}
 	if err := checkSchedule(in.Policy, in.RotationIntervalDays); err != nil {
 		return err
@@ -101,6 +115,9 @@ func (s *VaultService) SetHostKey(ctx context.Context, actorID string, actorRole
 	if a.DisabledAt != nil {
 		return "", domain.ErrNotFound
 	}
+	if a.Protocol != "ssh" {
+		return "", ErrUnsupportedProtocol
+	}
 	if s.audit == nil {
 		return "", ErrRotationOff
 	}
@@ -115,13 +132,16 @@ func (s *VaultService) SetHostKey(ctx context.Context, actorID string, actorRole
 	return fp, nil
 }
 
-// Delivered is what the Vault hands the proxy for one session: the secret, and the target it
-// is for — its address and pinned host key (ADR-0039).
+// Delivered is what the Vault hands a protocol proxy for one session: secret plus target identity.
+// SSH uses HostKey; VNC/RDP use TargetUser, TLSCertificateSHA256 and TargetDomain (ADR-0071).
 type Delivered struct {
-	Type       string
-	Material   []byte
-	TargetHost string
-	HostKey    string
+	Type                 string
+	Material             []byte
+	TargetHost           string
+	HostKey              string
+	TargetUser           string
+	TLSCertificateSHA256 string
+	TargetDomain         string
 }
 
 // SetApprovalRequired says whether a session on accountID waits for another person's approval,

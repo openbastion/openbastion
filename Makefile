@@ -66,6 +66,7 @@ build: proto-gen
 		./pkg/buildinfo/... \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
+		./pkg/vnc/... \
 		./pkg/tlspin/... \
 		./pkg/screenstream/... \
 		./pkg/mtls/... \
@@ -81,6 +82,7 @@ build: proto-gen
 		./services/access/authorization/... \
 		./services/access/session-broker/... \
 		./services/proxy/ssh-proxy/... \
+		./services/proxy/rdp-vnc-proxy/... \
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
 		./services/recording-audit/command-recorder/... \
@@ -90,6 +92,7 @@ build: proto-gen
 vet: proto-gen
 	$(GO) vet ./pkg/proxycore/...
 	$(GO) vet ./pkg/rdp/...
+	$(GO) vet ./pkg/vnc/...
 	$(GO) vet ./pkg/tlspin/...
 	$(GO) vet ./pkg/screenstream/...
 	$(GO) vet ./pkg/mtls/...
@@ -106,6 +109,7 @@ vet: proto-gen
 	$(GO) vet ./services/access/authorization/...
 	$(GO) vet ./services/access/session-broker/...
 	$(GO) vet ./services/proxy/ssh-proxy/...
+	$(GO) vet ./services/proxy/rdp-vnc-proxy/...
 	$(GO) vet ./services/vault/password-vault/...
 	$(GO) vet ./services/recording-audit/audit-service/...
 	$(GO) vet ./services/recording-audit/command-recorder/...
@@ -119,6 +123,7 @@ test: proto-gen
 	$(GO) test \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
+		./pkg/vnc/... \
 		./pkg/tlspin/... \
 		./pkg/screenstream/... \
 		./pkg/mtls/... \
@@ -135,6 +140,7 @@ test: proto-gen
 		./services/access/authorization/... \
 		./services/access/session-broker/... \
 		./services/proxy/ssh-proxy/... \
+		./services/proxy/rdp-vnc-proxy/... \
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
 		./services/recording-audit/command-recorder/... \
