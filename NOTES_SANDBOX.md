@@ -1764,3 +1764,10 @@ Le Session Broker sélectionne un pool par protocole depuis la session stockée,
 `pkg/rdp/credssp.go` ajoute un encodeur/décodeur Go pur pour `TSRequest` : version 2–6, liste de jetons `negoTokens`, `authInfo`, `pubKeyAuth`, `errorCode`, `clientNonce`. Les champs ASN.1 sont explicitement taggés, ordonnés, bornés en taille/compte, et encodés en DER canonique. Le parseur refuse BER à longueur indéfinie, longueur DER non canonique, champ inconnu/dupliqué/hors ordre, structure imbriquée incorrecte, version non supportée, payload trop grand et nonce d’une taille incorrecte. Les octets de jetons sont opaques : cette tranche n’implémente ni SPNEGO, ni NTLMv2, ni envoi de credential, ni authentification CredSSP. Le runtime RDP reste désactivé.
 
 Tests : round-trip de tous les champs, vecteur DER initial figé, cas malformés et bornes ; `go test -race ./pkg/rdp/...`, fuzzing `FuzzParseTSRequest` pendant 10 s (~152 000 entrées) et `make build vet test` passent. `git diff --check` et `gofmt` sont aussi vérifiés. La suite d’intégration complète n’a pas été relancée sur cette tranche ; aucun code d’authentification réel n’est activé.
+
+
+## ADR-0071 — incrément 7 : parseur SPNEGO strict
+
+`pkg/rdp/spnego.go` parse les formes DER SPNEGO `InitialContextToken` / `NegTokenInit` et `NegTokenResp`. Les listes de mécanismes sont limitées à NTLM OID ; Kerberos et les OID inconnus sont refusés. Les champs sont uniques, ordonnés, bornés à 16 Kio et les OID doivent être canoniques DER. Les états `reject` et `request-mic` sont refusés, car aucune vérification de MIC n’existe. Les jetons NTLM et MIC sont conservés comme octets opaques et ne constituent jamais une preuve d’identité.
+
+Les tests couvrent les deux structures, les champs opaques, le refus des mécanismes non pris en charge, les états de négociation refusés, les octets surnuméraires et la borne de taille ; un fuzzer couvre les deux parseurs. Ce composant n’est pas branché au transport CredSSP et ne met en œuvre ni NTLMv2, ni preuve cryptographique, ni transmission de credential. Le runtime RDP reste désactivé.
