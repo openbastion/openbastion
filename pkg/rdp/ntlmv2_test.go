@@ -98,6 +98,33 @@ func TestComputeNTLMv2ResponseMicrosoftVector(t *testing.T) {
 	}
 }
 
+func TestComputeNTLMv2ResponseUsesServerTimestampAndZeroLMResponse(t *testing.T) {
+	password := []byte("Password")
+	defer clear(password)
+	serverChallenge := mustHex8(t, "0123456789abcdef")
+	clientChallenge := mustHex8(t, "aaaaaaaaaaaaaaaa")
+	clientTimestamp := mustHex8(t, "0000000000000000")
+	serverTimestamp := mustHex8(t, "8877665544332211")
+	baseTargetInfo, _ := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
+	targetInfo := append([]byte{ntlmAvTimestamp, 0, 8, 0}, serverTimestamp[:]...)
+	targetInfo = append(targetInfo, baseTargetInfo...)
+
+	got, err := ComputeNTLMv2Response("User", "Domain", password, serverChallenge, clientChallenge, clientTimestamp, targetInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer got.Purge()
+	if !bytes.Equal(got.NTResponse[16+8:16+16], serverTimestamp[:]) {
+		t.Fatalf("NTLMv2 blob timestamp = %x, want server FILETIME %x", got.NTResponse[24:32], serverTimestamp)
+	}
+	if got.LMResponse != ([24]byte{}) {
+		t.Fatalf("LMChallengeResponse = %x, want Z(24)", got.LMResponse)
+	}
+	if allZero(got.NTProof[:]) || allZero(got.SessionBaseKey[:]) {
+		t.Fatal("server timestamp produced empty NT proof or session key")
+	}
+}
+
 func TestComputeNTLMv2ResponseRejectsInvalidInputs(t *testing.T) {
 	password := []byte("Password")
 	defer clear(password)
@@ -116,7 +143,6 @@ func TestComputeNTLMv2ResponseRejectsInvalidInputs(t *testing.T) {
 		{name: "empty password", user: "User", domain: "Domain", password: nil, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: targetInfo},
 		{name: "invalid UTF-8 username", user: string([]byte{0xff}), domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: targetInfo},
 		{name: "NUL in domain", user: "User", domain: "Do\x00main", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: targetInfo},
-		{name: "timestamp requires MIC", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{7, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0}, targetInfo...)},
 		{name: "unsupported MIC flag bits", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{6, 0, 4, 0, 6, 0, 0, 0}, targetInfo...)},
 		{name: "target name requires binding", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{9, 0, 6, 0, 0x52, 0, 0x44, 0, 0x50, 0}, targetInfo...)},
 		{name: "channel binding requires TLS binding", user: "User", domain: "Domain", password: password, server: serverChallenge, client: clientChallenge, timestamp: timestamp, info: append([]byte{10, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, targetInfo...)},
@@ -218,34 +244,27 @@ func mustHex16(t *testing.T, value string) (out [16]byte) {
 	return out
 }
 
-func TestNTLMv2TargetInfoWithMICFlag_AddsOrSetsOnlyMICPresent(t *testing.T) {
+func TestNTLMv2TargetInfoForMIC_RequiresServerFlagAndPreservesBytes(t *testing.T) {
 	base, _ := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
-	got, err := NTLMv2TargetInfoWithMICFlag(base)
+	if _, err := NTLMv2TargetInfoForMIC(base); !errors.Is(err, ErrNTLMv2Input) {
+		t.Fatalf("missing server MIC_PRESENT error = %v, want ErrNTLMv2Input", err)
+	}
+	withFlags := append([]byte{6, 0, 4, 0, 2, 0, 0, 0}, base...)
+	got, err := NTLMv2TargetInfoForMIC(withFlags)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(got)
-	pairs, err := ParseNTLMv2AVPairs(got)
-	if err != nil {
-		t.Fatal(err)
+	if !bytes.Equal(got, withFlags) {
+		t.Fatalf("TargetInfo changed while preparing MIC: got %x want exact server bytes %x", got, withFlags)
 	}
-	if len(pairs) != 3 || pairs[2].ID != ntlmAvFlags || binary.LittleEndian.Uint32(pairs[2].Value) != 2 {
-		t.Fatalf("MIC AV_PAIR = %#v", pairs)
-	}
-
-	withFlags := append([]byte{6, 0, 4, 0, 0, 0, 0, 0}, base...)
-	updated, err := NTLMv2TargetInfoWithMICFlag(withFlags)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(updated)
-	updatedPairs, err := ParseNTLMv2AVPairs(updated)
-	if err != nil || len(updatedPairs) != 3 || binary.LittleEndian.Uint32(updatedPairs[0].Value) != 2 {
-		t.Fatalf("updated MIC AV_PAIR = %#v, %v", updatedPairs, err)
-	}
-
-	unsupported := append([]byte{6, 0, 4, 0, 4, 0, 0, 0}, base...)
-	if _, err := NTLMv2TargetInfoWithMICFlag(unsupported); !errors.Is(err, ErrNTLMv2Input) {
-		t.Fatalf("unsupported AV flags error = %v, want ErrNTLMv2Input", err)
+	for name, flags := range map[string]uint32{"MIC absent": 0, "unsupported flag": 4, "unknown bits": 6} {
+		t.Run(name, func(t *testing.T) {
+			invalid := append([]byte{6, 0, 4, 0, 0, 0, 0, 0}, base...)
+			binary.LittleEndian.PutUint32(invalid[4:8], flags)
+			if _, err := NTLMv2TargetInfoForMIC(invalid); !errors.Is(err, ErrNTLMv2Input) {
+				t.Fatalf("flags %#x error = %v, want ErrNTLMv2Input", flags, err)
+			}
+		})
 	}
 }

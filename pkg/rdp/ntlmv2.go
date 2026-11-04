@@ -46,8 +46,7 @@ type NTLMv2AVPair struct {
 
 // NTLMv2Response contains the client responses and the session base key.
 // Call Purge when the response is no longer needed; it clears key material held by this result.
-// LMResponse contains the LMv2 proof. The current strict profile rejects server timestamps,
-// so AUTHENTICATE_MESSAGE includes this LMv2 value; timestamp support must switch to Z(24).
+// LMResponse contains the LMv2 proof, or Z(24) when the server supplied an AV timestamp.
 type NTLMv2Response struct {
 	NTProof        [16]byte
 	NTResponse     []byte
@@ -108,40 +107,29 @@ func ParseNTLMv2AVPairs(data []byte) ([]NTLMv2AVPair, error) {
 	return nil, ErrNTLMv2AVPair // EOL is mandatory, including for an empty list.
 }
 
-// NTLMv2TargetInfoWithMICFlag returns a copy of TargetInfo with MsvAvFlags.MIC_PRESENT set.
-// It preserves the order and bytes of all other AV pairs; unsupported flag bits fail closed.
-func NTLMv2TargetInfoWithMICFlag(targetInfo []byte) ([]byte, error) {
+// NTLMv2TargetInfoForMIC validates that the server explicitly required an
+// AUTHENTICATE_MESSAGE MIC and returns an owned, byte-for-byte copy of its
+// TargetInfo. Client code must never synthesize or rewrite server AV_PAIRs:
+// the NTProof is calculated over the exact TargetInfo sent in CHALLENGE_MESSAGE.
+func NTLMv2TargetInfoForMIC(targetInfo []byte) ([]byte, error) {
 	pairs, err := ParseNTLMv2AVPairs(targetInfo)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]byte, 0, len(targetInfo)+8)
 	flagsFound := false
 	for _, pair := range pairs {
-		value := pair.Value
-		if pair.ID == ntlmAvFlags {
-			flagsFound = true
-			flags := binary.LittleEndian.Uint32(value)
-			if flags&^uint32(0x00000002) != 0 {
-				return nil, ErrNTLMv2Input
-			}
-			value = []byte{2, 0, 0, 0}
+		if pair.ID != ntlmAvFlags {
+			continue
 		}
-		result = append(result, byte(pair.ID), byte(pair.ID>>8), byte(len(value)), byte(len(value)>>8))
-		result = append(result, value...)
-	}
-	if !flagsFound {
-		if len(pairs) >= maxNTLMv2AVPairs {
+		flagsFound = true
+		if binary.LittleEndian.Uint32(pair.Value) != 0x00000002 {
 			return nil, ErrNTLMv2Input
 		}
-		result = append(result, byte(ntlmAvFlags), byte(ntlmAvFlags>>8), 4, 0, 2, 0, 0, 0)
 	}
-	result = append(result, 0, 0, 0, 0)
-	if len(result) > maxNTLMv2TargetInfo {
-		clear(result)
+	if !flagsFound {
 		return nil, ErrNTLMv2Input
 	}
-	return result, nil
+	return append([]byte(nil), targetInfo...), nil
 }
 
 func validNTLMv2AVValue(id uint16, value []byte) bool {
@@ -199,9 +187,10 @@ func GenerateNTLMv2ClientChallenge() ([8]byte, error) {
 
 // ComputeNTLMv2Response implements the NTLMv2 response calculation. timestamp
 // is the eight-byte FILETIME value used in the NTLMv2 client-challenge blob.
-// Server-supplied timestamp, target-name and channel-binding AV pairs are rejected
-// until their time and TLS target/channel binding paths are complete. MIC_PRESENT
-// is supported when targetInfo has been updated by NTLMv2TargetInfoWithMICFlag.
+// A server-supplied AV timestamp overrides timestamp. In that case LMResponse
+// is Z(24), as required by MS-NLMP. Target-name and channel-binding AV pairs are
+// rejected until their TLS target/channel binding paths are complete. Only the
+// MIC_PRESENT bit is recognized; the NTLMSSP MIC path requires the server to set it.
 // targetInfo must be a complete,
 // validated AV_PAIR list. The caller owns password and should clear
 // it after use. This function does not perform CredSSP or TLS key binding.
@@ -214,12 +203,13 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 	if err != nil {
 		return out, err
 	}
+	serverTimestamp := false
+	effectiveTimestamp := timestamp
 	for _, pair := range pairs {
 		switch pair.ID {
 		case ntlmAvTimestamp:
-			// Timestamp support also changes LMChallengeResponse to Z(24) and
-			// requires explicit server-time handling; fail closed until implemented.
-			return out, ErrNTLMv2Input
+			copy(effectiveTimestamp[:], pair.Value)
+			serverTimestamp = true
 		case ntlmAvTargetName, ntlmAvChannelBindings:
 			// These must be bound to the actual target and TLS channel, not echoed.
 			return out, ErrNTLMv2Input
@@ -240,7 +230,7 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 
 	blob := make([]byte, 32+len(targetInfo))
 	blob[0], blob[1] = 1, 1 // RespType, HiRespType
-	copy(blob[8:16], timestamp[:])
+	copy(blob[8:16], effectiveTimestamp[:])
 	copy(blob[16:24], clientChallenge[:])
 	copy(blob[28:], targetInfo) // Reserved3 precedes AV pairs; the trailing four bytes are reserved.
 
@@ -255,14 +245,16 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 	copy(out.NTResponse[16:], blob)
 	clear(blob)
 
-	lmInput := make([]byte, 16)
-	copy(lmInput, serverChallenge[:])
-	copy(lmInput[8:], clientChallenge[:])
-	lmProof := hmacMD5(responseKey[:], lmInput)
-	clear(lmInput)
-	copy(out.LMResponse[:16], lmProof[:])
-	copy(out.LMResponse[16:], clientChallenge[:])
-	clear(lmProof[:])
+	if !serverTimestamp {
+		lmInput := make([]byte, 16)
+		copy(lmInput, serverChallenge[:])
+		copy(lmInput[8:], clientChallenge[:])
+		lmProof := hmacMD5(responseKey[:], lmInput)
+		clear(lmInput)
+		copy(out.LMResponse[:16], lmProof[:])
+		copy(out.LMResponse[16:], clientChallenge[:])
+		clear(lmProof[:])
+	}
 
 	out.SessionBaseKey = hmacMD5(responseKey[:], out.NTProof[:])
 	return out, nil
