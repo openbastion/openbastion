@@ -1868,3 +1868,19 @@ Nettoyage de l'environnement :
 - go clean -cache, nettoyage Conda/npm et purge BuildKit ont libéré les caches régénérables.
 - docker builder prune --all --force a récupéré 750.8 MB ; aucun volume Docker n'a été supprimé.
 - overlay : 94 % utilisés avant nettoyage, 84 % après le nettoyage Docker (4.8 GB disponibles). Le build et les tests ont ramené l'usage à environ 86 % (4.2 GB disponibles).
+
+
+## 2026-11-04 — ADR-0071, incrément 14 : raccordement TSRequest pubKeyAuth
+
+- `pkg/rdp/credssp_exchange.go` ajoute `NewCredSSPClientBindingRequest` : v5/v6 uniquement, dernier jeton SPNEGO fourni par l'appelant, hash client→serveur scellé via NTLMSSP GSS_Wrap, `pubKeyAuth` et `clientNonce` dans le même TSRequest. L'appel consomme une séquence sortante et la requête ne doit être envoyée qu'une fois.
+- `VerifyCredSSPServerBindingResponse` n'accepte qu'une réponse TSRequest avec les champs `version` et `pubKeyAuth`, vérifie la version, déroule le flux serveur→client, valide la signature/la séquence GSS_Wrap et compare le hash attendu en temps constant. Toute erreur ferme le contexte.
+- Tests couvrent l'aller-retour client/serveur, le dernier jeton, le nonce, l'absence du hash en clair, les champs supplémentaires, la version, le hash faux, la signature altérée et le rejeu.
+- Limites : pas de transport TLS ni de machine d'état SPNEGO/CredSSP ; le dernier jeton est fourni par l'appelant. `authInfo`, MCS/GCC, affichage et entrée restent à faire. Aucun credential n'est transmis et RDP reste désactivé.
+
+Validation de l'incrément 14 :
+- `make build vet test` : PASS.
+- `go test -race ./pkg/rdp/... -count=1` : PASS.
+- `make proto-lint` : PASS.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : PASS ; aucune vulnérabilité atteignable, quelques avis dans des modules requis mais non appelés ; `npm audit` : zéro vulnérabilité dans les deux workspaces UI.
+- `make test-integration` : PASS (222.858 s) ; PostgreSQL ignoré faute de `TEST_DATABASE_URL`. Les tests Compose restent réservés à GitHub Actions.
+- `git diff --check` : PASS.
