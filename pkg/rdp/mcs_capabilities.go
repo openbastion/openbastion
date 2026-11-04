@@ -283,7 +283,7 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings) []byte {
 	binary.LittleEndian.PutUint16(bitmap[10:12], 1) // receive 8 bpp (required legacy field)
 	binary.LittleEndian.PutUint16(bitmap[12:14], settings.DesktopWidth)
 	binary.LittleEndian.PutUint16(bitmap[14:16], settings.DesktopHeight)
-	binary.LittleEndian.PutUint16(bitmap[20:22], 1) // bitmap compression is mandatory
+	binary.LittleEndian.PutUint16(bitmap[20:22], 0) // do not negotiate compressed bitmaps until a decoder is available
 	binary.LittleEndian.PutUint16(bitmap[24:26], 1) // multiple rectangles are mandatory
 	caps = append(caps, bitmap...)
 	clear(bitmap)

@@ -140,7 +140,7 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(bitmap[4:6]) != 32 || binary.LittleEndian.Uint16(bitmap[6:8]) != 1 ||
 		binary.LittleEndian.Uint16(bitmap[8:10]) != 1 || binary.LittleEndian.Uint16(bitmap[10:12]) != 1 ||
 		binary.LittleEndian.Uint16(bitmap[12:14]) != 1600 || binary.LittleEndian.Uint16(bitmap[14:16]) != 900 ||
-		binary.LittleEndian.Uint16(bitmap[20:22]) != 1 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
+		binary.LittleEndian.Uint16(bitmap[20:22]) != 0 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
 		t.Fatalf("client Bitmap capability = %x", bitmap)
 	}
 	if binary.LittleEndian.Uint16(caps[52:54]) != rdpCapOrder || binary.LittleEndian.Uint16(caps[54:56]) != 88 ||
