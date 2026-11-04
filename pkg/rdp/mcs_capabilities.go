@@ -35,8 +35,9 @@ type RDPServerCapabilities struct {
 }
 
 // ExchangeCapabilities consumes one Demand Active PDU and sends one
-// Confirm Active PDU. It is a one-shot transition after MCS channel connection.
-// Licensing is a preceding protocol phase and is not implemented by this client yet.
+// Confirm Active PDU. It is available only after Client Info and a completed
+// Licensing exchange. Until that handler exists, licensingComplete remains
+// false and this transition refuses to consume any server PDU.
 func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout time.Duration) (capabilities RDPServerCapabilities, err error) {
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
 		return capabilities, ErrMCSConnection
@@ -44,7 +45,7 @@ func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil || s.transport == nil || s.transport.Conn == nil || !s.credentialsDelegated ||
-		!s.mcsConnected || !s.channelsConnected || s.capabilitiesExchanged ||
+		!s.mcsConnected || !s.channelsConnected || !s.clientInfoSent || !s.licensingComplete || s.capabilitiesExchanged ||
 		!validMCSUserID(s.userChannelID) || !s.transport.Conn.ConnectionState().HandshakeComplete {
 		return capabilities, ErrMCSConnection
 	}
@@ -316,7 +317,8 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings) []byte {
 }
 
 func marshalMCSSendDataRequest(userID, channelID uint16, userData []byte) ([]byte, error) {
-	if !validMCSUserID(userID) || channelID != mcsGlobalChannelID || len(userData) == 0 || len(userData) > maxTPKTPacket-16 {
+	if !validMCSUserID(userID) || channelID != mcsGlobalChannelID ||
+		len(userData) == 0 || len(userData) > maxTPKTPacket-16 {
 		return nil, ErrMCSConnection
 	}
 	mcs := []byte{mcsSendDataRequest, 0, 0, 0, 0, 0x70}

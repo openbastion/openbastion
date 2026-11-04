@@ -37,6 +37,8 @@ type CredSSPClientSession struct {
 	mcsResponse           MCSConnectResponse
 	channelsConnected     bool
 	userChannelID         uint16
+	clientInfoSent        bool
+	licensingComplete     bool
 	mcsSettings           MCSClientSettings
 	capabilitiesExchanged bool
 	serverCapabilities    RDPServerCapabilities
