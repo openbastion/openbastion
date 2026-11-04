@@ -2067,7 +2067,7 @@ Validation de l’incrément 23 :
 
 `CredSSPClientSession.ReadBitmapUpdate` lit un seul Bitmap Update sur le TLS épinglé, après `FinalizeConnection` et `Demand Active` validés. Il applique deadline et cancellation, décode les pixels via le parseur RAW de l'incrément 23 et rend le transport terminal sur tout échec de lecture ou de protocole. Un TPKT de 63×63 pixels dépassant 4 Kio est testé sur faux serveur TLS ; le dépassement du plafond est refusé.
 
-Le réassemblage MCS multi-segments n'est pas encore pris en charge : seul un SDIN complet (`0x70`) par TPKT est accepté. Aucun bitmap compressé, ordre graphique, pointeur, entrée, adaptateur `proxycore.ScreenCodec`, runtime ou route RDP n'est activé ; aucune interopérabilité Windows/RDS réelle n'a été prouvée.
+À l’incrément 24, seul un SDIN complet (`0x70`) par TPKT était accepté. Le réassemblage multi-segments est livré à l’incrément 25. Aucun bitmap compressé, ordre graphique, pointeur, entrée, adaptateur `proxycore.ScreenCodec`, runtime ou route RDP n’est activé ; aucune interopérabilité Windows/RDS réelle n’a été prouvée.
 
 Validation de l’incrément 24 :
 - `make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et `buf lint`.
@@ -2078,3 +2078,27 @@ Validation de l’incrément 24 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
 - `npm audit --audit-level=low` : zéro vulnérabilité dans `web/admin-ui` et `web/openbastion-icons`.
 - `git diff --check` : PASS. Aucun test d’interopérabilité Windows/RDS réel ; réassemblage MCS multi-segments, bitmaps compressés, adaptateur ScreenCodec, runtime et route RDP restent non implémentés/désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 25 : réassemblage MCS multi-segments des bitmaps
+
+`ReadBitmapUpdate` accepte maintenant les MCS Send Data Indication segmentés sur le canal global I/O 1003. Chaque TPKT est toujours lu avec la limite stricte de 16 383 octets. Le lecteur valide séparément l’initiateur serveur, le canal, la priorité HIGH, les bits de padding réservés et le PER length de chaque fragment avant de toucher au buffer d’assemblage.
+
+Le champ MCS `segmentation` est interprété comme un état de flux : `begin` seul ouvre un assemblage, zéro désigne un fragment intermédiaire, `end` seul clôt l’assemblage, et `begin|end` transporte un message complet non fragmenté. Les séquences sans `begin`, avec un second `begin`, avec un message complet au milieu ou avec des flags réservés sont rejetées. La session lit les fragments sous le même verrou, le même contexte et la même deadline ; une interruption, un dépassement ou une séquence invalide ferme le transport TLS et efface le buffer temporaire.
+
+Les bornes sont explicites : cinq fragments au maximum, 16 383 octets par TPKT et 65 535 octets pour le Share Data PDU réassemblé (champ `totalLength` 16 bits). Ce lecteur mono-flux n’entrelace pas d’autres PDUs MCS et refuse l’extension T.125 `totalDataSize` V3 ; ces formes ne sont pas requises par le profil RDP pris en charge. L’assemblage est validé ensuite par le parseur Share Data/Bitmap existant ; aucune taille de bitmap n’est acceptée sur la seule base des fragments. Les pixels décodés restent indépendants du buffer réseau, lequel est effacé après traitement.
+
+Tests : reconstitution d’un bitmap RAW 32 bpp de 120×120 pixels sur cinq fragments TLS ; validation des pixels après conversion BGRX→RGBA ; rejet d’une séquence répétant `begin` et fermeture terminale du transport. Les tests existants du chemin non fragmenté, des limites, des états et du fuzzer restent applicables.
+
+Références normatives : [MS-RDPBCGR §2.2 — Message Syntax](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/b61e1c76-5d7c-4285-b61a-b69f85e4a0e2) (borne MCS Send Data à 16 383 octets) ; [MS-RDPBCGR — spécification complète](https://winprotocoldoc.z19.web.core.windows.net/MS-RDPBCGR/%5BMS-RDPBCGR%5D-220903.pdf), qui décrit les bits `begin` et `end` du champ MCS `Segmentation`.
+
+**Limites restantes :** le parseur accepte uniquement les bitmaps RAW 32 bpp non compressés. Les ordres graphiques, les bitmaps compressés, le pointeur, le clavier/souris et l’adaptateur `proxycore.ScreenCodec` ne sont pas implémentés. Le runtime et la route RDP restent désactivés ; aucun test d’interopérabilité Windows/RDS réelle n’est revendiqué.
+
+Validation de l’incrément 25 :
+- `go test ./pkg/rdp/... -count=1` : PASS ; `go test -race ./pkg/rdp/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS sur les packages Go, `go vet`, les tests et Buf lint.
+- `FuzzParseRDPBitmapUpdate` : PASS, 64 507 exécutions en 5 s, 16 entrées intéressantes au total.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable détectée ; quelques avis subsistent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (218,635 s). Les scénarios PostgreSQL ont été ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose local n’a été lancé.
+- `git diff --check` : PASS. Aucun test d’interopérabilité Windows/RDS réel ; le runtime et la route RDP restent désactivés.
