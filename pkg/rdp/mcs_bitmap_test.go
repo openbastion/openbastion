@@ -1,9 +1,13 @@
 package rdp
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"net"
 	"testing"
+	"time"
 )
 
 func TestParseRDPBitmapUpdateDecodesRaw32BPPBottomUp(t *testing.T) {
@@ -76,6 +80,75 @@ func TestParseRDPBitmapUpdateRejectsMalformedInput(t *testing.T) {
 	if _, err := parseRDPBitmapUpdate(base, mcsGlobalChannelID, shareID, 0, 720); !errors.Is(err, ErrMCSConnection) {
 		t.Fatalf("zero desktop dimension accepted: %v", err)
 	}
+}
+
+func TestParseRDPBitmapUpdateAcceptsLargeBoundedTPKT(t *testing.T) {
+	const shareID = uint32(0x000103ea)
+	pixels := make([]byte, 63*63*4)
+	packet := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(0, 0, 63, 63, 32, 0, pixels))
+	if len(packet) <= maxTPKTPacket || len(packet) > maxRDPBitmapTPKTPacket {
+		t.Fatalf("fixture length = %d, want (%d, %d]", len(packet), maxTPKTPacket, maxRDPBitmapTPKTPacket)
+	}
+	got, err := parseRDPBitmapUpdate(packet, mcsGlobalChannelID, shareID, 1280, 720)
+	if err != nil || len(got.Rectangles) != 1 || len(got.Rectangles[0].Pixels) != len(pixels) {
+		t.Fatalf("large bitmap decode = rectangles %d, err %v", len(got.Rectangles), err)
+	}
+	oversized := append([]byte(nil), packet...)
+	oversized = append(oversized, 0)
+	binary.BigEndian.PutUint16(oversized[2:4], uint16(len(oversized)))
+	if _, err := parseRDPBitmapUpdate(oversized, mcsGlobalChannelID, shareID, 1280, 720); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("oversized packet error = %v, want ErrMCSConnection", err)
+	}
+}
+
+func TestReadBitmapUpdateOverTLSAcceptsLargeBoundedTPKT(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	const shareID = uint32(0x000103ea)
+	pixels := make([]byte, 63*63*4)
+	packet := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(0, 0, 63, 63, 32, 0, pixels))
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			acceptErr = writeFull(tlsConn, packet)
+		}
+		serverResult <- acceptErr
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport:             &Transport{Conn: tlsConn},
+		connectionFinalized:   true,
+		capabilitiesExchanged: true,
+		mcsResponse:           MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities:    RDPServerCapabilities{ShareID: shareID, DesktopWidth: 1280, DesktopHeight: 720},
+	}
+	got, err := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if err != nil || len(got.Rectangles) != 1 || len(got.Rectangles[0].Pixels) != len(pixels) {
+		t.Fatalf("ReadBitmapUpdate = rectangles %d, err %v", len(got.Rectangles), err)
+	}
+	if serverErr := <-serverResult; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+	session.Close()
 }
 
 func TestParseRDPBitmapUpdateSupportsMultipleRectangles(t *testing.T) {

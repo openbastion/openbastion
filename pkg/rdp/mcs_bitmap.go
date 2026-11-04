@@ -1,6 +1,10 @@
 package rdp
 
-import "encoding/binary"
+import (
+	"context"
+	"encoding/binary"
+	"time"
+)
 
 const (
 	rdpPDU2Update       = byte(2)
@@ -8,6 +12,9 @@ const (
 	rdpBitmapCompressed = uint16(0x0001)
 	rdpBitmapNoCompHdr  = uint16(0x0400)
 	maxRDPBitmapRects   = 64
+	// MS-RDPBCGR restricts each MCS Send Data Request/Indication to 16,383
+	// bytes. Keep the whole TPKT at or below that conservative bound.
+	maxRDPBitmapTPKTPacket = 16_383
 )
 
 // RDPBitmapRectangle is one decoded, top-down RGBA rectangle from a server
@@ -31,7 +38,7 @@ type RDPBitmapUpdate struct {
 // decoders are implemented and advertised independently.
 func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
 	var result RDPBitmapUpdate
-	if len(packet) < 7+7+18+4 || len(packet) > maxTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
+	if len(packet) < 7+7+18+4 || len(packet) > maxRDPBitmapTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
 		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) || !equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) ||
 		expectedChannelID != mcsGlobalChannelID || shareID == 0 ||
 		desktopWidth == 0 || desktopHeight == 0 || uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
@@ -107,4 +114,60 @@ func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint3
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	return result, nil
+}
+
+// ReadBitmapUpdate reads and decodes one complete server Bitmap Update after
+// connection finalization. It accepts a larger, but still protocol-bounded,
+// TPKT than the handshake path. Any malformed or unexpected packet makes the
+// stream terminal because its framing can no longer be trusted.
+func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout time.Duration) (update RDPBitmapUpdate, err error) {
+	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
+		return update, ErrMCSConnection
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ctx.Err() != nil || s.transport == nil || s.transport.Conn == nil || !s.connectionFinalized ||
+		!s.capabilitiesExchanged || s.serverCapabilities.ShareID == 0 ||
+		!s.transport.Conn.ConnectionState().HandshakeComplete {
+		return update, ErrMCSConnection
+	}
+	if timeout == 0 {
+		timeout = defaultCredSSPTimeout
+	}
+	conn := s.transport.Conn
+	deadline := time.Now().Add(timeout)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		s.closeTransportLocked()
+		return update, ErrMCSConnection
+	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
+	defer func() {
+		cancelStopped := stopCancel()
+		if err != nil || ctx.Err() != nil || !cancelStopped {
+			s.closeTransportLocked()
+			err = ErrMCSConnection
+			update = RDPBitmapUpdate{}
+			return
+		}
+		if setErr := conn.SetDeadline(time.Time{}); setErr != nil || ctx.Err() != nil {
+			s.closeTransportLocked()
+			err = ErrMCSConnection
+			update = RDPBitmapUpdate{}
+		}
+	}()
+
+	packet, readErr := readTPKTPacket(conn, maxRDPBitmapTPKTPacket)
+	if readErr != nil {
+		return RDPBitmapUpdate{}, ErrMCSConnection
+	}
+	defer clear(packet)
+	update, err = parseRDPBitmapUpdate(packet, s.mcsResponse.IOChannelID, s.serverCapabilities.ShareID,
+		s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight)
+	if err != nil || ctx.Err() != nil {
+		return RDPBitmapUpdate{}, ErrMCSConnection
+	}
+	return update, nil
 }

@@ -479,12 +479,22 @@ func equalBytes(a, b []byte) bool {
 }
 
 func readMCSConnectResponse(r io.Reader) ([]byte, error) {
+	return readTPKTPacket(r, maxTPKTPacket)
+}
+
+// readTPKTPacket reads one complete TPKT with a caller-selected, protocol-
+// specific bound. Handshake and control exchanges keep their small legacy cap;
+// the graphics receive path uses the larger RDP MCS bound.
+func readTPKTPacket(r io.Reader, maxPacket int) ([]byte, error) {
 	var header [4]byte
+	if maxPacket < 9 || maxPacket > 0xffff {
+		return nil, ErrMCSConnection
+	}
 	if _, err := io.ReadFull(r, header[:]); err != nil {
 		return nil, ErrMCSConnection
 	}
 	length := int(binary.BigEndian.Uint16(header[2:]))
-	if header[0] != 3 || header[1] != 0 || length < 9 || length > maxTPKTPacket {
+	if header[0] != 3 || header[1] != 0 || length < 9 || length > maxPacket {
 		return nil, ErrMCSConnection
 	}
 	packet := make([]byte, length)
