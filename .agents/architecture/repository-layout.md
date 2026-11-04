@@ -12,7 +12,7 @@ AGENTS.md                        point d'entrée des agents IA
   architecture/ personas/ policies/ rules/ settings/ tasks/ skills/<nom>/SKILL.md
 pkg/
   proxycore/                     pipeline proxy commun (listener, credential fetcher, tap, terminator) — ADR-0006
-  rdp/                           transport X.224 + négociation HYBRID/TLS épinglé, codec DER TSRequest, SPNEGO NTLM strict, primitives NTLMv2 et codecs NTLMSSP bornés avec MIC (pas de dialogue CredSSP réel) ; binding TLS/target-name, pubKeyAuth, MCS/affichage restent à implémenter — ADR-0071
+  rdp/                           transport X.224 + HYBRID/TLS épinglé, CredSSP NTLM v5/v6 avec authInfo scellé, codecs MCS/GCC Basic Settings Exchange stricts ; Channel Connection, capacités et affichage restent à implémenter — ADR-0071
   mtls/                          identité par certificat, Guard, rechargement, PKI de dev — ADR-0010
   migrate/                       migrations de schéma versionnées, sous verrou, une fois, checksum figé (sept magasins PostgreSQL) — ADR-0030 ; stdlib seulement
   refusalbudget/                 seau à jetons par identité des refus écrits dans l'audit (Broker, Recorder) — ADR-0020, ADR-0024 ; stdlib seulement
