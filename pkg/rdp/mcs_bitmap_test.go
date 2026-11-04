@@ -151,6 +151,152 @@ func TestReadBitmapUpdateOverTLSAcceptsLargeBoundedTPKT(t *testing.T) {
 	session.Close()
 }
 
+func TestReadBitmapUpdateOverTLSReassemblesMCSFragments(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	const shareID = uint32(0x000103ea)
+	pixels := make([]byte, 120*120*4)
+	for i := 0; i < len(pixels); i += 4 {
+		pixels[i+2] = 0x7f // BGRX wire order; decoded red must be 0x7f.
+	}
+	userData := mcsTestBitmapUpdateUserData(shareID, mcsTestBitmapRectangle(10, 20, 120, 120, 32, 0, pixels))
+	if len(userData) <= 3*maxRDPBitmapTPKTPacket {
+		t.Fatalf("fixture userData = %d bytes; want more than three fragments", len(userData))
+	}
+	const chunk = 14_000
+	var fragments [][]byte
+	for offset, index := 0, 0; offset < len(userData); index++ {
+		end := offset + chunk
+		if end > len(userData) {
+			end = len(userData)
+		}
+		segmentation := byte(0) // middle
+		if index == 0 {
+			segmentation = 2 // begin
+		} else if end == len(userData) {
+			segmentation = 1 // end
+		}
+		fragments = append(fragments, mcsTestBitmapFragment(userData[offset:end], segmentation))
+		offset = end
+	}
+	if len(fragments) != 5 {
+		t.Fatalf("fragment count = %d, want 5", len(fragments))
+	}
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			for _, fragment := range fragments {
+				if acceptErr = writeFull(tlsConn, fragment); acceptErr != nil {
+					break
+				}
+			}
+		}
+		serverResult <- acceptErr
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport:             &Transport{Conn: tlsConn},
+		connectionFinalized:   true,
+		capabilitiesExchanged: true,
+		mcsResponse:           MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities:    RDPServerCapabilities{ShareID: shareID, DesktopWidth: 1280, DesktopHeight: 720},
+	}
+	got, err := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if err != nil || len(got.Rectangles) != 1 || len(got.Rectangles[0].Pixels) != len(pixels) {
+		t.Fatalf("ReadBitmapUpdate = rectangles %d, err %v", len(got.Rectangles), err)
+	}
+	if got.Rectangles[0].Pixels[0] != 0x7f || got.Rectangles[0].Pixels[3] != 0xff {
+		t.Fatalf("decoded first pixel = %v, want [127 0 0 255]", got.Rectangles[0].Pixels[:4])
+	}
+	if serverErr := <-serverResult; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+	session.Close()
+}
+
+func TestReadBitmapUpdateOverTLSRejectsRepeatedBeginFragment(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	const shareID = uint32(0x000103ea)
+	userData := mcsTestBitmapUpdateUserData(shareID, mcsTestBitmapRectangle(0, 0, 1, 1, 32, 0, []byte{0, 0, 0, 0}))
+	first := mcsTestBitmapFragment(userData[:len(userData)/2], 2)
+	second := mcsTestBitmapFragment(userData[len(userData)/2:], 2)
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			acceptErr = writeFull(tlsConn, append(first, second...))
+		}
+		serverResult <- acceptErr
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport:             &Transport{Conn: tlsConn},
+		connectionFinalized:   true,
+		capabilitiesExchanged: true,
+		mcsResponse:           MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities:    RDPServerCapabilities{ShareID: shareID, DesktopWidth: 1280, DesktopHeight: 720},
+	}
+	if _, err := session.ReadBitmapUpdate(context.Background(), time.Second); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("repeated begin error = %v, want ErrMCSConnection", err)
+	}
+	if session.transport != nil {
+		t.Fatal("malformed fragment sequence did not close TLS transport")
+	}
+	if serverErr := <-serverResult; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+}
+
+func mcsTestBitmapFragment(userData []byte, segmentation byte) []byte {
+	mcs := []byte{mcsSendDataIndication, 0, 1, 0x03, 0xeb, 0x40 | ((segmentation & 0x03) << 4)}
+	mcs = appendPERLength(mcs, len(userData))
+	mcs = append(mcs, userData...)
+	packet := make([]byte, 7+len(mcs))
+	packet[0], packet[1] = 3, 0
+	binary.BigEndian.PutUint16(packet[2:4], uint16(len(packet)))
+	copy(packet[4:7], []byte{2, 0xf0, 0x80})
+	copy(packet[7:], mcs)
+	return packet
+}
+
 func TestParseRDPBitmapUpdateSupportsMultipleRectangles(t *testing.T) {
 	one := mcsTestBitmapRectangle(0, 0, 1, 1, 32, 0, []byte{0, 0, 255, 0})
 	two := mcsTestBitmapRectangle(4, 5, 1, 1, 32, 0, []byte{255, 0, 0, 0})
@@ -169,13 +315,35 @@ func FuzzParseRDPBitmapUpdate(f *testing.F) {
 }
 
 func mcsTestBitmapUpdatePacket(shareID uint32, rectangles ...[]byte) []byte {
+	userData := mcsTestBitmapUpdateUserData(shareID, rectangles...)
+	mcs := []byte{mcsSendDataIndication, 0, 1, 0x03, 0xeb, 0x70}
+	mcs = appendPERLength(mcs, len(userData))
+	mcs = append(mcs, userData...)
+	packet := make([]byte, 7+len(mcs))
+	packet[0], packet[1] = 3, 0
+	binary.BigEndian.PutUint16(packet[2:4], uint16(len(packet)))
+	copy(packet[4:7], []byte{2, 0xf0, 0x80})
+	copy(packet[7:], mcs)
+	return packet
+}
+
+func mcsTestBitmapUpdateUserData(shareID uint32, rectangles ...[]byte) []byte {
 	payload := make([]byte, 4)
 	binary.LittleEndian.PutUint16(payload[:2], rdpUpdateBitmap)
 	binary.LittleEndian.PutUint16(payload[2:4], uint16(len(rectangles)))
 	for _, rectangle := range rectangles {
 		payload = append(payload, rectangle...)
 	}
-	return mcsTestFinalizationResponse(shareID, rdpPDU2Update, 2, payload)
+	share := make([]byte, 18+len(payload))
+	binary.LittleEndian.PutUint16(share[:2], uint16(len(share)))
+	binary.LittleEndian.PutUint16(share[2:4], rdpShareDataPDU)
+	binary.LittleEndian.PutUint16(share[4:6], rdpServerChannelID)
+	binary.LittleEndian.PutUint32(share[6:10], shareID)
+	share[11] = 2
+	binary.LittleEndian.PutUint16(share[12:14], uint16(len(share)))
+	share[14] = rdpPDU2Update
+	copy(share[18:], payload)
+	return share
 }
 
 func mcsTestBitmapUpdateCount(shareID uint32, count int) []byte {

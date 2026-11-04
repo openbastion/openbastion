@@ -12,9 +12,11 @@ const (
 	rdpBitmapCompressed = uint16(0x0001)
 	rdpBitmapNoCompHdr  = uint16(0x0400)
 	maxRDPBitmapRects   = 64
-	// MS-RDPBCGR restricts each MCS Send Data Request/Indication to 16,383
-	// bytes. Keep the whole TPKT at or below that conservative bound.
-	maxRDPBitmapTPKTPacket = 16_383
+	// Keep each fragment below the conservative MCS/TPKT bound. A complete
+	// Share Data PDU has a 16-bit totalLength, so reassembly cannot exceed it.
+	maxRDPBitmapTPKTPacket      = 16_383
+	maxRDPBitmapReassemblyBytes = int(^uint16(0))
+	maxRDPBitmapFragments       = 5
 )
 
 // RDPBitmapRectangle is one decoded, top-down RGBA rectangle from a server
@@ -32,25 +34,33 @@ type RDPBitmapUpdate struct {
 	Rectangles []RDPBitmapRectangle
 }
 
-// parseRDPBitmapUpdate validates a complete MCS Send Data Indication and
-// decodes only uncompressed 32-bpp TS_BITMAP_DATA rectangles. Compressed
-// bitmaps and other pixel formats are deliberately rejected until their
-// decoders are implemented and advertised independently.
-func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
-	var result RDPBitmapUpdate
-	if len(packet) < 7+7+18+4 || len(packet) > maxRDPBitmapTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
+// parseRDPBitmapMCSFragment validates one TPKT/X.224/MCS envelope and returns
+// its userData and the two-bit MCS segmentation value (begin=2, end=1).
+func parseRDPBitmapMCSFragment(packet []byte, expectedChannelID uint16) ([]byte, byte, error) {
+	if len(packet) < 7+7 || len(packet) > maxRDPBitmapTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
 		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) || !equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) ||
-		expectedChannelID != mcsGlobalChannelID || shareID == 0 ||
-		desktopWidth == 0 || desktopHeight == 0 || uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
-		return result, ErrMCSConnection
+		expectedChannelID != mcsGlobalChannelID {
+		return nil, 0, ErrMCSConnection
 	}
 	mcs := packet[7:]
+	// Priority must remain HIGH and the four reserved padding bits must be 0.
+	// Bits 5..4 carry the MCS begin/end segmentation flags.
 	if mcs[0] != mcsSendDataIndication || binary.BigEndian.Uint16(mcs[1:3]) != rdpServerChannelID-mcsUserIDBase ||
-		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5] != 0x70 {
-		return result, ErrMCSConnection
+		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5]&0xcf != 0x40 {
+		return nil, 0, ErrMCSConnection
 	}
 	length, userData, err := readPERLength(mcs[6:])
-	if err != nil || length == 0 || length != len(userData) || len(userData) < 18+4 {
+	if err != nil || length == 0 || length != len(userData) {
+		return nil, 0, ErrMCSConnection
+	}
+	return userData, (mcs[5] >> 4) & 0x03, nil
+}
+
+// parseRDPBitmapShareData decodes one fully reassembled Share Data PDU.
+func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
+	var result RDPBitmapUpdate
+	if len(userData) < 18+4 || len(userData) > maxRDPBitmapReassemblyBytes || shareID == 0 ||
+		desktopWidth == 0 || desktopHeight == 0 || uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
 		return result, ErrMCSConnection
 	}
 	if int(binary.LittleEndian.Uint16(userData[0:2])) != len(userData) ||
@@ -59,7 +69,7 @@ func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint3
 		binary.LittleEndian.Uint32(userData[6:10]) != shareID || userData[10] != 0 || userData[11] != 2 ||
 		int(binary.LittleEndian.Uint16(userData[12:14])) != len(userData) || userData[14] != rdpPDU2Update ||
 		userData[15] != 0 || binary.LittleEndian.Uint16(userData[16:18]) != 0 {
-		return RDPBitmapUpdate{}, ErrMCSConnection
+		return result, ErrMCSConnection
 	}
 	payload := userData[18:]
 	if binary.LittleEndian.Uint16(payload[:2]) != rdpUpdateBitmap {
@@ -116,6 +126,17 @@ func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint3
 	return result, nil
 }
 
+// parseRDPBitmapUpdate validates and decodes one unsegmented MCS bitmap PDU.
+// Compressed bitmaps and other pixel formats remain deliberately unsupported.
+// Network callers use the reassembling ReadBitmapUpdate path below.
+func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
+	userData, segmentation, err := parseRDPBitmapMCSFragment(packet, expectedChannelID)
+	if err != nil || segmentation != 3 {
+		return RDPBitmapUpdate{}, ErrMCSConnection
+	}
+	return parseRDPBitmapShareData(userData, shareID, desktopWidth, desktopHeight)
+}
+
 // ReadBitmapUpdate reads and decodes one complete server Bitmap Update after
 // connection finalization. It accepts a larger, but still protocol-bounded,
 // TPKT than the handshake path. Any malformed or unexpected packet makes the
@@ -159,12 +180,47 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		}
 	}()
 
-	packet, readErr := readTPKTPacket(conn, maxRDPBitmapTPKTPacket)
-	if readErr != nil {
-		return RDPBitmapUpdate{}, ErrMCSConnection
+	var assembled []byte
+	for fragmentCount := 0; ; fragmentCount++ {
+		if fragmentCount >= maxRDPBitmapFragments || ctx.Err() != nil {
+			clear(assembled)
+			return RDPBitmapUpdate{}, ErrMCSConnection
+		}
+		packet, readErr := readTPKTPacket(conn, maxRDPBitmapTPKTPacket)
+		if readErr != nil {
+			clear(assembled)
+			return RDPBitmapUpdate{}, ErrMCSConnection
+		}
+		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, s.mcsResponse.IOChannelID)
+		if fragmentErr != nil {
+			clear(packet)
+			clear(assembled)
+			return RDPBitmapUpdate{}, ErrMCSConnection
+		}
+		if fragmentCount == 0 && segmentation == 3 {
+			assembled = append(assembled, fragment...)
+			clear(packet)
+			break
+		}
+		if fragmentCount == 0 && segmentation != 2 || fragmentCount > 0 && segmentation == 2 ||
+			fragmentCount > 0 && segmentation == 3 || fragmentCount > 0 && segmentation != 0 && segmentation != 1 {
+			clear(packet)
+			clear(assembled)
+			return RDPBitmapUpdate{}, ErrMCSConnection
+		}
+		if len(fragment) > maxRDPBitmapReassemblyBytes-len(assembled) {
+			clear(packet)
+			clear(assembled)
+			return RDPBitmapUpdate{}, ErrMCSConnection
+		}
+		assembled = append(assembled, fragment...)
+		clear(packet)
+		if segmentation == 1 {
+			break
+		}
 	}
-	defer clear(packet)
-	update, err = parseRDPBitmapUpdate(packet, s.mcsResponse.IOChannelID, s.serverCapabilities.ShareID,
+	defer clear(assembled)
+	update, err = parseRDPBitmapShareData(assembled, s.serverCapabilities.ShareID,
 		s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight)
 	if err != nil || ctx.Err() != nil {
 		return RDPBitmapUpdate{}, ErrMCSConnection

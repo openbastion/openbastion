@@ -681,3 +681,16 @@ Le profil n'accepte toujours qu'un MCS Send Data Indication complet (`dataPriori
 Tests : décodage d'un rectangle de 63×63 pixels dont le TPKT dépasse 4 Kio ; refus au-delà de la limite ; lecture du même grand TPKT sur un faux serveur TLS avec prérequis de session finalisée ; conservation des contrôles négatifs et du fuzzer du parseur. La limite et le chemin de lecture sont bornés avant allocation, et la lecture réseau est soumise au contexte et à une deadline.
 
 Référence normative : [MS-RDPBCGR §2.2 — Message Syntax](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/b61e1c76-5d7c-4285-b61a-b69f85e4a0e2), qui limite les MCS Send Data Request/Indication à 16 383 octets afin d'éviter le PER extended size determinant.
+
+
+## 2026-11-04 — Incrément 25 : réassemblage MCS multi-segments
+
+`CredSSPClientSession.ReadBitmapUpdate` prend désormais en charge le découpage MCS `Send Data Indication` : un message complet (`begin|end`), ou une séquence `begin`, zéro ou plusieurs fragments intermédiaires, puis `end`. Le parseur valide chaque enveloppe TPKT/X.224/MCS, l’initiateur serveur 1002, le canal I/O 1003, la priorité HIGH, les bits réservés et le PER length. L’ordre des fragments est strict ; les séquences ambiguës ou incomplètes sont terminales. Ce lecteur mono-flux ne met pas en file des PDUs MCS intercalés et ne prend pas en charge l’extension T.125 `totalDataSize` V3 : ces formes sont refusées par la validation stricte du Share Data PDU.
+
+Chaque fragment reste limité à 16 383 octets TPKT. L’assemblage est borné à cinq fragments et 65 535 octets, limite du champ Share Data `totalLength`. La lecture de toute la séquence utilise une deadline unique et l’annulation du contexte ; toute erreur, troncature, séquence invalide ou dépassement ferme TLS et efface le buffer temporaire. Le parseur Share Data/Bitmap existant est appelé seulement après réception de `end`, de sorte qu’aucune donnée partielle n’est exposée au consommateur.
+
+Le test TLS de bout en bout reconstitue un rectangle RAW 32 bpp de 120×120 pixels découpé en cinq fragments et vérifie les pixels décodés. Un second test confirme qu’un `begin` répété est refusé et que le transport devient terminal.
+
+**Limites :** pas de bitmap compressé, d’ordres graphiques, de pointeur, de clavier/souris ni d’adaptateur `proxycore.ScreenCodec`. Runtime et route RDP désactivés ; interopérabilité Windows/RDS réelle non vérifiée.
+
+Références : [MS-RDPBCGR §2.2 — Message Syntax](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/b61e1c76-5d7c-4285-b61a-b69f85e4a0e2) et [spécification MS-RDPBCGR](https://winprotocoldoc.z19.web.core.windows.net/MS-RDPBCGR/%5BMS-RDPBCGR%5D-220903.pdf).
