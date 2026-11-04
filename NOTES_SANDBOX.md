@@ -1776,7 +1776,7 @@ Les tests couvrent les deux structures, les champs opaques, le refus des mécani
 
 `pkg/rdp/ntlmv2.go` ajoute les primitives cryptographiques NTLMv2, sans construire ni envoyer de message NTLMSSP : dérivation `NTOWFv2` (MD4 du mot de passe UTF-16LE, puis HMAC-MD5 de `Uppercase(username) + domain`), construction du blob client, `NTProofStr`, réponse LMv2 et `SessionBaseKey`. Le challenge client de 8 octets est produit par `crypto/rand`. `NTLMv2Response.Purge` efface les champs de réponse et de clé exposés ; les buffers intermédiaires manipulables sont effacés au terme du calcul.
 
-`ParseNTLMv2AVPairs` valide les longueurs, les chaînes UTF-16LE, l'unicité des identifiants et le terminateur EOL final ; la taille est bornée à 16 Kio et 64 attributs. Les attributs inconnus restent opaques et sont conservés. Les attributs timestamp, target-name et channel-bindings sont refusés jusqu'à l'implémentation du MIC et des liaisons à la cible et au canal TLS ; les flags AV non nuls sont également refusés. NTLMv1 et LMv1 ne sont pas implémentés. Le calcul de LMv2 est fourni comme primitive ; le futur sérialiseur AUTHENTICATE devra appliquer les règles MS-NLMP avant de transmettre ce champ.
+`ParseNTLMv2AVPairs` valide les longueurs, les chaînes UTF-16LE, l'unicité des identifiants et le terminateur EOL final ; la taille est bornée à 16 Kio et 64 attributs. Les attributs inconnus restent opaques et sont conservés. `MsvAvTimestamp` est supporté : le FILETIME serveur est utilisé dans le blob NTLMv2 et entraîne `LMChallengeResponse = Z(24)`. `MsvAvTargetName` et `MsvAvChannelBindings` restent refusés jusqu'à leur liaison au pair TLS épinglé ; seul `MsvAvFlags.MIC_PRESENT` est accepté. NTLMv1 et LMv1 ne sont pas implémentés.
 
 Le vecteur Microsoft MS-NLMP §4.2.4 vérifie `NTProofStr`, la réponse LMv2 et `SessionBaseKey`. `NTProofStr` est la preuve du client ; NTLMv2 n’expose pas de preuve serveur distincte dans cette couche. Tests négatifs sur AV_PAIR et identités, test de purge, génération aléatoire, et fuzzer `FuzzParseNTLMv2AVPairs`.
 
@@ -1790,10 +1790,10 @@ Le vecteur Microsoft MS-NLMP §4.2.4 vérifie `NTProofStr`, la réponse LMv2 et 
 
 - `MarshalNTLMSSPNegotiate` émet le profil Unicode/NTLM/AlwaysSign/ESS/TargetInfo, sans OEM, LM-key, NTLMv1, SIGN, SEAL, KEY_EXCH ni VERSION. Le champ Version fixe est nul ; les security buffers vides pointent sur l'offset 40.
 - `ParseNTLMSSPChallenge` valide la signature/type, les flags réellement offerts, le champ Version nul, les security buffers, leurs bornes et leur non-chevauchement, l'alignement UTF-16LE, le challenge serveur non nul et la liste AV_PAIR bornée. Le header fixe est de 56 octets.
-- `NTLMv2TargetInfoWithMICFlag` conserve les AV_PAIR et pose `MsvAvFlags.MIC_PRESENT` (`0x2`), en refusant les autres bits.
+- `NTLMv2TargetInfoForMIC` exige le `MsvAvFlags.MIC_PRESENT` (`0x2`) envoyé par le serveur et conserve le TargetInfo octet pour octet. Le client ne synthétise pas ce flag : le NTProof couvre les AV_PAIR exacts du challenge.
 - `MarshalNTLMSSPAuthenticate` vérifie le NTProof, le blob et le TargetInfo attendu, lie le LMv2 au client challenge, sérialise LMv2 + NTLMv2, aligne les offsets UTF-16LE, laisse Version nul et calcule le MIC HMAC-MD5 sur NEGOTIATE + CHALLENGE + AUTHENTICATE (MIC nul pendant le calcul). `EncryptedRandomSessionKey` reste vide car KEY_EXCH n'est pas négocié.
 
-Le support du timestamp serveur n'est pas encore implémenté : les challenges avec `MsvAvTimestamp`, `MsvAvTargetName` ou `MsvAvChannelBindings` sont refusés. Le support du timestamp devra utiliser `Z(24)` pour LMChallengeResponse selon MS-NLMP. La liaison TLS `pubKeyAuth`, le dialogue CredSSP, le chiffrement `authInfo`, MCS/GCC et l'affichage restent absents. Aucun credential n'est transmis et le runtime RDP reste désactivé.
+Le timestamp serveur `MsvAvTimestamp` est maintenant supporté : son FILETIME remplace le timestamp local du blob et la réponse LM est `Z(24)` selon MS-NLMP. Les AV `MsvAvTargetName` et `MsvAvChannelBindings` restent refusés jusqu'à leur liaison cryptographique au pair TLS épinglé. La liaison TLS `pubKeyAuth`, le dialogue CredSSP, le chiffrement `authInfo`, MCS/GCC et l'affichage restent absents. Aucun credential n'est transmis et le runtime RDP reste désactivé.
 
 Tests et contrôles réalisés :
 
@@ -1808,3 +1808,16 @@ Tests et contrôles réalisés :
 - Les tests Compose ne sont pas lancés localement, conformément à la consigne : ils restent dans GitHub Actions.
 
 Références de protocole : MS-NLMP §§2.2.1.1–2.2.1.3 et §3.1.5.2.1. Les messages NTLMSSP ne sont pas encore branchés à SPNEGO/CredSSP ; aucune interopérabilité avec une cible Windows réelle n'est revendiquée.
+
+
+## 2026-11-04 — ADR-0071, incrément 10 : timestamp serveur NTLMv2
+
+- `ComputeNTLMv2Response` utilise les huit octets FILETIME de `MsvAvTimestamp` pour le blob NTLMv2, sans dépendre de l'horloge locale de l'appelant.
+- La présence de cet AV impose `LMChallengeResponse = Z(24)` (24 octets nuls) ; le validateur AUTHENTICATE n'accepte cette forme que si le timestamp est réellement présent et refuse une LM response non nulle.
+- Sans timestamp serveur, le LMv2 reste calculé et lié au client challenge.
+- Tests ciblés couvrent le remplacement du timestamp local, le contenu du blob, le security buffer `AUTHENTICATE_MESSAGE` et le refus d'une LM response non nulle.
+- `MsvAvTargetName` et `MsvAvChannelBindings` restent refusés jusqu'à leur construction depuis le pair TLS épinglé. `pubKeyAuth`, le dialogue CredSSP, `authInfo`, MCS/GCC, l'affichage et l'entrée ne sont pas implémentés.
+
+- Validation complémentaire de l'incrément 10 : `make build vet test`, `make vuln`, `make proto-lint`, `go test -race ./pkg/rdp/... -count=1`, les fuzzers NTLMSSP/AV_PAIR (10 s chacun) et `make test-integration` sont verts. L'intégration multi-processus a duré 226,162 s ; les tests PostgreSQL ont été ignorés localement faute de `TEST_DATABASE_URL` (la CI PostgreSQL 16 dédiée reste la preuve de ce périmètre). `git diff --check` et `gofmt` sont propres. Les tests Compose restent exécutés dans GitHub Actions, pas localement.
+
+- Revue de protocole : correction d'un point hérité du précédent incrément. Le client ne peut pas ajouter `MsvAvFlags.MIC_PRESENT` au TargetInfo sans invalider le NTProof. La préparation MIC exige maintenant que le serveur ait annoncé ce flag et préserve exactement les octets du TargetInfo ; tests de refus quand il est absent et de préservation exacte.

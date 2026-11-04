@@ -146,6 +146,50 @@ func TestMarshalNTLMSSPAuthenticate_ComputesMICIncludesLMv2AndOmitsKeyExchange(t
 	}
 }
 
+func TestMarshalNTLMSSPAuthenticate_UsesServerTimestampAndZ24(t *testing.T) {
+	baseTargetInfo := ntlmSSPTestTargetInfo(t)
+	serverTimestamp := mustHex8(t, "8877665544332211")
+	targetInfo := append([]byte{ntlmAvTimestamp, 0, 8, 0}, serverTimestamp[:]...)
+	targetInfo = append(targetInfo, baseTargetInfo...)
+	challenge := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo)
+	responseTargetInfo, err := NTLMv2TargetInfoForMIC(targetInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(responseTargetInfo)
+	password := []byte("Password")
+	response, err := ComputeNTLMv2Response("User", "Domain", password, mustHex8(t, "0123456789abcdef"), mustHex8(t, "aaaaaaaaaaaaaaaa"), mustHex8(t, "0000000000000000"), responseTargetInfo)
+	clear(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Purge()
+	if !allZero(response.LMResponse[:]) || !bytes.Equal(response.NTResponse[24:32], serverTimestamp[:]) {
+		t.Fatalf("NTLMv2 response did not use server timestamp/Z(24): timestamp=%x LM=%x", response.NTResponse[24:32], response.LMResponse)
+	}
+	message, err := MarshalNTLMSSPAuthenticate(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(message)
+	lmResponse, _, err := readNTLMSSPSecurityBuffer(message, 12, ntlmSSPAuthHeaderSize)
+	if err != nil || len(lmResponse) != 24 || !allZero(lmResponse) {
+		t.Fatalf("AUTHENTICATE_MESSAGE LMChallengeResponse = %x, %v; want Z(24)", lmResponse, err)
+	}
+	response.LMResponse[0] = 1
+	if _, err := MarshalNTLMSSPAuthenticate(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("nonzero LM response with server timestamp error = %v, want ErrNTLMSSPMessage", err)
+	}
+	response.LMResponse[0] = 0
+	tampered := response
+	tampered.NTResponse = append([]byte(nil), response.NTResponse...)
+	tampered.NTResponse[16+8] ^= 1
+	if _, err := MarshalNTLMSSPAuthenticate(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", tampered); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("blob timestamp not bound to server AV timestamp error = %v, want ErrNTLMSSPMessage", err)
+	}
+	clear(tampered.NTResponse)
+}
+
 func TestMarshalNTLMSSPAuthenticate_RejectsTamperedTranscriptAndResponse(t *testing.T) {
 	negotiate := MarshalNTLMSSPNegotiate()
 	targetInfo := ntlmSSPTestTargetInfo(t)
@@ -174,14 +218,16 @@ func TestMarshalNTLMSSPAuthenticate_RejectsTamperedTranscriptAndResponse(t *test
 	}
 
 	password := []byte("Password")
-	plainResponse, err := ComputeNTLMv2Response("User", "Domain", password, mustHex8(t, "0123456789abcdef"), mustHex8(t, "aaaaaaaaaaaaaaaa"), mustHex8(t, "0000000000000000"), targetInfo)
+	targetInfoWithoutMIC := targetInfo[8:] // Test fixture starts with the server's MsvAvFlags pair.
+	challengeWithoutMIC := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfoWithoutMIC)
+	plainResponse, err := ComputeNTLMv2Response("User", "Domain", password, mustHex8(t, "0123456789abcdef"), mustHex8(t, "aaaaaaaaaaaaaaaa"), mustHex8(t, "0000000000000000"), targetInfoWithoutMIC)
 	clear(password)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer plainResponse.Purge()
-	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challenge, "User", "Domain", plainResponse); !errors.Is(err, ErrNTLMSSPMessage) {
-		t.Fatalf("missing MIC_PRESENT flag error = %v", err)
+	if _, err := MarshalNTLMSSPAuthenticate(negotiate, challengeWithoutMIC, "User", "Domain", plainResponse); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("missing server MIC_PRESENT flag error = %v", err)
 	}
 	zeroKeyResponse := ntlmSSPTestResponse(t, targetInfo)
 	defer zeroKeyResponse.Purge()
@@ -207,7 +253,7 @@ func FuzzParseNTLMSSPChallenge(f *testing.F) {
 
 func ntlmSSPTestTargetInfo(t *testing.T) []byte {
 	t.Helper()
-	value, err := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
+	value, err := hex.DecodeString("060004000200000002000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +283,7 @@ func ntlmSSPTestResponse(t *testing.T, targetInfo []byte) NTLMv2Response {
 	t.Helper()
 	password := []byte("Password")
 	defer clear(password)
-	responseTargetInfo, err := NTLMv2TargetInfoWithMICFlag(targetInfo)
+	responseTargetInfo, err := NTLMv2TargetInfoForMIC(targetInfo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +300,7 @@ func TestMarshalNTLMSSPAuthenticate_AlignsUnicodePayloadAfterOddTargetInfo(t *te
 	oddTargetInfo := append(append([]byte(nil), base[:len(base)-4]...), 0x34, 0x12, 1, 0, 0x7f)
 	oddTargetInfo = append(oddTargetInfo, base[len(base)-4:]...)
 	challenge := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, oddTargetInfo)
-	responseTargetInfo, err := NTLMv2TargetInfoWithMICFlag(oddTargetInfo)
+	responseTargetInfo, err := NTLMv2TargetInfoForMIC(oddTargetInfo)
 	if err != nil {
 		t.Fatal(err)
 	}

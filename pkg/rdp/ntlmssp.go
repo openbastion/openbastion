@@ -109,8 +109,8 @@ func ParseNTLMSSPChallenge(data []byte, offeredFlags uint32) (NTLMSSPChallenge, 
 
 // MarshalNTLMSSPAuthenticate constructs a bounded NTLMv2 AUTHENTICATE_MESSAGE
 // and computes its MIC over the exact NEGOTIATE, CHALLENGE and zero-MIC
-// AUTHENTICATE messages. The current profile includes the computed LMv2 response
-// (server timestamps are refused until the Z(24) path is implemented) and omits
+// AUTHENTICATE messages. It includes LMv2 or Z(24) when the server supplies an
+// AV timestamp, and omits
 // EncryptedRandomSessionKey because KEY_EXCH is not negotiated. This is a codec
 // primitive only; it does not perform CredSSP, verify the TLS peer or transmit
 // credentials. The caller must enforce the TLS pin and clear the returned bytes.
@@ -175,15 +175,15 @@ func MarshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 }
 
 func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMSSPChallenge) error {
-	if len(response.NTResponse) < 16+32+4 || len(response.NTResponse) > 16+32+maxNTLMv2TargetInfo || allZero(response.NTProof[:]) || allZero(response.LMResponse[:16]) || allZero(response.SessionBaseKey[:]) || !hmac.Equal(response.NTProof[:], response.NTResponse[:16]) {
+	if len(response.NTResponse) < 16+32+4 || len(response.NTResponse) > 16+32+maxNTLMv2TargetInfo || allZero(response.NTProof[:]) || allZero(response.SessionBaseKey[:]) || !hmac.Equal(response.NTProof[:], response.NTResponse[:16]) {
 		return ErrNTLMSSPMessage
 	}
 	blob := response.NTResponse[16:]
-	if blob[0] != 1 || blob[1] != 1 || !allZero(blob[2:8]) || !allZero(blob[24:28]) || !allZero(blob[len(blob)-4:]) || !hmac.Equal(response.LMResponse[16:], blob[16:24]) {
+	if blob[0] != 1 || blob[1] != 1 || !allZero(blob[2:8]) || !allZero(blob[24:28]) || !allZero(blob[len(blob)-4:]) {
 		return ErrNTLMSSPMessage
 	}
 	targetInfo := blob[28 : len(blob)-4]
-	wantTargetInfo, err := NTLMv2TargetInfoWithMICFlag(challenge.TargetInfo)
+	wantTargetInfo, err := NTLMv2TargetInfoForMIC(challenge.TargetInfo)
 	if err != nil {
 		return ErrNTLMSSPMessage
 	}
@@ -195,17 +195,29 @@ func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMS
 	if err != nil {
 		return ErrNTLMSSPMessage
 	}
+	serverTimestamp := false
 	for _, pair := range pairs {
 		switch pair.ID {
-		case ntlmAvTimestamp, ntlmAvTargetName, ntlmAvChannelBindings:
-			// Timestamp needs Z(24)/clock handling; target-name and channel-binding
-			// AV pairs must be derived from the pinned TLS peer, not echoed blindly.
+		case ntlmAvTimestamp:
+			serverTimestamp = true
+			if !hmac.Equal(blob[8:16], pair.Value) {
+				return ErrNTLMSSPMessage
+			}
+		case ntlmAvTargetName, ntlmAvChannelBindings:
+			// These AV pairs must be derived from the pinned TLS peer, not echoed blindly.
 			return ErrNTLMSSPMessage
 		case ntlmAvFlags:
 			if binary.LittleEndian.Uint32(pair.Value) != 0x00000002 {
 				return ErrNTLMSSPMessage
 			}
 		}
+	}
+	if serverTimestamp {
+		if !allZero(response.LMResponse[:]) {
+			return ErrNTLMSSPMessage
+		}
+	} else if allZero(response.LMResponse[:16]) || !hmac.Equal(response.LMResponse[16:], blob[16:24]) {
+		return ErrNTLMSSPMessage
 	}
 	return nil
 }
