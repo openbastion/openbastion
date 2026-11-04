@@ -30,6 +30,8 @@ type CredSSPClientConfig struct {
 // immediately after the one-shot authInfo message is sent.
 type CredSSPClientSession struct {
 	mu                    sync.Mutex
+	readMu                sync.Mutex
+	writeMu               sync.Mutex
 	transport             *Transport
 	version               uint32
 	credentialsDelegated  bool

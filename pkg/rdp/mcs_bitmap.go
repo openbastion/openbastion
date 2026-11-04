@@ -145,36 +145,48 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
 		return update, ErrMCSConnection
 	}
+	s.readMu.Lock()
+	defer s.readMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if ctx.Err() != nil || s.transport == nil || s.transport.Conn == nil || !s.connectionFinalized ||
 		!s.capabilitiesExchanged || s.serverCapabilities.ShareID == 0 ||
 		!s.transport.Conn.ConnectionState().HandshakeComplete {
+		s.mu.Unlock()
 		return update, ErrMCSConnection
 	}
+	conn := s.transport.Conn
+	ioChannelID := s.mcsResponse.IOChannelID
+	shareID := s.serverCapabilities.ShareID
+	desktopWidth, desktopHeight := s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight
+	s.mu.Unlock()
 	if timeout == 0 {
 		timeout = defaultCredSSPTimeout
 	}
-	conn := s.transport.Conn
 	deadline := time.Now().Add(timeout)
 	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
 		deadline = ctxDeadline
 	}
-	if err := conn.SetDeadline(deadline); err != nil {
+	if err := conn.SetReadDeadline(deadline); err != nil {
+		s.mu.Lock()
 		s.closeTransportLocked()
+		s.mu.Unlock()
 		return update, ErrMCSConnection
 	}
-	stopCancel := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.SetReadDeadline(time.Now()) })
 	defer func() {
 		cancelStopped := stopCancel()
 		if err != nil || ctx.Err() != nil || !cancelStopped {
+			s.mu.Lock()
 			s.closeTransportLocked()
+			s.mu.Unlock()
 			err = ErrMCSConnection
 			update = RDPBitmapUpdate{}
 			return
 		}
-		if setErr := conn.SetDeadline(time.Time{}); setErr != nil || ctx.Err() != nil {
+		if setErr := conn.SetReadDeadline(time.Time{}); setErr != nil || ctx.Err() != nil {
+			s.mu.Lock()
 			s.closeTransportLocked()
+			s.mu.Unlock()
 			err = ErrMCSConnection
 			update = RDPBitmapUpdate{}
 		}
@@ -191,7 +203,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			clear(assembled)
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
-		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, s.mcsResponse.IOChannelID)
+		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)
 		if fragmentErr != nil {
 			clear(packet)
 			clear(assembled)
@@ -220,8 +232,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		}
 	}
 	defer clear(assembled)
-	update, err = parseRDPBitmapShareData(assembled, s.serverCapabilities.ShareID,
-		s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight)
+	update, err = parseRDPBitmapShareData(assembled, shareID, desktopWidth, desktopHeight)
 	if err != nil || ctx.Err() != nil {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

@@ -14,12 +14,14 @@ import (
 )
 
 type fakeRDPDesktop struct {
-	mu      sync.Mutex
-	updates []rdp.RDPBitmapUpdate
-	closed  bool
-	calls   int
-	width   uint16
-	height  uint16
+	mu       sync.Mutex
+	updates  []rdp.RDPBitmapUpdate
+	closed   bool
+	calls    int
+	width    uint16
+	height   uint16
+	inputs   [][]rdp.RDPInputEvent
+	inputErr error
 }
 
 func (f *fakeRDPDesktop) ReadBitmapUpdate(ctx context.Context, _ time.Duration) (rdp.RDPBitmapUpdate, error) {
@@ -34,6 +36,12 @@ func (f *fakeRDPDesktop) ReadBitmapUpdate(ctx context.Context, _ time.Duration) 
 	f.mu.Unlock()
 	<-ctx.Done()
 	return rdp.RDPBitmapUpdate{}, ctx.Err()
+}
+func (f *fakeRDPDesktop) SendInput(_ context.Context, events []rdp.RDPInputEvent, _ time.Duration) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inputs = append(f.inputs, append([]rdp.RDPInputEvent(nil), events...))
+	return f.inputErr
 }
 func (f *fakeRDPDesktop) Dimensions() (uint16, uint16) { return f.width, f.height }
 func (f *fakeRDPDesktop) Close()                       { f.mu.Lock(); f.closed = true; f.mu.Unlock() }
@@ -106,11 +114,44 @@ func TestRDPCodecStreamsFramebufferAndClosesTargetOnCancellation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("RDP framebuffer update was not emitted")
 	}
-	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: 0x1e}); !errors.Is(err, screenstream.ErrUnsupported) {
-		t.Fatalf("Input error = %v, want explicit unsupported", err)
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: 0x1e}); err != nil {
+		t.Fatalf("key down: %v", err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: 0xe01d}); err != nil {
+		t.Fatalf("extended key down: %v", err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 1}); err != nil {
+		t.Fatalf("pointer down: %v", err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 1, Wheel: -1}); err != nil {
+		t.Fatalf("wheel: %v", err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61}); !errors.Is(err, screenstream.ErrUnsupported) {
+		t.Fatalf("keysym-only input error = %v, want unsupported", err)
 	}
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+	target.mu.Lock()
+	inputBatches := append([][]rdp.RDPInputEvent(nil), target.inputs...)
+	target.mu.Unlock()
+	if len(inputBatches) != 5 {
+		t.Fatalf("input batches = %d, want 5 including release-all on close", len(inputBatches))
+	}
+	if got := inputBatches[0][0]; got.Type != rdp.RDPInputScancode || got.Scancode != 0x1e || got.Released {
+		t.Fatalf("normal key mapping = %+v", got)
+	}
+	if got := inputBatches[1][0]; got.Type != rdp.RDPInputScancode || got.Scancode != 0x1d || !got.Extended {
+		t.Fatalf("extended key mapping = %+v", got)
+	}
+	if got := inputBatches[2][1]; got.PointerFlags != rdpMouseButton1|rdpMouseDown {
+		t.Fatalf("mouse button mapping = %+v", got)
+	}
+	if got := inputBatches[3][1]; got.PointerFlags != rdpMouseWheel|rdpMouseWheelNegative|120 {
+		t.Fatalf("wheel mapping = %+v", got)
+	}
+	if len(inputBatches[4]) != 3 || !inputBatches[4][0].Released || !inputBatches[4][1].Released || inputBatches[4][2].PointerFlags != rdpMouseButton1 {
+		t.Fatalf("release-all events = %+v", inputBatches[4])
 	}
 	target.mu.Lock()
 	closed := target.closed
@@ -132,5 +173,66 @@ func TestRDPCodecMapsPinMismatchToStableScreenFailure(t *testing.T) {
 	var failure *proxycore.ScreenFailure
 	if !errors.As(err, &failure) || failure.ScreenEndCode() != "pin_mismatch" {
 		t.Fatalf("Open error = %v, want stable pin_mismatch failure", err)
+	}
+}
+
+func TestRDPCodecReleaseAllBatchesLargeHeldKeySet(t *testing.T) {
+	cred := rdpTestCredential(t)
+	target := &fakeRDPDesktop{width: 2, height: 1}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) {
+		return target, nil
+	}}
+	session, err := codec.Open(context.Background(), cred)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for code := uint16(1); code <= 127; code++ {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: code}); err != nil {
+			t.Fatalf("press scancode %#x: %v", code, err)
+		}
+	}
+	for code := uint16(0xe001); code <= 0xe003; code++ {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: code}); err != nil {
+			t.Fatalf("press extended scancode %#x: %v", code, err)
+		}
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputReleaseAll}); err != nil {
+		t.Fatalf("release all: %v", err)
+	}
+	target.mu.Lock()
+	batches := append([][]rdp.RDPInputEvent(nil), target.inputs...)
+	target.mu.Unlock()
+	if len(batches) != 132 || len(batches[130]) != 128 || len(batches[131]) != 2 {
+		t.Fatalf("total batches=%d release batch sizes=%d/%d", len(batches), len(batches)-130, len(batches)-131)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestRDPCodecReleasesHeldInputsAfterParentContextCancellation(t *testing.T) {
+	cred := rdpTestCredential(t)
+	target := &fakeRDPDesktop{width: 2, height: 1}
+	ctx, cancel := context.WithCancel(context.Background())
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) {
+		return target, nil
+	}}
+	session, err := codec.Open(ctx, cred)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: 0x1e}); err != nil {
+		cancel()
+		t.Fatalf("key down: %v", err)
+	}
+	cancel()
+	if err := session.Close(); err != nil {
+		t.Fatalf("Close after parent cancellation: %v", err)
+	}
+	target.mu.Lock()
+	defer target.mu.Unlock()
+	if len(target.inputs) != 2 || !target.inputs[1][0].Released || !target.closed {
+		t.Fatalf("inputs=%+v closed=%v; expected key-up before target close", target.inputs, target.closed)
 	}
 }

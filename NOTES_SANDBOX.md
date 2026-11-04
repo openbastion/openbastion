@@ -2140,3 +2140,23 @@ Validation de l’incrément 27 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; avis résiduels dans quelques modules requis mais non appelés.
 - `npm audit --audit-level=low` dans Admin UI et icons : zéro vulnérabilité.
 - `git diff --check` : PASS ; aucun test Windows/RDS réel ni E2E RDP/Video Recorder. Runtime et route RDP restent désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 28 : RDP Input PDU
+
+Ajout de `pkg/rdp/mcs_input.go` : `CredSSPClientSession.SendInput` émet des `TS_INPUT_PDU` slow-path dans un Share Data PDU, encapsulé en MCS Send Data Request sur le canal I/O négocié. Types pris en charge : scan code Set-1 (DOWN/RELEASE, E0 extended), souris déplacement, boutons primaires gauche/milieu/droit et molette ±120 par cran. Les lots sont limités à 128 événements. Les keysyms seuls, souris étendue et flags invalides sont refusés.
+
+Le verrou de lecture et le verrou d’écriture TLS sont indépendants. `ReadBitmapUpdate` utilise `SetReadDeadline`, `SendInput` utilise `SetWriteDeadline`, et le verrou d’état n’est pas détenu pendant un read réseau bloquant. Un seul écrivain TLS est autorisé à la fois. Les erreurs/annulations d’écriture ferment le transport. L’adaptateur `RDPCodec.Input` suit les touches/boutons actifs et envoie leurs relâchements sur `InputReleaseAll` et à la fermeture avec un timeout de 2 secondes. L’état n’est mis à jour qu’après l’envoi réussi.
+
+Tests : décodage structurel des PDU, scan codes normaux et étendus, key-up/down, boutons, molette, validation stricte, limites de lot, faux serveur TLS qui reçoit une entrée alors que la lecture bitmap est bloquée, tests engine de traduction et relâchement sur fermeture.
+
+Limites : pas de keysyms/XKB, Unicode/fast-path, boutons souris étendus, synchronisation LED/clavier ou presse-papiers ; bitmaps compressés et ordres graphiques absents. Aucun test Windows/RDS réel. Runtime et route RDP restent désactivés.
+
+Validation de l’incrément 28 :
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` et `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS.
+- `FuzzMarshalRDPInput` : PASS, 62 618 exécutions en 5 s.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (284,562 s). PostgreSQL ignoré sans `TEST_DATABASE_URL` ; Compose ignoré sans `COMPOSE_TEST`.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; avis résiduels dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` Admin UI et icons : zéro vulnérabilité. `git diff --check` : PASS.
+- Aucun test d’interopérabilité Windows/RDS réel ni E2E avec Video Recorder. Runtime et route RDP restent désactivés.
