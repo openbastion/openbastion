@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/openbastion/openbastion/pkg/mtls v0.0.0
 	github.com/openbastion/openbastion/pkg/proxycore v0.0.0
+	github.com/openbastion/openbastion/pkg/rdp v0.0.0
 	github.com/openbastion/openbastion/pkg/screenstream v0.0.0
 	github.com/openbastion/openbastion/pkg/vnc v0.0.0
 	github.com/openbastion/openbastion/proto v0.0.0
@@ -12,19 +13,23 @@ require (
 	google.golang.org/protobuf v1.36.11
 )
 
+require golang.org/x/crypto v0.58.0 // indirect
+
 require (
 	github.com/coder/websocket v1.8.14
 	github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
 	github.com/openbastion/openbastion/pkg/tlspin v0.0.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 )
 
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 
 replace github.com/openbastion/openbastion/pkg/proxycore => ../../../pkg/proxycore
+
+replace github.com/openbastion/openbastion/pkg/rdp => ../../../pkg/rdp
 
 replace github.com/openbastion/openbastion/pkg/screenstream => ../../../pkg/screenstream
 

@@ -2120,3 +2120,23 @@ Validation de l’incrément 26 :
 - `DOCKER_BUILDKIT=0 make test-integration` : PASS (203,567 s). Les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés car la variable n'est pas définie.
 - `git diff --check` : PASS. `scripts/check-architecture-deps.sh` absent du dépôt ; aucun gate d'architecture de ce nom n'a donc été exécuté.
 - Aucun test Compose local ni test d'interopérabilité Windows/RDS réel. Runtime et route RDP toujours désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 27 : RDP ScreenCodec et cycle des frames
+
+`services/proxy/rdp-vnc-proxy/internal/engine.RDPCodec` relie le moteur RDP existant au contrat `proxycore.ScreenCodec`. L’ouverture exige un pool de racines explicite et les métadonnées Vault d’adresse, utilisateur, nom TLS et empreinte SHA-256. Le client déroule X.224/HYBRID + TLS épinglé, CredSSP NTLMv2 v6, MCS/GCC, Channel Connection, Client Info, Licensing, Capabilities et Finalization. La dimension du bureau retenue provient des capacités réellement négociées par le serveur, et non de la taille demandée au client.
+
+La boucle de lecture récupère les `RDPBitmapUpdate`, les applique à `RDPFramebuffer` et publie les PNG complets sur `ScreenSession.Frames()`. L’annulation du contexte provoque la sortie de la lecture TLS ; `Close` ferme le transport et attend l’arrêt du lecteur. Le secret n’est pas copié dans un stockage persistant du codec : il est emprunté depuis `proxycore.Credential`, dont le cycle de vie assure la purge. Les erreurs de pin TLS et de négociation sont converties en codes `ScreenFailure` stables.
+
+Tests : refus avant connexion lorsque les métadonnées TLS sont incomplètes ou que le pool de racines est absent ; mapping stable de l’erreur de pin ; boucle framebuffer avec un bureau simulé 2×1 (différent de la résolution demandée), vérification d’une trame ScreenStream valide, fermeture du client cible et fin sans erreur lors de l’annulation.
+
+**Limites :** `Input` refuse explicitement les événements avec `screenstream.ErrUnsupported`. L’encodage RDP Input PDU et l’écriture concurrente sécurisée face à la lecture restent à faire ; bitmaps compressés et ordres graphiques restent refusés. Le `RDPCodec` n’est pas sélectionné par le binaire, le runtime et la route RDP restent désactivés. Le champ Vault `TargetDomain` est utilisé comme nom TLS cible ; le domaine AD distinct n’est pas transmis. Aucun test d’interopérabilité Windows/RDS réelle ni E2E avec le Video Recorder n’est revendiqué.
+
+Validation de l’incrément 27 :
+- `go test ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./services/proxy/rdp-vnc-proxy/internal/engine ./pkg/rdp/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (249,495 s). Les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés ; aucun test Compose local.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; avis résiduels dans quelques modules requis mais non appelés.
+- `npm audit --audit-level=low` dans Admin UI et icons : zéro vulnérabilité.
+- `git diff --check` : PASS ; aucun test Windows/RDS réel ni E2E RDP/Video Recorder. Runtime et route RDP restent désactivés.
