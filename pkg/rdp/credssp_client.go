@@ -34,6 +34,9 @@ type CredSSPClientSession struct {
 	version              uint32
 	credentialsDelegated bool
 	mcsConnected         bool
+	mcsResponse          MCSConnectResponse
+	channelsConnected    bool
+	userChannelID        uint16
 }
 
 func (s *CredSSPClientSession) Close() {
@@ -300,6 +303,7 @@ func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSett
 		return MCSConnectResponse{}, ErrMCSConnection
 	}
 	s.mcsConnected = true
+	s.mcsResponse = response
 	return response, nil
 }
 
