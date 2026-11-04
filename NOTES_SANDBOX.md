@@ -1831,3 +1831,15 @@ Références de protocole : MS-NLMP §§2.2.1.1–2.2.1.3 et §3.1.5.2.1. Les me
 - Aucun dialogue CredSSP, pubKeyAuth ou authInfo n'est activé ; aucun credential n'est transmis et RDP reste désactivé.
 - Validation finale : `make build vet`, `make test`, `go test -race ./pkg/rdp/... -count=1`, `make proto-lint` et `GOTOOLCHAIN=go1.27.3 make vuln` sont verts. Le scan govulncheck avec Go 1.27.3 ne trouve aucune vulnérabilité atteignable ; `npm audit` est propre pour les deux packages UI.
 - `make test-integration` passe en 216,000 s. Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL` ; les parcours multi-processus non PostgreSQL passent. Les tests Compose restent dans GitHub Actions et n'ont pas été exécutés localement.
+
+
+## 2026-11-04 — ADR-0071, incrément 12 : CredSSP v5/v6 public-key binding
+
+- `Transport.NewCredSSPPublicKeyBinding` exige un handshake TLS achevé et revalide le pin SHA-256 de la feuille avant d'utiliser la clé publique du pair.
+- Extrait le contenu du BIT STRING `SubjectPublicKey` depuis le `SubjectPublicKeyInfo` X.509 ; ne hash jamais le certificat entier ni le SPKI entier.
+- Génère un `clientNonce` de 32 octets avec `crypto/rand` et calcule les hashes directionnels SHA-256 `CredSSP Client-To-Server Binding Hash\0 || nonce || SubjectPublicKey` et `CredSSP Server-To-Client Binding Hash\0 || nonce || SubjectPublicKey`.
+- `VerifyServerToClientHash` vérifie en temps constant le hash attendu après déchiffrement par le futur GSS_Wrap.
+- **Ce n'est pas encore un `pubKeyAuth` transmissible** : la protection GSS_Wrap/NTLMSSP (signature, sealing et séquences), l'échange TSRequest, SPNEGO et `authInfo` ne sont pas implémentés. Aucun credential n'est transmis et RDP reste désactivé.
+- Tests : hashes indépendants, nonce et direction, pin TLS absent/différent, handshake incomplet, SubjectPublicKeyInfo invalide, retour serveur altéré ou tronqué.
+- Validation de l'incrément 12 : `make build vet test`, `go test -race ./pkg/rdp/... -count=1`, `make proto-lint`, `GOTOOLCHAIN=go1.27.3 make vuln`, `gofmt` et `git diff --check` passent. `govulncheck` ne trouve aucune vulnérabilité atteignable ; certains modules requis contiennent des avis non appelés. `npm audit` retourne zéro vulnérabilité pour les deux workspaces UI.
+- `make test-integration` passe : 287,742 s de tests (299,22 s pour la commande complète). Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL` ; les tests Compose restent réservés à GitHub Actions et n'ont pas été lancés localement.
