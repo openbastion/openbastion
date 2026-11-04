@@ -13,6 +13,7 @@ import (
 	"net"
 	"testing"
 	"time"
+	"unicode/utf16"
 )
 
 func TestMarshalSPNEGONTLMInitAndResponse(t *testing.T) {
@@ -78,6 +79,14 @@ func TestReadTSRequestIsBoundedAndConsumesExactlyOneMessage(t *testing.T) {
 }
 
 func TestEstablishCredSSPOverPinnedTLS(t *testing.T) {
+	runEstablishCredSSPOverPinnedTLS(t, false)
+}
+
+func TestEstablishCredSSPRejectsInvalidServerBindingBeforeDelegating(t *testing.T) {
+	runEstablishCredSSPOverPinnedTLS(t, true)
+}
+
+func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 	certificate, roots, pin := rdpTestCertificate(t)
 	serverLeaf, err := x509.ParseCertificate(certificate.Certificate[0])
 	if err != nil {
@@ -253,6 +262,9 @@ func TestEstablishCredSSPOverPinnedTLS(t *testing.T) {
 			return
 		}
 		serverHash := credSSPPublicKeyHash([]byte(credSSPServerBindingMagic), finalRequest.ClientNonce, publicKey)
+		if corruptServerBinding {
+			serverHash[0] ^= 0xff // valid GSS_Wrap, wrong certificate-binding hash
+		}
 		sealedServerHash, readErr := serverSecurity.outbound.wrap(serverHash[:])
 		if readErr != nil {
 			serverResult <- readErr
@@ -263,6 +275,53 @@ func TestEstablishCredSSPOverPinnedTLS(t *testing.T) {
 			serverResult <- errors.New("could not send server pubKeyAuth")
 			return
 		}
+		if corruptServerBinding {
+			_ = tlsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			var firstByte [1]byte
+			n, readErr := tlsConn.Read(firstByte[:])
+			if n != 0 {
+				serverResult <- errors.New("client delegated credentials before validating the server binding")
+				return
+			}
+			if timeout, ok := readErr.(net.Error); ok && timeout.Timeout() {
+				serverResult <- errors.New("client did not close the TLS transport after an invalid server binding")
+				return
+			}
+			if readErr == nil {
+				serverResult <- errors.New("TLS peer returned an empty read without closing")
+				return
+			}
+			serverResult <- nil
+			return
+		}
+
+		authInfoBytes, readErr := readTSRequest(tlsConn)
+		if readErr != nil {
+			serverResult <- readErr
+			return
+		}
+		defer clear(authInfoBytes)
+		if bytes.Contains(authInfoBytes, []byte("Password")) || bytes.Contains(authInfoBytes, []byte{'P', 0, 'a', 0, 's', 0, 's', 0}) {
+			serverResult <- errors.New("plaintext delegated password appeared in authInfo TSRequest")
+			return
+		}
+		authInfoRequest, readErr := ParseTSRequest(authInfoBytes)
+		if readErr != nil || authInfoRequest.Version != 5 || len(authInfoRequest.AuthInfo) <= ntlmSSPMessageSignatureSize ||
+			!tsRequestContainsOnlyVersionAndAuthInfo(authInfoBytes) {
+			serverResult <- errors.New("invalid post-binding authInfo TSRequest")
+			return
+		}
+		delegated, readErr := serverSecurity.inbound.unwrap(authInfoRequest.AuthInfo)
+		if readErr != nil {
+			serverResult <- readErr
+			return
+		}
+		defer clear(delegated)
+		domain, username, delegatedPassword, parseErr := parseCredSSPPasswordCredentialsForTest(delegated)
+		if parseErr != nil || domain != "Domain" || username != "User" || delegatedPassword != "Password" {
+			serverResult <- errors.New("delegated TSPasswordCreds did not match the expected UTF-16LE credentials")
+			return
+		}
 		serverResult <- nil
 	}()
 
@@ -271,12 +330,26 @@ func TestEstablishCredSSPOverPinnedTLS(t *testing.T) {
 		t.Fatalf("DialHybrid: %v", err)
 	}
 	session, err := transport.EstablishCredSSP(context.Background(), CredSSPClientConfig{Version: 6, Username: "User", Domain: "Domain", Password: []byte("Password"), Timeout: 2 * time.Second})
+	if corruptServerBinding {
+		if err == nil || session != nil {
+			if session != nil {
+				session.Close()
+			}
+			_ = transport.Close()
+			t.Fatal("invalid server pubKeyAuth unexpectedly delegated credentials")
+		}
+		if serverErr := <-serverResult; serverErr != nil {
+			t.Fatalf("fake CredSSP server: %v", serverErr)
+		}
+		_ = transport.Close()
+		return
+	}
 	if err != nil {
 		_ = transport.Close()
 		t.Fatalf("EstablishCredSSP: %v", err)
 	}
-	if session == nil || session.security == nil || session.version != 5 {
-		t.Fatal("CredSSP session was not retained after server binding")
+	if session == nil || !session.credentialsDelegated || session.version != 5 {
+		t.Fatal("CredSSP session did not complete credential delegation after server binding")
 	}
 	session.Close()
 	_ = transport.Close()
@@ -332,4 +405,53 @@ func TestReadTSRequestLeavesSchemaValidationToParser(t *testing.T) {
 	if _, err := ParseTSRequest(framed); !errors.Is(err, ErrCredSSPMessage) {
 		t.Fatalf("schema parser error = %v, want ErrCredSSPMessage", err)
 	}
+}
+
+func parseCredSSPPasswordCredentialsForTest(encoded []byte) (domain, username, password string, err error) {
+	outer, rest, err := derRead(encoded)
+	if err != nil || outer.tag != 0x30 || len(rest) != 0 {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	credTypeField, fields, err := derRead(outer.value)
+	if err != nil || credTypeField.tag != 0xa0 {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	credType, rem, err := derRead(credTypeField.value)
+	if err != nil || credType.tag != 0x02 || len(rem) != 0 || !bytes.Equal(credType.value, []byte{1}) {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	credentialsField, rem, err := derRead(fields)
+	if err != nil || credentialsField.tag != 0xa1 || len(rem) != 0 {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	credentialsOctets, rem, err := derRead(credentialsField.value)
+	if err != nil || credentialsOctets.tag != 0x04 || len(rem) != 0 {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	passwordSequence, rem, err := derRead(credentialsOctets.value)
+	if err != nil || passwordSequence.tag != 0x30 || len(rem) != 0 {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	values := make([]string, 0, 3)
+	for fields := passwordSequence.value; len(fields) > 0; {
+		field, tail, readErr := derRead(fields)
+		if readErr != nil || field.tag != byte(0xa0+len(values)) {
+			return "", "", "", ErrCredSSPCredentials
+		}
+		value, remaining, readErr := derRead(field.value)
+		if readErr != nil || value.tag != 0x04 || len(remaining) != 0 || len(value.value)%2 != 0 {
+			return "", "", "", ErrCredSSPCredentials
+		}
+		units := make([]uint16, len(value.value)/2)
+		for i := range units {
+			units[i] = binary.LittleEndian.Uint16(value.value[i*2:])
+		}
+		values = append(values, string(utf16.Decode(units)))
+		clear(units)
+		fields = tail
+	}
+	if len(values) != 3 {
+		return "", "", "", ErrCredSSPCredentials
+	}
+	return values[0], values[1], values[2], nil
 }

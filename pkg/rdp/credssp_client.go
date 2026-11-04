@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"sync"
 	"time"
 )
 
@@ -12,10 +13,10 @@ var ErrCredSSPClient = errors.New("rdp: CredSSP client negotiation failed")
 
 const defaultCredSSPTimeout = 10 * time.Second
 
-// CredSSPClientConfig contains credentials for the NTLMv2 proof. Password is
-// borrowed read-only and is never serialized or modified by this package.
-// This increment establishes NLA and TLS public-key binding only; it does not
-// construct or send the delegated TSCredentials/authInfo structure.
+// CredSSPClientConfig contains the credentials used for NTLMv2 and delegated
+// TSPasswordCreds. Password is borrowed read-only and is never modified.
+// EstablishCredSSP delegates it only after successful TLS public-key binding,
+// sealed with the negotiated NTLMSSP confidentiality context.
 type CredSSPClientConfig struct {
 	Version  uint32
 	Username string
@@ -24,25 +25,31 @@ type CredSSPClientConfig struct {
 	Timeout  time.Duration
 }
 
-// CredSSPClientSession owns the negotiated NTLMSSP confidentiality context.
-// The context is retained for the later authInfo increment and must be closed
-// when the RDP connection is abandoned.
+// CredSSPClientSession represents a completed NLA exchange and owns the
+// already verified TLS transport. The NTLM confidentiality keys are erased
+// immediately after the one-shot authInfo message is sent.
 type CredSSPClientSession struct {
-	security *NTLMSSPClientSecurityContext
-	version  uint32
+	mu                   sync.Mutex
+	transport            *Transport
+	version              uint32
+	credentialsDelegated bool
 }
 
 func (s *CredSSPClientSession) Close() {
-	if s != nil && s.security != nil {
-		s.security.Close()
-		s.security = nil
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.transport != nil {
+		_ = s.transport.Close()
+		s.transport = nil
 	}
 }
 
 // EstablishCredSSP performs the strict NTLM-only SPNEGO exchange over the
-// already TLS-verified and certificate-pinned transport. It sends no
-// TSCredentials: success means only that NTLM negotiation and v5/v6
-// pubKeyAuth channel binding completed.
+// already TLS-verified and certificate-pinned transport. It delegates password
+// credentials only after verifying the server's v5/v6 pubKeyAuth response.
 func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfig) (session *CredSSPClientSession, err error) {
 	if t == nil || t.Conn == nil || ctx == nil || ctx.Err() != nil || cfg.Version < 5 || cfg.Version > 6 ||
 		cfg.Username == "" || len(cfg.Password) == 0 || cfg.Timeout < 0 {
@@ -151,12 +158,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
-	keepSecurity := false
-	defer func() {
-		if !keepSecurity {
-			security.Close()
-		}
-	}()
+	defer security.Close()
 	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, serverSPNEGO.ResponseToken, cfg.Username, cfg.Domain, response, NTLMv2ClientBindings{TargetName: targetName, ChannelBindings: channelBinding})
 	if err != nil {
 		return nil, ErrCredSSPClient
@@ -197,8 +199,32 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if ctx.Err() != nil {
 		return nil, ErrCredSSPClient
 	}
-	keepSecurity = true
-	return &CredSSPClientSession{security: security, version: negotiatedVersion}, nil
+
+	credentials, err := marshalCredSSPPasswordCredentials(cfg.Domain, cfg.Username, cfg.Password)
+	if err != nil {
+		return nil, ErrCredSSPClient
+	}
+	defer clear(credentials)
+	authInfo, err := security.WrapClientToServer(credentials)
+	if err != nil {
+		return nil, ErrCredSSPClient
+	}
+	defer clear(authInfo)
+	authInfoRequest, err := MarshalTSRequest(TSRequest{Version: negotiatedVersion, AuthInfo: authInfo})
+	if err != nil || !tsRequestContainsOnlyVersionAndAuthInfo(authInfoRequest) {
+		clear(authInfoRequest)
+		return nil, ErrCredSSPClient
+	}
+	if err := writeFull(t.Conn, authInfoRequest); err != nil {
+		clear(authInfoRequest)
+		return nil, ErrCredSSPClient
+	}
+	clear(authInfoRequest)
+	if ctx.Err() != nil {
+		return nil, ErrCredSSPClient
+	}
+	security.Close()
+	return &CredSSPClientSession{transport: t, version: negotiatedVersion, credentialsDelegated: true}, nil
 }
 
 func ntlmCurrentFiletime() (value [8]byte) {

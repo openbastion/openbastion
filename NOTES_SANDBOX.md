@@ -1906,3 +1906,25 @@ Validation finale de l'incrément 15 :
 - `make test-integration` : PASS (237,746 s pour `test/integration`). Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose n'a été lancé localement ; ils restent réservés à GitHub Actions.
 - `gofmt -l` ne retourne aucun fichier ; `git diff --check` : PASS.
 - Espace disque après les validations : 4,2 Go disponibles (87 % utilisés). Aucun nettoyage destructif n'a été nécessaire.
+
+
+## 2026-11-04 — ADR-0071, incrément 16 : TSCredentials / authInfo
+
+- `pkg/rdp/credssp_credentials.go` encode `TSCredentials` type 1 et `TSPasswordCreds` en DER, avec `domainName`, `userName` et `password` UTF-16LE. Domaine vide accepté ; username/password obligatoires ; UTF-8 invalide et tailles > 256/256/1024 octets (domain/username/password) refusés, alignées sur les bornes NTLMv2. Les buffers UTF-16LE et les assemblages DER temporaires sont effacés après copie.
+- `Transport.EstablishCredSSP` envoie maintenant `authInfo` uniquement après validation du `pubKeyAuth` serveur. `authInfo` est le résultat de `NTLMSSPClientSecurityContext.WrapClientToServer(TSCredentials)` ; la signature GSS_Wrap précède le ciphertext. Le TSRequest final n'accepte/émet que `version` + `authInfo`.
+- La séquence sortante GSS_Wrap reste continue : `pubKeyAuth` client utilise le compteur 0, `authInfo` utilise le compteur 1. Le contexte NTLMSSP est fermé immédiatement après l'envoi ; le TLS vérifié reste possédé par `CredSSPClientSession` jusqu'à `Close`.
+- Envoi unique, pas de retry après erreur/écriture incertaine ; toute erreur après début de négociation ferme le transport. Le buffer Password fourni par l'appelant est emprunté en lecture seule et n'est pas effacé par la bibliothèque ; l'appelant doit le purger.
+- Le faux serveur TLS vérifie l'authInfo réellement reçu : forme TSRequest stricte, absence de texte mot de passe UTF-8/UTF-16LE en clair, déchiffrement et vérification du type TSCredentials + des trois valeurs. Les tests unitaires couvrent Unicode BMP et hors BMP, domaine vide, champs invalides/surdimensionnés, champ authInfo exclusif et altération de signature avec empoisonnement de séquence. Le faux serveur TLS vérifie aussi qu’un hash `pubKeyAuth` serveur invalide entraîne la fermeture sans aucun octet `authInfo` envoyé.
+- Limites : mot de passe seulement ; carte à puce et Remote Guard refusés. Aucune validation Windows/RDS réelle. Kerberos/SPNEGO MIC, MCS/GCC, capacités, affichage et entrée restent à faire. Le runtime et la route RDP restent désactivés.
+
+Validation finale de l'incrément 16 :
+- `make build vet test` : PASS sur tous les modules (38,35 s).
+- `go test ./pkg/rdp/... -count=1` : PASS ; 76 tests de premier niveau mesurés avec `go test -v ./pkg/rdp/... -count=1 | grep -c '^--- PASS'`.
+- `go test -race ./pkg/rdp/... -count=1` : PASS (6,10 s).
+- `make proto-lint` (`buf lint` + `buf generate`) : PASS.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : PASS ; zéro vulnérabilité atteignable détectée. Certains modules requis contiennent des avis non appelés ; `npm audit` : zéro vulnérabilité dans `web/admin-ui` et `web/openbastion-icons`.
+- `make test-integration` : PASS (252,780 s). Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose n'a été lancé localement ; ils restent réservés à GitHub Actions.
+- Trois mutations de sécurité tuées sur trois : suppression de GSS_Wrap détectée par le faux serveur TLS ; acceptation de champs TSRequest inattendus détectée par le validateur strict ; omission de la vérification `pubKeyAuth` serveur détectée parce que le client délègue alors des credentials sur un binding invalide.
+- `gofmt` ne retourne aucun fichier ; `git diff --check` : PASS.
+- Espace disque après les validations : 4,2 Go disponibles (87 % utilisés).
+- Rouge sur le commit précédent : non applicable directement, car les tests de cette tranche ciblent le nouveau contrat `authInfo` et les API de sérialisation/protection qui n'existaient pas avant l'incrément.
