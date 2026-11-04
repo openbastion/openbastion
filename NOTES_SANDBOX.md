@@ -2059,3 +2059,22 @@ Validation de l’incrément 23 :
 - `DOCKER_BUILDKIT=0 make test-integration` : PASS (213,421 s) ; les tests de processus réels passent. Les scénarios PostgreSQL ont été ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose local, conformément à la consigne : GitHub Actions les exécute.
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; certains avis subsistent dans des modules requis mais non appelés. `npm audit` : zéro vulnérabilité dans `web/admin-ui` et `web/openbastion-icons`.
 - `git diff --check` : PASS. Aucun test d’interopérabilité Windows/RDS réel ; le parseur n’est pas encore raccordé au runtime/ScreenCodec et la route RDP reste désactivée.
+
+
+## 2026-11-04 — ADR-0071, incrément 24 : MCS Bitmap Receive Path borné
+
+`readTPKTPacket` permet une limite TPKT propre à chaque chemin : le contrôle reste à 4 Kio et le lecteur bitmap est plafonné à 16 383 octets. Ce plafond entier est conservateur par rapport à la limite normative de 16 383 octets des MCS Send Data Request/Indication (MS-RDPBCGR §2.2). Il évite de relever globalement les limites de toutes les phases RDP.
+
+`CredSSPClientSession.ReadBitmapUpdate` lit un seul Bitmap Update sur le TLS épinglé, après `FinalizeConnection` et `Demand Active` validés. Il applique deadline et cancellation, décode les pixels via le parseur RAW de l'incrément 23 et rend le transport terminal sur tout échec de lecture ou de protocole. Un TPKT de 63×63 pixels dépassant 4 Kio est testé sur faux serveur TLS ; le dépassement du plafond est refusé.
+
+Le réassemblage MCS multi-segments n'est pas encore pris en charge : seul un SDIN complet (`0x70`) par TPKT est accepté. Aucun bitmap compressé, ordre graphique, pointeur, entrée, adaptateur `proxycore.ScreenCodec`, runtime ou route RDP n'est activé ; aucune interopérabilité Windows/RDS réelle n'a été prouvée.
+
+Validation de l’incrément 24 :
+- `make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et `buf lint`.
+- `go test ./pkg/rdp/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... -count=1` : PASS.
+- `FuzzParseRDPBitmapUpdate` : PASS, 58 161 exécutions en 5 s, 1 entrée intéressante nouvelle (16 au total).
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (210,248 s). Les tests PostgreSQL dépendant de `TEST_DATABASE_URL` ont été ignorés car la variable n’est pas définie. Aucun test Compose local, conformément à la consigne.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` : zéro vulnérabilité dans `web/admin-ui` et `web/openbastion-icons`.
+- `git diff --check` : PASS. Aucun test d’interopérabilité Windows/RDS réel ; réassemblage MCS multi-segments, bitmaps compressés, adaptateur ScreenCodec, runtime et route RDP restent non implémentés/désactivés.
