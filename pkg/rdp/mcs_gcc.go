@@ -52,7 +52,7 @@ type MCSClientSettings struct {
 }
 
 // MCSConnectResponse contains the only server settings accepted by this stage.
-// Channel connection (Erect Domain, Attach User and Channel Join) is a later step.
+// Channel connection (Erect Domain, Attach User and Channel Join) follows via ConnectMCSChannels.
 type MCSConnectResponse struct {
 	ServerVersion uint32
 	IOChannelID   uint16

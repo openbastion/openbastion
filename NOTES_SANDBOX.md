@@ -1941,3 +1941,24 @@ Validation finale de l'incrément 16 :
 - Rouge mesuré sur `origin/main` (`8c8accf`) : les tests de l'incrément ne compilent pas avant l'ajout de l'API MCS/GCC. Quatre mutations tuées sur quatre : protocole, chiffrement RDP, canal virtuel et clé H.221.
 - `gofmt` et `git diff --check` passent. Espace disque après validation : 3,5 Go disponibles (89 % utilisés), aucun nettoyage destructif.
 - Limites : pas encore d'Erect Domain, Attach User, Channel Join, capacités, Client Info, affichage ni entrée ; aucune interopérabilité Windows/RDS réelle ; runtime et route RDP restent désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 18 : MCS Channel Connection
+
+- `pkg/rdp/mcs_channel.go` encode Erect Domain Request, Attach User Request et Channel Join Request. Le premier est conforme au vecteur normatif `04 01 00 01 00` ; l'Attach User Confirm décode l'identifiant utilisateur PER avec son offset 1001. Les Channel Join Requests encodent l'initiateur de la même manière et les IDs de canal directement.
+- `CredSSPClientSession.ConnectMCSChannels` s'exécute uniquement après `ConnectMCS`, rejoint dans l'ordre le canal utilisateur puis le canal I/O 1003, et exige pour chaque confirmation un résultat réussi et une correspondance stricte des trois identifiants. La session conserve l'ID utilisateur et l'état de connexion des canaux. Aucun canal statique n'est demandé ni accepté.
+- Toute erreur, réponse mal formée, substitution de canal ou annulation après le début de l'échange ferme le TLS. L'opération est à usage unique, verrouillée et soumise à deadline/context.
+- Tests : faux serveur TLS pour le parcours complet, rejet Attach User, mauvais Channel Join Confirm, annulation, séquence exacte, transitions à usage unique ; fuzzers sur Attach User Confirm et Channel Join Confirm.
+- Rouge mesuré sur le commit précédent `4fb3546` dans un worktree détaché : les nouveaux tests échouent à compiler faute des API de l'incrément.
+- Validation finale :
+  - `make build vet test proto-lint` : PASS (42,4 s), compilation, `go vet`, tests de tous les modules et `buf lint`.
+  - `go test ./pkg/rdp/... -count=1` : PASS ; 98 tests de premier niveau mesurés avec `go test -v ./pkg/rdp/... -count=1 | grep -c '^--- PASS'`.
+  - `go test -race ./pkg/rdp/... -count=1` : PASS.
+  - Fuzz `FuzzParseMCSAttachUserConfirm` : PASS, 39 466 exécutions en 3 s, 5 entrées intéressantes nouvelles ; `FuzzParseMCSChannelJoinConfirm` : PASS, 39 427 exécutions en 3 s, 5 entrées intéressantes nouvelles.
+  - `GOTOOLCHAIN=go1.27.3 make vuln` : PASS ; aucune vulnérabilité atteignable dans les packages analysés, quelques avis restent dans des modules requis mais non appelés ; `npm audit` : zéro vulnérabilité dans `web/admin-ui` et `web/openbastion-icons`.
+  - `DOCKER_BUILDKIT=0 make test-integration` : PASS (225,956 s). Les tests d'intégration à processus réels ont passé ; les scénarios PostgreSQL sont ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose n'a été lancé localement : ils restent réservés à GitHub Actions.
+  - Trois mutations de sécurité tuées sur trois : ignorer le résultat du Channel Join Confirm, accepter un canal confirmé substitué et ne pas fermer le transport sur réponse invalide font échouer les tests.
+  - Rouge mesuré sur le commit précédent `4fb3546` dans un worktree détaché : les nouveaux tests échouent à compiler en l'absence des API Channel Connection.
+  - `gofmt` ne retourne aucun fichier ; `git diff --check` : PASS.
+  - Aucun test d'interopérabilité Windows/RDS réel n'a été exécuté ; le runtime et la route RDP restent désactivés.
+- Limites : capacités, Client Info/licensing, affichage et entrée restent absents ; aucune interopérabilité Windows/RDS réelle ; runtime et route RDP toujours désactivés.
