@@ -1884,3 +1884,25 @@ Validation de l'incrément 14 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : PASS ; aucune vulnérabilité atteignable, quelques avis dans des modules requis mais non appelés ; `npm audit` : zéro vulnérabilité dans les deux workspaces UI.
 - `make test-integration` : PASS (222.858 s) ; PostgreSQL ignoré faute de `TEST_DATABASE_URL`. Les tests Compose restent réservés à GitHub Actions.
 - `git diff --check` : PASS.
+
+
+## 2026-11-04 — ADR-0071, incrément 15 : machine d'état CredSSP/SPNEGO sur TLS
+
+- Branche : `feat/rdp-credssp-spnego-state-machine`, créée depuis `main` synchronisé sur le merge PR #28 (`30103b5`).
+- `pkg/rdp/spnego_marshal.go` encode les jetons SPNEGO client `NegTokenInit` (NTLM uniquement + NTLMSSP NEGOTIATE) et `NegTokenResp` final (NTLMSSP AUTHENTICATE).
+- `pkg/rdp/credssp_client.go` ajoute `Transport.EstablishCredSSP` : TSRequest initial, validation de la réponse SPNEGO `accept-incomplete`/NTLM, challenge NTLMSSP strict, preuve NTLMv2 + MIC, AV_PAIR TargetName/ChannelBindings issus du TLS épinglé, AUTHENTICATE + `pubKeyAuth` + nonce dans le dernier TSRequest, puis vérification de la réponse `pubKeyAuth` serveur.
+- Négociation de version bornée au minimum entre version client et serveur, v5/v6 seulement. Lecture d'un TSRequest à la fois, longueur DER canonique et borne 64 Kio ; délai par défaut 10 s, annulation de contexte, fermeture du transport sur tout échec ou état incertain. Le contexte NTLMSSP est remis dans `CredSSPClientSession` et doit être fermé explicitement.
+- Le test bout en bout TLS factice vérifie la preuve NTLMv2, le MIC du transcript, les AV_PAIR client et `MIC_PRESENT`, le binding client→serveur, le retour serveur scellé, ainsi que la négociation descendante v6→v5. Tests dédiés couvrent les encodages SPNEGO, les longueurs DER et l'annulation avant émission.
+- `authInfo`/`TSCredentials` n'est pas construit ni transmis ; le mot de passe sert seulement à calculer NTProof et n'est jamais sérialisé. Kerberos, `request-mic`/`mechListMIC`, CredSSP hors v5/v6 et Remote Guard restent refusés. Pas d'interopérabilité Windows réelle revendiquée ; MCS/GCC, capacités, affichage et entrée restent absents. Le runtime et la route RDP restent désactivés.
+
+Vérifications ciblées pendant l'implémentation : `go test ./pkg/rdp/... -count=1` et `git diff --check` passent. Les résultats des gates complètes sont consignés ci-dessous.
+
+Validation finale de l'incrément 15 :
+- `go test ./pkg/rdp/... -count=1` : PASS (5,0 s).
+- `make build vet test` : PASS sur tous les packages (56,32 s).
+- `go test -race ./pkg/rdp/... -count=1` : PASS (22,25 s).
+- `make proto-lint` (`buf lint` + `buf generate`) : PASS.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : PASS ; zéro vulnérabilité atteignable détectée. Des avis subsistent dans quelques modules requis mais non appelés ; `npm audit` retourne zéro vulnérabilité dans `web/admin-ui` et `web/openbastion-icons`.
+- `make test-integration` : PASS (237,746 s pour `test/integration`). Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose n'a été lancé localement ; ils restent réservés à GitHub Actions.
+- `gofmt -l` ne retourne aucun fichier ; `git diff --check` : PASS.
+- Espace disque après les validations : 4,2 Go disponibles (87 % utilisés). Aucun nettoyage destructif n'a été nécessaire.
