@@ -183,6 +183,7 @@ type rdpScreenSessionAdapter struct {
 	cancel       context.CancelFunc
 	done         chan struct{}
 	closeOnce    sync.Once
+	closeErr     error
 	mu           sync.Mutex
 	inputMu      sync.Mutex
 	inputTimeout time.Duration
@@ -350,12 +351,11 @@ func (s *rdpScreenSessionAdapter) Err() error {
 }
 
 func (s *rdpScreenSessionAdapter) Close() error {
-	var releaseErr error
 	s.closeOnce.Do(func() {
 		s.inputMu.Lock()
 		events := releaseAllRDPInput(s.pressedKeys, s.pointerBtns, s.pointerX, s.pointerY)
 		if len(events) > 0 {
-			releaseErr = s.sendInputEvents(events)
+			s.closeErr = s.sendInputEvents(events)
 		}
 		s.pressedKeys = make(map[uint16]bool)
 		s.pointerBtns = 0
@@ -364,7 +364,7 @@ func (s *rdpScreenSessionAdapter) Close() error {
 		s.target.Close()
 		<-s.done
 	})
-	return releaseErr
+	return s.closeErr
 }
 
 func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {

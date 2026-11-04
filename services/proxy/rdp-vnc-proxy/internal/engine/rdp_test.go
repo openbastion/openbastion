@@ -236,3 +236,26 @@ func TestRDPCodecReleasesHeldInputsAfterParentContextCancellation(t *testing.T) 
 		t.Fatalf("inputs=%+v closed=%v; expected key-up before target close", target.inputs, target.closed)
 	}
 }
+
+func TestRDPCodecCloseReturnsSameReleaseErrorOnRepeatedCalls(t *testing.T) {
+	cred := rdpTestCredential(t)
+	target := &fakeRDPDesktop{width: 2, height: 1}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) {
+		return target, nil
+	}}
+	session, err := codec.Open(context.Background(), cred)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: 0x1e}); err != nil {
+		t.Fatalf("key down: %v", err)
+	}
+	target.mu.Lock()
+	target.inputErr = errors.New("simulated write failure")
+	target.mu.Unlock()
+	first := session.Close()
+	second := session.Close()
+	if first == nil || second == nil || first.Error() != second.Error() {
+		t.Fatalf("Close errors differ: first=%v second=%v", first, second)
+	}
+}
