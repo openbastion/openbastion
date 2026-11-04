@@ -18,21 +18,28 @@ const (
 	ntlmSSPMessageChallenge    = 2
 	ntlmSSPMessageAuthenticate = 3
 
-	ntlmSSPNegotiateUnicode                 = 0x00000001
-	ntlmSSPRequestTarget                    = 0x00000004
-	ntlmSSPNegotiateNTLM                    = 0x00000200
-	ntlmSSPNegotiateAlwaysSign              = 0x00008000
-	ntlmSSPNegotiateExtendedSessionSecurity = 0x00080000
-	ntlmSSPNegotiateTargetInfo              = 0x00800000
-	ntlmSSPTargetTypeDomain                 = 0x00010000
-	ntlmSSPTargetTypeServer                 = 0x00020000
+	ntlmSSPNegotiateUnicode                 uint32 = 0x00000001
+	ntlmSSPRequestTarget                    uint32 = 0x00000004
+	ntlmSSPNegotiateSign                    uint32 = 0x00000010
+	ntlmSSPNegotiateSeal                    uint32 = 0x00000020
+	ntlmSSPNegotiateNTLM                    uint32 = 0x00000200
+	ntlmSSPNegotiateAlwaysSign              uint32 = 0x00008000
+	ntlmSSPNegotiateExtendedSessionSecurity uint32 = 0x00080000
+	ntlmSSPNegotiateTargetInfo              uint32 = 0x00800000
+	ntlmSSPTargetTypeDomain                 uint32 = 0x00010000
+	ntlmSSPTargetTypeServer                 uint32 = 0x00020000
+	ntlmSSPNegotiate128                     uint32 = 0x20000000
+	ntlmSSPNegotiateKeyExchange             uint32 = 0x40000000
 
 	ntlmSSPNegotiateFlags = ntlmSSPNegotiateUnicode |
 		ntlmSSPRequestTarget |
+		ntlmSSPNegotiateSign |
+		ntlmSSPNegotiateSeal |
 		ntlmSSPNegotiateNTLM |
 		ntlmSSPNegotiateAlwaysSign |
 		ntlmSSPNegotiateExtendedSessionSecurity |
-		ntlmSSPNegotiateTargetInfo
+		ntlmSSPNegotiateTargetInfo |
+		ntlmSSPNegotiate128
 )
 
 // ErrNTLMSSPMessage reports malformed messages or negotiation features outside the strict NTLMSSP profile.
@@ -48,11 +55,12 @@ type NTLMSSPChallenge struct {
 	ServerChallenge [8]byte
 	TargetName      []byte // UTF-16LE, without a terminator
 	TargetInfo      []byte // validated AV_PAIR encoding, still untrusted
+	valid           bool
 }
 
-// MarshalNTLMSSPNegotiate emits the one client profile supported by ADR-0071:
-// Unicode, NTLM, extended session security, target info and always-sign. It
-// deliberately does not request OEM, LM-key, NTLMv1, signing, sealing or key exchange.
+// MarshalNTLMSSPNegotiate emits the strict CredSSP client profile: Unicode,
+// NTLMv2, signing, sealing, 128-bit keys, extended session security, target
+// info and always-sign. OEM, LM-key, NTLMv1 and key exchange are not requested.
 func MarshalNTLMSSPNegotiate() []byte {
 	message := make([]byte, ntlmSSPNegotiateHeaderSize)
 	copy(message, ntlmSSPSignature)
@@ -80,7 +88,7 @@ func ParseNTLMSSPChallenge(data []byte, offeredFlags uint32) (NTLMSSPChallenge, 
 		return out, ErrNTLMSSPMessage
 	}
 	flags := binary.LittleEndian.Uint32(data[20:24])
-	required := uint32(ntlmSSPNegotiateUnicode | ntlmSSPNegotiateNTLM | ntlmSSPNegotiateAlwaysSign | ntlmSSPNegotiateExtendedSessionSecurity | ntlmSSPNegotiateTargetInfo)
+	required := uint32(ntlmSSPNegotiateUnicode | ntlmSSPNegotiateSign | ntlmSSPNegotiateSeal | ntlmSSPNegotiateNTLM | ntlmSSPNegotiateAlwaysSign | ntlmSSPNegotiateExtendedSessionSecurity | ntlmSSPNegotiateTargetInfo | ntlmSSPNegotiate128)
 	allowed := uint32(ntlmSSPNegotiateFlags | ntlmSSPTargetTypeDomain | ntlmSSPTargetTypeServer)
 	if flags&required != required || flags&^allowed != 0 || flags&(ntlmSSPTargetTypeDomain|ntlmSSPTargetTypeServer) == ntlmSSPTargetTypeDomain|ntlmSSPTargetTypeServer {
 		return out, ErrNTLMSSPMessage
@@ -104,6 +112,7 @@ func ParseNTLMSSPChallenge(data []byte, offeredFlags uint32) (NTLMSSPChallenge, 
 	out.Flags = flags
 	out.TargetName = append([]byte(nil), targetName...)
 	out.TargetInfo = append([]byte(nil), targetInfo...)
+	out.valid = true
 	return out, nil
 }
 

@@ -1843,3 +1843,28 @@ Références de protocole : MS-NLMP §§2.2.1.1–2.2.1.3 et §3.1.5.2.1. Les me
 - Tests : hashes indépendants, nonce et direction, pin TLS absent/différent, handshake incomplet, SubjectPublicKeyInfo invalide, retour serveur altéré ou tronqué.
 - Validation de l'incrément 12 : `make build vet test`, `go test -race ./pkg/rdp/... -count=1`, `make proto-lint`, `GOTOOLCHAIN=go1.27.3 make vuln`, `gofmt` et `git diff --check` passent. `govulncheck` ne trouve aucune vulnérabilité atteignable ; certains modules requis contiennent des avis non appelés. `npm audit` retourne zéro vulnérabilité pour les deux workspaces UI.
 - `make test-integration` passe : 287,742 s de tests (299,22 s pour la commande complète). Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL` ; les tests Compose restent réservés à GitHub Actions et n'ont pas été lancés localement.
+
+
+## 2026-11-04 — ADR-0071, incrément 13 : protection GSS_Wrap NTLMSSP
+
+- Branche de travail : feat/rdp-ntlm-gss-wrap, créée depuis main après fusion de la PR #26.
+- Ajout de pkg/rdp/ntlmssp_seal.go : contexte client NTLMSSP, clés de signature/scellement directionnelles, RC4 persistant par direction, HMAC-MD5 et séquences indépendantes.
+- Le profil NEGOTIATE exige SIGN, SEAL, 128 bits et Extended Session Security ; KEY_EXCH reste non négocié, donc SessionBaseKey sert d'exported session key.
+- Le contexte n'accepte qu'une réponse NTLMv2 calculée par ComputeNTLMv2Response et un CHALLENGE issu du parseur strict ; server challenge et TargetInfo doivent correspondre exactement au proof calculé. Les erreurs de signature, rejeux, désordres et messages mal formés empoisonnent la direction concernée.
+- Vecteur de référence MS-NLMP GSS_WrapEx ajouté, avec variante sans KEY_EXCH ; tests de clés directionnelles, NUL terminal, aller/retour, altération, rejeu, désordre, downgrade des flags et fermeture.
+- Aucun branchement à TSRequest.pubKeyAuth/authInfo n'est fait dans cet incrément ; pas de dialogue CredSSP/SPNEGO complet, aucun credential transmis et runtime RDP toujours désactivé.
+
+Validation :
+- make build vet test : PASS.
+- go test ./pkg/rdp/... -count=1 : PASS.
+- go test -race ./pkg/rdp/... -count=1 : PASS.
+- make proto-lint : PASS.
+- GOTOOLCHAIN=go1.27.3 make vuln : PASS ; aucune vulnérabilité atteignable détectée, quelques avis subsistent dans des modules requis mais non appelés ; npm audit : 0 vulnérabilité dans les deux workspaces UI.
+- make test-integration : PASS (247.583 s). Les tests PostgreSQL sont ignorés lorsque TEST_DATABASE_URL n'est pas défini. Les tests Compose restent réservés à GitHub Actions.
+- git diff --check : PASS.
+- Tests de mutation : retirer la comparaison HMAC fait échouer le test d'altération ; retirer l'incrément de séquence fait échouer le test de compteur. Les mutations ont été restaurées, puis les tests et la race suite sont repassés.
+
+Nettoyage de l'environnement :
+- go clean -cache, nettoyage Conda/npm et purge BuildKit ont libéré les caches régénérables.
+- docker builder prune --all --force a récupéré 750.8 MB ; aucun volume Docker n'a été supprimé.
+- overlay : 94 % utilisés avant nettoyage, 84 % après le nettoyage Docker (4.8 GB disponibles). Le build et les tests ont ramené l'usage à environ 86 % (4.2 GB disponibles).
