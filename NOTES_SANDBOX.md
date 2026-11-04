@@ -1962,3 +1962,27 @@ Validation finale de l'incrément 16 :
   - `gofmt` ne retourne aucun fichier ; `git diff --check` : PASS.
   - Aucun test d'interopérabilité Windows/RDS réel n'a été exécuté ; le runtime et la route RDP restent désactivés.
 - Limites : capacités, Client Info/licensing, affichage et entrée restent absents ; aucune interopérabilité Windows/RDS réelle ; runtime et route RDP toujours désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 19 : RDP Mandatory Capability Exchange
+
+`pkg/rdp/mcs_capabilities.go` ajoute `CredSSPClientSession.ExchangeCapabilities`, appelable une seule fois après CredSSP, MCS Connect-Initial/Response et Channel Connection. Le client lit un MCS Send Data Indication sur le canal I/O 1003, exige l'initiateur serveur (1002), le PDU de segmentation complet et un Demand Active dont le Share Control Header, le Share ID, la source et toutes les longueurs sont cohérents. La phase Licensing précède normalement Demand Active ; elle n'est pas encore implémentée et le test injecte donc Demand Active directement après les Channel Joins.
+
+Le parseur borne 32 Capability Sets, 2 Kio par bloc et le TPKT total ; il refuse les doublons, les longueurs invalides, les dimensions hors limites, tout profil autre que 32 bpp, l'absence des indicateurs Bitmap obligatoires, les flags d'entrée inconnus et l'absence des capacités General, Bitmap, Order, Pointer ou Input. Les champs que MS-RDPBCGR demande d'ignorer (padding, profondeurs bitmap legacy, caches pointer) restent ignorés. Les autres types sont conservés comme identifiants uniquement après validation de leur enveloppe ; leurs contenus ne sont pas interprétés ni activés.
+
+Le Confirm Active utilise le Share ID serveur et l'identifiant de canal utilisateur attribué. Il annonce les cinq capacités minimales conformes : General, Bitmap 32 bpp avec compression et rectangles multiples obligatoires, Order niveau 1 mais sans ordre primaire, Pointer avec le flag Color Pointer obligatoire et sans cache, Input limité aux scancodes. Aucun fast-path, Unicode, événement souris étendu ou ordre primaire n'est annoncé. Le décodeur bitmap compressé et les consommateurs pointer/input restent à implémenter avant l'activation du runtime. Le transport reste sous TLS HYBRID ; aucune sécurité RDP standard n'est activée. La transition est à usage unique, bornée par contexte/deadline et terminale en cas de réponse invalide ou d'écriture incertaine.
+
+Le faux serveur TLS teste la séquence MCS Connect-Initial/Response, Erect Domain, Attach User, les deux Channel Joins, Demand Active et Confirm Active. Les tests couvrent les champs MCS substitués, les longueurs, les doublons, les capacités manquantes, les dimensions et les booléens. Un fuzzer couvre le parseur Demand Active.
+
+**Limites restantes :** Licensing et Client Info ne sont pas implémentés ; aucune interopérabilité Windows/RDS n'est démontrée. Le décodage bitmap/ordres, l'entrée, le runtime et la route RDP restent désactivés. Les capacités client Order/Pointer/Input sont volontairement à zéro jusqu'à l'implémentation de leurs moteurs.
+
+Validation finale de l'incrément 19 :
+- `make build vet test proto-lint` : PASS (tous les modules, `go vet`, tests et `buf lint`).
+- `go test ./pkg/rdp/... -count=1` : PASS ; 105 tests de premier niveau mesurés.
+- `go test -race ./pkg/rdp/... -count=1` : PASS.
+- Fuzz `FuzzParseRDPDemandActive` : 80 789 exécutions en 6 s, 2 entrées intéressantes nouvelles (7 au total).
+- Six mutations de sécurité tuées sur six : doublon, fermeture terminale, limite de pixels, compression bitmap obligatoire, rectangles multiples obligatoires et SCANCODES obligatoire.
+- Rouge sur le commit de base `456a1aff` dans un worktree détaché : échec de compilation des tests en l'absence de l'API nouvelle.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable dans les packages analysés ; quelques avis subsistent dans des modules requis mais non appelés. `npm audit` : zéro vulnérabilité dans Admin UI et openbastion-icons.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (217,088 s) ; scénarios PostgreSQL ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose local, conformément à la consigne : GitHub Actions les exécute.
+- `gofmt` et `git diff --check` : PASS. Pas de test Windows/RDS réel ; route/runtime RDP désactivés.

@@ -29,14 +29,17 @@ type CredSSPClientConfig struct {
 // already verified TLS transport. The NTLM confidentiality keys are erased
 // immediately after the one-shot authInfo message is sent.
 type CredSSPClientSession struct {
-	mu                   sync.Mutex
-	transport            *Transport
-	version              uint32
-	credentialsDelegated bool
-	mcsConnected         bool
-	mcsResponse          MCSConnectResponse
-	channelsConnected    bool
-	userChannelID        uint16
+	mu                    sync.Mutex
+	transport             *Transport
+	version               uint32
+	credentialsDelegated  bool
+	mcsConnected          bool
+	mcsResponse           MCSConnectResponse
+	channelsConnected     bool
+	userChannelID         uint16
+	mcsSettings           MCSClientSettings
+	capabilitiesExchanged bool
+	serverCapabilities    RDPServerCapabilities
 }
 
 func (s *CredSSPClientSession) Close() {
@@ -304,6 +307,7 @@ func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSett
 	}
 	s.mcsConnected = true
 	s.mcsResponse = response
+	s.mcsSettings = cfg
 	return response, nil
 }
 
