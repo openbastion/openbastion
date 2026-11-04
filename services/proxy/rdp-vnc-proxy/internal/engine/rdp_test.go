@@ -262,3 +262,37 @@ func TestRDPCodecCloseReturnsSameReleaseErrorOnRepeatedCalls(t *testing.T) {
 		t.Fatalf("Close errors differ: first=%v second=%v", first, second)
 	}
 }
+
+func TestRDPCodecMapsScreenStreamWheelButtonBits(t *testing.T) {
+	cred := rdpTestCredential(t)
+	target := &fakeRDPDesktop{width: 2, height: 1}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) {
+		return target, nil
+	}}
+	session, err := codec.Open(context.Background(), cred)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []screenstream.InputEvent{
+		{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 0x08},
+		{Type: screenstream.InputPointer, X: 1, Y: 0},
+		{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 0x10},
+		{Type: screenstream.InputPointer, X: 1, Y: 0},
+	} {
+		if err := session.Input(event); err != nil {
+			t.Fatalf("pointer input %#v: %v", event, err)
+		}
+	}
+	target.mu.Lock()
+	batches := append([][]rdp.RDPInputEvent(nil), target.inputs...)
+	target.mu.Unlock()
+	if len(batches) != 4 || len(batches[0]) != 2 || len(batches[1]) != 1 || len(batches[2]) != 2 || len(batches[3]) != 1 {
+		t.Fatalf("wheel button batches = %#v", batches)
+	}
+	if batches[0][1].PointerFlags != rdpMouseWheel|120 || batches[2][1].PointerFlags != rdpMouseWheel|rdpMouseWheelNegative|120 {
+		t.Fatalf("wheel button flags = %#v / %#v", batches[0][1], batches[2][1])
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}

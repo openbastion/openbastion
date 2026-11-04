@@ -240,7 +240,7 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 			keys[keyID] = true
 		}
 	case screenstream.InputPointer:
-		if input.Buttons&^byte(0x07) != 0 || uint32(input.X) >= uint32(s.width) || uint32(input.Y) >= uint32(s.height) {
+		if input.Buttons&^screenstream.AllowedPointerButtons != 0 || uint32(input.X) >= uint32(s.width) || uint32(input.Y) >= uint32(s.height) {
 			return screenstream.ErrUnsupported
 		}
 		events = append(events, rdp.RDPInputEvent{Type: rdp.RDPInputMouse, PointerFlags: rdpMouseMove, X: input.X, Y: input.Y})
@@ -256,8 +256,14 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 				events = append(events, rdp.RDPInputEvent{Type: rdp.RDPInputMouse, PointerFlags: flags, X: input.X, Y: input.Y})
 			}
 		}
-		if input.Wheel != 0 {
-			steps := int(input.Wheel)
+		steps := int(input.Wheel)
+		if input.Buttons&0x08 != 0 && buttons&0x08 == 0 {
+			steps++ // ScreenStream/RFB button 4 is wheel-up.
+		}
+		if input.Buttons&0x10 != 0 && buttons&0x10 == 0 {
+			steps-- // ScreenStream/RFB button 5 is wheel-down.
+		}
+		if steps != 0 {
 			if steps > 120 || steps < -120 {
 				return screenstream.ErrUnsupported
 			}
