@@ -616,3 +616,29 @@ Validation finale de l'incrément 20 :
 - DOCKER_BUILDKIT=0 make test-integration : PASS (291,076 s). Les tests PostgreSQL ont été ignorés faute de TEST_DATABASE_URL. Aucun test Compose local ; ils restent réservés à GitHub Actions.
 - gofmt, validation YAML par Ruby/Psych et git diff --check : PASS.
 - Aucun test d'interopérabilité Windows/RDS réel ; Licensing, finalisation, affichage, entrée, runtime et route RDP restent à faire/désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 21 : RDP Licensing (profil Personal Terminal Server)
+
+Le package pkg/rdp/mcs_licensing.go implémente une transition Licensing à usage unique après Client Info. Le client attend un MCS Send Data Indication sur le canal global I/O 1003, valide l'initiateur serveur 1002, le TPKT, le PER length, le Basic Security Header SEC_LICENSE_PKT, le préambule LICENSE_REQUEST et la longueur de chaque champ. Le parseur vérifie ProductInfo (chaînes UTF-16LE terminées), KeyExchangeList (RSA obligatoire), le BLOB certificat et la liste de scopes bornée ; les données non consommées ou les longueurs incohérentes sont refusées.
+
+Le profil implémenté est volontairement celui d'un Personal Terminal Server sans CAL locale : le client crée un CLIENT_NEW_LICENSE_REQUEST avec KEY_EXCHANGE_ALG_RSA, le PlatformId WinNT, un ClientRandom cryptographiquement aléatoire, un premaster de 48 octets chiffré RSA PKCS#1 v1.5, puis les BLOB ClientUserName et ClientMachineName. Le nom machine est le ClientName déjà annoncé dans CS_CORE ; le nom d'utilisateur est celui envoyé dans Client Info. Pour ce champ Licensing ANSI, seuls les caractères ASCII imprimables sont acceptés. Le client n'accepte ensuite que ERROR_ALERT avec STATUS_VALID_CLIENT, ST_NO_TRANSITION et un BLOB BB_ERROR_BLOB vide. Ce triplet exact marque Licensing terminé et débloque alors ExchangeCapabilities.
+
+Le certificat RSA de Licensing est extrait d'une chaîne X.509 version 2 fournie dans le SERVER_LICENSE_REQUEST. Cette donnée étant transportée à l'intérieur du TLS déjà authentifié/épinglé, elle est liée à l'identité du serveur pour cette session. Si le BLOB certificat est vide, le client peut utiliser la clé RSA du certificat TLS, conformément au protocole ; une clé RSA de moins de 1024 bits est refusée. Les certificats propriétaires legacy (version 1) et les clés non-RSA sont refusés. Les secrets temporaires ClientRandom, premaster, ciphertext et buffers de PDU sont effacés après usage.
+
+CredSSPClientSession.CompleteLicensing protège la transition par le verrou de session, contexte et deadline. L'opération ne peut être tentée qu'une fois, après Client Info. Une réponse invalide, un PDU inattendu (dont Platform Challenge, New License ou Upgrade License), un statut autre que le succès exact, une annulation ou une erreur de transport ferme TLS et rend la session terminale. Aucun CAL n'est lu, conservé, émis, mis à niveau ou renouvelé ; le runtime et la route RDP restent désactivés.
+
+Les tests exercent le flux complet sur un faux serveur TLS : Client Info, Server License Request avec certificat X.509 RSA, Client New License Request, déchiffrement RSA du premaster côté serveur, STATUS_VALID_CLIENT, puis Demand Active/Confirm Active. Ils vérifient également les en-têtes MCS, l'identité Licensing, les champs RSA, les longueurs, le certificat, les états et les refus des messages malformés. Deux fuzzers couvrent les parseurs Server License Request et Licensing Error Alert.
+
+Limites restantes : pas de magasin CAL ni de flux New License/Upgrade License/Platform Challenge ; pas de certificat propriétaire legacy ; noms d'utilisateur Licensing non ASCII refusés ; pas d'interopérabilité Windows/RDS réelle. La fin de connexion RDP (Synchronize/Control/Font List), le décodage graphique, l'entrée et l'activation du runtime/route restent à faire.
+
+Références normatives : MS-RDPELE §1.3.3 (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpele/32851b14-da8a-4a72-9fd4-41209bddd6e8), §2.2.2.1 (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpele/e17772e9-9642-4bb6-a2bc-82875dd6da7c), §2.2.2.2 (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpele/c57e4890-9049-421e-9fe8-9a6f9519675a), §2.2.2.8 (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/f18b6c9f-f3d8-4a0e-8398-f9b153233dca), MS-RDPBCGR §2.2.1.4.3.1.1 (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/a37d449a-73ac-4f00-9b9d-56cefc954634) et §2.2.1.4.3.1.1.1 (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/fe93545c-772a-4ade-9d02-ad1e0d81b6af).
+
+Validation de l'incrément 21 :
+- make build vet test proto-lint : PASS sur tous les modules Go, go vet, tests et buf lint.
+- go test ./pkg/rdp/... -count=1 : PASS ; 121 tests de premier niveau.
+- go test -race ./pkg/rdp/... -count=1 : PASS.
+- FuzzParseRDPServerLicenseRequest : 48 962 exécutions en 3 s, 4 entrées intéressantes nouvelles (14 au total).
+- FuzzParseRDPServerLicenseSuccess : 38 792 exécutions en 3 s, aucune entrée intéressante nouvelle (11 au total).
+- GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; des avis existent dans des modules requis mais non appelés. npm audit : zéro vulnérabilité dans Admin UI et openbastion-icons.
+- Aucun test d'interopérabilité Windows/RDS réel ; le runtime et la route RDP restent désactivés.

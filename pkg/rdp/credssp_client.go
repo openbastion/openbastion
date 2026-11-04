@@ -38,6 +38,8 @@ type CredSSPClientSession struct {
 	channelsConnected     bool
 	userChannelID         uint16
 	clientInfoSent        bool
+	licensingAttempted    bool
+	licensingUsername     string
 	licensingComplete     bool
 	mcsSettings           MCSClientSettings
 	capabilitiesExchanged bool
