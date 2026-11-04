@@ -213,6 +213,15 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 				return
 			}
 		}
+		clientInfo, readErr := readTestTPKT(tlsConn)
+		if readErr != nil {
+			serverResult <- readErr
+			return
+		}
+		if _, readErr = parseMCSClientInfoForTest(clientInfo, 1007); readErr != nil {
+			serverResult <- readErr
+			return
+		}
 		if acceptErr = writeFull(tlsConn, mcsTestDemandActive()); acceptErr != nil {
 			serverResult <- acceptErr
 			return
@@ -245,6 +254,12 @@ func TestCredSSPSessionExchangeCapabilitiesOverTLS(t *testing.T) {
 	if _, err := session.ConnectMCSChannels(context.Background(), time.Second); err != nil {
 		t.Fatalf("ConnectMCSChannels: %v", err)
 	}
+	if err := session.SendClientInfo(context.Background(), RDPClientInfo{Domain: "EXAMPLE", Username: "alice", Password: []byte("p@ssword")}, time.Second); err != nil {
+		t.Fatalf("SendClientInfo: %v", err)
+	}
+	// This test isolates the post-Licensing capability codec. The licensing
+	// exchange itself is implemented in the following increment.
+	session.licensingComplete = true
 	got, err := session.ExchangeCapabilities(context.Background(), time.Second)
 	if err != nil {
 		t.Fatalf("ExchangeCapabilities: %v", err)
@@ -305,7 +320,8 @@ func TestCredSSPSessionExchangeCapabilitiesClosesOnInvalidDemandActive(t *testin
 	session := &CredSSPClientSession{
 		transport: &Transport{Conn: clientTLS}, credentialsDelegated: true, mcsConnected: true,
 		mcsResponse: MCSConnectResponse{IOChannelID: mcsGlobalChannelID}, channelsConnected: true,
-		userChannelID: 1007, mcsSettings: MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720, ClientName: "OpenBastion"},
+		userChannelID: 1007, clientInfoSent: true, licensingComplete: true,
+		mcsSettings: MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720, ClientName: "OpenBastion"},
 	}
 	if _, err := session.ExchangeCapabilities(context.Background(), time.Second); !errors.Is(err, ErrMCSConnection) {
 		t.Fatalf("ExchangeCapabilities error = %v", err)
@@ -319,7 +335,7 @@ func TestCredSSPSessionExchangeCapabilitiesClosesOnInvalidDemandActive(t *testin
 }
 
 func TestCredSSPSessionExchangeCapabilitiesRequiresCompletedChannelConnection(t *testing.T) {
-	session := &CredSSPClientSession{credentialsDelegated: true, mcsConnected: true}
+	session := &CredSSPClientSession{credentialsDelegated: true, mcsConnected: true, licensingComplete: true}
 	if _, err := session.ExchangeCapabilities(context.Background(), time.Second); !errors.Is(err, ErrMCSConnection) {
 		t.Fatalf("ExchangeCapabilities error = %v, want ErrMCSConnection", err)
 	}

@@ -1986,3 +1986,24 @@ Validation finale de l'incrément 19 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable dans les packages analysés ; quelques avis subsistent dans des modules requis mais non appelés. `npm audit` : zéro vulnérabilité dans Admin UI et openbastion-icons.
 - `DOCKER_BUILDKIT=0 make test-integration` : PASS (217,088 s) ; scénarios PostgreSQL ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose local, conformément à la consigne : GitHub Actions les exécute.
 - `gofmt` et `git diff --check` : PASS. Pas de test Windows/RDS réel ; route/runtime RDP désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 20 : Client Info
+
+Le package pkg/rdp/mcs_client_info.go construit le CLIENT_INFO_PDU après CredSSP et Channel Connection. Il utilise un MCS Send Data Request sur le canal global I/O 1003, avec le User Channel ID comme initiator, un Basic Security Header SEC_INFO_PKT et un TS_INFO_PACKET Unicode UTF-16LE. Les flags INFO_AUTOLOGON et INFO_FORCE_ENCRYPTED_CS_PDU sont activés. Le domaine, le nom d'utilisateur et le mot de passe ont un terminateur NUL obligatoire ; AlternateShell et WorkingDir restent vides.
+
+Le mot de passe est transmis une seconde fois dans le champ Password du TS_INFO_PACKET, conformément à l'ouverture automatique d'une session RDP classique. Il a déjà été délégué dans authInfo CredSSP scellé ; les deux transmissions sont protégées par CredSSP/GSS_Wrap et TLS HYBRID. Le secret n'est ni conservé dans CredSSPClientSession, ni écrit dans les journaux ou l'audit. RDPClientInfo.Password est une tranche empruntée en lecture seule ; les buffers temporaires d'encodage sont effacés, et l'appelant doit effacer sa tranche après la transition. Les champs cb* excluent le terminateur et sont bornés à 510 octets UTF-16 (512 avec NUL). L'encodeur rejette UTF-8 invalide, NUL et caractères de contrôle pour l'identité ; les mots de passe peuvent contenir des contrôles non NUL. SendClientInfo est une transition unique, limitée au contexte/deadline et autorisée uniquement après CredSSP, MCS et les deux Channel Joins. Toute erreur de transport ou écriture incertaine ferme le TLS ; une entrée locale invalide laisse la session intacte. ExchangeCapabilities exige Client Info et licensingComplete=true. Aucun handler de Licensing ne peut encore positionner cet état en production ; après Client Info, la session reste bloquée sans consommer de PDU serveur. Les tests de capacités positionnent explicitement cet état de façon synthétique pour isoler le codec post-Licensing.
+
+**Ce que cela ne fait PAS :** aucun PDU de Licensing n'est encore traité. Si un serveur envoie Server License Request ou Licensing Error Alert, aucun parseur ne le consomme encore. La session reste bloquée après Client Info ; ExchangeCapabilities refuse toute lecture tant que licensingComplete est faux. Le fixture du test de capacités simule un état post-Licensing, sans implémenter ni valider le protocole de licence. Aucun CAL n'est lu, stocké, émis ou renouvelé. Pas de validation Windows/RDS réelle, de finalisation, d'affichage, d'entrée ni d'activation de la route RDP.
+
+Validation finale de l'incrément 20 :
+- make build vet test proto-lint : PASS sur tous les modules Go, go vet, tests unitaires et buf lint.
+- go test ./pkg/rdp/... -count=1 : PASS ; 112 tests de premier niveau mesurés.
+- go test -race ./pkg/rdp/... -count=1 : PASS.
+- Fuzz FuzzMarshalRDPClientInfo : 38 738 exécutions en 6 s, 31 entrées intéressantes nouvelles (34 au total).
+- 17 mutations de sécurité tuées sur 17 : flags Unicode/auto-logon/TLS, SEC_INFO_PKT, longueurs cbDomain/cbPassword, contenu Password, canal MCS, initiator, séquencement, émission unique, identité/secret obligatoires, borne UTF-16, NUL, contrôles et UTF-8.
+- Rouge mesuré sur le commit de base 97a5934 dans un worktree détaché : échec de compilation en l'absence des nouvelles API.
+- GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable dans les packages analysés ; quelques avis subsistent dans des modules requis mais non appelés. npm audit : zéro vulnérabilité dans Admin UI et openbastion-icons.
+- DOCKER_BUILDKIT=0 make test-integration : PASS (291,076 s) ; scénarios PostgreSQL ignorés faute de TEST_DATABASE_URL. Aucun test Compose local, conformément à la consigne : GitHub Actions les exécute.
+- gofmt, validation YAML par Ruby/Psych et git diff --check : PASS.
+- Aucun test Windows/RDS réel ; Licensing, finalisation, affichage, entrée, runtime et route RDP restent à faire/désactivés.
