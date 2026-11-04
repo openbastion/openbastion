@@ -43,6 +43,7 @@ type CredSSPClientSession struct {
 	licensingComplete     bool
 	mcsSettings           MCSClientSettings
 	capabilitiesExchanged bool
+	connectionFinalized   bool
 	serverCapabilities    RDPServerCapabilities
 }
 

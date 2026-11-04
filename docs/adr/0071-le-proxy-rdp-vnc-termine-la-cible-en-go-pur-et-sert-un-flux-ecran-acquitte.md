@@ -642,3 +642,16 @@ Validation de l'incrément 21 :
 - FuzzParseRDPServerLicenseSuccess : 38 792 exécutions en 3 s, aucune entrée intéressante nouvelle (11 au total).
 - GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; des avis existent dans des modules requis mais non appelés. npm audit : zéro vulnérabilité dans Admin UI et openbastion-icons.
 - Aucun test d'interopérabilité Windows/RDS réel ; le runtime et la route RDP restent désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 22 : RDP Connection Finalization
+
+`pkg/rdp/mcs_finalization.go` implémente la finalisation client/serveur de la connexion RDP après Licensing et Confirm Active. `CredSSPClientSession.FinalizeConnection` est une transition à usage unique, verrouillée et soumise au contexte/deadline. Elle exige les états CredSSP, MCS, Client Info, Licensing et Capabilities tous terminés, un TLS actif et un Share ID non nul.
+
+Le client envoie dans l’ordre Synchronize, Control/Cooperate, Control/Request Control et Font List vide. Les quatre PDU sont construits avec Share ID serveur, source utilisateur attribuée, canal I/O 1003, longueurs cohérentes et sans sécurité RDP standard (le transport reste TLS HYBRID). Le profil annonce zéro police : `numberFonts=0`, `totalNumFonts=0`, `FIRST|LAST`, `entrySize=50`. Les PDU sont envoyés en lot dans l’ordre, autorisé par MS-RDPBCGR §1.3.1.1.
+
+Le client valide ensuite les quatre réponses serveur ordonnées : Synchronize serveur avec targetUser=0, Control/Cooperate, Control/Granted Control (grantId=User Channel ID, controlId=1002), puis Font Map vide (`numberEntries=0`, `totalNumEntries=0`, `FIRST|LAST`, `entrySize=4`). Le parseur vérifie TPKT/X.224, MCS Send Data Indication, initiateur 1002, canal 1003, segmentation, Share Control/Data headers, Share ID, source, stream ID, PDU type, longueurs et contenu. Toute erreur ou ambiguïté ferme TLS et rend la session terminale ; `connectionFinalized` n’est posé qu’après validation du Font Map et restauration de la deadline.
+
+Tests : encodage strict des quatre PDU client ; réponses serveur valides et cas négatifs (TPKT, initiateur, canal, segmentation, Share Control, source, Share ID, type, compression, longueur, action Control) ; faux serveur TLS vérifiant le lot client et fournissant les quatre réponses ; prérequis et transition unique ; fuzz du parseur de réponse.
+
+**Limites :** le faux serveur TLS valide le protocole mais ne constitue pas une interopérabilité Windows/RDS réelle. Le moteur d’affichage (bitmap compressé/ordres), le pointeur, le clavier/la souris, le runtime RDP et la route restent désactivés. Les limites Licensing (CAL, Platform Challenge, certificats propriétaires legacy, identités non ASCII) restent ouvertes.
