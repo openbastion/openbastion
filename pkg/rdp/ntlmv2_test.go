@@ -2,7 +2,6 @@ package rdp
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -244,27 +243,58 @@ func mustHex16(t *testing.T, value string) (out [16]byte) {
 	return out
 }
 
-func TestNTLMv2TargetInfoForMIC_RequiresServerFlagAndPreservesBytes(t *testing.T) {
+func TestNTLMv2ServerTargetInfoForProof_PreservesServerBytesWithoutClientMutation(t *testing.T) {
 	base, _ := hex.DecodeString("02000c0044006f006d00610069006e0001000c0053006500720076006500720000000000")
-	if _, err := NTLMv2TargetInfoForMIC(base); !errors.Is(err, ErrNTLMv2Input) {
-		t.Fatalf("missing server MIC_PRESENT error = %v, want ErrNTLMv2Input", err)
-	}
-	withFlags := append([]byte{6, 0, 4, 0, 2, 0, 0, 0}, base...)
-	got, err := NTLMv2TargetInfoForMIC(withFlags)
+	got, err := NTLMv2ServerTargetInfoForProof(base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(got)
-	if !bytes.Equal(got, withFlags) {
-		t.Fatalf("TargetInfo changed while preparing MIC: got %x want exact server bytes %x", got, withFlags)
+	if !bytes.Equal(got, base) {
+		t.Fatalf("TargetInfo changed before NTProof: got %x want %x", got, base)
 	}
-	for name, flags := range map[string]uint32{"MIC absent": 0, "unsupported flag": 4, "unknown bits": 6} {
-		t.Run(name, func(t *testing.T) {
-			invalid := append([]byte{6, 0, 4, 0, 0, 0, 0, 0}, base...)
-			binary.LittleEndian.PutUint32(invalid[4:8], flags)
-			if _, err := NTLMv2TargetInfoForMIC(invalid); !errors.Is(err, ErrNTLMv2Input) {
-				t.Fatalf("flags %#x error = %v, want ErrNTLMv2Input", flags, err)
-			}
-		})
+	malformed := append([]byte(nil), base...)
+	malformed[len(malformed)-1] = 1
+	if _, err := NTLMv2ServerTargetInfoForProof(malformed); !errors.Is(err, ErrNTLMv2AVPair) {
+		t.Fatalf("malformed TargetInfo error = %v", err)
+	}
+}
+
+func TestNTLMv2TargetInfoWithClientBindings_AppendsWithoutChangingServerPrefix(t *testing.T) {
+	serverInfo := ntlmSSPTestTargetInfo(t)
+	name, err := NTLMv2TargetName("rdp.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(name)
+	bindings := NTLMv2ClientBindings{TargetName: name, ChannelBindings: mustHex16(t, "00112233445566778899aabbccddeeff")}
+	got, err := NTLMv2TargetInfoWithClientBindings(serverInfo, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(got)
+	if !bytes.HasPrefix(got, serverInfo[:len(serverInfo)-4]) {
+		t.Fatalf("server AV_PAIR prefix changed: %x", got)
+	}
+	pairs, err := ParseNTLMv2AVPairs(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pairs) != 5 || pairs[3].ID != ntlmAvChannelBindings || !bytes.Equal(pairs[3].Value, bindings.ChannelBindings[:]) || pairs[4].ID != ntlmAvTargetName || !bytes.Equal(pairs[4].Value, name) {
+		t.Fatalf("client binding AV_PAIRs = %#v", pairs)
+	}
+	bad := bindings
+	bad.ChannelBindings = [16]byte{}
+	if _, err := NTLMv2TargetInfoWithClientBindings(serverInfo, bad); !errors.Is(err, ErrNTLMv2Input) {
+		t.Fatalf("zero channel binding error = %v", err)
+	}
+	bad = bindings
+	bad.TargetName = mustUTF16LE(t, "TERMSRV/rdp.example.test\x00.evil")
+	if _, err := NTLMv2TargetInfoWithClientBindings(serverInfo, bad); !errors.Is(err, ErrNTLMv2Input) {
+		t.Fatalf("NUL-containing target name error = %v", err)
+	}
+	bad.TargetName = mustUTF16LE(t, "HTTP/rdp.example.test")
+	if _, err := NTLMv2TargetInfoWithClientBindings(serverInfo, bad); !errors.Is(err, ErrNTLMv2Input) {
+		t.Fatalf("non-RDP SPN error = %v", err)
 	}
 }

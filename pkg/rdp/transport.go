@@ -45,9 +45,11 @@ type TransportConfig struct {
 // Transport owns a TLS connection negotiated with PROTOCOL_HYBRID and a
 // cancellation hook. CredSSP must be layered on top only after this returns.
 type Transport struct {
-	Conn       *tls.Conn
-	stopCancel func() bool
-	closeOnce  sync.Once
+	Conn             *tls.Conn
+	targetServerName string
+	expectedPin      tlspin.Fingerprint
+	stopCancel       func() bool
+	closeOnce        sync.Once
 }
 
 func (t *Transport) Close() error {
@@ -79,6 +81,10 @@ func DialHybrid(ctx context.Context, cfg TransportConfig) (*Transport, error) {
 	serverName := cfg.TLSServerName
 	if serverName == "" {
 		serverName = host
+	}
+	expectedPin, err := tlspin.ParseFingerprint(cfg.TLSFingerprint)
+	if err != nil {
+		return nil, ErrInvalidTarget
 	}
 	tlsConfig, err := tlspin.ServerConfig(cfg.TLSFingerprint, cfg.TLSRoots, serverName)
 	if err != nil {
@@ -121,7 +127,7 @@ func DialHybrid(ctx context.Context, cfg TransportConfig) (*Transport, error) {
 		return nil, err
 	}
 	keep = true
-	return &Transport{Conn: tlsConn, stopCancel: stopCancel}, nil
+	return &Transport{Conn: tlsConn, targetServerName: serverName, expectedPin: expectedPin, stopCancel: stopCancel}, nil
 }
 
 func connectionRequest() []byte {

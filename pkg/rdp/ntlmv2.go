@@ -107,27 +107,12 @@ func ParseNTLMv2AVPairs(data []byte) ([]NTLMv2AVPair, error) {
 	return nil, ErrNTLMv2AVPair // EOL is mandatory, including for an empty list.
 }
 
-// NTLMv2TargetInfoForMIC validates that the server explicitly required an
-// AUTHENTICATE_MESSAGE MIC and returns an owned, byte-for-byte copy of its
-// TargetInfo. Client code must never synthesize or rewrite server AV_PAIRs:
-// the NTProof is calculated over the exact TargetInfo sent in CHALLENGE_MESSAGE.
-func NTLMv2TargetInfoForMIC(targetInfo []byte) ([]byte, error) {
-	pairs, err := ParseNTLMv2AVPairs(targetInfo)
-	if err != nil {
+// NTLMv2ServerTargetInfoForProof validates and returns an owned, byte-for-byte
+// copy of the server TargetInfo. NTProofStr is computed over these exact bytes;
+// client AV_PAIRs and MIC_PRESENT are added to AUTHENTICATE only afterwards.
+func NTLMv2ServerTargetInfoForProof(targetInfo []byte) ([]byte, error) {
+	if _, err := ParseNTLMv2AVPairs(targetInfo); err != nil {
 		return nil, err
-	}
-	flagsFound := false
-	for _, pair := range pairs {
-		if pair.ID != ntlmAvFlags {
-			continue
-		}
-		flagsFound = true
-		if binary.LittleEndian.Uint32(pair.Value) != 0x00000002 {
-			return nil, ErrNTLMv2Input
-		}
-	}
-	if !flagsFound {
-		return nil, ErrNTLMv2Input
 	}
 	return append([]byte(nil), targetInfo...), nil
 }
@@ -188,9 +173,10 @@ func GenerateNTLMv2ClientChallenge() ([8]byte, error) {
 // ComputeNTLMv2Response implements the NTLMv2 response calculation. timestamp
 // is the eight-byte FILETIME value used in the NTLMv2 client-challenge blob.
 // A server-supplied AV timestamp overrides timestamp. In that case LMResponse
-// is Z(24), as required by MS-NLMP. Target-name and channel-binding AV pairs are
-// rejected until their TLS target/channel binding paths are complete. Only the
-// MIC_PRESENT bit is recognized; the NTLMSSP MIC path requires the server to set it.
+// is Z(24), as required by MS-NLMP. Server-supplied target-name and channel-binding AV pairs are
+// rejected; the client adds its own values after computing NTProof, from the
+// pinned TLS peer. Only the MIC_PRESENT bit is recognized; the client sets it
+// in AUTHENTICATE after computing NTProof.
 // targetInfo must be a complete,
 // validated AV_PAIR list. The caller owns password and should clear
 // it after use. This function does not perform CredSSP or TLS key binding.
@@ -199,7 +185,12 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 	if username == "" || !validNTLMv2Identity(username) || !validNTLMv2Identity(domain) || len(password) == 0 || len(password) > maxNTLMv2Password || !utf8.Valid(password) {
 		return out, ErrNTLMv2Input
 	}
-	pairs, err := ParseNTLMv2AVPairs(targetInfo)
+	proofTargetInfo, err := NTLMv2ServerTargetInfoForProof(targetInfo)
+	if err != nil {
+		return out, err
+	}
+	defer clear(proofTargetInfo)
+	pairs, err := ParseNTLMv2AVPairs(proofTargetInfo)
 	if err != nil {
 		return out, err
 	}
@@ -214,8 +205,7 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 			// These must be bound to the actual target and TLS channel, not echoed.
 			return out, ErrNTLMv2Input
 		case ntlmAvFlags:
-			// MIC_PRESENT is supported by the NTLMSSP serializer; all other
-			// flag bits remain refused until target-name binding is implemented.
+			// MIC_PRESENT is set by the client after NTProof; unknown bits fail closed.
 			if binary.LittleEndian.Uint32(pair.Value)&^uint32(0x00000002) != 0 {
 				return out, ErrNTLMv2Input
 			}
@@ -228,11 +218,11 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 	}
 	defer clear(responseKey[:])
 
-	blob := make([]byte, 32+len(targetInfo))
+	blob := make([]byte, 32+len(proofTargetInfo))
 	blob[0], blob[1] = 1, 1 // RespType, HiRespType
 	copy(blob[8:16], effectiveTimestamp[:])
 	copy(blob[16:24], clientChallenge[:])
-	copy(blob[28:], targetInfo) // Reserved3 precedes AV pairs; the trailing four bytes are reserved.
+	copy(blob[28:], proofTargetInfo) // Reserved3 precedes AV pairs; the trailing four bytes are reserved.
 
 	proofInput := make([]byte, 8+len(blob))
 	copy(proofInput, serverChallenge[:])

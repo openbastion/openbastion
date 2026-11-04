@@ -115,6 +115,17 @@ func ParseNTLMSSPChallenge(data []byte, offeredFlags uint32) (NTLMSSPChallenge, 
 // primitive only; it does not perform CredSSP, verify the TLS peer or transmit
 // credentials. The caller must enforce the TLS pin and clear the returned bytes.
 func MarshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, username, domain string, response NTLMv2Response) ([]byte, error) {
+	return marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage, username, domain, response, nil)
+}
+
+// MarshalNTLMSSPAuthenticateWithBindings adds the client TargetName and TLS
+// channel-binding AV_PAIRs to the AUTHENTICATE NTLMv2 blob. The response proof
+// must already have been computed over the unmodified server TargetInfo.
+func MarshalNTLMSSPAuthenticateWithBindings(negotiateMessage, challengeMessage []byte, username, domain string, response NTLMv2Response, bindings NTLMv2ClientBindings) ([]byte, error) {
+	return marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage, username, domain, response, &bindings)
+}
+
+func marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, username, domain string, response NTLMv2Response, bindings *NTLMv2ClientBindings) ([]byte, error) {
 	if !bytes.Equal(negotiateMessage, MarshalNTLMSSPNegotiate()) || username == "" || !validNTLMv2Identity(username) || !validNTLMv2Identity(domain) {
 		return nil, ErrNTLMSSPMessage
 	}
@@ -122,7 +133,28 @@ func MarshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 	if err != nil {
 		return nil, err
 	}
-	if err := validateNTLMv2ResponseForChallenge(response, challenge); err != nil {
+	if len(response.NTResponse) < 16+32+4 {
+		return nil, ErrNTLMSSPMessage
+	}
+	baseBlob := response.NTResponse[16:]
+	serverInfo := baseBlob[28 : len(baseBlob)-4]
+	var clientInfo []byte
+	if bindings != nil {
+		clientInfo, err = NTLMv2TargetInfoWithClientBindings(serverInfo, *bindings)
+	} else {
+		clientInfo, err = NTLMv2TargetInfoWithMICFlag(serverInfo)
+	}
+	if err != nil {
+		return nil, ErrNTLMSSPMessage
+	}
+	defer clear(clientInfo)
+	ntResponse := make([]byte, 16+28+len(clientInfo)+4)
+	copy(ntResponse[:16], response.NTResponse[:16])
+	copy(ntResponse[16:44], baseBlob[:28])
+	copy(ntResponse[44:], clientInfo)
+	response.NTResponse = ntResponse
+	defer clear(ntResponse)
+	if err := validateNTLMv2ResponseForChallenge(response, challenge, bindings); err != nil {
 		return nil, err
 	}
 	userBytes, ok := utf16LEFromUTF8([]byte(username))
@@ -174,7 +206,7 @@ func MarshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 	return message, nil
 }
 
-func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMSSPChallenge) error {
+func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMSSPChallenge, bindings *NTLMv2ClientBindings) error {
 	if len(response.NTResponse) < 16+32+4 || len(response.NTResponse) > 16+32+maxNTLMv2TargetInfo || allZero(response.NTProof[:]) || allZero(response.SessionBaseKey[:]) || !hmac.Equal(response.NTProof[:], response.NTResponse[:16]) {
 		return ErrNTLMSSPMessage
 	}
@@ -183,7 +215,13 @@ func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMS
 		return ErrNTLMSSPMessage
 	}
 	targetInfo := blob[28 : len(blob)-4]
-	wantTargetInfo, err := NTLMv2TargetInfoForMIC(challenge.TargetInfo)
+	var wantTargetInfo []byte
+	var err error
+	if bindings != nil {
+		wantTargetInfo, err = NTLMv2TargetInfoWithClientBindings(challenge.TargetInfo, *bindings)
+	} else {
+		wantTargetInfo, err = NTLMv2TargetInfoWithMICFlag(challenge.TargetInfo)
+	}
 	if err != nil {
 		return ErrNTLMSSPMessage
 	}
@@ -191,7 +229,7 @@ func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMS
 	if !bytes.Equal(targetInfo, wantTargetInfo) {
 		return ErrNTLMSSPMessage
 	}
-	pairs, err := ParseNTLMv2AVPairs(targetInfo)
+	pairs, err := ParseNTLMv2AVPairs(challenge.TargetInfo)
 	if err != nil {
 		return ErrNTLMSSPMessage
 	}
@@ -207,7 +245,7 @@ func validateNTLMv2ResponseForChallenge(response NTLMv2Response, challenge NTLMS
 			// These AV pairs must be derived from the pinned TLS peer, not echoed blindly.
 			return ErrNTLMSSPMessage
 		case ntlmAvFlags:
-			if binary.LittleEndian.Uint32(pair.Value) != 0x00000002 {
+			if binary.LittleEndian.Uint32(pair.Value)&^uint32(0x00000002) != 0 {
 				return ErrNTLMSSPMessage
 			}
 		}
