@@ -247,7 +247,7 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 		for _, button := range []struct {
 			bit  byte
 			flag uint16
-		}{{1, rdpMouseButton1}, {2, rdpMouseButton2}, {4, rdpMouseButton3}} {
+		}{{1, rdpMouseButton1}, {2, rdpMouseButton3}, {4, rdpMouseButton2}} {
 			if (buttons & button.bit) != (input.Buttons & button.bit) {
 				flags := button.flag
 				if input.Buttons&button.bit != 0 {
@@ -336,7 +336,7 @@ func releaseAllRDPInput(keys map[uint16]bool, buttons byte, x, y uint16) []rdp.R
 	for _, button := range []struct {
 		bit  byte
 		flag uint16
-	}{{1, rdpMouseButton1}, {2, rdpMouseButton2}, {4, rdpMouseButton3}} {
+	}{{1, rdpMouseButton1}, {2, rdpMouseButton3}, {4, rdpMouseButton2}} {
 		if buttons&button.bit != 0 {
 			events = append(events, rdp.RDPInputEvent{Type: rdp.RDPInputMouse, PointerFlags: button.flag, X: x, Y: y})
 		}

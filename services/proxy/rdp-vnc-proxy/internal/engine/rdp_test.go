@@ -120,10 +120,10 @@ func TestRDPCodecStreamsFramebufferAndClosesTargetOnCancellation(t *testing.T) {
 	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Scancode: 0xe01d}); err != nil {
 		t.Fatalf("extended key down: %v", err)
 	}
-	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 1}); err != nil {
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 7}); err != nil {
 		t.Fatalf("pointer down: %v", err)
 	}
-	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 1, Wheel: -1}); err != nil {
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 0, Buttons: 7, Wheel: -1}); err != nil {
 		t.Fatalf("wheel: %v", err)
 	}
 	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61}); !errors.Is(err, screenstream.ErrUnsupported) {
@@ -144,13 +144,16 @@ func TestRDPCodecStreamsFramebufferAndClosesTargetOnCancellation(t *testing.T) {
 	if got := inputBatches[1][0]; got.Type != rdp.RDPInputScancode || got.Scancode != 0x1d || !got.Extended {
 		t.Fatalf("extended key mapping = %+v", got)
 	}
-	if got := inputBatches[2][1]; got.PointerFlags != rdpMouseButton1|rdpMouseDown {
-		t.Fatalf("mouse button mapping = %+v", got)
+	if len(inputBatches[2]) != 4 || inputBatches[2][1].PointerFlags != rdpMouseButton1|rdpMouseDown ||
+		inputBatches[2][2].PointerFlags != rdpMouseButton3|rdpMouseDown || inputBatches[2][3].PointerFlags != rdpMouseButton2|rdpMouseDown {
+		t.Fatalf("mouse button mapping = %+v", inputBatches[2])
 	}
 	if got := inputBatches[3][1]; got.PointerFlags != rdpMouseWheel|rdpMouseWheelNegative|120 {
 		t.Fatalf("wheel mapping = %+v", got)
 	}
-	if len(inputBatches[4]) != 3 || !inputBatches[4][0].Released || !inputBatches[4][1].Released || inputBatches[4][2].PointerFlags != rdpMouseButton1 {
+	if len(inputBatches[4]) != 5 || !inputBatches[4][0].Released || !inputBatches[4][1].Released ||
+		inputBatches[4][2].PointerFlags != rdpMouseButton1 || inputBatches[4][3].PointerFlags != rdpMouseButton3 ||
+		inputBatches[4][4].PointerFlags != rdpMouseButton2 {
 		t.Fatalf("release-all events = %+v", inputBatches[4])
 	}
 	target.mu.Lock()
