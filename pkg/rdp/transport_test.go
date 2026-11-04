@@ -64,6 +64,22 @@ func TestDialHybridNegotiatesTLSOnlyAfterHybridSelection(t *testing.T) {
 	if transport.Conn.ConnectionState().Version < tls.VersionTLS12 {
 		t.Fatalf("TLS version too old: %x", transport.Conn.ConnectionState().Version)
 	}
+	targetName, channelBinding, err := transport.NTLMv2Bindings()
+	if err != nil {
+		t.Fatalf("NTLMv2Bindings: %v", err)
+	}
+	wantTargetName, err := NTLMv2TargetName("rdp.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(targetName, wantTargetName) {
+		t.Fatalf("transport target SPN = %x, want %x", targetName, wantTargetName)
+	}
+	if channelBinding == ([16]byte{}) {
+		t.Fatal("transport returned an empty TLS channel binding")
+	}
+	clear(targetName)
+	clear(wantTargetName)
 	if err := transport.Close(); err != nil {
 		t.Fatal(err)
 	}

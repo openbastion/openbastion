@@ -1790,7 +1790,7 @@ Le vecteur Microsoft MS-NLMP §4.2.4 vérifie `NTProofStr`, la réponse LMv2 et 
 
 - `MarshalNTLMSSPNegotiate` émet le profil Unicode/NTLM/AlwaysSign/ESS/TargetInfo, sans OEM, LM-key, NTLMv1, SIGN, SEAL, KEY_EXCH ni VERSION. Le champ Version fixe est nul ; les security buffers vides pointent sur l'offset 40.
 - `ParseNTLMSSPChallenge` valide la signature/type, les flags réellement offerts, le champ Version nul, les security buffers, leurs bornes et leur non-chevauchement, l'alignement UTF-16LE, le challenge serveur non nul et la liste AV_PAIR bornée. Le header fixe est de 56 octets.
-- `NTLMv2TargetInfoForMIC` exige le `MsvAvFlags.MIC_PRESENT` (`0x2`) envoyé par le serveur et conserve le TargetInfo octet pour octet. Le client ne synthétise pas ce flag : le NTProof couvre les AV_PAIR exacts du challenge.
+- `NTLMv2ServerTargetInfoForProof` conserve le TargetInfo serveur octet pour octet pour le NTProof ; `MsvAvFlags.MIC_PRESENT` est posé ensuite dans le blob AUTHENTICATE.
 - `MarshalNTLMSSPAuthenticate` vérifie le NTProof, le blob et le TargetInfo attendu, lie le LMv2 au client challenge, sérialise LMv2 + NTLMv2, aligne les offsets UTF-16LE, laisse Version nul et calcule le MIC HMAC-MD5 sur NEGOTIATE + CHALLENGE + AUTHENTICATE (MIC nul pendant le calcul). `EncryptedRandomSessionKey` reste vide car KEY_EXCH n'est pas négocié.
 
 Le timestamp serveur `MsvAvTimestamp` est maintenant supporté : son FILETIME remplace le timestamp local du blob et la réponse LM est `Z(24)` selon MS-NLMP. Les AV `MsvAvTargetName` et `MsvAvChannelBindings` restent refusés jusqu'à leur liaison cryptographique au pair TLS épinglé. La liaison TLS `pubKeyAuth`, le dialogue CredSSP, le chiffrement `authInfo`, MCS/GCC et l'affichage restent absents. Aucun credential n'est transmis et le runtime RDP reste désactivé.
@@ -1820,4 +1820,14 @@ Références de protocole : MS-NLMP §§2.2.1.1–2.2.1.3 et §3.1.5.2.1. Les me
 
 - Validation complémentaire de l'incrément 10 : `make build vet test`, `make vuln`, `make proto-lint`, `go test -race ./pkg/rdp/... -count=1`, les fuzzers NTLMSSP/AV_PAIR (10 s chacun) et `make test-integration` sont verts. L'intégration multi-processus a duré 226,162 s ; les tests PostgreSQL ont été ignorés localement faute de `TEST_DATABASE_URL` (la CI PostgreSQL 16 dédiée reste la preuve de ce périmètre). `git diff --check` et `gofmt` sont propres. Les tests Compose restent exécutés dans GitHub Actions, pas localement.
 
-- Revue de protocole : correction d'un point hérité du précédent incrément. Le client ne peut pas ajouter `MsvAvFlags.MIC_PRESENT` au TargetInfo sans invalider le NTProof. La préparation MIC exige maintenant que le serveur ait annoncé ce flag et préserve exactement les octets du TargetInfo ; tests de refus quand il est absent et de préservation exacte.
+- Revue de protocole : le TargetInfo serveur reste inchangé pendant le calcul de NTProof. La clarification de l'incrément 11 ajoute `MsvAvFlags.MIC_PRESENT` uniquement après ce calcul dans le blob AUTHENTICATE, conformément à MS-NLMP §3.1.5.1.2.
+
+## 2026-11-04 — ADR-0071, incrément 11 : NTLMv2 target-name et channel binding
+
+- `Transport.NTLMv2Bindings` revalide le pin SHA-256 mémorisé, dérive le SPN `TERMSRV/<TLS server name>` depuis le nom vérifié par le handshake (DNS strict, IP canonisée), et le CBT depuis le certificat présenté sur la même connexion TLS épinglée.
+- `tls-server-end-point` suit RFC 5929 : hash lié à l'algorithme de signature du certificat, SHA-256 en repli pour MD5/SHA-1, refus des signatures sans hash unique ; sérialisation GSS/NTLM et MD5 selon MS-NLMP.
+- `NTLMv2TargetInfoWithClientBindings` et `MarshalNTLMSSPAuthenticateWithBindings` posent `MsvAvFlags.MIC_PRESENT` et ajoutent les AV_PAIR client TargetName/ChannelBindings après calcul de NTProof sur le TargetInfo original du serveur. Le MIC est calculé sur l'AUTHENTICATE final.
+- Tests ciblés couvrent certificat absent/handshake incomplet, changement de certificat, SPN invalide, préservation de la preuve sur le TargetInfo serveur et substitution du SPN/CBT.
+- Aucun dialogue CredSSP, pubKeyAuth ou authInfo n'est activé ; aucun credential n'est transmis et RDP reste désactivé.
+- Validation finale : `make build vet`, `make test`, `go test -race ./pkg/rdp/... -count=1`, `make proto-lint` et `GOTOOLCHAIN=go1.27.3 make vuln` sont verts. Le scan govulncheck avec Go 1.27.3 ne trouve aucune vulnérabilité atteignable ; `npm audit` est propre pour les deux packages UI.
+- `make test-integration` passe en 216,000 s. Les tests PostgreSQL sont ignorés faute de `TEST_DATABASE_URL` ; les parcours multi-processus non PostgreSQL passent. Les tests Compose restent dans GitHub Actions et n'ont pas été exécutés localement.
