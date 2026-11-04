@@ -76,6 +76,7 @@ func (s *CredSSPClientSession) SendClientInfo(ctx context.Context, info RDPClien
 			return
 		}
 		s.clientInfoSent = true
+		s.licensingUsername = info.Username
 	}()
 	if ctx.Err() != nil || writeFull(conn, packet) != nil {
 		return ErrMCSConnection

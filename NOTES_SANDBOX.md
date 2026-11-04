@@ -2007,3 +2007,11 @@ Validation finale de l'incrément 20 :
 - DOCKER_BUILDKIT=0 make test-integration : PASS (291,076 s) ; scénarios PostgreSQL ignorés faute de TEST_DATABASE_URL. Aucun test Compose local, conformément à la consigne : GitHub Actions les exécute.
 - gofmt, validation YAML par Ruby/Psych et git diff --check : PASS.
 - Aucun test Windows/RDS réel ; Licensing, finalisation, affichage, entrée, runtime et route RDP restent à faire/désactivés.
+
+## 2026-11-04 — ADR-0071, incrément 21 : Licensing Personal Terminal Server
+
+Le client RDP ne saute plus l'étape Licensing. CredSSPClientSession.CompleteLicensing lit un SERVER_LICENSE_REQUEST sur le canal MCS global I/O, valide le MCS Send Data Indication, le canal serveur, le Security Header SEC_LICENSE_PKT, le préambule, ProductInfo, KeyExchangeList RSA, le certificat et les scopes. Il répond avec un CLIENT_NEW_LICENSE_REQUEST : ClientRandom aléatoire, premaster 48 octets chiffré RSA PKCS#1 v1.5, username ASCII imprimable et ClientName CS_CORE comme machine name. Le certificat RSA de Licensing peut être extrait d'une chaîne X.509 version 2 transportée dans le TLS authentifié ; si le BLOB est vide, la clé RSA du certificat TLS est utilisée. Clés inférieures à 1024 bits, certificats legacy propriétaires et clés non-RSA sont refusés.
+
+Seul le ERROR_ALERT exact STATUS_VALID_CLIENT + ST_NO_TRANSITION + BB_ERROR_BLOB vide termine Licensing. PLATFORM_CHALLENGE, NEW_LICENSE, UPGRADE_LICENSE, toute erreur ou toute réponse inattendue ferment le TLS. licensingAttempted empêche les reprises ; licensingComplete n'est positionné qu'après validation de la réponse et restauration de la deadline. Le nom d'utilisateur est mémorisé pour le seul BLOB Licensing (jamais le mot de passe). Les buffers aléatoires, premaster, ciphertext et PDU temporaires sont effacés.
+
+Le faux serveur TLS teste Client Info → Server License Request X.509 → New License Request (et déchiffre le premaster côté serveur) → STATUS_VALID_CLIENT → Demand Active/Confirm Active. Les parseurs ont des tests négatifs et des fuzzers dédiés. Le périmètre est volontairement Personal Terminal Server : aucun CAL, aucune émission/mise à niveau de licence ni Platform Challenge ; les noms d'utilisateur Licensing non ASCII et les certificats propriétaires legacy sont refusés. Aucun test Windows/RDS réel ; runtime et route RDP restent désactivés.
