@@ -1,0 +1,22 @@
+{
+    "inputs": [
+        {
+            "id": "github_token",
+            "type": "promptString",
+            "description": "GitHub Personal Access Token (optional, GitHub-MCP via PAT)",
+            "password": true
+        }
+    ],
+    "servers": {
+        "desktop-commander": {
+            "command": "npx",
+            "args": ["@wonderwhy-er/desktop-commander@latest", "remote"],
+            "env": {}
+        },
+        "playwright": {
+            "command": "npx",
+            "args": ["-y", "@playwright/mcp@latest"],
+            "env": {}
+        }
+    }
+}
