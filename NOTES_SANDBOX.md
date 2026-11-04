@@ -1928,3 +1928,16 @@ Validation finale de l'incrément 16 :
 - `gofmt` ne retourne aucun fichier ; `git diff --check` : PASS.
 - Espace disque après les validations : 4,2 Go disponibles (87 % utilisés).
 - Rouge sur le commit précédent : non applicable directement, car les tests de cette tranche ciblent le nouveau contrat `authInfo` et les API de sérialisation/protection qui n'existaient pas avant l'incrément.
+
+
+## 2026-11-04 — ADR-0071, incrément 17 : Basic Settings Exchange MCS/GCC
+
+- Branche : `feat/rdp-mcs-gcc-connection`, créée depuis `main` après fusion de la PR #30.
+- `pkg/rdp/mcs_gcc.go` encode le MCS Connect-Initial BER [APPLICATION 101] et le GCC Conference-Create-Request PER/T.124, avec `Duca`, DomainParameters, `CS_CORE` 32 bpp + `PROTOCOL_HYBRID` et `CS_SECURITY` avec une capacité 128 bits valide (champ standard ou extension de locale française). HYBRID reste obligatoire, donc ces capacités ne sont pas utilisées ; le serveur doit confirmer `SC_SECURITY` none/none. Aucun canal virtuel n'est demandé ; `CS_NET` est donc omis.
+- `CredSSPClientSession.ConnectMCS` enchaîne après l'envoi réussi de `authInfo`, avec deadline, annulation, transition à usage unique et fermeture terminale en cas d'erreur. Le contexte est revalidé après acquisition du verrou et avant toute écriture ; un faux serveur TLS vérifie la fermeture terminale en cas d'annulation pendant la lecture de la réponse. Un faux serveur TLS vérifie aussi qu'aucun MCS n'est envoyé avant la délégation des credentials.
+- Le parseur de réponse vérifie MCS Connect-Response [APPLICATION 102], la structure des DomainParameters BER (valeurs ignorées conformément au protocole), GCC Conference-Create-Response et `McDn`, puis `SC_CORE`, `SC_SECURITY` et `SC_NET`. Il accepte l'absence du champ optionnel `earlyCapabilityFlags`. Seul le profil HYBRID, chiffrement RDP standard désactivé, canal global 1003 et zéro canal virtuel est accepté. Les longueurs BER/PER, blocs inconnus/dupliqués et versions serveur sont bornés.
+- Validation : `make build vet test proto-lint` PASS (Go 1.27.1) ; `go test ./pkg/rdp/... -count=1` PASS ; `go test -race ./pkg/rdp/... -count=1` PASS ; 88 tests RDP de premier niveau mesurés ; fuzz `FuzzParseMCSConnectResponse` PASS (63 234 exécutions en 5 s, 0 nouvelle entrée intéressante) ; `GOTOOLCHAIN=go1.27.3 make vuln` PASS, aucune vulnérabilité atteignable ; certains modules requis ont des avis non appelés ; `npm audit` zéro vulnérabilité dans les deux workspaces UI.
+- `make test-integration` avec BuildKit a échoué sur deux extractions de couches Debian (`content digest ... not found`) dans les tests LDAP. `DOCKER_BUILDKIT=0 make test-integration` : PASS (252,405 s), y compris les deux parcours LDAP. PostgreSQL ignoré faute de `TEST_DATABASE_URL` ; tests Compose non lancés localement, réservés à GitHub Actions.
+- Rouge mesuré sur `origin/main` (`8c8accf`) : les tests de l'incrément ne compilent pas avant l'ajout de l'API MCS/GCC. Quatre mutations tuées sur quatre : protocole, chiffrement RDP, canal virtuel et clé H.221.
+- `gofmt` et `git diff --check` passent. Espace disque après validation : 3,5 Go disponibles (89 % utilisés), aucun nettoyage destructif.
+- Limites : pas encore d'Erect Domain, Attach User, Channel Join, capacités, Client Info, affichage ni entrée ; aucune interopérabilité Windows/RDS réelle ; runtime et route RDP restent désactivés.

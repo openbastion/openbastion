@@ -35,7 +35,7 @@ services:                    # identité mTLS = nom ; ports par défaut (archite
 
 libraries:
   pkg/proxycore: pipeline proxy commun (ADR-0006)
-  pkg/rdp: X.224 HYBRID + TLS épinglé, codec DER TSRequest, SPNEGO NTLM strict, primitives NTLMv2/AV_PAIR, codecs NEGOTIATE/CHALLENGE/AUTHENTICATE et MIC_PRESENT/MIC ; timestamp, target-name, channel binding TLS, pubKeyAuth CredSSP, dialogue runtime, MCS/GCC et affichage restent à implémenter (ADR-0071)
+  pkg/rdp: X.224 HYBRID + TLS épinglé, CredSSP NTLM v5/v6 avec authInfo scellé, Basic Settings Exchange MCS/GCC strict (Connect-Initial/Connect-Response, HYBRID, zéro canal virtuel) ; Channel Connection, capacités, Client Info, affichage et entrée restent à implémenter (ADR-0071)
   pkg/vnc: client RFB 3.8 borné, VeNCrypt/X.509, pin TLS et framebuffer PNG ; adapté à proxycore.ScreenCodec par le module engine RDP/VNC (ADR-0071)
   services/proxy/rdp-vnc-proxy: runtime exécutable, tickets à usage unique, relais WebSocket binaire et cycle de vie proxycore ; VNC seulement, RDP désactivé
   pkg/mtls: identité par certificat (ADR-0010) — stdlib seulement

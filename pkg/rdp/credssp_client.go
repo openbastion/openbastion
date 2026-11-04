@@ -33,6 +33,7 @@ type CredSSPClientSession struct {
 	transport            *Transport
 	version              uint32
 	credentialsDelegated bool
+	mcsConnected         bool
 }
 
 func (s *CredSSPClientSession) Close() {
@@ -225,6 +226,88 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	}
 	security.Close()
 	return &CredSSPClientSession{transport: t, version: negotiatedVersion, credentialsDelegated: true}, nil
+}
+
+// ConnectMCS starts the Basic Settings Exchange after CredSSP has delegated
+// credentials. It is a one-shot transition: any ambiguous wire state closes
+// the transport, and a successful response leaves channel connection for the
+// next protocol step.
+func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSettings) (response MCSConnectResponse, err error) {
+	if s == nil || ctx == nil || ctx.Err() != nil || cfg.Timeout < 0 {
+		return response, ErrMCSConnection
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// The caller may have been canceled while waiting for the session lock.
+	if ctx.Err() != nil {
+		return response, ErrMCSConnection
+	}
+	if s.transport == nil || s.transport.Conn == nil || !s.credentialsDelegated || s.mcsConnected ||
+		!s.transport.Conn.ConnectionState().HandshakeComplete {
+		return response, ErrMCSConnection
+	}
+	packet, err := MarshalMCSConnectInitial(cfg)
+	if err != nil {
+		return response, err
+	}
+	defer clear(packet)
+
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = defaultCredSSPTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
+	}
+	conn := s.transport.Conn
+	if err := conn.SetDeadline(deadline); err != nil {
+		s.closeTransportLocked()
+		return response, ErrMCSConnection
+	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = conn.SetDeadline(time.Now()) })
+	// Close rather than risk writing after cancellation or racing the deadline
+	// callback; the TLS connection is no longer safe to reuse in that state.
+	if ctx.Err() != nil {
+		stopCancel()
+		s.closeTransportLocked()
+		return response, ErrMCSConnection
+	}
+	if err := writeFull(conn, packet); err != nil {
+		stopCancel()
+		s.closeTransportLocked()
+		return response, ErrMCSConnection
+	}
+	serverPacket, readErr := readMCSConnectResponse(conn)
+	if readErr != nil {
+		stopCancel()
+		s.closeTransportLocked()
+		return response, ErrMCSConnection
+	}
+	response, err = ParseMCSConnectResponse(serverPacket)
+	clear(serverPacket)
+	cancelStopped := stopCancel()
+	if err != nil || ctx.Err() != nil || !cancelStopped {
+		s.closeTransportLocked()
+		return MCSConnectResponse{}, ErrMCSConnection
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		s.closeTransportLocked()
+		return MCSConnectResponse{}, ErrMCSConnection
+	}
+	if ctx.Err() != nil {
+		s.closeTransportLocked()
+		return MCSConnectResponse{}, ErrMCSConnection
+	}
+	s.mcsConnected = true
+	return response, nil
+}
+
+func (s *CredSSPClientSession) closeTransportLocked() {
+	if s.transport != nil {
+		_ = s.transport.Close()
+		s.transport = nil
+	}
 }
 
 func ntlmCurrentFiletime() (value [8]byte) {
