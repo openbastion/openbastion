@@ -2102,3 +2102,21 @@ Validation de l’incrément 25 :
 - `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
 - `DOCKER_BUILDKIT=0 make test-integration` : PASS (218,635 s). Les scénarios PostgreSQL ont été ignorés faute de `TEST_DATABASE_URL`. Aucun test Compose local n’a été lancé.
 - `git diff --check` : PASS. Aucun test d’interopérabilité Windows/RDS réel ; le runtime et la route RDP restent désactivés.
+
+
+## 2026-11-04 — ADR-0071, incrément 26 : RDP framebuffer / ScreenStream
+
+`pkg/rdp/RDPFramebuffer` applique les rectangles RGBA RAW du décodeur RDP dans un framebuffer complet à dimensions fixes (noir opaque à l’initialisation) et émet une trame PNG conforme au contrat `screenstream.Message`. Les rectangles partiels préservent les pixels précédents. Dimensions et pixels sont bornés ; chaque rectangle est validé avant mutation ; les zones précédentes sont restaurées si l'encodage ou la validation finale échoue. La séquence n'avance qu'après succès.
+
+Cette brique est un adaptateur de format, pas encore un `proxycore.ScreenCodec` complet : elle ne réalise ni `Open`, ni lecture réseau, ni boucle `Frames`, ni entrée. Les bitmaps compressés, ordres graphiques, pointeur et clavier/souris restent non supportés. Les trames PNG supérieures à 4 Mio sont refusées conformément au contrat ScreenStream v1. Runtime et route RDP restent désactivés.
+
+Validation de l’incrément 26 :
+- `make build vet test proto-lint` : PASS sur l'ensemble des modules, `go vet`, tests et Buf lint.
+- `go test ./pkg/rdp/... -count=1` : PASS, y compris la restauration du framebuffer après refus d'une PNG dépassant 4 Mio.
+- `go test -race ./pkg/rdp/... -count=1` : PASS après les derniers changements.
+- `FuzzParseRDPBitmapUpdate` : PASS, 60 275 exécutions en 5 s.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable détectée ; des avis subsistent dans quelques modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (203,567 s). Les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés car la variable n'est pas définie.
+- `git diff --check` : PASS. `scripts/check-architecture-deps.sh` absent du dépôt ; aucun gate d'architecture de ce nom n'a donc été exécuté.
+- Aucun test Compose local ni test d'interopérabilité Windows/RDS réel. Runtime et route RDP toujours désactivés.
