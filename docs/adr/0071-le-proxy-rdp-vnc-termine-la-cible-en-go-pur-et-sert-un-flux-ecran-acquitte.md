@@ -705,3 +705,21 @@ La création valide les dimensions et borne le bureau à `screenstream.MaxPixels
 Les tests décodent réellement les PNG générés, prouvent qu'une mise à jour partielle conserve les pixels précédents, valident le contrat ScreenStream, et vérifient qu'un rectangle invalide ne modifie ni l'image ni le numéro de séquence. La brique reste indépendante du réseau et du cycle de vie des sessions : elle ne constitue pas encore une implémentation `proxycore.ScreenCodec`, ne gère pas les événements clavier/souris et ne connecte pas automatiquement `ReadBitmapUpdate` à `ServeScreen`.
 
 **Limites :** RAW 32 bpp uniquement ; bitmaps compressés, ordres graphiques, pointeur et entrée toujours absents. Une trame PNG complète supérieure à 4 Mio est refusée sans exposer de trame partielle. Le runtime et la route RDP restent désactivés ; aucune interopérabilité Windows/RDS réelle n'est revendiquée.
+
+
+## 2026-11-04 — Incrément 27 : adaptateur RDP ScreenCodec et cycle de vie des frames
+
+`services/proxy/rdp-vnc-proxy/internal/engine.RDPCodec` implémente désormais le contrat `proxycore.ScreenCodec` sans introduire de dépendance inverse dans `pkg/proxycore`. Avant tout secret, `Open` exige les racines X.509 explicites, l’adresse cible, l’utilisateur, le nom TLS et l’empreinte SHA-256 fournis par les métadonnées Vault. Le client ouvre ensuite X.224 avec sélection exclusive HYBRID et pin TLS, effectue CredSSP NTLMv2 v6 avec `pubKeyAuth` vérifié et délégation `authInfo`, puis exécute dans l’ordre MCS/GCC, Channel Connection, Client Info, Licensing, Demand Active/Confirm Active et Connection Finalization. Le secret reste emprunté depuis `proxycore.Credential`, n’est pas conservé par le codec et reste soumis à la purge du cycle de vie proxycore.
+
+Après négociation, la taille réelle du bureau annoncée par le serveur initialise `RDPFramebuffer`. Une boucle de lecture appelle `CredSSPClientSession.ReadBitmapUpdate`, applique les rectangles RAW 32 bpp au framebuffer et émet des messages `screenstream.Message` complets via `ScreenSession.Frames()`. L’annulation du contexte interrompt la lecture TLS ; `Close` ferme le transport et attend la fin de la boucle. Les erreurs de pinning, de sélection HYBRID et de protocole sont traduites en `ScreenFailure` à codes stables. Les tests utilisent une session RDP factice pour vérifier l’émission de trames, la géométrie négociée, la fermeture à l’annulation, le refus des métadonnées absentes et le mapping du pin TLS.
+
+**Limites et décision de sécurité :** `ScreenSession.Input` refuse explicitement les événements (`screenstream.ErrUnsupported`) : le codec n’est donc pas encore interactif. L’encodage RDP Input PDU, la sérialisation indépendante des écritures face à la lecture TLS, les bitmaps compressés et les ordres graphiques restent à implémenter. Le `RDPCodec` n’est volontairement pas sélectionné par le runtime ; aucun ticket ou chemin réseau RDP n’est activé par cet incrément. L’interopérabilité Windows/RDS réelle et le flux E2E avec un enregistreur sont encore à valider. Le champ Vault `TargetDomain` sert ici de nom TLS cible ; le profil CredSSP/Client Info n’envoie pas de domaine AD distinct tant que le modèle Vault ne fournit pas un champ dédié non ambigu.
+Validation de l’incrément 27 :
+- `go test ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./services/proxy/rdp-vnc-proxy/internal/engine ./pkg/rdp/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS sur les modules Go, `go vet`, tests et Buf lint.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (249,495 s). Les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés faute de variable ; aucun test Compose local n’a été lancé.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `git diff --check` : PASS. `scripts/check-architecture-deps.sh` absent du dépôt.
+- Aucun test d’interopérabilité Windows/RDS réelle ni test E2E RDP avec Video Recorder. Runtime et route RDP désactivés.
