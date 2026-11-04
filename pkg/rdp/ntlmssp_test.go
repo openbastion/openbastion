@@ -89,7 +89,7 @@ func TestParseNTLMSSPChallenge_RejectsDowngradeAndMalformedBuffers(t *testing.T)
 			}
 		})
 	}
-	if _, err := ParseNTLMSSPChallenge(base, ntlmSSPNegotiateFlags|0x10); !errors.Is(err, ErrNTLMSSPMessage) {
+	if _, err := ParseNTLMSSPChallenge(base, ntlmSSPNegotiateFlags|0x40); !errors.Is(err, ErrNTLMSSPMessage) {
 		t.Fatalf("unoffered client flags error = %v, want ErrNTLMSSPMessage", err)
 	}
 }

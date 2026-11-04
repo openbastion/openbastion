@@ -48,10 +48,12 @@ type NTLMv2AVPair struct {
 // Call Purge when the response is no longer needed; it clears key material held by this result.
 // LMResponse contains the LMv2 proof, or Z(24) when the server supplied an AV timestamp.
 type NTLMv2Response struct {
-	NTProof        [16]byte
-	NTResponse     []byte
-	LMResponse     [24]byte
-	SessionBaseKey [16]byte
+	NTProof         [16]byte
+	NTResponse      []byte
+	LMResponse      [24]byte
+	SessionBaseKey  [16]byte
+	serverChallenge [8]byte
+	valid           bool
 }
 
 // Purge overwrites response and key material held by the result.
@@ -63,6 +65,8 @@ func (r *NTLMv2Response) Purge() {
 	clear(r.NTResponse)
 	clear(r.LMResponse[:])
 	clear(r.SessionBaseKey[:])
+	clear(r.serverChallenge[:])
+	r.valid = false
 }
 
 // ParseNTLMv2AVPairs validates a complete AV_PAIR list, including its final
@@ -247,6 +251,8 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 	}
 
 	out.SessionBaseKey = hmacMD5(responseKey[:], out.NTProof[:])
+	out.serverChallenge = serverChallenge
+	out.valid = true
 	return out, nil
 }
 
