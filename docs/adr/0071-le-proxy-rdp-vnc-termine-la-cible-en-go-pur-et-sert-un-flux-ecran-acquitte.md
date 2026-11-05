@@ -942,3 +942,24 @@ Validation de l’incrément 37 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 48 183 exécutions en 5 s.
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (mode DSTINVERT, canaux rouge/bleu, payload de remplacement, opération inconnue, rollback PNG, limite cumulative de pixels) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; aucune capacité graphique n'est annoncée, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — Incrément 38 : PatBlt PATINVERT à brosse solide
+
+Le profil PatBlt accepte maintenant `PATINVERT` (`0x5a`) avec `BS_SOLID`, en plus de `PATCOPY`. Le parseur conserve `ForeColor` comme motif RGBA répété dans le rectangle et marque l'opération comme `rdpBitmapRectanglePatInvert`. `RDPFramebuffer.Apply` applique le XOR RGB entre les pixels existants et le motif ; le canal alpha est préservé. La validation exige un payload motif de taille exacte, et le chemin reste soumis aux limites de rectangle et de surface cumulée ainsi qu'au rollback atomique existant.
+
+Les autres ROP PatBlt, les brushes non solides, les champs omis et les coordonnées delta restent refusés. Le slot de négociation partagé PatBlt/OpaqueRect demeure désactivé ; runtime et route RDP restent désactivés.
+
+Tests : PATINVERT sur une zone préalablement peinte par PATCOPY, résultat PNG vérifié par XOR RGB et alpha, payload de motif absent refusé, autres ROP et brushes non pris en charge refusés ; seed PATINVERT ajouté au fuzzer.
+
+Référence normative : [MS-RDPEGDI — ROP3 Operation Index, PATINVERT (0x5A)](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a9a85075-e796-45eb-b84a-f399324a1109).
+
+Validation de l'incrément 38 :
+- Test rouge avant implémentation : PATINVERT est rejeté par le parseur ; le test framebuffer échoue avant le chemin XOR.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 189 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 52 474 exécutions en 5 s.
+- Contre-épreuves : 8 mutations compilantes tuées sur 8 (mode PATINVERT, XOR rouge/vert/bleu, alpha, longueur exacte du motif, BS_SOLID, ROP non supporté) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot PatBlt/OpaqueRect reste non annoncé, runtime/route RDP désactivés.

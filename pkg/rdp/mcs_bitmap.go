@@ -18,6 +18,7 @@ const (
 	rdpOpaqueRectFieldMask = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask     = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
 	rdpPatBltPatCopy       = byte(0xf0)
+	rdpPatBltPatInvert     = byte(0x5a)
 	rdpPatBltSolidBrush    = byte(0x00)
 	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
 	rdpDstBltBlackness     = byte(0x00)
@@ -41,11 +42,12 @@ type rdpBitmapRectangleOperation uint8
 const (
 	rdpBitmapRectangleReplace rdpBitmapRectangleOperation = iota
 	rdpBitmapRectangleDstInvert
+	rdpBitmapRectanglePatInvert
 )
 
 // RDPBitmapRectangle is one decoded, top-down rectangle from a server graphics
-// update. Pixels is tightly packed RGBA for replace operations; destination-only
-// operations such as DSTINVERT carry no replacement pixel buffer.
+// update. Pixels is tightly packed RGBA for replacement and solid-brush pattern
+// operations; destination-only operations such as DSTINVERT carry no pixel buffer.
 type RDPBitmapRectangle struct {
 	X         uint16
 	Y         uint16
@@ -129,8 +131,8 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY
-// PatBlt, all with absolute coordinates and no clipping bounds or omitted fields.
+// DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY/
+// PATINVERT PatBlt, all with absolute coordinates and no clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -214,11 +216,19 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
 			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
 			rop := data[8]
-			// BackColor is present for wire compatibility; PATCOPY with BS_SOLID
-			// paints ForeColor and does not depend on the background color.
+			// BackColor is present for wire compatibility. Both accepted ROPs
+			// use the solid brush's ForeColor; neither reads BackColor.
 			red, green, blue = data[12], data[13], data[14]
 			brushStyle := data[15]
-			if rop != rdpPatBltPatCopy || brushStyle != rdpPatBltSolidBrush {
+			if brushStyle != rdpPatBltSolidBrush {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			switch rop {
+			case rdpPatBltPatCopy:
+				operation = rdpBitmapRectangleReplace
+			case rdpPatBltPatInvert:
+				operation = rdpBitmapRectanglePatInvert
+			default:
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			data = data[16:]
@@ -235,7 +245,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		}
 		totalPixels += pixels
 		var rgba []byte
-		if operation == rdpBitmapRectangleReplace {
+		if operation == rdpBitmapRectangleReplace || operation == rdpBitmapRectanglePatInvert {
 			rgba = make([]byte, int(pixels)*4)
 			for offset := 0; offset < len(rgba); offset += 4 {
 				rgba[offset], rgba[offset+1], rgba[offset+2], rgba[offset+3] = red, green, blue, 0xff

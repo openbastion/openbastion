@@ -2324,3 +2324,20 @@ Validation de l’incrément 37 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 48 183 exécutions en 5 s.
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (mode DSTINVERT, canaux rouge/bleu, payload de remplacement, opération inconnue, rollback PNG, limite cumulative de pixels) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; aucune capacité graphique n'est annoncée, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 38 : PatBlt PATINVERT
+
+PatBlt accepte désormais `PATINVERT` (`0x5a`) avec `BS_SOLID`. Le motif `ForeColor` est transmis sous forme de pixels RGBA bornés, puis le framebuffer applique un XOR sur les canaux RGB en préservant alpha. Le payload motif doit correspondre exactement à la surface du rectangle. Les autres ROP et brushes restent refusés ; le slot PatBlt/OpaqueRect reste non annoncé et la route/runtime RDP reste désactivée.
+
+Référence : [MS-RDPEGDI ROP3 Operation Index — PATINVERT](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a9a85075-e796-45eb-b84a-f399324a1109).
+
+Validation de l'incrément 38 :
+- Test rouge avant implémentation : PATINVERT est rejeté par le parseur ; le test framebuffer échoue avant le chemin XOR.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 189 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 52 474 exécutions en 5 s.
+- Contre-épreuves : 8 mutations compilantes tuées sur 8 (mode PATINVERT, XOR rouge/vert/bleu, alpha, longueur exacte du motif, BS_SOLID, ROP non supporté) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot PatBlt/OpaqueRect reste non annoncé, runtime/route RDP désactivés.

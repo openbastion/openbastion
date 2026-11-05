@@ -107,6 +107,30 @@ func TestRDPFramebufferRejectsMalformedDstInvertPayload(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferRejectsMalformedPatInvertPayload(t *testing.T) {
+	fb, err := NewRDPFramebuffer(1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pixels := range [][]byte{nil, {0x0f, 0xf0, 0xaa, 0xff, 0x0f, 0xf0, 0xaa, 0xff}} {
+		_, err = fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+			Width: 1, Height: 1, Pixels: pixels, operation: rdpBitmapRectanglePatInvert,
+		}}}, time.Unix(20, 0))
+		if err == nil {
+			t.Fatalf("PATINVERT with %d-byte solid-brush pattern payload accepted", len(pixels))
+		}
+	}
+	frame, err := fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff},
+	}}}, time.Unix(21, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.Sequence != 1 {
+		t.Fatalf("malformed PATINVERT consumed sequence: %d", frame.Sequence)
+	}
+}
+
 func TestRDPFramebufferRejectsUnknownRectangleOperationAtomically(t *testing.T) {
 	fb, err := NewRDPFramebuffer(2, 1)
 	if err != nil {
