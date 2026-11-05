@@ -1021,6 +1021,7 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 0, 0, 3, 2, 0x11, 0x22, 0x33), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -1055,6 +1056,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	ninth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x12, 0x34, 0x56))
 	tenth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{0x21, 0x43, 0x65}, 1, []byte{0x00, 1, 1}))
 	eleventh := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}))
+	twelfth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x21, 0x43, 0x65}))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -1098,6 +1100,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, eleventh)
 		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, twelfth)
+		}
 		serverResult <- acceptErr
 	}()
 
@@ -1124,6 +1129,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		lineToEnabled:           true, // LineTo has its own independent negotiation index 8.
 		polylineEnabled:         true, // Polyline has its own independent negotiation index 22.
 		polygonSCEnabled:        true, // PolygonSC has its own independent negotiation index 20.
+		ellipseSCEnabled:        true, // EllipseSC has its own independent negotiation index 25.
 		mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 		serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 	}
@@ -1170,6 +1176,11 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	if readErr != nil || len(polygonUpdate.Rectangles) != 1 || !session.primaryOrderState.polygonSCUsed ||
 		polygonUpdate.Rectangles[0].operation != rdpBitmapRectanglePolygon {
 		t.Fatalf("ReadBitmapUpdate PolygonSC = %+v, state=%+v, err=%v", polygonUpdate, session.primaryOrderState, readErr)
+	}
+	ellipseUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(ellipseUpdate.Rectangles) != 1 || !session.primaryOrderState.ellipseSCUsed ||
+		ellipseUpdate.Rectangles[0].operation != rdpBitmapRectangleEllipse {
+		t.Fatalf("ReadBitmapUpdate EllipseSC = %+v, state=%+v, err=%v", ellipseUpdate, session.primaryOrderState, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
@@ -1747,6 +1758,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		lineToEnabled           bool
 		polylineEnabled         bool
 		polygonSCEnabled        bool
+		ellipseSCEnabled        bool
 	}{
 		{
 			name:                 "all primary orders disabled",
@@ -1804,6 +1816,13 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 			primaryOrdersEnabled: true,
 			polylineEnabled:      true,
 		},
+		{
+			name:                 "EllipseSC negotiation index disabled",
+			order:                mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
+			primaryOrdersEnabled: true,
+			polylineEnabled:      true,
+			polygonSCEnabled:     true,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -1855,6 +1874,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 				lineToEnabled:           test.lineToEnabled,
 				polylineEnabled:         test.polylineEnabled,
 				polygonSCEnabled:        test.polygonSCEnabled,
+				ellipseSCEnabled:        test.ellipseSCEnabled,
 				mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 				serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 			}
@@ -2114,4 +2134,176 @@ func TestReadBitmapUpdateOverTLSPolygonSCUsesIndependentNegotiationIndex(t *test
 		t.Fatal(serverErr)
 	}
 	session.Close()
+}
+
+func mcsTestEllipseSCOrder(controlFlags byte, typeChange bool, left, top, right, bottom int16, rop2, fillMode byte, color [3]byte) []byte {
+	out := []byte{controlFlags}
+	if typeChange {
+		out = append(out, 0x19) // EllipseSC.
+	}
+	out = append(out, 0x7f) // All seven fields present.
+	for _, value := range []int16{left, top, right, bottom} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	out = append(out, rop2, fillMode)
+	out = append(out, color[:]...)
+	return out
+}
+
+func TestParseRDPOrdersUpdateDecodesEllipseSC(t *testing.T) {
+	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56})
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatalf("EllipseSC should decode: %v", err)
+	}
+	if len(update.Rectangles) != 1 || !state.ellipseSCUsed || update.Rectangles[0].X != 1 || update.Rectangles[0].Y != 1 ||
+		update.Rectangles[0].Width != 5 || update.Rectangles[0].Height != 5 {
+		t.Fatalf("EllipseSC update=%+v state=%+v", update, state)
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsMalformedEllipseSC(t *testing.T) {
+	valid := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3})
+	cases := map[string][]byte{
+		"wrong field mask":           func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
+		"unsupported ROP2":           func() []byte { out := append([]byte(nil), valid...); out[11] = 0x0c; return out }(),
+		"unsupported fill mode":      func() []byte { out := append([]byte(nil), valid...); out[12] = 0x02; return out }(),
+		"negative left":              mcsTestEllipseSCOrder(0x09, true, -1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
+		"reversed horizontal bounds": mcsTestEllipseSCOrder(0x09, true, 5, 1, 1, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
+		"reversed vertical bounds":   mcsTestEllipseSCOrder(0x09, true, 1, 5, 5, 1, 0x0d, 0x01, [3]byte{1, 2, 3}),
+		"outside desktop":            mcsTestEllipseSCOrder(0x09, true, 1, 1, 8, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
+		"truncated fields":           valid[:len(valid)-1],
+		"trailing bytes":             append(append([]byte(nil), valid...), 0),
+	}
+	for name, order := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func TestRasterizeRDPEllipseInclusiveBounds(t *testing.T) {
+	spans, bounds, pixels, err := rasterizeRDPEllipse(1, 1, 5, 5, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bounds != [4]uint16{1, 1, 5, 5} || pixels != 21 {
+		t.Fatalf("bounds=%v pixels=%d", bounds, pixels)
+	}
+	want := []rdpBitmapSpan{
+		{X: 2, Y: 1, Width: 3},
+		{X: 1, Y: 2, Width: 5},
+		{X: 1, Y: 3, Width: 5},
+		{X: 1, Y: 4, Width: 5},
+		{X: 2, Y: 5, Width: 3},
+	}
+	if len(spans) != len(want) {
+		t.Fatalf("spans=%v want=%v", spans, want)
+	}
+	for i := range want {
+		if spans[i] != want[i] {
+			t.Fatalf("span %d=%+v want=%+v", i, spans[i], want[i])
+		}
+	}
+}
+
+func TestRasterizeRDPEllipseRejectsInvalidBounds(t *testing.T) {
+	cases := []struct {
+		name                     string
+		left, top, width, height uint16
+	}{
+		{name: "zero width", left: 1, top: 1, width: 0, height: 3},
+		{name: "zero height", left: 1, top: 1, width: 3, height: 0},
+		{name: "outside desktop", left: 1, top: 1, width: 8, height: 3},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, _, err := rasterizeRDPEllipse(test.left, test.top, test.width, test.height, 8, 8); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error=%v want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func TestParseRDPOrdersUpdateRetainsEllipseSCTypeWhenTypeChangeOmitted(t *testing.T) {
+	first := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3})
+	second := mcsTestEllipseSCOrder(0x01, false, 2, 2, 4, 4, 0x0d, 0x01, [3]byte{4, 5, 6})
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(2, append(first, second...), 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(update.Rectangles) != 2 || !state.ellipseSCUsed || update.Rectangles[1].operation != rdpBitmapRectangleEllipse ||
+		update.Rectangles[1].ellipseColor != [4]byte{4, 5, 6, 0xff} {
+		t.Fatalf("EllipseSC type-change state not retained: update=%+v state=%+v", update, state)
+	}
+}
+
+func TestReadBitmapUpdateOverTLSEllipseSCUsesIndependentNegotiationIndex(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	const shareID = uint32(0x000103ea)
+	packet := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56}))
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverResult <- acceptErr
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+			acceptErr = writeFull(tlsConn, packet)
+		}
+		serverResult <- acceptErr
+	}()
+
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport:             &Transport{Conn: tlsConn},
+		connectionFinalized:   true,
+		capabilitiesExchanged: true,
+		primaryOrdersEnabled:  true,
+		ellipseSCEnabled:      true,
+		polygonSCEnabled:      false,
+		polylineEnabled:       false,
+		mcsResponse:           MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities:    RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
+	}
+	update, err := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if err != nil || len(update.Rectangles) != 1 || !session.primaryOrderState.ellipseSCUsed ||
+		update.Rectangles[0].operation != rdpBitmapRectangleEllipse {
+		t.Fatalf("EllipseSC with PolygonSC/Polyline disabled = %+v, state=%+v, err=%v", update, session.primaryOrderState, err)
+	}
+	if serverErr := <-serverResult; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+	session.Close()
+}
+
+func TestRasterizeRDPEllipseHandlesSinglePixelBounds(t *testing.T) {
+	spans, bounds, pixels, err := rasterizeRDPEllipse(2, 3, 1, 1, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bounds != [4]uint16{2, 3, 1, 1} || pixels != 1 || len(spans) != 1 || spans[0] != (rdpBitmapSpan{X: 2, Y: 3, Width: 1}) {
+		t.Fatalf("single-pixel ellipse: spans=%v bounds=%v pixels=%d", spans, bounds, pixels)
+	}
 }

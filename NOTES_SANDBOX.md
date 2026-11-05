@@ -2486,3 +2486,17 @@ Validation de l'incrément 48 :
 - 237 tests RDP principaux `--- PASS` ; fuzz `FuzzParseRDPOrdersUpdate` : 209 241 exécutions en 5 s (4 workers).
 - Contre-épreuves : 12 mutations compilantes tuées sur 12, incluant FillMode, ROP2, points, masque, zero-bits, négociation, couleur, arrondi et frontières/slicing `cbData` pour Polyline et PolygonSC.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; index 20 non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 49 : EllipseSC
+
+Le parseur slow-path accepte EllipseSC (`orderType=0x19`) avec les sept champs explicites : coordonnées absolues signées 16 bits, rectangle inclusif, `R2_COPYPEN`, `FillMode=ALTERNATE` et couleur RGB. Le profil rejette NOFILLL/WINDING, les coordonnées négatives/inversées et les rectangles hors bureau. Le rasteriseur entier produit des spans aux centres des pixels ; le framebuffer applique les spans dans l’ordre et restaure les pixels si le PNG dépasse sa limite. La parité pixel-à-pixel avec GDI reste à vérifier par interopérabilité Windows/RDS. L’index de négociation 25 est indépendant et non annoncé ; runtime/route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.19 — EllipseSC](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/5146fab3-c43f-44d7-b541-04666a80e33b), [Coord Field](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/870b982c-9abe-40cb-99d0-2c3f0cc5fb74) et [Fill Mode](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/06dc7074-71cd-41cf-9028-964877875dfc).
+
+Validation de l'incrément 49 :
+- Test rouge sur `f8a073c` : EllipseSC est refusé (`ErrMCSConnection`) avant implémentation, puis accepté après.
+- `make build vet test proto-lint` : PASS ; `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- 246 tests RDP principaux `--- PASS` ; fuzz `FuzzParseRDPOrdersUpdate` : 179 553 exécutions en 5 s (4 workers).
+- Contre-épreuves : 12 mutations compilantes tuées sur 12, incluant ROP2, FillMode, masque, bornes inclusives, centre/racine entière, négociation, couleur, état, consommation des champs et rollback PNG.
+- `gofmt` et `git diff --check` : PASS. Pas de test Compose local ni d'interopérabilité Windows/RDS ; parité GDI pixel-à-pixel non vérifiée. Index 25 non annoncé, runtime/route RDP désactivés.

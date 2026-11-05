@@ -3,6 +3,7 @@ package rdp
 import (
 	"context"
 	"encoding/binary"
+	"math"
 	"sort"
 	"time"
 )
@@ -23,6 +24,7 @@ const (
 	rdpOrderLineTo          = byte(0x09)
 	rdpOrderPolygonSC       = byte(0x14)
 	rdpOrderPolyline        = byte(0x16)
+	rdpOrderEllipseSC       = byte(0x19)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
@@ -73,11 +75,12 @@ const (
 	rdpBitmapRectangleScrCopy
 	rdpBitmapRectangleLine
 	rdpBitmapRectanglePolygon
+	rdpBitmapRectangleEllipse
 )
 
 // RDPBitmapRectangle is one ordered framebuffer operation from a server graphics
 // update. Pixels is tightly packed RGBA for replacement and solid-brush pattern
-// operations; line and polygon operations carry bounded geometry and color metadata.
+// operations; line, polygon and ellipse operations carry bounded geometry and color metadata.
 type RDPBitmapRectangle struct {
 	X               uint16
 	Y               uint16
@@ -92,6 +95,7 @@ type RDPBitmapRectangle struct {
 	polygonPoints   [][2]uint16
 	polygonColor    [4]byte
 	polygonFillMode byte
+	ellipseColor    [4]byte
 }
 
 // RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
@@ -143,6 +147,7 @@ type rdpPrimaryOrderState struct {
 	lineToUsed           bool
 	polylineUsed         bool
 	polygonSCUsed        bool
+	ellipseSCUsed        bool
 	multiOpaqueRectUsed  bool
 }
 
@@ -357,6 +362,34 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			totalPixels += pixels
 			state.polygonSCUsed = true
 			data = data[11+encodedLength:]
+			continue
+		case rdpOrderEllipseSC:
+			// Strict seven-field profile with inclusive, absolute 16-bit bounds.
+			if len(data) < 14 || data[0] != 0x7f {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			left := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			right := int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			bottom := int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			if data[8] != 0x0d || data[9] != 0x01 || left < 0 || top < 0 || right < left || bottom < top ||
+				right >= int32(desktopWidth) || bottom >= int32(desktopHeight) {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			ellipseColor := [4]byte{data[10], data[11], data[12], 0xff}
+			width, height := uint16(right-left+1), uint16(bottom-top+1)
+			_, bounds, pixels, ellipseErr := rasterizeRDPEllipse(uint16(left), uint16(top), width, height, desktopWidth, desktopHeight)
+			if ellipseErr != nil || len(result.Rectangles) >= maxRDPBitmapRects || pixels > maxRDPDesktopArea-totalPixels {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
+				X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectangleEllipse,
+				ellipseColor: ellipseColor,
+			})
+			totalPixels += pixels
+			state.ellipseSCUsed = true
+			data = data[13:]
 			continue
 		case rdpOrderLineTo:
 			// Strict ten-field profile: transparent background, absolute
@@ -778,6 +811,66 @@ func ceilRDPDivision(numerator, denominator int64) int64 {
 		return (numerator + denominator - 1) / denominator
 	}
 	return numerator / denominator // Go truncates toward zero, which is ceil for negative values.
+}
+
+// rasterizeRDPEllipse rasterizes an inclusive bounding rectangle using pixel
+// centers. The returned spans are bounded to the desktop and contain only the
+// pixels inside the filled ellipse.
+func rasterizeRDPEllipse(left, top, width, height, desktopWidth, desktopHeight uint16) ([]rdpBitmapSpan, [4]uint16, uint64, error) {
+	var bounds [4]uint16
+	if width == 0 || height == 0 || uint32(left)+uint32(width) > uint32(desktopWidth) ||
+		uint32(top)+uint32(height) > uint32(desktopHeight) {
+		return nil, bounds, 0, ErrMCSConnection
+	}
+	bounds = [4]uint16{left, top, width, height}
+	widthSquared, heightSquared := uint64(width)*uint64(width), uint64(height)*uint64(height)
+	centerXTwice := 2*int64(left) + int64(width)
+	centerYTwice := 2*int64(top) + int64(height)
+	spans := make([]rdpBitmapSpan, 0, int(height))
+	var totalPixels uint64
+	for y := int64(top); y < int64(top)+int64(height); y++ {
+		deltaYTwice := 2*y + 1 - centerYTwice
+		absoluteY := deltaYTwice
+		if absoluteY < 0 {
+			absoluteY = -absoluteY
+		}
+		if absoluteY >= int64(height) {
+			continue
+		}
+		remaining := heightSquared - uint64(absoluteY)*uint64(absoluteY)
+		radiusNumerator := widthSquared * remaining
+		maxDeltaXTwice := sqrtRDPUint64(radiusNumerator / heightSquared)
+		leftNumerator := centerXTwice - int64(maxDeltaXTwice) - 1
+		rightNumerator := centerXTwice + int64(maxDeltaXTwice) - 1
+		xStart := ceilRDPDivision(leftNumerator, 2)
+		xEnd := rightNumerator/2 + 1
+		if xStart < int64(left) || xEnd > int64(left)+int64(width) || xEnd < xStart {
+			return nil, [4]uint16{}, 0, ErrMCSConnection
+		}
+		if xEnd == xStart {
+			continue
+		}
+		if uint64(xEnd-xStart) > maxRDPDesktopArea-totalPixels {
+			return nil, [4]uint16{}, 0, ErrMCSConnection
+		}
+		spans = append(spans, rdpBitmapSpan{X: uint16(xStart), Y: uint16(y), Width: uint16(xEnd - xStart)})
+		totalPixels += uint64(xEnd - xStart)
+	}
+	if len(spans) == 0 || totalPixels == 0 {
+		return nil, [4]uint16{}, 0, ErrMCSConnection
+	}
+	return spans, bounds, totalPixels, nil
+}
+
+func sqrtRDPUint64(value uint64) uint64 {
+	root := uint64(math.Sqrt(float64(value)))
+	for (root+1)*(root+1) <= value {
+		root++
+	}
+	for root*root > value {
+		root--
+	}
+	return root
 }
 
 func absRDPInt32(value int32) int32 {
@@ -1268,6 +1361,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	lineToEnabled := s.lineToEnabled
 	polylineEnabled := s.polylineEnabled
 	polygonSCEnabled := s.polygonSCEnabled
+	ellipseSCEnabled := s.ellipseSCEnabled
 	multiOpaqueRectEnabled := s.multiOpaqueRectEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
@@ -1373,6 +1467,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		nextOrderState.lineToUsed && !lineToEnabled ||
 		nextOrderState.polylineUsed && !polylineEnabled ||
 		nextOrderState.polygonSCUsed && !polygonSCEnabled ||
+		nextOrderState.ellipseSCUsed && !ellipseSCEnabled ||
 		nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

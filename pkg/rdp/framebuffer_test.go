@@ -390,6 +390,13 @@ func TestRDPFramebufferRejectsMalformedPolygonAtomically(t *testing.T) {
 	if err == nil {
 		t.Fatal("polygon with transparent color accepted")
 	}
+	_, err = framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		X: 1, Y: 1, Width: 5, Height: 5, operation: rdpBitmapRectangleEllipse,
+		ellipseColor: [4]byte{1, 2, 3, 0},
+	}}}, time.Unix(62, 1))
+	if err == nil {
+		t.Fatal("ellipse with transparent color accepted")
+	}
 	message, err := framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
 		X: 1, Y: 1, Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff},
 	}}}, time.Unix(63, 0))
@@ -435,6 +442,73 @@ func TestRDPFramebufferRollsBackPolygonWhenPNGExceedsScreenStreamLimit(t *testin
 	}
 	if framebuffer.sequence != 0 {
 		t.Fatalf("failed polygon consumed sequence: %d", framebuffer.sequence)
+	}
+	clear(before)
+}
+
+func TestRDPFramebufferAppliesEllipseSC(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56})
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.ellipseSCUsed || len(update.Rectangles) != 1 || update.Rectangles[0].operation != rdpBitmapRectangleEllipse {
+		t.Fatalf("EllipseSC update=%+v state=%+v", update, state)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(71, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			inside := (x == 2 || x == 3 || x == 4) && y == 1 || x >= 1 && x <= 5 && y >= 2 && y <= 4 ||
+				(x == 2 || x == 3 || x == 4) && y == 5
+			if inside && got != (color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}) {
+				t.Fatalf("ellipse pixel (%d,%d)=%#v", x, y, got)
+			}
+			if !inside && got != (color.RGBA{A: 0xff}) {
+				t.Fatalf("unpainted pixel (%d,%d)=%#v", x, y, got)
+			}
+		}
+	}
+}
+
+func TestRDPFramebufferRollsBackEllipseWhenPNGExceedsScreenStreamLimit(t *testing.T) {
+	const width, height = 1050, 1050
+	framebuffer, err := NewRDPFramebuffer(width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := uint32(0x9e3779b9)
+	for i := range framebuffer.image.Pix {
+		state ^= state << 13
+		state ^= state >> 17
+		state ^= state << 5
+		framebuffer.image.Pix[i] = byte(state)
+	}
+	before := append([]byte(nil), framebuffer.image.Pix...)
+	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), width, height, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := framebuffer.Apply(update, time.Now()); err == nil {
+		t.Fatal("oversized ellipse PNG was accepted")
+	}
+	if !bytes.Equal(framebuffer.image.Pix, before) {
+		t.Fatal("failed ellipse encoding did not restore the framebuffer")
+	}
+	if framebuffer.sequence != 0 {
+		t.Fatalf("failed ellipse consumed sequence: %d", framebuffer.sequence)
 	}
 	clear(before)
 }

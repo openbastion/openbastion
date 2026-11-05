@@ -41,7 +41,7 @@ func NewRDPFramebuffer(width, height uint16) (*RDPFramebuffer, error) {
 }
 
 // Apply validates every operation before changing the framebuffer, applies
-// replacement, solid-brush, destination-only, line, polygon and screen-copy
+// replacement, solid-brush, destination-only, line, polygon, ellipse and screen-copy
 // operations, and returns the next complete PNG frame. Sequence numbers are
 // strictly increasing and committed only after PNG encoding succeeds.
 func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (screenstream.Message, error) {
@@ -57,6 +57,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	bounds := f.image.Bounds()
 	var totalPixels uint64
 	polygonSpans := make([][]rdpBitmapSpan, len(update.Rectangles))
+	ellipseSpans := make([][]rdpBitmapSpan, len(update.Rectangles))
 	for index, rect := range update.Rectangles {
 		pixels := uint64(rect.Width) * uint64(rect.Height)
 		if rect.operation == rdpBitmapRectangleLine {
@@ -79,6 +80,15 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			}
 			polygonSpans[index] = spans
 			pixels = polygonPixels
+		}
+		if rect.operation == rdpBitmapRectangleEllipse {
+			spans, ellipseBounds, ellipsePixels, ellipseErr := rasterizeRDPEllipse(rect.X, rect.Y, rect.Width, rect.Height, uint16(bounds.Dx()), uint16(bounds.Dy()))
+			if ellipseErr != nil || len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || len(rect.polygonPoints) != 0 || rect.ellipseColor[3] != 0xff ||
+				rect.X != ellipseBounds[0] || rect.Y != ellipseBounds[1] || rect.Width != ellipseBounds[2] || rect.Height != ellipseBounds[3] {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
+			ellipseSpans[index] = spans
+			pixels = ellipsePixels
 		}
 		if rect.Width == 0 || rect.Height == 0 || uint32(rect.X)+uint32(rect.Width) > uint32(bounds.Dx()) ||
 			uint32(rect.Y)+uint32(rect.Height) > uint32(bounds.Dy()) || pixels > screenstream.MaxPixels-totalPixels {
@@ -106,6 +116,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			// Line points and color were validated above.
 		case rdpBitmapRectanglePolygon:
 			// Polygon spans, bounds and color were validated above.
+		case rdpBitmapRectangleEllipse:
+			// Ellipse spans, bounds and color were validated above.
 		default:
 			return screenstream.Message{}, ErrRDPFramebuffer
 		}
@@ -127,6 +139,17 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			}
 			previous[i] = make([]byte, 0, previousBytes)
 			for _, span := range polygonSpans[i] {
+				start := f.image.PixOffset(int(span.X), int(span.Y))
+				end := start + int(span.Width)*4
+				previous[i] = append(previous[i], f.image.Pix[start:end]...)
+			}
+		case rdpBitmapRectangleEllipse:
+			var previousBytes int
+			for _, span := range ellipseSpans[i] {
+				previousBytes += int(span.Width) * 4
+			}
+			previous[i] = make([]byte, 0, previousBytes)
+			for _, span := range ellipseSpans[i] {
 				start := f.image.PixOffset(int(span.X), int(span.Y))
 				end := start + int(span.Width)*4
 				previous[i] = append(previous[i], f.image.Pix[start:end]...)
@@ -191,6 +214,13 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 					copy(f.image.Pix[start+x*4:start+x*4+4], rect.polygonColor[:])
 				}
 			}
+		case rdpBitmapRectangleEllipse:
+			for _, span := range ellipseSpans[i] {
+				start := f.image.PixOffset(int(span.X), int(span.Y))
+				for x := 0; x < int(span.Width); x++ {
+					copy(f.image.Pix[start+x*4:start+x*4+4], rect.ellipseColor[:])
+				}
+			}
 		case rdpBitmapRectangleScrCopy:
 			source := make([]byte, int(rect.Width)*int(rect.Height)*4)
 			for y := 0; y < int(rect.Height); y++ {
@@ -217,6 +247,14 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			case rdpBitmapRectanglePolygon:
 				pixelOffset := 0
 				for _, span := range polygonSpans[i] {
+					start := f.image.PixOffset(int(span.X), int(span.Y))
+					length := int(span.Width) * 4
+					copy(f.image.Pix[start:start+length], previous[i][pixelOffset:pixelOffset+length])
+					pixelOffset += length
+				}
+			case rdpBitmapRectangleEllipse:
+				pixelOffset := 0
+				for _, span := range ellipseSpans[i] {
 					start := f.image.PixOffset(int(span.X), int(span.Y))
 					length := int(span.Width) * 4
 					copy(f.image.Pix[start:start+length], previous[i][pixelOffset:pixelOffset+length])

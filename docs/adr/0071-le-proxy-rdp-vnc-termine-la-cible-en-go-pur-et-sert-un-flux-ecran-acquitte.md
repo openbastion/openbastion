@@ -1156,3 +1156,19 @@ Validation de l'incrément 48 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 209 241 exécutions en 5 s (4 workers).
 - Contre-épreuves : 12 mutations compilantes tuées sur 12 (FillMode, ROP2, limite de points, masque, zero-bits, négociation indépendante, couleur, arrondi pixel-center et quatre contrôles `cbData`/slicing Polyline/PolygonSC) ; les sources sont restaurées octet pour octet après chaque mutation.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; index PolygonSC 20 non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 49 — EllipseSC
+
+Le parseur slow-path accepte EllipseSC (`orderType=0x19`, négociation index 25) avec les sept champs explicites : coordonnées absolues signées 16 bits, rectangle inclusif, `R2_COPYPEN` (`0x0d`), `FillMode=ALTERNATE` (`0x01`) et couleur RGB. Le profil local refuse `NOFILLL` et `WINDING`, les coordonnées négatives/inversées, les rectangles hors bureau et tout clipping. Le rasteriseur calcule les spans horizontaux avec une équation d’ellipse entière aux centres des pixels ; le framebuffer conserve l’ordre des opérations et restaure les spans si l’encodage PNG échoue. La parité pixel-à-pixel avec GDI reste à vérifier par interopérabilité Windows/RDS. L’index 25 est contrôlé indépendamment, sans annoncer la capacité ; runtime/route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.19 — EllipseSC](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/5146fab3-c43f-44d7-b541-04666a80e33b), [Coord Field](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/870b982c-9abe-40cb-99d0-2c3f0cc5fb74) et [Fill Mode](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/06dc7074-71cd-41cf-9028-964877875dfc).
+
+Validation de l'incrément 49 :
+- Test rouge sur le commit précédent `f8a073c` : `TestParseRDPOrdersUpdateDecodesEllipseSC` échoue avec `ErrMCSConnection` avant l'implémentation, puis passe après ajout du profil.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 246 tests principaux `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 179 553 exécutions en 5 s (4 workers).
+- Contre-épreuves : 12 mutations compilantes tuées sur 12 (ROP2, FillMode, masque, bornes inclusives, centre et racine entière, négociation indépendante, couleur, mapping d’ordre, état, consommation des champs et rollback PNG) ; les sources sont restaurées octet pour octet après chaque mutation.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l’équivalence pixel-à-pixel avec GDI reste à vérifier. Index EllipseSC 25 non annoncé, runtime/route RDP désactivés.
