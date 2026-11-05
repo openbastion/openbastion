@@ -131,6 +131,63 @@ func TestRDPFramebufferRejectsMalformedPatInvertPayload(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferPatBooleanOperationsPreserveDestinationAlpha(t *testing.T) {
+	for _, operation := range []rdpBitmapRectangleOperation{rdpBitmapRectanglePatAnd, rdpBitmapRectanglePatOr} {
+		t.Run(map[rdpBitmapRectangleOperation]string{rdpBitmapRectanglePatAnd: "PATAND", rdpBitmapRectanglePatOr: "PATOR"}[operation], func(t *testing.T) {
+			fb, err := NewRDPFramebuffer(1, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+				Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff},
+			}}}, time.Unix(24, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame, err := fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+				Width: 1, Height: 1, Pixels: []byte{0x0f, 0xf0, 0xaa, 0x00}, operation: operation,
+			}}}, time.Unix(25, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := png.Decode(bytes.NewReader(frame.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, _, alpha := decoded.At(0, 0).RGBA()
+			if alpha != 0xffff {
+				t.Fatalf("destination alpha = %04x, want opaque 0xffff", alpha)
+			}
+		})
+	}
+}
+
+func TestRDPFramebufferRejectsMalformedPatBooleanPatternPayload(t *testing.T) {
+	fb, err := NewRDPFramebuffer(1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, operation := range []rdpBitmapRectangleOperation{rdpBitmapRectanglePatAnd, rdpBitmapRectanglePatOr} {
+		for _, pixels := range [][]byte{nil, {0x0f, 0xf0, 0xaa, 0xff, 0x0f, 0xf0, 0xaa, 0xff}} {
+			_, err = fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+				Width: 1, Height: 1, Pixels: pixels, operation: operation,
+			}}}, time.Unix(22, 0))
+			if err == nil {
+				t.Fatalf("operation %d with %d-byte pattern payload accepted", operation, len(pixels))
+			}
+		}
+	}
+	frame, err := fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff},
+	}}}, time.Unix(23, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.Sequence != 1 {
+		t.Fatalf("malformed pattern operations consumed sequence: %d", frame.Sequence)
+	}
+}
+
 func TestRDPFramebufferRejectsUnknownRectangleOperationAtomically(t *testing.T) {
 	fb, err := NewRDPFramebuffer(2, 1)
 	if err != nil {

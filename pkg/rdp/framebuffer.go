@@ -71,7 +71,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			if len(rect.Pixels) != 0 {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
-		case rdpBitmapRectanglePatInvert:
+		case rdpBitmapRectanglePatInvert, rdpBitmapRectanglePatAnd, rdpBitmapRectanglePatOr:
 			if pixels*4 != uint64(len(rect.Pixels)) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
@@ -111,6 +111,21 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 					f.image.Pix[dstOffset] ^= rect.Pixels[srcOffset]
 					f.image.Pix[dstOffset+1] ^= rect.Pixels[srcOffset+1]
 					f.image.Pix[dstOffset+2] ^= rect.Pixels[srcOffset+2]
+				}
+			}
+		case rdpBitmapRectanglePatAnd, rdpBitmapRectanglePatOr:
+			for y := 0; y < int(rect.Height); y++ {
+				start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
+				for x := 0; x < int(rect.Width); x++ {
+					dstOffset := start + x*4
+					srcOffset := (y*int(rect.Width) + x) * 4
+					for channel := 0; channel < 3; channel++ {
+						if rect.operation == rdpBitmapRectanglePatAnd {
+							f.image.Pix[dstOffset+channel] &= rect.Pixels[srcOffset+channel]
+						} else {
+							f.image.Pix[dstOffset+channel] |= rect.Pixels[srcOffset+channel]
+						}
+					}
 				}
 			}
 		}

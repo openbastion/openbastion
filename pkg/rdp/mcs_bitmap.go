@@ -19,6 +19,8 @@ const (
 	rdpPatBltFieldMask     = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
 	rdpPatBltPatCopy       = byte(0xf0)
 	rdpPatBltPatInvert     = byte(0x5a)
+	rdpPatBltPatAnd        = byte(0xa0)
+	rdpPatBltPatOr         = byte(0xfa)
 	rdpPatBltSolidBrush    = byte(0x00)
 	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
 	rdpDstBltBlackness     = byte(0x00)
@@ -43,6 +45,8 @@ const (
 	rdpBitmapRectangleReplace rdpBitmapRectangleOperation = iota
 	rdpBitmapRectangleDstInvert
 	rdpBitmapRectanglePatInvert
+	rdpBitmapRectanglePatAnd
+	rdpBitmapRectanglePatOr
 )
 
 // RDPBitmapRectangle is one decoded, top-down rectangle from a server graphics
@@ -131,8 +135,9 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY/
-// PATINVERT PatBlt, all with absolute coordinates and no clipping bounds or omitted fields.
+// DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY,
+// PATINVERT, PATAND, and PATOR PatBlt, all with absolute coordinates and no
+// clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -228,6 +233,10 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				operation = rdpBitmapRectangleReplace
 			case rdpPatBltPatInvert:
 				operation = rdpBitmapRectanglePatInvert
+			case rdpPatBltPatAnd:
+				operation = rdpBitmapRectanglePatAnd
+			case rdpPatBltPatOr:
+				operation = rdpBitmapRectanglePatOr
 			default:
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -245,7 +254,8 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		}
 		totalPixels += pixels
 		var rgba []byte
-		if operation == rdpBitmapRectangleReplace || operation == rdpBitmapRectanglePatInvert {
+		if operation == rdpBitmapRectangleReplace || operation == rdpBitmapRectanglePatInvert ||
+			operation == rdpBitmapRectanglePatAnd || operation == rdpBitmapRectanglePatOr {
 			rgba = make([]byte, int(pixels)*4)
 			for offset := 0; offset < len(rgba); offset += 4 {
 				rgba[offset], rgba[offset+1], rgba[offset+2], rgba[offset+3] = red, green, blue, 0xff

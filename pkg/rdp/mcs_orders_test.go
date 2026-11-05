@@ -159,18 +159,46 @@ func TestParseRDPOrdersUpdateDecodesSolidPatInvert(t *testing.T) {
 	}
 }
 
+func TestParseRDPOrdersUpdateDecodesSolidPatBltBooleanRasterOperations(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		rop  byte
+	}{
+		{name: "PATAND", rop: 0xa0},
+		{name: "PATOR", rop: 0xfa},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			order := mcsTestPatBltOrder(0x09, true, 2, 3, 2, 2, test.rop, [3]byte{0xff, 0xff, 0xff}, [3]byte{0x0f, 0xf0, 0xaa}, 0)
+			got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Rectangles) != 1 || !state.patBltOpaqueRectUsed {
+				t.Fatalf("%s update = %+v, state=%+v", test.name, got, state)
+			}
+			wantPattern := []byte{0x0f, 0xf0, 0xaa, 0xff}
+			for offset := 0; offset < len(got.Rectangles[0].Pixels); offset += 4 {
+				if !bytes.Equal(got.Rectangles[0].Pixels[offset:offset+4], wantPattern) {
+					t.Fatalf("%s pattern pixel %d = %v, want %v", test.name, offset/4, got.Rectangles[0].Pixels[offset:offset+4], wantPattern)
+				}
+			}
+		})
+	}
+}
+
 func TestParseRDPOrdersUpdateRejectsUnsupportedPatBltProfiles(t *testing.T) {
 	valid := mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0)
 	cases := map[string][]byte{
-		"unsupported ROP":       mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xcc, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
-		"non-solid brush":       mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 2),
-		"incomplete field mask": func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unexpected field mask": func() []byte { out := append([]byte(nil), valid...); out[3] = 0x03; return out }(),
-		"negative coordinate":   mcsTestPatBltOrder(0x09, true, -1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
-		"outside desktop":       mcsTestPatBltOrder(0x09, true, 7, 7, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
-		"zero width":            mcsTestPatBltOrder(0x09, true, 1, 1, 0, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
-		"truncated order":       valid[:len(valid)-1],
-		"delta coordinates":     mcsTestPatBltOrder(0x19, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"unsupported ROP":                  mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xcc, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"unsupported destination-only ROP": mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0x55, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"non-solid brush":                  mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 2),
+		"incomplete field mask":            func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
+		"unexpected field mask":            func() []byte { out := append([]byte(nil), valid...); out[3] = 0x03; return out }(),
+		"negative coordinate":              mcsTestPatBltOrder(0x09, true, -1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"outside desktop":                  mcsTestPatBltOrder(0x09, true, 7, 7, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"zero width":                       mcsTestPatBltOrder(0x09, true, 1, 1, 0, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"truncated order":                  valid[:len(valid)-1],
+		"delta coordinates":                mcsTestPatBltOrder(0x19, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
 	}
 	for name, order := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -300,6 +328,8 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0, 0, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{}, [3]byte{0xff, 0xff, 0xff}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0x5a, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xa0, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xfa, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
@@ -539,6 +569,54 @@ func TestRDPFramebufferAppliesPatInvertOperation(t *testing.T) {
 				t.Fatalf("PATINVERT pixel (%d,%d) = (%x,%x,%x,%x)", x, y, r, g, b, a)
 			}
 		}
+	}
+}
+
+func TestRDPFramebufferAppliesPatBltBooleanRasterOperations(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		rop  byte
+		want [3]byte
+	}{
+		{name: "PATAND", rop: 0xa0, want: [3]byte{0x02, 0x30, 0x02}},
+		{name: "PATOR", rop: 0xfa, want: [3]byte{0x1f, 0xf4, 0xfe}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			framebuffer, err := NewRDPFramebuffer(8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedOrder := mcsTestPatBltOrder(0x01, false, 2, 3, 2, 2, 0xf0, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0)
+			seedUpdate, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, seedOrder, 0, 0), 0x000103ea, 8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := framebuffer.Apply(seedUpdate, time.Unix(8, 0)); err != nil {
+				t.Fatal(err)
+			}
+
+			order := mcsTestPatBltOrder(0x09, true, 2, 3, 2, 2, test.rop, [3]byte{}, [3]byte{0x0f, 0xf0, 0xaa}, 0)
+			update, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, order, 0, 0), 0x000103ea, 8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			message, err := framebuffer.Apply(update, time.Unix(9, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := png.Decode(bytes.NewReader(message.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for y := 3; y < 5; y++ {
+				for x := 2; x < 4; x++ {
+					r, g, b, a := decoded.At(x, y).RGBA()
+					if r != uint32(test.want[0])*257 || g != uint32(test.want[1])*257 || b != uint32(test.want[2])*257 || a != 0xffff {
+						t.Fatalf("%s pixel (%d,%d) = (%x,%x,%x,%x), want %v/opaque", test.name, x, y, r, g, b, a, test.want)
+					}
+				}
+			}
+		})
 	}
 }
 
