@@ -49,6 +49,108 @@ func mcsTestScrBltOrder(controlFlags byte, typeChange bool, left, top, width, he
 	return out
 }
 
+func TestParseRDPOrdersUpdateDecodesMultiDstBlt(t *testing.T) {
+	order := mcsTestMultiDstBltOrder(0x09, true, 0, 0, 2, 2, rdpDstBltInvert,
+		2, []byte{0x05, 1, 1, 2, 2, 3, 1})
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 16, 16, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.multiDstBltUsed || state.orderType != rdpOrderMultiDstBlt || len(got.Rectangles) != 3 {
+		t.Fatalf("MultiDstBlt update = %+v, state=%+v", got, state)
+	}
+	want := [][4]uint16{{0, 0, 2, 2}, {1, 1, 2, 2}, {4, 1, 3, 2}}
+	for i, rect := range got.Rectangles {
+		if [4]uint16{rect.X, rect.Y, rect.Width, rect.Height} != want[i] ||
+			rect.operation != rdpBitmapRectangleDstInvert || len(rect.Pixels) != 0 {
+			t.Errorf("rectangle %d = %+v, want bounds %v and DSTINVERT", i, rect, want[i])
+		}
+	}
+}
+
+func TestParseRDPOrdersUpdateDecodesMultiDstBltConstantROP(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		rop   byte
+		pixel []byte
+	}{
+		{name: "BLACKNESS", rop: rdpDstBltBlackness, pixel: []byte{0, 0, 0, 0xff}},
+		{name: "WHITENESS", rop: rdpDstBltWhiteness, pixel: []byte{0xff, 0xff, 0xff, 0xff}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			order := mcsTestMultiDstBltOrder(0x09, true, 2, 3, 2, 1, test.rop, 1, []byte{0x00, 0x01, 0x00, 0x01, 0x01})
+			got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !state.multiDstBltUsed || len(got.Rectangles) != 2 {
+				t.Fatalf("MultiDstBlt update = %+v, state=%+v", got, state)
+			}
+			for _, rect := range got.Rectangles {
+				if len(rect.Pixels) == 0 || !bytes.Equal(rect.Pixels[:4], test.pixel) {
+					t.Fatalf("%s rectangle pixel = %v, want %v", test.name, rect.Pixels[:4], test.pixel)
+				}
+			}
+		})
+	}
+}
+
+func TestDecodeRDPMultiDstBltRectanglesSupportsSigned15BitDeltas(t *testing.T) {
+	got, err := decodeRDPMultiDstBltRectangles([]byte{0x40, 0x80, 0x64, 0x01, 0x01}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != [4]int32{100, 0, 1, 1} {
+		t.Fatalf("15-bit delta rectangles = %v, want [[100 0 1 1]]", got)
+	}
+	if value, rest, err := readRDPPackedSignedDelta([]byte{0xff, 0xff}); err != nil || value != -1 || len(rest) != 0 {
+		t.Fatalf("15-bit signed delta = %d, remaining=%x, err=%v; want -1", value, rest, err)
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsMalformedMultiDstBlt(t *testing.T) {
+	valid := mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, rdpDstBltBlackness, 1, []byte{0x00, 0x01, 0x01, 0x01, 0x01})
+	cases := map[string][]byte{
+		"source-dependent ROP":            mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, 0xcc, 1, []byte{0x00, 1, 1, 1, 1}),
+		"pattern-dependent ROP":           mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, 1, []byte{0x00, 1, 1, 1, 1}),
+		"wrong field mask":                func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
+		"delta coordinates":               mcsTestMultiDstBltOrder(0x19, true, 1, 1, 2, 2, rdpDstBltBlackness, 1, []byte{0x00, 1, 1, 1, 1}),
+		"missing type change":             mcsTestMultiDstBltOrder(0x01, false, 1, 1, 2, 2, rdpDstBltBlackness, 1, []byte{0x00, 1, 1, 1, 1}),
+		"zero delta entries":              mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, rdpDstBltBlackness, 0, nil),
+		"too many delta entries":          mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, rdpDstBltBlackness, 46, []byte{0}),
+		"truncated variable field":        valid[:len(valid)-1],
+		"variable field length mismatch":  func() []byte { out := append([]byte(nil), valid...); out[len(out)-7]++; return out }(),
+		"trailing bytes":                  append(append([]byte(nil), valid...), 0),
+		"delta rectangle outside desktop": mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, rdpDstBltBlackness, 1, []byte{0x00, 0x7f, 0x01, 0x01, 0x01}),
+		"negative delta width":            mcsTestMultiDstBltOrder(0x09, true, 1, 1, 2, 2, rdpDstBltBlackness, 1, []byte{0x00, 0x01, 0x01, 0x7e, 0x01}),
+	}
+	for name, order := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func mcsTestMultiDstBltOrder(controlFlags byte, typeChange bool, left, top, width, height int16, rop byte, deltaEntries byte, deltaRects []byte) []byte {
+	out := []byte{controlFlags}
+	if typeChange {
+		out = append(out, rdpOrderMultiDstBlt)
+	}
+	out = append(out, 0x7f) // Four coordinates, bRop, nDeltaEntries and CodedDeltaList.
+	for _, value := range []int16{left, top, width, height} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	out = append(out, rop, deltaEntries)
+	var length [2]byte
+	binary.LittleEndian.PutUint16(length[:], uint16(len(deltaRects)))
+	out = append(out, length[:]...)
+	return append(out, deltaRects...)
+}
+
 func TestParseRDPOrdersUpdateDecodesOpaqueRectangles(t *testing.T) {
 	orders := append(mcsTestOpaqueRectOrder(0x09, true, 1, 2, 2, 1, 0x11, 0x22, 0x33),
 		mcsTestOpaqueRectOrder(0x01, false, 4, 0, 1, 2, 0xaa, 0xbb, 0xcc)...)
@@ -412,6 +514,7 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xfa, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0x0f, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiDstBltOrder(0x09, true, 0, 0, 1, 1, rdpDstBltBlackness, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -439,6 +542,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	second := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPatBltOrder(0x09, true, 1, 0, 1, 1, 0xf0, [3]byte{1, 2, 3}, [3]byte{0x11, 0x22, 0x33}, 0))
 	third := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 2, 0, 1, 1, 0xaa, 0xbb, 0xcc))
 	fourth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestScrBltOrder(0x09, true, 3, 0, 1, 1, 0xcc, 0, 0))
+	fifth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestMultiDstBltOrder(0x09, true, 4, 0, 1, 1, rdpDstBltBlackness, 1, []byte{0x00, 1, 0, 1, 1}))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -461,6 +565,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, fourth)
 		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, fifth)
+		}
 		serverResult <- acceptErr
 	}()
 
@@ -480,6 +587,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		patBltOpaqueRectEnabled: true, // Shared negotiation index 1.
 		dstBltEnabled:           true, // DstBlt has its own independent negotiation index.
 		scrBltEnabled:           true, // ScrBlt has its own independent negotiation index.
+		multiDstBltEnabled:      true, // MultiDstBlt has its own independent negotiation index 15.
 		mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 		serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 	}
@@ -492,6 +600,10 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	scrBltUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
 	if readErr != nil || len(scrBltUpdate.Rectangles) != 1 || scrBltUpdate.Rectangles[0].operation != rdpBitmapRectangleScrCopy {
 		t.Fatalf("ReadBitmapUpdate ScrBlt = %+v, err=%v", scrBltUpdate, readErr)
+	}
+	multiDstUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(multiDstUpdate.Rectangles) != 2 || !session.primaryOrderState.multiDstBltUsed {
+		t.Fatalf("ReadBitmapUpdate MultiDstBlt = %+v, state=%+v, err=%v", multiDstUpdate, session.primaryOrderState, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
@@ -742,6 +854,43 @@ func TestRDPFramebufferAppliesOverlappingScrBltSourceCopy(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferAppliesMultiDstBltAtomically(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := mcsTestPatBltOrder(0x01, false, 0, 0, 2, 2, rdpPatBltPatCopy, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0)
+	seedUpdate, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, seed, 0, 0), 0x000103ea, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := framebuffer.Apply(seedUpdate, time.Unix(20, 0)); err != nil {
+		t.Fatal(err)
+	}
+	order := mcsTestMultiDstBltOrder(0x09, true, 0, 0, 1, 1, rdpDstBltInvert, 1, []byte{0x00, 1, 0, 1, 1})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(21, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range [][2]int{{0, 0}, {1, 0}} {
+		got := color.RGBAModel.Convert(decoded.At(point[0], point[1])).(color.RGBA)
+		if got != (color.RGBA{R: 0xed, G: 0xcb, B: 0xa9, A: 0xff}) {
+			t.Fatalf("MultiDstBlt pixel %v = %#v, want inverted seed", point, got)
+		}
+	}
+	if got := color.RGBAModel.Convert(decoded.At(2, 0)).(color.RGBA); got != (color.RGBA{A: 0xff}) {
+		t.Fatalf("untouched pixel = %#v, want opaque black", got)
+	}
+}
+
 func TestRDPFramebufferAppliesPatBltBooleanRasterOperations(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -826,6 +975,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		patBltOpaqueRectEnabled bool
 		dstBltEnabled           bool
 		scrBltEnabled           bool
+		multiDstBltEnabled      bool
 	}{
 		{
 			name:                 "all primary orders disabled",
@@ -845,6 +995,11 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		{
 			name:                 "ScrBlt negotiation index disabled",
 			order:                mcsTestScrBltOrder(0x09, true, 1, 1, 1, 1, 0xcc, 0, 0),
+			primaryOrdersEnabled: true,
+		},
+		{
+			name:                 "MultiDstBlt negotiation index disabled",
+			order:                mcsTestMultiDstBltOrder(0x09, true, 1, 1, 1, 1, rdpDstBltBlackness, 1, []byte{0x00, 1, 0, 1, 1}),
 			primaryOrdersEnabled: true,
 		},
 	}
@@ -891,6 +1046,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 				patBltOpaqueRectEnabled: test.patBltOpaqueRectEnabled,
 				dstBltEnabled:           test.dstBltEnabled,
 				scrBltEnabled:           test.scrBltEnabled,
+				multiDstBltEnabled:      test.multiDstBltEnabled,
 				mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 				serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 			}
