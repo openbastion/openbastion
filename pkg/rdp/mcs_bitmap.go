@@ -406,7 +406,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			data = data[2:]
-			if binary.LittleEndian.Uint16(data[0:2]) != 1 || (data[13] != rdpROP2CopyPen && data[13] != rdpROP2Not) || data[14] != 0 || data[15] != 1 {
+			if binary.LittleEndian.Uint16(data[0:2]) != 1 || (data[13] != rdpROP2CopyPen && data[13] != rdpROP2Not && data[13] != rdpROP2XorPen) || data[14] != 0 || data[15] != 1 {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			startX := int32(int16(binary.LittleEndian.Uint16(data[2:4])))

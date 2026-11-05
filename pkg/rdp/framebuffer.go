@@ -82,7 +82,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			pixels = uint64(len(rect.linePoints))
 			if rect.Width != 1 || rect.Height != 1 || len(rect.Pixels) != 0 || len(rect.linePoints) == 0 ||
 				len(rect.linePoints) > maxRDPLinePixels || rect.lineColor[3] != 0xff ||
-				(rect.lineROP2 != rdpROP2CopyPen && rect.lineROP2 != rdpROP2Not) {
+				(rect.lineROP2 != rdpROP2CopyPen && rect.lineROP2 != rdpROP2Not && rect.lineROP2 != rdpROP2XorPen) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
 			for _, point := range rect.linePoints {

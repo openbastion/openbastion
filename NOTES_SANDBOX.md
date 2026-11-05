@@ -2562,3 +2562,19 @@ Validation de l'incrément 53 :
 - `go test -v ./pkg/rdp/... -count=1` : 256 tests principaux `--- PASS`.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (désactivation de l’inversion RGB dans le renderer partagé et rejet de `R2_NOT` dans le parseur Polyline) ; fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index Polyline 22 non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 54 — R2_XORPEN pour LineTo
+
+Le profil LineTo (`orderType=0x09`, négociation index 8) accepte `R2_XORPEN` (`0x07`, fonction `DPx`) en plus de `R2_COPYPEN` (`0x0d`) et `R2_NOT` (`0x06`). Le framebuffer réutilise `applyRDPROP2` : pour chaque pixel du segment Bresenham, les trois composantes RGB de destination sont combinées par XOR avec la couleur de plume ; l’alpha interne reste opaque. La couleur reste requise dans l’ordre, les autres ROP2 restent refusés, et les bornes, le fond transparent, la plume solide d’un pixel ainsi que l’endpoint exclu restent inchangés. L’index 8 reste non annoncé ; runtime et route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_XORPEN` (`0x07`) comme `DPx`.
+
+Validation de l'incrément 54 :
+- Test rouge sur le profil précédent : le parseur refuse `R2_XORPEN` pour LineTo ; les tests de décodage et de rendu passent après implémentation.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 112 969 exécutions.
+- `go test -v ./pkg/rdp/... -count=1` : 258 tests principaux `--- PASS`.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (XOR remplacé par OR dans le renderer commun et rejet de `R2_XORPEN` dans le parseur LineTo) ; fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index LineTo 8 non annoncé, runtime/route RDP désactivés.
