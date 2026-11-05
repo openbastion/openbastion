@@ -2211,3 +2211,20 @@ Le lecteur RDP reconnaît désormais le framing Fast-Path directement sur TLS et
 Le décodeur accepte un seul événement Fast-Path Bitmap Update non fragmenté et non compressé ; le corps bitmap réutilise le même parseur de rectangles RAW/RDP6 ARGB RAW/RLE que le slow-path. Un test TLS avec serveur factice traverse le lecteur de session complet. Le fuzzer Fast-Path couvre les entrées arbitraires.
 
 La capacité FASTPATH_OUTPUT_SUPPORTED n'est pas annoncée au serveur. La fragmentation, la compression, les paquets contenant plusieurs événements, les ordres et événements pointeur Fast-Path restent refusés/non supportés. Aucune interopérabilité Windows/RDS réelle n'est revendiquée ; runtime et route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 32 : RDP6 AYCoCg avec CLL, sans subsampling
+
+Le décodeur RDP6 traite désormais `CLL=1..7` comme le profil AYCoCg, conserve `CLL=0` pour ARGB et refuse toujours `CS=1`. Les plans sont interprétés comme A/Y/Co/Cg (alpha facultatif), avec Co/Cg signés et restauration par le niveau CLL avant la transformation inverse vers RGB. La transformation conserve l'alpha et borne les canaux RGB à 8 bits. Les modes RAW et RLE réutilisent les mêmes contrôles de longueur et de consommation exacte.
+
+Tests ajoutés : AYCoCg CLL=1, chroma positive et négative, clamp de sortie, plan alpha absent, RLE AYCoCg et refus du chroma subsampling. Le `bitmapCompressionFlag` reste à zéro ; aucun test Windows/RDS réel, runtime ou route RDP activée.
+
+
+Validation de l'incrément 32 :
+- `go test ./pkg/rdp/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS sur tous les modules Go, `go vet`, tests unitaires et Buf lint.
+- `FuzzDecodeRDP6BitmapWithHeader` : PASS, 65 038 exécutions en 5 s, avec seed AYCoCg.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `gofmt` et `git diff --check` : PASS. Aucun test Windows/RDS réel ; le `bitmapCompressionFlag` reste à zéro, runtime et route RDP restent désactivés.

@@ -199,9 +199,16 @@ func decodeRDPBitmapRaw(src []byte, width, height int) []byte {
 }
 
 // decodeRDP6BitmapWithHeader validates TS_CD_HEADER and decodes the bounded
-// RDP 6.0 ARGB profile: no color loss or chroma subsampling. Planes may be raw
-// or independently scan-line RLE encoded. Plane bytes are ordered A (optional),
-// R, G, B in bottom-up row order; output pixels are top-down RGBA.
+// RDP 6.0 ARGB and AYCoCg profiles without chroma subsampling. Planes may be
+// raw or independently scan-line RLE encoded. Plane bytes are ordered A
+// (optional), R/Y, G/Co, B/Cg in bottom-up row order; output is top-down RGBA.
+const (
+	rdp6FormatChromaSubsampling = byte(0x10)
+	rdp6FormatRLE               = byte(0x08)
+	rdp6FormatNoAlpha           = byte(0x04)
+	rdp6FormatReservedMask      = byte(0x03)
+)
+
 func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) {
 	if width <= 0 || height <= 0 || width%4 != 0 || len(data) < 9 {
 		return nil, ErrMCSConnection
@@ -217,12 +224,14 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 	}
 	stream := data[8:]
 	format := stream[0]
-	// CLL=0 (ARGB), CS=0, reserved=0. RLE and no-alpha are independent flags.
-	if format&0xf3 != 0 {
+	// CLL selects ARGB (zero) or AYCoCg (1..7). Chroma subsampling remains
+	// unsupported in this increment; reserved bits must always be zero.
+	colorLossLevel := int(format >> 5)
+	if format&(rdp6FormatChromaSubsampling|rdp6FormatReservedMask) != 0 {
 		return nil, ErrMCSConnection
 	}
-	noAlpha := format&0x04 != 0
-	rle := format&0x08 != 0
+	noAlpha := format&rdp6FormatNoAlpha != 0
+	rle := format&rdp6FormatRLE != 0
 	planeCount := 4
 	if noAlpha {
 		planeCount = 3
@@ -254,8 +263,8 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 	}
 	decoded := make([]byte, int(decodedBytes))
 	for i := 0; i < planeBytes; i++ {
-		x, wireY := i%width, i/width
-		dst := ((height-1-wireY)*width + x) * 4
+		wireY := i / width
+		dst := ((height-1-wireY)*width + i%width) * 4
 		plane := 0
 		if !noAlpha {
 			decoded[dst+3] = planes[0][i]
@@ -263,9 +272,49 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 		} else {
 			decoded[dst+3] = 0xff
 		}
-		decoded[dst], decoded[dst+1], decoded[dst+2] = planes[plane][i], planes[plane+1][i], planes[plane+2][i]
+		first, second, third := planes[plane][i], planes[plane+1][i], planes[plane+2][i]
+		if colorLossLevel == 0 {
+			decoded[dst], decoded[dst+1], decoded[dst+2] = first, second, third
+			continue
+		}
+		red, green, blue := decodeRDP6AYCoCg(first, second, third, colorLossLevel)
+		decoded[dst], decoded[dst+1], decoded[dst+2] = red, green, blue
 	}
 	return decoded, nil
+}
+
+// decodeRDP6AYCoCg converts one AYCoCg sample to RGB. Co and Cg are signed
+// 8-bit chroma samples restored by the negotiated color-loss shift. The
+// transform uses signed arithmetic shifts for the matrix's half coefficients
+// and clamps every output channel to the representable 8-bit range.
+func decodeRDP6AYCoCg(y, co, cg byte, colorLossLevel int) (byte, byte, byte) {
+	orange := clampRDP6Chroma(int(int8(co)) << colorLossLevel)
+	greenChroma := clampRDP6Chroma(int(int8(cg)) << colorLossLevel)
+	luma := int(y)
+	red := luma + (orange >> 1) - (greenChroma >> 1)
+	green := luma + (greenChroma >> 1)
+	blue := luma - (orange >> 1) - (greenChroma >> 1)
+	return clampRDP6Channel(red), clampRDP6Channel(green), clampRDP6Channel(blue)
+}
+
+func clampRDP6Chroma(value int) int {
+	if value < -255 {
+		return -255
+	}
+	if value > 255 {
+		return 255
+	}
+	return value
+}
+
+func clampRDP6Channel(value int) byte {
+	if value < 0 {
+		return 0
+	}
+	if value > 255 {
+		return 255
+	}
+	return byte(value)
 }
 
 // decodeRDP6RLEPlane decodes one independently encoded ARGB color plane.
@@ -342,8 +391,8 @@ func decodeRDP6RLEPlane(src []byte, width, height int) ([]byte, int, error) {
 }
 
 // parseRDPBitmapUpdate validates and decodes one unsegmented MCS bitmap PDU.
-// The 32-bpp compressed path supports bounded RDP 6.0 ARGB planes in raw or
-// scan-line RLE form; AYCoCg and chroma subsampling are rejected.
+// The 32-bpp compressed path supports bounded RDP 6.0 ARGB and AYCoCg planes
+// in raw or scan-line RLE form. Chroma subsampling remains unsupported.
 // Network callers use the reassembling ReadBitmapUpdate path below.
 func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
 	userData, segmentation, err := parseRDPBitmapMCSFragment(packet, expectedChannelID)
