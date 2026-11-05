@@ -1041,6 +1041,25 @@ Validation de l'incrément 42 :
 - `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
 - `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
 - `go test -v ./pkg/rdp/... -count=1` : 206 tests `--- PASS`.
-- `FuzzParseRDPOrdersUpdate` : PASS, 103 750 exécutions en 5 s (4 workers).
+- `FuzzParseRDPOrdersUpdate` : PASS, 76 670 exécutions en 5 s (4 workers).
 - Contre-épreuves : 12 mutations compilantes tuées sur 12 (accumulation width/height, rectangle de tête, signes 7/15 bits, whitelist ROP, dimensions nulles, payload résiduel, zeroBits inutilisés, limite 45 rectangles, garde de négociation et field mask) ; sources restaurées octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiDstBlt 15 reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 43 : MultiOpaqueRect
+
+Le parseur slow-path accepte `MultiOpaqueRect` (`orderType=0x12`) avec les neuf champs explicites (`fieldFlags=0x01ff`) : coordonnées absolues signées 16 bits, couleur RGB, nombre de rectangles delta et `CodedDeltaList` bornée dans un `VARIABLE2_FIELD`. Les rectangles de la liste sont décodés avec les mêmes règles delta strictes que MultiDstBlt : `left`/`top` relatifs au rectangle précédent, dimensions explicites ou répétées par zero-bit. La couleur opaque est appliquée à chaque rectangle ; les coordonnées de tête ne sont pas peintes.
+
+L'ordre a son état de négociation indépendant, index 18 ; `ReadBitmapUpdate` refuse le flux si cette capacité n'est pas explicitement activée. Le profil impose 1 à 45 rectangles, une longueur de liste maximale de 395 octets, des bornes de bureau strictes, et refuse les coordonnées delta, les champs omis, les field flags incomplets, les données résiduelles et les rectangles invalides. Confirm Active n'annonce toujours aucun ordre graphique ; runtime et route RDP restent désactivés.
+
+Tests : décodage multi-rectangles, couleur RGBA exacte, rendu PNG des deux zones, conservation du fond non peint, rejet des masques/longueurs/listes/bornes invalides, refus TLS lorsque l'index 18 n'est pas négocié, acceptation TLS avec négociation simulée et seed de fuzz.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.6 — MultiOpaqueRect](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/74e46cd9-d649-4bbe-9f8a-f4200f23302e) et [MS-RDPEGDI — Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272).
+
+Validation de l’incrément 43 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 210 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 76 670 exécutions en 5 s (4 workers).
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (mapping RGB, liste delta seule, masque neuf champs, état de l'ordre, garde index 18, limite 46 rectangles et coordonnées négatives) ; source restaurée octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiOpaqueRect 18 reste non annoncé, runtime/route RDP désactivés.
