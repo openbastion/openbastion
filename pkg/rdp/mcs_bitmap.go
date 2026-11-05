@@ -283,7 +283,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			operation = rdpBitmapRectangleScrCopy
 			data = data[13:]
 		case rdpOrderPolyline:
-			// Strict seven-field profile: absolute start point, R2_COPYPEN,
+			// Strict seven-field profile: absolute start point, supported ROP2,
 			// uncached solid brush, RGB pen color and bounded delta points.
 			if len(data) < 13 || data[0] != 0x7f {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
@@ -291,7 +291,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			data = data[1:]
 			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
 			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			if (data[4] != rdpROP2CopyPen && data[4] != rdpROP2Not) || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
+			if (data[4] != rdpROP2CopyPen && data[4] != rdpROP2Not && data[4] != rdpROP2XorPen) || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
 				startX < 0 || startY < 0 || startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}

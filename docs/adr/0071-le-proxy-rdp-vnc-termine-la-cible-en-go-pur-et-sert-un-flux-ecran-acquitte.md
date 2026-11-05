@@ -1250,3 +1250,18 @@ Validation de l'incrément 54 :
 - `go test -v ./pkg/rdp/... -count=1` : 258 tests principaux `--- PASS`.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (XOR remplacé par OR dans le renderer commun et rejet de `R2_XORPEN` dans le parseur LineTo) ; fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index LineTo 8 non annoncé, runtime/route RDP désactivés.
+
+## ADR-0071, incrément 55 — R2_XORPEN pour Polyline
+
+Le profil Polyline (`orderType=0x16`, négociation index 22) accepte désormais `R2_XORPEN` (`0x07`, fonction `DPx`) en plus de `R2_COPYPEN` (`0x0d`) et `R2_NOT` (`0x06`). Le ROP2 est propagé sans perte à chacun des segments issus de `DELTA_PTS_FIELD` ; le framebuffer réutilise `applyRDPROP2` et combine par XOR les trois composantes RGB de destination avec la couleur de plume, tout en conservant l'alpha opaque. Les autres ROP2, les coordonnées et deltas hors limites, les champs omis, les données résiduelles et les profils de brosse non canoniques restent refusés. L'index 22 demeure non annoncé ; runtime et route RDP restent désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_XORPEN` (`0x07`) comme `DPx`.
+
+Validation de l'incrément 55 :
+- Test rouge sur le profil précédent : le parseur refuse `R2_XORPEN` sur Polyline ; les tests de décodage et de rendu des deux segments échouent avant implémentation puis passent après.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 74 400 exécutions après ajout d'une seed R2_XORPEN.
+- Tests de décodage, rendu framebuffer et lecture TLS slow-path : PASS ; le test TLS vérifie aussi la propagation du ROP2 et conserve la garde de négociation indépendante.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (XOR remplacé par OR dans le framebuffer ; retrait de R2_XORPEN de la whitelist Polyline).
+- `gofmt` et `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E avec une cible RDP ; index Polyline 22 non annoncé, runtime/route RDP désactivés.
