@@ -311,9 +311,10 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		default:
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
-		rectangles := make([][4]int32, 0, 1+len(multiRects))
-		rectangles = append(rectangles, [4]int32{left, top, width, height})
-		rectangles = append(rectangles, multiRects...)
+		rectangles := multiRects
+		if state.orderType != rdpOrderMultiDstBlt {
+			rectangles = [][4]int32{{left, top, width, height}}
+		}
 		for _, bounds := range rectangles {
 			if err := appendRDPPrimaryRectangle(&result, &totalPixels, bounds[0], bounds[1], bounds[2], bounds[3],
 				desktopWidth, desktopHeight, operation, red, green, blue, sourceX, sourceY); err != nil {
@@ -338,8 +339,9 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 }
 
 // decodeRDPMultiDstBltRectangles decodes the DELTA_RECTS_FIELD payload. The
-// first rectangle is relative to (0,0,0,0); subsequent left/top/width/height
-// values are deltas from the corresponding values of the preceding rectangle.
+// first rectangle is relative to (0,0,0,0). Only left and top accumulate across
+// rectangles; width and height are values or repeat the previous dimension when
+// their zero bit is set.
 func decodeRDPMultiDstBltRectangles(encoded []byte, count int) ([][4]int32, error) {
 	if count < 1 || count > maxRDPMultiDstBltRects {
 		return nil, ErrMCSConnection
@@ -367,7 +369,16 @@ func decodeRDPMultiDstBltRectangles(encoded []byte, count int) ([][4]int32, erro
 					return nil, ErrMCSConnection
 				}
 			}
-			current[component] = previous[component] + delta
+			if component < 2 {
+				// Left and top are deltas from the preceding rectangle.
+				current[component] = previous[component] + delta
+			} else if zeroBits[i/2]&(1<<bit) != 0 {
+				// An omitted width or height repeats the previous dimension.
+				current[component] = previous[component]
+			} else {
+				// Width and height are values, not deltas.
+				current[component] = delta
+			}
 		}
 		if current[0] < 0 || current[1] < 0 || current[2] <= 0 || current[3] <= 0 {
 			return nil, ErrMCSConnection

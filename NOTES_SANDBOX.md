@@ -2392,3 +2392,17 @@ Validation de l'incrément 41 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 50 319 exécutions en 5 s.
 - Contre-épreuves : 10 mutations compilantes tuées sur 10 (ROP SRCCOPY, limites source/destination, field mask, origine de copie, payload, état et garde de négociation) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index ScrBlt 2 reste non annoncé, runtime/route RDP désactivés.
+
+## 2026-11-05 — ADR-0071, incrément 42 : MultiDstBlt
+
+`pkg/rdp/mcs_bitmap.go` décode maintenant le profil primaire MultiDstBlt destination-only : `fieldFlags=0x7F`, coordonnées d'ordre explicites, 1 à 45 rectangles dans un `VARIABLE2_FIELD` de longueur bornée et ROP limité à BLACKNESS, WHITENESS ou DSTINVERT. Seuls les rectangles de la liste delta sont rendus. Les deltas `left`/`top` s'accumulent ; `width`/`height` sont des dimensions absolues, répétées lorsque leur zero-bit est positionné. Les entiers signés empaquetés 7/15 bits sont contrôlés, et chaque rectangle passe par les bornes de bureau et les budgets communs de framebuffer.
+
+Le slot de négociation 15 est indépendant et contrôlé par `ReadBitmapUpdate`, mais reste désactivé en production : Confirm Active n'annonce aucun ordre graphique. Le runtime et la route RDP restent désactivés. Aucun test Compose local ni interopérabilité Windows/RDS réelle n'est revendiqué.
+
+Validation de l'incrément 42 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 206 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 103 750 exécutions en 5 s (4 workers).
+- Contre-épreuves : 12 mutations compilantes tuées sur 12 (accumulation width/height, rectangle de tête, signes 7/15 bits, whitelist ROP, dimensions nulles, payload résiduel, zeroBits inutilisés, limite 45 rectangles, garde de négociation et field mask) ; sources restaurées octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiDstBlt 15 reste non annoncé, runtime/route RDP désactivés.

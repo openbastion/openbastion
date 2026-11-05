@@ -1026,3 +1026,21 @@ Validation de l'incrément 41 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 50 319 exécutions en 5 s.
 - Contre-épreuves : 10 mutations compilantes tuées sur 10 (ROP SRCCOPY, limites source/destination, field mask, origine de copie, payload, état et garde de négociation) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index ScrBlt 2 reste non annoncé, runtime/route RDP désactivés.
+
+## 2026-11-05 — ADR-0071, incrément 42 : MultiDstBlt destination-only
+
+Le parseur slow-path accepte `MultiDstBlt` (`orderType=0x0F`) avec le masque strict `fieldFlags=0x7F` : quatre coordonnées absolues signées 16 bits, un ROP destination-only, le nombre de rectangles delta et un `VARIABLE2_FIELD` borné. Le profil ne rend que les rectangles de `CodedDeltaList` (1 à 45), pas les quatre coordonnées d'ordre qui les précèdent. Dans chaque quadruple delta, `left` et `top` s'accumulent depuis le rectangle précédent ; `width` et `height` sont des dimensions, non des deltas, et un zero-bit les fait reprendre la dimension précédente. Les valeurs signées 7/15 bits sont décodées strictement.
+
+Seuls `BLACKNESS` (`0x00`), `WHITENESS` (`0xFF`) et `DSTINVERT` (`0x55`) sont acceptés. Les rectangles sont validés individuellement contre le bureau et soumis aux limites communes de nombre, de surface cumulée et de framebuffer ; le rendu conserve l'atomicité de `RDPFramebuffer.Apply`. Le slot de négociation MultiDstBlt 15 est suivi indépendamment, mais reste non annoncé dans Confirm Active ; le runtime et la route RDP restent désactivés.
+
+Tests : listes multi-rectangles, dimensions absolues et dimensions répétées, deltas signés 7/15 bits, BLACKNESS/WHITENESS/DSTINVERT, absence de rendu du rectangle de tête, bornes et rejets des ROP/champs/listes invalides, garde TLS lorsque l'index 15 n'est pas négocié, rendu PNG et fuzz du parseur.
+
+Références normatives : [MS-RDPEGDI §2.2.2.2.1.1.2.2 — MultiDstBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/aaae7840-3eb4-4038-9204-b95f87b44534) et [§2.2.2.2.1.1.1.5 — Delta-Encoded Rectangles](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/b89f2058-b180-4da0-9bd1-aa694c87768c).
+
+Validation de l'incrément 42 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 206 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 103 750 exécutions en 5 s (4 workers).
+- Contre-épreuves : 12 mutations compilantes tuées sur 12 (accumulation width/height, rectangle de tête, signes 7/15 bits, whitelist ROP, dimensions nulles, payload résiduel, zeroBits inutilisés, limite 45 rectangles, garde de négociation et field mask) ; sources restaurées octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiDstBlt 15 reste non annoncé, runtime/route RDP désactivés.
