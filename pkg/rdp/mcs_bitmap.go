@@ -21,6 +21,7 @@ const (
 	rdpPatBltPatInvert     = byte(0x5a)
 	rdpPatBltPatAnd        = byte(0xa0)
 	rdpPatBltPatOr         = byte(0xfa)
+	rdpPatBltNotPatCopy    = byte(0x0f)
 	rdpPatBltSolidBrush    = byte(0x00)
 	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
 	rdpDstBltBlackness     = byte(0x00)
@@ -136,7 +137,7 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
 // DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY,
-// PATINVERT, PATAND, and PATOR PatBlt, all with absolute coordinates and no
+// PATINVERT, PATAND, PATOR, and NOTPATCOPY PatBlt, all with absolute coordinates and no
 // clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
@@ -237,6 +238,9 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				operation = rdpBitmapRectanglePatAnd
 			case rdpPatBltPatOr:
 				operation = rdpBitmapRectanglePatOr
+			case rdpPatBltNotPatCopy:
+				operation = rdpBitmapRectangleReplace
+				red, green, blue = ^red, ^green, ^blue
 			default:
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}

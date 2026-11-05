@@ -186,6 +186,23 @@ func TestParseRDPOrdersUpdateDecodesSolidPatBltBooleanRasterOperations(t *testin
 	}
 }
 
+func TestParseRDPOrdersUpdateDecodesSolidNotPatCopy(t *testing.T) {
+	order := mcsTestPatBltOrder(0x09, true, 2, 3, 2, 2, 0x0f, [3]byte{0xff, 0xff, 0xff}, [3]byte{0x0f, 0xf0, 0xaa}, 0)
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rectangles) != 1 || !state.patBltOpaqueRectUsed {
+		t.Fatalf("NOTPATCOPY update = %+v, state=%+v", got, state)
+	}
+	wantPixel := []byte{0xf0, 0x0f, 0x55, 0xff}
+	for offset := 0; offset < len(got.Rectangles[0].Pixels); offset += 4 {
+		if !bytes.Equal(got.Rectangles[0].Pixels[offset:offset+4], wantPixel) {
+			t.Fatalf("NOTPATCOPY pixel %d = %v, want %v", offset/4, got.Rectangles[0].Pixels[offset:offset+4], wantPixel)
+		}
+	}
+}
+
 func TestParseRDPOrdersUpdateRejectsUnsupportedPatBltProfiles(t *testing.T) {
 	valid := mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0)
 	cases := map[string][]byte{
@@ -330,6 +347,7 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0x5a, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xa0, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xfa, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0x0f, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
@@ -567,6 +585,43 @@ func TestRDPFramebufferAppliesPatInvertOperation(t *testing.T) {
 			r, g, b, a := decoded.At(x, y).RGBA()
 			if r != 0x1d*257 || g != 0xc4*257 || b != 0xfc*257 || a != 0xffff {
 				t.Fatalf("PATINVERT pixel (%d,%d) = (%x,%x,%x,%x)", x, y, r, g, b, a)
+			}
+		}
+	}
+}
+
+func TestRDPFramebufferAppliesNotPatCopy(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedOrder := mcsTestPatBltOrder(0x01, false, 2, 3, 2, 2, 0xf0, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0)
+	seedUpdate, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, seedOrder, 0, 0), 0x000103ea, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := framebuffer.Apply(seedUpdate, time.Unix(10, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	order := mcsTestPatBltOrder(0x09, true, 2, 3, 2, 2, 0x0f, [3]byte{}, [3]byte{0x0f, 0xf0, 0xaa}, 0)
+	update, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, order, 0, 0), 0x000103ea, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(11, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 3; y < 5; y++ {
+		for x := 2; x < 4; x++ {
+			r, g, b, a := decoded.At(x, y).RGBA()
+			if r != 0xf0*257 || g != 0x0f*257 || b != 0x55*257 || a != 0xffff {
+				t.Fatalf("NOTPATCOPY pixel (%d,%d) = (%x,%x,%x,%x)", x, y, r, g, b, a)
 			}
 		}
 	}
