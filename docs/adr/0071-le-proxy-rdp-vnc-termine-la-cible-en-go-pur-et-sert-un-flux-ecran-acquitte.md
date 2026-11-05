@@ -900,3 +900,24 @@ Validation de l’incrément 35 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 49 161 exécutions en 5 s.
 - Contre-épreuves : 5 mutations compilantes tuées sur 5 (ROP, style de brosse, masque de champs, bornes du rectangle, garde de négociation) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 36 : DstBlt slow-path, BLACKNESS/WHITENESS
+
+Le parseur `TS_UPDATE_ORDERS` décode maintenant le profil DstBlt (`orderType=0x00`) avec masque strict `0x1f` : quatre coordonnées absolues signées 16 bits et `bRop` explicite. Seuls les ROP constants `BLACKNESS` (`0x00`) et `WHITENESS` (`0xff`) sont rendus comme rectangles opaques noir/blanc. Ils ne dépendent ni des bits source, ni des bits brush, ni de l'état précédent du framebuffer. Les opérations dépendantes de la destination, notamment `DSTINVERT`, restent refusées car elles exigent un opérateur de framebuffer stateful.
+
+Le type initial primaire reste PatBlt ; DstBlt exige donc un `TS_TYPE_CHANGE` explicite. L'état mémorise les familles d'ordres rencontrées et la session vérifie séparément `dstBltEnabled` (index 0) et `patBltOpaqueRectEnabled` (index partagé 1), en plus du garde-fou global `primaryOrdersEnabled`. Le test TLS couvre la transition DstBlt → PatBlt → OpaqueRect sur trois PDU. DstBlt et le slot partagé PatBlt/OpaqueRect restent non annoncés dans Confirm Active ; aucune capacité n'est activée prématurément.
+
+Tests : BLACKNESS/WHITENESS, pixels RGBA et rendu PNG, ROP destination-dépendant refusé, masque incomplet, coordonnées invalides/delta, type change initial obligatoire, garde de négociation DstBlt propre à l'index 0 et transition de type sur TLS. Le seed DstBlt est intégré au fuzzer `FuzzParseRDPOrdersUpdate`.
+
+Références normatives : [MS-RDPEGDI §2.2.2.2.1.1.2.1 — DstBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/87ea30df-59d6-438e-a735-83f0225fbf91), [§2.2.2.2.1.1.2 — Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272), [§2.2.2.2.1.1.1.7 — ROP3 Operation Index](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a9a85075-e796-45eb-b84a-f399324a1109).
+
+Validation de l’incrément 36 :
+- Test rouge avant implémentation : le décodeur refuse initialement DstBlt ; BLACKNESS/WHITENESS passent après ajout du profil strict.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 181 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 50 276 exécutions en 5 s.
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (ROP, masque, bornes, négociation DstBlt, négociation PatBlt/OpaqueRect, garde globale, type initial) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; les capacités DstBlt et PatBlt/OpaqueRect restent non annoncées, runtime/route RDP désactivés.

@@ -13,11 +13,15 @@ const (
 	rdpOrderStandard       = byte(0x01)
 	rdpOrderTypeChange     = byte(0x08)
 	rdpOrderOpaqueRect     = byte(0x0a)
+	rdpOrderDstBlt         = byte(0x00)
 	rdpOrderPatBlt         = byte(0x01)
 	rdpOpaqueRectFieldMask = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask     = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
 	rdpPatBltPatCopy       = byte(0xf0)
 	rdpPatBltSolidBrush    = byte(0x00)
+	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
+	rdpDstBltBlackness     = byte(0x00)
+	rdpDstBltWhiteness     = byte(0xff)
 	maxRDPPrimaryOrders    = 1024
 	rdpBitmapCompressed    = uint16(0x0001)
 	rdpBitmapNoCompHdr     = uint16(0x0400)
@@ -72,12 +76,15 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 	return update, err
 }
 
-// rdpPrimaryOrderState retains the connection-scoped primary order type. The
-// supported OpaqueRect and solid PATCOPY profiles require every data field, so
+// rdpPrimaryOrderState retains the connection-scoped primary order type and
+// records which negotiated order families appeared so the session can enforce
+// their independent indices. Supported profiles require every data field, so
 // no per-order field cache is needed.
 type rdpPrimaryOrderState struct {
-	orderType    byte
-	hasOrderType bool
+	orderType            byte
+	hasOrderType         bool
+	dstBltUsed           bool
+	patBltOpaqueRectUsed bool
 }
 
 func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
@@ -110,8 +117,8 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// OpaqueRect and solid-brush PATCOPY PatBlt, both with absolute coordinates and
-// no clipping bounds or omitted fields. Other ROPs and brush styles are refused.
+// DstBlt BLACKNESS/WHITENESS, OpaqueRect, and solid-brush PATCOPY PatBlt, all
+// with absolute coordinates and no clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -149,6 +156,26 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		var left, top, width, height int32
 		var red, green, blue byte
 		switch state.orderType {
+		case rdpOrderDstBlt:
+			if len(data) < 10 || data[0] != rdpDstBltFieldMask {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			// Only destination-independent constant raster operations can be
+			// represented as a standalone rectangle without framebuffer state.
+			switch data[8] {
+			case rdpDstBltBlackness:
+				red, green, blue = 0, 0, 0
+			case rdpDstBltWhiteness:
+				red, green, blue = 0xff, 0xff, 0xff
+			default:
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[9:]
 		case rdpOrderOpaqueRect:
 			if len(data) < 12 || data[0] != rdpOpaqueRectFieldMask {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
@@ -199,6 +226,12 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
 			X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba,
 		})
+		switch state.orderType {
+		case rdpOrderDstBlt:
+			state.dstBltUsed = true
+		case rdpOrderPatBlt, rdpOrderOpaqueRect:
+			state.patBltOpaqueRectUsed = true
+		}
 	}
 	if len(data) != 0 {
 		return RDPBitmapUpdate{}, initialState, ErrMCSConnection
@@ -565,6 +598,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	desktopWidth, desktopHeight := s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight
 	orderState := s.primaryOrderState
 	primaryOrdersEnabled := s.primaryOrdersEnabled
+	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
+	dstBltEnabled := s.dstBltEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
 		timeout = defaultCredSSPTimeout
@@ -659,7 +694,9 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	}
 	var nextOrderState rdpPrimaryOrderState
 	update, nextOrderState, err = parseRDPBitmapShareDataWithOrderState(assembled, shareID, desktopWidth, desktopHeight, orderState)
-	if err != nil || ctx.Err() != nil {
+	if err != nil || ctx.Err() != nil ||
+		nextOrderState.dstBltUsed && !dstBltEnabled ||
+		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	s.mu.Lock()

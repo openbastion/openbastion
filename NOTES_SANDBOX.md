@@ -2286,3 +2286,22 @@ Validation de l’incrément 35 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 49 161 exécutions en 5 s.
 - Contre-épreuves : 5 mutations compilantes tuées sur 5 (ROP, style de brosse, masque de champs, bornes du rectangle, garde de négociation) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 36 : DstBlt slow-path
+
+Ajout du profil DstBlt strict : `orderType=0x00`, masque de champs `0x1f`, quatre coordonnées absolues signées 16 bits et ROP explicite. Seuls BLACKNESS (`0x00`) et WHITENESS (`0xff`) sont convertis en rectangles RGBA opaques. Les opérations qui dépendent des pixels de destination (par exemple DSTINVERT) restent refusées tant que le framebuffer n'expose pas d'opérations stateful.
+
+Le type initial reste PatBlt, DstBlt doit être sélectionné explicitement par TS_TYPE_CHANGE. La session conserve les familles d'ordres rencontrées et refuse le flux si `dstBltEnabled` (index 0) ou `patBltOpaqueRectEnabled` (index partagé 1) n'est pas vrai, même si les ordres primaires sont globalement activés. Confirm Active ne déclare toujours aucun ordre ; DstBlt index 0 et PatBlt/OpaqueRect index 1 restent désactivés. Le runtime/route RDP restent désactivés.
+
+Références : [MS-RDPEGDI DstBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/87ea30df-59d6-438e-a735-83f0225fbf91), [Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272), [ROP3 Operation Index](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a9a85075-e796-45eb-b84a-f399324a1109).
+
+Validation de l’incrément 36 :
+- Test rouge avant implémentation : le décodeur refuse initialement DstBlt ; BLACKNESS/WHITENESS passent après ajout du profil strict.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 181 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 50 276 exécutions en 5 s.
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (ROP, masque, bornes, négociation DstBlt, négociation PatBlt/OpaqueRect, garde globale, type initial) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; les capacités DstBlt et PatBlt/OpaqueRect restent non annoncées, runtime/route RDP désactivés.

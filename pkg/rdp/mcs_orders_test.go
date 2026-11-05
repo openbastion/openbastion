@@ -51,7 +51,7 @@ func TestParseRDPOrdersUpdateDecodesSolidPatBlt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Rectangles) != 1 || !state.hasOrderType || state.orderType != rdpOrderPatBlt {
+	if len(got.Rectangles) != 1 || !state.hasOrderType || state.orderType != rdpOrderPatBlt || !state.patBltOpaqueRectUsed {
 		t.Fatalf("PatBlt update = %+v, state=%+v", got, state)
 	}
 	rect := got.Rectangles[0]
@@ -64,6 +64,73 @@ func TestParseRDPOrdersUpdateDecodesSolidPatBlt(t *testing.T) {
 			t.Fatalf("PatBlt pixel %d = %v, want %v", offset/4, rect.Pixels[offset:offset+4], wantPixel)
 		}
 	}
+}
+
+func TestParseRDPOrdersUpdateDecodesDstBltConstantRasterOperations(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		rop   byte
+		color [3]byte
+	}{
+		{name: "BLACKNESS", rop: 0x00, color: [3]byte{0x00, 0x00, 0x00}},
+		{name: "WHITENESS", rop: 0xff, color: [3]byte{0xff, 0xff, 0xff}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			order := mcsTestDstBltOrder(0x09, true, 2, 3, 2, 2, test.rop)
+			got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Rectangles) != 1 || !state.hasOrderType || state.orderType != rdpOrderDstBlt || !state.dstBltUsed {
+				t.Fatalf("DstBlt update = %+v, state=%+v", got, state)
+			}
+			rect := got.Rectangles[0]
+			if rect.X != 2 || rect.Y != 3 || rect.Width != 2 || rect.Height != 2 {
+				t.Fatalf("DstBlt rectangle = %+v", rect)
+			}
+			wantPixel := []byte{test.color[0], test.color[1], test.color[2], 0xff}
+			for offset := 0; offset < len(rect.Pixels); offset += 4 {
+				if !bytes.Equal(rect.Pixels[offset:offset+4], wantPixel) {
+					t.Fatalf("DstBlt pixel %d = %v, want %v", offset/4, rect.Pixels[offset:offset+4], wantPixel)
+				}
+			}
+		})
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsUnsupportedDstBltProfiles(t *testing.T) {
+	valid := mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0x00)
+	cases := map[string][]byte{
+		"destination-dependent ROP":   mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0x55),
+		"missing initial type change": mcsTestDstBltOrder(0x01, false, 1, 1, 2, 2, 0x00),
+		"wrong field mask":            func() []byte { out := append([]byte(nil), valid...); out[2] = 0x0f; return out }(),
+		"negative coordinate":         mcsTestDstBltOrder(0x09, true, -1, 1, 2, 2, 0x00),
+		"outside desktop":             mcsTestDstBltOrder(0x09, true, 7, 7, 2, 2, 0xff),
+		"zero height":                 mcsTestDstBltOrder(0x09, true, 1, 1, 2, 0, 0x00),
+		"truncated order":             valid[:len(valid)-1],
+		"delta coordinates":           mcsTestDstBltOrder(0x19, true, 1, 1, 2, 2, 0x00),
+	}
+	for name, order := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func mcsTestDstBltOrder(controlFlags byte, typeChange bool, left, top, width, height int16, rop byte) []byte {
+	out := []byte{controlFlags}
+	if typeChange {
+		out = append(out, rdpOrderDstBlt)
+	}
+	out = append(out, 0x1f) // Four coordinates and bRop.
+	for _, value := range []int16{left, top, width, height} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	return append(out, rop)
 }
 
 func TestParseRDPOrdersUpdateRejectsUnsupportedPatBltProfiles(t *testing.T) {
@@ -206,6 +273,7 @@ func TestParseRDPOrdersUpdateDoesNotCommitStateOnMalformedOrder(t *testing.T) {
 func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0, 0, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{}, [3]byte{0xff, 0xff, 0xff}, 0), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = parseRDPOrdersUpdateData(data, 64, 64, rdpPrimaryOrderState{})
@@ -228,8 +296,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	defer listener.Close()
 
 	const shareID = uint32(0x000103ea)
-	first := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{1, 2, 3}, [3]byte{0x11, 0x22, 0x33}, 0))
-	second := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 1, 0, 1, 1, 0xaa, 0xbb, 0xcc))
+	first := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00))
+	second := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPatBltOrder(0x09, true, 1, 0, 1, 1, 0xf0, [3]byte{1, 2, 3}, [3]byte{0x11, 0x22, 0x33}, 0))
+	third := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 2, 0, 1, 1, 0xaa, 0xbb, 0xcc))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -246,6 +315,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, second)
 		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, third)
+		}
 		serverResult <- acceptErr
 	}()
 
@@ -258,14 +330,16 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := &CredSSPClientSession{
-		transport:             &Transport{Conn: tlsConn},
-		connectionFinalized:   true,
-		capabilitiesExchanged: true,
-		primaryOrdersEnabled:  true, // Simulates a future Confirm Active profile that advertises the shared PatBlt/OpaqueRect slot.
-		mcsResponse:           MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
-		serverCapabilities:    RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
+		transport:               &Transport{Conn: tlsConn},
+		connectionFinalized:     true,
+		capabilitiesExchanged:   true,
+		primaryOrdersEnabled:    true, // Simulates future Confirm Active order negotiation.
+		patBltOpaqueRectEnabled: true, // Shared negotiation index 1.
+		dstBltEnabled:           true, // DstBlt has its own independent negotiation index.
+		mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 	}
-	for i, want := range [][]byte{{0x11, 0x22, 0x33, 0xff}, {0xaa, 0xbb, 0xcc, 0xff}} {
+	for i, want := range [][]byte{{0x00, 0x00, 0x00, 0xff}, {0x11, 0x22, 0x33, 0xff}, {0xaa, 0xbb, 0xcc, 0xff}} {
 		update, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
 		if readErr != nil || len(update.Rectangles) != 1 || string(update.Rectangles[0].Pixels) != string(want) {
 			t.Fatalf("ReadBitmapUpdate #%d = %+v, err=%v", i, update, readErr)
@@ -321,6 +395,45 @@ func TestRDPFramebufferAppliesOpaqueRectOrder(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferAppliesDstBltOrder(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		rop   byte
+		color [3]byte
+	}{
+		{name: "BLACKNESS", rop: 0x00, color: [3]byte{0x00, 0x00, 0x00}},
+		{name: "WHITENESS", rop: 0xff, color: [3]byte{0xff, 0xff, 0xff}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			order := mcsTestDstBltOrder(0x09, true, 2, 3, 2, 2, test.rop)
+			update, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, order, 0, 0), 0x000103ea, 8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			framebuffer, err := NewRDPFramebuffer(8, 8)
+			if err != nil {
+				t.Fatal(err)
+			}
+			message, err := framebuffer.Apply(update, time.Unix(3, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := png.Decode(bytes.NewReader(message.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for y := 3; y < 5; y++ {
+				for x := 2; x < 4; x++ {
+					r, g, b, a := decoded.At(x, y).RGBA()
+					if r != uint32(test.color[0])*257 || g != uint32(test.color[1])*257 || b != uint32(test.color[2])*257 || a != 0xffff {
+						t.Fatalf("pixel (%d,%d) = (%x,%x,%x,%x)", x, y, r, g, b, a)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestRDPFramebufferAppliesPatBltOrder(t *testing.T) {
 	order := mcsTestPatBltOrder(0x01, false, 2, 3, 2, 2, 0xf0, [3]byte{0xff, 0xff, 0xff}, [3]byte{0x12, 0x34, 0x56}, 0)
 	update, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, order, 0, 0), 0x000103ea, 8, 8)
@@ -350,56 +463,86 @@ func TestRDPFramebufferAppliesPatBltOrder(t *testing.T) {
 }
 
 func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
-	certificate, roots, _ := rdpTestCertificate(t)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name                    string
+		order                   []byte
+		primaryOrdersEnabled    bool
+		patBltOpaqueRectEnabled bool
+		dstBltEnabled           bool
+	}{
+		{
+			name:                 "all primary orders disabled",
+			order:                mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x11, 0x22, 0x33),
+			primaryOrdersEnabled: false,
+		},
+		{
+			name:                 "DstBlt negotiation index disabled",
+			order:                mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00),
+			primaryOrdersEnabled: true,
+		},
+		{
+			name:                 "PatBlt/OpaqueRect shared negotiation index disabled",
+			order:                mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x11, 0x22, 0x33),
+			primaryOrdersEnabled: true,
+		},
 	}
-	defer listener.Close()
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			certificate, roots, _ := rdpTestCertificate(t)
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
 
-	const shareID = uint32(0x000103ea)
-	packet := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x11, 0x22, 0x33))
-	serverResult := make(chan error, 1)
-	go func() {
-		conn, acceptErr := listener.Accept()
-		if acceptErr != nil {
-			serverResult <- acceptErr
-			return
-		}
-		defer conn.Close()
-		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
-		defer tlsConn.Close()
-		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
-			acceptErr = writeFull(tlsConn, packet)
-		}
-		serverResult <- acceptErr
-	}()
+			const shareID = uint32(0x000103ea)
+			packet := mcsTestOrdersUpdatePacket(shareID, 1, test.order)
+			serverResult := make(chan error, 1)
+			go func() {
+				conn, acceptErr := listener.Accept()
+				if acceptErr != nil {
+					serverResult <- acceptErr
+					return
+				}
+				defer conn.Close()
+				tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+				defer tlsConn.Close()
+				if acceptErr = tlsConn.Handshake(); acceptErr == nil {
+					acceptErr = writeFull(tlsConn, packet)
+				}
+				serverResult <- acceptErr
+			}()
 
-	conn, err := net.Dial("tcp", listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
-	if err := tlsConn.Handshake(); err != nil {
-		t.Fatal(err)
-	}
-	session := &CredSSPClientSession{
-		transport:             &Transport{Conn: tlsConn},
-		connectionFinalized:   true,
-		capabilitiesExchanged: true,
-		mcsResponse:           MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
-		serverCapabilities:    RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
-	}
-	if update, readErr := session.ReadBitmapUpdate(context.Background(), time.Second); !errors.Is(readErr, ErrMCSConnection) || len(update.Rectangles) != 0 {
-		t.Fatalf("unnegotiated orders update = %+v, err=%v", update, readErr)
-	}
-	session.mu.Lock()
-	transportClosed := session.transport == nil
-	session.mu.Unlock()
-	if !transportClosed {
-		t.Fatal("unnegotiated primary order did not close the transport")
-	}
-	if serverErr := <-serverResult; serverErr != nil {
-		t.Fatal(serverErr)
+			conn, err := net.Dial("tcp", listener.Addr().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+			if err := tlsConn.Handshake(); err != nil {
+				t.Fatal(err)
+			}
+			session := &CredSSPClientSession{
+				transport:               &Transport{Conn: tlsConn},
+				connectionFinalized:     true,
+				capabilitiesExchanged:   true,
+				primaryOrdersEnabled:    test.primaryOrdersEnabled,
+				patBltOpaqueRectEnabled: test.patBltOpaqueRectEnabled,
+				dstBltEnabled:           test.dstBltEnabled,
+				mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+				serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
+			}
+			if update, readErr := session.ReadBitmapUpdate(context.Background(), time.Second); !errors.Is(readErr, ErrMCSConnection) || len(update.Rectangles) != 0 {
+				t.Fatalf("unnegotiated orders update = %+v, err=%v", update, readErr)
+			}
+			session.mu.Lock()
+			transportClosed := session.transport == nil
+			session.mu.Unlock()
+			if !transportClosed {
+				t.Fatal("unnegotiated primary order did not close the transport")
+			}
+			if serverErr := <-serverResult; serverErr != nil {
+				t.Fatal(serverErr)
+			}
+		})
 	}
 }
