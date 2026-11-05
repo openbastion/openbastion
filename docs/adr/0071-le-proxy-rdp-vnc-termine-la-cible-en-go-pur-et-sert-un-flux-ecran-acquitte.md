@@ -723,3 +723,26 @@ Validation de l’incrément 27 :
 - `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
 - `git diff --check` : PASS. `scripts/check-architecture-deps.sh` absent du dépôt.
 - Aucun test d’interopérabilité Windows/RDS réelle ni test E2E RDP avec Video Recorder. Runtime et route RDP désactivés.
+
+
+## 2026-11-04 — Incrément 28 : RDP Input PDU et multiplexage TLS lecture/écriture
+
+`pkg/rdp/mcs_input.go` construit des `TS_INPUT_PDU` slow-path dans un Share Data PDU (`PDUTYPE2_INPUT`, message type scancode `0x0004` et souris `0x8001`), encapsulé dans un MCS Send Data Request sur le canal I/O 1003 avec l’User Channel ID et le Share ID négociés. Le nombre d’événements par PDU est limité à 128 et le paquet reste soumis à la borne TPKT existante. Les scan codes Set-1 utilisent `KBDFLAGS_DOWN`/`KBDFLAGS_RELEASE` et le bit `KBDFLAGS_EXTENDED` pour les codes préfixés E0. Les événements souris prennent en charge le déplacement, les trois boutons primaires et la molette par incréments de 120 ; les flags et combinaisons invalides sont rejetés. Le masque ScreenStream/RFB (bit 0 gauche, bit 1 milieu, bit 2 droit) est remappé vers les flags RDP (BUTTON1 gauche, BUTTON3 milieu, BUTTON2 droit), sans inversion de la disposition physique. Les bits 3/4 du masque partagé sont aussi traduits en impulsions wheel-up/wheel-down lors de leur front montant, en complément du champ `Wheel` dédié.
+
+`CredSSPClientSession.SendInput` est disponible uniquement après Connection Finalization. Le verrou de lecture (`readMu`) et celui d’écriture (`writeMu`) sont indépendants : le lecteur de bitmap ne conserve plus le verrou d’état pendant un read TLS bloquant. Les deadlines sont directionnelles (`SetReadDeadline` et `SetWriteDeadline`) et l’annulation interrompt seulement l’opération correspondante. TLS autorise un lecteur et un écrivain concurrents ; les écritures multiples restent sérialisées. Toute erreur d’écriture, deadline ambiguë ou annulation pendant l’envoi ferme la session. `Close` peut interrompre la lecture sans attendre la fin d’un verrou tenu pendant le réseau.
+
+`RDPCodec.Input` traduit les événements ScreenStream vers ces primitives. Les keysyms seuls et les boutons souris étendus sont refusés plutôt que convertis de manière heuristique. Les touches maintenues et boutons actifs sont suivis par session ; `InputReleaseAll` et la fermeture émettent les relâchements correspondants avant la fermeture TLS, avec un timeout borné. Le contexte de vie du lecteur appartient explicitement à `ScreenSession.Close` et n’est pas annulé directement par le contexte d’admission parent : `relayScreen` appelle `Close` dans son defer, ce qui permet de transmettre les key-up/button-up même lorsque le parent vient d’être annulé, puis d’interrompre la lecture TLS. Si le contexte est déjà annulé à la fin de l’ouverture, le transport est fermé avant de retourner la session. L’état des touches/boutons n’est mis à jour qu’après l’envoi réussi du lot. Les entrées sont sérialisées dans l’adaptateur pour empêcher les courses entre l’opérateur et la fermeture.
+
+Tests : construction et décodage structurel des PDU clavier/souris ; drapeaux key-down/key-up et E0 ; limites d’événements et entrées malformées ; faux serveur TLS vérifiant qu’un `SendInput` peut s’exécuter pendant qu’un `ReadBitmapUpdate` est bloqué ; tests engine de traduction scancode, touches étendues, bouton, molette, rejet keysym-only et relâchement des touches/boutons à la fermeture.
+
+**Limites et décision de sécurité :** seules les entrées slow-path scan code et les trois boutons souris primaires sont supportés ; pas de keysyms/XKB vers scan codes, Unicode fast-path, souris étendue, joystick, synchronisation clavier/LED, ni événements de presse-papiers. Les bitmaps compressés et ordres graphiques restent absents. Aucun test Windows/RDS réel n’est revendiqué. Le codec n’est toujours pas sélectionné par le runtime et la route RDP reste désactivée jusqu’à validation d’interopérabilité et du flux E2E avec Video Recorder.
+
+Validation de l’incrément 28 :
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS, y compris lecture bitmap bloquée + écriture concurrente et fermeture qui interrompt la lecture TLS.
+- `make build vet test proto-lint` : PASS sur tous les modules Go, `go vet`, tests et Buf lint.
+- `FuzzMarshalRDPInput` : PASS, 62 618 exécutions en 5 s.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (284,562 s). Les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés ; le test Compose est ignoré sans `COMPOSE_TEST`.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis demeurent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E RDP avec Video Recorder. Runtime et route RDP restent désactivés.
