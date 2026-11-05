@@ -143,6 +143,8 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(bitmap[20:22]) != 0 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
 		t.Fatalf("client Bitmap capability = %x", bitmap)
 	}
+	// PatBlt and OpaqueRect share negotiation index 1; keep the whole
+	// orderSupport array empty until both orders are implemented.
 	if binary.LittleEndian.Uint16(caps[52:54]) != rdpCapOrder || binary.LittleEndian.Uint16(caps[54:56]) != 88 ||
 		binary.LittleEndian.Uint16(caps[82:84]) != 1 || binary.LittleEndian.Uint16(caps[86:88]) != 0x000a ||
 		!bytes.Equal(caps[88:120], make([]byte, 32)) ||

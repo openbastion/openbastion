@@ -857,3 +857,23 @@ Validation de l'incrément 33 :
 - Contre-épreuves : 3 mutations tuées sur 3 (acceptation de CS avec CLL=0, index chroma horizontal sans facteur 2, décodage RLE des chromas à la résolution pleine) ; fichiers restaurés et `cmp` PASS.
 - `.agents/settings/project.yaml` : parse YAML PASS ; `gofmt` et `git diff --check` : PASS.
 - Aucun test Compose local, aucune interopérabilité Windows/RDS réelle ni E2E avec Video Recorder. Le `bitmapCompressionFlag` reste à zéro, le runtime et la route RDP restent désactivés.
+
+## 2026-11-05 — Incrément 34 : premier ordre graphique RDP OpaqueRect
+
+Le parseur slow-path `TS_UPDATE_ORDERS` prend en charge un profil primaire volontairement étroit : `TS_ENC_OPAQUERECT_ORDER` (0x0A). Il exige `TS_STANDARD`, un changement explicite vers OpaqueRect lorsque le type courant ne l'est pas, un unique octet `fieldFlags=0x7f` (les sept champs explicites), des coordonnées absolues signées 16 bits, une largeur et une hauteur strictement positives, et un rectangle entièrement inclus dans le bureau. Le triplet RGB est converti en pixels RGBA opaques et renvoyé sous forme de `RDPBitmapRectangle`, directement consommable par le framebuffer existant.
+
+Le type d'ordre primaire courant est conservé entre les mises à jour TLS successives et n'est validé/commis qu'après le décodage complet de la mise à jour. Les comptes d'ordres sont bornés à 1 024 ; l'aire cumulée des rectangles ne dépasse pas `maxRDPDesktopArea`. Les PDU secondaires/alternatifs, autres types d'ordre, coordonnées delta, clipping bounds, champs omis, flux tronqués, comptes nuls/excessifs et octets résiduels sont refusés. Une mise à jour malformée ne retourne aucun rectangle et ne modifie pas l'état d'ordre. Le lecteur de session refuse également tout `TS_UPDATE_ORDERS` tant que le slot de capacité partagé n'a pas été négocié ; ce garde reste fermé dans le profil actuel.
+
+**Ce que cela ne fait PAS :** aucun `PatBlt`, aucun autre ordre primaire, secondaire ou alternatif, aucun bounds/delta, aucun `TS_FP_UPDATE_ORDERS`, aucun état de champ omis. L'index de négociation `TS_NEG_PATBLT_INDEX` (0x01) représente à la fois PatBlt et OpaqueRect ; il reste donc entièrement à zéro dans Confirm Active. Ce parseur ne rend pas les ordres disponibles aux serveurs et ne justifie aucune activation du codec/runtime RDP. Les événements Fast-Path autres que Bitmap Update restent hors périmètre.
+
+Tests : décodage de plusieurs OpaqueRect dans une mise à jour ; persistance du type entre deux PDU TLS ; rendu PNG via `RDPFramebuffer` ; rejet sur TLS des ordres non négociés ; rejets des drapeaux, ordres, champs, dimensions et données invalides ; fuzz du parseur ; état inchangé après erreur.
+
+Références normatives : [MS-RDPBCGR §2.2.9.1.1.3.1 — Slow-Path Graphics Update](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/bd3c4df4-87b9-43dd-88cb-ce5b24698e19), [MS-RDPEGDI §2.2.2.1 — Orders Update](https://learn.microsoft.com/mt-mt/openspecs/windows_protocols/ms-rdpegdi/ef7c27f5-0977-46fe-a50e-f9a51d6ab90b), [MS-RDPEGDI §2.2.2.2.1.1.2 — Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272) et [MS-RDPEGDI — PatBlt et slot de négociation partagé](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/bd4bf5e7-b988-45f9-8201-3b22cc9aeeb8).
+
+Validation de l'incrément 34 :
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 174 résultats `--- PASS` mesurés.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `FuzzParseRDPOrdersUpdate` : PASS, 48 233 exécutions en 5 s.
+- Contre-épreuves : 6 mutations compilantes tuées sur 6 (bornes bureau, drapeaux de contrôle, masque des champs, type initial, persistance du type entre PDU, garde de négociation) ; restauration et `cmp` PASS pour chaque fichier.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.

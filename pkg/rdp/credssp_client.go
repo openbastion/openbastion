@@ -47,6 +47,8 @@ type CredSSPClientSession struct {
 	capabilitiesExchanged bool
 	connectionFinalized   bool
 	serverCapabilities    RDPServerCapabilities
+	primaryOrdersEnabled  bool
+	primaryOrderState     rdpPrimaryOrderState
 }
 
 func (s *CredSSPClientSession) Close() {
