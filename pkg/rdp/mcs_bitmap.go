@@ -198,10 +198,11 @@ func decodeRDPBitmapRaw(src []byte, width, height int) []byte {
 	return dst
 }
 
-// decodeRDP6BitmapWithHeader validates TS_CD_HEADER and decodes the bounded
-// RDP 6.0 ARGB and AYCoCg profiles without chroma subsampling. Planes may be
-// raw or independently scan-line RLE encoded. Plane bytes are ordered A
-// (optional), R/Y, G/Co, B/Cg in bottom-up row order; output is top-down RGBA.
+// decodeRDP6BitmapWithHeader validates TS_CD_HEADER and decodes bounded RDP 6.0
+// ARGB and AYCoCg profiles. AYCoCg chroma planes may be half-resolution in both
+// dimensions. Planes may be raw or independently scan-line RLE encoded. Plane
+// bytes are ordered A (optional), R/Y, G/Co, B/Cg in bottom-up row order;
+// output is top-down RGBA.
 const (
 	rdp6FormatChromaSubsampling = byte(0x10)
 	rdp6FormatRLE               = byte(0x08)
@@ -224,10 +225,11 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 	}
 	stream := data[8:]
 	format := stream[0]
-	// CLL selects ARGB (zero) or AYCoCg (1..7). Chroma subsampling remains
-	// unsupported in this increment; reserved bits must always be zero.
+	// CLL selects ARGB (zero) or AYCoCg (1..7). Chroma subsampling is
+	// defined only for AYCoCg; reserved bits must always be zero.
 	colorLossLevel := int(format >> 5)
-	if format&(rdp6FormatChromaSubsampling|rdp6FormatReservedMask) != 0 {
+	chromaSubsampling := format&rdp6FormatChromaSubsampling != 0
+	if format&rdp6FormatReservedMask != 0 || (chromaSubsampling && colorLossLevel == 0) {
 		return nil, ErrMCSConnection
 	}
 	noAlpha := format&rdp6FormatNoAlpha != 0
@@ -236,23 +238,29 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 	if noAlpha {
 		planeCount = 3
 	}
-	planeBytes := int(pixels)
-	planes := make([][]byte, planeCount)
+	fullPlaneBytes := int(pixels)
+	chromaWidth, chromaHeight := (width+1)/2, (height+1)/2
+	plans := make([][]byte, planeCount)
 	offset := 1
-	for i := range planes {
+	for i := range plans {
+		planeWidth, planeHeight := width, height
+		if chromaSubsampling && i >= planeCount-2 {
+			planeWidth, planeHeight = chromaWidth, chromaHeight
+		}
+		planeBytes := planeWidth * planeHeight
 		if rle {
-			decoded, consumed, err := decodeRDP6RLEPlane(stream[offset:], width, height)
+			decoded, consumed, err := decodeRDP6RLEPlane(stream[offset:], planeWidth, planeHeight)
 			if err != nil || consumed <= 0 || consumed > len(stream)-offset {
 				return nil, ErrMCSConnection
 			}
-			planes[i] = decoded
+			plans[i] = decoded
 			offset += consumed
 			continue
 		}
 		if planeBytes > len(stream)-offset {
 			return nil, ErrMCSConnection
 		}
-		planes[i] = stream[offset : offset+planeBytes]
+		plans[i] = stream[offset : offset+planeBytes]
 		offset += planeBytes
 	}
 	// The uncompressed stream optionally carries one ignored alignment byte.
@@ -262,17 +270,21 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 		return nil, ErrMCSConnection
 	}
 	decoded := make([]byte, int(decodedBytes))
-	for i := 0; i < planeBytes; i++ {
+	for i := 0; i < fullPlaneBytes; i++ {
 		wireY := i / width
 		dst := ((height-1-wireY)*width + i%width) * 4
 		plane := 0
 		if !noAlpha {
-			decoded[dst+3] = planes[0][i]
+			decoded[dst+3] = plans[0][i]
 			plane = 1
 		} else {
 			decoded[dst+3] = 0xff
 		}
-		first, second, third := planes[plane][i], planes[plane+1][i], planes[plane+2][i]
+		chromaIndex := i
+		if chromaSubsampling {
+			chromaIndex = (wireY/2)*chromaWidth + (i%width)/2
+		}
+		first, second, third := plans[plane][i], plans[plane+1][chromaIndex], plans[plane+2][chromaIndex]
 		if colorLossLevel == 0 {
 			decoded[dst], decoded[dst+1], decoded[dst+2] = first, second, third
 			continue
@@ -317,7 +329,7 @@ func clampRDP6Channel(value int) byte {
 	return byte(value)
 }
 
-// decodeRDP6RLEPlane decodes one independently encoded ARGB color plane.
+// decodeRDP6RLEPlane decodes one independently encoded RDP6 color plane.
 // Each scanline is a sequence of RAW/RUN segments. Rows after the first contain
 // zig-zag encoded deltas from the preceding decoded row, with byte arithmetic.
 // The returned consumed count lets the caller locate the next plane safely.
@@ -392,7 +404,7 @@ func decodeRDP6RLEPlane(src []byte, width, height int) ([]byte, int, error) {
 
 // parseRDPBitmapUpdate validates and decodes one unsegmented MCS bitmap PDU.
 // The 32-bpp compressed path supports bounded RDP 6.0 ARGB and AYCoCg planes
-// in raw or scan-line RLE form. Chroma subsampling remains unsupported.
+// in raw or scan-line RLE form, including AYCoCg chroma subsampling.
 // Network callers use the reassembling ReadBitmapUpdate path below.
 func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
 	userData, segmentation, err := parseRDPBitmapMCSFragment(packet, expectedChannelID)
