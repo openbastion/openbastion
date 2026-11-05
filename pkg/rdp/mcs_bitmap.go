@@ -20,6 +20,7 @@ const (
 	rdpOrderMultiPatBlt     = byte(0x10)
 	rdpOrderMultiScrBlt     = byte(0x11)
 	rdpOrderLineTo          = byte(0x09)
+	rdpOrderPolyline        = byte(0x16)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
@@ -40,6 +41,8 @@ const (
 	maxRDPMultiDstBltRects  = 45
 	maxRDPMultiDstBltBytes  = 395
 	maxRDPLinePixels        = 32_768
+	maxRDPPolylinePoints    = 34
+	maxRDPPolylineBytes     = 147
 	rdpBitmapCompressed     = uint16(0x0001)
 	rdpBitmapNoCompHdr      = uint16(0x0400)
 	maxRDPBitmapRects       = 64
@@ -127,6 +130,7 @@ type rdpPrimaryOrderState struct {
 	multiPatBltUsed      bool
 	multiScrBltUsed      bool
 	lineToUsed           bool
+	polylineUsed         bool
 	multiOpaqueRectUsed  bool
 }
 
@@ -254,6 +258,55 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
 			operation = rdpBitmapRectangleScrCopy
 			data = data[13:]
+		case rdpOrderPolyline:
+			// Strict seven-field profile: absolute start point, R2_COPYPEN,
+			// uncached solid brush, RGB pen color and bounded delta points.
+			if len(data) < 13 || data[0] != 0x7f {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			if data[4] != 0x0d || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
+				startX < 0 || startY < 0 || startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			lineColor = [4]byte{data[7], data[8], data[9], 0xff}
+			deltaEntries := int(data[10])
+			encodedLength := int(data[11])
+			if deltaEntries < 1 || deltaEntries > maxRDPPolylinePoints || encodedLength == 0 ||
+				encodedLength > maxRDPPolylineBytes || encodedLength != len(data)-12 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			points, decodeErr := decodeRDPPolylinePoints(data[12:], deltaEntries, startX, startY, desktopWidth, desktopHeight)
+			if decodeErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[12+encodedLength:]
+			previousX, previousY := startX, startY
+			segmentsAdded := 0
+			for _, point := range points {
+				currentX, currentY := int32(point[0]), int32(point[1])
+				if currentX == previousX && currentY == previousY {
+					continue
+				}
+				segment, segmentErr := rasterizeRDPLine(previousX, previousY, currentX, currentY, desktopWidth, desktopHeight)
+				if segmentErr != nil || len(result.Rectangles) >= maxRDPBitmapRects ||
+					uint64(len(segment)) > maxRDPDesktopArea-totalPixels {
+					return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+				}
+				first := segment[0]
+				result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: first[0], Y: first[1], Width: 1, Height: 1,
+					operation: rdpBitmapRectangleLine, linePoints: segment, lineColor: lineColor})
+				totalPixels += uint64(len(segment))
+				segmentsAdded++
+				previousX, previousY = currentX, currentY
+			}
+			if segmentsAdded == 0 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			state.polylineUsed = true
+			continue
 		case rdpOrderLineTo:
 			// Strict ten-field profile: transparent background, absolute
 			// endpoints, R2_COPYPEN and a one-pixel solid pen.
@@ -504,6 +557,54 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 // first rectangle is relative to (0,0,0,0). Only left and top accumulate across
 // rectangles; width and height are values or repeat the previous dimension when
 // their zero bit is set.
+func decodeRDPPolylinePoints(encoded []byte, count int, startX, startY int32, desktopWidth, desktopHeight uint16) ([][2]uint16, error) {
+	if count < 1 || count > maxRDPPolylinePoints || len(encoded) == 0 || len(encoded) > maxRDPPolylineBytes {
+		return nil, ErrMCSConnection
+	}
+	zeroBytes := (count + 3) / 4
+	if len(encoded) < zeroBytes {
+		return nil, ErrMCSConnection
+	}
+	zeroBits := encoded[:zeroBytes]
+	if count%4 != 0 {
+		unusedBits := 8 - (count%4)*2
+		if zeroBits[zeroBytes-1]&byte((1<<unusedBits)-1) != 0 {
+			return nil, ErrMCSConnection
+		}
+	}
+	data := encoded[zeroBytes:]
+	points := make([][2]uint16, 0, count)
+	x, y := startX, startY
+	for i := 0; i < count; i++ {
+		shift := uint(7 - (i%4)*2)
+		maskX, maskY := byte(1<<shift), byte(1<<(shift-1))
+		if zeroBits[i/4]&maskX == 0 {
+			delta, remaining, err := readRDPPackedSignedDelta(data)
+			if err != nil {
+				return nil, ErrMCSConnection
+			}
+			x += delta
+			data = remaining
+		}
+		if zeroBits[i/4]&maskY == 0 {
+			delta, remaining, err := readRDPPackedSignedDelta(data)
+			if err != nil {
+				return nil, ErrMCSConnection
+			}
+			y += delta
+			data = remaining
+		}
+		if x < 0 || y < 0 || x >= int32(desktopWidth) || y >= int32(desktopHeight) {
+			return nil, ErrMCSConnection
+		}
+		points = append(points, [2]uint16{uint16(x), uint16(y)})
+	}
+	if len(data) != 0 {
+		return nil, ErrMCSConnection
+	}
+	return points, nil
+}
+
 func rasterizeRDPLine(startX, startY, endX, endY int32, desktopWidth, desktopHeight uint16) ([][2]uint16, error) {
 	if startX < 0 || startY < 0 || endX < 0 || endY < 0 || startX >= int32(desktopWidth) || endX >= int32(desktopWidth) ||
 		startY >= int32(desktopHeight) || endY >= int32(desktopHeight) {
@@ -1026,6 +1127,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	multiPatBltEnabled := s.multiPatBltEnabled
 	multiScrBltEnabled := s.multiScrBltEnabled
 	lineToEnabled := s.lineToEnabled
+	polylineEnabled := s.polylineEnabled
 	multiOpaqueRectEnabled := s.multiOpaqueRectEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
@@ -1129,6 +1231,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		nextOrderState.multiPatBltUsed && !multiPatBltEnabled ||
 		nextOrderState.multiScrBltUsed && !multiScrBltEnabled ||
 		nextOrderState.lineToUsed && !lineToEnabled ||
+		nextOrderState.polylineUsed && !polylineEnabled ||
 		nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

@@ -93,6 +93,113 @@ func TestRasterizeRDPLineBoundedBresenham(t *testing.T) {
 	}
 }
 
+func TestDecodeRDPPolylinePoints(t *testing.T) {
+	got, err := decodeRDPPolylinePoints([]byte{0x00, 2, 1, 2, 1}, 2, 1, 1, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][2]uint16{{3, 2}, {5, 3}}
+	if len(got) != len(want) {
+		t.Fatalf("points = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("point %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestDecodeRDPPolylinePointsZeroDeltaBits(t *testing.T) {
+	got, err := decodeRDPPolylinePoints([]byte{0xd0, 1}, 2, 1, 1, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][2]uint16{{1, 1}, {2, 1}}
+	if len(got) != len(want) {
+		t.Fatalf("points = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("point %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseRDPOrdersUpdateDecodesPolyline(t *testing.T) {
+	order := mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{0x12, 0x34, 0x56}, 2, []byte{0x00, 2, 1, 2, 1})
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.polylineUsed || state.orderType != rdpOrderPolyline || len(got.Rectangles) != 2 {
+		t.Fatalf("Polyline update = %+v, state=%+v", got, state)
+	}
+	want := [][][2]uint16{{{1, 1}, {2, 1}}, {{3, 2}, {4, 2}}}
+	for i, segment := range got.Rectangles {
+		if segment.operation != rdpBitmapRectangleLine || segment.lineColor != [4]byte{0x12, 0x34, 0x56, 0xff} || len(segment.linePoints) != len(want[i]) {
+			t.Fatalf("segment %d = %+v", i, segment)
+		}
+		for j, point := range segment.linePoints {
+			if point != want[i][j] {
+				t.Fatalf("segment %d point %d = %v, want %v", i, j, point, want[i][j])
+			}
+		}
+	}
+}
+
+func mcsTestPolylineOrder(controlFlags byte, typeChange bool, startX, startY int16, rop2 byte, brushCache uint16, penColor [3]byte, count byte, codedPoints []byte) []byte {
+	out := []byte{controlFlags}
+	if typeChange {
+		out = append(out, rdpOrderPolyline)
+	}
+	out = append(out, 0x7f) // All seven fields present in one field-flag byte.
+	for _, value := range []int16{startX, startY} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	out = append(out, rop2)
+	var cache [2]byte
+	binary.LittleEndian.PutUint16(cache[:], brushCache)
+	out = append(out, cache[:]...)
+	out = append(out, penColor[:]...)
+	out = append(out, count, byte(len(codedPoints)))
+	return append(out, codedPoints...)
+}
+
+func mcsTestPolylineDeltaPoints(count int, deltaX, deltaY byte) []byte {
+	zeroBytes := (count + 3) / 4
+	out := make([]byte, zeroBytes)
+	for i := 0; i < count; i++ {
+		out = append(out, deltaX, deltaY)
+	}
+	return out
+}
+
+func TestParseRDPOrdersUpdateRejectsMalformedPolyline(t *testing.T) {
+	valid := mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 2, []byte{0x00, 1, 1, 1, 1})
+	cases := map[string][]byte{
+		"wrong field mask":      func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
+		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[3+4] = 0x0c; return out }(),
+		"nonzero brush cache":   func() []byte { out := append([]byte(nil), valid...); out[4+5] = 1; return out }(),
+		"zero entries":          mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 0, nil),
+		"too many entries":      mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{1, 2, 3}, 35, mcsTestPolylineDeltaPoints(35, 1, 0)),
+		"truncated points":      valid[:len(valid)-1],
+		"trailing bytes":        append(append([]byte(nil), valid...), 0),
+		"unused zero bits":      mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 1, []byte{0x01}),
+		"negative point":        mcsTestPolylineOrder(0x09, true, 0, 1, 0x0d, 0, [3]byte{1, 2, 3}, 1, []byte{0x00, 0x7f, 0}),
+		"point outside desktop": mcsTestPolylineOrder(0x09, true, 63, 1, 0x0d, 0, [3]byte{1, 2, 3}, 1, []byte{0x00, 1, 0}),
+		"delta coordinates":     mcsTestPolylineOrder(0x19, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 2, []byte{0x00, 1, 1, 1, 1}),
+	}
+	for name, order := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 64, 64, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
 func TestParseRDPOrdersUpdateDecodesLineTo(t *testing.T) {
 	order := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x12, 0x34, 0x56)
 	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
@@ -912,6 +1019,7 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiPatBltOrder(0x09, true, 0, 0, 1, 1, rdpPatBltPatCopy, [3]byte{}, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiScrBltOrder(0x09, true, 0, 0, 1, 1, rdpScrBltSrcCopy, 0, 0, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 0, 0, 3, 2, 0x11, 0x22, 0x33), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -944,6 +1052,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	seventh := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestMultiPatBltOrder(0x09, true, 6, 0, 1, 1, rdpPatBltPatCopy, [3]byte{}, [3]byte{0x44, 0x55, 0x66}, 1, []byte{0x00, 1, 0, 1, 1}))
 	eighth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestMultiScrBltOrder(0x09, true, 1, 1, 1, 1, rdpScrBltSrcCopy, 0, 0, 1, []byte{0x00, 1, 1, 1, 1}))
 	ninth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x12, 0x34, 0x56))
+	tenth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{0x21, 0x43, 0x65}, 1, []byte{0x00, 1, 1}))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -981,6 +1090,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, ninth)
 		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, tenth)
+		}
 		serverResult <- acceptErr
 	}()
 
@@ -1005,6 +1117,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		multiPatBltEnabled:      true, // MultiPatBlt has its own independent negotiation index 16.
 		multiScrBltEnabled:      true, // MultiScrBlt has its own independent negotiation index 17.
 		lineToEnabled:           true, // LineTo has its own independent negotiation index 8.
+		polylineEnabled:         true, // Polyline has its own independent negotiation index 22.
 		mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 		serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 	}
@@ -1041,6 +1154,11 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	if readErr != nil || len(lineUpdate.Rectangles) != 1 || !session.primaryOrderState.lineToUsed ||
 		lineUpdate.Rectangles[0].operation != rdpBitmapRectangleLine {
 		t.Fatalf("ReadBitmapUpdate LineTo = %+v, state=%+v, err=%v", lineUpdate, session.primaryOrderState, readErr)
+	}
+	polylineUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(polylineUpdate.Rectangles) != 1 || !session.primaryOrderState.polylineUsed ||
+		polylineUpdate.Rectangles[0].operation != rdpBitmapRectangleLine {
+		t.Fatalf("ReadBitmapUpdate Polyline = %+v, state=%+v, err=%v", polylineUpdate, session.primaryOrderState, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
@@ -1323,6 +1441,42 @@ func TestRDPFramebufferAppliesMultiOpaqueRect(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferAppliesPolyline(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{0x12, 0x34, 0x56}, 2, []byte{0x00, 2, 1, 2, 1})
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.polylineUsed || len(update.Rectangles) != 2 {
+		t.Fatalf("Polyline update = %+v, state=%+v", update, state)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(60, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	painted := map[[2]int]bool{{1, 1}: true, {2, 1}: true, {3, 2}: true, {4, 2}: true}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			if painted[[2]int{x, y}] {
+				if got != (color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}) {
+					t.Fatalf("polyline pixel (%d,%d) = %#v", x, y, got)
+				}
+			} else if got != (color.RGBA{A: 0xff}) {
+				t.Fatalf("unpainted pixel (%d,%d) = %#v", x, y, got)
+			}
+		}
+	}
+}
+
 func TestRDPFramebufferAppliesLineTo(t *testing.T) {
 	framebuffer, err := NewRDPFramebuffer(8, 8)
 	if err != nil {
@@ -1580,6 +1734,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		multiPatBltEnabled      bool
 		multiScrBltEnabled      bool
 		lineToEnabled           bool
+		polylineEnabled         bool
 	}{
 		{
 			name:                 "all primary orders disabled",
@@ -1624,6 +1779,11 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		{
 			name:                 "LineTo negotiation index disabled",
 			order:                mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 1, 2, 3),
+			primaryOrdersEnabled: true,
+		},
+		{
+			name:                 "Polyline negotiation index disabled",
+			order:                mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 1, []byte{0x00, 1, 1}),
 			primaryOrdersEnabled: true,
 		},
 	}
@@ -1675,6 +1835,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 				multiPatBltEnabled:      test.multiPatBltEnabled,
 				multiScrBltEnabled:      test.multiScrBltEnabled,
 				lineToEnabled:           test.lineToEnabled,
+				polylineEnabled:         test.polylineEnabled,
 				mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 				serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 			}

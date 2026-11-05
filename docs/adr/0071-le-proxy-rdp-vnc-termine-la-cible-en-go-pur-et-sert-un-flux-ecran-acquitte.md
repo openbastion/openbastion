@@ -1120,3 +1120,23 @@ Validation de l’incrément 46 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 112 213 exécutions en 5 s (4 workers).
 - Contre-épreuves : 11 mutations compilantes tuées sur 11 (masque, BackMode, ROP2, style/largeur de plume, BackColor, bornes, Bresenham, état, garde index 8 et rendu framebuffer) ; sources restaurées octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index LineTo 8 reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 47 : Polyline
+
+Le parseur slow-path accepte Polyline (orderType=0x16) avec les sept champs explicites (fieldFlags=0x7f) : point de départ absolu, R2_COPYPEN (0x0d), entrée de cache de brosse nulle, couleur de plume RGB, nombre de points et CodedDeltaList (VARIABLE1_FIELD). Le décodeur applique DELTA_PTS_FIELD : deux zero-bits par point, deltas X/Y signés empaquetés, première paire relative au point de départ, puis accumulation relative au point précédent. Le profil borne le champ CodedDeltaList à 148 octets au total (octet cbData inclus), soit 147 octets de données au maximum, et à 34 points ; cette limite locale reste sous le maximum normatif de 148 octets. Chaque segment est rasterisé en Bresenham GDI (départ inclus, endpoint exclu), et les opérations sont conservées dans l'ordre du flux framebuffer.
+
+L'ordre suit son état de négociation indépendant, index 22 ; ReadBitmapUpdate refuse le flux si cette capacité n'est pas explicitement activée. Le profil refuse les champs omis, les coordonnées delta, les ROP2 autres que R2_COPYPEN, les entrées de cache de brosse non nulles, les points hors bureau, les zero-bits inutilisés non nuls, les longueurs résiduelles et les polylignes dégénérées sans segment. Confirm Active n'annonce toujours aucun ordre graphique ; runtime et route RDP restent désactivés.
+
+Tests : décodage et accumulation de trois sommets, plusieurs segments et couleur RGB, rasterisation PNG avec pixels hors tracé inchangés, limites de 34 points/148 octets, zero-bits et deltas négatifs, rejet des champs/ROP/cache/liste invalides, refus TLS sans négociation index 22, acceptation TLS avec négociation simulée et seed de fuzz.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.18 — Polyline](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/b60b4d9b-aac5-4b98-84d3-edc0c0779a5c), [Delta-Encoded Points](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/6c7b2a52-103c-4a7d-a2a9-997416d4a475) et [One-Byte Header Variable Field](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/008cb233-8ae9-4e05-ad03-83f284f20a61).
+
+Validation de l'incrément 47 :
+- Test rouge sur le commit précédent `a257183` : un test temporaire exigeant le décodage de Polyline échoue avec `ErrMCSConnection` ; le même profil est accepté par le nouveau parseur.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 226 tests principaux `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 60 208 exécutions en 5 s (4 workers).
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (bits de zéro, plafond de points, whitelist ROP2, cache de brosse, masque de champs, garde de négociation et couleur de plume) ; le fichier source est restauré octet pour octet après chaque mutation.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index Polyline 22 reste non annoncé, runtime/route RDP désactivés.

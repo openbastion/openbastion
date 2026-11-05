@@ -2458,3 +2458,17 @@ Validation de l’incrément 46 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 112 213 exécutions en 5 s (4 workers).
 - Contre-épreuves : 11 mutations compilantes tuées sur 11 (masque, BackMode, ROP2, style/largeur de plume, BackColor, bornes, Bresenham, état, garde index 8 et rendu framebuffer) ; sources restaurées octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index LineTo 8 reste non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 47 — Polyline
+
+Polyline (orderType=0x16) accepte sept champs explicites, R2_COPYPEN et une entrée de cache de brosse nulle. DELTA_PTS_FIELD décode deux deltas signés par point depuis l'ancre précédente. Profil borné à 34 points et 148 octets au total pour CodedDeltaList (octet cbData inclus, 147 octets de données maximum), rasterisation Bresenham GDI avec endpoint exclu. L'index de négociation 22 est vérifié indépendamment et n'est pas annoncé. Runtime/route RDP désactivés ; aucune interopérabilité Windows/RDS réelle revendiquée.
+
+Validation de l'incrément 47 :
+- Test rouge sur `a257183` : le profil Polyline est refusé (`ErrMCSConnection`), puis accepté après implémentation.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 226 tests principaux `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 60 208 exécutions en 5 s (4 workers).
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (bits de zéro, plafond de points, ROP2, cache, field mask, négociation et couleur de plume).
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; index 22 non annoncé, runtime/route RDP désactivés.
