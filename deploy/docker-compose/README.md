@@ -13,7 +13,7 @@ deploy/docker-compose/init.sh          # once: draws the secrets into deploy/doc
 docker compose -f deploy/docker-compose/docker-compose.yml up -d --build --wait
 ```
 
-Compose builds the shared Go runtime image once (on `authentication`) and the tools image once (on `pki`); every other service reuses those images. This avoids repeating the multi-module build for each service.
+Compose builds the shared Go runtime image once (on `authentication`), the tools image once (on `pki`) and a hardened PostgreSQL 16 image. The PostgreSQL image starts from a pinned upstream multi-architecture digest and applies available Debian security updates during the build; the `postgres` and optional `video-recorder-db-init` services reuse it.
 
 `init.sh` refuses to overwrite an existing `.env`: its keys are what makes the audit chain,
 the vault and the recordings readable. **Keep a copy of it outside the host, never in git.**

@@ -101,16 +101,6 @@ jobs:
     name: PostgreSQL 16 — unit, dedicated, integration
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    services:
-      postgres:
-        image: postgres@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c # postgres:16
-        env:
-          POSTGRES_USER: openbastion
-          POSTGRES_PASSWORD: openbastion # a throwaway database of the job, never a real secret
-          POSTGRES_DB: openbastion
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U openbastion" --health-interval 2s --health-timeout 5s --health-retries 30
     env:
       TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
       PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials RESTART IDENTITY CASCADE;
@@ -122,6 +112,22 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: "**/go.sum"
+      # Use the same patched, digest-pinned PostgreSQL image as the Compose deployment.
+      - name: Start hardened PostgreSQL 16
+        run: |
+          docker build -f deploy/docker-compose/postgres/Dockerfile -t openbastion-postgres:ci .
+          docker run -d --name openbastion-postgres -e POSTGRES_USER=openbastion \
+            -e POSTGRES_PASSWORD=openbastion -e POSTGRES_DB=openbastion \
+            -p 127.0.0.1:5432:5432 --health-cmd='pg_isready -U openbastion' \
+            --health-interval=2s --health-timeout=5s --health-retries=30 openbastion-postgres:ci
+          for attempt in $(seq 1 60); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' openbastion-postgres)
+            [ "$status" = healthy ] && exit 0
+            [ "$status" = unhealthy ] && { docker logs openbastion-postgres; exit 1; }
+            sleep 2
+          done
+          docker logs openbastion-postgres
+          exit 1
       - name: psql
         run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
       - run: make proto-tools build
@@ -190,7 +196,7 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/trivy.tgz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tgz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
-      # The OpenBastion image (runtime target) and postgres:16 as pinned: HIGH or CRITICAL with a fix
+      # The OpenBastion runtime and patched, digest-pinned PostgreSQL 16 images: HIGH or CRITICAL with a fix
       # fails, except what .trivyignore.yaml accepts, by path, until its date.
       # On a release tag the image is stamped with the release itself; otherwise VERSION+<commit>.
       - run: make scan-images TRIVY="$RUNNER_TEMP/trivy" ${{ github.ref_type == 'tag' && 'BUILD_VERSION=$(cat VERSION)' || '' }}

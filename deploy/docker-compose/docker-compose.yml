@@ -42,7 +42,10 @@ services:
     network_mode: none
 
   postgres:
-    image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
+    image: openbastion-postgres:16
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/postgres/Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_USER: openbastion
@@ -162,7 +165,7 @@ services:
 
   video-recorder-db-init:
     profiles: [recording]
-    image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
+    image: openbastion-postgres:16
     restart: "no"
     entrypoint: ["/bin/sh", "/deploy/video-recorder-db-init.sh"]
     read_only: true

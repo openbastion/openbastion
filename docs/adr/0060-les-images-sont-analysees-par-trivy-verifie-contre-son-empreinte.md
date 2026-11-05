@@ -24,3 +24,14 @@ ADR-0052 cherche les vulnérabilités du code Go et des paquets npm, mais pas ce
 - **Grype** : comparable ; Trivy lit aussi les binaires Go, ce qui a trouvé `gosu`.
 - **Analyser sans faire échouer** (rapport seulement) : une porte qui ne ferme jamais n'est pas lue.
 - **Passer à `postgres:16-alpine`** (pas de `gosu`, `su-exec` en C) : un changement de l'image de déploiement et de ses tests, pour un risque jugé faible ; à rouvrir si les constats de `gosu` durent après janvier 2027.
+
+
+## Mise à jour — 5 novembre 2026 : PostgreSQL corrigé sans exception Trivy
+
+Le scan de la CI a détecté `CVE-2026-109518` (HIGH) dans `apt` et `libapt-pkg7.0` de l'image amont PostgreSQL 16 épinglée (Debian 13.7, version 3.0.3 ; correctif 3.0.4). L'image amont `postgres:16` la plus récente disponible à cette date embarquait encore les paquets vulnérables. Le même avis touchait aussi la variante Bookworm (2.6.1, correctif 2.6.2).
+
+Décision : conserver PostgreSQL 16 et l'épinglage d'un digest multi-architecture (`postgres:16-bookworm`), mais construire une image dérivée dédiée (`deploy/docker-compose/postgres/Dockerfile`) qui applique uniquement les mises à jour Debian signées disponibles pour `apt` et `libapt-pkg6.0`, puis supprime les index APT. La construction échoue si la mise à jour ne peut pas être obtenue. Le scan Trivy reste strict ; aucune exception n'est ajoutée pour cette CVE. Le service Compose principal et le job `video-recorder-db-init` réutilisent cette image. Le stack Base44 utilise le même Dockerfile.
+
+La CI PostgreSQL construit et démarre cette image durcie elle-même (avec healthcheck), au lieu de s'appuyer sur un service image non patché. `make scan-postgres-image` permet de vérifier isolément cette image ; `make scan-images` conserve les deux scans, OpenBastion runtime et PostgreSQL.
+
+Mesure locale avec Trivy 0.76.1 : image PostgreSQL dérivée, **0 HIGH / 0 CRITICAL** ; `apt` et `libapt-pkg6.0` sont en version 2.6.2. Les 26 anciennes exceptions `gosu` sont également retirées : le scan de l'image dérivée ne signale plus de vulnérabilité dans ce binaire. `.trivyignore.yaml` ne contient donc plus aucune vulnérabilité acceptée. Le correctif ne change ni la version majeure PostgreSQL ni le volume de données.
