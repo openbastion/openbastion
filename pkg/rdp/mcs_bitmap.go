@@ -7,33 +7,37 @@ import (
 )
 
 const (
-	rdpPDU2Update          = byte(2)
-	rdpUpdateOrders        = uint16(0)
-	rdpUpdateBitmap        = uint16(1)
-	rdpOrderStandard       = byte(0x01)
-	rdpOrderTypeChange     = byte(0x08)
-	rdpOrderOpaqueRect     = byte(0x0a)
-	rdpOrderDstBlt         = byte(0x00)
-	rdpOrderPatBlt         = byte(0x01)
-	rdpOrderScrBlt         = byte(0x02)
-	rdpOpaqueRectFieldMask = byte(0x7f)     // Four coordinates plus three RGB bytes.
-	rdpPatBltFieldMask     = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
-	rdpPatBltPatCopy       = byte(0xf0)
-	rdpPatBltPatInvert     = byte(0x5a)
-	rdpPatBltPatAnd        = byte(0xa0)
-	rdpPatBltPatOr         = byte(0xfa)
-	rdpPatBltNotPatCopy    = byte(0x0f)
-	rdpScrBltFieldMask     = byte(0x7f) // Four destination coordinates, ROP, and two source coordinates.
-	rdpScrBltSrcCopy       = byte(0xcc)
-	rdpPatBltSolidBrush    = byte(0x00)
-	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
-	rdpDstBltBlackness     = byte(0x00)
-	rdpDstBltWhiteness     = byte(0xff)
-	rdpDstBltInvert        = byte(0x55)
-	maxRDPPrimaryOrders    = 1024
-	rdpBitmapCompressed    = uint16(0x0001)
-	rdpBitmapNoCompHdr     = uint16(0x0400)
-	maxRDPBitmapRects      = 64
+	rdpPDU2Update           = byte(2)
+	rdpUpdateOrders         = uint16(0)
+	rdpUpdateBitmap         = uint16(1)
+	rdpOrderStandard        = byte(0x01)
+	rdpOrderTypeChange      = byte(0x08)
+	rdpOrderOpaqueRect      = byte(0x0a)
+	rdpOrderDstBlt          = byte(0x00)
+	rdpOrderPatBlt          = byte(0x01)
+	rdpOrderScrBlt          = byte(0x02)
+	rdpOrderMultiDstBlt     = byte(0x0f)
+	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
+	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
+	rdpPatBltPatCopy        = byte(0xf0)
+	rdpPatBltPatInvert      = byte(0x5a)
+	rdpPatBltPatAnd         = byte(0xa0)
+	rdpPatBltPatOr          = byte(0xfa)
+	rdpPatBltNotPatCopy     = byte(0x0f)
+	rdpScrBltFieldMask      = byte(0x7f) // Four destination coordinates, ROP, and two source coordinates.
+	rdpScrBltSrcCopy        = byte(0xcc)
+	rdpPatBltSolidBrush     = byte(0x00)
+	rdpDstBltFieldMask      = byte(0x1f) // Four coordinates and bRop.
+	rdpMultiDstBltFieldMask = byte(0x7f) // Four coordinates, ROP, count and delta list.
+	rdpDstBltBlackness      = byte(0x00)
+	rdpDstBltWhiteness      = byte(0xff)
+	rdpDstBltInvert         = byte(0x55)
+	maxRDPPrimaryOrders     = 1024
+	maxRDPMultiDstBltRects  = 45
+	maxRDPMultiDstBltBytes  = 395
+	rdpBitmapCompressed     = uint16(0x0001)
+	rdpBitmapNoCompHdr      = uint16(0x0400)
+	maxRDPBitmapRects       = 64
 	// Keep each fragment below the conservative MCS/TPKT bound. A complete
 	// Share Data PDU has a 16-bit totalLength, so reassembly cannot exceed it.
 	maxRDPBitmapTPKTPacket      = 16_383
@@ -111,6 +115,7 @@ type rdpPrimaryOrderState struct {
 	dstBltUsed           bool
 	patBltOpaqueRectUsed bool
 	scrBltUsed           bool
+	multiDstBltUsed      bool
 }
 
 func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
@@ -143,9 +148,9 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY,
-// PATINVERT, PATAND, PATOR, and NOTPATCOPY PatBlt, plus SRCCOPY ScrBlt,
-// all with absolute coordinates and no clipping bounds or omitted fields.
+// DstBlt BLACKNESS/WHITENESS/DSTINVERT, MultiDstBlt with destination-only
+// raster operations, OpaqueRect, solid-brush PatBlt, and SRCCOPY ScrBlt, all
+// with absolute coordinates and no clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -183,6 +188,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		var left, top, width, height int32
 		var red, green, blue byte
 		var sourceX, sourceY int32
+		var multiRects [][4]int32
 		operation := rdpBitmapRectangleReplace
 		switch state.orderType {
 		case rdpOrderDstBlt:
@@ -234,6 +240,39 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
 			operation = rdpBitmapRectangleScrCopy
 			data = data[13:]
+		case rdpOrderMultiDstBlt:
+			// Strict full-field profile: base rectangle, destination-only ROP,
+			// delta count, then a bounded VARIABLE2_FIELD containing DELTA_RECTS.
+			if len(data) < 13 || data[0] != rdpMultiDstBltFieldMask {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			switch data[8] {
+			case rdpDstBltBlackness:
+				red, green, blue = 0, 0, 0
+			case rdpDstBltWhiteness:
+				red, green, blue = 0xff, 0xff, 0xff
+			case rdpDstBltInvert:
+				operation = rdpBitmapRectangleDstInvert
+			default:
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			deltaEntries := int(data[9])
+			encodedLength := int(binary.LittleEndian.Uint16(data[10:12]))
+			if deltaEntries < 1 || deltaEntries > maxRDPMultiDstBltRects || encodedLength == 0 ||
+				encodedLength > maxRDPMultiDstBltBytes || encodedLength > len(data)-12 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			decodedRects, decodeErr := decodeRDPMultiDstBltRectangles(data[12:12+encodedLength], deltaEntries)
+			if decodeErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			multiRects = decodedRects
+			data = data[12+encodedLength:]
 		case rdpOrderPatBlt:
 			// This strict form is the normative 0x027f example: four absolute
 			// coordinates, PATCOPY, both colors, and a non-cached solid brush.
@@ -272,29 +311,15 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		default:
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
-		if left < 0 || top < 0 || width <= 0 || height <= 0 ||
-			left+width > int32(desktopWidth) || top+height > int32(desktopHeight) ||
-			operation == rdpBitmapRectangleScrCopy && (sourceX < 0 || sourceY < 0 ||
-				sourceX+width > int32(desktopWidth) || sourceY+height > int32(desktopHeight)) {
-			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
-		}
-		pixels := uint64(width) * uint64(height)
-		if pixels > maxRDPDesktopArea || totalPixels > maxRDPDesktopArea-pixels || pixels > uint64(int(^uint(0)>>1))/4 {
-			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
-		}
-		totalPixels += pixels
-		var rgba []byte
-		if operation == rdpBitmapRectangleReplace || operation == rdpBitmapRectanglePatInvert ||
-			operation == rdpBitmapRectanglePatAnd || operation == rdpBitmapRectanglePatOr {
-			rgba = make([]byte, int(pixels)*4)
-			for offset := 0; offset < len(rgba); offset += 4 {
-				rgba[offset], rgba[offset+1], rgba[offset+2], rgba[offset+3] = red, green, blue, 0xff
+		rectangles := make([][4]int32, 0, 1+len(multiRects))
+		rectangles = append(rectangles, [4]int32{left, top, width, height})
+		rectangles = append(rectangles, multiRects...)
+		for _, bounds := range rectangles {
+			if err := appendRDPPrimaryRectangle(&result, &totalPixels, bounds[0], bounds[1], bounds[2], bounds[3],
+				desktopWidth, desktopHeight, operation, red, green, blue, sourceX, sourceY); err != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 		}
-		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
-			X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba,
-			operation: operation, sourceX: uint16(sourceX), sourceY: uint16(sourceY),
-		})
 		switch state.orderType {
 		case rdpOrderDstBlt:
 			state.dstBltUsed = true
@@ -302,12 +327,112 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			state.patBltOpaqueRectUsed = true
 		case rdpOrderScrBlt:
 			state.scrBltUsed = true
+		case rdpOrderMultiDstBlt:
+			state.multiDstBltUsed = true
 		}
 	}
 	if len(data) != 0 {
 		return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 	}
 	return result, state, nil
+}
+
+// decodeRDPMultiDstBltRectangles decodes the DELTA_RECTS_FIELD payload. The
+// first rectangle is relative to (0,0,0,0); subsequent left/top/width/height
+// values are deltas from the corresponding values of the preceding rectangle.
+func decodeRDPMultiDstBltRectangles(encoded []byte, count int) ([][4]int32, error) {
+	if count < 1 || count > maxRDPMultiDstBltRects {
+		return nil, ErrMCSConnection
+	}
+	zeroBytes := (count + 1) / 2
+	if len(encoded) < zeroBytes {
+		return nil, ErrMCSConnection
+	}
+	zeroBits := encoded[:zeroBytes]
+	encoded = encoded[zeroBytes:]
+	if count%2 != 0 && zeroBits[zeroBytes-1]&0x0f != 0 {
+		return nil, ErrMCSConnection
+	}
+	rectangles := make([][4]int32, 0, count)
+	var previous [4]int32
+	for i := 0; i < count; i++ {
+		var current [4]int32
+		for component := 0; component < 4; component++ {
+			bit := uint(7 - (i%2)*4 - component)
+			var delta int32
+			if zeroBits[i/2]&(1<<bit) == 0 {
+				var err error
+				delta, encoded, err = readRDPPackedSignedDelta(encoded)
+				if err != nil {
+					return nil, ErrMCSConnection
+				}
+			}
+			current[component] = previous[component] + delta
+		}
+		if current[0] < 0 || current[1] < 0 || current[2] <= 0 || current[3] <= 0 {
+			return nil, ErrMCSConnection
+		}
+		rectangles = append(rectangles, current)
+		previous = current
+	}
+	if len(encoded) != 0 {
+		return nil, ErrMCSConnection
+	}
+	return rectangles, nil
+}
+
+// readRDPPackedSignedDelta decodes the signed 7-bit or 15-bit integer used by
+// DELTA_RECTS_FIELD. The high bit selects the two-byte representation.
+func readRDPPackedSignedDelta(data []byte) (int32, []byte, error) {
+	if len(data) == 0 {
+		return 0, data, ErrMCSConnection
+	}
+	first := data[0]
+	if first&0x80 == 0 {
+		value := int32(first & 0x7f)
+		if value&0x40 != 0 {
+			value -= 0x80
+		}
+		return value, data[1:], nil
+	}
+	if len(data) < 2 {
+		return 0, data, ErrMCSConnection
+	}
+	value := int32(first&0x7f)<<8 | int32(data[1])
+	if value&0x4000 != 0 {
+		value -= 0x8000
+	}
+	return value, data[2:], nil
+}
+
+func appendRDPPrimaryRectangle(result *RDPBitmapUpdate, totalPixels *uint64, left, top, width, height int32,
+	desktopWidth, desktopHeight uint16, operation rdpBitmapRectangleOperation, red, green, blue byte,
+	sourceX, sourceY int32) error {
+	if result == nil || totalPixels == nil || left < 0 || top < 0 || width <= 0 || height <= 0 ||
+		left+width > int32(desktopWidth) || top+height > int32(desktopHeight) ||
+		operation == rdpBitmapRectangleScrCopy && (sourceX < 0 || sourceY < 0 ||
+			sourceX+width > int32(desktopWidth) || sourceY+height > int32(desktopHeight)) ||
+		len(result.Rectangles) >= maxRDPBitmapRects {
+		return ErrMCSConnection
+	}
+	pixels := uint64(width) * uint64(height)
+	if pixels > maxRDPDesktopArea || *totalPixels > maxRDPDesktopArea-pixels || pixels > uint64(int(^uint(0)>>1))/4 {
+		return ErrMCSConnection
+	}
+	*totalPixels += pixels
+	var rgba []byte
+	if operation == rdpBitmapRectangleReplace || operation == rdpBitmapRectanglePatInvert ||
+		operation == rdpBitmapRectanglePatAnd || operation == rdpBitmapRectanglePatOr {
+		rgba = make([]byte, int(pixels)*4)
+		for offset := 0; offset < len(rgba); offset += 4 {
+			rgba[offset], rgba[offset+1], rgba[offset+2], rgba[offset+3] = red, green, blue, 0xff
+		}
+	}
+	result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
+		X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba,
+		operation: operation, sourceX: uint16(sourceX), sourceY: uint16(sourceY),
+	})
+	return nil
 }
 
 // parseRDPBitmapUpdateData decodes the shared bitmap-update body used by both
@@ -672,6 +797,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
 	dstBltEnabled := s.dstBltEnabled
 	scrBltEnabled := s.scrBltEnabled
+	multiDstBltEnabled := s.multiDstBltEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
 		timeout = defaultCredSSPTimeout
@@ -769,7 +895,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	if err != nil || ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||
 		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
-		nextOrderState.scrBltUsed && !scrBltEnabled {
+		nextOrderState.scrBltUsed && !scrBltEnabled ||
+		nextOrderState.multiDstBltUsed && !multiDstBltEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	s.mu.Lock()
