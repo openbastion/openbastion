@@ -15,6 +15,7 @@ const (
 	rdpOrderOpaqueRect     = byte(0x0a)
 	rdpOrderDstBlt         = byte(0x00)
 	rdpOrderPatBlt         = byte(0x01)
+	rdpOrderScrBlt         = byte(0x02)
 	rdpOpaqueRectFieldMask = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask     = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
 	rdpPatBltPatCopy       = byte(0xf0)
@@ -22,6 +23,8 @@ const (
 	rdpPatBltPatAnd        = byte(0xa0)
 	rdpPatBltPatOr         = byte(0xfa)
 	rdpPatBltNotPatCopy    = byte(0x0f)
+	rdpScrBltFieldMask     = byte(0x7f) // Four destination coordinates, ROP, and two source coordinates.
+	rdpScrBltSrcCopy       = byte(0xcc)
 	rdpPatBltSolidBrush    = byte(0x00)
 	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
 	rdpDstBltBlackness     = byte(0x00)
@@ -48,11 +51,12 @@ const (
 	rdpBitmapRectanglePatInvert
 	rdpBitmapRectanglePatAnd
 	rdpBitmapRectanglePatOr
+	rdpBitmapRectangleScrCopy
 )
 
 // RDPBitmapRectangle is one decoded, top-down rectangle from a server graphics
 // update. Pixels is tightly packed RGBA for replacement and solid-brush pattern
-// operations; destination-only operations such as DSTINVERT carry no pixel buffer.
+// operations; DSTINVERT and ScrBlt carry no replacement pixel buffer.
 type RDPBitmapRectangle struct {
 	X         uint16
 	Y         uint16
@@ -60,6 +64,8 @@ type RDPBitmapRectangle struct {
 	Height    uint16
 	Pixels    []byte
 	operation rdpBitmapRectangleOperation
+	sourceX   uint16
+	sourceY   uint16
 }
 
 // RDPBitmapUpdate contains the raster rectangles from one complete graphics update.
@@ -104,6 +110,7 @@ type rdpPrimaryOrderState struct {
 	hasOrderType         bool
 	dstBltUsed           bool
 	patBltOpaqueRectUsed bool
+	scrBltUsed           bool
 }
 
 func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
@@ -137,8 +144,8 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
 // DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY,
-// PATINVERT, PATAND, PATOR, and NOTPATCOPY PatBlt, all with absolute coordinates and no
-// clipping bounds or omitted fields.
+// PATINVERT, PATAND, PATOR, and NOTPATCOPY PatBlt, plus SRCCOPY ScrBlt,
+// all with absolute coordinates and no clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -175,6 +182,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		}
 		var left, top, width, height int32
 		var red, green, blue byte
+		var sourceX, sourceY int32
 		operation := rdpBitmapRectangleReplace
 		switch state.orderType {
 		case rdpOrderDstBlt:
@@ -210,6 +218,22 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
 			red, green, blue = data[8], data[9], data[10]
 			data = data[11:]
+		case rdpOrderScrBlt:
+			if len(data) < 14 || data[0] != rdpScrBltFieldMask {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			if data[8] != rdpScrBltSrcCopy {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			sourceX = int32(int16(binary.LittleEndian.Uint16(data[9:11])))
+			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
+			operation = rdpBitmapRectangleScrCopy
+			data = data[13:]
 		case rdpOrderPatBlt:
 			// This strict form is the normative 0x027f example: four absolute
 			// coordinates, PATCOPY, both colors, and a non-cached solid brush.
@@ -249,7 +273,9 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
 		if left < 0 || top < 0 || width <= 0 || height <= 0 ||
-			left+width > int32(desktopWidth) || top+height > int32(desktopHeight) {
+			left+width > int32(desktopWidth) || top+height > int32(desktopHeight) ||
+			operation == rdpBitmapRectangleScrCopy && (sourceX < 0 || sourceY < 0 ||
+				sourceX+width > int32(desktopWidth) || sourceY+height > int32(desktopHeight)) {
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
 		pixels := uint64(width) * uint64(height)
@@ -266,13 +292,16 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			}
 		}
 		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
-			X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba, operation: operation,
+			X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba,
+			operation: operation, sourceX: uint16(sourceX), sourceY: uint16(sourceY),
 		})
 		switch state.orderType {
 		case rdpOrderDstBlt:
 			state.dstBltUsed = true
 		case rdpOrderPatBlt, rdpOrderOpaqueRect:
 			state.patBltOpaqueRectUsed = true
+		case rdpOrderScrBlt:
+			state.scrBltUsed = true
 		}
 	}
 	if len(data) != 0 {
@@ -642,6 +671,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	primaryOrdersEnabled := s.primaryOrdersEnabled
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
 	dstBltEnabled := s.dstBltEnabled
+	scrBltEnabled := s.scrBltEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
 		timeout = defaultCredSSPTimeout
@@ -738,7 +768,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	update, nextOrderState, err = parseRDPBitmapShareDataWithOrderState(assembled, shareID, desktopWidth, desktopHeight, orderState)
 	if err != nil || ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||
-		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled {
+		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
+		nextOrderState.scrBltUsed && !scrBltEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	s.mu.Lock()

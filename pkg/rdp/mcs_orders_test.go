@@ -6,11 +6,48 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"image/color"
 	"image/png"
 	"net"
 	"testing"
 	"time"
 )
+
+func TestParseRDPOrdersUpdateDecodesScrBltSourceCopy(t *testing.T) {
+	order := mcsTestScrBltOrder(0x09, true, 3, 2, 2, 2, 0xcc, 0, 0)
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rectangles) != 1 || !state.scrBltUsed {
+		t.Fatalf("ScrBlt update = %+v, state=%+v", got, state)
+	}
+	rect := got.Rectangles[0]
+	if rect.X != 3 || rect.Y != 2 || rect.Width != 2 || rect.Height != 2 ||
+		rect.sourceX != 0 || rect.sourceY != 0 || len(rect.Pixels) != 0 || rect.operation != rdpBitmapRectangleScrCopy {
+		t.Fatalf("ScrBlt rectangle = %+v", rect)
+	}
+}
+
+func mcsTestScrBltOrder(controlFlags byte, typeChange bool, left, top, width, height int16, rop byte, sourceX, sourceY int16) []byte {
+	out := []byte{controlFlags}
+	if typeChange {
+		out = append(out, 0x02) // TS_ENC_SCRBLT_ORDER.
+	}
+	out = append(out, 0x7f) // Four destination coordinates, ROP, and two source coordinates.
+	for _, value := range []int16{left, top, width, height} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	out = append(out, rop)
+	for _, value := range []int16{sourceX, sourceY} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	return out
+}
 
 func TestParseRDPOrdersUpdateDecodesOpaqueRectangles(t *testing.T) {
 	orders := append(mcsTestOpaqueRectOrder(0x09, true, 1, 2, 2, 1, 0x11, 0x22, 0x33),
@@ -42,6 +79,31 @@ func TestParseRDPOrdersUpdateDecodesOpaqueRectangles(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsUnsupportedScrBltProfiles(t *testing.T) {
+	valid := mcsTestScrBltOrder(0x09, true, 2, 2, 2, 2, 0xcc, 0, 0)
+	cases := map[string][]byte{
+		"unsupported ROP":          mcsTestScrBltOrder(0x09, true, 2, 2, 2, 2, 0x66, 0, 0),
+		"negative source X":        mcsTestScrBltOrder(0x09, true, 2, 2, 2, 2, 0xcc, -1, 0),
+		"negative source Y":        mcsTestScrBltOrder(0x09, true, 2, 2, 2, 2, 0xcc, 0, -1),
+		"source X outside desktop": mcsTestScrBltOrder(0x09, true, 2, 2, 2, 2, 0xcc, 7, 0),
+		"source Y outside desktop": mcsTestScrBltOrder(0x09, true, 2, 2, 2, 2, 0xcc, 0, 7),
+		"destination X outside":    mcsTestScrBltOrder(0x09, true, 7, 2, 2, 2, 0xcc, 0, 0),
+		"destination Y outside":    mcsTestScrBltOrder(0x09, true, 2, 7, 2, 2, 0xcc, 0, 0),
+		"zero width":               mcsTestScrBltOrder(0x09, true, 2, 2, 0, 2, 0xcc, 0, 0),
+		"missing type change":      mcsTestScrBltOrder(0x01, false, 2, 2, 2, 2, 0xcc, 0, 0),
+		"wrong field mask":         func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
+		"delta coordinates":        mcsTestScrBltOrder(0x19, true, 2, 2, 2, 2, 0xcc, 0, 0),
+		"truncated order":          valid[:len(valid)-1],
+	}
+	for name, order := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
 	}
 }
 
@@ -343,6 +405,7 @@ func TestParseRDPOrdersUpdateDoesNotCommitStateOnMalformedOrder(t *testing.T) {
 
 func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0, 0, 0), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestScrBltOrder(0x09, true, 1, 0, 1, 1, 0xcc, 0, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{}, [3]byte{0xff, 0xff, 0xff}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0x5a, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x09, true, 0, 0, 1, 1, 0xa0, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0), 0, 0))
@@ -375,6 +438,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	first := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00))
 	second := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPatBltOrder(0x09, true, 1, 0, 1, 1, 0xf0, [3]byte{1, 2, 3}, [3]byte{0x11, 0x22, 0x33}, 0))
 	third := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 2, 0, 1, 1, 0xaa, 0xbb, 0xcc))
+	fourth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestScrBltOrder(0x09, true, 3, 0, 1, 1, 0xcc, 0, 0))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -394,6 +458,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, third)
 		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, fourth)
+		}
 		serverResult <- acceptErr
 	}()
 
@@ -412,6 +479,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		primaryOrdersEnabled:    true, // Simulates future Confirm Active order negotiation.
 		patBltOpaqueRectEnabled: true, // Shared negotiation index 1.
 		dstBltEnabled:           true, // DstBlt has its own independent negotiation index.
+		scrBltEnabled:           true, // ScrBlt has its own independent negotiation index.
 		mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 		serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 	}
@@ -420,6 +488,10 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		if readErr != nil || len(update.Rectangles) != 1 || string(update.Rectangles[0].Pixels) != string(want) {
 			t.Fatalf("ReadBitmapUpdate #%d = %+v, err=%v", i, update, readErr)
 		}
+	}
+	scrBltUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(scrBltUpdate.Rectangles) != 1 || scrBltUpdate.Rectangles[0].operation != rdpBitmapRectangleScrCopy {
+		t.Fatalf("ReadBitmapUpdate ScrBlt = %+v, err=%v", scrBltUpdate, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
@@ -627,6 +699,49 @@ func TestRDPFramebufferAppliesNotPatCopy(t *testing.T) {
 	}
 }
 
+func TestRDPFramebufferAppliesOverlappingScrBltSourceCopy(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(1, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		Width: 1, Height: 3, Pixels: []byte{
+			0x10, 0x20, 0x30, 0xff,
+			0x40, 0x50, 0x60, 0xff,
+			0x70, 0x80, 0x90, 0xff,
+		},
+	}}}
+	if _, err := framebuffer.Apply(seed, time.Unix(12, 0)); err != nil {
+		t.Fatal(err)
+	}
+	order := mcsTestScrBltOrder(0x09, true, 0, 1, 1, 2, 0xcc, 0, 0)
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 1, 3, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.scrBltUsed {
+		t.Fatalf("ScrBlt negotiation state = %+v", state)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(13, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []color.RGBA{
+		{R: 0x10, G: 0x20, B: 0x30, A: 0xff},
+		{R: 0x10, G: 0x20, B: 0x30, A: 0xff},
+		{R: 0x40, G: 0x50, B: 0x60, A: 0xff},
+	}
+	for y, expected := range want {
+		if got := color.RGBAModel.Convert(decoded.At(0, y)).(color.RGBA); got != expected {
+			t.Fatalf("overlapping ScrBlt pixel %d = %#v, want %#v", y, got, expected)
+		}
+	}
+}
+
 func TestRDPFramebufferAppliesPatBltBooleanRasterOperations(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -710,6 +825,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		primaryOrdersEnabled    bool
 		patBltOpaqueRectEnabled bool
 		dstBltEnabled           bool
+		scrBltEnabled           bool
 	}{
 		{
 			name:                 "all primary orders disabled",
@@ -724,6 +840,11 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 		{
 			name:                 "PatBlt/OpaqueRect shared negotiation index disabled",
 			order:                mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x11, 0x22, 0x33),
+			primaryOrdersEnabled: true,
+		},
+		{
+			name:                 "ScrBlt negotiation index disabled",
+			order:                mcsTestScrBltOrder(0x09, true, 1, 1, 1, 1, 0xcc, 0, 0),
 			primaryOrdersEnabled: true,
 		},
 	}
@@ -769,6 +890,7 @@ func TestReadBitmapUpdateRejectsUnnegotiatedPrimaryOrders(t *testing.T) {
 				primaryOrdersEnabled:    test.primaryOrdersEnabled,
 				patBltOpaqueRectEnabled: test.patBltOpaqueRectEnabled,
 				dstBltEnabled:           test.dstBltEnabled,
+				scrBltEnabled:           test.scrBltEnabled,
 				mcsResponse:             MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
 				serverCapabilities:      RDPServerCapabilities{ShareID: shareID, DesktopWidth: 8, DesktopHeight: 8},
 			}

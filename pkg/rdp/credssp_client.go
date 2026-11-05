@@ -50,6 +50,7 @@ type CredSSPClientSession struct {
 	primaryOrdersEnabled    bool
 	patBltOpaqueRectEnabled bool
 	dstBltEnabled           bool
+	scrBltEnabled           bool
 	primaryOrderState       rdpPrimaryOrderState
 }
 

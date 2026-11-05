@@ -2375,3 +2375,20 @@ Validation de l'incrément 40 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 50 994 exécutions en 5 s.
 - Contre-épreuves : 8 mutations compilantes tuées sur 8 (remplacement indépendant de la destination, inversion des trois canaux, index ROP, BS_SOLID, refus des ROP non supportés) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot PatBlt/OpaqueRect reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 41 : ScrBlt SRCCOPY
+
+Le sous-ensemble ScrBlt accepte `SRCCOPY` (`0xCC`) avec sept champs explicites. Source et destination doivent être entièrement dans le bureau ; les autres ROP, coordonnées delta, clipping et champs omis sont refusés. Le framebuffer copie une photographie de la source avant l'écriture pour préserver le comportement des rectangles chevauchants, avec rollback de destination en cas d'échec PNG. Le lecteur de session exige l'index de négociation ScrBlt 2 ; Confirm Active ne l'annonce toujours pas, et runtime/route RDP restent désactivés.
+
+Références : [MS-RDPEGDI ScrBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a4e322b0-cd64-4dfc-8e1a-f24dc0edc99d) et [Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272).
+
+Validation de l'incrément 41 :
+- Test rouge avant implémentation : le parseur rejette ScrBlt ; le test passe après ajout du profil SRCCOPY.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 199 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 50 319 exécutions en 5 s.
+- Contre-épreuves : 10 mutations compilantes tuées sur 10 (ROP SRCCOPY, limites source/destination, field mask, origine de copie, payload, état et garde de négociation) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index ScrBlt 2 reste non annoncé, runtime/route RDP désactivés.

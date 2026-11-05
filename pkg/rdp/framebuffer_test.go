@@ -162,6 +162,31 @@ func TestRDPFramebufferPatBooleanOperationsPreserveDestinationAlpha(t *testing.T
 	}
 }
 
+func TestRDPFramebufferRejectsMalformedScrBltAtomically(t *testing.T) {
+	fb, err := NewRDPFramebuffer(1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rect := range []RDPBitmapRectangle{
+		{Width: 1, Height: 1, sourceX: 1, operation: rdpBitmapRectangleScrCopy},
+		{Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff}, operation: rdpBitmapRectangleScrCopy},
+	} {
+		_, err = fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{rect}}, time.Unix(26, 0))
+		if err == nil {
+			t.Fatalf("malformed ScrBlt rectangle accepted: %+v", rect)
+		}
+	}
+	frame, err := fb.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff},
+	}}}, time.Unix(27, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.Sequence != 1 {
+		t.Fatalf("invalid ScrBlt consumed sequence: %d", frame.Sequence)
+	}
+}
+
 func TestRDPFramebufferRejectsMalformedPatBooleanPatternPayload(t *testing.T) {
 	fb, err := NewRDPFramebuffer(1, 1)
 	if err != nil {

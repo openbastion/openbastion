@@ -1005,3 +1005,24 @@ Validation de l'incrément 40 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 50 994 exécutions en 5 s.
 - Contre-épreuves : 8 mutations compilantes tuées sur 8 (remplacement indépendant de la destination, inversion des trois canaux, index ROP, BS_SOLID, refus des ROP non supportés) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot PatBlt/OpaqueRect reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 41 : ScrBlt SRCCOPY
+
+Le parseur slow-path accepte `ScrBlt` (`orderType=0x02`) uniquement avec `SRCCOPY` (`0xCC`) et les sept champs explicites (`fieldFlags=0x7F`) : quatre coordonnées de destination, le ROP et les deux coordonnées source. Les coordonnées source et destination sont absolues, signées 16 bits et entièrement bornées au bureau. Les bounds, deltas, champs omis, ROP source/destination différents et données résiduelles restent refusés.
+
+Le framebuffer copie depuis la surface primaire vers la destination. Il prend une photographie bornée de la région source avant l'écriture, ce qui rend les copies qui se chevauchent déterministes ; la sauvegarde destination existante permet toujours le rollback atomique si la génération de trame échoue. Le profil est soumis à l'index de négociation ScrBlt 2, indépendant de DstBlt 0 et du slot partagé PatBlt/OpaqueRect 1.
+
+Tests : décodage et état de négociation, rejets ROP/champs/delta/coordonnées source et destination, copie verticale chevauchante vérifiant la sémantique source snapshot, chemin TLS accepté lorsque l'index est explicitement simulé, refus TLS lorsque ScrBlt n'est pas négocié.
+
+Référence normative : [MS-RDPEGDI — ScrBlt (SCRBLT_ORDER)](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a4e322b0-cd64-4dfc-8e1a-f24dc0edc99d) et [Primary Drawing Order — ordre et index de négociation](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272).
+
+Validation de l'incrément 41 :
+- Test rouge avant implémentation : le parseur rejette ScrBlt ; le test passe après ajout du profil SRCCOPY.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 199 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 50 319 exécutions en 5 s.
+- Contre-épreuves : 10 mutations compilantes tuées sur 10 (ROP SRCCOPY, limites source/destination, field mask, origine de copie, payload, état et garde de négociation) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index ScrBlt 2 reste non annoncé, runtime/route RDP désactivés.

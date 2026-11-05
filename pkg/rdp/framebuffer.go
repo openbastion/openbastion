@@ -41,7 +41,7 @@ func NewRDPFramebuffer(width, height uint16) (*RDPFramebuffer, error) {
 }
 
 // Apply validates every rectangle before changing the framebuffer, applies
-// replacement, solid-brush, and destination-only operations, and returns the next complete
+// replacement, solid-brush, destination-only, and screen-copy operations, and returns the next complete
 // PNG frame. Sequence numbers are strictly increasing and are committed only
 // after PNG encoding succeeds.
 func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (screenstream.Message, error) {
@@ -73,6 +73,11 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			}
 		case rdpBitmapRectanglePatInvert, rdpBitmapRectanglePatAnd, rdpBitmapRectanglePatOr:
 			if pixels*4 != uint64(len(rect.Pixels)) {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
+		case rdpBitmapRectangleScrCopy:
+			if len(rect.Pixels) != 0 || uint32(rect.sourceX)+uint32(rect.Width) > uint32(bounds.Dx()) ||
+				uint32(rect.sourceY)+uint32(rect.Height) > uint32(bounds.Dy()) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
 		default:
@@ -128,6 +133,17 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 					}
 				}
 			}
+		case rdpBitmapRectangleScrCopy:
+			source := make([]byte, int(rect.Width)*int(rect.Height)*4)
+			for y := 0; y < int(rect.Height); y++ {
+				sourceStart := f.image.PixOffset(int(rect.sourceX), int(rect.sourceY)+y)
+				copy(source[y*int(rect.Width)*4:], f.image.Pix[sourceStart:sourceStart+int(rect.Width)*4])
+			}
+			for y := 0; y < int(rect.Height); y++ {
+				destinationStart := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
+				copy(f.image.Pix[destinationStart:destinationStart+int(rect.Width)*4], source[y*int(rect.Width)*4:])
+			}
+			clear(source)
 		}
 	}
 	var encoded bytes.Buffer
