@@ -1082,3 +1082,22 @@ Validation de l’incrément 44 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 94 425 exécutions en 5 s (4 workers).
 - Contre-épreuves : 10 mutations compilantes tuées sur 10 (mapping ForeColor, whitelist ROP, field mask, origine/style/BrushExtra, rectangles delta, état, garde index 16 et limite 46 rectangles) ; source restaurée octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiPatBlt 16 reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 45 : MultiScrBlt
+
+Le parseur slow-path accepte `MultiScrBlt` (`orderType=0x11`) avec les neuf champs explicites (`fieldFlags=0x01ff`) et le seul ROP `SRCCOPY` (`0xcc`). Il valide l'ancre destination, l'origine source, le compte et le `CodedDeltaList` borné. Chaque rectangle delta reçoit un offset source relatif à l'ancre destination de l'ordre : `source = nXSrc/nYSrc + (destination - nLeftRect/nTopRect)`. Les rectangles source et destination doivent être intégralement dans le bureau ; le framebuffer conserve la sémantique snapshot pour chaque copie.
+
+L'ordre suit son état de négociation indépendant, index 17 ; `ReadBitmapUpdate` refuse le flux si cette capacité n'est pas explicitement activée. Le profil impose 1 à 45 rectangles, un masque complet, des coordonnées absolues sans clipping, une liste delta bornée, et rejette les ROP autres que SRCCOPY, les champs omis, les coordonnées delta, les rectangles invalides et les données résiduelles. Confirm Active n'annonce toujours aucun ordre graphique ; runtime et route RDP restent désactivés.
+
+Tests : décodage de deux rectangles et calcul des deux origines source, rendu PNG depuis une trame de pixels déterministes, contrôle des bornes source/destination, rejet des masques/ROP/listes invalides, refus TLS sans négociation index 17, acceptation TLS avec négociation simulée et seed de fuzz.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.8 — MultiScrBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/31b79b49-15b7-4709-bbc2-d58ce0362292) et [Delta-Encoded Rectangles](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/b89f2058-b180-4da0-9bd1-aa694c87768c).
+
+Validation de l’incrément 45 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 217 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 116 071 exécutions en 5 s (4 workers).
+- Contre-épreuves : 9 mutations compilantes tuées sur 9 (field mask, SRCCOPY, calcul d'offset source, bornes source/destination, liste delta seule, état, garde index 17 et limite 46 rectangles) ; source restaurée octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiScrBlt 17 reste non annoncé, runtime/route RDP désactivés.

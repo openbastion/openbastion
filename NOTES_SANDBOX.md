@@ -2432,3 +2432,16 @@ Validation de l’incrément 44 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 94 425 exécutions en 5 s (4 workers).
 - Contre-épreuves : 10 mutations compilantes tuées sur 10 (mapping ForeColor, whitelist ROP, field mask, origine/style/BrushExtra, rectangles delta, état, garde index 16 et limite 46 rectangles) ; source restaurée octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiPatBlt 16 reste non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 45 — MultiScrBlt
+
+`MultiScrBlt` (`orderType=0x11`) accepte les neuf champs explicites et le seul ROP `SRCCOPY`. Les rectangles delta déterminent les destinations ; les origines sources sont calculées relativement à l'ancre de l'ordre. Les bornes source et destination sont strictes, sans clipping. L'index de négociation 17 est vérifié indépendamment et n'est pas annoncé. Runtime/route RDP désactivés ; aucune interopérabilité Windows/RDS réelle revendiquée.
+
+Validation de l’incrément 45 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 217 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 116 071 exécutions en 5 s (4 workers).
+- Contre-épreuves : 9 mutations compilantes tuées sur 9 (field mask, SRCCOPY, calcul d'offset source, bornes source/destination, liste delta seule, état, garde index 17 et limite 46 rectangles) ; source restaurée octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiScrBlt 17 reste non annoncé, runtime/route RDP désactivés.
