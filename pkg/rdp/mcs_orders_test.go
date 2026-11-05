@@ -1028,6 +1028,7 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	polylineNot := mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2Not, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1})
 	f.Add(mcsTestOrdersUpdateData(1, polylineNot, 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2XorPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
@@ -1066,7 +1067,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	seventh := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestMultiPatBltOrder(0x09, true, 6, 0, 1, 1, rdpPatBltPatCopy, [3]byte{}, [3]byte{0x44, 0x55, 0x66}, 1, []byte{0x00, 1, 0, 1, 1}))
 	eighth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestMultiScrBltOrder(0x09, true, 1, 1, 1, 1, rdpScrBltSrcCopy, 0, 0, 1, []byte{0x00, 1, 1, 1, 1}))
 	ninth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x12, 0x34, 0x56))
-	tenth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{0x21, 0x43, 0x65}, 1, []byte{0x00, 1, 1}))
+	tenth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2XorPen, 0, [3]byte{0x21, 0x43, 0x65}, 1, []byte{0x00, 1, 1}))
 	eleventh := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}))
 	twelfth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x21, 0x43, 0x65}))
 	serverResult := make(chan error, 1)
@@ -1181,7 +1182,7 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	}
 	polylineUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
 	if readErr != nil || len(polylineUpdate.Rectangles) != 1 || !session.primaryOrderState.polylineUsed ||
-		polylineUpdate.Rectangles[0].operation != rdpBitmapRectangleLine {
+		polylineUpdate.Rectangles[0].operation != rdpBitmapRectangleLine || polylineUpdate.Rectangles[0].lineROP2 != rdpROP2XorPen {
 		t.Fatalf("ReadBitmapUpdate Polyline = %+v, state=%+v, err=%v", polylineUpdate, session.primaryOrderState, readErr)
 	}
 	polygonUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
@@ -2430,6 +2431,17 @@ func TestRDPFramebufferAppliesPolylineNotROP2(t *testing.T) {
 	}
 }
 
+func TestParseRDPOrdersUpdateAcceptsPolylineXorROP2(t *testing.T) {
+	order := mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2XorPen, 0, [3]byte{1, 2, 3}, 2, []byte{0x00, 2, 1, 2, 1})
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatalf("Polyline R2_XORPEN should decode: %v", err)
+	}
+	if !state.polylineUsed || len(update.Rectangles) != 2 || update.Rectangles[0].lineROP2 != rdpROP2XorPen || update.Rectangles[1].lineROP2 != rdpROP2XorPen {
+		t.Fatalf("Polyline R2_XORPEN update = %+v, state=%+v", update, state)
+	}
+}
+
 func TestParseRDPOrdersUpdateAcceptsLineToXorROP2(t *testing.T) {
 	order := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 1, 2, 3)
 	order[17] = rdpROP2XorPen
@@ -2439,6 +2451,42 @@ func TestParseRDPOrdersUpdateAcceptsLineToXorROP2(t *testing.T) {
 	}
 	if !state.lineToUsed || len(update.Rectangles) != 1 || update.Rectangles[0].lineROP2 != rdpROP2XorPen {
 		t.Fatalf("LineTo R2_XORPEN update = %+v, state=%+v", update, state)
+	}
+}
+
+func TestRDPFramebufferAppliesPolylineXorROP2(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+		copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+	}
+	order := mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2XorPen, 0, [3]byte{1, 2, 3}, 2, []byte{0x00, 2, 1, 2, 1})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(78, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	painted := map[[2]int]bool{{1, 1}: true, {2, 1}: true, {3, 2}: true, {4, 2}: true}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+			if painted[[2]int{x, y}] {
+				want = color.RGBA{R: 0x13, G: 0x36, B: 0x55, A: 0xff}
+			}
+			if got != want {
+				t.Fatalf("Polyline R2_XORPEN pixel (%d,%d)=%#v want=%#v", x, y, got, want)
+			}
+		}
 	}
 }
 
