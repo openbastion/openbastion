@@ -1,3 +1,116 @@
-# No accepted HIGH/CRITICAL image vulnerabilities.
-# Keep the gate strict: every fixed finding must be corrected in the image, not ignored.
-vulnerabilities: []
+# ADR-0060: the findings Trivy reports that OpenBastion accepts, each with why, where and until when.
+# Read by `make scan-images` (and so by the CI). An entry holds for its path only: the same
+# vulnerability anywhere else — in an OpenBastion binary above all — still fails the gate. An entry
+# expires: past its date it no longer hides anything, and the gate fails until it is looked at again.
+#
+# usr/local/bin/gosu in the pinned upstream PostgreSQL image: the Go standard library v1.24.6
+# embedded by upstream. gosu runs once, as root, to exec postgres as the postgres user; it does
+# not accept network input. These findings are judged not reachable from gosu's limited role,
+# not proven unexploitable. The exception is path-scoped and expires 31 January 2027.
+# Debian OS packages are upgraded from the security repository in
+# deploy/docker-compose/postgres/Dockerfile and remain subject to the strict HIGH/CRITICAL gate.
+vulnerabilities:
+  - id: CVE-2025-61726
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2025-61729
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2025-68121
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-111943
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-25679
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-27145
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-32280
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-32281
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-32283
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-33811
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-33814
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-33818
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-39820
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-39821
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-39822
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-39836
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-42499
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-42504
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-56853
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-56858
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-56859
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-56860
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-56862
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-78667
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-78669
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31
+  - id: CVE-2026-97031
+    paths: ["usr/local/bin/gosu"]
+    statement: Go stdlib v1.24.6 in gosu of postgres:16, not reachable from what gosu does (see above)
+    expired_at: 2027-01-31

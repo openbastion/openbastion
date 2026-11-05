@@ -26,7 +26,7 @@ ADR-0052 cherche les vulnérabilités du code Go et des paquets npm, mais pas ce
 - **Passer à `postgres:16-alpine`** (pas de `gosu`, `su-exec` en C) : un changement de l'image de déploiement et de ses tests, pour un risque jugé faible ; à rouvrir si les constats de `gosu` durent après janvier 2027.
 
 
-## Mise à jour — 5 novembre 2026 : PostgreSQL corrigé sans exception Trivy
+## Mise à jour — 5 novembre 2026 : paquets PostgreSQL corrigés, exception gosu conservée
 
 Le scan de la CI a détecté `CVE-2026-109518` (HIGH) dans `apt` et `libapt-pkg7.0` de l'image amont PostgreSQL 16 épinglée (Debian 13.7, version 3.0.3 ; correctif 3.0.4). L'image amont `postgres:16` la plus récente disponible à cette date embarquait encore les paquets vulnérables. Le même avis touchait aussi la variante Bookworm (2.6.1, correctif 2.6.2).
 
@@ -34,4 +34,4 @@ Décision : conserver PostgreSQL 16 et l'épinglage d'un digest multi-architectu
 
 La CI PostgreSQL construit et démarre cette image durcie elle-même (avec healthcheck), au lieu de s'appuyer sur un service image non patché. `make scan-postgres-image` permet de vérifier isolément cette image ; `make scan-images` conserve les deux scans, OpenBastion runtime et PostgreSQL.
 
-Mesure locale avec Trivy 0.76.1 : image PostgreSQL dérivée, **0 HIGH / 0 CRITICAL** ; `apt` et `libapt-pkg6.0` sont en version 2.6.2. Les 26 anciennes exceptions `gosu` sont également retirées : le scan de l'image dérivée ne signale plus de vulnérabilité dans ce binaire. `.trivyignore.yaml` ne contient donc plus aucune vulnérabilité acceptée. Le correctif ne change ni la version majeure PostgreSQL ni le volume de données.
+Mesure locale avec Trivy 0.76.1 et la base de vulnérabilités présente dans le Codespace : image PostgreSQL dérivée, **0 HIGH / 0 CRITICAL** ; `apt` et `libapt-pkg6.0` sont en version 2.6.2. Le run CI avec une base Trivy fraîche a toutefois confirmé les 26 constats Go dans `usr/local/bin/gosu` (stdlib v1.24.6). Les exceptions historiques sont donc conservées, limitées à ce seul chemin et expirant le 31 janvier 2027 ; elles ne masquent aucun paquet Debian. Le correctif ne change ni la version majeure PostgreSQL ni le volume de données.
