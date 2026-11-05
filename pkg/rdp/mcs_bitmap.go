@@ -25,8 +25,10 @@ const (
 	rdpOrderPolygonSC       = byte(0x14)
 	rdpOrderPolyline        = byte(0x16)
 	rdpOrderEllipseSC       = byte(0x19)
+	rdpROP2Black            = byte(0x01)
 	rdpROP2Not              = byte(0x06)
 	rdpROP2XorPen           = byte(0x07)
+	rdpROP2White            = byte(0x10)
 	rdpROP2CopyPen          = byte(0x0d)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
@@ -186,6 +188,16 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 	}
 }
 
+// isSupportedRDPROP2 reports the deliberately small set of fully rendered ROP2 operations.
+func isSupportedRDPROP2(operation byte) bool {
+	switch operation {
+	case rdpROP2Black, rdpROP2Not, rdpROP2XorPen, rdpROP2CopyPen, rdpROP2White:
+		return true
+	default:
+		return false
+	}
+}
+
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
 // DstBlt BLACKNESS/WHITENESS/DSTINVERT, MultiDstBlt with destination-only
 // raster operations, OpaqueRect, solid-brush PatBlt, and SRCCOPY ScrBlt, all
@@ -291,7 +303,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			data = data[1:]
 			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
 			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			if (data[4] != rdpROP2CopyPen && data[4] != rdpROP2Not && data[4] != rdpROP2XorPen) || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
+			if !isSupportedRDPROP2(data[4]) || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
 				startX < 0 || startY < 0 || startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -341,7 +353,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			data = data[1:]
 			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
 			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			if (data[4] != rdpROP2CopyPen && data[4] != rdpROP2Not && data[4] != rdpROP2XorPen) || data[5] != 0x01 || startX < 0 || startY < 0 ||
+			if !isSupportedRDPROP2(data[4]) || data[5] != 0x01 || startX < 0 || startY < 0 ||
 				startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -381,7 +393,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			top := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
 			right := int32(int16(binary.LittleEndian.Uint16(data[4:6])))
 			bottom := int32(int16(binary.LittleEndian.Uint16(data[6:8])))
-			if (data[8] != rdpROP2CopyPen && data[8] != rdpROP2Not && data[8] != rdpROP2XorPen) || data[9] != 0x01 || left < 0 || top < 0 || right < left || bottom < top ||
+			if !isSupportedRDPROP2(data[8]) || data[9] != 0x01 || left < 0 || top < 0 || right < left || bottom < top ||
 				right >= int32(desktopWidth) || bottom >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -406,7 +418,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			data = data[2:]
-			if binary.LittleEndian.Uint16(data[0:2]) != 1 || (data[13] != rdpROP2CopyPen && data[13] != rdpROP2Not && data[13] != rdpROP2XorPen) || data[14] != 0 || data[15] != 1 {
+			if binary.LittleEndian.Uint16(data[0:2]) != 1 || !isSupportedRDPROP2(data[13]) || data[14] != 0 || data[15] != 1 {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			startX := int32(int16(binary.LittleEndian.Uint16(data[2:4])))

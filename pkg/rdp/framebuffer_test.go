@@ -654,3 +654,72 @@ func TestRDPFramebufferAppliesEllipseSCXorROP2(t *testing.T) {
 		}
 	}
 }
+
+func TestRDPFramebufferAppliesROP2BlackAndWhiteAcrossPrimitives(t *testing.T) {
+	linePixels := map[[2]int]bool{{1, 1}: true, {2, 1}: true, {3, 2}: true, {4, 2}: true}
+	painted := func(kind string, x, y int) bool {
+		switch kind {
+		case "LineTo", "Polyline":
+			return linePixels[[2]int{x, y}]
+		case "PolygonSC":
+			return x >= 1 && x <= 3 && y >= 1 && y <= 3
+		case "EllipseSC":
+			return (x >= 2 && x <= 4 && y == 1) || (x >= 1 && x <= 5 && y >= 2 && y <= 4) || (x >= 2 && x <= 4 && y == 5)
+		default:
+			return false
+		}
+	}
+	for _, rop := range []struct {
+		name  string
+		value byte
+		want  byte
+	}{{"R2_BLACK", rdpROP2Black, 0x00}, {"R2_WHITE", rdpROP2White, 0xff}} {
+		for _, primitive := range []string{"LineTo", "Polyline", "PolygonSC", "EllipseSC"} {
+			t.Run(primitive+"/"+rop.name, func(t *testing.T) {
+				var order []byte
+				switch primitive {
+				case "LineTo":
+					order = mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x12, 0x34, 0x56)
+					order[17] = rop.value
+				case "Polyline":
+					order = mcsTestPolylineOrder(0x09, true, 1, 1, rop.value, 0, [3]byte{0x12, 0x34, 0x56}, 2, []byte{0x00, 2, 1, 2, 1})
+				case "PolygonSC":
+					order = mcsTestPolygonSCOrder(0x09, true, 1, 1, rop.value, 0x01, [3]byte{0x12, 0x34, 0x56}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+				case "EllipseSC":
+					order = mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rop.value, 0x01, [3]byte{0x12, 0x34, 0x56})
+				}
+				update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+				if err != nil {
+					t.Fatalf("parse %s: %v", rop.name, err)
+				}
+				framebuffer, err := NewRDPFramebuffer(8, 8)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+					copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+				}
+				message, err := framebuffer.Apply(update, time.Unix(90, 0))
+				if err != nil {
+					t.Fatal(err)
+				}
+				decoded, err := png.Decode(bytes.NewReader(message.PNG))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for y := 0; y < 8; y++ {
+					for x := 0; x < 8; x++ {
+						got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+						want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+						if painted(primitive, x, y) {
+							want = color.RGBA{R: rop.want, G: rop.want, B: rop.want, A: 0xff}
+						}
+						if got != want {
+							t.Fatalf("%s %s pixel (%d,%d)=%#v want=%#v", primitive, rop.name, x, y, got, want)
+						}
+					}
+				}
+			})
+		}
+	}
+}

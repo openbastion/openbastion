@@ -44,6 +44,8 @@ func NewRDPFramebuffer(width, height uint16) (*RDPFramebuffer, error) {
 // keeping the internal framebuffer alpha opaque.
 func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 	switch operation {
+	case rdpROP2Black:
+		clear(destination[:3])
 	case rdpROP2CopyPen:
 		copy(destination[:3], pen[:3])
 	case rdpROP2Not:
@@ -53,6 +55,10 @@ func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 	case rdpROP2XorPen:
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] ^= pen[channel]
+		}
+	case rdpROP2White:
+		for channel := 0; channel < 3; channel++ {
+			destination[channel] = 0xff
 		}
 	}
 	destination[3] = 0xff
@@ -82,7 +88,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			pixels = uint64(len(rect.linePoints))
 			if rect.Width != 1 || rect.Height != 1 || len(rect.Pixels) != 0 || len(rect.linePoints) == 0 ||
 				len(rect.linePoints) > maxRDPLinePixels || rect.lineColor[3] != 0xff ||
-				(rect.lineROP2 != rdpROP2CopyPen && rect.lineROP2 != rdpROP2Not && rect.lineROP2 != rdpROP2XorPen) {
+				!isSupportedRDPROP2(rect.lineROP2) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
 			for _, point := range rect.linePoints {
@@ -93,7 +99,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		}
 		if rect.operation == rdpBitmapRectanglePolygon {
 			spans, polygonBounds, polygonPixels, polygonErr := rasterizeRDPPolygon(rect.polygonPoints, rect.polygonFillMode, uint16(bounds.Dx()), uint16(bounds.Dy()))
-			if polygonErr != nil || (rect.polygonROP2 != rdpROP2CopyPen && rect.polygonROP2 != rdpROP2Not && rect.polygonROP2 != rdpROP2XorPen) ||
+			if polygonErr != nil || !isSupportedRDPROP2(rect.polygonROP2) ||
 				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || rect.polygonColor[3] != 0xff ||
 				rect.X != polygonBounds[0] || rect.Y != polygonBounds[1] || rect.Width != polygonBounds[2] || rect.Height != polygonBounds[3] {
 				return screenstream.Message{}, ErrRDPFramebuffer
@@ -103,7 +109,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		}
 		if rect.operation == rdpBitmapRectangleEllipse {
 			spans, ellipseBounds, ellipsePixels, ellipseErr := rasterizeRDPEllipse(rect.X, rect.Y, rect.Width, rect.Height, uint16(bounds.Dx()), uint16(bounds.Dy()))
-			if ellipseErr != nil || (rect.ellipseROP2 != rdpROP2CopyPen && rect.ellipseROP2 != rdpROP2Not && rect.ellipseROP2 != rdpROP2XorPen) ||
+			if ellipseErr != nil || !isSupportedRDPROP2(rect.ellipseROP2) ||
 				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || len(rect.polygonPoints) != 0 || rect.ellipseColor[3] != 0xff ||
 				rect.X != ellipseBounds[0] || rect.Y != ellipseBounds[1] || rect.Width != ellipseBounds[2] || rect.Height != ellipseBounds[3] {
 				return screenstream.Message{}, ErrRDPFramebuffer
