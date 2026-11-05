@@ -2508,4 +2508,9 @@ PolygonSC et EllipseSC acceptent `R2_NOT` (`0x06`, `Dn`) en plus de `R2_COPYPEN`
 
 Référence : [MS-RDPEGDI — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1).
 
-Validation de l'incrément 50 : en attente.
+Validation de l'incrément 50 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 119 337 exécutions.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (suppression de l'inversion RGB et rejet de `R2_NOT` dans les parseurs PolygonSC/EllipseSC) ; fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Le contrôle d'architecture historique `scripts/check-architecture-deps.sh` n'existe pas dans ce dépôt. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index 20/25 non annoncés et runtime/route RDP désactivés.
