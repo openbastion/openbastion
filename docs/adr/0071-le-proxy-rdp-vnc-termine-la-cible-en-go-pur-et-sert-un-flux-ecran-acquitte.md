@@ -1285,3 +1285,21 @@ Validation de l'incrément 56 :
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (R2_BLACK rendu blanc ; retrait de R2_BLACK/R2_WHITE de la whitelist commune, rejeté par les huit cas).
 - Les autres ROP2 restent rejetés par les parseurs et le framebuffer ; aucun élargissement des profils de champs, coordonnées ou capacités annoncées.
 - `gofmt` et `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E avec une cible RDP ; index 8/20/22/25 non annoncés, runtime/route RDP désactivés.
+
+
+## ADR-0071 — incrément 57 : R2_NOTXORPEN pour les primitives vectorielles
+
+Les profils `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et `EllipseSC` (index 25) acceptent `R2_NOTXORPEN` (`0x0a`, fonction `DPxn`) en plus des opérations déjà prises en charge. Le moteur `applyRDPROP2` calcule chaque composante RGB comme le complément du XOR entre la destination et la plume/brosse (`^(D ^ P)`) ; l’alpha interne reste opaque. La couleur filaire demeure obligatoire et validée. La whitelist commune maintient l’alignement des quatre parseurs et du framebuffer ; les autres valeurs ROP2 restent refusées.
+
+Les coordonnées, champs, limites de points/deltas, règles de rasterisation, rollback PNG et gardes de négociation restent inchangés. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_NOTXORPEN` (`0x0a`) comme `DPxn` (complément de `D XOR P`).
+
+Validation de l'incrément 57 :
+- Tests de parsing et rendu PNG pixel-à-pixel pour les quatre primitives ; la couleur de plume/brosse est distincte de la destination afin de vérifier le complément du XOR et non un résultat constant : PASS.
+- Seeds du fuzzer `FuzzParseRDPOrdersUpdate` ajoutées pour les quatre ordres ; fuzzing ciblé : PASS, 61 186 exécutions en 5 s (4 workers).
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (complément XOR remplacé par XOR seul dans le renderer ; retrait de `R2_NOTXORPEN` de la whitelist commune).
+- `gofmt` et `git diff --check` : PASS. Les autres ROP2 restent refusés ; aucun champ ni slot de négociation supplémentaire n'est activé.
+- Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.

@@ -56,6 +56,10 @@ func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] ^= pen[channel]
 		}
+	case rdpROP2NotXorPen:
+		for channel := 0; channel < 3; channel++ {
+			destination[channel] = ^(destination[channel] ^ pen[channel])
+		}
 	case rdpROP2White:
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] = 0xff
