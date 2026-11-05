@@ -3,6 +3,7 @@ package rdp
 import (
 	"context"
 	"encoding/binary"
+	"sort"
 	"time"
 )
 
@@ -20,6 +21,7 @@ const (
 	rdpOrderMultiPatBlt     = byte(0x10)
 	rdpOrderMultiScrBlt     = byte(0x11)
 	rdpOrderLineTo          = byte(0x09)
+	rdpOrderPolygonSC       = byte(0x14)
 	rdpOrderPolyline        = byte(0x16)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
@@ -41,8 +43,13 @@ const (
 	maxRDPMultiDstBltRects  = 45
 	maxRDPMultiDstBltBytes  = 395
 	maxRDPLinePixels        = 32_768
-	maxRDPPolylinePoints    = 34
-	maxRDPPolylineBytes     = 147
+	maxRDPDeltaPoints       = 34
+	maxRDPDeltaBytes        = 147
+	maxRDPPolylinePoints    = maxRDPDeltaPoints
+	maxRDPPolylineBytes     = maxRDPDeltaBytes
+	maxRDPPolygonPoints     = maxRDPDeltaPoints // Local strict-profile limit for delta entries.
+	maxRDPPolygonBytes      = maxRDPDeltaBytes  // Local cbData payload limit; 148 bytes including cbData.
+	maxRDPPolygonSpans      = 1_114_095         // 17 spans per row at the maximum 16-bit desktop height.
 	rdpBitmapCompressed     = uint16(0x0001)
 	rdpBitmapNoCompHdr      = uint16(0x0400)
 	maxRDPBitmapRects       = 64
@@ -53,7 +60,7 @@ const (
 	maxRDPBitmapFragments       = 5
 )
 
-// rdpBitmapRectangleOperation describes how a decoded rectangle affects the
+// rdpBitmapRectangleOperation describes how a decoded graphics operation affects the
 // existing framebuffer. The zero value replaces pixels from the RGBA payload.
 type rdpBitmapRectangleOperation uint8
 
@@ -65,25 +72,29 @@ const (
 	rdpBitmapRectanglePatOr
 	rdpBitmapRectangleScrCopy
 	rdpBitmapRectangleLine
+	rdpBitmapRectanglePolygon
 )
 
-// RDPBitmapRectangle is one decoded, top-down rectangle from a server graphics
+// RDPBitmapRectangle is one ordered framebuffer operation from a server graphics
 // update. Pixels is tightly packed RGBA for replacement and solid-brush pattern
-// operations; DSTINVERT and ScrBlt carry no replacement pixel buffer.
+// operations; line and polygon operations carry bounded geometry and color metadata.
 type RDPBitmapRectangle struct {
-	X          uint16
-	Y          uint16
-	Width      uint16
-	Height     uint16
-	Pixels     []byte
-	operation  rdpBitmapRectangleOperation
-	sourceX    uint16
-	sourceY    uint16
-	linePoints [][2]uint16
-	lineColor  [4]byte
+	X               uint16
+	Y               uint16
+	Width           uint16
+	Height          uint16
+	Pixels          []byte
+	operation       rdpBitmapRectangleOperation
+	sourceX         uint16
+	sourceY         uint16
+	linePoints      [][2]uint16
+	lineColor       [4]byte
+	polygonPoints   [][2]uint16
+	polygonColor    [4]byte
+	polygonFillMode byte
 }
 
-// RDPBitmapUpdate contains the raster rectangles from one complete graphics update.
+// RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
 type RDPBitmapUpdate struct {
 	Rectangles []RDPBitmapRectangle
 }
@@ -131,6 +142,7 @@ type rdpPrimaryOrderState struct {
 	multiScrBltUsed      bool
 	lineToUsed           bool
 	polylineUsed         bool
+	polygonSCUsed        bool
 	multiOpaqueRectUsed  bool
 }
 
@@ -273,12 +285,12 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			}
 			lineColor = [4]byte{data[7], data[8], data[9], 0xff}
 			deltaEntries := int(data[10])
-			encodedLength := int(data[11])
+			encodedLength := int(data[11]) // cbData delimits this field; later orders may follow.
 			if deltaEntries < 1 || deltaEntries > maxRDPPolylinePoints || encodedLength == 0 ||
-				encodedLength > maxRDPPolylineBytes || encodedLength != len(data)-12 {
+				encodedLength > maxRDPPolylineBytes || encodedLength > len(data)-12 {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
-			points, decodeErr := decodeRDPPolylinePoints(data[12:], deltaEntries, startX, startY, desktopWidth, desktopHeight)
+			points, decodeErr := decodeRDPDeltaPoints(data[12:12+encodedLength], deltaEntries, startX, startY, desktopWidth, desktopHeight)
 			if decodeErr != nil {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -306,6 +318,45 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			state.polylineUsed = true
+			continue
+		case rdpOrderPolygonSC:
+			// Strict seven-field profile: absolute start, R2_COPYPEN,
+			// ALTERNATE fill, RGB brush color and bounded delta points.
+			if len(data) < 12 || data[0] != 0x7f {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			if data[4] != 0x0d || data[5] != 0x01 || startX < 0 || startY < 0 ||
+				startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			polygonColor := [4]byte{data[6], data[7], data[8], 0xff}
+			deltaEntries := int(data[9])
+			encodedLength := int(data[10]) // cbData delimits this field; later orders may follow.
+			if deltaEntries < 2 || deltaEntries > maxRDPPolygonPoints || encodedLength == 0 ||
+				encodedLength > maxRDPPolygonBytes || encodedLength > len(data)-11 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			deltaPoints, decodeErr := decodeRDPDeltaPoints(data[11:11+encodedLength], deltaEntries, startX, startY, desktopWidth, desktopHeight)
+			if decodeErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			polygonPoints := make([][2]uint16, 1, len(deltaPoints)+1)
+			polygonPoints[0] = [2]uint16{uint16(startX), uint16(startY)}
+			polygonPoints = append(polygonPoints, deltaPoints...)
+			_, bounds, pixels, polygonErr := rasterizeRDPPolygon(polygonPoints, 0x01, desktopWidth, desktopHeight)
+			if polygonErr != nil || len(result.Rectangles) >= maxRDPBitmapRects || pixels > maxRDPDesktopArea-totalPixels {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
+				X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectanglePolygon,
+				polygonPoints: polygonPoints, polygonColor: polygonColor, polygonFillMode: 0x01,
+			})
+			totalPixels += pixels
+			state.polygonSCUsed = true
+			data = data[11+encodedLength:]
 			continue
 		case rdpOrderLineTo:
 			// Strict ten-field profile: transparent background, absolute
@@ -553,12 +604,11 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 	return result, state, nil
 }
 
-// decodeRDPMultiDstBltRectangles decodes the DELTA_RECTS_FIELD payload. The
-// first rectangle is relative to (0,0,0,0). Only left and top accumulate across
-// rectangles; width and height are values or repeat the previous dimension when
-// their zero bit is set.
-func decodeRDPPolylinePoints(encoded []byte, count int, startX, startY int32, desktopWidth, desktopHeight uint16) ([][2]uint16, error) {
-	if count < 1 || count > maxRDPPolylinePoints || len(encoded) == 0 || len(encoded) > maxRDPPolylineBytes {
+// decodeRDPDeltaPoints decodes the zero-bits-prefixed DELTA_PTS_FIELD shared by
+// Polyline and PolygonSC. The initial point is supplied separately; each decoded
+// point accumulates signed X/Y deltas and must remain inside the desktop.
+func decodeRDPDeltaPoints(encoded []byte, count int, startX, startY int32, desktopWidth, desktopHeight uint16) ([][2]uint16, error) {
+	if count < 1 || count > maxRDPDeltaPoints || len(encoded) == 0 || len(encoded) > maxRDPDeltaBytes {
 		return nil, ErrMCSConnection
 	}
 	zeroBytes := (count + 3) / 4
@@ -639,6 +689,95 @@ func rasterizeRDPLine(startX, startY, endX, endY int32, desktopWidth, desktopHei
 		return nil, ErrMCSConnection
 	}
 	return points, nil
+}
+
+type rdpBitmapSpan struct {
+	X     uint16
+	Y     uint16
+	Width uint16
+}
+
+type rdpPolygonIntersection struct {
+	x     float64 // Sort key; start retains exact integer pixel rounding.
+	start int64   // ceil(x - 0.5), computed with integer arithmetic.
+}
+
+// rasterizeRDPPolygon converts an ALTERNATE-filled polygon into bounded
+// horizontal pixel spans. Pixel centers are tested at (x+0.5, y+0.5), and
+// horizontal edges are excluded so shared vertices are counted exactly once.
+func rasterizeRDPPolygon(points [][2]uint16, fillMode byte, desktopWidth, desktopHeight uint16) ([]rdpBitmapSpan, [4]uint16, uint64, error) {
+	var bounds [4]uint16
+	if fillMode != 0x01 || len(points) < 3 || len(points) > maxRDPPolygonPoints+1 || desktopWidth == 0 || desktopHeight == 0 {
+		return nil, bounds, 0, ErrMCSConnection
+	}
+	minX, minY := ^uint16(0), ^uint16(0)
+	var maxX, maxY uint16
+	for _, point := range points {
+		if point[0] >= desktopWidth || point[1] >= desktopHeight {
+			return nil, bounds, 0, ErrMCSConnection
+		}
+		minX, minY = min(minX, point[0]), min(minY, point[1])
+		maxX, maxY = max(maxX, point[0]), max(maxY, point[1])
+	}
+	if minX == maxX || minY == maxY {
+		return nil, bounds, 0, ErrMCSConnection
+	}
+	bounds = [4]uint16{minX, minY, maxX - minX + 1, maxY - minY + 1}
+	spans := make([]rdpBitmapSpan, 0, min(int(maxY-minY)*(len(points)/2), maxRDPPolygonSpans))
+	intersections := make([]rdpPolygonIntersection, 0, len(points))
+	var totalPixels uint64
+	for y := int64(minY); y < int64(maxY); y++ {
+		scanYTwice := 2*y + 1
+		intersections = intersections[:0]
+		for i, first := range points {
+			second := points[(i+1)%len(points)]
+			y1, y2 := int64(first[1]), int64(second[1])
+			dy := y2 - y1
+			if dy == 0 || scanYTwice < min(2*y1, 2*y2) || scanYTwice >= max(2*y1, 2*y2) {
+				continue
+			}
+			x1, x2 := int64(first[0]), int64(second[0])
+			dx := x2 - x1
+			numerator := 2*x1*dy + (scanYTwice-2*y1)*dx
+			denominator := 2 * dy
+			startNumerator := numerator - dy
+			if denominator < 0 {
+				numerator, denominator, startNumerator = -numerator, -denominator, -startNumerator
+			}
+			intersections = append(intersections, rdpPolygonIntersection{
+				x: float64(numerator) / float64(denominator), start: ceilRDPDivision(startNumerator, denominator),
+			})
+		}
+		if len(intersections)%2 != 0 {
+			return nil, [4]uint16{}, 0, ErrMCSConnection
+		}
+		sort.Slice(intersections, func(i, j int) bool { return intersections[i].x < intersections[j].x })
+		for i := 0; i < len(intersections); i += 2 {
+			left, right := intersections[i].start, intersections[i+1].start
+			if left < 0 || right > int64(desktopWidth) || right < left {
+				return nil, [4]uint16{}, 0, ErrMCSConnection
+			}
+			if right == left {
+				continue
+			}
+			if len(spans) >= maxRDPPolygonSpans || uint64(right-left) > maxRDPDesktopArea-totalPixels {
+				return nil, [4]uint16{}, 0, ErrMCSConnection
+			}
+			spans = append(spans, rdpBitmapSpan{X: uint16(left), Y: uint16(y), Width: uint16(right - left)})
+			totalPixels += uint64(right - left)
+		}
+	}
+	if len(spans) == 0 || totalPixels == 0 {
+		return nil, [4]uint16{}, 0, ErrMCSConnection
+	}
+	return spans, bounds, totalPixels, nil
+}
+
+func ceilRDPDivision(numerator, denominator int64) int64 {
+	if numerator >= 0 {
+		return (numerator + denominator - 1) / denominator
+	}
+	return numerator / denominator // Go truncates toward zero, which is ceil for negative values.
 }
 
 func absRDPInt32(value int32) int32 {
@@ -1128,6 +1267,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	multiScrBltEnabled := s.multiScrBltEnabled
 	lineToEnabled := s.lineToEnabled
 	polylineEnabled := s.polylineEnabled
+	polygonSCEnabled := s.polygonSCEnabled
 	multiOpaqueRectEnabled := s.multiOpaqueRectEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
@@ -1232,6 +1372,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		nextOrderState.multiScrBltUsed && !multiScrBltEnabled ||
 		nextOrderState.lineToUsed && !lineToEnabled ||
 		nextOrderState.polylineUsed && !polylineEnabled ||
+		nextOrderState.polygonSCUsed && !polygonSCEnabled ||
 		nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

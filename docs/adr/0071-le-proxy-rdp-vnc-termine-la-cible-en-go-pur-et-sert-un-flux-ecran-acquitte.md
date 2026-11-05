@@ -82,7 +82,7 @@ La connexion cible est un client RDP qui n'accepte que ce sous-ensemble. Tout le
 | Authentification | CredSSP/NLA, NTLMv2, domaine optionnel (vide = compte local) | NTLMv1, LM, mot de passe du client, repli sans NLA |
 | MCS/GCC | canal d'E/S et canal utilisateur, **zéro canal virtuel** | `cliprdr`, `rdpdr`, `rdpsnd`, `drdynvc`, `rdpecam`, tout canal virtuel |
 | Capacités | 32 bpp, bitmap RAW + RLE (RDP6), ordres de base, cache bitmap borné (v2/v3), cache de glyphes | RemoteFX, EGFX, NSCodec, cache hors écran, multi-moniteurs |
-| Ordres | DstBlt, PatBlt, ScrBlt, MemBlt, Mem3Blt, LineTo, OpaqueRect, SaveBitmap, GlyphIndex, FastIndex, MultiDstBlt, MultiPatBlt, MultiScrBlt, MultiOpaqueRect | tout ordre non annoncé : la session est refusée |
+| Ordres | DstBlt, PatBlt, ScrBlt, MemBlt, Mem3Blt, LineTo, PolygonSC, PolygonCB, EllipseSC, EllipseCB, OpaqueRect, SaveBitmap, GlyphIndex, FastIndex, MultiDstBlt, MultiPatBlt, MultiScrBlt, MultiOpaqueRect | tout ordre non annoncé : la session est refusée |
 | Entrée | `TS_INPUT_PDU` (scancodes, souris) | fastpath input et Unicode input dans le premier incrément |
 | Affichage | un moniteur, redimensionnement borné | multi-moniteurs, bureau au-delà de 16 777 216 px |
 | Fin | MCS Disconnect Provider Ultimatum, TLS `close_notify` | — |
@@ -1140,3 +1140,19 @@ Validation de l'incrément 47 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 60 208 exécutions en 5 s (4 workers).
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (bits de zéro, plafond de points, whitelist ROP2, cache de brosse, masque de champs, garde de négociation et couleur de plume) ; le fichier source est restauré octet pour octet après chaque mutation.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index Polyline 22 reste non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 48 — PolygonSC
+
+Le parseur slow-path accepte PolygonSC (`orderType=0x14`, négociation index 20) avec les sept champs explicites : point de départ absolu, `R2_COPYPEN` (`0x0d`), `FillMode=ALTERNATE` (`0x01`), couleur de brosse RGB, nombre de deltas et `CodedDeltaList`. Le profil local n’accepte que des coordonnées absolues signées 16 bits, borne les deltas à 34 points et le champ à 147 octets de données (148 avec `cbData`) ; les sommets restent dans le bureau, sans clipping. Le rasteriseur applique la règle pair/impair aux centres des pixels et produit des spans horizontaux bornés ; les opérations polygonales restent ordonnées avec les autres opérations du framebuffer. `cbData` délimite exactement `CodedDeltaList`, sans consommer les ordres suivants ; le même découpage corrige Polyline pour les PDU contenant plusieurs ordres primaires. Le rollback PNG restaure uniquement les spans effectivement peints. L'index 20 est vérifié indépendamment mais reste non annoncé ; runtime/route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.16 — PolygonSC](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/22e1117f-d40d-41df-9709-59389ac1f8dc), [Delta-Encoded Points](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/6c7b2a52-103c-4a7d-a2a9-997416d4a475).
+
+Validation de l'incrément 48 :
+- Test rouge sur le commit précédent `8c9efa7` : `TestParseRDPOrdersUpdateDecodesPolygonSC` échoue avec `ErrMCSConnection` avant l'implémentation, puis passe après ajout du profil.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 237 tests principaux `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 209 241 exécutions en 5 s (4 workers).
+- Contre-épreuves : 12 mutations compilantes tuées sur 12 (FillMode, ROP2, limite de points, masque, zero-bits, négociation indépendante, couleur, arrondi pixel-center et quatre contrôles `cbData`/slicing Polyline/PolygonSC) ; les sources sont restaurées octet pour octet après chaque mutation.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; index PolygonSC 20 non annoncé, runtime/route RDP désactivés.

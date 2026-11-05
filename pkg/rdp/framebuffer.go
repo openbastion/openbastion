@@ -40,10 +40,10 @@ func NewRDPFramebuffer(width, height uint16) (*RDPFramebuffer, error) {
 	return &RDPFramebuffer{image: frame}, nil
 }
 
-// Apply validates every rectangle before changing the framebuffer, applies
-// replacement, solid-brush, destination-only, and screen-copy operations, and returns the next complete
-// PNG frame. Sequence numbers are strictly increasing and are committed only
-// after PNG encoding succeeds.
+// Apply validates every operation before changing the framebuffer, applies
+// replacement, solid-brush, destination-only, line, polygon and screen-copy
+// operations, and returns the next complete PNG frame. Sequence numbers are
+// strictly increasing and committed only after PNG encoding succeeds.
 func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (screenstream.Message, error) {
 	if f == nil {
 		return screenstream.Message{}, ErrRDPFramebuffer
@@ -56,7 +56,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	}
 	bounds := f.image.Bounds()
 	var totalPixels uint64
-	for _, rect := range update.Rectangles {
+	polygonSpans := make([][]rdpBitmapSpan, len(update.Rectangles))
+	for index, rect := range update.Rectangles {
 		pixels := uint64(rect.Width) * uint64(rect.Height)
 		if rect.operation == rdpBitmapRectangleLine {
 			pixels = uint64(len(rect.linePoints))
@@ -69,6 +70,15 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 					return screenstream.Message{}, ErrRDPFramebuffer
 				}
 			}
+		}
+		if rect.operation == rdpBitmapRectanglePolygon {
+			spans, polygonBounds, polygonPixels, polygonErr := rasterizeRDPPolygon(rect.polygonPoints, rect.polygonFillMode, uint16(bounds.Dx()), uint16(bounds.Dy()))
+			if polygonErr != nil || len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || rect.polygonColor[3] != 0xff ||
+				rect.X != polygonBounds[0] || rect.Y != polygonBounds[1] || rect.Width != polygonBounds[2] || rect.Height != polygonBounds[3] {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
+			polygonSpans[index] = spans
+			pixels = polygonPixels
 		}
 		if rect.Width == 0 || rect.Height == 0 || uint32(rect.X)+uint32(rect.Width) > uint32(bounds.Dx()) ||
 			uint32(rect.Y)+uint32(rect.Height) > uint32(bounds.Dy()) || pixels > screenstream.MaxPixels-totalPixels {
@@ -94,6 +104,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			}
 		case rdpBitmapRectangleLine:
 			// Line points and color were validated above.
+		case rdpBitmapRectanglePolygon:
+			// Polygon spans, bounds and color were validated above.
 		default:
 			return screenstream.Message{}, ErrRDPFramebuffer
 		}
@@ -101,18 +113,30 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	}
 	previous := make([][]byte, len(update.Rectangles))
 	for i, rect := range update.Rectangles {
-		if rect.operation == rdpBitmapRectangleLine {
+		switch rect.operation {
+		case rdpBitmapRectangleLine:
 			previous[i] = make([]byte, len(rect.linePoints)*4)
 			for pointIndex, point := range rect.linePoints {
 				start := f.image.PixOffset(int(point[0]), int(point[1]))
 				copy(previous[i][pointIndex*4:], f.image.Pix[start:start+4])
 			}
-		} else {
+		case rdpBitmapRectanglePolygon:
+			var previousBytes int
+			for _, span := range polygonSpans[i] {
+				previousBytes += int(span.Width) * 4
+			}
+			previous[i] = make([]byte, 0, previousBytes)
+			for _, span := range polygonSpans[i] {
+				start := f.image.PixOffset(int(span.X), int(span.Y))
+				end := start + int(span.Width)*4
+				previous[i] = append(previous[i], f.image.Pix[start:end]...)
+			}
+		default:
 			previous[i] = make([]byte, int(rect.Width)*int(rect.Height)*4)
-		}
-		for y := 0; rect.operation != rdpBitmapRectangleLine && y < int(rect.Height); y++ {
-			start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
-			copy(previous[i][y*int(rect.Width)*4:], f.image.Pix[start:start+int(rect.Width)*4])
+			for y := 0; y < int(rect.Height); y++ {
+				start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
+				copy(previous[i][y*int(rect.Width)*4:], f.image.Pix[start:start+int(rect.Width)*4])
+			}
 		}
 		switch rect.operation {
 		case rdpBitmapRectangleReplace:
@@ -160,6 +184,13 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 				offset := f.image.PixOffset(int(point[0]), int(point[1]))
 				copy(f.image.Pix[offset:offset+4], rect.lineColor[:])
 			}
+		case rdpBitmapRectanglePolygon:
+			for _, span := range polygonSpans[i] {
+				start := f.image.PixOffset(int(span.X), int(span.Y))
+				for x := 0; x < int(span.Width); x++ {
+					copy(f.image.Pix[start+x*4:start+x*4+4], rect.polygonColor[:])
+				}
+			}
 		case rdpBitmapRectangleScrCopy:
 			source := make([]byte, int(rect.Width)*int(rect.Height)*4)
 			for y := 0; y < int(rect.Height); y++ {
@@ -177,12 +208,21 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	if err := png.Encode(&encoded, f.image); err != nil || encoded.Len() == 0 || encoded.Len() > screenstream.MaxPNGBytes {
 		for i := len(update.Rectangles) - 1; i >= 0; i-- {
 			rect := update.Rectangles[i]
-			if rect.operation == rdpBitmapRectangleLine {
+			switch rect.operation {
+			case rdpBitmapRectangleLine:
 				for pointIndex, point := range rect.linePoints {
 					start := f.image.PixOffset(int(point[0]), int(point[1]))
 					copy(f.image.Pix[start:start+4], previous[i][pointIndex*4:])
 				}
-			} else {
+			case rdpBitmapRectanglePolygon:
+				pixelOffset := 0
+				for _, span := range polygonSpans[i] {
+					start := f.image.PixOffset(int(span.X), int(span.Y))
+					length := int(span.Width) * 4
+					copy(f.image.Pix[start:start+length], previous[i][pixelOffset:pixelOffset+length])
+					pixelOffset += length
+				}
+			default:
 				for y := 0; y < int(rect.Height); y++ {
 					start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
 					copy(f.image.Pix[start:start+int(rect.Width)*4], previous[i][y*int(rect.Width)*4:])

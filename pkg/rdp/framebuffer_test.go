@@ -342,3 +342,99 @@ func TestRDPFramebufferRollsBackWhenPNGExceedsScreenStreamLimit(t *testing.T) {
 		t.Fatalf("oversized update was not rolled back: %#v", got)
 	}
 }
+
+func TestRDPFramebufferAppliesPolygonSC(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.polygonSCUsed || len(update.Rectangles) != 1 || update.Rectangles[0].operation != rdpBitmapRectanglePolygon {
+		t.Fatalf("PolygonSC update=%+v state=%+v", update, state)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(61, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			inside := x >= 1 && x <= 3 && y >= 1 && y <= 3
+			if inside && got != (color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}) {
+				t.Fatalf("polygon pixel (%d,%d)=%#v", x, y, got)
+			}
+			if !inside && got != (color.RGBA{A: 0xff}) {
+				t.Fatalf("unpainted pixel (%d,%d)=%#v", x, y, got)
+			}
+		}
+	}
+}
+
+func TestRDPFramebufferRejectsMalformedPolygonAtomically(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		Width: 4, Height: 4, operation: rdpBitmapRectanglePolygon,
+		polygonPoints: [][2]uint16{{1, 1}, {4, 1}, {4, 4}}, polygonColor: [4]byte{1, 2, 3, 0}, polygonFillMode: 0x01,
+	}}}, time.Unix(62, 0))
+	if err == nil {
+		t.Fatal("polygon with transparent color accepted")
+	}
+	message, err := framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
+		X: 1, Y: 1, Width: 1, Height: 1, Pixels: []byte{0x12, 0x34, 0x56, 0xff},
+	}}}, time.Unix(63, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := color.RGBAModel.Convert(decoded.At(1, 1)).(color.RGBA); got != (color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}) {
+		t.Fatalf("rejected polygon changed framebuffer: %#v", got)
+	}
+	if message.Sequence != 1 {
+		t.Fatalf("rejected polygon consumed sequence: %d", message.Sequence)
+	}
+}
+
+func TestRDPFramebufferRollsBackPolygonWhenPNGExceedsScreenStreamLimit(t *testing.T) {
+	const width, height = 1050, 1050
+	framebuffer, err := NewRDPFramebuffer(width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := uint32(0x9e3779b9)
+	for i := range framebuffer.image.Pix {
+		state ^= state << 13
+		state ^= state >> 17
+		state ^= state << 5
+		framebuffer.image.Pix[i] = byte(state)
+	}
+	before := append([]byte(nil), framebuffer.image.Pix...)
+	order := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), width, height, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := framebuffer.Apply(update, time.Now()); err == nil {
+		t.Fatal("oversized polygon PNG was accepted")
+	}
+	if !bytes.Equal(framebuffer.image.Pix, before) {
+		t.Fatal("failed polygon encoding did not restore the framebuffer")
+	}
+	if framebuffer.sequence != 0 {
+		t.Fatalf("failed polygon consumed sequence: %d", framebuffer.sequence)
+	}
+	clear(before)
+}

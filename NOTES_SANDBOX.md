@@ -2472,3 +2472,17 @@ Validation de l'incrément 47 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 60 208 exécutions en 5 s (4 workers).
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (bits de zéro, plafond de points, ROP2, cache, field mask, négociation et couleur de plume).
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; index 22 non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 48 : PolygonSC
+
+Le parseur slow-path accepte PolygonSC (`orderType=0x14`) avec les sept champs explicites, coordonnées absolues signées 16 bits, `R2_COPYPEN`, `FillMode=ALTERNATE`, BrushColor RGB et `DELTA_PTS_FIELD`. Le profil local borne à 34 deltas/147 octets de données (148 avec `cbData`), sans clipping. Le rasteriseur pair/impair convertit les intersections aux centres des pixels en spans horizontaux ; le framebuffer garde l'ordre des opérations et restaure les spans en cas d'échec PNG. `cbData` délimite exactement la liste de deltas, y compris lorsque plusieurs ordres primaires partagent le même PDU ; le découpage Polyline est corrigé de la même façon. L'index de négociation 20 est indépendant et non annoncé ; runtime/route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.16 — PolygonSC](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/22e1117f-d40d-41df-9709-59389ac1f8dc), [Delta-Encoded Points](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/6c7b2a52-103c-4a7d-a2a9-997416d4a475).
+
+Validation de l'incrément 48 :
+- Test rouge sur `8c9efa7` : le profil PolygonSC est refusé (`ErrMCSConnection`) avant implémentation, puis accepté après.
+- `make build vet test proto-lint` : PASS ; `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- 237 tests RDP principaux `--- PASS` ; fuzz `FuzzParseRDPOrdersUpdate` : 209 241 exécutions en 5 s (4 workers).
+- Contre-épreuves : 12 mutations compilantes tuées sur 12, incluant FillMode, ROP2, points, masque, zero-bits, négociation, couleur, arrondi et frontières/slicing `cbData` pour Polyline et PolygonSC.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; index 20 non annoncé, runtime/route RDP désactivés.
