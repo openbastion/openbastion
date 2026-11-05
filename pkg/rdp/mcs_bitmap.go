@@ -291,10 +291,11 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			data = data[1:]
 			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
 			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			if data[4] != 0x0d || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
+			if (data[4] != rdpROP2CopyPen && data[4] != rdpROP2Not) || binary.LittleEndian.Uint16(data[5:7]) != 0 ||
 				startX < 0 || startY < 0 || startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
+			lineROP2 = data[4]
 			lineColor = [4]byte{data[7], data[8], data[9], 0xff}
 			deltaEntries := int(data[10])
 			encodedLength := int(data[11]) // cbData delimits this field; later orders may follow.

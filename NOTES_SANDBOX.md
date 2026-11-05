@@ -2546,3 +2546,19 @@ Validation de l'incrément 52 :
 - `go test -v ./pkg/rdp/... -count=1` : 254 tests principaux `--- PASS`.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (désactivation de l'inversion RGB et rejet de `R2_NOT` dans le parseur LineTo) ; fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index LineTo 8 non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 53 — R2_NOT pour Polyline
+
+Le profil Polyline (`orderType=0x16`, négociation index 22) accepte `R2_NOT` (`0x06`, fonction `Dn`) en plus de `R2_COPYPEN` (`0x0d`). Le ROP2 est conservé sur chaque segment produit par le décodage de `DELTA_PTS_FIELD`, puis transmis au moteur ROP2 commun du framebuffer. Chaque pixel des segments inverse les trois composantes RGB de destination ; l’alpha interne reste opaque et la couleur de plume demeure requise sur le fil mais n’est pas consommée par `R2_NOT`. Les autres ROP2, les coordonnées hors bureau, les points/deltas hors limites, les champs omis et les données résiduelles restent refusés. L’index 22 reste non annoncé ; runtime et route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_NOT` (`0x06`) comme `Dn`.
+
+Validation de l'incrément 53 :
+- Test rouge sur le profil précédent : le parseur refuse `R2_NOT` sur Polyline ; les tests de décodage et de rendu de deux segments passent après implémentation.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 74 501 exécutions.
+- `go test -v ./pkg/rdp/... -count=1` : 256 tests principaux `--- PASS`.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (désactivation de l’inversion RGB dans le renderer partagé et rejet de `R2_NOT` dans le parseur Polyline) ; fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index Polyline 22 non annoncé, runtime/route RDP désactivés.
