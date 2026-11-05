@@ -22,6 +22,7 @@ const (
 	rdpDstBltFieldMask     = byte(0x1f) // Four coordinates and bRop.
 	rdpDstBltBlackness     = byte(0x00)
 	rdpDstBltWhiteness     = byte(0xff)
+	rdpDstBltInvert        = byte(0x55)
 	maxRDPPrimaryOrders    = 1024
 	rdpBitmapCompressed    = uint16(0x0001)
 	rdpBitmapNoCompHdr     = uint16(0x0400)
@@ -33,14 +34,25 @@ const (
 	maxRDPBitmapFragments       = 5
 )
 
-// RDPBitmapRectangle is one decoded, top-down RGBA rectangle from a server
-// graphics update. Pixels is tightly packed (four bytes per pixel).
+// rdpBitmapRectangleOperation describes how a decoded rectangle affects the
+// existing framebuffer. The zero value replaces pixels from the RGBA payload.
+type rdpBitmapRectangleOperation uint8
+
+const (
+	rdpBitmapRectangleReplace rdpBitmapRectangleOperation = iota
+	rdpBitmapRectangleDstInvert
+)
+
+// RDPBitmapRectangle is one decoded, top-down rectangle from a server graphics
+// update. Pixels is tightly packed RGBA for replace operations; destination-only
+// operations such as DSTINVERT carry no replacement pixel buffer.
 type RDPBitmapRectangle struct {
-	X      uint16
-	Y      uint16
-	Width  uint16
-	Height uint16
-	Pixels []byte
+	X         uint16
+	Y         uint16
+	Width     uint16
+	Height    uint16
+	Pixels    []byte
+	operation rdpBitmapRectangleOperation
 }
 
 // RDPBitmapUpdate contains the raster rectangles from one complete graphics update.
@@ -117,8 +129,8 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 }
 
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt BLACKNESS/WHITENESS, OpaqueRect, and solid-brush PATCOPY PatBlt, all
-// with absolute coordinates and no clipping bounds or omitted fields.
+// DstBlt BLACKNESS/WHITENESS/DSTINVERT, OpaqueRect, and solid-brush PATCOPY
+// PatBlt, all with absolute coordinates and no clipping bounds or omitted fields.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -155,6 +167,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		}
 		var left, top, width, height int32
 		var red, green, blue byte
+		operation := rdpBitmapRectangleReplace
 		switch state.orderType {
 		case rdpOrderDstBlt:
 			if len(data) < 10 || data[0] != rdpDstBltFieldMask {
@@ -172,6 +185,8 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				red, green, blue = 0, 0, 0
 			case rdpDstBltWhiteness:
 				red, green, blue = 0xff, 0xff, 0xff
+			case rdpDstBltInvert:
+				operation = rdpBitmapRectangleDstInvert
 			default:
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -219,12 +234,15 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
 		totalPixels += pixels
-		rgba := make([]byte, int(pixels)*4)
-		for offset := 0; offset < len(rgba); offset += 4 {
-			rgba[offset], rgba[offset+1], rgba[offset+2], rgba[offset+3] = red, green, blue, 0xff
+		var rgba []byte
+		if operation == rdpBitmapRectangleReplace {
+			rgba = make([]byte, int(pixels)*4)
+			for offset := 0; offset < len(rgba); offset += 4 {
+				rgba[offset], rgba[offset+1], rgba[offset+2], rgba[offset+3] = red, green, blue, 0xff
+			}
 		}
 		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
-			X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba,
+			X: uint16(left), Y: uint16(top), Width: uint16(width), Height: uint16(height), Pixels: rgba, operation: operation,
 		})
 		switch state.orderType {
 		case rdpOrderDstBlt:

@@ -66,14 +66,16 @@ func TestParseRDPOrdersUpdateDecodesSolidPatBlt(t *testing.T) {
 	}
 }
 
-func TestParseRDPOrdersUpdateDecodesDstBltConstantRasterOperations(t *testing.T) {
+func TestParseRDPOrdersUpdateDecodesDstBltSupportedRasterOperations(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		rop   byte
-		color [3]byte
+		name     string
+		rop      byte
+		color    [3]byte
+		stateful bool
 	}{
 		{name: "BLACKNESS", rop: 0x00, color: [3]byte{0x00, 0x00, 0x00}},
 		{name: "WHITENESS", rop: 0xff, color: [3]byte{0xff, 0xff, 0xff}},
+		{name: "DSTINVERT", rop: 0x55, stateful: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			order := mcsTestDstBltOrder(0x09, true, 2, 3, 2, 2, test.rop)
@@ -88,10 +90,16 @@ func TestParseRDPOrdersUpdateDecodesDstBltConstantRasterOperations(t *testing.T)
 			if rect.X != 2 || rect.Y != 3 || rect.Width != 2 || rect.Height != 2 {
 				t.Fatalf("DstBlt rectangle = %+v", rect)
 			}
-			wantPixel := []byte{test.color[0], test.color[1], test.color[2], 0xff}
-			for offset := 0; offset < len(rect.Pixels); offset += 4 {
-				if !bytes.Equal(rect.Pixels[offset:offset+4], wantPixel) {
-					t.Fatalf("DstBlt pixel %d = %v, want %v", offset/4, rect.Pixels[offset:offset+4], wantPixel)
+			if test.stateful {
+				if len(rect.Pixels) != 0 {
+					t.Fatalf("DSTINVERT unexpectedly carries replacement pixels: %d bytes", len(rect.Pixels))
+				}
+			} else {
+				wantPixel := []byte{test.color[0], test.color[1], test.color[2], 0xff}
+				for offset := 0; offset < len(rect.Pixels); offset += 4 {
+					if !bytes.Equal(rect.Pixels[offset:offset+4], wantPixel) {
+						t.Fatalf("DstBlt pixel %d = %v, want %v", offset/4, rect.Pixels[offset:offset+4], wantPixel)
+					}
 				}
 			}
 		})
@@ -101,7 +109,8 @@ func TestParseRDPOrdersUpdateDecodesDstBltConstantRasterOperations(t *testing.T)
 func TestParseRDPOrdersUpdateRejectsUnsupportedDstBltProfiles(t *testing.T) {
 	valid := mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0x00)
 	cases := map[string][]byte{
-		"destination-dependent ROP":   mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0x55),
+		"source-dependent ROP":        mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0xcc),
+		"unsupported destination ROP": mcsTestDstBltOrder(0x09, true, 1, 1, 2, 2, 0xaa),
 		"missing initial type change": mcsTestDstBltOrder(0x01, false, 1, 1, 2, 2, 0x00),
 		"wrong field mask":            func() []byte { out := append([]byte(nil), valid...); out[2] = 0x0f; return out }(),
 		"negative coordinate":         mcsTestDstBltOrder(0x09, true, -1, 1, 2, 2, 0x00),
@@ -274,6 +283,7 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0, 0, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{}, [3]byte{0xff, 0xff, 0xff}, 0), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x00), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = parseRDPOrdersUpdateData(data, 64, 64, rdpPrimaryOrderState{})
@@ -431,6 +441,46 @@ func TestRDPFramebufferAppliesDstBltOrder(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRDPFramebufferAppliesDstInvertOperation(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedOrder := mcsTestPatBltOrder(0x01, false, 2, 3, 2, 2, 0xf0, [3]byte{}, [3]byte{0x12, 0x34, 0x56}, 0)
+	seedUpdate, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, seedOrder, 0, 0), 0x000103ea, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := framebuffer.Apply(seedUpdate, time.Unix(4, 0)); err != nil {
+		t.Fatal(err)
+	}
+
+	invertOrder := mcsTestDstBltOrder(0x09, true, 2, 3, 2, 2, 0x55)
+	invertUpdate, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, invertOrder, 0, 0), 0x000103ea, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(invertUpdate.Rectangles) != 1 || len(invertUpdate.Rectangles[0].Pixels) != 0 {
+		t.Fatalf("DSTINVERT update = %+v", invertUpdate)
+	}
+	message, err := framebuffer.Apply(invertUpdate, time.Unix(5, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 3; y < 5; y++ {
+		for x := 2; x < 4; x++ {
+			r, g, b, a := decoded.At(x, y).RGBA()
+			if r != 0xed*257 || g != 0xcb*257 || b != 0xa9*257 || a != 0xffff {
+				t.Fatalf("inverted pixel (%d,%d) = (%x,%x,%x,%x)", x, y, r, g, b, a)
+			}
+		}
 	}
 }
 

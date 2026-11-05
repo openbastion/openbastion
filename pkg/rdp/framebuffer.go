@@ -40,9 +40,10 @@ func NewRDPFramebuffer(width, height uint16) (*RDPFramebuffer, error) {
 	return &RDPFramebuffer{image: frame}, nil
 }
 
-// Apply validates every rectangle before changing the framebuffer, applies the
-// update, and returns the next complete PNG frame. Sequence numbers are strictly
-// increasing and are committed only after PNG encoding succeeds.
+// Apply validates every rectangle before changing the framebuffer, applies
+// replacement and destination-only operations, and returns the next complete
+// PNG frame. Sequence numbers are strictly increasing and are committed only
+// after PNG encoding succeeds.
 func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (screenstream.Message, error) {
 	if f == nil {
 		return screenstream.Message{}, ErrRDPFramebuffer
@@ -58,8 +59,19 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	for _, rect := range update.Rectangles {
 		pixels := uint64(rect.Width) * uint64(rect.Height)
 		if rect.Width == 0 || rect.Height == 0 || uint32(rect.X)+uint32(rect.Width) > uint32(bounds.Dx()) ||
-			uint32(rect.Y)+uint32(rect.Height) > uint32(bounds.Dy()) || pixels > screenstream.MaxPixels-totalPixels ||
-			pixels*4 != uint64(len(rect.Pixels)) {
+			uint32(rect.Y)+uint32(rect.Height) > uint32(bounds.Dy()) || pixels > screenstream.MaxPixels-totalPixels {
+			return screenstream.Message{}, ErrRDPFramebuffer
+		}
+		switch rect.operation {
+		case rdpBitmapRectangleReplace:
+			if pixels*4 != uint64(len(rect.Pixels)) {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
+		case rdpBitmapRectangleDstInvert:
+			if len(rect.Pixels) != 0 {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
+		default:
 			return screenstream.Message{}, ErrRDPFramebuffer
 		}
 		totalPixels += pixels
@@ -71,9 +83,22 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
 			copy(previous[i][y*int(rect.Width)*4:], f.image.Pix[start:start+int(rect.Width)*4])
 		}
-		dst := image.Rect(int(rect.X), int(rect.Y), int(rect.X)+int(rect.Width), int(rect.Y)+int(rect.Height))
-		src := &image.RGBA{Pix: rect.Pixels, Stride: int(rect.Width) * 4, Rect: image.Rect(0, 0, int(rect.Width), int(rect.Height))}
-		draw.Draw(f.image, dst, src, src.Bounds().Min, draw.Src)
+		switch rect.operation {
+		case rdpBitmapRectangleReplace:
+			dst := image.Rect(int(rect.X), int(rect.Y), int(rect.X)+int(rect.Width), int(rect.Y)+int(rect.Height))
+			src := &image.RGBA{Pix: rect.Pixels, Stride: int(rect.Width) * 4, Rect: image.Rect(0, 0, int(rect.Width), int(rect.Height))}
+			draw.Draw(f.image, dst, src, src.Bounds().Min, draw.Src)
+		case rdpBitmapRectangleDstInvert:
+			for y := 0; y < int(rect.Height); y++ {
+				start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
+				for x := 0; x < int(rect.Width); x++ {
+					offset := start + x*4
+					f.image.Pix[offset] ^= 0xff
+					f.image.Pix[offset+1] ^= 0xff
+					f.image.Pix[offset+2] ^= 0xff
+				}
+			}
+		}
 	}
 	var encoded bytes.Buffer
 	if err := png.Encode(&encoded, f.image); err != nil || encoded.Len() == 0 || encoded.Len() > screenstream.MaxPNGBytes {

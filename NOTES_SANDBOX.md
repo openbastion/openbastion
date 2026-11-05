@@ -2290,7 +2290,7 @@ Validation de l’incrément 35 :
 
 ## 2026-11-05 — ADR-0071, incrément 36 : DstBlt slow-path
 
-Ajout du profil DstBlt strict : `orderType=0x00`, masque de champs `0x1f`, quatre coordonnées absolues signées 16 bits et ROP explicite. Seuls BLACKNESS (`0x00`) et WHITENESS (`0xff`) sont convertis en rectangles RGBA opaques. Les opérations qui dépendent des pixels de destination (par exemple DSTINVERT) restent refusées tant que le framebuffer n'expose pas d'opérations stateful.
+Ajout du profil DstBlt strict : `orderType=0x00`, masque de champs `0x1f`, quatre coordonnées absolues signées 16 bits et ROP explicite. Seuls BLACKNESS (`0x00`) et WHITENESS (`0xff`) sont convertis en rectangles RGBA opaques. Les ROP destination-dépendants restent refusés à ce stade.
 
 Le type initial reste PatBlt, DstBlt doit être sélectionné explicitement par TS_TYPE_CHANGE. La session conserve les familles d'ordres rencontrées et refuse le flux si `dstBltEnabled` (index 0) ou `patBltOpaqueRectEnabled` (index partagé 1) n'est pas vrai, même si les ordres primaires sont globalement activés. Confirm Active ne déclare toujours aucun ordre ; DstBlt index 0 et PatBlt/OpaqueRect index 1 restent désactivés. Le runtime/route RDP restent désactivés.
 
@@ -2305,3 +2305,22 @@ Validation de l’incrément 36 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 50 276 exécutions en 5 s.
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (ROP, masque, bornes, négociation DstBlt, négociation PatBlt/OpaqueRect, garde globale, type initial) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; les capacités DstBlt et PatBlt/OpaqueRect restent non annoncées, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 37 : DstBlt DSTINVERT stateful
+
+DSTINVERT (`0x55`) est désormais accepté comme opération destination-only typée sans buffer RGBA de remplacement. `RDPFramebuffer.Apply` inverse RGB dans la zone existante et préserve l'alpha ; les pixels précédents sont sauvegardés pour rollback en cas d'échec d'encodage PNG. Les ROP source/pattern dépendants et les autres ROP non implémentés restent refusés. Le garde de négociation DstBlt index 0 reste obligatoire ; Confirm Active, runtime et route RDP restent désactivés.
+
+Test de bout en bout du framebuffer : PATCOPY peint une zone, DSTINVERT inverse les pixels et le PNG confirme les valeurs RGB inversées et alpha 255. Le fuzzer reçoit aussi un seed DSTINVERT.
+
+Références : [MS-RDPEGDI DstBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/87ea30df-59d6-438e-a735-83f0225fbf91), [ROP3 Operation Index](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a9a85075-e796-45eb-b84a-f399324a1109).
+
+Validation de l’incrément 37 :
+- Test rouge avant implémentation : le parseur rejette DSTINVERT et le framebuffer refuse l'opération sans pixels de remplacement ; les tests passent après ajout du chemin stateful.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 186 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 48 183 exécutions en 5 s.
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (mode DSTINVERT, canaux rouge/bleu, payload de remplacement, opération inconnue, rollback PNG, limite cumulative de pixels) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; aucune capacité graphique n'est annoncée, runtime/route RDP désactivés.

@@ -921,3 +921,24 @@ Validation de l’incrément 36 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 50 276 exécutions en 5 s.
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (ROP, masque, bornes, négociation DstBlt, négociation PatBlt/OpaqueRect, garde globale, type initial) ; tous les fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; les capacités DstBlt et PatBlt/OpaqueRect restent non annoncées, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — Incrément 37 : DstBlt DSTINVERT stateful
+
+Le profil DstBlt accepte maintenant le ROP `DSTINVERT` (`0x55`) en plus de BLACKNESS/WHITENESS. Contrairement aux remplissages constants, DSTINVERT ne transporte aucun buffer RGBA de remplacement : il est conservé comme une opération destination-only typée dans `RDPBitmapRectangle`. `RDPFramebuffer.Apply` valide l'opération, sauvegarde les pixels touchés pour rollback, inverse les trois canaux RGB du framebuffer existant et préserve l'alpha. Les contrôles de dimensions, de limites, de compte de rectangles et le rollback sur erreur PNG s'appliquent aussi à ce chemin.
+
+Le parseur refuse toujours les ROP qui dépendent des bits source/pattern ainsi que les autres ROP destination-only non implémentés. Le contrôle de négociation DstBlt index 0 demeure obligatoire ; aucune capacité n'est annoncée et le runtime/route RDP restent désactivés.
+
+Tests : vecteur DSTINVERT sans pixels de remplacement, peinture PATCOPY initiale suivie d'une inversion réelle vérifiée dans le PNG, alpha préservé, ROP source-dépendant et ROP non pris en charge refusés, seed DSTINVERT ajouté au fuzzer.
+
+Références : [MS-RDPEGDI DstBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/87ea30df-59d6-438e-a735-83f0225fbf91), [ROP3 Operation Index — DSTINVERT](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/a9a85075-e796-45eb-b84a-f399324a1109).
+
+Validation de l’incrément 37 :
+- Test rouge avant implémentation : le parseur rejette DSTINVERT et le framebuffer refuse l'opération sans pixels de remplacement ; les tests passent après ajout du chemin stateful.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 186 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 48 183 exécutions en 5 s.
+- Contre-épreuves : 7 mutations compilantes tuées sur 7 (mode DSTINVERT, canaux rouge/bleu, payload de remplacement, opération inconnue, rollback PNG, limite cumulative de pixels) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; aucune capacité graphique n'est annoncée, runtime/route RDP désactivés.
