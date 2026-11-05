@@ -1022,6 +1022,8 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -2305,5 +2307,19 @@ func TestRasterizeRDPEllipseHandlesSinglePixelBounds(t *testing.T) {
 	}
 	if bounds != [4]uint16{2, 3, 1, 1} || pixels != 1 || len(spans) != 1 || spans[0] != (rdpBitmapSpan{X: 2, Y: 3, Width: 1}) {
 		t.Fatalf("single-pixel ellipse: spans=%v bounds=%v pixels=%d", spans, bounds, pixels)
+	}
+}
+
+func TestParseRDPOrdersUpdateAcceptsPolygonSCNotROP2(t *testing.T) {
+	order := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x06, 0x01, [3]byte{1, 2, 3}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); err != nil {
+		t.Fatalf("PolygonSC R2_NOT should decode: %v", err)
+	}
+}
+
+func TestParseRDPOrdersUpdateAcceptsEllipseSCNotROP2(t *testing.T) {
+	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x06, 0x01, [3]byte{1, 2, 3})
+	if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); err != nil {
+		t.Fatalf("EllipseSC R2_NOT should decode: %v", err)
 	}
 }

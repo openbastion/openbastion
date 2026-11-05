@@ -1172,3 +1172,12 @@ Validation de l'incrément 49 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 179 553 exécutions en 5 s (4 workers).
 - Contre-épreuves : 12 mutations compilantes tuées sur 12 (ROP2, FillMode, masque, bornes inclusives, centre et racine entière, négociation indépendante, couleur, mapping d’ordre, état, consommation des champs et rollback PNG) ; les sources sont restaurées octet pour octet après chaque mutation.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l’équivalence pixel-à-pixel avec GDI reste à vérifier. Index EllipseSC 25 non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 50 — R2_NOT pour PolygonSC et EllipseSC
+
+Les profils PolygonSC et EllipseSC acceptent désormais `R2_NOT` (`0x06`, fonction `Dn`) en plus de `R2_COPYPEN` (`0x0d`). `R2_NOT` inverse les trois canaux RGB de la destination ; le canal alpha interne reste opaque et la couleur fournie dans l’ordre reste requise mais n’est pas utilisée par cette opération. Les autres valeurs ROP2 restent refusées. Le même chemin de spans et le même rollback PNG sont conservés. Les index de négociation 20 et 25 restent indépendants et non annoncés ; runtime/route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_NOT` (`0x06`) comme `Dn`.
+
+Validation de l'incrément 50 : en attente des portes complètes, du fuzzing et des contre-épreuves avant commit.

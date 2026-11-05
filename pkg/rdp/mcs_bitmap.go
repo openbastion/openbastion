@@ -25,6 +25,8 @@ const (
 	rdpOrderPolygonSC       = byte(0x14)
 	rdpOrderPolyline        = byte(0x16)
 	rdpOrderEllipseSC       = byte(0x19)
+	rdpROP2Not              = byte(0x06)
+	rdpROP2CopyPen          = byte(0x0d)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
@@ -95,7 +97,9 @@ type RDPBitmapRectangle struct {
 	polygonPoints   [][2]uint16
 	polygonColor    [4]byte
 	polygonFillMode byte
+	polygonROP2     byte
 	ellipseColor    [4]byte
+	ellipseROP2     byte
 }
 
 // RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
@@ -333,7 +337,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			data = data[1:]
 			startX := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
 			startY := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			if data[4] != 0x0d || data[5] != 0x01 || startX < 0 || startY < 0 ||
+			if (data[4] != rdpROP2CopyPen && data[4] != rdpROP2Not) || data[5] != 0x01 || startX < 0 || startY < 0 ||
 				startX >= int32(desktopWidth) || startY >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -357,7 +361,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			}
 			result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
 				X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectanglePolygon,
-				polygonPoints: polygonPoints, polygonColor: polygonColor, polygonFillMode: 0x01,
+				polygonPoints: polygonPoints, polygonColor: polygonColor, polygonFillMode: 0x01, polygonROP2: data[4],
 			})
 			totalPixels += pixels
 			state.polygonSCUsed = true
@@ -373,7 +377,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			top := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
 			right := int32(int16(binary.LittleEndian.Uint16(data[4:6])))
 			bottom := int32(int16(binary.LittleEndian.Uint16(data[6:8])))
-			if data[8] != 0x0d || data[9] != 0x01 || left < 0 || top < 0 || right < left || bottom < top ||
+			if (data[8] != rdpROP2CopyPen && data[8] != rdpROP2Not) || data[9] != 0x01 || left < 0 || top < 0 || right < left || bottom < top ||
 				right >= int32(desktopWidth) || bottom >= int32(desktopHeight) {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
@@ -385,7 +389,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			}
 			result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{
 				X: bounds[0], Y: bounds[1], Width: bounds[2], Height: bounds[3], operation: rdpBitmapRectangleEllipse,
-				ellipseColor: ellipseColor,
+				ellipseColor: ellipseColor, ellipseROP2: data[8],
 			})
 			totalPixels += pixels
 			state.ellipseSCUsed = true

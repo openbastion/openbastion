@@ -385,14 +385,14 @@ func TestRDPFramebufferRejectsMalformedPolygonAtomically(t *testing.T) {
 	}
 	_, err = framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
 		Width: 4, Height: 4, operation: rdpBitmapRectanglePolygon,
-		polygonPoints: [][2]uint16{{1, 1}, {4, 1}, {4, 4}}, polygonColor: [4]byte{1, 2, 3, 0}, polygonFillMode: 0x01,
+		polygonPoints: [][2]uint16{{1, 1}, {4, 1}, {4, 4}}, polygonColor: [4]byte{1, 2, 3, 0}, polygonFillMode: 0x01, polygonROP2: rdpROP2CopyPen,
 	}}}, time.Unix(62, 0))
 	if err == nil {
 		t.Fatal("polygon with transparent color accepted")
 	}
 	_, err = framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{
 		X: 1, Y: 1, Width: 5, Height: 5, operation: rdpBitmapRectangleEllipse,
-		ellipseColor: [4]byte{1, 2, 3, 0},
+		ellipseColor: [4]byte{1, 2, 3, 0}, ellipseROP2: rdpROP2CopyPen,
 	}}}, time.Unix(62, 1))
 	if err == nil {
 		t.Fatal("ellipse with transparent color accepted")
@@ -511,4 +511,75 @@ func TestRDPFramebufferRollsBackEllipseWhenPNGExceedsScreenStreamLimit(t *testin
 		t.Fatalf("failed ellipse consumed sequence: %d", framebuffer.sequence)
 	}
 	clear(before)
+}
+
+func TestRDPFramebufferAppliesPolygonSCNotROP2(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+		copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+	}
+	order := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x06, 0x01, [3]byte{1, 2, 3}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(72, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+			if x >= 1 && x <= 3 && y >= 1 && y <= 3 {
+				want = color.RGBA{R: 0xed, G: 0xcb, B: 0xa9, A: 0xff}
+			}
+			if got != want {
+				t.Fatalf("polygon R2_NOT pixel (%d,%d)=%#v want=%#v", x, y, got, want)
+			}
+		}
+	}
+}
+
+func TestRDPFramebufferAppliesEllipseSCNotROP2(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+		copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+	}
+	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x06, 0x01, [3]byte{1, 2, 3})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(73, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+			inside := (x >= 2 && x <= 4 && y == 1) || (x >= 1 && x <= 5 && y >= 2 && y <= 4) || (x >= 2 && x <= 4 && y == 5)
+			if inside {
+				want = color.RGBA{R: 0xed, G: 0xcb, B: 0xa9, A: 0xff}
+			}
+			if got != want {
+				t.Fatalf("ellipse R2_NOT pixel (%d,%d)=%#v want=%#v", x, y, got, want)
+			}
+		}
+	}
 }

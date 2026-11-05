@@ -2500,3 +2500,12 @@ Validation de l'incrément 49 :
 - 246 tests RDP principaux `--- PASS` ; fuzz `FuzzParseRDPOrdersUpdate` : 179 553 exécutions en 5 s (4 workers).
 - Contre-épreuves : 12 mutations compilantes tuées sur 12, incluant ROP2, FillMode, masque, bornes inclusives, centre/racine entière, négociation, couleur, état, consommation des champs et rollback PNG.
 - `gofmt` et `git diff --check` : PASS. Pas de test Compose local ni d'interopérabilité Windows/RDS ; parité GDI pixel-à-pixel non vérifiée. Index 25 non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 50 : R2_NOT
+
+PolygonSC et EllipseSC acceptent `R2_NOT` (`0x06`, `Dn`) en plus de `R2_COPYPEN` (`0x0d`). Le framebuffer inverse les trois canaux RGB de destination et conserve l’alpha opaque ; la couleur de brosse reste exigée dans le flux mais ignorée pour `R2_NOT`. Les autres ROP2 sont rejetés. Index 20/25 non annoncés, runtime/route RDP désactivés.
+
+Référence : [MS-RDPEGDI — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1).
+
+Validation de l'incrément 50 : en attente.

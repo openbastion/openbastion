@@ -74,7 +74,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		}
 		if rect.operation == rdpBitmapRectanglePolygon {
 			spans, polygonBounds, polygonPixels, polygonErr := rasterizeRDPPolygon(rect.polygonPoints, rect.polygonFillMode, uint16(bounds.Dx()), uint16(bounds.Dy()))
-			if polygonErr != nil || len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || rect.polygonColor[3] != 0xff ||
+			if polygonErr != nil || (rect.polygonROP2 != rdpROP2CopyPen && rect.polygonROP2 != rdpROP2Not) ||
+				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || rect.polygonColor[3] != 0xff ||
 				rect.X != polygonBounds[0] || rect.Y != polygonBounds[1] || rect.Width != polygonBounds[2] || rect.Height != polygonBounds[3] {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
@@ -83,7 +84,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		}
 		if rect.operation == rdpBitmapRectangleEllipse {
 			spans, ellipseBounds, ellipsePixels, ellipseErr := rasterizeRDPEllipse(rect.X, rect.Y, rect.Width, rect.Height, uint16(bounds.Dx()), uint16(bounds.Dy()))
-			if ellipseErr != nil || len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || len(rect.polygonPoints) != 0 || rect.ellipseColor[3] != 0xff ||
+			if ellipseErr != nil || (rect.ellipseROP2 != rdpROP2CopyPen && rect.ellipseROP2 != rdpROP2Not) ||
+				len(rect.Pixels) != 0 || len(rect.linePoints) != 0 || len(rect.polygonPoints) != 0 || rect.ellipseColor[3] != 0xff ||
 				rect.X != ellipseBounds[0] || rect.Y != ellipseBounds[1] || rect.Width != ellipseBounds[2] || rect.Height != ellipseBounds[3] {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
@@ -211,14 +213,28 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			for _, span := range polygonSpans[i] {
 				start := f.image.PixOffset(int(span.X), int(span.Y))
 				for x := 0; x < int(span.Width); x++ {
-					copy(f.image.Pix[start+x*4:start+x*4+4], rect.polygonColor[:])
+					pixel := f.image.Pix[start+x*4 : start+x*4+4]
+					if rect.polygonROP2 == rdpROP2Not {
+						for channel := 0; channel < 3; channel++ {
+							pixel[channel] = ^pixel[channel]
+						}
+					} else {
+						copy(pixel, rect.polygonColor[:])
+					}
 				}
 			}
 		case rdpBitmapRectangleEllipse:
 			for _, span := range ellipseSpans[i] {
 				start := f.image.PixOffset(int(span.X), int(span.Y))
 				for x := 0; x < int(span.Width); x++ {
-					copy(f.image.Pix[start+x*4:start+x*4+4], rect.ellipseColor[:])
+					pixel := f.image.Pix[start+x*4 : start+x*4+4]
+					if rect.ellipseROP2 == rdpROP2Not {
+						for channel := 0; channel < 3; channel++ {
+							pixel[channel] = ^pixel[channel]
+						}
+					} else {
+						copy(pixel, rect.ellipseColor[:])
+					}
 				}
 			}
 		case rdpBitmapRectangleScrCopy:
