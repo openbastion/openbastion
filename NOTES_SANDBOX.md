@@ -2202,3 +2202,12 @@ Validation :
 Aucune interopérabilité Windows/RDS réelle ; AYCoCg/subsampling, ordres graphiques, runtime et route RDP toujours désactivés.
 
 Références : MS-RDPEGDI §2.2.2.5.1.2, §3.1.9.2 et §3.1.9.2.3.
+
+
+## ADR-0071 — incrément 31 : Fast-Path Bitmap Update
+
+Le lecteur RDP reconnaît désormais le framing Fast-Path directement sur TLS et le distingue du TPKT slow-path sans surconsommer le flux. Les longueurs à un ou deux octets sont validées avant allocation, avec un plafond conservateur de 16 383 octets. Le TPKT garde sa borne et son réassemblage MCS existants.
+
+Le décodeur accepte un seul événement Fast-Path Bitmap Update non fragmenté et non compressé ; le corps bitmap réutilise le même parseur de rectangles RAW/RDP6 ARGB RAW/RLE que le slow-path. Un test TLS avec serveur factice traverse le lecteur de session complet. Le fuzzer Fast-Path couvre les entrées arbitraires.
+
+La capacité FASTPATH_OUTPUT_SUPPORTED n'est pas annoncée au serveur. La fragmentation, la compression, les paquets contenant plusieurs événements, les ordres et événements pointeur Fast-Path restent refusés/non supportés. Aucune interopérabilité Windows/RDS réelle n'est revendiquée ; runtime et route RDP restent désactivés.

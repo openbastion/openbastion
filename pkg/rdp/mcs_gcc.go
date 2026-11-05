@@ -482,6 +482,71 @@ func readMCSConnectResponse(r io.Reader) ([]byte, error) {
 	return readTPKTPacket(r, maxTPKTPacket)
 }
 
+// readRDPServerUpdatePacket reads one bounded TPKT slow-path packet or one
+// Fast-Path Output PDU. The bool result identifies the fast-path form.
+func readRDPServerUpdatePacket(r io.Reader, maxPacket int) ([]byte, bool, error) {
+	if maxPacket < 9 || maxPacket > maxRDPFastPathPacket {
+		return nil, false, ErrMCSConnection
+	}
+	var first [1]byte
+	if _, err := io.ReadFull(r, first[:]); err != nil {
+		return nil, false, ErrMCSConnection
+	}
+	if first[0] == 3 {
+		var rest [3]byte
+		if _, err := io.ReadFull(r, rest[:]); err != nil {
+			return nil, false, ErrMCSConnection
+		}
+		length := int(binary.BigEndian.Uint16(rest[1:3]))
+		if rest[0] != 0 || length < 9 || length > maxPacket {
+			return nil, false, ErrMCSConnection
+		}
+		packet := make([]byte, length)
+		packet[0] = first[0]
+		copy(packet[1:4], rest[:])
+		if _, err := io.ReadFull(r, packet[4:]); err != nil {
+			clear(packet)
+			return nil, false, ErrMCSConnection
+		}
+		return packet, false, nil
+	}
+	// TLS is the security layer. Reject legacy RDP encryption and non-fast-path
+	// action values rather than attempting to interpret their payload.
+	if first[0] != 0 {
+		return nil, false, ErrMCSConnection
+	}
+	var lengthFirst [1]byte
+	if _, err := io.ReadFull(r, lengthFirst[:]); err != nil {
+		return nil, false, ErrMCSConnection
+	}
+	length := int(lengthFirst[0])
+	headerLength := 2
+	var lengthSecond [1]byte
+	if lengthFirst[0]&0x80 != 0 {
+		if _, err := io.ReadFull(r, lengthSecond[:]); err != nil {
+			return nil, false, ErrMCSConnection
+		}
+		length = int(lengthFirst[0]&0x7f)<<8 | int(lengthSecond[0])
+		headerLength++
+		if length < 128 {
+			return nil, false, ErrMCSConnection
+		}
+	}
+	if length < headerLength+4 || length > maxPacket {
+		return nil, false, ErrMCSConnection
+	}
+	packet := make([]byte, length)
+	packet[0], packet[1] = first[0], lengthFirst[0]
+	if headerLength == 3 {
+		packet[2] = lengthSecond[0]
+	}
+	if _, err := io.ReadFull(r, packet[headerLength:]); err != nil {
+		clear(packet)
+		return nil, false, ErrMCSConnection
+	}
+	return packet, true, nil
+}
+
 // readTPKTPacket reads one complete TPKT with a caller-selected, protocol-
 // specific bound. Handshake and control exchanges keep their small legacy cap;
 // the graphics receive path uses the larger RDP MCS bound.

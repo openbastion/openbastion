@@ -792,3 +792,26 @@ Validation de l'incrément 30 :
 - GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; quelques avis restent dans des modules requis mais non appelés. npm audit : zéro vulnérabilité dans web/admin-ui et web/openbastion-icons.
 - git diff --check : PASS. Le script scripts/check-architecture-deps.sh est absent du dépôt.
 - Aucun test d'interopérabilité Windows/RDS réel ni E2E RDP avec Video Recorder. bitmapCompressionFlag=0, runtime et route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 31 : réception Fast-Path Bitmap Update bornée
+
+ReadBitmapUpdate sait maintenant reconnaître le framing Fast-Path directement sur le flux TLS, en plus du TPKT slow-path. Le lecteur lit le premier octet sans surconsommer, valide le format de longueur Fast-Path à un ou deux octets et applique un plafond de 16 383 octets au paquet complet. Le chemin TPKT conserve son plafond MCS existant et son réassemblage multi-fragments inchangé.
+
+Le parseur accepte un seul TS_FP_UPDATE_BITMAP par PDU, non fragmenté et non compressé. Son corps bitmapUpdateData partage le même décodeur borné des rectangles que le slow-path : nombre de rectangles limité à 64, 32 bpp seulement, géométrie incluse dans le bureau négocié, longueurs exactes, RAW ou profil RDP6 ARGB RAW/RLE. Les formats d'événement Fast-Path autres que Bitmap, les fragments, les flags de sécurité RDP legacy, la compression Fast-Path et les mises à jour multiples dans un même paquet sont refusés.
+
+Le lecteur ne positionne pas FASTPATH_OUTPUT_SUPPORTED dans la General Capability Set. Cette capacité n'est pas annoncée au serveur tant que les événements pointeur, ordres et autres mises à jour Fast-Path ne sont pas pris en charge. Le parseur et le chemin de lecture sont néanmoins couverts par des tests unitaires, un test TLS réel avec serveur factice et un fuzzer dédié.
+
+Limites : pas de négociation Fast-Path, fragmentation Fast-Path, compression Fast-Path, agrégation de plusieurs événements, pointeur Fast-Path ni ordres Fast-Path. Aucun test d'interopérabilité Windows/RDS réel ; runtime et route RDP restent désactivés.
+
+Références normatives : MS-RDPBCGR §2.2.9.1.2.1 — Fast-Path Update (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/a1c4caa8-00ed-45bb-a06e-5177473766d3), §2.2.9.1.2.1.2 — Fast-Path Bitmap Update (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/0ae3c114-1439-4465-8d3f-6585227eff7d), §3.2.5.9.3.1 — Processing Fast-Path Update Fragments (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/8000f797-c2b6-42da-b469-29d4f90f375e).
+
+Validation de l'incrément 31 :
+- go test ./pkg/rdp/... -count=1 : PASS.
+- go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1 : PASS.
+- make build vet test proto-lint : PASS sur tous les modules Go, go vet, tests unitaires et Buf lint.
+- FuzzParseRDPFastPathBitmapUpdate : PASS, 56 576 exécutions en 5 s.
+- DOCKER_BUILDKIT=0 go test -v ./test/integration/... -count=1 -timeout=900s : PASS (231,640 s), processus réels ; les tests PostgreSQL sont ignorés faute de TEST_DATABASE_URL. Aucun test Compose local n'a été lancé.
+- GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; certains avis subsistent dans des modules requis mais non appelés.
+- npm audit --audit-level=low dans web/admin-ui et web/openbastion-icons : zéro vulnérabilité.
+- git diff --check : PASS. Aucun test Windows/RDS réel ; runtime et route RDP restent désactivés.
