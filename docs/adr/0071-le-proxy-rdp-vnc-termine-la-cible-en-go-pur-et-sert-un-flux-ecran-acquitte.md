@@ -838,3 +838,22 @@ Validation de l'incrément 32 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
 - `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
 - `gofmt` et `git diff --check` : PASS. Aucun test Windows/RDS réel ; le `bitmapCompressionFlag` reste à zéro, runtime et route RDP restent désactivés.
+
+## 2026-11-05 — Incrément 33 : RDP6 AYCoCg avec chroma subsampling
+
+Le décodeur accepte désormais `CS=1` pour les profils AYCoCg (`CLL=1..7`). Les plans alpha et luma conservent la résolution bitmap ; les plans Co/Cg sont lus à `ceil(width/2) × ceil(height/2)`, en RAW ou RLE indépendant. La reconstruction réplique chaque échantillon chroma sur son bloc 2×2, en tronquant les blocs de bord pour les dimensions impaires. L'ordre bottom-up des plans est conservé jusqu'à la conversion RGBA top-down.
+
+Le `TS_CD_HEADER.cbScanWidth` reste strictement vérifié et la largeur bitmap reste multiple de quatre, conformément à MS-RDPBCGR ; les hauteurs impaires sont prises en charge. `CS=1` avec `CLL=0` est refusé, comme tout bit réservé, plan tronqué, RLE hors dimensions, consommation inexacte ou octet résiduel ambigu. Les allocations restent bornées par les plafonds de pixels et `cbUncompressedSize`. Le `bitmapCompressionFlag` reste à zéro : le serveur n'est pas invité à émettre des profils compressés tant que les capacités RDP complètes et l'interopérabilité ne sont pas établies.
+
+Tests : reconstruction RAW avec hauteur impaire et passage par Bitmap Update ; alpha pleine résolution ; RLE des plans Y/Co/Cg à leurs dimensions respectives ; rejet d'un plan chroma RLE tronqué et de `CS=1` en ARGB ; seeds RAW/RLE du fuzzer de conteneur.
+
+Référence normative : [MS-RDPEGDI §3.1.9.1.3 — Chroma Subsampling and Super-Sampling](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/57507b94-41e6-41ff-a35e-c00211945ceb) et [§2.2.2.5.1 — RDP6_BITMAP_STREAM](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/9b422f69-8e05-4c6d-b6fb-fa02ef75a8f2).
+
+Validation de l'incrément 33 :
+- `make build vet test proto-lint` : PASS sur tous les modules Go, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... -count=1` : PASS ; 167 résultats `--- PASS` mesurés.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `FuzzDecodeRDP6BitmapWithHeader` : PASS, 49 267 exécutions en 5 s.
+- Contre-épreuves : 3 mutations tuées sur 3 (acceptation de CS avec CLL=0, index chroma horizontal sans facteur 2, décodage RLE des chromas à la résolution pleine) ; fichiers restaurés et `cmp` PASS.
+- `.agents/settings/project.yaml` : parse YAML PASS ; `gofmt` et `git diff --check` : PASS.
+- Aucun test Compose local, aucune interopérabilité Windows/RDS réelle ni E2E avec Video Recorder. Le `bitmapCompressionFlag` reste à zéro, le runtime et la route RDP restent désactivés.

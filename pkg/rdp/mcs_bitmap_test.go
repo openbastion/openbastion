@@ -529,11 +529,121 @@ func TestDecodeRDP6AYCoCgSupportsRLEPlanes(t *testing.T) {
 	}
 }
 
-func TestDecodeRDP6BitmapRejectsUnsupportedAYCoCgSubsampling(t *testing.T) {
-	stream := []byte{0x34, 128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0}
+func TestDecodeRDP6AYCoCgSubsamplingExpandsOddHeight(t *testing.T) {
+	const width, height = 4, 5
+	const chromaWidth, chromaHeight = 2, 3
+	stream := []byte{0x34} // CLL=1, CS=1, no alpha, raw planes.
+	for range width * height {
+		stream = append(stream, 128) // full-resolution luma.
+	}
+	// Chroma rows are encoded bottom-up at ceil(width/2) x ceil(height/2).
+	stream = append(stream, 64, 0, 0xc0, 32, 0xe0, 16) // Co: +64, 0 / -64, +32 / -32, +16.
+	stream = append(stream, make([]byte, chromaWidth*chromaHeight)...)
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(width, height, stream), width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != width*height*4 {
+		t.Fatalf("decoded size = %d, want %d", len(got), width*height*4)
+	}
+	// Super-sampling replicates each chroma sample to a 2x2 block, cropping
+	// the final block to one row for the odd-height edge.
+	rowColors := [][]byte{
+		{96, 128, 160, 0xff, 96, 128, 160, 0xff, 144, 128, 112, 0xff, 144, 128, 112, 0xff},
+		{64, 128, 192, 0xff, 64, 128, 192, 0xff, 160, 128, 96, 0xff, 160, 128, 96, 0xff},
+		{64, 128, 192, 0xff, 64, 128, 192, 0xff, 160, 128, 96, 0xff, 160, 128, 96, 0xff},
+		{192, 128, 64, 0xff, 192, 128, 64, 0xff, 128, 128, 128, 0xff, 128, 128, 128, 0xff},
+		{192, 128, 64, 0xff, 192, 128, 64, 0xff, 128, 128, 128, 0xff, 128, 128, 128, 0xff},
+	}
+	want := make([]byte, 0, width*height*4)
+	for _, row := range rowColors {
+		want = append(want, row...)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("decoded subsampled AYCoCg = %v, want %v", got, want)
+	}
+	const shareID = uint32(0x000103ea)
+	bitmapData := mcsTestRDP6BitmapData(width, height, stream)
+	packet := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(0, 0, width, height, 32, rdpBitmapCompressed, bitmapData))
+	update, err := parseRDPBitmapUpdate(packet, mcsGlobalChannelID, shareID, 1280, 720)
+	if err != nil || len(update.Rectangles) != 1 || string(update.Rectangles[0].Pixels) != string(want) {
+		t.Fatalf("Bitmap Update subsampled decode = %+v, err=%v", update, err)
+	}
+}
+
+func TestDecodeRDP6AYCoCgSubsamplingPreservesAlpha(t *testing.T) {
+	const width, height = 4, 3
+	stream := []byte{0x30} // CLL=1, CS=1, alpha present, raw planes.
+	for i := range width * height {
+		stream = append(stream, byte(i+1))
+	}
+	for range width * height {
+		stream = append(stream, 128) // luma.
+	}
+	stream = append(stream, 64, 0, 0xc0, 0) // Co at 2x2 chroma resolution.
+	stream = append(stream, 0, 0, 0, 0)     // Cg at 2x2 chroma resolution.
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(width, height, stream), width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for wireY := 0; wireY < height; wireY++ {
+		for x := 0; x < width; x++ {
+			wireIndex := wireY*width + x
+			dst := ((height-1-wireY)*width + x) * 4
+			if got[dst+3] != byte(wireIndex+1) {
+				t.Fatalf("alpha at (%d,%d) = %d, want %d", x, height-1-wireY, got[dst+3], wireIndex+1)
+			}
+		}
+	}
+}
+
+func TestDecodeRDP6AYCoCgSubsamplingSupportsRLEPlanes(t *testing.T) {
+	const width, height = 4, 5
+	stream := []byte{0x3c} // CLL=1, CS=1, RLE, no alpha.
+	appendRLEPlane := func(planeWidth, planeHeight int, firstRow []byte) {
+		for y := 0; y < planeHeight; y++ {
+			stream = append(stream, byte(planeWidth<<4))
+			if y == 0 {
+				stream = append(stream, firstRow...)
+			} else {
+				stream = append(stream, make([]byte, planeWidth)...)
+			}
+		}
+	}
+	appendRLEPlane(width, height, []byte{128, 128, 128, 128})
+	appendRLEPlane(width/2, (height+1)/2, []byte{64, 0})
+	appendRLEPlane(width/2, (height+1)/2, []byte{0, 0})
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(width, height, stream), width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(got); i += 4 {
+		want := []byte{192, 128, 64, 0xff}
+		if (i/4)%width >= 2 {
+			want = []byte{128, 128, 128, 0xff}
+		}
+		if string(got[i:i+4]) != string(want) {
+			t.Fatalf("RLE subsampled pixel %d = %v, want %v", i/4, got[i:i+4], want)
+		}
+	}
+}
+
+func TestDecodeRDP6AYCoCgSubsamplingRejectsTruncatedRLEChromaPlane(t *testing.T) {
+	stream := []byte{0x3c}                            // CLL=1, CS=1, RLE, no alpha.
+	stream = append(stream, 0x40, 128, 128, 128, 128) // full-resolution luma.
+	stream = append(stream, 0x20, 64, 0)              // Co, 2x1.
+	stream = append(stream, 0x20, 0)                  // truncated Cg, 2x1.
 	data := mcsTestRDP6BitmapData(4, 1, stream)
 	if _, err := decodeRDP6BitmapWithHeader(data, 4, 1); !errors.Is(err, ErrMCSConnection) {
-		t.Fatalf("subsampling error = %v, want ErrMCSConnection", err)
+		t.Fatalf("truncated RLE chroma error = %v, want ErrMCSConnection", err)
+	}
+}
+
+func TestDecodeRDP6BitmapRejectsCSWithoutAYCoCg(t *testing.T) {
+	stream := []byte{0x10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+	data := mcsTestRDP6BitmapData(4, 1, stream)
+	if _, err := decodeRDP6BitmapWithHeader(data, 4, 1); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("ARGB subsampling error = %v, want ErrMCSConnection", err)
 	}
 }
 
@@ -679,6 +789,8 @@ func FuzzDecodeRDP6RLEPlane(f *testing.F) {
 func FuzzDecodeRDP6BitmapWithHeader(f *testing.F) {
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}))
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x24, 128, 128, 128, 128, 64, 64, 64, 64, 32, 32, 32, 32}))
+	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x34, 128, 128, 128, 128, 64, 0, 0xc0, 0, 0, 0, 0, 0}))
+	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x3c, 0x40, 128, 128, 128, 128, 0x20, 64, 0, 0x20, 0, 0}))
 	rleSeed := []byte{0x0c}
 	for i := 0; i < 3; i++ {
 		rleSeed = append(rleSeed, 0x40, 1, 2, 3, 4)
