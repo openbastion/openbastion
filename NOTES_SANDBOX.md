@@ -2593,3 +2593,12 @@ Validation de l'incrément 55 :
 - Tests de décodage, rendu framebuffer et lecture TLS slow-path : PASS ; le test TLS vérifie aussi la propagation du ROP2 et conserve la garde de négociation indépendante.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (XOR remplacé par OR dans le framebuffer ; retrait de R2_XORPEN de la whitelist Polyline).
 - `gofmt` et `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E avec une cible RDP ; index Polyline 22 non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071 — incrément 56 : R2_BLACK / R2_WHITE
+
+Ajout des opérations ROP2 constantes `R2_BLACK` (`0x01`, RGB zéro) et `R2_WHITE` (`0x10`, RGB à 255) aux profils vectoriels déjà implémentés : `LineTo`, `Polyline`, `PolygonSC` et `EllipseSC`. Le rendu passe par le moteur commun `applyRDPROP2`; la couleur de plume/brosse reste exigée par le protocole mais n'influence pas ces deux opérations. Une whitelist unique est utilisée à la fois par les quatre parseurs et par la validation du framebuffer, afin d'éviter qu'un ordre accepté ne soit rejeté plus tard (ou inversement).
+
+Tests pixel-à-pixel couvrant les huit couples primitive/ROP2, pixels non peints inchangés, alpha opaque, parsing strict et lecture TLS slow-path (LineTo BLACK puis Polyline WHITE avec propagation sur les deux segments). Les huit combinaisons ont également une seed du fuzzer `FuzzParseRDPOrdersUpdate`. Les autres ROP2 restent refusés.
+
+Aucun slot de négociation n'est activé : index 8 (LineTo), 20 (PolygonSC), 22 (Polyline) et 25 (EllipseSC) restent non annoncés ; runtime/route RDP désactivés. Aucune interopérabilité Windows/RDS réelle revendiquée.

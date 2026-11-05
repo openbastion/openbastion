@@ -1035,6 +1035,19 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x07, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x07, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33), 0, 0)) // R2_COPYPEN baseline.
+	lineToBlack := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
+	lineToBlack[17] = rdpROP2Black
+	f.Add(mcsTestOrdersUpdateData(1, lineToBlack, 0, 0))
+	lineToWhite := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
+	lineToWhite[17] = rdpROP2White
+	f.Add(mcsTestOrdersUpdateData(1, lineToWhite, 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2Black, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2White, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2Black, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2White, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2Black, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2White, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -1070,6 +1083,10 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	tenth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2XorPen, 0, [3]byte{0x21, 0x43, 0x65}, 1, []byte{0x00, 1, 1}))
 	eleventh := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x12, 0x34, 0x56}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}))
 	twelfth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x21, 0x43, 0x65}))
+	lineToBlack := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x12, 0x34, 0x56)
+	lineToBlack[17] = rdpROP2Black
+	thirteenth := mcsTestOrdersUpdatePacket(shareID, 1, lineToBlack)
+	fourteenth := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2White, 0, [3]byte{0x21, 0x43, 0x65}, 2, []byte{0x00, 2, 1, 2, 1}))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -1115,6 +1132,12 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		}
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, twelfth)
+		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, thirteenth)
+		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, fourteenth)
 		}
 		serverResult <- acceptErr
 	}()
@@ -1194,6 +1217,15 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	if readErr != nil || len(ellipseUpdate.Rectangles) != 1 || !session.primaryOrderState.ellipseSCUsed ||
 		ellipseUpdate.Rectangles[0].operation != rdpBitmapRectangleEllipse {
 		t.Fatalf("ReadBitmapUpdate EllipseSC = %+v, state=%+v, err=%v", ellipseUpdate, session.primaryOrderState, readErr)
+	}
+	lineBlackUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(lineBlackUpdate.Rectangles) != 1 || lineBlackUpdate.Rectangles[0].lineROP2 != rdpROP2Black {
+		t.Fatalf("ReadBitmapUpdate LineTo R2_BLACK = %+v, err=%v", lineBlackUpdate, readErr)
+	}
+	polylineWhiteUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(polylineWhiteUpdate.Rectangles) != 2 ||
+		polylineWhiteUpdate.Rectangles[0].lineROP2 != rdpROP2White || polylineWhiteUpdate.Rectangles[1].lineROP2 != rdpROP2White {
+		t.Fatalf("ReadBitmapUpdate Polyline R2_WHITE = %+v, err=%v", polylineWhiteUpdate, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
