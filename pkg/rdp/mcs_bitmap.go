@@ -96,25 +96,27 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 		flags := binary.LittleEndian.Uint16(payload[14:16])
 		bitmapLength := int(binary.LittleEndian.Uint16(payload[16:18]))
 		payload = payload[18:]
-		if width == 0 || height == 0 || bpp != 32 || flags != 0 || bitmapLength == 0 || bitmapLength > len(payload) ||
+		if width == 0 || height == 0 || bpp != 32 || (flags != 0 && flags != rdpBitmapCompressed) || bitmapLength == 0 || bitmapLength > len(payload) ||
 			uint32(left)+uint32(width) > uint32(desktopWidth) || uint32(top)+uint32(height) > uint32(desktopHeight) ||
 			right != left+width-1 || bottom != top+height-1 {
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
 		pixels := uint64(width) * uint64(height)
-		if pixels > maxRDPDesktopArea || totalPixels > maxRDPDesktopArea-pixels || pixels*4 != uint64(bitmapLength) {
+		if pixels > maxRDPDesktopArea || totalPixels > maxRDPDesktopArea-pixels {
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
 		totalPixels += pixels
-		decoded := make([]byte, int(pixels)*4)
-		rowBytes := int(width) * 4 // 32-bpp rows are already DWORD aligned.
-		for y := 0; y < int(height); y++ {
-			srcRow := (int(height) - 1 - y) * rowBytes // TS_BITMAP_DATA is bottom-up.
-			dstRow := y * rowBytes
-			for x := 0; x < int(width); x++ {
-				src := srcRow + x*4
-				dst := dstRow + x*4
-				decoded[dst], decoded[dst+1], decoded[dst+2], decoded[dst+3] = payload[src+2], payload[src+1], payload[src], 0xff
+		var decoded []byte
+		if flags == 0 {
+			if pixels*4 != uint64(bitmapLength) {
+				return RDPBitmapUpdate{}, ErrMCSConnection
+			}
+			decoded = decodeRDPBitmapRaw(payload, int(width), int(height))
+		} else {
+			var decodeErr error
+			decoded, decodeErr = decodeRDP6BitmapWithHeader(payload, int(width), int(height))
+			if decodeErr != nil {
+				return RDPBitmapUpdate{}, ErrMCSConnection
 			}
 		}
 		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: width, Height: height, Pixels: decoded})
@@ -126,8 +128,79 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 	return result, nil
 }
 
+// decodeRDPBitmapRaw converts bottom-up BGRX wire pixels to top-down RGBA.
+func decodeRDPBitmapRaw(src []byte, width, height int) []byte {
+	rowBytes := width * 4 // 32-bpp rows are already DWORD aligned.
+	dst := make([]byte, width*height*4)
+	for y := 0; y < height; y++ {
+		srcRow := (height - 1 - y) * rowBytes
+		dstRow := y * rowBytes
+		for x := 0; x < width; x++ {
+			s, d := srcRow+x*4, dstRow+x*4
+			dst[d], dst[d+1], dst[d+2], dst[d+3] = src[s+2], src[s+1], src[s], 0xff
+		}
+	}
+	return dst
+}
+
+// decodeRDP6BitmapWithHeader validates TS_CD_HEADER and decodes the initial
+// RDP 6.0 ARGB profile: no color loss, no chroma subsampling and no plane RLE.
+// Plane bytes are ordered A (optional), R, G, B in bottom-up row order;
+// output pixels are normalized to top-down RGBA.
+func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) {
+	if width <= 0 || height <= 0 || width%4 != 0 || len(data) < 9 {
+		return nil, ErrMCSConnection
+	}
+	pixels := uint64(width) * uint64(height)
+	decodedBytes := pixels * 4
+	if pixels > maxRDPDesktopArea || decodedBytes > uint64(^uint16(0)) ||
+		binary.LittleEndian.Uint16(data[0:2]) != 0 ||
+		int(binary.LittleEndian.Uint16(data[2:4])) != len(data)-8 ||
+		int(binary.LittleEndian.Uint16(data[4:6])) != width ||
+		uint64(binary.LittleEndian.Uint16(data[6:8])) != decodedBytes {
+		return nil, ErrMCSConnection
+	}
+	stream := data[8:]
+	format := stream[0]
+	// CLL=0 (ARGB), CS=0, RLE=0, reserved=0. Alpha may be absent.
+	if format&0xf8 != 0 || format&0x03 != 0 {
+		return nil, ErrMCSConnection
+	}
+	noAlpha := format&0x04 != 0
+	planeCount := 4
+	if noAlpha {
+		planeCount = 3
+	}
+	planeBytes := int(pixels)
+	want := 1 + planeCount*planeBytes
+	if len(stream) != want && len(stream) != want+1 {
+		return nil, ErrMCSConnection
+	}
+	planes := make([][]byte, planeCount)
+	offset := 1
+	for i := range planes {
+		planes[i] = stream[offset : offset+planeBytes]
+		offset += planeBytes
+	}
+	decoded := make([]byte, int(decodedBytes))
+	for i := 0; i < planeBytes; i++ {
+		x, wireY := i%width, i/width
+		dst := ((height-1-wireY)*width + x) * 4
+		plane := 0
+		if !noAlpha {
+			decoded[dst+3] = planes[0][i]
+			plane = 1
+		} else {
+			decoded[dst+3] = 0xff
+		}
+		decoded[dst], decoded[dst+1], decoded[dst+2] = planes[plane][i], planes[plane+1][i], planes[plane+2][i]
+	}
+	return decoded, nil
+}
+
 // parseRDPBitmapUpdate validates and decodes one unsegmented MCS bitmap PDU.
-// Compressed bitmaps and other pixel formats remain deliberately unsupported.
+// The 32-bpp compressed path intentionally supports only the bounded RDP 6.0
+// ARGB plane format with raw planes; RLE, AYCoCg and subsampling are rejected.
 // Network callers use the reassembling ReadBitmapUpdate path below.
 func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint32, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
 	userData, segmentation, err := parseRDPBitmapMCSFragment(packet, expectedChannelID)
