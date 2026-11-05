@@ -815,3 +815,26 @@ Validation de l'incrément 31 :
 - GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; certains avis subsistent dans des modules requis mais non appelés.
 - npm audit --audit-level=low dans web/admin-ui et web/openbastion-icons : zéro vulnérabilité.
 - git diff --check : PASS. Aucun test Windows/RDS réel ; runtime et route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 32 : décodage AYCoCg avec réduction de perte
+
+Le décodeur RDP6 accepte désormais les profils AYCoCg (`CLL=1..7`) sans chroma subsampling (`CS=0`), en complément du profil ARGB (`CLL=0`). Les plans alpha, luma, Co et Cg sont lus dans leur ordre normatif ; l'alpha reste inchangé et l'absence de plan alpha produit une image opaque. Les plans peuvent être RAW ou RLE, en réutilisant le décodeur de plans borné existant.
+
+Les composantes Co/Cg sont interprétées comme des échantillons signés, puis restaurées selon le niveau CLL. La transformation inverse AYCoCg vers RGB utilise les coefficients normatifs à demi-précision signée et borne chaque canal de sortie à `[0,255]`. Les dimensions, tailles de plan, limites d'allocation, consommation exacte et règles de padding existantes restent appliquées. Le profil avec subsampling (`CS=1`) et les bits réservés restent refusés.
+
+Le `bitmapCompressionFlag` de Confirm Active reste à zéro : l'ajout de profils de décodage isolés ne constitue pas encore une négociation complète de toutes les capacités RDP6. Aucun test Windows/RDS réel n'est revendiqué ; le runtime et la route RDP restent désactivés.
+
+Tests : conversion AYCoCg avec CLL, chroma signée positive/négative, clamp RGB, plan alpha absent, chemins RAW et RLE, rejet du subsampling et fuzz du conteneur RDP6.
+
+Références normatives : [MS-RDPEGDI §2.2.2.5.1 — RDP6_BITMAP_STREAM](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/9b422f69-8e05-4c6d-b6fb-fa02ef75a8f2), [§3.1.9.1.2 — Color Space Conversion](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/ef530a0a-03d8-482f-989b-57a1036797b2), [§3.1.9.1.4 — Color Loss Reduction](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/b4462e64-2286-4e77-9c5e-2046fc490cc0).
+
+
+Validation de l'incrément 32 :
+- `go test ./pkg/rdp/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS sur tous les modules Go, `go vet`, tests unitaires et Buf lint.
+- `FuzzDecodeRDP6BitmapWithHeader` : PASS, 65 038 exécutions en 5 s, avec seed AYCoCg.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `gofmt` et `git diff --check` : PASS. Aucun test Windows/RDS réel ; le `bitmapCompressionFlag` reste à zéro, runtime et route RDP restent désactivés.

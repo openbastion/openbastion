@@ -443,7 +443,6 @@ func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
 		"scan width mismatch":            mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[4:6], 8) }),
 		"decoded size mismatch":          mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[6:8], 4) }),
 		"RLE truncated plane":            mcsTestRDP6BitmapData(4, 1, []byte{0x0c, 0x40, 1, 2}),
-		"AYCoCg unsupported":             mutateRDP6Data(base, func(data []byte) { data[8] = 0x24 }),
 		"chroma subsampling unsupported": mutateRDP6Data(base, func(data []byte) { data[8] = 0x14 }),
 		"reserved format bits":           mutateRDP6Data(base, func(data []byte) { data[8] = 0x07 }),
 		"short plane data":               base[:len(base)-1],
@@ -458,6 +457,83 @@ func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
 	}
 	if _, err := decodeRDP6BitmapWithHeader(base, 3, 1); !errors.Is(err, ErrMCSConnection) {
 		t.Fatalf("unaligned width error = %v, want ErrMCSConnection", err)
+	}
+}
+
+func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
+	// CLL=1 restores signed Co/Cg samples by one bit before inverse conversion.
+	// The expected values follow the MS-RDPEGDI inverse AYCoCg matrix.
+	stream := []byte{0x24}                      // CLL=1, no alpha, no subsampling, raw planes.
+	stream = append(stream, 128, 128, 128, 128) // Y
+	stream = append(stream, 64, 64, 64, 64)     // Co = +128 after restoration
+	stream = append(stream, 32, 32, 32, 32)     // Cg = +64 after restoration
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 1, stream), 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		160, 160, 32, 0xff, 160, 160, 32, 0xff,
+		160, 160, 32, 0xff, 160, 160, 32, 0xff,
+	}
+	if string(got) != string(want) {
+		t.Fatalf("decoded AYCoCg RGBA = %v, want %v", got, want)
+	}
+
+	red, green, blue := decodeRDP6AYCoCg(250, 127, 127, 1)
+	if red != 250 || green != 255 || blue != 0 {
+		t.Fatalf("clamped AYCoCg = (%d,%d,%d), want (250,255,0)", red, green, blue)
+	}
+	red, green, blue = decodeRDP6AYCoCg(128, 0xc0, 0xe0, 1) // Co=-128, Cg=-64
+	if red != 96 || green != 96 || blue != 224 {
+		t.Fatalf("negative AYCoCg = (%d,%d,%d), want (96,96,224)", red, green, blue)
+	}
+	for cll := 1; cll <= 7; cll++ {
+		red, green, blue = decodeRDP6AYCoCg(128, 1, 0, cll)
+		wantRed := byte(128 + (1 << (cll - 1)))
+		wantBlue := byte(128 - (1 << (cll - 1)))
+		if red != wantRed || green != 128 || blue != wantBlue {
+			t.Fatalf("CLL=%d AYCoCg = (%d,%d,%d), want (%d,128,%d)", cll, red, green, blue, wantRed, wantBlue)
+		}
+	}
+
+	// Alpha is copied, never passed through the color-space transform.
+	alphaStream := []byte{0x20}
+	alphaStream = append(alphaStream, 0x11, 0x22, 0x33, 0x44) // alpha
+	alphaStream = append(alphaStream, 128, 128, 128, 128)     // Y
+	alphaStream = append(alphaStream, 0, 0, 0, 0)             // Co
+	alphaStream = append(alphaStream, 0, 0, 0, 0)             // Cg
+	withAlpha, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 1, alphaStream), 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, alpha := range []byte{0x11, 0x22, 0x33, 0x44} {
+		if withAlpha[i*4+3] != alpha {
+			t.Fatalf("pixel %d alpha = %02x, want %02x", i, withAlpha[i*4+3], alpha)
+		}
+	}
+}
+
+func TestDecodeRDP6AYCoCgSupportsRLEPlanes(t *testing.T) {
+	stream := []byte{0x2c}                    // CLL=1, RLE, no alpha.
+	for _, value := range []byte{128, 0, 0} { // neutral gray: Y=128, Co=Cg=0
+		stream = append(stream, 0x40, value, value, value, value)
+	}
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 1, stream), 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(got); i += 4 {
+		if got[i] != 128 || got[i+1] != 128 || got[i+2] != 128 || got[i+3] != 0xff {
+			t.Fatalf("pixel %d = %v, want opaque neutral gray", i/4, got[i:i+4])
+		}
+	}
+}
+
+func TestDecodeRDP6BitmapRejectsUnsupportedAYCoCgSubsampling(t *testing.T) {
+	stream := []byte{0x34, 128, 128, 128, 128, 0, 0, 0, 0, 0, 0, 0, 0}
+	data := mcsTestRDP6BitmapData(4, 1, stream)
+	if _, err := decodeRDP6BitmapWithHeader(data, 4, 1); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("subsampling error = %v, want ErrMCSConnection", err)
 	}
 }
 
@@ -602,6 +678,7 @@ func FuzzDecodeRDP6RLEPlane(f *testing.F) {
 
 func FuzzDecodeRDP6BitmapWithHeader(f *testing.F) {
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}))
+	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x24, 128, 128, 128, 128, 64, 64, 64, 64, 32, 32, 32, 32}))
 	rleSeed := []byte{0x0c}
 	for i := 0; i < 3; i++ {
 		rleSeed = append(rleSeed, 0x40, 1, 2, 3, 4)
