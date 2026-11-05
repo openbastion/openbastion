@@ -81,7 +81,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		if rect.operation == rdpBitmapRectangleLine {
 			pixels = uint64(len(rect.linePoints))
 			if rect.Width != 1 || rect.Height != 1 || len(rect.Pixels) != 0 || len(rect.linePoints) == 0 ||
-				len(rect.linePoints) > maxRDPLinePixels || rect.lineColor[3] != 0xff {
+				len(rect.linePoints) > maxRDPLinePixels || rect.lineColor[3] != 0xff ||
+				(rect.lineROP2 != rdpROP2CopyPen && rect.lineROP2 != rdpROP2Not) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
 			for _, point := range rect.linePoints {
@@ -225,7 +226,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		case rdpBitmapRectangleLine:
 			for _, point := range rect.linePoints {
 				offset := f.image.PixOffset(int(point[0]), int(point[1]))
-				copy(f.image.Pix[offset:offset+4], rect.lineColor[:])
+				applyRDPROP2(f.image.Pix[offset:offset+4], rect.lineColor, rect.lineROP2)
 			}
 		case rdpBitmapRectanglePolygon:
 			for _, span := range polygonSpans[i] {

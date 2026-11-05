@@ -95,6 +95,7 @@ type RDPBitmapRectangle struct {
 	sourceY         uint16
 	linePoints      [][2]uint16
 	lineColor       [4]byte
+	lineROP2        byte
 	polygonPoints   [][2]uint16
 	polygonColor    [4]byte
 	polygonFillMode byte
@@ -229,6 +230,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		var multiRects [][4]int32
 		var linePoints [][2]uint16
 		var lineColor [4]byte
+		lineROP2 := rdpROP2CopyPen
 		operation := rdpBitmapRectangleReplace
 		switch state.orderType {
 		case rdpOrderDstBlt:
@@ -319,7 +321,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				}
 				first := segment[0]
 				result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: first[0], Y: first[1], Width: 1, Height: 1,
-					operation: rdpBitmapRectangleLine, linePoints: segment, lineColor: lineColor})
+					operation: rdpBitmapRectangleLine, linePoints: segment, lineColor: lineColor, lineROP2: lineROP2})
 				totalPixels += uint64(len(segment))
 				segmentsAdded++
 				previousX, previousY = currentX, currentY
@@ -403,7 +405,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			data = data[2:]
-			if binary.LittleEndian.Uint16(data[0:2]) != 1 || data[13] != 0x0d || data[14] != 0 || data[15] != 1 {
+			if binary.LittleEndian.Uint16(data[0:2]) != 1 || (data[13] != rdpROP2CopyPen && data[13] != rdpROP2Not) || data[14] != 0 || data[15] != 1 {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
 			startX := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
@@ -418,6 +420,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			if lineErr != nil {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 			}
+			lineROP2 = data[13]
 			lineColor = [4]byte{data[16], data[17], data[18], 0xff}
 			data = data[19:]
 		case rdpOrderMultiScrBlt:
@@ -599,7 +602,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			}
 			first := linePoints[0]
 			result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: first[0], Y: first[1], Width: 1, Height: 1,
-				operation: rdpBitmapRectangleLine, linePoints: linePoints, lineColor: lineColor})
+				operation: rdpBitmapRectangleLine, linePoints: linePoints, lineColor: lineColor, lineROP2: lineROP2})
 			totalPixels += uint64(len(linePoints))
 			continue
 		}

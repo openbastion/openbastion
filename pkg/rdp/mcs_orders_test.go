@@ -1019,6 +1019,9 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiPatBltOrder(0x09, true, 0, 0, 1, 1, rdpPatBltPatCopy, [3]byte{}, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestMultiScrBltOrder(0x09, true, 0, 0, 1, 1, rdpScrBltSrcCopy, 0, 0, 1, []byte{0x00, 1, 0, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 0, 0, 3, 2, 0x11, 0x22, 0x33), 0, 0))
+	lineToNot := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
+	lineToNot[17] = rdpROP2Not
+	f.Add(mcsTestOrdersUpdateData(1, lineToNot, 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
@@ -2323,5 +2326,54 @@ func TestParseRDPOrdersUpdateAcceptsEllipseSCNotROP2(t *testing.T) {
 	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x06, 0x01, [3]byte{1, 2, 3})
 	if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); err != nil {
 		t.Fatalf("EllipseSC R2_NOT should decode: %v", err)
+	}
+}
+
+func TestParseRDPOrdersUpdateAcceptsLineToNotROP2(t *testing.T) {
+	order := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 1, 2, 3)
+	order[17] = rdpROP2Not
+	update, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatalf("LineTo R2_NOT should decode: %v", err)
+	}
+	if !state.lineToUsed || len(update.Rectangles) != 1 || update.Rectangles[0].lineROP2 != rdpROP2Not {
+		t.Fatalf("LineTo R2_NOT update = %+v, state=%+v", update, state)
+	}
+}
+
+func TestRDPFramebufferAppliesLineToNotROP2(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+		copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+	}
+	order := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 1, 2, 3)
+	order[17] = rdpROP2Not
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(76, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	painted := map[[2]int]bool{{1, 1}: true, {2, 1}: true, {3, 2}: true, {4, 2}: true}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+			if painted[[2]int{x, y}] {
+				want = color.RGBA{R: 0xed, G: 0xcb, B: 0xa9, A: 0xff}
+			}
+			if got != want {
+				t.Fatalf("LineTo R2_NOT pixel (%d,%d)=%#v want=%#v", x, y, got, want)
+			}
+		}
 	}
 }

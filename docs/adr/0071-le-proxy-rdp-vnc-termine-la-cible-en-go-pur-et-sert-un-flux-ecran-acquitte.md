@@ -1202,3 +1202,19 @@ Validation de l'incrément 51 :
 - `go test -v ./pkg/rdp/... -count=1` : 252 tests principaux `--- PASS`.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (XOR remplacé par OR dans le framebuffer ; `R2_XORPEN` retiré des parseurs PolygonSC/EllipseSC), les deux formes échouent pour chaque mutation ; sources restaurées octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index 20/25 non annoncés et runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 52 — R2_NOT pour LineTo
+
+Le profil LineTo (`orderType=0x09`, négociation index 8) accepte `R2_NOT` (`0x06`, fonction `Dn`) en plus de `R2_COPYPEN` (`0x0d`). Le framebuffer réutilise le moteur ROP2 commun : les trois composantes RGB de destination sont inversées, l’alpha interne reste opaque et la couleur de plume demeure requise dans l’ordre mais n’est pas consommée par `R2_NOT`. Les autres ROP2 restent refusés ; les coordonnées absolues, la plume solide d’un pixel, le fond transparent, les bornes et la sémantique Bresenham GDI restent inchangés. L’index 8 reste non annoncé ; runtime et route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_NOT` (`0x06`) comme `Dn`.
+
+Validation de l'incrément 52 :
+- Test rouge sur le profil précédent : le parseur refuse `R2_NOT` pour LineTo et le test de rendu ne compile pas avant l'ajout du champ ROP2 ; les tests ciblés passent après implémentation.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 87 432 exécutions.
+- `go test -v ./pkg/rdp/... -count=1` : 254 tests principaux `--- PASS`.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (désactivation de l'inversion RGB et rejet de `R2_NOT` dans le parseur LineTo) ; fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index LineTo 8 non annoncé, runtime/route RDP désactivés.
