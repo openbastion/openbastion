@@ -2515,3 +2515,18 @@ Validation de l'incrément 50 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 102 090 exécutions en 5 s (4 workers).
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 : suppression de l'inversion RGB (les deux rendus échouent) et rejet de `R2_NOT` dans les parseurs PolygonSC/EllipseSC (les deux tests de décodage échouent) ; sources restaurées et comparées octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Le contrôle d'architecture historique `scripts/check-architecture-deps.sh` n'existe pas dans ce dépôt. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index 20/25 non annoncés et runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 51 : R2_XORPEN
+
+PolygonSC et EllipseSC acceptent `R2_XORPEN` (`0x07`, `DPx`) en plus de `R2_COPYPEN` et `R2_NOT`. Le framebuffer applique le XOR bit à bit entre RGB de destination et couleur de plume/brosse, en conservant l’alpha opaque. Les autres ROP2 restent refusés. Les index 20/25 restent indépendants et non annoncés ; runtime/route RDP désactivés.
+
+Référence normative : [MS-RDPEGDI — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1).
+
+Validation de l'incrément 51 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 69 393 exécutions.
+- `go test -v ./pkg/rdp/... -count=1` : 252 tests principaux `--- PASS`.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (XOR remplacé par OR dans le framebuffer ; `R2_XORPEN` retiré des parseurs PolygonSC/EllipseSC), les deux formes échouent pour chaque mutation ; sources restaurées octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index 20/25 non annoncés et runtime/route RDP désactivés.

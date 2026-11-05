@@ -1024,6 +1024,8 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x07, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x07, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestDstBltOrder(0x09, true, 0, 0, 1, 1, 0x55), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {

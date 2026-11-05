@@ -583,3 +583,74 @@ func TestRDPFramebufferAppliesEllipseSCNotROP2(t *testing.T) {
 		}
 	}
 }
+
+func TestRDPFramebufferAppliesPolygonSCXorROP2(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+		copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+	}
+	order := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x07, 0x01, [3]byte{0x01, 0x02, 0x03}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(74, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+			if x >= 1 && x <= 3 && y >= 1 && y <= 3 {
+				want = color.RGBA{R: 0x13, G: 0x36, B: 0x55, A: 0xff}
+			}
+			if got != want {
+				t.Fatalf("polygon R2_XORPEN pixel (%d,%d)=%#v want=%#v", x, y, got, want)
+			}
+		}
+	}
+}
+
+func TestRDPFramebufferAppliesEllipseSCXorROP2(t *testing.T) {
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < len(framebuffer.image.Pix); i += 4 {
+		copy(framebuffer.image.Pix[i:i+4], []byte{0x12, 0x34, 0x56, 0xff})
+	}
+	order := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x07, 0x01, [3]byte{0x01, 0x02, 0x03})
+	update, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(75, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			got := color.RGBAModel.Convert(decoded.At(x, y)).(color.RGBA)
+			want := color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+			inside := (x >= 2 && x <= 4 && y == 1) || (x >= 1 && x <= 5 && y >= 2 && y <= 4) || (x >= 2 && x <= 4 && y == 5)
+			if inside {
+				want = color.RGBA{R: 0x13, G: 0x36, B: 0x55, A: 0xff}
+			}
+			if got != want {
+				t.Fatalf("ellipse R2_XORPEN pixel (%d,%d)=%#v want=%#v", x, y, got, want)
+			}
+		}
+	}
+}
