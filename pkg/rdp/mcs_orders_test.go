@@ -45,6 +45,66 @@ func TestParseRDPOrdersUpdateDecodesOpaqueRectangles(t *testing.T) {
 	}
 }
 
+func TestParseRDPOrdersUpdateDecodesSolidPatBlt(t *testing.T) {
+	order := mcsTestPatBltOrder(0x01, false, 26, 451, 13, 13, 0xf0, [3]byte{0xff, 0xff, 0x00}, [3]byte{0x5b, 0xef, 0x00}, 0x00)
+	got, state, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 640, 480, rdpPrimaryOrderState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rectangles) != 1 || !state.hasOrderType || state.orderType != rdpOrderPatBlt {
+		t.Fatalf("PatBlt update = %+v, state=%+v", got, state)
+	}
+	rect := got.Rectangles[0]
+	if rect.X != 26 || rect.Y != 451 || rect.Width != 13 || rect.Height != 13 {
+		t.Fatalf("PatBlt rectangle = %+v", rect)
+	}
+	wantPixel := []byte{0x5b, 0xef, 0x00, 0xff}
+	for offset := 0; offset < len(rect.Pixels); offset += 4 {
+		if !bytes.Equal(rect.Pixels[offset:offset+4], wantPixel) {
+			t.Fatalf("PatBlt pixel %d = %v, want %v", offset/4, rect.Pixels[offset:offset+4], wantPixel)
+		}
+	}
+}
+
+func TestParseRDPOrdersUpdateRejectsUnsupportedPatBltProfiles(t *testing.T) {
+	valid := mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0)
+	cases := map[string][]byte{
+		"unsupported ROP":       mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xcc, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"non-solid brush":       mcsTestPatBltOrder(0x09, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 2),
+		"incomplete field mask": func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
+		"unexpected field mask": func() []byte { out := append([]byte(nil), valid...); out[3] = 0x03; return out }(),
+		"negative coordinate":   mcsTestPatBltOrder(0x09, true, -1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"outside desktop":       mcsTestPatBltOrder(0x09, true, 7, 7, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"zero width":            mcsTestPatBltOrder(0x09, true, 1, 1, 0, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+		"truncated order":       valid[:len(valid)-1],
+		"delta coordinates":     mcsTestPatBltOrder(0x19, true, 1, 1, 2, 2, 0xf0, [3]byte{1, 2, 3}, [3]byte{4, 5, 6}, 0),
+	}
+	for name, order := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := parseRDPOrdersUpdateData(mcsTestOrdersUpdateData(1, order, 0, 0), 8, 8, rdpPrimaryOrderState{}); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func mcsTestPatBltOrder(controlFlags byte, typeChange bool, left, top, width, height int16, rop byte, backColor, foreColor [3]byte, brushStyle byte) []byte {
+	out := []byte{controlFlags}
+	if typeChange {
+		out = append(out, rdpOrderPatBlt)
+	}
+	out = append(out, 0x7f, 0x02) // Four coordinates, ROP, both colors, and BrushStyle.
+	for _, value := range []int16{left, top, width, height} {
+		var encoded [2]byte
+		binary.LittleEndian.PutUint16(encoded[:], uint16(value))
+		out = append(out, encoded[:]...)
+	}
+	out = append(out, rop)
+	out = append(out, backColor[:]...)
+	out = append(out, foreColor[:]...)
+	return append(out, brushStyle)
+}
+
 func TestParseRDPOrdersUpdateRejectsUnsupportedAndMalformedOrders(t *testing.T) {
 	valid := mcsTestOpaqueRectOrder(0x09, true, 1, 1, 2, 2, 1, 2, 3)
 	cases := map[string][]byte{
@@ -145,6 +205,7 @@ func TestParseRDPOrdersUpdateDoesNotCommitStateOnMalformedOrder(t *testing.T) {
 
 func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0, 0, 0), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{}, [3]byte{0xff, 0xff, 0xff}, 0), 0, 0))
 	f.Add([]byte("not an orders update"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = parseRDPOrdersUpdateData(data, 64, 64, rdpPrimaryOrderState{})
@@ -167,8 +228,8 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	defer listener.Close()
 
 	const shareID = uint32(0x000103ea)
-	first := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 0, 0, 1, 1, 0x11, 0x22, 0x33))
-	second := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x01, false, 1, 0, 1, 1, 0xaa, 0xbb, 0xcc))
+	first := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestPatBltOrder(0x01, false, 0, 0, 1, 1, 0xf0, [3]byte{1, 2, 3}, [3]byte{0x11, 0x22, 0x33}, 0))
+	second := mcsTestOrdersUpdatePacket(shareID, 1, mcsTestOpaqueRectOrder(0x09, true, 1, 0, 1, 1, 0xaa, 0xbb, 0xcc))
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -257,6 +318,34 @@ func TestRDPFramebufferAppliesOpaqueRectOrder(t *testing.T) {
 	}
 	if r, g, b, a := decoded.At(0, 0).RGBA(); r != 0 || g != 0 || b != 0 || a != 0xffff {
 		t.Fatalf("untouched pixel = (%x,%x,%x,%x), want opaque black", r, g, b, a)
+	}
+}
+
+func TestRDPFramebufferAppliesPatBltOrder(t *testing.T) {
+	order := mcsTestPatBltOrder(0x01, false, 2, 3, 2, 2, 0xf0, [3]byte{0xff, 0xff, 0xff}, [3]byte{0x12, 0x34, 0x56}, 0)
+	update, err := parseRDPBitmapShareData(mcsTestOrdersShareData(0x000103ea, 1, order, 0, 0), 0x000103ea, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	framebuffer, err := NewRDPFramebuffer(8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := framebuffer.Apply(update, time.Unix(2, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := png.Decode(bytes.NewReader(message.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := 3; y < 5; y++ {
+		for x := 2; x < 4; x++ {
+			r, g, b, a := decoded.At(x, y).RGBA()
+			if r != 0x12*257 || g != 0x34*257 || b != 0x56*257 || a != 0xffff {
+				t.Fatalf("pixel (%d,%d) = (%x,%x,%x,%x)", x, y, r, g, b, a)
+			}
+		}
 	}
 }
 

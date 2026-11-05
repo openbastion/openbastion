@@ -2267,3 +2267,22 @@ Validation de l'incrément 34 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 48 233 exécutions en 5 s.
 - Contre-épreuves : 6 mutations compilantes tuées sur 6 (bornes bureau, drapeaux de contrôle, masque des champs, type initial, persistance du type entre PDU, garde de négociation) ; restauration et `cmp` PASS pour chaque fichier.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 35 : PatBlt slow-path
+
+Le décodeur des ordres slow-path prend en charge `PatBlt` uniquement pour le ROP `PATCOPY` (`0xF0`) et une brosse non mise en cache `BS_SOLID` (`0x00`). Le masque de champs est exactement `0x027f` (quatre coordonnées absolues, ROP, `BackColor`, `ForeColor`, `BrushStyle`) ; la couleur du rectangle provient de `ForeColor`. Le type primaire initial implicite PatBlt et les changements de type restent conservés entre PDU TLS. Le rendu est réutilisé par `RDPFramebuffer`.
+
+Les ROP autres que PATCOPY, brushes null/hachées/pattern/cachées, coordonnées delta, bounds, champs omis, brush hatch/extra, autres ordres primaires/secondaires/alternatifs et Fast-Path Orders restent refusés. Le slot de négociation PatBlt/OpaqueRect reste désactivé : les profils stricts ne représentent pas encore le support complet que cette capacité annoncerait. Runtime et route RDP restent désactivés ; aucune interopérabilité Windows/RDS réelle n'est revendiquée.
+
+Références : [MS-RDPEGDI PatBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/bd4bf5e7-b988-45f9-8201-3b22cc9aeeb8), [Coord Field](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/870b982c-9abe-40cb-99d0-2c3f0cc5fb74), [Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272), [Order Capability Set](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/9f409c29-480c-4751-9665-510b8ffff294).
+
+Validation de l’incrément 35 :
+- Test rouge avant implémentation : `TestParseRDPOrdersUpdateDecodesSolidPatBlt` échoue sur le commit précédent (`ErrMCSConnection`), puis passe après ajout du décodeur.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 178 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 49 161 exécutions en 5 s.
+- Contre-épreuves : 5 mutations compilantes tuées sur 5 (ROP, style de brosse, masque de champs, bornes du rectangle, garde de négociation) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.

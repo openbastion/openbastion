@@ -877,3 +877,26 @@ Validation de l'incrément 34 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 48 233 exécutions en 5 s.
 - Contre-épreuves : 6 mutations compilantes tuées sur 6 (bornes bureau, drapeaux de contrôle, masque des champs, type initial, persistance du type entre PDU, garde de négociation) ; restauration et `cmp` PASS pour chaque fichier.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 35 : PatBlt slow-path, profil PATCOPY à brosse solide
+
+Le parseur `TS_UPDATE_ORDERS` décode maintenant un second profil primaire : `TS_ENC_PATBLT_ORDER` (0x01), en plus d'OpaqueRect. Le profil accepté correspond à la forme documentée `fieldFlags=0x027f` : coordonnées absolues signées 16 bits, ROP `PATCOPY` (0xF0), champs `BackColor` et `ForeColor` présents, puis `BrushStyle=BS_SOLID` (0x00). Le rectangle rendu prend la couleur `ForeColor`, opaque. La forme reste volontairement stricte : aucun delta, clipping bounds, champ omis, brush en cache, brush hachée/pattern, `BrushHatch`, `BrushExtra` ou ROP dépendant de la destination/source.
+
+Le type primaire initial implicite est PatBlt, conformément à MS-RDPEGDI ; le type courant demeure conservé entre les PDU. Les contrôles de dimensions, de bornes du bureau, de compte d'ordres, de surface cumulée, de consommation exacte et de commit transactionnel de l'état restent communs au chemin OpaqueRect. Les ordres secondaires, alternatifs et Fast-Path Orders restent refusés.
+
+Le slot `TS_NEG_PATBLT_INDEX` demeure à zéro dans Confirm Active : implémenter ce profil restreint ne suffit pas à annoncer un support général de PatBlt/OpaqueRect à un serveur. Le runtime et la route RDP restent désactivés.
+
+Tests : décodage du vecteur normatif PATCOPY/solid brush, pixels RGBA et rendu PNG via `RDPFramebuffer`, transition PatBlt vers OpaqueRect entre deux PDU TLS, rejet des ROP et brushes non supportés, des masques de champs invalides, coordonnées delta et rectangles invalides ; seed PatBlt ajouté au fuzzer des ordres.
+
+Références normatives : [MS-RDPEGDI §2.2.2.2.1.1.2.3 — PatBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/bd4bf5e7-b988-45f9-8201-3b22cc9aeeb8), [§2.2.2.2.1.1.1.1 — Coord Field](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/870b982c-9abe-40cb-99d0-2c3f0cc5fb74), [§2.2.2.2.1.1.2 — Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272) et [MS-RDPBCGR — Order Capability Set](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/9f409c29-480c-4751-9665-510b8ffff294).
+
+Validation de l’incrément 35 :
+- Test rouge avant implémentation : `TestParseRDPOrdersUpdateDecodesSolidPatBlt` échoue sur le commit précédent (`ErrMCSConnection`), puis passe après ajout du décodeur.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, compilation, `go vet`, tests unitaires et Buf lint.
+- `go test ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 178 résultats `--- PASS` mesurés.
+- `FuzzParseRDPOrdersUpdate` : PASS, 49 161 exécutions en 5 s.
+- Contre-épreuves : 5 mutations compilantes tuées sur 5 (ROP, style de brosse, masque de champs, bornes du rectangle, garde de négociation) ; tous les fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; le slot de négociation reste désactivé et le runtime/route RDP restent désactivés.

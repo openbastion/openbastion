@@ -14,7 +14,10 @@ const (
 	rdpOrderTypeChange     = byte(0x08)
 	rdpOrderOpaqueRect     = byte(0x0a)
 	rdpOrderPatBlt         = byte(0x01)
-	rdpOpaqueRectFieldMask = byte(0x7f) // Four coordinates plus three RGB bytes.
+	rdpOpaqueRectFieldMask = byte(0x7f)     // Four coordinates plus three RGB bytes.
+	rdpPatBltFieldMask     = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
+	rdpPatBltPatCopy       = byte(0xf0)
+	rdpPatBltSolidBrush    = byte(0x00)
 	maxRDPPrimaryOrders    = 1024
 	rdpBitmapCompressed    = uint16(0x0001)
 	rdpBitmapNoCompHdr     = uint16(0x0400)
@@ -70,7 +73,8 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 }
 
 // rdpPrimaryOrderState retains the connection-scoped primary order type. The
-// OpaqueRect profile requires every data field, so no per-order field cache is needed.
+// supported OpaqueRect and solid PATCOPY profiles require every data field, so
+// no per-order field cache is needed.
 type rdpPrimaryOrderState struct {
 	orderType    byte
 	hasOrderType bool
@@ -105,10 +109,9 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 	}
 }
 
-// parseRDPOrdersUpdateData accepts a deliberately narrow primary-order profile:
-// OpaqueRect with absolute coordinates, no clipping bounds and all seven fields
-// present. The negotiated order slot is shared with PatBlt, so this decoder is
-// not advertised until PatBlt is implemented as well.
+// parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
+// OpaqueRect and solid-brush PATCOPY PatBlt, both with absolute coordinates and
+// no clipping bounds or omitted fields. Other ROPs and brush styles are refused.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -143,16 +146,43 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			state.orderType = rdpOrderPatBlt // Initial primary order type per MS-RDPEGDI.
 			state.hasOrderType = true
 		}
-		if state.orderType != rdpOrderOpaqueRect || len(data) < 12 || data[0] != rdpOpaqueRectFieldMask {
+		var left, top, width, height int32
+		var red, green, blue byte
+		switch state.orderType {
+		case rdpOrderOpaqueRect:
+			if len(data) < 12 || data[0] != rdpOpaqueRectFieldMask {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[1:]
+			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			red, green, blue = data[8], data[9], data[10]
+			data = data[11:]
+		case rdpOrderPatBlt:
+			// This strict form is the normative 0x027f example: four absolute
+			// coordinates, PATCOPY, both colors, and a non-cached solid brush.
+			if len(data) < 18 || binary.LittleEndian.Uint16(data[:2]) != rdpPatBltFieldMask {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[2:]
+			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			rop := data[8]
+			// BackColor is present for wire compatibility; PATCOPY with BS_SOLID
+			// paints ForeColor and does not depend on the background color.
+			red, green, blue = data[12], data[13], data[14]
+			brushStyle := data[15]
+			if rop != rdpPatBltPatCopy || brushStyle != rdpPatBltSolidBrush {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[16:]
+		default:
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
-		data = data[1:]
-		left := int32(int16(binary.LittleEndian.Uint16(data[0:2])))
-		top := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-		width := int32(int16(binary.LittleEndian.Uint16(data[4:6])))
-		height := int32(int16(binary.LittleEndian.Uint16(data[6:8])))
-		red, green, blue := data[8], data[9], data[10]
-		data = data[11:]
 		if left < 0 || top < 0 || width <= 0 || height <= 0 ||
 			left+width > int32(desktopWidth) || top+height > int32(desktopHeight) {
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
@@ -513,8 +543,8 @@ func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint3
 }
 
 // ReadBitmapUpdate reads and decodes one complete server graphics update after
-// connection finalization. It accepts bitmap updates and the strict OpaqueRect
-// order subset. The packet is bounded to a larger TPKT than the handshake path.
+// connection finalization. It accepts bitmap updates and strict primary-order
+// subsets. The packet is bounded to a larger TPKT than the handshake path.
 // Any malformed or unexpected packet makes the stream terminal.
 func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout time.Duration) (update RDPBitmapUpdate, err error) {
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
