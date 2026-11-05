@@ -72,14 +72,25 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 		return result, ErrMCSConnection
 	}
 	payload := userData[18:]
-	if binary.LittleEndian.Uint16(payload[:2]) != rdpUpdateBitmap {
+	if len(payload) < 2 || binary.LittleEndian.Uint16(payload[:2]) != rdpUpdateBitmap {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
-	count := int(binary.LittleEndian.Uint16(payload[2:4]))
+	return parseRDPBitmapUpdateData(payload[2:], desktopWidth, desktopHeight)
+}
+
+// parseRDPBitmapUpdateData decodes the shared bitmap-update body used by both
+// slow-path TS_UPDATE and fast-path TS_FP_UPDATE_BITMAP.
+func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
+	var result RDPBitmapUpdate
+	if len(payload) < 2 || desktopWidth == 0 || desktopHeight == 0 ||
+		uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
+		return result, ErrMCSConnection
+	}
+	count := int(binary.LittleEndian.Uint16(payload[:2]))
 	if count == 0 || count > maxRDPBitmapRects {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
-	payload = payload[4:]
+	payload = payload[2:]
 	result.Rectangles = make([]RDPBitmapRectangle, 0, count)
 	var totalPixels uint64
 	for i := 0; i < count; i++ {
@@ -126,6 +137,50 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	return result, nil
+}
+
+const (
+	rdpFastPathUpdateBitmap = byte(1)
+	maxRDPFastPathPacket    = 0x7fff
+)
+
+// parseRDPFastPathBitmapUpdate accepts one unencrypted, unfragmented bitmap
+// update. TLS is the security layer; fast-path RDP encryption and compression
+// remain deliberately unsupported.
+func parseRDPFastPathBitmapUpdate(packet []byte, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
+	var empty RDPBitmapUpdate
+	if len(packet) < 4 || len(packet) > maxRDPFastPathPacket || packet[0] != 0 {
+		return empty, ErrMCSConnection
+	}
+	offset := 2
+	packetLength := int(packet[1])
+	if packet[1]&0x80 != 0 {
+		if len(packet) < 3 {
+			return empty, ErrMCSConnection
+		}
+		packetLength = int(packet[1]&0x7f)<<8 | int(packet[2])
+		offset++
+		if packetLength < 128 {
+			return empty, ErrMCSConnection
+		}
+	}
+	if packetLength != len(packet) || packetLength < offset+4 {
+		return empty, ErrMCSConnection
+	}
+
+	// This profile accepts exactly one bitmap update per Fast-Path PDU.
+	// Other update types, compression and fragment sequences are not negotiated.
+	updateHeader := packet[offset]
+	if updateHeader&0x0f != rdpFastPathUpdateBitmap ||
+		(updateHeader>>4)&0x03 != 0 || updateHeader>>6 != 0 {
+		return empty, ErrMCSConnection
+	}
+	size := int(binary.LittleEndian.Uint16(packet[offset+1 : offset+3]))
+	data := packet[offset+3:]
+	if size == 0 || size != len(data) {
+		return empty, ErrMCSConnection
+	}
+	return parseRDPBitmapUpdateData(data, desktopWidth, desktopHeight)
 }
 
 // decodeRDPBitmapRaw converts bottom-up BGRX wire pixels to top-down RGBA.
@@ -359,7 +414,22 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			clear(assembled)
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
-		packet, readErr := readTPKTPacket(conn, maxRDPBitmapTPKTPacket)
+		var packet []byte
+		var readErr error
+		if fragmentCount == 0 {
+			var fastPath bool
+			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPBitmapTPKTPacket)
+			if readErr == nil && fastPath {
+				update, err = parseRDPFastPathBitmapUpdate(packet, desktopWidth, desktopHeight)
+				clear(packet)
+				if err != nil || ctx.Err() != nil {
+					return RDPBitmapUpdate{}, ErrMCSConnection
+				}
+				return update, nil
+			}
+		} else {
+			packet, readErr = readTPKTPacket(conn, maxRDPBitmapTPKTPacket)
+		}
 		if readErr != nil {
 			clear(assembled)
 			return RDPBitmapUpdate{}, ErrMCSConnection
