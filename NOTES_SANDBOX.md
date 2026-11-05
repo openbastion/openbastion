@@ -2445,3 +2445,16 @@ Validation de l’incrément 45 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 116 071 exécutions en 5 s (4 workers).
 - Contre-épreuves : 9 mutations compilantes tuées sur 9 (field mask, SRCCOPY, calcul d'offset source, bornes source/destination, liste delta seule, état, garde index 17 et limite 46 rectangles) ; source restaurée octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiScrBlt 17 reste non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 46 — LineTo
+
+`LineTo` (`orderType=0x09`) accepte dix champs explicites, `BackMode=TRANSPARENT`, `R2_COPYPEN`, plume solide d'un pixel et coordonnées absolues. Le tracé Bresenham GDI (endpoint exclu) est borné au bureau et à 32 768 points. L'index de négociation 8 est vérifié indépendamment et n'est pas annoncé. Runtime/route RDP désactivés ; aucune interopérabilité Windows/RDS réelle revendiquée.
+
+Validation de l’incrément 46 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 221 tests principaux `--- PASS` (669 succès en comptant les sous-tests et seeds).
+- `FuzzParseRDPOrdersUpdate` : PASS, 112 213 exécutions en 5 s (4 workers).
+- Contre-épreuves : 11 mutations compilantes tuées sur 11 (masque, BackMode, ROP2, style/largeur de plume, BackColor, bornes, Bresenham, état, garde index 8 et rendu framebuffer) ; sources restaurées octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index LineTo 8 reste non annoncé, runtime/route RDP désactivés.

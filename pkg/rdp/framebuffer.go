@@ -58,6 +58,18 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	var totalPixels uint64
 	for _, rect := range update.Rectangles {
 		pixels := uint64(rect.Width) * uint64(rect.Height)
+		if rect.operation == rdpBitmapRectangleLine {
+			pixels = uint64(len(rect.linePoints))
+			if rect.Width != 1 || rect.Height != 1 || len(rect.Pixels) != 0 || len(rect.linePoints) == 0 ||
+				len(rect.linePoints) > maxRDPLinePixels || rect.lineColor[3] != 0xff {
+				return screenstream.Message{}, ErrRDPFramebuffer
+			}
+			for _, point := range rect.linePoints {
+				if point[0] >= uint16(bounds.Dx()) || point[1] >= uint16(bounds.Dy()) {
+					return screenstream.Message{}, ErrRDPFramebuffer
+				}
+			}
+		}
 		if rect.Width == 0 || rect.Height == 0 || uint32(rect.X)+uint32(rect.Width) > uint32(bounds.Dx()) ||
 			uint32(rect.Y)+uint32(rect.Height) > uint32(bounds.Dy()) || pixels > screenstream.MaxPixels-totalPixels {
 			return screenstream.Message{}, ErrRDPFramebuffer
@@ -80,6 +92,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 				uint32(rect.sourceY)+uint32(rect.Height) > uint32(bounds.Dy()) {
 				return screenstream.Message{}, ErrRDPFramebuffer
 			}
+		case rdpBitmapRectangleLine:
+			// Line points and color were validated above.
 		default:
 			return screenstream.Message{}, ErrRDPFramebuffer
 		}
@@ -87,8 +101,16 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	}
 	previous := make([][]byte, len(update.Rectangles))
 	for i, rect := range update.Rectangles {
-		previous[i] = make([]byte, int(rect.Width)*int(rect.Height)*4)
-		for y := 0; y < int(rect.Height); y++ {
+		if rect.operation == rdpBitmapRectangleLine {
+			previous[i] = make([]byte, len(rect.linePoints)*4)
+			for pointIndex, point := range rect.linePoints {
+				start := f.image.PixOffset(int(point[0]), int(point[1]))
+				copy(previous[i][pointIndex*4:], f.image.Pix[start:start+4])
+			}
+		} else {
+			previous[i] = make([]byte, int(rect.Width)*int(rect.Height)*4)
+		}
+		for y := 0; rect.operation != rdpBitmapRectangleLine && y < int(rect.Height); y++ {
 			start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
 			copy(previous[i][y*int(rect.Width)*4:], f.image.Pix[start:start+int(rect.Width)*4])
 		}
@@ -133,6 +155,11 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 					}
 				}
 			}
+		case rdpBitmapRectangleLine:
+			for _, point := range rect.linePoints {
+				offset := f.image.PixOffset(int(point[0]), int(point[1]))
+				copy(f.image.Pix[offset:offset+4], rect.lineColor[:])
+			}
 		case rdpBitmapRectangleScrCopy:
 			source := make([]byte, int(rect.Width)*int(rect.Height)*4)
 			for y := 0; y < int(rect.Height); y++ {
@@ -150,9 +177,16 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	if err := png.Encode(&encoded, f.image); err != nil || encoded.Len() == 0 || encoded.Len() > screenstream.MaxPNGBytes {
 		for i := len(update.Rectangles) - 1; i >= 0; i-- {
 			rect := update.Rectangles[i]
-			for y := 0; y < int(rect.Height); y++ {
-				start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
-				copy(f.image.Pix[start:start+int(rect.Width)*4], previous[i][y*int(rect.Width)*4:])
+			if rect.operation == rdpBitmapRectangleLine {
+				for pointIndex, point := range rect.linePoints {
+					start := f.image.PixOffset(int(point[0]), int(point[1]))
+					copy(f.image.Pix[start:start+4], previous[i][pointIndex*4:])
+				}
+			} else {
+				for y := 0; y < int(rect.Height); y++ {
+					start := f.image.PixOffset(int(rect.X), int(rect.Y)+y)
+					copy(f.image.Pix[start:start+int(rect.Width)*4], previous[i][y*int(rect.Width)*4:])
+				}
 			}
 		}
 		for _, old := range previous {

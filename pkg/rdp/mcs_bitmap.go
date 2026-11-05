@@ -19,6 +19,7 @@ const (
 	rdpOrderMultiDstBlt     = byte(0x0f)
 	rdpOrderMultiPatBlt     = byte(0x10)
 	rdpOrderMultiScrBlt     = byte(0x11)
+	rdpOrderLineTo          = byte(0x09)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
@@ -38,6 +39,7 @@ const (
 	maxRDPPrimaryOrders     = 1024
 	maxRDPMultiDstBltRects  = 45
 	maxRDPMultiDstBltBytes  = 395
+	maxRDPLinePixels        = 32_768
 	rdpBitmapCompressed     = uint16(0x0001)
 	rdpBitmapNoCompHdr      = uint16(0x0400)
 	maxRDPBitmapRects       = 64
@@ -59,20 +61,23 @@ const (
 	rdpBitmapRectanglePatAnd
 	rdpBitmapRectanglePatOr
 	rdpBitmapRectangleScrCopy
+	rdpBitmapRectangleLine
 )
 
 // RDPBitmapRectangle is one decoded, top-down rectangle from a server graphics
 // update. Pixels is tightly packed RGBA for replacement and solid-brush pattern
 // operations; DSTINVERT and ScrBlt carry no replacement pixel buffer.
 type RDPBitmapRectangle struct {
-	X         uint16
-	Y         uint16
-	Width     uint16
-	Height    uint16
-	Pixels    []byte
-	operation rdpBitmapRectangleOperation
-	sourceX   uint16
-	sourceY   uint16
+	X          uint16
+	Y          uint16
+	Width      uint16
+	Height     uint16
+	Pixels     []byte
+	operation  rdpBitmapRectangleOperation
+	sourceX    uint16
+	sourceY    uint16
+	linePoints [][2]uint16
+	lineColor  [4]byte
 }
 
 // RDPBitmapUpdate contains the raster rectangles from one complete graphics update.
@@ -121,6 +126,7 @@ type rdpPrimaryOrderState struct {
 	multiDstBltUsed      bool
 	multiPatBltUsed      bool
 	multiScrBltUsed      bool
+	lineToUsed           bool
 	multiOpaqueRectUsed  bool
 }
 
@@ -195,6 +201,8 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		var red, green, blue byte
 		var sourceX, sourceY int32
 		var multiRects [][4]int32
+		var linePoints [][2]uint16
+		var lineColor [4]byte
 		operation := rdpBitmapRectangleReplace
 		switch state.orderType {
 		case rdpOrderDstBlt:
@@ -246,6 +254,30 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
 			operation = rdpBitmapRectangleScrCopy
 			data = data[13:]
+		case rdpOrderLineTo:
+			// Strict ten-field profile: transparent background, absolute
+			// endpoints, R2_COPYPEN and a one-pixel solid pen.
+			if len(data) < 21 || binary.LittleEndian.Uint16(data[:2]) != 0x03ff {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[2:]
+			if binary.LittleEndian.Uint16(data[0:2]) != 1 || data[13] != 0x0d || data[14] != 0 || data[15] != 1 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			startX := int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			startY := int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			endX := int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			endY := int32(int16(binary.LittleEndian.Uint16(data[8:10])))
+			if !allZeroBytes(data[10:13]) {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			var lineErr error
+			linePoints, lineErr = rasterizeRDPLine(startX, startY, endX, endY, desktopWidth, desktopHeight)
+			if lineErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			lineColor = [4]byte{data[16], data[17], data[18], 0xff}
+			data = data[19:]
 		case rdpOrderMultiScrBlt:
 			// Strict full-field profile: destination anchor, SRCCOPY source
 			// anchor, count and a bounded delta-rectangle list.
@@ -418,6 +450,17 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
 		rectangles := multiRects
+		if state.orderType == rdpOrderLineTo {
+			state.lineToUsed = true
+			if len(linePoints) == 0 || len(result.Rectangles) >= maxRDPBitmapRects || uint64(len(linePoints)) > maxRDPDesktopArea-totalPixels {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			first := linePoints[0]
+			result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: first[0], Y: first[1], Width: 1, Height: 1,
+				operation: rdpBitmapRectangleLine, linePoints: linePoints, lineColor: lineColor})
+			totalPixels += uint64(len(linePoints))
+			continue
+		}
 		if state.orderType != rdpOrderMultiDstBlt && state.orderType != rdpOrderMultiOpaqueRect && state.orderType != rdpOrderMultiPatBlt && state.orderType != rdpOrderMultiScrBlt {
 			rectangles = [][4]int32{{left, top, width, height}}
 		}
@@ -445,6 +488,8 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			state.multiPatBltUsed = true
 		case rdpOrderMultiScrBlt:
 			state.multiScrBltUsed = true
+		case rdpOrderLineTo:
+			state.lineToUsed = true
 		case rdpOrderMultiOpaqueRect:
 			state.multiOpaqueRectUsed = true
 		}
@@ -459,6 +504,49 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 // first rectangle is relative to (0,0,0,0). Only left and top accumulate across
 // rectangles; width and height are values or repeat the previous dimension when
 // their zero bit is set.
+func rasterizeRDPLine(startX, startY, endX, endY int32, desktopWidth, desktopHeight uint16) ([][2]uint16, error) {
+	if startX < 0 || startY < 0 || endX < 0 || endY < 0 || startX >= int32(desktopWidth) || endX >= int32(desktopWidth) ||
+		startY >= int32(desktopHeight) || endY >= int32(desktopHeight) {
+		return nil, ErrMCSConnection
+	}
+	dx, dy := absRDPInt32(endX-startX), absRDPInt32(endY-startY)
+	if max(dx, dy)+1 > maxRDPLinePixels {
+		return nil, ErrMCSConnection
+	}
+	sx, sy := int32(1), int32(1)
+	if startX > endX {
+		sx = -1
+	}
+	if startY > endY {
+		sy = -1
+	}
+	errValue := dx - dy
+	points := make([][2]uint16, 0, int(max(dx, dy))+1)
+	for startX != endX || startY != endY {
+		points = append(points, [2]uint16{uint16(startX), uint16(startY)})
+		doubleError := 2 * errValue
+		if doubleError > -dy {
+			errValue -= dy
+			startX += sx
+		}
+		if doubleError < dx {
+			errValue += dx
+			startY += sy
+		}
+	}
+	if len(points) == 0 {
+		return nil, ErrMCSConnection
+	}
+	return points, nil
+}
+
+func absRDPInt32(value int32) int32 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
 func allZeroBytes(data []byte) bool {
 	for _, value := range data {
 		if value != 0 {
@@ -937,6 +1025,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	multiDstBltEnabled := s.multiDstBltEnabled
 	multiPatBltEnabled := s.multiPatBltEnabled
 	multiScrBltEnabled := s.multiScrBltEnabled
+	lineToEnabled := s.lineToEnabled
 	multiOpaqueRectEnabled := s.multiOpaqueRectEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
@@ -1039,6 +1128,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		nextOrderState.multiDstBltUsed && !multiDstBltEnabled ||
 		nextOrderState.multiPatBltUsed && !multiPatBltEnabled ||
 		nextOrderState.multiScrBltUsed && !multiScrBltEnabled ||
+		nextOrderState.lineToUsed && !lineToEnabled ||
 		nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

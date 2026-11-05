@@ -54,6 +54,7 @@ type CredSSPClientSession struct {
 	multiDstBltEnabled      bool
 	multiPatBltEnabled      bool
 	multiScrBltEnabled      bool
+	lineToEnabled           bool
 	multiOpaqueRectEnabled  bool
 	primaryOrderState       rdpPrimaryOrderState
 }

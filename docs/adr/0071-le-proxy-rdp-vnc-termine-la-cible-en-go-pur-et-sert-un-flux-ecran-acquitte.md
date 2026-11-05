@@ -1101,3 +1101,22 @@ Validation de l’incrément 45 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 116 071 exécutions en 5 s (4 workers).
 - Contre-épreuves : 9 mutations compilantes tuées sur 9 (field mask, SRCCOPY, calcul d'offset source, bornes source/destination, liste delta seule, état, garde index 17 et limite 46 rectangles) ; source restaurée octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiScrBlt 17 reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 46 : LineTo
+
+Le parseur slow-path accepte `LineTo` (`orderType=0x09`) avec les dix champs explicites (`fieldFlags=0x03ff`) et un profil de tracé minimal : `BackMode=TRANSPARENT`, `R2_COPYPEN` (`0x0d`), `PenStyle=SOLID`, `PenWidth=1`, couleur de fond nulle et coordonnées absolues signées. Le segment est rasterisé par Bresenham, départ inclus et endpoint exclu (sémantique GDI), sans antialiasing ni clipping. Les points sont conservés comme une opération ordonnée dans le même flux d'updates framebuffer que les rectangles ; les pixels antérieurs sont sauvegardés afin de permettre le rollback si l'encodage PNG échoue.
+
+L'ordre suit son état de négociation indépendant, index 8 ; `ReadBitmapUpdate` refuse le flux si cette capacité n'est pas explicitement activée. Le profil refuse les champs omis, les coordonnées delta, les endpoints hors bureau, les modes de fond opaques, les ROP2 non supportés, les styles de plume non solides, les épaisseurs autres que 1 et les lignes dépassant 32 768 points et les segments de longueur nulle. Confirm Active n'annonce toujours aucun ordre graphique ; runtime et route RDP restent désactivés.
+
+Tests : rasterisation horizontale, verticale, diagonale et point unique, limites et coordonnées négatives, rendu PNG et pixels hors segment inchangés, rejet de chaque champ non supporté, refus TLS sans négociation index 8, acceptation TLS avec négociation simulée et seed de fuzz.
+
+Référence normative : MS-RDPEGDI §2.2.2.2.1.1.2.11 (`LINETO_ORDER`), [Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272) et [Win32 LineTo endpoint semantics](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-lineto).
+
+Validation de l’incrément 46 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 221 tests principaux `--- PASS` (669 succès en comptant les sous-tests et seeds).
+- `FuzzParseRDPOrdersUpdate` : PASS, 112 213 exécutions en 5 s (4 workers).
+- Contre-épreuves : 11 mutations compilantes tuées sur 11 (masque, BackMode, ROP2, style/largeur de plume, BackColor, bornes, Bresenham, état, garde index 8 et rendu framebuffer) ; sources restaurées octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index LineTo 8 reste non annoncé, runtime/route RDP désactivés.
