@@ -79,7 +79,10 @@ services:
     network_mode: none
 
   postgres:
-    image: postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
+    image: openbastion-postgres:16
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/postgres/Dockerfile
     restart: on-failure
     environment:
       POSTGRES_USER: openbastion

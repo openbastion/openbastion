@@ -2160,3 +2160,23 @@ Validation de l’incrément 28 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; avis résiduels dans des modules requis mais non appelés.
 - `npm audit --audit-level=low` Admin UI et icons : zéro vulnérabilité. `git diff --check` : PASS.
 - Aucun test d’interopérabilité Windows/RDS réel ni E2E avec Video Recorder. Runtime et route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 29 : profil RDP6 ARGB à plans bruts
+
+Le parseur `TS_BITMAP_DATA` accepte maintenant le flag `BITMAP_COMPRESSION` sur les rectangles 32 bpp. Le décodeur vérifie le `TS_CD_HEADER` (longueur exacte, `cbCompFirstRowSize=0`, scan width alignée sur 4 et taille décompressée cohérente), puis traite le `RDP6_BITMAP_STREAM` en format ARGB (`CLL=0`), sans subsampling ni RLE des plans. Les plans A (facultatif), R, G, B sont lus bottom-up puis normalisés en RGBA top-down ; sans alpha, celui-ci vaut 255. Un octet de padding final est accepté.
+
+RLE des plans, AYCoCg, chroma subsampling, profondeurs autres que 32 bpp et toutes formes ambiguës restent refusés. Les bornes pixels/rectangles/TPKT/bitmapLength existantes sont conservées. Il s'agit d'un premier profil RDP6, pas de la prise en charge complète de la compression RDP. Le `bitmapCompressionFlag` du Confirm Active reste à zéro : cette capacité n'est pas négociée avec les serveurs tant que tous les profils nécessaires ne sont pas implémentés. Les ordres graphiques ne sont pas implémentés ; runtime et route RDP restent désactivés.
+
+Tests ajoutés : décodage ARGB sans alpha, décodage avec alpha et padding, intégration Bitmap Update, cas négatifs du header et des modes non pris en charge, fuzzer `FuzzDecodeRDP6BitmapWithHeader`.
+
+
+Validation de l’incrément 29 :
+- `go test ./pkg/rdp/... -count=1` : PASS, y compris les lignes bottom-up du RDP6.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS.
+- `FuzzDecodeRDP6BitmapWithHeader` : PASS, 61 383 exécutions en 5 s.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (267,706 s). Les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés ; aucun test Compose local n’a été lancé.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis demeurent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` Admin UI et icons : zéro vulnérabilité. `git diff --check` : PASS.
+- Aucun test Windows/RDS réel ni E2E RDP avec Video Recorder. Le `bitmapCompressionFlag` reste à zéro, runtime et route RDP désactivés.

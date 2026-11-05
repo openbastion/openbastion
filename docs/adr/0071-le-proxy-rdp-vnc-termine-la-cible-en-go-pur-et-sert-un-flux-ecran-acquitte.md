@@ -746,3 +746,26 @@ Validation de l’incrément 28 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis demeurent dans des modules requis mais non appelés.
 - `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
 - `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E RDP avec Video Recorder. Runtime et route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 29 : premier profil de décodage RDP 6.0 Bitmap
+
+Le parseur `TS_BITMAP_DATA` accepte désormais `BITMAP_COMPRESSION` pour les rectangles 32 bpp et décode un sous-ensemble strict du `RDP6_BITMAP_STREAM`. Le chemin valide le `TS_CD_HEADER` (première ligne à zéro, taille du corps exacte, largeur de scan alignée sur quatre pixels, taille décompressée égale à `width × height × 4`) avant toute allocation du framebuffer de sortie. Le flux RDP6 accepte le format ARGB (`CLL=0`), sans chroma subsampling, sans RLE de plans et avec ou sans plan alpha. Les plans sont lus en ordre de lignes bottom-up et normalisés en pixels RGBA top-down ; l'alpha absent est opaque. Un octet de padding final est toléré conformément au format.
+
+Les entrées RLE, AYCoCg, chroma subsampling, flags réservés, tailles de plan incohérentes, longueurs tronquées/sur-déclarées et données résiduelles sont refusées. Les limites existantes (64 rectangles, 16 777 216 pixels au total, TPKT/MCS et `bitmapLength` bornés) restent appliquées. Aucun fallback ne tente d'interpréter un flux non reconnu comme RAW : l'erreur rend la mise à jour invalide et le chemin réseau terminal selon le comportement existant.
+
+Ce profil ne couvre **pas** encore le RDP 6.0 RLE par plan ; il s'agit d'une première tranche de compatibilité du conteneur RDP6, pas d'une prise en charge complète de la compression RDP. Le `bitmapCompressionFlag` reste volontairement à zéro dans le Confirm Active : le client ne négocie donc pas la réception compressée tant que RLE/AYCoCg/subsampling ne sont pas couverts. Le décodeur est prêt pour des tests contrôlés et l'évolution du profil, mais le serveur ne doit pas être incité à envoyer un encodage partiellement supporté. Le codec RDP n'est toujours pas sélectionné par le runtime, les ordres graphiques ne sont pas implémentés, et la route RDP reste désactivée. Aucun test d'interopérabilité Windows/RDS réel n'est revendiqué.
+
+Tests : reconstruction ARGB avec/sans alpha, padding, intégration dans un Bitmap Update, refus des en-têtes/flags/formats non pris en charge et fuzz dédié du décodeur.
+
+Références normatives : [MS-RDPBCGR §2.2.9.1.1.3.1.2.2 — Bitmap Data](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/84a3d4d2-5523-4e49-9a48-33952c559485), [MS-RDPEGDI §2.2.2.5.1 — RDP 6.0 Bitmap Compressed Bitmap Stream](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/9b422f69-8e05-4c6d-b6fb-fa02ef75a8f2), [MS-RDPEGDI §3.1.9 — RDP 6.0 Bitmap Compression](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/0d2e1a03-e123-46b2-b2b8-ed730a794ae4).
+
+Validation de l’incrément 29 :
+- `go test ./pkg/rdp/... -count=1` : PASS.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `make build vet test proto-lint` : PASS sur tous les modules Go, `go vet`, tests et Buf lint.
+- `FuzzDecodeRDP6BitmapWithHeader` : PASS, 61 383 exécutions en 5 s.
+- `DOCKER_BUILDKIT=0 make test-integration` : PASS (267,706 s), processus réels ; les tests PostgreSQL nécessitant `TEST_DATABASE_URL` sont ignorés. Aucun test Compose local n’a été lancé.
+- `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
+- `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
+- `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E RDP avec Video Recorder. `bitmapCompressionFlag=0`, runtime et route RDP restent désactivés.

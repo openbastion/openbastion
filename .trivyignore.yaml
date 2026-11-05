@@ -3,13 +3,12 @@
 # vulnerability anywhere else — in an OpenBastion binary above all — still fails the gate. An entry
 # expires: past its date it no longer hides anything, and the gate fails until it is looked at again.
 #
-# postgres:16 (digest pinned in deploy/*/docker-compose.yml), usr/local/bin/gosu: the Go standard
-# library v1.24.6 that the upstream image builds gosu with. gosu runs once, as root, at the start of
-# the container, to exec postgres as the postgres user: no network, no TLS, no parsing of anything
-# but its arguments. Not reachable from what it does (judged, not proven). Nothing to fix on our
-# side but the image: Dependabot proposes a new digest once upstream rebuilds (ADR-0059), and the
-# entries go. Measured on 31 October 2026 with Trivy 0.76.1: 26 findings (HIGH 25, CRITICAL 1), the
-# Debian packages of the image: 0.
+# usr/local/bin/gosu in the pinned upstream PostgreSQL image: the Go standard library v1.24.6
+# embedded by upstream. gosu runs once, as root, to exec postgres as the postgres user; it does
+# not accept network input. These findings are judged not reachable from gosu's limited role,
+# not proven unexploitable. The exception is path-scoped and expires 31 January 2027.
+# Debian OS packages are upgraded from the security repository in
+# deploy/docker-compose/postgres/Dockerfile and remain subject to the strict HIGH/CRITICAL gate.
 vulnerabilities:
   - id: CVE-2025-61726
     paths: ["usr/local/bin/gosu"]

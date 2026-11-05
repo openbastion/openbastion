@@ -387,3 +387,97 @@ func mutateBitmapShare(packet []byte, mutate func([]byte)) []byte {
 	}
 	return out
 }
+
+func TestParseRDPBitmapUpdateDecodesRDP6ARGBRawPlanes(t *testing.T) {
+	const shareID = uint32(0x000103ea)
+	stream := []byte{0x04, 0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff}
+	compressed := mcsTestRDP6BitmapData(4, 1, stream)
+	packet := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(0, 0, 4, 1, 32, rdpBitmapCompressed, compressed))
+	got, err := parseRDPBitmapUpdate(packet, mcsGlobalChannelID, shareID, 1280, 720)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{0xff, 0, 0, 0xff, 0, 0xff, 0, 0xff, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+	if pixels := got.Rectangles[0].Pixels; string(pixels) != string(want) {
+		t.Fatalf("decoded RGBA = %v, want %v", pixels, want)
+	}
+}
+
+func TestDecodeRDP6BitmapUsesBottomUpPlaneRows(t *testing.T) {
+	stream := []byte{0x04}
+	stream = append(stream, 1, 2, 3, 4, 5, 6, 7, 8) // red, bottom row first
+	stream = append(stream, 11, 12, 13, 14, 15, 16, 17, 18)
+	stream = append(stream, 21, 22, 23, 24, 25, 26, 27, 28)
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 2, stream), 4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		5, 15, 25, 0xff, 6, 16, 26, 0xff, 7, 17, 27, 0xff, 8, 18, 28, 0xff,
+		1, 11, 21, 0xff, 2, 12, 22, 0xff, 3, 13, 23, 0xff, 4, 14, 24, 0xff,
+	}
+	if string(got) != string(want) {
+		t.Fatalf("decoded RGBA = %v, want %v", got, want)
+	}
+}
+
+func TestDecodeRDP6BitmapWithAlphaAndOptionalPadding(t *testing.T) {
+	stream := []byte{0x00, 0x80, 0xff, 0x40, 0x00, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0xee}
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 1, stream), 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{1, 5, 9, 0x80, 2, 6, 10, 0xff, 3, 7, 11, 0x40, 4, 8, 12, 0}
+	if string(got) != string(want) {
+		t.Fatalf("decoded RGBA = %v, want %v", got, want)
+	}
+}
+
+func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
+	valid := []byte{0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+	base := mcsTestRDP6BitmapData(4, 1, valid)
+	cases := map[string][]byte{
+		"truncated compression header":   base[:7],
+		"nonzero first row size":         mutateRDP6Data(base, func(data []byte) { data[0] = 1 }),
+		"compressed length mismatch":     mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[2:4], 1) }),
+		"scan width mismatch":            mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[4:6], 8) }),
+		"decoded size mismatch":          mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[6:8], 4) }),
+		"RLE unsupported":                mutateRDP6Data(base, func(data []byte) { data[8] = 0x0c }),
+		"AYCoCg unsupported":             mutateRDP6Data(base, func(data []byte) { data[8] = 0x24 }),
+		"chroma subsampling unsupported": mutateRDP6Data(base, func(data []byte) { data[8] = 0x14 }),
+		"reserved format bits":           mutateRDP6Data(base, func(data []byte) { data[8] = 0x07 }),
+		"short plane data":               base[:len(base)-1],
+		"trailing data":                  append(append([]byte(nil), base...), 0, 1),
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeRDP6BitmapWithHeader(data, 4, 1); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+	if _, err := decodeRDP6BitmapWithHeader(base, 3, 1); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("unaligned width error = %v, want ErrMCSConnection", err)
+	}
+}
+
+func FuzzDecodeRDP6BitmapWithHeader(f *testing.F) {
+	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}))
+	f.Add([]byte("invalid RDP6 bitmap"))
+	f.Fuzz(func(t *testing.T, data []byte) { _, _ = decodeRDP6BitmapWithHeader(data, 4, 1) })
+}
+
+func mcsTestRDP6BitmapData(width, height uint16, stream []byte) []byte {
+	out := make([]byte, 8+len(stream))
+	binary.LittleEndian.PutUint16(out[2:4], uint16(len(stream)))
+	binary.LittleEndian.PutUint16(out[4:6], width)
+	binary.LittleEndian.PutUint16(out[6:8], width*height*4)
+	copy(out[8:], stream)
+	return out
+}
+
+func mutateRDP6Data(data []byte, mutate func([]byte)) []byte {
+	out := append([]byte(nil), data...)
+	mutate(out)
+	return out
+}

@@ -1,7 +1,7 @@
 # ADR-0051 — Toute image tirée d'un registre est épinglée par son empreinte, et un test refuse celle qui ne l'est pas
 
 **Contexte**
-ADR-0033 l'avait noté : « les images ne sont pas épinglées par empreinte (`@sha256:`) : reproductible vaut ici pour le code (`go.sum`), pas pour les images ». Le 31 octobre 2026, huit références tirées d'un registre n'étaient épinglées que par une étiquette, qu'un éditeur peut déplacer : `golang:1.23` (deux fois, Base44), `golang:1.23-alpine`, `node:24-alpine` et `gcr.io/distroless/static-debian12:nonroot` (image de déploiement), `postgres:16` (deux fichiers compose), `node:22` (Base44). Une image compromise ou simplement changée en amont entrait dans la construction suivante sans qu'aucun fichier du dépôt ne change. La CI (ADR-0047) et le test contre OpenBao (ADR-0049) épinglaient déjà les leurs.
+ADR-0033 l'avait noté : « les images ne sont pas épinglées par empreinte (`@sha256:`) : reproductible vaut ici pour le code (`go.sum`), pas pour les images ». Le 31 octobre 2026, huit références tirées d'un registre n'étaient épinglées que par une étiquette, qu'un éditeur peut déplacer : `golang:1.23` (deux fois, Base44), `golang:1.23-alpine`, `node:24-alpine` et `gcr.io/distroless/static-debian12:nonroot` (image de déploiement), `postgres:16` (Compose principal et Base44 ; depuis le 5 novembre 2026, via un Dockerfile dérivé à base multi-architecture épinglée), `node:22` (Base44). Une image compromise ou simplement changée en amont entrait dans la construction suivante sans qu'aucun fichier du dépôt ne change. La CI (ADR-0047) et le test contre OpenBao (ADR-0049) épinglaient déjà les leurs.
 
 **Décision** *(Go de Bony Kiss le 31 octobre 2026 pour le point 9 du backlog ; la forme est renversable)*
 
