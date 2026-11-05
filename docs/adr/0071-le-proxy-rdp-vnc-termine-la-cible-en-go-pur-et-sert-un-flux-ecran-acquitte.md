@@ -769,3 +769,26 @@ Validation de l’incrément 29 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis subsistent dans des modules requis mais non appelés.
 - `npm audit --audit-level=low` dans `web/admin-ui` et `web/openbastion-icons` : zéro vulnérabilité.
 - `git diff --check` : PASS. Aucun test Windows/RDS réel ni E2E RDP avec Video Recorder. `bitmapCompressionFlag=0`, runtime et route RDP restent désactivés.
+
+
+## 2026-11-05 — Incrément 30 : RDP 6.0 RLE des plans ARGB
+
+Le décodeur RDP6 accepte désormais le bit RLE du FormatHeader pour le profil ARGB sans perte ni sous-échantillonnage. Chaque plan (alpha facultatif, rouge, vert, bleu) est décodé indépendamment, ligne par ligne, à partir de segments RAW/RUN. Le control byte est interprété avec le nombre RAW dans le nibble haut et la longueur RUN dans le nibble bas ; les longueurs étendues 16+n et 32+n sont prises en charge avec zéro valeur RAW. Les segments sans RAW utilisent la valeur de base zéro, comme prescrit.
+
+Les lignes suivantes à la première sont reconstruites à partir des deltas zig-zag signés sur 8 bits par rapport à la ligne précédente, avec arithmétique modulo 256. Le décodeur borne chaque segment à la largeur de sa ligne, chaque plan à width×height, exige la consommation exacte de chaque plan et refuse les contrôles nuls, segments vides, données tronquées, dépassements de ligne et octets résiduels. Les plans sont ensuite recombinés dans l'ordre ARGB, inversés de bottom-up vers top-down et normalisés en RGBA. Le format non compressé conserve son octet de padding optionnel ; aucun padding RLE ambigu n'est accepté.
+
+Le profil reste strictement CLL=0 / CS=0 : AYCoCg, réduction de perte, chroma subsampling et bits réservés restent refusés. Le flag bitmap compression du Confirm Active demeure à zéro : cet incrément ajoute une capacité de décodage isolée, sans annoncer encore au serveur que le client accepte tous les profils RDP6. Les ordres graphiques restent absents ; runtime et route RDP restent désactivés. Aucune interopérabilité Windows/RDS réelle n'est revendiquée.
+
+Tests : vecteur publié MS-RDPEGDI §3.1.9.2.3 (6×3), RAW/RUN, run-only à base zéro, runs étendus, deltas multi-lignes, intégration de quatre plans ARGB avec alpha et de trois plans sans alpha, bottom-up, rejets de segments malformés et données résiduelles ; fuzz dédié du décodeur de plans et seed RLE du fuzzer du conteneur.
+
+Références normatives : [MS-RDPEGDI §2.2.2.5.1.2 — RDP6_RLE_SEGMENT](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/f7e4c717-669e-4f31-8b34-e8f5ab2e107e), [§3.1.9.2 — Run-Length Encoding](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/c5f101a0-7e67-4f3c-a678-d9760ce8921c), [§3.1.9.2.3 — Decoding Run-Length Sequences](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/46a9972c-0cdd-4673-add4-87f89b837742).
+
+Validation de l'incrément 30 :
+- go test ./pkg/rdp/... -count=1 : PASS.
+- go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1 : PASS.
+- make build vet test proto-lint : PASS sur les modules Go, go vet, tests unitaires et Buf lint.
+- FuzzDecodeRDP6RLEPlane : PASS, 63 458 exécutions en 5 s ; le fuzzer du conteneur RDP6 inclut également un seed RLE.
+- DOCKER_BUILDKIT=0 go test -v ./test/integration/... -count=1 -timeout=900s : PASS (224,177 s). Les scénarios PostgreSQL sont ignorés faute de TEST_DATABASE_URL. Aucun test Compose local n'a été lancé.
+- GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; quelques avis restent dans des modules requis mais non appelés. npm audit : zéro vulnérabilité dans web/admin-ui et web/openbastion-icons.
+- git diff --check : PASS. Le script scripts/check-architecture-deps.sh est absent du dépôt.
+- Aucun test d'interopérabilité Windows/RDS réel ni E2E RDP avec Video Recorder. bitmapCompressionFlag=0, runtime et route RDP restent désactivés.

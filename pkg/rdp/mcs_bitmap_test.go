@@ -442,7 +442,7 @@ func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
 		"compressed length mismatch":     mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[2:4], 1) }),
 		"scan width mismatch":            mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[4:6], 8) }),
 		"decoded size mismatch":          mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[6:8], 4) }),
-		"RLE unsupported":                mutateRDP6Data(base, func(data []byte) { data[8] = 0x0c }),
+		"RLE truncated plane":            mcsTestRDP6BitmapData(4, 1, []byte{0x0c, 0x40, 1, 2}),
 		"AYCoCg unsupported":             mutateRDP6Data(base, func(data []byte) { data[8] = 0x24 }),
 		"chroma subsampling unsupported": mutateRDP6Data(base, func(data []byte) { data[8] = 0x14 }),
 		"reserved format bits":           mutateRDP6Data(base, func(data []byte) { data[8] = 0x07 }),
@@ -461,8 +461,152 @@ func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
 	}
 }
 
+func TestDecodeRDP6RLEPlaneMatchesPublishedMSRDPEGDIVector(t *testing.T) {
+	// MS-RDPEGDI 3.1.9.2.3, six pixels by three rows.
+	encoded := []byte{
+		0x13, 0xff, 0x20, 0xfe, 0xfd,
+		0x60, 0x01, 0x7d, 0xf5, 0xc2, 0x9a, 0x38,
+		0x60, 0x01, 0x67, 0x8b, 0xa3, 0x78, 0xaf,
+	}
+	got, consumed, err := decodeRDP6RLEPlane(encoded, 6, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		255, 255, 255, 255, 254, 253,
+		254, 192, 132, 96, 75, 25,
+		253, 140, 62, 14, 135, 193,
+	}
+	if consumed != len(encoded) || string(got) != string(want) {
+		t.Fatalf("decoded=%v consumed=%d, want %v consumed=%d", got, consumed, want, len(encoded))
+	}
+}
+
+func TestDecodeRDP6BitmapDecodesRLEARGBPlanes(t *testing.T) {
+	plane := func(first byte) []byte {
+		// First row is absolute; second row encodes +4 deltas (zig-zag 8).
+		return []byte{0x40, first, first + 1, first + 2, first + 3, 0x40, 8, 8, 8, 8}
+	}
+	stream := []byte{0x08} // CLL=0, CS=0, RLE=1, alpha present.
+	stream = append(stream, plane(240)...)
+	stream = append(stream, plane(10)...)
+	stream = append(stream, plane(20)...)
+	stream = append(stream, plane(30)...)
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 2, stream), 4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		14, 24, 34, 244, 15, 25, 35, 245, 16, 26, 36, 246, 17, 27, 37, 247,
+		10, 20, 30, 240, 11, 21, 31, 241, 12, 22, 32, 242, 13, 23, 33, 243,
+	}
+	if string(got) != string(want) {
+		t.Fatalf("decoded RGBA = %v, want %v", got, want)
+	}
+	const shareID = uint32(0x000103ea)
+	bitmapData := mcsTestRDP6BitmapData(4, 2, stream)
+	packet := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(0, 0, 4, 2, 32, rdpBitmapCompressed, bitmapData))
+	update, err := parseRDPBitmapUpdate(packet, mcsGlobalChannelID, shareID, 1280, 720)
+	if err != nil || len(update.Rectangles) != 1 || string(update.Rectangles[0].Pixels) != string(want) {
+		t.Fatalf("Bitmap Update RLE decode = %+v, err=%v", update, err)
+	}
+}
+
+func TestDecodeRDP6BitmapDecodesRLEWithoutAlpha(t *testing.T) {
+	stream := []byte{0x0c} // CLL=0, CS=0, RLE=1, no alpha plane.
+	stream = append(stream, 0x40, 10, 11, 12, 13)
+	stream = append(stream, 0x40, 20, 21, 22, 23)
+	stream = append(stream, 0x40, 30, 31, 32, 33)
+	got, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(4, 1, stream), 4, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		10, 20, 30, 0xff, 11, 21, 31, 0xff,
+		12, 22, 32, 0xff, 13, 23, 33, 0xff,
+	}
+	if string(got) != string(want) {
+		t.Fatalf("decoded RGBA = %v, want %v", got, want)
+	}
+}
+
+func TestDecodeRDP6RLEPlaneSupportsRunOnlyAndExtendedRuns(t *testing.T) {
+	cases := []struct {
+		name  string
+		src   []byte
+		width int
+		want  []byte
+	}{
+		{name: "run only zero base", src: []byte{0x03}, width: 3, want: []byte{0, 0, 0}},
+		{name: "extended run 16", src: []byte{0x01}, width: 16, want: make([]byte, 16)},
+		{name: "extended run 32 plus nibble", src: []byte{0x22}, width: 34, want: make([]byte, 34)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, consumed, err := decodeRDP6RLEPlane(tc.src, tc.width, 1)
+			if err != nil || consumed != len(tc.src) || string(got) != string(tc.want) {
+				t.Fatalf("decode=%v consumed=%d err=%v", got, consumed, err)
+			}
+		})
+	}
+}
+
+func TestDecodeRDP6RLEPlaneRejectsMalformedSegments(t *testing.T) {
+	cases := map[string][]byte{
+		"zero control":         {0x00},
+		"truncated raw":        {0x40, 1, 2},
+		"raw exceeds row":      {0x50, 1, 2, 3, 4, 5},
+		"run exceeds row":      {0x17, 7},
+		"extended run exceeds": {0x01},
+		"empty row segment":    {0x00},
+		"missing second row":   {0x40, 1, 2, 3, 4},
+	}
+	for name, src := range cases {
+		t.Run(name, func(t *testing.T) {
+			width, height := 4, 1
+			if name == "missing second row" {
+				height = 2
+			}
+			if _, _, err := decodeRDP6RLEPlane(src, width, height); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("error = %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
+
+func TestDecodeRDP6BitmapRejectsRLETrailingBytes(t *testing.T) {
+	plane := []byte{0x40, 1, 2, 3, 4}
+	stream := []byte{0x0c} // RLE, no alpha.
+	for range 3 {
+		stream = append(stream, plane...)
+	}
+	stream = append(stream, 0)
+	data := mcsTestRDP6BitmapData(4, 1, stream)
+	if _, err := decodeRDP6BitmapWithHeader(data, 4, 1); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("trailing RLE byte error = %v, want ErrMCSConnection", err)
+	}
+}
+
+func FuzzDecodeRDP6RLEPlane(f *testing.F) {
+	f.Add([]byte{0x13, 0xff, 0x20, 0xfe, 0xfd}, 6, 1)
+	f.Add([]byte{0x00}, 4, 1)
+	f.Add([]byte{0x01}, 16, 1)
+	f.Fuzz(func(t *testing.T, src []byte, width, height int) {
+		if width < 1 || width > 4096 || height < 1 || height > 4096 ||
+			uint64(width)*uint64(height) > maxRDPDesktopArea {
+			return
+		}
+		_, _, _ = decodeRDP6RLEPlane(src, width, height)
+	})
+}
+
 func FuzzDecodeRDP6BitmapWithHeader(f *testing.F) {
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x04, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}))
+	rleSeed := []byte{0x0c}
+	for i := 0; i < 3; i++ {
+		rleSeed = append(rleSeed, 0x40, 1, 2, 3, 4)
+	}
+	f.Add(mcsTestRDP6BitmapData(4, 1, rleSeed))
 	f.Add([]byte("invalid RDP6 bitmap"))
 	f.Fuzz(func(t *testing.T, data []byte) { _, _ = decodeRDP6BitmapWithHeader(data, 4, 1) })
 }

@@ -2180,3 +2180,25 @@ Validation de l’incrément 29 :
 - `GOTOOLCHAIN=go1.27.3 make vuln` : aucune vulnérabilité atteignable ; quelques avis demeurent dans des modules requis mais non appelés.
 - `npm audit --audit-level=low` Admin UI et icons : zéro vulnérabilité. `git diff --check` : PASS.
 - Aucun test Windows/RDS réel ni E2E RDP avec Video Recorder. Le `bitmapCompressionFlag` reste à zéro, runtime et route RDP désactivés.
+
+
+## 2026-11-05 — Incrément 30 : RDP6 RLE des plans ARGB
+
+Le bit RLE du FormatHeader est désormais accepté pour le seul profil ARGB CLL=0, sans chroma subsampling. Le décodeur traite indépendamment les plans alpha (facultatif), rouge, vert et bleu. Chaque plan est parcouru ligne par ligne avec des segments RAW/RUN ; le nibble haut du control byte indique le nombre de valeurs RAW et le nibble bas la longueur RUN. Les runs étendus 16+n et 32+n, les segments sans RAW (valeur de base zéro), ainsi que les deltas zig-zag signés des lignes suivantes sont gérés. Les valeurs reconstruites utilisent l'arithmétique octet modulo 256.
+
+Les limites de sécurité restent strictes : segments bornés à la largeur de ligne, plan borné à width×height, longueur exacte du TS_CD_HEADER, consommation exacte de chaque plan et rejet des contrôles nuls, données tronquées, dépassements, segments vides et octets résiduels. Le padding optionnel reste limité au profil non RLE. Les plans sont recombinés en RGBA top-down. AYCoCg, chroma subsampling, perte de couleur et bits réservés restent refusés ; bitmapCompressionFlag reste à zéro dans Confirm Active.
+
+Tests : vecteur normatif MS-RDPEGDI 3.1.9.2.3 (6×3), runs RAW/RUN et runs étendus, base zéro, deltas multi-lignes, quatre plans ARGB avec alpha et trois plans sans alpha, ordre bottom-up, entrées malformées, intégration Bitmap Update et fuzz dédié.
+
+Validation :
+- go test ./pkg/rdp/... -count=1 : PASS.
+- go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1 : PASS.
+- make build vet test proto-lint : PASS.
+- FuzzDecodeRDP6RLEPlane : 63 458 exécutions en 5 s, PASS.
+- Intégration processus réels : PASS (224,177 s). Les tests PostgreSQL sont ignorés faute de TEST_DATABASE_URL. Aucun test Compose local.
+- GOTOOLCHAIN=go1.27.3 make vuln : aucune vulnérabilité atteignable ; npm audit : zéro vulnérabilité dans les deux workspaces UI.
+- git diff --check : PASS. Le script scripts/check-architecture-deps.sh est absent du dépôt.
+
+Aucune interopérabilité Windows/RDS réelle ; AYCoCg/subsampling, ordres graphiques, runtime et route RDP toujours désactivés.
+
+Références : MS-RDPEGDI §2.2.2.5.1.2, §3.1.9.2 et §3.1.9.2.3.
