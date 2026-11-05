@@ -1183,6 +1183,7 @@ Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https:
 Validation de l'incrément 50 :
 - `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
 - `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
-- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 119 337 exécutions.
-- Contre-épreuves : 2 mutations compilantes tuées sur 2 (suppression de l'inversion RGB et rejet de `R2_NOT` dans les parseurs PolygonSC/EllipseSC) ; fichiers restaurés octet pour octet.
-- `gofmt` et `git diff --check` : PASS. Le contrôle d'architecture historique `scripts/check-architecture-deps.sh` n'existe pas dans ce dépôt. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index 20/25 non annoncés et runtime/route RDP désactivés.
+- `go test -v ./pkg/rdp/... -count=1` : 250 tests principaux `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 102 090 exécutions en 5 s (4 workers).
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 : suppression de l'inversion RGB (PolygonSC et EllipseSC) et rejet de `R2_NOT` dans les deux parseurs ; sources restaurées et comparées octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose ni interopérabilité Windows/RDS réelle ; index 20/25 non annoncés et runtime/route RDP désactivés.
