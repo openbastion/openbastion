@@ -1063,3 +1063,22 @@ Validation de l’incrément 43 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 76 670 exécutions en 5 s (4 workers).
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (mapping RGB, liste delta seule, masque neuf champs, état de l'ordre, garde index 18, limite 46 rectangles et coordonnées négatives) ; source restaurée octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiOpaqueRect 18 reste non annoncé, runtime/route RDP désactivés.
+
+
+## 2026-11-05 — ADR-0071, incrément 44 : MultiPatBlt
+
+Le parseur slow-path accepte `MultiPatBlt` (`orderType=0x10`) avec les quatorze champs explicites (`fieldFlags=0x3fff`) : coordonnées, ROP3, couleurs de fond et de premier plan, origine et description de brosse, compte et `CodedDeltaList`. Le profil volontairement restreint accepte uniquement `BS_SOLID`, origine `(0,0)`, `BrushHatch=0` et sept octets `BrushExtra` nuls. La couleur de premier plan pilote les cinq ROP déjà éprouvés sur PatBlt : PATCOPY, PATINVERT, PATAND, PATOR et NOTPATCOPY ; BackColor est conservé sur le fil mais n'est pas consommé par ce sous-ensemble. Seuls les rectangles delta sont appliqués, jamais les coordonnées de tête.
+
+L'ordre suit son état de négociation indépendant, index 16 ; `ReadBitmapUpdate` refuse le flux si cette capacité n'est pas explicitement activée. Le profil impose 1 à 45 rectangles, une liste delta de 395 octets maximum, un masque complet, des dimensions/bornes strictes et rejette les brosses non solides, origines/hachures/extra non nuls, ROP non supportés, champs omis et octets résiduels. Confirm Active n'annonce toujours aucun ordre graphique ; runtime et route RDP restent désactivés.
+
+Tests : décodage de plusieurs rectangles, rendu PNG PATINVERT sur deux régions avec framebuffer prérempli, cinq ROP partagés avec PatBlt, rejet du masque/ROP/brosse/origine/hachure/extra/liste invalide, refus TLS sans négociation index 16, acceptation TLS avec négociation simulée et seed de fuzz.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.2.4 — MultiPatBlt](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/5f677576-a62e-48d9-a58d-711490882365) et [MS-RDPEGDI — Primary Drawing Order](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/23f766d4-8343-4e6b-8281-071ddccc0272).
+
+Validation de l’incrément 44 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 214 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 94 425 exécutions en 5 s (4 workers).
+- Contre-épreuves : 10 mutations compilantes tuées sur 10 (mapping ForeColor, whitelist ROP, field mask, origine/style/BrushExtra, rectangles delta, état, garde index 16 et limite 46 rectangles) ; source restaurée octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiPatBlt 16 reste non annoncé, runtime/route RDP désactivés.

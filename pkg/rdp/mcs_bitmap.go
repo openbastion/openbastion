@@ -17,6 +17,7 @@ const (
 	rdpOrderPatBlt          = byte(0x01)
 	rdpOrderScrBlt          = byte(0x02)
 	rdpOrderMultiDstBlt     = byte(0x0f)
+	rdpOrderMultiPatBlt     = byte(0x10)
 	rdpOrderMultiOpaqueRect = byte(0x12)
 	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
 	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
@@ -117,6 +118,7 @@ type rdpPrimaryOrderState struct {
 	patBltOpaqueRectUsed bool
 	scrBltUsed           bool
 	multiDstBltUsed      bool
+	multiPatBltUsed      bool
 	multiOpaqueRectUsed  bool
 }
 
@@ -242,6 +244,52 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			sourceY = int32(int16(binary.LittleEndian.Uint16(data[11:13])))
 			operation = rdpBitmapRectangleScrCopy
 			data = data[13:]
+		case rdpOrderMultiPatBlt:
+			// Strict full-field profile: four coordinates, ROP, colors, a
+			// non-cached solid brush, count and bounded delta rectangles.
+			if len(data) < 29 || binary.LittleEndian.Uint16(data[:2]) != 0x3fff {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			data = data[2:]
+			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
+			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
+			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
+			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
+			rop := data[8]
+			// BackColor is retained for wire compatibility; the supported
+			// solid-brush ROP subset consumes ForeColor only.
+			red, green, blue = data[12], data[13], data[14]
+			if data[15] != 0 || data[16] != 0 || data[17] != rdpPatBltSolidBrush || data[18] != 0 ||
+				!allZeroBytes(data[19:26]) {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			switch rop {
+			case rdpPatBltPatCopy:
+				operation = rdpBitmapRectangleReplace
+			case rdpPatBltPatInvert:
+				operation = rdpBitmapRectanglePatInvert
+			case rdpPatBltPatAnd:
+				operation = rdpBitmapRectanglePatAnd
+			case rdpPatBltPatOr:
+				operation = rdpBitmapRectanglePatOr
+			case rdpPatBltNotPatCopy:
+				operation = rdpBitmapRectangleReplace
+				red, green, blue = ^red, ^green, ^blue
+			default:
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			deltaEntries := int(data[26])
+			encodedLength := int(binary.LittleEndian.Uint16(data[27:29]))
+			if deltaEntries < 1 || deltaEntries > maxRDPMultiDstBltRects || encodedLength == 0 ||
+				encodedLength > maxRDPMultiDstBltBytes || encodedLength > len(data)-29 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			decodedRects, decodeErr := decodeRDPMultiDstBltRectangles(data[29:29+encodedLength], deltaEntries)
+			if decodeErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			multiRects = decodedRects
+			data = data[29+encodedLength:]
 		case rdpOrderMultiOpaqueRect:
 			// Strict full-field profile: four coordinates, RGB color, count,
 			// and a bounded two-byte-length DELTA_RECTS_FIELD.
@@ -338,7 +386,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
 		rectangles := multiRects
-		if state.orderType != rdpOrderMultiDstBlt && state.orderType != rdpOrderMultiOpaqueRect {
+		if state.orderType != rdpOrderMultiDstBlt && state.orderType != rdpOrderMultiOpaqueRect && state.orderType != rdpOrderMultiPatBlt {
 			rectangles = [][4]int32{{left, top, width, height}}
 		}
 		for _, bounds := range rectangles {
@@ -356,6 +404,8 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			state.scrBltUsed = true
 		case rdpOrderMultiDstBlt:
 			state.multiDstBltUsed = true
+		case rdpOrderMultiPatBlt:
+			state.multiPatBltUsed = true
 		case rdpOrderMultiOpaqueRect:
 			state.multiOpaqueRectUsed = true
 		}
@@ -370,6 +420,15 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 // first rectangle is relative to (0,0,0,0). Only left and top accumulate across
 // rectangles; width and height are values or repeat the previous dimension when
 // their zero bit is set.
+func allZeroBytes(data []byte) bool {
+	for _, value := range data {
+		if value != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func decodeRDPMultiDstBltRectangles(encoded []byte, count int) ([][4]int32, error) {
 	if count < 1 || count > maxRDPMultiDstBltRects {
 		return nil, ErrMCSConnection
@@ -837,6 +896,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	dstBltEnabled := s.dstBltEnabled
 	scrBltEnabled := s.scrBltEnabled
 	multiDstBltEnabled := s.multiDstBltEnabled
+	multiPatBltEnabled := s.multiPatBltEnabled
 	multiOpaqueRectEnabled := s.multiOpaqueRectEnabled
 	s.mu.Unlock()
 	if timeout == 0 {
@@ -937,6 +997,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
 		nextOrderState.scrBltUsed && !scrBltEnabled ||
 		nextOrderState.multiDstBltUsed && !multiDstBltEnabled ||
+		nextOrderState.multiPatBltUsed && !multiPatBltEnabled ||
 		nextOrderState.multiOpaqueRectUsed && !multiOpaqueRectEnabled {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}

@@ -2419,3 +2419,16 @@ Validation de l’incrément 43 :
 - `FuzzParseRDPOrdersUpdate` : PASS, 76 670 exécutions en 5 s (4 workers).
 - Contre-épreuves : 7 mutations compilantes tuées sur 7 (mapping RGB, liste delta seule, masque neuf champs, état de l'ordre, garde index 18, limite 46 rectangles et coordonnées négatives) ; source restaurée octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiOpaqueRect 18 reste non annoncé, runtime/route RDP désactivés.
+
+
+## ADR-0071, incrément 44 — MultiPatBlt
+
+`MultiPatBlt` (`orderType=0x10`) accepte un profil strict à quatorze champs explicites. Brosse `BS_SOLID` uniquement, origine nulle, hatch et sept octets BrushExtra nuls ; ROP restreint à PATCOPY/PATINVERT/PATAND/PATOR/NOTPATCOPY. Les rectangles rendus proviennent exclusivement de la liste delta bornée (1 à 45). L'index de négociation 16 est vérifié indépendamment et n'est pas annoncé. Runtime/route RDP désactivés ; aucune interopérabilité Windows/RDS réelle revendiquée.
+
+Validation de l’incrément 44 :
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS (génération Buf, build, vet de tous les modules, tests unitaires complets et `buf lint`).
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 214 tests `--- PASS`.
+- `FuzzParseRDPOrdersUpdate` : PASS, 94 425 exécutions en 5 s (4 workers).
+- Contre-épreuves : 10 mutations compilantes tuées sur 10 (mapping ForeColor, whitelist ROP, field mask, origine/style/BrushExtra, rectangles delta, état, garde index 16 et limite 46 rectangles) ; source restaurée octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Aucun test Compose local ni interopérabilité Windows/RDS réelle ; l'index MultiPatBlt 16 reste non annoncé, runtime/route RDP désactivés.
