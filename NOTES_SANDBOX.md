@@ -1730,7 +1730,7 @@ La Gateway expose `PUT /vault/accounts/{id}/tls-pin` en n'acceptant du corps que
 **Limite de l'incrément** : aucun parcours RDP/VNC de bout en bout n'est activé. Le Session Broker sélectionne encore SSH uniquement ; le service `rdp-vnc-proxy` n'a pas encore de serveur exécutable, de gestion des tickets, de client Video Recorder ou de relais WebSocket Gateway. Le client VNC et `VNCCodec` sont des composants, pas encore un service connecté ; le moteur RDP reste à implémenter. `make test-compose` n'a pas été lancé localement, conformément à la consigne ; il reste couvert par GitHub Actions.
 
 
-## ADR-0072 — incrément 4 : adaptateur gRPC du Video Recorder pour les sessions écran
+## ADR-0071 — incrément 4 : adaptateur gRPC du Video Recorder pour les sessions écran
 
 `services/proxy/rdp-vnc-proxy/internal/infrastructure.VideoRecorderClient` implémente `proxycore.FrameRecorder` et `proxycore.ScreenRecorderGate`. Le constructeur vérifie le mode URL/TLS et épingle le pair gRPC à l’identité mTLS `video-recorder` ; `Ready` vérifie la readiness avant dépense du scope Vault. Chaque frame PNG est envoyée sur un flux bidirectionnel persistant par session et n’est considérée enregistrée qu’après un ACK de session et de séquence exacts. `Seal` envoie le marqueur terminal sur le même flux, attend l’ACK `Complete` et la fermeture propre. Les ACK tardifs ou ambigus ne permettent jamais de déclarer la vidéo complète ; les erreurs de séquence, les identifiants de session invalides et un enregistreur non prêt sont refusés. `Close` annule les flux ouverts et ferme la connexion gRPC.
 
