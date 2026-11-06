@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/infrastructure"
 )
@@ -393,5 +394,56 @@ func TestWebhook_AnApprovalRequestCarriesItsTicket(t *testing.T) {
 	text, _ := d.body["text"].(string)
 	if d.body["event"] != "approval.requested" || d.body["ticket"] != "CHG0001234" || !strings.Contains(text, "ticket CHG0001234") || strings.Contains(text, "break-glass") {
 		t.Fatalf("message = %s", d.raw)
+	}
+}
+
+// ADR-0074: a chat format receives the phrase alone, built from SafeText, whatever people wrote.
+func TestWebhook_AChatFormatCarriesThePhraseAlone_WithNothingPeopleCanTurnIntoAMentionOrALink(t *testing.T) {
+	hostile := []string{"<!channel>", "<@U1>", "<http://evil.example|clic>", "[clic](http://evil.example)", "<at>x</at>", "a\nb", `a"b`}
+	for _, format := range []webhook.Format{webhook.FormatSlack, webhook.FormatTeams} {
+		for _, value := range hostile {
+			srv, got := receiver(t)
+			n, err := infrastructure.NewWebhookNotifier(srv.URL + secretPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			n.WithFormat(format)
+			event := requested
+			event.Event = domain.NotifyApprovalRequested
+			event.AccountID, event.RequestedBy, event.Ticket, event.SessionID = value, value, value, value
+			n.Notify(context.Background(), event)
+			d := wait(t, got)
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(d.raw), &parsed); err != nil {
+				t.Fatalf("%s, %q: not JSON: %v", format, value, err)
+			}
+			for _, forbidden := range []string{"<!", "<@", "<http", "http://", "](", "<at>", "requestedBy", "accountId", "sessionId"} {
+				if strings.Contains(d.raw, forbidden) {
+					t.Fatalf("%s, %q: %q is in the message: %s", format, value, forbidden, d.raw)
+				}
+			}
+			if strings.Contains(d.raw, `a\"b`) || strings.Contains(d.raw, `a\nb`) {
+				t.Fatalf("%s, %q: the value crossed unfiltered: %s", format, value, d.raw)
+			}
+			if !strings.Contains(d.raw, "OpenBastion access request") {
+				t.Fatalf("%s: not the phrase: %s", format, d.raw)
+			}
+		}
+	}
+}
+
+// Generic is what a receiver in place reads: asked or by default, the same bytes.
+func TestWebhook_GenericIsTheDefault_AndKeepsItsFields(t *testing.T) {
+	srv, got := receiver(t)
+	n, err := infrastructure.NewWebhookNotifier(srv.URL + secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.Notify(context.Background(), requested)
+	byDefault := wait(t, got)
+	n.WithFormat(webhook.FormatGeneric)
+	n.Notify(context.Background(), requested)
+	if asked := wait(t, got); asked.raw != byDefault.raw || byDefault.body["requestedBy"] == nil {
+		t.Fatalf("%s\n%s", byDefault.raw, asked.raw)
 	}
 }

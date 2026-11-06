@@ -1,6 +1,6 @@
 # ADR-0074 — Slack et Teams reçoivent les notifications dans leur format, sans nouveau service
 
-**Statut** `Proposé` · 6 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date
+**Statut** `Accepté` · 6 novembre 2026 · go du propriétaire du projet le 6 novembre 2026 (« Accepté »), avec les trois choix qui lui étaient soumis : pas de nouveau service, pas d'approbation depuis une messagerie, secret du canal d'alertes maintenu
 
 **Contexte** — Le premier critère de sortie de la v0.0.1 (`docs/roadmap.md`) demande une double validation « avec ticket obligatoire et notification Slack/Teams, de bout en bout ». La double validation et le ticket existent (ADR-0011, ADR-0067). La notification est un webhook JSON générique, dans deux services : le Session Broker (ADR-0012, ADR-0013) et l'Audit Service (ADR-0045), par `pkg/webhook`. ADR-0067 le note : « pas de message Slack ou Teams mis en forme ».
 
@@ -32,9 +32,12 @@ Ce qui existe déjà et ne change pas : l'URL traitée comme un secret et jamais
 - Mutations sur chacune de ces garanties.
 - **Contre un vrai Slack et un vrai Teams** : test ignoré sans URL en variable d'environnement, jamais écrite dans le dépôt, à lancer avec des canaux de test du propriétaire. Sans lui, le critère de sortie reste ouvert.
 
+**Mesuré** (6 novembre 2026, sur récepteurs de test) : rouge avant le code ; `pkg/webhook`, le Broker et l'Audit Service verts, sous `-race` aussi ; sur processus réels, une alerte arrive en carte Teams signée, une demande arrive à Slack en phrase seule et sans justification, et un canal qui ne répond plus ne retarde pas la demande suivante ; `generic` inchangé, parcours existants verts ; 11 mutations sur 11 tuées. **Slack et Teams réels ne sont pas encore essayés : le critère de sortie reste ouvert jusque-là.**
+
 **Conséquences**
 
 - (+) Le premier critère de sortie de la v0.0.1 devient atteignable sans service, sans dépendance et sans table.
+- (−) Dans `alert_outbox`, le corps est déjà formé : une alerte en attente garde le format qu'elle avait quand elle a été écrite, même après un changement de `ALERT_NOTIFY_FORMAT`.
 - (−) `docs/roadmap.md` prévoit un Notification Service et un Workflow Service : cette décision ne crée pas le premier, et la feuille de route est à amender. Les deux services gardent chacun leur canal : **un seul canal par service**, pas de routage par événement ni par équipe, et une reconfiguration par service.
 - (−) `SafeText` remplace par `?` tout ce qui sort de sa liste : un nom accentué, ou un ticket contenant `/`, s'affiche mal. Lisibilité sacrifiée à la sûreté, comme aujourd'hui.
 - (−) Les identifiants de compte et de demandeur, ainsi que le ticket, partent chez un tiers (Slack, Microsoft). C'est déjà vrai pour qui y pointe son webhook ; l'administrateur en décide, et la documentation le dit.

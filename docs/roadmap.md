@@ -37,7 +37,7 @@ Deux règles guident l'ordre de livraison :
 | Domaine | Composants ajoutés |
 |---|---|
 | Proxy | RDP/VNC Proxy, Database Proxy, Kubernetes Proxy |
-| Gouvernance | Workflow Service, Approval Engine (validation N+1, ticket ServiceNow/Jira), Notification Service (Slack/Teams) |
+| Gouvernance | Workflow Service, Approval Engine (validation N+1, ticket ServiceNow/Jira), notifications Slack/Teams (par les services qui les émettent, sans service dédié : ADR-0074) |
 | Sécurité & Intelligence | MFA Service (TOTP, WebAuthn/FIDO2, YubiKey, Passkeys, carte à puce) |
 | Vault | Secrets Manager (secrets applicatifs dynamiques) |
 | Enregistrement & Audit | Video Recorder, Search Engine (OpenSearch) |
@@ -96,7 +96,7 @@ Deux règles guident l'ordre de livraison :
 | Reporting Service | | | ✅ |
 | Workflow Service | | ✅ | |
 | Approval Engine | | ✅ | |
-| Notification Service | | ✅ | |
+| Notifications Slack/Teams | | ✅ (format livré, ADR-0074 ; canaux réels à essayer) | |
 | MFA Service | | ✅ (TOTP, ADR-0062, et WebAuthn, ADR-0065, livrés dans l'Authentication Service) | |
 | Anomaly Detection / Risk Engine | | | ✅ |
 | OIDC Connector | ✅ | | |

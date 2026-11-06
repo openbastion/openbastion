@@ -261,3 +261,32 @@ func TestAlertWebhook_AnUnsignedChannelOrABadRetryIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// ADR-0074: an alert in a chat format is the phrase alone, still signed, still retried.
+func TestAlertWebhook_AChatFormatCarriesThePhraseAlone_SignedAndRetried(t *testing.T) {
+	for _, format := range []webhook.Format{webhook.FormatSlack, webhook.FormatTeams} {
+		r := newReceiver(t, 503, 202)
+		a, _ := alertWebhook(t, r.srv.URL+"/hook", 20*time.Millisecond)
+		a.WithFormat(format)
+		a.Notify(context.Background(), overdue("evt_1", "<!channel>[x](http://evil.example)"))
+		eventually(t, "two attempts", func() bool { return r.count() == 2 })
+
+		r.mu.Lock()
+		body, h := r.bodies[1], r.headers[1]
+		r.mu.Unlock()
+		if got, want := h.Get(webhook.SignatureHeader), webhook.Signature([]byte(alertSecret), h.Get(webhook.TimestampHeader), body); got != want {
+			t.Fatalf("%s: signature %q, want %q", format, got, want)
+		}
+		if !json.Valid(body) {
+			t.Fatalf("%s: %s", format, body)
+		}
+		for _, forbidden := range []string{"<!", "](", "http://", "resourceId", "eventId"} {
+			if strings.Contains(string(body), forbidden) {
+				t.Fatalf("%s: %q is in the message: %s", format, forbidden, body)
+			}
+		}
+		if !strings.Contains(string(body), "OpenBastion alert") {
+			t.Fatalf("%s: not the phrase: %s", format, body)
+		}
+	}
+}

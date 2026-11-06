@@ -31,6 +31,7 @@ const (
 // stops — it stays in the chain, and the Vault writes it again N failures later (ADR-0041).
 type AlertWebhook struct {
 	endpoint *webhook.Endpoint
+	format   webhook.Format // what the channel reads (ADR-0074)
 	retry    time.Duration
 	queue    AlertQueue    // where the alerts wait (ADR-0057)
 	wake     chan struct{} // a new alert: look at the queue now
@@ -56,9 +57,16 @@ func NewAlertWebhookWithQueue(endpoint *webhook.Endpoint, retry time.Duration, q
 	if retry <= 0 || retry > MaxAlertRetry {
 		return nil, fmt.Errorf("the wait before a retry is between 1s and %s, got %s", MaxAlertRetry, retry)
 	}
-	a := &AlertWebhook{endpoint: endpoint, retry: retry, queue: queue, wake: make(chan struct{}, 1), logf: log.Printf, now: time.Now}
+	a := &AlertWebhook{endpoint: endpoint, format: webhook.FormatGeneric, retry: retry, queue: queue, wake: make(chan struct{}, 1), logf: log.Printf, now: time.Now}
 	go a.work()
 	return a, nil
+}
+
+// WithFormat sets the shape of a delivery (ADR-0074). Set before the first alert: the worker only
+// sends bodies already made, so what a queue kept from an earlier run keeps the shape it had.
+func (a *AlertWebhook) WithFormat(format webhook.Format) *AlertWebhook {
+	a.format = format
+	return a
 }
 
 // WithLogf replaces the logger; for tests.
@@ -105,10 +113,16 @@ func alertText(e domain.Event) string {
 
 // Notify keeps e in the queue and returns at once.
 func (a *AlertWebhook) Notify(ctx context.Context, e domain.Event) {
-	body, _ := json.Marshal(alertMessage{ // strings and a boolean only: it cannot fail
+	text := alertText(e)
+	generic, _ := json.Marshal(alertMessage{ // strings and a boolean only: it cannot fail
 		Event: e.Action, EventID: e.ID, Emitter: e.Emitter, ResourceType: e.ResourceType, ResourceID: e.ResourceID,
-		Success: e.Success, At: e.Timestamp.UTC().Format(time.RFC3339Nano), Text: alertText(e),
+		Success: e.Success, At: e.Timestamp.UTC().Format(time.RFC3339Nano), Text: text,
 	})
+	body, err := a.format.Body(generic, text)
+	if err != nil {
+		a.log("audit-service: alert %s (event %s) not pushed: %v", e.Action, webhook.SafeText(e.ID), err)
+		return
+	}
 	kept, err := a.queue.Put(context.WithoutCancel(ctx), QueuedAlert{EventID: e.ID, Action: e.Action, Body: body, Attempt: 1, Due: a.now()})
 	switch {
 	case err != nil:

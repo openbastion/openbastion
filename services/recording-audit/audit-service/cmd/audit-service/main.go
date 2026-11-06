@@ -192,7 +192,14 @@ func archiveEvery(svc *application.AuditService, every time.Duration) {
 // a restart does not lose them (ADR-0057), memory without one.
 func configureAlerts(svc *application.AuditService, internalTLS bool, queue infrastructure.AlertQueue) {
 	rawURL, secret, retry := os.Getenv("ALERT_NOTIFY_URL"), os.Getenv("ALERT_NOTIFY_SECRET"), os.Getenv("ALERT_NOTIFY_RETRY_SECONDS")
+	formatValue := os.Getenv("ALERT_NOTIFY_FORMAT")
+	format, formatErr := webhook.ParseFormat(formatValue)
+	if formatErr != nil {
+		log.Fatalf("audit-service: ALERT_NOTIFY_FORMAT cannot be used: %v — refusing to start", formatErr)
+	}
 	switch {
+	case rawURL == "" && formatValue != "":
+		log.Fatalf("audit-service: ALERT_NOTIFY_FORMAT is set but ALERT_NOTIFY_URL is not: there is no alert channel to shape for — refusing to start")
 	case rawURL == "" && secret == "" && retry == "":
 		log.Printf("audit-service: no alert channel (ALERT_NOTIFY_URL is not set): alerts are in the chain only, for whoever reads it")
 		return
@@ -220,6 +227,7 @@ func configureAlerts(svc *application.AuditService, internalTLS bool, queue infr
 	if err != nil {
 		log.Fatalf("audit-service: the alert channel cannot be used: %v — refusing to start", err)
 	}
+	notifier.WithFormat(format)
 	svc.WithAlertNotifier(notifier, !internalTLS)
 
 	var alerts []string
@@ -227,6 +235,7 @@ func configureAlerts(svc *application.AuditService, internalTLS bool, queue infr
 		alerts = append(alerts, action+" from "+emitter)
 	}
 	sort.Strings(alerts)
+	log.Printf("audit-service: alerts use the %s format", format)
 	log.Printf("audit-service: alerts (%s) are pushed to %s once written, signed (%s, v1 HMAC-SHA256), up to %d attempts from %s; best effort, the rest of the URL is a secret and is not logged",
 		strings.Join(alerts, ", "), notifier.Where(), webhook.SignatureHeader, infrastructure.AlertMaxAttempts, wait)
 	if _, durable := queue.(*infrastructure.PostgresAlertQueue); durable {

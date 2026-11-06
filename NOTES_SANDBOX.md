@@ -2910,3 +2910,11 @@ Le job `Images — Trivy` échouait sur `75bb7ff` et `b9aa958`, sans changement 
 ## 2026-11-06 — ADR-0071 reste en cours : validation Windows à réaliser
 
 À la demande du propriétaire, ADR-0071 reste marqué en cours, le temps qu'il mette en place une machine Windows. La décision reste `Accepté`, le vocabulaire des statuts étant fermé : « mise en œuvre en cours » est écrit à côté, dans l'ADR et dans l'index. Ce que la validation doit établir est en tête de l'ADR. Il faudra alors l'adresse, un compte de test jetable et le certificat de la cible, qui n'entrent jamais dans le dépôt.
+
+## 2026-11-06 — ADR-0074 : notifications au format Slack et Teams
+
+ADR accepté par le propriétaire le même jour, sans nouveau service. `ALERT_NOTIFY_FORMAT` et `BREAKGLASS_NOTIFY_FORMAT` valent `generic`, `slack` ou `teams`. Slack et Teams ne reçoivent que la phrase déjà assainie. La documentation qui présentait Teams comme récepteur du corps générique est corrigée : Microsoft indique avoir retiré ses connecteurs en mai 2026.
+
+**Prouvé** (dans cette session, sur récepteurs de test) : voir l'ADR ; 11/11 mutations tuées ; `-race` vert ; parcours d'approbation, de quotas et d'alertes verts.
+
+**Non prouvé** : aucun vrai Slack ni Teams n'a été essayé. La carte adaptative vient de la documentation de Microsoft, et le rendu de la phrase reste à regarder. `TestRealChannel` attend `NOTIFY_INTEROP_SLACK_URL` et `NOTIFY_INTEROP_TEAMS_URL`. Le premier critère de sortie de la v0.0.1 reste ouvert jusque-là ; le ticket n'est toujours pas vérifié dans un ITSM.

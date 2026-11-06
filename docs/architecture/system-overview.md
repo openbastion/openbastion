@@ -134,7 +134,7 @@ Tous ces proxies partagent un **pipeline commun** (ADR-0006 ; l'invariant qu'il 
 |---|---|
 | **Workflow Service** | Machine à états de la demande d'accès : requête → validation → fenêtre temporelle → octroi → expiration automatique. |
 | **Approval Engine** | Évalue les politiques d'approbation (validation N+1, double validation, justification obligatoire, ticket ServiceNow/Jira requis). |
-| **Notification Service** | Relaye les demandes/décisions vers Slack, Teams, email, webhooks. |
+| **Notification Service** | Relaye les demandes/décisions vers Slack, Teams, email, webhooks. Pas de service dédié aujourd'hui : le Broker et l'Audit Service émettent eux-mêmes (ADR-0074). |
 
 ### Sécurité et intelligence
 

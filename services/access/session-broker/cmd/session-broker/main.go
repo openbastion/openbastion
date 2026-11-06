@@ -19,6 +19,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
+	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/interfaces"
 )
@@ -208,11 +209,19 @@ func runService() {
 		// protected that does not exist. Never repeated, like the URL (ADR-0013).
 		log.Fatalf("session-broker: BREAKGLASS_NOTIFY_SECRET is set but BREAKGLASS_NOTIFY_URL is not: there is nothing to sign")
 	}
+	if os.Getenv("BREAKGLASS_NOTIFY_URL") == "" && os.Getenv("BREAKGLASS_NOTIFY_FORMAT") != "" {
+		log.Fatalf("session-broker: BREAKGLASS_NOTIFY_FORMAT is set but BREAKGLASS_NOTIFY_URL is not: there is no channel to shape for")
+	}
+	notifyFormat, err := webhook.ParseFormat(os.Getenv("BREAKGLASS_NOTIFY_FORMAT"))
+	if err != nil {
+		log.Fatalf("session-broker: BREAKGLASS_NOTIFY_FORMAT cannot be used: %v", err)
+	}
 	if v := os.Getenv("BREAKGLASS_NOTIFY_URL"); v != "" {
 		n, err := infrastructure.NewWebhookNotifier(v)
 		if err != nil {
 			log.Fatalf("session-broker: BREAKGLASS_NOTIFY_URL cannot be used: %v", err)
 		}
+		n.WithFormat(notifyFormat)
 		if notifySecret != "" {
 			if _, err := n.WithSecret(notifySecret); err != nil {
 				log.Fatalf("session-broker: BREAKGLASS_NOTIFY_SECRET cannot be used: %v", err)
@@ -228,7 +237,7 @@ func runService() {
 		if notifySigned {
 			signing = "signed: " + infrastructure.WebhookSignatureHeader + " is a v1 HMAC-SHA256"
 		}
-		log.Printf("session-broker: break-glass notifications are sent to %s (%s; best effort; the rest of the URL is a secret and is not logged)", notifyChannel, signing)
+		log.Printf("session-broker: break-glass notifications are sent to %s (format %s; %s; best effort; the rest of the URL is a secret and is not logged)", notifyChannel, notifyFormat, signing)
 	case breakGlassMax > 0 && approvalRequired:
 		log.Printf("session-broker: no notification channel (BREAKGLASS_NOTIFY_URL is not set): approvers have to look at GET /sessions?status=pending_approval")
 	}

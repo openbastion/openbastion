@@ -2,6 +2,32 @@
 
 OpenBastion pousse deux sortes de messages vers l'extérieur, chacun par un webhook `POST` JSON que vous déclarez : les étapes d'une demande break-glass (Session Broker, ADR-0012 et ADR-0013) et les **alertes** écrites à l'audit (Audit Service, ADR-0045). Les deux utilisent la même signature, et leur URL n'est jamais écrite dans un journal. Une notification est un rappel, pas le registre : ce qui fait foi est la chaîne d'audit.
 
+## Slack et Teams
+
+Chaque canal a un format (ADR-0074) : `ALERT_NOTIFY_FORMAT` pour les alertes, `BREAKGLASS_NOTIFY_FORMAT` pour les demandes d'accès et de break-glass.
+
+| Valeur | Corps envoyé | Pour |
+|---|---|---|
+| `generic` (défaut) | Le JSON décrit plus bas | Un récepteur à vous, qui peut vérifier la signature |
+| `slack` | `{"text": "<phrase>"}` | Un webhook entrant Slack, ou un récepteur compatible |
+| `teams` | La phrase dans une carte adaptative, sans bouton ni action | Un flux Teams **Workflows**, « Post to a channel when a webhook request is received » |
+
+Une autre valeur, ou un format sans URL : le service refuse de démarrer.
+
+- **Teams.** Microsoft indique avoir retiré ses connecteurs Office 365 en mai 2026. Créez un flux Workflows : une ancienne URL de connecteur ne fonctionne plus.
+- **Seule la phrase part.** Elle n'est faite que de textes fixes, de nombres et d'identifiants filtrés : une mention ou un lien fabriqués n'y survivent pas. Ni justification, ni rien de la cible. Identifiants de compte et de demandeur, et ticket, partent bien chez Slack ou Microsoft : c'est votre décision en déclarant le canal.
+- **Slack et Teams ne vérifient pas la signature.** Pour eux, seule l'URL fait foi : qui la détient peut écrire un faux message dans le canal. Il ne peut rien décider : approuver passe toujours par l'API authentifiée. Traitez l'URL en secret, et remplacez-la si elle fuit.
+- **Un canal par service.** Pas de routage par équipe. La livraison ne change pas avec le format : le Broker n'essaie qu'une fois, sans jamais retarder une session.
+
+**Essayer un vrai canal**, sans écrire l'URL dans l'historique du shell :
+
+```sh
+read -rs NOTIFY_INTEROP_SLACK_URL; export NOTIFY_INTEROP_SLACK_URL   # ou NOTIFY_INTEROP_TEAMS_URL
+go test ./pkg/webhook/ -run TestRealChannel -v -count=1
+```
+
+Le message de test s'affiche dans le canal : regardez-le, le test ne prouve que le `2xx`.
+
 ## Alertes (Audit Service)
 
 Une alerte est un événement d'audit, poussé **après** avoir été écrit dans la chaîne, et seulement si le service qui l'écrit est celui qui a le droit de la dire. L'émetteur est lu dans son certificat mTLS (ADR-0027), jamais dans la requête.
@@ -18,6 +44,7 @@ Le même `vault.rotation_overdue` écrit par un autre service (Broker, proxy, Re
 |---|---|
 | `ALERT_NOTIFY_URL` | URL du récepteur : `https`, ou `http` vers une adresse de bouclage (développement). C'est un **secret** (Slack et Teams mettent le leur dans le chemin) : il n'est jamais écrit ; le journal n'en dit que le schéma et l'hôte. Une URL avec identifiants (`user:pass@`), sans hôte ou d'un autre schéma arrête le service. |
 | `ALERT_NOTIFY_SECRET` | Clé de signature, **obligatoire avec l'URL**, 32 octets au moins (`openssl rand -hex 32`). Utilisée telle quelle : un saut de ligne final en fait partie. |
+| `ALERT_NOTIFY_FORMAT` | `generic` (défaut), `slack` ou `teams` (ADR-0074, ci-dessus). |
 | `ALERT_NOTIFY_RETRY_SECONDS` | Attente avant le premier renvoi, de 1 à 600 (30 par défaut) ; elle double à chaque renvoi. |
 
 L'une sans l'autre, une valeur hors bornes ou un secret trop court : l'Audit Service refuse de démarrer, avec un message qui ne répète ni l'URL ni le secret. Sans aucune des trois, il démarre et l'annonce : « no alert channel ». Au démarrage, il dit ce qu'il pousse, vers quel hôte, et combien de fois il essaie.

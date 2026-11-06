@@ -39,6 +39,7 @@ const (
 // theirs in the path), no redirect followed, the exact body signed — is pkg/webhook's.
 type WebhookNotifier struct {
 	endpoint *webhook.Endpoint
+	format   webhook.Format // what the channel reads (ADR-0074)
 	slots    chan struct{}
 	logf     func(format string, args ...any)
 }
@@ -50,7 +51,13 @@ func NewWebhookNotifier(rawURL string) (*WebhookNotifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WebhookNotifier{endpoint: e, slots: make(chan struct{}, webhookMaxInFlight), logf: log.Printf}, nil
+	return &WebhookNotifier{endpoint: e, format: webhook.FormatGeneric, slots: make(chan struct{}, webhookMaxInFlight), logf: log.Printf}, nil
+}
+
+// WithFormat sets the shape of a delivery (ADR-0074). Set before the first notification.
+func (w *WebhookNotifier) WithFormat(format webhook.Format) *WebhookNotifier {
+	w.format = format
+	return w
 }
 
 // WithTimeout shortens or lengthens the bound of one delivery; for tests.
@@ -140,7 +147,14 @@ func (w *WebhookNotifier) Notify(ctx context.Context, n domain.ApprovalNotificat
 		w.logf("session-broker: notification %s for %s dropped: %d deliveries are already in flight", n.Event, webhook.SafeText(n.SessionID), webhookMaxInFlight)
 		return
 	}
-	body, _ := json.Marshal(toWebhookMessage(n)) // strings and integers only: it cannot fail
+	message := toWebhookMessage(n)
+	generic, _ := json.Marshal(message) // strings and integers only: it cannot fail
+	body, err := w.format.Body(generic, message.Text)
+	if err != nil {
+		<-w.slots
+		w.logf("session-broker: notification %s for %s dropped: %v", n.Event, webhook.SafeText(n.SessionID), err)
+		return
+	}
 	// The request that caused the notification will have ended long before the
 	// delivery does; its cancellation is not the delivery's.
 	ctx = context.WithoutCancel(ctx)
