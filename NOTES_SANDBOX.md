@@ -2652,3 +2652,8 @@ Les indices de négociation 8, 20, 22 et 25 ne sont toujours pas annoncés ; auc
 Ajout de R2_MASKPENNOT (0x05, fonction PDna) à la whitelist ROP2 partagée des quatre primitives vectorielles (LineTo, Polyline, PolygonSC, EllipseSC). Le framebuffer calcule D AND NOT P sur les trois canaux RGB et conserve un alpha opaque. Les tests vérifient les quatre profils, les pixels peints et non peints, les seeds de fuzzing ainsi que le passage TLS slow-path de LineTo. Les autres valeurs ROP2 restent refusées. Validation complète : make build vet test proto-lint, tests ciblés -race, fuzzing 51 168 exécutions en 5 s et 2/2 mutations compilantes tuées.
 
 Les indices de négociation 8, 20, 22 et 25 ne sont toujours pas annoncés ; aucun runtime ni route RDP n’est activé. Pas d’interopérabilité Windows/RDS réelle revendiquée.
+
+
+## ADR-0071, incrément 61 : R2_MASKPEN
+
+Ajout en cours de `R2_MASKPEN` (`0x09`, fonction `DPa`) à la whitelist ROP2 partagée des quatre primitives vectorielles. Le framebuffer calcule `D AND P` sur les trois canaux RGB et garde un alpha opaque. Tests pixel-à-pixel et transport TLS slow-path : PASS ; fuzzing 68 339 exécutions en 5 s ; build/vet/tests/proto-lint, tests ciblés `-race`, et 2/2 mutations tuées : PASS. Les slots de négociation restent non annoncés ; aucun runtime ni route RDP n’est activé.

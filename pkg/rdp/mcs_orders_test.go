@@ -1037,6 +1037,9 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	lineToMaskPenNot := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
 	lineToMaskPenNot[17] = rdpROP2MaskPenNot
 	f.Add(mcsTestOrdersUpdateData(1, lineToMaskPenNot, 0, 0))
+	lineToMaskPen := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
+	lineToMaskPen[17] = rdpROP2MaskPen
+	f.Add(mcsTestOrdersUpdateData(1, lineToMaskPen, 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	polylineNot := mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2Not, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1})
 	f.Add(mcsTestOrdersUpdateData(1, polylineNot, 0, 0))
@@ -1059,6 +1062,9 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2NotCopyPen, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2MaskPenNot, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2MaskPenNot, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2MaskPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2MaskPen, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2MaskPen, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33), 0, 0)) // R2_COPYPEN baseline.
 	lineToBlack := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
 	lineToBlack[17] = rdpROP2Black
@@ -1120,6 +1126,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	maskPenNotLine := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x21, 0x43, 0x65)
 	maskPenNotLine[17] = rdpROP2MaskPenNot
 	seventeenth := mcsTestOrdersUpdatePacket(shareID, 1, maskPenNotLine)
+	maskPenLine := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x21, 0x43, 0x65)
+	maskPenLine[17] = rdpROP2MaskPen
+	eighteenth := mcsTestOrdersUpdatePacket(shareID, 1, maskPenLine)
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -1180,6 +1189,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		}
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, seventeenth)
+		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, eighteenth)
 		}
 		serverResult <- acceptErr
 	}()
@@ -1280,6 +1292,10 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	maskPenUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
 	if readErr != nil || len(maskPenUpdate.Rectangles) != 1 || maskPenUpdate.Rectangles[0].lineROP2 != rdpROP2MaskPenNot {
 		t.Fatalf("ReadBitmapUpdate LineTo R2_MASKPENNOT = %+v, err=%v", maskPenUpdate, readErr)
+	}
+	maskPenNextUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(maskPenNextUpdate.Rectangles) != 1 || maskPenNextUpdate.Rectangles[0].lineROP2 != rdpROP2MaskPen {
+		t.Fatalf("ReadBitmapUpdate LineTo R2_MASKPEN = %+v, err=%v", maskPenNextUpdate, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)

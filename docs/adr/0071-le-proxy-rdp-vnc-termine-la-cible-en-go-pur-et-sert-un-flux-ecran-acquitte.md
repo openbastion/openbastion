@@ -1360,3 +1360,19 @@ Validation de l’incrément 60 :
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (D AND NOT P remplacé par D AND P ; retrait de R2_MASKPENNOT de la whitelist commune).
 - gofmt et git diff --check : PASS. Les autres ROP2 restent refusés ; aucun slot de négociation n’est activé.
 - Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.
+
+
+## ADR-0071 — incrément 61 : R2_MASKPEN pour les primitives vectorielles
+
+Les profils `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et `EllipseSC` (index 25) acceptent `R2_MASKPEN` (`0x09`, fonction `DPa`). Le framebuffer calcule `D AND P` sur chacune des trois composantes RGB et conserve un alpha interne opaque. Les tests vérifient les quatre primitives, les pixels peints et non peints, les seeds de fuzzing et le transport TLS slow-path de `LineTo`. Les autres valeurs ROP2 non implémentées restent refusées.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), `R2_MASKPEN` (`0x09`) = `DPa`. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Validation de l’incrément 61 :
+- Tests de parsing et rendu PNG pixel-à-pixel pour LineTo, Polyline, PolygonSC et EllipseSC ; destination `0x12,0x34,0x56` et plume/brosse `0x21,0x43,0x65` donnent `0x00,0x00,0x44` sur les pixels peints ; les pixels hors tracé restent inchangés : PASS.
+- Lecture TLS slow-path : `LineTo/R2_MASKPEN` accepté et ROP2 conservé : PASS.
+- Seeds de fuzzing ajoutées aux quatre primitives ; fuzzing ciblé `FuzzParseRDPOrdersUpdate` : PASS, 68 339 exécutions en 5 s (4 workers).
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, build, vet, tests unitaires et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (D AND P remplacé par D OR P ; retrait de `R2_MASKPEN` de la whitelist commune).
+- `gofmt` et `git diff --check` : PASS. Aucun slot de négociation supplémentaire n’est activé ; runtime et route RDP restent désactivés.
