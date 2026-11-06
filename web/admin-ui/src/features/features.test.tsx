@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ReactNode } from "react";
 import { Api } from "../shared/api";
@@ -234,5 +234,124 @@ describe("Policies", () => {
     fireEvent.click(screen.getByText("Créer"));
     expect((await screen.findByRole("status")).textContent).toContain("Politique dba-on-prod créée");
     expect(calls[0].body).toEqual({ name: "dba-on-prod", role: "dba", resourcePattern: "vault:account:acc_1", effect: "allow" });
+  });
+});
+
+describe("Graphical accounts and sessions (ADR-0071)", () => {
+  const vnc = { id: "acc_v", name: "bureau", username: "ops", targetHost: "desk:5900", protocol: "vnc", rotationPolicy: "manual", createdAt: "2026-10-30T10:00:00Z" };
+  const page = (items: unknown[]) => ({ body: { items, page: 1, pageSize: 20, totalItems: items.length } });
+  const session = { id: "sess_v", status: "active", protocol: "vnc", requestedBy: "alice", privilegedAccountId: "acc_v", justification: "patch", breakGlass: false, expiresAt: "2030-01-01T00:00:00Z" };
+
+  it("onboards a VNC account with neither host key nor rotation, and sends its secret once", async () => {
+    const { api, calls } = fakeApi({ "GET /vault/accounts": page([]), "POST /vault/accounts": { status: 201, body: {} } });
+    signedIn(api, <Accounts />);
+    const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
+    const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    field("Protocole", "vnc");
+    expect(screen.queryByLabelText("Rotation")).toBeNull();
+    expect(screen.queryByPlaceholderText("ssh-ed25519 AAAA…")).toBeNull();
+    field("Identifiant", "acc_v");
+    field("Nom", "bureau");
+    field("Cible (hôte:port)", "desk:5900");
+    field("Utilisateur sur la cible", "ops");
+    field("Secret initial", "pw");
+    fireEvent.submit(form);
+    await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ protocol: "vnc", rotationPolicy: "manual", hostKey: "", reconciliationAccountId: "" });
+    expect((screen.getByLabelText("Secret initial") as HTMLInputElement).value).toBe("");
+  });
+
+  it("pins a VNC account's certificate, offers no rotation, and says when it is not pinned", async () => {
+    const { api, calls } = fakeApi({ "GET /vault/accounts": page([vnc]), "PUT /vault/accounts/acc_v/tls-pin": { body: {} } });
+    signedIn(api, <Accounts />);
+    expect(await screen.findByText("non épinglée")).toBeTruthy();
+    expect(screen.queryByText("Renouveler le secret")).toBeNull();
+    const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce(" ab12 ").mockReturnValueOnce("desk.example");
+    fireEvent.click(screen.getByText("Épingler le certificat TLS"));
+    expect((await screen.findByRole("status")).textContent).toContain("Certificat TLS de acc_v épinglé");
+    expect(calls.find((c) => c.method === "PUT")).toMatchObject({ path: "/vault/accounts/acc_v/tls-pin", body: { tlsCertificateSha256: "ab12", targetDomain: "desk.example" } });
+    prompt.mockRestore();
+  });
+
+  it("changes nothing when the pin is cancelled at either question", async () => {
+    const { api, calls } = fakeApi({ "GET /vault/accounts": page([vnc]) });
+    signedIn(api, <Accounts />);
+    await screen.findByText("non épinglée");
+    const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce(null).mockReturnValueOnce("ab12").mockReturnValueOnce(null);
+    fireEvent.click(screen.getByText("Épingler le certificat TLS"));
+    fireEvent.click(screen.getByText("Épingler le certificat TLS"));
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+    prompt.mockRestore();
+  });
+
+  it("shows a pinned certificate where an SSH account shows its host key", async () => {
+    const { api } = fakeApi({ "GET /vault/accounts": page([{ ...vnc, tlsCertificateSha256: "ab".repeat(32), targetDomain: "desk.example" }]) });
+    signedIn(api, <Accounts />);
+    expect(await screen.findByText("ab".repeat(32))).toBeTruthy();
+    expect(screen.getByText("Changer le certificat TLS")).toBeTruthy();
+  });
+
+  it("asks for a session in the protocol chosen, and offers the screen once it is active", async () => {
+    const socketOpen = vi.fn(function () {
+      return { close: vi.fn(), send: vi.fn(), readyState: 0 };
+    });
+    vi.stubGlobal("WebSocket", socketOpen);
+    const { api, calls } = fakeApi({ "GET /sessions": page([]), "POST /sessions": { status: 201, body: session }, "POST /sessions/sess_v/connect": { body: { protocol: "vnc", attach: "/sessions/sess_v/screen", expiresAt: "2030-01-01T00:00:00Z" } } });
+    signedIn(api, <Sessions />);
+    const form = await screen.findByRole("form", { name: "Demander une session" });
+    const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    field("Compte", "acc_v");
+    field("Protocole du compte", "vnc");
+    field("Justification", "patch");
+    fireEvent.submit(form);
+    fireEvent.click(await screen.findByText("Ouvrir l'écran"));
+    await waitFor(() => expect(socketOpen).toHaveBeenCalledOnce());
+    expect(calls.find((c) => c.path === "/sessions")?.body).toMatchObject({ protocol: "vnc" });
+    expect(socketOpen).toHaveBeenCalledWith(expect.stringMatching(/\/sessions\/sess_v\/screen$/), "openbastion.screen.v1");
+    vi.unstubAllGlobals();
+  });
+
+  // A browser ignores Set-Cookie on a call made with credentials "omit": without this, no screen
+  // ever attaches, and no test with a fake API would ever say so.
+  it("lets the attach cookie land on connect, and on nothing else", async () => {
+    vi.stubGlobal("WebSocket", vi.fn(function () {
+      return { close: vi.fn(), send: vi.fn(), readyState: 0 };
+    }));
+    const { api, calls } = fakeApi({ "GET /sessions": page([]), "GET /sessions/sess_v": { body: session }, "POST /sessions/sess_v/connect": { body: { protocol: "vnc", attach: "/sessions/sess_v/screen", expiresAt: "2030-01-01T00:00:00Z" } } });
+    signedIn(api, <Sessions />);
+    fireEvent.change(await screen.findByLabelText("Identifiant"), { target: { value: "sess_v" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Chercher une session" }));
+    fireEvent.click(await screen.findByText("Ouvrir l'écran"));
+    await waitFor(() => expect(calls.some((c) => c.path === "/sessions/sess_v/connect")).toBe(true));
+    for (const call of calls) expect(call.credentials, call.path).toBe(call.path === "/sessions/sess_v/connect" ? "same-origin" : "omit");
+    vi.unstubAllGlobals();
+  });
+
+  it("says why a screen cannot be attached, and opens nothing", async () => {
+    const socketOpen = vi.fn();
+    vi.stubGlobal("WebSocket", socketOpen);
+    const { api } = fakeApi({ "GET /sessions": page([]), "GET /sessions/sess_v": { body: session }, "POST /sessions/sess_v/connect": { status: 409, body: { message: "no_pinned_tls_certificate" } } });
+    signedIn(api, <Sessions />);
+    fireEvent.change(await screen.findByLabelText("Identifiant"), { target: { value: "sess_v" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Chercher une session" }));
+    fireEvent.click(await screen.findByText("Ouvrir l'écran"));
+    expect((await screen.findByRole("alert")).textContent).toContain("no_pinned_tls_certificate");
+    expect(socketOpen).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("offers no screen for an SSH session, nor one that is not active", async () => {
+    const { api } = fakeApi({ "GET /sessions": page([]), "GET /sessions/sess_v": { body: { ...session, protocol: "ssh" } }, "GET /sessions/sess_w": { body: { ...session, status: "pending_approval" } } });
+    signedIn(api, <Sessions />);
+    const find = async (id: string) => {
+      fireEvent.change(screen.getByLabelText("Identifiant"), { target: { value: id } });
+      fireEvent.submit(screen.getByRole("form", { name: "Chercher une session" }));
+      await screen.findByText(id === "sess_v" ? "ssh" : "pending_approval");
+    };
+    await screen.findByLabelText("Identifiant");
+    await find("sess_v");
+    expect(screen.queryByText("Ouvrir l'écran")).toBeNull();
+    await find("sess_w");
+    expect(screen.queryByText("Ouvrir l'écran")).toBeNull();
   });
 });

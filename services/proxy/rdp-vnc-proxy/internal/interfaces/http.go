@@ -154,7 +154,11 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "session ended")
 	conn.SetReadLimit(screenstream.MaxInputBytes)
-	sink := &websocketScreenSink{conn: conn}
+	// A read cancelled by its context closes the WebSocket, and the session's context ends before
+	// the END that says why: the input reads under this one, which outlives the relay.
+	inputCtx, stopInput := context.WithCancel(context.Background())
+	defer stopInput()
+	sink := &websocketScreenSink{conn: conn, inputCtx: inputCtx}
 	writeTicketEnd := func() {
 		endCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
@@ -173,15 +177,19 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusPolicyViolation, "invalid connection ticket")
 		return
 	}
-	ctx, cancel := context.WithDeadline(r.Context(), pending.ExpiresAt)
-	defer cancel()
+	// The Listener applies ExpiresAt to the relay alone. A deadline here would also end the context
+	// the audit of the expiry and the purge of the credential run on.
+	ctx := r.Context()
 	meta := proxycore.SessionMetadata{SessionID: pending.SessionID, ScopeToken: pending.ScopeToken, ScreenProtocol: pending.Protocol, ExpiresAt: pending.ExpiresAt}
 	if err := s.listener.ServeScreen(ctx, meta, s.codec, s.recorder, s.gate, sink); err != nil {
 		log.Printf("rdp-vnc-proxy: graphical session ended: %v", err)
 	}
 }
 
-type websocketScreenSink struct{ conn *websocket.Conn }
+type websocketScreenSink struct {
+	conn     *websocket.Conn
+	inputCtx context.Context
+}
 
 func (s *websocketScreenSink) Send(ctx context.Context, m screenstream.Message) error {
 	data, err := screenstream.Encode(m)
@@ -190,8 +198,8 @@ func (s *websocketScreenSink) Send(ctx context.Context, m screenstream.Message) 
 	}
 	return s.conn.Write(ctx, websocket.MessageBinary, data)
 }
-func (s *websocketScreenSink) ReceiveInput(ctx context.Context) ([]byte, error) {
-	typ, data, err := s.conn.Read(ctx)
+func (s *websocketScreenSink) ReceiveInput(context.Context) ([]byte, error) {
+	typ, data, err := s.conn.Read(s.inputCtx)
 	if err != nil {
 		return nil, err
 	}

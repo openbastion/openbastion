@@ -259,6 +259,7 @@ test-postgres: proto-gen
 	$(GO) test ./services/recording-audit/video-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
 	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, video_recording_segments, video_recordings RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=300s
+	$(GO) test ./test/integration/... -run TestScreenFlow -v -count=1 -timeout=300s
 
 ## Les images : celle d'OpenBastion (cible runtime) et l'image PostgreSQL 16 durcie, analysées par
 ## Trivy (ADR-0060) ; échoue sur toute vulnérabilité HIGH ou CRITICAL corrigée ailleurs, sauf celles

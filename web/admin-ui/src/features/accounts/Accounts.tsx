@@ -9,7 +9,8 @@ const pageSize = 20;
 // onboarding and never shown again: the API never returns one. A rotation changes the secret on
 // the target, through the account's reconciliation account (ADR-0037). Each account pins its
 // target's host key (ADR-0039): the secret goes only to the server that presents it. An account
-// may require another person's approval, with a ticket, for every session on it (ADR-0067).
+// may require another person's approval, with a ticket, for every session on it (ADR-0067). A VNC
+// account pins its target's TLS certificate instead of a host key (ADR-0071), and is not rotated.
 export function Accounts() {
   const { api } = useSignedIn();
   const [page, setPage] = useState(1);
@@ -47,12 +48,25 @@ export function Accounts() {
     );
   }
 
+  // The same decision for a graphical target: this certificate, for this name, gets the secret.
+  function pinTLS(a: Account) {
+    const fingerprint = window.prompt(
+      `Empreinte SHA-256 du certificat TLS de ${a.targetHost}, relevée sur la cible (openssl x509 -in cert.pem -outform der | sha256sum).` +
+        (a.tlsCertificateSha256 ? ` Elle remplace ${a.tlsCertificateSha256} : ne le faites que si la cible a réellement changé de certificat.` : ""),
+    );
+    if (!fingerprint) return;
+    const name = window.prompt(`Nom pour lequel ce certificat est valide (DNS ou IP).`, a.targetDomain ?? "");
+    if (!name) return;
+    act(`Certificat TLS de ${a.id} épinglé`, () => api.request("PUT", `/vault/accounts/${encodeURIComponent(a.id)}/tls-pin`, { tlsCertificateSha256: fingerprint.trim(), targetDomain: name.trim() }));
+  }
+
   return (
     <section className="page">
       <div className="page-head">
         <h2>Comptes privilégiés</h2>
         <p className="hint">Renouveler un secret le change sur la cible, par le compte de réconciliation du compte, et le vérifie avant de l'adopter : un compte sans compte de réconciliation ne peut pas être renouvelé.</p>
         <p className="hint">Le secret n'est envoyé qu'au serveur qui présente la clé d'hôte épinglée : un compte sans clé n'ouvre aucune session et n'est pas renouvelé. Relevez la clé sur la cible elle-même, pas par le réseau que vous voulez protéger.</p>
+        <p className="hint">Un compte VNC épingle de même le certificat TLS de sa cible : sans empreinte, il n'ouvre aucune session.</p>
       </div>
       <Notice error={error} ok={ok} />
       <div className="card">
@@ -61,7 +75,7 @@ export function Accounts() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Identifiant</th><th>Nom</th><th>Cible</th><th>Utilisateur</th><th>Clé d'hôte</th><th>Rotation</th><th>Dernière rotation</th><th>Approbation</th><th /></tr>
+                <tr><th>Identifiant</th><th>Nom</th><th>Cible</th><th>Utilisateur</th><th>Identité de la cible</th><th>Rotation</th><th>Dernière rotation</th><th>Approbation</th><th /></tr>
               </thead>
               <tbody>
                 {data.items.map((a) => (
@@ -70,7 +84,11 @@ export function Accounts() {
                     <td>{a.name}</td>
                     <td>{a.targetHost}</td>
                     <td>{a.username}</td>
-                    <td>{a.hostKeyFingerprint ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code> : <span className="badge warn">non épinglée</span>}</td>
+                    <td>
+                      {a.protocol === "ssh"
+                        ? (a.hostKeyFingerprint ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code> : <span className="badge warn">non épinglée</span>)
+                        : (a.tlsCertificateSha256 ? <code title={a.targetDomain}>{a.tlsCertificateSha256}</code> : <span className="badge warn">non épinglée</span>)}
+                    </td>
                     <td>
                       <span className="badge">{a.rotationPolicy}</span>
                       {a.rotationIntervalDays ? <span className="cell-note">tous les {a.rotationIntervalDays} j — prochaine : {a.nextRotationAt ?? "—"}</span> : null}
@@ -80,9 +98,11 @@ export function Accounts() {
                     <td>{a.lastRotatedAt ?? "—"}</td>
                     <td>{a.approvalRequired ? <span className="badge">requise</span> : "—"}</td>
                     <td className="actions">
-                      <button type="button" onClick={() => pin(a)}>{a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}</button>
+                      {a.protocol === "ssh"
+                        ? <button type="button" onClick={() => pin(a)}>{a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}</button>
+                        : <button type="button" onClick={() => pinTLS(a)}>{a.tlsCertificateSha256 ? "Changer le certificat TLS" : "Épingler le certificat TLS"}</button>}
                       <button type="button" onClick={() => act(a.approvalRequired ? `${a.id} : sessions sans approbation` : `${a.id} : approbation requise`, () => api.request("PUT", `/vault/accounts/${encodeURIComponent(a.id)}/approval`, { approvalRequired: !a.approvalRequired }))}>{a.approvalRequired ? "Ne plus exiger l'approbation" : "Exiger l'approbation"}</button>
-                      <button type="button" onClick={() => act(`Secret de ${a.id} renouvelé sur la cible`, () => api.request("POST", `/vault/accounts/${encodeURIComponent(a.id)}/rotate`))}>Renouveler le secret</button>
+                      {a.protocol === "ssh" ? <button type="button" onClick={() => act(`Secret de ${a.id} renouvelé sur la cible`, () => api.request("POST", `/vault/accounts/${encodeURIComponent(a.id)}/rotate`))}>Renouveler le secret</button> : null}
                       <button type="button" className="danger" onClick={() => window.confirm(`Désactiver ${a.id} ?`) && act(`${a.id} désactivé`, () => api.request("DELETE", `/vault/accounts/${encodeURIComponent(a.id)}`))}>Désactiver</button>
                     </td>
                   </tr>
@@ -106,10 +126,11 @@ export function Accounts() {
 
 function Onboard({ onDone }: { onDone: (id: string) => void }) {
   const { api } = useSignedIn();
-  const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", rotationPolicy: "manual", initialSecret: "", reconciliationAccountId: "", hostKey: "", rotationIntervalDays: "30" });
+  const [f, setF] = useState({ id: "", name: "", username: "", targetHost: "", protocol: "ssh", rotationPolicy: "manual", initialSecret: "", reconciliationAccountId: "", hostKey: "", rotationIntervalDays: "30" });
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [error, setError] = useState<unknown>();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const ssh = f.protocol === "ssh";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -122,7 +143,9 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
       // Only a scheduled account takes an interval (ADR-0040): the Vault refuses one elsewhere.
       const { rotationIntervalDays, ...rest } = f;
       const schedule = f.rotationPolicy === "scheduled" ? { rotationIntervalDays: Number(rotationIntervalDays) } : {};
-      await api.request("POST", "/vault/accounts", { ...rest, ...schedule, approvalRequired, protocol: "ssh", initialSecret: btoa(bin) });
+      // A VNC account has no host key and no rotation; its TLS pin comes next, by its own route.
+      const shape = ssh ? { ...rest, ...schedule } : { ...rest, rotationPolicy: "manual", reconciliationAccountId: "", hostKey: "" };
+      await api.request("POST", "/vault/accounts", { ...shape, approvalRequired, initialSecret: btoa(bin) });
       setF({ ...f, id: "", name: "", initialSecret: "", hostKey: "" });
       onDone(f.id);
     } catch (err) {
@@ -139,24 +162,31 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
         <label>Cible (hôte:port)<input value={f.targetHost} onChange={set("targetHost")} required /></label>
         <label>Utilisateur sur la cible<input value={f.username} onChange={set("username")} required /></label>
         <label>
+          Protocole
+          <select value={f.protocol} onChange={set("protocol")}>
+            <option value="ssh">SSH</option>
+            <option value="vnc">VNC</option>
+          </select>
+        </label>
+        {ssh ? <label>
           Rotation
           <select value={f.rotationPolicy} onChange={set("rotationPolicy")}>
             <option value="manual">manuelle</option>
             <option value="post_use">après usage</option>
             <option value="scheduled">planifiée</option>
           </select>
-        </label>
-        {f.rotationPolicy === "scheduled" ? (
+        </label> : null}
+        {ssh && f.rotationPolicy === "scheduled" ? (
           <label>
             Intervalle de rotation (jours, 1 à 365)
             <input type="number" min={1} max={365} value={f.rotationIntervalDays} onChange={set("rotationIntervalDays")} required />
           </label>
         ) : null}
-        <label>Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)<input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} /></label>
-        <label className="wide">
+        {ssh ? <label>Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)<input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} /></label> : null}
+        {ssh ? <label className="wide">
           Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub), ou autorité : @cert-authority &lt;nom&gt; &lt;clé de l'autorité&gt;
           <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
-        </label>
+        </label> : <p className="hint wide">Une fois le compte enregistré, épinglez le certificat TLS de sa cible : sans lui, le compte n'ouvre aucune session.</p>}
         <label className="check">
           <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
           Approbation requise : chaque session attend l'accord d'une autre personne, avec un ticket

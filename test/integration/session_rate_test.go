@@ -141,13 +141,24 @@ func TestSessionRate_AUserWithNoRightCannotMakeTheBrokerWriteMoreThanItsBudget_A
 
 // The limiter of authenticated traffic was a burst of 60 and then ONE request a minute under
 // a comment that said sixty a minute. What a real process lets through is what pins it.
+// answeringUpstream stands behind a Gateway whose limiter is being counted: what it answers does not
+// matter, that it answers at once does. A closed port would need the machine to refuse the connection
+// immediately, and where it does not (a loopback that sends no RST, as under WSL in mirrored mode)
+// each request that passes lasts the Gateway's timeout, while the limiter refills.
+func answeringUpstream(t *testing.T) string {
+	t.Helper()
+	return newLocalServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+}
+
 func TestSessionRate_TheLimiterOfAuthenticatedTrafficIsSixtyAMinute_NotOneAMinuteAfterTheBurst(t *testing.T) {
 	root := repoRoot(t)
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-14b")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-14b")
 	authn := startService(t, root, authnBin, "18764", "SKIP_DEMO_SEED=1")
 	gw := startService(t, root, gatewayBin, "18767", "AUTHENTICATION_URL="+authn.baseURL,
-		"SESSION_BROKER_URL=http://127.0.0.1:18769", "COMMAND_RECORDER_URL=http://127.0.0.1:18769")
+		"SESSION_BROKER_URL="+answeringUpstream(t), "COMMAND_RECORDER_URL=http://127.0.0.1:18769")
 	authCreateUser(t, authn.baseURL, "steady", "Steady", "steady-password-123", []string{"nobody"})
 	tok, status := gatewayLogin(t, gw.baseURL, "steady", "steady-password-123")
 	if status != http.StatusOK {

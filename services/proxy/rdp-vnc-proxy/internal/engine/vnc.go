@@ -42,18 +42,39 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 	}}
 	session, err := client.Open(ctx)
 	if err == nil {
-		return session, nil
+		return vncScreenSession{session}, nil
 	}
-	code := "target_unreachable"
+	return nil, &proxycore.ScreenFailure{Code: vncEndCode(err), Err: err}
+}
+
+// vncEndCode is what the operator is told (ADR-0071 §12). A target refusing the password has no
+// code of its own in that list: it stays target_unreachable, like every other cause not named.
+func vncEndCode(err error) string {
 	switch {
+	case errors.Is(err, vnc.ErrPasswordTruncation):
+		return "codec_unsupported"
 	case errors.Is(err, vnc.ErrInvalidTarget):
-		code = "pin_missing"
+		return "pin_missing"
 	case errors.Is(err, vnc.ErrTLSVerification):
-		code = "pin_mismatch"
-	case errors.Is(err, vnc.ErrUnsupportedProtocol):
-		code = "codec_unsupported"
-	case errors.Is(err, vnc.ErrInvalidFramebuffer):
-		code = "codec_unsupported"
+		return "pin_mismatch"
+	case errors.Is(err, vnc.ErrTLSRequired):
+		return "tls_required"
+	case errors.Is(err, vnc.ErrProtocolVersion):
+		return "protocol_version_unsupported"
+	case errors.Is(err, vnc.ErrUnsupportedProtocol), errors.Is(err, vnc.ErrInvalidFramebuffer):
+		return "codec_unsupported"
 	}
-	return nil, &proxycore.ScreenFailure{Code: code, Err: err}
+	return "target_unreachable"
+}
+
+// vncScreenSession gives what ends a running session the same codes as what refuses its opening:
+// a target that sends a rectangle out of bounds is not a target that cannot be reached.
+type vncScreenSession struct{ proxycore.ScreenSession }
+
+func (s vncScreenSession) Err() error {
+	err := s.ScreenSession.Err()
+	if err == nil {
+		return nil
+	}
+	return &proxycore.ScreenFailure{Code: vncEndCode(err), Err: err}
 }

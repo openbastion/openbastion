@@ -28,7 +28,8 @@ export class Api {
     return this.token !== null;
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // credentials stays "omit" for everything but the one call that needs a cookie (connectScreen).
+  async request<T>(method: string, path: string, body?: unknown, credentials: RequestCredentials = "omit"): Promise<T> {
     const headers: Record<string, string> = {};
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
     if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -36,7 +37,7 @@ export class Api {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: "omit",
+      credentials,
       cache: "no-store",
     });
     const text = await resp.text();
@@ -44,6 +45,13 @@ export class Api {
       throw new ApiError(resp.status, errorMessage(resp.status, text), parseJSON(text));
     }
     return (text ? JSON.parse(text) : undefined) as T;
+  }
+
+  // POST /sessions/{id}/connect for a graphical session. The answer sets the HttpOnly cookie that
+  // attaches the screen (ADR-0071 §7), and a browser ignores Set-Cookie on a call made with
+  // credentials "omit": this one, and only this one, lets it land.
+  connectScreen(sessionId: string): Promise<ScreenAttach> {
+    return this.request<ScreenAttach>("POST", `/sessions/${encodeURIComponent(sessionId)}/connect`, undefined, "same-origin");
   }
 }
 
@@ -110,6 +118,9 @@ export interface Account {
   rotationOwedSince?: string;
   // Sessions on the account wait for another person's approval, with a ticket (ADR-0067).
   approvalRequired?: boolean;
+  // A graphical target's pinned TLS certificate and the name it is valid for (ADR-0071).
+  tlsCertificateSha256?: string;
+  targetDomain?: string;
 }
 
 export interface Page<T> {
@@ -134,6 +145,13 @@ export interface Session {
   expiresAt: string;
   decidedBy?: string;
   decidedAt?: string;
+}
+
+// What connecting to a graphical session gives the page: a path, no ticket and no proxy address.
+export interface ScreenAttach {
+  protocol: string;
+  attach: string;
+  expiresAt: string;
 }
 
 export interface RecordingPage {

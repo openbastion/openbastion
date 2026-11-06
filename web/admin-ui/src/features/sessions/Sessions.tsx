@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Page, Session } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
+import { ScreenViewer } from "../screen/ScreenViewer";
 import { useSignedIn } from "../../shared/session";
 
 // A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
@@ -13,6 +14,8 @@ export function Sessions() {
   const [ok, setOk] = useState<string>();
   const [lookup, setLookup] = useState("");
   const [found, setFound] = useState<Session>();
+  // Each connection is another attach: the key restarts the viewer on the new one.
+  const [screenAttach, setScreenAttach] = useState<{ sessionId: string; attach: string; key: number }>();
 
   const load = useCallback(() => {
     api.request<Page<Session>>("GET", "/sessions?status=pending_approval").then(setPending, setError);
@@ -42,6 +45,18 @@ export function Sessions() {
     }
   }
 
+  async function openScreen(sessionId: string) {
+    setError(undefined);
+    setOk(undefined);
+    setScreenAttach(undefined);
+    try {
+      const { attach } = await api.connectScreen(sessionId);
+      setScreenAttach((previous) => ({ sessionId, attach, key: (previous?.key ?? 0) + 1 }));
+    } catch (err) {
+      setError(err);
+    }
+  }
+
   const id = (s: Session) => encodeURIComponent(s.id);
   return (
     <section className="page">
@@ -49,7 +64,12 @@ export function Sessions() {
         <h2>Sessions</h2>
       </div>
       <Notice error={error} ok={ok} />
-      <Request onDone={(s) => act(s.status === "pending_approval" ? `${s.id} en attente de l'approbation d'une autre personne, jusqu'à ${s.expiresAt}` : `${s.id} ${s.status}`, async () => undefined)} />
+      <Request onDone={(s) => {
+        setLookup(s.id);
+        setFound(s);
+        setScreenAttach(undefined);
+        act(s.status === "pending_approval" ? `${s.id} en attente de l'approbation d'une autre personne, jusqu'à ${s.expiresAt}` : `${s.id} ${s.status}`, async () => undefined);
+      }} />
       <div className="card">
         <div className="card-head"><h3>Demandes à décider</h3></div>
         {pending && pending.items.length === 0 ? <p className="empty">Aucune demande en attente.</p> : null}
@@ -95,6 +115,7 @@ export function Sessions() {
           <>
             <dl className="session">
               <dt>Statut</dt><dd><span className="badge">{found.status}</span></dd>
+              <dt>Protocole</dt><dd>{found.protocol}</dd>
               <dt>Demandeur</dt><dd>{found.requestedBy}</dd>
               <dt>Compte</dt><dd>{found.privilegedAccountId}</dd>
               <dt>Justification</dt><dd>{found.justification}</dd>
@@ -105,10 +126,19 @@ export function Sessions() {
             </dl>
             {found.status === "active" ? (
               <div className="form-actions">
+                {found.protocol === "vnc" ? <button type="button" className="primary" onClick={() => openScreen(found.id)}>Ouvrir l'écran</button> : null}
                 <button type="button" className="danger" onClick={() => window.confirm(`Mettre fin à ${found.id} ?`) && act(`${found.id} terminée`, () => api.request("DELETE", `/sessions/${id(found)}`))}>Mettre fin</button>
               </div>
             ) : null}
           </>
+        ) : null}
+        {screenAttach ? (
+          <ScreenViewer
+            key={screenAttach.key}
+            attach={screenAttach.attach}
+            onReconnect={() => openScreen(screenAttach.sessionId)}
+            onClose={() => setScreenAttach(undefined)}
+          />
         ) : null}
       </div>
     </section>
@@ -119,7 +149,7 @@ export function Sessions() {
 // for (ADR-0067), in the format the platform declared; the Broker ignores it on any other account.
 function Request({ onDone }: { onDone: (s: Session) => void }) {
   const { api } = useSignedIn();
-  const [f, setF] = useState({ targetAccountId: "", justification: "", durationMinutes: "30", ticket: "" });
+  const [f, setF] = useState({ targetAccountId: "", protocol: "ssh", justification: "", durationMinutes: "30", ticket: "" });
   const [error, setError] = useState<unknown>();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
@@ -128,7 +158,8 @@ function Request({ onDone }: { onDone: (s: Session) => void }) {
     setError(undefined);
     try {
       const { ticket, ...rest } = f;
-      const s = await api.request<Session>("POST", "/sessions", { ...rest, ...(ticket ? { ticket } : {}), protocol: "ssh", durationMinutes: Number(f.durationMinutes) });
+      // The protocol must be the account's: the Broker refuses any other, and routes on its own.
+      const s = await api.request<Session>("POST", "/sessions", { ...rest, ...(ticket ? { ticket } : {}), durationMinutes: Number(f.durationMinutes) });
       setF({ ...f, justification: "", ticket: "" });
       onDone(s);
     } catch (err) {
@@ -141,6 +172,13 @@ function Request({ onDone }: { onDone: (s: Session) => void }) {
       <h3>Demander une session</h3>
       <div className="fields">
         <label>Compte<input value={f.targetAccountId} onChange={set("targetAccountId")} required /></label>
+        <label>
+          Protocole du compte
+          <select value={f.protocol} onChange={set("protocol")}>
+            <option value="ssh">SSH</option>
+            <option value="vnc">VNC</option>
+          </select>
+        </label>
         <label>Durée (minutes)<input type="number" min={1} value={f.durationMinutes} onChange={set("durationMinutes")} required /></label>
         <label className="wide">Justification<input value={f.justification} onChange={set("justification")} required /></label>
         <label>Ticket (si le compte exige une approbation)<input value={f.ticket} onChange={set("ticket")} maxLength={128} autoComplete="off" /></label>

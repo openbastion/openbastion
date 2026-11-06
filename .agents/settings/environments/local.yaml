@@ -16,6 +16,19 @@ codespace:
       ... make test-compose ...
       sudo -n iptables-legacy -D FORWARD -i br-+ -o br-+ -j ACCEPT
     Ne la laisse jamais en place.
+wsl_mirrored:
+  root: /home/eldorplus/openbastion
+  setup: |
+    # comme codespace pour PostgreSQL (conteneur obpg) ; ni buf ni psql sur l'hôte
+    export TEST_DATABASE_URL="postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable"
+    # sans buf, avec les *.pb.go déjà générés : make -o proto-gen <cible>
+  loopback_pitfall: |
+    Un port fermé de 127.0.0.1 ne répond pas (pas de RST) : connect attend au lieu d'échouer. Un test qui
+    compte sur un refus immédiat attend donc son délai : donne-lui un amont qui répond (answeringUpstream).
+  integration_timeout: make test-integration dépasse ici ses 300 s (398 s mesurées, sans échec) ; go test -timeout=1200s
+  orphans_pitfall: |
+    Un binaire de test tué ou arrivé au délai n'exécute pas ses t.Cleanup : ses services gardent leurs ports et
+    faussent le passage suivant (502, create-user 400). Avant de relancer, cherche les exécutables sous /tmp/Test*.
 cloud_sandbox:
   root: /home/claude/openbastion
   setup: |

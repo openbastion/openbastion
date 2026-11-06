@@ -118,6 +118,12 @@ func (s *fakeScreenSink) Send(_ context.Context, m screenstream.Message) error {
 	return nil
 }
 
+func (s *fakeScreenSink) snapshot() []screenstream.Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]screenstream.Message(nil), s.messages...)
+}
+
 type fakeInputScreenSink struct {
 	fakeScreenSink
 	input []byte
@@ -605,7 +611,14 @@ func TestServeScreen_EndIsNotHeldUpByAFrameThatNeverLeaves(t *testing.T) {
 type stallingSink struct {
 	mu      sync.Mutex
 	sent    []screenstream.Message
+	started int
 	release chan struct{}
+}
+
+func (s *stallingSink) frameStarted() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.started
 }
 
 func newStallingSink() *stallingSink { return &stallingSink{release: make(chan struct{})} }
@@ -613,6 +626,9 @@ func newStallingSink() *stallingSink { return &stallingSink{release: make(chan s
 // Send holds every frame until release, as a socket whose peer stopped reading does.
 func (s *stallingSink) Send(ctx context.Context, m screenstream.Message) error {
 	if m.Type == screenstream.TypeFrame {
+		s.mu.Lock()
+		s.started++
+		s.mu.Unlock()
 		select {
 		case <-s.release:
 		case <-ctx.Done():
@@ -638,3 +654,223 @@ func (s *stallingSink) frameSequences() []uint64 {
 }
 
 func (s *stallingSink) frameCount() int { return len(s.frameSequences()) }
+
+// Revocation lands while a frame is on its way: the frame finishes, on a context that does not
+// end with the session, and END follows. An interrupted write would close the socket before END.
+func TestServeScreen_RevocationLetsTheFrameUnderWayFinishThenSaysWhy(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	frames := make(chan screenstream.Message)
+	session := &fakeScreenSession{frames: frames}
+	sink := newStallingSink()
+	meta := screenMeta()
+	done := make(chan error, 1)
+	go func() {
+		done <- l.ServeScreen(context.Background(), meta, &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	}()
+	frames <- validScreenFrame(1)
+	deadline := time.Now().Add(2 * time.Second)
+	for sink.frameStarted() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the frame never left")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	revocation := l.Live.Revoke(meta.SessionID, time.Now().Add(time.Minute))
+	revocation.Cut()
+	time.Sleep(50 * time.Millisecond)
+	close(sink.release)
+	if err := <-done; !errors.Is(err, ErrSessionRevoked) {
+		t.Fatalf("error = %v, want ErrSessionRevoked", err)
+	}
+	if got := sink.frameSequences(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("the frame under way was cut: %v", got)
+	}
+	last := sink.sent[len(sink.sent)-1]
+	if last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeSessionRevoked {
+		t.Fatalf("END = %#v", last)
+	}
+}
+
+// Revocation lands while the recorder is about to acknowledge a frame already sent. The target is
+// cut at once, the acknowledgement is still awaited, and the terminal marker covers the frame: a
+// recording cut this way is complete, and END says revoked, not lost.
+func TestServeScreen_RevocationDuringAnAcknowledgementCutsTheTargetAndKeepsTheRecordingWhole(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	frames := make(chan screenstream.Message, 1)
+	frames <- validScreenFrame(1)
+	session := &fakeScreenSession{frames: frames}
+	recorder := &slowAckRecorder{received: make(chan struct{}), release: make(chan struct{})}
+	sink := &fakeScreenSink{}
+	meta := screenMeta()
+	done := make(chan error, 1)
+	go func() {
+		done <- l.ServeScreen(context.Background(), meta, &fakeScreenCodec{session: session}, recorder, &fakeScreenGate{}, sink)
+	}()
+	<-recorder.received
+	l.Live.Revoke(meta.SessionID, time.Now().Add(time.Minute)).Cut()
+	deadline := time.Now().Add(time.Second)
+	for {
+		session.mu.Lock()
+		closed := session.closed
+		session.mu.Unlock()
+		if closed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the target stayed open while the acknowledgement was awaited")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(recorder.release)
+	if err := <-done; !errors.Is(err, ErrSessionRevoked) {
+		t.Fatalf("error = %v, want ErrSessionRevoked", err)
+	}
+	if !reflect.DeepEqual(recorder.sealed, []uint64{1}) {
+		t.Fatalf("sealed through %v, want the frame under way", recorder.sealed)
+	}
+	last := sink.messages[len(sink.messages)-1]
+	if last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeSessionRevoked {
+		t.Fatalf("END = %#v, want session_revoked", last)
+	}
+	if slices.Contains(audit.events, "session.recording_lost") {
+		t.Fatalf("audit events %v", audit.events)
+	}
+}
+
+// A recorder that never answers does not hold up a revoked session beyond the grace.
+func TestServeScreen_RevocationGivesASilentRecorderOnlyTheGrace(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	frames := make(chan screenstream.Message, 1)
+	frames <- validScreenFrame(1)
+	session := &fakeScreenSession{frames: frames}
+	meta := screenMeta()
+	received := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- l.ServeScreen(context.Background(), meta, &fakeScreenCodec{session: session}, silentAfterReceipt{received}, &fakeScreenGate{}, &fakeScreenSink{})
+	}()
+	<-received
+	start := time.Now()
+	l.Live.Revoke(meta.SessionID, time.Now().Add(time.Minute)).Cut()
+	select {
+	case <-done:
+		if waited := time.Since(start); waited > screenAckGrace+time.Second {
+			t.Fatalf("the relay took %v to end", waited)
+		}
+	case <-time.After(screenAckGrace + 5*time.Second):
+		t.Fatal("a silent recorder held up a revoked session")
+	}
+}
+
+type silentAfterReceipt struct{ received chan struct{} }
+
+func (r silentAfterReceipt) Record(ctx context.Context, _ string, _ screenstream.Message) (uint64, error) {
+	close(r.received)
+	<-ctx.Done()
+	return 0, ctx.Err()
+}
+func (silentAfterReceipt) Seal(context.Context, string, uint64) error { return nil }
+
+type slowAckRecorder struct {
+	received chan struct{}
+	release  chan struct{}
+	sealed   []uint64
+}
+
+func (r *slowAckRecorder) Record(ctx context.Context, _ string, f screenstream.Message) (uint64, error) {
+	close(r.received)
+	select {
+	case <-r.release:
+		return f.Sequence, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+func (r *slowAckRecorder) Seal(_ context.Context, _ string, seq uint64) error {
+	r.sealed = append(r.sealed, seq)
+	return nil
+}
+
+// Ending a session closes the target, which closes the frame stream: the relay can wake to either,
+// and picks at random when both are ready. Both are ready here, every time. Whichever it picks, a
+// revoked session says revoked, and an expired one expired.
+func TestRelayScreen_ClosedStreamDoesNotHideWhyTheSessionEnded(t *testing.T) {
+	for name, want := range map[string]struct {
+		end func() (context.Context, context.CancelFunc)
+		err error
+		tag uint16
+	}{
+		"revoked": {func() (context.Context, context.CancelFunc) {
+			ctx, cancel := context.WithCancelCause(context.Background())
+			cancel(ErrSessionRevoked)
+			return ctx, func() {}
+		}, ErrSessionRevoked, screenstream.EndCodeSessionRevoked},
+		"expired": {func() (context.Context, context.CancelFunc) {
+			return context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		}, ErrSessionExpired, screenstream.EndCodeSessionExpired},
+	} {
+		for i := 0; i < 64; i++ {
+			frames := make(chan screenstream.Message)
+			close(frames)
+			session := &fakeScreenSession{frames: frames}
+			sink := &fakeScreenSink{}
+			ctx, cancel := want.end()
+			err := relayScreen(ctx, context.Background(), screenMeta(), nil, &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second)
+			cancel()
+			if !errors.Is(err, want.err) {
+				t.Fatalf("%s: error = %v", name, err)
+			}
+			if last := sink.messages[len(sink.messages)-1]; last.Type != screenstream.TypeEnd || last.EndCode != want.tag {
+				t.Fatalf("%s: END = %#v", name, last)
+			}
+		}
+	}
+}
+
+// The deadline of a session: the operator is told it expired, the audit too, and the context the
+// audit and the purge run on is still alive.
+func TestServeScreen_ExpiryIsSaidAndAudited(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	session := &closingScreenSession{fakeScreenSession: fakeScreenSession{frames: make(chan screenstream.Message)}}
+	sink := &fakeScreenSink{}
+	meta := screenMeta()
+	meta.ExpiresAt = time.Now().Add(30 * time.Millisecond)
+	opened := make(chan struct{})
+	codec := openedCodec{session: session, opened: opened}
+	err := l.ServeScreen(context.Background(), meta, codec, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	if !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("error = %v, want ErrSessionExpired", err)
+	}
+	last := sink.messages[len(sink.messages)-1]
+	if last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeSessionExpired {
+		t.Fatalf("END = %#v, want session_expired", last)
+	}
+	if !slices.Contains(audit.events, "session.expire") || !slices.Contains(audit.events, "session.terminate") {
+		t.Fatalf("audit events %v", audit.events)
+	}
+}
+
+// closingScreenSession closes its frame stream on Close, as a real target's reader does.
+type closingScreenSession struct {
+	fakeScreenSession
+	once sync.Once
+}
+
+func (s *closingScreenSession) Close() error {
+	s.once.Do(func() { close(s.frames) })
+	return s.fakeScreenSession.Close()
+}
+
+type openedCodec struct {
+	session ScreenSession
+	opened  chan struct{}
+}
+
+func (c openedCodec) Open(context.Context, *Credential) (ScreenSession, error) {
+	close(c.opened)
+	return c.session, nil
+}

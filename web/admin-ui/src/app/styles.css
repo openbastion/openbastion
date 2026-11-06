@@ -935,3 +935,31 @@ main.login {
     transform: none;
   }
 }
+
+/* The remote screen (ADR-0071): as large as the page allows, never upscaled, and it shows when it
+   has the keyboard. */
+.screen {
+  margin-top: 1rem;
+}
+
+.screen-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.75rem;
+  background: var(--navy);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  cursor: default;
+  touch-action: none;
+}
+
+/* display above would otherwise show an empty canvas before the first frame. */
+.screen-canvas[hidden] {
+  display: none;
+}
+
+.screen-canvas:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}

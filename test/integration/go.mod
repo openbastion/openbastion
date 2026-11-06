@@ -3,6 +3,7 @@ module github.com/openbastion/openbastion/test/integration
 go 1.26.0
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/lib/pq v1.12.3
 	github.com/openbastion/openbastion/pkg/proxycore v0.0.0
 	github.com/pkg/sftp v1.13.12

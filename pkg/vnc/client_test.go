@@ -728,3 +728,65 @@ func TestFrameIntervalDelaysTheNextRequestAndCloseInterruptsIt(t *testing.T) {
 		t.Fatal("Close did not interrupt the wait")
 	}
 }
+
+// What a target lacks is told apart, each refusal before anything of the secret could be sent.
+func TestNegotiationSaysWhatTheTargetLacks(t *testing.T) {
+	refusal := func(reason string) []byte {
+		m := []byte{0, 0, 0, 0, byte(len(reason))} // no security type, then the reason
+		return append(m, reason...)
+	}
+	for _, tc := range []struct {
+		name   string
+		server []byte
+		want   error
+	}{
+		{"RFB 3.3", []byte("RFB 003.003\n"), ErrProtocolVersion},
+		{"RFB 5.0", []byte("RFB 005.000\n"), ErrProtocolVersion},
+		{"no VeNCrypt", append([]byte(protocolVersion), 2, 1, 2), ErrTLSRequired},
+		{"the target says no by itself", append([]byte(protocolVersion), refusal("too many failures")...), ErrTargetRefused},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, server := net.Pipe()
+			defer client.Close()
+			defer server.Close()
+			go func() {
+				_, _ = server.Write(tc.server[:12])
+				if len(tc.server) > 12 {
+					var answer [12]byte
+					_, _ = io.ReadFull(server, answer[:])
+					_, _ = server.Write(tc.server[12:])
+				}
+			}()
+			_ = client.SetDeadline(time.Now().Add(2 * time.Second))
+			if err := handshakeRFB(client); !errors.Is(err, tc.want) {
+				t.Fatalf("handshake error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name   string
+		server []byte
+		want   error
+	}{
+		{"VeNCrypt 0.1", []byte{0, 1}, ErrProtocolVersion},
+		{"version refused", []byte{0, 2, 1}, ErrProtocolVersion},
+		{"no subtype", []byte{0, 2, 0, 0}, ErrTLSRequired},
+		{"TLS without X.509", []byte{0, 2, 0, 1, 0, 0, 1, 1}, ErrTLSRequired},
+		{"X.509 refused after all", []byte{0, 2, 0, 1, 0, 0, 1, 6, 0}, ErrTLSRequired},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, server := net.Pipe()
+			defer client.Close()
+			defer server.Close()
+			go func() {
+				_, _ = server.Write(tc.server[:2])
+				go func() { _, _ = io.Copy(io.Discard, server) }()
+				_, _ = server.Write(tc.server[2:])
+			}()
+			_ = client.SetDeadline(time.Now().Add(2 * time.Second))
+			if _, err := negotiateVeNCrypt(client); !errors.Is(err, tc.want) {
+				t.Fatalf("negotiation error = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}

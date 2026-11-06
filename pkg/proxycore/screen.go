@@ -47,6 +47,9 @@ const (
 	// DefaultScreenAckTimeout leaves room to persist a whole 4 MiB frame: past it, a recorder that
 	// says nothing is a recording that is lost, not a session that waits for its deadline.
 	DefaultScreenAckTimeout = 10 * time.Second
+	// screenAckGrace is what a frame already sent to the recorder gets after the session ended:
+	// its acknowledgement is what lets the terminal marker say the recording is complete.
+	screenAckGrace = 2 * time.Second
 )
 
 // screenInputBudget is a token bucket that belongs to one relay, so it takes no lock.
@@ -111,8 +114,10 @@ type screenDisplay struct {
 	idle    chan struct{}
 }
 
+// The display does not end with the relay's context: an interrupted write closes a WebSocket, and
+// the END that says why the session ended must still get through. close is what bounds it.
 func newScreenDisplay(ctx context.Context, sink ScreenSink) *screenDisplay {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	return &screenDisplay{sink: sink, ctx: ctx, cancel: cancel, failed: make(chan error, 1)}
 }
 
@@ -338,6 +343,40 @@ type screenInputResult struct {
 	err  error
 }
 
+// recordScreenFrame waits for the acknowledgement of one frame, for ackTimeout at most. The end of
+// the session does not abandon it at once: the frame is on its way, and giving up now would leave a
+// recording the terminal marker cannot call complete. It gets screenAckGrace more, no longer.
+func recordScreenFrame(ctx context.Context, recorder FrameRecorder, sessionID string, frame screenstream.Message, ackTimeout time.Duration) (uint64, error) {
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackTimeout)
+	defer cancel()
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-recordCtx.Done():
+			return
+		}
+		timer := time.NewTimer(screenAckGrace)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			cancel()
+		case <-recordCtx.Done():
+		}
+	}()
+	return recorder.Record(recordCtx, sessionID, frame)
+}
+
+// screenContextEnd says why the session's context ended, in the terms END and the audit use.
+func screenContextEnd(ctx context.Context) error {
+	switch {
+	case errors.Is(context.Cause(ctx), ErrSessionRevoked):
+		return ErrSessionRevoked
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return ErrSessionExpired
+	}
+	return ctx.Err()
+}
+
 func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration) (relayErr error) {
 	if ackTimeout <= 0 {
 		ackTimeout = DefaultScreenAckTimeout
@@ -348,8 +387,13 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	}
 	lastAck := uint64(0)
 	display := newScreenDisplay(ctx, sink)
+	// Ending a session cuts the target at once (ADR-0018), even with an acknowledgement under way.
+	// Once, and over before the relay returns: whoever comes second waits for the first.
+	closeTarget := sync.OnceValue(session.Close)
+	stopCut := context.AfterFunc(ctx, func() { _ = closeTarget() })
+	defer stopCut()
 	defer func() {
-		if closeErr := session.Close(); relayErr == nil && closeErr != nil {
+		if closeErr := closeTarget(); relayErr == nil && closeErr != nil {
 			relayErr = closeErr
 		}
 		display.close(500 * time.Millisecond)
@@ -409,10 +453,7 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	for {
 		select {
 		case <-ctx.Done():
-			if errors.Is(context.Cause(ctx), ErrSessionRevoked) {
-				return ErrSessionRevoked
-			}
-			return ctx.Err()
+			return screenContextEnd(ctx)
 		case incoming, ok := <-inputResults:
 			if !ok || incoming.err != nil {
 				return fmt.Errorf("proxycore: screen input transport closed")
@@ -434,10 +475,12 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			return err
 		case frame, ok := <-frames:
 			if !ok {
-				if err := session.Err(); err != nil {
-					return err
+				// Ending the session closes the target, which closes this stream: that is the
+				// session's end, whatever the target's side of it looks like.
+				if ctx.Err() != nil {
+					return screenContextEnd(ctx)
 				}
-				return nil
+				return session.Err()
 			}
 			if frame.Type != screenstream.TypeFrame || frame.Sequence != sequence || frame.Timestamp.IsZero() {
 				return ErrScreenSequence
@@ -449,9 +492,7 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			// buggy adapter cannot mutate the exact frame we later display.
 			recordFrame := frame
 			recordFrame.PNG = append([]byte(nil), frame.PNG...)
-			recordCtx, recordCancel := context.WithTimeout(ctx, ackTimeout)
-			ack, err := recorder.Record(recordCtx, meta.SessionID, recordFrame)
-			recordCancel()
+			ack, err := recordScreenFrame(ctx, recorder, meta.SessionID, recordFrame, ackTimeout)
 			if err != nil || ack != frame.Sequence {
 				return fmt.Errorf("%w: frame acknowledgement missing or ambiguous", ErrRecordingLost)
 			}

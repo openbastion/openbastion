@@ -66,7 +66,11 @@ The Go-native proxy is optional and currently serves **VNC only**; RDP is delibe
      --profile recording --profile rdp-vnc up -d --build --wait
    ```
 
-The Session Broker routes a session based on its stored protocol. The Gateway returns an HttpOnly, SameSite=Strict one-use attach cookie for VNC and relays the binary screen WebSocket; the proxy ticket is never returned to browser JavaScript. The Admin UI's live screen viewer is still pending.
+The Session Broker routes a session based on its stored protocol. The Gateway returns an HttpOnly, SameSite=Strict one-use attach cookie for VNC and relays the binary screen WebSocket; the proxy ticket is never returned to browser JavaScript. The Admin UI opens the screen from an active VNC session.
+
+`--env-file deploy/docker-compose/.env.recording` is for installations upgraded with `init-recording.sh`: on a new installation that file does not exist and the credentials are in `.env`, so drop the option. The bundle named by `SCREEN_TARGET_CA_FILE` is mounted with the mode of the file and read by an unprivileged user: make it world-readable (`0644`), it holds only public certificates.
+
+`up --wait` does not vouch for the recording: `video-recorder` and `rdp-vnc-proxy` have no healthcheck, and a recorder that refuses its Transit configuration restarts in a loop while `up --wait` succeeds. Sessions then fail closed (`503` on `connect`, nothing sent to the target): check `logs video-recorder`.
 
 ## What lives where
 

@@ -24,7 +24,7 @@ export default defineConfig({
         host: "0.0.0.0",
         port: 3000,
         allowedHosts: previewHosts,
-        proxy: Object.fromEntries(apiPaths.map((p) => [p, { target: gateway }])),
+        proxy: Object.fromEntries(apiPaths.map((p) => [p, { target: gateway, ws: p === "/sessions" }])),
       }
     : undefined,
   build: {

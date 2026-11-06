@@ -22,4 +22,8 @@ eval "$(test/integration/testdata/vnc/target.sh /tmp/vnc-target --env)"
 go test ./pkg/vnc/ -run TestRealTarget -count=1 -v
 ```
 
+`TestScreenFlow_VNC…` (`test/integration/screen_flow_test.go`, `TEST_DATABASE_URL` requis) rejoue tout le parcours sur processus réels, contre un serveur factice et, si `OPENBASTION_VNC_TARGET` est posé, contre cette cible, dans le mode où elle a été lancée (`X509Plain` ou `X509Vnc`). Un TigerVNC ne dit pas ce qu'il a reçu : contre lui, le test prouve l'image, la coupure (relais TCP témoin) et le refus d'un mauvais mot de passe ; le clavier est témoigné par le serveur factice seul.
+
+`TestCompose_AVNCSession…` (`test/integration/compose_screen_test.go`, lancé par `make test-compose`, Docker requis) fait le même parcours sur la pile `deploy/docker-compose` avec ses profils `recording` et `rdp-vnc` : vraies images, vrai SeaweedFS. La cible factice reste sur l'hôte, jointe par la passerelle du réseau Compose. Le Video Recorder y utilise une clé locale (override du test), pas Transit, couvert par `transit_flow_test.go`.
+
 Sans `OPENBASTION_VNC_TARGET`, `TestRealTarget` se saute. Il complète les serveurs factices, il ne les remplace pas.

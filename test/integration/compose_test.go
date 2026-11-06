@@ -112,7 +112,7 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		out := run("", "run", "--rm", "--no-deps", "-T", "--entrypoint", "sh", "-v", "obcompose-test_pki:/look:ro", "pki",
 			"-c", "cd /look && find . -type f | sort")
 		want := ""
-		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "password-vault", "seaweedfs", "session-broker", "ssh-proxy", "video-recorder"} {
+		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "password-vault", "rdp-vnc-proxy", "seaweedfs", "session-broker", "ssh-proxy", "video-recorder"} {
 			want += "./" + svc + "/ca.pem\n./" + svc + "/cert.pem\n./" + svc + "/key.pem\n"
 		}
 		if got := out[strings.Index(out, "./"):]; got != want {

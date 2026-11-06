@@ -2771,3 +2771,61 @@ L'ADR les promettait, le code ne les tenait pas. Mesuré par lecture du dépôt 
 - `SCREEN_ALLOWED_ORIGINS` côté Gateway (§10) : vide, seule l'origine de la Gateway passe ; une autre origine reçoit 403 **sans consommer le cookie**. `*` et un élément vide sont fatals.
 
 **Prouvé** : `pkg/proxycore`, Gateway, proxys RDP/VNC et SSH verts sous `-race` ; tests SSH inchangés ; 14/14 mutations tuées.
+
+## 2026-11-06 — ADR-0071, incrément 67 : VNC de bout en bout, de l'Admin UI à la cible réelle
+
+Critères de sortie de l'incrément 1 d'ADR-0071 (VNC) franchis, sauf les limites ci-dessous.
+
+**Admin UI** (`web/admin-ui/src/features/screen/`) : lecteur d'écran sur canvas, contrat `openbastion.screen.v1` décodé strictement, `createImageBitmap` sans `<img>` donc sans relâcher la CSP, table de touches, coordonnées bornées à la trame, `RELEASE_ALL` à la perte du focus, déplacements coalescés par image d'animation, aucune reconnexion automatique (l'attache est à usage unique), socket ouvert seulement sur la même origine. Comptes VNC : enregistrement sans clé d'hôte ni rotation, `PUT /vault/accounts/{id}/tls-pin`. Sessions : protocole choisi, bouton « Ouvrir l'écran » sur une session VNC active. `Api.connectScreen` est le seul appel en `credentials: same-origin` : un navigateur ignore `Set-Cookie` sous `omit`, et aucun test à faux `fetch` ne l'aurait vu. Le relais Vite passe `ws: true` sous `BASE44_PREVIEW_MODE=1`.
+
+**Défauts que seule la chaîne réelle a révélés, corrigés avec leur preuve** :
+
+- À la révocation, le WebSocket se fermait **sans `END`** : dans `coder/websocket`, annuler le contexte d'une lecture ferme la connexion. L'entrée lit désormais sous un contexte qui survit au relais, et l'image en cours d'envoi aussi.
+- Le handler du proxy posait l'échéance sur le contexte parent : à l'expiration, **`session.expire`, `session.terminate` et la purge s'exécutaient sur un contexte mort**, et `END` disait `target_unreachable`. L'échéance est appliquée au seul relais.
+- Une révocation pendant l'attente d'un acquittement abandonnait une frame déjà partie : le marqueur terminal devenait ambigu, `END` disait `recording_lost`. La cible est coupée aussitôt (ADR-0018), l'acquittement dispose de 2 s de sursis, l'enregistrement reste complet.
+- Fermer la cible ferme le flux d'images ; le relais pouvait y voir une fin normale et dire `session_ended` au lieu de `session_revoked`. `Close` de la cible est unique et attendu par le relais.
+- Le canvas vide de 300×150 s'affichait avant la première image (`display: block` annule `hidden`) : vu seulement dans Chromium.
+
+**Prouvé** :
+
+- `TestScreenFlow_VNC…` (`test/integration/screen_flow_test.go`), huit services sous mTLS, vrai Video Recorder sur PostgreSQL : cookie sans ticket ni adresse de proxy, cookie rejoué ou d'une autre session refusé, clavier reçu par la cible, révocation et expiration qui coupent la cible et disent pourquoi à l'opérateur, image affichée **identique à l'octet** à l'image rejouée par un auditeur, enregistrement scellé, objet stocké jamais en clair, imposteur au certificat valide mais non épinglé sans aucun secret reçu et `session.tls_certificate_mismatch` à l'audit, compte sans pin refusé, protocole choisi par le client refusé, recorder arrêté refusé avant tout contact avec la cible.
+- Le même parcours contre **TigerVNC 1.13.1 réel** en `X509Plain`, sauf le clavier et la coupure, que ce serveur ne peut pas témoigner (coupure prouvée depuis, incrément 68).
+- Parcours opérateur dans **Chromium réel** (1.65 de playwright-core, hors dépôt) contre TigerVNC réel, via l'Admin UI servie par la Gateway : connexion, demande de session, canvas 800×600, cookie `HttpOnly`/`Secure`/`SameSite=Strict` illisible par script, touche reçue par la cible (cible factice), « La session a été révoquée. ». Vérification manuelle ponctuelle : ce test n'est pas dans le dépôt, Playwright n'y étant pas une dépendance.
+- 8/8 mutations de ce lot tuées, dont deux par le flux d'intégration.
+
+**Limites** :
+
+- Le service `rdp-vnc-proxy` n'est **pas** branché dans `deploy/base44/docker-compose.yml`, et `SCREEN_ALLOWED_ORIGINS` n'y est pas posé. La prévisualisation Base44 n'ouvre donc pas encore d'écran. (`make test-compose` : voir l'incrément 68.)
+- Pas de lecteur vidéo dans l'Admin UI : le replay passe par `GET /sessions/{id}/recording/video/segments/{n}`.
+- Le lecteur n'envoie pas de scancode : suffisant pour VNC (keysym), à ajouter avant d'exposer RDP.
+- Les clavier AZERTY/QWERTY réels ne sont pas vérifiés de bout en bout (seul le keysym est transmis) ; une touche morte est ignorée.
+- `TestScreenFlow` se saute sans `TEST_DATABASE_URL`.
+- Les icônes de `web/openbastion-icons` injectent des balises `<style>` que la CSP bloque (9 violations sur ce parcours, sources `src/icons/*`) : antérieur à ce lot, sans effet de sécurité, les animations d'icônes ne jouent pas.
+- RDP reste non exposé : ordres restants, cache de glyphes et validation Windows réelle manquent.
+
+## 2026-11-06 — ADR-0071, incrément 68 : les refus VNC de bout en bout, et la pile Compose
+
+Le flux de l'incrément 67 était vert, mais ne couvrait qu'un refus sur ceux que le critère de sortie exige « avec le code attendu ». Écrits, les scénarios ont échoué sur processus réels.
+
+**Défauts corrigés, rouge mesuré** :
+
+- Cible sans VeNCrypt ou sans X.509 : `codec_unsupported`, désormais `tls_required`. RFB 3.3 : `codec_unsupported`, désormais `protocol_version_unsupported`. Secret de plus de 8 octets en `X509Vnc` : `pin_missing`, désormais `codec_unsupported`. Rectangle hors bornes et encodage non demandé en cours de session : `target_unreachable`, désormais `codec_unsupported` (`vncScreenSession`). Une cible qui refuse d'elle-même avant négociation (`ErrTargetRefused`) dit `target_unreachable`.
+- `deploy/docker-compose` : le profil `recording` ne démarrait pas sur une installation neuve (`chmod: /config/s3.json: Operation not permitted`). `seaweedfs-config.sh` remplace le fichier et pose le mode avant le propriétaire : `CHOWN` reste sa seule capacité.
+- `TestCompose_TheMVPJourney…` échouait : sa liste d'identités ignorait `rdp-vnc-proxy`, que `pki.sh` émet depuis ADR-0071. La liste est complétée, l'assertion reste exacte.
+- `TestClientAddress_TheLimitsAreAdjustable` et `TestSessionRate_…` dépendaient d'un port fermé qui refuse aussitôt. Ici il ne répond pas, chaque requête durait 30 s et le limiteur se rechargeait. Ils ont un amont qui répond (`answeringUpstream`), assertions inchangées : 154,9 s en échec, puis 6,1 s.
+- `coder/websocket` est marqué direct dans `test/integration/go.mod`, le test l'important.
+
+**Prouvé** (commandes lancées dans cette session) :
+
+- `TestScreenFlow_VNC…` : vert en 77,5 s avec TigerVNC 1.13.1 `X509Plain` ; parcours réel et refus d'un mauvais mot de passe verts aussi en `X509Vnc`. Sept refus nouveaux, et ce que la cible a reçu est demandé à la cible. Aucun secret de cible dans la sortie des dix services. Coupure de la cible réelle prouvée par un relais TCP témoin.
+- `TestCompose_AVNCSession…` : vraies images et vrai SeaweedFS, profils `recording` et `rdp-vnc`. Image identique à l'octet au replay, enregistrement scellé, clavier reçu, révocation qui coupe la cible, chaîne d'audit vérifiée, proxy et stockage non publiés, recorder arrêté : `503` sans contact avec la cible, aucun secret dans les journaux, job `seaweedfs-config` rejouable.
+- `go test ./test/integration/` sans base : 63 tests passés, 31 sautés, 0 échec en 398,7 s. `TestCompose` : 4/4 en 142,9 s. `make build vet test` : 47 paquets verts. `-race` vert sur `pkg/vnc`, `pkg/proxycore`, le proxy, la Gateway et le Broker. `make ui-test` : 77 tests. 8/8 mutations tuées.
+
+**Limites** :
+
+- `make test-integration` dépasse ici sa limite de 300 s (398,7 s sans échec) : limite du Makefile laissée telle quelle.
+- `make test-postgres` et les suites Go avec base n'ont pas été rejouées : `psql` est absent de l'hôte. Seul `TestScreenFlow` a tourné sur PostgreSQL. `buf` est absent aussi : contrats déjà générés, `make -o proto-gen`.
+- Un mot de passe refusé par la cible se dit `target_unreachable` : §12 n'a pas de code pour ce cas, et l'opérateur peut chercher une panne réseau.
+- Le test Compose utilise une clé locale pour le recorder, pas Transit. `up --wait` réussit alors qu'un recorder sans clé redémarre en boucle (constaté) : les sessions refusent, mais rien ne le signale à l'installation.
+- Le clavier sur un vrai TigerVNC n'a pas de témoin : aucun client X n'y affiche ce qui est tapé.
+- `deploy/base44` n'a toujours pas `rdp-vnc-proxy`.

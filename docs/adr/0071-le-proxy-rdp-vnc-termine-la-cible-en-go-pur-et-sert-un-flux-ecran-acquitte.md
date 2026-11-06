@@ -1432,3 +1432,11 @@ Le client VNC est confronté à TigerVNC 1.13.1 réel (`TestRealTarget`, `test/i
 ## ADR-0071 — incrément 66 : garanties du relais écran
 
 `session.tls_certificate_mismatch` (§3), budget d'entrée (§6), image la plus récente pour un opérateur lent (§11), délai d'acquittement du recorder de 10 s, `SCREEN_FRAME_INTERVAL_MS` (§8) et `SCREEN_ALLOWED_ORIGINS` côté Gateway (§10) sont implémentés. La séquence des `FRAME` reçues par un opérateur est strictement croissante mais peut comporter des trous ; l'enregistrement, lui, ne perd rien.
+
+## ADR-0071 — incrément 67 : VNC de bout en bout
+
+L'incrément 1 du plan est livré : lecteur d'écran de l'Admin UI, comptes et sessions VNC, parcours sur processus réels jusqu'à TigerVNC, enregistré et rejouable à l'octet près. Cinq défauts que seule la chaîne réelle a révélés sont corrigés, dont un `END` jamais remis à la révocation et un audit d'expiration exécuté sur un contexte mort. Les preuves et les limites, dont la pile Base44 non branchée, sont dans `NOTES_SANDBOX.md`. RDP reste non exposé.
+
+## ADR-0071 — incrément 68 : les refus VNC de bout en bout, et la pile Compose
+
+Les critères de sortie de l'incrément 1 exigeaient chaque refus « avec le code attendu » ; quatre codes étaient faux sur processus réels et ceux d'une session en cours n'étaient pas donnés. Une cible sans VeNCrypt X.509 dit `tls_required`, une version autre que RFB 3.8 ou VeNCrypt 0.2 `protocol_version_unsupported`, un secret que `X509Vnc` tronquerait `codec_unsupported`, un rectangle hors bornes ou un encodage non demandé `codec_unsupported`. §12 n'a pas de code pour un mot de passe refusé par la cible : il reste `target_unreachable`. Le profil `recording` ne démarrait pas sur une installation neuve : le job `seaweedfs-config` est corrigé sans lui donner de capacité. Les preuves et les limites sont dans `NOTES_SANDBOX.md`.

@@ -47,7 +47,14 @@ var (
 	ErrInvalidFramebuffer  = errors.New("vnc: invalid framebuffer update")
 	ErrAuthentication      = errors.New("vnc: target authentication failed")
 	ErrTLSVerification     = errors.New("vnc: target TLS verification failed")
-	errLastRect            = errors.New("vnc: last rectangle marker")
+	// ErrTargetRefused is the target saying no before any negotiation, with its own reason: too
+	// many failures, too many clients. Nothing about it is unsupported.
+	ErrTargetRefused = errors.New("vnc: the target refused the connection")
+	// The refusals the operator is told apart (ADR-0071 §12); each remains what it wraps.
+	ErrProtocolVersion    = fmt.Errorf("%w: not RFB 3.8 with VeNCrypt 0.2", ErrUnsupportedProtocol)
+	ErrTLSRequired        = fmt.Errorf("%w: no VeNCrypt X.509 security", ErrUnsupportedProtocol)
+	ErrPasswordTruncation = fmt.Errorf("%w: X509Vnc would truncate the password", ErrInvalidTarget)
+	errLastRect           = errors.New("vnc: last rectangle marker")
 )
 
 // Config must be populated from the Vault-issued target identity and the
@@ -132,7 +139,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 		return nil, err
 	}
 	if subtype == vencryptX509VNC && len(password) > 8 {
-		return nil, ErrInvalidTarget
+		return nil, ErrPasswordTruncation
 	}
 	tlsConn := tls.Client(conn, tlsConfig)
 	if err := tlsConn.HandshakeContext(dialCtx); err != nil {
@@ -553,7 +560,7 @@ func handshakeRFB(conn net.Conn) error {
 		return err
 	}
 	if string(version[:]) != protocolVersion {
-		return ErrUnsupportedProtocol
+		return ErrProtocolVersion
 	}
 	if err := writeFull(conn, []byte(protocolVersion)); err != nil {
 		return err
@@ -568,7 +575,7 @@ func handshakeRFB(conn net.Conn) error {
 			return err
 		}
 		_ = discardN(conn, uint64(n))
-		return ErrUnsupportedProtocol
+		return ErrTargetRefused
 	}
 	types := make([]byte, int(count[0]))
 	if _, err := io.ReadFull(conn, types); err != nil {
@@ -581,7 +588,7 @@ func handshakeRFB(conn net.Conn) error {
 		}
 	}
 	if !found {
-		return ErrUnsupportedProtocol
+		return ErrTLSRequired
 	}
 	return writeFull(conn, []byte{securityVeNCrypt})
 }
@@ -591,7 +598,7 @@ func negotiateVeNCrypt(conn net.Conn) (uint32, error) {
 		return 0, err
 	}
 	if version[0] != 0 || version[1] != 2 {
-		return 0, ErrUnsupportedProtocol
+		return 0, ErrProtocolVersion
 	}
 	if err := writeFull(conn, []byte{0, 2}); err != nil {
 		return 0, err
@@ -601,14 +608,14 @@ func negotiateVeNCrypt(conn net.Conn) (uint32, error) {
 		return 0, err
 	}
 	if status[0] != 0 {
-		return 0, ErrUnsupportedProtocol
+		return 0, ErrProtocolVersion
 	}
 	var count [1]byte
 	if _, err := io.ReadFull(conn, count[:]); err != nil {
 		return 0, err
 	}
 	if count[0] == 0 {
-		return 0, ErrUnsupportedProtocol
+		return 0, ErrTLSRequired
 	}
 	raw := make([]byte, int(count[0])*4)
 	if _, err := io.ReadFull(conn, raw); err != nil {
@@ -624,7 +631,7 @@ func negotiateVeNCrypt(conn net.Conn) (uint32, error) {
 	} else if supported[vencryptX509VNC] {
 		chosen = vencryptX509VNC
 	} else {
-		return 0, ErrUnsupportedProtocol
+		return 0, ErrTLSRequired
 	}
 	var out [4]byte
 	binary.BigEndian.PutUint32(out[:], chosen)
@@ -637,7 +644,7 @@ func negotiateVeNCrypt(conn net.Conn) (uint32, error) {
 		return 0, err
 	}
 	if status[0] != 1 {
-		return 0, ErrUnsupportedProtocol
+		return 0, ErrTLSRequired
 	}
 	return chosen, nil
 }
@@ -662,7 +669,7 @@ func authenticatePlain(conn net.Conn, username string, password []byte) error {
 }
 func authenticateVNC(conn net.Conn, password []byte) error {
 	if len(password) > 8 {
-		return ErrInvalidTarget
+		return ErrPasswordTruncation
 	}
 	var challenge [16]byte
 	if _, err := io.ReadFull(conn, challenge[:]); err != nil {

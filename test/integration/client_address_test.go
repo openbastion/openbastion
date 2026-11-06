@@ -176,7 +176,7 @@ func TestClientAddress_TheLimitsAreAdjustable_AcrossRealProcesses(t *testing.T) 
 	})
 
 	t.Run("authenticated requests: three at once, then six a minute", func(t *testing.T) {
-		gw := startService(t, root, gatewayBin, "18777", append(upstream, "CLIENT_REQUEST_BURST=3", "CLIENT_REQUEST_RATE_PER_MINUTE=6")...)
+		gw := startService(t, root, gatewayBin, "18777", append(upstream, "SESSION_BROKER_URL="+answeringUpstream(t), "CLIENT_REQUEST_BURST=3", "CLIENT_REQUEST_RATE_PER_MINUTE=6")...)
 		tok, status := gatewayLogin(t, gw.baseURL, "steady", "steady-password-123")
 		if status != http.StatusOK {
 			t.Fatalf("login: %d", status)
