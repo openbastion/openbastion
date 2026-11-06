@@ -64,6 +64,8 @@ jobs:
         run: |
           unformatted=$(git ls-files '*.go' | xargs gofmt -l)
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: git diff --check (no trailing whitespace or conflict markers)
+        run: git diff --check
       - name: unit tests without a database
         run: make test
 

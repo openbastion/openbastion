@@ -267,9 +267,11 @@ test-postgres: proto-gen
 TRIVY ?= trivy
 scan-images: scan-postgres-image
 	docker build --progress=plain -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) -t openbastion:scan .
-	@got=$$(docker run --rm --entrypoint /usr/local/bin/openbastion-cli openbastion:scan version --short); \
-		[ "$$got" = "$(BUILD_VERSION)" ] || { echo "l'image dit être $$got, pas $(BUILD_VERSION)"; exit 1; }; \
-		echo "l'image est la version $$got"
+	@for bin in openbastion-cli openbastion-pki api-gateway audit-service ssh-proxy password-vault; do \
+		got=$$(docker run --rm --entrypoint /usr/local/bin/$$bin openbastion:scan version --short); \
+		[ "$$got" = "$(BUILD_VERSION)" ] || { echo "$$bin : version $$got ≠ $(BUILD_VERSION)"; exit 1; }; \
+		echo "$$bin : $$got"; \
+	done
 	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml openbastion:scan
 
 scan-postgres-image:
