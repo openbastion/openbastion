@@ -52,3 +52,32 @@ func TestString_TheStampedVersion_AndTheCommitOnlyWhenTheVersionHasNone(t *testi
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestShortRevision(t *testing.T) {
+	tests := []struct{ input, want string }{
+		{"b75be22f1a2b3c4d", "b75be22"},
+		{"ABCDEF012345", "abcdef0"},
+		{"abcdef", "unknown"},
+		{"zzzzzzz12345", "unknown"},
+		{"1234567+dirty", "unknown"},
+		{"", "unknown"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := shortRevision(tt.input); got != tt.want {
+				t.Fatalf("shortRevision(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInfoFormatting(t *testing.T) {
+	i := Info{Version: "dev", GoVersion: "go1.27.3", Built: "b75be22", OSArch: "linux/amd64"}
+	want := "Version:           dev\nGo version:        go1.27.3\nBuilt:             b75be22\nOS/Arch:           linux/amd64"
+	if got := i.String(); got != want {
+		t.Fatalf("Info.String() = %q, want %q", got, want)
+	}
+	if got := i.Short(); got != "dev" {
+		t.Fatalf("Info.Short() = %q, want dev", got)
+	}
+}

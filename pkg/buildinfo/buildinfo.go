@@ -8,8 +8,11 @@
 package buildinfo
 
 import (
+	"fmt"
 	"regexp"
+	"runtime"
 	"runtime/debug"
+	"strings"
 )
 
 // Version is what -ldflags stamps; "dev" for a binary built without it (go run, go test).
@@ -64,4 +67,57 @@ func String() string {
 		return Version + " (commit " + c + ")"
 	}
 	return Version
+}
+
+// Info describes the build currently executing, without changing String's legacy log format.
+type Info struct {
+	Version   string
+	GoVersion string
+	Built     string
+	OSArch    string
+}
+
+// Current returns the runtime and VCS metadata embedded in the current executable.
+func Current() Info {
+	return Info{
+		Version:   Version,
+		GoVersion: runtime.Version(),
+		Built:     vcsRevision(),
+		OSArch:    runtime.GOOS + "/" + runtime.GOARCH,
+	}
+}
+
+// Short returns only the stamped version, suitable for scripts.
+func (i Info) Short() string { return i.Version }
+
+// String returns the stable four-line diagnostic representation.
+func (i Info) String() string {
+	return fmt.Sprintf("Version:           %s\nGo version:        %s\nBuilt:             %s\nOS/Arch:           %s",
+		i.Version, i.GoVersion, i.Built, i.OSArch)
+}
+
+func vcsRevision() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" {
+			return shortRevision(setting.Value)
+		}
+	}
+	return "unknown"
+}
+
+func shortRevision(revision string) string {
+	revision = strings.ToLower(revision)
+	if len(revision) < 7 {
+		return "unknown"
+	}
+	for _, r := range revision {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return "unknown"
+		}
+	}
+	return revision[:7]
 }

@@ -64,6 +64,7 @@ proto-lint:
 build: proto-gen
 	$(GO) build -ldflags "$(LDFLAGS)" \
 		./pkg/buildinfo/... \
+		./pkg/command/... \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
 		./pkg/vnc/... \
@@ -104,6 +105,7 @@ vet: proto-gen
 	$(GO) vet ./pkg/transit/...
 	$(GO) vet ./proto/...
 	$(GO) vet ./pkg/buildinfo/...
+	$(GO) vet ./pkg/command/...
 	$(GO) vet ./services/access/api-gateway/...
 	$(GO) vet ./services/access/authentication/...
 	$(GO) vet ./services/access/authorization/...
@@ -135,6 +137,7 @@ test: proto-gen
 		./pkg/transit/... \
 		./proto/... \
 		./pkg/buildinfo/... \
+		./pkg/command/... \
 		./services/access/api-gateway/... \
 		./services/access/authentication/... \
 		./services/access/authorization/... \
