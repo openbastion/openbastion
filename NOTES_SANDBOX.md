@@ -2714,3 +2714,9 @@ Validation : `make build vet` PASS ; tests ciblés des quatre modules PASS ; smo
 Les exécutables `ssh-proxy` et `rdp-vnc-proxy` adoptent la racine Cobra commune. Le démarrage existant (tickets, mTLS, validation des cibles, enregistrement et cycle de vie des connexions) reste dans sa fonction dédiée et n'est appelé que par la racine sans sous-commande. `version` s'arrête avant toute initialisation du proxy.
 
 Validation : `make build vet` PASS ; tests ciblés des deux modules PASS ; smoke tests version courte PASS avec une configuration TLS/port volontairement invalide ; `git diff --check` PASS. Le protocole SSH/VNC et les invariants d'enregistrement ne changent pas.
+
+## 2026-11-06 — ADR-0072, incrément 6 : commandes Cobra des enregistreurs
+
+Les exécutables `audit-service`, `command-recorder` et `video-recorder` utilisent la racine Cobra commune. Le démarrage sans argument conserve ses initialisations d'audit, de stockage, de chiffrement, de Transit et de transport ; `version` ne les déclenche pas et ne lit aucun secret.
+
+Validation : `make build vet` PASS ; tests ciblés des trois modules PASS ; smoke tests version courte PASS avec mTLS, port et DSN invalides ; `git diff --check` PASS. Aucun chemin d'écriture/lecture d'enregistrement ni aucune politique fail-closed n'est modifié.

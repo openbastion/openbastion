@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/application"
@@ -25,7 +26,7 @@ import (
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/interfaces"
 )
 
-func main() {
+func runService() {
 	log.Printf("video-recorder %s", buildinfo.String())
 	runtime, err := mtls.Setup(mtls.VideoRecorder)
 	if err != nil {
@@ -238,4 +239,11 @@ func safeEndpoint(endpoint string) string {
 		return "<invalid>"
 	}
 	return u.Scheme + "://" + u.Host
+}
+
+// main dispatches version before entering the recorder lifecycle.
+func main() {
+	if err := command.NewServiceCommand("video-recorder", runService).Execute(); err != nil {
+		log.Fatalf("video-recorder: %v", err)
+	}
 }
