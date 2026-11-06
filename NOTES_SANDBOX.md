@@ -2679,3 +2679,20 @@ Ajout de `R2_MASKNOTPEN` (`0x03`, `DPna`) sur les quatre primitives vectorielles
 Le propriétaire a explicitement accepté ADR-0072, y compris Cobra pour les douze exécutables de production. Le statut de l'ADR est passé à `Accepté`. Le premier incrément ajoute à `pkg/buildinfo` une représentation structurée des quatre champs (version estampillée, version Go, révision VCS sur sept caractères hexadécimaux ou `unknown`, OS/architecture) et un formateur détaillé ; `buildinfo.String()` reste inchangé pour préserver les journaux existants. Nouveau module `pkg/command` : commande Cobra `version [--short]`, sortie injectée, validation `NoArgs`, erreurs d'écriture propagées, aucune lecture des métadonnées avant exécution. Le module est inscrit dans `go.work` et les cibles build/vet/test du Makefile.
 
 Tests unitaires et `-race` ciblés sur `pkg/buildinfo` et `pkg/command` : PASS. Le contrôle global `make build vet test proto-lint` a passé avant l'ajout de `pkg/command` aux listes du Makefile ; il est relancé avec le module inclus. Aucun binaire de production n'a encore migré ; CLI opérateur, PKI et services restent à traiter dans les incréments suivants.
+
+
+## 2026-11-06 — ADR-0072, incrément 2 : CLI opérateur Cobra
+
+`cli/openbastion-cli` utilise maintenant un arbre Cobra : `user create`, `audit verify-chain`, `mfa enrollment-code`, `mfa reset`, `mfa keys`, `mfa revoke-key` et `version`. La commande `version` réutilise `pkg/command.NewVersionCommand()` et fournit `--short`. Les handlers HTTP/mTLS restent séparés de l'interface de commande ; les vérifications de présence des paramètres et les routes existantes sont conservées. Compatibilité maintenue pour les options longues historiques à un tiret (`-authn`, `-username`, etc.) par normalisation avant le parseur Cobra ; les options à deux tirets sont également acceptées. Aucun mot de passe n'est ajouté à l'interface de flags : `user create` le lit exclusivement sur stdin. Les erreurs de commande inconnue gardent l'usage historique.
+
+Tests CLI ajoutés pour le rendu version détaillé/court, l'aide, la compatibilité des options à un tiret, le refus des arguments positionnels et l'impossibilité de passer un mot de passe en option. Validation mesurée : `make build vet test proto-lint` PASS sur tous les modules et `buf lint` ; `go test -race -count=1 ./cli/openbastion-cli/...` PASS ; `gofmt -l` vide sur les trois fichiers Go modifiés ; `git diff --check` PASS. La suite complète inclut les tests unitaires de tous les modules Go, mais aucun test d’intégration PostgreSQL ni test Compose n’a été lancé (ce changement ne touche ni schéma, ni processus de service, ni déploiement).
+
+
+## 2026-11-06 — correction CI : contrôle de version des images après ADR-0072
+
+Le job `Images — Trivy (HIGH, CRITICAL)` de la PR #62 ne révélait pas une vulnérabilité de l'image runtime : `make scan-images` échouait avant d'appeler Trivy sur cette image. Son contrôle de cohérence exécutait `openbastion-cli version` et comparait toute la sortie à `BUILD_VERSION`. Depuis ADR-0072, `version` produit volontairement le diagnostic détaillé multi-lignes ; le contrat scriptable est `version --short`. Le contrôle Docker utilise désormais cette forme courte. Le scan PostgreSQL avait déjà franchi son étape Trivy ; le scan runtime restait à exécuter après correction.
+
+
+## 2026-11-06 — correction du test d’intégration de version après ADR-0072
+
+Le job `integration on real processes, without a database` de la PR #62 échouait dans `TestVersion_AStampedBinarySaysItsVersion_TheCLIWhenAsked_AServiceFirst` : ce test historique attendait que `openbastion-cli version` ne renvoie que la chaîne de version. Depuis l’ADR-0072, cette commande expose les métadonnées détaillées du binaire ; `version --short` est l’interface stable destinée aux scripts. Le test vérifie maintenant explicitement les deux contrats : la sortie détaillée contient la version estampillée, et `version --short` renvoie exactement la version. Le binaire non estampillé est également vérifié via `version --short` (`dev`). Aucun scénario n’est supprimé ni ignoré. Validation de cette correction à compléter avant livraison.

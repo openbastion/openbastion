@@ -12,7 +12,9 @@ OpenBastion suit [Semantic Versioning 2.0.0](https://semver.org). La version que
 
 ```sh
 make version                                   # la version qu'une construction estampille : 0.0.1-dev+<commit>
-openbastion-cli version                        # celle de la CLI
+openbastion-cli version                        # diagnostic complet de la CLI
+openbastion-cli version --short                # version seule, pour les scripts
+openbastion-cli --help                         # commandes et options disponibles
 docker run --rm --entrypoint /usr/local/bin/openbastion-cli openbastion:dev version   # celle d'une image
 ```
 

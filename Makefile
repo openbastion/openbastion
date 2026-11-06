@@ -8,7 +8,7 @@ export GOFLAGS :=
 
 ## La version (ADR-0063) : VERSION est la source, en Semantic Versioning. Une construction est
 ## estampillée VERSION+<commit> ; une construction de release (la CI, sur un tag) passe
-## BUILD_VERSION=$(VERSION). Lue par `openbastion-cli version` et la première ligne du journal
+## BUILD_VERSION=$(VERSION). Lue par `openbastion-cli version --short` et la première ligne du journal
 ## de chaque service.
 VERSION := $(shell cat VERSION)
 GIT_SHA := $(shell git rev-parse --short=12 HEAD 2>/dev/null)
@@ -264,7 +264,7 @@ test-postgres: proto-gen
 TRIVY ?= trivy
 scan-images: scan-postgres-image
 	docker build --progress=plain -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) -t openbastion:scan .
-	@got=$$(docker run --rm --entrypoint /usr/local/bin/openbastion-cli openbastion:scan version); \
+	@got=$$(docker run --rm --entrypoint /usr/local/bin/openbastion-cli openbastion:scan version --short); \
 		[ "$$got" = "$(BUILD_VERSION)" ] || { echo "l'image dit être $$got, pas $(BUILD_VERSION)"; exit 1; }; \
 		echo "l'image est la version $$got"
 	$(TRIVY) image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --ignorefile .trivyignore.yaml openbastion:scan
