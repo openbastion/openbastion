@@ -17,9 +17,9 @@ import (
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
-	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/interfaces"
 )
