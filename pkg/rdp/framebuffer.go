@@ -50,6 +50,10 @@ func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] = ^(destination[channel] | pen[channel])
 		}
+	case rdpROP2MergeNotPen:
+		for channel := 0; channel < 3; channel++ {
+			destination[channel] |= ^pen[channel]
+		}
 	case rdpROP2NotCopyPen:
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] = ^pen[channel]

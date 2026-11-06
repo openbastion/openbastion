@@ -1385,3 +1385,21 @@ Les profils `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et
 Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), `R2_NOTMERGEPEN` (`0x02`) = `DPon`. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
 
 Validation de l’incrément 62 : build, vet, unit, proto-lint, race et fuzz PASS (82 067 exécutions en 5 s).
+
+
+## ADR-0071 — incrément 63 : R2_MERGENOTPEN pour les primitives vectorielles
+
+Les profils `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et `EllipseSC` (index 25) acceptent `R2_MERGENOTPEN` (`0x0C`, fonction `DPno`). Le framebuffer calcule `D OR NOT P` sur chacune des trois composantes RGB et conserve un alpha interne opaque. La whitelist commune maintient l'alignement des quatre parseurs et du framebuffer ; les autres valeurs ROP2 non implémentées restent refusées.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), `R2_MERGENOTPEN` (`0x0C`) = `DPno`. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Les tests pixel-à-pixel couvrent les quatre primitives, les pixels hors tracé, l'alpha opaque et la couleur de plume/brosse distincte de la destination. Le transport TLS slow-path vérifie l'acceptation et la conservation du ROP2 dans `LineTo` ; les seeds de fuzzing couvrent les quatre ordres.
+
+Validation de l’incrément 63 :
+- Test rouge sur le commit précédent : les quatre primitives et la lecture TLS slow-path refusent `R2_MERGENOTPEN` avant implémentation ; PASS après ajout.
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=local GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- `go test ./pkg/rdp -run '^$' -fuzz '^FuzzParseRDPOrdersUpdate$' -fuzztime=5s -parallel=4` : PASS, 61 978 exécutions.
+- `go test -v ./pkg/rdp/... -count=1` : 261 tests de premier niveau `--- PASS`.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (D OR NOT P remplacé par D AND NOT P ; retrait de `R2_MERGENOTPEN` de la whitelist commune), fichiers restaurés octet pour octet.
+- `gofmt` et `git diff --check` : PASS. Les index 8, 20, 22 et 25 restent non annoncés ; runtime et route RDP désactivés ; aucune interopérabilité Windows/RDS réelle revendiquée.
