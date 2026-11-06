@@ -7,7 +7,12 @@ require (
 	golang.org/x/crypto v0.58.0
 )
 
-require golang.org/x/sys v0.49.0 // indirect
+require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+)
 
 // Un replace local explicite vers pkg/proxycore : il lève l'ambiguïté du mode
 // workspace pour un module qui a aussi des dépendances externes (observé quand
@@ -36,3 +41,8 @@ replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildin
 require github.com/openbastion/openbastion/pkg/command v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/command => ../../../pkg/command
+
+// Écran VNC/RDP du proxy commun (ADR-0071), requis par pkg/proxycore.
+require github.com/openbastion/openbastion/pkg/screenstream v0.0.0 // indirect
+
+replace github.com/openbastion/openbastion/pkg/screenstream => ../../../pkg/screenstream

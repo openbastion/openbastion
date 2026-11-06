@@ -2,9 +2,17 @@ module github.com/openbastion/openbastion/services/vault/password-vault
 
 go 1.26.0
 
-require github.com/lib/pq v1.12.3
+require (
+	github.com/lib/pq v1.12.3
+	github.com/openbastion/openbastion/pkg/tlspin v0.0.0
+)
 
-require golang.org/x/sys v0.49.0 // indirect
+require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+)
 
 // Transport mTLS interne (ADR-0010). Un replace local explicite, comme pour
 // pkg/proxycore : il lève l'ambiguïté du mode workspace quand le module a aussi
@@ -43,3 +51,5 @@ replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildin
 require github.com/openbastion/openbastion/pkg/command v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/command => ../../../pkg/command
+
+replace github.com/openbastion/openbastion/pkg/tlspin => ../../../pkg/tlspin

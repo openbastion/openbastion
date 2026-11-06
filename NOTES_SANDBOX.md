@@ -2726,3 +2726,12 @@ Validation : `make build vet` PASS ; tests ciblés des trois modules PASS ; smok
 Le binaire `password-vault` adopte la racine Cobra commune. Le chemin `version` termine avant mTLS, connexion PostgreSQL, configuration KMS/Transit, rotation ou lancement des tâches de ré-enveloppement ; le démarrage sans argument conserve le cycle de vie existant.
 
 Validation : `make build vet` PASS ; tests du module Vault PASS ; smoke test version courte PASS avec mTLS, port, DSN et clé KMS invalides ; `git diff --check` PASS. Aucun secret n'est lu ou exposé par la commande de version.
+
+
+## 2026-11-06 — ADR-0072, incrément 8 : PKI Cobra et contrat de fumée des douze binaires
+
+L'outil `openbastion-pki` migre `init`, `issue` et `all` vers Cobra et réutilise `pkg/command.NewVersionCommand()`. Les options historiques à tiret simple (`-dir`, `-trust-domain`, `-ttl`, `-service`, `-dns`, `-ip`) restent acceptées ; la forme à double tiret fonctionne également. Les durées par défaut, l'initialisation idempotente de `all`, les SAN DNS/IP et le format des certificats restent inchangés. Pour préserver l'invariant `pkg/mtls` stdlib-only, l'exécutable PKI est désormais un module Go imbriqué et indépendant (`pkg/mtls/cmd/openbastion-pki`) : Cobra n'entre pas dans le module de la bibliothèque mTLS.
+
+Un test d'intégration construit les douze exécutables depuis leurs vrais packages avec un même estampillage, puis vérifie pour chacun les quatre champs détaillés et la sortie `version --short` exacte. Les binaires sont exécutés avec des valeurs volontairement invalides pour TLS, ports, DSN et clés : le succès prouve que le chemin `version` ne lance ni service ni accès au coffre. Le test cible a réussi pour les douze exécutables (12/12).
+
+Validation de cet incrément : `go test -race` ciblé sur le module PKI ; tests PKI existants (init, issue, all, renouvellement, refus) ; smoke test des douze binaires ; `make build vet` ; `git diff --check`. Les tests d'intégration de démarrage réel sans argument et la suite globale restent à rejouer dans les gates finales.

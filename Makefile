@@ -71,6 +71,7 @@ build: proto-gen
 		./pkg/tlspin/... \
 		./pkg/screenstream/... \
 		./pkg/mtls/... \
+		./pkg/mtls/cmd/openbastion-pki/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
@@ -97,6 +98,7 @@ vet: proto-gen
 	$(GO) vet ./pkg/tlspin/...
 	$(GO) vet ./pkg/screenstream/...
 	$(GO) vet ./pkg/mtls/...
+	$(GO) vet ./pkg/mtls/cmd/openbastion-pki/...
 	$(GO) vet ./cli/openbastion-cli/...
 	$(GO) vet ./pkg/migrate/...
 	$(GO) vet ./pkg/refusalbudget/...
@@ -129,6 +131,7 @@ test: proto-gen
 		./pkg/tlspin/... \
 		./pkg/screenstream/... \
 		./pkg/mtls/... \
+		./pkg/mtls/cmd/openbastion-pki/... \
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
