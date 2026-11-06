@@ -252,9 +252,7 @@ services:
     network_mode: none
     read_only: true
     cap_drop: [ALL]
-    # The shared script chowns s3.json to 1000:1000, then chmods it: a root that no longer owns the
-    # file needs FOWNER for the mode, and DAC_OVERRIDE to rewrite an s3.json left by an earlier run.
-    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    cap_add: [CHOWN]
     security_opt: [no-new-privileges:true]
 
   seaweedfs:
@@ -327,6 +325,64 @@ services:
       retries: 24
       start_period: 120s
 
+  # What the preview opens a screen on (ADR-0071). Not the Go services' image: the shared build
+  # cache has nothing to do here, and this one has a desktop to serve.
+  vnc-target:
+    image: openbastion:base44-vnc-target
+    build:
+      context: ../..
+      dockerfile: deploy/base44/Dockerfile
+      target: vnc-target
+    restart: on-failure
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["sh", "/deploy/vnc-target.sh"]
+    environment:
+      VNC_PASSWORD: demo-vnc
+    volumes:
+      - ./vnc-target.sh:/deploy/vnc-target.sh:ro
+      - screen-target-key:/key
+      - screen-target-trust:/trust
+    tmpfs: ["/tmp"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5901"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
+  # Terminates the target, records, and serves the screen to the Gateway (ADR-0071). It trusts the
+  # certificate of the target above, by an explicit file, and the Vault pins it: never system roots.
+  rdp-vnc-proxy:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/cmd/rdp-vnc-proxy"]
+    environment:
+      <<: *go-env
+      PORT: "8090"
+      VAULT_URL: https://password-vault:8081
+      AUDIT_URL: https://audit-service:8082
+      VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
+      RDP_VNC_PROXY_PUBLIC_ENDPOINT: rdp-vnc-proxy:8090
+      TARGET_TLS_ROOTS_FILE: /trust/cert.pem
+    volumes:
+      - ../..:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}
+      - {type: volume, source: screen-target-trust, target: /trust, read_only: true}
+    depends_on:
+      proto: {condition: service_completed_successfully}
+      pki: {condition: service_completed_successfully}
+      password-vault: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+      video-recorder: {condition: service_healthy}
+      vnc-target: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8090"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
   ssh-proxy:
     <<: *go
     command: ["go", "run", "github.com/openbastion/openbastion/services/proxy/ssh-proxy/cmd/ssh-proxy"]
@@ -365,6 +421,7 @@ services:
       VAULT_URL: https://password-vault:8081
       AUDIT_URL: https://audit-service:8082
       SSH_PROXY_URL: https://ssh-proxy:8085
+      RDP_VNC_PROXY_URLS: https://rdp-vnc-proxy:8090
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
@@ -376,6 +433,7 @@ services:
       password-vault: {condition: service_healthy}
       audit-service: {condition: service_healthy}
       ssh-proxy: {condition: service_healthy}
+      rdp-vnc-proxy: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084"]
       interval: 5s
@@ -401,6 +459,9 @@ services:
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
       VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
+      # The preview's public host may differ from the Host the Gateway receives (ADR-0071, increment
+      # 0): only that suffix is added. Unset, only the Gateway's own origin opens a screen.
+      SCREEN_ALLOWED_ORIGINS: ${BASE44_PUBLIC_HOST_SUFFIX:+*.${BASE44_PUBLIC_HOST_SUFFIX}}
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: api-gateway}}
@@ -461,7 +522,7 @@ services:
       retries: 24
       start_period: 120s
 
-  # First run only: the operator account (CLI), then one policy and one privileged account
+  # The operator account (CLI), then the policies and the privileged accounts (SSH and VNC)
   # through the public API, so the preview shows a live installation rather than an empty one.
   # The script is idempotent, so this service seeds and then idles: the sandbox health check
   # reads a service that exits as a stopped one, so it marks its work done in /tmp and stays up
@@ -476,14 +537,17 @@ services:
       AUTHENTICATION_URL: https://authentication:8086
       OPERATOR_USERNAME: operator
       OPERATOR_PASSWORD: openbastion-demo
+      VNC_TARGET_PASSWORD: demo-vnc
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: admin-cli}}
+      - {type: volume, source: screen-target-trust, target: /trust, read_only: true}
     depends_on:
       proto: {condition: service_completed_successfully}
       pki: {condition: service_completed_successfully}
       authentication: {condition: service_healthy}
       api-gateway: {condition: service_healthy}
+      vnc-target: {condition: service_healthy}
     healthcheck:
       # The only state this job has: its seeding ran to completion.
       test: ["CMD", "test", "-f", "/tmp/openbastion-seeded"]
@@ -499,6 +563,8 @@ volumes:
   anchors:
   seaweedfs-config:
   seaweedfs-data:
+  screen-target-key:
+  screen-target-trust:
   node_modules:
   icons_node_modules:
 

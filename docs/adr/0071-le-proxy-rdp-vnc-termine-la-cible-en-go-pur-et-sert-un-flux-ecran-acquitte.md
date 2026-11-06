@@ -1440,3 +1440,7 @@ L'incrément 1 du plan est livré : lecteur d'écran de l'Admin UI, comptes et s
 ## ADR-0071 — incrément 68 : les refus VNC de bout en bout, et la pile Compose
 
 Les critères de sortie de l'incrément 1 exigeaient chaque refus « avec le code attendu » ; quatre codes étaient faux sur processus réels et ceux d'une session en cours n'étaient pas donnés. Une cible sans VeNCrypt X.509 dit `tls_required`, une version autre que RFB 3.8 ou VeNCrypt 0.2 `protocol_version_unsupported`, un secret que `X509Vnc` tronquerait `codec_unsupported`, un rectangle hors bornes ou un encodage non demandé `codec_unsupported`. §12 n'a pas de code pour un mot de passe refusé par la cible : il reste `target_unreachable`. Le profil `recording` ne démarrait pas sur une installation neuve : le job `seaweedfs-config` est corrigé sans lui donner de capacité. Les preuves et les limites sont dans `NOTES_SANDBOX.md`.
+
+## ADR-0071 — incrément 69 : la prévisualisation Base44 ouvre un écran
+
+`deploy/base44` reçoit `rdp-vnc-proxy` et une cible TigerVNC réelle, comme le prévoyait l'incrément 0 : relais WebSocket de Vite sous `BASE44_PREVIEW_MODE=1`, `SCREEN_ALLOWED_ORIGINS` construit depuis `BASE44_PUBLIC_HOST_SUFFIX` et jamais écrit en dur. La racine de confiance et l'épinglage viennent du certificat de la cible, aucun magasin système. Sans le drapeau, `vite build` et la Gateway de production ne changent pas. Preuves et limites dans `NOTES_SANDBOX.md`.

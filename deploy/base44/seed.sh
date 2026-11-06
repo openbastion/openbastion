@@ -3,7 +3,7 @@
 # user and no demo password (deploy/docker-compose/README.md), so the preview could not even be
 # logged into. This one-shot service does the documented first-run journey — the operator
 # account through the CLI, everything else through the public API — and nothing else.
-# It is idempotent: once the operator can log in, it exits without writing anything.
+# It is idempotent: what exists is not written again.
 set -eu
 
 GATEWAY=${GATEWAY_URL:-http://api-gateway:8080}
@@ -27,8 +27,45 @@ until curl -fsS "$GATEWAY/healthz" >/dev/null 2>&1; do
   sleep 2
 done
 
-if [ -n "$(login)" ]; then
-  log "$USER_NAME already exists — nothing to do"
+# The screen target of the preview, on an installation of any age (ADR-0071): an account whose
+# certificate is pinned, read from the target's own volume, and the right to open a session on it.
+#
+# Done means the account pins this target's certificate, not merely that the account exists: an
+# interrupted run or a recreated target is repaired here. A refused step stops the seed, so that the
+# service does not report as seeded a preview that cannot open a screen. 409: already there.
+seed_vnc() {
+  token=$1
+  pin=$(openssl x509 -in /trust/cert.pem -outform der | sha256sum | cut -d' ' -f1)
+  if curl -sS "$GATEWAY/vault/accounts/acc_demo_vnc" -H "Authorization: Bearer $token" |
+    grep -q "\"tlsCertificateSha256\":\"$pin\""; then
+    log "acc_demo_vnc already pins the target"
+    return 0
+  fi
+  log "onboarding the VNC demonstration account"
+  vnc_step policy POST /policies \
+    '{"name":"vault-admin-demo-screen","role":"vault-admin","resourcePattern":"vault:account:acc_demo_vnc","effect":"allow"}'
+  vnc_step account POST /vault/accounts \
+    "{\"id\":\"acc_demo_vnc\",\"name\":\"demo-desktop\",\"username\":\"operator\",
+      \"targetHost\":\"vnc-target:5901\",\"protocol\":\"vnc\",\"rotationPolicy\":\"manual\",
+      \"initialSecret\":\"$(printf '%s' "$VNC_TARGET_PASSWORD" | base64 | tr -d '\n')\"}"
+  vnc_step pin PUT /vault/accounts/acc_demo_vnc/tls-pin \
+    "{\"tlsCertificateSha256\":\"$pin\",\"targetDomain\":\"vnc-target\"}"
+}
+
+vnc_step() {
+  code=$(curl -sS -o /dev/null -w '%{http_code}' -X "$2" "$GATEWAY$3" \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$4")
+  log "VNC $1 -> HTTP $code"
+  case "$code" in
+    2??|409) ;;
+    *) log "the VNC $1 was refused — stopping"; exit 1 ;;
+  esac
+}
+
+TOKEN=$(login)
+if [ -n "$TOKEN" ]; then
+  log "$USER_NAME already exists"
+  seed_vnc "$TOKEN"
   exit 0
 fi
 
@@ -56,5 +93,7 @@ curl -sS -o /dev/null -w 'seed: account -> HTTP %{http_code}\n' -X POST "$GATEWA
        \"targetHost\":\"10.0.4.12:22\",\"protocol\":\"ssh\",\"rotationPolicy\":\"manual\",
        \"initialSecret\":\"$(printf '%s' 'demo-only-do-not-use-in-prod' | base64 | tr -d '\n')\",
        \"hostKey\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+pXuNMSq8lVqUNZ0A+gFlXPmbP+09vCp5Y/mHuzYpS\"}"
+
+seed_vnc "$TOKEN"
 
 log "done — log in as $USER_NAME"

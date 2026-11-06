@@ -24,6 +24,13 @@ COPY . .
 # keep.
 RUN set -e; buf generate; for m in $(awk '/^[[:space:]]+\.\//{print $1}' go.work); do echo "warm $m"; (cd "$m" && go build ./...); done
 
+# The preview's VNC target (vnc-target.sh), on the same pinned base. The volumes take the owner of
+# the directories they are mounted on, so an unprivileged user can write them.
+FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS vnc-target
+RUN apk add --no-cache bash openssl tigervnc xterm font-misc-misc \
+ && mkdir -p /key /trust && chown 1000:1000 /key /trust
+USER 1000:1000
+
 FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb
 RUN apk add --no-cache bash curl openssl
 ENV CGO_ENABLED=0 GOWORK=/src/go.work

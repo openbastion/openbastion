@@ -2829,3 +2829,27 @@ Le flux de l'incrément 67 était vert, mais ne couvrait qu'un refus sur ceux qu
 - Le test Compose utilise une clé locale pour le recorder, pas Transit. `up --wait` réussit alors qu'un recorder sans clé redémarre en boucle (constaté) : les sessions refusent, mais rien ne le signale à l'installation.
 - Le clavier sur un vrai TigerVNC n'a pas de témoin : aucun client X n'y affiche ce qui est tapé.
 - `deploy/base44` n'a toujours pas `rdp-vnc-proxy`.
+
+## 2026-11-06 — ADR-0071, incrément 69 : la prévisualisation Base44 ouvre un écran
+
+`deploy/base44` reçoit `vnc-target` (TigerVNC réel, VeNCrypt/X.509, `cat` dans un terminal), `rdp-vnc-proxy` et le compte `acc_demo_vnc`. `seaweedfs-config` revient à la seule capacité `CHOWN`, alignée sur `deploy/docker-compose` depuis l'incrément 68.
+
+**Défaut corrigé, rouge mesuré** : le seed se disait terminé dès que le compte existait et ignorait les statuts HTTP. Un épinglage faux restait en place, le seed annonçait un succès, et toute session finissait en `pin_mismatch`. « Terminé » veut désormais dire que le compte épingle le certificat de cette cible ; une étape refusée arrête le seed, 409 valant « déjà là ».
+
+**Prouvé** (commandes lancées dans cette session, `TestBase44Preview` sur la pile réelle) :
+
+- Installation neuve (`down -v`, puis `up -d --wait`) : tous les services sains, `acc_demo` et `acc_demo_vnc` listés à travers le port 3000, 2 sous-tests verts.
+- Avec `BASE44_PUBLIC_HOST_SUFFIX=sandbox.example.test` : 3 sous-tests verts. Sans la variable, `SCREEN_ALLOWED_ORIGINS` est vide.
+- Le clavier a un témoin : l'écran de TigerVNC change seulement si la touche arrive au terminal.
+- Aucune occurrence de `demo-vnc`, de son encodage base64 ni du mot de passe opérateur dans les journaux de la pile.
+- 4/4 contre-épreuves : seed sur un `PUT` refusé (`exit=1`), Vite sans `ws` (3 sous-tests rouges), origines élargies à `*example*` (2 rouges), cible sans terminal (clavier rouge). Retour au vert vérifié ensuite.
+- Le test se saute sans `BASE44_PREVIEW_URL`.
+
+**Limites** :
+
+- Parcours exercé par le protocole, pas dans un vrai navigateur : aucun navigateur ni Playwright ici. Le lecteur d'écran de l'Admin UI n'a pas été rejoué contre cette pile.
+- `TestBase44Preview` n'est pas en CI et ne démarre pas la pile. Le suffixe public est simulé par l'en-tête `Origin`, pas par le vrai domaine du bac à sable.
+- La relecture de l'enregistrement n'est pas éprouvée sur cette pile ; elle l'est sur `deploy/docker-compose` (incrément 68).
+- Le proxy lit sa racine de confiance au démarrage : si les volumes de `vnc-target` sont recréés seuls, le seed répare l'épinglage, mais `rdp-vnc-proxy` doit être redémarré.
+- La cible a un mot de passe et une clé de développement, et son image n'est pas analysée par Trivy, comme les autres images Base44.
+- Le premier `build` a échoué une fois sur une coupure réseau vers `proxy.golang.org` (`connection reset`) ; la nouvelle tentative a réussi.
