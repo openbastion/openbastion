@@ -1345,14 +1345,16 @@ Validation de l’incrément 59 :
 
 ## ADR-0071 — incrément 60 : R2_MASKPENNOT pour les primitives vectorielles
 
-Les profils LineTo (index 8), Polyline (index 22), PolygonSC (index 20) et EllipseSC (index 25) acceptent R2_MASKPENNOT (0x05, fonction PDna) en plus des opérations déjà prises en charge. Le framebuffer applique D AND NOT P sur les trois composantes RGB : chaque canal de destination est masqué par le complément du canal correspondant de la plume/brosse. L'alpha interne reste opaque. La couleur filaire demeure obligatoire et validée. La whitelist commune garde les quatre parseurs et le renderer alignés ; les autres ROP2 non implémentés restent refusés.
+Les profils LineTo (index 8), Polyline (index 22), PolygonSC (index 20) et EllipseSC (index 25) acceptent R2_MASKPENNOT (0x05, fonction PDna) en plus des opérations déjà prises en charge. Le framebuffer applique P AND NOT D sur les trois composantes RGB : chaque canal de plume/brosse est masqué par le complément du canal correspondant de la destination. L'alpha interne reste opaque. La couleur filaire demeure obligatoire et validée. La whitelist commune garde les quatre parseurs et le renderer alignés ; les autres ROP2 non implémentés restent refusés.
 
 Les limites de coordonnées, champs, points/deltas, rasterisation, rollback PNG et gardes de négociation restent inchangés. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
 
-Référence normative : MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit R2_MASKPENNOT (0x05) comme PDna (destination AND NOT pen).
+Référence normative : MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit R2_MASKPENNOT (0x05) comme PDna (pen AND NOT destination).
 
-Validation de l’incrément 60 :
-- Tests de parsing et rendu PNG pixel-à-pixel pour les quatre primitives ; avec destination 0x12,0x34,0x56 et plume/brosse 0x21,0x43,0x65, la sortie RGB est 0x12,0x34,0x12 ; les pixels hors tracé restent inchangés : PASS.
+Correction rétrospective (incrément 64) : l’implémentation et l’attente de test initiales de `R2_MASKPENNOT` partageaient la même inversion d’opérandes ; les résultats et mutations de cette validation initiale ne démontraient donc pas la formule normative. Le renderer, les attentes pixel-à-pixel et la validation de cette opération ont été corrigés à l’incrément 64.
+
+Validation initiale de l’incrément 60 (historique, avant correction) :
+- Tests de parsing et rendu PNG pixel-à-pixel pour les quatre primitives ; avec destination 0x12,0x34,0x56 et plume/brosse 0x21,0x43,0x65, la sortie RGB est 0x21,0x43,0x21 (P AND NOT D) ; les pixels hors tracé restent inchangés : PASS.
 - Lecture TLS slow-path : LineTo/R2_MASKPENNOT accepté et ROP2 conservé dans l’ordre décodé : PASS.
 - Seeds du fuzzer FuzzParseRDPOrdersUpdate ajoutées pour les quatre ordres ; fuzzing ciblé : PASS, 51 168 exécutions en 5 s (4 workers).
 - PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint : PASS sur tous les modules Go, génération Buf, compilation, go vet, tests unitaires complets et buf lint.
@@ -1403,3 +1405,22 @@ Validation de l’incrément 63 :
 - `go test -v ./pkg/rdp/... -count=1` : 261 tests de premier niveau `--- PASS`.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (D OR NOT P remplacé par D AND NOT P ; retrait de `R2_MERGENOTPEN` de la whitelist commune), fichiers restaurés octet pour octet.
 - `gofmt` et `git diff --check` : PASS. Les index 8, 20, 22 et 25 restent non annoncés ; runtime et route RDP désactivés ; aucune interopérabilité Windows/RDS réelle revendiquée.
+
+
+## ADR-0071 — incrément 64 : R2_MASKNOTPEN et correction de R2_MASKPENNOT
+
+Les quatre primitives vectorielles `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et `EllipseSC` (index 25) acceptent `R2_MASKNOTPEN` (`0x03`, fonction `DPna`). Le framebuffer calcule `D AND NOT P` sur les trois canaux RGB et conserve un alpha opaque.
+
+Cet incrément corrige aussi une erreur normative introduite à l'incrément 60 : `R2_MASKPENNOT` (`0x05`, `PDna`) signifie `P AND NOT D`, et non `D AND NOT P`. Le renderer et les attentes pixel-à-pixel sont corrigés en conséquence ; `R2_MASKNOTPEN` (`0x03`) porte désormais l'opération `D AND NOT P`. Les deux codes restent distincts et explicitement nommés dans la whitelist partagée.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `0x03` comme `DPna` et `0x05` comme `PDna`.
+
+Avec destination `12 34 56` et plume/brosse `21 43 65`, `R2_MASKNOTPEN` rend `12 34 12` et `R2_MASKPENNOT` rend `21 43 21`. Les quatre primitives sont couvertes pixel-à-pixel ; le transport TLS slow-path vérifie l'acceptation de `R2_MASKNOTPEN` dans `LineTo` ; les seeds de fuzzing couvrent les quatre ordres pour le nouveau code. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Validation de l’incrément 64 :
+- `make build vet test proto-lint` : PASS sur tous les modules Go, `go vet`, tests unitaires et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- Fuzzing `FuzzParseRDPOrdersUpdate` : 60 630 exécutions en 5 s, 4 workers : PASS.
+- `go test -v ./pkg/rdp/... -count=1` : 261 tests de premier niveau `--- PASS`.
+- 3 mutations compilantes tuées sur 3 : inversion des opérandes de `R2_MASKPENNOT`, remplacement de AND par OR dans `R2_MASKNOTPEN`, retrait de `R2_MASKNOTPEN` de la whitelist.
+- `gofmt` et `git diff --check` : PASS. Aucun index de négociation n’est annoncé ; runtime et route RDP restent désactivés.

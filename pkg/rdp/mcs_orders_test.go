@@ -180,7 +180,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedPolyline(t *testing.T) {
 	valid := mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 2, []byte{0x00, 1, 1, 1, 1})
 	cases := map[string][]byte{
 		"wrong field mask":      func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[3+4] = 0x03; return out }(),
+		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[3+4] = 0x08; return out }(),
 		"nonzero brush cache":   func() []byte { out := append([]byte(nil), valid...); out[4+5] = 1; return out }(),
 		"zero entries":          mcsTestPolylineOrder(0x09, true, 1, 1, 0x0d, 0, [3]byte{1, 2, 3}, 0, nil),
 		"too many entries":      mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{1, 2, 3}, 35, mcsTestDeltaPoints(35, 1, 0)),
@@ -245,7 +245,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedLineTo(t *testing.T) {
 		"wrong field mask":         func() []byte { out := append([]byte(nil), valid...); out[2] = 0xfe; return out }(),
 		"opaque background mode":   func() []byte { out := append([]byte(nil), valid...); out[4] = 2; return out }(),
 		"nonzero background color": func() []byte { out := append([]byte(nil), valid...); out[4+10] = 1; return out }(),
-		"unsupported ROP2":         func() []byte { out := append([]byte(nil), valid...); out[4+13] = 0x03; return out }(),
+		"unsupported ROP2":         func() []byte { out := append([]byte(nil), valid...); out[4+13] = 0x08; return out }(),
 		"dashed pen":               func() []byte { out := append([]byte(nil), valid...); out[4+14] = 1; return out }(),
 		"wide pen":                 func() []byte { out := append([]byte(nil), valid...); out[4+15] = 2; return out }(),
 		"negative start":           mcsTestLineToOrder(0x09, true, -1, 1, 5, 3, 1, 2, 3),
@@ -1077,6 +1077,12 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2MergeNotPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2MergeNotPen, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2MergeNotPen, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	lineToMaskNotPen := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
+	lineToMaskNotPen[17] = rdpROP2MaskNotPen
+	f.Add(mcsTestOrdersUpdateData(1, lineToMaskNotPen, 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2MaskNotPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2MaskNotPen, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2MaskNotPen, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33), 0, 0)) // R2_COPYPEN baseline.
 	lineToBlack := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
 	lineToBlack[17] = rdpROP2Black
@@ -1147,6 +1153,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	mergeNotPenLine := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x21, 0x43, 0x65)
 	mergeNotPenLine[17] = rdpROP2MergeNotPen
 	twentieth := mcsTestOrdersUpdatePacket(shareID, 1, mergeNotPenLine)
+	maskNotPenLine := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x21, 0x43, 0x65)
+	maskNotPenLine[17] = rdpROP2MaskNotPen
+	twentyFirst := mcsTestOrdersUpdatePacket(shareID, 1, maskNotPenLine)
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -1216,6 +1225,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		}
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, twentieth)
+		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, twentyFirst)
 		}
 		serverResult <- acceptErr
 	}()
@@ -1328,6 +1340,10 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	mergeNotPenUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
 	if readErr != nil || len(mergeNotPenUpdate.Rectangles) != 1 || mergeNotPenUpdate.Rectangles[0].lineROP2 != rdpROP2MergeNotPen {
 		t.Fatalf("ReadBitmapUpdate LineTo R2_MERGENOTPEN = %+v, err=%v", mergeNotPenUpdate, readErr)
+	}
+	maskNotPenUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(maskNotPenUpdate.Rectangles) != 1 || maskNotPenUpdate.Rectangles[0].lineROP2 != rdpROP2MaskNotPen {
+		t.Fatalf("ReadBitmapUpdate LineTo R2_MASKNOTPEN = %+v, err=%v", maskNotPenUpdate, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
@@ -2076,7 +2092,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedPolygonSC(t *testing.T) {
 	valid := mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{1, 2, 3}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0})
 	cases := map[string][]byte{
 		"wrong field mask":      func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[7] = 0x03; return out }(),
+		"unsupported ROP2":      func() []byte { out := append([]byte(nil), valid...); out[7] = 0x08; return out }(),
 		"unsupported fill mode": func() []byte { out := append([]byte(nil), valid...); out[8] = 0x02; return out }(),
 		"zero entries":          mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{1, 2, 3}, 0, nil),
 		"one delta entry":       mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{1, 2, 3}, 1, []byte{0x00, 1, 0}),
@@ -2315,7 +2331,7 @@ func TestParseRDPOrdersUpdateRejectsMalformedEllipseSC(t *testing.T) {
 	valid := mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3})
 	cases := map[string][]byte{
 		"wrong field mask":           func() []byte { out := append([]byte(nil), valid...); out[2] = 0x3f; return out }(),
-		"unsupported ROP2":           func() []byte { out := append([]byte(nil), valid...); out[11] = 0x03; return out }(),
+		"unsupported ROP2":           func() []byte { out := append([]byte(nil), valid...); out[11] = 0x08; return out }(),
 		"unsupported fill mode":      func() []byte { out := append([]byte(nil), valid...); out[12] = 0x02; return out }(),
 		"negative left":              mcsTestEllipseSCOrder(0x09, true, -1, 1, 5, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
 		"reversed horizontal bounds": mcsTestEllipseSCOrder(0x09, true, 5, 1, 1, 5, 0x0d, 0x01, [3]byte{1, 2, 3}),
