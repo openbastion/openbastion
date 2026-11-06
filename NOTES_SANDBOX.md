@@ -2639,3 +2639,10 @@ Validation de l’incrément 58 :
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (R2_NOP rendu comme COPYPEN ; retrait de R2_NOP de la whitelist commune).
 - `gofmt` et `git diff --check` : PASS. Les autres ROP2 restent refusés ; aucun slot de négociation n’est activé.
 - Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.
+
+
+## ADR-0071, incrément 59 : R2_NOTCOPYPEN
+
+Ajout de `R2_NOTCOPYPEN` (`0x04`, fonction `Pn`) à la whitelist ROP2 partagée des quatre primitives vectorielles (`LineTo`, `Polyline`, `PolygonSC`, `EllipseSC`). Le framebuffer écrit `~P` sur les trois canaux RGB et conserve un alpha opaque ; le résultat est indépendant de la destination. Les tests vérifient les quatre profils, les pixels peints et non peints, les seeds de fuzzing ainsi que le passage TLS slow-path de LineTo. Les autres valeurs ROP2 restent refusées. Validation complète : `make build vet test proto-lint`, tests ciblés `-race`, fuzzing 72 403 exécutions en 5 s et 2/2 mutations compilantes tuées.
+
+Les indices de négociation 8, 20, 22 et 25 ne sont toujours pas annoncés ; aucun runtime ni route RDP n’est activé. Pas d’interopérabilité Windows/RDS réelle revendiquée.
