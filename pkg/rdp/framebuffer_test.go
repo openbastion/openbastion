@@ -673,7 +673,7 @@ func TestRDPFramebufferAppliesROP2AcrossPrimitives(t *testing.T) {
 		name  string
 		value byte
 		want  [3]byte
-	}{{"R2_BLACK", rdpROP2Black, [3]byte{0x00, 0x00, 0x00}}, {"R2_NOTCOPYPEN", rdpROP2NotCopyPen, [3]byte{0xde, 0xbc, 0x9a}}, {"R2_WHITE", rdpROP2White, [3]byte{0xff, 0xff, 0xff}}, {"R2_NOTXORPEN", rdpROP2NotXorPen, [3]byte{0xcc, 0x88, 0xcc}}, {"R2_NOP", rdpROP2Nop, [3]byte{0x12, 0x34, 0x56}}} {
+	}{{"R2_BLACK", rdpROP2Black, [3]byte{0x00, 0x00, 0x00}}, {"R2_NOTCOPYPEN", rdpROP2NotCopyPen, [3]byte{0xde, 0xbc, 0x9a}}, {"R2_MASKPENNOT", rdpROP2MaskPenNot, [3]byte{0x12, 0x34, 0x12}}, {"R2_WHITE", rdpROP2White, [3]byte{0xff, 0xff, 0xff}}, {"R2_NOTXORPEN", rdpROP2NotXorPen, [3]byte{0xcc, 0x88, 0xcc}}, {"R2_NOP", rdpROP2Nop, [3]byte{0x12, 0x34, 0x56}}} {
 		for _, primitive := range []string{"LineTo", "Polyline", "PolygonSC", "EllipseSC"} {
 			t.Run(primitive+"/"+rop.name, func(t *testing.T) {
 				var order []byte
