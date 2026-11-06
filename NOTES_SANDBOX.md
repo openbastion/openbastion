@@ -2906,3 +2906,7 @@ Le job `Images — Trivy` échouait sur `75bb7ff` et `b9aa958`, sans changement 
 **Prouvé** (dans cette session, Trivy 0.76.1 vérifié contre l'empreinte de la CI) : rouge reproduit sur l'image de `b9aa958`, un seul constat ; `make scan-images` vert, base PostgreSQL comprise ; `make build vet` sans erreur ; tests des trois services verts ; `go mod tidy` ne change aucun `go.mod`.
 
 **Non établi** : `go list -deps` montre qu'aucun des trois services ne lie `x/net/html`, donc le code vulnérable ne semble pas embarqué ; `govulncheck` n'a pas été lancé pour le confirmer. Que la base de Trivy ait intégré la CVE entre les deux CI est une déduction, le journal du job n'étant pas lisible ici.
+
+## 2026-11-06 — ADR-0071 reste en cours : validation Windows à réaliser
+
+À la demande du propriétaire, ADR-0071 reste marqué en cours, le temps qu'il mette en place une machine Windows. La décision reste `Accepté`, le vocabulaire des statuts étant fermé : « mise en œuvre en cours » est écrit à côté, dans l'ADR et dans l'index. Ce que la validation doit établir est en tête de l'ADR. Il faudra alors l'adresse, un compte de test jetable et le certificat de la cible, qui n'entrent jamais dans le dépôt.
