@@ -1,8 +1,20 @@
 # ADR-0071 — Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté
 
-**Statut** `Accepté` · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
+**Statut** `Accepté`, **mise en œuvre en cours** (validation contre une cible Windows réelle à réaliser) · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
 
 Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC n'est écrit tant que cet ADR n'est pas accepté.
+
+## Reste à valider : une cible Windows réelle — 6 novembre 2026
+
+VNC est livré. RDP est éprouvé contre FreeRDP 3.15 (incréments 70 et 71), jamais contre Windows : le critère de sortie de l'incrément 2 n'est pas tenu, et **RDP reste non exposé**. La machine Windows est en cours de mise en place par le propriétaire du projet. La validation devra établir :
+
+- la poignée de main complète, Bureau à distance et NLA activés, et les refus d'ADR-0071 §3 sur cette cible ;
+- si Windows demande `request-mic`, et comment il compte les séquences après : le passage à 1 n'est mesuré que sur FreeRDP ;
+- la fidélité des pixels à fort contraste et la lisibilité du texte, masquées par un bogue de l'encodeur de FreeRDP ; et l'arithmétique des deltas RDP6, modulo 256 ici, saturée chez FreeRDP ;
+- si des fragments Fast-Path ou une réactivation (`Deactivate All`) arrivent en pratique : ils ferment aujourd'hui la session ;
+- quelles mises à jour non graphiques Windows envoie, au regard de la liste fermée d'incrément 71.
+
+La section suivante date du 4 novembre et décrit l'état d'alors.
 
 ## État actuel de la pile RDP — 4 novembre 2026
 
