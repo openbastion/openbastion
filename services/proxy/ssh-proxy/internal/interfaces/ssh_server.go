@@ -225,7 +225,6 @@ func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), <-c
 			started := false
 			once.Do(func() {
 				start <- s
-				close(shellRequested)
 				started = true
 			})
 			return started
@@ -233,26 +232,35 @@ func acceptSessionChannel(chans <-chan ssh.NewChannel) (ssh.Channel, func(), <-c
 		go func() {
 			for req := range requests {
 				ok := false
+				started := false
 				switch req.Type {
 				case "pty-req", "env", "window-change":
 					ok = true
 				case "shell":
-					ok = begin(sessionStart{mode: sshcodec.ModeShell})
+					started = begin(sessionStart{mode: sshcodec.ModeShell})
+					ok = started
 				case "subsystem":
 					var p struct{ Name string }
 					if ssh.Unmarshal(req.Payload, &p) == nil && p.Name == "sftp" {
-						ok = begin(sessionStart{mode: sshcodec.ModeSFTP})
+						started = begin(sessionStart{mode: sshcodec.ModeSFTP})
+						ok = started
 					}
 				case "exec":
 					var p struct{ Command string }
 					if ssh.Unmarshal(req.Payload, &p) == nil {
 						if c, accepted := sshcodec.ParseSCPCommand(p.Command); accepted {
-							ok = begin(sessionStart{mode: sshcodec.ModeSCP, scp: c})
+							started = begin(sessionStart{mode: sshcodec.ModeSCP, scp: c})
+							ok = started
 						}
 					}
 				}
 				if req.WantReply {
 					_ = req.Reply(ok, nil)
+				}
+				// Do not let session handling close the channel or write a refusal
+				// before the client has received the reply to its start request.
+				if started {
+					close(shellRequested)
 				}
 			}
 		}()
