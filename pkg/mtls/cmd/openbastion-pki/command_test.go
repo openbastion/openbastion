@@ -18,7 +18,7 @@ func execute(args ...string) (*bytes.Buffer, error) {
 	cmd := newRootCommand()
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs(normalizeLegacyFlags(args))
+	cmd.SetArgs(args)
 	return &out, cmd.Execute()
 }
 
@@ -32,9 +32,46 @@ func TestPKIVersionIsSideEffectFree(t *testing.T) {
 	}
 }
 
+func TestPKICommandsRejectSingleDashLongFlags(t *testing.T) {
+	tests := [][]string{
+		{"init", "-dir", t.TempDir()},
+		{"issue", "-service", "authentication"},
+		{"all", "-ttl", "24h"},
+	}
+	for _, args := range tests {
+		t.Run(strings.Join(args[:2], "_"), func(t *testing.T) {
+			if _, err := execute(args...); err == nil {
+				t.Fatalf("execute(%q) accepted a non-Cobra single-dash long flag", args)
+			}
+		})
+	}
+}
+
+func TestPKIInitAcceptsDirectoryValueStartingWithDash(t *testing.T) {
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := execute("init", "--dir", "-ttl"); err != nil {
+		t.Fatalf("init with a dash-prefixed directory value: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("-ttl", "ca.pem")); err != nil {
+		t.Fatalf("CA certificate in dash-prefixed directory: %v", err)
+	}
+}
+
 func TestPKIInitAndIssueCommandsPreserveFlagsAndSANs(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := execute("init", "-dir", dir, "-trust-domain", "test.openbastion.local", "-ttl", "8760h"); err != nil {
+	if _, err := execute("init", "--dir", dir, "--trust-domain", "test.openbastion.local", "--ttl", "8760h"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "ca.pem")); err != nil {
@@ -61,10 +98,10 @@ func TestPKIInitAndIssueCommandsPreserveFlagsAndSANs(t *testing.T) {
 
 func TestPKIAllCommandRemainsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := execute("all", "-dir", dir); err != nil {
+	if _, err := execute("all", "--dir", dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := execute("all", "-dir", dir); err != nil {
+	if _, err := execute("all", "--dir", dir); err != nil {
 		t.Fatal(err)
 	}
 	for _, service := range pki.StandardServices {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/command"
@@ -69,25 +68,4 @@ func newAllCommand() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "trust-domain", mtls.DefaultTrustDomain, "SPIFFE trust domain")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "certificate lifetime (default 168h)")
 	return cmd
-}
-
-// normalizeLegacyFlags preserves the historical single-dash long options while
-// Cobra/pflag uses the conventional double-dash form internally.
-func normalizeLegacyFlags(args []string) []string {
-	known := map[string]struct{}{"dir": {}, "trust-domain": {}, "ttl": {}, "service": {}, "dns": {}, "ip": {}}
-	out := make([]string, len(args))
-	for i, arg := range args {
-		if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") {
-			name := strings.TrimPrefix(arg, "-")
-			if equal := strings.IndexByte(name, '='); equal >= 0 {
-				name = name[:equal]
-			}
-			if _, ok := known[name]; ok {
-				out[i] = "-" + arg
-				continue
-			}
-		}
-		out[i] = arg
-	}
-	return out
 }

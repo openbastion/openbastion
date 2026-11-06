@@ -2,9 +2,9 @@
 // internal mTLS (ADR-0010) — for development and for tests. A production
 // deployment issues the same shape of certificate from its own infrastructure.
 //
-//	openbastion-pki init  -dir .pki [-trust-domain openbastion.local] [-ttl 8760h]
-//	openbastion-pki issue -dir .pki -service password-vault [-ttl 24h] [-dns a,b] [-ip 10.0.0.1]
-//	openbastion-pki all   -dir .pki [-ttl 168h]      (init if needed, then every standard service)
+//	openbastion-pki init  --dir .pki [--trust-domain openbastion.local] [--ttl 8760h]
+//	openbastion-pki issue --dir .pki --service password-vault [--ttl 24h] [--dns a,b] [--ip 10.0.0.1]
+//	openbastion-pki all   --dir .pki [--ttl 168h]      (init if needed, then every standard service)
 //
 // Run issue (or all) again to renew: running services pick up the new files
 // without a restart.
@@ -22,9 +22,7 @@ import (
 )
 
 func main() {
-	root := newRootCommand()
-	root.SetArgs(normalizeLegacyFlags(os.Args[1:]))
-	if err := root.Execute(); err != nil {
+	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "openbastion-pki:", err)
 		os.Exit(1)
 	}
@@ -43,7 +41,7 @@ func runInit(dir, domain string, ttl time.Duration) error {
 
 func runIssue(dir, domain, service string, ttl time.Duration, dns, ips string) error {
 	if service == "" {
-		return errors.New("issue needs -service")
+		return errors.New("issue needs --service")
 	}
 	ca, err := pki.LoadDir(dir, domain)
 	if err != nil {
