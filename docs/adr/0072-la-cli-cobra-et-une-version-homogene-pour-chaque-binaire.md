@@ -1,6 +1,6 @@
 # ADR-0072 — Les exécutables OpenBastion adoptent Cobra et exposent une version de build homogène
 
-**Statut** Proposé · 6 novembre 2026 · aucun changement de code ni aucune dépendance Cobra ne sont introduits avant acceptation explicite de cet ADR.
+**Statut** Accepté · 6 novembre 2026 · acceptation explicite du propriétaire du projet.
 
 ## Contexte
 
@@ -27,7 +27,7 @@ Cela représente **12 exécutables de production**. test/integration/cmd/demo-ss
 
 pkg/buildinfo expose aujourd'hui la version estampillée et un commit, mais pas une fiche de build uniforme. La CLI opérateur affiche seulement buildinfo.String() et les services inscrivent cette forme compacte dans leur journal. Il manque une commande standard, utilisable sans démarrer un serveur ni contacter un service, pour identifier précisément un binaire.
 
-## Décision proposée
+## Décision
 
 ### 1. Périmètre et bibliothèque de commandes
 

@@ -14,6 +14,7 @@ use (
 	./pkg/hostkey
 	./pkg/transit
 	./pkg/buildinfo
+	./pkg/command
 	./proto
 	./services/access/api-gateway
 	./services/access/authentication

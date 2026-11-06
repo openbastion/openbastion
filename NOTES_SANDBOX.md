@@ -2672,3 +2672,10 @@ Ajout de `R2_MERGENOTPEN` (`0x0C`, fonction `DPno`) à la whitelist ROP2 partag�
 ## ADR-0071, incrément 64 : R2_MASKNOTPEN et correction normative
 
 Ajout de `R2_MASKNOTPEN` (`0x03`, `DPna`) sur les quatre primitives vectorielles : `D AND NOT P`. Correction de l'incrément 60 : `R2_MASKPENNOT` (`0x05`, `PDna`) est `P AND NOT D`, et non `D AND NOT P`. Le framebuffer et les tests pixel-à-pixel sont alignés sur la table normative Microsoft ; avec D=`12 34 56` et P=`21 43 65`, les résultats sont respectivement `12 34 12` et `21 43 21`. TLS slow-path `LineTo` et seeds de fuzzing pour les quatre ordres couvrent le nouveau code. Slots de négociation non annoncés ; runtime et route RDP désactivés. Validation : `make build vet test proto-lint` PASS ; race ciblé PASS ; fuzzing 60 630 exécutions en 5 s ; 261 tests RDP de premier niveau PASS ; 3/3 mutations compilantes tuées ; `gofmt` et `git diff --check` PASS.
+
+
+## 2026-11-06 — ADR-0072 accepté, incrément 1 : socle buildinfo et commande version
+
+Le propriétaire a explicitement accepté ADR-0072, y compris Cobra pour les douze exécutables de production. Le statut de l'ADR est passé à `Accepté`. Le premier incrément ajoute à `pkg/buildinfo` une représentation structurée des quatre champs (version estampillée, version Go, révision VCS sur sept caractères hexadécimaux ou `unknown`, OS/architecture) et un formateur détaillé ; `buildinfo.String()` reste inchangé pour préserver les journaux existants. Nouveau module `pkg/command` : commande Cobra `version [--short]`, sortie injectée, validation `NoArgs`, erreurs d'écriture propagées, aucune lecture des métadonnées avant exécution. Le module est inscrit dans `go.work` et les cibles build/vet/test du Makefile.
+
+Tests unitaires et `-race` ciblés sur `pkg/buildinfo` et `pkg/command` : PASS. Le contrôle global `make build vet test proto-lint` a passé avant l'ajout de `pkg/command` aux listes du Makefile ; il est relancé avec le module inclus. Aucun binaire de production n'a encore migré ; CLI opérateur, PKI et services restent à traiter dans les incréments suivants.
