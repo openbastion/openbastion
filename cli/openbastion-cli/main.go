@@ -16,14 +16,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/mtls"
 )
 
@@ -31,41 +29,6 @@ func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "openbastion-cli:", err)
 		os.Exit(1)
-	}
-}
-
-const usage = `usage:
-  openbastion-cli user create -authn URL -username NAME -roles ROLE[,ROLE…] [-display NAME] < password
-  openbastion-cli audit verify-chain -audit URL
-  openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME)
-  openbastion-cli mfa reset -authn URL -username NAME
-  openbastion-cli mfa keys -authn URL -username NAME
-  openbastion-cli mfa revoke-key -authn URL -username NAME -key ID
-  openbastion-cli version`
-
-func run(args []string, stdin io.Reader, stdout io.Writer) error {
-	if len(args) == 1 && args[0] == "version" {
-		fmt.Fprintln(stdout, buildinfo.String()) // ADR-0063
-		return nil
-	}
-	if len(args) < 2 {
-		return errors.New(usage)
-	}
-	switch args[0] + " " + args[1] {
-	case "user create":
-		return userCreate(args[2:], stdin, stdout)
-	case "audit verify-chain":
-		return verifyChain(args[2:], stdout)
-	case "mfa enrollment-code":
-		return mfaEnrollmentCode(args[2:], stdout)
-	case "mfa reset":
-		return mfaReset(args[2:], stdout)
-	case "mfa keys":
-		return mfaKeys(args[2:], stdout)
-	case "mfa revoke-key":
-		return mfaRevokeKey(args[2:], stdout)
-	default:
-		return errors.New(usage)
 	}
 }
 
@@ -81,16 +44,8 @@ func client(url, service string) (*http.Client, error) {
 	return rt.Client(mtls.Peer{URL: url, Service: service})
 }
 
-func userCreate(args []string, stdin io.Reader, stdout io.Writer) error {
-	fs := flag.NewFlagSet("user create", flag.ContinueOnError)
-	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
-	username := fs.String("username", "", "the new user's name")
-	display := fs.String("display", "", "display name (defaults to the username)")
-	roles := fs.String("roles", "", "comma-separated roles")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *authn == "" || *username == "" || *roles == "" {
+func userCreate(authn, username, display, roles string, stdin io.Reader, stdout io.Writer) error {
+	if authn == "" || username == "" || roles == "" {
 		return errors.New("user create needs -authn, -username and -roles")
 	}
 	line, err := bufio.NewReader(stdin).ReadString('\n')
@@ -101,21 +56,21 @@ func userCreate(args []string, stdin io.Reader, stdout io.Writer) error {
 	if password == "" {
 		return errors.New("user create reads the password from standard input, and it is empty")
 	}
-	if *display == "" {
-		*display = *username
+	if display == "" {
+		display = username
 	}
 	var list []string
-	for _, r := range strings.Split(*roles, ",") {
+	for _, r := range strings.Split(roles, ",") {
 		if r = strings.TrimSpace(r); r != "" {
 			list = append(list, r)
 		}
 	}
-	c, err := client(*authn, mtls.Authentication)
+	c, err := client(authn, mtls.Authentication)
 	if err != nil {
 		return err
 	}
-	body, _ := json.Marshal(map[string]any{"username": *username, "displayName": *display, "password": password, "roles": list})
-	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/users", "application/json", bytes.NewReader(body))
+	body, _ := json.Marshal(map[string]any{"username": username, "displayName": display, "password": password, "roles": list})
+	resp, err := c.Post(strings.TrimRight(authn, "/")+"/auth/v1/users", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -128,24 +83,19 @@ func userCreate(args []string, stdin io.Reader, stdout io.Writer) error {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(raw, &created)
-	fmt.Fprintf(stdout, "user %s created (%s) with roles %s\n", *username, created.ID, strings.Join(list, ","))
+	fmt.Fprintf(stdout, "user %s created (%s) with roles %s\n", username, created.ID, strings.Join(list, ","))
 	return nil
 }
 
-func verifyChain(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("audit verify-chain", flag.ContinueOnError)
-	audit := fs.String("audit", "", "URL of the Audit Service, e.g. https://audit-service:8082")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *audit == "" {
+func verifyChain(audit string, stdout io.Writer) error {
+	if audit == "" {
 		return errors.New("audit verify-chain needs -audit")
 	}
-	c, err := client(*audit, mtls.AuditService)
+	c, err := client(audit, mtls.AuditService)
 	if err != nil {
 		return err
 	}
-	resp, err := c.Get(strings.TrimRight(*audit, "/") + "/audit/v1/verify-chain")
+	resp, err := c.Get(strings.TrimRight(audit, "/") + "/audit/v1/verify-chain")
 	if err != nil {
 		return err
 	}
@@ -161,27 +111,20 @@ func verifyChain(args []string, stdout io.Writer) error {
 // mfaEnrollmentCode issues a one-time code with which an account enrolls its second factor
 // (ADR-0062): for a local account by its name, for a directory account by its login name. The
 // code is shown once, here; give it to the user by another channel than the password.
-func mfaEnrollmentCode(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("mfa enrollment-code", flag.ContinueOnError)
-	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
-	local := fs.String("local", "", "the local account's name")
-	directory := fs.String("directory", "", "the directory login name (sAMAccountName or uid)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *authn == "" || (*local == "") == (*directory == "") {
+func mfaEnrollmentCode(authn, local, directory string, stdout io.Writer) error {
+	if authn == "" || (local == "") == (directory == "") {
 		return errors.New("mfa enrollment-code needs -authn and one of -local or -directory")
 	}
-	source, name := "local", *local
-	if *directory != "" {
-		source, name = "ldap", *directory
+	source, name := "local", local
+	if directory != "" {
+		source, name = "ldap", directory
 	}
-	c, err := client(*authn, mtls.Authentication)
+	c, err := client(authn, mtls.Authentication)
 	if err != nil {
 		return err
 	}
 	body, _ := json.Marshal(map[string]string{"source": source, "loginName": name})
-	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/enrollment-codes", "application/json", bytes.NewReader(body))
+	resp, err := c.Post(strings.TrimRight(authn, "/")+"/auth/v1/mfa/enrollment-codes", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -202,22 +145,16 @@ func mfaEnrollmentCode(args []string, stdout io.Writer) error {
 }
 
 // mfaReset forgets an account's second factor (a lost device); it enrolls again with a new code.
-func mfaReset(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("mfa reset", flag.ContinueOnError)
-	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
-	username := fs.String("username", "", "the account's name (ldap:<id> for a directory account)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *authn == "" || *username == "" {
+func mfaReset(authn, username string, stdout io.Writer) error {
+	if authn == "" || username == "" {
 		return errors.New("mfa reset needs -authn and -username")
 	}
-	c, err := client(*authn, mtls.Authentication)
+	c, err := client(authn, mtls.Authentication)
 	if err != nil {
 		return err
 	}
-	body, _ := json.Marshal(map[string]string{"username": *username})
-	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/reset", "application/json", bytes.NewReader(body))
+	body, _ := json.Marshal(map[string]string{"username": username})
+	resp, err := c.Post(strings.TrimRight(authn, "/")+"/auth/v1/mfa/reset", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -226,27 +163,21 @@ func mfaReset(args []string, stdout io.Writer) error {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("mfa reset: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
-	fmt.Fprintf(stdout, "the second factor of %s was reset: it enrolls again with a new enrollment code\n", *username)
+	fmt.Fprintf(stdout, "the second factor of %s was reset: it enrolls again with a new enrollment code\n", username)
 	return nil
 }
 
 // mfaKeys lists an account's security keys (ADR-0066): which one to revoke when one is lost.
-func mfaKeys(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("mfa keys", flag.ContinueOnError)
-	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
-	username := fs.String("username", "", "the account's name (ldap:<id> for a directory account)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *authn == "" || *username == "" {
+func mfaKeys(authn, username string, stdout io.Writer) error {
+	if authn == "" || username == "" {
 		return errors.New("mfa keys needs -authn and -username")
 	}
-	c, err := client(*authn, mtls.Authentication)
+	c, err := client(authn, mtls.Authentication)
 	if err != nil {
 		return err
 	}
-	body, _ := json.Marshal(map[string]string{"username": *username})
-	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/keys", "application/json", bytes.NewReader(body))
+	body, _ := json.Marshal(map[string]string{"username": username})
+	resp, err := c.Post(strings.TrimRight(authn, "/")+"/auth/v1/mfa/keys", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -264,7 +195,7 @@ func mfaKeys(args []string, stdout io.Writer) error {
 		return errors.New("mfa keys: the answer cannot be read")
 	}
 	if len(out.Keys) == 0 {
-		fmt.Fprintf(stdout, "%s has no security key\n", *username)
+		fmt.Fprintf(stdout, "%s has no security key\n", username)
 		return nil
 	}
 	for _, k := range out.Keys {
@@ -278,23 +209,16 @@ func mfaKeys(args []string, stdout io.Writer) error {
 }
 
 // mfaRevokeKey revokes one security key of an account (ADR-0066); the others stay.
-func mfaRevokeKey(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("mfa revoke-key", flag.ContinueOnError)
-	authn := fs.String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
-	username := fs.String("username", "", "the account's name (ldap:<id> for a directory account)")
-	key := fs.String("key", "", "the key's identifier, as mfa keys gives it")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *authn == "" || *username == "" || *key == "" {
+func mfaRevokeKey(authn, username, key string, stdout io.Writer) error {
+	if authn == "" || username == "" || key == "" {
 		return errors.New("mfa revoke-key needs -authn, -username and -key")
 	}
-	c, err := client(*authn, mtls.Authentication)
+	c, err := client(authn, mtls.Authentication)
 	if err != nil {
 		return err
 	}
-	body, _ := json.Marshal(map[string]string{"username": *username, "keyId": *key})
-	resp, err := c.Post(strings.TrimRight(*authn, "/")+"/auth/v1/mfa/revoke-key", "application/json", bytes.NewReader(body))
+	body, _ := json.Marshal(map[string]string{"username": username, "keyId": key})
+	resp, err := c.Post(strings.TrimRight(authn, "/")+"/auth/v1/mfa/revoke-key", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -303,6 +227,6 @@ func mfaRevokeKey(args []string, stdout io.Writer) error {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("mfa revoke-key: status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
-	fmt.Fprintf(stdout, "the key %s of %s was revoked; its other keys stay\n", *key, *username)
+	fmt.Fprintf(stdout, "the key %s of %s was revoked; its other keys stay\n", key, username)
 	return nil
 }

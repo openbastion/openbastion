@@ -48,3 +48,56 @@ func TestRun_WithoutMutualTLSItRefusesToCallAnything(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestRun_VersionSupportsDetailedAndShortOutput(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "short", args: []string{"version", "--short"}, want: "dev\n"},
+		{name: "short legacy single dash", args: []string{"version", "-short"}, want: "dev\n"},
+		{name: "detailed", args: []string{"version"}, want: "Version:           dev\nGo version:        "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := run(tc.args, strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.HasPrefix(out.String(), tc.want) {
+				t.Fatalf("output = %q, want prefix %q", out.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestRun_LegacySingleDashLongFlagsRemainSupported(t *testing.T) {
+	t.Setenv("INTERNAL_TLS", "disabled")
+	err := run([]string{"audit", "verify-chain", "-audit", "https://audit-service:8082"}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "INTERNAL_TLS must be required") {
+		t.Fatalf("legacy -audit flag was not parsed: %v", err)
+	}
+}
+
+func TestRun_RejectsPositionalArgumentsAndPasswordFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"audit", "verify-chain", "--audit", "https://audit-service:8082", "unexpected"},
+		{"user", "create", "--authn", "https://a:1", "--username", "alice", "--roles", "admin", "--password", "secret"},
+	} {
+		if err := run(args, strings.NewReader("password\n"), &bytes.Buffer{}); err == nil {
+			t.Fatalf("run(%v) unexpectedly succeeded", args)
+		}
+	}
+}
+
+func TestRun_HelpListsExistingCommands(t *testing.T) {
+	var out bytes.Buffer
+	if err := run([]string{"--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"user", "audit", "mfa", "version"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("help output does not contain %q: %s", want, out.String())
+		}
+	}
+}
