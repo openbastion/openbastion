@@ -1303,3 +1303,22 @@ Validation de l'incrément 57 :
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (complément XOR remplacé par XOR seul dans le renderer ; retrait de `R2_NOTXORPEN` de la whitelist commune).
 - `gofmt` et `git diff --check` : PASS. Les autres ROP2 restent refusés ; aucun champ ni slot de négociation supplémentaire n'est activé.
 - Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.
+
+
+## ADR-0071 — incrément 58 : R2_NOP pour les primitives vectorielles
+
+Les profils `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et `EllipseSC` (index 25) acceptent `R2_NOP` (`0x0b`, fonction `D`) en plus des opérations déjà prises en charge. `applyRDPROP2` laisse les trois composantes RGB de destination inchangées ; l’alpha interne reste opaque. La couleur filaire demeure obligatoire et validée, même si cette opération ne l’utilise pas. La whitelist commune conserve le refus de toute autre valeur ROP2 non implémentée.
+
+Le décodage des champs, les limites de coordonnées/points/deltas, la rasterisation, le rollback PNG et les gardes de négociation restent inchangés. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit `R2_NOP` (`0x0b`) comme `D` (la destination inchangée).
+
+Validation de l’incrément 58 :
+- Tests de parsing et rendu PNG pixel-à-pixel pour les quatre primitives ; les pixels peints conservent exactement leur RGB initial malgré une couleur de plume/brosse distincte : PASS.
+- Lecture TLS slow-path : `LineTo/R2_NOP` accepté et ROP2 conservé dans l’ordre décodé : PASS.
+- Seeds du fuzzer `FuzzParseRDPOrdersUpdate` ajoutées pour les quatre ordres ; fuzzing ciblé : PASS, 78 502 exécutions en 5 s (4 workers).
+- `PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : PASS sur tous les modules Go, génération Buf, compilation, `go vet`, tests unitaires complets et `buf lint`.
+- `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (R2_NOP rendu comme COPYPEN ; retrait de R2_NOP de la whitelist commune).
+- `gofmt` et `git diff --check` : PASS. Les autres ROP2 restent refusés ; aucun slot de négociation n’est activé.
+- Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.
