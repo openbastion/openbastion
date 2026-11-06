@@ -2708,3 +2708,9 @@ Validation mesurée : `make build vet test proto-lint` PASS ; `go test -race -co
 Les exécutables `api-gateway`, `authentication`, `authorization` et `session-broker` utilisent la racine Cobra commune. Leur fonction de démarrage historique reste intacte et est appelée uniquement sans sous-commande ; `version` et `version --short` terminent avant mTLS, stockage, OIDC, Transit ou écoute réseau. Les quatre modules déclarent `pkg/command` en dépendance locale, sans ajouter de dépendance externe propre à ces services.
 
 Validation : `make build vet` PASS ; tests ciblés des quatre modules PASS ; smoke tests `go run … version --short` PASS avec `INTERNAL_TLS=invalid` et `PORT=not-a-port`, démontrant que le chemin version n'initialise pas le service ; `git diff --check` PASS. Le démarrage réel sans argument reste couvert par les tests d'intégration/Compose existants ; aucun secret ni comportement mTLS n'est modifié.
+
+## 2026-11-06 — ADR-0072, incrément 5 : commandes Cobra des proxys
+
+Les exécutables `ssh-proxy` et `rdp-vnc-proxy` adoptent la racine Cobra commune. Le démarrage existant (tickets, mTLS, validation des cibles, enregistrement et cycle de vie des connexions) reste dans sa fonction dédiée et n'est appelé que par la racine sans sous-commande. `version` s'arrête avant toute initialisation du proxy.
+
+Validation : `make build vet` PASS ; tests ciblés des deux modules PASS ; smoke tests version courte PASS avec une configuration TLS/port volontairement invalide ; `git diff --check` PASS. Le protocole SSH/VNC et les invariants d'enregistrement ne changent pas.

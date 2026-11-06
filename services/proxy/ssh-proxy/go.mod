@@ -31,3 +31,8 @@ replace github.com/openbastion/openbastion/pkg/hostkey => ../../../pkg/hostkey
 require github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildinfo
+
+// Racine Cobra et commande version communes (ADR-0072).
+require github.com/openbastion/openbastion/pkg/command v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/command => ../../../pkg/command

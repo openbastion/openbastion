@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/engine"
@@ -28,7 +29,7 @@ func env(key, fallback string) string {
 	return fallback
 }
 
-func main() {
+func runService() {
 	log.Printf("rdp-vnc-proxy %s", buildinfo.String())
 	rt, err := mtls.Setup(mtls.RDPVNCProxy)
 	if err != nil {
@@ -104,4 +105,11 @@ func splitOrigins(value string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// main dispatches version before entering the proxy lifecycle.
+func main() {
+	if err := command.NewServiceCommand("rdp-vnc-proxy", runService).Execute(); err != nil {
+		log.Fatalf("rdp-vnc-proxy: %v", err)
+	}
 }
