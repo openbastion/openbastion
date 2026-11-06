@@ -2743,3 +2743,18 @@ Validation de cet incrément : `go test -race` ciblé sur le module PKI ; tests 
 ## 2026-11-06 — PKI : suppression de la compatibilité Legacy des options
 
 À la demande du propriétaire, `openbastion-pki` n'accepte désormais que les options longues Cobra/pflag à double tiret : `--dir`, `--trust-domain`, `--ttl`, `--service`, `--dns` et `--ip`. La normalisation Legacy a été supprimée du code de production et des helpers de tests ; les appels du Makefile, du job Compose et de la documentation ont été migrés. Les tests de commande vérifient le refus des anciennes formes à un tiret, y compris via le vrai processus `go run`, et conservent le cas où une valeur de `--dir` commence par `-` (`--dir -ttl`). Les commandes, valeurs par défaut, durées, SAN et certificats produits ne changent pas. Validation locale complète à consigner après exécution des gates.
+
+## 2026-11-06 — ADR-0071, incrément 65 : interopérabilité VNC réelle (TigerVNC 1.13.1)
+
+Première confrontation du client `pkg/vnc` à un vrai serveur : **il n'avait jamais pu ouvrir une session réelle**. Le serveur factice encodait les mêmes croyances que le client. Défauts mesurés contre TigerVNC (`TestRealTarget`, rouge avant) puis corrigés :
+
+- L'accusé VeNCrypt après le choix du sous-type vaut **1** pour « accepté », pas 0 : le client refusait tout serveur conforme. Le faux serveur et les deux tests qui l'utilisaient envoyaient 0, valeur fausse corrigée ; 0 est désormais prouvé comme un refus (aucun TLS, aucune authentification).
+- TigerVNC répond à chaque demande complète par `ExtendedDesktopSize` seul ; le client redemandait une mise à jour complète : **boucle sans fin, aucune image**. Seul un vrai changement de taille réinitialise la trame et redemande en entier ; la raison 2 (autre client) est acceptée, la raison 1 (réponse à une demande jamais émise) refusée.
+
+Défauts repérés à la lecture et corrigés avec le même test rouge/mutation : un `ServerCutText` de plus de 4 Kio (copie sur la cible) coupait la session, il est lu et jeté jusqu'à 16 Mio ; `RELEASE_ALL` déplaçait le pointeur en (0,0), il relâche sur place ; la table de touches d'ADR-0071 §6 n'existait pas (`validKeysym`), et 64 touches enfoncées au plus. `Config.FrameInterval` espace les demandes de mise à jour (la cible coalesce, rien n'est perdu) ; son branchement au service est à l'incrément suivant.
+
+**Prouvé** : `TestRealTarget` passe contre TigerVNC 1.13.1 réel en `X509Plain` (mot de passe de 22 octets vérifié par PAM) et en `X509Vnc` : image PNG, clavier, souris, molette, `RELEASE_ALL`, mauvais mot de passe `ErrAuthentication`, mauvais pin `ErrTLSVerification`. 14/14 mutations tuées. La cible est `test/integration/testdata/vnc/target.sh`, sans Docker.
+
+**Limites** : RealVNC non testé (il annonce RFB 5.0, refusé par ADR-0071 §5) ; l'Admin UI et la chaîne de bout en bout ne sont pas couvertes par cet incrément.
+
+**Environnement constaté** : le disque de swap de la VM WSL (`sdc`) a disparu ; les pages de tmpfs parties en swap sont illisibles (EIO sur `/run/docker.pid`, SIGBUS de containerd), Docker reste indisponible jusqu'à un `wsl --shutdown` côté Windows. Le `go` du snap expire (snapd en échec) : `/snap/go/current/bin/go` avec `GOROOT=/snap/go/current` fonctionne.

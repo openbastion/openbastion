@@ -139,7 +139,7 @@ func TestOpenRejectsWrongCertificatePinBeforeAuthentication(t *testing.T) {
 			serverResult <- err
 			return
 		}
-		if err := writeFull(conn, []byte{0}); err != nil {
+		if err := writeFull(conn, []byte{1}); err != nil {
 			serverResult <- err
 			return
 		}
@@ -294,7 +294,7 @@ func serveFakeVeNCrypt(t *testing.T, listener net.Listener, cert tls.Certificate
 	if binary.BigEndian.Uint32(subtype[:]) != vencryptX509Plain {
 		return errors.New("client did not prefer X509Plain")
 	}
-	if err = writeFull(conn, []byte{0}); err != nil {
+	if err = writeFull(conn, []byte{1}); err != nil { // accepted: TigerVNC and QEMU say yes with 1
 		return err
 	}
 	tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
@@ -492,5 +492,239 @@ func TestReadRectangleRejectsOutOfBoundsAndHandlesLastRect(t *testing.T) {
 	}()
 	if _, err := s.readRectangle(true); !errors.Is(err, errLastRect) {
 		t.Fatalf("LastRect error = %v", err)
+	}
+}
+
+// Refused by the server, the subtype must not start a TLS handshake nor, later, an
+// authentication: 0 is the server's no, whatever the status of the version said.
+func TestVeNCryptSubtypeRefusalIsNotMistakenForAcceptance(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	go func() {
+		_ = writeFull(server, []byte{0, 2})
+		var version [2]byte
+		_, _ = io.ReadFull(server, version[:])
+		_ = writeFull(server, []byte{0, 1, 0, 0, 1, 6})
+		var subtype [4]byte
+		_, _ = io.ReadFull(server, subtype[:])
+		_ = writeFull(server, []byte{0})
+	}()
+	if _, err := negotiateVeNCrypt(client); !errors.Is(err, ErrUnsupportedProtocol) {
+		t.Fatalf("refused subtype: %v", err)
+	}
+}
+
+func pipeSession(t *testing.T, width, height uint32) (*Session, net.Conn) {
+	t.Helper()
+	client, server := net.Pipe()
+	t.Cleanup(func() { client.Close(); server.Close() })
+	return &Session{conn: client, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{})}, server
+}
+
+func extendedDesktopSize(reason, w, h uint16) []byte {
+	var m bytes.Buffer
+	m.Write([]byte{0, 0, 0, 1})
+	var rect [12]byte
+	binary.BigEndian.PutUint16(rect[0:2], reason)
+	binary.BigEndian.PutUint16(rect[4:6], w)
+	binary.BigEndian.PutUint16(rect[6:8], h)
+	var encoding int32 = -308
+	binary.BigEndian.PutUint32(rect[8:12], uint32(encoding))
+	m.Write(rect[:])
+	m.Write([]byte{1, 0, 0, 0})
+	var screen [16]byte
+	binary.BigEndian.PutUint16(screen[8:10], w)
+	binary.BigEndian.PutUint16(screen[10:12], h)
+	m.Write(screen[:])
+	return m.Bytes()
+}
+
+// TigerVNC answers each full request with the size alone. Asking again in full would loop for
+// as long as the session lives, at the target's expense, without ever showing a pixel.
+func TestSameSizeAnnouncementAsksIncrementallyInsteadOfLooping(t *testing.T) {
+	s, server := pipeSession(t, 4, 3)
+	go func() { _ = writeFull(server, extendedDesktopSize(0, 4, 3)) }()
+	result := make(chan error, 1)
+	go func() { result <- s.readServerMessage() }()
+	var request [10]byte
+	_ = server.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.ReadFull(server, request[:]); err != nil {
+		t.Fatal(err)
+	}
+	if request[0] != 3 || request[1] != 1 {
+		t.Fatalf("after the same size: request %v, want an incremental one", request[:2])
+	}
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A size that does change discards the old picture and asks for the new one in full; another
+// client resizing the desktop (reason 2) is such a change, and the reason 1 this client never
+// asks for is refused.
+func TestRealResizeAsksForTheWholeNewDesktop(t *testing.T) {
+	s, server := pipeSession(t, 4, 3)
+	go func() { _ = writeFull(server, extendedDesktopSize(2, 8, 6)) }()
+	result := make(chan error, 1)
+	go func() { result <- s.readServerMessage() }()
+	var request [10]byte
+	_ = server.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.ReadFull(server, request[:]); err != nil {
+		t.Fatal(err)
+	}
+	if request[0] != 3 || request[1] != 0 || binary.BigEndian.Uint16(request[6:8]) != 8 || binary.BigEndian.Uint16(request[8:10]) != 6 {
+		t.Fatalf("after a resize: request %v, want a full one of 8x6", request)
+	}
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+	if s.width != 8 || s.height != 6 || s.framebuffer.Bounds().Dx() != 8 {
+		t.Fatalf("framebuffer stayed %dx%d", s.width, s.height)
+	}
+
+	s2, server2 := pipeSession(t, 4, 3)
+	go func() {
+		_ = writeFull(server2, extendedDesktopSize(1, 8, 6))
+		_, _ = io.Copy(io.Discard, server2)
+	}()
+	if err := s2.readServerMessage(); !errors.Is(err, ErrInvalidFramebuffer) {
+		t.Fatalf("an answer to a request never made: %v", err)
+	}
+}
+
+// A clipboard larger than a credential field is an ordinary event on a real desktop: it is read
+// and thrown away, without ending the session and without reaching anything.
+func TestLargeServerCutTextIsDiscardedAndAbsurdOneRefused(t *testing.T) {
+	cut := func(n uint32) []byte {
+		m := []byte{2, 0, 0, 0, 0, 0, 0, 0}
+		binary.BigEndian.PutUint32(m[4:], n)
+		return m
+	}
+	s, server := pipeSession(t, 1, 1)
+	const size = 256 << 10
+	go func() {
+		_ = writeFull(server, cut(size))
+		_ = writeFull(server, make([]byte, size))
+	}()
+	if err := s.readServerMessage(); err != nil {
+		t.Fatalf("256 KiB of clipboard ended the session: %v", err)
+	}
+
+	s2, server2 := pipeSession(t, 1, 1)
+	go func() {
+		_ = writeFull(server2, cut(maxServerCutText+1))
+		_, _ = io.Copy(io.Discard, server2)
+	}()
+	_ = s2.conn.SetDeadline(time.Now().Add(2 * time.Second))
+	if err := s2.readServerMessage(); !errors.Is(err, ErrUnsupportedProtocol) {
+		t.Fatalf("oversized clipboard: %v", err)
+	}
+}
+
+// Losing the focus lifts the buttons where the pointer is: moving it to a corner is an action
+// the operator did not take, on a privileged desktop.
+func TestReleaseAllKeepsThePointerWhereItIs(t *testing.T) {
+	s, server := pipeSession(t, 100, 100)
+	done := make(chan error, 1)
+	go func() {
+		if err := s.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 40, Y: 30, Buttons: 1}); err != nil {
+			done <- err
+			return
+		}
+		done <- s.Input(screenstream.InputEvent{Type: screenstream.InputReleaseAll})
+	}()
+	_ = server.SetDeadline(time.Now().Add(3 * time.Second))
+	var msgs [12]byte
+	if _, err := io.ReadFull(server, msgs[:]); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	release := msgs[6:]
+	if release[1] != 0 || binary.BigEndian.Uint16(release[2:4]) != 40 || binary.BigEndian.Uint16(release[4:6]) != 30 {
+		t.Fatalf("release = %v, want buttons up at 40,30", release)
+	}
+}
+
+// Input out of the table never reaches the target (ADR-0071 §6): the adapter refuses, and the
+// relay closes the session on that refusal.
+func TestKeysymOutOfTheTableAndKeyFloodNeverReachTheTarget(t *testing.T) {
+	s, server := pipeSession(t, 10, 10)
+	seen := make(chan int64, 1)
+	go func() {
+		n, _ := io.Copy(io.Discard, server)
+		seen <- n
+	}()
+	for _, k := range []uint32{0, 0x1b, 0x7f, 0x9f, 0x2100, 0xfdff, 0x10000, 0x01000000, 0x01110000, 0xffffffff} {
+		if err := s.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: k}); !errors.Is(err, screenstream.ErrOutOfBounds) {
+			t.Errorf("keysym %#x: %v, want a refusal", k, err)
+		}
+	}
+	s.conn.Close()
+	if n := <-seen; n != 0 {
+		t.Fatalf("%d bytes reached the target", n)
+	}
+
+	s2, server2 := pipeSession(t, 10, 10)
+	go func() { _, _ = io.Copy(io.Discard, server2) }()
+	for i := 0; i < maxPressedKeys; i++ {
+		if err := s2.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x100 + uint32(i)}); err != nil {
+			t.Fatalf("key %d: %v", i, err)
+		}
+	}
+	if err := s2.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61}); !errors.Is(err, screenstream.ErrOutOfBounds) {
+		t.Fatalf("one key too many: %v", err)
+	}
+	if err := s2.Input(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x100}); err != nil {
+		t.Fatalf("auto-repeat of a held key: %v", err)
+	}
+}
+
+// The interval paces what a busy desktop costs in PNG encoding and recorded bytes: no update is
+// asked for before it, and closing the session does not wait for it.
+func TestFrameIntervalDelaysTheNextRequestAndCloseInterruptsIt(t *testing.T) {
+	s, server := pipeSession(t, 1, 1)
+	s.frameInterval = 80 * time.Millisecond
+	rawUpdate := func() []byte {
+		var m bytes.Buffer
+		m.Write([]byte{0, 0, 0, 1})
+		var rect [12]byte
+		binary.BigEndian.PutUint16(rect[4:6], 1)
+		binary.BigEndian.PutUint16(rect[6:8], 1)
+		m.Write(rect[:])
+		m.Write([]byte{1, 2, 3, 0})
+		return m.Bytes()
+	}
+	go func() { _ = writeFull(server, rawUpdate()) }()
+	result := make(chan error, 1)
+	go func() { result <- s.readServerMessage() }()
+	<-s.frames
+	received := time.Now()
+	var request [10]byte
+	_ = server.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.ReadFull(server, request[:]); err != nil {
+		t.Fatal(err)
+	}
+	if waited := time.Since(received); waited < 60*time.Millisecond {
+		t.Fatalf("the next update was asked for after %v, before the interval", waited)
+	}
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+
+	s.frameInterval = time.Hour
+	go func() { _ = writeFull(server, rawUpdate()) }()
+	go func() { result <- s.readServerMessage() }()
+	<-s.frames
+	_ = s.Close()
+	select {
+	case err := <-result:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("closed during the wait: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not interrupt the wait")
 	}
 }

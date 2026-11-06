@@ -34,6 +34,11 @@ const (
 	maxAuthField               = 4096
 	maxFramebufferBytes        = 64 << 20
 	maxRectangles              = 4096
+	// A target's clipboard is read and thrown away (ADR-0071 §5), so this bound protects
+	// nothing but the read loop: an operator copying a page on the target must not end the session.
+	maxServerCutText = 16 << 20
+	// A session holds few keys down; more than this is not a keyboard.
+	maxPressedKeys = 64
 )
 
 var (
@@ -58,6 +63,10 @@ type Config struct {
 	TLSRoots       *x509.CertPool
 	TLSServerName  string
 	DialTimeout    time.Duration
+	// FrameInterval is the least time between two frames (SCREEN_FRAME_INTERVAL_MS, ADR-0071
+	// §8). The next update is asked for only then: the target coalesces what changed meanwhile,
+	// and nothing is dropped. Zero asks at once.
+	FrameInterval time.Duration
 }
 
 // Client opens one target session. A Client is intended for one session only.
@@ -91,7 +100,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	cfg.Password = nil
 	defer zero(password)
 
-	if cfg.DialTimeout < 0 {
+	if cfg.DialTimeout < 0 || cfg.FrameInterval < 0 {
 		return nil, ErrInvalidTarget
 	}
 	timeout := cfg.DialTimeout
@@ -151,7 +160,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
-	s := &Session{conn: tlsConn, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{})}
+	s := &Session{conn: tlsConn, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
 	if err := s.requestUpdate(false); err != nil {
 		return nil, err
 	}
@@ -176,9 +185,12 @@ type Session struct {
 	done            chan struct{}
 	err             error
 	pressed         map[uint32]struct{}
+	pointerX        uint16
+	pointerY        uint16
 	sequence        uint64
 	updatePixels    uint64
 	forceFullUpdate bool
+	frameInterval   time.Duration
 	stopCancel      func() bool
 }
 
@@ -207,10 +219,13 @@ func (s *Session) Input(e screenstream.InputEvent) error {
 	defer s.mu.Unlock()
 	switch e.Type {
 	case screenstream.InputKey:
-		if (e.Flags != screenstream.KeyPressed && e.Flags != screenstream.KeyReleased) || e.Keysym == 0 || e.X != 0 || e.Y != 0 || e.Buttons != 0 || e.Wheel != 0 {
+		if (e.Flags != screenstream.KeyPressed && e.Flags != screenstream.KeyReleased) || !validKeysym(e.Keysym) || e.X != 0 || e.Y != 0 || e.Buttons != 0 || e.Wheel != 0 {
 			return screenstream.ErrOutOfBounds
 		}
 		if e.Flags == screenstream.KeyPressed {
+			if _, held := s.pressed[e.Keysym]; !held && len(s.pressed) >= maxPressedKeys {
+				return screenstream.ErrOutOfBounds
+			}
 			s.pressed[e.Keysym] = struct{}{}
 		} else {
 			delete(s.pressed, e.Keysym)
@@ -220,6 +235,7 @@ func (s *Session) Input(e screenstream.InputEvent) error {
 		if uint32(e.X) >= s.width || uint32(e.Y) >= s.height || e.Buttons & ^screenstream.AllowedPointerButtons != 0 || e.Wheel < -1 || e.Wheel > 1 {
 			return screenstream.ErrOutOfBounds
 		}
+		s.pointerX, s.pointerY = e.X, e.Y
 		mask := e.Buttons
 		if e.Wheel > 0 {
 			mask |= 1 << 3
@@ -244,10 +260,27 @@ func (s *Session) Input(e screenstream.InputEvent) error {
 			}
 			delete(s.pressed, key)
 		}
-		return s.writePointer(0, 0, 0)
+		// Buttons up where the pointer already is: losing the focus must not move it.
+		return s.writePointer(0, s.pointerX, s.pointerY)
 	default:
 		return screenstream.ErrUnsupported
 	}
+}
+
+// validKeysym is the key table of ADR-0071 §6: printable Latin-1, the legacy X11 groups, ISO and
+// function keys, and Unicode keysyms. Anything else is not a key and closes the session.
+func validKeysym(k uint32) bool {
+	switch {
+	case k >= 0x20 && k <= 0x7e, k >= 0xa0 && k <= 0xff:
+		return true
+	case k >= 0x100 && k <= 0x20ff:
+		return true
+	case k >= 0xfe00 && k <= 0xffff:
+		return true
+	case k >= 0x01000100 && k <= 0x0110ffff:
+		return true
+	}
+	return false
 }
 
 func (s *Session) writeKey(key uint32, down bool) error {
@@ -337,6 +370,9 @@ func (s *Session) readServerMessage() error {
 			if err := s.emitFrame(); err != nil {
 				return err
 			}
+			if err := s.waitFrameInterval(); err != nil {
+				return err
+			}
 		}
 		if s.forceFullUpdate {
 			s.forceFullUpdate = false
@@ -351,7 +387,7 @@ func (s *Session) readServerMessage() error {
 			return err
 		}
 		n := binary.BigEndian.Uint32(hdr[3:])
-		if n > maxAuthField {
+		if n > maxServerCutText {
 			return ErrUnsupportedProtocol
 		}
 		return discardN(s.conn, uint64(n))
@@ -422,7 +458,9 @@ func (s *Session) readRectangle(allowLastRect bool) (bool, error) {
 		}
 		return s.resize(uint32(w), uint32(h))
 	case -308: // ExtendedDesktopSize, exactly one screen.
-		if x != 0 || y != 0 {
+		// x is why (0: the server, 2: another client; 1 answers a request this client never
+		// makes) and y the status, for which only success says anything about the size.
+		if (x != 0 && x != 2) || y != 0 {
 			return false, ErrInvalidFramebuffer
 		}
 		var prefix [4]byte
@@ -463,10 +501,15 @@ func (s *Session) resize(w, h uint32) (bool, error) {
 		return false, ErrInvalidFramebuffer
 	}
 	s.mu.Lock()
-	s.width, s.height = w, h
-	s.framebuffer = image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
+	unchanged := s.width == w && s.height == h
+	if !unchanged {
+		s.width, s.height = w, h
+		s.framebuffer = image.NewRGBA(image.Rect(0, 0, int(w), int(h)))
+	}
 	s.mu.Unlock()
-	s.forceFullUpdate = true
+	// A server may answer every full request with the size it already announced, and nothing
+	// else (TigerVNC does): asking again for a full update would then never get a pixel.
+	s.forceFullUpdate = s.forceFullUpdate || !unchanged
 	return false, nil
 }
 func (s *Session) emitFrame() error {
@@ -484,6 +527,20 @@ func (s *Session) emitFrame() error {
 	}
 	select {
 	case s.frames <- msg:
+		return nil
+	case <-s.done:
+		return net.ErrClosed
+	}
+}
+
+func (s *Session) waitFrameInterval() error {
+	if s.frameInterval <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(s.frameInterval)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
 		return nil
 	case <-s.done:
 		return net.ErrClosed
@@ -574,10 +631,12 @@ func negotiateVeNCrypt(conn net.Conn) (uint32, error) {
 	if err := writeFull(conn, out[:]); err != nil {
 		return 0, err
 	}
+	// Unlike the status of the version above, this one says yes with 1: the server accepted
+	// the subtype and TLS starts now. 0 is its refusal, never an invitation to continue.
 	if _, err := io.ReadFull(conn, status[:]); err != nil {
 		return 0, err
 	}
-	if status[0] != 0 {
+	if status[0] != 1 {
 		return 0, ErrUnsupportedProtocol
 	}
 	return chosen, nil

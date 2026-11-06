@@ -1424,3 +1424,7 @@ Validation de l’incrément 64 :
 - `go test -v ./pkg/rdp/... -count=1` : 261 tests de premier niveau `--- PASS`.
 - 3 mutations compilantes tuées sur 3 : inversion des opérandes de `R2_MASKPENNOT`, remplacement de AND par OR dans `R2_MASKNOTPEN`, retrait de `R2_MASKNOTPEN` de la whitelist.
 - `gofmt` et `git diff --check` : PASS. Aucun index de négociation n’est annoncé ; runtime et route RDP restent désactivés.
+
+## ADR-0071 — incrément 65 : interopérabilité VNC réelle
+
+Le client VNC est confronté à TigerVNC 1.13.1 réel (`TestRealTarget`, `test/integration/testdata/vnc/target.sh`), en `X509Plain` et `X509Vnc`. Deux défauts empêchaient toute session réelle et sont corrigés : l'accusé VeNCrypt du sous-type vaut 1 pour « accepté » ; une annonce de taille identique ne relance plus une demande complète, ce qui bouclait sans fin. S'y ajoutent `ServerCutText` jeté jusqu'à 16 Mio au lieu de couper la session, `RELEASE_ALL` qui relâche sur place, la table de touches de §6, et l'espacement `FrameInterval` de §8. Les preuves et les limites sont dans `NOTES_SANDBOX.md`.
