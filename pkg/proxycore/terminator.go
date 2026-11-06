@@ -56,6 +56,12 @@ func (t *Terminator) EmitHostKeyMismatch(ctx context.Context, sessionID string) 
 	return t.audit.EmitEvent(ctx, "session.host_key_mismatch", "session", sessionID, false)
 }
 
+// EmitTLSCertificateMismatch is EmitHostKeyMismatch for a graphical target (ADR-0071 §3): its TLS
+// certificate is not the one pinned for the account. Nothing of the secret was sent.
+func (t *Terminator) EmitTLSCertificateMismatch(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.tls_certificate_mismatch", "session", sessionID, false)
+}
+
 // EmitBreakGlass records that a session was admitted WITHOUT a recorder, by a
 // break-glass waiver (ADR-0009). It is emitted before the credential is fetched
 // and its failure refuses the session, so a waiver is never exercised unseen.

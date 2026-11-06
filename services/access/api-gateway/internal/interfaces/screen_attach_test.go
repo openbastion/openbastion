@@ -3,14 +3,17 @@ package interfaces
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/openbastion/openbastion/pkg/screenstream"
+	gatewayinfra "github.com/openbastion/openbastion/services/access/api-gateway/internal/infrastructure"
 )
 
 type unusedScreenDialer struct{}
@@ -170,5 +173,106 @@ func TestRelayScreenWebSocketsRelaysValidatedBinaryMessagesBothWays(t *testing.T
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("relay did not stop after connection close")
+	}
+}
+
+// The cookie is what attaches a session. A page of another site must not be able to spend it,
+// and a refused upgrade must leave it to its owner.
+func TestScreenAttach_RefusesAnotherOriginWithoutSpendingTheCookie(t *testing.T) {
+	dial := func(url, origin, cookie string) (*websocket.Conn, int, error) {
+		headers := http.Header{"Cookie": {"ob_screen_attach=" + cookie}}
+		if origin != "" {
+			headers.Set("Origin", origin)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		conn, resp, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: headers, Subprotocols: []string{"openbastion.screen.v1"}})
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		return conn, status, err
+	}
+	register := func(t *testing.T, g *GatewayServer) string {
+		t.Helper()
+		token, err := g.screenAttaches.Register(gatewayinfra.ScreenAttach{SessionID: "s1", UserID: "u1", Endpoint: "proxy:8090", Ticket: "ticket", ExpiresAt: time.Now().Add(time.Minute)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return token
+	}
+	serve := func(t *testing.T, g *GatewayServer) string {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { g.handleScreenAttach(w, r, "s1") }))
+		t.Cleanup(srv.Close)
+		return "ws" + strings.TrimPrefix(srv.URL, "http")
+	}
+
+	dialer := &countingScreenDialer{}
+	g := NewGatewayServer(nil, nil, nil, "", "", "", "", "").WithScreenAttach(dialer, false)
+	url := serve(t, g)
+	token := register(t, g)
+	if conn, status, err := dial(url, "https://evil.example", token); err == nil || status != http.StatusForbidden {
+		if conn != nil {
+			conn.Close(websocket.StatusNormalClosure, "")
+		}
+		t.Fatalf("another origin: status %d, err %v", status, err)
+	}
+	if dialer.calls() != 0 {
+		t.Fatal("the proxy was reached for another origin")
+	}
+	// The cookie survived: its owner still attaches.
+	conn, _, err := dial(url, strings.Replace(url, "ws://", "http://", 1), token)
+	if err != nil {
+		t.Fatalf("same origin refused: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	waitForDial(t, dialer, 1)
+
+	// Named, an origin passes; nothing else does.
+	dialer2 := &countingScreenDialer{}
+	g2 := NewGatewayServer(nil, nil, nil, "", "", "", "", "").WithScreenAttach(dialer2, false).WithScreenOrigins([]string{"*.preview.example"})
+	url2 := serve(t, g2)
+	token2 := register(t, g2)
+	if conn, status, err := dial(url2, "https://evil.example", token2); err == nil || status != http.StatusForbidden {
+		if conn != nil {
+			conn.Close(websocket.StatusNormalClosure, "")
+		}
+		t.Fatalf("an origin not named: status %d, err %v", status, err)
+	}
+	conn2, _, err := dial(url2, "https://3000-abc.preview.example", token2)
+	if err != nil {
+		t.Fatalf("a named origin refused: %v", err)
+	}
+	defer conn2.Close(websocket.StatusNormalClosure, "")
+	waitForDial(t, dialer2, 1)
+}
+
+type countingScreenDialer struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (d *countingScreenDialer) Dial(context.Context, string, string) (*websocket.Conn, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.n++
+	return nil, errors.New("no proxy in this test")
+}
+
+func (d *countingScreenDialer) calls() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.n
+}
+
+func waitForDial(t *testing.T, d *countingScreenDialer, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for d.calls() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("proxy dialled %d times, want %d", d.calls(), want)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

@@ -27,6 +27,152 @@ func (e *ScreenFailure) Error() string         { return "proxycore: screen failu
 func (e *ScreenFailure) Unwrap() error         { return e.Err }
 func (e *ScreenFailure) ScreenEndCode() string { return e.Code }
 
+// isTLSPinMismatch says the target did not present the certificate the Vault pinned for it: what
+// someone taking the target's place looks like. Nothing of the secret was sent (ADR-0071 §3).
+func isTLSPinMismatch(err error) bool {
+	var coded interface{ ScreenEndCode() string }
+	return errors.As(err, &coded) && coded.ScreenEndCode() == "pin_mismatch"
+}
+
+// ScreenInputLimits bounds what one session may send to its target (ADR-0071 §6): moves beyond
+// the budget are coalesced, anything else beyond it closes the session. Zero means the defaults.
+type ScreenInputLimits struct {
+	RatePerSecond int
+	Burst         int
+}
+
+const (
+	DefaultScreenInputRate  = 200
+	DefaultScreenInputBurst = 400
+	// DefaultScreenAckTimeout leaves room to persist a whole 4 MiB frame: past it, a recorder that
+	// says nothing is a recording that is lost, not a session that waits for its deadline.
+	DefaultScreenAckTimeout = 10 * time.Second
+)
+
+// screenInputBudget is a token bucket that belongs to one relay, so it takes no lock.
+type screenInputBudget struct {
+	rate, burst, tokens float64
+	last                time.Time
+	buttons             byte
+}
+
+func newScreenInputBudget(limits ScreenInputLimits, now time.Time) *screenInputBudget {
+	rate, burst := limits.RatePerSecond, limits.Burst
+	if rate <= 0 {
+		rate = DefaultScreenInputRate
+	}
+	if burst <= 0 {
+		burst = DefaultScreenInputBurst
+	}
+	return &screenInputBudget{rate: float64(rate), burst: float64(burst), tokens: float64(burst), last: now}
+}
+
+type screenInputVerdict int
+
+const (
+	screenInputForward screenInputVerdict = iota
+	screenInputCoalesce
+	screenInputRefuse
+)
+
+// admit spends one token. Out of tokens, a mere move is dropped, since the next one carries a later
+// position; a key or a button change is not a thing to lose or to guess, so it ends the session.
+func (b *screenInputBudget) admit(e screenstream.InputEvent, now time.Time) screenInputVerdict {
+	if elapsed := now.Sub(b.last).Seconds(); elapsed > 0 {
+		b.tokens = min(b.burst, b.tokens+elapsed*b.rate)
+		b.last = now
+	}
+	isMove := e.Type == screenstream.InputPointer && e.Buttons == b.buttons && e.Wheel == 0
+	if e.Type == screenstream.InputPointer {
+		b.buttons = e.Buttons
+	}
+	if b.tokens >= 1 {
+		b.tokens--
+		return screenInputForward
+	}
+	if isMove {
+		return screenInputCoalesce
+	}
+	return screenInputRefuse
+}
+
+// screenDisplay sends acknowledged frames to the operator without ever holding up the relay: a
+// stalled browser must not stop the recording nor the input (ADR-0071 §11). One frame is in
+// flight, one waits, and a newer one replaces the one that waits: frames are complete, so nothing
+// is lost but an intermediate picture, which the recorder has anyway.
+type screenDisplay struct {
+	sink    ScreenSink
+	ctx     context.Context
+	cancel  context.CancelFunc
+	mu      sync.Mutex
+	pending *screenstream.Message
+	sending bool
+	failed  chan error
+	idle    chan struct{}
+}
+
+func newScreenDisplay(ctx context.Context, sink ScreenSink) *screenDisplay {
+	ctx, cancel := context.WithCancel(ctx)
+	return &screenDisplay{sink: sink, ctx: ctx, cancel: cancel, failed: make(chan error, 1)}
+}
+
+func (d *screenDisplay) offer(frame screenstream.Message) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.sending {
+		d.pending = &frame
+		return
+	}
+	d.sending = true
+	d.idle = make(chan struct{})
+	go d.run(frame, d.idle)
+}
+
+func (d *screenDisplay) run(frame screenstream.Message, idle chan struct{}) {
+	defer close(idle)
+	for {
+		if err := d.sink.Send(d.ctx, frame); err != nil {
+			d.mu.Lock()
+			d.sending, d.pending = false, nil
+			d.mu.Unlock()
+			select {
+			case d.failed <- err:
+			default:
+			}
+			return
+		}
+		d.mu.Lock()
+		if d.pending == nil {
+			d.sending = false
+			d.mu.Unlock()
+			return
+		}
+		frame = *d.pending
+		d.pending = nil
+		d.mu.Unlock()
+	}
+}
+
+// close gives what is under way the time to reach the operator, then cuts it: END must follow the
+// last frame on the wire, and a stalled browser must not hold up the end of a session.
+func (d *screenDisplay) close(grace time.Duration) {
+	d.mu.Lock()
+	idle := d.idle
+	d.mu.Unlock()
+	if idle != nil {
+		timer := time.NewTimer(grace)
+		defer timer.Stop()
+		select {
+		case <-idle:
+		case <-timer.C:
+		}
+	}
+	d.cancel()
+	if idle != nil {
+		<-idle
+	}
+}
+
 // ScreenCodec opens the protocol engine using a one-use Vault credential.
 type ScreenCodec interface {
 	Open(context.Context, *Credential) (ScreenSession, error)
@@ -103,7 +249,7 @@ func (l *Listener) ServeScreen(ctx context.Context, meta SessionMetadata, codec 
 	// readiness proof, even if the caller reused metadata from another path.
 	meta.Admission = Admission{}
 	return l.serveWithRelay(ctx, meta, admit, func(relayCtx, cleanupCtx context.Context, cred *Credential) error {
-		return relayScreen(relayCtx, cleanupCtx, meta, cred, codec, recorder, sink)
+		return relayScreen(relayCtx, cleanupCtx, meta, cred, codec, recorder, sink, l.ScreenInput, l.ScreenAckTimeout)
 	})
 }
 
@@ -192,16 +338,21 @@ type screenInputResult struct {
 	err  error
 }
 
-func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink) (relayErr error) {
+func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration) (relayErr error) {
+	if ackTimeout <= 0 {
+		ackTimeout = DefaultScreenAckTimeout
+	}
 	session, err := codec.Open(ctx, cred)
 	if err != nil {
 		return err
 	}
 	lastAck := uint64(0)
+	display := newScreenDisplay(ctx, sink)
 	defer func() {
 		if closeErr := session.Close(); relayErr == nil && closeErr != nil {
 			relayErr = closeErr
 		}
+		display.close(500 * time.Millisecond)
 		// A terminal marker is attempted even after revocation, expiry or an
 		// ambiguous frame acknowledgement. It is bounded and independent of the
 		// relay context so cancellation cannot silently skip finalization.
@@ -240,6 +391,7 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 		}()
 	}
 	var frameWidth, frameHeight uint32
+	budget := newScreenInputBudget(limits, time.Now())
 	if frames == nil {
 		return errors.New("proxycore: screen engine returned no frame stream")
 	}
@@ -269,9 +421,17 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			if err != nil {
 				return fmt.Errorf("%w: invalid operator input", ErrScreenInputInvalid)
 			}
+			switch budget.admit(event, time.Now()) {
+			case screenInputCoalesce:
+				continue
+			case screenInputRefuse:
+				return fmt.Errorf("%w: input beyond the session's budget", ErrScreenInputInvalid)
+			}
 			if err := session.Input(event); err != nil {
 				return fmt.Errorf("%w: protocol engine rejected input", ErrScreenInputInvalid)
 			}
+		case err := <-display.failed:
+			return err
 		case frame, ok := <-frames:
 			if !ok {
 				if err := session.Err(); err != nil {
@@ -289,17 +449,16 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			// buggy adapter cannot mutate the exact frame we later display.
 			recordFrame := frame
 			recordFrame.PNG = append([]byte(nil), frame.PNG...)
-			ack, err := recorder.Record(ctx, meta.SessionID, recordFrame)
+			recordCtx, recordCancel := context.WithTimeout(ctx, ackTimeout)
+			ack, err := recorder.Record(recordCtx, meta.SessionID, recordFrame)
+			recordCancel()
 			if err != nil || ack != frame.Sequence {
 				return fmt.Errorf("%w: frame acknowledgement missing or ambiguous", ErrRecordingLost)
 			}
 			lastAck = ack
 			frameWidth, frameHeight = frame.Width, frame.Height
-			if err := sink.Send(ctx, frame); err != nil {
-				// The frame is durable even if the operator disconnected. Seal the
-				// recording on the caller context before returning the relay error.
-				return err
-			}
+			// The frame is durable from here on, whatever becomes of the operator.
+			display.offer(frame)
 			sequence++
 		}
 	}

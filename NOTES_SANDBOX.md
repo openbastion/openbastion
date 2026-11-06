@@ -2758,3 +2758,16 @@ Défauts repérés à la lecture et corrigés avec le même test rouge/mutation 
 **Limites** : RealVNC non testé (il annonce RFB 5.0, refusé par ADR-0071 §5) ; l'Admin UI et la chaîne de bout en bout ne sont pas couvertes par cet incrément.
 
 **Environnement constaté** : le disque de swap de la VM WSL (`sdc`) a disparu ; les pages de tmpfs parties en swap sont illisibles (EIO sur `/run/docker.pid`, SIGBUS de containerd), Docker reste indisponible jusqu'à un `wsl --shutdown` côté Windows. Le `go` du snap expire (snapd en échec) : `/snap/go/current/bin/go` avec `GOROOT=/snap/go/current` fonctionne.
+
+## 2026-11-06 — ADR-0071, incrément 66 : garanties du relais écran annoncées mais absentes
+
+L'ADR les promettait, le code ne les tenait pas. Mesuré par lecture du dépôt (aucune occurrence), puis implémenté avec test rouge et mutation :
+
+- `session.tls_certificate_mismatch` (§3) est écrit quand la cible ne présente pas le certificat épinglé, en plus de `session.terminate`.
+- Budget d'entrée (§6) : `SCREEN_INPUT_RATE_PER_SECOND=200`, `SCREEN_INPUT_BURST=400`. Au-delà, un simple déplacement est coalescé ; une touche, un bouton, une molette ou `RELEASE_ALL` ferme la session avec `input_invalid`.
+- Une seule image en attente d'affichage, remplacée par la plus récente (§11) : avant, un navigateur qui ne lisait plus bloquait l'enregistrement **et** l'entrée. `END` suit la dernière frame ; un navigateur figé ne retarde pas la fin de plus de 500 ms. Le navigateur doit donc accepter des trous de séquence, strictement croissante (§6 ne dit pas mieux).
+- Un recorder qui ne répond pas à une frame en 10 s (`Listener.ScreenAckTimeout`) vaut `session.recording_lost` (table des attaques de l'ADR) ; avant, la session attendait son échéance sans rien montrer ni enregistrer.
+- `SCREEN_FRAME_INTERVAL_MS=50` (borné à [16, 250]) et `VNC_CONNECT_TIMEOUT_SECONDS=10` (borné à [1, 120]) sont branchés ; valeur hors bornes fatale au démarrage.
+- `SCREEN_ALLOWED_ORIGINS` côté Gateway (§10) : vide, seule l'origine de la Gateway passe ; une autre origine reçoit 403 **sans consommer le cookie**. `*` et un élément vide sont fatals.
+
+**Prouvé** : `pkg/proxycore`, Gateway, proxys RDP/VNC et SSH verts sous `-race` ; tests SSH inchangés ; 14/14 mutations tuées.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -384,3 +385,256 @@ func TestServeScreen_NilFrameStreamStillSealsAndPurges(t *testing.T) {
 		t.Fatalf("sealed %v, want [0]", recorder.sealed)
 	}
 }
+
+// The audit says that someone took a target's place, and that the secret stayed: the operator's
+// END says pin_mismatch and nothing more (ADR-0071 §3).
+func TestServeScreen_PinMismatchIsOnTheRecordAndTheCredentialPurged(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	codec := &fakeScreenCodec{openErr: &ScreenFailure{Code: "pin_mismatch", Err: errors.New("the leaf differs")}}
+	sink := &fakeScreenSink{}
+	if err := l.ServeScreen(context.Background(), screenMeta(), codec, &fakeFrameRecorder{}, &fakeScreenGate{}, sink); err == nil {
+		t.Fatal("a mismatch was hidden")
+	}
+	if !reflect.DeepEqual(audit.events, []string{"session.tls_certificate_mismatch", "session.terminate"}) {
+		t.Fatalf("audit events %v", audit.events)
+	}
+	if !codec.cred.Purged() {
+		t.Fatal("credential not purged")
+	}
+	if last := sink.messages[len(sink.messages)-1]; last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodePinMismatch {
+		t.Fatalf("END = %#v", last)
+	}
+
+	// Any other refusal says nothing of the kind.
+	l2, audit2 := screenListener(&fakeVault{material: []byte("ephemeral-secret")})
+	other := &fakeScreenCodec{openErr: &ScreenFailure{Code: "target_unreachable", Err: errors.New("no route")}}
+	_ = l2.ServeScreen(context.Background(), screenMeta(), other, &fakeFrameRecorder{}, &fakeScreenGate{}, &fakeScreenSink{})
+	if !reflect.DeepEqual(audit2.events, []string{"session.terminate"}) {
+		t.Fatalf("audit events %v", audit2.events)
+	}
+}
+
+func TestScreenInputBudget_CoalescesMovesAndRefusesTheRest(t *testing.T) {
+	start := time.Unix(1000, 0)
+	key := screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61}
+	move := screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 1}
+	press := screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 1, Buttons: 1}
+	wheel := screenstream.InputEvent{Type: screenstream.InputPointer, X: 1, Y: 1, Wheel: 1}
+
+	b := newScreenInputBudget(ScreenInputLimits{RatePerSecond: 10, Burst: 2}, start)
+	for i := 0; i < 2; i++ {
+		if got := b.admit(move, start); got != screenInputForward {
+			t.Fatalf("event %d within the burst: %v", i, got)
+		}
+	}
+	if got := b.admit(move, start); got != screenInputCoalesce {
+		t.Fatalf("a move beyond the burst: %v", got)
+	}
+	for name, e := range map[string]screenstream.InputEvent{"key": key, "press": press, "release-all": {Type: screenstream.InputReleaseAll}} {
+		fresh := newScreenInputBudget(ScreenInputLimits{RatePerSecond: 10, Burst: 1}, start)
+		fresh.admit(move, start)
+		if got := fresh.admit(e, start); got != screenInputRefuse {
+			t.Errorf("%s beyond the burst: %v", name, got)
+		}
+	}
+	fresh := newScreenInputBudget(ScreenInputLimits{RatePerSecond: 10, Burst: 1}, start)
+	fresh.admit(move, start)
+	if got := fresh.admit(wheel, start); got != screenInputRefuse {
+		t.Errorf("a wheel notch is not a move: %v", got)
+	}
+	// Tokens come back with time, up to the burst and no further.
+	if got := b.admit(key, start.Add(100*time.Millisecond)); got != screenInputForward {
+		t.Fatalf("after the refill: %v", got)
+	}
+	b.admit(move, start.Add(time.Hour))
+	if b.tokens > b.burst {
+		t.Fatalf("tokens %v above the burst", b.tokens)
+	}
+	if d := newScreenInputBudget(ScreenInputLimits{}, start); d.rate != DefaultScreenInputRate || d.burst != DefaultScreenInputBurst {
+		t.Fatalf("defaults %v/%v", d.rate, d.burst)
+	}
+}
+
+// Flooding keys closes the session with input_invalid, before more of them reach the target.
+func TestServeScreen_KeyFloodClosesTheSession(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	l.ScreenInput = ScreenInputLimits{RatePerSecond: 1, Burst: 3}
+	frames := make(chan screenstream.Message)
+	session := &fakeScreenSession{frames: frames}
+	encoded, err := screenstream.EncodeInput(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := &floodSink{event: encoded}
+	err = l.ServeScreen(context.Background(), screenMeta(), &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	if !errors.Is(err, ErrScreenInputInvalid) {
+		t.Fatalf("error = %v, want ErrScreenInputInvalid", err)
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if len(session.inputs) != 3 {
+		t.Fatalf("%d events reached the target, want the burst of 3", len(session.inputs))
+	}
+	if last := sink.messages[len(sink.messages)-1]; last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeInputInvalid {
+		t.Fatalf("END = %#v", last)
+	}
+}
+
+type floodSink struct {
+	fakeScreenSink
+	event []byte
+}
+
+func (s *floodSink) ReceiveInput(context.Context) ([]byte, error) { return s.event, nil }
+
+// A browser that stops reading holds up neither the recording nor the input. What it finally
+// shows is the latest acknowledged frame, and revocation does not wait for it.
+func TestServeScreen_StalledOperatorHoldsUpNeitherTheRecordingNorTheEnd(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	frames := make(chan screenstream.Message)
+	session := &fakeScreenSession{frames: frames}
+	recorder := &fakeFrameRecorder{}
+	sink := newStallingSink()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- l.ServeScreen(ctx, screenMeta(), &fakeScreenCodec{session: session}, recorder, &fakeScreenGate{}, sink)
+	}()
+	for seq := uint64(1); seq <= 5; seq++ {
+		select {
+		case frames <- validScreenFrame(seq):
+		case <-time.After(2 * time.Second):
+			t.Fatalf("frame %d was not taken: a stalled operator held up the recording", seq)
+		}
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		recorder.mu.Lock()
+		n := len(recorder.frames)
+		recorder.mu.Unlock()
+		if n == 5 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d frames recorded, want all 5", n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	// The operator comes back: frame 1 was under way, and only the latest of the others follows.
+	close(sink.release)
+	deadline = time.Now().Add(2 * time.Second)
+	for sink.frameCount() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("frames sent: %v", sink.frameSequences())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(frames)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	// Frame 1 was under way, 5 is the latest. In between, at most the frame the relay was
+	// recording when the operator came back.
+	if got := sink.frameSequences(); got[0] != 1 || got[len(got)-1] != 5 || len(got) > 3 {
+		t.Fatalf("frames shown %v, want 1, then the latest", got)
+	}
+	last := sink.sent[len(sink.sent)-1]
+	if last.Type != screenstream.TypeEnd || last.Sequence != 6 {
+		t.Fatalf("END = %#v, want the sequence after the last acknowledged frame", last)
+	}
+}
+
+// A recorder that says nothing is a lost recording, now, not a session that waits for its
+// deadline with nothing recorded and nothing shown.
+func TestServeScreen_RecorderSilenceIsARecordingLoss(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	l.ScreenAckTimeout = 30 * time.Millisecond
+	frames := make(chan screenstream.Message, 1)
+	frames <- validScreenFrame(1)
+	session := &fakeScreenSession{frames: frames}
+	sink := &fakeScreenSink{}
+	err := l.ServeScreen(context.Background(), screenMeta(), &fakeScreenCodec{session: session}, silentRecorder{}, &fakeScreenGate{}, sink)
+	if !errors.Is(err, ErrRecordingLost) {
+		t.Fatalf("error = %v, want ErrRecordingLost", err)
+	}
+	if !session.closed {
+		t.Fatal("target not closed")
+	}
+	if !slices.Contains(audit.events, "session.recording_lost") {
+		t.Fatalf("audit events %v", audit.events)
+	}
+	for _, m := range sink.messages {
+		if m.Type == screenstream.TypeFrame {
+			t.Fatal("a frame nobody acknowledged reached the operator")
+		}
+	}
+}
+
+type silentRecorder struct{}
+
+func (silentRecorder) Record(ctx context.Context, _ string, _ screenstream.Message) (uint64, error) {
+	<-ctx.Done()
+	return 0, ctx.Err()
+}
+func (silentRecorder) Seal(context.Context, string, uint64) error { return nil }
+
+func TestServeScreen_EndIsNotHeldUpByAFrameThatNeverLeaves(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, _ := screenListener(vault)
+	sink := newStallingSink()
+	session := newFakeScreenSession(validScreenFrame(1))
+	done := make(chan error, 1)
+	go func() {
+		done <- l.ServeScreen(context.Background(), screenMeta(), &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the end of the session waited for a stalled operator")
+	}
+	if !session.closed {
+		t.Fatal("target not closed")
+	}
+}
+
+type stallingSink struct {
+	mu      sync.Mutex
+	sent    []screenstream.Message
+	release chan struct{}
+}
+
+func newStallingSink() *stallingSink { return &stallingSink{release: make(chan struct{})} }
+
+// Send holds every frame until release, as a socket whose peer stopped reading does.
+func (s *stallingSink) Send(ctx context.Context, m screenstream.Message) error {
+	if m.Type == screenstream.TypeFrame {
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sent = append(s.sent, m)
+	return nil
+}
+
+func (s *stallingSink) frameSequences() []uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []uint64
+	for _, m := range s.sent {
+		if m.Type == screenstream.TypeFrame {
+			out = append(out, m.Sequence)
+		}
+	}
+	return out
+}
+
+func (s *stallingSink) frameCount() int { return len(s.frameSequences()) }

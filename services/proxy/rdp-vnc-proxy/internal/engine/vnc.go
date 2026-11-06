@@ -19,6 +19,8 @@ var ErrVNCConfiguration = errors.New("rdp-vnc-proxy: VNC target metadata is inco
 type VNCCodec struct {
 	TLSRoots    *x509.CertPool
 	DialTimeout time.Duration
+	// FrameInterval is SCREEN_FRAME_INTERVAL_MS: the least time between two frames of a session.
+	FrameInterval time.Duration
 }
 
 var _ proxycore.ScreenCodec = (*VNCCodec)(nil)
@@ -36,6 +38,7 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 		TLSRoots:       c.TLSRoots,
 		TLSServerName:  cred.TargetDomain,
 		DialTimeout:    c.DialTimeout,
+		FrameInterval:  c.FrameInterval,
 	}}
 	session, err := client.Open(ctx)
 	if err == nil {

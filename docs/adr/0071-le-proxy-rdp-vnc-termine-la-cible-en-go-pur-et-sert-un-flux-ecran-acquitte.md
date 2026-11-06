@@ -1428,3 +1428,7 @@ Validation de l’incrément 64 :
 ## ADR-0071 — incrément 65 : interopérabilité VNC réelle
 
 Le client VNC est confronté à TigerVNC 1.13.1 réel (`TestRealTarget`, `test/integration/testdata/vnc/target.sh`), en `X509Plain` et `X509Vnc`. Deux défauts empêchaient toute session réelle et sont corrigés : l'accusé VeNCrypt du sous-type vaut 1 pour « accepté » ; une annonce de taille identique ne relance plus une demande complète, ce qui bouclait sans fin. S'y ajoutent `ServerCutText` jeté jusqu'à 16 Mio au lieu de couper la session, `RELEASE_ALL` qui relâche sur place, la table de touches de §6, et l'espacement `FrameInterval` de §8. Les preuves et les limites sont dans `NOTES_SANDBOX.md`.
+
+## ADR-0071 — incrément 66 : garanties du relais écran
+
+`session.tls_certificate_mismatch` (§3), budget d'entrée (§6), image la plus récente pour un opérateur lent (§11), délai d'acquittement du recorder de 10 s, `SCREEN_FRAME_INTERVAL_MS` (§8) et `SCREEN_ALLOWED_ORIGINS` côté Gateway (§10) sont implémentés. La séquence des `FRAME` reçues par un opérateur est strictement croissante mais peut comporter des trous ; l'enregistrement, lui, ne perd rien.

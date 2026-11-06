@@ -64,6 +64,12 @@ type Listener struct {
 	// NewListener creates one; a Listener without it refuses every session
 	// (ErrNotRevocable): a connection nobody could cut is not started.
 	Live *LiveSessions
+
+	// ScreenInput bounds a graphical session's input, ScreenAckTimeout how long the Video
+	// Recorder has to acknowledge one frame before the recording counts as lost (ADR-0071).
+	// Zero means the defaults.
+	ScreenInput      ScreenInputLimits
+	ScreenAckTimeout time.Duration
 }
 
 func NewListener(fetcher *CredentialFetcher, terminator *Terminator) *Listener {
@@ -204,6 +210,9 @@ func (l *Listener) serveWithRelay(ctx context.Context, meta SessionMetadata, adm
 	}
 	if errors.Is(relayErr, ErrHostKeyMismatch) {
 		_ = l.Terminator.EmitHostKeyMismatch(ctx, meta.SessionID)
+	}
+	if isTLSPinMismatch(relayErr) {
+		_ = l.Terminator.EmitTLSCertificateMismatch(ctx, meta.SessionID)
 	}
 	termErr := l.Terminator.Terminate(ctx, meta.SessionID, cred, relayErr == nil || expired || cut)
 	if relayErr != nil {

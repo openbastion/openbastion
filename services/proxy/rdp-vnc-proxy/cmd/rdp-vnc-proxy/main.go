@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -70,7 +71,15 @@ func runService() {
 	}
 	fetcher := proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy)
 	listener := proxycore.NewListener(fetcher, proxycore.NewTerminator(audit))
-	vncCodec := &engine.VNCCodec{TLSRoots: roots, DialTimeout: 10 * time.Second}
+	listener.ScreenInput = proxycore.ScreenInputLimits{
+		RatePerSecond: boundedIntEnv("SCREEN_INPUT_RATE_PER_SECOND", proxycore.DefaultScreenInputRate, 1, 10000),
+		Burst:         boundedIntEnv("SCREEN_INPUT_BURST", proxycore.DefaultScreenInputBurst, 1, 100000),
+	}
+	vncCodec := &engine.VNCCodec{
+		TLSRoots:      roots,
+		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
+		FrameInterval: time.Duration(boundedIntEnv("SCREEN_FRAME_INTERVAL_MS", 50, 16, 250)) * time.Millisecond,
+	}
 	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
 	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -89,6 +98,20 @@ func runService() {
 	if err := recorder.Close(); err != nil {
 		log.Printf("rdp-vnc-proxy: closing recorder: %v", err)
 	}
+}
+
+// boundedIntEnv reads a bounded integer: absent means the default, anything else out of bounds
+// stops the service rather than running with a value nobody chose (settings/security.yaml).
+func boundedIntEnv(name string, fallback, low, high int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < low || n > high {
+		log.Fatalf("rdp-vnc-proxy: %s must be between %d and %d, got %q", name, low, high, value)
+	}
+	return n
 }
 
 func splitOrigins(value string) []string {

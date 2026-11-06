@@ -72,6 +72,7 @@ type GatewayServer struct {
 		Dial(context.Context, string, string) (*websocket.Conn, error)
 	}
 	screenCookieSecure bool
+	screenOrigins      []string
 	// ldapInfo remembers, a short while, whether directory login is on (ADR-0061).
 	ldapInfo ldapInfoCache
 }
@@ -141,6 +142,14 @@ func (g *GatewayServer) WithHTTPClient(c *http.Client) *GatewayServer {
 // WithVideoRecorderClient installs the internal reader; a nil client keeps replay fail-closed.
 func (g *GatewayServer) WithVideoRecorderClient(client VideoRecorderClient) *GatewayServer {
 	g.videoRecorder = client
+	return g
+}
+
+// WithScreenOrigins names the other origins a screen WebSocket may come from
+// (SCREEN_ALLOWED_ORIGINS, ADR-0071 §10). Without any, only the Gateway's own origin may: the
+// cookie that attaches a session must not be usable from another site's page.
+func (g *GatewayServer) WithScreenOrigins(patterns []string) *GatewayServer {
+	g.screenOrigins = append([]string(nil), patterns...)
 	return g
 }
 
@@ -833,7 +842,7 @@ func (g *GatewayServer) handleScreenAttach(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "screen attach unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"openbastion.screen.v1"}})
+	client, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"openbastion.screen.v1"}, OriginPatterns: g.screenOrigins})
 	if err != nil {
 		return
 	}

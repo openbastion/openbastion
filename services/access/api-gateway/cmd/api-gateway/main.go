@@ -127,6 +127,7 @@ func runService() {
 	srv := interfaces.NewGatewayServer(authClient, requestLimiter, loginLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL).
 		WithHTTPClient(upstreams).
 		WithScreenAttach(&infrastructure.ScreenWebSocketDialer{Runtime: rt}, screenCookieSecure).
+		WithScreenOrigins(screenOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))).
 		WithSessionRequestLimiter(application.NewSessionRequestLimiter(sessionBurst, sessionRate)).
 		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
 		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(vaultActionBurst, vaultActionRate)).
@@ -177,4 +178,21 @@ func main() {
 	if err := command.NewServiceCommand("api-gateway", runService).Execute(); err != nil {
 		log.Fatalf("api-gateway: %v", err)
 	}
+}
+
+// screenOrigins reads SCREEN_ALLOWED_ORIGINS, host patterns separated by commas. Empty: the
+// Gateway's own origin only. An empty item is a typing mistake that must not widen anything.
+func screenOrigins(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	var patterns []string
+	for _, part := range strings.Split(value, ",") {
+		pattern := strings.TrimSpace(part)
+		if pattern == "" || pattern == "*" {
+			log.Fatalf("api-gateway: SCREEN_ALLOWED_ORIGINS must name origins, got %q", value)
+		}
+		patterns = append(patterns, pattern)
+	}
+	return patterns
 }
