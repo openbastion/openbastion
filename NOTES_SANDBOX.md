@@ -2720,3 +2720,9 @@ Validation : `make build vet` PASS ; tests ciblés des deux modules PASS ; smoke
 Les exécutables `audit-service`, `command-recorder` et `video-recorder` utilisent la racine Cobra commune. Le démarrage sans argument conserve ses initialisations d'audit, de stockage, de chiffrement, de Transit et de transport ; `version` ne les déclenche pas et ne lit aucun secret.
 
 Validation : `make build vet` PASS ; tests ciblés des trois modules PASS ; smoke tests version courte PASS avec mTLS, port et DSN invalides ; `git diff --check` PASS. Aucun chemin d'écriture/lecture d'enregistrement ni aucune politique fail-closed n'est modifié.
+
+## 2026-11-06 — ADR-0072, incrément 7 : commande Cobra du Password Vault
+
+Le binaire `password-vault` adopte la racine Cobra commune. Le chemin `version` termine avant mTLS, connexion PostgreSQL, configuration KMS/Transit, rotation ou lancement des tâches de ré-enveloppement ; le démarrage sans argument conserve le cycle de vie existant.
+
+Validation : `make build vet` PASS ; tests du module Vault PASS ; smoke test version courte PASS avec mTLS, port, DSN et clé KMS invalides ; `git diff --check` PASS. Aucun secret n'est lu ou exposé par la commande de version.

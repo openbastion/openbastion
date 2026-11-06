@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
@@ -28,7 +29,7 @@ func mustEnv(key, def string) string {
 	return def
 }
 
-func main() {
+func runService() {
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("password-vault %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
@@ -256,5 +257,12 @@ func rewrapEvery(svc *application.VaultService, every time.Duration, previous []
 			}
 		}
 		time.Sleep(every)
+	}
+}
+
+// main dispatches version before entering the Vault lifecycle.
+func main() {
+	if err := command.NewServiceCommand("password-vault", runService).Execute(); err != nil {
+		log.Fatalf("password-vault: %v", err)
 	}
 }
