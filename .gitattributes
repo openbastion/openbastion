@@ -1,0 +1,20 @@
+# Impose LF pour tous les fichiers texte du dépôt, quelle que soit la
+# plateforme du contributeur (Windows, macOS, Linux). Les binaires sont
+# marqués explicitement pour éviter toute conversion.
+* text=auto eol=lf
+
+# Binaires : pas de conversion de fin de ligne.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.tgz binary
