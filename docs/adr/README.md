@@ -82,3 +82,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté |
 | [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté |
 | [ADR-0072](0072-la-cli-cobra-et-une-version-homogene-pour-chaque-binaire.md) | Les exécutables OpenBastion adoptent Cobra et exposent une version de build homogène | Accepté |
+| [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Proposé |
