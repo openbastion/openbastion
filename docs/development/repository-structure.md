@@ -79,8 +79,16 @@ openbastion/
 │   └── errors/                   # types d'erreurs partagés, mapping gRPC/HTTP
 │
 ├── web/
-│   ├── admin-ui/                 # React / TypeScript / Vite
-│   └── user-portal/              # React / TypeScript / Vite
+│   ├── admin-ui/                 # React / TypeScript / Vite — interface opérateur
+│   ├── user-portal/              # React / TypeScript / Vite — interface self-service
+│   ├── openbastion-icons/        # package React/SVG des icônes OpenBastion
+│   ├── packages/
+│   │   ├── ui/                   # primitives UI génériques partagées
+│   │   ├── design-tokens/        # tokens et thèmes partagés
+│   │   ├── api-client/           # client de l'API publique Gateway
+│   │   ├── contracts/            # types issus des contrats API publics
+│   │   └── utilities/            # utilitaires frontend génériques
+│   └── package.json              # orchestration et scripts frontend
 │
 ├── desktop/
 │   └── tauri-client/             # client natif RDP/SSH
@@ -166,19 +174,80 @@ pkg/proxycore/
 
 ## 5. Frontend — `web/`
 
+Le frontend est organisé en deux applications indépendantes et en packages partagés. Cette structure est la référence normative des incréments frontend (ADR-0036 et ADR-0074). Les dossiers métier restent dans leur application ; les packages partagés ne contiennent pas de logique métier.
+
 ```
 web/
 ├── admin-ui/
 │   ├── src/
-│   │   ├── features/             # un dossier par domaine fonctionnel (comptes, secrets, audit, workflows…)
-│   │   ├── shared/                # composants, hooks, clients API partagés
-│   │   └── app/                   # routage, providers, layout racine
-│   ├── vite.config.ts
-│   ├── package.json
-│   └── README.md
-└── user-portal/
-    └── (même organisation, périmètre self-service uniquement)
+│   └── ...
+│
+├── user-portal/
+│   └── src/
+│       ├── app/
+│       │   ├── router/
+│       │   ├── providers/
+│       │   └── layouts/
+│       │
+│       ├── features/
+│       │   ├── home/
+│       │   ├── resources/
+│       │   ├── access-requests/
+│       │   ├── sessions/
+│       │   ├── approvals/
+│       │   ├── activity/
+│       │   └── profile/
+│       │
+│       ├── components/
+│       │   ├── navigation/
+│       │   ├── resources/
+│       │   ├── sessions/
+│       │   └── feedback/
+│       │
+│       ├── services/
+│       ├── hooks/
+│       ├── stores/
+│       ├── types/
+│       └── test/
+│
+├── openbastion-icons/
+│   ├── src/
+│   └── ...
+│
+├── packages/
+│   ├── ui/
+│   ├── design-tokens/
+│   ├── api-client/
+│   ├── contracts/
+│   └── utilities/
+│
+└── package.json
 ```
+
+### Responsabilités
+
+| Chemin | Responsabilité |
+|---|---|
+| `admin-ui/` | Interface opérateur et administration ; aucun parcours self-service propre au portail |
+| `user-portal/` | Interface self-service : ressources, demandes, sessions, approbations conditionnelles, activité et profil |
+| `openbastion-icons/` | Source commune des icônes de marque et fonctionnelles |
+| `packages/ui/` | Primitives visuelles génériques, sans connaissance des domaines PAM |
+| `packages/design-tokens/` | Tokens sémantiques et thèmes clair/sombre |
+| `packages/api-client/` | Client HTTP de l'API publique Gateway uniquement |
+| `packages/contracts/` | Types frontend issus des contrats API publics ; OpenAPI reste la source de vérité |
+| `packages/utilities/` | Utilitaires frontend génériques et sans logique métier |
+| `web/package.json` | Scripts et orchestration du frontend ; gestion des workspaces/lockfiles à faire évoluer sans rompre `npm ci` |
+
+Règles de dépendance :
+
+1. `admin-ui` et `user-portal` sont indépendants ; aucune importation directe entre leurs fonctionnalités ou leurs composants métier.
+2. Les deux applications peuvent consommer `openbastion-icons` et les packages partagés via leurs interfaces publiques.
+3. Les packages partagés ne dépendent d'aucune application ; les cycles de dépendances sont interdits.
+4. Les composants réutilisés par plusieurs applications et réellement génériques vont dans `packages/ui/`. Un composant propre au portail reste dans `user-portal/src/components/` ou dans sa feature.
+5. `packages/api-client/` ne contacte que l'API publique Gateway. Le navigateur n'accède jamais directement aux microservices, bases, bus, Redis, OpenSearch ou MinIO.
+6. `packages/contracts/` est dérivé des contrats API publics versionnés ; il ne duplique pas les modèles internes ni les contrats gRPC privés.
+7. Les secrets privilégiés ne sont jamais transmis aux applications web. Un lancement de session utilise uniquement le ticket éphémère borné émis par le Session Broker.
+8. Chaque application conserve son build et ses tests. Le chemin de service Gateway du portail sera défini et vérifié avant son exposition ; aucune route `/portal/` n'est présumée existante par cette arborescence.
 
 ## 6. `deploy/` — portabilité on-prem / cloud
 
@@ -221,7 +290,7 @@ Une page n'existe que si son contenu décrit ce que fait le code ; ce qui est pr
 
 ## 9. CI/CD — aperçu
 
-- **GitHub Actions** (`.github/workflows/`) : un workflow réutilisable par type de job (lint, test unitaire, build image, scan sécurité), déclenché sélectivement selon les chemins modifiés (`paths:` filter) pour ne pas reconstruire les 35 services à chaque commit.
+- **GitHub Actions** (`.github/workflows/`) : un workflow réutilisable par type de job (lint, test unitaire, build image, scan sécurité), déclenché sélectivement selon les chemins modifiés (`paths:` filter) pour ne pas reconstruire les 35 services à chaque commit de service isolé.
 - **GitLab CI** (`.gitlab-ci.yml`) : miroir fonctionnel, maintenu pour compatibilité selon la plateforme d'hébergement finale du projet.
 - Les tests d'intégration/e2e/performance/sécurité (`test/`) tournent sur un sous-ensemble de la matrice CI, pas sur chaque commit de service isolé.
 
