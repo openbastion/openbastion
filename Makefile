@@ -282,7 +282,7 @@ scan-postgres-image:
 ## Relancer renouvelle les certificats (7 jours) et conserve l'autorité : les services
 ## en cours les reprennent sans redémarrage. $(PKI_DIR) est ignoré par git.
 pki:
-	$(GO) run ./pkg/mtls/cmd/openbastion-pki all -dir $(PKI_DIR)
+	$(GO) run ./pkg/mtls/cmd/openbastion-pki all --dir $(PKI_DIR)
 
 ## Lance chaque service en local (ports par défaut : voir chaque cmd/main.go).
 ## Sous mTLS (défaut), lancer d'abord `make pki`.

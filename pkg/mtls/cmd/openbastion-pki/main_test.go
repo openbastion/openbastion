@@ -18,7 +18,7 @@ func run(t *testing.T, args ...string) (string, error) {
 
 func TestCLI_AllIssuesAUsableIdentityPerService_AndIsRepeatable(t *testing.T) {
 	dir := t.TempDir()
-	if out, err := run(t, "all", "-dir", dir, "-trust-domain", "cli.test"); err != nil {
+	if out, err := run(t, "all", "--dir", dir, "--trust-domain", "cli.test"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	for _, svc := range pki.StandardServices {
@@ -32,7 +32,7 @@ func TestCLI_AllIssuesAUsableIdentityPerService_AndIsRepeatable(t *testing.T) {
 	}
 	caBefore, _ := os.ReadFile(pki.CAFile(dir))
 	// running it again renews the identities but keeps the authority
-	if out, err := run(t, "all", "-dir", dir, "-trust-domain", "cli.test"); err != nil {
+	if out, err := run(t, "all", "--dir", dir, "--trust-domain", "cli.test"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if caAfter, _ := os.ReadFile(pki.CAFile(dir)); string(caBefore) != string(caAfter) {
@@ -40,24 +40,30 @@ func TestCLI_AllIssuesAUsableIdentityPerService_AndIsRepeatable(t *testing.T) {
 	}
 }
 
+func TestCLI_RejectsLegacySingleDashLongFlags(t *testing.T) {
+	if out, err := run(t, "init", "-dir", t.TempDir()); err == nil {
+		t.Fatalf("legacy single-dash flag was accepted: %s", out)
+	}
+}
+
 func TestCLI_RefusesWhatItCannotDo(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := run(t, "issue", "-dir", dir, "-service", "ssh-proxy"); err == nil {
+	if _, err := run(t, "issue", "--dir", dir, "--service", "ssh-proxy"); err == nil {
 		t.Error("issued without an authority")
 	}
-	if out, err := run(t, "init", "-dir", dir); err != nil {
+	if out, err := run(t, "init", "--dir", dir); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if _, err := run(t, "init", "-dir", dir); err == nil {
+	if _, err := run(t, "init", "--dir", dir); err == nil {
 		t.Error("a second init succeeded")
 	}
-	if _, err := run(t, "issue", "-dir", dir); err == nil {
-		t.Error("issue without -service succeeded")
+	if _, err := run(t, "issue", "--dir", dir); err == nil {
+		t.Error("issue without --service succeeded")
 	}
-	if _, err := run(t, "issue", "-dir", dir, "-service", "Bad Name"); err == nil {
+	if _, err := run(t, "issue", "--dir", dir, "--service", "Bad Name"); err == nil {
 		t.Error("issued for an invalid name")
 	}
-	if _, err := run(t, "issue", "-dir", dir, "-service", "ssh-proxy", "-ip", "not-an-ip"); err == nil {
+	if _, err := run(t, "issue", "--dir", dir, "--service", "ssh-proxy", "--ip", "not-an-ip"); err == nil {
 		t.Error("accepted a bad IP")
 	}
 	if _, err := run(t, "bogus"); err == nil {

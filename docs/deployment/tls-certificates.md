@@ -17,8 +17,8 @@ Tous les appels entre services sont en TLS 1.3, avec certificat des deux côtés
 ```sh
 make pki                                   # autorité + une identité par service, dans .pki/
 # ou, sans make :
-openbastion-pki all -dir /etc/openbastion/pki -trust-domain bastion.example.com -ttl 168h
-openbastion-pki issue -dir … -service password-vault -dns vault.openbastion.svc -ip 10.0.0.12 -ttl 24h
+openbastion-pki all --dir /etc/openbastion/pki --trust-domain bastion.example.com --ttl 168h
+openbastion-pki issue --dir … --service password-vault --dns vault.openbastion.svc --ip 10.0.0.12 --ttl 24h
 ```
 
 Chaque service reçoit `<dir>/<service>/cert.pem` et `key.pem` (clé en 0600) et la même `<dir>/ca.pem`. La clé de l'autorité (`ca-key.pem`) **ne doit atteindre aucun service** : elle reste sur la machine qui émet. Les certificats durent 7 jours par défaut : relancer la commande les **renouvelle** sans redémarrage (voir ci-dessous) et conserve l'autorité.

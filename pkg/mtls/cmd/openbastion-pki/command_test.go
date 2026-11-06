@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -19,7 +18,7 @@ func execute(args ...string) (*bytes.Buffer, error) {
 	cmd := newRootCommand()
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs(normalizeLegacyFlags(args))
+	cmd.SetArgs(args)
 	return &out, cmd.Execute()
 }
 
@@ -33,52 +32,16 @@ func TestPKIVersionIsSideEffectFree(t *testing.T) {
 	}
 }
 
-func TestNormalizeLegacyFlagsPreservesValuesAndOptionBoundaries(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want []string
-	}{
-		{
-			name: "legacy flag value starts with dash",
-			args: []string{"init", "-dir", "-ttl"},
-			want: []string{"init", "--dir", "-ttl"},
-		},
-		{
-			name: "modern flag value starts with dash",
-			args: []string{"init", "--dir", "-ttl"},
-			want: []string{"init", "--dir", "-ttl"},
-		},
-		{
-			name: "legacy equals form",
-			args: []string{"init", "-dir=-ttl"},
-			want: []string{"init", "--dir=-ttl"},
-		},
-		{
-			name: "modern equals form",
-			args: []string{"init", "--dir=-ttl"},
-			want: []string{"init", "--dir=-ttl"},
-		},
-		{
-			name: "mixed legacy and modern flags",
-			args: []string{"issue", "-dir", "-tmp", "--service", "authentication", "-ttl", "24h", "-dns", "auth.example.test"},
-			want: []string{"issue", "--dir", "-tmp", "--service", "authentication", "--ttl", "24h", "--dns", "auth.example.test"},
-		},
-		{
-			name: "unknown option is preserved",
-			args: []string{"init", "-unknown", "-ttl", "1h"},
-			want: []string{"init", "-unknown", "--ttl", "1h"},
-		},
-		{
-			name: "end of options is preserved",
-			args: []string{"init", "--", "-dir"},
-			want: []string{"init", "--", "-dir"},
-		},
+func TestPKICommandsRejectSingleDashLongFlags(t *testing.T) {
+	tests := [][]string{
+		{"init", "-dir", t.TempDir()},
+		{"issue", "-service", "authentication"},
+		{"all", "-ttl", "24h"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeLegacyFlags(tt.args); !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("normalizeLegacyFlags(%q) = %q, want %q", tt.args, got, tt.want)
+	for _, args := range tests {
+		t.Run(strings.Join(args[:2], "_"), func(t *testing.T) {
+			if _, err := execute(args...); err == nil {
+				t.Fatalf("execute(%q) accepted a non-Cobra single-dash long flag", args)
 			}
 		})
 	}
@@ -98,7 +61,7 @@ func TestPKIInitAcceptsDirectoryValueStartingWithDash(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := execute("init", "-dir", "-ttl"); err != nil {
+	if _, err := execute("init", "--dir", "-ttl"); err != nil {
 		t.Fatalf("init with a dash-prefixed directory value: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join("-ttl", "ca.pem")); err != nil {
@@ -108,7 +71,7 @@ func TestPKIInitAcceptsDirectoryValueStartingWithDash(t *testing.T) {
 
 func TestPKIInitAndIssueCommandsPreserveFlagsAndSANs(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := execute("init", "-dir", dir, "-trust-domain", "test.openbastion.local", "-ttl", "8760h"); err != nil {
+	if _, err := execute("init", "--dir", dir, "--trust-domain", "test.openbastion.local", "--ttl", "8760h"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "ca.pem")); err != nil {
@@ -135,10 +98,10 @@ func TestPKIInitAndIssueCommandsPreserveFlagsAndSANs(t *testing.T) {
 
 func TestPKIAllCommandRemainsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := execute("all", "-dir", dir); err != nil {
+	if _, err := execute("all", "--dir", dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := execute("all", "-dir", dir); err != nil {
+	if _, err := execute("all", "--dir", dir); err != nil {
 		t.Fatal(err)
 	}
 	for _, service := range pki.StandardServices {

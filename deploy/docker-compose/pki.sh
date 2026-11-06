@@ -4,7 +4,7 @@
 # authority's certificate — never the authority's key, never another service's key. Run at every
 # `docker compose up`: the authority is kept, the services' certificates are renewed.
 set -eu
-openbastion-pki all -dir /ca -ttl "${OB_CERT_TTL:-720h}"
+openbastion-pki all --dir /ca --ttl "${OB_CERT_TTL:-720h}"
 for svc in api-gateway authentication authorization session-broker ssh-proxy rdp-vnc-proxy password-vault audit-service command-recorder video-recorder seaweedfs admin-cli; do
   mkdir -p "/pki/$svc"
   cp "/ca/$svc/cert.pem" "/ca/$svc/key.pem" "/ca/ca.pem" "/pki/$svc/"

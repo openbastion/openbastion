@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/command"
@@ -69,48 +68,4 @@ func newAllCommand() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "trust-domain", mtls.DefaultTrustDomain, "SPIFFE trust domain")
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "certificate lifetime (default 168h)")
 	return cmd
-}
-
-// normalizeLegacyFlags preserves historical single-dash long options while
-// leaving the value of each option untouched, even when it starts with a dash.
-func normalizeLegacyFlags(args []string) []string {
-	known := map[string]struct{}{"dir": {}, "trust-domain": {}, "ttl": {}, "service": {}, "dns": {}, "ip": {}}
-	out := make([]string, 0, len(args))
-	valueExpected := false
-	for i, arg := range args {
-		if valueExpected {
-			out = append(out, arg)
-			valueExpected = false
-			continue
-		}
-		if arg == "--" {
-			return append(out, args[i:]...)
-		}
-
-		name := arg
-		legacy := strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--")
-		if legacy {
-			name = strings.TrimPrefix(arg, "-")
-		} else if strings.HasPrefix(arg, "--") {
-			name = strings.TrimPrefix(arg, "--")
-		} else {
-			out = append(out, arg)
-			continue
-		}
-
-		hasValue := strings.Contains(name, "=")
-		if equal := strings.IndexByte(name, '='); equal >= 0 {
-			name = name[:equal]
-		}
-		if _, ok := known[name]; ok {
-			if legacy {
-				arg = "-" + arg
-			}
-			out = append(out, arg)
-			valueExpected = !hasValue
-			continue
-		}
-		out = append(out, arg)
-	}
-	return out
 }
