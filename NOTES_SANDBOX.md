@@ -2649,7 +2649,7 @@ Les indices de négociation 8, 20, 22 et 25 ne sont toujours pas annoncés ; auc
 
 ## ADR-0071, incrément 60 : R2_MASKPENNOT
 
-Ajout de R2_MASKPENNOT (0x05, fonction PDna) à la whitelist ROP2 partagée des quatre primitives vectorielles (LineTo, Polyline, PolygonSC, EllipseSC). Le framebuffer calcule D AND NOT P sur les trois canaux RGB et conserve un alpha opaque. Les tests vérifient les quatre profils, les pixels peints et non peints, les seeds de fuzzing ainsi que le passage TLS slow-path de LineTo. Les autres valeurs ROP2 restent refusées. Validation complète : make build vet test proto-lint, tests ciblés -race, fuzzing 51 168 exécutions en 5 s et 2/2 mutations compilantes tuées.
+Ajout de R2_MASKPENNOT (0x05, fonction PDna) à la whitelist ROP2 partagée des quatre primitives vectorielles (LineTo, Polyline, PolygonSC, EllipseSC). **Correction apportée à l’incrément 64 :** le framebuffer doit calculer P AND NOT D sur les trois canaux RGB (et non D AND NOT P, erreur de l’implémentation initiale) ; les attentes pixel-à-pixel sont corrigées, et R2_MASKNOTPEN (0x03, DPna) porte désormais D AND NOT P. Voir la section ADR-0071, incrément 64.
 
 Les indices de négociation 8, 20, 22 et 25 ne sont toujours pas annoncés ; aucun runtime ni route RDP n’est activé. Pas d’interopérabilité Windows/RDS réelle revendiquée.
 
@@ -2667,3 +2667,8 @@ Ajout de `R2_NOTMERGEPEN` (`0x02`, fonction `DPon`) à la whitelist ROP2 partag�
 ## ADR-0071, incrément 63 : R2_MERGENOTPEN
 
 Ajout de `R2_MERGENOTPEN` (`0x0C`, fonction `DPno`) à la whitelist ROP2 partagée des quatre primitives vectorielles. Le framebuffer calcule `D OR NOT P` sur les trois canaux RGB et garde un alpha opaque. Tests pixel-à-pixel et TLS slow-path : PASS. Validation : `make build vet test proto-lint` PASS ; race ciblé PASS ; fuzzing 61 978 exécutions en 5 s ; 261 tests RDP de premier niveau PASS ; 2/2 mutations compilantes tuées. Les slots de négociation restent non annoncés ; aucun runtime ni route RDP n’est activé ; aucune interopérabilité Windows/RDS réelle revendiquée.
+
+
+## ADR-0071, incrément 64 : R2_MASKNOTPEN et correction normative
+
+Ajout de `R2_MASKNOTPEN` (`0x03`, `DPna`) sur les quatre primitives vectorielles : `D AND NOT P`. Correction de l'incrément 60 : `R2_MASKPENNOT` (`0x05`, `PDna`) est `P AND NOT D`, et non `D AND NOT P`. Le framebuffer et les tests pixel-à-pixel sont alignés sur la table normative Microsoft ; avec D=`12 34 56` et P=`21 43 65`, les résultats sont respectivement `12 34 12` et `21 43 21`. TLS slow-path `LineTo` et seeds de fuzzing pour les quatre ordres couvrent le nouveau code. Slots de négociation non annoncés ; runtime et route RDP désactivés. Validation : `make build vet test proto-lint` PASS ; race ciblé PASS ; fuzzing 60 630 exécutions en 5 s ; 261 tests RDP de premier niveau PASS ; 3/3 mutations compilantes tuées ; `gofmt` et `git diff --check` PASS.

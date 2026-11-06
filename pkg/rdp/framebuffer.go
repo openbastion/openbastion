@@ -54,13 +54,17 @@ func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] |= ^pen[channel]
 		}
+	case rdpROP2MaskNotPen:
+		for channel := 0; channel < 3; channel++ {
+			destination[channel] &= ^pen[channel]
+		}
 	case rdpROP2NotCopyPen:
 		for channel := 0; channel < 3; channel++ {
 			destination[channel] = ^pen[channel]
 		}
 	case rdpROP2MaskPenNot:
 		for channel := 0; channel < 3; channel++ {
-			destination[channel] &= ^pen[channel]
+			destination[channel] = pen[channel] & ^destination[channel]
 		}
 	case rdpROP2MaskPen:
 		for channel := 0; channel < 3; channel++ {
