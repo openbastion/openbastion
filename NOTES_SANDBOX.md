@@ -2691,3 +2691,8 @@ Tests CLI ajoutés pour le rendu version détaillé/court, l'aide, la compatibil
 ## 2026-11-06 — correction CI : contrôle de version des images après ADR-0072
 
 Le job `Images — Trivy (HIGH, CRITICAL)` de la PR #62 ne révélait pas une vulnérabilité de l'image runtime : `make scan-images` échouait avant d'appeler Trivy sur cette image. Son contrôle de cohérence exécutait `openbastion-cli version` et comparait toute la sortie à `BUILD_VERSION`. Depuis ADR-0072, `version` produit volontairement le diagnostic détaillé multi-lignes ; le contrat scriptable est `version --short`. Le contrôle Docker utilise désormais cette forme courte. Le scan PostgreSQL avait déjà franchi son étape Trivy ; le scan runtime restait à exécuter après correction.
+
+
+## 2026-11-06 — correction du test d’intégration de version après ADR-0072
+
+Le job `integration on real processes, without a database` de la PR #62 échouait dans `TestVersion_AStampedBinarySaysItsVersion_TheCLIWhenAsked_AServiceFirst` : ce test historique attendait que `openbastion-cli version` ne renvoie que la chaîne de version. Depuis l’ADR-0072, cette commande expose les métadonnées détaillées du binaire ; `version --short` est l’interface stable destinée aux scripts. Le test vérifie maintenant explicitement les deux contrats : la sortie détaillée contient la version estampillée, et `version --short` renvoie exactement la version. Le binaire non estampillé est également vérifié via `version --short` (`dev`). Aucun scénario n’est supprimé ni ignoré. Validation de cette correction à compléter avant livraison.
