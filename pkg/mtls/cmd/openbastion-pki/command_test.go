@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,6 +30,79 @@ func TestPKIVersionIsSideEffectFree(t *testing.T) {
 	}
 	if got, want := out.String(), buildinfo.Version+"\n"; got != want {
 		t.Fatalf("version output = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeLegacyFlagsPreservesValuesAndOptionBoundaries(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "legacy flag value starts with dash",
+			args: []string{"init", "-dir", "-ttl"},
+			want: []string{"init", "--dir", "-ttl"},
+		},
+		{
+			name: "modern flag value starts with dash",
+			args: []string{"init", "--dir", "-ttl"},
+			want: []string{"init", "--dir", "-ttl"},
+		},
+		{
+			name: "legacy equals form",
+			args: []string{"init", "-dir=-ttl"},
+			want: []string{"init", "--dir=-ttl"},
+		},
+		{
+			name: "modern equals form",
+			args: []string{"init", "--dir=-ttl"},
+			want: []string{"init", "--dir=-ttl"},
+		},
+		{
+			name: "mixed legacy and modern flags",
+			args: []string{"issue", "-dir", "-tmp", "--service", "authentication", "-ttl", "24h", "-dns", "auth.example.test"},
+			want: []string{"issue", "--dir", "-tmp", "--service", "authentication", "--ttl", "24h", "--dns", "auth.example.test"},
+		},
+		{
+			name: "unknown option is preserved",
+			args: []string{"init", "-unknown", "-ttl", "1h"},
+			want: []string{"init", "-unknown", "--ttl", "1h"},
+		},
+		{
+			name: "end of options is preserved",
+			args: []string{"init", "--", "-dir"},
+			want: []string{"init", "--", "-dir"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeLegacyFlags(tt.args); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("normalizeLegacyFlags(%q) = %q, want %q", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPKIInitAcceptsDirectoryValueStartingWithDash(t *testing.T) {
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := execute("init", "-dir", "-ttl"); err != nil {
+		t.Fatalf("init with a dash-prefixed directory value: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join("-ttl", "ca.pem")); err != nil {
+		t.Fatalf("CA certificate in dash-prefixed directory: %v", err)
 	}
 }
 

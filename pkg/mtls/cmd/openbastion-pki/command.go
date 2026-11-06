@@ -71,23 +71,46 @@ func newAllCommand() *cobra.Command {
 	return cmd
 }
 
-// normalizeLegacyFlags preserves the historical single-dash long options while
-// Cobra/pflag uses the conventional double-dash form internally.
+// normalizeLegacyFlags preserves historical single-dash long options while
+// leaving the value of each option untouched, even when it starts with a dash.
 func normalizeLegacyFlags(args []string) []string {
 	known := map[string]struct{}{"dir": {}, "trust-domain": {}, "ttl": {}, "service": {}, "dns": {}, "ip": {}}
-	out := make([]string, len(args))
+	out := make([]string, 0, len(args))
+	valueExpected := false
 	for i, arg := range args {
-		if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") {
-			name := strings.TrimPrefix(arg, "-")
-			if equal := strings.IndexByte(name, '='); equal >= 0 {
-				name = name[:equal]
-			}
-			if _, ok := known[name]; ok {
-				out[i] = "-" + arg
-				continue
-			}
+		if valueExpected {
+			out = append(out, arg)
+			valueExpected = false
+			continue
 		}
-		out[i] = arg
+		if arg == "--" {
+			return append(out, args[i:]...)
+		}
+
+		name := arg
+		legacy := strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--")
+		if legacy {
+			name = strings.TrimPrefix(arg, "-")
+		} else if strings.HasPrefix(arg, "--") {
+			name = strings.TrimPrefix(arg, "--")
+		} else {
+			out = append(out, arg)
+			continue
+		}
+
+		hasValue := strings.Contains(name, "=")
+		if equal := strings.IndexByte(name, '='); equal >= 0 {
+			name = name[:equal]
+		}
+		if _, ok := known[name]; ok {
+			if legacy {
+				arg = "-" + arg
+			}
+			out = append(out, arg)
+			valueExpected = !hasValue
+			continue
+		}
+		out = append(out, arg)
 	}
 	return out
 }
