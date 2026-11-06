@@ -1342,3 +1342,21 @@ Validation de l’incrément 59 :
 - `gofmt` et `git diff --check` : PASS. Les autres ROP2 restent refusés ; aucun slot de négociation n’est activé.
 - Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.
 - Interopérabilité Windows/RDS réelle non revendiquée ; aucun slot de négociation n’est activé, runtime et route RDP désactivés.
+
+## ADR-0071 — incrément 60 : R2_MASKPENNOT pour les primitives vectorielles
+
+Les profils LineTo (index 8), Polyline (index 22), PolygonSC (index 20) et EllipseSC (index 25) acceptent R2_MASKPENNOT (0x05, fonction PDna) en plus des opérations déjà prises en charge. Le framebuffer applique D AND NOT P sur les trois composantes RGB : chaque canal de destination est masqué par le complément du canal correspondant de la plume/brosse. L'alpha interne reste opaque. La couleur filaire demeure obligatoire et validée. La whitelist commune garde les quatre parseurs et le renderer alignés ; les autres ROP2 non implémentés restent refusés.
+
+Les limites de coordonnées, champs, points/deltas, rasterisation, rollback PNG et gardes de négociation restent inchangés. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Référence normative : MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION (https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), qui définit R2_MASKPENNOT (0x05) comme PDna (destination AND NOT pen).
+
+Validation de l’incrément 60 :
+- Tests de parsing et rendu PNG pixel-à-pixel pour les quatre primitives ; avec destination 0x12,0x34,0x56 et plume/brosse 0x21,0x43,0x65, la sortie RGB est 0x12,0x34,0x12 ; les pixels hors tracé restent inchangés : PASS.
+- Lecture TLS slow-path : LineTo/R2_MASKPENNOT accepté et ROP2 conservé dans l’ordre décodé : PASS.
+- Seeds du fuzzer FuzzParseRDPOrdersUpdate ajoutées pour les quatre ordres ; fuzzing ciblé : PASS, 51 168 exécutions en 5 s (4 workers).
+- PATH=/tmp/openbastion-tools:$PATH GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint : PASS sur tous les modules Go, génération Buf, compilation, go vet, tests unitaires complets et buf lint.
+- go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1 : PASS.
+- Contre-épreuves : 2 mutations compilantes tuées sur 2 (D AND NOT P remplacé par D AND P ; retrait de R2_MASKPENNOT de la whitelist commune).
+- gofmt et git diff --check : PASS. Les autres ROP2 restent refusés ; aucun slot de négociation n’est activé.
+- Interopérabilité Windows/RDS réelle non revendiquée ; runtime et route RDP désactivés.
