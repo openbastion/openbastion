@@ -1031,12 +1031,16 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	lineToNop := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
 	lineToNop[17] = rdpROP2Nop
 	f.Add(mcsTestOrdersUpdateData(1, lineToNop, 0, 0))
+	lineToNotCopyPen := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
+	lineToNotCopyPen[17] = rdpROP2NotCopyPen
+	f.Add(mcsTestOrdersUpdateData(1, lineToNotCopyPen, 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 0, 0, 0x0d, 0, [3]byte{0x11, 0x22, 0x33}, 1, []byte{0x00, 1, 1}), 0, 0))
 	polylineNot := mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2Not, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1})
 	f.Add(mcsTestOrdersUpdateData(1, polylineNot, 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2XorPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2NotXorPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2Nop, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolylineOrder(0x09, true, 1, 1, rdpROP2NotCopyPen, 0, [3]byte{0x11, 0x22, 0x33}, 2, []byte{0x00, 2, 1, 2, 1}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, 0x0d, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, 0x06, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
@@ -1047,6 +1051,8 @@ func FuzzParseRDPOrdersUpdate(f *testing.F) {
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2NotXorPen, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2Nop, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2Nop, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestPolygonSCOrder(0x09, true, 1, 1, rdpROP2NotCopyPen, 0x01, [3]byte{0x11, 0x22, 0x33}, 3, []byte{0x00, 3, 0, 0, 3, 0x7d, 0}), 0, 0))
+	f.Add(mcsTestOrdersUpdateData(1, mcsTestEllipseSCOrder(0x09, true, 1, 1, 5, 5, rdpROP2NotCopyPen, 0x01, [3]byte{0x11, 0x22, 0x33}), 0, 0))
 	f.Add(mcsTestOrdersUpdateData(1, mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33), 0, 0)) // R2_COPYPEN baseline.
 	lineToBlack := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x11, 0x22, 0x33)
 	lineToBlack[17] = rdpROP2Black
@@ -1102,6 +1108,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	nopLine := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x21, 0x43, 0x65)
 	nopLine[17] = rdpROP2Nop
 	fifteenth := mcsTestOrdersUpdatePacket(shareID, 1, nopLine)
+	notCopyPenLine := mcsTestLineToOrder(0x09, true, 1, 1, 5, 3, 0x21, 0x43, 0x65)
+	notCopyPenLine[17] = rdpROP2NotCopyPen
+	sixteenth := mcsTestOrdersUpdatePacket(shareID, 1, notCopyPenLine)
 	serverResult := make(chan error, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -1156,6 +1165,9 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 		}
 		if acceptErr == nil {
 			acceptErr = writeFull(tlsConn, fifteenth)
+		}
+		if acceptErr == nil {
+			acceptErr = writeFull(tlsConn, sixteenth)
 		}
 		serverResult <- acceptErr
 	}()
@@ -1248,6 +1260,10 @@ func TestReadBitmapUpdateOverTLSRetainsPrimaryOrderType(t *testing.T) {
 	nopLineUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
 	if readErr != nil || len(nopLineUpdate.Rectangles) != 1 || nopLineUpdate.Rectangles[0].lineROP2 != rdpROP2Nop {
 		t.Fatalf("ReadBitmapUpdate LineTo R2_NOP = %+v, err=%v", nopLineUpdate, readErr)
+	}
+	notCopyPenUpdate, readErr := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if readErr != nil || len(notCopyPenUpdate.Rectangles) != 1 || notCopyPenUpdate.Rectangles[0].lineROP2 != rdpROP2NotCopyPen {
+		t.Fatalf("ReadBitmapUpdate LineTo R2_NOTCOPYPEN = %+v, err=%v", notCopyPenUpdate, readErr)
 	}
 	if serverErr := <-serverResult; serverErr != nil {
 		t.Fatal(serverErr)
