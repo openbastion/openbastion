@@ -2896,3 +2896,13 @@ Reprise d'ADR-0071 par ce qui manquait le plus : `pkg/rdp` n'avait jamais parlé
 **Bogue amont vérifié dans le code source** : `freerdp_bitmap_planar_delta_encode_plane`, FreeRDP 3.15, `BYTE s2c` et test `s2c >= 0` toujours vrai. D'où la bande grise sur les transitions fortes, et sans doute les glyphes pâteux. Notre décodeur n'est pas déformé ; il garde l'arithmétique modulo 256 où FreeRDP sature : **à trancher sur Windows**.
 
 **Limites** : aucune cible Windows, et rien ne prouve que les assouplissements y suffisent ; texte lisible non prouvé ; `Deactivate All` ferme la session (la cible de test a été alignée sur 1280×800 pour cela) ; pas de fragments Fast-Path ; aucun ordre graphique annoncé, donc les décodeurs d'ordres restent sans contact réel ; pointeur non dessiné ; enregistrement RDP non éprouvé ; pas de scancode côté Admin UI ; `make test-rdp-interop` hors CI. RDP reste non exposé.
+
+## 2026-11-06 — Porte Trivy : CVE-2026-78661 dans `golang.org/x/net`
+
+Le job `Images — Trivy` échouait sur `75bb7ff` et `b9aa958`, sans changement de `go.mod` depuis le dernier commit vert (`b487094`). La CVE (publiée le 27 octobre, HIGH) est un déni de service de `x/net/html`, signalé par module dans `api-gateway`, `rdp-vnc-proxy` et `video-recorder`, en v0.60.0.
+
+**Montée, pas d'exception** : `x/net` passe à v0.62.0 dans les quatre modules qui le déclarent (`proto`, `api-gateway`, `rdp-vnc-proxy`, `video-recorder`). `x/sys`, `x/text`, `x/crypto` et la directive `go 1.26.0` suivent parce que `x/net` 0.62 les exige. `.trivyignore.yaml` n'est pas touché. `go work sync` a été essayé et annulé : il réordonnait `go.work` et touchait d'autres modules.
+
+**Prouvé** (dans cette session, Trivy 0.76.1 vérifié contre l'empreinte de la CI) : rouge reproduit sur l'image de `b9aa958`, un seul constat ; `make scan-images` vert, base PostgreSQL comprise ; `make build vet` sans erreur ; tests des trois services verts ; `go mod tidy` ne change aucun `go.mod`.
+
+**Non établi** : `go list -deps` montre qu'aucun des trois services ne lie `x/net/html`, donc le code vulnérable ne semble pas embarqué ; `govulncheck` n'a pas été lancé pour le confirmer. Que la base de Trivy ait intégré la CVE entre les deux CI est une déduction, le journal du job n'étant pas lisible ici.

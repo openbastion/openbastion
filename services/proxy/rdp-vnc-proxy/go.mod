@@ -24,7 +24,7 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
 	github.com/openbastion/openbastion/pkg/tlspin v0.0.0 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
