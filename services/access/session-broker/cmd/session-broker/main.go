@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
@@ -44,7 +45,7 @@ func boundedIntEnv(name string, def, min, max int) int {
 	return n
 }
 
-func main() {
+func runService() {
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("session-broker %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
@@ -318,4 +319,11 @@ func hostOf(raw string) string {
 		return "?"
 	}
 	return u.Scheme + "://" + u.Host
+}
+
+// main dispatches the common version command before entering the service lifecycle.
+func main() {
+	if err := command.NewServiceCommand("session-broker", runService).Execute(); err != nil {
+		log.Fatalf("session-broker: %v", err)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
@@ -21,7 +22,7 @@ import (
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/interfaces"
 )
 
-func main() {
+func runService() {
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("audit-service %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
@@ -235,5 +236,12 @@ func configureAlerts(svc *application.AuditService, internalTLS bool, queue infr
 	}
 	if !internalTLS {
 		log.Printf("audit-service: internal TLS is disabled, so no emitter is named: an alert is pushed whoever writes it (dev only)")
+	}
+}
+
+// main dispatches version before entering the recorder lifecycle.
+func main() {
+	if err := command.NewServiceCommand("audit-service", runService).Execute(); err != nil {
+		log.Fatalf("audit-service: %v", err)
 	}
 }

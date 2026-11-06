@@ -4,6 +4,12 @@ go 1.22
 
 require github.com/lib/pq v1.12.3
 
+require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+)
+
 // Transport mTLS interne (ADR-0010). Un replace local explicite, comme pour
 // pkg/proxycore : il lève l'ambiguïté du mode workspace quand le module a aussi
 // des dépendances externes.
@@ -27,3 +33,8 @@ replace github.com/openbastion/openbastion/pkg/webhook => ../../../pkg/webhook
 require github.com/openbastion/openbastion/pkg/buildinfo v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildinfo
+
+// Racine Cobra et commande version communes (ADR-0072).
+require github.com/openbastion/openbastion/pkg/command v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/command => ../../../pkg/command

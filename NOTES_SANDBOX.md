@@ -2696,3 +2696,42 @@ Le job `Images — Trivy (HIGH, CRITICAL)` de la PR #62 ne révélait pas une vu
 ## 2026-11-06 — correction du test d’intégration de version après ADR-0072
 
 Le job `integration on real processes, without a database` de la PR #62 échouait dans `TestVersion_AStampedBinarySaysItsVersion_TheCLIWhenAsked_AServiceFirst` : ce test historique attendait que `openbastion-cli version` ne renvoie que la chaîne de version. Depuis l’ADR-0072, cette commande expose les métadonnées détaillées du binaire ; `version --short` est l’interface stable destinée aux scripts. Le test vérifie maintenant explicitement les deux contrats : la sortie détaillée contient la version estampillée, et `version --short` renvoie exactement la version. Le binaire non estampillé est également vérifié via `version --short` (`dev`). Aucun scénario n’est supprimé ni ignoré. Validation de cette correction à compléter avant livraison.
+
+## 2026-11-06 — ADR-0072, incrément 3 : commande racine commune des services
+
+`pkg/command.NewServiceCommand` fournit maintenant la racine Cobra des exécutables de service : sans argument, elle appelle le démarrage existant ; `version` réutilise la commande commune et s'exécute sans appeler ce démarrage ; les arguments positionnels inconnus sont refusés. Le helper n'initialise aucun service et n'accède à aucun secret. Tests dédiés : démarrage racine appelé une fois, `version --short` ne déclenche pas le callback et produit uniquement la version, arguments inattendus refusés.
+
+Validation mesurée : `make build vet test proto-lint` PASS ; `go test -race -count=1 ./pkg/command/...` PASS ; `git diff --check` PASS. Une exécution intermédiaire de la suite complète a rencontré un test concurrent flaky du Session Broker (`TestWebhook_AFailureIsALogLine_NeverTheURL_AndNeverAnEffect`, serveur de test ayant répondu 500 au lieu de refuser la connexion) ; le test isolé puis la suite complète relancée ont réussi sans modification du code concerné.
+
+## 2026-11-06 — ADR-0072, incrément 4 : commandes Cobra des services d'accès
+
+Les exécutables `api-gateway`, `authentication`, `authorization` et `session-broker` utilisent la racine Cobra commune. Leur fonction de démarrage historique reste intacte et est appelée uniquement sans sous-commande ; `version` et `version --short` terminent avant mTLS, stockage, OIDC, Transit ou écoute réseau. Les quatre modules déclarent `pkg/command` en dépendance locale, sans ajouter de dépendance externe propre à ces services.
+
+Validation : `make build vet` PASS ; tests ciblés des quatre modules PASS ; smoke tests `go run … version --short` PASS avec `INTERNAL_TLS=invalid` et `PORT=not-a-port`, démontrant que le chemin version n'initialise pas le service ; `git diff --check` PASS. Le démarrage réel sans argument reste couvert par les tests d'intégration/Compose existants ; aucun secret ni comportement mTLS n'est modifié.
+
+## 2026-11-06 — ADR-0072, incrément 5 : commandes Cobra des proxys
+
+Les exécutables `ssh-proxy` et `rdp-vnc-proxy` adoptent la racine Cobra commune. Le démarrage existant (tickets, mTLS, validation des cibles, enregistrement et cycle de vie des connexions) reste dans sa fonction dédiée et n'est appelé que par la racine sans sous-commande. `version` s'arrête avant toute initialisation du proxy.
+
+Validation : `make build vet` PASS ; tests ciblés des deux modules PASS ; smoke tests version courte PASS avec une configuration TLS/port volontairement invalide ; `git diff --check` PASS. Le protocole SSH/VNC et les invariants d'enregistrement ne changent pas.
+
+## 2026-11-06 — ADR-0072, incrément 6 : commandes Cobra des enregistreurs
+
+Les exécutables `audit-service`, `command-recorder` et `video-recorder` utilisent la racine Cobra commune. Le démarrage sans argument conserve ses initialisations d'audit, de stockage, de chiffrement, de Transit et de transport ; `version` ne les déclenche pas et ne lit aucun secret.
+
+Validation : `make build vet` PASS ; tests ciblés des trois modules PASS ; smoke tests version courte PASS avec mTLS, port et DSN invalides ; `git diff --check` PASS. Aucun chemin d'écriture/lecture d'enregistrement ni aucune politique fail-closed n'est modifié.
+
+## 2026-11-06 — ADR-0072, incrément 7 : commande Cobra du Password Vault
+
+Le binaire `password-vault` adopte la racine Cobra commune. Le chemin `version` termine avant mTLS, connexion PostgreSQL, configuration KMS/Transit, rotation ou lancement des tâches de ré-enveloppement ; le démarrage sans argument conserve le cycle de vie existant.
+
+Validation : `make build vet` PASS ; tests du module Vault PASS ; smoke test version courte PASS avec mTLS, port, DSN et clé KMS invalides ; `git diff --check` PASS. Aucun secret n'est lu ou exposé par la commande de version.
+
+
+## 2026-11-06 — ADR-0072, incrément 8 : PKI Cobra et contrat de fumée des douze binaires
+
+L'outil `openbastion-pki` migre `init`, `issue` et `all` vers Cobra et réutilise `pkg/command.NewVersionCommand()`. Les options historiques à tiret simple (`-dir`, `-trust-domain`, `-ttl`, `-service`, `-dns`, `-ip`) restent acceptées ; la forme à double tiret fonctionne également. Les durées par défaut, l'initialisation idempotente de `all`, les SAN DNS/IP et le format des certificats restent inchangés. Pour préserver l'invariant `pkg/mtls` stdlib-only, l'exécutable PKI est désormais un module Go imbriqué et indépendant (`pkg/mtls/cmd/openbastion-pki`) : Cobra n'entre pas dans le module de la bibliothèque mTLS.
+
+Un test d'intégration construit les douze exécutables depuis leurs vrais packages avec un même estampillage, puis vérifie pour chacun les quatre champs détaillés et la sortie `version --short` exacte. Les binaires sont exécutés avec des valeurs volontairement invalides pour TLS, ports, DSN et clés : le succès prouve que le chemin `version` ne lance ni service ni accès au coffre. Le test cible a réussi pour les douze exécutables (12/12).
+
+Validation de cet incrément : `go test -race` ciblé sur le module PKI ; tests PKI existants (init, issue, all, renouvellement, refus) ; smoke test des douze binaires ; `make build vet` ; `git diff --check`. Les tests d'intégration de démarrage réel sans argument et la suite globale restent à rejouer dans les gates finales.

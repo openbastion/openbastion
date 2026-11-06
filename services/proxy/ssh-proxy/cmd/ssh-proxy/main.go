@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
@@ -32,7 +33,7 @@ func mustEnv(key, def string) string {
 	return def
 }
 
-func main() {
+func runService() {
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("ssh-proxy %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
@@ -221,4 +222,11 @@ func publicEndpoint(sshPort string) string {
 		log.Fatalf("ssh-proxy: SSH_PUBLIC_ENDPOINT must be host:port (the address operators reach this instance at), got %q — refusing to start", v)
 	}
 	return v
+}
+
+// main dispatches version before entering the proxy lifecycle.
+func main() {
+	if err := command.NewServiceCommand("ssh-proxy", runService).Execute(); err != nil {
+		log.Fatalf("ssh-proxy: %v", err)
+	}
 }

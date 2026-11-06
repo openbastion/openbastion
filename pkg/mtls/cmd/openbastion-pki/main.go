@@ -12,51 +12,22 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/mtls/pki"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		usage()
-	}
-	cmd, args := os.Args[1], os.Args[2:]
-	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	dir := fs.String("dir", ".pki", "PKI directory")
-	domain := fs.String("trust-domain", mtls.DefaultTrustDomain, "SPIFFE trust domain")
-	ttl := fs.Duration("ttl", 0, "lifetime (init: default 8760h; issue and all: default 24h and 168h)")
-	service := fs.String("service", "", "service name (issue)")
-	dns := fs.String("dns", "", "comma-separated DNS names to add to the certificate (issue); replaces the defaults")
-	ips := fs.String("ip", "", "comma-separated IP addresses to add to the certificate (issue); replaces the defaults")
-	_ = fs.Parse(args)
-
-	var err error
-	switch cmd {
-	case "init":
-		err = runInit(*dir, *domain, *ttl)
-	case "issue":
-		err = runIssue(*dir, *domain, *service, *ttl, *dns, *ips)
-	case "all":
-		err = runAll(*dir, *domain, *ttl)
-	default:
-		usage()
-	}
-	if err != nil {
+	root := newRootCommand()
+	root.SetArgs(normalizeLegacyFlags(os.Args[1:]))
+	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "openbastion-pki:", err)
 		os.Exit(1)
 	}
-}
-
-func usage() {
-	fmt.Fprintln(os.Stderr, "usage: openbastion-pki init|issue|all -dir DIR [flags]  (see the package documentation)")
-	os.Exit(2)
 }
 
 func runInit(dir, domain string, ttl time.Duration) error {

@@ -3,6 +3,7 @@ go 1.26.0
 use (
 	./cli/openbastion-cli
 	./pkg/mtls
+	./pkg/mtls/cmd/openbastion-pki
 	./pkg/proxycore
 	./pkg/rdp
 	./pkg/vnc

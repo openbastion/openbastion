@@ -87,3 +87,44 @@ func newTestRoot(version *cobra.Command) *cobra.Command {
 	root.AddCommand(version)
 	return root
 }
+
+func TestServiceCommandRunsServiceOnlyWithoutSubcommand(t *testing.T) {
+	calls := 0
+	root := NewServiceCommand("test-service", func() { calls++ })
+	root.SetArgs(nil)
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("service callback called %d times, want 1", calls)
+	}
+}
+
+func TestServiceCommandVersionDoesNotStartService(t *testing.T) {
+	calls := 0
+	root := NewServiceCommand("test-service", func() { calls++ })
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"version", "--short"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), buildinfo.Version+"\n"; got != want {
+		t.Fatalf("version output = %q, want %q", got, want)
+	}
+	if calls != 0 {
+		t.Fatalf("version started service callback %d times", calls)
+	}
+}
+
+func TestServiceCommandRejectsArguments(t *testing.T) {
+	calls := 0
+	root := NewServiceCommand("test-service", func() { calls++ })
+	root.SetArgs([]string{"unexpected"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("unexpected positional argument was accepted")
+	}
+	if calls != 0 {
+		t.Fatalf("invalid invocation started service callback %d times", calls)
+	}
+}
