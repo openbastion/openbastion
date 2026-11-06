@@ -34,3 +34,21 @@ func newVersionCommand(current func() buildinfo.Info) *cobra.Command {
 	cmd.Flags().BoolVar(&short, "short", false, "Affiche uniquement la version")
 	return cmd
 }
+
+// NewServiceCommand creates the root command for a service executable. Running
+// the binary without arguments preserves the service's existing startup path;
+// the version subcommand exits before that path can initialize any dependency.
+func NewServiceCommand(name string, run func()) *cobra.Command {
+	root := &cobra.Command{
+		Use:           name,
+		Short:         "Démarre le service " + name,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Run: func(*cobra.Command, []string) {
+			run()
+		},
+	}
+	root.AddCommand(NewVersionCommand())
+	return root
+}

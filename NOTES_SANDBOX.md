@@ -2696,3 +2696,9 @@ Le job `Images — Trivy (HIGH, CRITICAL)` de la PR #62 ne révélait pas une vu
 ## 2026-11-06 — correction du test d’intégration de version après ADR-0072
 
 Le job `integration on real processes, without a database` de la PR #62 échouait dans `TestVersion_AStampedBinarySaysItsVersion_TheCLIWhenAsked_AServiceFirst` : ce test historique attendait que `openbastion-cli version` ne renvoie que la chaîne de version. Depuis l’ADR-0072, cette commande expose les métadonnées détaillées du binaire ; `version --short` est l’interface stable destinée aux scripts. Le test vérifie maintenant explicitement les deux contrats : la sortie détaillée contient la version estampillée, et `version --short` renvoie exactement la version. Le binaire non estampillé est également vérifié via `version --short` (`dev`). Aucun scénario n’est supprimé ni ignoré. Validation de cette correction à compléter avant livraison.
+
+## 2026-11-06 — ADR-0072, incrément 3 : commande racine commune des services
+
+`pkg/command.NewServiceCommand` fournit maintenant la racine Cobra des exécutables de service : sans argument, elle appelle le démarrage existant ; `version` réutilise la commande commune et s'exécute sans appeler ce démarrage ; les arguments positionnels inconnus sont refusés. Le helper n'initialise aucun service et n'accède à aucun secret. Tests dédiés : démarrage racine appelé une fois, `version --short` ne déclenche pas le callback et produit uniquement la version, arguments inattendus refusés.
+
+Validation mesurée : `make build vet test proto-lint` PASS ; `go test -race -count=1 ./pkg/command/...` PASS ; `git diff --check` PASS. Une exécution intermédiaire de la suite complète a rencontré un test concurrent flaky du Session Broker (`TestWebhook_AFailureIsALogLine_NeverTheURL_AndNeverAnEffect`, serveur de test ayant répondu 500 au lieu de refuser la connexion) ; le test isolé puis la suite complète relancée ont réussi sans modification du code concerné.
