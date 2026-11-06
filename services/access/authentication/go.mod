@@ -18,7 +18,10 @@ require (
 	github.com/go-webauthn/x v0.3.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/sys v0.49.0 // indirect
@@ -47,3 +50,8 @@ replace github.com/openbastion/openbastion/pkg/buildinfo => ../../../pkg/buildin
 require github.com/openbastion/openbastion/pkg/refusalbudget v0.0.0
 
 replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/refusalbudget
+
+// Racine Cobra et commande version communes (ADR-0072).
+require github.com/openbastion/openbastion/pkg/command v0.0.0
+
+replace github.com/openbastion/openbastion/pkg/command => ../../../pkg/command

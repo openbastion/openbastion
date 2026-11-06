@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/application"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/domain"
@@ -24,7 +25,7 @@ func mustEnv(key, def string) string {
 	return def
 }
 
-func main() {
+func runService() {
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("authorization %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010): without a
@@ -84,4 +85,11 @@ func redactDSN(dsn string) string {
 		return dsn
 	}
 	return "***@" + dsn[at+1:]
+}
+
+// main dispatches the common version command before entering the service lifecycle.
+func main() {
+	if err := command.NewServiceCommand("authorization", runService).Execute(); err != nil {
+		log.Fatalf("authorization: %v", err)
+	}
 }

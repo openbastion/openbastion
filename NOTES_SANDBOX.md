@@ -2702,3 +2702,9 @@ Le job `integration on real processes, without a database` de la PR #62 échouai
 `pkg/command.NewServiceCommand` fournit maintenant la racine Cobra des exécutables de service : sans argument, elle appelle le démarrage existant ; `version` réutilise la commande commune et s'exécute sans appeler ce démarrage ; les arguments positionnels inconnus sont refusés. Le helper n'initialise aucun service et n'accède à aucun secret. Tests dédiés : démarrage racine appelé une fois, `version --short` ne déclenche pas le callback et produit uniquement la version, arguments inattendus refusés.
 
 Validation mesurée : `make build vet test proto-lint` PASS ; `go test -race -count=1 ./pkg/command/...` PASS ; `git diff --check` PASS. Une exécution intermédiaire de la suite complète a rencontré un test concurrent flaky du Session Broker (`TestWebhook_AFailureIsALogLine_NeverTheURL_AndNeverAnEffect`, serveur de test ayant répondu 500 au lieu de refuser la connexion) ; le test isolé puis la suite complète relancée ont réussi sans modification du code concerné.
+
+## 2026-11-06 — ADR-0072, incrément 4 : commandes Cobra des services d'accès
+
+Les exécutables `api-gateway`, `authentication`, `authorization` et `session-broker` utilisent la racine Cobra commune. Leur fonction de démarrage historique reste intacte et est appelée uniquement sans sous-commande ; `version` et `version --short` terminent avant mTLS, stockage, OIDC, Transit ou écoute réseau. Les quatre modules déclarent `pkg/command` en dépendance locale, sans ajouter de dépendance externe propre à ces services.
+
+Validation : `make build vet` PASS ; tests ciblés des quatre modules PASS ; smoke tests `go run … version --short` PASS avec `INTERNAL_TLS=invalid` et `PORT=not-a-port`, démontrant que le chemin version n'initialise pas le service ; `git diff --check` PASS. Le démarrage réel sans argument reste couvert par les tests d'intégration/Compose existants ; aucun secret ni comportement mTLS n'est modifié.

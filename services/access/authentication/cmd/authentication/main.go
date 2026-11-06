@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
+	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/refusalbudget"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
@@ -20,7 +21,7 @@ import (
 	"github.com/openbastion/openbastion/services/access/authentication/internal/interfaces"
 )
 
-func main() {
+func runService() {
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("authentication %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
@@ -262,5 +263,12 @@ func configureMFA(svc *application.AuthenticationService, repo domain.MFAReposit
 	}
 	if len(strict) > 0 {
 		log.Printf("authentication: only a security key (WebAuthn) counts for the roles %s: TOTP gives them no token (ADR-0065)", strings.Join(strict, ", "))
+	}
+}
+
+// main dispatches the common version command before entering the service lifecycle.
+func main() {
+	if err := command.NewServiceCommand("authentication", runService).Execute(); err != nil {
+		log.Fatalf("authentication: %v", err)
 	}
 }
