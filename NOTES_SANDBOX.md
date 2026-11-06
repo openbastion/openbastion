@@ -2853,3 +2853,26 @@ Le flux de l'incrément 67 était vert, mais ne couvrait qu'un refus sur ceux qu
 - Le proxy lit sa racine de confiance au démarrage : si les volumes de `vnc-target` sont recréés seuls, le seed répare l'épinglage, mais `rdp-vnc-proxy` doit être redémarré.
 - La cible a un mot de passe et une clé de développement, et son image n'est pas analysée par Trivy, comme les autres images Base44.
 - Le premier `build` a échoué une fois sur une coupure réseau vers `proxy.golang.org` (`connection reset`) ; la nouvelle tentative a réussi.
+
+## 2026-11-06 — Base44 : une vraie session SSH sur `acc_demo`, et la pile survit à un redémarrage
+
+Signalé par le propriétaire : `403 — no policy matches` en ouvrant une session sur `acc_demo`. Le refus était exact : aucune politique, cible fictive (`10.0.4.12`), clé privée jetée, port 2222 non publié. Une politique seule aurait seulement déplacé l'échec.
+
+**Corrigé** : `demo-ssh-target` (cible du dépôt, rien n'est exécuté) rejoint la pile ; `acc_demo` y pointe avec sa clé d'hôte épinglée et sa politique ; `127.0.0.1:2222` est publié.
+
+**Défaut trouvé en reprenant la pile, rouge observé** : `authentication` n'avait pas `SKIP_DEMO_SEED` (ADR-0033). Tout redémarrage du service sur une base existante échouait sur le doublon `demo-dba` (`seed: username already exists`), en boucle. Ce compte, au mot de passe connu, existait aussi dans la prévisualisation. Mon incrément 69 ne l'avait pas vu : il n'avait redémarré que le seed.
+
+**Prouvé** (projet Compose isolé `obtest`, volumes du propriétaire conservés) :
+
+- Installation neuve : `TestBase44Preview`, SSH et écran verts. Puis `down` et `up --wait` sur les mêmes volumes : sains, seed sans écriture, de nouveau verts.
+- Ticket rejoué refusé. Client OpenSSH réel : `whoami` donne `out:whoami`.
+- 3/3 contre-épreuves : clé d'hôte fausse (`nothing was sent to it`, réparée ensuite par le seed), Command Recorder arrêté (`connect` 503), cible arrêtée.
+- Aucune occurrence de `demo-ssh-preview`, de son encodage base64 ni de `demo-password` dans les journaux.
+- Installation existante : `authentication` repart, l'écran VNC reste vert, `acc_demo` garde `10.0.4.12:22` et le `403`, et le seed le dit.
+
+**Limites** :
+
+- L'API ne déplace pas un compte : une installation existante garde l'ancien `acc_demo` jusqu'à `down -v`. Le `demo-dba` déjà créé y reste aussi.
+- L'Admin UI n'a pas de bouton de connexion SSH : elle crée la session, le ticket s'obtient par l'API.
+- L'opérateur de démonstration lit `403` sur `/sessions/{id}/recording`, faute du rôle : la relecture de la commande n'est pas vérifiée sur cette pile. Elle l'est dans `TestCompose`.
+- La clé d'hôte du seed dépend de `DEMO_TARGET_PASSWORD` : les changer ensemble, sinon la session est refusée.

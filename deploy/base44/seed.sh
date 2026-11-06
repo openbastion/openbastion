@@ -42,29 +42,58 @@ seed_vnc() {
     return 0
   fi
   log "onboarding the VNC demonstration account"
-  vnc_step policy POST /policies \
+  step 'VNC policy' POST /policies \
     '{"name":"vault-admin-demo-screen","role":"vault-admin","resourcePattern":"vault:account:acc_demo_vnc","effect":"allow"}'
-  vnc_step account POST /vault/accounts \
+  step 'VNC account' POST /vault/accounts \
     "{\"id\":\"acc_demo_vnc\",\"name\":\"demo-desktop\",\"username\":\"operator\",
       \"targetHost\":\"vnc-target:5901\",\"protocol\":\"vnc\",\"rotationPolicy\":\"manual\",
       \"initialSecret\":\"$(printf '%s' "$VNC_TARGET_PASSWORD" | base64 | tr -d '\n')\"}"
-  vnc_step pin PUT /vault/accounts/acc_demo_vnc/tls-pin \
+  step 'VNC pin' PUT /vault/accounts/acc_demo_vnc/tls-pin \
     "{\"tlsCertificateSha256\":\"$pin\",\"targetDomain\":\"vnc-target\"}"
 }
 
-vnc_step() {
+# The SSH target of the preview (demo-ssh-target), by the same rule: done means the account pins
+# this target's host key (ADR-0039). That key derives from SSH_TARGET_PASSWORD: its private half is
+# as public as this development password, which is all a target that executes nothing needs.
+# An account from before this target points at a machine that does not exist, and the API cannot
+# move it: it gets no right to a session, and the log says what to do.
+SSH_HOST_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDcmLFmmVd4+WLuTaTGBq+u7taFcTBqDl2G7rRblW3oe'
+seed_ssh() {
+  token=$1
+  account=$(curl -sS "$GATEWAY/vault/accounts/acc_demo" -H "Authorization: Bearer $token")
+  case "$account" in
+    *'"targetHost":"10.0.4.12:22"'*)
+      log "acc_demo predates the demonstration target: no SSH session on it until the preview's volumes are recreated"
+      return 0 ;;
+    *"\"hostKey\":\"$SSH_HOST_KEY"*)
+      log "acc_demo already pins the target"
+      return 0 ;;
+  esac
+  log "onboarding the SSH demonstration account"
+  step 'SSH policy' POST /policies \
+    '{"name":"vault-admin-demo-ssh","role":"vault-admin","resourcePattern":"vault:account:acc_demo","effect":"allow"}'
+  step 'SSH account' POST /vault/accounts \
+    "{\"id\":\"acc_demo\",\"name\":\"demo-shell\",\"username\":\"root\",
+      \"targetHost\":\"demo-ssh-target:2022\",\"protocol\":\"ssh\",\"rotationPolicy\":\"manual\",
+      \"initialSecret\":\"$(printf '%s' "$SSH_TARGET_PASSWORD" | base64 | tr -d '\n')\",
+      \"hostKey\":\"$SSH_HOST_KEY\"}"
+  step 'SSH host key' PUT /vault/accounts/acc_demo/host-key "{\"hostKey\":\"$SSH_HOST_KEY\"}"
+}
+
+step() {
   code=$(curl -sS -o /dev/null -w '%{http_code}' -X "$2" "$GATEWAY$3" \
     -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$4")
-  log "VNC $1 -> HTTP $code"
+  log "$1 -> HTTP $code"
   case "$code" in
     2??|409) ;;
-    *) log "the VNC $1 was refused — stopping"; exit 1 ;;
+    *) log "$1 was refused — stopping"; exit 1 ;;
   esac
 }
 
 TOKEN=$(login)
 if [ -n "$TOKEN" ]; then
   log "$USER_NAME already exists"
+  seed_ssh "$TOKEN"
   seed_vnc "$TOKEN"
   exit 0
 fi
@@ -84,16 +113,7 @@ curl -sS -o /dev/null -w 'seed: policy -> HTTP %{http_code}\n' -X POST "$GATEWAY
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"vault-admin-accounts","role":"vault-admin","resourcePattern":"vault:account-admin:*","effect":"allow"}'
 
-# One privileged account, so the admin UI has something real to show. Its target is fictitious:
-# the pinned host key (ADR-0039) is one whose private half was discarded — no machine has it.
-log "onboarding the demonstration account"
-curl -sS -o /dev/null -w 'seed: account -> HTTP %{http_code}\n' -X POST "$GATEWAY/vault/accounts" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"id\":\"acc_demo\",\"name\":\"prod-db-01-root\",\"username\":\"root\",
-       \"targetHost\":\"10.0.4.12:22\",\"protocol\":\"ssh\",\"rotationPolicy\":\"manual\",
-       \"initialSecret\":\"$(printf '%s' 'demo-only-do-not-use-in-prod' | base64 | tr -d '\n')\",
-       \"hostKey\":\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+pXuNMSq8lVqUNZ0A+gFlXPmbP+09vCp5Y/mHuzYpS\"}"
-
+seed_ssh "$TOKEN"
 seed_vnc "$TOKEN"
 
 log "done — log in as $USER_NAME"

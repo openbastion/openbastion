@@ -123,6 +123,9 @@ services:
       TOKEN_SIGNING_KEY_HEX: 2239acb116a20ab72fe698d0fbf018a7180072508ab7ce0ab7e9040615956892
       # Every login is written to the audit before its token is issued (ADR-0064).
       AUDIT_URL: https://audit-service:8082
+      # No demonstration user (ADR-0033): `seed` makes the operator. Its account has a known password,
+      # and creating it again on an existing database stops this service.
+      SKIP_DEMO_SEED: "1"
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
@@ -383,6 +386,25 @@ services:
       retries: 24
       start_period: 120s
 
+  # What the preview opens an SSH session on: a pretend shell, nothing typed is executed (ADR-0033).
+  # Its host key derives from this password, and seed.sh pins it: change both together.
+  demo-ssh-target:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/test/integration/cmd/demo-ssh-target"]
+    environment:
+      GOWORK: /src/go.work
+      GOFLAGS: -buildvcs=false
+      DEMO_TARGET_PASSWORD: demo-ssh-preview
+      DEMO_TARGET_PORT: "2022"
+    volumes:
+      - ../..:/src
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2022"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
   ssh-proxy:
     <<: *go
     command: ["go", "run", "github.com/openbastion/openbastion/services/proxy/ssh-proxy/cmd/ssh-proxy"]
@@ -394,6 +416,10 @@ services:
       AUDIT_URL: https://audit-service:8082
       RECORDER_URL: https://command-recorder:8087
       RECORDING_POLICY: required
+      # The address connect hands out: the port below, on the machine that runs the preview.
+      SSH_PUBLIC_ENDPOINT: localhost:2222
+    ports:
+      - "127.0.0.1:2222:2222"
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
@@ -538,6 +564,7 @@ services:
       OPERATOR_USERNAME: operator
       OPERATOR_PASSWORD: openbastion-demo
       VNC_TARGET_PASSWORD: demo-vnc
+      SSH_TARGET_PASSWORD: demo-ssh-preview
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: admin-cli}}
@@ -548,6 +575,7 @@ services:
       authentication: {condition: service_healthy}
       api-gateway: {condition: service_healthy}
       vnc-target: {condition: service_healthy}
+      demo-ssh-target: {condition: service_healthy}
     healthcheck:
       # The only state this job has: its seeding ran to completion.
       test: ["CMD", "test", "-f", "/tmp/openbastion-seeded"]

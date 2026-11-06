@@ -44,4 +44,5 @@ base44_preview:
   demo_account: operator / openbastion-demo   # valeur de développement locale, écrite dans le compose
   after_go_change: docker compose -f deploy/base44/docker-compose.yml restart <service>
   screen_test: cd test/integration && BASE44_PREVIEW_URL=http://localhost:3000 go test . -run TestBase44Preview -v   # GOWORK absolu ; pile déjà démarrée
+  ssh: 127.0.0.1:2222, ticket de POST /sessions/{id}/connect comme mot de passe ; cible demo-ssh-target (rien n'est exécuté)
   rate_limit_pitfall: la Gateway limite les connexions par adresse (5 puis 1/min) ; l'UI arrive d'une seule adresse

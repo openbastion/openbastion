@@ -1,6 +1,7 @@
-// The Base44 preview, running (deploy/base44/docker-compose.yml): an operator opens the seeded VNC
-// account through the Vite server, on one origin, as the browser does (ADR-0071). The target is a
-// real TigerVNC showing `cat` in a terminal, so a key that reaches it changes what the screen shows.
+// The Base44 preview, running (deploy/base44/docker-compose.yml): an operator opens the seeded
+// accounts. The SSH one through the published port; the VNC one through the Vite server, on one
+// origin, as the browser does (ADR-0071), whose target is a real TigerVNC showing `cat` in a
+// terminal, so a key that reaches it changes what the screen shows.
 //
 // Skipped without BASE44_PREVIEW_URL: this test does not start the stack, which is long to build.
 //
@@ -11,6 +12,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -18,7 +20,48 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"golang.org/x/crypto/ssh"
 )
+
+// The seeded SSH account: a session, a one-use ticket, and a shell on the real demonstration target
+// through the published port, with what is typed recorded.
+func TestBase44Preview_AnOperatorOpensTheSeededSSHSession(t *testing.T) {
+	preview := os.Getenv("BASE44_PREVIEW_URL")
+	if preview == "" {
+		t.Skip("BASE44_PREVIEW_URL not set: this test needs the preview stack running")
+	}
+	token, status := gatewayLogin(t, preview, "operator", "openbastion-demo")
+	if status != http.StatusOK {
+		t.Fatalf("login through the preview: %d", status)
+	}
+	api := screenAPI{t: t, url: preview}
+	status, raw := api.call(token, http.MethodPost, "/sessions", map[string]any{"targetAccountId": "acc_demo", "protocol": "ssh", "justification": "preview", "durationMinutes": 5})
+	if status != http.StatusCreated {
+		t.Fatalf("session: %d %s", status, raw)
+	}
+	id := jsonField(t, raw, "id")
+	defer api.call(token, http.MethodDelete, "/sessions/"+id, nil)
+
+	endpoint, ticket, status := gatewayConnect(t, preview, token, id)
+	if status != http.StatusOK {
+		t.Fatalf("connect: %d", status)
+	}
+	if endpoint != "localhost:2222" {
+		t.Fatalf("connect sends the operator to %q, not to the published port", endpoint)
+	}
+	sh := openShell(t, endpoint, ticket)
+	fmt.Fprint(sh.stdin, "whoami\r")
+	sh.waitFor("out:whoami")
+
+	// The ticket opened the shell above: it opens nothing else.
+	if client, err := ssh.Dial("tcp", endpoint, &ssh.ClientConfig{
+		User: "operator", Auth: []ssh.AuthMethod{ssh.Password(ticket)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: 5 * time.Second,
+	}); err == nil {
+		client.Close()
+		t.Fatal("the same ticket opened a second connection")
+	}
+}
 
 func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *testing.T) {
 	preview := os.Getenv("BASE44_PREVIEW_URL")
