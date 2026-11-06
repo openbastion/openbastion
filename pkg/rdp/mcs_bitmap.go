@@ -26,6 +26,7 @@ const (
 	rdpOrderPolyline        = byte(0x16)
 	rdpOrderEllipseSC       = byte(0x19)
 	rdpROP2Black            = byte(0x01)
+	rdpROP2NotMergePen      = byte(0x02)
 	rdpROP2NotCopyPen       = byte(0x04)
 	rdpROP2MaskPenNot       = byte(0x05)
 	rdpROP2MaskPen          = byte(0x09)
@@ -196,7 +197,7 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 // isSupportedRDPROP2 reports the deliberately small set of fully rendered ROP2 operations.
 func isSupportedRDPROP2(operation byte) bool {
 	switch operation {
-	case rdpROP2Black, rdpROP2NotCopyPen, rdpROP2MaskPenNot, rdpROP2MaskPen, rdpROP2Not, rdpROP2XorPen, rdpROP2NotXorPen, rdpROP2Nop, rdpROP2CopyPen, rdpROP2White:
+	case rdpROP2Black, rdpROP2NotMergePen, rdpROP2NotCopyPen, rdpROP2MaskPenNot, rdpROP2MaskPen, rdpROP2Not, rdpROP2XorPen, rdpROP2NotXorPen, rdpROP2Nop, rdpROP2CopyPen, rdpROP2White:
 		return true
 	default:
 		return false

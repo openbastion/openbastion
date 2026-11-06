@@ -2656,4 +2656,9 @@ Les indices de négociation 8, 20, 22 et 25 ne sont toujours pas annoncés ; auc
 
 ## ADR-0071, incrément 61 : R2_MASKPEN
 
-Ajout en cours de `R2_MASKPEN` (`0x09`, fonction `DPa`) à la whitelist ROP2 partagée des quatre primitives vectorielles. Le framebuffer calcule `D AND P` sur les trois canaux RGB et garde un alpha opaque. Tests pixel-à-pixel et transport TLS slow-path : PASS ; fuzzing 68 339 exécutions en 5 s ; build/vet/tests/proto-lint, tests ciblés `-race`, et 2/2 mutations tuées : PASS. Les slots de négociation restent non annoncés ; aucun runtime ni route RDP n’est activé.
+Ajout de `R2_MASKPEN` (`0x09`, fonction `DPa`) à la whitelist ROP2 partagée des quatre primitives vectorielles. Le framebuffer calcule `D AND P` sur les trois canaux RGB et garde un alpha opaque. Tests pixel-à-pixel et transport TLS slow-path : PASS ; fuzzing 68 339 exécutions en 5 s ; build/vet/tests/proto-lint, tests ciblés `-race`, et 2/2 mutations tuées : PASS. Les slots de négociation restent non annoncés ; aucun runtime ni route RDP n’est activé.
+
+
+## ADR-0071, incrément 62 : R2_NOTMERGEPEN
+
+Ajout de `R2_NOTMERGEPEN` (`0x02`, fonction `DPon`) à la whitelist ROP2 partagée des quatre primitives vectorielles. Le framebuffer calcule `NOT (D OR P)` sur les trois canaux RGB et garde un alpha opaque. Tests pixel-à-pixel et TLS slow-path : PASS ; fuzzing 82 067 exécutions en 5 s ; build, vet, tests, proto-lint et race ciblé : PASS. Les slots de négociation restent non annoncés ; aucun runtime ni route RDP n’est activé.

@@ -1376,3 +1376,12 @@ Validation de l’incrément 61 :
 - `go test -race ./pkg/rdp/... ./services/proxy/rdp-vnc-proxy/... -count=1` : PASS.
 - Contre-épreuves : 2 mutations compilantes tuées sur 2 (D AND P remplacé par D OR P ; retrait de `R2_MASKPEN` de la whitelist commune).
 - `gofmt` et `git diff --check` : PASS. Aucun slot de négociation supplémentaire n’est activé ; runtime et route RDP restent désactivés.
+
+
+## ADR-0071 — incrément 62 : R2_NOTMERGEPEN pour les primitives vectorielles
+
+Les profils `LineTo` (index 8), `Polyline` (index 22), `PolygonSC` (index 20) et `EllipseSC` (index 25) acceptent `R2_NOTMERGEPEN` (`0x02`, fonction `DPon`). Le framebuffer calcule `NOT (D OR P)` sur chacune des trois composantes RGB et conserve un alpha interne opaque. Les tests pixel-à-pixel couvrent les quatre primitives et les pixels hors tracé ; le transport TLS slow-path vérifie l’acceptation et la conservation du ROP2 dans `LineTo`, et les seeds de fuzzing couvrent les quatre ordres. Les autres valeurs ROP2 non implémentées restent refusées.
+
+Référence normative : [MS-RDPEGDI §2.2.2.2.1.1.1.6 — ROP2_OPERATION](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpegdi/34e554e4-2e7c-4f1f-a8a6-e7b319bf6fe1), `R2_NOTMERGEPEN` (`0x02`) = `DPon`. Les index 8, 20, 22 et 25 restent non annoncés dans Confirm Active ; runtime et route RDP restent désactivés.
+
+Validation de l’incrément 62 : build, vet, unit, proto-lint, race et fuzz PASS (82 067 exécutions en 5 s).
