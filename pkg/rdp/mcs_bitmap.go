@@ -130,7 +130,7 @@ func parseRDPBitmapMCSFragment(packet []byte, expectedChannelID uint16) ([]byte,
 	mcs := packet[7:]
 	// Priority must remain HIGH and the four reserved padding bits must be 0.
 	// Bits 5..4 carry the MCS begin/end segmentation flags.
-	if mcs[0] != mcsSendDataIndication || binary.BigEndian.Uint16(mcs[1:3]) != rdpServerChannelID-mcsUserIDBase ||
+	if mcs[0] != mcsSendDataIndication ||
 		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5]&0xcf != 0x40 {
 		return nil, 0, ErrMCSConnection
 	}
@@ -175,9 +175,7 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 	}
 	if int(binary.LittleEndian.Uint16(userData[0:2])) != len(userData) ||
 		binary.LittleEndian.Uint16(userData[2:4]) != rdpShareDataPDU ||
-		binary.LittleEndian.Uint16(userData[4:6]) != rdpServerChannelID ||
-		binary.LittleEndian.Uint32(userData[6:10]) != shareID || userData[10] != 0 || userData[11] != 2 ||
-		int(binary.LittleEndian.Uint16(userData[12:14])) != len(userData) || userData[14] != rdpPDU2Update ||
+		binary.LittleEndian.Uint32(userData[6:10]) != shareID || userData[14] != rdpPDU2Update ||
 		userData[15] != 0 || binary.LittleEndian.Uint16(userData[16:18]) != 0 {
 		return result, state, ErrMCSConnection
 	}
@@ -1051,7 +1049,7 @@ func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16
 		flags := binary.LittleEndian.Uint16(payload[14:16])
 		bitmapLength := int(binary.LittleEndian.Uint16(payload[16:18]))
 		payload = payload[18:]
-		if width == 0 || height == 0 || bpp != 32 || (flags != 0 && flags != rdpBitmapCompressed) || bitmapLength == 0 || bitmapLength > len(payload) ||
+		if width == 0 || height == 0 || bpp != 32 || (flags != 0 && flags != rdpBitmapCompressed && flags != rdpBitmapCompressed|rdpBitmapNoCompHdr) || bitmapLength == 0 || bitmapLength > len(payload) ||
 			uint32(left)+uint32(width) > uint32(desktopWidth) || uint32(top)+uint32(height) > uint32(desktopHeight) ||
 			right != left+width-1 || bottom != top+height-1 {
 			return RDPBitmapUpdate{}, ErrMCSConnection
@@ -1069,7 +1067,11 @@ func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16
 			decoded = decodeRDPBitmapRaw(payload, int(width), int(height))
 		} else {
 			var decodeErr error
-			decoded, decodeErr = decodeRDP6BitmapWithHeader(payload, int(width), int(height))
+			if flags&rdpBitmapNoCompHdr != 0 {
+				decoded, decodeErr = decodeRDP6Bitmap(payload[:bitmapLength], int(width), int(height))
+			} else {
+				decoded, decodeErr = decodeRDP6BitmapWithHeader(payload[:bitmapLength], int(width), int(height))
+			}
 			if decodeErr != nil {
 				return RDPBitmapUpdate{}, ErrMCSConnection
 			}
@@ -1104,9 +1106,6 @@ func parseRDPFastPathBitmapUpdate(packet []byte, desktopWidth, desktopHeight uin
 		}
 		packetLength = int(packet[1]&0x7f)<<8 | int(packet[2])
 		offset++
-		if packetLength < 128 {
-			return empty, ErrMCSConnection
-		}
 	}
 	if packetLength != len(packet) || packetLength < offset+4 {
 		return empty, ErrMCSConnection
@@ -1121,10 +1120,58 @@ func parseRDPFastPathBitmapUpdate(packet []byte, desktopWidth, desktopHeight uin
 	}
 	size := int(binary.LittleEndian.Uint16(packet[offset+1 : offset+3]))
 	data := packet[offset+3:]
-	if size == 0 || size != len(data) {
+	// TS_UPDATE_BITMAP_DATA starts with its updateType, as in the slow path.
+	if size < 2 || size != len(data) || binary.LittleEndian.Uint16(data[:2]) != rdpUpdateBitmap {
 		return empty, ErrMCSConnection
 	}
-	return parseRDPBitmapUpdateData(data, desktopWidth, desktopHeight)
+	return parseRDPBitmapUpdateData(data[2:], desktopWidth, desktopHeight)
+}
+
+// rdpFastPathUpdateIsIgnored recognizes the updates that show nothing in the screen stream: the
+// pointer, which the operator's browser draws itself, and the frame synchronization. The list is
+// closed: any other code goes on to be refused, and a fragment is not judged by its first piece.
+func rdpFastPathUpdateIsIgnored(packet []byte) bool {
+	offset := 2
+	if len(packet) > 1 && packet[1]&0x80 != 0 {
+		offset = 3
+	}
+	if len(packet) < offset+3 || packet[offset]>>4 != 0 {
+		return false
+	}
+	if int(binary.LittleEndian.Uint16(packet[offset+1:offset+3])) != len(packet)-offset-3 {
+		return false
+	}
+	switch packet[offset] & 0x0f {
+	case 0x3, // synchronize
+		0x5, // pointer hidden
+		0x6, // pointer default
+		0x8, // pointer position
+		0x9, // pointer color
+		0xa, // pointer cached
+		0xb: // pointer new
+		return true
+	}
+	return false
+}
+
+// rdpShareDataIsIgnored does the same for a Share Data PDU of this share that carries no graphics:
+// the pointer, keyboard indicators, session information, and the reason a server gives before it
+// disconnects, which closes the stream by itself.
+func rdpShareDataIsIgnored(data []byte, shareID uint32) bool {
+	if len(data) < 18 || int(binary.LittleEndian.Uint16(data[0:2])) != len(data) ||
+		binary.LittleEndian.Uint16(data[2:4]) != rdpShareDataPDU ||
+		binary.LittleEndian.Uint32(data[6:10]) != shareID || data[15] != 0 {
+		return false
+	}
+	switch data[14] {
+	case 0x1b, // pointer
+		0x26, // save session info
+		0x29, // set keyboard indicators
+		0x2a, // set keyboard IME status
+		0x2f: // set error info
+		return true
+	}
+	return false
 }
 
 // decodeRDPBitmapRaw converts bottom-up BGRX wire pixels to top-down RGBA.
@@ -1148,10 +1195,12 @@ func decodeRDPBitmapRaw(src []byte, width, height int) []byte {
 // bytes are ordered A (optional), R/Y, G/Co, B/Cg in bottom-up row order;
 // output is top-down RGBA.
 const (
-	rdp6FormatChromaSubsampling = byte(0x10)
-	rdp6FormatRLE               = byte(0x08)
-	rdp6FormatNoAlpha           = byte(0x04)
-	rdp6FormatReservedMask      = byte(0x03)
+	// formatHeader, low bits first (MS-RDPEGDI 2.2.2.5.1): CLL in bits 0-2, then CS, RLE, NA.
+	rdp6FormatColorLossMask     = byte(0x07)
+	rdp6FormatChromaSubsampling = byte(0x08)
+	rdp6FormatRLE               = byte(0x10)
+	rdp6FormatNoAlpha           = byte(0x20)
+	rdp6FormatReservedMask      = byte(0xc0)
 )
 
 func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) {
@@ -1163,15 +1212,29 @@ func decodeRDP6BitmapWithHeader(data []byte, width, height int) ([]byte, error) 
 	if pixels > maxRDPDesktopArea || decodedBytes > uint64(^uint16(0)) ||
 		binary.LittleEndian.Uint16(data[0:2]) != 0 ||
 		int(binary.LittleEndian.Uint16(data[2:4])) != len(data)-8 ||
-		int(binary.LittleEndian.Uint16(data[4:6])) != width ||
+		(int(binary.LittleEndian.Uint16(data[4:6])) != width && int(binary.LittleEndian.Uint16(data[4:6])) != width*4) ||
 		uint64(binary.LittleEndian.Uint16(data[6:8])) != decodedBytes {
 		return nil, ErrMCSConnection
 	}
-	stream := data[8:]
+	return decodeRDP6Bitmap(data[8:], width, height)
+}
+
+// decodeRDP6Bitmap decodes the planes alone: announcing NO_BITMAP_COMPRESSION_HDR, this client does
+// not depend on what bitmapLength counts when a header is present, where FreeRDP and the
+// specification differ.
+func decodeRDP6Bitmap(stream []byte, width, height int) ([]byte, error) {
+	if width <= 0 || height <= 0 || len(stream) == 0 {
+		return nil, ErrMCSConnection
+	}
+	pixels := uint64(width) * uint64(height)
+	decodedBytes := pixels * 4
+	if pixels > maxRDPDesktopArea || decodedBytes > uint64(^uint16(0)) {
+		return nil, ErrMCSConnection
+	}
 	format := stream[0]
 	// CLL selects ARGB (zero) or AYCoCg (1..7). Chroma subsampling is
 	// defined only for AYCoCg; reserved bits must always be zero.
-	colorLossLevel := int(format >> 5)
+	colorLossLevel := int(format & rdp6FormatColorLossMask)
 	chromaSubsampling := format&rdp6FormatChromaSubsampling != 0
 	if format&rdp6FormatReservedMask != 0 || (chromaSubsampling && colorLossLevel == 0) {
 		return nil, ErrMCSConnection
@@ -1286,6 +1349,8 @@ func decodeRDP6RLEPlane(src []byte, width, height int) ([]byte, int, error) {
 	for y := 0; y < height; y++ {
 		rowStart := y * width
 		column := 0
+		// A run repeats the last raw value of this line, whichever segment gave it; 0 before any.
+		var value byte
 		for column < width {
 			if offset >= len(src) {
 				return nil, 0, ErrMCSConnection
@@ -1310,15 +1375,12 @@ func decodeRDP6RLEPlane(src []byte, width, height int) ([]byte, int, error) {
 				copy(plane[rowStart+column:rowStart+column+rawCount], src[offset:offset+rawCount])
 				offset += rawCount
 				column += rawCount
+				value = plane[rowStart+column-1]
 			}
 			if runCount > width-column {
 				return nil, 0, ErrMCSConnection
 			}
 			if runCount > 0 {
-				var value byte
-				if rawCount > 0 {
-					value = plane[rowStart+column-1]
-				}
 				for n := 0; n < runCount; n++ {
 					plane[rowStart+column+n] = value
 				}
@@ -1426,6 +1488,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		}
 	}()
 
+readUpdate:
 	var assembled []byte
 	for fragmentCount := 0; ; fragmentCount++ {
 		if fragmentCount >= maxRDPBitmapFragments || ctx.Err() != nil {
@@ -1438,6 +1501,10 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			var fastPath bool
 			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPBitmapTPKTPacket)
 			if readErr == nil && fastPath {
+				if rdpFastPathUpdateIsIgnored(packet) {
+					clear(packet)
+					goto readUpdate
+				}
 				update, err = parseRDPFastPathBitmapUpdate(packet, desktopWidth, desktopHeight)
 				clear(packet)
 				if err != nil || ctx.Err() != nil {
@@ -1479,6 +1546,10 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		if segmentation == 1 {
 			break
 		}
+	}
+	if rdpShareDataIsIgnored(assembled, shareID) {
+		clear(assembled)
+		goto readUpdate
 	}
 	defer clear(assembled)
 	if len(assembled) >= 20 && binary.LittleEndian.Uint16(assembled[18:20]) == rdpUpdateOrders && !primaryOrdersEnabled {

@@ -1462,3 +1462,31 @@ Premier contact de `pkg/rdp` avec un serveur réel : FreeRDP 3.15, `freerdp-shad
 **L'échange en deux temps.** Quand le serveur demande le MIC, `pubKeyAuth` part après que le MIC du serveur a été vérifié. Envoyés ensemble, FreeRDP renvoie le `pubKeyAuth` du client : le refus de cette réflexion est testé. Après l'échange, les flux RC4 repartent de zéro et les deux compteurs sont à 1. **Ce comportement est mesuré sur FreeRDP 3.15, pas lu dans une norme**, et n'est pas vérifié sur Windows.
 
 **Preuves** : `make test-rdp-interop` (authentification, mauvais mot de passe, pin d'imposteur arrêté avant tout octet CredSSP) ; le faux serveur du test unitaire recalcule désormais la preuve depuis ce qu'il reçoit ; 9 mutations sur 9 tuées. **Limites** : aucune cible Windows ; le serveur n'atteste pas encore la réception de `authInfo` ; la suite de la connexion échoue à la réponse MCS/GCC. RDP reste non exposé.
+
+## ADR-0071 — incrément 71 : un écran RDP réel, sans route opérateur
+
+`RDPCodec` ouvre désormais une session complète contre FreeRDP 3.15 : image reçue, pixels vérifiés, souris et clavier jusqu'au terminal de la cible. Le chemin aboutissait à des refus sur des points où le code, ses tests et ses faux serveurs partageaient la même lecture fausse.
+
+| Couche | Défaut | Correction |
+|---|---|---|
+| GCC | `c0 00 McDn` attendu un octet trop tôt | décalage de MS-RDPBCGR 4.1.4 |
+| Client Info | `TS_EXTENDED_INFO_PACKET` absent | présent, sans adresse, répertoire ni fuseau du proxy |
+| Licence | seul le parcours complet était géré | `STATUS_VALID_CLIENT` d'emblée accepté, et rien d'autre |
+| Confirm Active | `originatorId` absent, `pduSource` faux | format de MS-RDPBCGR 2.2.1.13.2.1 |
+| Capacités | Fast-Path lu mais non annoncé | `FASTPATH_OUTPUT_SUPPORTED`, `NO_BITMAP_COMPRESSION_HDR` |
+| Fast-Path | `updateType` lu comme le nombre de rectangles | sauté, et vérifié |
+| RDP6 | bits de `formatHeader` inversés | CLL 0-2, CS 0x08, RLE 0x10, NA 0x20 (MS-RDPEGDI 2.2.2.5.1) |
+| RDP6 RLE | un run sans octet brut repartait de 0 | la valeur courante persiste jusqu'à la fin de la ligne |
+| Bitmaps | le décodeur recevait la suite du paquet | chaque rectangle décode ses propres octets |
+| Longueurs PER et Fast-Path | forme longue d'une petite valeur refusée | acceptée : ces champs ne sont pas du DER |
+| Mises à jour non graphiques | fatales | ignorées, sur liste fermée (voir ci-dessous) |
+
+**Ce que le client ne contrôle plus.** `initiator` MCS, `pduSource`, `targetUser`, `controlId`, flux et `uncompressedLength` : FreeRDP y met autre chose que ce que le code exigeait. Aucun n'authentifie quoi que ce soit, le canal étant déjà prouvé par le pin TLS et CredSSP. `shareID`, type de PDU, canal, absence de compression et bornes restent contrôlés.
+
+**Ce qui est ignoré.** Fast-Path : pointeur et synchronisation. Share Data : pointeur, indicateurs clavier, informations de session, motif de déconnexion. La liste est fermée : un code inconnu, un fragment, une compression, un autre `shareID` ou une taille fausse restent des refus, et ce qui dessine n'est jamais sauté. C'est ce que garantissent les tests d'attaque de `realserver_bytes_test.go`.
+
+**Repeints sans changement.** FreeRDP renvoie son écran environ 50 fois par seconde (mesuré : 635 images en 12 s, 14 distinctes). Chaque image coûte un PNG et un segment enregistré. L'adaptateur ne garde que ce qui change les pixels, sauf la première image. Seuls les remplacements simples peuvent être jugés identiques.
+
+**Un bogue de FreeRDP, pas du client.** La transition noir→blanc dans une tuile s'affiche en gris `0x7f`. Dans `freerdp_bitmap_planar_delta_encode_plane` (3.15), `s2c` est un `BYTE`, le test `s2c >= 0` est toujours vrai, et tout delta négatif ou supérieur à 127 est mal encodé : le décodeur de FreeRDP donnerait le même gris. Le décodeur d'OpenBastion n'est pas déformé pour le suivre. **La fidélité des pixels à fort contraste n'est donc pas prouvée.**
+
+**Preuves** : `make test-rdp-interop` ; 10 passages consécutifs verts ; `-race` vert ; 15 mutations tuées, sur le vrai serveur quand elles retirent un correctif. **Limites** : aucune cible Windows, donc le critère de l'incrément 2 reste ouvert. `Deactivate All` ferme la session, sans réactivation : le bureau doit avoir la taille demandée. Pas de fragments Fast-Path, ni d'ordres graphiques annoncés, ni de cache de glyphes. Pointeur non dessiné. Enregistrement RDP non éprouvé de bout en bout. L'Admin UI n'envoie pas de scancode, que RDP exige. **RDP reste non exposé** : `cmd/rdp-vnc-proxy` ne sélectionne pas `RDPCodec`.

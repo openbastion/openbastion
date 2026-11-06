@@ -86,10 +86,10 @@ func TestReadRDPServerUpdatePacketSupportsBothFramings(t *testing.T) {
 		t.Fatalf("extended fast-path read = %d bytes, fastPath=%v, err=%v", len(got), isFastPath, err)
 	}
 
-	// The two-octet determinant is canonical only for lengths >= 128.
-	nonCanonical := []byte{0, 0x80, 7, 1, 0, 2, 0}
-	if _, _, err := readRDPServerUpdatePacket(bytes.NewReader(nonCanonical), maxRDPBitmapTPKTPacket); !errors.Is(err, ErrMCSConnection) {
-		t.Fatalf("non-canonical extended length error = %v, want ErrMCSConnection", err)
+	// FreeRDP uses the long form for small packets too.
+	longForm := []byte{0, 0x80, 7, 1, 0, 2, 0}
+	if got, isFastPath, err := readRDPServerUpdatePacket(bytes.NewReader(longForm), maxRDPBitmapTPKTPacket); err != nil || !isFastPath || !bytes.Equal(got, longForm) {
+		t.Fatalf("long form of a small length: %x, %v, %v", got, isFastPath, err)
 	}
 }
 
@@ -116,7 +116,8 @@ func TestReadBitmapUpdateOverTLSAcceptsFastPathBitmap(t *testing.T) {
 		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
 		defer tlsConn.Close()
 		if acceptErr = tlsConn.Handshake(); acceptErr == nil {
-			acceptErr = writeFull(tlsConn, packet)
+			// A pointer update comes first: the bitmap behind it is what the read returns.
+			acceptErr = writeFull(tlsConn, append(fastPathUpdate(0x9, []byte{1, 2}), packet...))
 		}
 		serverResult <- acceptErr
 	}()
@@ -157,8 +158,8 @@ func FuzzParseRDPFastPathBitmapUpdate(f *testing.F) {
 }
 
 func mcsTestFastPathBitmapPacket(bitmapData []byte) []byte {
-	update := []byte{rdpFastPathUpdateBitmap, 0, 0}
-	binary.LittleEndian.PutUint16(update[1:3], uint16(len(bitmapData)))
+	update := []byte{rdpFastPathUpdateBitmap, 0, 0, byte(rdpUpdateBitmap), 0}
+	binary.LittleEndian.PutUint16(update[1:3], uint16(len(bitmapData)+2))
 	update = append(update, bitmapData...)
 	packetLength := len(update) + 2
 	if packetLength < 128 {

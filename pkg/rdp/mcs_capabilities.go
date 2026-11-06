@@ -1,15 +1,18 @@
 package rdp
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"time"
 )
 
 const (
-	rdpServerChannelID    = uint16(1002)
-	mcsSendDataRequest    = byte(0x64)
-	mcsSendDataIndication = byte(0x68)
+	rdpServerChannelID = uint16(1002)
+	// TS_GENERAL_CAPABILITYSET extraFlags.
+	rdpFastPathOutputSupported = uint16(0x0001)
+	mcsSendDataRequest         = byte(0x64)
+	mcsSendDataIndication      = byte(0x68)
 
 	rdpDemandActivePDU  = uint16(0x11)
 	rdpConfirmActivePDU = uint16(0x13)
@@ -117,7 +120,6 @@ func parseRDPDemandActive(packet []byte, expectedChannelID uint16) (RDPServerCap
 	}
 	mcs := packet[7:]
 	if len(mcs) < 7 || mcs[0] != mcsSendDataIndication ||
-		binary.BigEndian.Uint16(mcs[1:3]) != rdpServerChannelID-mcsUserIDBase ||
 		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5] != 0x70 {
 		return result, ErrMCSConnection
 	}
@@ -132,10 +134,10 @@ func parseRDPDemandActiveData(data []byte) (RDPServerCapabilities, error) {
 	var result RDPServerCapabilities
 	if len(data) < 6+4+2+2+4 || len(data) > maxTPKTPacket ||
 		int(binary.LittleEndian.Uint16(data[0:2])) != len(data) ||
-		binary.LittleEndian.Uint16(data[2:4]) != rdpDemandActivePDU ||
-		binary.LittleEndian.Uint16(data[4:6]) != rdpServerChannelID {
+		binary.LittleEndian.Uint16(data[2:4]) != rdpDemandActivePDU {
 		return result, ErrMCSConnection
 	}
+	// pduSource is whichever channel the server speaks from (FreeRDP: its own, 1004): not checked.
 	result.ShareID = binary.LittleEndian.Uint32(data[6:10])
 	sourceLength := int(binary.LittleEndian.Uint16(data[10:12]))
 	combinedLength := int(binary.LittleEndian.Uint16(data[12:14]))
@@ -143,7 +145,8 @@ func parseRDPDemandActiveData(data []byte) (RDPServerCapabilities, error) {
 		14+sourceLength+combinedLength+4 != len(data) {
 		return RDPServerCapabilities{}, ErrMCSConnection
 	}
-	source := data[14 : 14+sourceLength]
+	// The descriptor is informative, and usually NUL-terminated ("RDP\0").
+	source := bytes.TrimSuffix(data[14:14+sourceLength], []byte{0})
 	for _, b := range source {
 		if b < 0x20 || b > 0x7e {
 			return RDPServerCapabilities{}, ErrMCSConnection
@@ -248,15 +251,18 @@ func marshalRDPConfirmActive(capabilities RDPServerCapabilities, settings MCSCli
 		return nil, ErrMCSConnection
 	}
 	source := []byte("OpenBastion")
-	share := make([]byte, 6+4+2+2+len(source)+combinedLength)
+	// TS_CONFIRM_ACTIVE_PDU (MS-RDPBCGR 2.2.1.13.2.1): the source of the PDU is this client, its
+	// originator the server's channel, whichever channel the server spoke from.
+	share := make([]byte, 6+4+2+2+2+len(source)+combinedLength)
 	binary.LittleEndian.PutUint16(share[0:2], uint16(len(share)))
 	binary.LittleEndian.PutUint16(share[2:4], rdpConfirmActivePDU)
-	binary.LittleEndian.PutUint16(share[4:6], rdpServerChannelID)
+	binary.LittleEndian.PutUint16(share[4:6], userID)
 	binary.LittleEndian.PutUint32(share[6:10], capabilities.ShareID)
-	binary.LittleEndian.PutUint16(share[10:12], uint16(len(source)))
-	binary.LittleEndian.PutUint16(share[12:14], uint16(combinedLength))
-	copy(share[14:], source)
-	offset := 14 + len(source)
+	binary.LittleEndian.PutUint16(share[10:12], rdpServerChannelID)
+	binary.LittleEndian.PutUint16(share[12:14], uint16(len(source)))
+	binary.LittleEndian.PutUint16(share[14:16], uint16(combinedLength))
+	copy(share[16:], source)
+	offset := 16 + len(source)
 	binary.LittleEndian.PutUint16(share[offset:offset+2], 5)
 	copy(share[offset+4:], caps)
 	clear(caps)
@@ -271,6 +277,8 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings) []byte {
 	binary.LittleEndian.PutUint16(general[0:2], rdpCapGeneral)
 	binary.LittleEndian.PutUint16(general[2:4], uint16(len(general)))
 	binary.LittleEndian.PutUint16(general[8:10], 0x0200)
+	// Servers may send graphics by Fast-Path only (FreeRDP's shadow does): this client reads it.
+	binary.LittleEndian.PutUint16(general[14:16], rdpFastPathOutputSupported|rdpBitmapNoCompHdr)
 	caps = append(caps, general...)
 	clear(general)
 

@@ -94,6 +94,37 @@ func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
 	destination[3] = 0xff
 }
 
+// Unchanged reports that update only repaints what is already shown. A server may resend its screen
+// many times a second (FreeRDP's shadow: about 50): each frame costs a PNG and a recorded,
+// acknowledged segment, for nothing to see. Only plain replacements can be judged; anything else
+// counts as a change, so that nothing is lost by being wrongly skipped.
+func (f *RDPFramebuffer) Unchanged(update RDPBitmapUpdate) bool {
+	if f == nil || len(update.Rectangles) == 0 {
+		return false
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.image == nil {
+		return false
+	}
+	bounds := f.image.Bounds()
+	for _, rect := range update.Rectangles {
+		rowBytes := int(rect.Width) * 4
+		if rect.operation != rdpBitmapRectangleReplace || rect.Width == 0 || rect.Height == 0 ||
+			int(rect.X)+int(rect.Width) > bounds.Dx() || int(rect.Y)+int(rect.Height) > bounds.Dy() ||
+			len(rect.Pixels) != rowBytes*int(rect.Height) {
+			return false
+		}
+		for row := 0; row < int(rect.Height); row++ {
+			start := f.image.PixOffset(int(rect.X), int(rect.Y)+row)
+			if !bytes.Equal(f.image.Pix[start:start+rowBytes], rect.Pixels[row*rowBytes:(row+1)*rowBytes]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // Apply validates every operation before changing the framebuffer, applies
 // replacement, solid-brush, destination-only, line, polygon, ellipse and screen-copy
 // operations, and returns the next complete PNG frame. Sequence numbers are

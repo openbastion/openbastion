@@ -105,6 +105,11 @@ func (s *CredSSPClientSession) CompleteLicensing(ctx context.Context, timeout ti
 	if readErr != nil {
 		return ErrMCSConnection
 	}
+	// A server with nothing to license answers at once (MS-RDPBCGR 1.3.1.1, phase 7).
+	if parseRDPServerLicenseSuccess(serverPacket, s.mcsResponse.IOChannelID) {
+		clear(serverPacket)
+		return nil
+	}
 	licenseKey, parseErr := parseRDPServerLicenseRequest(serverPacket, s.mcsResponse.IOChannelID, fallbackKey)
 	clear(serverPacket)
 	if parseErr != nil {
@@ -379,7 +384,6 @@ func parseMCSLicensingIndication(packet []byte, expectedChannelID uint16) ([]byt
 	}
 	mcs := packet[7:]
 	if len(mcs) < 7 || mcs[0] != mcsSendDataIndication ||
-		binary.BigEndian.Uint16(mcs[1:3]) != rdpServerChannelID-mcsUserIDBase ||
 		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5] != 0x70 {
 		return nil, ErrMCSConnection
 	}

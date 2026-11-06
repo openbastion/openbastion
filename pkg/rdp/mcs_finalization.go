@@ -97,20 +97,19 @@ func (s *CredSSPClientSession) FinalizeConnection(ctx context.Context, timeout t
 
 	for _, expected := range []struct {
 		typ    byte
-		stream byte
 		action uint16
 	}{
-		{typ: rdpPDU2Synchronize, stream: 0}, // STREAM_UNDEFINED is seen in some server implementations.
-		{typ: rdpPDU2Control, stream: 2, action: rdpControlCooperate},
-		{typ: rdpPDU2Control, stream: 2, action: rdpControlGranted},
-		{typ: rdpPDU2FontMap, stream: 2},
+		{typ: rdpPDU2Synchronize},
+		{typ: rdpPDU2Control, action: rdpControlCooperate},
+		{typ: rdpPDU2Control, action: rdpControlGranted},
+		{typ: rdpPDU2FontMap},
 	} {
 		packet, readErr := readMCSConnectResponse(conn)
 		if readErr != nil {
 			return RDPFinalizationResult{}, ErrMCSConnection
 		}
 		entries, parseErr := parseRDPFinalizationResponse(packet, s.mcsResponse.IOChannelID,
-			s.serverCapabilities.ShareID, s.userChannelID, expected.typ, expected.stream, expected.action)
+			s.serverCapabilities.ShareID, s.userChannelID, expected.typ, expected.action)
 		clear(packet)
 		if parseErr != nil || ctx.Err() != nil {
 			return RDPFinalizationResult{}, ErrMCSConnection
@@ -182,14 +181,14 @@ func marshalRDPClientFontList(shareID uint32, userID uint16) []byte {
 	return packet
 }
 
-func parseRDPFinalizationResponse(packet []byte, expectedChannelID uint16, shareID uint32, userID uint16, pduType2, streamID byte, expectedAction uint16) (uint16, error) {
+func parseRDPFinalizationResponse(packet []byte, expectedChannelID uint16, shareID uint32, userID uint16, pduType2 byte, expectedAction uint16) (uint16, error) {
 	if len(packet) < 7+7+18 || len(packet) > maxTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
 		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) || !equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) ||
 		expectedChannelID != mcsGlobalChannelID {
 		return 0, ErrMCSConnection
 	}
 	mcs := packet[7:]
-	if mcs[0] != mcsSendDataIndication || binary.BigEndian.Uint16(mcs[1:3]) != rdpServerChannelID-mcsUserIDBase ||
+	if mcs[0] != mcsSendDataIndication ||
 		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5] != 0x70 {
 		return 0, ErrMCSConnection
 	}
@@ -197,23 +196,19 @@ func parseRDPFinalizationResponse(packet []byte, expectedChannelID uint16, share
 	if err != nil || length == 0 || length != len(userData) || len(userData) < 18 {
 		return 0, ErrMCSConnection
 	}
-	streamMatches := userData[11] == streamID
-	if pduType2 == rdpPDU2Synchronize {
-		streamMatches = userData[11] == 0 || userData[11] == 1
-	}
+	// The stream and uncompressedLength (FreeRDP: the payload's length; the specification: the
+	// packet's) say nothing this client depends on, and it is not compressed: flag and length are 0.
 	if int(binary.LittleEndian.Uint16(userData[0:2])) != len(userData) ||
 		binary.LittleEndian.Uint16(userData[2:4]) != rdpShareDataPDU ||
-		binary.LittleEndian.Uint16(userData[4:6]) != rdpServerChannelID ||
-		binary.LittleEndian.Uint32(userData[6:10]) != shareID || !streamMatches ||
-		int(binary.LittleEndian.Uint16(userData[12:14])) != len(userData) || userData[14] != pduType2 ||
+		binary.LittleEndian.Uint32(userData[6:10]) != shareID ||
+		userData[14] != pduType2 ||
 		userData[15] != 0 || binary.LittleEndian.Uint16(userData[16:18]) != 0 {
 		return 0, ErrMCSConnection
 	}
 	payload := userData[18:]
 	switch pduType2 {
 	case rdpPDU2Synchronize:
-		if len(payload) != 4 || binary.LittleEndian.Uint16(payload[:2]) != rdpSyncMessage ||
-			binary.LittleEndian.Uint16(payload[2:4]) != 0 {
+		if len(payload) != 4 || binary.LittleEndian.Uint16(payload[:2]) != rdpSyncMessage {
 			return 0, ErrMCSConnection
 		}
 	case rdpPDU2Control:
@@ -229,7 +224,7 @@ func parseRDPFinalizationResponse(packet []byte, expectedChannelID uint16, share
 		if action == rdpControlCooperate && (grantID != 0 || controlID != 0) {
 			return 0, ErrMCSConnection
 		}
-		if action == rdpControlGranted && (grantID != userID || controlID != uint32(rdpServerChannelID)) {
+		if action == rdpControlGranted && grantID != userID {
 			return 0, ErrMCSConnection
 		}
 	case rdpPDU2FontMap:

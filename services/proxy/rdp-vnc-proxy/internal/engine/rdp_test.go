@@ -296,3 +296,39 @@ func TestRDPCodecMapsScreenStreamWheelButtonBits(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 }
+
+// A server may repaint its screen tens of times a second: only what changes costs a PNG and a
+// recorded segment. The first frame is always sent, even of a screen still black.
+func TestRDPCodec_ARepaintOfTheSamePixelsIsNotAFrame(t *testing.T) {
+	// The very pixels of a new framebuffer: nothing changes, and the operator must still see it.
+	black := rdp.RDPBitmapUpdate{Rectangles: []rdp.RDPBitmapRectangle{{Width: 1, Height: 1, Pixels: []byte{0, 0, 0, 0xff}}}}
+	white := rdp.RDPBitmapUpdate{Rectangles: []rdp.RDPBitmapRectangle{{Width: 1, Height: 1, Pixels: []byte{0xff, 0xff, 0xff, 0xff}}}}
+	target := &fakeRDPDesktop{width: 1, height: 1, updates: []rdp.RDPBitmapUpdate{black, black, black, white, white, black}}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return target, nil }}
+	session, err := codec.Open(context.Background(), rdpTestCredential(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	var frames int
+	var last uint64
+	for frames < 3 {
+		select {
+		case frame := <-session.Frames():
+			frames++
+			if frame.Sequence <= last && frames > 1 {
+				t.Fatalf("sequence %d after %d", frame.Sequence, last)
+			}
+			last = frame.Sequence
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d frames, want 3: black, white, black", frames)
+		}
+	}
+	select {
+	case frame, ok := <-session.Frames():
+		if ok {
+			t.Fatalf("a fourth frame: %+v", frame.Sequence)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
+}

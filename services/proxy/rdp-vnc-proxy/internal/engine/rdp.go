@@ -376,6 +376,7 @@ func (s *rdpScreenSessionAdapter) Close() error {
 func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 	defer close(s.done)
 	defer close(s.frames)
+	shown := false
 	for {
 		update, err := s.target.ReadBitmapUpdate(ctx, rdpReadTimeout)
 		if err != nil {
@@ -386,6 +387,11 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 			}
 			return
 		}
+		// The first frame is always sent: the operator has seen nothing yet, even of a black screen.
+		if shown && s.framebuffer.Unchanged(update) {
+			continue
+		}
+		shown = true
 		frame, err := s.framebuffer.Apply(update, time.Now().UTC())
 		if err != nil {
 			s.mu.Lock()

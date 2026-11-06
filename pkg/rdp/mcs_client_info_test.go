@@ -262,8 +262,8 @@ func parseMCSClientInfoForTest(packet []byte, userID uint16) (parsedRDPClientInf
 	if result.Password, readErr = readString(result.PasswordLength); readErr != nil || result.Password == "" {
 		return result, ErrMCSConnection
 	}
-	if alternateLength != 0 || workingLength != 0 || offset+4 != len(info) ||
-		!bytes.Equal(info[offset:], []byte{0, 0, 0, 0}) {
+	if alternateLength != 0 || workingLength != 0 ||
+		!bytes.Equal(info[offset:], append([]byte{0, 0, 0, 0}, rdpExtendedInfoPacket()...)) {
 		return result, ErrMCSConnection
 	}
 	return result, nil

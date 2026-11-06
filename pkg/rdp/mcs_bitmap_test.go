@@ -47,13 +47,10 @@ func TestParseRDPBitmapUpdateRejectsMalformedInput(t *testing.T) {
 	trailingBitmapData := mcsTestFinalizationResponse(shareID, rdpPDU2Update, 2, trailingPayload)
 	cases := map[string][]byte{
 		"truncated":                        append([]byte(nil), base[:len(base)-1]...),
-		"wrong MCS initiator":              mutateBitmapMCS(base, func(mcs []byte) { mcs[2]++ }),
 		"wrong MCS channel":                mutateBitmapMCS(base, func(mcs []byte) { mcs[4]++ }),
 		"wrong MCS segmentation":           mutateBitmapMCS(base, func(mcs []byte) { mcs[5] = 0x71 }),
 		"wrong share data PDU":             mutateBitmapShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[2:4], 0x0018) }),
-		"wrong share source":               mutateBitmapShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[4:6], 1003) }),
 		"wrong share id":                   mutateBitmapShare(base, func(share []byte) { binary.LittleEndian.PutUint32(share[6:10], 0) }),
-		"wrong stream":                     mutateBitmapShare(base, func(share []byte) { share[11] = 1 }),
 		"wrong update type":                mutateBitmapShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[18:20], 0) }),
 		"compressed bitmap":                mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1, 2, 1, 1, 32, rdpBitmapCompressed, validBitmap)),
 		"compressed bitmap without header": mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1, 2, 1, 1, 32, rdpBitmapNoCompHdr, validBitmap)),
@@ -390,7 +387,7 @@ func mutateBitmapShare(packet []byte, mutate func([]byte)) []byte {
 
 func TestParseRDPBitmapUpdateDecodesRDP6ARGBRawPlanes(t *testing.T) {
 	const shareID = uint32(0x000103ea)
-	stream := []byte{0x04, 0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff}
+	stream := []byte{0x20, 0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff}
 	compressed := mcsTestRDP6BitmapData(4, 1, stream)
 	packet := mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(0, 0, 4, 1, 32, rdpBitmapCompressed, compressed))
 	got, err := parseRDPBitmapUpdate(packet, mcsGlobalChannelID, shareID, 1280, 720)
@@ -404,7 +401,7 @@ func TestParseRDPBitmapUpdateDecodesRDP6ARGBRawPlanes(t *testing.T) {
 }
 
 func TestDecodeRDP6BitmapUsesBottomUpPlaneRows(t *testing.T) {
-	stream := []byte{0x04}
+	stream := []byte{0x20}
 	stream = append(stream, 1, 2, 3, 4, 5, 6, 7, 8) // red, bottom row first
 	stream = append(stream, 11, 12, 13, 14, 15, 16, 17, 18)
 	stream = append(stream, 21, 22, 23, 24, 25, 26, 27, 28)
@@ -444,7 +441,7 @@ func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
 		"decoded size mismatch":          mutateRDP6Data(base, func(data []byte) { binary.LittleEndian.PutUint16(data[6:8], 4) }),
 		"RLE truncated plane":            mcsTestRDP6BitmapData(4, 1, []byte{0x0c, 0x40, 1, 2}),
 		"chroma subsampling unsupported": mutateRDP6Data(base, func(data []byte) { data[8] = 0x14 }),
-		"reserved format bits":           mutateRDP6Data(base, func(data []byte) { data[8] = 0x07 }),
+		"reserved format bits":           mutateRDP6Data(base, func(data []byte) { data[8] = 0xc0 }),
 		"short plane data":               base[:len(base)-1],
 		"trailing data":                  append(append([]byte(nil), base...), 0, 1),
 	}
@@ -463,7 +460,7 @@ func TestDecodeRDP6BitmapRejectsUnsupportedOrMalformedStreams(t *testing.T) {
 func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
 	// CLL=1 restores signed Co/Cg samples by one bit before inverse conversion.
 	// The expected values follow the MS-RDPEGDI inverse AYCoCg matrix.
-	stream := []byte{0x24}                      // CLL=1, no alpha, no subsampling, raw planes.
+	stream := []byte{0x21}                      // CLL=1, no alpha, no subsampling, raw planes.
 	stream = append(stream, 128, 128, 128, 128) // Y
 	stream = append(stream, 64, 64, 64, 64)     // Co = +128 after restoration
 	stream = append(stream, 32, 32, 32, 32)     // Cg = +64 after restoration
@@ -497,7 +494,7 @@ func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
 	}
 
 	// Alpha is copied, never passed through the color-space transform.
-	alphaStream := []byte{0x20}
+	alphaStream := []byte{0x01}
 	alphaStream = append(alphaStream, 0x11, 0x22, 0x33, 0x44) // alpha
 	alphaStream = append(alphaStream, 128, 128, 128, 128)     // Y
 	alphaStream = append(alphaStream, 0, 0, 0, 0)             // Co
@@ -514,7 +511,7 @@ func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
 }
 
 func TestDecodeRDP6AYCoCgSupportsRLEPlanes(t *testing.T) {
-	stream := []byte{0x2c}                    // CLL=1, RLE, no alpha.
+	stream := []byte{0x31}                    // CLL=1, RLE, no alpha.
 	for _, value := range []byte{128, 0, 0} { // neutral gray: Y=128, Co=Cg=0
 		stream = append(stream, 0x40, value, value, value, value)
 	}
@@ -532,7 +529,7 @@ func TestDecodeRDP6AYCoCgSupportsRLEPlanes(t *testing.T) {
 func TestDecodeRDP6AYCoCgSubsamplingExpandsOddHeight(t *testing.T) {
 	const width, height = 4, 5
 	const chromaWidth, chromaHeight = 2, 3
-	stream := []byte{0x34} // CLL=1, CS=1, no alpha, raw planes.
+	stream := []byte{0x29} // CLL=1, CS=1, no alpha, raw planes.
 	for range width * height {
 		stream = append(stream, 128) // full-resolution luma.
 	}
@@ -573,7 +570,7 @@ func TestDecodeRDP6AYCoCgSubsamplingExpandsOddHeight(t *testing.T) {
 
 func TestDecodeRDP6AYCoCgSubsamplingPreservesAlpha(t *testing.T) {
 	const width, height = 4, 3
-	stream := []byte{0x30} // CLL=1, CS=1, alpha present, raw planes.
+	stream := []byte{0x09} // CLL=1, CS=1, alpha present, raw planes.
 	for i := range width * height {
 		stream = append(stream, byte(i+1))
 	}
@@ -599,7 +596,7 @@ func TestDecodeRDP6AYCoCgSubsamplingPreservesAlpha(t *testing.T) {
 
 func TestDecodeRDP6AYCoCgSubsamplingSupportsRLEPlanes(t *testing.T) {
 	const width, height = 4, 5
-	stream := []byte{0x3c} // CLL=1, CS=1, RLE, no alpha.
+	stream := []byte{0x39} // CLL=1, CS=1, RLE, no alpha.
 	appendRLEPlane := func(planeWidth, planeHeight int, firstRow []byte) {
 		for y := 0; y < planeHeight; y++ {
 			stream = append(stream, byte(planeWidth<<4))
@@ -629,7 +626,7 @@ func TestDecodeRDP6AYCoCgSubsamplingSupportsRLEPlanes(t *testing.T) {
 }
 
 func TestDecodeRDP6AYCoCgSubsamplingRejectsTruncatedRLEChromaPlane(t *testing.T) {
-	stream := []byte{0x3c}                            // CLL=1, CS=1, RLE, no alpha.
+	stream := []byte{0x39}                            // CLL=1, CS=1, RLE, no alpha.
 	stream = append(stream, 0x40, 128, 128, 128, 128) // full-resolution luma.
 	stream = append(stream, 0x20, 64, 0)              // Co, 2x1.
 	stream = append(stream, 0x20, 0)                  // truncated Cg, 2x1.
@@ -673,7 +670,7 @@ func TestDecodeRDP6BitmapDecodesRLEARGBPlanes(t *testing.T) {
 		// First row is absolute; second row encodes +4 deltas (zig-zag 8).
 		return []byte{0x40, first, first + 1, first + 2, first + 3, 0x40, 8, 8, 8, 8}
 	}
-	stream := []byte{0x08} // CLL=0, CS=0, RLE=1, alpha present.
+	stream := []byte{0x10} // CLL=0, CS=0, RLE=1, alpha present.
 	stream = append(stream, plane(240)...)
 	stream = append(stream, plane(10)...)
 	stream = append(stream, plane(20)...)
@@ -699,7 +696,7 @@ func TestDecodeRDP6BitmapDecodesRLEARGBPlanes(t *testing.T) {
 }
 
 func TestDecodeRDP6BitmapDecodesRLEWithoutAlpha(t *testing.T) {
-	stream := []byte{0x0c} // CLL=0, CS=0, RLE=1, no alpha plane.
+	stream := []byte{0x30} // CLL=0, CS=0, RLE=1, no alpha plane.
 	stream = append(stream, 0x40, 10, 11, 12, 13)
 	stream = append(stream, 0x40, 20, 21, 22, 23)
 	stream = append(stream, 0x40, 30, 31, 32, 33)
@@ -762,7 +759,7 @@ func TestDecodeRDP6RLEPlaneRejectsMalformedSegments(t *testing.T) {
 
 func TestDecodeRDP6BitmapRejectsRLETrailingBytes(t *testing.T) {
 	plane := []byte{0x40, 1, 2, 3, 4}
-	stream := []byte{0x0c} // RLE, no alpha.
+	stream := []byte{0x30} // RLE, no alpha.
 	for range 3 {
 		stream = append(stream, plane...)
 	}
@@ -791,7 +788,7 @@ func FuzzDecodeRDP6BitmapWithHeader(f *testing.F) {
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x24, 128, 128, 128, 128, 64, 64, 64, 64, 32, 32, 32, 32}))
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x34, 128, 128, 128, 128, 64, 0, 0xc0, 0, 0, 0, 0, 0}))
 	f.Add(mcsTestRDP6BitmapData(4, 1, []byte{0x3c, 0x40, 128, 128, 128, 128, 0x20, 64, 0, 0x20, 0, 0}))
-	rleSeed := []byte{0x0c}
+	rleSeed := []byte{0x30}
 	for i := 0; i < 3; i++ {
 		rleSeed = append(rleSeed, 0x40, 1, 2, 3, 4)
 	}

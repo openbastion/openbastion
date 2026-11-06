@@ -38,11 +38,9 @@ func TestParseRDPDemandActiveRejectsMalformedAndUnsupportedProfile(t *testing.T)
 	cases["wrong TPKT version"] = append([]byte{4}, base[1:]...)
 	cases["wrong X224"] = append([]byte{base[0], base[1], base[2], base[3], 2, 0, 0x81}, base[7:]...)
 	cases["wrong MCS PDU"] = mutateDemandActive(base, func(mcs []byte) { mcs[0] = 0x64 })
-	cases["wrong server initiator"] = mutateDemandActive(base, func(mcs []byte) { mcs[2]++ })
 	cases["wrong channel"] = mutateDemandActive(base, func(mcs []byte) { mcs[4]++ })
 	cases["wrong segmentation"] = mutateDemandActive(base, func(mcs []byte) { mcs[5] = 0x71 })
 	cases["wrong share control type"] = mutateDemandActiveShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[2:4], 0x12) })
-	cases["wrong share source"] = mutateDemandActiveShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[4:6], 1003) })
 	cases["zero share id"] = mutateDemandActiveShare(base, func(share []byte) { binary.LittleEndian.PutUint32(share[6:10], 0) })
 	cases["bad source descriptor"] = mutateDemandActiveShare(base, func(share []byte) { share[14] = 0 })
 	cases["bad combined length"] = mutateDemandActiveShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[12:14], 3) })
@@ -117,16 +115,17 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 	}
 	if binary.LittleEndian.Uint16(share[0:2]) != uint16(len(share)) ||
 		binary.LittleEndian.Uint16(share[2:4]) != rdpConfirmActivePDU ||
-		binary.LittleEndian.Uint16(share[4:6]) != rdpServerChannelID ||
-		binary.LittleEndian.Uint32(share[6:10]) != 0x000103ea {
-		t.Fatalf("Confirm Active Share Control header = %x", share[:10])
+		binary.LittleEndian.Uint16(share[4:6]) != 1007 ||
+		binary.LittleEndian.Uint32(share[6:10]) != 0x000103ea ||
+		binary.LittleEndian.Uint16(share[10:12]) != rdpServerChannelID {
+		t.Fatalf("Confirm Active Share Control header = %x", share[:12])
 	}
-	sourceLength := int(binary.LittleEndian.Uint16(share[10:12]))
-	combinedLength := int(binary.LittleEndian.Uint16(share[12:14]))
-	if string(share[14:14+sourceLength]) != "OpenBastion" || combinedLength != 242 {
-		t.Fatalf("Confirm Active descriptor/combined length invalid: %x", share[14:])
+	sourceLength := int(binary.LittleEndian.Uint16(share[12:14]))
+	combinedLength := int(binary.LittleEndian.Uint16(share[14:16]))
+	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 242 {
+		t.Fatalf("Confirm Active descriptor/combined length invalid: %x", share[16:])
 	}
-	combined := share[14+sourceLength:]
+	combined := share[16+sourceLength:]
 	if binary.LittleEndian.Uint16(combined[:2]) != 5 || binary.LittleEndian.Uint16(combined[2:4]) != 0 {
 		t.Fatalf("Confirm Active capability count/padding = %x", combined[:4])
 	}

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
@@ -8,6 +9,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/pkg/rdp"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 )
 
 // A real RDP server, FreeRDP 3 (test/integration/testdata/rdp/freerdp, ADR-0071): every byte of this
@@ -136,4 +141,113 @@ func TestRDPInterop_CredSSP(t *testing.T) {
 			t.Fatalf("the target received CredSSP: %s", logs)
 		}
 	})
+}
+
+func TestRDPInterop_Screen(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := &RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second}
+	session, err := codec.Open(ctx, cred)
+	if err != nil {
+		var failure *proxycore.ScreenFailure
+		if errors.As(err, &failure) {
+			t.Fatalf("%v: %v\n%s", err, failure.Err, target.logs(t))
+		}
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+
+	next := func(limit time.Duration) (screenstream.Message, bool) {
+		select {
+		case message, ok := <-session.Frames():
+			if !ok {
+				t.Fatalf("the stream ended: %v\n%s", session.Err(), target.logs(t))
+			}
+			return message, true
+		case <-time.After(limit):
+			return screenstream.Message{}, false
+		}
+	}
+	// The first screen comes in slices of rectangles: only a quiet screen can show what a key did.
+	settle := func(frame screenstream.Message) screenstream.Message {
+		for {
+			following, ok := next(3 * time.Second)
+			if !ok {
+				return frame
+			}
+			frame = following
+		}
+	}
+	first, ok := next(20 * time.Second)
+	if !ok {
+		t.Fatalf("no frame in 20 s: %v\n%s", session.Err(), target.logs(t))
+	}
+	before := settle(first)
+	if len(before.PNG) == 0 || before.Width != 1280 || before.Height != 800 {
+		t.Fatalf("frame: %d bytes, %dx%d", len(before.PNG), before.Width, before.Height)
+	}
+	dump := func(name string, frame screenstream.Message) {
+		if dir := os.Getenv("RDP_INTEROP_DUMP"); dir != "" {
+			if err := os.WriteFile(filepath.Join(dir, name), frame.PNG, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	dump("before.png", before)
+	shown := rdpInteropDecode(t, before)
+	if !rdpInteropIs(shown, 100, 100, 0xff) || !rdpInteropIs(shown, 800, 600, 0) {
+		t.Fatalf("not the target's screen, an xterm on black: %v at (100,100), %v at (800,600)", shown.At(100, 100), shown.At(800, 600))
+	}
+	// No window manager on this X server: the keyboard goes to the window under the pointer.
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 100, Y: 100}); err != nil {
+		t.Fatalf("pointer: %v", err)
+	}
+	// xterm runs `cat`: what is typed shows only if the key reached the desktop.
+	for _, scancode := range []uint16{0x1e, 0x30, 0x1c} { // a, b, Enter
+		for _, flags := range []uint8{screenstream.KeyPressed, screenstream.KeyReleased} {
+			if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: scancode, Flags: flags}); err != nil {
+				t.Fatalf("input: %v", err)
+			}
+		}
+	}
+	changed, ok := next(10 * time.Second)
+	if !ok {
+		t.Fatalf("the screen did not change after the keys: %v\n%s", session.Err(), target.logs(t))
+	}
+	after := settle(changed)
+	dump("after.png", after)
+	if bytes.Equal(after.PNG, before.PNG) {
+		t.Fatal("the screen came back identical: the keys changed nothing")
+	}
+	// Only where xterm writes: the first lines of its window, not anywhere on the desktop.
+	typed := rdpInteropDecode(t, after)
+	for y := 0; y < 800; y++ {
+		for x := 0; x < 1280; x++ {
+			if typed.At(x, y) != shown.At(x, y) && (x > 484 || y > 60) {
+				t.Fatalf("a change outside the terminal's first lines at (%d,%d)", x, y)
+			}
+		}
+	}
+}
+
+func rdpInteropDecode(t *testing.T, frame screenstream.Message) image.Image {
+	t.Helper()
+	decoded, err := png.Decode(bytes.NewReader(frame.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decoded
+}
+
+func rdpInteropIs(shown image.Image, x, y int, value uint32) bool {
+	r, g, b, a := shown.At(x, y).RGBA()
+	return r>>8 == value && g>>8 == value && b>>8 == value && a>>8 == 0xff
 }

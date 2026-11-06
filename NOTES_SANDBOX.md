@@ -2884,3 +2884,15 @@ Reprise d'ADR-0071 par ce qui manquait le plus : `pkg/rdp` n'avait jamais parlé
 **Prouvé** (dans cette session) : `make test-rdp-interop`, 3 sous-tests verts, dont mauvais mot de passe et pin d'imposteur. `go test -race ./pkg/rdp` vert. 9/9 mutations tuées, dont 5 rejouées contre le vrai serveur. FreeRDP 2.11 a été écarté : il attend du NTLM nu, hors de SPNEGO.
 
 **Limites** : pas de Windows. Le passage de la séquence à 1 après le MIC est mesuré sur FreeRDP, non normatif. Un serveur qui demande le MIC et compte autrement fermera la session : refus, pas contournement. `make test-rdp-interop` n'est pas en CI. La connexion échoue ensuite à la réponse MCS/GCC. RDP reste non exposé.
+
+## 2026-11-06 — ADR-0071, incrément 71 : un écran RDP réel, sans route opérateur
+
+`RDPCodec.Open` aboutit contre FreeRDP 3.15, avec image et entrée. Onze défauts corrigés, tous invisibles sur les faux serveurs (table dans l'ADR). Le décodeur RDP6 des incréments 29 à 33 lisait les bits du format à l'envers et remettait à zéro les runs. Les tests et les gabarits encodaient les mêmes erreurs : ils sont réalignés, et `pkg/rdp/realserver_bytes_test.go` ajoute des octets capturés.
+
+**Deux leçons mesurées.** Un premier test « l'image a changé » passait sans que le clavier ait rien fait : l'écran arrive par tranches. Le test attend désormais un écran stable, et limite la différence aux lignes du terminal. Et c'est en regardant la capture qu'on a vu les bandes de pixels faux, qu'un test d'image non vide acceptait.
+
+**Prouvé** (dans cette session) : `make test-rdp-interop` vert, écran blanc et noir aux bons endroits, touches visibles dans `xterm` (`cat`) ; 10/10 passages stables après correction de l'instabilité (forme longue des longueurs Fast-Path) ; `go test -race ./pkg/rdp` et le service verts ; `make build vet` sans erreur ; fuzz Fast-Path 20 s sans panique ; 15/15 mutations tuées. Le harnais de mutation signalait à tort « vert » sur une mutation qui ne compile pas : corrigé, puis rejoué sur les 4 concernées.
+
+**Bogue amont vérifié dans le code source** : `freerdp_bitmap_planar_delta_encode_plane`, FreeRDP 3.15, `BYTE s2c` et test `s2c >= 0` toujours vrai. D'où la bande grise sur les transitions fortes, et sans doute les glyphes pâteux. Notre décodeur n'est pas déformé ; il garde l'arithmétique modulo 256 où FreeRDP sature : **à trancher sur Windows**.
+
+**Limites** : aucune cible Windows, et rien ne prouve que les assouplissements y suffisent ; texte lisible non prouvé ; `Deactivate All` ferme la session (la cible de test a été alignée sur 1280×800 pour cela) ; pas de fragments Fast-Path ; aucun ordre graphique annoncé, donc les décodeurs d'ordres restent sans contact réel ; pointeur non dessiné ; enregistrement RDP non éprouvé ; pas de scancode côté Admin UI ; `make test-rdp-interop` hors CI. RDP reste non exposé.

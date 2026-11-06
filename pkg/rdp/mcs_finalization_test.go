@@ -76,53 +76,43 @@ func TestParseRDPFinalizationResponsesStrictly(t *testing.T) {
 	for _, tc := range valid {
 		t.Run(tc.name, func(t *testing.T) {
 			packet := mcsTestFinalizationResponse(shareID, tc.typ, tc.stream, tc.payload)
-			if _, err := parseRDPFinalizationResponse(packet, mcsGlobalChannelID, shareID, userID, tc.typ, tc.stream, tc.action); err != nil {
+			if _, err := parseRDPFinalizationResponse(packet, mcsGlobalChannelID, shareID, userID, tc.typ, tc.action); err != nil {
 				t.Fatalf("valid response rejected: %v", err)
 			}
 		})
 	}
 	base := mcsTestFinalizationResponse(shareID, rdpPDU2Control, 2, []byte{4, 0, 0, 0, 0, 0, 0, 0})
-	badSyncTarget := mcsTestFinalizationResponse(shareID, rdpPDU2Synchronize, 0, []byte{1, 0, 0xef, 0x03})
 	badGrantID := mcsTestFinalizationResponse(shareID, rdpPDU2Control, 2, []byte{2, 0, 0, 0, 0xea, 0x03, 0, 0})
-	badControlID := mcsTestFinalizationResponse(shareID, rdpPDU2Control, 2, []byte{2, 0, 0xef, 0x03, 0xeb, 0x03, 0, 0})
 	badFontMap := mcsTestFinalizationResponse(shareID, rdpPDU2FontMap, 2, []byte{1, 0, 1, 0, 3, 0, 4, 0})
 	cases := map[string][]byte{
 		"truncated":                             append([]byte(nil), base[:len(base)-1]...),
 		"wrong TPKT":                            append([]byte{4}, base[1:]...),
-		"wrong initiator":                       mutateFinalizationMCS(base, func(mcs []byte) { mcs[2]++ }),
 		"wrong channel":                         mutateFinalizationMCS(base, func(mcs []byte) { mcs[4]++ }),
 		"wrong segmentation":                    mutateFinalizationMCS(base, func(mcs []byte) { mcs[5] = 0x71 }),
 		"wrong share type":                      mutateFinalizationShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[2:4], 0x11) }),
-		"wrong share source":                    mutateFinalizationShare(base, func(share []byte) { binary.LittleEndian.PutUint16(share[4:6], 1003) }),
 		"wrong share ID":                        mutateFinalizationShare(base, func(share []byte) { binary.LittleEndian.PutUint32(share[6:10], 1) }),
 		"wrong PDU type":                        mutateFinalizationShare(base, func(share []byte) { share[14] = rdpPDU2FontList }),
 		"compressed PDU":                        mutateFinalizationShare(base, func(share []byte) { share[15] = 1 }),
 		"trailing payload":                      append(append([]byte(nil), base...), 0),
 		"wrong control action":                  mcsTestFinalizationResponse(shareID, rdpPDU2Control, 2, []byte{2, 0, 0xef, 0x03, 0xea, 0x03, 0, 0}),
-		"wrong server synchronize target":       badSyncTarget,
 		"wrong granted user":                    badGrantID,
-		"wrong granted server":                  badControlID,
 		"nonempty font map for empty font list": badFontMap,
 	}
 	for name, packet := range cases {
 		t.Run(name, func(t *testing.T) {
 			typ, action := rdpPDU2Control, rdpControlCooperate
-			stream := byte(2)
-			if name == "wrong server synchronize target" {
-				typ, action, stream = rdpPDU2Synchronize, 0, 0
-			}
-			if name == "wrong granted user" || name == "wrong granted server" {
+			if name == "wrong granted user" {
 				action = rdpControlGranted
 			}
 			if name == "nonempty font map for empty font list" {
 				typ, action = rdpPDU2FontMap, 0
 			}
-			if _, err := parseRDPFinalizationResponse(packet, mcsGlobalChannelID, shareID, userID, typ, stream, action); !errors.Is(err, ErrMCSConnection) {
+			if _, err := parseRDPFinalizationResponse(packet, mcsGlobalChannelID, shareID, userID, typ, action); !errors.Is(err, ErrMCSConnection) {
 				t.Fatalf("error = %v, want ErrMCSConnection", err)
 			}
 		})
 	}
-	if _, err := parseRDPFinalizationResponse(base, 1004, shareID, userID, rdpPDU2Control, 2, rdpControlCooperate); !errors.Is(err, ErrMCSConnection) {
+	if _, err := parseRDPFinalizationResponse(base, 1004, shareID, userID, rdpPDU2Control, rdpControlCooperate); !errors.Is(err, ErrMCSConnection) {
 		t.Fatalf("unexpected MCS channel accepted: %v", err)
 	}
 }
@@ -273,6 +263,16 @@ func FuzzParseRDPFinalizationResponse(f *testing.F) {
 	f.Add(mcsTestFinalizationResponse(0x000103ea, rdpPDU2Synchronize, 1, []byte{1, 0, 0x00, 0x00}))
 	f.Add([]byte("not an RDP finalization PDU"))
 	f.Fuzz(func(t *testing.T, packet []byte) {
-		_, _ = parseRDPFinalizationResponse(packet, mcsGlobalChannelID, 0x000103ea, 1007, rdpPDU2Synchronize, 1, 0)
+		_, _ = parseRDPFinalizationResponse(packet, mcsGlobalChannelID, 0x000103ea, 1007, rdpPDU2Synchronize, 0)
 	})
+}
+
+// What FreeRDP 3.15 sends (captured): pduSource and targetUser are its own channel, 1004, and
+// uncompressedLength the payload's. None of them is what this client depends on.
+func TestParseRDPFinalizationResponse_TheSynchronizeOfARealServer(t *testing.T) {
+	share := []byte{0x16, 0, 0x17, 0, 0xec, 3, 0xec, 3, 1, 0, 0, 1, 4, 0, 0x1f, 0, 0, 0, 1, 0, 0xec, 3}
+	packet := append([]byte{3, 0, 0, byte(7 + 7 + len(share)), 2, 0xf0, 0x80, mcsSendDataIndication, 0, 3, 3, 0xeb, 0x70, byte(len(share))}, share...)
+	if _, err := parseRDPFinalizationResponse(packet, mcsGlobalChannelID, 0x000103ec, 1007, rdpPDU2Synchronize, 0); err != nil {
+		t.Fatalf("%v", err)
+	}
 }

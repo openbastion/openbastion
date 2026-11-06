@@ -149,7 +149,7 @@ func TestParseMCSConnectResponseAcceptsOptionalEarlyCapabilityFlagsOmission(t *t
 
 func TestParseMCSConnectResponseIgnoresMCSAndGCCMetadataAsSpecified(t *testing.T) {
 	packet := mcsTestConnectResponseWithDomainParameters(protocolHybrid, 0, 0, 0, []uint32{65536, 0, 65536, 0, 65536, 0, 1, 0})
-	metadata := []byte{0x14, 0x79, 0xf3, 0x01, 0x00, 0x01, 0xc0}
+	metadata := []byte{0x14, 0x79, 0xf3, 0x01, 0x01, 0x00, 0x01, 0xc0}
 	offset := bytes.Index(packet, metadata)
 	if offset < 0 {
 		t.Fatal("test response has no GCC Conference-Create-Response metadata")
@@ -532,7 +532,7 @@ func mcsTestConnectResponseWithOptions(requestedProtocol uint32, encryptionMetho
 		network = append(network, make([]byte, int(channelCount)*2)...)
 	}
 	blocks = appendGCCBlock(blocks, gccServerNetworkType, network)
-	gcc := []byte{0, 5, 0, 0x14, 0x7c, 0, 1, 0x2a, 0x14, 0x79, 0xf3, 1, 0, 1, 0xc0, 0, 'M', 'c', 'D', 'n'}
+	gcc := []byte{0, 5, 0, 0x14, 0x7c, 0, 1, 0x2a, 0x14, 0x79, 0xf3, 1, 1, 0, 1, 0xc0, 0, 'M', 'c', 'D', 'n'}
 	gcc = appendPERLength(gcc, len(blocks))
 	gcc = append(gcc, blocks...)
 	var mcsBody []byte

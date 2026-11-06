@@ -381,11 +381,8 @@ func readPERLength(data []byte) (int, []byte, error) {
 	if first&0xc0 != 0x80 || len(data) < 2 {
 		return 0, nil, ErrMCSConnection
 	}
-	length := int(first&0x3f)<<8 | int(data[1])
-	if length < 0x80 {
-		return 0, nil, ErrMCSConnection
-	}
-	return length, data[2:], nil
+	// A real server uses this form for small lengths too (FreeRDP: 80 14): PER is not DER here.
+	return int(first&0x3f)<<8 | int(data[1]), data[2:], nil
 }
 
 func parseGCCConferenceCreateResponse(data []byte) (MCSConnectResponse, error) {
@@ -398,16 +395,17 @@ func parseGCCConferenceCreateResponse(data []byte) (MCSConnectResponse, error) {
 		return response, ErrMCSConnection
 	}
 	rest = rest[1:]
-	if len(rest) < 11 {
+	if len(rest) < 12 {
 		return response, ErrMCSConnection
 	}
-	// The nodeID, tag, result and number-of-sets fields are ignored by the
-	// RDP client. Only the conference choice and mandatory H.221 key matter.
-	rest = rest[2:]
-	if rest[3] != 0xc0 || rest[4] != 0 || !equalBytes(rest[5:9], []byte("McDn")) {
+	// nodeID (2), tag length and tag (2), result (1) and number of sets (1) are ignored by the RDP
+	// client (MS-RDPBCGR 4.1.4: 14 76 0a 01 01 00 01 c0 00 "McDn"). Only the conference choice and
+	// the mandatory H.221 key matter.
+	rest = rest[6:]
+	if rest[0] != 0xc0 || rest[1] != 0 || !equalBytes(rest[2:6], []byte("McDn")) {
 		return response, ErrMCSConnection
 	}
-	rest = rest[9:]
+	rest = rest[6:]
 	userDataLength, rest, err := readPERLength(rest)
 	if err != nil || userDataLength == 0 || userDataLength > maxMCSConnectData || len(rest) != userDataLength {
 		return response, ErrMCSConnection
@@ -527,12 +525,10 @@ func readRDPServerUpdatePacket(r io.Reader, maxPacket int) ([]byte, bool, error)
 			return nil, false, ErrMCSConnection
 		}
 		length = int(lengthFirst[0]&0x7f)<<8 | int(lengthSecond[0])
-		headerLength++
-		if length < 128 {
-			return nil, false, ErrMCSConnection
-		}
+		headerLength++ // The long form is not reserved for long packets: FreeRDP uses it for small ones.
 	}
-	if length < headerLength+4 || length > maxPacket {
+	// A pointer update is as short as its 3-byte header (MS-RDPBCGR 2.2.9.1.2.1).
+	if length < headerLength+3 || length > maxPacket {
 		return nil, false, ErrMCSConnection
 	}
 	packet := make([]byte, length)

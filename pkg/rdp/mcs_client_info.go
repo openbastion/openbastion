@@ -124,6 +124,7 @@ func marshalRDPClientInfo(userID, ioChannelID uint16, info RDPClientInfo) ([]byt
 	infoPacket = append(infoPacket, 0, 0) // Password is protected by HYBRID/TLS.
 	infoPacket = append(infoPacket, 0, 0) // AlternateShell: default shell.
 	infoPacket = append(infoPacket, 0, 0) // WorkingDir: default directory.
+	infoPacket = append(infoPacket, rdpExtendedInfoPacket()...)
 
 	// The Basic Security Header remains present under HYBRID/TLS. TLS protects
 	// the complete transport; SEC_INFO_PKT identifies the Client Info payload.
@@ -137,6 +138,28 @@ func marshalRDPClientInfo(userID, ioChannelID uint16, info RDPClientInfo) ([]byt
 		return nil, ErrMCSConnection
 	}
 	return packet, nil
+}
+
+// rdpExtendedInfoPacket is the TS_EXTENDED_INFO_PACKET every server after RDP 4.0 reads
+// (MS-RDPBCGR 2.2.1.11.1.1.1). Nothing about the proxy is told: no client address, no directory,
+// no time zone, no reconnection cookie. What is disabled costs bitmaps and shows nothing useful.
+func rdpExtendedInfoPacket() []byte {
+	const (
+		afInet              = 0x0002
+		timeZoneInformation = 172
+		perfDisable         = 0x00000001 | 0x00000002 | 0x00000004 | 0x00000008 | 0x00000020 | 0x00000040 // wallpaper, window drag, menu animations, theming, cursor shadow, cursor settings
+	)
+	packet := make([]byte, 0, 2+2+2+2+2+timeZoneInformation+4+4+2)
+	packet = binary.LittleEndian.AppendUint16(packet, afInet)
+	packet = binary.LittleEndian.AppendUint16(packet, 2) // cbClientAddress: the terminator alone.
+	packet = append(packet, 0, 0)
+	packet = binary.LittleEndian.AppendUint16(packet, 2) // cbClientDir: the terminator alone.
+	packet = append(packet, 0, 0)
+	packet = append(packet, make([]byte, timeZoneInformation)...)
+	packet = binary.LittleEndian.AppendUint32(packet, 0) // clientSessionId
+	packet = binary.LittleEndian.AppendUint32(packet, perfDisable)
+	packet = binary.LittleEndian.AppendUint16(packet, 0) // cbAutoReconnectCookie
+	return packet
 }
 
 func encodeRDPInfoString(value string, emptyAllowed bool) ([]byte, bool) {
