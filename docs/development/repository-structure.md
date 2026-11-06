@@ -290,7 +290,7 @@ Une page n'existe que si son contenu décrit ce que fait le code ; ce qui est pr
 
 ## 9. CI/CD — aperçu
 
-- **GitHub Actions** (`.github/workflows/`) : un workflow réutilisable par type de job (lint, test unitaire, build image, scan sécurité), déclenché sélectivement selon les chemins modifiés (`paths:` filter) pour ne pas reconstruire les 35 services à chaque commit de service isolé.
+- **GitHub Actions** (`.github/workflows/`) : un workflow réutilisable par type de job (lint, test unitaire, build image, scan sécurité), déclenché sélectivement selon les chemins modifiés (`paths:` filter) pour ne pas reconstruire les 35 services à chaque commit.
 - **GitLab CI** (`.gitlab-ci.yml`) : miroir fonctionnel, maintenu pour compatibilité selon la plateforme d'hébergement finale du projet.
 - Les tests d'intégration/e2e/performance/sécurité (`test/`) tournent sur un sous-ensemble de la matrice CI, pas sur chaque commit de service isolé.
 
