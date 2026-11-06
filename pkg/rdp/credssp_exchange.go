@@ -18,8 +18,7 @@ func NewCredSSPClientBindingRequest(
 	binding CredSSPPublicKeyBinding,
 	security *NTLMSSPClientSecurityContext,
 ) (TSRequest, error) {
-	if version < 5 || version > 6 || !binding.valid || security == nil ||
-		len(lastSPNEGOToken) == 0 || len(lastSPNEGOToken) > maxCredSSPToken {
+	if version < 5 || version > 6 || !binding.valid || security == nil || len(lastSPNEGOToken) > maxCredSSPToken {
 		return TSRequest{}, ErrCredSSPBindingExchange
 	}
 
@@ -27,9 +26,13 @@ func NewCredSSPClientBindingRequest(
 	if err != nil {
 		return TSRequest{}, ErrCredSSPBindingExchange
 	}
+	var tokens [][]byte
+	if len(lastSPNEGOToken) != 0 {
+		tokens = [][]byte{append([]byte(nil), lastSPNEGOToken...)}
+	}
 	return TSRequest{
 		Version:     version,
-		NegoTokens:  [][]byte{append([]byte(nil), lastSPNEGOToken...)},
+		NegoTokens:  tokens,
 		PubKeyAuth:  sealedHash,
 		ClientNonce: append([]byte(nil), binding.ClientNonce[:]...),
 	}, nil
@@ -45,6 +48,19 @@ func VerifyCredSSPServerBindingResponse(
 	binding CredSSPPublicKeyBinding,
 	security *NTLMSSPClientSecurityContext,
 ) error {
+	return verifyCredSSPServerCompletion(encoded, version, binding, security, nil)
+}
+
+// verifyCredSSPServerCompletion also accepts the server's last SPNEGO token beside pubKeyAuth when
+// mechTypes says what its MIC covers: that token only completes the negotiation, and a MIC is
+// checked whenever present.
+func verifyCredSSPServerCompletion(
+	encoded []byte,
+	version uint32,
+	binding CredSSPPublicKeyBinding,
+	security *NTLMSSPClientSecurityContext,
+	mechTypes []byte,
+) error {
 	if security == nil || !binding.valid || version < 5 || version > 6 {
 		if security != nil {
 			security.Close()
@@ -54,7 +70,11 @@ func VerifyCredSSPServerBindingResponse(
 
 	request, err := ParseTSRequest(encoded)
 	if err != nil || request.Version != version || len(request.PubKeyAuth) == 0 ||
-		!tsRequestContainsOnlyVersionAndPubKeyAuth(encoded) {
+		!tsRequestContainsOnlyServerCompletionFields(encoded, mechTypes != nil) {
+		security.Close()
+		return ErrCredSSPBindingExchange
+	}
+	if err := verifySPNEGOCompletion(request.NegoTokens, security, mechTypes, false); err != nil {
 		security.Close()
 		return ErrCredSSPBindingExchange
 	}
@@ -72,10 +92,35 @@ func VerifyCredSSPServerBindingResponse(
 	return nil
 }
 
-// tsRequestContainsOnlyVersionAndPubKeyAuth enforces the server response shape
-// from MS-CSSP §3.1.5: no negoTokens, authInfo, errorCode, or clientNonce.
+// verifySPNEGOCompletion: an exchange the server asked for and did not finish is not finished.
+func verifySPNEGOCompletion(tokens [][]byte, security *NTLMSSPClientSecurityContext, mechTypes []byte, micRequired bool) error {
+	if len(tokens) == 0 {
+		if micRequired {
+			return ErrCredSSPBindingExchange
+		}
+		return nil
+	}
+	if len(tokens) != 1 {
+		return ErrCredSSPBindingExchange
+	}
+	completion, err := ParseSPNEGONegTokenResp(tokens[0])
+	if err != nil || completion.State != spnegoStateAcceptCompleted || len(completion.ResponseToken) != 0 {
+		return ErrCredSSPBindingExchange
+	}
+	if len(completion.MechanismListMIC) == 0 {
+		if micRequired {
+			return ErrCredSSPBindingExchange
+		}
+		return nil
+	}
+	return security.VerifyMechListMIC(mechTypes, completion.MechanismListMIC)
+}
+
+// tsRequestContainsOnlyServerCompletionFields enforces the server response shape
+// from MS-CSSP §3.1.5: no authInfo, errorCode, or clientNonce, and negoTokens
+// only where the caller can check them.
 // ParseTSRequest has already validated DER canonicality and field ordering.
-func tsRequestContainsOnlyVersionAndPubKeyAuth(encoded []byte) bool {
+func tsRequestContainsOnlyServerCompletionFields(encoded []byte, allowNegoTokens bool) bool {
 	outer, rest, err := derRead(encoded)
 	if err != nil || outer.tag != 0x30 || len(rest) != 0 {
 		return false
@@ -92,6 +137,10 @@ func tsRequestContainsOnlyVersionAndPubKeyAuth(encoded []byte) bool {
 				return false
 			}
 			seenVersion = true
+		case 0xa1:
+			if !allowNegoTokens {
+				return false
+			}
 		case 0xa3:
 			if seenPubKeyAuth {
 				return false

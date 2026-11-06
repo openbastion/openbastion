@@ -24,8 +24,8 @@ func TestMarshalNTLMSSPNegotiate_UsesStrictClientProfile(t *testing.T) {
 	if !allZero(message[16:20]) || !allZero(message[24:28]) {
 		t.Fatal("NEGOTIATE_MESSAGE unexpectedly supplies a domain or workstation")
 	}
-	if !allZero(message[32:40]) {
-		t.Fatal("NEGOTIATE_MESSAGE Version must be zero when VERSION was not negotiated")
+	if !bytes.Equal(message[32:40], ntlmSSPClientVersion) {
+		t.Fatal("NEGOTIATE_MESSAGE must carry the Version it negotiates")
 	}
 }
 
@@ -55,7 +55,7 @@ func TestParseNTLMSSPChallenge_RejectsDowngradeAndMalformedBuffers(t *testing.T)
 			return b
 		},
 		"key exchange downgrade": func(b []byte) []byte {
-			binary.LittleEndian.PutUint32(b[20:24], ntlmSSPNegotiateFlags|0x40000000)
+			binary.LittleEndian.PutUint32(b[20:24], ntlmSSPNegotiateFlags&^ntlmSSPNegotiateKeyExchange)
 			return b
 		},
 		"target name points into header": func(b []byte) []byte { binary.LittleEndian.PutUint32(b[16:20], 20); return b },
@@ -77,9 +77,8 @@ func TestParseNTLMSSPChallenge_RejectsDowngradeAndMalformedBuffers(t *testing.T)
 			binary.LittleEndian.PutUint32(shifted[44:48], uint32(ntlmSSPChallengeHeaderSize+1+12))
 			return shifted
 		},
-		"zero server challenge":      func(b []byte) []byte { clear(b[24:32]); return b },
-		"unnegotiated version field": func(b []byte) []byte { b[48] = 1; return b },
-		"malformed target info":      func(b []byte) []byte { b[len(b)-1] = 1; return b },
+		"zero server challenge": func(b []byte) []byte { clear(b[24:32]); return b },
+		"malformed target info": func(b []byte) []byte { b[len(b)-1] = 1; return b },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -94,7 +93,7 @@ func TestParseNTLMSSPChallenge_RejectsDowngradeAndMalformedBuffers(t *testing.T)
 	}
 }
 
-func TestMarshalNTLMSSPAuthenticate_ComputesMICIncludesLMv2AndOmitsKeyExchange(t *testing.T) {
+func TestMarshalNTLMSSPAuthenticate_ComputesMICIncludesLMv2AndTheExchangedKey(t *testing.T) {
 	negotiate := MarshalNTLMSSPNegotiate()
 	targetInfo := ntlmSSPTestTargetInfo(t)
 	challenge := ntlmSSPTestChallenge(ntlmSSPNegotiateFlags, targetInfo)
@@ -109,15 +108,19 @@ func TestMarshalNTLMSSPAuthenticate_ComputesMICIncludesLMv2AndOmitsKeyExchange(t
 	if len(message) < ntlmSSPAuthHeaderSize || !bytes.Equal(message[:8], ntlmSSPSignature) || binary.LittleEndian.Uint32(message[8:12]) != ntlmSSPMessageAuthenticate {
 		t.Fatalf("malformed AUTHENTICATE_MESSAGE header: %x", message[:min(len(message), ntlmSSPAuthHeaderSize)])
 	}
-	if binary.LittleEndian.Uint16(message[12:14]) != 24 || binary.LittleEndian.Uint16(message[52:54]) != 0 {
-		t.Fatal("expected a 24-byte LMv2 response and no encrypted session key")
+	if binary.LittleEndian.Uint16(message[12:14]) != 24 || binary.LittleEndian.Uint16(message[52:54]) != 16 {
+		t.Fatal("expected a 24-byte LMv2 response")
+	}
+	encrypted, _, err := readNTLMSSPSecurityBuffer(message, 52, ntlmSSPAuthHeaderSize)
+	if err != nil || !bytes.Equal(encrypted, response.EncryptedRandomSessionKey[:]) || bytes.Equal(encrypted, response.ExportedSessionKey[:]) {
+		t.Fatalf("EncryptedRandomSessionKey = %x, %v", encrypted, err)
 	}
 	lmResponse, _, err := readNTLMSSPSecurityBuffer(message, 12, ntlmSSPAuthHeaderSize)
 	if err != nil || !bytes.Equal(lmResponse, response.LMResponse[:]) {
 		t.Fatalf("LMv2 response security buffer = %x, %v", lmResponse, err)
 	}
-	if !allZero(message[64:72]) || allZero(message[72:88]) {
-		t.Fatal("expected zero Version and a populated MIC")
+	if !bytes.Equal(message[64:72], ntlmSSPClientVersion) || allZero(message[72:88]) {
+		t.Fatal("expected the client Version and a populated MIC")
 	}
 	ntResponse, _, err := readNTLMSSPSecurityBuffer(message, 20, ntlmSSPAuthHeaderSize)
 	if err != nil || !bytes.Equal(ntResponse, response.NTResponse) {
@@ -137,7 +140,7 @@ func TestMarshalNTLMSSPAuthenticate_ComputesMICIncludesLMv2AndOmitsKeyExchange(t
 	wantMIC := append([]byte(nil), message[72:88]...)
 	defer clear(wantMIC)
 	clear(withoutMIC[72:88])
-	mac := hmac.New(md5.New, response.SessionBaseKey[:])
+	mac := hmac.New(md5.New, response.ExportedSessionKey[:])
 	_, _ = mac.Write(negotiate)
 	_, _ = mac.Write(challenge)
 	_, _ = mac.Write(withoutMIC)
@@ -167,6 +170,8 @@ func TestMarshalNTLMSSPAuthenticate_UsesServerTimestampAndZ24(t *testing.T) {
 	if !allZero(response.LMResponse[:]) || !bytes.Equal(response.NTResponse[24:32], serverTimestamp[:]) {
 		t.Fatalf("NTLMv2 response did not use server timestamp/Z(24): timestamp=%x LM=%x", response.NTResponse[24:32], response.LMResponse)
 	}
+	response = ntlmSSPBound(t, response, responseTargetInfo, nil)
+	defer response.Purge()
 	message, err := MarshalNTLMSSPAuthenticate(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response)
 	if err != nil {
 		t.Fatal(err)
@@ -225,6 +230,8 @@ func TestMarshalNTLMSSPAuthenticate_RejectsTamperedTranscriptAndResponse(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer plainResponse.Purge()
+	plainResponse = ntlmSSPBound(t, plainResponse, targetInfoWithoutMIC, nil)
 	defer plainResponse.Purge()
 	messageWithoutServerFlag, err := MarshalNTLMSSPAuthenticate(negotiate, challengeWithoutMIC, "User", "Domain", plainResponse)
 	if err != nil {
@@ -311,7 +318,17 @@ func ntlmSSPTestResponse(t *testing.T, targetInfo []byte) NTLMv2Response {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return returnValue
+	defer returnValue.Purge()
+	return ntlmSSPBound(t, returnValue, responseTargetInfo, nil)
+}
+
+func ntlmSSPBound(t *testing.T, response NTLMv2Response, serverInfo []byte, bindings *NTLMv2ClientBindings) NTLMv2Response {
+	t.Helper()
+	bound, err := BindNTLMv2Response(response, serverInfo, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bound
 }
 
 func TestMarshalNTLMSSPAuthenticate_AlignsUnicodePayloadAfterOddTargetInfo(t *testing.T) {
@@ -330,6 +347,8 @@ func TestMarshalNTLMSSPAuthenticate_AlignsUnicodePayloadAfterOddTargetInfo(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer response.Purge()
+	response = ntlmSSPBound(t, response, responseTargetInfo, nil)
 	defer response.Purge()
 	message, err := MarshalNTLMSSPAuthenticate(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response)
 	if err != nil {
@@ -367,8 +386,11 @@ func TestMarshalNTLMSSPAuthenticateWithBindings_BindsTargetAndTLSChannel(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(response.NTResponse[16+28:len(response.NTResponse)-4], parsed.TargetInfo) {
-		t.Fatalf("NTProof input TargetInfo is not the server's original bytes")
+	unbound := response
+	response = ntlmSSPBound(t, unbound, parsed.TargetInfo, &bindings)
+	defer response.Purge()
+	if !bytes.Equal(response.NTResponse[16+28:len(response.NTResponse)-4], wantInfo) {
+		t.Fatalf("the proof does not cover the TargetInfo that is sent")
 	}
 	clear(wantInfo)
 	message, err := MarshalNTLMSSPAuthenticateWithBindings(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response, bindings)
@@ -399,7 +421,16 @@ func TestMarshalNTLMSSPAuthenticateWithBindings_BindsTargetAndTLSChannel(t *test
 			if err := validateNTLMv2ResponseForChallenge(tampered, parsed, &changed); !errors.Is(err, ErrNTLMSSPMessage) {
 				t.Fatalf("substituted binding validation error = %v, want ErrNTLMSSPMessage", err)
 			}
-			other, err := MarshalNTLMSSPAuthenticateWithBindings(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response, changed)
+			// The proof is bound to its target and channel: it does not serve for another.
+			if _, err := MarshalNTLMSSPAuthenticateWithBindings(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", response, changed); !errors.Is(err, ErrNTLMSSPMessage) {
+				t.Fatalf("a proof for another binding error = %v, want ErrNTLMSSPMessage", err)
+			}
+			rebound := ntlmSSPBound(t, unbound, parsed.TargetInfo, &changed)
+			defer rebound.Purge()
+			if rebound.NTProof == response.NTProof || rebound.SessionBaseKey == response.SessionBaseKey {
+				t.Fatal("the proof and the session key do not depend on the binding")
+			}
+			other, err := MarshalNTLMSSPAuthenticateWithBindings(MarshalNTLMSSPNegotiate(), challenge, "User", "Domain", rebound, changed)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -418,4 +449,55 @@ func mustUTF16LE(t *testing.T, value string) []byte {
 		t.Fatalf("cannot encode %q", value)
 	}
 	return encoded
+}
+
+// The MIC sits at 72 only when VERSION is agreed: a server that does not echo it would read the MIC
+// elsewhere, so the session is refused rather than proved against the wrong bytes.
+func TestParseNTLMSSPChallenge_VersionMustBeAgreed(t *testing.T) {
+	info := []byte{1, 0, 2, 0, 'S', 0, 0, 0, 0, 0}
+	flags := uint32(ntlmSSPNegotiateFlags)
+	if _, err := ParseNTLMSSPChallenge(ntlmSSPTestChallenge(flags, info), ntlmSSPNegotiateFlags); err != nil {
+		t.Fatalf("agreed: %v", err)
+	}
+	if _, err := ParseNTLMSSPChallenge(ntlmSSPTestChallenge(flags&^ntlmSSPNegotiateVersion, info), ntlmSSPNegotiateFlags); !errors.Is(err, ErrNTLMSSPMessage) {
+		t.Fatalf("not echoed: %v", err)
+	}
+}
+
+// What a server recomputes from AUTHENTICATE (MS-NLMP 3.2.5.1.2) must be what the client proved and
+// keyed with: a proof over the server's TargetInfo alone leaves both sides with different keys.
+func TestBindNTLMv2Response_TheProofCoversTheBlobThatIsSent(t *testing.T) {
+	info := ntlmSSPTestTargetInfo(t)
+	response := ntlmSSPTestResponse(t, info)
+	defer response.Purge()
+	password := []byte("Password")
+	defer clear(password)
+	key, err := deriveNTLMv2ResponseKey("User", "Domain", password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge := mustHex8(t, "0123456789abcdef")
+	proof := hmacMD5(key[:], append(challenge[:], response.NTResponse[16:]...))
+	if proof != response.NTProof || !bytes.Equal(response.NTResponse[:16], proof[:]) {
+		t.Fatal("NTProofStr does not cover the blob that is sent")
+	}
+	if want := hmacMD5(key[:], proof[:]); want != response.SessionBaseKey {
+		t.Fatal("the session key is not the one a server derives")
+	}
+}
+
+// KEY_EXCH is worth something only if the key is the client's own random: two bindings of one proof
+// never share it, and it is not the key that derives from the password.
+func TestBindNTLMv2Response_TheExchangedKeyIsRandom(t *testing.T) {
+	info := ntlmSSPTestTargetInfo(t)
+	first := ntlmSSPTestResponse(t, info)
+	defer first.Purge()
+	second := ntlmSSPTestResponse(t, info)
+	defer second.Purge()
+	if first.SessionBaseKey != second.SessionBaseKey {
+		t.Fatal("the same inputs should give the same base key: this test compares nothing else")
+	}
+	if first.ExportedSessionKey == second.ExportedSessionKey || first.ExportedSessionKey == first.SessionBaseKey {
+		t.Fatal("the exported session key is not random")
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/rc4"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/asn1"
@@ -28,7 +29,7 @@ func TestMarshalSPNEGONTLMInitAndResponse(t *testing.T) {
 	}
 
 	mechanism := []byte("ntlm-authenticate")
-	response, err := MarshalSPNEGONTLMResponse(mechanism)
+	response, err := MarshalSPNEGONTLMResponse(mechanism, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestMarshalSPNEGONTLMInitAndResponse(t *testing.T) {
 	if _, err := MarshalSPNEGONTLMInit(nil); !errors.Is(err, ErrSPNEGOToken) {
 		t.Fatalf("empty initial mechanism token error = %v", err)
 	}
-	if _, err := MarshalSPNEGONTLMResponse(bytes.Repeat([]byte{1}, maxSPNEGOToken+1)); !errors.Is(err, ErrSPNEGOToken) {
+	if _, err := MarshalSPNEGONTLMResponse(bytes.Repeat([]byte{1}, maxSPNEGOToken+1), nil); !errors.Is(err, ErrSPNEGOToken) {
 		t.Fatalf("oversized final mechanism token error = %v", err)
 	}
 }
@@ -181,23 +182,39 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 		var clientChallenge, timestamp [8]byte
 		copy(timestamp[:], ntResponse[24:32])
 		copy(clientChallenge[:], ntResponse[32:40])
+		// As a conforming server does (MS-NLMP 3.2.5.1.2): the proof and the session key are
+		// recomputed over the blob received, client AV_PAIRs included.
 		password := []byte("Password")
-		response, readErr := ComputeNTLMv2Response("User", "Domain", password, challenge.ServerChallenge, clientChallenge, timestamp, challenge.TargetInfo)
+		responseKey, readErr := deriveNTLMv2ResponseKey("User", "Domain", password)
 		clear(password)
 		if readErr != nil {
 			serverResult <- readErr
 			return
 		}
-		defer response.Purge()
-		if !bytes.Equal(ntResponse[:16], response.NTProof[:]) || !bytes.Equal(ntResponse[16:44], response.NTResponse[16:44]) {
-			serverResult <- errors.New("NTLM AUTHENTICATE proof does not match the challenge")
+		proofInput := append(append([]byte(nil), challenge.ServerChallenge[:]...), ntResponse[16:]...)
+		proof := hmacMD5(responseKey[:], proofInput)
+		if !bytes.Equal(ntResponse[:16], proof[:]) {
+			serverResult <- errors.New("NTLM AUTHENTICATE proof does not cover the blob it was sent with")
 			return
 		}
+		sessionBaseKey := hmacMD5(responseKey[:], proof[:])
+		encryptedKey, _, readErr := readNTLMSSPSecurityBuffer(authenticate, 52, ntlmSSPAuthHeaderSize)
+		if readErr != nil || len(encryptedKey) != 16 {
+			serverResult <- errors.New("AUTHENTICATE has no EncryptedRandomSessionKey")
+			return
+		}
+		keyExchange, readErr := rc4.NewCipher(sessionBaseKey[:])
+		if readErr != nil {
+			serverResult <- readErr
+			return
+		}
+		var exportedKey [16]byte
+		keyExchange.XORKeyStream(exportedKey[:], encryptedKey)
 		authenticateCopy := append([]byte(nil), authenticate...)
 		defer clear(authenticateCopy)
 		gotMIC := append([]byte(nil), authenticateCopy[72:88]...)
 		clear(authenticateCopy[72:88])
-		mac := hmac.New(md5.New, response.SessionBaseKey[:])
+		mac := hmac.New(md5.New, exportedKey[:])
 		_, _ = mac.Write(MarshalNTLMSSPNegotiate())
 		_, _ = mac.Write(challengeBytes)
 		_, _ = mac.Write(authenticateCopy)
@@ -238,7 +255,7 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 			serverResult <- errors.New("AUTHENTICATE omitted or changed TLS target/channel-binding AV_PAIRs or MIC_PRESENT")
 			return
 		}
-		serverSecurity, readErr := newNTLMSSPSecurityContext(response.SessionBaseKey, challenge.Flags, false)
+		serverSecurity, readErr := newNTLMSSPSecurityContext(exportedKey, challenge.Flags, false)
 		if readErr != nil {
 			serverResult <- readErr
 			return

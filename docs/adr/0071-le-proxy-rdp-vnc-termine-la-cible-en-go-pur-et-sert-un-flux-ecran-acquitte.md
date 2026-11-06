@@ -438,7 +438,7 @@ Tests : timestamp serveur distinct de l'horloge injectée, timestamp recopié à
 
 `Transport.NTLMv2Bindings` ne travaille qu'après le handshake TLS de `DialHybrid`, qui a déjà vérifié chaîne, nom DNS et pin SHA-256 de la feuille. Il revalide le pin SHA-256 stocké pour le pair TLS avant de dériver le SPN RDP `TERMSRV/<nom TLS vérifié>` en UTF-16LE sans terminateur et le channel binding `tls-server-end-point` depuis le certificat réellement présenté sur cette connexion. Les noms DNS sont validés strictement et les IP sont canonisées. Le hash du certificat suit RFC 5929 §4.1 (algorithme de signature du certificat, SHA-256 en remplacement de MD5/SHA-1 ; les algorithmes sans hash unique sont refusés), puis la structure de channel binding NTLM/GSS est sérialisée et condensée en MD5 conformément à MS-NLMP.
 
-`NTLMv2TargetInfoWithClientBindings` pose ou ajoute `MsvAvFlags.MIC_PRESENT`, puis ajoute les AV_PAIR client `MsvAvChannelBindings` et `MsvAvTargetName` au TargetInfo transporté dans le blob AUTHENTICATE. Point de protocole important : `NTProofStr` et `SessionBaseKey` restent calculés sur le TargetInfo exact du CHALLENGE serveur ; les deux AV_PAIR client sont ajoutés après le calcul de la preuve, comme le décrit MS-NLMP §3.1.5.1.2. `MarshalNTLMSSPAuthenticateWithBindings` vérifie l'égalité exacte des AV_PAIR ajoutés avec les liaisons attendues, puis calcule le MIC sur le message AUTHENTICATE final. L'ancienne API sans bindings reste disponible pour les tests de primitives, mais le chemin avec bindings est celui à employer pour une future orchestration CredSSP.
+`NTLMv2TargetInfoWithClientBindings` pose ou ajoute `MsvAvFlags.MIC_PRESENT`, puis ajoute les AV_PAIR client `MsvAvChannelBindings` et `MsvAvTargetName` au TargetInfo transporté dans le blob AUTHENTICATE. **Corrigé par l'incrément 70, ce point était faux** : `NTProofStr` et `SessionBaseKey` couvrent le blob envoyé. Texte d'origine : `NTProofStr` et `SessionBaseKey` restent calculés sur le TargetInfo exact du CHALLENGE serveur ; les deux AV_PAIR client sont ajoutés après le calcul de la preuve, comme le décrit MS-NLMP §3.1.5.1.2. `MarshalNTLMSSPAuthenticateWithBindings` vérifie l'égalité exacte des AV_PAIR ajoutés avec les liaisons attendues, puis calcule le MIC sur le message AUTHENTICATE final. L'ancienne API sans bindings reste disponible pour les tests de primitives, mais le chemin avec bindings est celui à employer pour une future orchestration CredSSP.
 
 Tests : SPN RDP canonique et refus des noms mal formés ; dérivation CBT à partir du certificat TLS présenté ; refus d'un handshake incomplet, d'un certificat absent et d'algorithmes de signature ambigus ; différence de CBT entre deux certificats ; préservation du TargetInfo serveur utilisé pour NTProof ; AV_PAIR client présents dans AUTHENTICATE ; rejet par le validateur d'une substitution du SPN ou du CBT.
 
@@ -1444,3 +1444,21 @@ Les critères de sortie de l'incrément 1 exigeaient chaque refus « avec le cod
 ## ADR-0071 — incrément 69 : la prévisualisation Base44 ouvre un écran
 
 `deploy/base44` reçoit `rdp-vnc-proxy` et une cible TigerVNC réelle, comme le prévoyait l'incrément 0 : relais WebSocket de Vite sous `BASE44_PREVIEW_MODE=1`, `SCREEN_ALLOWED_ORIGINS` construit depuis `BASE44_PUBLIC_HOST_SUFFIX` et jamais écrit en dur. La racine de confiance et l'épinglage viennent du certificat de la cible, aucun magasin système. Sans le drapeau, `vite build` et la Gateway de production ne changent pas. Preuves et limites dans `NOTES_SANDBOX.md`.
+
+## ADR-0071 — incrément 70 : CredSSP contre un vrai serveur
+
+Premier contact de `pkg/rdp` avec un serveur réel : FreeRDP 3.15, `freerdp-shadow-cli3 /sec:nla`, image de test `test/integration/testdata/rdp/freerdp` sur la base `debian:13-slim` épinglée. La poignée de main n'aboutissait pas. Les faux serveurs partageaient les erreurs du client, écrits d'après la même lecture de la spécification. Ce qui change :
+
+| Sujet | Avant | Maintenant |
+|---|---|---|
+| `RDP_NEG_RSP` | drapeaux non nuls refusés | les drapeaux annoncent les capacités du serveur, et sont ignorés ; le protocole choisi reste HYBRID ou rien |
+| `NTProofStr` et `SessionBaseKey` | calculés sur le TargetInfo du serveur, avant l'ajout des AV_PAIR du client | calculés sur le blob envoyé (MS-NLMP 3.1.5.1.2), `BindNTLMv2Response` ; une réponse non liée n'authentifie pas |
+| `VERSION` | non négocié, alors que le MIC est placé à l'octet 72 comme s'il l'était | négocié et exigé : la place du MIC n'est plus ambiguë |
+| `KEY_EXCH` | refusé | négocié et exigé : clé d'export aléatoire, envoyée chiffrée, somme de contrôle scellée |
+| SPNEGO `request-mic` | refusé, faute de vérification | `mechListMIC` échangé et vérifié dans les deux sens, en deux temps |
+
+**Amendement de la décision.** Le §3 et les incréments 9 à 15 excluaient `KEY_EXCH` et `request-mic`. `KEY_EXCH` renforce le profil : la clé de session ne dérive plus du seul mot de passe et du défi. `request-mic` n'est plus refusé parce que l'échange est prouvé : un MIC demandé et absent ferme la session, un MIC présent est toujours vérifié.
+
+**L'échange en deux temps.** Quand le serveur demande le MIC, `pubKeyAuth` part après que le MIC du serveur a été vérifié. Envoyés ensemble, FreeRDP renvoie le `pubKeyAuth` du client : le refus de cette réflexion est testé. Après l'échange, les flux RC4 repartent de zéro et les deux compteurs sont à 1. **Ce comportement est mesuré sur FreeRDP 3.15, pas lu dans une norme**, et n'est pas vérifié sur Windows.
+
+**Preuves** : `make test-rdp-interop` (authentification, mauvais mot de passe, pin d'imposteur arrêté avant tout octet CredSSP) ; le faux serveur du test unitaire recalcule désormais la preuve depuis ce qu'il reçoit ; 9 mutations sur 9 tuées. **Limites** : aucune cible Windows ; le serveur n'atteste pas encore la réception de `authInfo` ; la suite de la connexion échoue à la réponse MCS/GCC. RDP reste non exposé.

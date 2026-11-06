@@ -270,3 +270,20 @@ func FuzzReadConnectionConfirm(f *testing.F) {
 		_ = readConnectionConfirm(bytes.NewReader(data))
 	})
 }
+
+// A real server announces its own abilities in the flags of RDP_NEG_RSP (MS-RDPBCGR 2.2.1.2.1):
+// these are the bytes of FreeRDP 2.11, flags 0x03. They say nothing of the protocol chosen, which
+// stays HYBRID or nothing.
+func TestReadConnectionConfirm_TheFlagsOfARealServerAreNotADowngrade(t *testing.T) {
+	confirm := func(flags byte, protocol byte) []byte {
+		return []byte{3, 0, 0, 0x13, 0x0e, 0xd0, 0, 0, 0, 0, 0, rdpNegResp, flags, 8, 0, protocol, 0, 0, 0}
+	}
+	for _, flags := range []byte{0x01, 0x03, 0x1f} {
+		if err := readConnectionConfirm(bytes.NewReader(confirm(flags, byte(protocolHybrid)))); err != nil {
+			t.Fatalf("flags %#x: %v", flags, err)
+		}
+		if err := readConnectionConfirm(bytes.NewReader(confirm(flags, 1))); !errors.Is(err, ErrUnsupportedProtocol) {
+			t.Fatalf("flags %#x with TLS alone: %v", flags, err)
+		}
+	}
+}

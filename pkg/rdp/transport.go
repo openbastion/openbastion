@@ -164,7 +164,12 @@ func readConnectionConfirm(r io.Reader) error {
 	if len(neg) != 8 {
 		return ErrNegotiation
 	}
-	if binary.LittleEndian.Uint16(neg[2:4]) != 8 || neg[1] != 0 {
+	if binary.LittleEndian.Uint16(neg[2:4]) != 8 {
+		return ErrNegotiation
+	}
+	// RDP_NEG_RSP flags announce what the server can do, and this client asks for none of it. A
+	// failure has none to announce.
+	if neg[0] == rdpNegFailure && neg[1] != 0 {
 		return ErrNegotiation
 	}
 	if neg[0] == rdpNegFailure {

@@ -80,7 +80,6 @@ func TestCredSSPClientBindingRequestRejectsInvalidInputs(t *testing.T) {
 	}{
 		{"legacy version", 4, []byte{1}, binding},
 		{"unsupported version", 7, []byte{1}, binding},
-		{"empty final token", 6, nil, binding},
 		{"oversized final token", 6, bytes.Repeat([]byte{1}, maxCredSSPToken+1), binding},
 		{"zero binding", 6, []byte{1}, CredSSPPublicKeyBinding{}},
 	}

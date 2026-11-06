@@ -149,7 +149,8 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	serverSPNEGO, err := ParseSPNEGONegTokenResp(serverRequest.NegoTokens[0])
 	defer clear(serverSPNEGO.ResponseToken)
 	defer clear(serverSPNEGO.MechanismListMIC)
-	if err != nil || serverSPNEGO.State != 1 || !serverSPNEGO.SupportedMech.Equal(ntlmOID) ||
+	micRequested := err == nil && serverSPNEGO.State == spnegoStateRequestMIC
+	if err != nil || (serverSPNEGO.State != spnegoStateAcceptIncomplete && !micRequested) || !serverSPNEGO.SupportedMech.Equal(ntlmOID) ||
 		len(serverSPNEGO.ResponseToken) == 0 || len(serverSPNEGO.MechanismListMIC) != 0 {
 		return nil, ErrCredSSPClient
 	}
@@ -176,7 +177,13 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer clear(targetName)
-	response, err := ComputeNTLMv2Response(cfg.Username, cfg.Domain, cfg.Password, challenge.ServerChallenge, clientChallenge, timestamp, challenge.TargetInfo)
+	unbound, err := ComputeNTLMv2Response(cfg.Username, cfg.Domain, cfg.Password, challenge.ServerChallenge, clientChallenge, timestamp, challenge.TargetInfo)
+	if err != nil {
+		return nil, ErrCredSSPClient
+	}
+	defer unbound.Purge()
+	bindings := NTLMv2ClientBindings{TargetName: targetName, ChannelBindings: channelBinding}
+	response, err := BindNTLMv2Response(unbound, challenge.TargetInfo, &bindings)
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
@@ -186,17 +193,37 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer security.Close()
-	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, serverSPNEGO.ResponseToken, cfg.Username, cfg.Domain, response, NTLMv2ClientBindings{TargetName: targetName, ChannelBindings: channelBinding})
+	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, serverSPNEGO.ResponseToken, cfg.Username, cfg.Domain, response, bindings)
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
 	defer clear(ntlmAuthenticate)
-	finalToken, err := MarshalSPNEGONTLMResponse(ntlmAuthenticate)
+	mechTypes, err := spnegoNTLMMechTypes()
+	if err != nil {
+		return nil, ErrCredSSPClient
+	}
+	var mechListMIC []byte
+	if micRequested {
+		if mechListMIC, err = security.SignMechListMIC(mechTypes); err != nil {
+			return nil, ErrCredSSPClient
+		}
+	}
+	finalToken, err := MarshalSPNEGONTLMResponse(ntlmAuthenticate, mechListMIC)
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
 	defer clear(finalToken)
-	bindingRequest, err := NewCredSSPClientBindingRequest(negotiatedVersion, finalToken, binding, security)
+	// A server that asked for the MIC finishes SPNEGO first, and reads pubKeyAuth in the next
+	// message: nothing about the channel is said before the negotiation is proved.
+	pendingToken := finalToken
+	if micRequested {
+		if err := completeSPNEGOMICExchange(t.Conn, negotiatedVersion, finalToken, security, mechTypes); err != nil {
+			security.Close()
+			return nil, ErrCredSSPClient
+		}
+		pendingToken = nil
+	}
+	bindingRequest, err := NewCredSSPClientBindingRequest(negotiatedVersion, pendingToken, binding, security)
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
@@ -218,7 +245,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		security.Close()
 		return nil, ErrCredSSPClient
 	}
-	if err := VerifyCredSSPServerBindingResponse(serverBindingResponse, negotiatedVersion, binding, security); err != nil {
+	if err := verifyCredSSPServerCompletion(serverBindingResponse, negotiatedVersion, binding, security, mechTypes); err != nil {
 		clear(serverBindingResponse)
 		return nil, ErrCredSSPClient
 	}
@@ -329,6 +356,35 @@ func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSett
 	s.mcsResponse = response
 	s.mcsSettings = cfg
 	return response, nil
+}
+
+// completeSPNEGOMICExchange sends AUTHENTICATE with this client's MIC and checks the server's. The
+// server's answer carries nothing else: a pubKeyAuth here is not a proof of anything, this client
+// having sent none it could be the answer to.
+func completeSPNEGOMICExchange(conn io.ReadWriter, version uint32, token []byte, security *NTLMSSPClientSecurityContext, mechTypes []byte) error {
+	request, err := MarshalTSRequest(TSRequest{Version: version, NegoTokens: [][]byte{token}})
+	if err != nil {
+		return ErrCredSSPClient
+	}
+	defer clear(request)
+	if err := writeFull(conn, request); err != nil {
+		return ErrCredSSPClient
+	}
+	encoded, err := readTSRequest(conn)
+	if err != nil {
+		return ErrCredSSPClient
+	}
+	defer clear(encoded)
+	answer, err := ParseTSRequest(encoded)
+	defer clearTSRequest(&answer)
+	if err != nil || answer.Version != version || answer.ErrorCode != nil || answer.AuthInfo != nil ||
+		answer.PubKeyAuth != nil || answer.ClientNonce != nil {
+		return ErrCredSSPClient
+	}
+	if err := verifySPNEGOCompletion(answer.NegoTokens, security, mechTypes, true); err != nil {
+		return err
+	}
+	return security.mechListMICExchanged()
 }
 
 func (s *CredSSPClientSession) closeTransportLocked() {

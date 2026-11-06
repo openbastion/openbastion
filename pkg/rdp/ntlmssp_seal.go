@@ -35,18 +35,20 @@ type NTLMSSPClientSecurityContext struct {
 }
 
 type ntlmSSPProtection struct {
-	signKey  [md5.Size]byte
-	sealKey  [md5.Size]byte
-	stream   *rc4.Cipher
-	seq      uint32
-	poisoned bool
+	signKey [md5.Size]byte
+	sealKey [md5.Size]byte
+	stream  *rc4.Cipher
+	// keyExchange: the checksum is sealed as well, from the same stream (MS-NLMP 3.4.4.2).
+	keyExchange bool
+	seq         uint32
+	poisoned    bool
 }
 
 // NewNTLMSSPClientSecurityContext creates the client-side NTLM session security
-// context after NTLMv2 authentication. The response must be the same validated
+// context after NTLMv2 authentication. The response must be the same bound
 // response passed to MarshalNTLMSSPAuthenticate, and challenge must come from
-// ParseNTLMSSPChallenge. KEY_EXCH is deliberately not negotiated: the
-// NTLMv2 SessionBaseKey is the exported session key for this strict profile.
+// ParseNTLMSSPChallenge. KEY_EXCH is negotiated: the session keys derive from
+// the bound response's random exported key.
 func NewNTLMSSPClientSecurityContext(response NTLMv2Response, challenge NTLMSSPChallenge) (*NTLMSSPClientSecurityContext, error) {
 	if !challenge.valid ||
 		!ntlmSSPConfidentialityFlagsValid(challenge.Flags) ||
@@ -54,20 +56,15 @@ func NewNTLMSSPClientSecurityContext(response NTLMv2Response, challenge NTLMSSPC
 		response.serverChallenge != challenge.ServerChallenge ||
 		len(response.NTResponse) < 16+32+4 || len(response.NTResponse) > maxNTLMSSPMessage ||
 		allZero(response.SessionBaseKey[:]) ||
+		allZero(response.ExportedSessionKey[:]) ||
 		allZero(response.NTProof[:]) ||
 		!hmac.Equal(response.NTResponse[:16], response.NTProof[:]) {
 		return nil, ErrNTLMSSPSecurity
 	}
-	proofTargetInfo, err := NTLMv2ServerTargetInfoForProof(challenge.TargetInfo)
-	if err != nil {
+	if !bytes.Equal(response.boundServerInfo, challenge.TargetInfo) {
 		return nil, ErrNTLMSSPSecurity
 	}
-	defer clear(proofTargetInfo)
-	responseTargetInfo := response.NTResponse[16+28 : len(response.NTResponse)-4]
-	if !bytes.Equal(responseTargetInfo, proofTargetInfo) {
-		return nil, ErrNTLMSSPSecurity
-	}
-	return newNTLMSSPSecurityContext(response.SessionBaseKey, challenge.Flags, true)
+	return newNTLMSSPSecurityContext(response.ExportedSessionKey, challenge.Flags, true)
 }
 
 // newNTLMSSPSecurityContext is also used by protocol tests to model the peer.
@@ -88,7 +85,7 @@ func newNTLMSSPSecurityContext(exportedSessionKey [16]byte, negotiatedFlags uint
 		outSign, inSign = serverSign, clientSign
 		outSeal, inSeal = serverSeal, clientSeal
 	}
-	outbound, err := newNTLMSSPProtection(outSign, outSeal)
+	outbound, err := newNTLMSSPProtection(outSign, outSeal, true)
 	if err != nil {
 		clear(clientSign[:])
 		clear(serverSign[:])
@@ -96,7 +93,7 @@ func newNTLMSSPSecurityContext(exportedSessionKey [16]byte, negotiatedFlags uint
 		clear(serverSeal[:])
 		return nil, ErrNTLMSSPSecurity
 	}
-	inbound, err := newNTLMSSPProtection(inSign, inSeal)
+	inbound, err := newNTLMSSPProtection(inSign, inSeal, true)
 	clear(clientSign[:])
 	clear(serverSign[:])
 	clear(clientSeal[:])
@@ -117,12 +114,12 @@ func ntlmSSPDeriveSessionKey(exportedSessionKey [16]byte, magic string) [md5.Siz
 	return key
 }
 
-func newNTLMSSPProtection(signKey, sealKey [md5.Size]byte) (*ntlmSSPProtection, error) {
+func newNTLMSSPProtection(signKey, sealKey [md5.Size]byte, keyExchange bool) (*ntlmSSPProtection, error) {
 	stream, err := rc4.NewCipher(sealKey[:])
 	if err != nil {
 		return nil, err
 	}
-	return &ntlmSSPProtection{signKey: signKey, sealKey: sealKey, stream: stream}, nil
+	return &ntlmSSPProtection{signKey: signKey, sealKey: sealKey, stream: stream, keyExchange: keyExchange}, nil
 }
 
 // WrapClientToServer returns the NTLMSSP message signature followed by the
@@ -152,6 +149,66 @@ func (c *NTLMSSPClientSecurityContext) UnwrapServerToClient(message []byte) ([]b
 		return nil, ErrNTLMSSPSecurity
 	}
 	return c.inbound.unwrap(message)
+}
+
+// SignMechListMIC signs the SPNEGO mechanism list for the server (RFC 4178, mechListMIC), and
+// VerifyMechListMIC checks the server's. Both are at sequence 0 and share no RC4 state with the
+// confidentiality streams: each uses a fresh RC4 of the sealing key, as the peer restarts its own
+// after this exchange. mechListMICExchanged then counts them: pubKeyAuth is at sequence 1, at the
+// start of the stream (measured on FreeRDP 3.15, ADR-0071).
+func (c *NTLMSSPClientSecurityContext) SignMechListMIC(mechTypes []byte) ([]byte, error) {
+	if c == nil {
+		return nil, ErrNTLMSSPSecurity
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.outbound == nil || len(mechTypes) == 0 {
+		return nil, ErrNTLMSSPSecurity
+	}
+	return ntlmSSPMICSignature(c.outbound.signKey, c.outbound.sealKey, mechTypes)
+}
+
+func (c *NTLMSSPClientSecurityContext) VerifyMechListMIC(mechTypes, mic []byte) error {
+	if c == nil {
+		return ErrNTLMSSPSecurity
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.inbound == nil || len(mechTypes) == 0 || len(mic) != ntlmSSPMessageSignatureSize {
+		return ErrNTLMSSPSecurity
+	}
+	want, err := ntlmSSPMICSignature(c.inbound.signKey, c.inbound.sealKey, mechTypes)
+	if err != nil {
+		return err
+	}
+	defer clear(want)
+	if !hmac.Equal(mic, want) {
+		return ErrNTLMSSPSecurity
+	}
+	return nil
+}
+
+func (c *NTLMSSPClientSecurityContext) mechListMICExchanged() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.outbound == nil || c.inbound == nil || c.outbound.seq != 0 || c.inbound.seq != 0 {
+		return ErrNTLMSSPSecurity
+	}
+	c.outbound.seq, c.inbound.seq = 1, 1
+	return nil
+}
+
+func ntlmSSPMICSignature(signKey, sealKey [md5.Size]byte, message []byte) ([]byte, error) {
+	stream, err := rc4.NewCipher(sealKey[:])
+	if err != nil {
+		return nil, ErrNTLMSSPSecurity
+	}
+	signature := make([]byte, ntlmSSPMessageSignatureSize)
+	binary.LittleEndian.PutUint32(signature[:4], 1)
+	checksum := ntlmSSPHMAC(signKey, 0, message)
+	stream.XORKeyStream(signature[4:12], checksum[:8])
+	clear(checksum[:])
+	return signature, nil
 }
 
 // Close clears key arrays and makes the context unusable. The standard-library
@@ -190,6 +247,9 @@ func (p *ntlmSSPProtection) wrap(plaintext []byte) ([]byte, error) {
 
 	ciphertext := make([]byte, len(plaintext))
 	p.stream.XORKeyStream(ciphertext, plaintext)
+	if p.keyExchange {
+		p.stream.XORKeyStream(signature[4:12], signature[4:12])
+	}
 	p.seq++
 	return append(signature, ciphertext...), nil
 }
@@ -208,8 +268,12 @@ func (p *ntlmSSPProtection) unwrap(message []byte) ([]byte, error) {
 	}
 	plaintext := make([]byte, len(message)-ntlmSSPMessageSignatureSize)
 	p.stream.XORKeyStream(plaintext, message[ntlmSSPMessageSignatureSize:])
+	received := append([]byte(nil), message[4:12]...)
+	if p.keyExchange {
+		p.stream.XORKeyStream(received, received)
+	}
 	checksum := ntlmSSPHMAC(p.signKey, p.seq, plaintext)
-	valid := hmac.Equal(message[4:12], checksum[:8])
+	valid := hmac.Equal(received, checksum[:8])
 	clear(checksum[:])
 	if !valid {
 		clear(plaintext)
@@ -244,7 +308,8 @@ func (p *ntlmSSPProtection) close() {
 func ntlmSSPConfidentialityFlagsValid(flags uint32) bool {
 	required := uint32(ntlmSSPNegotiateUnicode | ntlmSSPNegotiateSign | ntlmSSPNegotiateSeal |
 		ntlmSSPNegotiateNTLM | ntlmSSPNegotiateAlwaysSign |
-		ntlmSSPNegotiateExtendedSessionSecurity | ntlmSSPNegotiateTargetInfo | ntlmSSPNegotiate128)
+		ntlmSSPNegotiateExtendedSessionSecurity | ntlmSSPNegotiateTargetInfo | ntlmSSPNegotiate128 |
+		ntlmSSPNegotiateKeyExchange)
 	allowed := uint32(ntlmSSPNegotiateFlags | ntlmSSPTargetTypeDomain | ntlmSSPTargetTypeServer)
 	targetTypes := uint32(ntlmSSPTargetTypeDomain | ntlmSSPTargetTypeServer)
 	return flags&required == required &&

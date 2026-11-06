@@ -95,6 +95,7 @@ make test                         # tests unitaires (hermétique ; les tests Pos
 make test-integration             # scénarios sur processus réels
 make test-postgres                # tests PostgreSQL réels (TEST_DATABASE_URL requis)
 make test-compose                 # pile docker-compose réelle et parcours du MVP (Docker requis, ADR-0033)
+make test-rdp-interop             # pkg/rdp contre un vrai serveur RDP, FreeRDP 3 en Docker (ADR-0071)
 make ui-test ui-build             # Admin UI : tests (Vitest) et construction (web/admin-ui, ADR-0036)
 make vuln                         # vulnérabilités connues : govulncheck (chaque module) et npm audit (ADR-0052)
 make scan-images TRIVY=<binaire>  # images (runtime + postgres:16) : Trivy, HIGH/CRITICAL corrigée = échec ; acceptations dans .trivyignore.yaml (ADR-0060)

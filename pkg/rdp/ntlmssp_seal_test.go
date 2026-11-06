@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/rc4"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -24,7 +25,7 @@ func ntlmSSPSecurityContexts(t *testing.T) (*NTLMSSPClientSecurityContext, *NTLM
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := newNTLMSSPSecurityContext(response.SessionBaseKey, challenge.Flags, false)
+	server, err := newNTLMSSPSecurityContext(response.ExportedSessionKey, challenge.Flags, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,8 +101,15 @@ func TestNTLMSSPSecurityContextSignatureMatchesIndependentHMAC(t *testing.T) {
 	_, _ = mac.Write(seq)
 	_, _ = mac.Write(plaintext)
 	want := mac.Sum(nil)
-	if !hmac.Equal(wrapped[4:12], want[:8]) {
-		t.Fatalf("signature checksum = %x, want %x", wrapped[4:12], want[:8])
+	// KEY_EXCH: the checksum is sealed by the same stream, right after the message.
+	stream, err := rc4.NewCipher(client.outbound.sealKey[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed := make([]byte, len(plaintext)+8)
+	stream.XORKeyStream(sealed, append(append([]byte(nil), plaintext...), want[:8]...))
+	if !hmac.Equal(wrapped[4:12], sealed[len(plaintext):]) {
+		t.Fatalf("signature checksum = %x, want %x", wrapped[4:12], sealed[len(plaintext):])
 	}
 	if got := binary.LittleEndian.Uint32(wrapped[12:16]); got != 0 {
 		t.Fatalf("sequence = %d, want 0", got)
@@ -164,7 +172,7 @@ func TestNTLMSSPSecurityContextRequiresStrictNegotiatedProfile(t *testing.T) {
 		ntlmSSPNegotiateFlags &^ ntlmSSPNegotiateSign,
 		ntlmSSPNegotiateFlags &^ ntlmSSPNegotiateSeal,
 		ntlmSSPNegotiateFlags &^ ntlmSSPNegotiate128,
-		ntlmSSPNegotiateFlags | ntlmSSPNegotiateKeyExchange,
+		ntlmSSPNegotiateFlags &^ ntlmSSPNegotiateKeyExchange,
 	} {
 		if _, err := newNTLMSSPSecurityContext(sessionKey, flags, true); !errors.Is(err, ErrNTLMSSPSecurity) {
 			t.Fatalf("flags %#08x error = %v", flags, err)
@@ -266,7 +274,7 @@ func TestNTLMSSPProtectionMatchesMSNLMPGSSWrapVectorWithoutKeyExchange(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	protection, err := newNTLMSSPProtection(signKey, sealKey)
+	protection, err := newNTLMSSPProtection(signKey, sealKey, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +287,7 @@ func TestNTLMSSPProtectionMatchesMSNLMPGSSWrapVectorWithoutKeyExchange(t *testin
 		t.Fatalf("GSS_Wrap output = %x, want MS-NLMP vector %x", got, want)
 	}
 
-	receiver, err := newNTLMSSPProtection(signKey, sealKey)
+	receiver, err := newNTLMSSPProtection(signKey, sealKey, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,6 +28,7 @@ const (
 	ntlmSSPNegotiateTargetInfo              uint32 = 0x00800000
 	ntlmSSPTargetTypeDomain                 uint32 = 0x00010000
 	ntlmSSPTargetTypeServer                 uint32 = 0x00020000
+	ntlmSSPNegotiateVersion                 uint32 = 0x02000000
 	ntlmSSPNegotiate128                     uint32 = 0x20000000
 	ntlmSSPNegotiateKeyExchange             uint32 = 0x40000000
 
@@ -39,11 +40,18 @@ const (
 		ntlmSSPNegotiateAlwaysSign |
 		ntlmSSPNegotiateExtendedSessionSecurity |
 		ntlmSSPNegotiateTargetInfo |
-		ntlmSSPNegotiate128
+		ntlmSSPNegotiateVersion |
+		ntlmSSPNegotiate128 |
+		ntlmSSPNegotiateKeyExchange
 )
 
 // ErrNTLMSSPMessage reports malformed messages or negotiation features outside the strict NTLMSSP profile.
 var ErrNTLMSSPMessage = errors.New("rdp: malformed or unsupported NTLMSSP message")
+
+// ntlmSSPClientVersion fills VERSION, informational only (MS-NLMP 2.2.2.10): 6.1.7601, NTLMSSP
+// revision 15. It is negotiated because the place of the AUTHENTICATE MIC depends on it: without
+// VERSION, a server reads the MIC 8 bytes earlier than one that keeps the fixed layout.
+var ntlmSSPClientVersion = []byte{6, 1, 0xb1, 0x1d, 0, 0, 0, 15}
 
 var ntlmSSPSignature = []byte{'N', 'T', 'L', 'M', 'S', 'S', 'P', 0}
 
@@ -60,7 +68,7 @@ type NTLMSSPChallenge struct {
 
 // MarshalNTLMSSPNegotiate emits the strict CredSSP client profile: Unicode,
 // NTLMv2, signing, sealing, 128-bit keys, extended session security, target
-// info and always-sign. OEM, LM-key, NTLMv1 and key exchange are not requested.
+// info, version, key exchange and always-sign. OEM, LM-key and NTLMv1 are not requested.
 func MarshalNTLMSSPNegotiate() []byte {
 	message := make([]byte, ntlmSSPNegotiateHeaderSize)
 	copy(message, ntlmSSPSignature)
@@ -69,6 +77,7 @@ func MarshalNTLMSSPNegotiate() []byte {
 	// Empty DomainName and Workstation security buffers point at the payload.
 	binary.LittleEndian.PutUint32(message[20:24], uint32(len(message)))
 	binary.LittleEndian.PutUint32(message[28:32], uint32(len(message)))
+	copy(message[32:40], ntlmSSPClientVersion)
 	return message
 }
 
@@ -84,11 +93,8 @@ func ParseNTLMSSPChallenge(data []byte, offeredFlags uint32) (NTLMSSPChallenge, 
 	if !bytes.Equal(data[:8], ntlmSSPSignature) || binary.LittleEndian.Uint32(data[8:12]) != ntlmSSPMessageChallenge {
 		return out, ErrNTLMSSPMessage
 	}
-	if !allZero(data[48:56]) { // VERSION was not negotiated; the fixed field must be zero.
-		return out, ErrNTLMSSPMessage
-	}
 	flags := binary.LittleEndian.Uint32(data[20:24])
-	required := uint32(ntlmSSPNegotiateUnicode | ntlmSSPNegotiateSign | ntlmSSPNegotiateSeal | ntlmSSPNegotiateNTLM | ntlmSSPNegotiateAlwaysSign | ntlmSSPNegotiateExtendedSessionSecurity | ntlmSSPNegotiateTargetInfo | ntlmSSPNegotiate128)
+	required := uint32(ntlmSSPNegotiateVersion | ntlmSSPNegotiateKeyExchange | ntlmSSPNegotiateUnicode | ntlmSSPNegotiateSign | ntlmSSPNegotiateSeal | ntlmSSPNegotiateNTLM | ntlmSSPNegotiateAlwaysSign | ntlmSSPNegotiateExtendedSessionSecurity | ntlmSSPNegotiateTargetInfo | ntlmSSPNegotiate128)
 	allowed := uint32(ntlmSSPNegotiateFlags | ntlmSSPTargetTypeDomain | ntlmSSPTargetTypeServer)
 	if flags&required != required || flags&^allowed != 0 || flags&(ntlmSSPTargetTypeDomain|ntlmSSPTargetTypeServer) == ntlmSSPTargetTypeDomain|ntlmSSPTargetTypeServer {
 		return out, ErrNTLMSSPMessage
@@ -120,7 +126,7 @@ func ParseNTLMSSPChallenge(data []byte, offeredFlags uint32) (NTLMSSPChallenge, 
 // and computes its MIC over the exact NEGOTIATE, CHALLENGE and zero-MIC
 // AUTHENTICATE messages. It includes LMv2 or Z(24) when the server supplies an
 // AV timestamp, and omits
-// EncryptedRandomSessionKey because KEY_EXCH is not negotiated. This is a codec
+// EncryptedRandomSessionKey of the bound response. This is a codec
 // primitive only; it does not perform CredSSP, verify the TLS peer or transmit
 // credentials. The caller must enforce the TLS pin and clear the returned bytes.
 func MarshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, username, domain string, response NTLMv2Response) ([]byte, error) {
@@ -128,8 +134,8 @@ func MarshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 }
 
 // MarshalNTLMSSPAuthenticateWithBindings adds the client TargetName and TLS
-// channel-binding AV_PAIRs to the AUTHENTICATE NTLMv2 blob. The response proof
-// must already have been computed over the unmodified server TargetInfo.
+// channel-binding AV_PAIRs to the AUTHENTICATE NTLMv2 blob. The response must
+// come from BindNTLMv2Response with the same bindings: the proof covers them.
 func MarshalNTLMSSPAuthenticateWithBindings(negotiateMessage, challengeMessage []byte, username, domain string, response NTLMv2Response, bindings NTLMv2ClientBindings) ([]byte, error) {
 	return marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage, username, domain, response, &bindings)
 }
@@ -142,27 +148,9 @@ func marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 	if err != nil {
 		return nil, err
 	}
-	if len(response.NTResponse) < 16+32+4 {
+	if !bytes.Equal(response.boundServerInfo, challenge.TargetInfo) {
 		return nil, ErrNTLMSSPMessage
 	}
-	baseBlob := response.NTResponse[16:]
-	serverInfo := baseBlob[28 : len(baseBlob)-4]
-	var clientInfo []byte
-	if bindings != nil {
-		clientInfo, err = NTLMv2TargetInfoWithClientBindings(serverInfo, *bindings)
-	} else {
-		clientInfo, err = NTLMv2TargetInfoWithMICFlag(serverInfo)
-	}
-	if err != nil {
-		return nil, ErrNTLMSSPMessage
-	}
-	defer clear(clientInfo)
-	ntResponse := make([]byte, 16+28+len(clientInfo)+4)
-	copy(ntResponse[:16], response.NTResponse[:16])
-	copy(ntResponse[16:44], baseBlob[:28])
-	copy(ntResponse[44:], clientInfo)
-	response.NTResponse = ntResponse
-	defer clear(ntResponse)
 	if err := validateNTLMv2ResponseForChallenge(response, challenge, bindings); err != nil {
 		return nil, err
 	}
@@ -181,7 +169,7 @@ func marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 	copy(message, ntlmSSPSignature)
 	binary.LittleEndian.PutUint32(message[8:12], ntlmSSPMessageAuthenticate)
 	binary.LittleEndian.PutUint32(message[60:64], challenge.Flags)
-	// Version is all zero because NEGOTIATE_VERSION was not offered.
+	copy(message[64:72], ntlmSSPClientVersion)
 	payloadOffset := uint32(len(message))
 	setNTLMSSPSecurityBuffer(message[12:20], payloadOffset, response.LMResponse[:])
 	message = append(message, response.LMResponse[:]...)
@@ -199,13 +187,14 @@ func marshalNTLMSSPAuthenticate(negotiateMessage, challengeMessage []byte, usern
 	message = append(message, userBytes...)
 	payloadOffset = uint32(len(message))
 	setNTLMSSPSecurityBuffer(message[44:52], payloadOffset, nil) // Workstation is not supplied.
-	setNTLMSSPSecurityBuffer(message[52:60], payloadOffset, nil) // KEY_EXCH is not negotiated.
+	setNTLMSSPSecurityBuffer(message[52:60], payloadOffset, response.EncryptedRandomSessionKey[:])
+	message = append(message, response.EncryptedRandomSessionKey[:]...)
 	if len(message) > maxNTLMSSPMessage {
 		clear(message)
 		return nil, ErrNTLMSSPMessage
 	}
 
-	mac := hmac.New(md5.New, response.SessionBaseKey[:])
+	mac := hmac.New(md5.New, response.ExportedSessionKey[:])
 	_, _ = mac.Write(negotiateMessage)
 	_, _ = mac.Write(challengeMessage)
 	_, _ = mac.Write(message) // MIC field remains zero during calculation.

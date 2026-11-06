@@ -11,6 +11,13 @@ const (
 	maxSPNEGOMechs = 8
 )
 
+// negState of a NegTokenResp (RFC 4178 4.2.2).
+const (
+	spnegoStateAcceptCompleted  = 0
+	spnegoStateAcceptIncomplete = 1
+	spnegoStateRequestMIC       = 3
+)
+
 var (
 	ErrSPNEGOToken       = errors.New("invalid SPNEGO token")
 	ErrSPNEGOMechanism   = errors.New("unsupported SPNEGO mechanism")
@@ -161,7 +168,8 @@ func ParseSPNEGONegTokenResp(data []byte) (SPNEGONegTokenResp, error) {
 			if e != nil || out.State > 3 {
 				return SPNEGONegTokenResp{}, ErrSPNEGOToken
 			}
-			if out.State == 2 || out.State == 3 {
+			// request-mic (3) is an exchange the caller must complete; reject (2) ends here.
+			if out.State == 2 {
 				return SPNEGONegTokenResp{}, ErrSPNEGONegotiation
 			}
 		case 0xa1: // supportedMech OBJECT IDENTIFIER

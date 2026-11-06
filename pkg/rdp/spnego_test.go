@@ -70,9 +70,6 @@ func TestParseSPNEGORejectsBadStateAndMalformed(t *testing.T) {
 	if _, e := ParseSPNEGONegTokenResp(responseSPNEGOTokenForTest(t, 2)); !errors.Is(e, ErrSPNEGONegotiation) {
 		t.Fatalf("reject state: %v", e)
 	}
-	if _, e := ParseSPNEGONegTokenResp(responseSPNEGOTokenForTest(t, 3)); !errors.Is(e, ErrSPNEGONegotiation) {
-		t.Fatalf("request mic state: %v", e)
-	}
 	good := initialSPNEGOTokenForTest(t)
 	if _, e := ParseSPNEGONegTokenInit(append(good, 0)); e == nil {
 		t.Fatal("trailing byte accepted")

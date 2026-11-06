@@ -1,9 +1,11 @@
 package rdp
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/rc4"
 	"encoding/binary"
 	"errors"
 	"unicode"
@@ -48,12 +50,20 @@ type NTLMv2AVPair struct {
 // Call Purge when the response is no longer needed; it clears key material held by this result.
 // LMResponse contains the LMv2 proof, or Z(24) when the server supplied an AV timestamp.
 type NTLMv2Response struct {
-	NTProof         [16]byte
-	NTResponse      []byte
-	LMResponse      [24]byte
-	SessionBaseKey  [16]byte
-	serverChallenge [8]byte
-	valid           bool
+	NTProof        [16]byte
+	NTResponse     []byte
+	LMResponse     [24]byte
+	SessionBaseKey [16]byte
+	// ExportedSessionKey is random, and reaches the server as EncryptedRandomSessionKey: the
+	// session keys do not derive from the password and the challenge alone (MS-NLMP 3.1.5.1.2).
+	ExportedSessionKey        [16]byte
+	EncryptedRandomSessionKey [16]byte
+	serverChallenge           [8]byte
+	valid                     bool
+	// responseKey lets BindNTLMv2Response prove the blob as it is sent; boundServerInfo is the
+	// server TargetInfo it was bound from: only a bound response authenticates.
+	responseKey     [16]byte
+	boundServerInfo []byte
 }
 
 // Purge overwrites response and key material held by the result.
@@ -65,7 +75,11 @@ func (r *NTLMv2Response) Purge() {
 	clear(r.NTResponse)
 	clear(r.LMResponse[:])
 	clear(r.SessionBaseKey[:])
+	clear(r.ExportedSessionKey[:])
+	clear(r.EncryptedRandomSessionKey[:])
 	clear(r.serverChallenge[:])
+	clear(r.responseKey[:])
+	clear(r.boundServerInfo)
 	r.valid = false
 }
 
@@ -252,6 +266,60 @@ func ComputeNTLMv2Response(username, domain string, password []byte, serverChall
 
 	out.SessionBaseKey = hmacMD5(responseKey[:], out.NTProof[:])
 	out.serverChallenge = serverChallenge
+	out.responseKey = responseKey
+	out.valid = true
+	return out, nil
+}
+
+// BindNTLMv2Response gives a response its final TargetInfo: the server's, with MsvAvFlags.MIC_PRESENT
+// and, with bindings, the client's TargetName and TLS channel binding. NTProofStr and the session
+// key are computed over those bytes, the ones sent: the server recomputes them from what it receives
+// (MS-NLMP 3.1.5.1.2), so a proof over anything else cannot authenticate. The result owns its
+// memory; purge both.
+func BindNTLMv2Response(response NTLMv2Response, serverTargetInfo []byte, bindings *NTLMv2ClientBindings) (NTLMv2Response, error) {
+	var out NTLMv2Response
+	if !response.valid || allZero(response.responseKey[:]) || len(response.NTResponse) < 16+32+4 ||
+		!bytes.Equal(response.NTResponse[16+28:len(response.NTResponse)-4], serverTargetInfo) {
+		return out, ErrNTLMv2Input
+	}
+	var clientInfo []byte
+	var err error
+	if bindings != nil {
+		clientInfo, err = NTLMv2TargetInfoWithClientBindings(serverTargetInfo, *bindings)
+	} else {
+		clientInfo, err = NTLMv2TargetInfoWithMICFlag(serverTargetInfo)
+	}
+	if err != nil {
+		return out, err
+	}
+	defer clear(clientInfo)
+
+	blob := make([]byte, 28+len(clientInfo)+4)
+	copy(blob, response.NTResponse[16:16+28])
+	copy(blob[28:], clientInfo)
+	proofInput := make([]byte, 8+len(blob))
+	copy(proofInput, response.serverChallenge[:])
+	copy(proofInput[8:], blob)
+	out.NTProof = hmacMD5(response.responseKey[:], proofInput)
+	clear(proofInput)
+	out.NTResponse = make([]byte, 16+len(blob))
+	copy(out.NTResponse, out.NTProof[:])
+	copy(out.NTResponse[16:], blob)
+	clear(blob)
+	out.LMResponse = response.LMResponse
+	out.SessionBaseKey = hmacMD5(response.responseKey[:], out.NTProof[:])
+	if _, err := rand.Read(out.ExportedSessionKey[:]); err != nil {
+		out.Purge()
+		return NTLMv2Response{}, ErrNTLMv2Input
+	}
+	keyExchange, err := rc4.NewCipher(out.SessionBaseKey[:])
+	if err != nil {
+		out.Purge()
+		return NTLMv2Response{}, ErrNTLMv2Input
+	}
+	keyExchange.XORKeyStream(out.EncryptedRandomSessionKey[:], out.ExportedSessionKey[:])
+	out.serverChallenge = response.serverChallenge
+	out.boundServerInfo = append([]byte(nil), serverTargetInfo...)
 	out.valid = true
 	return out, nil
 }

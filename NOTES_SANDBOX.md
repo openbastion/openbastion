@@ -2876,3 +2876,11 @@ Signalé par le propriétaire : `403 — no policy matches` en ouvrant une sessi
 - L'Admin UI n'a pas de bouton de connexion SSH : elle crée la session, le ticket s'obtient par l'API.
 - L'opérateur de démonstration lit `403` sur `/sessions/{id}/recording`, faute du rôle : la relecture de la commande n'est pas vérifiée sur cette pile. Elle l'est dans `TestCompose`.
 - La clé d'hôte du seed dépend de `DEMO_TARGET_PASSWORD` : les changer ensemble, sinon la session est refusée.
+
+## 2026-11-06 — ADR-0071, incrément 70 : CredSSP contre un vrai serveur RDP
+
+Reprise d'ADR-0071 par ce qui manquait le plus : `pkg/rdp` n'avait jamais parlé à un vrai serveur. Contre FreeRDP 3.15, cinq défauts ou manques, tous invisibles sur les faux serveurs (détail et amendement dans l'ADR) : drapeaux de `RDP_NEG_RSP` refusés, preuve NTLMv2 calculée avant l'ajout des AV_PAIR, `VERSION` non négocié, `KEY_EXCH` absent, `request-mic` refusé. Le faux serveur du test unitaire reproduisait l'erreur de la preuve ; il recalcule désormais depuis ce qu'il reçoit.
+
+**Prouvé** (dans cette session) : `make test-rdp-interop`, 3 sous-tests verts, dont mauvais mot de passe et pin d'imposteur. `go test -race ./pkg/rdp` vert. 9/9 mutations tuées, dont 5 rejouées contre le vrai serveur. FreeRDP 2.11 a été écarté : il attend du NTLM nu, hors de SPNEGO.
+
+**Limites** : pas de Windows. Le passage de la séquence à 1 après le MIC est mesuré sur FreeRDP, non normatif. Un serveur qui demande le MIC et compte autrement fermera la session : refus, pas contournement. `make test-rdp-interop` n'est pas en CI. La connexion échoue ensuite à la réponse MCS/GCC. RDP reste non exposé.
