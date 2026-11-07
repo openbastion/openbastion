@@ -48,7 +48,7 @@ Deux règles guident l'ordre de livraison :
 **Explicitement hors périmètre v0.0.1** : Docker Proxy, Hypervisor Console Proxy, WinRM Proxy, Telnet/Serial-IPMI Proxy, HTTP/HTTPS Web Proxy, Risk Engine, Reporting Service, SDK Python/Java/JavaScript.
 
 **Critères de sortie**
-- Une demande d'accès peut être soumise à double validation avec ticket obligatoire et notification Slack/Teams, de bout en bout.
+- Une demande d'accès peut être soumise à double validation avec ticket obligatoire et notification Slack/Teams, de bout en bout. — **Atteint** le 7 novembre 2026 (ADR-0067, ADR-0074) : sur de vrais services, une demande avec ticket et son approbation par une autre personne arrivent dans un vrai Teams et un vrai Slack, signées, sans la justification. Le ticket est vérifié dans son format, pas dans un ITSM : c'est ce qu'ADR-0067 a retenu.
 - Replay vidéo disponible pour les sessions RDP/VNC ; recherche plein texte opérationnelle sur commandes et sessions.
 - Au moins trois fournisseurs d'identité externes fédérés simultanément en environnement de test.
 - Helm charts et `docs/deployment/high-availability.md` disponibles pour un déploiement Kubernetes/K3s/OpenShift en production.
@@ -96,7 +96,7 @@ Deux règles guident l'ordre de livraison :
 | Reporting Service | | | ✅ |
 | Workflow Service | | ✅ | |
 | Approval Engine | | ✅ | |
-| Notifications Slack/Teams | | ✅ (format livré, ADR-0074 ; Teams réel affiche une alerte de l'Audit Service et un break-glass approuvé du Broker, signés ; Slack réel affiche le message de test ; demande avec ticket et services réels vers Slack à essayer) | |
+| Notifications Slack/Teams | | ✅ (ADR-0074 ; vrais Teams et Slack : alertes de l'Audit Service, break-glass et demandes avec ticket du Broker, et leurs approbations) | |
 | MFA Service | | ✅ (TOTP, ADR-0062, et WebAuthn, ADR-0065, livrés dans l'Authentication Service) | |
 | Anomaly Detection / Risk Engine | | | ✅ |
 | OIDC Connector | ✅ | | |

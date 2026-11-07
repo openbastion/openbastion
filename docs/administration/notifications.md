@@ -32,7 +32,7 @@ read -rs NOTIFY_INTEROP_SLACK_URL; export NOTIFY_INTEROP_SLACK_URL   # ou NOTIFY
 go test ./pkg/webhook/ -run TestRealChannel -v -count=1
 ```
 
-Pour Teams, sur de vrais processus (`GOWORK` absolu) : une alerte de l'Audit Service, signée, sous mTLS ; puis une demande de break-glass et son approbation par une seconde personne, signées par le Broker. Le canal reçoit trois cartes, et aucune ne porte la justification :
+Sur de vrais processus, pour chaque URL fournie (`NOTIFY_INTEROP_TEAMS_URL`, `NOTIFY_INTEROP_SLACK_URL` ; `GOWORK` absolu) : une alerte de l'Audit Service, signée, sous mTLS ; puis, signés par le Broker, une demande de break-glass, une demande d'accès avec le ticket `CHG0074001`, et l'approbation de chacune par une autre personne. Chaque canal reçoit cinq messages, et aucun ne porte de justification :
 
 ```sh
 cd test/integration && go test . -run TestRealChannel -v -count=1

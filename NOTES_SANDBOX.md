@@ -2936,3 +2936,11 @@ Puis `TestRealChannel_TheBrokerTellsTeamsOfABreakGlassRequest_AndOfItsApproval` 
 **Slack réel** (même jour) : le premier essai répond `302`, car l'URL fournie était un lien Workflow Builder (`slack.com/shortcuts/…`) et non un webhook ; rien n'est publié, et la redirection n'est pas suivie, comme prévu. Avec un webhook entrant (`hooks.slack.com/services/…`), `TestRealChannel` passe en 0,46 s, et le propriétaire voit la phrase, `??here?` compris, sans notification. Dépannage : la ligne du `302` est ajoutée. **Non prouvé** : un message de service réel vers Slack ; une demande d'accès avec ticket vers l'un ou l'autre canal. Le premier critère de sortie de la v0.0.1 reste ouvert.
 
 **Limite** : un tenant qui interdit « Anyone » ne peut pas utiliser ce canal. OAuth (client credentials) demanderait son propre ADR.
+
+## 2026-11-07 — ADR-0074 : services réels vers vrais Teams et Slack, demande avec ticket
+
+`test/integration/notify_real_channel_test.go` tourne pour chaque URL fournie (`NOTIFY_INTEROP_TEAMS_URL`, `NOTIFY_INTEROP_SLACK_URL`) ; sans aucune, ses deux tests sont ignorés. Le scénario du Broker passe sur un vrai Vault (`gatewaySetApproval` le demande). `sre-oncall` demande un break-glass avec justification, puis un accès avec le ticket `CHG0074001` ; `lead-bob`, qui détient `breakglass-approve` et `session-approve` sur ces deux comptes, approuve chacun. Ports : Audit 18860 et 18859, Broker 1887x et 1888x.
+
+**Prouvé** (59 s, 4 sous-tests verts) : les cinq messages s'affichent dans les deux canaux, d'après le propriétaire. Contre-épreuve : avec deux récepteurs morts, les 4 sous-tests échouent sur « not delivered », chaque scénario allant jusqu'au bout. Aucun journal ne porte une URL ni le secret. **Premier critère de sortie de la v0.0.1 atteint** : roadmap mise à jour, ticket vérifié dans son format (ADR-0067). Choix renversable : je l'ai marqué atteint à la place du propriétaire.
+
+**Non prouvé** : l'alerte d'une vraie rotation en échec vers un vrai canal ; qu'aucun des messages affichés ne contienne la justification a été demandé au propriétaire, qui a confirmé l'affichage des cinq messages sans le redire pour cet essai (il l'avait confirmé pour le break-glass seul).
