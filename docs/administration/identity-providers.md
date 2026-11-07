@@ -56,6 +56,8 @@ LDAP_ROLE_MAP_FILE=/etc/openbastion/ldap-roles.json
 
 Les variables ci-dessus déclarent **un** émetteur OIDC et **un** annuaire. Pour en servir plusieurs en même temps (par exemple Active Directory, OpenLDAP et deux émetteurs OIDC), déclarez-les tous dans un fichier, `IDENTITY_PROVIDERS_FILE`, et retirez les variables `OIDC_*` et `LDAP_*` : **les deux ensemble, le service refuse de démarrer**.
 
+> **Avant de passer au fichier : les comptes existants.** Les comptes créés par les variables (`oidc:<sub>`, `ldap:<identifiant>`) **ne peuvent plus se connecter** après le passage, sauf si une entrée les reprend avec `"adopt_legacy_accounts": true` (une entrée de chaque type au plus, et seulement celle **du même fournisseur** qu'avant : ADR-0078 refuse le démarrage sinon). Le démarrage dit combien de comptes ne sont repris par aucune entrée. Détail ci-dessous.
+
 ```json
 {
   "oidc": [
