@@ -135,9 +135,6 @@ func TestEntra_AGroupsOverage_IsRefused_AndItsReferenceIsNeverFetched(t *testing
 			c["_claim_sources"] = map[string]any{"src1": map[string]string{"endpoint": graph}}
 		},
 		"_claim_names alone": func(c jwt.MapClaims) { c["_claim_names"] = map[string]string{"groups": "src1"} },
-		"_claim_sources alone": func(c jwt.MapClaims) {
-			c["_claim_sources"] = map[string]any{"src1": map[string]string{"endpoint": graph}}
-		},
 		"hasgroups": func(c jwt.MapClaims) { delete(c, "groups"); c["hasgroups"] = true },
 	}
 	for name, change := range overages {
@@ -152,11 +149,30 @@ func TestEntra_AGroupsOverage_IsRefused_AndItsReferenceIsNeverFetched(t *testing
 			t.Fatalf("the reference of an overage was fetched: %s", r)
 		}
 	}
-	// hasgroups false, or another claim named elsewhere: not an overage of the groups.
-	c := entraClaims(tenantA)
-	c["hasgroups"] = false
-	if _, err := p.VerifyIDToken(context.Background(), f.sign(t, jwt.SigningMethodRS256, "rsa-1", f.rsaKey, c), "n1"); err != nil {
-		t.Fatalf("hasgroups false: %v", err)
+	// Distributed claims unrelated to groups are valid OIDC: _claim_sources alone, or
+	// referenced by _claim_names for another claim, is not a groups overage.
+	unrelated := map[string]jwt.MapClaims{
+		"_claim_sources alone": func() jwt.MapClaims {
+			c := entraClaims(tenantA)
+			c["_claim_sources"] = map[string]any{"src1": map[string]string{"endpoint": graph}}
+			return c
+		}(),
+		"another claim uses _claim_sources": func() jwt.MapClaims {
+			c := entraClaims(tenantA)
+			c["_claim_names"] = map[string]string{"email": "src1"}
+			c["_claim_sources"] = map[string]any{"src1": map[string]string{"endpoint": graph}}
+			return c
+		}(),
+		"hasgroups false": func() jwt.MapClaims {
+			c := entraClaims(tenantA)
+			c["hasgroups"] = false
+			return c
+		}(),
+	}
+	for name, c := range unrelated {
+		if _, err := p.VerifyIDToken(context.Background(), f.sign(t, jwt.SigningMethodRS256, "rsa-1", f.rsaKey, c), "n1"); err != nil {
+			t.Fatalf("%s: %v, want a valid token", name, err)
+		}
 	}
 }
 
