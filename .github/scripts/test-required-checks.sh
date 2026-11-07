@@ -31,11 +31,12 @@ for state in failure cancelled skipped neutral timed_out action_required stale '
 done
 
 for variable in "${variables[@]}"; do
-  if env -u "$variable" \
-    GO_RESULT=success INTEGRATION_RESULT=success POSTGRES_RESULT=success \
-    FRONTEND_RESULT=success SECURITY_RESULT=success CONTAINERS_RESULT=success \
-    bash "$script" >/dev/null 2>&1; then
-    printf 'FAIL: missing %s unexpectedly passed\n' "$variable" >&2
+  assignments=()
+  for candidate in "${variables[@]}"; do
+    [[ "$candidate" == "$variable" ]] || assignments+=("$candidate=success")
+  done
+  if env "${assignments[@]}" bash "$script" >/dev/null 2>&1; then
+    printf 'FAIL: missing %s unexpectedly passed\\n' "$variable" >&2
     exit 1
   fi
 done
