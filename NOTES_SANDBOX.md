@@ -2993,11 +2993,11 @@ ADR accepté par le propriétaire le même jour (« J'accepte ADR-0078 tel quel,
 
 ## 2026-11-07 — ADR-0079 : Entra ID, profil OIDC lié à un tenant
 
-ADR accepté par le propriétaire le même jour. Une entrée `oidc` de `IDENTITY_PROVIDERS_FILE` prend `"profile": "entra"` et `"tenant_id"` (GUID en minuscules). L'émetteur doit être exactement `https://login.microsoftonline.com/<tenant_id>/v2.0` (vérifié à la lecture du fichier et à la construction du fournisseur). Chaque jeton doit porter ce `tid`. Un overage de groupes (`_claim_names`, `_claim_sources`, `hasgroups`) est refusé et jamais suivi. Les rôles ne viennent que de la table de l'entrée. Le profil ne demande pas de scope `groups`. Aucune nouvelle variable, aucune migration, aucune route.
+ADR accepté par le propriétaire le même jour. Une entrée `oidc` de `IDENTITY_PROVIDERS_FILE` prend `"profile": "entra"` et `"tenant_id"` (GUID en minuscules). L'émetteur doit être exactement `https://login.microsoftonline.com/<tenant_id>/v2.0` (vérifié à la lecture du fichier et à la construction du fournisseur). Chaque jeton doit porter ce `tid`. Un overage de groupes (`_claim_names` qui nomme les groupes, `hasgroups` ; `_claim_sources` seul n'en est pas un) est refusé et jamais suivi. Les rôles ne viennent que de la table de l'entrée. Le profil ne demande pas de scope `groups`. Aucune nouvelle variable, aucune migration, aucune route.
 
 **Prouvé** :
-- infrastructure : 7 tests, 6 mutations sur 6 tuées ;
-- processus réels (`entra_flow_test.go`, 4 à 6 s) : vrai binaire, vrai émetteur en HTTPS, faux Entra ID derrière un proxy `CONNECT` de test et une autorité de test. 6 sous-tests verts, 3 mutations tuées ; l'overage `_claim_sources` seul y survit (le cas porte aussi `_claim_names`), il est tué par les tests de l'infrastructure ;
+- infrastructure : 7 tests, mutations tuées (tenant, émetteur, autorités multi-tenant, `_claim_names` des groupes accepté, tout `_claim_sources` refusé) ;
+- processus réels (`entra_flow_test.go`, 4 à 6 s) : vrai binaire, vrai émetteur en HTTPS, faux Entra ID derrière un proxy `CONNECT` de test et une autorité de test. 6 sous-tests verts, 3 mutations tuées ;
 - `make build vet test` verts ; tests de contrat, et tests de fédération sous PostgreSQL (Entra, quatre fournisseurs, émetteur, OIDC, audit des connexions) verts.
 
 **Non prouvé, ou limites** :
@@ -3006,4 +3006,4 @@ ADR accepté par le propriétaire le même jour. Une entrée `oidc` de `IDENTITY
 - comptes invités B2B : seulement au titre du tenant déclaré ;
 - pas de SCIM, pas de synchronisation hors connexion.
 
-**Choix renversables** : `tenant_id` exigé en minuscules (le `tid` du jeton est comparé sans casse) ; `_claim_sources` seul suffit à refuser ; le scope `openid profile email` pour le profil `entra`.
+**Choix renversables** : `tenant_id` exigé en minuscules (le `tid` du jeton est comparé sans casse) ; `_claim_sources` seul ne refuse pas — décision du propriétaire, qui a corrigé la première mise en œuvre (`dd770c7`) ; le scope `openid profile email` pour le profil `entra`.

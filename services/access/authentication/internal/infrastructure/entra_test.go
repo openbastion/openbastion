@@ -135,7 +135,7 @@ func TestEntra_AGroupsOverage_IsRefused_AndItsReferenceIsNeverFetched(t *testing
 			c["_claim_sources"] = map[string]any{"src1": map[string]string{"endpoint": graph}}
 		},
 		"_claim_names alone": func(c jwt.MapClaims) { c["_claim_names"] = map[string]string{"groups": "src1"} },
-		"hasgroups": func(c jwt.MapClaims) { delete(c, "groups"); c["hasgroups"] = true },
+		"hasgroups":          func(c jwt.MapClaims) { delete(c, "groups"); c["hasgroups"] = true },
 	}
 	for name, change := range overages {
 		c := entraClaims(tenantA)
