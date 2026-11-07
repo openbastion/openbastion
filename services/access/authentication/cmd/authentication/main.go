@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sort"
@@ -55,6 +56,7 @@ func runService() {
 		domain.UserRepository
 		domain.LoginAttemptRepository
 		domain.MFARepository
+		domain.IssuerBindingRepository
 	}
 	if dsn != "" {
 		ctx := context.Background()
@@ -95,10 +97,15 @@ func runService() {
 			set++
 		}
 	}
+	// The issuer of the provider of the variables, checked once the audit is wired (ADR-0078).
+	var issuers []application.IssuerDeclaration
 	switch {
 	case providersFile != "":
 		// Read below, once the audit is wired: the file says both providers and directories.
 	case set == 0:
+		if os.Getenv("OIDC_PREVIOUS_ISSUER") != "" {
+			log.Fatalf("authentication: OIDC_PREVIOUS_ISSUER is set, and OIDC is off: it declares a change of OIDC_ISSUER — refusing to start")
+		}
 		log.Printf("authentication: federated login (OIDC) off — local accounts only")
 	case set == len(oidcVars):
 		roles, err := application.LoadRoleMap(oidcVars["OIDC_ROLE_MAP_FILE"])
@@ -116,6 +123,8 @@ func runService() {
 			log.Fatalf("authentication: OIDC: %v — refusing to start", err)
 		}
 		svc.WithOIDC(provider, roles, store)
+		issuers = append(issuers, application.IssuerDeclaration{Provider: "", Issuer: oidcVars["OIDC_ISSUER"],
+			PreviousIssuer: os.Getenv("OIDC_PREVIOUS_ISSUER"), Name: "OIDC_ISSUER", Declare: "OIDC_PREVIOUS_ISSUER"})
 		log.Printf("authentication: federated login (OIDC) with %s, %d group(s) in the role map; a user with no mapped role is refused", oidcVars["OIDC_ISSUER"], len(roles))
 	default:
 		var missing []string
@@ -144,10 +153,11 @@ func runService() {
 	log.Printf("authentication: logins are written to the audit at %s before a token is issued — the audit down, no login (ADR-0064)", auditURL)
 
 	if providersFile != "" {
-		configureProvidersFile(svc, store, providersFile)
+		issuers = configureProvidersFile(svc, store, providersFile)
 	} else {
 		configureDirectory(svc)
 	}
+	bindIssuers(svc, store, issuers)
 	configureMFA(svc, store)
 
 	// Demo seed — real onboarding goes through POST /auth/v1/users.
@@ -165,7 +175,7 @@ func runService() {
 
 // The variables of one provider of each kind (ADR-0035, ADR-0061); IDENTITY_PROVIDERS_FILE excludes them.
 var (
-	oidcVariables = []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_ROLE_MAP_FILE", "OIDC_GROUPS_CLAIM"}
+	oidcVariables = []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_ROLE_MAP_FILE", "OIDC_GROUPS_CLAIM", "OIDC_PREVIOUS_ISSUER"}
 	ldapVariables = []string{"LDAP_URL", "LDAP_SCHEMA", "LDAP_BIND_DN", "LDAP_BIND_PASSWORD_FILE", "LDAP_USER_BASE_DN", "LDAP_GROUP_BASE_DN", "LDAP_ROLE_MAP_FILE", "LDAP_CA_FILE"}
 )
 
@@ -180,12 +190,13 @@ type legacyAccounts interface {
 // logins answer 503.
 func configureProvidersFile(svc *application.AuthenticationService, store interface {
 	domain.LoginAttemptRepository
-}, path string) {
+}, path string) []application.IssuerDeclaration {
 	f, err := infrastructure.LoadProvidersFile(path)
 	if err != nil {
 		log.Fatalf("authentication: %v — refusing to start", err)
 	}
 	var oidc []application.OIDCEntry
+	var issuers []application.IssuerDeclaration
 	adopts := map[string]string{}
 	for _, e := range f.OIDC {
 		roles, err := application.LoadRoleMap(e.RoleMapFile)
@@ -205,8 +216,13 @@ func configureProvidersFile(svc *application.AuthenticationService, store interf
 			log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE: oidc %q: %v — refusing to start", e.ID, err)
 		}
 		oidc = append(oidc, application.OIDCEntry{ID: e.ID, Label: e.Label, Provider: provider, Roles: roles, AdoptLegacyAccounts: e.AdoptLegacyAccounts})
+		name, declare := fmt.Sprintf("oidc %q", e.ID), fmt.Sprintf("oidc %q: previous_issuer", e.ID)
+		issuers = append(issuers, application.IssuerDeclaration{Provider: e.ID, Issuer: e.Issuer, PreviousIssuer: e.PreviousIssuer, Name: name, Declare: declare})
 		if e.AdoptLegacyAccounts {
 			adopts[domain.SourceOIDC] = e.ID
+			// The accounts of the variables go to this entry only if it is their issuer (ADR-0078, point 4).
+			issuers = append(issuers, application.IssuerDeclaration{Provider: "", Issuer: e.Issuer, PreviousIssuer: e.PreviousIssuer,
+				Name: name + " (adopt_legacy_accounts, the accounts of OIDC_ISSUER)", Declare: declare})
 		}
 		log.Printf("authentication: federated login (OIDC) %q with %s, %d group(s) in its role map", e.ID, e.Issuer, len(roles))
 	}
@@ -267,6 +283,23 @@ func configureProvidersFile(svc *application.AuthenticationService, store interf
 			log.Printf("authentication: %d %s account(s) made before ADR-0076 belong to no entry of IDENTITY_PROVIDERS_FILE: they cannot log in until an entry declares adopt_legacy_accounts", n, source)
 		}
 	}
+	return issuers
+}
+
+// bindIssuers holds every OIDC provider to the issuer it was bound to (ADR-0078), all at once and
+// after every other check: a start refused leaves no binding behind. A declared change is written
+// to the audit before the binding changes; the audit down, the service does not start.
+func bindIssuers(svc *application.AuthenticationService, repo domain.IssuerBindingRepository, issuers []application.IssuerDeclaration) {
+	if len(issuers) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*infrastructure.AuditTimeout)
+	defer cancel()
+	outcomes, err := svc.BindIssuers(ctx, repo, issuers)
+	if err != nil {
+		log.Fatalf("authentication: %v — refusing to start", err)
+	}
+	application.LogIssuerOutcomes(outcomes)
 }
 
 func redactDSN(dsn string) string {

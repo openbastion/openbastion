@@ -87,4 +87,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0075](0075-architecture-du-user-portal-et-socle-frontend-partage.md) | Architecture du User Portal et socle frontend partagé | Proposé |
 | [ADR-0076](0076-plusieurs-fournisseurs-d-identite-chaque-compte-lie-au-sien.md) | Plusieurs fournisseurs d'identité à la fois, chaque compte lié au sien | Accepté |
 | [ADR-0077](0077-modulariser-les-workflows-github-actions-derriere-une-porte-de-validation-stable.md) | Modulariser les workflows GitHub Actions derrière une porte de validation stable | Proposé |
-| [ADR-0078](0078-chaque-fournisseur-oidc-garde-son-emetteur-un-changement-se-declare.md) | Chaque fournisseur OIDC garde son émetteur ; un changement se déclare | Proposé |
+| [ADR-0078](0078-chaque-fournisseur-oidc-garde-son-emetteur-un-changement-se-declare.md) | Chaque fournisseur OIDC garde son émetteur ; un changement se déclare | Accepté |

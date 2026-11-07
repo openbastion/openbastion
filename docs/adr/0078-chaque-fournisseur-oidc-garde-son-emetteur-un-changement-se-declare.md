@@ -1,6 +1,6 @@
 # ADR-0078 — Chaque fournisseur OIDC garde son émetteur ; un changement se déclare
 
-**Statut** `Proposé` · 7 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date · amende ADR-0076 (et ADR-0035 pour les variables `OIDC_*`)
+**Statut** `Accepté` · 7 novembre 2026 · go du propriétaire du projet le 7 novembre 2026 (« J'accepte ADR-0078 tel quel, go pour la mise en œuvre ») · amende ADR-0076 (et ADR-0035 pour les variables `OIDC_*`)
 
 **Contexte** — ADR-0076 lie un compte fédéré à l'**identifiant** de son fournisseur, pas à son émetteur. Sa limite restante, laissée « à décider », est donc toujours ouverte. **Mesuré sur `main` (`3159a68`)**, sous PostgreSQL, avec deux émetteurs de test qui donnent le même `sub`, chaque fois en redémarrant l'Authentication Service avec une autre configuration :
 
@@ -41,6 +41,8 @@ Invariants touchés : l'identité qui décide est celle que le service vérifie 
 
 **Conséquences**
 
+- (+) **Mesuré** (7 novembre 2026, `test/integration/issuer_binding_flow_test.go`, 5 à 7 s) : un Authentication Service réel, sous PostgreSQL, derrière une vraie Gateway, avec un vrai Audit Service et deux émetteurs de test au même `sub`. Les trois voies du tableau refusent maintenant de démarrer, en nommant le fournisseur, les deux émetteurs et la déclaration attendue. Un `previous_issuer` faux est refusé. L'audit coupé, le changement déclaré n'est pas fait. Déclaré depuis l'émetteur retenu, il est accepté : l'utilisateur retrouve son compte, et l'événement `auth.identity_provider_rebound` arrive à l'Audit Service quand la ligne porte encore l'ancien émetteur. Un `id` retiré puis redéclaré est refusé. Une entrée refusée n'en laisse aucune autre liée. Deux démarrages simultanés : un seul tourne, l'autre refuse. Neuf sous-tests verts ; deux mutations tuées sur ces processus (le garde-fou retiré, l'audit écrit après la ligne).
+- (+) **Tests unitaires** : dix tests de la décision, cinq mutations sur cinq tuées (un changement non déclaré accepté, un changement depuis un autre émetteur accepté, un changement sans audit, l'audit écrit après la ligne, les nouvelles lignes gardées malgré un refus). **PostgreSQL** : deux tests (création unique, changement sur demande, annulation complète sur refus ; deux transactions simultanées voient le même émetteur), trois mutations sur trois tuées (validation malgré un refus, `Created` toujours vrai, mise à jour ignorée).
 - (+) Le défaut mesuré dans les trois voies devient un refus de démarrer, qui dit pourquoi et comment en sortir. Un changement d'émetteur légitime reste possible, consigné à l'audit.
 - (−) **Confiance au premier démarrage** : la première ligne retient l'émetteur configuré à ce moment-là. Une installation dont l'émetteur a déjà changé avant cette décision ne peut pas être détectée. Ses comptes restent tels qu'ils sont.
 - (−) **Une déclaration n'est pas une preuve** : `previous_issuer` dit que le nouvel émetteur parle pour les mêmes `sub`. Une déclaration fausse redonne le défaut, mais consigné à l'audit, avec ses deux émetteurs.
@@ -49,6 +51,14 @@ Invariants touchés : l'identité qui décide est celle que le service vérifie 
 - (−) **Les annuaires restent hors du garde-fou** (point 7). La limite les concernant reste dans `known-limitations.md`, réduite à eux.
 - (−) Qui peut écrire dans la base de l'Authentication Service peut modifier la ligne sans passer par l'audit. C'est déjà le cas de toutes ses tables : hors du périmètre de cette décision.
 - (−) **Un état de plus à opérer** : une table, une variable (`OIDC_PREVIOUS_ISSUER`), un champ de fichier (`previous_issuer`) et un événement d'audit à documenter (`docs/administration/identity-providers.md`, `docs/deployment/configuration.md`, `docs/deployment/troubleshooting.md`, `docs/architecture/data-architecture.md`).
+
+**Précisions de mise en œuvre** (7 novembre 2026, sans changer la décision)
+
+- **Tout ou rien, pour l'ensemble des fournisseurs** : toutes les lignes sont tenues et vérifiées dans une seule transaction, après les autres contrôles du démarrage. Un refus, et aucune ligne n'est créée ni changée, même pour les fournisseurs nouveaux : une faute de frappe dans un émetteur ne se retrouve pas retenue au démarrage suivant. Les changements déclarés ne sont écrits à l'audit qu'une fois toutes les vérifications passées.
+- **Si la validation échoue après l'écriture à l'audit**, l'audit dit un changement qui n'a pas été retenu. Le démarrage suivant le refait et l'écrit de nouveau. C'est l'ordre de tout le dépôt : l'audit avant le geste, jamais l'inverse.
+- **L'événement** : action `auth.identity_provider_rebound`, type `identity_provider`, ressource = l'`id` (`(variables)` pour le fournisseur `''`), détails `previous_issuer` et `issuer` (ADR-0068). Un émetteur de plus de 256 octets ne peut pas y être écrit : son changement est refusé.
+- **`OIDC_PREVIOUS_ISSUER`** fait partie des variables `OIDC_*` exclues avec `IDENTITY_PROVIDERS_FILE`. Seule, sans OIDC configuré, elle fait refuser le démarrage.
+- **Les tests d'intégration** démarrent leurs émetteurs sur des ports nouveaux à chaque passage. Ceux qui réutilisent un `id` fixe ou les variables oublient d'abord ce qu'un passage précédent a retenu. Les listes de purge du CI et de `make test-postgres` comprennent la table.
 
 **Alternatives envisagées**
 

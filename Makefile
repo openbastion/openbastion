@@ -253,7 +253,7 @@ test-postgres: proto-gen
 		echo "TEST_DATABASE_URL non défini — voir NOTES_SANDBOX.md"; exit 1; \
 	fi
 	@command -v psql >/dev/null 2>&1 || { echo "psql introuvable — nécessaire pour purger la base avant les tests PostgreSQL (voir NOTES_SANDBOX.md)"; exit 1; }
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials RESTART IDENTITY CASCADE;"
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;"
 	$(GO) test ./services/vault/password-vault/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authorization/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/access/authentication/internal/infrastructure/... -run TestPostgres -v -count=1
@@ -261,7 +261,7 @@ test-postgres: proto-gen
 	$(GO) test ./services/recording-audit/audit-service/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/command-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
 	$(GO) test ./services/recording-audit/video-recorder/internal/infrastructure/... -run TestPostgres -v -count=1
-	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, video_recording_segments, video_recordings RESTART IDENTITY CASCADE;"
+	psql "$$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings, video_recording_segments, video_recordings RESTART IDENTITY CASCADE;"
 	$(GO) test ./test/integration/... -run TestPostgresFlow -v -count=1 -timeout=300s
 	$(GO) test ./test/integration/... -run TestScreenFlow -v -count=1 -timeout=300s
 

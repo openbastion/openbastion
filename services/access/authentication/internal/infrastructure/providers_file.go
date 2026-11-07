@@ -36,6 +36,8 @@ type OIDCEntryConfig struct {
 	RoleMapFile         string `json:"role_map_file"`
 	GroupsClaim         string `json:"groups_claim"`
 	AdoptLegacyAccounts bool   `json:"adopt_legacy_accounts"`
+	// PreviousIssuer declares a change of issuer (ADR-0078): the one this id was bound to.
+	PreviousIssuer string `json:"previous_issuer"`
 }
 
 // DirectoryEntryConfig is one directory: the fields of ADR-0061, its ID, label and role map.

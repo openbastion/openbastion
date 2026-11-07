@@ -99,7 +99,7 @@ var contractPairs = []contractPair{
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
 	// ADR-0064: the Authentication Service writes logins and the second factor's gestures.
 	{"services/access/authentication/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	// ADR-0070: the Video Recorder's clients of the Authorization and Audit routes.
 	{"services/recording-audit/video-recorder/internal/infrastructure/http_clients.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},

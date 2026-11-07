@@ -399,6 +399,15 @@ CREATE INDEX IF NOT EXISTS mfa_webauthn_credentials_user_idx ON mfa_webauthn_cre
 
 `005_webauthn_last_used.sql` (ADR-0066) ajoute `last_used_at TIMESTAMPTZ` : la dernière connexion signée par la clé, pour qu'un administrateur sache laquelle révoquer.
 
+`services/access/authentication/migrations/007_identity_provider_bindings.sql` (ADR-0078) : l'émetteur de chaque fournisseur OIDC, retenu à son premier démarrage. Lue et écrite au démarrage seulement, dans une transaction qui tient les lignes (`SELECT … FOR UPDATE`) : deux réplicas qui démarrent ensemble en retiennent un seul. Une ligne ne change que sur un changement déclaré, écrit à l'audit avant.
+
+```sql
+CREATE TABLE IF NOT EXISTS identity_provider_bindings (
+    provider  TEXT PRIMARY KEY,                 -- l'id du fichier ; '' pour les variables OIDC_*
+    issuer    TEXT NOT NULL,                    -- exactement, comme OIDC_ISSUER (ADR-0035)
+    bound_at  TIMESTAMPTZ NOT NULL DEFAULT now());
+```
+
 ### File des alertes à pousser (ADR-0057)
 
 `services/recording-audit/audit-service/migrations/002_alert_outbox.sql` : les alertes qui attendent d'être poussées (ADR-0045), pour qu'un redémarrage de l'Audit Service ne les perde pas. Une ligne par événement ; 256 au plus (borne tenue par le service) ; la ligne disparaît une fois l'alerte livrée ou abandonnée. Le corps est ce que la chaîne contient déjà, sans secret ; la signature est faite à chaque tentative, sa clé n'est pas en base.
