@@ -267,3 +267,33 @@ func TestRealChannel_AcceptsTheFormat(t *testing.T) {
 		})
 	}
 }
+
+// A Workflows URL is authorized by its query (sp, sv, sig): one byte changed is a 401. And a request
+// must carry no other scheme beside it: Microsoft refuses both at once.
+func TestPost_SendsAWorkflowsURLUntouched_AndNoAuthorizationHeader(t *testing.T) {
+	const path = "/powerautomate/automations/direct/workflows/abc123/triggers/manual/paths/invoke"
+	const query = "api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=a-_b%2Bc%3D"
+	var gotURI, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURI, gotAuth = r.RequestURI, r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+	endpoint, err := webhook.New(srv.URL + path + "?" + query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := endpoint.WithSecret(secret); err != nil {
+		t.Fatal(err)
+	}
+	status, err := endpoint.Post(context.Background(), "test", []byte(`{}`))
+	if err != nil || status != http.StatusAccepted {
+		t.Fatalf("%d, %v", status, err)
+	}
+	if gotURI != path+"?"+query {
+		t.Fatalf("the URL changed on the way: %s", gotURI)
+	}
+	if gotAuth != "" {
+		t.Fatalf("an Authorization header was sent: %s", gotAuth)
+	}
+}
