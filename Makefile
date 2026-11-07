@@ -29,7 +29,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test test-rdp-interop test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
+.PHONY: build version version-check test test-rdp-interop test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -202,6 +202,12 @@ test: proto-gen
 # A real RDP server in Docker, FreeRDP 3 (ADR-0071). Not Windows.
 test-rdp-interop:
 	RDP_INTEROP=1 $(GO) test ./services/proxy/rdp-vnc-proxy/internal/engine/ -run TestRDPInterop -v -count=1 -timeout=300s
+
+## A real Windows target (ADR-0071), in CI: .github/workflows/windows-rdp.yml starts it
+## (test/integration/testdata/rdp/windows) and exports the RDP_WINDOWS_* variables of its test.env.
+## Needs /dev/kvm and about 40 GB of disk; waits up to RDP_WINDOWS_WAIT (90m) for the installation.
+test-rdp-windows:
+	$(GO) test ./services/proxy/rdp-vnc-proxy/internal/engine/ -run TestRDPWindows -v -count=1 -timeout=120m
 
 test-integration: build
 	$(GO) test ./test/integration/... -v -count=1 -timeout=300s

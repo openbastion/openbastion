@@ -14,6 +14,14 @@ VNC est livré. RDP est éprouvé contre FreeRDP 3.15 (incréments 70 et 71), ja
 - si des fragments Fast-Path ou une réactivation (`Deactivate All`) arrivent en pratique : ils ferment aujourd'hui la session ;
 - quelles mises à jour non graphiques Windows envoie, au regard de la liste fermée d'incrément 71.
 
+**Comment, depuis le 7 novembre 2026** (demande du propriétaire du projet : « utilise `dockur/Windows` et configure un environnement Compose à lancer par la CI », sans lancement local) :
+
+- **La cible** : Windows Server 2022, installé sans intervention dans une machine virtuelle KVM par `dockurr/windows` 6.06, épinglée par empreinte (ADR-0051) et suivie par Dependabot (`test/integration/testdata/rdp/windows/docker-compose.yml`). L'image télécharge l'ISO d'évaluation de Microsoft à chaque installation, soit 6 Go : aucun Windows n'est dans le dépôt ni dans une image. Seul le port RDP est publié, et seulement sur la boucle locale.
+- **Le certificat n'est pas appris de la cible** : `prepare.sh` crée à chaque passage une autorité de test et le certificat RDP de `rdp-windows.test`, qu'`oem/rdp-setup.ps1` installe dans Windows à la fin de l'installation. Ce script garde NLA activé (`UserAuthentication=1`), TLS (`SecurityLayer=2`), et lance le Bloc-notes à chaque ouverture de session. Le test connaît donc l'empreinte et la racine avant que Windows démarre : ni apprentissage à la première connexion, ni `InsecureSkipVerify`. Il considère l'installation finie quand la cible présente ce certificat. Le mot de passe est tiré au hasard à chaque passage ; rien de tout cela n'est commité.
+- **Le test** (`services/proxy/rdp-vnc-proxy/internal/engine/rdp_windows_interop_test.go`, `make test-rdp-windows`) rejoue ceux de FreeRDP contre Windows : CredSSP accepté, mauvais mot de passe refusé, empreinte d'imposteur refusée avant tout CredSSP ; puis l'écran, un clic et des touches dans le Bloc-notes, et l'écran qui change. Il dépose les images avant et après dans les artefacts du CI : la fidélité des pixels et la lisibilité du texte restent à juger par une personne. Il vaut aussi contre une autre machine Windows : il suffit des variables `RDP_WINDOWS_*`.
+- **Le CI** (`.github/workflows/windows-rdp.yml`) : un runner `ubuntu-24.04` avec `/dev/kvm`, à la demande, chaque lundi, et sur une PR qui touche la cible, son test, `pkg/rdp` ou le codec RDP. **Ce n'est pas un contrôle requis** : une installation prend des dizaines de minutes.
+- **Non vérifié à l'écriture** : rien n'a tourné. Le propriétaire n'a pas l'espace disque pour tirer l'image en local, et le premier passage du CI dira si le runner offre KVM, si l'installation tient dans le disque et le temps donnés, et si `rdp-setup.ps1` fait ce qu'il doit sur Windows. Cette section reste « à réaliser » tant que les cinq points ci-dessus ne sont pas établis sur ses résultats.
+
 La section suivante date du 4 novembre et décrit l'état d'alors.
 
 ## État actuel de la pile RDP — 4 novembre 2026

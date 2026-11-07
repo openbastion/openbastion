@@ -3025,3 +3025,13 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 - **reste à faire** : la recherche des sessions (`GET /sessions/search`, incrément 2) et l'Admin UI (incrément 3).
 
 **Choix renversables** : la borne de 1 000 commandes par réponse ; l'échec entier sur une KEK absente ; le préfixe `search-` des identifiants de recherche ; la recherche désactivée par défaut dans les déploiements (aucune clé générée par `init.sh`).
+
+## 2026-11-07 — ADR-0071 : une cible Windows en CI (dockur/windows)
+
+À la demande du propriétaire (« utilise `dockur/Windows` et configure un environnement Compose à lancer par la CI », sans lancement local, faute d'espace disque) : `test/integration/testdata/rdp/windows/` (`docker-compose.yml`, `prepare.sh`, `oem/install.bat`, `oem/rdp-setup.ps1`), `make test-rdp-windows`, `.github/workflows/windows-rdp.yml`. Windows Server 2022 dans une VM KVM, installée sans intervention. Une autorité de test et un certificat RDP sont créés à chaque passage, puis installés par le script OEM. NLA reste activé, et le Bloc-notes s'ouvre à chaque ouverture de session. Le test se connecte avec l'empreinte connue d'avance, joue CredSSP, l'image et l'entrée, et dépose les captures en artefacts.
+
+**Vérifié en local** : `prepare.sh` (certificat vérifié par l'autorité, SAN et EKU, PFX SHA1/3DES, `install.bat` en CRLF), `docker compose config`, la syntaxe du workflow, `go vet`, et la mise en attente du test sans `RDP_WINDOWS`.
+
+**Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
+
+**Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.

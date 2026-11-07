@@ -1,0 +1,33 @@
+# A real Windows target for the RDP proxy (ADR-0071): Windows Server 2022 in a KVM virtual machine,
+# run by dockur/windows. CI only (.github/workflows/windows-rdp.yml): it needs /dev/kvm, about 40 GB
+# of disk and downloads a 6 GB ISO from Microsoft at its first start.
+#
+# prepare.sh makes everything this file names, in a directory of its own: the test authority and the
+# certificate Windows presents for RDP (installed by oem/install.bat), the random password, and
+# compose.env. Nothing of it is ever committed.
+#
+#   bash prepare.sh "$DIR" && docker compose --env-file "$DIR/compose.env" -f docker-compose.yml up -d
+services:
+  windows:
+    # dockurr/windows 6.06, pinned by its index digest (ADR-0051).
+    image: dockurr/windows:6.06@sha256:16fd7c39a3e48bb946d29c59dc6015942e5b900a1fa5d7e5552053bfc48ee2ea
+    container_name: openbastion-rdp-windows
+    environment:
+      VERSION: "2022"
+      USERNAME: operator
+      PASSWORD: ${WINDOWS_PASSWORD:?run prepare.sh first}
+      DISK_SIZE: 40G
+      RAM_SIZE: 6G
+      CPU_CORES: "2"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      # RDP only, and only on the loopback: the web viewer (8006) is not published.
+      - 127.0.0.1:3389:3389/tcp
+    volumes:
+      - ${WINDOWS_STORAGE_DIR:?run prepare.sh first}:/storage
+      - ${WINDOWS_OEM_DIR:?run prepare.sh first}:/oem:ro
+    stop_grace_period: 2m
