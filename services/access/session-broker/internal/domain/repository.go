@@ -64,6 +64,11 @@ type SessionRepository interface {
 	// them is the service's question, not the store's.
 	ListPending(ctx context.Context, now time.Time, limit int) (sessions []*Session, more bool, err error)
 
+	// SearchSessions returns the sessions created in [From, To), after the cursor in the order
+	// (created_at, id) descending, that match the search (ADR-0080), at most limit. It decides
+	// nothing about who may see them.
+	SearchSessions(ctx context.Context, q SessionSearch, limit int) ([]*Session, error)
+
 	// CountPending is how many break-glass requests requestedBy has waiting at now —
 	// the same predicate as ListPending: status pending_approval, deadline not before
 	// now (ADR-0013). It is an early, cheap answer; the limit itself is held by
@@ -105,4 +110,24 @@ type SessionRepository interface {
 type AfterUseNotice struct {
 	SessionID, AccountID string
 	EndedAt              time.Time
+}
+
+// SessionSearch is what a search of sessions looks for (ADR-0080, point 5). Text is matched as a
+// substring, without case and without wildcards, in the requester, the account, the
+// justification and the ticket; empty matches every session of the window.
+type SessionSearch struct {
+	Text                string
+	From, To            time.Time
+	Protocol            string // empty: any
+	RequestedBy         string // empty: any
+	PrivilegedAccountID string // empty: any
+	BreakGlass          *bool  // nil: either
+	// After is where the previous page stopped: only sessions strictly before it are returned.
+	After *SearchCursor
+}
+
+// SearchCursor is a position in the order (created_at, id) descending.
+type SearchCursor struct {
+	CreatedAt time.Time
+	ID        string
 }

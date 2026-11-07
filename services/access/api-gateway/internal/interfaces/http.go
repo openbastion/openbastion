@@ -197,6 +197,8 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	// The search of recorded commands (ADR-0080), served by the Command Recorder.
 	mux.HandleFunc("/recordings/search", g.requireAuth(g.handleRecordingSearch))
+	// The search of sessions (ADR-0080), more specific than /sessions/{id}.
+	mux.HandleFunc("/sessions/search", g.requireAuth(g.handleSessionSearch))
 	mux.HandleFunc("/sessions/", g.handleSessionRoute)
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))
 	mux.HandleFunc("/vault/accounts/", g.requireAuth(g.handleVaultAccountItem))
@@ -984,6 +986,24 @@ func (g *GatewayServer) handleSessionRecording(w http.ResponseWriter, r *http.Re
 	q.Set("actorRoles", strings.Join(id.Roles, ","))
 	g.forwardPassthrough(w, r, http.MethodGet,
 		g.commandRecorderURL+"/recorder/v1/sessions/"+neturl.PathEscape(sessionID)+"/commands?"+q.Encode())
+}
+
+// handleSessionSearch relays GET /sessions/search (ADR-0080): the search from the client, the
+// caller and its roles from the verified token, nothing else.
+func (g *GatewayServer) handleSessionSearch(w http.ResponseWriter, r *http.Request, id identity) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := neturl.Values{}
+	for _, key := range []string{"q", "from", "to", "status", "protocol", "requestedBy", "privilegedAccountId", "breakGlass", "cursor"} {
+		if v := r.URL.Query().Get(key); v != "" {
+			q.Set(key, v)
+		}
+	}
+	q.Set("callerId", id.UserID)
+	q.Set("actorRoles", strings.Join(id.Roles, ","))
+	g.forwardPassthrough(w, r, http.MethodGet, g.sessionBrokerURL+"/sessions/search?"+q.Encode())
 }
 
 // handleRecordingSearch relays GET /recordings/search (ADR-0080): q, from and to from the client,

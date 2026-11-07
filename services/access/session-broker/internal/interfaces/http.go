@@ -14,6 +14,7 @@ package interfaces
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
@@ -37,7 +38,8 @@ func NewHTTPServer(svc *application.SessionBrokerService) *HTTPServer {
 func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/sessions", s.handleSessionsCollection)
-	mux.HandleFunc("/sessions/", s.handleSessionItem) // /sessions/{id}, /sessions/{id}/connect
+	mux.HandleFunc("/sessions/search", s.handleSearch) // ADR-0080; more specific than /sessions/
+	mux.HandleFunc("/sessions/", s.handleSessionItem)  // /sessions/{id}, /sessions/{id}/connect
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -417,4 +419,92 @@ func (s *HTTPServer) decide(w http.ResponseWriter, r *http.Request, sessionID st
 		log.Printf("session-broker: decision on %s not taken: %v", sessionID, err)
 		http.Error(w, "the decision was not taken: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
 	}
+}
+
+type sessionSearchResponse struct {
+	Sessions []sessionResponse `json:"sessions"`
+	// Next is the cursor of the next page; empty when there is none.
+	Next string `json:"next"`
+}
+
+// encodeCursor and decodeCursor make a position opaque to the client: base64url of the
+// creation time (RFC 3339, nanoseconds) and the id.
+func encodeCursor(c *domain.SearchCursor) string {
+	if c == nil {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(c.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.ID))
+}
+
+func decodeCursor(s string) (*domain.SearchCursor, error) {
+	if s == "" {
+		return nil, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+	at, id, ok := strings.Cut(string(raw), "|")
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if !ok || err != nil || id == "" {
+		return nil, errors.New("not a cursor")
+	}
+	return &domain.SearchCursor{CreatedAt: t, ID: id}, nil
+}
+
+// handleSearch is GET /sessions/search (ADR-0080): the search from the client, callerId and
+// actorRoles from the Gateway.
+func (s *HTTPServer) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := r.URL.Query()
+	from, errFrom := time.Parse(time.RFC3339, q.Get("from"))
+	to, errTo := time.Parse(time.RFC3339, q.Get("to"))
+	after, errCursor := decodeCursor(q.Get("cursor"))
+	if errFrom != nil || errTo != nil || errCursor != nil {
+		http.Error(w, "from and to are RFC 3339 times, and cursor is the one a page gave", http.StatusBadRequest)
+		return
+	}
+	req := application.SessionSearchRequest{SessionSearch: domain.SessionSearch{
+		Text: q.Get("q"), From: from, To: to, After: after,
+		Protocol: q.Get("protocol"), RequestedBy: q.Get("requestedBy"), PrivilegedAccountID: q.Get("privilegedAccountId"),
+	}, Status: domain.SessionStatus(q.Get("status"))}
+	switch q.Get("breakGlass") {
+	case "":
+	case "true", "false":
+		v := q.Get("breakGlass") == "true"
+		req.BreakGlass = &v
+	default:
+		http.Error(w, "breakGlass is true or false", http.StatusBadRequest)
+		return
+	}
+	var roles []string
+	if v := q.Get("actorRoles"); v != "" {
+		roles = strings.Split(v, ",")
+	}
+	callerID := q.Get("callerId")
+	result, err := s.svc.SearchSessions(r.Context(), callerID, roles, req)
+	switch {
+	case err == nil:
+	case errors.Is(err, application.ErrInvalidSearch):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	case errors.Is(err, domain.ErrForbidden):
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	default:
+		// Never the text searched, nor the cause: the Gateway relays this body.
+		log.Printf("session-broker: a search of sessions for user %s not done: %v", callerID, err)
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
+	out := sessionSearchResponse{Sessions: make([]sessionResponse, 0, len(result.Sessions)), Next: encodeCursor(result.Next)}
+	for _, sess := range result.Sessions {
+		out.Sessions = append(out.Sessions, toSessionResponse(sess))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(out)
 }

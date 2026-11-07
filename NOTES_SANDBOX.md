@@ -3026,6 +3026,16 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : la borne de 1 000 commandes par réponse ; l'échec entier sur une KEK absente ; le préfixe `search-` des identifiants de recherche ; la recherche désactivée par défaut dans les déploiements (aucune clé générée par `init.sh`).
 
+## 2026-11-07 — ADR-0080, incrément 2 : la recherche des sessions
+
+`GET /sessions/search?q&from&to&status&protocol&requestedBy&privilegedAccountId&breakGlass&cursor` : le Session Broker cherche dans les métadonnées (demandeur, compte, justification, ticket), par `ILIKE … ESCAPE`, sans joker. Fenêtre de 31 jours, 50 sessions par page, 500 regardées au plus ; `next` est un curseur opaque. Qui voit une session est qui peut la lire (ADR-0021). Chaque session servie au titre d'une politique écrit un `session.read` avant la réponse ; sinon, `503`. Migration `005_search_window.sql`.
+
+**Prouvé** : application, 7 tests et 5 mutations sur 5 tuées ; contrat des magasins en mémoire et sous PostgreSQL, échappement prouvé par mutation ; processus réels, 5 sous-tests et une mutation tuée.
+
+**Limites** : le repli de casse est celui de PostgreSQL (`ILIKE`), pas la normalisation NFC des commandes ; une page de moins de 50 sessions avec un `next` n'est pas la fin ; **reste l'Admin UI** (incrément 3).
+
+**Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
+
 ## 2026-11-07 — ADR-0071 : une cible Windows en CI (dockur/windows)
 
 À la demande du propriétaire (« utilise `dockur/Windows` et configure un environnement Compose à lancer par la CI », sans lancement local, faute d'espace disque) : `test/integration/testdata/rdp/windows/` (`docker-compose.yml`, `prepare.sh`, `oem/install.bat`, `oem/rdp-setup.ps1`), `make test-rdp-windows`, `.github/workflows/windows-rdp.yml`. Windows Server 2022 dans une VM KVM, installée sans intervention. Une autorité de test et un certificat RDP sont créés à chaque passage, puis installés par le script OEM. NLA reste activé, et le Bloc-notes s'ouvre à chaque ouverture de session. Le test se connecte avec l'empreinte connue d'avance, joue CredSSP, l'image et l'entrée, et dépose les captures en artefacts.

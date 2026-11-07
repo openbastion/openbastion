@@ -10,7 +10,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -217,6 +219,49 @@ func (s *PostgresStore) ListPending(ctx context.Context, now time.Time, limit in
 		return out[:limit], true, nil
 	}
 	return out, false, nil
+}
+
+// likePattern makes text a substring pattern for ILIKE … ESCAPE '\': no character of the text
+// is a wildcard (ADR-0080).
+func likePattern(text string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return "%" + r.Replace(text) + "%"
+}
+
+// SearchSessions is domain.SessionRepository.SearchSessions.
+func (s *PostgresStore) SearchSessions(ctx context.Context, q domain.SessionSearch, limit int) ([]*domain.Session, error) {
+	where := []string{"created_at >= $1", "created_at < $2"}
+	args := []any{q.From, q.To}
+	add := func(cond string, v any) {
+		args = append(args, v)
+		where = append(where, strings.ReplaceAll(cond, "?", fmt.Sprintf("$%d", len(args))))
+	}
+	if q.Text != "" {
+		add(`(requested_by ILIKE ? ESCAPE '\' OR privileged_account_id ILIKE ? ESCAPE '\' OR justification ILIKE ? ESCAPE '\' OR ticket ILIKE ? ESCAPE '\')`, likePattern(q.Text))
+	}
+	if q.Protocol != "" {
+		add("protocol = ?", q.Protocol)
+	}
+	if q.RequestedBy != "" {
+		add("requested_by = ?", q.RequestedBy)
+	}
+	if q.PrivilegedAccountID != "" {
+		add("privileged_account_id = ?", q.PrivilegedAccountID)
+	}
+	if q.BreakGlass != nil {
+		add("break_glass = ?", *q.BreakGlass)
+	}
+	if q.After != nil {
+		args = append(args, q.After.CreatedAt, q.After.ID)
+		where = append(where, fmt.Sprintf("(created_at, id) < ($%d, $%d)", len(args)-1, len(args)))
+	}
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+sessionColumns+` FROM sessions WHERE `+strings.Join(where, " AND ")+
+		fmt.Sprintf(` ORDER BY created_at DESC, id DESC LIMIT $%d`, len(args)), args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanSessions(rows)
 }
 
 const sessionColumns = `id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, terminated_at, break_glass,

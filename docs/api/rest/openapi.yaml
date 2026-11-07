@@ -647,6 +647,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /sessions/search:
+    get:
+      tags: [sessions]
+      summary: Cherche des sessions par leurs métadonnées (ADR-0080)
+      description: >
+        Les sessions créées dans la fenêtre, les plus récentes d'abord, dont
+        le demandeur, le compte, la justification ou le ticket contient `q`
+        (sous-chaîne sans casse, sans joker : `%` et `_` sont eux-mêmes ;
+        `q` absent : toutes celles de la fenêtre), parmi celles que
+        l'appelant peut lire — les siennes, celles qu'il a décidées, et
+        celles d'un compte où il détient `session:read` sur
+        `session-read:account:{id}` (ADR-0021). Chaque session servie au
+        titre d'une politique est un événement `session.read`, écrit
+        **avant** la réponse ; un seul non écrit : rien n'est servi (503).
+        50 sessions par page ; une page regarde au plus 500 sessions, et
+        `next` dit où commence la suivante.
+      parameters:
+        - { name: q, in: query, schema: { type: string, minLength: 3, maxLength: 256 } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, description: "Après `from`, 31 jours au plus.", schema: { type: string, format: date-time } }
+        - { name: status, in: query, description: "Le statut effectif (une session échue est `expired`).", schema: { type: string } }
+        - { name: protocol, in: query, schema: { type: string } }
+        - { name: requestedBy, in: query, schema: { type: string } }
+        - { name: privilegedAccountId, in: query, schema: { type: string } }
+        - { name: breakGlass, in: query, schema: { type: boolean } }
+        - { name: cursor, in: query, description: "Le `next` de la page précédente.", schema: { type: string } }
+      responses:
+        "200":
+          description: Une page
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions, next]
+                properties:
+                  sessions: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/Session" } }
+                  next: { type: string, description: "Vide quand il n'y a plus rien." }
+        "400":
+          description: "`q` de 1, 2 ou plus de 256 caractères ; fenêtre absente, inversée ou de plus de 31 jours ; `breakGlass` ni `true` ni `false` ; `cursor` qui n'est pas celui d'une page."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Pas d'utilisateur authentifié.
+        "503":
+          description: L'Authorization Service ne répond pas, ou une lecture n'a pas pu être écrite dans l'audit ; rien n'est servi.
+
   /sessions/{sessionId}:
     parameters:
       - $ref: "#/components/parameters/SessionId"
