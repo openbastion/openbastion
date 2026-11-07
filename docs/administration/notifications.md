@@ -32,6 +32,12 @@ read -rs NOTIFY_INTEROP_SLACK_URL; export NOTIFY_INTEROP_SLACK_URL   # ou NOTIFY
 go test ./pkg/webhook/ -run TestRealChannel -v -count=1
 ```
 
+Pour Teams, une vraie alerte de l'Audit Service, signée, sous mTLS (`GOWORK` absolu) :
+
+```sh
+cd test/integration && go test . -run TestRealChannel -v -count=1
+```
+
 Le message de test s'affiche dans le canal : regardez-le, le test ne prouve que le `2xx`.
 
 ## Alertes (Audit Service)

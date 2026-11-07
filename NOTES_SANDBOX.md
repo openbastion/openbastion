@@ -2927,6 +2927,8 @@ Le `202` ne prouvait pas la livraison : le canal restait vide, car l'action du m
 
 **Prouvé** : un vrai canal Teams affiche le corps `teams` d'OpenBastion : « OpenBastion: test message of ADR-0074, nothing to do. A neutralized mention reads: ??here? ». `SafeText` neutralise bien la mention.
 
-**Non prouvé** : une alerte émise par un service réel, avec sa signature (le test n'en envoie pas) ; Slack réel. Le premier critère de sortie de la v0.0.1 reste ouvert.
+Puis `TestRealChannel_TheAuditServicePushesTheVaultsAlertToTeams_Signed` (`test/integration`, ignoré sans `NOTIFY_INTEROP_TEAMS_URL`) : un vrai Audit Service sous mTLS pousse le `vault.rotation_overdue` écrit avec le certificat du Vault, signé, au format `teams`. Passe en 9,7 s ; le propriétaire voit l'alerte dans le canal (événement `evt_1794045768743151989_1`). Contre-épreuve : contre un récepteur mort, le test échoue sur « not delivered ». L'URL passe par l'environnement du processus, jamais par un argument, et le test refuse un journal qui la contient.
+
+**Non prouvé** : l'alerte née d'une vraie rotation en échec (`rotation_alert_flow_test.go` le prouve contre un récepteur de test) ; une demande d'accès ou de break-glass du Broker vers Teams ; Slack réel. Le premier critère de sortie de la v0.0.1 reste ouvert.
 
 **Limite** : un tenant qui interdit « Anyone » ne peut pas utiliser ce canal. OAuth (client credentials) demanderait son propre ADR.
