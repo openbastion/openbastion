@@ -268,8 +268,9 @@ func TestRealChannel_AcceptsTheFormat(t *testing.T) {
 	}
 }
 
-// A Workflows URL is authorized by its query (sp, sv, sig): one byte changed is a 401. And a request
-// must carry no other scheme beside it: Microsoft refuses both at once.
+// A Workflows URL of a flow set to "Anyone" is authorized by its query (sp, sv, sig): one byte changed
+// is a 401. And a request must carry no other scheme beside it: Microsoft refuses both at once. A flow
+// restricted to a tenant has no sig and wants an Entra token, which this client does not send (ADR-0074).
 func TestPost_SendsAWorkflowsURLUntouched_AndNoAuthorizationHeader(t *testing.T) {
 	const path = "/powerautomate/automations/direct/workflows/abc123/triggers/manual/paths/invoke"
 	const query = "api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=a-_b%2Bc%3D"

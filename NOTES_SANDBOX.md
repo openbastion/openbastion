@@ -2918,3 +2918,13 @@ ADR accepté par le propriétaire le même jour, sans nouveau service. `ALERT_NO
 **Prouvé** (dans cette session, sur récepteurs de test) : voir l'ADR ; 11/11 mutations tuées ; `-race` vert ; parcours d'approbation, de quotas et d'alertes verts.
 
 **Non prouvé** : aucun vrai Slack ni Teams n'a été essayé. La carte adaptative vient de la documentation de Microsoft, et le rendu de la phrase reste à regarder. `TestRealChannel` attend `NOTIFY_INTEROP_SLACK_URL` et `NOTIFY_INTEROP_TEAMS_URL`. Le premier critère de sortie de la v0.0.1 reste ouvert jusque-là ; le ticket n'est toujours pas vérifié dans un ITSM.
+
+## 2026-11-07 — ADR-0074 : premier essai contre un vrai flux Teams
+
+Essai du propriétaire sur sa machine, le mien n'a porté que sur la lecture des résultats. Un flux réservé répond `401` à `TestRealChannel` : son URL n'a ni `sp`, ni `sv`, ni `sig`, et le même flux accepte un appel portant un jeton `az` de son compte. Réglé sur « Anyone », avec son URL recopiée, `TestRealChannel` passe en 0,76 s. La cause n'était donc pas le client. La documentation exige maintenant ce réglage et le dépannage nomme ce `401`.
+
+**Prouvé** : Teams réel répond `2xx` au corps `teams` d'OpenBastion.
+
+**Non prouvé** : le rendu de la carte dans le canal et l'exécution du flux ; une alerte émise par un service réel, avec sa signature (le test n'en envoie pas) ; Slack réel. Le premier critère de sortie de la v0.0.1 reste ouvert.
+
+**Limite** : un tenant qui interdit « Anyone » ne peut pas utiliser ce canal. OAuth (client credentials) demanderait son propre ADR.

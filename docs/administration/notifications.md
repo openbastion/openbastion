@@ -15,8 +15,9 @@ Chaque canal a un format (ADR-0074) : `ALERT_NOTIFY_FORMAT` pour les alertes, `B
 Une autre valeur, ou un format sans URL : le service refuse de démarrer.
 
 - **Teams.** Microsoft indique avoir retiré ses connecteurs Office 365 en mai 2026. Créez un flux Workflows : une ancienne URL de connecteur ne fonctionne plus.
+- **Teams : réglez « Who can trigger the flow » sur « Anyone », puis enregistrez et recopiez l'URL.** Elle doit contenir `sig`. Une URL sans `sig` vient d'un flux réservé au tenant : il exige un jeton Entra qu'OpenBastion n'envoie pas, et répond `401` (ADR-0074). Si votre tenant interdit « Anyone », ce canal n'est pas utilisable aujourd'hui.
 - **Seule la phrase part.** Elle n'est faite que de textes fixes, de nombres et d'identifiants filtrés : une mention ou un lien fabriqués n'y survivent pas. Ni justification, ni rien de la cible. Identifiants de compte et de demandeur, et ticket, partent bien chez Slack ou Microsoft : c'est votre décision en déclarant le canal.
-- **Slack et Teams ne vérifient pas la signature.** Pour eux, seule l'URL fait foi : qui la détient peut écrire un faux message dans le canal. Il ne peut rien décider : approuver passe toujours par l'API authentifiée. Traitez l'URL en secret, et remplacez-la si elle fuit.
+- **Slack et Teams ne vérifient pas la signature.** Pour eux, avec le réglage ci-dessus, seule l'URL fait foi : qui la détient peut écrire un faux message dans le canal. Il ne peut rien décider : approuver passe toujours par l'API authentifiée. Traitez l'URL en secret, et remplacez-la si elle fuit.
 - **Un canal par service.** Pas de routage par équipe. La livraison ne change pas avec le format : le Broker n'essaie qu'une fois, sans jamais retarder une session.
 
 **Essayer un vrai canal**, sans écrire l'URL dans l'historique du shell :
