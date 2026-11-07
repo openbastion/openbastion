@@ -61,9 +61,9 @@ func entraClaims(all map[string]json.RawMessage, tenant, groupsClaim string) err
 	if raw, ok := all["hasgroups"]; ok && json.Unmarshal(raw, &hasGroups) == nil && hasGroups {
 		return fmt.Errorf("%w: the token says its groups are not in it (hasgroups)", application.ErrOIDCRejected)
 	}
-	if _, ok := all["_claim_sources"]; ok {
-		return fmt.Errorf("%w: the token says its groups are not in it (_claim_sources)", application.ErrOIDCRejected)
-	}
+	// _claim_sources is a dictionary of distributed-claim sources, not proof of group
+	// overage by itself. _claim_names above identifies which claim is external; only a
+	// reference for the configured groups claim (or the standard groups claim) is rejected.
 	if raw, ok := all["_claim_names"]; ok {
 		var names map[string]json.RawMessage
 		if json.Unmarshal(raw, &names) != nil {
