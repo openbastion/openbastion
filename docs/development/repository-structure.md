@@ -174,7 +174,7 @@ pkg/proxycore/
 
 ## 5. Frontend — `web/`
 
-Le frontend est organisé en deux applications indépendantes et en packages partagés. Cette structure est la référence normative des incréments frontend (ADR-0036 et ADR-0074). Les dossiers métier restent dans leur application ; les packages partagés ne contiennent pas de logique métier.
+Le frontend est organisé en deux applications indépendantes et en packages partagés. Cette structure est la référence normative des incréments frontend (ADR-0036 et ADR-0075). Les dossiers métier restent dans leur application ; les packages partagés ne contiennent pas de logique métier.
 
 ```
 web/
