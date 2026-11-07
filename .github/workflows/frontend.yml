@@ -1,0 +1,21 @@
+# Admin UI and shared icon package validation (ADR-0077).
+name: Frontend checks
+on:
+  workflow_call:
+permissions:
+  contents: read
+env:
+  NODE_VERSION: "24.21.0"
+jobs:
+  ui:
+    name: Admin UI — Vitest and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: make ui-test ui-build

@@ -1,0 +1,18 @@
+name: Setup Node.js
+description: Configure the repository's pinned Node.js toolchain and npm cache.
+inputs:
+  node-version:
+    description: Node.js version used by the workflow.
+    required: false
+    default: "24.21.0"
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: |
+          web/admin-ui/package-lock.json
+          web/openbastion-icons/package-lock.json

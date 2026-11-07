@@ -1,6 +1,6 @@
 # ADR-0077 — Modulariser les workflows GitHub Actions derrière une porte de validation stable
 
-**Statut** `Proposé` · 7 novembre 2026
+**Statut** `Accepté` · accepté par le propriétaire du projet le 7 novembre 2026
 
 **Contexte**
 

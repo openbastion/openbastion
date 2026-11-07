@@ -1,0 +1,58 @@
+# Go build, unit, race and release-version checks (ADR-0077).
+name: Go checks
+on:
+  workflow_call:
+permissions:
+  contents: read
+env:
+  GO_VERSION: "1.27.3"
+  GOPROXY: direct
+jobs:
+  version:
+    name: version — VERSION is SemVer, a tag is its release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: VERSION, and the tag when there is one
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: make version-check TAG="$TAG"
+      - run: echo "built as $(make -s version)"
+  go:
+    name: build, vet, gofmt, unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: make proto-tools proto-lint build vet
+      - name: gofmt -l (must print nothing)
+        run: |
+          unformatted=$(git ls-files '*.go' | xargs gofmt -l)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: git diff --check (no trailing whitespace or conflict markers)
+        run: git diff --check
+      - name: unit tests without a database
+        run: make test
+  race:
+    name: unit tests under -race
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: make proto-tools test GOFLAGS=-race
