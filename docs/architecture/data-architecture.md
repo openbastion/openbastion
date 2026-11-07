@@ -228,6 +228,8 @@ CREATE TABLE session_command_entries (
     command_sealed  BYTEA NOT NULL          -- nonce || chiffré ; AAD = session_id + ts
 );
 CREATE INDEX idx_session_command_entries_session ON session_command_entries (session_id, ts, id);
+-- Session Broker, 005_search_window.sql (ADR-0080) : sessions_created_idx ON sessions (created_at DESC, id DESC),
+-- l'ordre et le curseur de la recherche des sessions (ILIKE … ESCAPE '\' sur ses métadonnées, sans index du texte).
 -- 002_search_window.sql (ADR-0080) : la recherche lit sa fenêtre sur le début de chaque enregistrement.
 -- Aucun index du texte : les commandes ne sont déchiffrées qu'à la volée, et jetées.
 CREATE INDEX idx_session_recording_keys_created ON session_recording_keys (created_at DESC, session_id);

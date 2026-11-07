@@ -103,4 +103,12 @@ Chaque jeton émis est un événement `auth.login` ou `auth.login_mfa` de la cha
 - **Activation** : `SEARCH_AUDIT_KEY_FILE` sur le Command Recorder (32 octets en hexadécimal, fichier `0600` : `openssl rand -hex 32 > search-key && chmod 600 search-key`). Sans elle, `404`. Gardez-la comme un secret, et sauvegardez-la : perdue, les empreintes passées ne se vérifient plus.
 - **Durée mesurée** : 1,1 à 1,5 s pour 200 sessions de 50 commandes, chaque clé désenveloppée par un vrai Transit (OpenBao local).
 
-*À venir* — la recherche des sessions par leurs métadonnées (`GET /sessions/search`, même ADR) et les deux recherches dans l'Admin UI.
+## Chercher des sessions (ADR-0080)
+
+`GET /sessions/search?q=…&from=…&to=…` cherche dans les métadonnées des sessions : le demandeur, le compte privilégié, la justification et le ticket. `q` est une sous-chaîne sans casse, sans joker (`%` et `_` sont eux-mêmes), facultative. Filtres : `status` (le statut effectif), `protocol`, `requestedBy`, `privilegedAccountId`, `breakGlass`.
+
+- **Même fenêtre** : 31 jours au plus. **50 sessions par page**, les plus récentes d'abord ; `next` dit où commence la suivante. Une page regarde au plus 500 sessions : une recherche dans un compte que vous ne pouvez pas lire s'arrête là, et `next` permet de continuer.
+- **Ce que vous pouvez lire, comme pour une lecture** (ADR-0021) : vos sessions, celles que vous avez décidées, et celles d'un compte où vous détenez `session:read` sur `session-read:account:{id}`.
+- **Dans la chaîne** : chaque session servie au titre d'une politique est un `session.read` écrit **avant** la réponse ; une seule manque, rien n'est servi (`503`). Vos propres sessions et celles que vous avez décidées n'écrivent rien : vous n'y apprenez rien de nouveau.
+
+*À venir* — les deux recherches dans l'Admin UI.

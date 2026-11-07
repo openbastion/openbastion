@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -211,4 +212,40 @@ func (s *InMemoryStore) MarkAfterUseDelivered(ctx context.Context, id string) er
 		sess.AfterUseOwed = false
 	}
 	return nil
+}
+
+// SearchSessions is domain.SessionRepository.SearchSessions.
+func (s *InMemoryStore) SearchSessions(ctx context.Context, q domain.SessionSearch, limit int) ([]*domain.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	text := strings.ToLower(q.Text)
+	var out []*domain.Session
+	for _, sess := range s.sessions {
+		if sess.CreatedAt.Before(q.From) || !sess.CreatedAt.Before(q.To) {
+			continue
+		}
+		if text != "" && !strings.Contains(strings.ToLower(sess.RequestedBy), text) && !strings.Contains(strings.ToLower(sess.PrivilegedAccountID), text) &&
+			!strings.Contains(strings.ToLower(sess.Justification), text) && !strings.Contains(strings.ToLower(sess.Ticket), text) {
+			continue
+		}
+		if q.Protocol != "" && sess.Protocol != q.Protocol || q.RequestedBy != "" && sess.RequestedBy != q.RequestedBy ||
+			q.PrivilegedAccountID != "" && sess.PrivilegedAccountID != q.PrivilegedAccountID || q.BreakGlass != nil && sess.BreakGlass != *q.BreakGlass {
+			continue
+		}
+		if q.After != nil && !(sess.CreatedAt.Before(q.After.CreatedAt) || sess.CreatedAt.Equal(q.After.CreatedAt) && sess.ID < q.After.ID) {
+			continue
+		}
+		cp := *sess
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID > out[j].ID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }

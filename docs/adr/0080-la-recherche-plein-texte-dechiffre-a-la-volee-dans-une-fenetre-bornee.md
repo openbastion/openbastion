@@ -60,7 +60,7 @@ Invariants touchés : un secret n'est jamais en clair hors de son enveloppe ; en
 - (−) L'empreinte de `q` permet de confirmer une recherche supposée, avec la clé, mais pas de retrouver ce qui a été cherché sans elle. Un `q` court et courant (`root`) se retrouve par dictionnaire **pour qui a la clé** : elle se garde comme un secret.
 - (−) **Un secret de plus à fournir et à sauvegarder** : `SEARCH_AUDIT_KEY_FILE`. Perdue, les empreintes passées ne peuvent plus être confirmées ; la chaîne, elle, reste vérifiable.
 
-**Mise en œuvre** (7 novembre 2026), en trois incréments : (1) les commandes — fait ; (2) les sessions ; (3) l'Admin UI.
+**Mise en œuvre** (7 novembre 2026), en trois incréments : (1) les commandes — fait ; (2) les sessions — fait ; (3) l'Admin UI.
 
 - **Incrément 1, les commandes** : `GET /recordings/search` (Gateway) → `GET /recorder/v1/search` (Command Recorder, appelable par la Gateway seule). Migration `002_search_window.sql` (index de la fenêtre). La normalisation NFC et le repli de casse viennent de `golang.org/x/text`, déjà dans l'espace de travail (Gateway, Video Recorder), devenu une dépendance directe du Command Recorder.
 - **Précisions, sans changer la décision** :
@@ -73,6 +73,17 @@ Invariants touchés : un secret n'est jamais en clair hors de son enveloppe ; en
   - magasins : le contrat de la fenêtre et du parcours, en mémoire et sous PostgreSQL ;
   - processus réels (`test/integration/recording_search_flow_test.go`, sous PostgreSQL, vrai Audit Service derrière un espion) : 7 sous-tests verts. Ils couvrent la sous-chaîne sans casse, une politique sur une seule session, le texte cherché absent de la chaîne et des journaux, l'audit coupé (`503`), les bornes (`400`), aucune commande en clair dans aucune colonne du Recorder, et `404` sans clé. La mutation « autorisation retirée » y est tuée. **Les commandes sont enregistrées par la route du Recorder, comme le fait le proxy SSH : aucune n'est tapée dans une vraie session SSH** ;
   - **avec Transit réel** (OpenBao local, ADR-0049) : une recherche de 200 sessions × 50 commandes prend **1,08 à 1,52 s** (trois passages), autorisation de chaque session et audit compris.
+
+- **Incrément 2, les sessions** : `GET /sessions/search` (Gateway) → `GET /sessions/search` (Session Broker), migration `005_search_window.sql`. Précisions, sans changer la décision :
+  - **qui voit une session est qui peut la lire** (`GetSession`, ADR-0021) : son demandeur et celui qui l'a décidée, sans politique et **sans événement** (ils n'apprennent rien) ; les autres au titre d'une politique sur son compte, et chacune de ces sessions est un `session.read` écrit avant la réponse. L'ADR disait « chaque session servie » : c'est la règle 4 d'ADR-0021, qui ne vise que les lectures au titre d'une politique ;
+  - `q` est **facultatif** (toutes les sessions de la fenêtre, avec les filtres) ; présent, 3 à 256 caractères. Il est cherché par `ILIKE … ESCAPE '\'`, `%`, `_` et `\` échappés ;
+  - **une page regarde au plus 500 sessions** : sans cette borne, chercher dans des comptes qu'on ne peut pas lire parcourrait toute la fenêtre. Au-delà, la page s'arrête et `next` (curseur opaque : la date de création et l'identifiant) dit où reprendre ;
+  - l'autorisation est demandée **une fois par compte et par page** ; le filtre `status` porte sur le statut effectif (une session échue est `expired`) ;
+  - les refus ne sont pas écrits un par un, comme pour les commandes (point 3).
+- **Mesuré, incrément 2** :
+  - application : 7 tests, 5 mutations sur 5 tuées (autorisation retirée, pas de `session.read`, demandeur soumis à une politique, reste d'un lot perdu, pas de borne des 500) ;
+  - magasins : le contrat (jokers neutralisés, sans casse, ticket, demandeur, filtres, ordre, égalités, curseur, limite), en mémoire et sous PostgreSQL ; la mutation « échappement retiré » est tuée sous PostgreSQL ;
+  - processus réels (`test/integration/session_search_flow_test.go`, de vraies sessions créées par la Gateway) : 5 sous-tests verts, et la mutation « autorisation retirée » y est tuée.
 
 **Alternatives envisagées**
 
