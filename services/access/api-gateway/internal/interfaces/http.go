@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -74,7 +75,9 @@ type GatewayServer struct {
 	screenCookieSecure bool
 	screenOrigins      []string
 	// ldapInfo remembers, a short while, whether directory login is on (ADR-0061).
-	ldapInfo ldapInfoCache
+	ldapInfo providersCache
+	// oidcInfo remembers, a short while, which OIDC providers are on (ADR-0076).
+	oidcInfo providersCache
 }
 
 func NewGatewayServer(authClient application.TokenVerifier, requestLimiter, loginLimiter *application.RateLimiter, authenticationURL, sessionBrokerURL, vaultURL, authorizationURL, commandRecorderURL string) *GatewayServer {
@@ -175,6 +178,7 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/login", g.handleLogin) // public
 	// Federated login (ADR-0035), public and in the login budget.
+	mux.HandleFunc("/auth/oidc", g.handleOIDCInfo) // which providers (ADR-0076), public, from a short cache
 	mux.HandleFunc("/auth/oidc/start", g.handleOIDC("/auth/v1/oidc/start"))
 	mux.HandleFunc("/auth/oidc/callback", g.handleOIDC("/auth/v1/oidc/callback"))
 	// Directory login (ADR-0061): the login is public and in the login budget; whether it is on,
@@ -244,7 +248,8 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 // handleOIDC forwards one end of a federated login to the Authentication Service. Each call
 // takes from the same per-address budget as a password login: both are what an attacker who
-// holds nothing can hammer. Only code and state are forwarded, rebuilt, never the raw body.
+// holds nothing can hammer. Only the provider (start, ADR-0076), or code and state (callback), are
+// forwarded, rebuilt, never the raw body.
 func (g *GatewayServer) handleOIDC(upstream string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -257,6 +262,16 @@ func (g *GatewayServer) handleOIDC(upstream string) http.HandlerFunc {
 			return
 		}
 		body := []byte("{}")
+		if strings.HasSuffix(upstream, "/start") {
+			var in struct {
+				Provider string `json:"provider,omitempty"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, "the body is not a start", http.StatusBadRequest)
+				return
+			}
+			body, _ = json.Marshal(in)
+		}
 		if strings.HasSuffix(upstream, "/callback") {
 			var in struct {
 				Code  string `json:"code"`

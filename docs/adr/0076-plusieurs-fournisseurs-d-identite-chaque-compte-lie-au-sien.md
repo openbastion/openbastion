@@ -1,10 +1,10 @@
 # ADR-0076 — Plusieurs fournisseurs d'identité à la fois, chaque compte lié au sien
 
-**Statut** `Proposé` · 7 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date · amende ADR-0035 et ADR-0061
+**Statut** `Accepté` · 7 novembre 2026 · go du propriétaire du projet le 7 novembre 2026 (« J'accepte ADR-0076 tel quel, avec Dex pour la preuve ») · amende ADR-0035 et ADR-0061
 
 **Contexte** — Le deuxième critère de sortie de la v0.0.1 (`docs/roadmap.md` §3) demande « au moins trois fournisseurs d'identité externes fédérés simultanément en environnement de test ». L'Authentication Service n'en accepte que **deux** au plus : un seul émetteur OIDC (`OIDC_ISSUER`, ADR-0035) et un seul annuaire (`LDAP_URL`, en `ad` ou `rfc`, ADR-0061), chacun « tout ou rien ». OpenLDAP et Active Directory ne peuvent donc pas être servis en même temps.
 
-Un défaut latent vient avec, **lu dans le code, pas encore mesuré**. Un compte fédéré est retrouvé par `(identity_source, external_subject)` (`migrations/002_oidc.sql`, `externalUser`), sans l'émetteur ni l'annuaire. Or un `sub` OIDC n'est unique que **chez son émetteur** (OpenID Connect Core §2). Si un administrateur remplace `OIDC_ISSUER` par un autre fournisseur, le `sub` `42` du nouveau retombe sur le compte `oidc:42` de l'ancien. Il hérite de son historique d'audit et de ses sessions passées ; ses rôles, eux, sont recalculés depuis la table, donc non hérités. Pour l'annuaire, `objectGUID` et `entryUUID` rendent une collision improbable, mais rien ne l'empêche. Avec plusieurs fournisseurs à la fois, cette confusion ne demanderait plus aucune erreur de l'administrateur : il suffirait d'un fournisseur hostile ou mal tenu.
+Un défaut latent vient avec, **mesuré sur `main` (`502861e`)** : un service configuré avec un premier émetteur crée `oidc:42` ; reconfiguré avec un autre émetteur dont le `sub` est aussi `42`, il rend un jeton pour le **même** compte (`user_04d32f3113a14e8b`). Un compte fédéré est retrouvé par `(identity_source, external_subject)` (`migrations/002_oidc.sql`, `externalUser`), sans l'émetteur ni l'annuaire. Or un `sub` OIDC n'est unique que **chez son émetteur** (OpenID Connect Core §2). Si un administrateur remplace `OIDC_ISSUER` par un autre fournisseur, le `sub` `42` du nouveau retombe sur le compte `oidc:42` de l'ancien. Il hérite de son historique d'audit et de ses sessions passées ; ses rôles, eux, sont recalculés depuis la table, donc non hérités. Pour l'annuaire, `objectGUID` et `entryUUID` rendent une collision improbable, mais rien ne l'empêche. Avec plusieurs fournisseurs à la fois, cette confusion ne demanderait plus aucune erreur de l'administrateur : il suffirait d'un fournisseur hostile ou mal tenu.
 
 Invariants touchés : l'identité qui décide est celle que le service vérifie, jamais un nom que le client choisit ; défaut strict ; aucun secret au journal.
 
@@ -16,7 +16,7 @@ Invariants touchés : l'identité qui décide est celle que le service vérifie,
 4. **Tout ou rien, pour le fichier entier.** Le service refuse de démarrer dans chacun de ces cas, avec un message qui ne cite aucun secret :
    - une entrée invalide, ou un identifiant en double ;
    - deux entrées OIDC avec le même émetteur, ou deux annuaires avec le même `url` et la même base ;
-   - un fournisseur injoignable au démarrage (comme aujourd'hui) ;
+   - un émetteur OIDC injoignable au démarrage (comme aujourd'hui ; un **annuaire** injoignable, lui, n'arrête pas le service, comme aujourd'hui aussi : ses connexions répondent `503`) ;
    - le fichier déclaré en même temps que des variables `OIDC_*` ou `LDAP_*`.
 5. **Les variables actuelles restent valides**, pour un fournisseur de chaque type, d'identifiant vide `""`. Leurs comptes gardent leur nom (`oidc:<sub>`, `ldap:<guid>`) et sont retrouvés comme avant : rien ne change pour une installation existante. En passant au fichier, une entrée peut reprendre ces comptes par `"adopt_legacy_accounts": true`, au plus une par type. Sans cette déclaration, ils ne sont rattachés à aucun fournisseur et ne peuvent plus se connecter : défaut strict, et le démarrage le signale.
 6. **Une table de rôles par fournisseur.** Un groupe déclaré pour un fournisseur ne donne rien à une identité d'un autre, même s'il porte le même nom ou le même DN.
@@ -41,8 +41,16 @@ Invariants touchés : l'identité qui décide est celle que le service vérifie,
 - (−) **Contrat public élargi** : un champ facultatif sur trois routes et deux listes publiques. Rien n'est retiré, mais les libellés des fournisseurs deviennent lisibles sans connexion.
 - (−) **Deux manières de configurer** tant que les variables restent valides ; leur retrait serait une autre décision.
 - (−) Les comptes existants **non repris** deviennent inaccessibles en passant au fichier : c'est voulu, mais cela demande un geste explicite, et la documentation doit le dire en tête.
-- (−) Un émetteur ou un annuaire injoignable au démarrage empêche de démarrer, et cela vaut désormais pour tous les autres fournisseurs. C'est le comportement actuel, étendu ; le changer serait une autre décision.
+- (−) Un émetteur OIDC injoignable au démarrage empêche de démarrer, et cela vaut désormais pour tous les autres fournisseurs. C'est le comportement actuel, étendu ; le changer serait une autre décision.
 - (−) Le `sub` d'un fournisseur reste sa parole : un fournisseur hostile peut créer autant de comptes qu'il veut **chez lui**, mais aucun chez un autre.
+
+**Précisions de mise en œuvre** (7 novembre 2026, sans changer la décision)
+
+- **Codes d'enrôlement du second facteur** (ADR-0062) : ils étaient émis pour `("ldap", nom de connexion)`. Avec deux annuaires, l'`alice` de l'un et celle de l'autre partageraient le code. Ils le sont désormais pour `ldap:<annuaire>` (`openbastion-cli mfa enrollment-code -directory alice -directory-id <id>`), et `ldap` reste la source des comptes du fournisseur `""`. Une source qui ne nomme aucun annuaire configuré est refusée. C'est la règle 2 appliquée aux codes.
+- **Point 4, annuaire injoignable** : la première rédaction disait « un fournisseur injoignable (comme aujourd'hui) ». Or aujourd'hui, un annuaire injoignable n'arrête pas le service (ADR-0061). Ce comportement est gardé, et le texte est corrigé.
+- **Point 10, audit** : l'événement `auth.login` porte le nom du compte, qui nomme son fournisseur (`oidc:<id>:<sub>`), sauf pour les comptes du fournisseur `""` : ceux-là n'en disent rien. Les refus portent le nom de connexion tapé, sans l'annuaire. Le schéma des événements ne change pas.
+- **Le fichier lui-même** n'est accepté que s'il n'est modifiable ni par son groupe ni par les autres : qui peut l'écrire peut déclarer un fournisseur dont les groupes donnent `platform-admin`.
+- **Limite restante** : avec les variables `OIDC_*`, changer `OIDC_ISSUER` garde le fournisseur `""`, et donc le défaut mesuré plus haut. De même, dans le fichier, changer l'émetteur d'un identifiant existant le garde. La parade, documentée, est de déclarer un nouvel identifiant. Un garde-fou, qui retiendrait l'émetteur de chaque identifiant et refuserait de démarrer s'il change, reste à décider.
 
 **Alternatives envisagées**
 

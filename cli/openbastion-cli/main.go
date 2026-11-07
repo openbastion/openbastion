@@ -109,15 +109,22 @@ func verifyChain(audit string, stdout io.Writer) error {
 }
 
 // mfaEnrollmentCode issues a one-time code with which an account enrolls its second factor
-// (ADR-0062): for a local account by its name, for a directory account by its login name. The
+// (ADR-0062): for a local account by its name, for a directory account by its login name — at
+// the directory directoryID of IDENTITY_PROVIDERS_FILE when there are several (ADR-0076). The
 // code is shown once, here; give it to the user by another channel than the password.
-func mfaEnrollmentCode(authn, local, directory string, stdout io.Writer) error {
+func mfaEnrollmentCode(authn, local, directory, directoryID string, stdout io.Writer) error {
 	if authn == "" || (local == "") == (directory == "") {
 		return errors.New("mfa enrollment-code needs -authn and one of -local or -directory")
+	}
+	if directoryID != "" && directory == "" {
+		return errors.New("mfa enrollment-code: -directory-id goes with -directory")
 	}
 	source, name := "local", local
 	if directory != "" {
 		source, name = "ldap", directory
+		if directoryID != "" {
+			source = "ldap:" + directoryID
+		}
 	}
 	c, err := client(authn, mtls.Authentication)
 	if err != nil {
