@@ -154,11 +154,10 @@ func ParseTSRequest(data []byte) (TSRequest, error) {
 			if err != nil || value.tag != 0x02 || len(rem) != 0 {
 				return TSRequest{}, ErrCredSSPMessage
 			}
-			n, err := parseDERUint(value.value)
-			if err != nil || n > 0xffffffff {
+			code, err := parseDERInt32(value.value)
+			if err != nil {
 				return TSRequest{}, ErrCredSSPMessage
 			}
-			code := uint32(n)
 			req.ErrorCode = &code
 		}
 	}
@@ -248,4 +247,28 @@ func parseDERUint(value []byte) (uint64, error) {
 		n = n<<8 | uint64(b)
 	}
 	return n, nil
+}
+
+// parseDERInt32 decodes the signed ASN.1 INTEGER used for CredSSP errorCode.
+// NTSTATUS is a signed 32-bit value on the wire; converting it to uint32 keeps
+// its conventional hexadecimal bit pattern for callers and diagnostics. Values
+// in the positive uint32 range are also accepted for interoperability.
+func parseDERInt32(value []byte) (uint32, error) {
+	if len(value) == 0 || len(value) > 5 {
+		return 0, ErrCredSSPMessage
+	}
+	if len(value) > 1 && ((value[0] == 0x00 && value[1]&0x80 == 0) || (value[0] == 0xff && value[1]&0x80 != 0)) {
+		return 0, ErrCredSSPMessage
+	}
+	n := int64(0)
+	if value[0]&0x80 != 0 {
+		n = -1
+	}
+	for _, b := range value {
+		n = (n << 8) | int64(b)
+	}
+	if n < -1<<31 || n > 1<<32-1 {
+		return 0, ErrCredSSPMessage
+	}
+	return uint32(n), nil
 }

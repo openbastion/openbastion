@@ -3,6 +3,7 @@ package rdp
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 	"unicode/utf16"
@@ -104,35 +105,37 @@ func MarshalMCSConnectInitial(settings MCSClientSettings) ([]byte, error) {
 func ParseMCSConnectResponse(packet []byte) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	if len(packet) < 7+2 || len(packet) > maxTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
-		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) ||
-		!equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) {
-		return response, ErrMCSConnection
+		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) {
+		return response, fmt.Errorf("%w: MCS Connect-Response TPKT header", ErrMCSConnection)
+	}
+	if !equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) {
+		return response, fmt.Errorf("%w: MCS Connect-Response X.224 data TPDU", ErrMCSConnection)
 	}
 	mcs := packet[7:]
 	outer, rest, err := readMCSBER(mcs, []byte{0x7f, mcsConnectResponseTag})
 	if err != nil || len(rest) != 0 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response BER envelope", ErrMCSConnection)
 	}
 	body := outer
 	result, body, err := readMCSBER(body, []byte{0x0a}) // ENUMERATED
 	if err != nil || len(result) != 1 || result[0] != 0 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response result", ErrMCSConnection)
 	}
 	calledConnectID, body, err := readMCSBER(body, []byte{0x02})
 	if err != nil || !validBERInteger(calledConnectID) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response calledConnectId", ErrMCSConnection)
 	}
 	domainParameters, body, err := readMCSBER(body, []byte{0x30})
 	if err != nil || !validMCSBERDomainParameters(domainParameters) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response domainParameters", ErrMCSConnection)
 	}
 	userData, body, err := readMCSBER(body, []byte{0x04})
 	if err != nil || len(body) != 0 || len(userData) == 0 || len(userData) > maxMCSConnectData {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response userData", ErrMCSConnection)
 	}
 	response, err = parseGCCConferenceCreateResponse(userData)
 	if err != nil {
-		return MCSConnectResponse{}, err
+		return MCSConnectResponse{}, fmt.Errorf("%w: GCC ConferenceCreate-Response: %v", ErrMCSConnection, err)
 	}
 	return response, nil
 }
@@ -388,31 +391,31 @@ func readPERLength(data []byte) (int, []byte, error) {
 func parseGCCConferenceCreateResponse(data []byte) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	if len(data) < 16 || len(data) > maxMCSConnectData || !equalBytes(data[:7], []byte{0x00, 0x05, 0x00, 0x14, 0x7c, 0x00, 0x01}) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response header", ErrMCSConnection)
 	}
 	_, rest, err := readPERLength(data[7:])
 	if err != nil || len(rest) < 1 || rest[0] != 0x14 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response PER length or choice", ErrMCSConnection)
 	}
 	rest = rest[1:]
 	if len(rest) < 12 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response conference parameters", ErrMCSConnection)
 	}
 	// nodeID (2), tag length and tag (2), result (1) and number of sets (1) are ignored by the RDP
 	// client (MS-RDPBCGR 4.1.4: 14 76 0a 01 01 00 01 c0 00 "McDn"). Only the conference choice and
 	// the mandatory H.221 key matter.
 	rest = rest[6:]
 	if rest[0] != 0xc0 || rest[1] != 0 || !equalBytes(rest[2:6], []byte("McDn")) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response H.221 key", ErrMCSConnection)
 	}
 	rest = rest[6:]
 	userDataLength, rest, err := readPERLength(rest)
 	if err != nil || userDataLength == 0 || userDataLength > maxMCSConnectData || len(rest) != userDataLength {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response server data length", ErrMCSConnection)
 	}
 	response, err = parseServerDataBlocks(rest)
 	if err != nil {
-		return MCSConnectResponse{}, err
+		return MCSConnectResponse{}, fmt.Errorf("%w: GCC server data blocks: %v", ErrMCSConnection, err)
 	}
 	return response, nil
 }
@@ -422,40 +425,40 @@ func parseServerDataBlocks(data []byte) (MCSConnectResponse, error) {
 	seen := map[uint16]bool{}
 	for len(data) > 0 {
 		if len(data) < 4 {
-			return response, ErrMCSConnection
+			return response, fmt.Errorf("%w: truncated GCC server data block header", ErrMCSConnection)
 		}
 		blockType := binary.LittleEndian.Uint16(data[:2])
 		blockLength := int(binary.LittleEndian.Uint16(data[2:4]))
 		if blockLength < 4 || blockLength > len(data) || seen[blockType] {
-			return response, ErrMCSConnection
+			return response, fmt.Errorf("%w: invalid or duplicate GCC server data block type 0x%04x", ErrMCSConnection, blockType)
 		}
 		seen[blockType] = true
 		payload := data[4:blockLength]
 		switch blockType {
 		case gccServerCoreType:
 			if len(payload) != 8 && len(payload) != 12 {
-				return response, ErrMCSConnection
+				return response, fmt.Errorf("%w: invalid GCC SC_CORE length %d", ErrMCSConnection, len(payload))
 			}
 			response.ServerVersion = binary.LittleEndian.Uint32(payload[:4])
 			if !validRDPServerVersion(response.ServerVersion) || binary.LittleEndian.Uint32(payload[4:8]) != protocolHybrid {
-				return MCSConnectResponse{}, ErrMCSConnection
+				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_CORE version or selected protocol", ErrMCSConnection)
 			}
 		case gccServerSecurityType:
 			if len(payload) != 8 || binary.LittleEndian.Uint32(payload[:4]) != 0 || binary.LittleEndian.Uint32(payload[4:8]) != 0 {
-				return MCSConnectResponse{}, ErrMCSConnection
+				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_SECURITY profile", ErrMCSConnection)
 			}
 		case gccServerNetworkType:
 			if len(payload) != 4 || binary.LittleEndian.Uint16(payload[:2]) != mcsGlobalChannelID || binary.LittleEndian.Uint16(payload[2:4]) != 0 {
-				return MCSConnectResponse{}, ErrMCSConnection
+				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_NET channels", ErrMCSConnection)
 			}
 			response.IOChannelID = mcsGlobalChannelID
 		default:
-			return MCSConnectResponse{}, ErrMCSConnection
+			return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC server data block type 0x%04x", ErrMCSConnection, blockType)
 		}
 		data = data[blockLength:]
 	}
 	if !seen[gccServerCoreType] || !seen[gccServerSecurityType] || !seen[gccServerNetworkType] || response.IOChannelID == 0 {
-		return MCSConnectResponse{}, ErrMCSConnection
+		return MCSConnectResponse{}, fmt.Errorf("%w: missing required GCC SC_CORE, SC_SECURITY, or SC_NET block", ErrMCSConnection)
 	}
 	return response, nil
 }

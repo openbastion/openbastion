@@ -43,6 +43,46 @@ func TestTSRequestDERKnownInitialMessage(t *testing.T) {
 	}
 }
 
+func TestTSRequestParsesSignedNTSTATUSErrorCodes(t *testing.T) {
+	cases := []struct {
+		name string
+		der  []byte
+		want uint32
+	}{
+		{"logon failure", []byte{0xc0, 0x00, 0x00, 0x6d}, 0xc000006d},
+		{"wrong password", []byte{0xc0, 0x00, 0x00, 0x6a}, 0xc000006a},
+		{"unsigned positive encoding", []byte{0x00, 0x80, 0x07, 0x00, 0x05}, 0x80070005},
+		{"small positive", []byte{0x01}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			integer := derWrap(0x02, tc.der)
+			encoded := derWrap(0x30, append(derWrap(0xa0, derWrap(0x02, []byte{6})), derWrap(0xa4, integer)...))
+			got, err := ParseTSRequest(encoded)
+			if err != nil || got.ErrorCode == nil || *got.ErrorCode != tc.want {
+				t.Fatalf("ParseTSRequest() = %#v, %v; want errorCode %#08x", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestTSRequestRejectsNonCanonicalOrOutOfRangeErrorCode(t *testing.T) {
+	cases := map[string][]byte{
+		"redundant positive sign": {0x00, 0x01},
+		"redundant negative sign": {0xff, 0x80},
+		"out of signed range":     {0xff, 0x7f, 0xff, 0xff, 0xff},
+		"too wide":                {0x00, 0x01, 0x00, 0x00, 0x00, 0x00},
+	}
+	for name, integer := range cases {
+		t.Run(name, func(t *testing.T) {
+			encoded := derWrap(0x30, append(derWrap(0xa0, derWrap(0x02, []byte{6})), derWrap(0xa4, derWrap(0x02, integer))...))
+			if _, err := ParseTSRequest(encoded); !errors.Is(err, ErrCredSSPMessage) {
+				t.Fatalf("ParseTSRequest() error = %v, want ErrCredSSPMessage", err)
+			}
+		})
+	}
+}
+
 func TestTSRequestRejectsMalformedDER(t *testing.T) {
 	valid, err := MarshalTSRequest(TSRequest{Version: 6, NegoTokens: [][]byte{{1, 2, 3}}})
 	if err != nil {

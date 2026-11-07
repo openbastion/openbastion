@@ -357,14 +357,20 @@ func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSett
 	if readErr != nil {
 		stopCancel()
 		s.closeTransportLocked()
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: reading MCS Connect-Response TPKT: %v", ErrMCSConnection, readErr)
 	}
 	response, err = ParseMCSConnectResponse(serverPacket)
 	clear(serverPacket)
 	cancelStopped := stopCancel()
 	if err != nil || ctx.Err() != nil || !cancelStopped {
 		s.closeTransportLocked()
-		return MCSConnectResponse{}, ErrMCSConnection
+		if err != nil {
+			return MCSConnectResponse{}, err
+		}
+		if ctx.Err() != nil {
+			return MCSConnectResponse{}, fmt.Errorf("%w: context cancelled during MCS Connect-Response", ErrMCSConnection)
+		}
+		return MCSConnectResponse{}, fmt.Errorf("%w: MCS response deadline callback raced completion", ErrMCSConnection)
 	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		s.closeTransportLocked()
