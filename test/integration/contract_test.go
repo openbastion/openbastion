@@ -120,9 +120,11 @@ var notMirrored = map[string]string{
 	"video-recorder/checkAccessRequestBody":    "idem — the Video Recorder's client of it",
 	"video-recorder/checkAccessResponseBody":   "idem",
 	// Not routes between services: formats of a third party, or of a file.
-	"authentication/idClaims":   "the claims of an OIDC identity token: the provider's format (ADR-0035)",
-	"audit-service/anchorLine":  "a line of the anchor file (ADR-0028), not a message",
-	"audit-service/archiveLine": "a line of an archive file (ADR-0032), not a message",
+	"authentication/idClaims":             "the claims of an OIDC identity token: the provider's format (ADR-0035)",
+	"audit-service/anchorLine":            "a line of the anchor file (ADR-0028), not a message",
+	"audit-service/archiveLine":           "a line of an archive file (ADR-0032), not a message",
+	"authentication/OIDCEntryConfig":      "an entry of IDENTITY_PROVIDERS_FILE (ADR-0076): a configuration file, not a message",
+	"authentication/DirectoryEntryConfig": "idem",
 }
 
 var protoMessage = regexp.MustCompile(`(?ms)^message (\w+) \{(.*?)^\}`)
@@ -217,7 +219,8 @@ func TestContract_EveryInternalRouteCarriesTheFieldsOfItsProtoMessage_OrSaysWhyN
 
 // anonymousAllowed are files whose anonymous snake_case shapes are not routes between services.
 var anonymousAllowed = map[string]string{
-	"services/access/authentication/internal/infrastructure/oidc_provider.go": "the OIDC provider's discovery document and token response (ADR-0035)",
+	"services/access/authentication/internal/infrastructure/oidc_provider.go":  "the OIDC provider's discovery document and token response (ADR-0035)",
+	"services/access/authentication/internal/infrastructure/providers_file.go": "the required fields of IDENTITY_PROVIDERS_FILE, named in its errors (ADR-0076): no body is built there",
 }
 
 // anonymousJSON lists, in a Go file, the anonymous structs with snake_case json tags and the map

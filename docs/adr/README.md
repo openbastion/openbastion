@@ -85,3 +85,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Proposé |
 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté |
 | [ADR-0075](0075-architecture-du-user-portal-et-socle-frontend-partage.md) | Architecture du User Portal et socle frontend partagé | Proposé |
+| [ADR-0076](0076-plusieurs-fournisseurs-d-identite-chaque-compte-lie-au-sien.md) | Plusieurs fournisseurs d'identité à la fois, chaque compte lié au sien | Accepté |

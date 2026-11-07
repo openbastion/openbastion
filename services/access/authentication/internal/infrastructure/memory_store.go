@@ -32,7 +32,7 @@ func (s *InMemoryStore) Create(ctx context.Context, u *domain.User) error {
 	}
 	if u.ExternalSubject != "" {
 		for _, other := range s.byID {
-			if other.IdentitySource == u.IdentitySource && other.ExternalSubject == u.ExternalSubject {
+			if other.IdentitySource == u.IdentitySource && other.IdentityProvider == u.IdentityProvider && other.ExternalSubject == u.ExternalSubject {
 				return ErrUsernameTaken
 			}
 		}
@@ -64,15 +64,28 @@ func (s *InMemoryStore) GetByID(ctx context.Context, id string) (*domain.User, e
 }
 
 // GetByExternalSubject is domain.UserRepository.GetByExternalSubject.
-func (s *InMemoryStore) GetByExternalSubject(ctx context.Context, source, subject string) (*domain.User, error) {
+func (s *InMemoryStore) GetByExternalSubject(ctx context.Context, source, provider, subject string) (*domain.User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, u := range s.byID {
-		if subject != "" && u.IdentitySource == source && u.ExternalSubject == subject {
+		if subject != "" && u.IdentitySource == source && u.IdentityProvider == provider && u.ExternalSubject == subject {
 			return copyUser(u), nil
 		}
 	}
 	return nil, ErrUserNotFound
+}
+
+// CountExternalAccounts is PostgresStore.CountExternalAccounts.
+func (s *InMemoryStore) CountExternalAccounts(ctx context.Context, source, provider string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, u := range s.byID {
+		if u.IdentitySource == source && u.IdentityProvider == provider && u.ExternalSubject != "" {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // UpdateIdentity is domain.UserRepository.UpdateIdentity.

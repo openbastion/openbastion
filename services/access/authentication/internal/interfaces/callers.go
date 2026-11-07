@@ -15,6 +15,7 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/auth/v1/login", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/verify", Callers: []string{mtls.APIGateway}},
 		// Federated login (ADR-0035): the Gateway forwards both ends of it.
+		{Method: http.MethodGet, Path: "/auth/v1/oidc", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/oidc/start", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodPost, Path: "/auth/v1/oidc/callback", Callers: []string{mtls.APIGateway}},
 		// Directory login (ADR-0061): the Gateway forwards it, and asks whether it is on.

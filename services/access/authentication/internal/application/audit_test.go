@@ -162,12 +162,12 @@ func TestAudit_ADirectoryLoginAndItsRefusalsAreWritten(t *testing.T) {
 	w, a := audited(t)
 	ctx := context.Background()
 	w.svc.WithMFA(nil, w.store, nil) // no role requires the second factor here
-	token, _, err := w.svc.LoginLDAP(ctx, "alice", "dir-pass")
+	token, _, err := w.svc.LoginLDAP(ctx, "", "alice", "dir-pass")
 	if err != nil || token == "" {
 		t.Fatal(err)
 	}
-	_, _, _ = w.svc.LoginLDAP(ctx, "alice", "wrong")
-	_, _, _ = w.svc.LoginLDAP(ctx, "alice", "")
+	_, _, _ = w.svc.LoginLDAP(ctx, "", "alice", "wrong")
+	_, _, _ = w.svc.LoginLDAP(ctx, "", "alice", "")
 	if got := a.actions(); got != "auth.login:ldap:"+w.dir.id.ID+" auth.login_refused:alice auth.login_refused:alice" {
 		t.Fatalf("events %q", got)
 	}

@@ -67,9 +67,9 @@ func (s *PostgresStore) Create(ctx context.Context, u *domain.User) error {
 		roles = []string{}
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO users (id, username, display_name, password_hash, roles, identity_source, external_subject)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		u.ID, u.Username, u.DisplayName, u.PasswordHash, pq.Array(roles), sourceOrLocal(u.IdentitySource), u.ExternalSubject)
+		INSERT INTO users (id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		u.ID, u.Username, u.DisplayName, u.PasswordHash, pq.Array(roles), sourceOrLocal(u.IdentitySource), u.IdentityProvider, u.ExternalSubject)
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unique_violation
@@ -82,21 +82,21 @@ func (s *PostgresStore) Create(ctx context.Context, u *domain.User) error {
 
 func (s *PostgresStore) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, password_hash, roles, identity_source, external_subject
+		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject
 		FROM users WHERE username = $1`, username)
 	return scanUser(row)
 }
 
 func (s *PostgresStore) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, password_hash, roles, identity_source, external_subject
+		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject
 		FROM users WHERE id = $1`, id)
 	return scanUser(row)
 }
 
 func scanUser(row *sql.Row) (*domain.User, error) {
 	var u domain.User
-	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, pq.Array(&u.Roles), &u.IdentitySource, &u.ExternalSubject); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.DisplayName, &u.PasswordHash, pq.Array(&u.Roles), &u.IdentitySource, &u.IdentityProvider, &u.ExternalSubject); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
@@ -113,14 +113,22 @@ func sourceOrLocal(s string) string {
 }
 
 // GetByExternalSubject is domain.UserRepository.GetByExternalSubject.
-func (s *PostgresStore) GetByExternalSubject(ctx context.Context, source, subject string) (*domain.User, error) {
+func (s *PostgresStore) GetByExternalSubject(ctx context.Context, source, provider, subject string) (*domain.User, error) {
 	if subject == "" {
 		return nil, ErrUserNotFound
 	}
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, username, display_name, password_hash, roles, identity_source, external_subject
-		FROM users WHERE identity_source = $1 AND external_subject = $2`, source, subject)
+		SELECT id, username, display_name, password_hash, roles, identity_source, identity_provider, external_subject
+		FROM users WHERE identity_source = $1 AND identity_provider = $2 AND external_subject = $3`, source, provider, subject)
 	return scanUser(row)
+}
+
+// CountExternalAccounts counts the accounts of source kept under provider (ADR-0076): at start, the
+// accounts made before that no entry adopts are said.
+func (s *PostgresStore) CountExternalAccounts(ctx context.Context, source, provider string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE identity_source = $1 AND identity_provider = $2 AND external_subject <> ''`, source, provider).Scan(&n)
+	return n, err
 }
 
 // UpdateIdentity is domain.UserRepository.UpdateIdentity.
@@ -144,8 +152,8 @@ func (s *PostgresStore) SaveAttempt(ctx context.Context, a domain.LoginAttempt) 
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM oidc_login_attempts WHERE expires_at < now() - interval '1 hour'`); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO oidc_login_attempts (state, verifier, nonce, expires_at) VALUES ($1, $2, $3, $4)`,
-		a.State, a.Verifier, a.Nonce, a.ExpiresAt)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO oidc_login_attempts (state, verifier, nonce, provider, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		a.State, a.Verifier, a.Nonce, a.Provider, a.ExpiresAt)
 	return err
 }
 
@@ -153,8 +161,8 @@ func (s *PostgresStore) SaveAttempt(ctx context.Context, a domain.LoginAttempt) 
 // of two callbacks with the same state, one at most gets it — whichever replica they reach.
 func (s *PostgresStore) TakeAttempt(ctx context.Context, state string) (domain.LoginAttempt, error) {
 	var a domain.LoginAttempt
-	err := s.db.QueryRowContext(ctx, `DELETE FROM oidc_login_attempts WHERE state = $1 RETURNING state, verifier, nonce, expires_at`, state).
-		Scan(&a.State, &a.Verifier, &a.Nonce, &a.ExpiresAt)
+	err := s.db.QueryRowContext(ctx, `DELETE FROM oidc_login_attempts WHERE state = $1 RETURNING state, verifier, nonce, provider, expires_at`, state).
+		Scan(&a.State, &a.Verifier, &a.Nonce, &a.Provider, &a.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, domain.ErrAttemptNotFound
 	}

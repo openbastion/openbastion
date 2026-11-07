@@ -66,7 +66,7 @@ func oidcService(t *testing.T) (*application.AuthenticationService, *fakeProvide
 
 func start(t *testing.T, svc *application.AuthenticationService) string {
 	t.Helper()
-	u, err := svc.StartOIDC(context.Background())
+	u, err := svc.StartOIDC(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestFinishOIDC_NoMappedRoleIsRefused_AndRolesFollowTheGroupsAtEachLogin(t *
 	if _, _, err := svc.FinishOIDC(context.Background(), "code", start(t, svc)); !errors.Is(err, application.ErrNoRole) {
 		t.Fatalf("no mapped group: %v, want ErrNoRole", err)
 	}
-	if _, err := store.GetByExternalSubject(context.Background(), domain.SourceOIDC, "s"); err == nil {
+	if _, err := store.GetByExternalSubject(context.Background(), domain.SourceOIDC, "", "s"); err == nil {
 		t.Fatal("an account was made for an identity with no role")
 	}
 	p.next.Groups = []string{"bastion-admins"}
@@ -166,7 +166,7 @@ func TestFinishOIDC_ACodeTheProviderRefusesOrATokenThatDoesNotVerifyIsRefused(t 
 
 func TestOIDC_OffUnlessConfigured(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.StartOIDC(context.Background()); !errors.Is(err, application.ErrOIDCOff) {
+	if _, err := svc.StartOIDC(context.Background(), ""); !errors.Is(err, application.ErrOIDCOff) {
 		t.Fatalf("StartOIDC: %v", err)
 	}
 	if _, _, err := svc.FinishOIDC(context.Background(), "c", "s"); !errors.Is(err, application.ErrOIDCOff) {

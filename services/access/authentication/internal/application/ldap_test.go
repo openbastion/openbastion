@@ -53,7 +53,7 @@ func ldapService(t *testing.T) (*application.AuthenticationService, *fakeDirecto
 
 func TestLoginLDAP_TheRolesAreTheMapsOfTheGroups_AndTheAccountIsLDAPAndItsStableID(t *testing.T) {
 	svc, d, store, tokens := ldapService(t)
-	token, ttl, err := svc.LoginLDAP(context.Background(), "alice", "s3cret pass")
+	token, ttl, err := svc.LoginLDAP(context.Background(), "", "alice", "s3cret pass")
 	if err != nil || ttl != time.Hour {
 		t.Fatalf("LoginLDAP: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestLoginLDAP_TheRolesAreTheMapsOfTheGroups_AndTheAccountIsLDAPAndItsStable
 
 	// The groups change in the directory: the next login has today's roles, on the same account.
 	d.id.Groups = []string{adminsDN}
-	token, _, err = svc.LoginLDAP(context.Background(), "alice", "s3cret pass")
+	token, _, err = svc.LoginLDAP(context.Background(), "", "alice", "s3cret pass")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,20 +87,20 @@ func TestLoginLDAP_TheRolesAreTheMapsOfTheGroups_AndTheAccountIsLDAPAndItsStable
 func TestLoginLDAP_NoMappedGroupIsRefused_AndNoAccountIsMade(t *testing.T) {
 	svc, d, store, _ := ldapService(t)
 	d.id.Groups = []string{"cn=unmapped,dc=example,dc=test"}
-	if _, _, err := svc.LoginLDAP(context.Background(), "alice", "s3cret pass"); !errors.Is(err, application.ErrNoRole) {
+	if _, _, err := svc.LoginLDAP(context.Background(), "", "alice", "s3cret pass"); !errors.Is(err, application.ErrNoRole) {
 		t.Fatalf("no mapped group: %v, want ErrNoRole", err)
 	}
-	if _, err := store.GetByExternalSubject(context.Background(), domain.SourceLDAP, d.id.ID); err == nil {
+	if _, err := store.GetByExternalSubject(context.Background(), domain.SourceLDAP, "", d.id.ID); err == nil {
 		t.Fatal("an account was made for a user with no role")
 	}
 }
 
 func TestLoginLDAP_WhatTheDirectoryRefusesIsRefused_AndAnEmptyPasswordNeverReachesIt(t *testing.T) {
 	svc, d, _, _ := ldapService(t)
-	if _, _, err := svc.LoginLDAP(context.Background(), "alice", "wrong"); !errors.Is(err, application.ErrDirectoryRejected) {
+	if _, _, err := svc.LoginLDAP(context.Background(), "", "alice", "wrong"); !errors.Is(err, application.ErrDirectoryRejected) {
 		t.Fatalf("a wrong password: %v", err)
 	}
-	if _, _, err := svc.LoginLDAP(context.Background(), "bob", "s3cret pass"); !errors.Is(err, application.ErrDirectoryRejected) {
+	if _, _, err := svc.LoginLDAP(context.Background(), "", "bob", "s3cret pass"); !errors.Is(err, application.ErrDirectoryRejected) {
 		t.Fatalf("an unknown user: %v", err)
 	}
 	asked := d.asked
@@ -108,7 +108,7 @@ func TestLoginLDAP_WhatTheDirectoryRefusesIsRefused_AndAnEmptyPasswordNeverReach
 	// name that is empty, too long, or holds a control character.
 	for _, c := range [][2]string{{"alice", ""}, {"", "s3cret pass"}, {strings.Repeat("a", application.MaxDirectoryUsername+1), "s3cret pass"},
 		{"alice\x00", "s3cret pass"}, {"ali\nce", "s3cret pass"}, {"alice\xff", "s3cret pass"}} {
-		if _, _, err := svc.LoginLDAP(context.Background(), c[0], c[1]); !errors.Is(err, application.ErrDirectoryRejected) {
+		if _, _, err := svc.LoginLDAP(context.Background(), "", c[0], c[1]); !errors.Is(err, application.ErrDirectoryRejected) {
 			t.Fatalf("%q/%q: %v, want a refusal", c[0], c[1], err)
 		}
 	}
@@ -120,12 +120,12 @@ func TestLoginLDAP_WhatTheDirectoryRefusesIsRefused_AndAnEmptyPasswordNeverReach
 func TestLoginLDAP_ADirectoryThatCannotAnswerIsNotARefusal_AndNoIdentifierIsAFailure(t *testing.T) {
 	svc, d, _, _ := ldapService(t)
 	d.down = true
-	_, _, err := svc.LoginLDAP(context.Background(), "alice", "s3cret pass")
+	_, _, err := svc.LoginLDAP(context.Background(), "", "alice", "s3cret pass")
 	if err == nil || errors.Is(err, application.ErrDirectoryRejected) || errors.Is(err, application.ErrNoRole) {
 		t.Fatalf("a directory down: %v, want an error that is neither a refusal nor a missing role (503)", err)
 	}
 	d.down, d.id.ID = false, ""
-	if _, _, err := svc.LoginLDAP(context.Background(), "alice", "s3cret pass"); err == nil || errors.Is(err, application.ErrDirectoryRejected) {
+	if _, _, err := svc.LoginLDAP(context.Background(), "", "alice", "s3cret pass"); err == nil || errors.Is(err, application.ErrDirectoryRejected) {
 		t.Fatalf("no stable identifier: %v, want a failure", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestLoginLDAP_OffUnlessConfigured(t *testing.T) {
 	if svc.DirectoryEnabled() {
 		t.Fatal("directory login is on without a directory")
 	}
-	if _, _, err := svc.LoginLDAP(context.Background(), "alice", "x"); !errors.Is(err, application.ErrDirectoryOff) {
+	if _, _, err := svc.LoginLDAP(context.Background(), "", "alice", "x"); !errors.Is(err, application.ErrDirectoryOff) {
 		t.Fatalf("%v, want ErrDirectoryOff", err)
 	}
 }

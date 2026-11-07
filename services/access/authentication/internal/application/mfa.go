@@ -362,13 +362,13 @@ func (s *AuthenticationService) IssueEnrollmentCode(ctx context.Context, actor, 
 		if err != nil || (u.IdentitySource != "" && u.IdentitySource != domain.SourceLocal) {
 			return "", time.Time{}, ErrUnknownAccount
 		}
-	case domain.SourceLDAP:
-		if !directoryUsername(loginName) {
+	default:
+		// "ldap" (the directory of the LDAP_* variables, or the one that adopts the accounts made
+		// before ADR-0076), or "ldap:<id>": a directory that is configured, never another (ADR-0076).
+		if !strings.HasPrefix(source, domain.SourceLDAP) || (source != domain.SourceLDAP && !s.directoryBySource(source)) || !directoryUsername(loginName) {
 			return "", time.Time{}, ErrUnknownAccount
 		}
 		loginName = strings.ToLower(loginName)
-	default:
-		return "", time.Time{}, ErrUnknownAccount
 	}
 	raw := make([]byte, 16)
 	if _, err := rand.Read(raw); err != nil {

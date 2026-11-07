@@ -72,16 +72,52 @@ paths:
             text/plain:
               schema: { type: string }
 
+  /auth/oidc:
+    get:
+      tags: [auth]
+      summary: Les fournisseurs OIDC déclarés (ADR-0076)
+      description: >
+        Pour la page de connexion : l'identifiant et le libellé de chaque
+        fournisseur, dans l'ordre déclaré, jamais son émetteur. L'identifiant
+        vide est celui des variables `OIDC_*`. Publique ; la Gateway garde la
+        réponse 30 s.
+      security: []
+      responses:
+        "200":
+          description: La liste, vide si la connexion fédérée est désactivée
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, providers]
+                properties:
+                  enabled: { type: boolean }
+                  providers:
+                    type: array
+                    items: { $ref: "#/components/schemas/IdentityProviderInfo" }
+        "502": { description: L'Authentication Service ne répond pas }
+
   /auth/oidc/start:
     post:
       tags: [auth]
-      summary: Commence une connexion fédérée OIDC (ADR-0035)
+      summary: Commence une connexion fédérée OIDC (ADR-0035, ADR-0076)
       description: >
         Rend l'URL du fournisseur où envoyer le navigateur : flux par code
         d'autorisation avec PKCE (S256), `state` et `nonce` tirés au hasard,
-        valables 10 minutes et à usage unique. Sans corps. Compte dans le budget
-        de connexion par adresse, comme `/auth/login`.
+        valables 10 minutes et à usage unique. La tentative retient son
+        fournisseur : le retour ne s'échange que chez lui. Corps facultatif avec
+        un seul fournisseur ; `provider` obligatoire dès qu'il y en a plusieurs.
+        Compte dans le budget de connexion par adresse, comme `/auth/login`.
       security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                provider: { type: string, pattern: "^[a-z0-9-]{1,32}$", description: "L'identifiant d'une entrée de `GET /auth/oidc`" }
       responses:
         "200":
           description: L'URL d'autorisation
@@ -92,6 +128,7 @@ paths:
                 required: [authorizationUrl]
                 properties:
                   authorizationUrl: { type: string, format: uri }
+        "400": { description: Plusieurs fournisseurs et aucun nommé, ou un identifiant inconnu }
         "404": { description: La connexion fédérée n'est pas configurée }
         "429": { description: Budget de connexion de l'adresse épuisé (`Retry-After`) }
 
@@ -130,20 +167,25 @@ paths:
   /auth/ldap:
     get:
       tags: [auth]
-      summary: Dit si la connexion par annuaire est activée (ADR-0061)
+      summary: Dit si la connexion par annuaire est activée, et par quels annuaires (ADR-0061, ADR-0076)
       description: >
-        Pour la page de connexion. Publique ; la Gateway garde la réponse 30 s.
+        Pour la page de connexion : l'identifiant et le libellé de chaque
+        annuaire, jamais son URL ni sa base. L'identifiant vide est celui des
+        variables `LDAP_*`. Publique ; la Gateway garde la réponse 30 s.
       security: []
       responses:
         "200":
-          description: Activée ou non
+          description: Activée ou non, et la liste
           content:
             application/json:
               schema:
                 type: object
-                required: [enabled]
+                required: [enabled, directories]
                 properties:
                   enabled: { type: boolean }
+                  directories:
+                    type: array
+                    items: { $ref: "#/components/schemas/IdentityProviderInfo" }
         "502": { description: L'Authentication Service ne répond pas }
 
   /auth/ldap/login:
@@ -151,10 +193,14 @@ paths:
       tags: [auth]
       summary: Connexion avec le mot de passe de l'annuaire, LDAP ou Active Directory (ADR-0061)
       description: >
-        Même corps que `/auth/login`. L'annuaire vérifie le mot de passe (un compte
-        de service cherche l'utilisateur, une connexion à part se lie en son nom) ;
-        les rôles viennent de la table des groupes déclarée (`LDAP_ROLE_MAP_FILE`),
-        jamais de l'annuaire. Le compte s'appelle `ldap:<objectGUID ou entryUUID>`.
+        Le corps de `/auth/login`, plus `directory` : l'identifiant de l'annuaire
+        choisi, obligatoire dès qu'il y en a plusieurs (ADR-0076) ; OpenBastion
+        n'essaie jamais les annuaires l'un après l'autre. L'annuaire vérifie le mot
+        de passe (un compte de service cherche l'utilisateur, une connexion à part
+        se lie en son nom) ; les rôles viennent de la table des groupes de cet
+        annuaire, jamais de l'annuaire lui-même. Le compte s'appelle
+        `ldap:<annuaire>:<objectGUID ou entryUUID>`, ou `ldap:<…>` pour l'annuaire
+        des variables `LDAP_*`.
         Un mot de passe vide est refusé avant l'annuaire (ce serait un bind anonyme).
         Compte dans le budget de connexion par adresse, comme `/auth/login`.
       security: []
@@ -162,14 +208,19 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/LoginRequest" }
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/LoginRequest" }
+                - type: object
+                  properties:
+                    directory: { type: string, pattern: "^[a-z0-9-]{1,32}$", description: "L'identifiant d'une entrée de `GET /auth/ldap`" }
       responses:
         "200":
           description: Le jeton OpenBastion, comme `/auth/login`
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TokenPair" }
-        "400": { description: Le corps n'est pas une connexion }
+        "400": { description: "Le corps n'est pas une connexion ; ou plusieurs annuaires et aucun nommé, ou un identifiant inconnu — aucun annuaire n'est interrogé" }
         "401": { description: Connexion refusée (nom inconnu, plusieurs entrées, mot de passe faux ou vide, compte désactivé) — sans détail }
         "403": { description: L'annuaire répond de l'utilisateur, et aucun de ses groupes ne donne de rôle OpenBastion }
         "404": { description: La connexion par annuaire n'est pas configurée }
@@ -1509,6 +1560,13 @@ components:
       properties:
         challenge: { type: string }
         code: { type: string, pattern: "^[0-9]{6}$" }
+    IdentityProviderInfo:
+      description: Ce que la page de connexion sait d'un fournisseur ou d'un annuaire (ADR-0076)
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: string, description: "`[a-z0-9-]{1,32}`, ou vide pour celui des variables `OIDC_*`/`LDAP_*`" }
+        label: { type: string, description: "Le libellé déclaré ; vide pour celui des variables" }
     LoginRequest:
       type: object
       required: [username, password]
