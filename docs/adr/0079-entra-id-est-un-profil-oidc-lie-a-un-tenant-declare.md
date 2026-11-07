@@ -1,12 +1,12 @@
 # ADR-0079 — Entra ID est un profil OIDC lié à un tenant déclaré
 
-**Statut** `Proposé` · 7 novembre 2026 · en attente du go du propriétaire du projet
+**Statut** `Accepté` · 7 novembre 2026 · accepté explicitement par le propriétaire du projet
 
 **Contexte** — ADR-0035 fournit le protocole OIDC et ADR-0076 permet plusieurs fournisseurs simultanés, chacun avec son identifiant et ses rôles propres. L'Authentication Service ne distingue toutefois pas un fournisseur Microsoft Entra ID d'un fournisseur OIDC générique. La feuille de route v0.0.1 annonce un connecteur Entra ID, mais créer un second moteur d'authentification ferait diverger deux implémentations du même protocole et multiplierait les chemins de validation des jetons.
 
 Entra ID apporte néanmoins une contrainte utile à exprimer explicitement : une configuration d'entreprise doit être liée à un tenant déterminé, et non accepter implicitement des autorités multi-tenant ou personnelles. Le contrôle d'émetteur d'ADR-0078 protège déjà chaque fournisseur OIDC contre un changement non déclaré ; il ne remplace pas la vérification du tenant revendiqué par le jeton.
 
-**Décision proposée**
+**Décision**
 
 1. **Pas de protocole ni de service d'authentification supplémentaire.** Entra ID utilise le flux OIDC existant (Authorization Code + PKCE), le stockage des fournisseurs d'ADR-0076, les contrôles de jeton d'ADR-0035 et le verrou d'émetteur d'ADR-0078. Le profil Entra est une variante explicitement déclarée d'un fournisseur OIDC.
 2. **Tenant obligatoire et explicite.** Un fournisseur de profil `entra` déclare un `tenant_id` GUID. Son émetteur doit être exactement l'émetteur v2 du tenant déclaré : `https://login.microsoftonline.com/<tenant_id>/v2.0`. Les autorités génériques `common`, `organizations` et `consumers`, les émetteurs non HTTPS et les tenants implicites sont refusés au démarrage.
