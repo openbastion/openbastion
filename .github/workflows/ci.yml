@@ -1,204 +1,82 @@
-# La vérification complète de .agents/tasks/releases/full-verification.md, sans le test Compose
-# (ADR-0047). Chaque dépendance du workflow est épinglée par empreinte, l'étiquette en
-# commentaire : une étiquette se déplace, une empreinte non. Aucun secret du dépôt n'est lu ;
-# la PKI et les clés des tests sont générées dans le job.
-name: ci
-
+# Event entry point and stable branch-protection contract (ADR-0077).
+name: CI
 on:
   push:
     branches: [main]
-    # A tag vX.Y.Z is a release (ADR-0063): the whole CI runs on it, and the version job checks that
-    # it names the VERSION file, without pre-release. Tags are made by the project's owner only.
+    # A tag vX.Y.Z is a release (ADR-0063); the version workflow validates it against VERSION.
     tags: ["v*"]
   pull_request:
-  # Weekly, so that a vulnerability published without a commit of ours is seen (ADR-0052).
+  # Weekly, so vulnerabilities published without a repository change are still detected (ADR-0052).
   schedule:
     - cron: "17 5 * * 1"
-
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  GO_VERSION: "1.27.3"
-  NODE_VERSION: "24.21.0"
-  # Comme le Makefile : le workspace, et les modules tirés de leur source (go.sum fait foi).
-  GOPROXY: direct
-
 jobs:
-  version:
-    name: version — VERSION is SemVer, a tag is its release
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
-      - name: VERSION, and the tag when there is one
-        env:
-          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-        run: make version-check TAG="$TAG"
-      - run: echo "built as $(make -s version)"
-
   go:
-    name: build, vet, gofmt, unit
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
-      - run: make proto-tools proto-lint build vet
-      - name: gofmt -l (must print nothing)
-        run: |
-          unformatted=$(git ls-files '*.go' | xargs gofmt -l)
-          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
-      - name: git diff --check (no trailing whitespace or conflict markers)
-        run: git diff --check
-      - name: unit tests without a database
-        run: make test
-
-  race:
-    name: unit tests under -race
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
-      - run: make proto-tools test GOFLAGS=-race
-
+    name: Go
+    uses: ./.github/workflows/go.yml
+    permissions:
+      contents: read
   integration:
-    name: integration on real processes, without a database
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
-      # The integration tests build the services with GOPROXY=off: the module cache comes first.
-      - run: make proto-tools proto-lint build
-      - run: GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
-
+    name: Integration
+    uses: ./.github/workflows/integration.yml
+    permissions:
+      contents: read
   postgres:
-    name: PostgreSQL 16 — unit, dedicated, integration
+    name: PostgreSQL
+    uses: ./.github/workflows/postgres.yml
+    permissions:
+      contents: read
+  frontend:
+    name: Frontend
+    uses: ./.github/workflows/frontend.yml
+    permissions:
+      contents: read
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+  containers:
+    name: Containers
+    uses: ./.github/workflows/containers.yml
+    permissions:
+      contents: read
+  required-checks:
+    name: Required checks
+    needs: [go, integration, postgres, frontend, security, containers]
+    if: ${{ always() }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    env:
-      TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
-      PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
-      # Use the same patched, digest-pinned PostgreSQL image as the Compose deployment.
-      - name: Start hardened PostgreSQL 16
+      - name: Require every workflow to succeed
+        env:
+          GO_RESULT: ${{ needs.go.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          CONTAINERS_RESULT: ${{ needs.containers.result }}
         run: |
-          docker build -f deploy/docker-compose/postgres/Dockerfile -t openbastion-postgres:ci .
-          docker run -d --name openbastion-postgres -e POSTGRES_USER=openbastion \
-            -e POSTGRES_PASSWORD=openbastion -e POSTGRES_DB=openbastion \
-            -p 127.0.0.1:5432:5432 --health-cmd='pg_isready -U openbastion' \
-            --health-interval=2s --health-timeout=5s --health-retries=30 openbastion-postgres:ci
-          for attempt in $(seq 1 60); do
-            status=$(docker inspect --format='{{.State.Health.Status}}' openbastion-postgres)
-            [ "$status" = healthy ] && exit 0
-            [ "$status" = unhealthy ] && { docker logs openbastion-postgres; exit 1; }
-            sleep 2
-          done
-          docker logs openbastion-postgres
-          exit 1
-      - name: psql
-        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
-      - run: make proto-tools build
-      # The tables exist once a service has migrated them; the unit tests of each store do.
-      - name: unit tests with the database
-        run: make test
-      - name: dedicated PostgreSQL tests (they purge first)
-        run: make test-postgres
-      - name: integration with the database (purged first)
-        run: |
-          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$PURGE"
-          GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
-
-  ui:
-    name: Admin UI — Vitest and build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            web/admin-ui/package-lock.json
-            web/openbastion-icons/package-lock.json
-      - run: make ui-test ui-build
-
-  vulnerabilities:
-    name: govulncheck and npm audit
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      # Every module of go.work, symbol by symbol (a vulnerability whose code is called fails the
-      # job), and both lockfiles of the Admin UI (ADR-0052).
-      - run: make proto-tools vuln
-
-
-  images:
-    name: Images — Trivy (HIGH, CRITICAL)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      # Never the trivy-action nor setup-trivy (CVE-2026-33634, March 2026: their tags were moved to
-      # a credential stealer): the release archive, checked against its digest written here (ADR-0060).
-      TRIVY_VERSION: 0.76.1
-      TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Trivy, checked against its digest
-        run: |
-          curl -fsSL -o "$RUNNER_TEMP/trivy.tgz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tgz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
-      # The OpenBastion runtime and patched, digest-pinned PostgreSQL 16 images: HIGH or CRITICAL with a fix
-      # fails, except what .trivyignore.yaml accepts, by path, until its date.
-      # On a release tag the image is stamped with the release itself; otherwise VERSION+<commit>.
-      - run: make scan-images TRIVY="$RUNNER_TEMP/trivy" ${{ github.ref_type == 'tag' && 'BUILD_VERSION=$(cat VERSION)' || '' }}
+          set -eu
+          failed=0
+          require_success() {
+            name="$1"
+            result="$2"
+            if [ "$result" = "success" ]; then
+              printf 'PASS: %s (%s)\\n' "$name" "$result"
+            else
+              printf '::error title=Required workflow did not succeed::%s returned %s\\n' "$name" "$result"
+              failed=1
+            fi
+          }
+          require_success "Go" "$GO_RESULT"
+          require_success "Integration" "$INTEGRATION_RESULT"
+          require_success "PostgreSQL" "$POSTGRES_RESULT"
+          require_success "Frontend" "$FRONTEND_RESULT"
+          require_success "Security" "$SECURITY_RESULT"
+          require_success "Containers" "$CONTAINERS_RESULT"
+          exit "$failed"
