@@ -1,0 +1,51 @@
+# PostgreSQL-backed unit, dedicated and integration tests (ADR-0077).
+name: PostgreSQL tests
+on:
+  workflow_call:
+permissions:
+  contents: read
+env:
+  GO_VERSION: "1.27.3"
+  GOPROXY: direct
+  TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+  PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;
+jobs:
+  postgres:
+    name: PostgreSQL 16 — unit, dedicated, integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # Use the same patched, digest-pinned PostgreSQL image as the Compose deployment.
+      - name: Start hardened PostgreSQL 16
+        run: |
+          docker build -f deploy/docker-compose/postgres/Dockerfile -t openbastion-postgres:ci .
+          docker run -d --name openbastion-postgres -e POSTGRES_USER=openbastion \
+            -e POSTGRES_PASSWORD=openbastion -e POSTGRES_DB=openbastion \
+            -p 127.0.0.1:5432:5432 --health-cmd='pg_isready -U openbastion' \
+            --health-interval=2s --health-timeout=5s --health-retries=30 openbastion-postgres:ci
+          for attempt in $(seq 1 60); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' openbastion-postgres)
+            [ "$status" = healthy ] && exit 0
+            [ "$status" = unhealthy ] && { docker logs openbastion-postgres; exit 1; }
+            sleep 2
+          done
+          docker logs openbastion-postgres
+          exit 1
+      - name: psql
+        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - run: make proto-tools build
+      # The tables exist once a service has migrated them; the unit tests of each store do.
+      - name: unit tests with the database
+        run: make test
+      - name: dedicated PostgreSQL tests (they purge first)
+        run: make test-postgres
+      - name: integration with the database (purged first)
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$PURGE"
+          GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
