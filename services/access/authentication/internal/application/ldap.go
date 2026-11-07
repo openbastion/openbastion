@@ -136,12 +136,12 @@ func (s *AuthenticationService) LoginLDAP(ctx context.Context, directory, userna
 		return "", 0, err
 	}
 	if !directoryUsername(username) || password == "" {
-		s.refused(ctx, username)
+		s.refused(ctx, username, s.loginDetails(domain.SourceLDAP, d.accounts))
 		return "", 0, ErrDirectoryRejected
 	}
 	id, err := d.directory.Authenticate(ctx, username, password)
 	if errors.Is(err, ErrDirectoryRejected) {
-		s.refused(ctx, username)
+		s.refused(ctx, username, s.loginDetails(domain.SourceLDAP, d.accounts))
 	}
 	if err != nil {
 		return "", 0, err

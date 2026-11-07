@@ -138,7 +138,7 @@ func (s *AuthenticationService) tokenOrChallenge(ctx context.Context, u *domain.
 
 // issue writes the login to the audit, then issues the token: no audit, no token (ADR-0064).
 func (s *AuthenticationService) issue(ctx context.Context, u *domain.User, roles []string, action string) (string, time.Duration, error) {
-	if err := s.record(ctx, u.ID, action, "account", u.Username); err != nil {
+	if err := s.recordWith(ctx, u.ID, action, "account", u.Username, s.loginDetails(u.IdentitySource, u.IdentityProvider)); err != nil {
 		return "", 0, err
 	}
 	token, err := s.tokens.Issue(u.ID, u.Username, roles, s.clock().Add(s.ttl))
@@ -183,7 +183,7 @@ func (s *AuthenticationService) fail(ctx context.Context, c domain.MFAChallenge)
 	if _, err := s.mfa.FailChallenge(ctx, c.Hash, MaxChallengeAttempts); err != nil {
 		return err
 	}
-	s.refused(ctx, c.LoginName)
+	s.refused(ctx, c.LoginName, s.challengeDetails(c))
 	return ErrMFARejected
 }
 
@@ -460,4 +460,11 @@ func ParseRoleList(v string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// challengeDetails names, for the refusal of a second factor, where the login came from: the
+// source of its enrollment codes ("local", "ldap", "ldap:<id>", ADR-0062, ADR-0076).
+func (s *AuthenticationService) challengeDetails(c domain.MFAChallenge) map[string]string {
+	source, provider, _ := strings.Cut(c.LoginSource, ":")
+	return s.loginDetails(source, provider)
 }

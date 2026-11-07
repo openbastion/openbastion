@@ -2954,7 +2954,7 @@ ADR accepté par le propriétaire le même jour (« J'accepte ADR-0076 tel quel,
 **Non prouvé, ou limites** :
 - un cas du parcours OIDC existant (`no provider there`, émetteur `http://127.0.0.1:1`) attend au lieu de refuser sur cette machine WSL : une connexion vers ce port n'y est jamais refusée (`curl` : 10 s). Le chemin de code n'a pas changé ; la CI tranchera ;
 - changer l'émetteur d'un identifiant, ou `OIDC_ISSUER` avec les variables, garde les comptes (`known-limitations.md`) ;
-- l'audit d'une connexion d'un compte du fournisseur `""` ne nomme pas son fournisseur, et les refus d'annuaire ne nomment pas l'annuaire (ADR-0076, précisions).
+- ~~l'audit d'une connexion d'un compte du fournisseur `""` ne nomme pas son fournisseur, et les refus d'annuaire ne nomment pas l'annuaire~~ : corrigé le 7 novembre 2026 (section suivante « ADR-0076, point 10 »).
 
 **Choix renversables** : le fichier refusé s'il est modifiable par son groupe ou par d'autres ; la limite de 16 fournisseurs ; le critère de sortie marqué atteint à la place du propriétaire.
 
@@ -2976,3 +2976,17 @@ ADR accepté par le propriétaire le même jour (« J'accepte ADR-0078 tel quel,
 - si la validation échoue après l'écriture à l'audit, l'audit dit un changement non retenu ; le démarrage suivant le refait.
 
 **Choix renversables** : l'émetteur comparé au caractère près ; `(variables)` comme ressource d'audit du fournisseur `''` ; un émetteur de plus de 256 octets refusé au changement ; les tests qui réutilisent un `id` fixe oublient d'abord ce qu'un passage précédent a retenu.
+
+## 2026-11-07 — ADR-0076, point 10 : l'audit nomme le fournisseur de chaque connexion
+
+Écart relevé sur ADR-0076 : seul le nom du compte (`oidc:<id>:<sub>`) disait le fournisseur. Les comptes du fournisseur `""` et les refus d'annuaire n'en disaient rien. Désormais, `auth.login`, `auth.login_mfa`, `auth.login_webauthn` et `auth.login_refused` portent dans leurs détails (ADR-0068, hash v4) `identity_source` et, hors comptes locaux, `identity_provider`. Un compte du fournisseur `""` est nommé d'après l'entrée qui le reprend, ou `(variables)`. Un refus d'annuaire nomme l'annuaire, avant comme après le réseau. Le refus d'un second facteur nomme l'annuaire de sa connexion. Aucun schéma ni contrat ne change : le client d'audit envoyait déjà des détails (ADR-0078).
+
+**Prouvé** :
+- application : 5 tests (connexion OIDC, annuaire et locale ; compte repris nommé d'après l'entrée ; fournisseur des variables ; refus d'annuaire, avant et après le réseau, et refus local ; refus d'un code d'enrôlement). Sur `main`, ils ne compileraient pas (ni `VariablesProvider` ni détails) : la contre-épreuve est la mutation qui retire les détails. 4 mutations tuées (connexion sans détails, entrée qui reprend non nommée, refus d'annuaire mal nommé, refus de second facteur mal nommé). Une première version de la troisième mutation survivait : elle ne touchait que le refus avant réseau, qu'aucun test ne couvrait. Le cas est ajouté, et la mutation est tuée ;
+- processus réels, vrai Audit Service : `audit_login_flow_test.go` (compte local : `identity_source` local, sans fournisseur) et `issuer_binding_flow_test.go` (variables : `(variables)` ; entrée du fichier : son `id` ; compte repris : l'entrée qui le reprend). Les détails sont acceptés par l'Audit Service, sinon aucun jeton ne serait émis. La mutation « connexion sans détails » fait échouer les deux tests.
+
+**Limites** :
+- un émetteur d'audit sans détails (aucun en production : le client de `cmd/authentication` les envoie) écrit l'événement sans eux ;
+- un refus OIDC au retour (`401`) n'est pas un `auth.login_refused` : il n'a pas de nom de connexion, comme avant.
+
+**Choix renversables** : les noms des deux clés (`identity_source`, `identity_provider`) ; aucun `identity_provider` pour un compte local.

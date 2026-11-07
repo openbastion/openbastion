@@ -12,6 +12,8 @@ import (
 	"log"
 	"strings"
 	"unicode"
+
+	"github.com/openbastion/openbastion/services/access/authentication/internal/domain"
 )
 
 // AuditEmitter is the port to the Audit Service (POST /audit/v1/emit-event).
@@ -51,18 +53,70 @@ func (s *AuthenticationService) WithAudit(audit AuditEmitter, refusals RefusalBu
 
 // record writes one event, and fails closed: its error is ErrAuditUnavailable.
 func (s *AuthenticationService) record(ctx context.Context, actor, action, resourceType, resourceID string) error {
+	return s.recordWith(ctx, actor, action, resourceType, resourceID, nil)
+}
+
+// recordWith is record with details (ADR-0068), written when the audit takes them — the client of
+// cmd/authentication does.
+func (s *AuthenticationService) recordWith(ctx context.Context, actor, action, resourceType, resourceID string, details map[string]string) error {
 	if s.audit == nil {
 		return nil
 	}
-	if err := s.audit.EmitEvent(ctx, actor, action, resourceType, resourceID, true); err != nil {
+	if err := s.emit(ctx, actor, action, resourceType, resourceID, details, true); err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrAuditUnavailable, action, err)
 	}
 	return nil
 }
 
+func (s *AuthenticationService) emit(ctx context.Context, actor, action, resourceType, resourceID string, details map[string]string, success bool) error {
+	if d, ok := s.audit.(DetailedAuditEmitter); ok && len(details) > 0 {
+		return d.EmitEventWithDetails(ctx, actor, action, resourceType, resourceID, details, success)
+	}
+	return s.audit.EmitEvent(ctx, actor, action, resourceType, resourceID, success)
+}
+
+// VariablesProvider names, in the audit, the provider of the OIDC_* and LDAP_* variables (ADR-0078).
+const VariablesProvider = "(variables)"
+
+// loginDetails says in the audit who vouches for an account (ADR-0076, point 10): its source and,
+// for a provider or a directory, which one. The accounts kept under "" are named after the entry
+// that adopts them, or the variables'. A local account has no provider.
+func (s *AuthenticationService) loginDetails(source, provider string) map[string]string {
+	if source == "" {
+		source = domain.SourceLocal
+	}
+	details := map[string]string{"identity_source": source}
+	if source == domain.SourceLocal {
+		return details
+	}
+	if provider == "" {
+		provider = VariablesProvider
+		var ids []ProviderInfo
+		switch source {
+		case domain.SourceOIDC:
+			for _, e := range s.oidcProviders {
+				if e.accounts == "" {
+					ids = append(ids, e.info)
+				}
+			}
+		case domain.SourceLDAP:
+			for _, d := range s.directories {
+				if d.accounts == "" {
+					ids = append(ids, d.info)
+				}
+			}
+		}
+		if len(ids) == 1 && ids[0].ID != "" {
+			provider = ids[0].ID
+		}
+	}
+	details["identity_provider"] = provider
+	return details
+}
+
 // refused writes a refusal at best — not writing a refusal protects nothing — within the budget of
 // its login name; beyond it, the first unwritten one is said in the log.
-func (s *AuthenticationService) refused(ctx context.Context, loginName string) {
+func (s *AuthenticationService) refused(ctx context.Context, loginName string, details map[string]string) {
 	if s.audit == nil {
 		return
 	}
@@ -76,7 +130,7 @@ func (s *AuthenticationService) refused(ctx context.Context, loginName string) {
 			return
 		}
 	}
-	if err := s.audit.EmitEvent(ctx, "", ActionLoginRefused, "login", name, false); err != nil {
+	if err := s.emit(ctx, "", ActionLoginRefused, "login", name, details, false); err != nil {
 		log.Printf("authentication: a refused login could not be written to the audit: %v", err)
 	}
 }
