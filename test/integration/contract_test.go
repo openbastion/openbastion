@@ -50,7 +50,7 @@ var contractPairs = []contractPair{
 	{"services/access/session-broker/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/recording-audit/command-recorder/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/vault/password-vault/internal/interfaces/http.go", "authorizeScopeRequest", "proto/vault/v1/vault.proto", "AuthorizeScopeRequest",
 		map[string]string{"ttl_seconds": whyTTL}, map[string]string{"context": whyContext, "expires_at": whyExpiresAt}},
 	{"services/access/session-broker/internal/infrastructure/vault_client.go", "authorizeScopeRequestBody", "proto/vault/v1/vault.proto", "AuthorizeScopeRequest",

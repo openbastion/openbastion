@@ -16,6 +16,8 @@ func CallerRules() []mtls.Rule {
 	return []mtls.Rule{
 		{Method: http.MethodPost, Path: "/recorder/v1/command-entries", Callers: []string{mtls.SSHProxy}},
 		{Method: http.MethodGet, Path: "/recorder/v1/sessions/", Prefix: true, Callers: []string{mtls.APIGateway}},
+		// The search (ADR-0080): the Gateway only, for a user it has authenticated.
+		{Method: http.MethodGet, Path: "/recorder/v1/search", Callers: []string{mtls.APIGateway}},
 		// Readiness is asked by the proxy before it admits a session (ADR-0008),
 		// and by whatever supervises the recorder.
 		{Method: http.MethodGet, Path: "/readyz", Callers: []string{mtls.Any}},

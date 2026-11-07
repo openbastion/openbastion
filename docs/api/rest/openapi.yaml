@@ -1154,6 +1154,67 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /recordings/search:
+    get:
+      tags: [sessions]
+      summary: Cherche un texte dans les commandes enregistrées (ADR-0080)
+      description: >
+        Le Command Recorder déchiffre à la volée les sessions dont
+        l'enregistrement a commencé dans la fenêtre, et y cherche `q` comme
+        sous-chaîne, sans tenir compte de la casse (Unicode, NFC). Aucun index,
+        aucune copie en clair. Au plus 200 sessions par recherche (les plus
+        récentes d'abord), 50 commandes par session et 1 000 au total ;
+        au-delà, `truncated` est vrai et une fenêtre plus étroite trouve le
+        reste. Chaque session est autorisée (`recording:session:read` sur
+        `recording:session:{id}`) avant que rien d'elle ne soit déchiffré ;
+        une session refusée n'apparaît pas. Un événement `recording.search`
+        est écrit **avant** tout déchiffrement (détails : la fenêtre, les
+        nombres de sessions candidates, autorisées et refusées, et une
+        empreinte HMAC de `q`, jamais `q`) ; puis un `recording.read` par
+        session dont la réponse montre des commandes (détail `search_id`).
+        L'un d'eux non écrit : rien n'est servi (503). Désactivée sans
+        `SEARCH_AUDIT_KEY_FILE` (404).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 3, maxLength: 256 }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          description: "Après `from`, 31 jours au plus."
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Les sessions dont la réponse montre des commandes
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingSearchResult" }
+        "400":
+          description: "`q` hors de 3 à 256 caractères, fenêtre absente, inversée ou de plus de 31 jours."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Pas d'utilisateur authentifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: La recherche n'est pas configurée (`SEARCH_AUDIT_KEY_FILE`).
+        "503":
+          description: >
+            L'Authorization Service ne répond pas, ou la recherche ou l'une
+            des lectures qu'elle divulgue n'a pas pu être écrite dans
+            l'audit : rien n'est servi, et la réponse ne dit rien des
+            enregistrements.
+
   /vault/accounts:
     get:
       tags: [vault]
@@ -1694,6 +1755,28 @@ components:
             properties:
               timestamp: { type: string, format: date-time }
               command: { type: string }
+
+    RecordingSearchResult:
+      type: object
+      required: [searchId, sessions, truncated]
+      properties:
+        searchId: { type: string, description: "L'identifiant de la recherche, celui de son événement `recording.search`" }
+        truncated: { type: boolean, description: "Plus de 200 sessions dans la fenêtre, ou plus de 1 000 commandes trouvées" }
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [sessionId, hits]
+            properties:
+              sessionId: { type: string }
+              hits:
+                type: array
+                maxItems: 50
+                items:
+                  type: object
+                  properties:
+                    timestamp: { type: string, format: date-time }
+                    command: { type: string }
 
     VideoRecordingSegment:
       type: object

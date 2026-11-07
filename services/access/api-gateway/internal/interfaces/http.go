@@ -195,6 +195,8 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	// One more key (ADR-0066): the current key's signature and an administrator's code.
 	mux.HandleFunc("/auth/mfa/webauthn/keys/add", g.handleMFA("/auth/v1/mfa/webauthn/keys/add", "challenge", "{credential}", "enrollmentCode"))
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
+	// The search of recorded commands (ADR-0080), served by the Command Recorder.
+	mux.HandleFunc("/recordings/search", g.requireAuth(g.handleRecordingSearch))
 	mux.HandleFunc("/sessions/", g.handleSessionRoute)
 	mux.HandleFunc("/vault/accounts", g.requireAuth(g.handleVaultAccountsCollection))
 	mux.HandleFunc("/vault/accounts/", g.requireAuth(g.handleVaultAccountItem))
@@ -982,6 +984,22 @@ func (g *GatewayServer) handleSessionRecording(w http.ResponseWriter, r *http.Re
 	q.Set("actorRoles", strings.Join(id.Roles, ","))
 	g.forwardPassthrough(w, r, http.MethodGet,
 		g.commandRecorderURL+"/recorder/v1/sessions/"+neturl.PathEscape(sessionID)+"/commands?"+q.Encode())
+}
+
+// handleRecordingSearch relays GET /recordings/search (ADR-0080): q, from and to from the client,
+// the caller and its roles from the verified token, nothing else.
+func (g *GatewayServer) handleRecordingSearch(w http.ResponseWriter, r *http.Request, id identity) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := neturl.Values{}
+	for _, key := range []string{"q", "from", "to"} {
+		q.Set(key, r.URL.Query().Get(key))
+	}
+	q.Set("callerId", id.UserID)
+	q.Set("actorRoles", strings.Join(id.Roles, ","))
+	g.forwardPassthrough(w, r, http.MethodGet, g.commandRecorderURL+"/recorder/v1/search?"+q.Encode())
 }
 
 // -- GET/POST /vault/accounts (mirrors docs/api/rest/openapi.yaml) --------------------------

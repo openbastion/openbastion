@@ -45,6 +45,7 @@ optional_keys:             # requises seulement avec la fonction qu'elles serven
   - S3_ACCESS_KEY + S3_SECRET_KEY # video-recorder : compte S3 dédié ; en Compose, identité SeaweedFS actuellement administratrice pour créer le bucket
 optional_secrets:          # fichiers 0600, jamais une variable d'environnement qui porte la valeur
   - IDENTITY_PROVIDERS_FILE # authentication (ADR-0076) : pas un secret, mais modifiable par son seul propriétaire ; ses client_secret_file et bind_password_file en 0600 ; exclut OIDC_* et LDAP_*
+  - SEARCH_AUDIT_KEY_FILE # command-recorder (ADR-0080) : 32 octets en hexadécimal, clé de l'empreinte du texte cherché écrite à l'audit ; absente, la recherche répond 404
   - LDAP_BIND_PASSWORD_FILE # authentication (ADR-0061) : le compte de service de l'annuaire, relu à chaque connexion ; avec LDAP_URL, LDAP_SCHEMA, LDAP_BIND_DN, LDAP_USER_BASE_DN, LDAP_GROUP_BASE_DN, LDAP_ROLE_MAP_FILE, tout ou rien
 never:
   - InsecureSkipVerify

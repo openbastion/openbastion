@@ -56,6 +56,20 @@ type CommandRepository interface {
 	// (Timestamp, ID), and the total number of entries the session has.
 	// A session with no entries is an empty page, not an error.
 	ListBySession(ctx context.Context, sessionID string, page, pageSize int) ([]CommandEntry, int, error)
+
+	// RecordingsStartedBetween names the sessions whose recording started in [from, to), the
+	// most recent first, at most limit (ADR-0080). Nothing is decrypted.
+	RecordingsStartedBetween(ctx context.Context, from, to time.Time, limit int) ([]SearchCandidate, error)
+
+	// EachCommand decrypts a session's entries in order, (Timestamp, ID), and hands each to fn
+	// until fn returns false. The plaintext is not kept (ADR-0080).
+	EachCommand(ctx context.Context, sessionID string, fn func(CommandEntry) bool) error
+}
+
+// SearchCandidate is a session a search may look into: its id and when its recording started.
+type SearchCandidate struct {
+	SessionID string
+	StartedAt time.Time
 }
 
 // ReadinessChecker is implemented by a repository that can tell whether it

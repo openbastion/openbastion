@@ -170,6 +170,56 @@ func runRepositoryContract(t *testing.T, repo domain.CommandRepository) {
 	})
 }
 
+// runSearchContract: the window names sessions by the start of their recording, the most recent
+// first, at most limit; EachCommand decrypts in order and stops when asked (ADR-0080).
+func runSearchContract(t *testing.T, repo domain.CommandRepository) {
+	t.Helper()
+	ctx := context.Background()
+	before := time.Now().UTC().Add(-time.Second)
+	a, b := uniqueID("search-a"), uniqueID("search-b")
+	base := time.Now().UTC().Truncate(time.Microsecond)
+	must(t, repo.AppendBatch(ctx, []domain.CommandEntry{{SessionID: a, Timestamp: base, Command: "first"}, {SessionID: a, Timestamp: base.Add(time.Second), Command: "second"}, {SessionID: a, Timestamp: base.Add(2 * time.Second), Command: "third"}}))
+	time.Sleep(20 * time.Millisecond)
+	must(t, repo.AppendBatch(ctx, []domain.CommandEntry{{SessionID: b, Timestamp: base, Command: "only"}}))
+	after := time.Now().UTC().Add(time.Second)
+	got, err := repo.RecordingsStartedBetween(ctx, before, after, 10)
+	must(t, err)
+	var ids []string
+	for _, c := range got {
+		if c.SessionID == a || c.SessionID == b {
+			ids = append(ids, c.SessionID)
+		}
+	}
+	if len(ids) != 2 || ids[0] != b || ids[1] != a {
+		t.Fatalf("window %v, want %s then %s (the most recent first)", ids, b, a)
+	}
+	if one, _ := repo.RecordingsStartedBetween(ctx, before, after, 1); len(one) != 1 {
+		t.Fatalf("limit 1: %d", len(one))
+	}
+	if none, _ := repo.RecordingsStartedBetween(ctx, after, after.Add(time.Hour), 10); len(none) != 0 {
+		t.Fatalf("an empty window: %v", none)
+	}
+	var seen []string
+	must(t, repo.EachCommand(ctx, a, func(e domain.CommandEntry) bool { seen = append(seen, e.Command); return true }))
+	if !same(seen, []string{"first", "second", "third"}) {
+		t.Fatalf("EachCommand: %v", seen)
+	}
+	seen = nil
+	must(t, repo.EachCommand(ctx, a, func(e domain.CommandEntry) bool { seen = append(seen, e.Command); return len(seen) < 2 }))
+	if !same(seen, []string{"first", "second"}) {
+		t.Fatalf("EachCommand stopped after two: %v", seen)
+	}
+	must(t, repo.EachCommand(ctx, uniqueID("nothing"), func(domain.CommandEntry) bool { t.Fatal("a session without entries"); return false }))
+}
+
+func TestInMemoryStore_SearchContract(t *testing.T) {
+	runSearchContract(t, infrastructure.NewInMemoryStore())
+}
+
+func TestPostgresStore_SearchContract(t *testing.T) {
+	runSearchContract(t, testPostgresStore(t, testDB(t), strings.Repeat("ab", 32)))
+}
+
 func TestInMemoryStore_Contract(t *testing.T) {
 	runRepositoryContract(t, infrastructure.NewInMemoryStore())
 }

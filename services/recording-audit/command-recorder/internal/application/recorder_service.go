@@ -79,6 +79,8 @@ type RecorderService struct {
 	// readRefusals bounds what the refused reads of one identity write to the audit
 	// (ADR-0024). Never nil: the constructor gives the strict default.
 	readRefusals *refusalbudget.Budget
+	// searchKey keys the digest of what a search looks for (ADR-0080); empty: no search.
+	searchKey []byte
 }
 
 func NewRecorderService(repo domain.CommandRepository, authz AuthorizationClient, audit AuditEmitter) *RecorderService {

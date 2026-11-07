@@ -1,6 +1,6 @@
 # ADR-0080 — La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair
 
-**Statut** `Proposé` · 7 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date · amende la feuille de route (`Search Engine (OpenSearch)`, v0.0.1) et ADR-0022
+**Statut** `Accepté`, mise en œuvre en cours · 7 novembre 2026 · go du propriétaire du projet le 7 novembre 2026 (« J'accepte ADR-0080 tel quel, go pour la mise en œuvre ») · amende la feuille de route (`Search Engine (OpenSearch)`, v0.0.1) et ADR-0022
 
 **Contexte** — Un critère de sortie de la v0.0.1 (`docs/roadmap.md` §3) demande une « recherche plein texte opérationnelle sur commandes et sessions ». La feuille de route et `docs/architecture/system-overview.md` prévoient pour cela un Search Engine adossé à OpenSearch. Rien n'existe aujourd'hui, et trois faits du dépôt contredisent ce plan.
 
@@ -59,6 +59,20 @@ Invariants touchés : un secret n'est jamais en clair hors de son enveloppe ; en
 - (−) Une session sans correspondance a été déchiffrée en mémoire sans `recording.read` ; seuls les compteurs de `recording.search` le disent.
 - (−) L'empreinte de `q` permet de confirmer une recherche supposée, avec la clé, mais pas de retrouver ce qui a été cherché sans elle. Un `q` court et courant (`root`) se retrouve par dictionnaire **pour qui a la clé** : elle se garde comme un secret.
 - (−) **Un secret de plus à fournir et à sauvegarder** : `SEARCH_AUDIT_KEY_FILE`. Perdue, les empreintes passées ne peuvent plus être confirmées ; la chaîne, elle, reste vérifiable.
+
+**Mise en œuvre** (7 novembre 2026), en trois incréments : (1) les commandes — fait ; (2) les sessions ; (3) l'Admin UI.
+
+- **Incrément 1, les commandes** : `GET /recordings/search` (Gateway) → `GET /recorder/v1/search` (Command Recorder, appelable par la Gateway seule). Migration `002_search_window.sql` (index de la fenêtre). La normalisation NFC et le repli de casse viennent de `golang.org/x/text`, déjà dans l'espace de travail (Gateway, Video Recorder), devenu une dépendance directe du Command Recorder.
+- **Précisions, sans changer la décision** :
+  - **une borne de plus** : 1 000 commandes par réponse. Sans elle, 200 sessions de 50 commandes de 8 Kio feraient 80 Mo ; au-delà, `truncated` ;
+  - **une session dont la KEK n'est plus détenue fait échouer toute la recherche** (`500`), plutôt que d'être sautée : une recherche qui sauterait une session en silence pourrait cacher une preuve ;
+  - le `recording.read` d'une session trouvée porte le détail `search_id` ; la ressource de `recording.search` est l'identifiant de la recherche, rendu dans la réponse ;
+  - le texte cherché et la cause d'un échec ne sont jamais dans la réponse ni dans les journaux.
+- **Mesuré** :
+  - application : 7 tests, 6 mutations sur 6 tuées (autorisation retirée, texte au lieu de l'empreinte, pas de `recording.read` par session divulguée, pas de borne des sessions, casse conservée, audit écrit après le déchiffrement) ;
+  - magasins : le contrat de la fenêtre et du parcours, en mémoire et sous PostgreSQL ;
+  - processus réels (`test/integration/recording_search_flow_test.go`, sous PostgreSQL, vrai Audit Service derrière un espion) : 7 sous-tests verts. Ils couvrent la sous-chaîne sans casse, une politique sur une seule session, le texte cherché absent de la chaîne et des journaux, l'audit coupé (`503`), les bornes (`400`), aucune commande en clair dans aucune colonne du Recorder, et `404` sans clé. La mutation « autorisation retirée » y est tuée. **Les commandes sont enregistrées par la route du Recorder, comme le fait le proxy SSH : aucune n'est tapée dans une vraie session SSH** ;
+  - **avec Transit réel** (OpenBao local, ADR-0049) : une recherche de 200 sessions × 50 commandes prend **1,08 à 1,52 s** (trois passages), autorisation de chaque session et audit compris.
 
 **Alternatives envisagées**
 

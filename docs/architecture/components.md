@@ -113,13 +113,12 @@ C4Component
         Component(vr, "Video Recorder", "Go", "Persistance et replay de segments PNG ; producteur graphique à raccorder (ADR-0071)")
         Component(cr, "Command Recorder", "Go", "Capture texte SSH/DB/K8s")
         Component(aud, "Audit Service", "Go", "Journal immuable et signé")
-        Component(se, "Search Engine", "Go", "Indexation et recherche")
+        Component(se, "Recherche", "Go", "Dans le Command Recorder et le Session Broker, sans index (ADR-0080)")
         Component(rep, "Reporting Service", "Go", "Rapports de conformité")
     }
 
     Container(proxy, "Couche Proxy")
     ContainerDb(objects, "Stockage objet S3-compatible")
-    ContainerDb(search, "OpenSearch")
     Container(kafka, "Kafka")
 
     Rel(proxy, sr, "Flux clipboard / transfert fichiers / impression")
@@ -130,8 +129,7 @@ C4Component
     Rel(cr, aud, "Événements de session")
     Rel(aud, kafka, "Streaming durable")
     Rel(kafka, se, "Indexation")
-    Rel(se, search, "Stockage index")
-    Rel(rep, search, "Agrégation")
+    Rel(rep, objects, "Agrégation")
 ```
 
 ## Conteneur « Gouvernance »

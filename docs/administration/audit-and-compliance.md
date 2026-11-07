@@ -91,3 +91,16 @@ L'Audit Service écrit périodiquement une **ancre** — l'identifiant et le has
 ## Les connexions (ADR-0064)
 
 Chaque jeton émis est un événement `auth.login` ou `auth.login_mfa` de la chaîne, écrit avant l'émission ; les gestes du second facteur (`auth.mfa_enrollment_code_issued`, `auth.mfa_enrolled`, `auth.mfa_reset`) avant d'être faits ; les refus (`auth.login_refused`) au mieux, dans un budget par nom de connexion. Chaque connexion et chaque refus disent dans leurs détails qui répond du compte : `identity_source` (`local`, `oidc`, `ldap`) et, pour un fournisseur ou un annuaire, `identity_provider` (son `id`, ou `(variables)` pour celui des variables `OIDC_*`/`LDAP_*` ; ADR-0076). **Sans Audit Service, personne ne se connecte.** Le détail est dans [`../deployment/configuration.md`](../deployment/configuration.md).
+
+## Chercher dans les commandes enregistrées (ADR-0080)
+
+`GET /recordings/search?q=…&from=…&to=…` cherche `q` (3 à 256 caractères, sous-chaîne, sans casse) dans les commandes des sessions dont l'enregistrement a commencé dans la fenêtre. **Il n'y a pas d'index** : le Command Recorder déchiffre ces sessions à la volée, et jette le clair.
+
+- **Bornes fixes** : 31 jours, 200 sessions (les plus récentes d'abord), 50 commandes par session, 1 000 au total. Au-delà, `truncated` est vrai : resserrez la fenêtre. Ces bornes ne se règlent pas.
+- **Seulement ce que vous pouvez lire** : chaque session est autorisée (`recording:session:read`) avant d'être déchiffrée ; une session refusée n'apparaît pas.
+- **Dans la chaîne** : un `recording.search` avant tout déchiffrement (la fenêtre, les nombres de sessions candidates, autorisées et refusées, et `q_hmac`, une empreinte HMAC-SHA-256 de `q`) ; puis un `recording.read` par session dont la réponse montre des commandes, avec le `search_id`. **Le texte cherché n'est jamais dans la chaîne ni dans les journaux.** Avec la clé, on peut vérifier après coup qu'un texte donné a été cherché : `printf '%s' "<q normalisé>" | openssl dgst -sha256 -mac HMAC -macopt hexkey:"$(tr -d '\n' < search-key)"`, la normalisation étant NFC puis le repli de casse Unicode.
+- **Sans audit, rien** : l'Audit Service ou l'Authorization Service muet, `503`.
+- **Activation** : `SEARCH_AUDIT_KEY_FILE` sur le Command Recorder (32 octets en hexadécimal, fichier `0600` : `openssl rand -hex 32 > search-key && chmod 600 search-key`). Sans elle, `404`. Gardez-la comme un secret, et sauvegardez-la : perdue, les empreintes passées ne se vérifient plus.
+- **Durée mesurée** : 1,1 à 1,5 s pour 200 sessions de 50 commandes, chaque clé désenveloppée par un vrai Transit (OpenBao local).
+
+*À venir* — la recherche des sessions par leurs métadonnées (`GET /sessions/search`, même ADR) et les deux recherches dans l'Admin UI.
