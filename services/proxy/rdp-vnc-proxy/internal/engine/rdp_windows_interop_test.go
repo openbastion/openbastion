@@ -112,13 +112,19 @@ func TestRDPWindows_CredSSP(t *testing.T) {
 		}
 		session.Close()
 	})
-	t.Run("a wrong password authenticates nothing", func(t *testing.T) {
-		if session, err := target.authenticate(ctx, target.pin, target.password+"-not"); err == nil {
+	t.Run("a wrong password is refused by Windows authentication", func(t *testing.T) {
+		session, err := target.authenticate(ctx, target.pin, target.password+"-not")
+		if err == nil {
 			session.Close()
-			t.Fatal("authenticated with a wrong password")
-		} else {
-			t.Logf("refused as it should be: %v", err)
+			t.Fatal("Windows accepted a wrong password")
 		}
+		// A protocol/binding failure is not evidence that Windows rejected the credentials.
+		// Windows reports STATUS_LOGON_FAILURE or STATUS_WRONG_PASSWORD in TSRequest.errorCode.
+		if !strings.Contains(err.Error(), "NTSTATUS 0xC000006D") &&
+			!strings.Contains(err.Error(), "NTSTATUS 0xC000006A") {
+			t.Fatalf("Windows did not return an authentication refusal status: %v", err)
+		}
+		t.Logf("Windows refused the credentials: %v", err)
 	})
 	t.Run("an impostor's pin stops before any CredSSP byte", func(t *testing.T) {
 		if _, err := target.authenticate(ctx, strings.Repeat("0", 64), target.password); !errors.Is(err, rdp.ErrTLSVerification) {

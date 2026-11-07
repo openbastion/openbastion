@@ -261,7 +261,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	serverBindingResponse, err := readTSRequest(t.Conn)
 	if err != nil {
 		security.Close()
-		return nil, credsspFailure(fmt.Sprintf("reading the server's answer to AUTHENTICATE (MIC requested %v)", micRequested), nil)
+		return nil, credsspFailure(fmt.Sprintf("reading the server's answer to AUTHENTICATE (MIC requested %v): %v", micRequested, err), nil)
 	}
 	if err := verifyCredSSPServerCompletion(serverBindingResponse, negotiatedVersion, binding, security, mechTypes); err != nil {
 		var code *uint32

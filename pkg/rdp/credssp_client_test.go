@@ -270,6 +270,10 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 			serverResult <- errors.New("the client's mechListMIC is not a signature of this context at sequence 0")
 			return
 		}
+		if err := serverSecurity.inbound.resetStream(); err != nil {
+			serverResult <- err
+			return
+		}
 		clientHash, readErr := serverSecurity.inbound.unwrap(finalRequest.PubKeyAuth)
 		if readErr != nil {
 			serverResult <- readErr
@@ -293,6 +297,10 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 		}
 		serverMIC, readErr := serverSecurity.outbound.sign(mechTypes)
 		if readErr != nil {
+			serverResult <- readErr
+			return
+		}
+		if readErr = serverSecurity.outbound.resetStream(); readErr != nil {
 			serverResult <- readErr
 			return
 		}

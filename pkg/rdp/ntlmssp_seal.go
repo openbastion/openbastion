@@ -32,8 +32,9 @@ type NTLMSSPClientSecurityContext struct {
 	outbound *ntlmSSPProtection
 	inbound  *ntlmSSPProtection
 	closed   bool
-	// micInStream: this client sent its mechListMIC unasked, as a signature of this context — its
-	// sequence and RC4 stream (MS-NLMP 3.4.4.2) — and checks the server's the same way.
+	// micInStream: this client sent its mechListMIC unasked. The MIC consumes sequence 0;
+	// MS-SPNG resets the RC4 stream before the first application message (sequence 1).
+	// The server's MIC, if present, is verified and reset the same way.
 	micInStream bool
 }
 
@@ -181,7 +182,10 @@ func (c *NTLMSSPClientSecurityContext) VerifyMechListMIC(mechTypes, mic []byte) 
 		return ErrNTLMSSPSecurity
 	}
 	if c.micInStream {
-		return c.inbound.verifySignature(mechTypes, mic)
+		if err := c.inbound.verifySignature(mechTypes, mic); err != nil {
+			return err
+		}
+		return c.inbound.resetStream()
 	}
 	want, err := ntlmSSPMICSignature(c.inbound.signKey, c.inbound.sealKey, mechTypes)
 	if err != nil {
@@ -194,11 +198,10 @@ func (c *NTLMSSPClientSecurityContext) VerifyMechListMIC(mechTypes, mic []byte) 
 	return nil
 }
 
-// SignMechListMICInStream signs the mechanism list unasked, when the server did not request it
-// but the NTLM AUTHENTICATE carries a MIC (MS-SPNG: such an exchange is not complete without
-// mechListMIC; Windows closes the connection otherwise — ADR-0071). It is an SSPI MakeSignature on
-// this context: the outbound sequence (0) and RC4 stream, both advanced, so pubKeyAuth follows at
-// sequence 1. The server's MIC is then checked the same way.
+// SignMechListMICInStream signs the mechanism list when the server did not request a MIC but
+// the NTLM AUTHENTICATE carries one. The signature consumes sequence 0 and eight bytes of RC4
+// keystream; MS-SPNG §3.3.5.1 requires resetting the RC4 stream before the first application
+// message while retaining sequence 1. The server's MIC is verified and reset the same way.
 func (c *NTLMSSPClientSecurityContext) SignMechListMICInStream(mechTypes []byte) ([]byte, error) {
 	if c == nil {
 		return nil, ErrNTLMSSPSecurity
@@ -210,6 +213,9 @@ func (c *NTLMSSPClientSecurityContext) SignMechListMICInStream(mechTypes []byte)
 	}
 	signature, err := c.outbound.sign(mechTypes)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.outbound.resetStream(); err != nil {
 		return nil, err
 	}
 	c.micInStream = true
@@ -364,6 +370,23 @@ func ntlmSSPHMAC(signKey [md5.Size]byte, sequence uint32, message []byte) [md5.S
 	var checksum [md5.Size]byte
 	copy(checksum[:], mac.Sum(nil))
 	return checksum
+}
+
+// resetStream reinitializes the directional RC4 handle without changing the NTLM sequence
+// number. MS-SPNG §3.3.5.1 requires this after a mechListMIC: the next protected message is
+// sequence 1, but starts at the beginning of the sealing stream.
+func (p *ntlmSSPProtection) resetStream() error {
+	if p == nil || p.stream == nil || p.poisoned {
+		return ErrNTLMSSPSecurity
+	}
+	stream, err := rc4.NewCipher(p.sealKey[:])
+	if err != nil {
+		p.stream = nil
+		p.poisoned = true
+		return ErrNTLMSSPSecurity
+	}
+	p.stream = stream
+	return nil
 }
 
 func (p *ntlmSSPProtection) close() {
