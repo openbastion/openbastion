@@ -3,15 +3,29 @@
 ci:
   exists: true
   workflow: .github/workflows/ci.yml
+  reusable_workflows:
+    go: .github/workflows/go.yml              # version, build, vet, gofmt, unit, -race
+    integration: .github/workflows/integration.yml
+    postgres: .github/workflows/postgres.yml
+    frontend: .github/workflows/frontend.yml
+    security: .github/workflows/security.yml
+    containers: .github/workflows/containers.yml
+  local_actions:
+    setup_go: .github/actions/setup-go/action.yml
+    setup_node: .github/actions/setup-node/action.yml
+  required_gate:
+    job: "CI / Required checks"
+    behavior: "if: always() ; échec si un workflow amont n'a pas exactement le résultat success"
+    dependencies: [go, integration, postgres, frontend, security, containers]
   jobs:
-    version: [make version-check]      # ADR-0063 : VERSION est SemVer ; sur un tag v*, le tag est v+VERSION, sans pré-version
-    go: [make build vet, "gofmt -l sur tout le dépôt → vide", make test]          # sans base
-    race: ["make test GOFLAGS=-race"]
-    integration: ["make build", "go test ./test/integration/... -timeout=900s"]  # sans base
-    postgres: ["make test (avec TEST_DATABASE_URL)", make test-postgres, "intégration avec base, purgée avant"]
+    version: [make version-check]      # ADR-0063 : VERSION est SemVer ; sur un tag v*, le tag est v+VERSION
+    go: [make proto-tools proto-lint build vet, "gofmt -l sur tout le dépôt → vide", make test]
+    race: ["make proto-tools test GOFLAGS=-race"]
+    integration: ["make proto-tools proto-lint build", "go test ./test/integration/... -timeout=900s"]
+    postgres: ["make proto-tools build", "make test (avec TEST_DATABASE_URL)", make test-postgres, "intégration avec base, purgée avant"]
     ui: [make ui-test ui-build]
-    vulnerabilities: [make vuln]          # govulncheck v1.9.0 sur chaque module + npm audit ; aussi chaque lundi (cron), ADR-0052
-    images: ["make scan-images TRIVY=…"]  # ADR-0060 : image runtime + postgres:16 épinglée ; HIGH/CRITICAL corrigée = échec ; acceptations dans .trivyignore.yaml (chemin, date)
+    vulnerabilities: [make proto-tools vuln]  # govulncheck v1.9.0 sur chaque module + npm audit ; aussi chaque lundi (cron), ADR-0052
+    images: ["make scan-images TRIVY=…"]  # ADR-0060 : image runtime + postgres:16 épinglée ; HIGH/CRITICAL corrigée = échec
   trivy:                                # jamais trivy-action ni setup-trivy (CVE-2026-33634) : l'archive, vérifiée contre TRIVY_SHA256 du workflow
     version: 0.76.1
     sha256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
@@ -33,16 +47,18 @@ ci:
     - make test-compose                 # Docker requis ; vérification avant un jalon (ADR-0033)
   never_in_ci:
     - secrets réels ; la PKI et les clés des tests se génèrent dans le job et n'en sortent pas
-  required_checks:                      # NON appliqués aujourd'hui : la CI signale sans bloquer
-    names:                              # noms exacts des check runs (app github-actions, id 15368)
+  required_checks:                      # Migration différée jusqu'à validation du nouveau check sur une PR réelle
+    current_names:                      # contextes historiques actuellement déclarés dans le ruleset
       - "build, vet, gofmt, unit"
       - "unit tests under -race"
       - "integration on real processes, without a database"
       - "PostgreSQL 16 — unit, dedicated, integration"
       - "Admin UI — Vitest and build"
-      - "govulncheck and npm audit"       # ajouté à ADR-0052, à ajouter au ruleset si ce n'est fait
-      - "Images — Trivy (HIGH, CRITICAL)" # ADR-0060, à ajouter au ruleset
-      - "version — VERSION is SemVer, a tag is its release" # ADR-0063, à ajouter au ruleset
+      - "govulncheck and npm audit"
+      - "Images — Trivy (HIGH, CRITICAL)"
+      - "version — VERSION is SemVer, a tag is its release"
+    target_name: "CI / Required checks"
+    migration: "Après preuve du nom exact, de l'application émettrice et du fail-closed sur une PR réelle ; ne pas modifier les règles pendant cet incrément"
     ruleset: "posé par Bony Kiss le 31 octobre 2026 sur main ; GitHub affiche « won't be enforced on this private repository until you upgrade this organization account to GitHub Team »"
     bypass: "Repository admin — appliqué : le 7 novembre 2026, chaque push direct sur main a répondu « Bypassed rule violations » (PR exigée, 8 contrôles requis). Depuis, la livraison passe par une pull request (policies/release-management.md) : le contournement n'est pas une voie de livraison"
     api: "le jeton du codespace ne lit ni la protection (403 integration) ni les rulesets (403 offre) : vérifier dans l'interface"
