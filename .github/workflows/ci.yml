@@ -67,9 +67,9 @@ jobs:
             name="$1"
             result="$2"
             if [ "$result" = "success" ]; then
-              printf 'PASS: %s (%s)\\n' "$name" "$result"
+              printf 'PASS: %s (%s)\n' "$name" "$result"
             else
-              printf '::error title=Required workflow did not succeed::%s returned %s\\n' "$name" "$result"
+              printf '::error title=Required workflow did not succeed::%s returned %s\n' "$name" "$result"
               failed=1
             fi
           }
