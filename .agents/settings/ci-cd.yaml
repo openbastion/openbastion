@@ -44,9 +44,9 @@ ci:
       - "Images — Trivy (HIGH, CRITICAL)" # ADR-0060, à ajouter au ruleset
       - "version — VERSION is SemVer, a tag is its release" # ADR-0063, à ajouter au ruleset
     ruleset: "posé par Bony Kiss le 31 octobre 2026 sur main ; GitHub affiche « won't be enforced on this private repository until you upgrade this organization account to GitHub Team »"
-    bypass: "Repository admin — une fois appliqué, les pushes directs sous un compte administrateur passent : la livraison commit-et-push sur main (policies/release-management.md) reste valable ; la règle protège main des autres contributeurs, pas d'un push direct raté"
+    bypass: "Repository admin — appliqué : le 7 novembre 2026, chaque push direct sur main a répondu « Bypassed rule violations » (PR exigée, 8 contrôles requis). Depuis, la livraison passe par une pull request (policies/release-management.md) : le contournement n'est pas une voie de livraison"
     api: "le jeton du codespace ne lit ni la protection (403 integration) ni les rulesets (403 offre) : vérifier dans l'interface"
 cd:
   exists: false
   deployment_reference: deploy/docker-compose (ADR-0033) ; pas de Helm ni de Kubernetes dans le dépôt
-  delivery: commit et push sur main, vérifiés (policies/release-management.md) ; tags et releases sur demande seulement
+  delivery: une pull request vers main par modification vérifiée, fusionnée par l'utilisateur (policies/release-management.md) ; tags et releases sur demande seulement

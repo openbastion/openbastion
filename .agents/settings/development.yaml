@@ -32,7 +32,7 @@ tools:                              # ce que tu peux utiliser, et comment ; un o
   shell_allowed:
     - go build / vet / test (-race, -count=1, -run, -v) ; gofmt -l, gofmt -w sur tes fichiers ; go run des outils du dépôt
     - make build vet test test-integration test-postgres test-compose ui-test ui-build pki run-*
-    - git status diff log add commit push origin main ; git worktree pour mesurer un rouge sur l'ancien code
+    - git status diff log add commit fetch switch ; git push -u origin <branche> (jamais main) ; gh pr create si gh est installé ; git worktree pour mesurer un rouge sur l'ancien code
     - psql sur TEST_DATABASE_URL ; TRUNCATE des tables de test ; docker start obpg
     - grep -c, cmp, diff, unzip -l, openssl x509 -noout, python3 -I (YAML, mutations)
   shell_forbidden: policies/secure-development.md §Commandes et policies/release-management.md

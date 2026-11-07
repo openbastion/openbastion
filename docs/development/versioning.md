@@ -29,9 +29,11 @@ Chaque service l'écrit en **première ligne de son journal** (`authentication 0
 Le propriétaire du projet seul pose un tag. La CI vérifie qu'il nomme `VERSION`, sans pré-version :
 
 ```sh
-printf '0.0.1\n' > VERSION && git commit -am "release: 0.0.1"   # avec les lignes d'attribution
-git tag v0.0.1 && git push origin main v0.0.1                   # le workflow tourne sur le tag
-printf '0.0.2-dev\n' > VERSION && git commit -am "chore: 0.0.2-dev"
+git switch -c release/0.0.1 origin/main && printf '0.0.1\n' > VERSION
+git commit -am "release: 0.0.1" && git push -u origin release/0.0.1   # puis la pull request, et sa fusion
+git switch main && git pull --ff-only
+git tag v0.0.1 && git push origin v0.0.1                          # le workflow tourne sur le tag
+# puis 0.0.2-dev dans VERSION, par une autre pull request
 ```
 
 `make version-check TAG=v0.0.1` fait la même vérification en local.
