@@ -2921,10 +2921,12 @@ ADR accepté par le propriétaire le même jour, sans nouveau service. `ALERT_NO
 
 ## 2026-11-07 — ADR-0074 : premier essai contre un vrai flux Teams
 
-Essai du propriétaire sur sa machine, le mien n'a porté que sur la lecture des résultats. Un flux réservé répond `401` à `TestRealChannel` : son URL n'a ni `sp`, ni `sv`, ni `sig`, et le même flux accepte un appel portant un jeton `az` de son compte. Réglé sur « Anyone », avec son URL recopiée, `TestRealChannel` passe en 0,76 s. La cause n'était donc pas le client. La documentation exige maintenant ce réglage et le dépannage nomme ce `401`.
+Essai du propriétaire sur sa machine, le mien n'a porté que sur la lecture des résultats. Un flux réservé répond `401` à `TestRealChannel` : son URL n'a ni `sp`, ni `sv`, ni `sig`, et le même flux accepte un appel portant un jeton `az` de son compte. Avec un flux réglé sur « Anyone », `TestRealChannel` passe en 0,76 s. La cause n'était donc pas le client. La documentation exige maintenant ce réglage et le dépannage nomme ce `401`.
 
-**Prouvé** : Teams réel répond `2xx` au corps `teams` d'OpenBastion.
+Le `202` ne prouvait pas la livraison : le canal restait vide, car l'action du modèle publiait son texte d'exemple. Corrigé par le propriétaire : boucle « For each » sur `triggerOutputs()?['body']?['attachments']`, puis « Publier une carte » sur `item()?['content']`. Modèle écrit dans `docs/administration/notifications.md`.
 
-**Non prouvé** : le rendu de la carte dans le canal et l'exécution du flux ; une alerte émise par un service réel, avec sa signature (le test n'en envoie pas) ; Slack réel. Le premier critère de sortie de la v0.0.1 reste ouvert.
+**Prouvé** : un vrai canal Teams affiche le corps `teams` d'OpenBastion : « OpenBastion: test message of ADR-0074, nothing to do. A neutralized mention reads: ??here? ». `SafeText` neutralise bien la mention.
+
+**Non prouvé** : une alerte émise par un service réel, avec sa signature (le test n'en envoie pas) ; Slack réel. Le premier critère de sortie de la v0.0.1 reste ouvert.
 
 **Limite** : un tenant qui interdit « Anyone » ne peut pas utiliser ce canal. OAuth (client credentials) demanderait son propre ADR.

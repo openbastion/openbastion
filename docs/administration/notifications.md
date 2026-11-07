@@ -16,8 +16,13 @@ Une autre valeur, ou un format sans URL : le service refuse de démarrer.
 
 - **Teams.** Microsoft indique avoir retiré ses connecteurs Office 365 en mai 2026. Créez un flux Workflows : une ancienne URL de connecteur ne fonctionne plus.
 - **Teams : réglez « Who can trigger the flow » sur « Anyone », puis enregistrez et recopiez l'URL.** Elle doit contenir `sig`. Une URL sans `sig` vient d'un flux réservé au tenant : il exige un jeton Entra qu'OpenBastion n'envoie pas, et répond `401` (ADR-0074). Si votre tenant interdit « Anyone », ce canal n'est pas utilisable aujourd'hui.
+- **Teams : le flux doit publier la carte reçue, pas un texte fixe.** Le modèle « Post to a channel when a webhook request is received » peut arriver avec une action « Publier le message… » dont le champ Message contient un texte d'exemple : ce texte est publié à la place, ou rien. Le flux qui affiche les messages d'OpenBastion :
+  1. **For each** (Appliquer à chacun), sur `triggerOutputs()?['body']?['attachments']` ;
+  2. dans la boucle, **Publier une carte dans une conversation instantanée ou un canal**, champ Carte adaptative : `item()?['content']`.
+
+  Le `202` de Microsoft ne dit que « reçu » : un flux mal réglé répond `202` et n'affiche rien. Vérifiez le canal, et l'historique d'exécution du flux en cas d'échec.
 - **Seule la phrase part.** Elle n'est faite que de textes fixes, de nombres et d'identifiants filtrés : une mention ou un lien fabriqués n'y survivent pas. Ni justification, ni rien de la cible. Identifiants de compte et de demandeur, et ticket, partent bien chez Slack ou Microsoft : c'est votre décision en déclarant le canal.
-- **Slack et Teams ne vérifient pas la signature.** Pour eux, avec le réglage ci-dessus, seule l'URL fait foi : qui la détient peut écrire un faux message dans le canal. Il ne peut rien décider : approuver passe toujours par l'API authentifiée. Traitez l'URL en secret, et remplacez-la si elle fuit.
+- **Slack et Teams ne vérifient pas la signature.** Pour eux, avec un flux « Anyone », seule l'URL fait foi : qui la détient peut écrire un faux message dans le canal. Il ne peut rien décider : approuver passe toujours par l'API authentifiée. Traitez l'URL en secret, et remplacez-la si elle fuit.
 - **Un canal par service.** Pas de routage par équipe. La livraison ne change pas avec le format : le Broker n'essaie qu'une fois, sans jamais retarder une session.
 
 **Essayer un vrai canal**, sans écrire l'URL dans l'historique du shell :
