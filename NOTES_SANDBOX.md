@@ -3007,3 +3007,21 @@ ADR accepté par le propriétaire le même jour. Une entrée `oidc` de `IDENTITY
 - pas de SCIM, pas de synchronisation hors connexion.
 
 **Choix renversables** : `tenant_id` exigé en minuscules (le `tid` du jeton est comparé sans casse) ; `_claim_sources` seul ne refuse pas — décision du propriétaire, qui a corrigé la première mise en œuvre (`dd770c7`) ; le scope `openid profile email` pour le profil `entra`.
+
+## 2026-11-07 — ADR-0080, incrément 1 : la recherche des commandes
+
+ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&to` : le Command Recorder déchiffre à la volée les sessions dont l'enregistrement a commencé dans la fenêtre. Les bornes sont fixes : 31 jours, 200 sessions, 50 commandes par session, 1 000 au total. Chaque session est autorisée avant d'être déchiffrée. `recording.search` est écrit avant tout déchiffrement, avec l'empreinte HMAC de `q` (`SEARCH_AUDIT_KEY_FILE`). Puis un `recording.read` est écrit par session divulguée, avant la réponse. Sans clé : `404`. Migration `002_search_window.sql`. Dépendance directe `golang.org/x/text` (déjà dans l'espace de travail).
+
+**Prouvé** :
+- application : 7 tests, 6 mutations sur 6 tuées ;
+- magasins : contrat de la fenêtre et du parcours, en mémoire et sous PostgreSQL ;
+- processus réels (`recording_search_flow_test.go`) : 7 sous-tests verts, dont aucune commande en clair dans aucune colonne du Recorder ; la mutation « autorisation retirée » y est tuée ;
+- Transit réel (OpenBao local) : une recherche à la borne (200 sessions × 50 commandes) prend 1,08 à 1,52 s.
+
+**Non prouvé, ou limites** :
+- les commandes de ces tests sont enregistrées par la route du Recorder, pas tapées dans une vraie session SSH ;
+- une session parcourue sans correspondance a été déchiffrée sans `recording.read` (seuls les compteurs le disent) ;
+- une session dont la KEK n'est plus détenue fait échouer la recherche entière ;
+- **reste à faire** : la recherche des sessions (`GET /sessions/search`, incrément 2) et l'Admin UI (incrément 3).
+
+**Choix renversables** : la borne de 1 000 commandes par réponse ; l'échec entier sur une KEK absente ; le préfixe `search-` des identifiants de recherche ; la recherche désactivée par défaut dans les déploiements (aucune clé générée par `init.sh`).

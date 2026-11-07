@@ -277,6 +277,70 @@ func (s *PostgresStore) ListBySession(ctx context.Context, sessionID string, pag
 	return entries, total, nil
 }
 
+// RecordingsStartedBetween is domain.CommandRepository.RecordingsStartedBetween: the creation
+// of a session's key is when its recording started. Nothing is unwrapped.
+func (s *PostgresStore) RecordingsStartedBetween(ctx context.Context, from, to time.Time, limit int) ([]domain.SearchCandidate, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT session_id, created_at FROM session_recording_keys
+		WHERE created_at >= $1 AND created_at < $2
+		ORDER BY created_at DESC, session_id
+		LIMIT $3`, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.SearchCandidate
+	for rows.Next() {
+		var c domain.SearchCandidate
+		if err := rows.Scan(&c.SessionID, &c.StartedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// EachCommand is domain.CommandRepository.EachCommand: one unwrap of the session's key, then
+// each entry opened, handed to fn, and dropped.
+func (s *PostgresStore) EachCommand(ctx context.Context, sessionID string, fn func(domain.CommandEntry) bool) error {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, ts, command_sealed FROM session_command_entries
+		WHERE session_id = $1
+		ORDER BY ts, id`, sessionID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var dek []byte
+	defer func() { zero(dek) }()
+	for rows.Next() {
+		var id int64
+		var ts time.Time
+		var sealed []byte
+		if err := rows.Scan(&id, &ts, &sealed); err != nil {
+			return err
+		}
+		if dek == nil {
+			d, found, err := s.loadDEK(ctx, s.db, sessionID)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return fmt.Errorf("session %q has recorded entries but no recording key", sessionID)
+			}
+			dek = d
+		}
+		command, err := openCommand(dek, sessionID, ts, sealed)
+		if err != nil {
+			return fmt.Errorf("recording entry %d failed authentication (altered, moved, or sealed under another key)", id)
+		}
+		if !fn(domain.CommandEntry{ID: id, SessionID: sessionID, Timestamp: ts, Command: command}) {
+			return nil
+		}
+	}
+	return rows.Err()
+}
+
 // sealLegacyPlaintext upgrades a table created before encryption existed: it
 // seals every plaintext row under its session's key, then drops the plaintext
 // column, all in one transaction under an exclusive lock — so a second replica

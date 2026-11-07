@@ -20,18 +20,24 @@ type AuditHTTPClient struct {
 }
 
 type emitEventRequestBody struct {
-	ActorID      string `json:"actor_id"`
-	Action       string `json:"action"`
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
-	Success      bool   `json:"success"`
+	ActorID      string            `json:"actor_id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	Details      map[string]string `json:"details,omitempty"`
+	Success      bool              `json:"success"`
 }
 
 // EmitEvent succeeds only on a 200: anything else is an event that may not be in
 // the trail, and the caller must not act as if it were.
 func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
+	return c.EmitEventWithDetails(ctx, actorID, action, resourceType, resourceID, nil, success)
+}
+
+// EmitEventWithDetails is EmitEvent with bounded details, covered by the chain's hash (ADR-0068).
+func (c *AuditHTTPClient) EmitEventWithDetails(ctx context.Context, actorID, action, resourceType, resourceID string, details map[string]string, success bool) error {
 	body, _ := json.Marshal(emitEventRequestBody{
-		ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success,
+		ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Details: details, Success: success,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/audit/v1/emit-event", bytes.NewReader(body))
 	if err != nil {

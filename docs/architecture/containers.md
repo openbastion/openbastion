@@ -28,7 +28,6 @@ C4Container
 
         ContainerDb(pg, "PostgreSQL", "Base relationnelle", "Comptes, politiques, métadonnées de session, workflows")
         ContainerDb(redis, "Redis", "Cache", "Sessions actives, verrous, rate-limiting")
-        ContainerDb(search, "OpenSearch", "Moteur de recherche", "Index audit et sessions")
         ContainerDb(objects, "Stockage objet S3-compatible", "Stockage objet", "Segments vidéo chiffrés")
         Container(nats, "NATS", "Bus événementiel", "Coordination temps réel")
         Container(kafka, "Kafka", "Bus de streaming", "Streaming durable d'audit")
@@ -58,7 +57,6 @@ C4Container
     Rel(proxy, vault, "gRPC — récupération credential éphémère", "mTLS")
     Rel(proxy, rec, "Flux de session / commande", "mTLS")
     Rel(gw, rec, "Replay vidéo (gRPC)", "mTLS")
-    Rel(rec, search, "Indexation")
     Rel(rec, pg, "Métadonnées vidéo")
     Rel(rec, objects, "Segments vidéo chiffrés (S3-compatible)")
     Rel(gov, chat, "Webhooks")
@@ -85,7 +83,7 @@ C4Container
 | SDKs | Bibliothèques | Go, Python, Java, JavaScript |
 | API Gateway | Service | Go, Envoy (data plane) |
 | Accès & Session, Proxy Layer, Vault & Secrets, Enregistrement & Audit, Gouvernance, Sécurité & Intelligence, Fédération d'identité, Scheduler | Groupes de microservices | Go |
-| PostgreSQL, Redis, OpenSearch, stockage objet S3-compatible | Magasins de données | — |
+| PostgreSQL, Redis, stockage objet S3-compatible | Magasins de données (pas d'OpenSearch : ADR-0080) | — |
 | NATS, Kafka | Bus de messages | — |
 | Keycloak | Identity Provider | — |
 

@@ -38,6 +38,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/recorder/v1/command-entries", s.handleRecord)
 	mux.HandleFunc("/recorder/v1/sessions/", s.handleSession)
+	mux.HandleFunc("/recorder/v1/search", s.handleSearch)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/readyz", s.handleReady)
 	return mux
@@ -166,7 +167,7 @@ func (s *HTTPServer) handleSession(w http.ResponseWriter, r *http.Request) {
 // hide it.
 func statusFor(err error) int {
 	switch {
-	case errors.Is(err, domain.ErrInvalidEntry), errors.Is(err, domain.ErrNotASessionID):
+	case errors.Is(err, domain.ErrInvalidEntry), errors.Is(err, domain.ErrNotASessionID), errors.Is(err, application.ErrInvalidSearch):
 		return http.StatusBadRequest
 	case errors.Is(err, domain.ErrForbidden):
 		return http.StatusForbidden
@@ -189,4 +190,63 @@ func splitCommaList(s string) []string {
 		}
 	}
 	return out
+}
+
+type searchHit struct {
+	Timestamp time.Time `json:"timestamp"`
+	Command   string    `json:"command"`
+}
+
+type searchSession struct {
+	SessionID string      `json:"sessionId"`
+	Hits      []searchHit `json:"hits"`
+}
+
+type searchResponse struct {
+	SearchID  string          `json:"searchId"`
+	Sessions  []searchSession `json:"sessions"`
+	Truncated bool            `json:"truncated"`
+}
+
+// handleSearch is GET /recorder/v1/search (ADR-0080): q, from and to (RFC 3339) from the client,
+// callerId and actorRoles from the Gateway.
+func (s *HTTPServer) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	q := r.URL.Query()
+	from, errFrom := time.Parse(time.RFC3339, q.Get("from"))
+	to, errTo := time.Parse(time.RFC3339, q.Get("to"))
+	if errFrom != nil || errTo != nil {
+		http.Error(w, "from and to are RFC 3339 times", http.StatusBadRequest)
+		return
+	}
+	callerID := q.Get("callerId")
+	result, err := s.svc.Search(r.Context(), callerID, splitCommaList(q.Get("actorRoles")), q.Get("q"), from, to)
+	if err != nil {
+		switch {
+		case errors.Is(err, application.ErrSearchDisabled):
+			http.NotFound(w, r)
+		case errors.Is(err, application.ErrInvalidSearch), errors.Is(err, domain.ErrForbidden):
+			http.Error(w, err.Error(), statusFor(err))
+		default:
+			// Never the text searched, nor the cause: the Gateway relays this body.
+			log.Printf("command-recorder: a search for user %s not done: %v", callerID, err)
+			status := statusFor(err)
+			http.Error(w, http.StatusText(status), status)
+		}
+		return
+	}
+	out := searchResponse{SearchID: result.SearchID, Sessions: make([]searchSession, 0, len(result.Sessions)), Truncated: result.Truncated}
+	for _, found := range result.Sessions {
+		ss := searchSession{SessionID: found.SessionID, Hits: make([]searchHit, 0, len(found.Hits))}
+		for _, h := range found.Hits {
+			ss.Hits = append(ss.Hits, searchHit{Timestamp: h.Timestamp, Command: h.Command})
+		}
+		out.Sessions = append(out.Sessions, ss)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(out)
 }

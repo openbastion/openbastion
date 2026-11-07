@@ -55,7 +55,7 @@ graph TB
         VR[Video Recorder]
         CR[Command Recorder]
         AUD[Audit Service]
-        SE[Search Engine — OpenSearch]
+        SE[Recherche — déchiffrement borné, ADR-0080]
         REP[Reporting Service]
     end
 
@@ -125,7 +125,7 @@ Tous ces proxies partagent un **pipeline commun** (ADR-0006 ; l'invariant qu'il 
 | **Video Recorder** | Segments PNG ordonnés, chiffrés avant stockage S3-compatible, métadonnées PostgreSQL et replay audité. Le proxy RDP producteur et le lecteur Admin UI ne sont pas encore implémentés (ADR-0069/0070). |
 | **Command Recorder** | Capture texte (SSH/Telnet/DB/K8s exec) → log structuré recherchable commande par commande. |
 | **Audit Service** | Journal immuable et signé de toute action système (connexion, déconnexion, commande, upload/download, escalade, rotation, config, workflow, appel API). |
-| **Search Engine** | Indexation OpenSearch — recherche plein texte, par utilisateur, serveur, commande, date, à travers sessions et audit. |
+| **Search Engine** | Recherche plein texte des commandes (par le Command Recorder, qui déchiffre à la volée les sessions d'une fenêtre de 31 jours au plus) et des sessions (par le Session Broker, sur leurs métadonnées) : ADR-0080. Aucun index ni OpenSearch : les commandes ne sortent jamais de leur enveloppe. |
 | **Reporting Service** | Rapports de conformité, exports périodiques, tableaux de bord agrégés. |
 
 ### Gouvernance : workflow, approbation, notification
@@ -229,7 +229,7 @@ sequenceDiagram
 | Client desktop | Tauri |
 | Base de données relationnelle | PostgreSQL |
 | Cache | Redis |
-| Recherche | OpenSearch |
+| Recherche | Déchiffrement à la volée, borné (ADR-0080) ; pas d'OpenSearch |
 | Bus temps réel | NATS |
 | Streaming durable | Kafka |
 | Stockage objet | API S3-compatible (SeaweedFS en Compose ; endpoint externe configurable) |

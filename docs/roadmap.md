@@ -40,7 +40,7 @@ Deux règles guident l'ordre de livraison :
 | Gouvernance | Workflow Service, Approval Engine (validation N+1, ticket ServiceNow/Jira), notifications Slack/Teams (par les services qui les émettent, sans service dédié : ADR-0074) |
 | Sécurité & Intelligence | MFA Service (TOTP, WebAuthn/FIDO2, YubiKey, Passkeys, carte à puce) |
 | Vault | Secrets Manager (secrets applicatifs dynamiques) |
-| Enregistrement & Audit | Video Recorder, Search Engine (OpenSearch) |
+| Enregistrement & Audit | Video Recorder, recherche plein texte des commandes et des sessions, par déchiffrement à la volée dans une fenêtre bornée (ADR-0080 : sans index ni OpenSearch) |
 | Fédération d'identité | LDAP Connector, Active Directory Connector, Entra ID Connector, SAML Connector, SCIM Provisioning |
 | Plateforme | Scheduler complet (rotation planifiée et post-usage) |
 | Clients | User Portal, Desktop Client (Tauri), SDK Go |
@@ -92,7 +92,7 @@ Deux règles guident l'ordre de livraison :
 | Command Recorder | ✅ | | |
 | Video Recorder | | ✅ | |
 | Audit Service | ✅ | | |
-| Search Engine | | ✅ | |
+| Recherche plein texte (ADR-0080, sans OpenSearch) | | ✅ | |
 | Reporting Service | | | ✅ |
 | Workflow Service | | ✅ | |
 | Approval Engine | | ✅ | |

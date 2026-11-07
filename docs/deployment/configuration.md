@@ -99,6 +99,10 @@ Une entrée `oidc` de `IDENTITY_PROVIDERS_FILE` de profil `entra` (`"profile": "
 
 L'Authentication Service retient l'émetteur de chaque fournisseur OIDC (table `identity_provider_bindings`), et refuse de démarrer si un fournisseur est configuré avec un autre. `OIDC_PREVIOUS_ISSUER` (avec les variables `OIDC_*`) et le champ `previous_issuer` d'une entrée de `IDENTITY_PROVIDERS_FILE` déclarent un changement : l'ancien émetteur, exactement. Le changement est écrit à l'audit avant d'être retenu, et demande donc que l'Audit Service réponde à ce démarrage. `OIDC_PREVIOUS_ISSUER` sans OIDC, ou avec `IDENTITY_PROVIDERS_FILE` : refus de démarrer. Voir [`identity-providers.md`](../administration/identity-providers.md#chaque-fournisseur-oidc-garde-son-émetteur-adr-0078).
 
+## Recherche dans les enregistrements (ADR-0080)
+
+`SEARCH_AUDIT_KEY_FILE` (Command Recorder, facultatif) : un fichier `0600` qui contient 32 octets en hexadécimal (`openssl rand -hex 32`). Il active `GET /recordings/search` et sert à l'empreinte du texte cherché écrite à l'audit. Absent : la recherche répond `404`. Un fichier lisible par d'autres, ou qui ne contient pas 32 octets en hexadécimal : refus de démarrer. Voir [`audit-and-compliance.md`](../administration/audit-and-compliance.md#chercher-dans-les-commandes-enregistrées-adr-0080).
+
 ## Clés de chiffrement : Transit (ADR-0049)
 
 Le Password Vault et le Command Recorder peuvent faire garder leur clé maîtresse par le moteur Transit d'OpenBao (ou de HashiCorp Vault) plutôt que par `KMS_KEY_HEX` : `TRANSIT_ADDR`, `TRANSIT_KEY`, et soit `TRANSIT_TOKEN_FILE` (fichier `0600`), soit AppRole — `TRANSIT_ROLE_ID_FILE` et `TRANSIT_SECRET_ID_FILE` (fichiers `0600`, `TRANSIT_APPROLE_MOUNT` en option, ADR-0058) —, et en option `TRANSIT_MOUNT` et `TRANSIT_CA_FILE`. La mise en place, la politique minimale du jeton, la migration depuis la clé locale et le comportement en panne sont décrits dans [`../security/key-management.md`](../security/key-management.md).

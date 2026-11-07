@@ -1,8 +1,11 @@
 module github.com/openbastion/openbastion/services/recording-audit/command-recorder
 
-go 1.22
+go 1.26.0
 
-require github.com/lib/pq v1.12.3
+require (
+	github.com/lib/pq v1.12.3
+	golang.org/x/text v0.43.0
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

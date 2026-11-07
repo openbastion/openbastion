@@ -7,6 +7,9 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -112,6 +115,18 @@ func runService() {
 		boundedIntEnv("RECORDING_READ_AUDIT_BURST", application.DefaultReadAuditBurst, 1, application.MaxReadAuditBurst),
 		boundedIntEnv("RECORDING_READ_AUDIT_RATE_PER_MINUTE", application.DefaultReadAuditRatePerMinute, 1, application.MaxReadAuditRatePerMinute))
 	readBurst, readRate := svc.ReadRefusalAudit()
+	// The search (ADR-0080): on with the key of the digest of what it looks for, off without it.
+	if path := os.Getenv("SEARCH_AUDIT_KEY_FILE"); path != "" {
+		key, err := readSearchKey(path)
+		if err != nil {
+			log.Fatalf("command-recorder: %v — refusing to start", err)
+		}
+		svc.WithSearchKey(key)
+		log.Printf("command-recorder: the search of recordings is on: %d days and %d sessions at most, each search written to the audit before anything is decrypted (ADR-0080)",
+			int(application.SearchMaxWindow.Hours()/24), application.SearchMaxSessions)
+	} else {
+		log.Printf("command-recorder: the search of recordings is off (SEARCH_AUDIT_KEY_FILE not set)")
+	}
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("command-recorder listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
@@ -219,4 +234,28 @@ func main() {
 	if err := command.NewServiceCommand("command-recorder", runService).Execute(); err != nil {
 		log.Fatalf("command-recorder: %v", err)
 	}
+}
+
+// readSearchKey reads SEARCH_AUDIT_KEY_FILE: 32 bytes in hex, in a file only its owner reads.
+// Its errors never say what the file holds.
+func readSearchKey(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("SEARCH_AUDIT_KEY_FILE cannot be read: %v", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("SEARCH_AUDIT_KEY_FILE must be a regular file")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("SEARCH_AUDIT_KEY_FILE is readable by its group or by others (mode %#o): make it 0600 or 0400", info.Mode().Perm())
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("SEARCH_AUDIT_KEY_FILE cannot be read: %v", err)
+	}
+	key, err := hex.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil || len(key) != application.SearchKeyBytes {
+		return nil, fmt.Errorf("SEARCH_AUDIT_KEY_FILE must hold %d bytes in hex (openssl rand -hex %d)", application.SearchKeyBytes, application.SearchKeyBytes)
+	}
+	return key, nil
 }

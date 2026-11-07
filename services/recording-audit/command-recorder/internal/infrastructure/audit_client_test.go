@@ -27,7 +27,8 @@ func TestAuditHTTPClient_SendsTheEventAndBelievesOnlyA200(t *testing.T) {
 		t.Fatalf("a 200: %v", err)
 	}
 	want := emitEventRequestBody{ActorID: "u_carol", Action: "recording.read", ResourceType: "session", ResourceID: "s1", Success: true}
-	if got != want {
+	if got.ActorID != want.ActorID || got.Action != want.Action || got.ResourceType != want.ResourceType ||
+		got.ResourceID != want.ResourceID || got.Success != want.Success || got.Details != nil {
 		t.Fatalf("sent %+v, want %+v", got, want)
 	}
 	for _, s := range []int{http.StatusAccepted, http.StatusBadRequest, http.StatusForbidden, http.StatusServiceUnavailable} {
