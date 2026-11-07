@@ -280,7 +280,7 @@ func TestMFA_TheSecretIsSealedForItsAccount_AndAResetAsksForANewEnrollment(t *te
 func TestMFA_ADirectoryAccountEnrollsWithTheCodeOfItsLoginName(t *testing.T) {
 	w := mfaService(t)
 	ctx := context.Background()
-	_, _, err := w.svc.LoginLDAP(ctx, "alice", "dir-pass")
+	_, _, err := w.svc.LoginLDAP(ctx, "", "alice", "dir-pass")
 	var c *application.MFAChallengeRequired
 	if !errors.As(err, &c) || c.Kind != domain.MFAEnroll {
 		t.Fatalf("a directory admin: %v, want an enrollment challenge", err)

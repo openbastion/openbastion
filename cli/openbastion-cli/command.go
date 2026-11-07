@@ -12,7 +12,7 @@ import (
 const usage = `usage:
   openbastion-cli user create -authn URL -username NAME -roles ROLE[,ROLE…] [-display NAME] < password
   openbastion-cli audit verify-chain -audit URL
-  openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME)
+  openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME [-directory-id ID])
   openbastion-cli mfa reset -authn URL -username NAME
   openbastion-cli mfa keys -authn URL -username NAME
   openbastion-cli mfa revoke-key -authn URL -username NAME -key ID
@@ -64,12 +64,14 @@ func newRootCommand(stdin io.Reader) *cobra.Command {
 			authn, _ := cmd.Flags().GetString("authn")
 			local, _ := cmd.Flags().GetString("local")
 			directory, _ := cmd.Flags().GetString("directory")
-			return mfaEnrollmentCode(authn, local, directory, cmd.OutOrStdout())
+			directoryID, _ := cmd.Flags().GetString("directory-id")
+			return mfaEnrollmentCode(authn, local, directory, directoryID, cmd.OutOrStdout())
 		},
 	}
 	enrollment.Flags().String("authn", "", "URL of the Authentication Service, e.g. https://authentication:8086")
 	enrollment.Flags().String("local", "", "the local account's name")
 	enrollment.Flags().String("directory", "", "the directory login name (sAMAccountName or uid)")
+	enrollment.Flags().String("directory-id", "", "the directory's id in IDENTITY_PROVIDERS_FILE (ADR-0076); empty: the directory of the LDAP_* variables")
 
 	reset := &cobra.Command{
 		Use: "reset", Short: "Réinitialiser le second facteur d'un compte", Args: cobra.NoArgs,

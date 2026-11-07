@@ -27,8 +27,12 @@ type User struct {
 	// IdentitySource says who vouches for the user (docs/architecture/data-architecture.md): "local" (a password here),
 	// "oidc" (a provider, ADR-0035) or "ldap" (a directory, ADR-0061). ExternalSubject is the
 	// provider's `sub`, or the directory's stable identifier; empty for a local account.
-	IdentitySource  string
-	ExternalSubject string
+	// IdentityProvider is which provider or directory vouches for it (ADR-0076): a `sub` is unique
+	// at its issuer only. Empty: the one of the OIDC_* or LDAP_* variables, or the entry of the
+	// providers file that adopts the accounts made before.
+	IdentitySource   string
+	IdentityProvider string
+	ExternalSubject  string
 }
 
 // ErrAttemptNotFound: no login under way has this state — never started, already used, or
@@ -46,8 +50,9 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
 
-	// GetByExternalSubject finds the account a provider's subject belongs to (ADR-0035).
-	GetByExternalSubject(ctx context.Context, source, subject string) (*User, error)
+	// GetByExternalSubject finds the account that provider of source vouches for as subject
+	// (ADR-0035, ADR-0076): the same subject at another provider is another account.
+	GetByExternalSubject(ctx context.Context, source, provider, subject string) (*User, error)
 	// UpdateIdentity replaces the display name and roles of user id — recomputed at each
 	// federated login.
 	UpdateIdentity(ctx context.Context, id, displayName string, roles []string) error
@@ -58,6 +63,7 @@ type LoginAttempt struct {
 	State     string
 	Verifier  string // PKCE code verifier
 	Nonce     string
+	Provider  string // the provider it was started at, the only one its code is exchanged with (ADR-0076)
 	ExpiresAt time.Time
 }
 

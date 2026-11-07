@@ -35,15 +35,13 @@ type AuthenticationService struct {
 	tokens TokenIssuer
 	ttl    time.Duration
 
-	// Federated login (ADR-0035); nil oidc = off.
-	oidc     OIDCProvider
-	roleMap  RoleMap
-	attempts domain.LoginAttemptRepository
-	now      func() time.Time
+	// Federated login (ADR-0035), one or more providers (ADR-0076); none = off.
+	oidcProviders []oidcEntry
+	attempts      domain.LoginAttemptRepository
+	now           func() time.Time
 
-	// Directory login (ADR-0061); nil directory = off.
-	directory   Directory
-	ldapRoleMap RoleMap
+	// Directory login (ADR-0061), one or more directories (ADR-0076); none = off.
+	directories []directoryEntry
 
 	// The second factor (ADR-0062); nil mfa = off.
 	mfaRoles map[string]bool

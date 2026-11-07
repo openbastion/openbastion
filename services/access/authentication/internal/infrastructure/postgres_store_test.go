@@ -163,11 +163,11 @@ func TestPostgresStore_FederatedAccountsAndLoginAttempts(t *testing.T) {
 	if err := store.Create(ctx, twin); err == nil {
 		t.Fatal("two accounts for the same subject")
 	}
-	got, err := store.GetByExternalSubject(ctx, domain.SourceOIDC, sub)
+	got, err := store.GetByExternalSubject(ctx, domain.SourceOIDC, "", sub)
 	if err != nil || got.ID != u.ID || got.IdentitySource != domain.SourceOIDC {
 		t.Fatalf("by subject: %+v %v", got, err)
 	}
-	if _, err := store.GetByExternalSubject(ctx, domain.SourceLocal, sub); err == nil {
+	if _, err := store.GetByExternalSubject(ctx, domain.SourceLocal, "", sub); err == nil {
 		t.Fatal("found under another source")
 	}
 	if err := store.UpdateIdentity(ctx, u.ID, "Alice", []string{"platform-admin"}); err != nil {
@@ -213,6 +213,55 @@ func TestPostgresStore_FederatedAccountsAndLoginAttempts(t *testing.T) {
 	wg.Wait()
 	if won != 1 {
 		t.Fatalf("%d callbacks took the same attempt, want 1", won)
+	}
+}
+
+// ADR-0076: a subject is unique at its provider only. The same sub at two providers is two
+// accounts; at one provider, never two; an attempt keeps its provider; the accounts made before are
+// counted under the provider "".
+func TestPostgresStore_AnAccountIsBoundToItsProvider(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	store := infrastructure.NewPostgresStore(db)
+	sub := uniqueID("sub")
+	mk := func(provider, name string) error {
+		return store.Create(ctx, &domain.User{ID: uniqueID("user"), Username: name, DisplayName: "X", Roles: []string{"dba"},
+			IdentitySource: domain.SourceOIDC, IdentityProvider: provider, ExternalSubject: sub})
+	}
+	if err := mk("", "oidc:"+sub); err != nil {
+		t.Fatal(err)
+	}
+	if err := mk("corp", "oidc:corp:"+sub); err != nil {
+		t.Fatalf("the same sub at another provider: %v", err)
+	}
+	if err := mk("corp", "oidc:corp:twin-"+sub); err == nil {
+		t.Fatal("two accounts for one sub at one provider")
+	}
+	legacy, err := store.GetByExternalSubject(ctx, domain.SourceOIDC, "", sub)
+	if err != nil || legacy.Username != "oidc:"+sub || legacy.IdentityProvider != "" {
+		t.Fatalf("the legacy account: %+v %v", legacy, err)
+	}
+	corp, err := store.GetByExternalSubject(ctx, domain.SourceOIDC, "corp", sub)
+	if err != nil || corp.IdentityProvider != "corp" || corp.ID == legacy.ID {
+		t.Fatalf("corp's account: %+v %v", corp, err)
+	}
+	if _, err := store.GetByExternalSubject(ctx, domain.SourceOIDC, "partner", sub); err == nil {
+		t.Fatal("found at a provider that never vouched for it")
+	}
+	n, err := store.CountExternalAccounts(ctx, domain.SourceOIDC, "corp")
+	if err != nil || n < 1 {
+		t.Fatalf("count: %d %v", n, err)
+	}
+	state := uniqueID("state")
+	if err := store.SaveAttempt(ctx, domain.LoginAttempt{State: state, Verifier: "v", Nonce: "n", Provider: "corp", ExpiresAt: time.Now().Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if a, err := store.TakeAttempt(ctx, state); err != nil || a.Provider != "corp" {
+		t.Fatalf("the attempt read back %+v %v", a, err)
+	}
+	var old int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_indexes WHERE indexname = 'users_external_subject_idx'`).Scan(&old); err != nil || old != 0 {
+		t.Fatalf("the index of (source, subject) is still there: %d %v", old, err)
 	}
 }
 

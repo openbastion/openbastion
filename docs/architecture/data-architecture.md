@@ -29,6 +29,7 @@ erDiagram
         uuid id PK
         text username
         text identity_source
+        text identity_provider
         text external_subject
         timestamptz disabled_at
     }
@@ -102,12 +103,13 @@ CREATE TABLE users (
     username          TEXT NOT NULL UNIQUE,
     display_name      TEXT NOT NULL,
     identity_source   TEXT NOT NULL CHECK (identity_source IN ('local','oidc','ldap')),  -- 'ldap' : ADR-0061
+    identity_provider TEXT NOT NULL DEFAULT '', -- ADR-0076 : l'identifiant du fournisseur ; '' pour les variables OIDC_*/LDAP_* et les comptes repris
     external_subject  TEXT,                    -- sub OIDC, ou objectGUID/entryUUID de l'annuaire ; NULL si identity_source = 'local'
     password_hash     TEXT,                    -- Argon2id ; NULL si identity_source = 'oidc'
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     disabled_at       TIMESTAMPTZ,
-    UNIQUE (identity_source, external_subject)
+    UNIQUE (identity_source, identity_provider, external_subject)  -- ADR-0076 : un sub n'est unique que chez son émetteur
 );
 
 CREATE TABLE roles (

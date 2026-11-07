@@ -73,6 +73,17 @@ func runService() {
 	tokens := infrastructure.NewTokenIssuer(key)
 	svc := application.NewAuthenticationService(store, hasher, tokens, time.Hour)
 
+	// Several providers (ADR-0076): IDENTITY_PROVIDERS_FILE, or the variables of ADR-0035 and
+	// ADR-0061 — never both, which would leave which one counts to chance.
+	providersFile := os.Getenv("IDENTITY_PROVIDERS_FILE")
+	if providersFile != "" {
+		for _, name := range append(append([]string{}, oidcVariables...), ldapVariables...) {
+			if os.Getenv(name) != "" {
+				log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE is set, and so is %s: declare every provider in the file, or none there — refusing to start", name)
+			}
+		}
+	}
+
 	// Federated login (ADR-0035): off unless every variable is set — all or none.
 	oidcVars := map[string]string{}
 	for _, name := range []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_ROLE_MAP_FILE"} {
@@ -84,10 +95,12 @@ func runService() {
 			set++
 		}
 	}
-	switch set {
-	case 0:
+	switch {
+	case providersFile != "":
+		// Read below, once the audit is wired: the file says both providers and directories.
+	case set == 0:
 		log.Printf("authentication: federated login (OIDC) off — local accounts only")
-	case len(oidcVars):
+	case set == len(oidcVars):
 		roles, err := application.LoadRoleMap(oidcVars["OIDC_ROLE_MAP_FILE"])
 		if err != nil {
 			log.Fatalf("authentication: OIDC_ROLE_MAP_FILE: %v — refusing to start", err)
@@ -130,7 +143,11 @@ func runService() {
 		refusalbudget.New(refusalbudget.DefaultBurst, refusalbudget.DefaultRatePerMinute))
 	log.Printf("authentication: logins are written to the audit at %s before a token is issued — the audit down, no login (ADR-0064)", auditURL)
 
-	configureDirectory(svc)
+	if providersFile != "" {
+		configureProvidersFile(svc, store, providersFile)
+	} else {
+		configureDirectory(svc)
+	}
 	configureMFA(svc, store)
 
 	// Demo seed — real onboarding goes through POST /auth/v1/users.
@@ -144,6 +161,112 @@ func runService() {
 	srv := interfaces.NewHTTPServer(svc)
 	log.Printf("authentication listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+}
+
+// The variables of one provider of each kind (ADR-0035, ADR-0061); IDENTITY_PROVIDERS_FILE excludes them.
+var (
+	oidcVariables = []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_ROLE_MAP_FILE", "OIDC_GROUPS_CLAIM"}
+	ldapVariables = []string{"LDAP_URL", "LDAP_SCHEMA", "LDAP_BIND_DN", "LDAP_BIND_PASSWORD_FILE", "LDAP_USER_BASE_DN", "LDAP_GROUP_BASE_DN", "LDAP_ROLE_MAP_FILE", "LDAP_CA_FILE"}
+)
+
+// legacyAccounts counts the accounts made before ADR-0076, kept under the provider "".
+type legacyAccounts interface {
+	CountExternalAccounts(ctx context.Context, source, provider string) (int, error)
+}
+
+// configureProvidersFile turns on every provider and directory of the file (ADR-0076), checked whole
+// first: one entry wrong, a role map unreadable, an OIDC provider that does not answer — the service
+// does not start. A directory that does not answer does not stop it (ADR-0061): it is said, and its
+// logins answer 503.
+func configureProvidersFile(svc *application.AuthenticationService, store interface {
+	domain.LoginAttemptRepository
+}, path string) {
+	f, err := infrastructure.LoadProvidersFile(path)
+	if err != nil {
+		log.Fatalf("authentication: %v — refusing to start", err)
+	}
+	var oidc []application.OIDCEntry
+	adopts := map[string]string{}
+	for _, e := range f.OIDC {
+		roles, err := application.LoadRoleMap(e.RoleMapFile)
+		if err != nil {
+			log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE: oidc %q: role_map_file: %v — refusing to start", e.ID, err)
+		}
+		secret, err := infrastructure.ReadClientSecret(e)
+		if err != nil {
+			log.Fatalf("authentication: %v — refusing to start", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		provider, err := infrastructure.NewOIDCProvider(ctx, infrastructure.OIDCConfig{
+			Issuer: e.Issuer, ClientID: e.ClientID, ClientSecret: secret, RedirectURL: e.RedirectURL, GroupsClaim: e.GroupsClaim,
+		}, nil)
+		cancel()
+		if err != nil {
+			log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE: oidc %q: %v — refusing to start", e.ID, err)
+		}
+		oidc = append(oidc, application.OIDCEntry{ID: e.ID, Label: e.Label, Provider: provider, Roles: roles, AdoptLegacyAccounts: e.AdoptLegacyAccounts})
+		if e.AdoptLegacyAccounts {
+			adopts[domain.SourceOIDC] = e.ID
+		}
+		log.Printf("authentication: federated login (OIDC) %q with %s, %d group(s) in its role map", e.ID, e.Issuer, len(roles))
+	}
+	if len(oidc) > 0 {
+		svc.WithOIDCProviders(oidc, store)
+	} else {
+		log.Printf("authentication: federated login (OIDC) off — no oidc entry in IDENTITY_PROVIDERS_FILE")
+	}
+	var dirs []application.DirectoryEntry
+	for _, e := range f.Directories {
+		raw, err := application.LoadRoleMap(e.RoleMapFile)
+		if err != nil {
+			log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE: directory %q: role_map_file: %v — refusing to start", e.ID, err)
+		}
+		roles, err := infrastructure.NormalizeRoleMap(raw)
+		if err != nil {
+			log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE: directory %q: role_map_file: %v — refusing to start", e.ID, err)
+		}
+		dir, err := infrastructure.NewLDAPDirectory(infrastructure.LDAPConfig{
+			URL: e.URL, CAFile: e.CAFile, Schema: e.Schema, BindDN: e.BindDN, BindPasswordFile: e.BindPasswordFile,
+			UserBaseDN: e.UserBaseDN, GroupBaseDN: e.GroupBaseDN,
+		})
+		if err != nil {
+			log.Fatalf("authentication: IDENTITY_PROVIDERS_FILE: directory %q: %v — refusing to start", e.ID, err)
+		}
+		dirs = append(dirs, application.DirectoryEntry{ID: e.ID, Label: e.Label, Directory: dir, Roles: roles, AdoptLegacyAccounts: e.AdoptLegacyAccounts})
+		if e.AdoptLegacyAccounts {
+			adopts[domain.SourceLDAP] = e.ID
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*infrastructure.LDAPTimeout)
+		if err := dir.Probe(ctx); err != nil {
+			log.Printf("authentication: directory %q (LDAP, schema %s) configured, but it does not answer now (%v): its logins answer 503 until it does", e.ID, e.Schema, err)
+		} else {
+			log.Printf("authentication: directory %q (LDAP, schema %s) with %s over TLS, the service account accepted, %d group(s) in its role map", e.ID, e.Schema, dir.Where(), len(roles))
+		}
+		cancel()
+	}
+	if len(dirs) > 0 {
+		svc.WithDirectories(dirs)
+	} else {
+		log.Printf("authentication: directory login (LDAP) off — no directory in IDENTITY_PROVIDERS_FILE")
+	}
+	// The accounts made before (provider ""): adopted by one entry, or unreachable — said, never guessed.
+	counter, ok := store.(legacyAccounts)
+	for _, source := range []string{domain.SourceOIDC, domain.SourceLDAP} {
+		if id, adopted := adopts[source]; adopted {
+			log.Printf("authentication: the %s accounts made before ADR-0076 are those of %q (adopt_legacy_accounts)", source, id)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		n, err := counter.CountExternalAccounts(context.Background(), source, "")
+		if err != nil {
+			log.Fatalf("authentication: the %s accounts made before ADR-0076 cannot be counted: %v — refusing to start", source, err)
+		}
+		if n > 0 {
+			log.Printf("authentication: %d %s account(s) made before ADR-0076 belong to no entry of IDENTITY_PROVIDERS_FILE: they cannot log in until an entry declares adopt_legacy_accounts", n, source)
+		}
+	}
 }
 
 func redactDSN(dsn string) string {

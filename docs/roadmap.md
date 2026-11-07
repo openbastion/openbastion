@@ -50,7 +50,7 @@ Deux règles guident l'ordre de livraison :
 **Critères de sortie**
 - Une demande d'accès peut être soumise à double validation avec ticket obligatoire et notification Slack/Teams, de bout en bout. — **Atteint** le 7 novembre 2026 (ADR-0067, ADR-0074) : sur de vrais services, une demande avec ticket et son approbation par une autre personne arrivent dans un vrai Teams et un vrai Slack, signées, sans la justification. Le ticket est vérifié dans son format, pas dans un ITSM : c'est ce qu'ADR-0067 a retenu.
 - Replay vidéo disponible pour les sessions RDP/VNC ; recherche plein texte opérationnelle sur commandes et sessions.
-- Au moins trois fournisseurs d'identité externes fédérés simultanément en environnement de test.
+- Au moins trois fournisseurs d'identité externes fédérés simultanément en environnement de test. — **Atteint** le 7 novembre 2026 (ADR-0076) : un Authentication Service fédère à la fois un vrai OpenLDAP, un vrai Samba AD et deux Dex, chaque compte lié à son fournisseur (`test/integration/identity_providers_flow_test.go`).
 - Helm charts et `docs/deployment/high-availability.md` disponibles pour un déploiement Kubernetes/K3s/OpenShift en production.
 
 ## 4. v0.0.2 — Couverture complète, intelligence et écosystème

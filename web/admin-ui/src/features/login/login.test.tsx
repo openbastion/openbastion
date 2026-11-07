@@ -115,6 +115,44 @@ describe("Login", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("401 — invalid credentials");
   });
 
+  it("lists each directory by its label, and sends the one chosen by its id — never picked for the user (ADR-0076)", async () => {
+    const { api, calls } = fakeApi({
+      "GET /auth/ldap": { body: { enabled: true, directories: [{ id: "corp-ad", label: "Active Directory" }, { id: "openldap", label: "OpenLDAP" }] } },
+      "POST /auth/ldap/login": { body: { accessToken: "dir-tok", expiresIn: 3600 } },
+    });
+    const onToken = vi.fn();
+    render(<Login api={api} onToken={onToken} navigate={vi.fn()} />);
+    const ad = (await screen.findByLabelText("Active Directory")) as HTMLInputElement;
+    await waitFor(() => expect(ad.checked).toBe(true)); // the first, shown checked: what a submit sends
+    fireEvent.click(screen.getByLabelText("OpenLDAP"));
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    await waitFor(() => expect(onToken).toHaveBeenCalledWith("dir-tok"));
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([{ directory: "openldap", username: "alice", password: "pw" }]);
+    expect(screen.getByLabelText("Compte local")).toBeTruthy();
+  });
+
+  it("offers one button per provider, each starting at its own (ADR-0076)", async () => {
+    const { api, calls } = fakeApi({
+      "GET /auth/oidc": { body: { enabled: true, providers: [{ id: "dex-a", label: "Dex A" }, { id: "partner", label: "Partenaire" }] } },
+      "POST /auth/oidc/start": { body: { authorizationUrl: "https://idp.partner.example/authorize?state=s" } },
+    });
+    const navigate = vi.fn();
+    render(<Login api={api} onToken={vi.fn()} navigate={navigate} />);
+    fireEvent.click(await screen.findByText("Se connecter avec Partenaire"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("https://idp.partner.example/authorize?state=s"));
+    expect(screen.getByText("Se connecter avec Dex A")).toBeTruthy();
+    expect(calls.find((c) => c.path === "/auth/oidc/start")?.body).toEqual({ provider: "partner" });
+  });
+
+  it("shows no provider button when the Gateway says federation is off", async () => {
+    const { api, calls } = fakeApi({ "GET /auth/oidc": { body: { enabled: false, providers: [] } } });
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    await waitFor(() => expect(calls.some((c) => c.path === "/auth/oidc")).toBe(true));
+    await waitFor(() => expect(screen.queryByText("Se connecter avec le fournisseur d'identité")).toBeNull());
+  });
+
   it("starts a federated login by going to the provider's URL", async () => {
     const { api } = fakeApi({ "POST /auth/oidc/start": { body: { authorizationUrl: "https://idp.example/authorize?state=s" } } });
     const navigate = vi.fn();

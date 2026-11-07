@@ -30,6 +30,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/users", s.handleCreateUser)
 	mux.HandleFunc("/auth/v1/login", s.handleLogin)
 	mux.HandleFunc("/auth/v1/verify", s.handleVerify)
+	mux.HandleFunc("/auth/v1/oidc", s.handleOIDCInfo)
 	mux.HandleFunc("/auth/v1/oidc/start", s.handleOIDCStart)
 	mux.HandleFunc("/auth/v1/oidc/callback", s.handleOIDCCallback)
 	mux.HandleFunc("/auth/v1/ldap", s.handleLDAPInfo)
@@ -143,14 +144,41 @@ func (s *HTTPServer) handleVerify(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(verifyResponse{UserID: userID, Username: username, Roles: roles})
 }
 
-// -- POST /auth/v1/oidc/start and /auth/v1/oidc/callback (ADR-0035) ----
+// -- GET /auth/v1/oidc, POST /auth/v1/oidc/start and /auth/v1/oidc/callback (ADR-0035, ADR-0076) ----
+
+// providersResponse is what the login screen may know of the providers or directories: their ID
+// and label, never an issuer, a URL or a base (ADR-0076 §9).
+type providersResponse struct {
+	Enabled   bool                       `json:"enabled"`
+	Providers []application.ProviderInfo `json:"providers"`
+}
+
+func (s *HTTPServer) handleOIDCInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	p := s.svc.OIDCProviders()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(providersResponse{Enabled: len(p) > 0, Providers: p})
+}
+
+type oidcStartRequest struct {
+	Provider string `json:"provider"`
+}
 
 func (s *HTTPServer) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	u, err := s.svc.StartOIDC(r.Context())
+	// The body may be empty (one provider): {"provider": "<id>"} otherwise.
+	var req oidcStartRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "the body is not a start", http.StatusBadRequest)
+		return
+	}
+	u, err := s.svc.StartOIDC(r.Context(), req.Provider)
 	if err != nil {
 		oidcError(w, err)
 		return
@@ -188,6 +216,8 @@ func oidcError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, application.ErrOIDCOff):
 		http.Error(w, "federated login is not configured", http.StatusNotFound)
+	case errors.Is(err, application.ErrProviderRequired), errors.Is(err, application.ErrUnknownProvider):
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, application.ErrNoRole):
 		log.Printf("authentication: federated login refused: %v", err)
 		http.Error(w, "this identity has no OpenBastion role", http.StatusForbidden)
@@ -203,7 +233,14 @@ func oidcError(w http.ResponseWriter, err error) {
 // -- GET /auth/v1/ldap and POST /auth/v1/ldap/login (ADR-0061) ----
 
 type ldapInfoResponse struct {
-	Enabled bool `json:"enabled"`
+	Enabled     bool                       `json:"enabled"`
+	Directories []application.ProviderInfo `json:"directories"`
+}
+
+type ldapLoginRequest struct {
+	Directory string `json:"directory"` // ADR-0076: required when several directories are configured
+	Username  string `json:"username"`
+	Password  string `json:"password"`
 }
 
 func (s *HTTPServer) handleLDAPInfo(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +249,7 @@ func (s *HTTPServer) handleLDAPInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(ldapInfoResponse{Enabled: s.svc.DirectoryEnabled()})
+	_ = json.NewEncoder(w).Encode(ldapInfoResponse{Enabled: s.svc.DirectoryEnabled(), Directories: s.svc.Directories()})
 }
 
 func (s *HTTPServer) handleLDAPLogin(w http.ResponseWriter, r *http.Request) {
@@ -220,12 +257,12 @@ func (s *HTTPServer) handleLDAPLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req loginRequest
+	var req ldapLoginRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
 		http.Error(w, "the body is not a login", http.StatusBadRequest)
 		return
 	}
-	token, ttl, err := s.svc.LoginLDAP(r.Context(), req.Username, req.Password)
+	token, ttl, err := s.svc.LoginLDAP(r.Context(), req.Directory, req.Username, req.Password)
 	if err != nil {
 		ldapError(w, err)
 		return
@@ -243,6 +280,8 @@ func ldapError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, application.ErrDirectoryOff):
 		http.Error(w, "directory login is not configured", http.StatusNotFound)
+	case errors.Is(err, application.ErrProviderRequired), errors.Is(err, application.ErrUnknownProvider):
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, application.ErrNoRole):
 		log.Printf("authentication: directory login refused: the user's groups give no OpenBastion role")
 		http.Error(w, "this identity has no OpenBastion role", http.StatusForbidden)

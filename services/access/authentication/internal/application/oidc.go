@@ -40,7 +40,43 @@ var (
 	ErrNoRole = errors.New("this identity has no OpenBastion role")
 	// ErrOIDCOff: no provider is configured.
 	ErrOIDCOff = errors.New("federated login is not configured")
+	// ErrProviderRequired: several providers are configured and the request names none (400).
+	ErrProviderRequired = errors.New("several identity providers are configured: name one")
+	// ErrUnknownProvider: the request names a provider that is not configured (400).
+	ErrUnknownProvider = errors.New("no such identity provider")
 )
+
+// ProviderInfo is all the login screen may show of a provider or a directory (ADR-0076 §9): never
+// its issuer, its URL or its base.
+type ProviderInfo struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// OIDCEntry is one provider to turn on (ADR-0076). ID "" is the one of the OIDC_* variables.
+// AdoptLegacyAccounts: this provider's accounts are those made before ADR-0076 (provider "").
+type OIDCEntry struct {
+	ID, Label           string
+	Provider            OIDCProvider
+	Roles               RoleMap
+	AdoptLegacyAccounts bool
+}
+
+type oidcEntry struct {
+	info     ProviderInfo
+	provider OIDCProvider
+	roles    RoleMap
+	accounts string // the identity_provider of its accounts
+}
+
+// accountsKey is the identity_provider under which an entry's accounts are kept: "" for the
+// variables' provider and the one that adopts the accounts made before ADR-0076, its ID otherwise.
+func accountsKey(id string, adopt bool) string {
+	if adopt {
+		return ""
+	}
+	return id
+}
 
 // AttemptTTL is how long a login may take between start and callback.
 const AttemptTTL = 10 * time.Minute
@@ -105,10 +141,51 @@ func (m RoleMap) Roles(groups []string) []string {
 	return out
 }
 
-// WithOIDC turns federated login on.
+// WithOIDC turns federated login on with one provider, the one of the OIDC_* variables.
 func (s *AuthenticationService) WithOIDC(p OIDCProvider, roles RoleMap, attempts domain.LoginAttemptRepository) *AuthenticationService {
-	s.oidc, s.roleMap, s.attempts = p, roles, attempts
+	return s.WithOIDCProviders([]OIDCEntry{{Provider: p, Roles: roles}}, attempts)
+}
+
+// WithOIDCProviders turns federated login on with entries (ADR-0076); cmd/authentication has
+// checked them: distinct IDs, at most one that adopts the accounts made before.
+func (s *AuthenticationService) WithOIDCProviders(entries []OIDCEntry, attempts domain.LoginAttemptRepository) *AuthenticationService {
+	s.oidcProviders = nil
+	for _, e := range entries {
+		s.oidcProviders = append(s.oidcProviders, oidcEntry{info: ProviderInfo{ID: e.ID, Label: e.Label}, provider: e.Provider,
+			roles: e.Roles, accounts: accountsKey(e.ID, e.AdoptLegacyAccounts || e.ID == "")})
+	}
+	s.attempts = attempts
 	return s
+}
+
+// OIDCProviders is what the login screen may show of the providers, in the declared order.
+func (s *AuthenticationService) OIDCProviders() []ProviderInfo {
+	out := make([]ProviderInfo, 0, len(s.oidcProviders))
+	for _, e := range s.oidcProviders {
+		out = append(out, e.info)
+	}
+	return out
+}
+
+// oidcProvider is the provider id names; with a single provider, id may be empty. Several and
+// none named: ErrProviderRequired — never a default, which would send the user to a provider
+// they did not choose.
+func (s *AuthenticationService) oidcProvider(id string) (*oidcEntry, error) {
+	if len(s.oidcProviders) == 0 {
+		return nil, ErrOIDCOff
+	}
+	if id == "" && len(s.oidcProviders) == 1 {
+		return &s.oidcProviders[0], nil
+	}
+	if id == "" {
+		return nil, ErrProviderRequired
+	}
+	for i := range s.oidcProviders {
+		if s.oidcProviders[i].info.ID == id {
+			return &s.oidcProviders[i], nil
+		}
+	}
+	return nil, ErrUnknownProvider
 }
 
 func random32() (string, error) {
@@ -119,13 +196,14 @@ func random32() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// StartOIDC begins a federated login and returns where to send the browser.
-func (s *AuthenticationService) StartOIDC(ctx context.Context) (string, error) {
-	if s.oidc == nil {
-		return "", ErrOIDCOff
+// StartOIDC begins a federated login at provider and returns where to send the browser. The
+// attempt keeps the provider: its callback is exchanged there only (ADR-0076 §7).
+func (s *AuthenticationService) StartOIDC(ctx context.Context, provider string) (string, error) {
+	p, err := s.oidcProvider(provider)
+	if err != nil {
+		return "", err
 	}
-	var a domain.LoginAttempt
-	var err error
+	a := domain.LoginAttempt{Provider: p.info.ID}
 	for _, v := range []*string{&a.State, &a.Nonce, &a.Verifier} {
 		if *v, err = random32(); err != nil {
 			return "", err
@@ -135,14 +213,18 @@ func (s *AuthenticationService) StartOIDC(ctx context.Context) (string, error) {
 	if err := s.attempts.SaveAttempt(ctx, a); err != nil {
 		return "", err
 	}
-	return s.oidc.AuthorizeURL(a.State, a.Nonce, a.Verifier), nil
+	return p.provider.AuthorizeURL(a.State, a.Nonce, a.Verifier), nil
 }
 
 // FinishOIDC ends a federated login: the attempt is taken (once), the code exchanged, the ID
 // token verified, the roles computed from the map — none is a refusal — and the account
 // found or made, its roles replaced by those of today.
+//
+// The provider is the attempt's, never one the callback names: a code or an ID token of another
+// provider is exchanged and verified where it was not issued, and refused (the mix-up attack,
+// RFC 9207). A provider no longer configured since the start: refused.
 func (s *AuthenticationService) FinishOIDC(ctx context.Context, code, state string) (token string, expiresIn time.Duration, err error) {
-	if s.oidc == nil {
+	if len(s.oidcProviders) == 0 {
 		return "", 0, ErrOIDCOff
 	}
 	if code == "" || state == "" {
@@ -158,22 +240,31 @@ func (s *AuthenticationService) FinishOIDC(ctx context.Context, code, state stri
 	if !s.clock().Before(a.ExpiresAt) {
 		return "", 0, ErrOIDCRejected
 	}
-	raw, err := s.oidc.Exchange(ctx, code, a.Verifier)
+	var p *oidcEntry
+	for i := range s.oidcProviders {
+		if s.oidcProviders[i].info.ID == a.Provider {
+			p = &s.oidcProviders[i]
+		}
+	}
+	if p == nil {
+		return "", 0, ErrOIDCRejected
+	}
+	raw, err := p.provider.Exchange(ctx, code, a.Verifier)
 	if err != nil {
 		return "", 0, fmt.Errorf("%w: %v", ErrOIDCRejected, err)
 	}
-	id, err := s.oidc.VerifyIDToken(ctx, raw, a.Nonce)
+	id, err := p.provider.VerifyIDToken(ctx, raw, a.Nonce)
 	if err != nil {
 		if errors.Is(err, ErrOIDCRejected) {
 			return "", 0, err
 		}
 		return "", 0, fmt.Errorf("%w: %v", ErrOIDCRejected, err)
 	}
-	roles := s.roleMap.Roles(id.Groups)
+	roles := p.roles.Roles(id.Groups)
 	if len(roles) == 0 {
 		return "", 0, ErrNoRole
 	}
-	u, err := s.federatedUser(ctx, id, roles)
+	u, err := s.federatedUser(ctx, p.accounts, id, roles)
 	if err != nil {
 		return "", 0, err
 	}
@@ -181,20 +272,24 @@ func (s *AuthenticationService) FinishOIDC(ctx context.Context, code, state stri
 	return s.issue(ctx, u, roles, ActionLogin)
 }
 
-// federatedUser finds the account of id's subject and gives it today's roles, or makes it.
-func (s *AuthenticationService) federatedUser(ctx context.Context, id OIDCIdentity, roles []string) (*domain.User, error) {
+// federatedUser finds the account of id's subject at the provider whose accounts are kept under
+// accounts, and gives it today's roles, or makes it.
+func (s *AuthenticationService) federatedUser(ctx context.Context, accounts string, id OIDCIdentity, roles []string) (*domain.User, error) {
 	display := id.Name
 	if display == "" {
 		display = id.Subject
 	}
-	return s.externalUser(ctx, domain.SourceOIDC, id.Subject, display, roles)
+	return s.externalUser(ctx, domain.SourceOIDC, accounts, id.Subject, display, roles)
 }
 
-// externalUser finds the account that source vouches for as subject and gives it today's roles, or
-// makes it. Its name is <source>:<subject> — never a name the provider or the directory chooses,
-// which could be a local account's.
-func (s *AuthenticationService) externalUser(ctx context.Context, source, subject, display string, roles []string) (*domain.User, error) {
-	u, err := s.users.GetByExternalSubject(ctx, source, subject)
+// externalUser finds the account that provider of source vouches for as subject and gives it
+// today's roles, or makes it. Its name is <source>:<provider>:<subject>, or <source>:<subject> for
+// the provider "" (the accounts made before ADR-0076 keep their name) — never a name the provider
+// or the directory chooses. The account is found by its subject, never by its name: a name already
+// taken (a subject holding ':' at the provider "", or a local account named so) makes Create fail,
+// and the login is refused — a collision of names never joins two identities.
+func (s *AuthenticationService) externalUser(ctx context.Context, source, provider, subject, display string, roles []string) (*domain.User, error) {
+	u, err := s.users.GetByExternalSubject(ctx, source, provider, subject)
 	if err == nil {
 		if err := s.users.UpdateIdentity(ctx, u.ID, display, roles); err != nil {
 			return nil, err
@@ -202,11 +297,15 @@ func (s *AuthenticationService) externalUser(ctx context.Context, source, subjec
 		u.DisplayName, u.Roles = display, roles
 		return u, nil
 	}
-	u = &domain.User{ID: randomID("user"), Username: source + ":" + subject, DisplayName: display, Roles: roles,
-		IdentitySource: source, ExternalSubject: subject}
+	name := source + ":" + subject
+	if provider != "" {
+		name = source + ":" + provider + ":" + subject
+	}
+	u = &domain.User{ID: randomID("user"), Username: name, DisplayName: display, Roles: roles,
+		IdentitySource: source, IdentityProvider: provider, ExternalSubject: subject}
 	if err := s.users.Create(ctx, u); err != nil {
 		// Two first logins at once: the other made it.
-		if again, err2 := s.users.GetByExternalSubject(ctx, source, subject); err2 == nil {
+		if again, err2 := s.users.GetByExternalSubject(ctx, source, provider, subject); err2 == nil {
 			if err := s.users.UpdateIdentity(ctx, again.ID, display, roles); err != nil {
 				return nil, err
 			}
