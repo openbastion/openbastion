@@ -184,6 +184,8 @@ func TestPostgresFlow_FederatedLoginWithOIDC_RolesFromTheDeclaredMapOnly(t *test
 		t.Fatal(err)
 	}
 	defer db.Close()
+	// The provider of the variables is bound to the issuer of an earlier run's IdP (ADR-0078).
+	forgetIssuerBindings(t, db, "")
 	root := repoRoot(t)
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-35")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-35")

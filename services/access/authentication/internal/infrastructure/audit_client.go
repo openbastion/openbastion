@@ -23,9 +23,14 @@ type AuditHTTPClient struct {
 }
 
 func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
+	return c.EmitEventWithDetails(ctx, actorID, action, resourceType, resourceID, nil, success)
+}
+
+// EmitEventWithDetails writes an event with bounded details, covered by the chain's hash (ADR-0068).
+func (c *AuditHTTPClient) EmitEventWithDetails(ctx context.Context, actorID, action, resourceType, resourceID string, details map[string]string, success bool) error {
 	ctx, cancel := context.WithTimeout(ctx, AuditTimeout)
 	defer cancel()
-	body, _ := json.Marshal(emitEventRequestBody{ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success})
+	body, _ := json.Marshal(emitEventRequestBody{ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Details: details, Success: success})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/audit/v1/emit-event", bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -49,9 +54,10 @@ func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resour
 // The body of the Audit Service's emit-event, with the field names of AuditIngestion's message
 // (test/integration/contract_test.go holds them to it, ADR-0050).
 type emitEventRequestBody struct {
-	ActorID      string `json:"actor_id"`
-	Action       string `json:"action"`
-	ResourceType string `json:"resource_type"`
-	ResourceID   string `json:"resource_id"`
-	Success      bool   `json:"success"`
+	ActorID      string            `json:"actor_id"`
+	Action       string            `json:"action"`
+	ResourceType string            `json:"resource_type"`
+	ResourceID   string            `json:"resource_id"`
+	Details      map[string]string `json:"details,omitempty"`
+	Success      bool              `json:"success"`
 }

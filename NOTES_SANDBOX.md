@@ -2957,3 +2957,22 @@ ADR accepté par le propriétaire le même jour (« J'accepte ADR-0076 tel quel,
 - l'audit d'une connexion d'un compte du fournisseur `""` ne nomme pas son fournisseur, et les refus d'annuaire ne nomment pas l'annuaire (ADR-0076, précisions).
 
 **Choix renversables** : le fichier refusé s'il est modifiable par son groupe ou par d'autres ; la limite de 16 fournisseurs ; le critère de sortie marqué atteint à la place du propriétaire.
+
+## 2026-11-07 — ADR-0078 : chaque fournisseur OIDC garde son émetteur
+
+ADR accepté par le propriétaire le même jour (« J'accepte ADR-0078 tel quel, go pour la mise en œuvre »). Table `identity_provider_bindings` (migration `007`) : l'émetteur de chaque `id` et du fournisseur `''`, retenu au premier démarrage. Un autre émetteur refuse le démarrage ; un changement se déclare par `previous_issuer` / `OIDC_PREVIOUS_ISSUER`, exactement l'émetteur retenu, et est écrit à l'audit (`auth.identity_provider_rebound`, détails ADR-0068) avant la ligne. Tout ou rien pour l'ensemble des fournisseurs, dans une transaction, après les autres contrôles. Le client d'audit d'Authentication envoie désormais des détails (contrat `EmitEventRequest.details`).
+
+**Prouvé** :
+- le défaut, mesuré sur `main` (`3159a68`) par un test jetable : un autre émetteur au même `sub` retrouve le même compte par les trois voies (variables, entrée du fichier, reprise par `adopt_legacy_accounts`) ;
+- application : 10 tests, 5 mutations sur 5 tuées ; PostgreSQL : 2 tests (dont deux transactions simultanées), 3 mutations sur 3 tuées ;
+- processus réels (`issuer_binding_flow_test.go`, 5 à 7 s, vrais PostgreSQL, Audit Service, Authentication et Gateway, deux émetteurs de test) : 9 sous-tests verts, 2 mutations tuées (garde-fou retiré, audit écrit après la ligne). Les trois tests de fédération passent deux fois de suite sur la même base ;
+- `make build vet test` verts ; séquence du job PostgreSQL de la CI rejouée en local sur une base neuve : `make test` vert, `make test-postgres` 93 verts et 1 rouge (le cas `no provider there`, l'effet WSL déjà noté, inchangé), intégration 96 verts, 7 ignorés, 0 rouge (810 s).
+
+**Non prouvé, ou limites** :
+- le cas `no provider there` reste invérifiable sur cette machine ; la CI tranche ;
+- confiance au premier démarrage : un émetteur déjà changé avant cette version est retenu tel quel ;
+- un changement déclaré est la parole de l'administrateur, consignée, pas une preuve ;
+- les annuaires ne sont pas couverts (`known-limitations.md`) ;
+- si la validation échoue après l'écriture à l'audit, l'audit dit un changement non retenu ; le démarrage suivant le refait.
+
+**Choix renversables** : l'émetteur comparé au caractère près ; `(variables)` comme ressource d'audit du fournisseur `''` ; un émetteur de plus de 256 octets refusé au changement ; les tests qui réutilisent un `id` fixe oublient d'abord ce qu'un passage précédent a retenu.

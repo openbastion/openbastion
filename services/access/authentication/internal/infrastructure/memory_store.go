@@ -16,7 +16,8 @@ type InMemoryStore struct {
 	byID       map[string]*domain.User
 	byUsername map[string]*domain.User
 	attempts   map[string]domain.LoginAttempt
-	mfa        memoryMFA // ADR-0062, in mfa_store.go
+	mfa        memoryMFA         // ADR-0062, in mfa_store.go
+	issuers    map[string]string // ADR-0078, in issuer_binding_store.go
 }
 
 func NewInMemoryStore() *InMemoryStore {

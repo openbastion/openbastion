@@ -15,3 +15,6 @@ deploy/docker-compose/.env.recording
 
 # Autorité et identités de développement générées par `make pki` (clés privées !)
 /.pki/
+.idea/
+.NOTIFY_INTEROP_TEAMS_URL
+.NOTIFY_INTEROP_SLACK_URL

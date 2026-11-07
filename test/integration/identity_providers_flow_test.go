@@ -227,6 +227,8 @@ samba-tool group addmembers bastion-admins alice >/dev/null
 		t.Fatal(err)
 	}
 	defer db.Close()
+	// Fixed ids, and Dex on new ports at each run: what an earlier run bound is forgotten (ADR-0078).
+	forgetIssuerBindings(t, db, "", "dex-a", "dex-b")
 
 	// Before ADR-0076: one provider by its variables — its account is kept under the provider "".
 	legacy := startService(t, root, authnBin, "19931", append(append([]string{}, base...), "OIDC_ISSUER="+issuerA, "OIDC_CLIENT_ID=openbastion",

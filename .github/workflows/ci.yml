@@ -105,7 +105,7 @@ jobs:
     timeout-minutes: 45
     env:
       TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
-      PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials RESTART IDENTITY CASCADE;
+      PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
