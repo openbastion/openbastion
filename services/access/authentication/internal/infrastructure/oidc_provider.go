@@ -34,6 +34,9 @@ type OIDCConfig struct {
 	ClientSecret string
 	RedirectURL  string
 	GroupsClaim  string // "groups" when empty
+	// TenantID makes it an Entra ID provider (ADR-0079): the issuer is that tenant's v2 issuer,
+	// and every ID token carries that tenant, with all its groups. Empty: a generic provider.
+	TenantID string
 }
 
 // OIDCProvider is application.OIDCProvider against one OpenID Connect provider.
@@ -84,6 +87,11 @@ func NewOIDCProvider(ctx context.Context, cfg OIDCConfig, client *http.Client) (
 	}
 	if cfg.ClientID == "" || cfg.ClientSecret == "" {
 		return nil, errors.New("OIDC_CLIENT_ID and OIDC_CLIENT_SECRET are required")
+	}
+	if cfg.TenantID != "" {
+		if err := checkEntraIssuer(cfg.TenantID, cfg.Issuer); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.GroupsClaim == "" {
 		cfg.GroupsClaim = "groups"
@@ -141,11 +149,17 @@ func (p *OIDCProvider) getJSON(ctx context.Context, u string, out any) error {
 // AuthorizeURL is where the browser is sent: the code flow, with PKCE (S256), state and nonce.
 func (p *OIDCProvider) AuthorizeURL(state, nonce, verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
+	scope := "openid profile email " + p.cfg.GroupsClaim
+	if p.cfg.TenantID != "" {
+		// Entra ID has no groups scope: the groups are in the token by the application's own
+		// configuration (groupMembershipClaims), and an unknown scope is refused (ADR-0079).
+		scope = "openid profile email"
+	}
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {p.cfg.ClientID},
 		"redirect_uri":          {p.cfg.RedirectURL},
-		"scope":                 {"openid profile email " + p.cfg.GroupsClaim},
+		"scope":                 {scope},
 		"state":                 {state},
 		"nonce":                 {nonce},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
@@ -263,6 +277,11 @@ func (p *OIDCProvider) groups(raw string) ([]string, error) {
 	var all map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &all); err != nil {
 		return nil, fmt.Errorf("%w: payload", application.ErrOIDCRejected)
+	}
+	if p.cfg.TenantID != "" {
+		if err := entraClaims(all, p.cfg.TenantID, p.cfg.GroupsClaim); err != nil {
+			return nil, err
+		}
 	}
 	v, ok := all[p.cfg.GroupsClaim]
 	if !ok {

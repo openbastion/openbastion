@@ -210,6 +210,7 @@ func configureProvidersFile(svc *application.AuthenticationService, store interf
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		provider, err := infrastructure.NewOIDCProvider(ctx, infrastructure.OIDCConfig{
 			Issuer: e.Issuer, ClientID: e.ClientID, ClientSecret: secret, RedirectURL: e.RedirectURL, GroupsClaim: e.GroupsClaim,
+			TenantID: e.TenantID, // set for the profile entra only (checked with the file, ADR-0079)
 		}, nil)
 		cancel()
 		if err != nil {
@@ -224,7 +225,11 @@ func configureProvidersFile(svc *application.AuthenticationService, store interf
 			issuers = append(issuers, application.IssuerDeclaration{Provider: "", Issuer: e.Issuer, PreviousIssuer: e.PreviousIssuer,
 				Name: name + " (adopt_legacy_accounts, the accounts of OIDC_ISSUER)", Declare: declare})
 		}
-		log.Printf("authentication: federated login (OIDC) %q with %s, %d group(s) in its role map", e.ID, e.Issuer, len(roles))
+		profile := "OIDC"
+		if e.Profile == infrastructure.ProfileEntra {
+			profile = "Entra ID, tenant " + e.TenantID
+		}
+		log.Printf("authentication: federated login (%s) %q with %s, %d group(s) in its role map", profile, e.ID, e.Issuer, len(roles))
 	}
 	if len(oidc) > 0 {
 		svc.WithOIDCProviders(oidc, store)

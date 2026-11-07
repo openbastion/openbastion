@@ -91,6 +91,10 @@ L'Authentication Service peut laisser un annuaire vérifier le mot de passe de s
 
 `IDENTITY_PROVIDERS_FILE` déclare plusieurs émetteurs OIDC et plusieurs annuaires à la fois, à la place des variables `OIDC_*` et `LDAP_*` (les deux ensemble : refus de démarrer). Le fichier, vérifié en entier, ne contient aucun secret mais ne doit être modifiable que par son propriétaire. Son format, la reprise des comptes existants et les refus sont décrits dans [`identity-providers.md`](../administration/identity-providers.md#plusieurs-fournisseurs-à-la-fois-adr-0076).
 
+## Microsoft Entra ID (ADR-0079)
+
+Une entrée `oidc` de `IDENTITY_PROVIDERS_FILE` de profil `entra` (`"profile": "entra"`, `"tenant_id": "<GUID>"`) est liée à un seul tenant : son émetteur doit être exactement `https://login.microsoftonline.com/<tenant_id>/v2.0`, et chaque jeton doit porter ce tenant (`tid`). Aucune nouvelle variable. L'Authentication Service doit joindre `login.microsoftonline.com` en HTTPS (par `HTTPS_PROXY` si la sortie passe par un proxy). Voir [`identity-providers.md`](../administration/identity-providers.md#microsoft-entra-id-adr-0079).
+
 ## L'émetteur de chaque fournisseur OIDC (ADR-0078)
 
 L'Authentication Service retient l'émetteur de chaque fournisseur OIDC (table `identity_provider_bindings`), et refuse de démarrer si un fournisseur est configuré avec un autre. `OIDC_PREVIOUS_ISSUER` (avec les variables `OIDC_*`) et le champ `previous_issuer` d'une entrée de `IDENTITY_PROVIDERS_FILE` déclarent un changement : l'ancien émetteur, exactement. Le changement est écrit à l'audit avant d'être retenu, et demande donc que l'Audit Service réponde à ce démarrage. `OIDC_PREVIOUS_ISSUER` sans OIDC, ou avec `IDENTITY_PROVIDERS_FILE` : refus de démarrer. Voir [`identity-providers.md`](../administration/identity-providers.md#chaque-fournisseur-oidc-garde-son-émetteur-adr-0078).

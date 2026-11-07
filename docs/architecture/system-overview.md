@@ -149,7 +149,7 @@ Tous ces proxies partagent un **pipeline commun** (ADR-0006 ; l'invariant qu'il 
 |---|---|
 | **LDAP Connector** | Authentification et synchronisation annuaire LDAP/OpenLDAP générique. |
 | **Active Directory Connector** | Idem, spécificités AD (groupes, Kerberos). |
-| **Entra ID Connector** | Fédération Microsoft Entra ID (OIDC/SAML + Graph API pour le provisioning). |
+| **Entra ID Connector** | Fédération Microsoft Entra ID : un profil OIDC lié à un tenant déclaré (ADR-0079), dans l'Authentication Service. Ni SAML, ni Graph API, ni provisioning à ce jour. |
 | **OpenID Connect Connector** | Fédération OIDC/OAuth2 générique (tout IdP conforme). |
 | **SAML Connector** | Fédération SAML 2.0 générique. |
 | **SCIM Provisioning Service** | Provisionnement/déprovisionnement automatique des identités et groupes. |

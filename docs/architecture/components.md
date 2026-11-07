@@ -169,7 +169,7 @@ Ces deux conteneurs sont volontairement présentés sous forme de table plutôt 
 | Sécurité & Intelligence | Anomaly Detection / Risk Engine | Score de risque par règles, brique ML optionnelle |
 | Fédération d'identité | LDAP Connector | Auth/synchro LDAP/OpenLDAP |
 | Fédération d'identité | Active Directory Connector | Auth/synchro AD, Kerberos |
-| Fédération d'identité | Entra ID Connector | OIDC/SAML + Graph API |
+| Fédération d'identité | Entra ID Connector | Profil OIDC lié à un tenant (ADR-0079) ; ni SAML ni Graph API à ce jour |
 | Fédération d'identité | OpenID Connect Connector | OIDC/OAuth2 générique |
 | Fédération d'identité | SAML Connector | SAML 2.0 générique |
 | Fédération d'identité | SCIM Provisioning Service | Provisioning/déprovisioning automatique |
