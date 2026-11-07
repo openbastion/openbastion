@@ -213,11 +213,18 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
+	// The MIC goes with AUTHENTICATE whether or not the server asked for it: an NTLM AUTHENTICATE
+	// with a MIC needs SPNEGO's mechListMIC (MS-SPNG), and Windows Server closes the connection
+	// without it (ADR-0071, measured in CI). Asked (FreeRDP), it keeps the measured exchange of its
+	// own; unasked (Windows), it is a signature of this context, and pubKeyAuth follows it.
 	var mechListMIC []byte
 	if micRequested {
-		if mechListMIC, err = security.SignMechListMIC(mechTypes); err != nil {
-			return nil, ErrCredSSPClient
-		}
+		mechListMIC, err = security.SignMechListMIC(mechTypes)
+	} else {
+		mechListMIC, err = security.SignMechListMICInStream(mechTypes)
+	}
+	if err != nil {
+		return nil, credsspFailure("signing the mechListMIC", nil)
 	}
 	finalToken, err := MarshalSPNEGONTLMResponse(ntlmAuthenticate, mechListMIC)
 	if err != nil {

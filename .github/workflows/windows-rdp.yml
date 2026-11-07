@@ -43,11 +43,18 @@ jobs:
       - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
+      # The same client against FreeRDP 3 first (ADR-0071): a change made for Windows must not break
+      # what works already. It runs nowhere else in CI.
+      - name: RDP against FreeRDP
+        run: make test-rdp-interop
       - name: "Prepare the target (authority, certificate, password: for this run only)"
+        if: ${{ !cancelled() }}
         run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows"
       - name: Start Windows
+        if: ${{ !cancelled() }}
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml up -d
       - name: RDP against Windows
+        if: ${{ !cancelled() }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           make test-rdp-windows

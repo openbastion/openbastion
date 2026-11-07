@@ -169,8 +169,10 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 			return
 		}
 		finalSPNEGO, readErr := ParseSPNEGONegTokenResp(finalRequest.NegoTokens[0])
-		if readErr != nil || len(finalSPNEGO.ResponseToken) == 0 || finalSPNEGO.State != 0 || len(finalSPNEGO.MechanismListMIC) != 0 {
-			serverResult <- errors.New("invalid final SPNEGO response")
+		// As Windows does (MS-SPNG): an AUTHENTICATE carrying an NTLM MIC comes with SPNEGO's
+		// mechListMIC, asked for or not (ADR-0071).
+		if readErr != nil || len(finalSPNEGO.ResponseToken) == 0 || finalSPNEGO.State != 0 || len(finalSPNEGO.MechanismListMIC) != ntlmSSPMessageSignatureSize {
+			serverResult <- errors.New("invalid final SPNEGO response: no mechListMIC beside an NTLM MIC")
 			return
 		}
 		authenticate := finalSPNEGO.ResponseToken
@@ -261,6 +263,13 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 			return
 		}
 		defer serverSecurity.Close()
+		// The client's mechListMIC is a signature of the context (MS-NLMP 3.4.4.2): sequence 0, from
+		// the sealing stream; pubKeyAuth follows at sequence 1.
+		mechTypes, readErr := spnegoNTLMMechTypes()
+		if readErr != nil || serverSecurity.inbound.verifySignature(mechTypes, finalSPNEGO.MechanismListMIC) != nil {
+			serverResult <- errors.New("the client's mechListMIC is not a signature of this context at sequence 0")
+			return
+		}
 		clientHash, readErr := serverSecurity.inbound.unwrap(finalRequest.PubKeyAuth)
 		if readErr != nil {
 			serverResult <- readErr
@@ -282,12 +291,17 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 		if corruptServerBinding {
 			serverHash[0] ^= 0xff // valid GSS_Wrap, wrong certificate-binding hash
 		}
+		serverMIC, readErr := serverSecurity.outbound.sign(mechTypes)
+		if readErr != nil {
+			serverResult <- readErr
+			return
+		}
 		sealedServerHash, readErr := serverSecurity.outbound.wrap(serverHash[:])
 		if readErr != nil {
 			serverResult <- readErr
 			return
 		}
-		serverResponse, readErr := MarshalTSRequest(TSRequest{Version: 5, PubKeyAuth: sealedServerHash})
+		serverResponse, readErr := MarshalTSRequest(TSRequest{Version: 5, NegoTokens: [][]byte{micTestCompletion(serverMIC)}, PubKeyAuth: sealedServerHash})
 		if readErr != nil || writeFull(tlsConn, serverResponse) != nil {
 			serverResult <- errors.New("could not send server pubKeyAuth")
 			return
