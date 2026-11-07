@@ -36,12 +36,15 @@ Invariants touchés : l'identité qui décide est celle que le service vérifie,
 
 **Conséquences**
 
-- (+) Le critère de sortie devient atteignable, et le lien compte–fournisseur ferme la confusion de `sub` entre émetteurs, y compris lors d'un changement d'émetteur.
+- (+) **Mesuré** (7 novembre 2026) : avant, sur `main`, un autre émetteur au même `sub` rejoint le compte existant ; après, deux comptes. Tests de l'application : 8 tests d'attaque, et 8 mutations de la logique sur 8 tuées, plus celle des codes d'enrôlement par annuaire. Le fichier est vérifié en entier (17 refus, chacun avec son test). Tests PostgreSQL : un `sub` par fournisseur, ancien index retiré, tentative qui garde son fournisseur.
+- (+) **Mesuré sur processus réels** (`test/integration/identity_providers_flow_test.go`, 19 à 26 s) : un Authentication Service, sous PostgreSQL, derrière une vraie Gateway, fédère à la fois un vrai OpenLDAP, un vrai Samba AD et deux Dex v2.46.0 épinglés par empreinte. Chaque utilisateur se connecte avec les rôles de sa propre table. Le même `sub` chez les deux Dex donne deux comptes. Un code de Dex B sur une connexion ouverte chez Dex A est refusé (`401`). Une connexion qui ne nomme pas d'annuaire répond `400`, sans qu'OpenLDAP reçoive de bind. Les comptes faits par les variables ne sont repris que par l'entrée qui le déclare, et le démarrage dit ceux qu'aucune ne reprend. Deux mutations tuées sur ces processus : un annuaire choisi par défaut, et le retour échangé chez un autre fournisseur. Admin UI : un choix par annuaire et un bouton par fournisseur ; 80 tests Vitest verts, deux mutations tuées.
+- (+) Le critère de sortie est atteint, et le lien compte–fournisseur ferme la confusion de `sub` entre deux fournisseurs déclarés.
 - (+) Aucune donnée réécrite, aucune installation existante modifiée tant qu'elle garde ses variables.
 - (−) **Contrat public élargi** : un champ facultatif sur trois routes et deux listes publiques. Rien n'est retiré, mais les libellés des fournisseurs deviennent lisibles sans connexion.
 - (−) **Deux manières de configurer** tant que les variables restent valides ; leur retrait serait une autre décision.
 - (−) Les comptes existants **non repris** deviennent inaccessibles en passant au fichier : c'est voulu, mais cela demande un geste explicite, et la documentation doit le dire en tête.
 - (−) Un émetteur OIDC injoignable au démarrage empêche de démarrer, et cela vaut désormais pour tous les autres fournisseurs. C'est le comportement actuel, étendu ; le changer serait une autre décision.
+- (−) **Dex** devient une image de test, épinglée par empreinte dans le code du test : Dependabot ne la met pas à jour, comme l'image OpenBao des tests.
 - (−) Le `sub` d'un fournisseur reste sa parole : un fournisseur hostile peut créer autant de comptes qu'il veut **chez lui**, mais aucun chez un autre.
 
 **Précisions de mise en œuvre** (7 novembre 2026, sans changer la décision)

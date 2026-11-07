@@ -23,6 +23,8 @@ openbastion-cli mfa enrollment-code -authn https://authentication:8086 -local al
 # un compte d'annuaire, par son nom de connexion (sAMAccountName ou uid) : le compte ldap:<id>
 # n'existe qu'après sa première connexion
 openbastion-cli mfa enrollment-code -authn https://authentication:8086 -directory alice
+# plusieurs annuaires (IDENTITY_PROVIDERS_FILE, ADR-0076) : l'alice de l'annuaire corp-ad, pas une autre
+openbastion-cli mfa enrollment-code -authn https://authentication:8086 -directory alice -directory-id corp-ad
 ```
 
 Le code est **affiché une seule fois**, vaut **24 heures**, sert **une fois** ; un nouveau code annule le précédent. Remettez-le à l'utilisateur **par un autre canal** que son mot de passe (en personne, par téléphone). L'utilisateur saisit ce code dans l'Admin UI, reçoit son secret (base32 et URI `otpauth://`, à recopier dans son application : pas de QR code), puis saisit un premier code pour confirmer. Le code d'enrôlement est alors brûlé.

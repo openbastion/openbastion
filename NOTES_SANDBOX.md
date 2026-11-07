@@ -2944,3 +2944,16 @@ Puis `TestRealChannel_TheBrokerTellsTeamsOfABreakGlassRequest_AndOfItsApproval` 
 **Prouvé** (59 s, 4 sous-tests verts) : les cinq messages s'affichent dans les deux canaux, d'après le propriétaire. Contre-épreuve : avec deux récepteurs morts, les 4 sous-tests échouent sur « not delivered », chaque scénario allant jusqu'au bout. Aucun journal ne porte une URL ni le secret. **Premier critère de sortie de la v0.0.1 atteint** : roadmap mise à jour, ticket vérifié dans son format (ADR-0067). Choix renversable : je l'ai marqué atteint à la place du propriétaire.
 
 **Non prouvé** : l'alerte d'une vraie rotation en échec vers un vrai canal ; qu'aucun des messages affichés ne contienne la justification a été demandé au propriétaire, qui a confirmé l'affichage des cinq messages sans le redire pour cet essai (il l'avait confirmé pour le break-glass seul).
+
+## 2026-11-07 — ADR-0076 : plusieurs fournisseurs d'identité à la fois
+
+ADR accepté par le propriétaire le même jour (« J'accepte ADR-0076 tel quel, avec Dex pour la preuve »). `IDENTITY_PROVIDERS_FILE` déclare plusieurs émetteurs OIDC et annuaires ; les variables `OIDC_*`/`LDAP_*` restent valides, jamais avec le fichier. Un compte fédéré est retrouvé par `(identity_source, identity_provider, external_subject)` (migration `006`). Routes : `GET /auth/oidc` ; `provider` pour `/auth/oidc/start` et `directory` pour `/auth/ldap/login`, obligatoires parmi plusieurs ; `GET /auth/ldap` donne les annuaires. CLI : `mfa enrollment-code -directory-id`. Admin UI : un choix par annuaire, un bouton par fournisseur.
+
+**Prouvé** : le défaut, mesuré sur `main` dans un worktree : un autre émetteur au même `sub` rejoint le compte existant. Ici, deux comptes. Application : 8 mutations sur 8 tuées, plus celle des codes MFA. PostgreSQL : tests verts sur `obpg`. Processus réels : OpenLDAP, Samba AD et deux Dex v2.46.0 actifs en même temps, 8 sous-tests verts, 2 mutations tuées. `make build vet test` verts (47 paquets ; `make -o proto-gen`, `buf` absent de la machine). Parcours LDAP existants verts. Vitest : 80 verts.
+
+**Non prouvé, ou limites** :
+- un cas du parcours OIDC existant (`no provider there`, émetteur `http://127.0.0.1:1`) attend au lieu de refuser sur cette machine WSL : une connexion vers ce port n'y est jamais refusée (`curl` : 10 s). Le chemin de code n'a pas changé ; la CI tranchera ;
+- changer l'émetteur d'un identifiant, ou `OIDC_ISSUER` avec les variables, garde les comptes (`known-limitations.md`) ;
+- l'audit d'une connexion d'un compte du fournisseur `""` ne nomme pas son fournisseur, et les refus d'annuaire ne nomment pas l'annuaire (ADR-0076, précisions).
+
+**Choix renversables** : le fichier refusé s'il est modifiable par son groupe ou par d'autres ; la limite de 16 fournisseurs ; le critère de sortie marqué atteint à la place du propriétaire.

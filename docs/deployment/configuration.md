@@ -87,6 +87,10 @@ Un ticket ne vaut que sur l'instance qui l'a émis : **ne mettez pas d'équilibr
 
 L'Authentication Service peut laisser un annuaire vérifier le mot de passe de ses utilisateurs : `LDAP_URL`, `LDAP_SCHEMA` (`ad` ou `rfc`), `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD_FILE` (fichier `0600`), `LDAP_USER_BASE_DN`, `LDAP_GROUP_BASE_DN` et `LDAP_ROLE_MAP_FILE` vont ensemble, `LDAP_CA_FILE` en option. Toujours sur TLS. La table des rôles, les deux schémas et les refus sont décrits dans [`../administration/identity-providers.md`](../administration/identity-providers.md).
 
+## Plusieurs fournisseurs d'identité (ADR-0076)
+
+`IDENTITY_PROVIDERS_FILE` déclare plusieurs émetteurs OIDC et plusieurs annuaires à la fois, à la place des variables `OIDC_*` et `LDAP_*` (les deux ensemble : refus de démarrer). Le fichier, vérifié en entier, ne contient aucun secret mais ne doit être modifiable que par son propriétaire. Son format, la reprise des comptes existants et les refus sont décrits dans [`identity-providers.md`](../administration/identity-providers.md#plusieurs-fournisseurs-à-la-fois-adr-0076).
+
 ## Clés de chiffrement : Transit (ADR-0049)
 
 Le Password Vault et le Command Recorder peuvent faire garder leur clé maîtresse par le moteur Transit d'OpenBao (ou de HashiCorp Vault) plutôt que par `KMS_KEY_HEX` : `TRANSIT_ADDR`, `TRANSIT_KEY`, et soit `TRANSIT_TOKEN_FILE` (fichier `0600`), soit AppRole — `TRANSIT_ROLE_ID_FILE` et `TRANSIT_SECRET_ID_FILE` (fichiers `0600`, `TRANSIT_APPROLE_MOUNT` en option, ADR-0058) —, et en option `TRANSIT_MOUNT` et `TRANSIT_CA_FILE`. La mise en place, la politique minimale du jeton, la migration depuis la clé locale et le comportement en panne sont décrits dans [`../security/key-management.md`](../security/key-management.md).

@@ -52,4 +52,34 @@ LDAP_GROUP_BASE_DN=DC=example,DC=com
 LDAP_ROLE_MAP_FILE=/etc/openbastion/ldap-roles.json
 ```
 
+## Plusieurs fournisseurs à la fois (ADR-0076)
+
+Les variables ci-dessus déclarent **un** émetteur OIDC et **un** annuaire. Pour en servir plusieurs en même temps (par exemple Active Directory, OpenLDAP et deux émetteurs OIDC), déclarez-les tous dans un fichier, `IDENTITY_PROVIDERS_FILE`, et retirez les variables `OIDC_*` et `LDAP_*` : **les deux ensemble, le service refuse de démarrer**.
+
+```json
+{
+  "oidc": [
+    {"id": "corp", "label": "Compte Corp", "issuer": "https://login.corp.example", "client_id": "openbastion",
+     "client_secret_file": "/run/secrets/corp-oidc-secret", "redirect_url": "https://bastion.example/ui/oidc/callback",
+     "role_map_file": "/etc/openbastion/corp-roles.json", "groups_claim": "groups", "adopt_legacy_accounts": true}
+  ],
+  "directories": [
+    {"id": "corp-ad", "label": "Active Directory", "url": "ldaps://dc1.example.com:636", "schema": "ad",
+     "bind_dn": "CN=svc-bastion,OU=Service Accounts,DC=example,DC=com", "bind_password_file": "/run/secrets/ad-bind-password",
+     "user_base_dn": "OU=People,DC=example,DC=com", "group_base_dn": "DC=example,DC=com", "role_map_file": "/etc/openbastion/ad-roles.json"},
+    {"id": "labs", "label": "Annuaire des laboratoires", "url": "ldap://ldap.labs.example:389", "ca_file": "/etc/openbastion/labs-ca.pem",
+     "schema": "rfc", "bind_dn": "cn=svc,dc=labs,dc=example", "bind_password_file": "/run/secrets/labs-bind-password",
+     "user_base_dn": "ou=people,dc=labs,dc=example", "group_base_dn": "ou=groups,dc=labs,dc=example", "role_map_file": "/etc/openbastion/labs-roles.json"}
+  ]
+}
+```
+
+- **L'identifiant (`id`) lie les comptes à leur fournisseur** : `[a-z0-9-]`, 1 à 32 caractères, unique dans le fichier. **Ne le réutilisez jamais pour un autre fournisseur, et ne changez pas l'émetteur ou l'annuaire d'un identifiant existant** : les comptes de cet identifiant seraient ceux du nouveau. Pour un nouveau fournisseur, un nouvel identifiant. Le libellé (`label`, 1 à 64 caractères) est ce que l'écran de connexion affiche.
+- **Les comptes** s'appellent `oidc:<id>:<sub>` et `ldap:<id>:<identifiant stable>` : le même `sub` chez deux émetteurs donne deux comptes. Les rôles viennent de la table de **ce** fournisseur seulement.
+- **Les comptes existants** (créés par les variables) s'appellent `oidc:<sub>` et `ldap:<identifiant>`. En passant au fichier, **une entrée de chaque type au plus** peut les reprendre avec `"adopt_legacy_accounts": true`. Sans cette déclaration, ils ne peuvent plus se connecter, et le démarrage le dit (« made before ADR-0076 belong to no entry »). Ne reprenez les comptes qu'avec l'entrée **du même fournisseur** qu'avant.
+- **Le fichier tout entier, ou rien** : une entrée invalide, un identifiant en double, deux entrées avec le même émetteur (ou le même annuaire et la même base), plus de 16 fournisseurs, une table illisible, un secret lisible par d'autres, un émetteur OIDC injoignable — **refus de démarrer**, sans aucun secret dans le message. Le fichier ne contient pas de secret, mais **il ne doit être modifiable que par son propriétaire** (`0644` au plus) : qui peut l'écrire peut déclarer un fournisseur qui donne `platform-admin`. Un annuaire injoignable, lui, n'arrête pas le service : ses connexions répondent `503`.
+- **L'utilisateur choisit** : `POST /auth/oidc/start` prend `{"provider": "<id>"}` et `POST /auth/ldap/login` prend `"directory": "<id>"`, obligatoires dès qu'il y en a plusieurs (`400` sinon). OpenBastion n'essaie **jamais** les annuaires l'un après l'autre : le mot de passe d'un utilisateur ne part que vers l'annuaire qu'il a choisi. `GET /auth/oidc` et `GET /auth/ldap` donnent la liste `[{id, label}]` à l'écran de connexion, rien d'autre.
+- **Le retour OIDC s'échange chez le fournisseur où la connexion a commencé**, jamais ailleurs : un code d'un autre fournisseur est refusé (`401`). Déclarez chez chaque fournisseur l'URL de retour de son entrée.
+- **Second facteur** : le code d'enrôlement d'un compte d'annuaire du fichier se donne pour son annuaire, `openbastion-cli mfa enrollment-code -authn … -directory alice -directory-id corp-ad` ([`second-factor.md`](second-factor.md)).
+
 *v0.0.1, à venir* — Entra ID, SAML et SCIM (`docs/architecture/system-overview.md`). Ce document sera mis à jour à leur livraison.

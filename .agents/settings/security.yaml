@@ -44,6 +44,7 @@ optional_keys:             # requises seulement avec la fonction qu'elles serven
   - MFA_SECRET_KEY_HEX      # authentication (ADR-0062) : scelle les secrets TOTP, obligatoire avec MFA_REQUIRED_ROLES (et réciproquement) ; la perdre rend tous les secrets illisibles
   - S3_ACCESS_KEY + S3_SECRET_KEY # video-recorder : compte S3 dédié ; en Compose, identité SeaweedFS actuellement administratrice pour créer le bucket
 optional_secrets:          # fichiers 0600, jamais une variable d'environnement qui porte la valeur
+  - IDENTITY_PROVIDERS_FILE # authentication (ADR-0076) : pas un secret, mais modifiable par son seul propriétaire ; ses client_secret_file et bind_password_file en 0600 ; exclut OIDC_* et LDAP_*
   - LDAP_BIND_PASSWORD_FILE # authentication (ADR-0061) : le compte de service de l'annuaire, relu à chaque connexion ; avec LDAP_URL, LDAP_SCHEMA, LDAP_BIND_DN, LDAP_USER_BASE_DN, LDAP_GROUP_BASE_DN, LDAP_ROLE_MAP_FILE, tout ou rien
 never:
   - InsecureSkipVerify
