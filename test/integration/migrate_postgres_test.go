@@ -141,11 +141,10 @@ func TestPostgresMigrate_ComponentsCreatingTheTableTogether_NoneFails(t *testing
 	db := migrateDB(t)
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	const rounds, components = 10, 6
+	keepAppliedMigrations(t, db)
 	failures := 0
 	for round := 0; round < rounds; round++ {
-		// No schema_migrations yet: every component creates it at once. The services
-		// recreate it and record their 001_init.sql again at their next start (it is
-		// idempotent): this costs the tests nothing.
+		// No schema_migrations yet: every component creates it at once.
 		if _, err := db.Exec(`DROP TABLE IF EXISTS schema_migrations`); err != nil {
 			t.Fatal(err)
 		}
@@ -185,6 +184,41 @@ func TestPostgresMigrate_ComponentsCreatingTheTableTogether_NoneFails(t *testing
 	if failures != 0 {
 		t.Fatalf("%d of %d components creating schema_migrations together failed", failures, rounds*components)
 	}
+}
+
+// keepAppliedMigrations puts back, once the test is over, the rows of schema_migrations the
+// services wrote in this shared database. Without them a service replays every migration at its
+// next start, and only 001_init.sql is idempotent (ADR-0030): 002_oidc.sql recreates the index
+// (identity_source, external_subject) that 006_identity_provider.sql replaced, and fails as soon
+// as two providers have the same subject (ADR-0076).
+func keepAppliedMigrations(t *testing.T, db *sql.DB) {
+	t.Helper()
+	const kept = "schema_migrations_kept_by_test"
+	const cols = "component, version, name, checksum, applied_at"
+	if _, err := db.Exec(`DROP TABLE IF EXISTS ` + kept); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrate.Apply(context.Background(), db, "test-migrate-keep", fstest.MapFS{"001_init.sql": {Data: []byte(`SELECT 1;`)}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE ` + kept + ` AS SELECT ` + cols + ` FROM schema_migrations WHERE component <> 'test-migrate-keep'`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		// The table as the runner makes it, if a failed round left none.
+		if _, err := migrate.Apply(context.Background(), db, "test-migrate-keep", fstest.MapFS{"001_init.sql": {Data: []byte(`SELECT 1;`)}}); err != nil {
+			t.Error(err)
+		}
+		for _, q := range []string{
+			`INSERT INTO schema_migrations (` + cols + `) SELECT ` + cols + ` FROM ` + kept + ` ON CONFLICT (component, version) DO NOTHING`,
+			`DELETE FROM schema_migrations WHERE component = 'test-migrate-keep'`,
+			`DROP TABLE ` + kept,
+		} {
+			if _, err := db.Exec(q); err != nil {
+				t.Errorf("putting back schema_migrations: %v", err)
+			}
+		}
+	})
 }
 
 func TestPostgresMigrate_AMigrationChangedAfterItWasAppliedIsRefused(t *testing.T) {
