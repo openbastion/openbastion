@@ -75,7 +75,7 @@ Demande **avant d'agir** si, et seulement si, la décision est **irréversible o
 - affaiblir ou retirer une garantie de sécurité — même « temporairement » ;
 - une demande qui contredit un invariant, un ADR accepté ou une policy ;
 - un coût important non demandé (grosse dépendance, refonte de plusieurs services) ;
-- une dépendance externe nouvelle ; une branche longue, un tag, une release, une PR.
+- une dépendance externe nouvelle ; une branche longue, un tag, une release, la fusion d'une PR.
 
 Pour tout le reste — nommage, découpage interne, forme d'un test, texte de documentation — **décide, avance, et marque le choix comme renversable** dans ton rapport. Si l'utilisateur est absent, prends la lecture la plus raisonnable, dis laquelle en tête de ton travail, et continue ; sauf pour ce qui est irréversible : prépare, expose la décision, arrête-toi.
 
@@ -84,7 +84,7 @@ Pour tout le reste — nommage, découpage interne, forme d'un test, texte de do
 1. **Prouve ce que tu affirmes** : lance les tests, lis la sortie, mesure les chiffres avant de les écrire. Toute garantie de sécurité a un test d'attaque **et** une contre-épreuve.
 2. **N'affaiblis aucun invariant** (secrets jamais dans le control plane, enregistrer ou refuser, break-glass borné, identité tirée du certificat, audit fail-closed, secret envoyé seulement à la cible que le compte reconnaît — sa clé d'hôte épinglée ou un certificat de l'autorité épinglée pour son nom, ADR-0039 et ADR-0048) pour faire passer quoi que ce soit.
 3. **Conçois avant de coder** : ADR et contrats d'abord ; documentation dans le même commit que le code.
-4. **Commite et pousse chaque incrément vérifié** sur `main`, sans secret, sans force-push ; termine le commit par les lignes d'attribution de la session.
+4. **Livre chaque incrément vérifié par une pull request** : branche partie de `origin/main`, commit, push de la branche, PR vers `main` — jamais de push direct sur `main` ; sans secret, sans force-push ; termine le commit et la PR par les lignes d'attribution de la session. La fusion revient à l'utilisateur.
 5. **Sois honnête dans ton rapport** : en français, résultat d'abord, chiffres mesurés, choix renversables, limites restantes, une seule prochaine étape.
 
 ## Commandes de base
