@@ -96,7 +96,7 @@ Deux règles guident l'ordre de livraison :
 | Reporting Service | | | ✅ |
 | Workflow Service | | ✅ | |
 | Approval Engine | | ✅ | |
-| Notifications Slack/Teams | | ✅ (format livré, ADR-0074 ; Teams réel affiche une alerte de l'Audit Service et un break-glass approuvé du Broker, signés ; demande avec ticket vers Teams et Slack réel à essayer) | |
+| Notifications Slack/Teams | | ✅ (format livré, ADR-0074 ; Teams réel affiche une alerte de l'Audit Service et un break-glass approuvé du Broker, signés ; Slack réel affiche le message de test ; demande avec ticket et services réels vers Slack à essayer) | |
 | MFA Service | | ✅ (TOTP, ADR-0062, et WebAuthn, ADR-0065, livrés dans l'Authentication Service) | |
 | Anomaly Detection / Risk Engine | | | ✅ |
 | OIDC Connector | ✅ | | |

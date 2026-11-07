@@ -2931,6 +2931,8 @@ Puis `TestRealChannel_TheAuditServicePushesTheVaultsAlertToTeams_Signed` (`test/
 
 Puis `TestRealChannel_TheBrokerTellsTeamsOfABreakGlassRequest_AndOfItsApproval` : vraie Gateway, Broker, Authentication, Authorization et Audit Service, Vault simulé (`playVaultAccounts`). `sre-oncall` demande 10 min avec une justification, `lead-bob` approuve ; le Broker, signé (`BREAKGLASS_NOTIFY_SECRET`), au format `teams`. Passe en 17 s ; le propriétaire voit les deux cartes de `session_261936f7df634def`, la seconde « APPROVED by user_78dc8ce312e0d7e6 », et la justification dans aucune. Contre-épreuve : contre un récepteur mort, échec sur « not delivered ». Le test d'alerte passe du port 18793, déjà pris par `breakglass_discovery_test.go`, à 18860.
 
-**Non prouvé** : l'alerte née d'une vraie rotation en échec (`rotation_alert_flow_test.go` le prouve contre un récepteur de test) ; une demande d'accès avec ticket vers Teams ; le ticket dans un ITSM ; Slack réel. Le premier critère de sortie de la v0.0.1 reste ouvert.
+**Non prouvé** : l'alerte née d'une vraie rotation en échec (`rotation_alert_flow_test.go` le prouve contre un récepteur de test)  ; une demande d'accès avec ticket vers Teams ; le ticket dans un ITSM.
+
+**Slack réel** (même jour) : le premier essai répond `302`, car l'URL fournie était un lien Workflow Builder (`slack.com/shortcuts/…`) et non un webhook ; rien n'est publié, et la redirection n'est pas suivie, comme prévu. Avec un webhook entrant (`hooks.slack.com/services/…`), `TestRealChannel` passe en 0,46 s, et le propriétaire voit la phrase, `??here?` compris, sans notification. Dépannage : la ligne du `302` est ajoutée. **Non prouvé** : un message de service réel vers Slack ; une demande d'accès avec ticket vers l'un ou l'autre canal. Le premier critère de sortie de la v0.0.1 reste ouvert.
 
 **Limite** : un tenant qui interdit « Anyone » ne peut pas utiliser ce canal. OAuth (client credentials) demanderait son propre ADR.
