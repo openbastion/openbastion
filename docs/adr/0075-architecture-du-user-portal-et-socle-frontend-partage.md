@@ -1,4 +1,4 @@
-# ADR-0074 — Architecture du User Portal et socle frontend partagé
+# ADR-0075 — Architecture du User Portal et socle frontend partagé
 
 **Statut** `Proposé` · 6 novembre 2026 · acceptation explicite du propriétaire du projet requise.
 
