@@ -122,9 +122,12 @@ func (f *fakeIdP) provider(t *testing.T) *infrastructure.OIDCProvider {
 }
 
 // claims is a valid ID token's payload for this client, nonce "n1".
-func (f *fakeIdP) claims() jwt.MapClaims {
+func (f *fakeIdP) claims() jwt.MapClaims { return f.claimsAt(f.srv.URL) }
+
+// claimsAt is claims from issuer.
+func (f *fakeIdP) claimsAt(issuer string) jwt.MapClaims {
 	now := time.Now()
-	return jwt.MapClaims{"iss": f.srv.URL, "aud": clientID, "sub": "subject-1", "nonce": "n1", "iat": now.Unix(),
+	return jwt.MapClaims{"iss": issuer, "aud": clientID, "sub": "subject-1", "nonce": "n1", "iat": now.Unix(),
 		"exp": now.Add(5 * time.Minute).Unix(), "name": "Alice", "groups": []string{"admins"}}
 }
 

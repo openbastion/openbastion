@@ -95,4 +95,22 @@ Un `sub` n'est unique que chez son émetteur. Le service retient donc, au premie
 - **Les annuaires ne sont pas concernés** : leurs comptes sont retrouvés par `objectGUID` ou `entryUUID`, uniques par construction, et leur adresse peut changer.
 - **Le premier émetteur retenu est celui du premier démarrage avec cette version.** Un changement d'émetteur fait avant ne peut pas être détecté.
 
-*v0.0.1, à venir* — Entra ID, SAML et SCIM (`docs/architecture/system-overview.md`). Ce document sera mis à jour à leur livraison.
+## Microsoft Entra ID (ADR-0079)
+
+Entra ID est une entrée `oidc` du fichier, de profil `entra`, liée à **un** tenant déclaré. Le flux est celui d'OIDC (code d'autorisation, PKCE), avec les mêmes contrôles de jeton, le même verrou d'émetteur (ADR-0078) et une table de rôles propre à l'entrée.
+
+```json
+{"id": "corp-entra", "label": "Microsoft", "profile": "entra", "tenant_id": "11111111-2222-4333-8444-555555555555",
+ "issuer": "https://login.microsoftonline.com/11111111-2222-4333-8444-555555555555/v2.0", "client_id": "<id de l'application>",
+ "client_secret_file": "/run/secrets/entra-secret", "redirect_url": "https://bastion.example/ui/oidc/callback",
+ "role_map_file": "/etc/openbastion/entra-roles.json"}
+```
+
+- **Un tenant, et son émetteur v2 exactement.** `tenant_id` est le GUID du tenant, en minuscules. `issuer` est `https://login.microsoftonline.com/<tenant_id>/v2.0`, au caractère près. `common`, `organizations`, `consumers`, un nom de domaine, l'émetteur v1 (`sts.windows.net`) ou celui d'un autre tenant : **refus de démarrer**. Un `tenant_id` sans `"profile": "entra"` aussi. Pour deux tenants, deux entrées : le même `sub` y donne deux comptes.
+- **Chaque jeton doit porter ce tenant** (`tid`). Un jeton sans `tid`, ou d'un autre tenant, est refusé (`401`) avant toute création ou reprise de compte.
+- **Les groupes viennent du jeton.** Déclarez-les dans l'application Entra (*Token configuration* → *Add groups claim*, ou `groupMembershipClaims` dans le manifeste) : OpenBastion ne demande pas de scope `groups`, et ne lit que le claim de groupes (`groups_claim`, `groups` par défaut). Les valeurs sont celles qu'Entra met dans le jeton, en général les identifiants (GUID) des groupes : ce sont eux que la table des rôles nomme.
+- **Les rôles viennent de la table de l'entrée seulement.** Un claim `roles` ou un rôle d'application Entra ne donne rien. Un groupe absent de la table ne donne rien. Sans aucun groupe de la table : `403`, aucun compte.
+- **Trop de groupes : refus.** Quand un utilisateur a plus de groupes qu'un jeton n'en porte, Entra remplace la liste par une référence à Microsoft Graph (`_claim_names` qui nomme les groupes, ou `hasgroups`). OpenBastion refuse alors la connexion (`401`) et **ne suit jamais** cette référence : aucune permission Graph n'est demandée. Réduisez les groupes émis (par exemple *Groups assigned to the application*) pour ces utilisateurs.
+- **Les variables `OIDC_*` ne sont jamais Entra ID** : seul le fichier déclare ce profil.
+
+*v0.0.1, à venir* — SAML et SCIM (`docs/architecture/system-overview.md`). Ce document sera mis à jour à leur livraison.

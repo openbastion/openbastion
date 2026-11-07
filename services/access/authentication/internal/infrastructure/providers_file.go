@@ -38,6 +38,10 @@ type OIDCEntryConfig struct {
 	AdoptLegacyAccounts bool   `json:"adopt_legacy_accounts"`
 	// PreviousIssuer declares a change of issuer (ADR-0078): the one this id was bound to.
 	PreviousIssuer string `json:"previous_issuer"`
+	// Profile is "oidc" (or empty) for a generic provider, "entra" for Entra ID (ADR-0079), which
+	// requires TenantID and the v2 issuer of that tenant exactly.
+	Profile  string `json:"profile"`
+	TenantID string `json:"tenant_id"`
 }
 
 // DirectoryEntryConfig is one directory: the fields of ADR-0061, its ID, label and role map.
@@ -117,6 +121,18 @@ func (f *ProvidersFile) check() error {
 			if v == "" {
 				return fmt.Errorf("IDENTITY_PROVIDERS_FILE: oidc %q: %s is required", e.ID, field)
 			}
+		}
+		switch e.Profile {
+		case "", ProfileOIDC:
+			if e.TenantID != "" {
+				return fmt.Errorf("IDENTITY_PROVIDERS_FILE: oidc %q: tenant_id is for the profile %q only", e.ID, ProfileEntra)
+			}
+		case ProfileEntra:
+			if err := checkEntraIssuer(e.TenantID, e.Issuer); err != nil {
+				return fmt.Errorf("IDENTITY_PROVIDERS_FILE: oidc %q (Entra ID): %v", e.ID, err)
+			}
+		default:
+			return fmt.Errorf("IDENTITY_PROVIDERS_FILE: oidc %q: profile is %q or %q", e.ID, ProfileOIDC, ProfileEntra)
 		}
 		// The same issuer twice would be the same subjects under two IDs: two accounts per person.
 		if other, ok := issuers[e.Issuer]; ok {
