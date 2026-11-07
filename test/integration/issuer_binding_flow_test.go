@@ -140,6 +140,10 @@ func TestIssuerBinding_AnotherIssuerRefusesTheStart_AChangeIsDeclaredAndAuditedF
 	var account string
 	t.Run("the variables: another OIDC_ISSUER refuses the start, and says how to get out", func(t *testing.T) {
 		account, _ = login(vars(issuerA, ""), "")
+		// The account of the variables' provider, named as such in the chain (ADR-0076, point 10).
+		if d := spy.detailsOf("auth.login", account); d["identity_source"] != "oidc" || d["identity_provider"] != "(variables)" {
+			t.Fatalf("auth.login of %s: details %v, want oidc and (variables)", account, d)
+		}
 		refused(vars(issuerB, ""), "OIDC_ISSUER is bound to the issuer "+issuerA, "configured with "+issuerB, "OIDC_PREVIOUS_ISSUER = "+issuerA)
 		if got := boundIssuer(t, db, ""); got != issuerA {
 			t.Fatalf("bound to %q after a refusal, want %q", got, issuerA)
@@ -182,7 +186,10 @@ func TestIssuerBinding_AnotherIssuerRefusesTheStart_AChangeIsDeclaredAndAuditedF
 	})
 
 	t.Run("an entry of the file: another issuer under its id refuses the start", func(t *testing.T) {
-		login(file(entry{id: corp, issuer: issuerA}), corp)
+		username, _ := login(file(entry{id: corp, issuer: issuerA}), corp)
+		if d := spy.detailsOf("auth.login", username); d["identity_source"] != "oidc" || d["identity_provider"] != corp {
+			t.Fatalf("auth.login of %s: details %v, want oidc and %s", username, d, corp)
+		}
 		refused(file(entry{id: corp, issuer: issuerB}), fmt.Sprintf("oidc %q is bound to the issuer %s", corp, issuerA), fmt.Sprintf("oidc %q: previous_issuer = %s", corp, issuerA))
 	})
 
@@ -191,6 +198,10 @@ func TestIssuerBinding_AnotherIssuerRefusesTheStart_AChangeIsDeclaredAndAuditedF
 		refused(file(entry{id: other, issuer: issuerA, adopt: true}), "adopt_legacy_accounts", "bound to the issuer "+issuerB)
 		if username, _ := login(file(entry{id: other, issuer: issuerB, adopt: true}), other); username != account {
 			t.Fatalf("the entry of their issuer adopting them: %s, want %s", username, account)
+		}
+		// An adopted account is named after the entry that adopts it.
+		if d := spy.detailsOf("auth.login", account); d["identity_provider"] != other {
+			t.Fatalf("auth.login of the adopted %s: details %v, want the provider %s", account, d, other)
 		}
 	})
 
@@ -331,4 +342,16 @@ func forgetIssuerBindings(t *testing.T, db *sql.DB, providers ...string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// detailsOf is the details of the last event of action for resource that reached the Audit Service.
+func (s *auditSpy) detailsOf(action, resource string) map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.events) - 1; i >= 0; i-- {
+		if e := s.events[i]; e.Action == action && e.ResourceID == resource {
+			return e.Details
+		}
+	}
+	return nil
 }

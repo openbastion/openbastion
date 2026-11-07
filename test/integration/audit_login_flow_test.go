@@ -45,6 +45,12 @@ func TestAuditLogin_ATokenIsWrittenBeforeItIsIssued_AndTheAuditDownNobodyLogsIn(
 			t.Fatalf("a wrong password: %d", s)
 		}
 		spy.waitFor(t, "auth.login_refused", dba, false)
+		// Who vouches for the account, in the chain (ADR-0076, point 10): a local one says so.
+		for _, action := range []string{"auth.login", "auth.login_refused"} {
+			if d := spy.detailsOf(action, dba); d["identity_source"] != "local" || d["identity_provider"] != "" {
+				t.Fatalf("%s of a local account: details %v, want identity_source local and no provider", action, d)
+			}
+		}
 	})
 
 	t.Run("the second factor's code, enrollment and login are in the chain, in their order", func(t *testing.T) {
