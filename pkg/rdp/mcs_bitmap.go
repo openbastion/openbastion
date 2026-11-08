@@ -1587,7 +1587,9 @@ readUpdate:
 		var readErr error
 		if fragmentCount == 0 {
 			var fastPath bool
-			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPBitmapTPKTPacket)
+			// A Fast-Path PDU is up to 0x7fff bytes (a 15-bit length): Windows fills it past
+			// 16 383 (CI run #46). A TPKT stays bounded by parseRDPBitmapMCSFragment.
+			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPFastPathPacket)
 			if readErr == nil && fastPath {
 				if rdpFastPathUpdateIsIgnored(packet) {
 					clear(packet)
@@ -1610,6 +1612,9 @@ readUpdate:
 		}
 		if readErr != nil {
 			clear(assembled)
+			if errors.Is(readErr, ErrMCSConnection) {
+				return RDPBitmapUpdate{}, readErr // what the read refused, said
+			}
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
 		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)

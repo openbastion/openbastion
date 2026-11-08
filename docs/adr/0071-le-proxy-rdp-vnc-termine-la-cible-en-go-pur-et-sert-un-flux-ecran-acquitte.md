@@ -12,7 +12,7 @@ Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC
 |---|---|
 | Poignée de main, NLA, refus du §3 | **Établi** : CredSSP accepté, mauvais mot de passe refusé (`0xC000006D`), empreinte d'imposteur refusée avant tout octet CredSSP ; puis MCS, canaux, Client Info, licence, capacités et finalisation. |
 | `request-mic` et séquences | **Établi** : Windows ne demande pas le MIC ; le client l'envoie non demandé, à la séquence 0, flux RC4 réinitialisé, `pubKeyAuth` à 1. |
-| Fidélité des pixels, deltas RDP6 | **En partie** : à 16 bpp (Interleaved RLE et non compressé), écran et texte fidèles à l'œil. Le 32 bpp (RDP 6.0 planar, deltas) n'est pas rencontré : Windows par défaut propose 16 bpp à ce client. |
+| Fidélité des pixels, deltas RDP6 | **En partie** : à 16 bpp (Interleaved RLE et non compressé), écran et texte fidèles à l'œil. À 32 bpp, autorisé par stratégie sur une seconde cible (passage #46) : la session est négociée et chaque mise à jour décodée sans refus, **mais l'écran sort entièrement blanc** : le décodeur RDP 6.0 planar ne rend pas ce que Windows envoie. |
 | Fragments Fast-Path, réactivation | **Non rencontrés** dans ces sessions (aucun refus en 30 s de flux, aucun Deactivate All à l'ouverture de session) ; non prouvé qu'ils n'arrivent jamais. |
 | Mises à jour non graphiques | **En partie** : pointeur (Fast-Path 5 et 9), Save Session Info, Set Error Info, toutes ignorées ou reconnues ; la liste reste fermée. |
 
