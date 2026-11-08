@@ -169,9 +169,9 @@ func TestRDPWindows_Screen(t *testing.T) {
 			return screenstream.Message{}, false
 		}
 	}
-	settle := func(frame screenstream.Message) screenstream.Message {
+	settle := func(frame screenstream.Message, quiet time.Duration) screenstream.Message {
 		for {
-			following, ok := next(5 * time.Second)
+			following, ok := next(quiet)
 			if !ok {
 				return frame
 			}
@@ -190,7 +190,9 @@ func TestRDPWindows_Screen(t *testing.T) {
 	if !ok {
 		t.Fatalf("no frame from Windows in 90 s: %v", session.Err())
 	}
-	before := settle(first)
+	// Quiet for 10 s: the session opens, then Notepad starts (CI run #43: after 5 s, the click came
+	// before Notepad, and the change the test saw was Notepad appearing, not the keys).
+	before := settle(first, 10*time.Second)
 	dump("windows-before.png", before)
 	t.Logf("Windows' desktop: %dx%d, %d frame(s) to settle", before.Width, before.Height, frames)
 	// A screen is not a session: Windows' logon screen streams as well as a desktop, and keys reach
@@ -226,7 +228,7 @@ func TestRDPWindows_Screen(t *testing.T) {
 	if !ok {
 		t.Fatalf("the screen of Windows did not change after the keys: %v", session.Err())
 	}
-	after := settle(changed)
+	after := settle(changed, 5*time.Second)
 	dump("windows-after.png", after)
 	if bytes.Equal(after.PNG, before.PNG) {
 		t.Fatal("the screen came back identical: the input changed nothing")
