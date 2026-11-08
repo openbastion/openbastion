@@ -68,6 +68,12 @@ const (
 	rdpBitmapCompressed     = uint16(0x0001)
 	rdpBitmapNoCompHdr      = uint16(0x0400)
 	maxRDPBitmapRects       = 64
+	// maxRDPBitmapUpdateRects bounds the rectangles of one bitmap update: Windows sends its whole
+	// screen at once, as 64 x 64 tiles (260 for 1280 x 800, CI run #36). 4096 is the largest desktop
+	// accepted (maxRDPDesktopArea) in such tiles; the PDU size bounds it further (19 bytes at least
+	// per rectangle), and the pixels decoded per update stay bounded by maxRDPDesktopArea. Orders
+	// keep maxRDPBitmapRects.
+	maxRDPBitmapUpdateRects = 4096
 	// Keep each fragment below the conservative MCS/TPKT bound. A complete
 	// Share Data PDU has a 16-bit totalLength, so reassembly cannot exceed it.
 	maxRDPBitmapTPKTPacket      = 16_383
@@ -1047,7 +1053,8 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 		return result, ErrMCSConnection
 	}
 	count := int(binary.LittleEndian.Uint16(payload[:2]))
-	if count == 0 || count > maxRDPBitmapRects {
+	// A rectangle takes 18 header bytes and at least one of data: no more fit than the payload holds.
+	if count == 0 || count > maxRDPBitmapUpdateRects || count > (len(payload)-2)/19 {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	payload = payload[2:]
@@ -1072,7 +1079,9 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
 		destWidth, destHeight := right-left+1, bottom-top+1
-		if destWidth > width || destHeight > height ||
+		// The bitmap may be wider than its destination by the padding to four pixels, and no more;
+		// it is exactly as tall. A larger one would make the client decode what it never shows.
+		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height ||
 			uint32(left)+uint32(destWidth) > uint32(desktopWidth) || uint32(top)+uint32(destHeight) > uint32(desktopHeight) {
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}

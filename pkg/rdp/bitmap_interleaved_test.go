@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"testing"
+	"time"
 )
 
 // Vectors for each Interleaved RLE order, built from MS-RDPBCGR 3.1.9 (ADR-0083). Pixels are
@@ -210,6 +211,10 @@ func TestBitmapUpdateAtSessionDepth(t *testing.T) {
 		"15-bpp rectangle in a 16-bpp session": rect(0, 0, 1, 0, 2, 1, 15, 0, raw),
 		"destination wider than the bitmap":    rect(0, 0, 2, 0, 2, 1, 16, 0, raw),
 		"destination taller than the bitmap":   rect(0, 0, 1, 1, 2, 1, 16, 0, raw),
+		// Padding is to four pixels of width only: a bitmap larger than that would let a server make
+		// the client decode far more than it shows.
+		"bitmap wider than padding to four":    rect(0, 0, 0, 0, 8, 1, 16, 0, make([]byte, 16)),
+		"bitmap taller than its destination":   rect(0, 0, 1, 0, 2, 2, 16, 0, make([]byte, 8)),
 		"destination past the desktop":         rect(9, 0, 10, 0, 2, 1, 16, 0, raw),
 		"right before left":                    rect(1, 0, 0, 0, 2, 1, 16, 0, raw),
 	} {
@@ -219,6 +224,36 @@ func TestBitmapUpdateAtSessionDepth(t *testing.T) {
 	}
 	if _, err := parseRDPBitmapUpdateDataAt(rect(0, 0, 1, 0, 2, 1, 24, 0, make([]byte, 8)), 10, 10, 24); err == nil {
 		t.Error("a 24-bpp session accepted")
+	}
+}
+
+// Run #36: Windows' first update is the whole screen, 260 tiles of 64 x 64 in one Fast-Path PDU.
+func TestBitmapUpdateCarriesAWholeScreenOfTiles(t *testing.T) {
+	const tiles = 260
+	payload := binary.LittleEndian.AppendUint16(nil, tiles)
+	tile := cat([]byte{0xf3, 0x00, 0x10}, px(0x1234)) // mega mega color run of 64 x 64 pixels
+	for i := 0; i < tiles; i++ {
+		left, top := uint16(i%20*64), uint16(i/20*64)
+		for _, v := range []uint16{left, top, left + 63, top + 63, 64, 64, 16, rdpBitmapCompressed | rdpBitmapNoCompHdr, uint16(len(tile))} {
+			payload = binary.LittleEndian.AppendUint16(payload, v)
+		}
+		payload = append(payload, tile...)
+	}
+	update, err := parseRDPBitmapUpdateDataAt(payload, 1280, 832, 16)
+	if err != nil || len(update.Rectangles) != tiles {
+		t.Fatalf("%d rectangles, %v", len(update.Rectangles), err)
+	}
+	fb, err := NewRDPFramebuffer(1280, 832)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fb.Apply(update, time.Now()); err != nil {
+		t.Fatalf("framebuffer: %v", err)
+	}
+	// Beyond the bound, refused.
+	over := binary.LittleEndian.AppendUint16(nil, maxRDPBitmapUpdateRects+1)
+	if _, err := parseRDPBitmapUpdateDataAt(over, 1280, 832, 16); err == nil {
+		t.Fatal("more rectangles than the bound accepted")
 	}
 }
 

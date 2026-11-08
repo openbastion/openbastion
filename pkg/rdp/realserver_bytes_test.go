@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"os"
 	"testing"
 	"time"
 )
@@ -290,5 +291,30 @@ func TestFramebuffer_UnchangedKnowsOnlyWhatRepaintsTheSamePixels(t *testing.T) {
 	}
 	if framebuffer.Unchanged(RDPBitmapUpdate{}) {
 		t.Fatal("an empty update")
+	}
+}
+
+// Windows Server 2022, left as installed (16 bpp), CI run #36: the first update after the
+// finalization, as it came. The whole screen in one Fast-Path PDU, 260 tiles of 64 x 64, all
+// Interleaved RLE without header (ADR-0083). The client refused it for its rectangle count.
+func TestWindowsServer2022FirstUpdateAt16BPP(t *testing.T) {
+	packet, err := os.ReadFile("testdata/windows-server-2022-first-update-16bpp.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	update, err := parseRDPFastPathBitmapUpdateAt(packet, 1280, 800, 16)
+	if err != nil || len(update.Rectangles) != 260 {
+		t.Fatalf("%d rectangles, %v", len(update.Rectangles), err)
+	}
+	fb, err := NewRDPFramebuffer(1280, 800)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fb.Apply(update, time.Now()); err != nil {
+		t.Fatalf("framebuffer: %v", err)
+	}
+	// At 32 bpp, the same PDU is refused: its rectangles say 16.
+	if _, err := parseRDPFastPathBitmapUpdateAt(packet, 1280, 800, 32); err == nil {
+		t.Fatal("a 16-bpp update accepted in a 32-bpp session")
 	}
 }
