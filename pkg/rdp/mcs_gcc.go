@@ -24,12 +24,15 @@ const (
 	gccServerSecurityType = uint16(0x0c02)
 	gccServerNetworkType  = uint16(0x0c03)
 
-	rdpClientVersion            = uint32(0x00080004)
-	rdpClientBuild              = uint32(1)
-	rdpColor8BPP                = uint16(0xca01)
-	rdpColor24BPP               = uint16(0xca04)
-	rdpHighColor24BPP           = uint16(0x0018)
-	rdpSupported32BPP           = uint16(0x0008)
+	rdpClientVersion  = uint32(0x00080004)
+	rdpClientBuild    = uint32(1)
+	rdpColor8BPP      = uint16(0xca01)
+	rdpColor24BPP     = uint16(0xca04)
+	rdpHighColor24BPP = uint16(0x0018)
+	rdpSupported24BPP = uint16(0x0001)
+	rdpSupported32BPP = uint16(0x0008)
+	// Keep the 24-bpp fallback advertised alongside the requested 32-bpp session.
+	rdpSupportedColorDepths     = rdpSupported24BPP | rdpSupported32BPP
 	rdpClientErrInfo            = uint16(0x0001)
 	rdpClusterRedirectSupported = uint32(0x00000001)
 	rdpClusterRedirectVersion4  = uint32(0x0000000c)
@@ -184,7 +187,7 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	put16(1) // clientProductId
 	put32(0) // serialNumber
 	put16(rdpHighColor24BPP)
-	put16(rdpSupported32BPP)
+	put16(rdpSupportedColorDepths)
 	put16(rdpClientErrInfo | rdpClientWant32BPP)
 	productID := utf16.Encode([]rune("OpenBastion"))
 	for _, unit := range productID {
