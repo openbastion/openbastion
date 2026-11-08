@@ -31,6 +31,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -50,6 +51,8 @@ type authInfoCase struct {
 	requested uint32
 	// directNTLM drops SPNEGO, as FreeRDP does (CredSSPClientConfig.directNTLM).
 	directNTLM bool
+	// packet replaces the client's Connect-Initial; nil keeps it.
+	packet []byte
 	// seal replaces the client's sealing of authInfo; nil keeps it. domain is the one it names.
 	seal func(user, password string) func(*NTLMSSPClientSecurityContext, NTLMSSPChallenge, []byte) ([]byte, error)
 }
@@ -216,7 +219,29 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 	}
 	settings := MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: "OpenBastion", Timeout: 15 * time.Second}
 	var report []string
-	for _, c := range authInfoCases() {
+	cases := authInfoCases()
+	// CI run #22: direct NTLM changes nothing either. FreeRDP's own Connect-Initial, recorded by
+	// FreeRDP against this machine, after this client's CredSSP and TLS: if Windows answers it, the
+	// cause is what this client's Connect-Initial says; if not, it is this client's CredSSP or TLS.
+	if file := os.Getenv("RDP_WINDOWS_FREERDP_PCAP"); file != "" {
+		recorded, err := os.ReadFile(file)
+		freerdp := findConnectInitial(recorded)
+		clear(recorded) // FreeRDP's recording holds the password; only the Connect-Initial is kept.
+		switch {
+		case err != nil:
+			report = append(report, fmt.Sprintf("FreeRDP's Connect-Initial: no recording: %v", err))
+		case freerdp == nil:
+			report = append(report, "FreeRDP's Connect-Initial: not found in the recording")
+		default:
+			if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
+				_ = os.WriteFile(filepath.Join(dir, "freerdp.connect-initial.hex"), []byte(hex.Dump(freerdp)), 0o644)
+			}
+			cases = append(cases,
+				authInfoCase{name: "FreeRDP's Connect-Initial", source: "recorded by FreeRDP 3 against this machine", packet: freerdp},
+				authInfoCase{name: "FreeRDP's Connect-Initial, as FreeRDP asks", source: "and its request and CredSSP", packet: freerdp, directNTLM: true, requested: protocolSSL | protocolHybrid})
+		}
+	}
+	for _, c := range cases {
 		var names string
 		cfg := CredSSPClientConfig{Version: 6, Username: user, Password: []byte(password), Timeout: 15 * time.Second, directNTLM: c.directNTLM}
 		var seal func(*NTLMSSPClientSecurityContext, NTLMSSPChallenge, []byte) ([]byte, error)
@@ -231,7 +256,7 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 			}
 			return security.WrapClientToServer(credentials)
 		}
-		result, connection := authInfoRun(address, pin, name, roots, c.requested, cfg, settings)
+		result, connection := authInfoRun(address, pin, name, roots, c.requested, cfg, settings, c.packet)
 		line := fmt.Sprintf("%-46s | %s | after authInfo: %-32s | Connect-Initial: %s   [%s; CHALLENGE %s]",
 			c.name, connection, result.openAfterAuthInfo, result.answer, c.source, names)
 		t.Log(line)
@@ -246,7 +271,7 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 // authInfoRun is one case: dial, CredSSP with the case's authInfo, then (HYBRID_EX) the Early User
 // Authorization Result, 10 s for Windows to close on its own, and the client's Connect-Initial
 // naming the selected protocol. The second result names the protocol, the TLS version and suite.
-func authInfoRun(address, pin, name string, roots *x509.CertPool, requested uint32, cfg CredSSPClientConfig, settings MCSClientSettings) (isolationResult, string) {
+func authInfoRun(address, pin, name string, roots *x509.CertPool, requested uint32, cfg CredSSPClientConfig, settings MCSClientSettings, replacement []byte) (isolationResult, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	transport, selected, err := isolationDial(ctx, address, pin, name, roots, requested)
@@ -256,6 +281,9 @@ func authInfoRun(address, pin, name string, roots *x509.CertPool, requested uint
 	state := transport.Conn.ConnectionState()
 	connection := fmt.Sprintf("selected 0x%x, %s %s", selected, tls.VersionName(state.Version), tls.CipherSuiteName(state.CipherSuite))
 	packet, err := connectInitialSelecting(settings, selected)
+	if replacement != nil {
+		packet = replacement
+	}
 	if err != nil {
 		_ = transport.Close()
 		return isolationResult{openAfterAuthInfo: "not reached", answer: fmt.Sprintf("Connect-Initial: %v", err)}, connection
@@ -368,5 +396,36 @@ func TestEstablishCredSSPDirectNTLMSendsBareNTLM(t *testing.T) {
 		if bare != direct {
 			t.Fatalf("directNTLM %v: first negoToken % x…, bare NTLM %v", direct, token[:min(len(token), 12)], bare)
 		}
+	}
+}
+
+// findConnectInitial returns a copy of the first TPKT/X.224 Data/MCS Connect-Initial in data (a
+// FreeRDP recording: its framing around the PDUs does not matter), or nil.
+func findConnectInitial(data []byte) []byte {
+	prefix := []byte{0x02, 0xf0, 0x80, 0x7f, mcsConnectInitialTag}
+	for i := 0; i+9 <= len(data); i++ {
+		if data[i] != 3 || data[i+1] != 0 || !bytes.Equal(data[i+4:i+9], prefix) {
+			continue
+		}
+		length := int(binary.BigEndian.Uint16(data[i+2 : i+4]))
+		if length >= 9 && i+length <= len(data) {
+			return append([]byte(nil), data[i:i+length]...)
+		}
+	}
+	return nil
+}
+
+func TestRDPWindowsIsolation_FindConnectInitial(t *testing.T) {
+	packet, err := MarshalMCSConnectInitial(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: "OpenBastion", Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Framing before and after, and a decoy TPKT that is not a Connect-Initial.
+	recording := append(append([]byte{0xd4, 0xc3, 0xb2, 0xa1, 3, 0, 0, 11, 2, 0xf0, 0x80, 0x64, 0, 0, 0}, packet...), 0xff, 0xff)
+	if got := findConnectInitial(recording); !bytes.Equal(got, packet) {
+		t.Fatalf("found % x…, want the Connect-Initial", got[:min(len(got), 12)])
+	}
+	if findConnectInitial(recording[:len(recording)-3]) != nil {
+		t.Fatal("a truncated Connect-Initial must not be returned")
 	}
 }

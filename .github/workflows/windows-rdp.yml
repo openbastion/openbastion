@@ -58,6 +58,23 @@ jobs:
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           make test-rdp-windows
+      # A reference client on the same machine (ADR-0071): run #21 had FreeRDP open a full session.
+      # Its log is in the artifact; its PDUs, recorded in clear for the isolation that follows (it
+      # sends FreeRDP's own Connect-Initial after this client's CredSSP), hold the password and
+      # stay outside the artifact.
+      - name: FreeRDP against Windows
+        if: ${{ !cancelled() }}
+        run: |
+          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          docker build -q -t openbastion-rdp-reference-client test/integration/testdata/rdp/windows/client
+          mkdir -p "$RUNNER_TEMP/windows/freerdp"
+          docker run --rm --network host --add-host "$RDP_WINDOWS_SERVER_NAME:127.0.0.1" \
+            -v "$RDP_WINDOWS_CA_FILE:/usr/local/share/ca-certificates/rdp-test.crt:ro" \
+            -v "$RUNNER_TEMP/windows/freerdp:/out" -e RDP_PCAP=/out/freerdp.pcap \
+            -e RDP_HOST="$RDP_WINDOWS_SERVER_NAME:3389" -e RDP_USER="$RDP_WINDOWS_USER" -e RDP_PASSWORD="$RDP_WINDOWS_PASSWORD" \
+            openbastion-rdp-reference-client > "$RDP_WINDOWS_DUMP/freerdp-client.log" 2>&1 || true
+          sudo chmod -R a+rX "$RUNNER_TEMP/windows/freerdp"
+          grep -v -i "password" "$RDP_WINDOWS_DUMP/freerdp-client.log" | grep -E -i "error|fail|connect|mcs|gcc|nego|nla|credssp|exit status" | head -80
       # ADR-0071: what Windows refuses after CredSSP — one case per fresh connection: blocks and
       # parameters of the Connect-Initial (MS-RDPBCGR §4.1.3), then authInfo (a refused one as the
       # counter-proof, the TSPasswordCreds domain, TLS 1.2). The tables are in the artifact.
@@ -65,19 +82,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
-          go test ./pkg/rdp -run TestRDPWindowsIsolation -v -count=1 -timeout=20m
-      # A reference client on the same machine (ADR-0071): if FreeRDP also stops at the Connect-
-      # Initial, the target is the cause, not this client. Its log is in the artifact.
-      - name: FreeRDP against Windows
-        if: ${{ !cancelled() }}
-        run: |
-          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
-          docker build -q -t openbastion-rdp-reference-client test/integration/testdata/rdp/windows/client
-          docker run --rm --network host --add-host "$RDP_WINDOWS_SERVER_NAME:127.0.0.1" \
-            -v "$RDP_WINDOWS_CA_FILE:/usr/local/share/ca-certificates/rdp-test.crt:ro" \
-            -e RDP_HOST="$RDP_WINDOWS_SERVER_NAME:3389" -e RDP_USER="$RDP_WINDOWS_USER" -e RDP_PASSWORD="$RDP_WINDOWS_PASSWORD" \
-            openbastion-rdp-reference-client > "$RDP_WINDOWS_DUMP/freerdp-client.log" 2>&1 || true
-          grep -v -i "password" "$RDP_WINDOWS_DUMP/freerdp-client.log" | grep -E -i "error|fail|connect|mcs|gcc|nego|nla|credssp|exit status" | head -80
+          RDP_WINDOWS_FREERDP_PCAP="$RUNNER_TEMP/windows/freerdp/freerdp.pcap" \
+            go test ./pkg/rdp -run TestRDPWindowsIsolation -v -count=1 -timeout=20m
       # rdp-setup.ps1 copies the RDP event logs every 30 s: wait for the copy that follows the last
       # connection, then keep them with the rest. Absent if the share did not work.
       - name: What Windows logged
