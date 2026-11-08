@@ -3036,6 +3036,21 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : l'enregistrement et la reprise par le codec, contre Windows
+
+PR #93.
+
+**Mesuré** :
+- **Enregistrement** : `TestRDPRecording` contre Windows, aux trois cibles ; images montrées identiques à l'octet aux images rejouées, enregistrement scellé (11 à 16 bpp, 12 à 32 bpp, 8 à la console).
+- **Reprise** : `TestRDPWindowsIsolation_Reactivation` reprend deux fois la session déconnectée par le codec. Aucun `Deactivate All`, aucun refus.
+- **Cible `fPromptForPassword`** : sous NLA, la session s'ouvre avec les identifiants délégués, sans rien demander. Elle ne déclenche donc pas de réactivation, et a été retirée.
+
+**Incident** : sur cette cible, l'isolement a tapé le mot de passe de test (aléatoire, propre au passage, VM détruite) dans le Bloc-notes, et la capture est partie en artefact. Artefact supprimé ; la saisie est retirée. Aucun test de cette PR ne tape plus de secret.
+
+**Ajouté** : `ReadBitmapUpdate` décrit ses refus MCS (une reprise s'était arrêtée sur un refus muet, une fois, sur la cible retirée) ; l'isolement de reprise note les PDU slow-path qu'il ignorait (aucun) ; le job Windows génère les contrats Protobuf et démarre PostgreSQL pour l'enregistrement.
+
+**Reste** : la réactivation contre Windows. Aucun déclencheur reproductible n'est connu, elle reste éprouvée contre FreeRDP seulement.
+
 ## 2026-11-08 — ADR-0071 : l'enregistrement RDP de bout en bout
 
 Incrément 73, sans exposer RDP (choix du propriétaire). `make test-rdp-recording` (`services/proxy/rdp-vnc-proxy/internal/interfaces/rdp_recording_test.go`) assemble le vrai serveur du proxy avec le codec RDP, le vrai Video Recorder (processus, PostgreSQL, mTLS) et FreeRDP 3. Le ticket est enregistré comme le ferait le Broker. Stockage objet, audit et autorisation sont simulés, comme dans le parcours VNC.
