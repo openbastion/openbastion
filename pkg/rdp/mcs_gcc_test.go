@@ -110,9 +110,9 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	clusterHeader := []byte{0x04, 0xc0, 0x0c, 0x00}
 	clusterOffset := bytes.Index(gcc, clusterHeader)
 	if clusterOffset < 0 || clusterOffset+12 > len(gcc) ||
-		binary.LittleEndian.Uint32(gcc[clusterOffset+4:clusterOffset+8]) != 0 ||
+		binary.LittleEndian.Uint32(gcc[clusterOffset+4:clusterOffset+8]) != rdpClusterRedirectSupported|rdpClusterRedirectVersion4 ||
 		binary.LittleEndian.Uint32(gcc[clusterOffset+8:clusterOffset+12]) != 0 {
-		t.Fatal("GCC request must include an empty CS_CLUSTER block, matching the FreeRDP baseline")
+		t.Fatal("GCC request must advertise RDP redirection version 4 without requesting a redirected session")
 	}
 }
 

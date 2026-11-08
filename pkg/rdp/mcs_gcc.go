@@ -24,18 +24,20 @@ const (
 	gccServerSecurityType = uint16(0x0c02)
 	gccServerNetworkType  = uint16(0x0c03)
 
-	rdpClientVersion        = uint32(0x00080004)
-	rdpClientBuild          = uint32(1)
-	rdpColor8BPP            = uint16(0xca01)
-	rdpColor24BPP           = uint16(0xca04)
-	rdpHighColor24BPP       = uint16(0x0018)
-	rdpSupported32BPP       = uint16(0x0008)
-	rdpClientErrInfo        = uint16(0x0001)
-	rdpClientWant32BPP      = uint16(0x0002)
-	rdpSASDel               = uint16(0xaa03)
-	rdpKeyboardEnhanced     = uint32(4)
-	rdpKeyboardFunctionKeys = uint32(12)
-	mcsGlobalChannelID      = uint16(1003)
+	rdpClientVersion            = uint32(0x00080004)
+	rdpClientBuild              = uint32(1)
+	rdpColor8BPP                = uint16(0xca01)
+	rdpColor24BPP               = uint16(0xca04)
+	rdpHighColor24BPP           = uint16(0x0018)
+	rdpSupported32BPP           = uint16(0x0008)
+	rdpClientErrInfo            = uint16(0x0001)
+	rdpClusterRedirectSupported = uint32(0x00000001)
+	rdpClusterRedirectVersion4  = uint32(0x0000000c)
+	rdpClientWant32BPP          = uint16(0x0002)
+	rdpSASDel                   = uint16(0xaa03)
+	rdpKeyboardEnhanced         = uint32(4)
+	rdpKeyboardFunctionKeys     = uint32(12)
+	mcsGlobalChannelID          = uint16(1003)
 )
 
 // ErrMCSConnection reports a malformed or unsupported MCS/GCC connection exchange.
@@ -204,7 +206,8 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	clear(core)
 	// Match FreeRDP's baseline GCC block sequence. CS_CLUSTER is emitted even
 	// when no redirection or redirected session is requested.
-	cluster := make([]byte, 8) // flags=0, redirectedSessionID=0
+	cluster := make([]byte, 8) // flags=REDIRECTION_SUPPORTED | REDIRECTION_VERSION4
+	binary.LittleEndian.PutUint32(cluster[:4], rdpClusterRedirectSupported|rdpClusterRedirectVersion4)
 	blocks = appendGCCBlock(blocks, gccClientClusterType, cluster)
 	clear(cluster)
 	// TS_UD_CS_SEC applies only to Standard RDP Security. This client requires
