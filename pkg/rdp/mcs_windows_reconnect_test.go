@@ -56,6 +56,9 @@ type reconnectSession struct {
 	last        []byte
 	sessionIDs  []int64
 	assembler   rdpFastPathAssembler
+	// others counts the slow-path PDUs read here that are not a logon notification: passed over,
+	// where the codec may refuse them (PR #93), so said.
+	others map[string]int
 }
 
 func openReconnectSession(address, pin, name string, roots *x509.CertPool, user, password string) (*reconnectSession, error) {
@@ -103,6 +106,11 @@ func (r *reconnectSession) watch(quiet, limit time.Duration) error {
 				r.sessionIDs = append(r.sessionIDs, id)
 			} else if saveSessionInfo(packet) != "" {
 				r.sessionIDs = append(r.sessionIDs, -1) // a logon notification without an ID
+			} else {
+				if r.others == nil {
+					r.others = map[string]int{}
+				}
+				r.others[describeRDPServerPacket(packet)]++
 			}
 			continue
 		}
@@ -185,7 +193,7 @@ func TestRDPWindowsIsolation_Reconnect(t *testing.T) {
 	if err := first.watch(5*time.Second, 20*time.Second); err != nil {
 		logf("first connection, after the keys: %v", err)
 	}
-	logf("first connection: logon notifications, session IDs %v", first.sessionIDs)
+	logf("first connection: logon notifications, session IDs %v; other slow-path PDUs %v", first.sessionIDs, first.others)
 	if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && first.last != nil {
 		_ = os.WriteFile(filepath.Join(dir, "reconnect-before.png"), first.last, 0o644)
 	}
@@ -200,7 +208,7 @@ func TestRDPWindowsIsolation_Reconnect(t *testing.T) {
 	if err := second.watch(8*time.Second, 90*time.Second); err != nil {
 		t.Fatalf("second connection, screen: %v", err)
 	}
-	logf("second connection: logon notifications, session IDs %v", second.sessionIDs)
+	logf("second connection: logon notifications, session IDs %v; other slow-path PDUs %v", second.sessionIDs, second.others)
 	if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && second.last != nil {
 		_ = os.WriteFile(filepath.Join(dir, "reconnect-after.png"), second.last, 0o644)
 	}

@@ -44,13 +44,6 @@ jobs:
         include:
           - depth: 16
             session: console
-          # Windows prompts for the password at every connection: the connection starts on the
-          # logon screen and moves to the user's session, a reactivation (ADR-0071). Only the
-          # reactivation's isolation runs there: the screen and recording tests need the delegated
-          # credentials to open the session.
-          - depth: 16
-            session: prompt
-            isolation: TestRDPWindowsIsolation_Reactivation$
     env:
       DEPTH: ${{ matrix.depth }}
       SESSION: ${{ matrix.session }}
@@ -81,14 +74,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml up -d
       - name: RDP against Windows
-        if: ${{ !cancelled() && matrix.session != 'prompt' }}
+        if: ${{ !cancelled() }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           make test-rdp-windows
       # ADR-0071: the recording against Windows. The proxy's real server with the RDP codec, the real
       # Video Recorder on PostgreSQL: what the operator saw is, to the byte, what an auditor replays.
       - name: PostgreSQL for the Video Recorder
-        if: ${{ !cancelled() && matrix.session != 'prompt' }}
+        if: ${{ !cancelled() }}
         run: |
           docker build -f deploy/docker-compose/postgres/Dockerfile -t openbastion-postgres:ci .
           docker run -d --name openbastion-postgres -e POSTGRES_USER=openbastion -e POSTGRES_PASSWORD=openbastion \
@@ -103,10 +96,12 @@ jobs:
           docker logs openbastion-postgres
           exit 1
       - name: RDP recording against Windows
-        if: ${{ !cancelled() && matrix.session != 'prompt' }}
+        if: ${{ !cancelled() }}
         env:
           TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
         run: |
+          # The Protobuf contracts are not in git (*.pb.go): the recorder's client needs them.
+          make proto-tools proto-gen
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           go test ./services/proxy/rdp-vnc-proxy/internal/interfaces/ -run TestRDPRecording -v -count=1 -timeout=15m
       # Runs #16 to #32 settled CredSSP, TLS, the Connect-Initial and the Confirm Active (ADR-0071):
@@ -116,11 +111,11 @@ jobs:
       - name: Isolate what Windows refuses after CredSSP
         if: ${{ !cancelled() }}
         env:
-          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || matrix.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|Reconnect)$' }}
+          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|Reconnect|Reactivation)$' }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \
-            go test ./pkg/rdp -run "$RDP_WINDOWS_ISOLATION" -v -count=1 -timeout=120m
+            go test ./pkg/rdp -run "$RDP_WINDOWS_ISOLATION" -v -count=1 -timeout=30m
       # A reference client on the same machine (ADR-0071): run #21 had FreeRDP open a full session.
       # Its log is in the artifact; its PDUs, recorded in clear for the isolation that follows (it
       # sends FreeRDP's own Connect-Initial after this client's CredSSP), hold the password and

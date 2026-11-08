@@ -9,8 +9,6 @@
 # path (RDP 6.0 planar) against Windows.
 # SESSION, none by default: the target is ready with no session open, a server's common case.
 # console keeps the session dockur opens at the console for the user, to take it over by RDP.
-# prompt: no session, and Windows always prompts for the password (fPromptForPassword), so that a
-# connection starts on the logon screen and moves to the user's session: a reactivation.
 # The pin and the roots are known before Windows starts: nothing is learnt from the target.
 # Everything here is for one run and is never committed.
 set -euo pipefail
@@ -18,7 +16,7 @@ dir=${1:?usage: prepare.sh DIR [DEPTH] [SESSION]}
 depth=${2:-16}
 case "$depth" in 16 | 32) ;; *) echo "DEPTH must be 16 or 32, not $depth" >&2; exit 2 ;; esac
 session=${3:-none}
-case "$session" in none | console | prompt) ;; *) echo "SESSION must be none, console or prompt, not $session" >&2; exit 2 ;; esac
+case "$session" in none | console) ;; *) echo "SESSION must be none or console, not $session" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 name=rdp-windows.test
 mkdir -p "$dir/oem" "$dir/storage" "$dir/dump" "$dir/shared"

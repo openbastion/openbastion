@@ -46,15 +46,6 @@ try {
   Write-Output "rdp-setup: colour depth not recorded: $_"
 }
 
-# prepare.sh DIR DEPTH prompt (ADR-0071, the reactivation): Windows prompts for the password at
-# every connection, whatever CredSSP delegated. The connection starts on the logon screen and moves
-# to the user's session once the password is typed.
-if ((Get-Content 'C:\OEM\session' -Raw -ErrorAction SilentlyContinue) -eq 'prompt') {
-  $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
-  New-Item -Path $policy -Force | Out-Null
-  Set-ItemProperty $policy -Name fPromptForPassword -Value 1 -Type DWord
-}
-
 # Something the test can type into and see: Notepad, at every logon.
 Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OpenBastionNotepad -Value 'notepad.exe'
 
