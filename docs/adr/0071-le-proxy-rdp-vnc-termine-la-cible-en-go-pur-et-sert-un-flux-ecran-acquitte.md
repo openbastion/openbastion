@@ -1591,3 +1591,24 @@ C'est le premier critère de sortie de l'incrément 2 : « session RDP interacti
 - pas encore contre Windows ;
 - l'Admin UI n'a pas de lecteur vidéo (rejeu par l'API) ;
 - RDP reste non exposé.
+
+## ADR-0071 — incrément 75 : le lecteur de l'écran enregistré, dans l'Admin UI
+
+**Ce qui est livré.** La page « Enregistrements » relit l'écran d'une session RDP ou VNC (`VideoReplay`) : les PNG acquittés par le Video Recorder, dans l'ordre, sur un canvas, sans `<img>` ni `blob:`, comme l'écran en direct.
+- **Rythme** : celui de l'enregistrement, écarts bornés entre 40 ms et 2 s, vitesse ×1, ×2 ou ×4.
+- **Navigation** : image par image, ou par le curseur.
+- **Lecture des segments** : au fil de la relecture, cinq images d'avance au plus. Chaque segment lu est un `recording.read` au nom de l'auditeur, et une session longue ne se charge pas d'un coup.
+
+**Ce qui est refusé.**
+- Un segment qui n'est pas ce qu'il dit : base64, signature PNG, 4 Mio par image, horodatage, nombre d'images égal à l'écart des séquences.
+- Une image qui ne se décode pas.
+- Au-delà de 256 Mio chargés, la suite n'est pas lue, et le lecteur le dit.
+
+Un refus de l'API s'affiche tel quel. La fin dit si l'enregistrement a été scellé, ou interrompu sans marqueur de fin.
+
+**Preuves** : 6 tests Vitest, et 6 mutations tuées sur 6 (signature PNG, nombre d'images, rythme borné, scellé ou interrompu, lecture d'avance, image ancienne peinte sur une plus récente).
+
+**Limites** :
+- ni export vidéo, ni recherche dans l'image, ni lecture des frappes (ADR-0069 : le rejeu est visuel) ;
+- le lecteur n'a pas été vu dans un navigateur réel contre un enregistrement réel, seulement sous jsdom ;
+- `vite build` passe.

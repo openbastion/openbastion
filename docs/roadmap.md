@@ -7,7 +7,7 @@ Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versio
 La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
 
 - **MVP SSH/SFTP/SCP** : parcours fonctionnel de référence, avec Gateway, Broker, Vault, proxy SSH, audit et replay texte.
-- **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API ; le lecteur vidéo Admin UI et plusieurs fonctions de redirection restent à faire.
+- **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API et dans l'Admin UI (lecteur d'écran enregistré, page « Enregistrements ») ; plusieurs fonctions de redirection restent à faire.
 - **RDP** : moteur Go pur en développement avancé. X.224/HYBRID, TLS épinglé, CredSSP/NTLMv2, MCS/GCC, licensing partiel, négociation de capacités et décodage graphique partiel sont présents. **Le runtime RDP reste désactivé** ; la couverture des ordres graphiques et Fast-Path est incomplète ; l'interopérabilité Windows/RDS réelle, les licences CAL complètes et les canaux virtuels ne sont pas validés.
 - **Veille externe** : ADR-0081 propose une veille hebdomadaire de gopher-rdp, gordp et Casvisor afin d'identifier les évolutions utiles sans adopter automatiquement leur code ou leurs choix de sécurité.
 

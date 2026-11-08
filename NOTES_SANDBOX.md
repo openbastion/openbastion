@@ -3036,6 +3036,22 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : le lecteur de l'écran enregistré, dans l'Admin UI
+
+Incrément 75. La page « Enregistrements » relit l'écran d'une session RDP ou VNC (`web/admin-ui/src/features/audit/VideoReplay.tsx`) :
+- les PNG acquittés, au rythme enregistré (écarts bornés entre 40 ms et 2 s, vitesse ×1, ×2 ou ×4), image par image ou par le curseur ;
+- les segments lus au fil de la relecture, cinq images d'avance au plus, chacun audité au nom de l'auditeur ;
+- refus d'un segment invalide (PNG, 4 Mio, horodatage, nombre d'images) ; arrêt au-delà de 256 Mio chargés ;
+- la fin dit si l'enregistrement a été scellé ou interrompu.
+
+**Prouvé** : 6 tests Vitest (80 → 86), 6 mutations tuées sur 6, `vite build` passe.
+
+**Limites** :
+- pas vu dans un navigateur réel contre un enregistrement réel ;
+- ni export vidéo, ni recherche dans l'image.
+
+**Choix renversables** : les bornes de rythme ; 256 Mio ; cinq images d'avance ; le libellé « Session de l'écran », distinct du champ de la relecture des commandes.
+
 ## 2026-11-08 — ADR-0071 : l'enregistrement RDP de bout en bout
 
 Incrément 73, sans exposer RDP (choix du propriétaire). `make test-rdp-recording` (`services/proxy/rdp-vnc-proxy/internal/interfaces/rdp_recording_test.go`) assemble le vrai serveur du proxy avec le codec RDP, le vrai Video Recorder (processus, PostgreSQL, mTLS) et FreeRDP 3. Le ticket est enregistré comme le ferait le Broker. Stockage objet, audit et autorisation sont simulés, comme dans le parcours VNC.

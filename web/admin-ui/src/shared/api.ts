@@ -154,6 +154,15 @@ export interface ScreenAttach {
   expiresAt: string;
 }
 
+// One segment of a session's screen recording (GET /sessions/{id}/recording/video/segments/{first}).
+export interface VideoRecordingSegment {
+  sessionId: string;
+  firstSequence: number;
+  lastSequence: number;
+  complete: boolean;
+  frames: { timestamp: string; frameData: string; codec: string }[];
+}
+
 export interface RecordingPage {
   sessionId: string;
   entries: { timestamp: string; command: string }[];

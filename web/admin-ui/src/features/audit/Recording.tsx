@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { RecordingPage } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
+import { VideoReplay } from "./VideoReplay";
 
 const pageSize = 100;
 
@@ -52,6 +53,7 @@ export function Recording() {
           </p>
         </div>
       ) : null}
+      <VideoReplay />
     </section>
   );
 }
