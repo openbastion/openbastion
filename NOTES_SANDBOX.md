@@ -3036,6 +3036,12 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-08 — ADR-0071 : la reprise d'une session Windows
+
+PR #89, passage CI #52 : la matrice Windows a trois cibles (16 bpp, 32 bpp, 16 bpp avec la session de console que dockur ouvre). `TestRDPWindowsIsolation_Reconnect` ouvre une session, tape, ferme, se reconnecte : Windows rend la même session (identifiant 3, écran conservé). Sur la cible console, la connexion reprend la session 1, bureau et saisie compris. Mesuré sur un passage ; avant, PR #88 : un Synchronize Event n'évite pas la perte de touches tapées sitôt après un clic (5 essais complets sur 6 sans, 3 et 0 avec).
+
+**Reste** (ADR-0071 en cours) : fragments Fast-Path et réactivation jamais rencontrés, toujours refusés ; RDP non exposé.
+
 ## 2026-11-08 — ADR-0071 : le 32 bpp éprouvé contre Windows
 
 PR #86, passages CI #46 à #50 : `.github/workflows/windows-rdp.yml` lance deux cibles en parallèle, 16 bpp (Windows tel qu'installé) et 32 bpp (autorisé par la stratégie « Limit maximum color depth », `prepare.sh DIR 32`). Le test d'écran exige la profondeur que la cible autorise (`CredSSPClientSession.BitsPerPixel`).
