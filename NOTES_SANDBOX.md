@@ -3036,6 +3036,18 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-08 — ADR-0071 : les fragments Fast-Path, réassemblés contre Windows
+
+PR #90. Le client annonce `TS_MULTIFRAGMENTUPDATE_CAPABILITYSET` (`MaxRequestSize` 256 Kio) et réassemble les mises à jour Fast-Path fragmentées (`pkg/rdp/fastpath_fragments.go`) : FIRST, NEXT…, LAST d'un même code, contigus, non compressés, 256 Kio et 64 morceaux au plus ; tout écart ferme la session, de même qu'un TPKT au milieu d'une séquence.
+
+**Mesuré** : au passage #53, Windows fragmente dès que la capacité est annoncée ; le test d'écran passait, mais les isolements, qui lisent le flux eux-mêmes, refusaient le premier fragment. Ils réassemblent désormais comme le codec (`reassembleFastPath`). Passage #54, trois cibles vertes : après la finalisation, 4 et 5 fragments à 16 bpp, 125 à 32 bpp ; écran fidèle, « ob » tapé, reprise de la même session (3, et 1 à la console), « rr » conservé.
+
+**Prouvé** : tests rouges avant, refus (hors séquence, code qui change, taille et nombre dépassés, fragment vide, séquence interrompue), bout en bout sur TLS, mutations tuées, fuzzing, `-race`.
+
+**Reste** (ADR-0071 en cours) : la réactivation (`Deactivate All`), jamais rencontrée, toujours refusée ; RDP non exposé.
+
+**Choix renversables** : 256 Kio et 64 morceaux ; une seule mise à jour par PDU (pas de compression Fast-Path).
+
 ## 2026-11-08 — ADR-0071 : la reprise d'une session Windows
 
 PR #89, passage CI #52 : la matrice Windows a trois cibles (16 bpp, 32 bpp, 16 bpp avec la session de console que dockur ouvre). `TestRDPWindowsIsolation_Reconnect` ouvre une session, tape, ferme, se reconnecte : Windows rend la même session (identifiant 3, écran conservé). Sur la cible console, la connexion reprend la session 1, bureau et saisie compris. Mesuré sur un passage ; avant, PR #88 : un Synchronize Event n'évite pas la perte de touches tapées sitôt après un clic (5 essais complets sur 6 sans, 3 et 0 avec).
