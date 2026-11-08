@@ -7,17 +7,19 @@ package rdp
 // Client Info PDU, before any step of this client reads it:
 //
 //   - the sequence as the RDP codec runs it, step by step, until one fails;
-//   - on a second connection, the same steps through Licensing, then the server's next packets as
-//     they come, unparsed (run #28 named the capability exchange: this is its Demand Active).
+//   - on a second connection, the same steps through the capability exchange, then the server's
+//     next packets as they come, unparsed (run #30 named the finalization).
 //
 //	RDP_WINDOWS=1 … go test ./pkg/rdp -run TestRDPWindowsIsolation -v
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -105,19 +107,20 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	// Up to Licensing, then what Windows sends, unread by any step: run #28 named the capability
-	// exchange, so this is the Demand Active, in full (server capabilities, nothing secret).
+	// Through the capability exchange, then what Windows sends, unread by any step: run #30, with
+	// 32 bpp allowed on the target, passes the capability exchange and names the finalization. The
+	// packets come in full (finalization PDUs, nothing secret), TPKT or Fast-Path alike.
 	session, done, err = sequenceSession(address, pin, name, roots, user, password)
 	if err != nil {
-		logf("after Licensing: %v", err)
+		logf("after Confirm Active: %v", err)
 	} else {
 		ok := true
-		for _, step := range sequenceSteps(settings, user, password, "Licensing") {
+		for _, step := range sequenceSteps(settings, user, password, "Demand Active/Confirm Active") {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := step.run(ctx, session)
 			cancel()
 			if err != nil {
-				logf("after Licensing: %s FAILED: %v", step.name, err)
+				logf("after Confirm Active: %s FAILED: %v", step.name, err)
 				ok = false
 				break
 			}
@@ -127,19 +130,19 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 			deadline := time.Now().Add(6 * time.Second)
 			for i := 0; i < 8; i++ {
 				_ = conn.SetReadDeadline(deadline)
-				packet, err := readTPKTPacket(conn, 0xffff)
+				packet, err := readSlowOrFastPathPacket(conn)
 				var netErr net.Error
 				switch {
 				case errors.As(err, &netErr) && netErr.Timeout():
-					logf("after Licensing: nothing more in 6 s")
+					logf("after Confirm Active: nothing more in 6 s")
 				case err != nil:
-					logf("after Licensing: packet %d: %v", i+1, err)
+					logf("after Confirm Active: packet %d: %v", i+1, err)
 				default:
 					head := packet
 					if len(head) > 4096 {
 						head = head[:4096]
 					}
-					logf("after Licensing: packet %d, %d bytes: %s", i+1, len(packet), hex.EncodeToString(head))
+					logf("after Confirm Active: packet %d, %d bytes: %s", i+1, len(packet), hex.EncodeToString(head))
 					continue
 				}
 				break
@@ -154,6 +157,36 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 
 // sequenceSession dials and runs CredSSP. The transport closes when its dial context ends (run
 // #28 lost both connections to a cancel on return): the context lives until the caller's done().
+// readSlowOrFastPathPacket reads one TPKT packet (first byte 3) or one Fast-Path output packet
+// (MS-RDPBCGR 2.2.9.1.2: action in the low bits, then a one- or two-byte length that counts the
+// whole packet).
+func readSlowOrFastPathPacket(r io.Reader) ([]byte, error) {
+	var first [2]byte
+	if _, err := io.ReadFull(r, first[:]); err != nil {
+		return nil, err
+	}
+	if first[0] == 3 {
+		return readTPKTPacket(io.MultiReader(bytes.NewReader(first[:]), r), 0xffff)
+	}
+	header := first[:]
+	length := int(first[1])
+	if first[1]&0x80 != 0 {
+		var low [1]byte
+		if _, err := io.ReadFull(r, low[:]); err != nil {
+			return nil, err
+		}
+		header = append(header, low[0])
+		length = int(first[1]&0x7f)<<8 | int(low[0])
+	}
+	if length < len(header) {
+		return nil, fmt.Errorf("fast-path length %d", length)
+	}
+	packet := make([]byte, length)
+	copy(packet, header)
+	_, err := io.ReadFull(r, packet[len(header):])
+	return packet, err
+}
+
 func sequenceSession(address, pin, name string, roots *x509.CertPool, user, password string) (*CredSSPClientSession, func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	transport, err := DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
@@ -181,7 +214,18 @@ func TestRDPWindowsIsolation_SequenceSteps(t *testing.T) {
 	if strings.Join(names, "|") != want {
 		t.Fatalf("steps %q", names)
 	}
-	if n := len(sequenceSteps(settings, "u", "p", "Licensing")); n != 4 {
-		t.Fatalf("through Licensing: %d steps", n)
+	if n := len(sequenceSteps(settings, "u", "p", "Demand Active/Confirm Active")); n != 5 {
+		t.Fatalf("through the capability exchange: %d steps", n)
+	}
+	// A Fast-Path header is read by its own length (one or two bytes), a TPKT by its own.
+	for _, c := range []struct{ in, want []byte }{
+		{[]byte{0x00, 0x05, 1, 2, 3, 9}, []byte{0x00, 0x05, 1, 2, 3}},
+		{[]byte{0x00, 0x80, 0x06, 1, 2, 3}, []byte{0x00, 0x80, 0x06, 1, 2, 3}},
+		{[]byte{3, 0, 0, 9, 2, 0xf0, 0x80, 1, 2, 9}, []byte{3, 0, 0, 9, 2, 0xf0, 0x80, 1, 2}},
+	} {
+		got, err := readSlowOrFastPathPacket(bytes.NewReader(c.in))
+		if err != nil || !bytes.Equal(got, c.want) {
+			t.Fatalf("% x: % x, %v", c.in, got, err)
+		}
 	}
 }
