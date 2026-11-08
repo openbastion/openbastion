@@ -3036,6 +3036,25 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-08 — ADR-0071 : la réactivation
+
+Incrément 72. Après un `Deactivate All`, le client confirme le nouveau Demand Active et refait la finalisation sous le nouveau partage (`pkg/rdp/mcs_reactivation.go`, appelé par `ReadBitmapUpdate`). Il suit aussi un changement de taille du bureau : le moteur repart d'un bureau noir de la nouvelle taille, la séquence des images continue, et le pointeur est borné par le nouveau bureau.
+
+**Mesuré** : contre FreeRDP 3, un client qui demande 1024×768 à un serveur de 1280×800 se faisait fermer la session (`TestRDPInterop_Reactivation` rouge). Il voit maintenant l'écran à 1280×800.
+
+**Prouvé** :
+- tests unitaires de bout en bout sur TLS et 7 refus ;
+- test du moteur ;
+- 16 mutations tuées, `-race` vert ;
+- `make test-rdp-interop` vert (4 tests).
+
+**Limites** :
+- Windows n'a jamais envoyé de `Deactivate All` à ce client, en aucun passage, et aucun déclencheur reproductible n'est connu sur la cible du CI ;
+- l'enregistrement d'une session dont la taille change n'est pas éprouvé ;
+- RDP reste non exposé.
+
+**Choix renversables** : 16 réactivations par session, 30 s chacune ; bureau noir après un changement de taille.
+
 ## 2026-11-08 — ADR-0071 : les fragments Fast-Path, réassemblés contre Windows
 
 PR #90. Le client annonce `TS_MULTIFRAGMENTUPDATE_CAPABILITYSET` (`MaxRequestSize` 256 Kio) et réassemble les mises à jour Fast-Path fragmentées (`pkg/rdp/fastpath_fragments.go`) : FIRST, NEXT…, LAST d'un même code, contigus, non compressés, 256 Kio et 64 morceaux au plus ; tout écart ferme la session, de même qu'un TPKT au milieu d'une séquence.

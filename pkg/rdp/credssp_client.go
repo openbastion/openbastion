@@ -81,6 +81,7 @@ type CredSSPClientSession struct {
 	multiOpaqueRectEnabled  bool
 	primaryOrderState       rdpPrimaryOrderState
 	logonNotified           bool
+	reactivations           int
 }
 
 // BitsPerPixel is the colour depth of the session, as the server chose it in its Demand Active

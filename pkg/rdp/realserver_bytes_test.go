@@ -150,7 +150,8 @@ func TestShareData_OnlyWhatCarriesNoGraphicsIsIgnored(t *testing.T) {
 	if rdpShareDataIsIgnored(lying, share) {
 		t.Error("a PDU whose length lies was ignored")
 	}
-	// The deactivation of a share is not information: it is refused, the stream ends.
+	// The deactivation of a share is not information to skip: it starts a reactivation
+	// (mcs_reactivation.go).
 	deactivate := realServerBytes(t, "0d001600ec03ec030100010000")
 	if rdpShareDataIsIgnored(deactivate, share) {
 		t.Error("a Deactivate All was ignored")

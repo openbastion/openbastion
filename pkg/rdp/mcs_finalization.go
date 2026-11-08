@@ -3,6 +3,7 @@ package rdp
 import (
 	"context"
 	"encoding/binary"
+	"io"
 	"time"
 )
 
@@ -78,11 +79,17 @@ func (s *CredSSPClientSession) FinalizeConnection(ctx context.Context, timeout t
 		s.connectionFinalized = true
 	}()
 
+	return finalizeRDPConnection(ctx, conn, s.mcsResponse.IOChannelID, s.serverCapabilities.ShareID, s.userChannelID)
+}
+
+// finalizeRDPConnection sends the client's finalization PDUs and validates the server's answers, in
+// protocol order: at the first activation and at each reactivation (MS-RDPBCGR 1.3.1.1, 1.3.1.3).
+func finalizeRDPConnection(ctx context.Context, conn io.ReadWriter, ioChannelID uint16, shareID uint32, userID uint16) (result RDPFinalizationResult, err error) {
 	for _, payload := range [][]byte{
-		marshalRDPClientSynchronize(s.serverCapabilities.ShareID, s.userChannelID),
-		marshalRDPClientControl(s.serverCapabilities.ShareID, s.userChannelID, rdpControlCooperate),
-		marshalRDPClientControl(s.serverCapabilities.ShareID, s.userChannelID, rdpControlRequest),
-		marshalRDPClientFontList(s.serverCapabilities.ShareID, s.userChannelID),
+		marshalRDPClientSynchronize(shareID, userID),
+		marshalRDPClientControl(shareID, userID, rdpControlCooperate),
+		marshalRDPClientControl(shareID, userID, rdpControlRequest),
+		marshalRDPClientFontList(shareID, userID),
 	} {
 		if len(payload) == 0 || ctx.Err() != nil {
 			clear(payload)
@@ -108,8 +115,8 @@ func (s *CredSSPClientSession) FinalizeConnection(ctx context.Context, timeout t
 		if readErr != nil {
 			return RDPFinalizationResult{}, ErrMCSConnection
 		}
-		entries, parseErr := parseRDPFinalizationResponse(packet, s.mcsResponse.IOChannelID,
-			s.serverCapabilities.ShareID, s.userChannelID, expected.typ, expected.action)
+		entries, parseErr := parseRDPFinalizationResponse(packet, ioChannelID,
+			shareID, userID, expected.typ, expected.action)
 		clear(packet)
 		if parseErr != nil || ctx.Err() != nil {
 			return RDPFinalizationResult{}, ErrMCSConnection

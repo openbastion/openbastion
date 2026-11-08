@@ -251,3 +251,53 @@ func rdpInteropIs(shown image.Image, x, y int, value uint32) bool {
 	r, g, b, a := shown.At(x, y).RGBA()
 	return r>>8 == value && g>>8 == value && b>>8 == value && a>>8 == 0xff
 }
+
+// The reactivation (MS-RDPBCGR 1.3.1.3), against a real server: FreeRDP's shadow server keeps the
+// size of its screen, 1280x800. A client that asks for another gets, once connected, a Deactivate
+// All, then a Demand Active of the server's size, and must go through the capabilities and the
+// finalization again. The operator then sees the server's screen at the server's size.
+func TestRDPInterop_Reactivation(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec := &RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second, DesktopWidth: 1024, DesktopHeight: 768}
+	session, err := codec.Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+	var last screenstream.Message
+	for frames := 0; ; frames++ {
+		select {
+		case message, ok := <-session.Frames():
+			if !ok {
+				t.Fatalf("the stream ended after %d frame(s): %v\n%s", frames, session.Err(), target.logs(t))
+			}
+			last = message
+			continue
+		case <-time.After(3 * time.Second):
+		}
+		if frames == 0 {
+			t.Fatalf("no frame: %v\n%s", session.Err(), target.logs(t))
+		}
+		break
+	}
+	if last.Width != 1280 || last.Height != 800 {
+		t.Fatalf("last frame %dx%d, not the server's 1280x800", last.Width, last.Height)
+	}
+	shown := rdpInteropDecode(t, last)
+	if !rdpInteropIs(shown, 100, 100, 0xff) || !rdpInteropIs(shown, 1200, 700, 0) {
+		t.Fatalf("not the target's screen, an xterm on black: %v at (100,100), %v at (1200,700)", shown.At(100, 100), shown.At(1200, 700))
+	}
+	// Input at the new size: a point the old size had not.
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 1200, Y: 700}); err != nil {
+		t.Fatalf("pointer at the server's size: %v", err)
+	}
+}

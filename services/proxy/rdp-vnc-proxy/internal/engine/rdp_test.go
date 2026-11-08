@@ -356,3 +356,38 @@ func TestRunRDPConnectionStepsNamesTheFailingPhase(t *testing.T) {
 		t.Fatalf("cancelled: %v, ran %v", err, ran)
 	}
 }
+
+// A reactivation that changes the desktop's size (MS-RDPBCGR 1.3.1.3): the frames take the new
+// size, the sequence carries on, and the operator's pointer is bounded by the new desktop.
+func TestRDPCodec_AReactivationResizesTheScreen(t *testing.T) {
+	pixel := []byte{0xff, 0xff, 0xff, 0xff}
+	target := &fakeRDPDesktop{width: 4, height: 4, updates: []rdp.RDPBitmapUpdate{
+		{Rectangles: []rdp.RDPBitmapRectangle{{X: 3, Y: 3, Width: 1, Height: 1, Pixels: pixel}}, DesktopWidth: 4, DesktopHeight: 4},
+		// The same pixels as the black desktop of the new size: still a frame, the first at that size.
+		{Rectangles: []rdp.RDPBitmapRectangle{{X: 7, Y: 1, Width: 1, Height: 1, Pixels: []byte{0, 0, 0, 0xff}}}, DesktopWidth: 8, DesktopHeight: 2},
+	}}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return target, nil }}
+	session, err := codec.Open(context.Background(), rdpTestCredential(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	var frames []screenstream.Message
+	for len(frames) < 2 {
+		select {
+		case frame := <-session.Frames():
+			frames = append(frames, frame)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d frame(s), want 2", len(frames))
+		}
+	}
+	if frames[0].Width != 4 || frames[1].Width != 8 || frames[1].Height != 2 || frames[1].Sequence != frames[0].Sequence+1 {
+		t.Fatalf("frames %dx%d #%d, then %dx%d #%d", frames[0].Width, frames[0].Height, frames[0].Sequence, frames[1].Width, frames[1].Height, frames[1].Sequence)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 7, Y: 1}); err != nil {
+		t.Fatalf("a point of the new desktop: %v", err)
+	}
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 3, Y: 3}); err == nil {
+		t.Fatal("a point of the old desktop only was sent")
+	}
+}
