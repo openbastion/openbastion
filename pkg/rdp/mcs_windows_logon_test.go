@@ -132,6 +132,7 @@ func logonRun(address, pin, name string, roots *x509.CertPool, user, password st
 	var notes []string
 	var last []byte
 	frames := 0
+	var assembler rdpFastPathAssembler
 	for {
 		_ = conn.SetReadDeadline(deadline)
 		packet, err := readSlowOrFastPathPacket(conn)
@@ -173,15 +174,15 @@ func logonRun(address, pin, name string, roots *x509.CertPool, user, password st
 			}
 			continue
 		}
-		if rdpFastPathUpdateIsIgnored(packet) {
-			continue
-		}
-		update, err := parseRDPFastPathBitmapUpdateAt(packet, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+		update, err := reassembleFastPath(&assembler, packet, caps)
 		if err != nil {
 			notes = append(notes, fmt.Sprintf("refused: %s", describeRDPServerPacket(packet)))
 			break
 		}
-		if message, err := framebuffer.Apply(update, time.Now()); err == nil {
+		if update == nil {
+			continue
+		}
+		if message, err := framebuffer.Apply(*update, time.Now()); err == nil {
 			last, frames = message.PNG, frames+1
 		}
 	}

@@ -55,6 +55,7 @@ type reconnectSession struct {
 	framebuffer *RDPFramebuffer
 	last        []byte
 	sessionIDs  []int64
+	assembler   rdpFastPathAssembler
 }
 
 func openReconnectSession(address, pin, name string, roots *x509.CertPool, user, password string) (*reconnectSession, error) {
@@ -105,14 +106,14 @@ func (r *reconnectSession) watch(quiet, limit time.Duration) error {
 			}
 			continue
 		}
-		if rdpFastPathUpdateIsIgnored(packet) {
-			continue
-		}
-		update, err := parseRDPFastPathBitmapUpdateAt(packet, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+		update, err := reassembleFastPath(&r.assembler, packet, caps)
 		if err != nil {
 			return errors.New("refused: " + describeRDPServerPacket(packet))
 		}
-		if message, err := r.framebuffer.Apply(update, time.Now()); err == nil {
+		if update == nil {
+			continue
+		}
+		if message, err := r.framebuffer.Apply(*update, time.Now()); err == nil {
 			r.last = message.PNG
 		}
 	}
@@ -237,4 +238,23 @@ func TestRDPWindowsIsolation_LogonSessionID(t *testing.T) {
 			t.Errorf("session ID %d, want %d", got, c.want)
 		}
 	}
+}
+
+// reassembleFastPath decodes Fast-Path updates as the codec does (CI run #53: with
+// TS_MULTIFRAGMENTUPDATE announced, Windows fragments them): nil while a sequence is incomplete,
+// or for an update the screen stream ignores.
+func reassembleFastPath(a *rdpFastPathAssembler, packet []byte, caps RDPServerCapabilities) (*RDPBitmapUpdate, error) {
+	code, fragmentation, piece, err := splitRDPFastPathUpdate(packet)
+	if err != nil {
+		return nil, err
+	}
+	whole, complete, err := a.add(code, fragmentation, piece)
+	if err != nil || !complete || rdpFastPathCodeIsIgnored(code) {
+		return nil, err
+	}
+	if code != rdpFastPathUpdateBitmap || len(whole) < 2 || binary.LittleEndian.Uint16(whole[:2]) != rdpUpdateBitmap {
+		return nil, ErrMCSConnection
+	}
+	update, err := parseRDPBitmapUpdateDataAt(whole[2:], caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+	return &update, err
 }

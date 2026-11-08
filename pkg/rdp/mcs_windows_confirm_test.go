@@ -300,7 +300,7 @@ func TestRDPWindowsIsolation_ConfirmActivePieces(t *testing.T) {
 		t.Fatal(err)
 	}
 	sets, err := confirmActiveCapabilities(share)
-	if err != nil || len(sets) != 5 {
+	if err != nil || len(sets) != rdpClientCapabilitySetCount {
 		t.Fatalf("sets: %v, %d", err, len(sets))
 	}
 	again, err := confirmActiveWith(share, sets, 1007)

@@ -133,7 +133,8 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 			// counted, the first they refuse is described, kept in full, and ends the watch.
 			caps := session.serverCapabilities
 			deadline := time.Now().Add(30 * time.Second)
-			ignored, decoded, slow := 0, 0, 0
+			ignored, decoded, slow, fragments := 0, 0, 0, 0
+			var assembler rdpFastPathAssembler
 			for i := 1; i <= 400; i++ {
 				_ = conn.SetReadDeadline(deadline)
 				packet, err := readSlowOrFastPathPacket(conn)
@@ -151,6 +152,27 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 				case packet[0] != 3 && rdpFastPathUpdateIsIgnored(packet):
 					ignored++
 					continue
+				case packet[0] != 3 && fastPathFragmented(packet):
+					// Fragments (FIRST, NEXT, LAST) are reassembled, as the codec does, and counted.
+					code, fragmentation, piece, splitErr := splitRDPFastPathUpdate(packet)
+					fragments++
+					if splitErr == nil {
+						var whole []byte
+						var complete bool
+						whole, complete, parseErr = assembler.add(code, fragmentation, piece)
+						if complete && parseErr == nil && !rdpFastPathCodeIsIgnored(code) {
+							if len(whole) < 2 {
+								parseErr = errors.New("reassembled update too short")
+							} else {
+								_, parseErr = parseRDPBitmapUpdateDataAt(whole[2:], caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+							}
+						}
+					} else {
+						parseErr = splitErr
+					}
+					if parseErr == nil {
+						continue
+					}
 				case packet[0] != 3:
 					_, parseErr = parseRDPFastPathBitmapUpdateAt(packet, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
 				default:
@@ -189,7 +211,7 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 				}
 				break
 			}
-			logf("after Finalization: %d decoded, %d ignored, %d slow-path", decoded, ignored, slow)
+			logf("after Finalization: %d decoded, %d ignored, %d slow-path, %d Fast-Path fragments", decoded, ignored, slow, fragments)
 		}
 		done()
 	}
@@ -228,6 +250,12 @@ func readSlowOrFastPathPacket(r io.Reader) ([]byte, error) {
 	copy(packet, header)
 	_, err := io.ReadFull(r, packet[len(header):])
 	return packet, err
+}
+
+// fastPathFragmented says whether a Fast-Path PDU carries a fragment of an update.
+func fastPathFragmented(packet []byte) bool {
+	_, fragmentation, _, err := splitRDPFastPathUpdate(packet)
+	return err == nil && fragmentation != rdpFastPathFragmentSingle
 }
 
 func sequenceSession(address, pin, name string, roots *x509.CertPool, user, password string) (*CredSSPClientSession, func(), error) {

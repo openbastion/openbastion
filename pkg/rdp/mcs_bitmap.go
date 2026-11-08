@@ -1592,11 +1592,47 @@ readUpdate:
 			// 16 383 (CI run #46). A TPKT stays bounded by parseRDPBitmapMCSFragment.
 			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPFastPathPacket)
 			if readErr == nil && fastPath {
-				if rdpFastPathUpdateIsIgnored(packet) {
+				// One update per PDU, whole or in fragments (FIRST, NEXT..., LAST of one code),
+				// reassembled to the size this client announced, then shown or ignored.
+				var assembler rdpFastPathAssembler
+				var code byte
+				var data []byte
+				for complete := false; !complete; {
+					var fragmentation byte
+					var piece []byte
+					code, fragmentation, piece, err = splitRDPFastPathUpdate(packet)
+					if err == nil {
+						data, complete, err = assembler.add(code, fragmentation, piece)
+					}
+					if err != nil {
+						described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+						clear(packet)
+						return RDPBitmapUpdate{}, described
+					}
+					if !complete {
+						clear(packet)
+						var nextFastPath bool
+						packet, nextFastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPFastPathPacket)
+						if readErr != nil || !nextFastPath || ctx.Err() != nil {
+							clear(packet)
+							if errors.Is(readErr, ErrMCSConnection) {
+								return RDPBitmapUpdate{}, readErr
+							}
+							return RDPBitmapUpdate{}, fmt.Errorf("%w: a Fast-Path update interrupted mid-fragments", ErrMCSConnection)
+						}
+					}
+				}
+				if rdpFastPathCodeIsIgnored(code) {
 					clear(packet)
 					goto readUpdate
 				}
-				update, err = parseRDPFastPathBitmapUpdateAt(packet, desktopWidth, desktopHeight, sessionBPP)
+				// TS_UPDATE_BITMAP_DATA starts with its updateType, as in the slow path.
+				if code != rdpFastPathUpdateBitmap || len(data) < 2 || binary.LittleEndian.Uint16(data[:2]) != rdpUpdateBitmap {
+					described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+					clear(packet)
+					return RDPBitmapUpdate{}, described
+				}
+				update, err = parseRDPBitmapUpdateDataAt(data[2:], desktopWidth, desktopHeight, sessionBPP)
 				if err != nil {
 					described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
 					clear(packet)

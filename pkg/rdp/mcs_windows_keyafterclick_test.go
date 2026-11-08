@@ -101,6 +101,7 @@ func keyAfterClickRun(address, pin, name string, roots *x509.CertPool, user, pas
 	var last []byte
 	// The stream until it is quiet; read here, as a read that times out in ReadBitmapUpdate ends
 	// the session by design.
+	var assembler rdpFastPathAssembler
 	watch := func(quiet, limit time.Duration) string {
 		end := time.Now().Add(limit)
 		for time.Now().Before(end) {
@@ -113,14 +114,17 @@ func keyAfterClickRun(address, pin, name string, roots *x509.CertPool, user, pas
 			if err != nil {
 				return err.Error()
 			}
-			if packet[0] == 3 || rdpFastPathUpdateIsIgnored(packet) {
+			if packet[0] == 3 {
 				continue
 			}
-			update, err := parseRDPFastPathBitmapUpdateAt(packet, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+			update, err := reassembleFastPath(&assembler, packet, caps)
 			if err != nil {
 				return "refused: " + describeRDPServerPacket(packet)
 			}
-			if message, err := framebuffer.Apply(update, time.Now()); err == nil {
+			if update == nil {
+				continue
+			}
+			if message, err := framebuffer.Apply(*update, time.Now()); err == nil {
 				last = message.PNG
 			}
 		}
