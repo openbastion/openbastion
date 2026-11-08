@@ -2,6 +2,17 @@
 
 Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
+## 0. État d'avancement — 8 novembre 2026
+
+La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
+
+- **MVP SSH/SFTP/SCP** : parcours fonctionnel de référence, avec Gateway, Broker, Vault, proxy SSH, audit et replay texte.
+- **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API ; le lecteur vidéo Admin UI et plusieurs fonctions de redirection restent à faire.
+- **RDP** : moteur Go pur en développement avancé. X.224/HYBRID, TLS épinglé, CredSSP/NTLMv2, MCS/GCC, licensing partiel, négociation de capacités et décodage graphique partiel sont présents. **Le runtime RDP reste désactivé** ; la couverture des ordres graphiques et Fast-Path est incomplète ; l'interopérabilité Windows/RDS réelle, les licences CAL complètes et les canaux virtuels ne sont pas validés.
+- **Veille externe** : ADR-0081 propose une veille hebdomadaire de gopher-rdp, gordp et Casvisor afin d'identifier les évolutions utiles sans adopter automatiquement leur code ou leurs choix de sécurité.
+
+La source de vérité opérationnelle pour les capacités réellement présentes, leurs tests et leurs limites est [`docs/security/known-limitations.md`](security/known-limitations.md). Toute activation runtime ou preuve d'interopérabilité doit être reflétée ici et dans le README.
+
 ## 1. Principe de séquencement
 
 Deux règles guident l'ordre de livraison :
@@ -45,6 +56,8 @@ Deux règles guident l'ordre de livraison :
 | Plateforme | Scheduler complet (rotation planifiée et post-usage) |
 | Clients | User Portal, Desktop Client (Tauri), SDK Go |
 
+**État RDP/VNC dans cette phase** : VNC possède une preuve de parcours de bout en bout, mais n'est pas encore une expérience complète (lecteur vidéo UI, clipboard et interopérabilité RealVNC notamment). RDP reste un moteur en cours d'activation : l'ouverture de session contre FreeRDP 3.15 est un test d'interopérabilité de développement, **pas** une preuve Windows/RDS. La sortie de cette capacité exige un runtime RDP activé, validation stricte des certificats, enregistrement obligatoire, tests négatifs et interopérabilité réelle Windows Server/RDS. Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md), [ADR-0081](adr/0081-veille-rdp-externe-et-integration-selective.md) et [les limites connues](security/known-limitations.md).
+
 **Explicitement hors périmètre v0.0.1** : Docker Proxy, Hypervisor Console Proxy, WinRM Proxy, Telnet/Serial-IPMI Proxy, HTTP/HTTPS Web Proxy, Risk Engine, Reporting Service, SDK Python/Java/JavaScript.
 
 **Critères de sortie**
@@ -78,7 +91,7 @@ Deux règles guident l'ordre de livraison :
 | Authorization Service | ✅ (RBAC) | ABAC | |
 | Session Broker | ✅ | | |
 | SSH/SFTP/SCP Proxy | ✅ | | |
-| RDP/VNC Proxy | | ✅ | |
+| RDP/VNC Proxy | | ⚠️ (VNC E2E validé ; RDP runtime désactivé) | |
 | Database Proxy | | ✅ | |
 | Kubernetes Proxy | | ✅ | |
 | Docker Proxy | | | ✅ |
@@ -90,7 +103,7 @@ Deux règles guident l'ordre de livraison :
 | Secrets Manager | | ✅ | |
 | Session Recorder | ✅ | | |
 | Command Recorder | ✅ | | |
-| Video Recorder | | ✅ | |
+| Video Recorder | | ⚠️ (pipeline VNC E2E ; lecteur UI restant) | |
 | Audit Service | ✅ | | |
 | Recherche plein texte (ADR-0080, sans OpenSearch) | | ✅ | |
 | Reporting Service | | | ✅ |
@@ -119,4 +132,3 @@ Deux règles guident l'ordre de livraison :
 |---|---|
 | Le MVP mono-protocole (SSH) ne convainc pas des utilisateurs déjà équipés d'un PAM commercial couvrant RDP/DB dès le premier jour | Communiquer le MVP comme une preuve d'architecture, pas comme un produit de remplacement immédiat |
 | `pkg/proxycore` (ADR-0006) conçu pour SSH seul en MVP pourrait nécessiter un refactoring lors de l'ajout de RDP en v0.0.1 | Concevoir l'interface `Codec` dès le MVP en anticipant au moins un second protocole (RDP), sans l'implémenter |
-| Fédération d'identité limitée à OIDC en MVP peut bloquer des pilotes en entreprise déjà en AD pur | Prioriser LDAP/AD en tout début de v0.0.1 plutôt qu'en fin de phase |
