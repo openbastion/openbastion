@@ -6,10 +6,33 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestReadTPKTPacketPreservesTransportDiagnostics(t *testing.T) {
+	t.Run("closed connection", func(t *testing.T) {
+		_, err := readTPKTPacket(bytes.NewReader(nil), maxTPKTPacket)
+		if !errors.Is(err, ErrMCSConnection) || !errors.Is(err, io.EOF) {
+			t.Fatalf("readTPKTPacket() error = %v, want ErrMCSConnection and io.EOF", err)
+		}
+	})
+	t.Run("truncated header", func(t *testing.T) {
+		_, err := readTPKTPacket(bytes.NewReader([]byte{3, 0}), maxTPKTPacket)
+		if !errors.Is(err, ErrMCSConnection) || !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Fatalf("readTPKTPacket() error = %v, want ErrMCSConnection and io.ErrUnexpectedEOF", err)
+		}
+	})
+	t.Run("unexpected protocol response", func(t *testing.T) {
+		_, err := readTPKTPacket(bytes.NewReader([]byte{0x30, 0x82, 0x00, 0x10}), maxTPKTPacket)
+		if !errors.Is(err, ErrMCSConnection) || !strings.Contains(err.Error(), "30 82 00 10") {
+			t.Fatalf("readTPKTPacket() error = %v, want unexpected response header", err)
+		}
+	})
+}
 
 func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	packet, err := MarshalMCSConnectInitial(MCSClientSettings{DesktopWidth: 1920, DesktopHeight: 1080, ClientName: "OpenBastion"})

@@ -555,17 +555,17 @@ func readTPKTPacket(r io.Reader, maxPacket int) ([]byte, error) {
 		return nil, ErrMCSConnection
 	}
 	if _, err := io.ReadFull(r, header[:]); err != nil {
-		return nil, ErrMCSConnection
+		return nil, fmt.Errorf("%w: reading TPKT header: %w", ErrMCSConnection, err)
 	}
 	length := int(binary.BigEndian.Uint16(header[2:]))
 	if header[0] != 3 || header[1] != 0 || length < 9 || length > maxPacket {
-		return nil, ErrMCSConnection
+		return nil, fmt.Errorf("%w: unexpected response header % x (TPKT length %d, limit %d)", ErrMCSConnection, header, length, maxPacket)
 	}
 	packet := make([]byte, length)
 	copy(packet, header[:])
 	if _, err := io.ReadFull(r, packet[4:]); err != nil {
 		clear(packet)
-		return nil, ErrMCSConnection
+		return nil, fmt.Errorf("%w: reading TPKT payload (%d bytes): %w", ErrMCSConnection, length-4, err)
 	}
 	return packet, nil
 }
