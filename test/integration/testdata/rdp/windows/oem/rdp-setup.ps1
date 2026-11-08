@@ -15,8 +15,6 @@ foreach ($path in @("$env:ProgramData\Microsoft\Crypto\Keys\$key", "$env:Program
   if (Test-Path $path) { icacls $path /grant '*S-1-5-20:R' | Out-Null }
 }
 
-$ts = Get-CimInstance -Namespace root\cimv2\TerminalServices -ClassName Win32_TSGeneralSetting -Filter "TerminalName='RDP-tcp'"
-Set-CimInstance -InputObject $ts -Property @{ SSLCertificateSHA1Hash = $cert.Thumbprint }
 
 $rdp = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
 Set-ItemProperty $rdp -Name fDenyTSConnections -Value 0
@@ -43,8 +41,29 @@ try {
 # Something the test can type into and see: Notepad, at every logon.
 Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OpenBastionNotepad -Value 'notepad.exe'
 
+# Ready, in a known state (ADR-0071, CI runs #39 to #42): dockur logs the user on at the console to
+# run this script, and a test that came while that session was there found Windows' logon screen in
+# some runs and the desktop in others. A server's common case is no interactive session: a task
+# running as SYSTEM, once this script is over, logs every session off, turns dockur's autologon
+# off, and only then installs the pinned certificate and restarts Remote Desktop Services. The
+# certificate is the test's sign that the target is ready: when it comes, no session is open.
+# Reconnecting to a session already open remains to be validated.
+$ready = @"
+Start-Sleep -Seconds 20
+Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
+`$ids = (query session) -split "``n" | ForEach-Object { if (`$_ -match '\s(\d+)\s+(Active|Disc|Conn)') { [int]`$Matches[1] } } | Where-Object { `$_ -ge 1 -and `$_ -lt 65536 }
+foreach (`$id in `$ids) { logoff `$id }
+Start-Sleep -Seconds 10
+`$ts = Get-CimInstance -Namespace root\cimv2\TerminalServices -ClassName Win32_TSGeneralSetting -Filter "TerminalName='RDP-tcp'"
+Set-CimInstance -InputObject `$ts -Property @{ SSLCertificateSHA1Hash = '$($cert.Thumbprint)' }
 Restart-Service TermService -Force
-Write-Output "rdp-setup: done, certificate $($cert.Thumbprint)"
+"logged off: `$(`$ids -join ', ')" | Out-File 'C:\OEM\rdp-ready.log' -Encoding utf8
+"@
+Set-Content 'C:\OEM\rdp-ready.ps1' $ready
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\rdp-ready.ps1'
+Register-ScheduledTask -TaskName 'OpenBastionRdpReady' -Action $action -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+Start-ScheduledTask -TaskName 'OpenBastionRdpReady'
+Write-Output "rdp-setup: done; certificate $($cert.Thumbprint) once every session is logged off"
 
 # What Windows says about each RDP connection, for the CI (ADR-0071): every 30 s, the RDP logs as
 # text and XML (the text drops the event data, where the error codes are), copied to the share

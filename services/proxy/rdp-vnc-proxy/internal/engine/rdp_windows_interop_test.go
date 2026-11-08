@@ -193,6 +193,18 @@ func TestRDPWindows_Screen(t *testing.T) {
 	before := settle(first)
 	dump("windows-before.png", before)
 	t.Logf("Windows' desktop: %dx%d, %d frame(s) to settle", before.Width, before.Height, frames)
+	// A screen is not a session: Windows' logon screen streams as well as a desktop, and keys reach
+	// it (CI runs #39 and #42). Windows says when the user's session opened; without that, the
+	// target did not open it with the delegated credentials.
+	logonNotified := false
+	if adapter, ok := session.(*rdpScreenSessionAdapter); ok {
+		if target, ok := adapter.target.(*rdpTargetSession); ok {
+			logonNotified = target.session.LogonNotified()
+		}
+	}
+	if !logonNotified {
+		t.Fatal("Windows did not say the session opened: this is its logon screen, not the session the delegated credentials should open (windows-before.png)")
+	}
 	if len(before.PNG) == 0 || before.Width == 0 || before.Height == 0 {
 		t.Fatalf("frame: %d bytes, %dx%d", len(before.PNG), before.Width, before.Height)
 	}

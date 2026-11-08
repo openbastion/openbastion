@@ -80,6 +80,20 @@ type CredSSPClientSession struct {
 	ellipseSCEnabled        bool
 	multiOpaqueRectEnabled  bool
 	primaryOrderState       rdpPrimaryOrderState
+	logonNotified           bool
+}
+
+// LogonNotified reports whether the server has said the user's session opened (a Save Session
+// Info logon notification, MS-RDPBCGR 2.2.10.1.1). A Windows target that does not open the
+// session with the delegated credentials shows its logon screen instead, and never says so
+// (ADR-0071, CI runs #39 to #42): the screen alone cannot tell the two apart.
+func (s *CredSSPClientSession) LogonNotified() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.logonNotified
 }
 
 func (s *CredSSPClientSession) Close() {

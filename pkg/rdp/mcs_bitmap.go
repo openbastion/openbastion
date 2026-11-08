@@ -1244,6 +1244,16 @@ func rdpShareDataIsIgnored(data []byte, shareID uint32) bool {
 	return false
 }
 
+// rdpShareDataIsLogonNotification recognizes, in a Share Data PDU already found to be of this
+// share, a Save Session Info that says the user logged on: INFOTYPE_LOGON (0), INFOTYPE_LOGON_LONG
+// (1) or INFOTYPE_LOGON_PLAINNOTIFY (2). Extended logon information (3) is not a logon.
+func rdpShareDataIsLogonNotification(data []byte) bool {
+	if len(data) < 22 || data[14] != 0x26 {
+		return false
+	}
+	return binary.LittleEndian.Uint32(data[18:22]) <= 2
+}
+
 // decodeRDPBitmapRaw converts bottom-up BGRX wire pixels to top-down RGBA.
 func decodeRDPBitmapRaw(src []byte, width, height int) []byte {
 	rowBytes := width * 4 // 32-bpp rows are already DWORD aligned.
@@ -1631,6 +1641,11 @@ readUpdate:
 		}
 	}
 	if rdpShareDataIsIgnored(assembled, shareID) {
+		if rdpShareDataIsLogonNotification(assembled) {
+			s.mu.Lock()
+			s.logonNotified = true
+			s.mu.Unlock()
+		}
 		clear(assembled)
 		goto readUpdate
 	}
