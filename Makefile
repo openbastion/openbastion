@@ -29,7 +29,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test test-rdp-interop test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
+.PHONY: build version version-check test test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -202,6 +202,12 @@ test: proto-gen
 # A real RDP server in Docker, FreeRDP 3 (ADR-0071). Not Windows.
 test-rdp-interop:
 	RDP_INTEROP=1 $(GO) test ./services/proxy/rdp-vnc-proxy/internal/engine/ -run TestRDPInterop -v -count=1 -timeout=300s
+
+## The recording of an RDP session, end to end (ADR-0071): the proxy's real server with the RDP codec,
+## the real Video Recorder on PostgreSQL (TEST_DATABASE_URL), FreeRDP 3 in Docker whose display
+## shrinks mid-session. RDP stays unexposed: the test registers the ticket the Broker would.
+test-rdp-recording:
+	RDP_INTEROP=1 $(GO) test ./services/proxy/rdp-vnc-proxy/internal/interfaces/ -run TestRDPRecording -v -count=1 -timeout=600s
 
 ## A real Windows target (ADR-0071), in CI: .github/workflows/windows-rdp.yml starts it
 ## (test/integration/testdata/rdp/windows) and exports the RDP_WINDOWS_* variables of its test.env.

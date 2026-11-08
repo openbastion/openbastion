@@ -1558,3 +1558,36 @@ Premier contact de `pkg/rdp` avec un serveur réel : FreeRDP 3.15, `freerdp-shad
 - RDP reste non exposé.
 
 **Choix renversables** : 16 réactivations et 30 s ; un bureau noir après un changement de taille ; le Confirm Active qui reprend la taille annoncée par le serveur, comme le client de FreeRDP.
+
+## ADR-0071 — incrément 73 : l'enregistrement d'une session RDP, de bout en bout
+
+C'est le premier critère de sortie de l'incrément 2 : « session RDP interactive enregistrée et rejouable ». La preuve est faite sans exposer RDP, choix du propriétaire le 8 novembre (« Proxy réel, sans exposer »).
+
+**Ce qui est réel.** `TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays` (`make test-rdp-recording`) assemble :
+- le serveur HTTP et le relais écran du proxy (`interfaces.NewHTTPServer`, `proxycore.ServeScreen`) avec le codec RDP ;
+- le client gRPC du Video Recorder ;
+- le Video Recorder comme processus à part, sur PostgreSQL, sous mTLS ;
+- FreeRDP 3 en Docker comme cible.
+
+**Ce qui est simulé.** Le ticket est enregistré par le test, comme le ferait le Broker : la route `establish-session` du proxy continue de refuser RDP. Autour du recorder, le test simule le stockage objet, l'audit et la réponse de l'autorisation, ce que le parcours VNC simule aussi.
+
+**Ce que le test établit** :
+- chaque image vue par l'opérateur est, à l'octet près, l'image qu'un auditeur rejoue sous le même numéro de séquence ;
+- l'enregistrement est contigu, et scellé quand l'opérateur part ;
+- il suit un changement de taille en cours de session : la cible passe de 1280×800 à 1024×768 par `xrandr`, le serveur réactive, et l'enregistrement contient les deux tailles ;
+- un lecteur sans le droit ne reçoit rien (`PermissionDenied`) ;
+- l'identité du proxy ne peut pas lire un enregistrement ;
+- toute lecture est auditée.
+
+**Une cible qui change de taille.** Xvfb garde sa taille, même par RandR (mesuré). La cible FreeRDP prend donc Xvnc quand `RDP_DISPLAY=resizable`, seulement pour ce test ; les autres tests gardent Xvfb.
+
+**Preuves** :
+- passage local : 4 images montrées, 4 enregistrées, deux tailles ;
+- 3 contre-épreuves, chacune fait échouer le test : un octet ajouté à l'enregistrement, pas de scellement, pas de suivi de taille ;
+- en CI, une étape du job PostgreSQL.
+
+**Limites** :
+- le parcours ne part pas de l'API publique : Gateway et Broker, indépendants du protocole, sont prouvés par VNC, mais leur chemin RDP reste fermé ;
+- pas encore contre Windows ;
+- l'Admin UI n'a pas de lecteur vidéo (rejeu par l'API) ;
+- RDP reste non exposé.
