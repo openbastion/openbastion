@@ -96,3 +96,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0084](0084-bibliotheque-rdp-openbastion-moteur-protocolaire-instrumente.md) | La bibliothèque RDP OpenBastion sépare le moteur protocolaire des contrôles PAM | Proposé |
 | [ADR-0085](0085-bibliotheque-vnc-openbastion-moteur-rfb-instrumente.md) | La bibliothèque VNC OpenBastion sépare RFB des contrôles PAM et de l'enregistrement | Proposé |
 | [ADR-0086](0086-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mise en œuvre en cours |
+| [ADR-0087](0087-contrats-transverses-des-bibliotheques-protocolaires-ssh-rdp-vnc.md) | Les bibliothèques SSH, RDP et VNC partagent des contrats PAM sans partager leurs moteurs protocolaires | Proposé |
