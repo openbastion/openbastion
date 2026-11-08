@@ -32,6 +32,10 @@ type NTLMSSPClientSecurityContext struct {
 	outbound *ntlmSSPProtection
 	inbound  *ntlmSSPProtection
 	closed   bool
+	// micInStream: this client sent its mechListMIC unasked. The MIC consumes sequence 0;
+	// MS-SPNG resets the RC4 stream before the first application message (sequence 1).
+	// The server's MIC, if present, is verified and reset the same way.
+	micInStream bool
 }
 
 type ntlmSSPProtection struct {
@@ -177,6 +181,12 @@ func (c *NTLMSSPClientSecurityContext) VerifyMechListMIC(mechTypes, mic []byte) 
 	if c.closed || c.inbound == nil || len(mechTypes) == 0 || len(mic) != ntlmSSPMessageSignatureSize {
 		return ErrNTLMSSPSecurity
 	}
+	if c.micInStream {
+		if err := c.inbound.verifySignature(mechTypes, mic); err != nil {
+			return err
+		}
+		return c.inbound.resetStream()
+	}
 	want, err := ntlmSSPMICSignature(c.inbound.signKey, c.inbound.sealKey, mechTypes)
 	if err != nil {
 		return err
@@ -186,6 +196,30 @@ func (c *NTLMSSPClientSecurityContext) VerifyMechListMIC(mechTypes, mic []byte) 
 		return ErrNTLMSSPSecurity
 	}
 	return nil
+}
+
+// SignMechListMICInStream signs the mechanism list when the server did not request a MIC but
+// the NTLM AUTHENTICATE carries one. The signature consumes sequence 0 and eight bytes of RC4
+// keystream; MS-SPNG §3.3.5.1 requires resetting the RC4 stream before the first application
+// message while retaining sequence 1. The server's MIC is verified and reset the same way.
+func (c *NTLMSSPClientSecurityContext) SignMechListMICInStream(mechTypes []byte) ([]byte, error) {
+	if c == nil {
+		return nil, ErrNTLMSSPSecurity
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.outbound == nil || c.inbound == nil || len(mechTypes) == 0 || c.outbound.seq != 0 || c.inbound.seq != 0 {
+		return nil, ErrNTLMSSPSecurity
+	}
+	signature, err := c.outbound.sign(mechTypes)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.outbound.resetStream(); err != nil {
+		return nil, err
+	}
+	c.micInStream = true
+	return signature, nil
 }
 
 func (c *NTLMSSPClientSecurityContext) mechListMICExchanged() error {
@@ -284,6 +318,49 @@ func (p *ntlmSSPProtection) unwrap(message []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+// sign is MakeSignature (MS-NLMP 3.4.4.2): the message is not sealed, only its checksum, from the
+// same stream as sealing, and the sequence advances.
+func (p *ntlmSSPProtection) sign(message []byte) ([]byte, error) {
+	if p == nil || p.stream == nil || p.poisoned || p.seq == ^uint32(0) {
+		return nil, ErrNTLMSSPSecurity
+	}
+	signature := make([]byte, ntlmSSPMessageSignatureSize)
+	binary.LittleEndian.PutUint32(signature[:4], 1)
+	binary.LittleEndian.PutUint32(signature[12:16], p.seq)
+	checksum := ntlmSSPHMAC(p.signKey, p.seq, message)
+	copy(signature[4:12], checksum[:8])
+	clear(checksum[:])
+	if p.keyExchange {
+		p.stream.XORKeyStream(signature[4:12], signature[4:12])
+	}
+	p.seq++
+	return signature, nil
+}
+
+// verifySignature is VerifySignature: the peer's sign, at this sequence and point of the stream.
+func (p *ntlmSSPProtection) verifySignature(message, signature []byte) error {
+	if p == nil || p.stream == nil || p.poisoned || len(signature) != ntlmSSPMessageSignatureSize ||
+		binary.LittleEndian.Uint32(signature[:4]) != 1 || binary.LittleEndian.Uint32(signature[12:16]) != p.seq || p.seq == ^uint32(0) {
+		if p != nil {
+			p.poisoned = true
+		}
+		return ErrNTLMSSPSecurity
+	}
+	received := append([]byte(nil), signature[4:12]...)
+	if p.keyExchange {
+		p.stream.XORKeyStream(received, received)
+	}
+	checksum := ntlmSSPHMAC(p.signKey, p.seq, message)
+	valid := hmac.Equal(received, checksum[:8])
+	clear(checksum[:])
+	if !valid {
+		p.poisoned = true
+		return ErrNTLMSSPSecurity
+	}
+	p.seq++
+	return nil
+}
+
 func ntlmSSPHMAC(signKey [md5.Size]byte, sequence uint32, message []byte) [md5.Size]byte {
 	mac := hmac.New(md5.New, signKey[:])
 	var seq [4]byte
@@ -293,6 +370,23 @@ func ntlmSSPHMAC(signKey [md5.Size]byte, sequence uint32, message []byte) [md5.S
 	var checksum [md5.Size]byte
 	copy(checksum[:], mac.Sum(nil))
 	return checksum
+}
+
+// resetStream reinitializes the directional RC4 handle without changing the NTLM sequence
+// number. MS-SPNG §3.3.5.1 requires this after a mechListMIC: the next protected message is
+// sequence 1, but starts at the beginning of the sealing stream.
+func (p *ntlmSSPProtection) resetStream() error {
+	if p == nil || p.stream == nil || p.poisoned {
+		return ErrNTLMSSPSecurity
+	}
+	stream, err := rc4.NewCipher(p.sealKey[:])
+	if err != nil {
+		p.stream = nil
+		p.poisoned = true
+		return ErrNTLMSSPSecurity
+	}
+	p.stream = stream
+	return nil
 }
 
 func (p *ntlmSSPProtection) close() {

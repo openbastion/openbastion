@@ -332,3 +332,27 @@ func TestRDPCodec_ARepaintOfTheSamePixelsIsNotAFrame(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// A failing phase of the connection sequence is named, keeps its error for the refusal code, and
+// stops the sequence; a cancelled context stops it before the next phase (ADR-0071).
+func TestRunRDPConnectionStepsNamesTheFailingPhase(t *testing.T) {
+	var ran []string
+	step := func(name string, err error) rdpConnectionStep {
+		return rdpConnectionStep{name, func() error { ran = append(ran, name); return err }}
+	}
+	err := runRDPConnectionSteps(context.Background(), []rdpConnectionStep{
+		step("MCS connect", nil), step("licensing", rdp.ErrMCSConnection), step("capabilities", nil),
+	})
+	if !errors.Is(err, rdp.ErrMCSConnection) || err.Error() != "RDP licensing: "+rdp.ErrMCSConnection.Error() {
+		t.Fatalf("err = %v", err)
+	}
+	if len(ran) != 2 {
+		t.Fatalf("ran %v: the sequence must stop at the failing phase", ran)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ran = nil
+	if err := runRDPConnectionSteps(ctx, []rdpConnectionStep{step("MCS connect", nil)}); !errors.Is(err, context.Canceled) || len(ran) != 0 {
+		t.Fatalf("cancelled: %v, ran %v", err, ran)
+	}
+}

@@ -4,12 +4,22 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
 )
 
 var ErrCredSSPClient = errors.New("rdp: CredSSP client negotiation failed")
+
+// credsspFailure is ErrCredSSPClient saying where it failed (ADR-0071, the Windows validation): a
+// step, and the server's NTSTATUS when its TSRequest carries one — never a value of the exchange.
+func credsspFailure(step string, serverCode *uint32) error {
+	if serverCode != nil {
+		return fmt.Errorf("%w (%s: the server answers NTSTATUS 0x%08X)", ErrCredSSPClient, step, *serverCode)
+	}
+	return fmt.Errorf("%w (%s)", ErrCredSSPClient, step)
+}
 
 const defaultCredSSPTimeout = 10 * time.Second
 
@@ -23,6 +33,16 @@ type CredSSPClientConfig struct {
 	Domain   string
 	Password []byte
 	Timeout  time.Duration
+
+	// sealAuthInfo replaces the sealing of authInfo. Unexported: only this package's tests set it,
+	// to see how Windows answers an authInfo it must refuse or one naming another domain (ADR-0071
+	// isolation). Every other caller seals the credentials it was given with the context it proved.
+	sealAuthInfo func(security *NTLMSSPClientSecurityContext, challenge NTLMSSPChallenge, credentials []byte) ([]byte, error)
+	// directNTLM sends the NTLM messages themselves as negoTokens, without SPNEGO, as FreeRDP does:
+	// no mechListMIC, pubKeyAuth at sequence 0. Unexported, for the same isolation: CI run #21 has
+	// FreeRDP open a full session on the Windows target that closes after this client's
+	// Connect-Initial, and this is what differs most between the two.
+	directNTLM bool
 }
 
 // CredSSPClientSession represents a completed NLA exchange and owns the
@@ -60,6 +80,20 @@ type CredSSPClientSession struct {
 	ellipseSCEnabled        bool
 	multiOpaqueRectEnabled  bool
 	primaryOrderState       rdpPrimaryOrderState
+	logonNotified           bool
+}
+
+// LogonNotified reports whether the server has said the user's session opened (a Save Session
+// Info logon notification, MS-RDPBCGR 2.2.10.1.1). A Windows target that does not open the
+// session with the delegated credentials shows its logon screen instead, and never says so
+// (ADR-0071, CI runs #39 to #42): the screen alone cannot tell the two apart.
+func (s *CredSSPClientSession) LogonNotified() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.logonNotified
 }
 
 func (s *CredSSPClientSession) Close() {
@@ -123,6 +157,10 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer clear(initialToken)
+	if cfg.directNTLM {
+		initialToken = append([]byte(nil), negotiate...)
+		defer clear(initialToken)
+	}
 	initial, err := MarshalTSRequest(TSRequest{Version: cfg.Version, NegoTokens: [][]byte{initialToken}})
 	if err != nil || writeFull(t.Conn, initial) != nil {
 		clear(initial)
@@ -132,7 +170,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 
 	serverMessage, err := readTSRequest(t.Conn)
 	if err != nil {
-		return nil, ErrCredSSPClient
+		return nil, credsspFailure("reading the server's CHALLENGE", nil)
 	}
 	serverRequest, err := ParseTSRequest(serverMessage)
 	clear(serverMessage)
@@ -140,25 +178,33 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if err != nil || serverRequest.Version < 5 || serverRequest.ErrorCode != nil ||
 		len(serverRequest.NegoTokens) != 1 || serverRequest.AuthInfo != nil ||
 		serverRequest.PubKeyAuth != nil || serverRequest.ClientNonce != nil {
-		return nil, ErrCredSSPClient
+		return nil, credsspFailure(fmt.Sprintf("the server's CHALLENGE TSRequest: version %d, %d token(s), parse error %v", serverRequest.Version, len(serverRequest.NegoTokens), err != nil), serverRequest.ErrorCode)
 	}
 	negotiatedVersion := cfg.Version
 	if serverRequest.Version < negotiatedVersion {
 		negotiatedVersion = serverRequest.Version
 	}
-	serverSPNEGO, err := ParseSPNEGONegTokenResp(serverRequest.NegoTokens[0])
-	defer clear(serverSPNEGO.ResponseToken)
-	defer clear(serverSPNEGO.MechanismListMIC)
-	micRequested := err == nil && serverSPNEGO.State == spnegoStateRequestMIC
-	if err != nil || (serverSPNEGO.State != spnegoStateAcceptIncomplete && !micRequested) || !serverSPNEGO.SupportedMech.Equal(ntlmOID) ||
-		len(serverSPNEGO.ResponseToken) == 0 || len(serverSPNEGO.MechanismListMIC) != 0 {
-		return nil, ErrCredSSPClient
+	var challengeToken []byte
+	micRequested := false
+	if cfg.directNTLM {
+		challengeToken = serverRequest.NegoTokens[0]
+	} else {
+		serverSPNEGO, err := ParseSPNEGONegTokenResp(serverRequest.NegoTokens[0])
+		defer clear(serverSPNEGO.ResponseToken)
+		defer clear(serverSPNEGO.MechanismListMIC)
+		micRequested = err == nil && serverSPNEGO.State == spnegoStateRequestMIC
+		if err != nil || (serverSPNEGO.State != spnegoStateAcceptIncomplete && !micRequested) || !serverSPNEGO.SupportedMech.Equal(ntlmOID) ||
+			len(serverSPNEGO.ResponseToken) == 0 || len(serverSPNEGO.MechanismListMIC) != 0 {
+			return nil, credsspFailure(fmt.Sprintf("the server's SPNEGO negTokenResp: state %d, NTLM %v, token %d bytes, mechListMIC %d bytes, parse error %v",
+				serverSPNEGO.State, serverSPNEGO.SupportedMech.Equal(ntlmOID), len(serverSPNEGO.ResponseToken), len(serverSPNEGO.MechanismListMIC), err != nil), nil)
+		}
+		challengeToken = serverSPNEGO.ResponseToken
 	}
-	challenge, err := ParseNTLMSSPChallenge(serverSPNEGO.ResponseToken, ntlmSSPNegotiateFlags)
+	challenge, err := ParseNTLMSSPChallenge(challengeToken, ntlmSSPNegotiateFlags)
 	defer clear(challenge.TargetName)
 	defer clear(challenge.TargetInfo)
 	if err != nil {
-		return nil, ErrCredSSPClient
+		return nil, credsspFailure(fmt.Sprintf("the NTLM CHALLENGE: %v", err), nil)
 	}
 
 	clientChallenge, err := GenerateNTLMv2ClientChallenge()
@@ -193,7 +239,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer security.Close()
-	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, serverSPNEGO.ResponseToken, cfg.Username, cfg.Domain, response, bindings)
+	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, challengeToken, cfg.Username, cfg.Domain, response, bindings)
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
@@ -202,15 +248,29 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
-	var mechListMIC []byte
-	if micRequested {
-		if mechListMIC, err = security.SignMechListMIC(mechTypes); err != nil {
+	// The MIC goes with AUTHENTICATE whether or not the server asked for it: an NTLM AUTHENTICATE
+	// with a MIC needs SPNEGO's mechListMIC (MS-SPNG), and Windows Server closes the connection
+	// without it (ADR-0071, measured in CI). Asked (FreeRDP), it keeps the measured exchange of its
+	// own; unasked (Windows), it is a signature of this context, and pubKeyAuth follows it.
+	var finalToken []byte
+	if cfg.directNTLM {
+		// No SPNEGO, so no mechListMIC, and nothing in the server's answer but pubKeyAuth.
+		finalToken = append([]byte(nil), ntlmAuthenticate...)
+		mechTypes = nil
+	} else {
+		var mechListMIC []byte
+		if micRequested {
+			mechListMIC, err = security.SignMechListMIC(mechTypes)
+		} else {
+			mechListMIC, err = security.SignMechListMICInStream(mechTypes)
+		}
+		if err != nil {
+			return nil, credsspFailure("signing the mechListMIC", nil)
+		}
+		finalToken, err = MarshalSPNEGONTLMResponse(ntlmAuthenticate, mechListMIC)
+		if err != nil {
 			return nil, ErrCredSSPClient
 		}
-	}
-	finalToken, err := MarshalSPNEGONTLMResponse(ntlmAuthenticate, mechListMIC)
-	if err != nil {
-		return nil, ErrCredSSPClient
 	}
 	defer clear(finalToken)
 	// A server that asked for the MIC finishes SPNEGO first, and reads pubKeyAuth in the next
@@ -219,7 +279,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if micRequested {
 		if err := completeSPNEGOMICExchange(t.Conn, negotiatedVersion, finalToken, security, mechTypes); err != nil {
 			security.Close()
-			return nil, ErrCredSSPClient
+			return nil, err
 		}
 		pendingToken = nil
 	}
@@ -243,11 +303,15 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	serverBindingResponse, err := readTSRequest(t.Conn)
 	if err != nil {
 		security.Close()
-		return nil, ErrCredSSPClient
+		return nil, credsspFailure(fmt.Sprintf("reading the server's answer to AUTHENTICATE (MIC requested %v): %v", micRequested, err), nil)
 	}
 	if err := verifyCredSSPServerCompletion(serverBindingResponse, negotiatedVersion, binding, security, mechTypes); err != nil {
+		var code *uint32
+		if answer, perr := ParseTSRequest(serverBindingResponse); perr == nil {
+			code = answer.ErrorCode
+		}
 		clear(serverBindingResponse)
-		return nil, ErrCredSSPClient
+		return nil, credsspFailure(fmt.Sprintf("the server's pubKeyAuth (MIC requested %v): %v", micRequested, err), code)
 	}
 	clear(serverBindingResponse)
 	if ctx.Err() != nil {
@@ -259,8 +323,14 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer clear(credentials)
-	authInfo, err := security.WrapClientToServer(credentials)
-	if err != nil {
+	seal := func(security *NTLMSSPClientSecurityContext, _ NTLMSSPChallenge, credentials []byte) ([]byte, error) {
+		return security.WrapClientToServer(credentials)
+	}
+	if cfg.sealAuthInfo != nil {
+		seal = cfg.sealAuthInfo
+	}
+	authInfo, err := seal(security, challenge, credentials)
+	if err != nil || len(authInfo) == 0 {
 		return nil, ErrCredSSPClient
 	}
 	defer clear(authInfo)
@@ -335,14 +405,20 @@ func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSett
 	if readErr != nil {
 		stopCancel()
 		s.closeTransportLocked()
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: reading MCS Connect-Response TPKT: %v", ErrMCSConnection, readErr)
 	}
 	response, err = ParseMCSConnectResponse(serverPacket)
 	clear(serverPacket)
 	cancelStopped := stopCancel()
 	if err != nil || ctx.Err() != nil || !cancelStopped {
 		s.closeTransportLocked()
-		return MCSConnectResponse{}, ErrMCSConnection
+		if err != nil {
+			return MCSConnectResponse{}, err
+		}
+		if ctx.Err() != nil {
+			return MCSConnectResponse{}, fmt.Errorf("%w: context cancelled during MCS Connect-Response", ErrMCSConnection)
+		}
+		return MCSConnectResponse{}, fmt.Errorf("%w: MCS response deadline callback raced completion", ErrMCSConnection)
 	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		s.closeTransportLocked()
@@ -372,17 +448,18 @@ func completeSPNEGOMICExchange(conn io.ReadWriter, version uint32, token []byte,
 	}
 	encoded, err := readTSRequest(conn)
 	if err != nil {
-		return ErrCredSSPClient
+		return credsspFailure("reading the server's answer to AUTHENTICATE with the MIC", nil)
 	}
 	defer clear(encoded)
 	answer, err := ParseTSRequest(encoded)
 	defer clearTSRequest(&answer)
 	if err != nil || answer.Version != version || answer.ErrorCode != nil || answer.AuthInfo != nil ||
 		answer.PubKeyAuth != nil || answer.ClientNonce != nil {
-		return ErrCredSSPClient
+		return credsspFailure(fmt.Sprintf("the server's answer to the MIC: version %d (sent %d), pubKeyAuth %d bytes, parse error %v",
+			answer.Version, version, len(answer.PubKeyAuth), err != nil), answer.ErrorCode)
 	}
 	if err := verifySPNEGOCompletion(answer.NegoTokens, security, mechTypes, true); err != nil {
-		return err
+		return credsspFailure(fmt.Sprintf("the server's SPNEGO completion of the MIC: %v", err), nil)
 	}
 	return security.mechListMICExchanged()
 }

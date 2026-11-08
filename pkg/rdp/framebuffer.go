@@ -136,7 +136,7 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.image == nil || timestamp.IsZero() || len(update.Rectangles) == 0 ||
-		len(update.Rectangles) > maxRDPBitmapRects || f.sequence == ^uint64(0) {
+		len(update.Rectangles) > maxRDPBitmapUpdateRects || f.sequence == ^uint64(0) {
 		return screenstream.Message{}, ErrRDPFramebuffer
 	}
 	bounds := f.image.Bounds()

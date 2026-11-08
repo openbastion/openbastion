@@ -6,10 +6,33 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestReadTPKTPacketPreservesTransportDiagnostics(t *testing.T) {
+	t.Run("closed connection", func(t *testing.T) {
+		_, err := readTPKTPacket(bytes.NewReader(nil), maxTPKTPacket)
+		if !errors.Is(err, ErrMCSConnection) || !errors.Is(err, io.EOF) {
+			t.Fatalf("readTPKTPacket() error = %v, want ErrMCSConnection and io.EOF", err)
+		}
+	})
+	t.Run("truncated header", func(t *testing.T) {
+		_, err := readTPKTPacket(bytes.NewReader([]byte{3, 0}), maxTPKTPacket)
+		if !errors.Is(err, ErrMCSConnection) || !errors.Is(err, io.ErrUnexpectedEOF) {
+			t.Fatalf("readTPKTPacket() error = %v, want ErrMCSConnection and io.ErrUnexpectedEOF", err)
+		}
+	})
+	t.Run("unexpected protocol response", func(t *testing.T) {
+		_, err := readTPKTPacket(bytes.NewReader([]byte{0x30, 0x82, 0x00, 0x10}), maxTPKTPacket)
+		if !errors.Is(err, ErrMCSConnection) || !strings.Contains(err.Error(), "30 82 00 10") {
+			t.Fatalf("readTPKTPacket() error = %v, want unexpected response header", err)
+		}
+	})
+}
 
 func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	packet, err := MarshalMCSConnectInitial(MCSClientSettings{DesktopWidth: 1920, DesktopHeight: 1080, ClientName: "OpenBastion"})
@@ -39,12 +62,25 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 		}
 		outer = tail
 	}
+	var maximum []byte
 	for i := 0; i < 3; i++ {
 		params, tail, readErr := readMCSBER(outer, []byte{0x30})
 		if readErr != nil || !validMCSBERDomainParameters(params) {
 			t.Fatalf("domain parameters %d invalid: %v", i, readErr)
 		}
+		if i == 2 {
+			maximum = params
+		}
 		outer = tail
+	}
+	// Match the interoperable FreeRDP/Microsoft sample maximum maxUserIds (0xFC17).
+	maxChannelIDs, maximum, readErr := readMCSBER(maximum, []byte{0x02})
+	if readErr != nil || !bytes.Equal(maxChannelIDs, []byte{0x00, 0xff, 0xff}) {
+		t.Fatalf("maximum maxChannelIds = %x, %v", maxChannelIDs, readErr)
+	}
+	maxUserIDs, _, readErr := readMCSBER(maximum, []byte{0x02})
+	if readErr != nil || !bytes.Equal(maxUserIDs, []byte{0x00, 0xfc, 0x17}) {
+		t.Fatalf("maximum maxUserIds = %x, %v; want 0xFC17", maxUserIDs, readErr)
 	}
 	gcc, tail, err := readMCSBER(outer, []byte{0x04})
 	if err != nil || len(tail) != 0 {
@@ -65,7 +101,9 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	if binary.LittleEndian.Uint32(core[0:4]) != rdpClientVersion ||
 		binary.LittleEndian.Uint16(core[4:6]) != 1920 || binary.LittleEndian.Uint16(core[6:8]) != 1080 ||
 		binary.LittleEndian.Uint16(core[136:138]) != rdpHighColor24BPP ||
-		binary.LittleEndian.Uint16(core[138:140]) != rdpSupported32BPP ||
+		// 15, 16, 24 and 32 bpp, as FreeRDP and Windows clients: Windows Server 2022 closes the
+		// connection on 24 and 32 alone with these early capabilities (ADR-0071, CI run #26).
+		binary.LittleEndian.Uint16(core[138:140]) != 0x000f ||
 		binary.LittleEndian.Uint16(core[140:142]) != rdpClientErrInfo|rdpClientWant32BPP ||
 		binary.LittleEndian.Uint32(core[208:212]) != protocolHybrid {
 		t.Fatalf("CS_CORE fields do not match the HYBRID/32-bpp profile: %x", core)
@@ -79,28 +117,17 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	if securityOffset < 0 || securityOffset+12 > len(gcc) ||
 		binary.LittleEndian.Uint32(gcc[securityOffset+4:securityOffset+8]) != rdpEncryption128Bit ||
 		binary.LittleEndian.Uint32(gcc[securityOffset+8:securityOffset+12]) != 0 {
-		t.Fatal("GCC request must advertise 128-bit security capability with no French extension")
+		t.Fatal("HYBRID GCC request must advertise a valid Standard RDP Security capability and no French-locale methods")
 	}
 	if bytes.Contains(gcc, []byte{0x03, 0xc0}) {
 		t.Fatal("GCC request unexpectedly advertised a virtual channel")
 	}
-}
-
-func TestMarshalMCSConnectInitialUsesFrenchSecurityExtensionWhenRequested(t *testing.T) {
-	packet, err := MarshalMCSConnectInitial(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720, ClientName: "OpenBastion", FrenchLocale: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	gcc, err := parseMCSClientConnectInitialForTest(packet)
-	if err != nil {
-		t.Fatal(err)
-	}
-	header := []byte{0x02, 0xc0, 0x0c, 0x00}
-	offset := bytes.Index(gcc, header)
-	if offset < 0 || offset+12 > len(gcc) ||
-		binary.LittleEndian.Uint32(gcc[offset+4:offset+8]) != 0 ||
-		binary.LittleEndian.Uint32(gcc[offset+8:offset+12]) != rdpEncryption128Bit {
-		t.Fatal("French-locale CS_SECURITY must move the advertised method to extEncryptionMethods")
+	clusterHeader := []byte{0x04, 0xc0, 0x0c, 0x00}
+	clusterOffset := bytes.Index(gcc, clusterHeader)
+	if clusterOffset < 0 || clusterOffset+12 > len(gcc) ||
+		binary.LittleEndian.Uint32(gcc[clusterOffset+4:clusterOffset+8]) != rdpClusterRedirectSupported|rdpClusterRedirectVersion4 ||
+		binary.LittleEndian.Uint32(gcc[clusterOffset+8:clusterOffset+12]) != 0 {
+		t.Fatal("GCC request must advertise RDP redirection version 4 without requesting a redirected session")
 	}
 }
 

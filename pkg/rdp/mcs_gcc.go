@@ -3,6 +3,7 @@ package rdp
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 	"unicode/utf16"
@@ -18,37 +19,53 @@ const (
 
 	gccClientCoreType     = uint16(0xc001)
 	gccClientSecurityType = uint16(0xc002)
+	gccClientClusterType  = uint16(0xc004)
 	gccServerCoreType     = uint16(0x0c01)
 	gccServerSecurityType = uint16(0x0c02)
 	gccServerNetworkType  = uint16(0x0c03)
 
-	rdpClientVersion        = uint32(0x00080004)
-	rdpClientBuild          = uint32(1)
-	rdpColor8BPP            = uint16(0xca01)
-	rdpColor24BPP           = uint16(0xca04)
-	rdpHighColor24BPP       = uint16(0x0018)
-	rdpSupported32BPP       = uint16(0x0008)
-	rdpClientErrInfo        = uint16(0x0001)
-	rdpClientWant32BPP      = uint16(0x0002)
-	rdpSASDel               = uint16(0xaa03)
-	rdpEncryption128Bit     = uint32(0x00000002)
-	rdpKeyboardEnhanced     = uint32(4)
-	rdpKeyboardFunctionKeys = uint32(12)
-	mcsGlobalChannelID      = uint16(1003)
+	rdpClientVersion    = uint32(0x00080004)
+	rdpClientBuild      = uint32(1)
+	rdpColor8BPP        = uint16(0xca01)
+	rdpColor24BPP       = uint16(0xca04)
+	rdpHighColor24BPP   = uint16(0x0018)
+	rdpSupported24BPP   = uint16(0x0001)
+	rdpSupported16BPP   = uint16(0x0002)
+	rdpSupported15BPP   = uint16(0x0004)
+	rdpSupported32BPP   = uint16(0x0008)
+	rdpEncryption128Bit = uint32(0x00000002)
+	// Every depth, as FreeRDP and Windows clients advertise: Windows Server 2022 closes the
+	// connection, 1 ms after the Connect-Initial and without an answer, when only 24 and 32 bpp are
+	// offered with these early capabilities (ADR-0071, CI run #26, pkg/rdp/mcs_windows_bisect_test.go).
+	// The session stays 32 bpp: WANT_32BPP is requested, and a Demand Active or a bitmap at any
+	// other depth is refused (mcs_capabilities.go, mcs_bitmap.go).
+	rdpSupportedColorDepths     = rdpSupported24BPP | rdpSupported16BPP | rdpSupported15BPP | rdpSupported32BPP
+	rdpClientErrInfo            = uint16(0x0001)
+	rdpClusterRedirectSupported = uint32(0x00000001)
+	rdpClusterRedirectVersion4  = uint32(0x0000000c)
+	rdpClientWant32BPP          = uint16(0x0002)
+	rdpSASDel                   = uint16(0xaa03)
+	rdpKeyboardEnhanced         = uint32(4)
+	rdpKeyboardFunctionKeys     = uint32(12)
+	mcsGlobalChannelID          = uint16(1003)
 )
 
 // ErrMCSConnection reports a malformed or unsupported MCS/GCC connection exchange.
 var ErrMCSConnection = errors.New("rdp: malformed or unsupported MCS/GCC connection exchange")
 
 // MCSClientSettings describes the deliberately small client settings profile
-// advertised after CredSSP. FrenchLocale selects the French extEncryptionMethods form.
+// advertised after CredSSP. HYBRID uses TLS/CredSSP, not Standard RDP Security.
 // No static or dynamic virtual channels are requested.
 type MCSClientSettings struct {
 	DesktopWidth  uint16
 	DesktopHeight uint16
 	ClientName    string
-	FrenchLocale  bool
 	Timeout       time.Duration
+
+	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
+	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches
+	// Notepad and the keys do not).
+	keyboardLayout uint32
 }
 
 // MCSConnectResponse contains the only server settings accepted by this stage.
@@ -104,35 +121,37 @@ func MarshalMCSConnectInitial(settings MCSClientSettings) ([]byte, error) {
 func ParseMCSConnectResponse(packet []byte) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	if len(packet) < 7+2 || len(packet) > maxTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
-		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) ||
-		!equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) {
-		return response, ErrMCSConnection
+		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) {
+		return response, fmt.Errorf("%w: MCS Connect-Response TPKT header", ErrMCSConnection)
+	}
+	if !equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) {
+		return response, fmt.Errorf("%w: MCS Connect-Response X.224 data TPDU", ErrMCSConnection)
 	}
 	mcs := packet[7:]
 	outer, rest, err := readMCSBER(mcs, []byte{0x7f, mcsConnectResponseTag})
 	if err != nil || len(rest) != 0 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response BER envelope", ErrMCSConnection)
 	}
 	body := outer
 	result, body, err := readMCSBER(body, []byte{0x0a}) // ENUMERATED
 	if err != nil || len(result) != 1 || result[0] != 0 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response result", ErrMCSConnection)
 	}
 	calledConnectID, body, err := readMCSBER(body, []byte{0x02})
 	if err != nil || !validBERInteger(calledConnectID) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response calledConnectId", ErrMCSConnection)
 	}
 	domainParameters, body, err := readMCSBER(body, []byte{0x30})
 	if err != nil || !validMCSBERDomainParameters(domainParameters) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response domainParameters", ErrMCSConnection)
 	}
 	userData, body, err := readMCSBER(body, []byte{0x04})
 	if err != nil || len(body) != 0 || len(userData) == 0 || len(userData) > maxMCSConnectData {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: MCS Connect-Response userData", ErrMCSConnection)
 	}
 	response, err = parseGCCConferenceCreateResponse(userData)
 	if err != nil {
-		return MCSConnectResponse{}, err
+		return MCSConnectResponse{}, fmt.Errorf("%w: GCC ConferenceCreate-Response: %v", ErrMCSConnection, err)
 	}
 	return response, nil
 }
@@ -164,7 +183,7 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	put16(settings.DesktopHeight)
 	put16(rdpColor8BPP) // Ignored when postBeta2ColorDepth is present.
 	put16(rdpSASDel)
-	put32(0) // Let the server select the account's default keyboard layout.
+	put32(settings.keyboardLayout) // 0: let the server select the account's default keyboard layout.
 	put32(rdpClientBuild)
 	name := utf16.Encode([]rune(settings.ClientName))
 	for _, unit := range name {
@@ -180,7 +199,7 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	put16(1) // clientProductId
 	put32(0) // serialNumber
 	put16(rdpHighColor24BPP)
-	put16(rdpSupported32BPP)
+	put16(rdpSupportedColorDepths)
 	put16(rdpClientErrInfo | rdpClientWant32BPP)
 	productID := utf16.Encode([]rune("OpenBastion"))
 	for _, unit := range productID {
@@ -200,14 +219,17 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	blocks := make([]byte, 0, 228)
 	blocks = appendGCCBlock(blocks, gccClientCoreType, core)
 	clear(core)
-	// Advertise a valid Standard RDP Security capability for protocol compliance.
-	// HYBRID remains mandatory, so this capability is never used as the security layer.
+	// Match FreeRDP's baseline GCC block sequence. CS_CLUSTER is emitted even
+	// when no redirection or redirected session is requested.
+	cluster := make([]byte, 8) // flags=REDIRECTION_SUPPORTED | REDIRECTION_VERSION4
+	binary.LittleEndian.PutUint32(cluster[:4], rdpClusterRedirectSupported|rdpClusterRedirectVersion4)
+	blocks = appendGCCBlock(blocks, gccClientClusterType, cluster)
+	clear(cluster)
+	// TS_UD_CS_SEC advertises a valid Standard RDP Security capability as
+	// required by MS-RDPBCGR. The negotiated protocol remains HYBRID (TLS +
+	// CredSSP); this legacy capability is not used to protect this session.
 	security := make([]byte, 8)
-	if settings.FrenchLocale {
-		binary.LittleEndian.PutUint32(security[4:8], rdpEncryption128Bit) // extEncryptionMethods
-	} else {
-		binary.LittleEndian.PutUint32(security[0:4], rdpEncryption128Bit) // encryptionMethods
-	}
+	binary.LittleEndian.PutUint32(security[:4], rdpEncryption128Bit)
 	blocks = appendGCCBlock(blocks, gccClientSecurityType, security)
 	clear(security)
 	if len(blocks) > maxMCSConnectData {
@@ -252,7 +274,7 @@ func marshalMCSConnectInitial(gccData []byte) ([]byte, error) {
 	body = appendBER(body, 0x01, []byte{0xff}) // upwardFlag TRUE
 	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{34, 2, 0, 1, 0, 1, 65535, 2}))
 	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{1, 1, 1, 1, 0, 1, 1056, 2}))
-	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{65535, 65535, 65535, 1, 0, 1, 65535, 2}))
+	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{65535, 64535, 65535, 1, 0, 1, 65535, 2}))
 	body = appendBER(body, 0x04, gccData)
 	return appendBERHighTag(nil, []byte{0x7f, mcsConnectInitialTag}, body), nil
 }
@@ -388,31 +410,31 @@ func readPERLength(data []byte) (int, []byte, error) {
 func parseGCCConferenceCreateResponse(data []byte) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	if len(data) < 16 || len(data) > maxMCSConnectData || !equalBytes(data[:7], []byte{0x00, 0x05, 0x00, 0x14, 0x7c, 0x00, 0x01}) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response header", ErrMCSConnection)
 	}
 	_, rest, err := readPERLength(data[7:])
 	if err != nil || len(rest) < 1 || rest[0] != 0x14 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response PER length or choice", ErrMCSConnection)
 	}
 	rest = rest[1:]
 	if len(rest) < 12 {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response conference parameters", ErrMCSConnection)
 	}
 	// nodeID (2), tag length and tag (2), result (1) and number of sets (1) are ignored by the RDP
 	// client (MS-RDPBCGR 4.1.4: 14 76 0a 01 01 00 01 c0 00 "McDn"). Only the conference choice and
 	// the mandatory H.221 key matter.
 	rest = rest[6:]
 	if rest[0] != 0xc0 || rest[1] != 0 || !equalBytes(rest[2:6], []byte("McDn")) {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response H.221 key", ErrMCSConnection)
 	}
 	rest = rest[6:]
 	userDataLength, rest, err := readPERLength(rest)
 	if err != nil || userDataLength == 0 || userDataLength > maxMCSConnectData || len(rest) != userDataLength {
-		return response, ErrMCSConnection
+		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response server data length", ErrMCSConnection)
 	}
 	response, err = parseServerDataBlocks(rest)
 	if err != nil {
-		return MCSConnectResponse{}, err
+		return MCSConnectResponse{}, fmt.Errorf("%w: GCC server data blocks: %v", ErrMCSConnection, err)
 	}
 	return response, nil
 }
@@ -422,40 +444,40 @@ func parseServerDataBlocks(data []byte) (MCSConnectResponse, error) {
 	seen := map[uint16]bool{}
 	for len(data) > 0 {
 		if len(data) < 4 {
-			return response, ErrMCSConnection
+			return response, fmt.Errorf("%w: truncated GCC server data block header", ErrMCSConnection)
 		}
 		blockType := binary.LittleEndian.Uint16(data[:2])
 		blockLength := int(binary.LittleEndian.Uint16(data[2:4]))
 		if blockLength < 4 || blockLength > len(data) || seen[blockType] {
-			return response, ErrMCSConnection
+			return response, fmt.Errorf("%w: invalid or duplicate GCC server data block type 0x%04x", ErrMCSConnection, blockType)
 		}
 		seen[blockType] = true
 		payload := data[4:blockLength]
 		switch blockType {
 		case gccServerCoreType:
 			if len(payload) != 8 && len(payload) != 12 {
-				return response, ErrMCSConnection
+				return response, fmt.Errorf("%w: invalid GCC SC_CORE length %d", ErrMCSConnection, len(payload))
 			}
 			response.ServerVersion = binary.LittleEndian.Uint32(payload[:4])
 			if !validRDPServerVersion(response.ServerVersion) || binary.LittleEndian.Uint32(payload[4:8]) != protocolHybrid {
-				return MCSConnectResponse{}, ErrMCSConnection
+				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_CORE version or selected protocol", ErrMCSConnection)
 			}
 		case gccServerSecurityType:
 			if len(payload) != 8 || binary.LittleEndian.Uint32(payload[:4]) != 0 || binary.LittleEndian.Uint32(payload[4:8]) != 0 {
-				return MCSConnectResponse{}, ErrMCSConnection
+				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_SECURITY profile", ErrMCSConnection)
 			}
 		case gccServerNetworkType:
 			if len(payload) != 4 || binary.LittleEndian.Uint16(payload[:2]) != mcsGlobalChannelID || binary.LittleEndian.Uint16(payload[2:4]) != 0 {
-				return MCSConnectResponse{}, ErrMCSConnection
+				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_NET channels", ErrMCSConnection)
 			}
 			response.IOChannelID = mcsGlobalChannelID
 		default:
-			return MCSConnectResponse{}, ErrMCSConnection
+			return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC server data block type 0x%04x", ErrMCSConnection, blockType)
 		}
 		data = data[blockLength:]
 	}
 	if !seen[gccServerCoreType] || !seen[gccServerSecurityType] || !seen[gccServerNetworkType] || response.IOChannelID == 0 {
-		return MCSConnectResponse{}, ErrMCSConnection
+		return MCSConnectResponse{}, fmt.Errorf("%w: missing required GCC SC_CORE, SC_SECURITY, or SC_NET block", ErrMCSConnection)
 	}
 	return response, nil
 }
@@ -552,17 +574,17 @@ func readTPKTPacket(r io.Reader, maxPacket int) ([]byte, error) {
 		return nil, ErrMCSConnection
 	}
 	if _, err := io.ReadFull(r, header[:]); err != nil {
-		return nil, ErrMCSConnection
+		return nil, fmt.Errorf("%w: reading TPKT header: %w", ErrMCSConnection, err)
 	}
 	length := int(binary.BigEndian.Uint16(header[2:]))
 	if header[0] != 3 || header[1] != 0 || length < 9 || length > maxPacket {
-		return nil, ErrMCSConnection
+		return nil, fmt.Errorf("%w: unexpected response header % x (TPKT length %d, limit %d)", ErrMCSConnection, header, length, maxPacket)
 	}
 	packet := make([]byte, length)
 	copy(packet, header[:])
 	if _, err := io.ReadFull(r, packet[4:]); err != nil {
 		clear(packet)
-		return nil, ErrMCSConnection
+		return nil, fmt.Errorf("%w: reading TPKT payload (%d bytes): %w", ErrMCSConnection, length-4, err)
 	}
 	return packet, nil
 }

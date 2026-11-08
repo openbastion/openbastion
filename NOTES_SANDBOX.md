@@ -3035,3 +3035,32 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 **Limites** : le repli de casse est celui de PostgreSQL (`ILIKE`), pas la normalisation NFC des commandes ; une page de moins de 50 sessions avec un `next` n'est pas la fin ; **reste l'Admin UI** (incrément 3).
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
+
+## 2026-11-08 — ADR-0071 et ADR-0086 : la session RDP complète contre Windows
+
+PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows Server 2022 par dockur, laissé par défaut). Détail passage par passage dans ADR-0071 ; décision de profondeur dans ADR-0086 (go du propriétaire le 8 novembre : « Option 1, décode le 15/16 bpp »).
+
+**Ce qui marche, mesuré contre Windows** : CredSSP (Windows ne demande pas le MIC ; le client l'envoie non demandé, RC4 réinitialisé, `pubKeyAuth` à la séquence 1), MCS, canaux, Client Info, licence, capacités, finalisation ; Windows ouvre la session avec les identifiants délégués et le notifie (`LogonNotified`) ; écran 16 bpp fidèle (Interleaved RLE et non compressé) ; clic et clavier (« ob » tapé dans le Bloc-notes).
+
+**Ce qui a été corrigé, dans l'ordre où Windows l'a montré** :
+- `supportedColorDepths` : 15, 16, 24 et 32 bpp ; avec 24 et 32 seuls, Windows coupait 1 ms après le Connect-Initial (bisection contre le Connect-Initial de FreeRDP rejoué derrière ce client).
+- `bitmapCompressionFlag` à TRUE, comme MS-RDPBCGR l'exige ; à FALSE, `ERRINFO_BADCAPABILITIES`.
+- Décodage 15/16 bpp (ADR-0086) : Windows par défaut a `RDP-Tcp\ColorDepth` 3 et propose 16 bpp à un client sans pipeline graphique.
+- 4096 rectangles par mise à jour bitmap (Windows envoie l'écran entier en 260 tuiles de 64 × 64), avec un bitmap au plus complété à 4 pixels de large.
+- Les refus disent ce qui a été reçu (`describeRDPServerPacket`), et le codec nomme l'étape en échec ; même code de refus.
+
+**Outils de diagnostic laissés dans le dépôt** : isolements `pkg/rdp/*_windows_*_test.go` (CredSSP, Connect-Initial, Confirm Active, séquence, ouverture de session, clavier), relancés à la demande par l'entrée `isolation` du workflow ; FreeRDP 3 et gopher-rdp comme clients de référence ; export des journaux RDP de Windows (peu fiable : vide à plusieurs passages) ; le premier paquet réel de Windows en non-régression (`pkg/rdp/testdata/`).
+
+**Limites** : 16 bpp, 65 536 couleurs ; 8 et 24 bpp refusés ; le 32 bpp (RDP 6.0 planar) n'est pas éprouvé contre Windows ; fragments Fast-Path et réactivation non rencontrés, toujours refusés ; la reprise d'une session déjà ouverte sur la cible n'est pas validée (la cible de test ferme toute session avant d'être prête) ; RDP reste non exposé. ADR-0071 reste « mise en œuvre en cours ».
+
+**Choix réversibles** : `keyboardLayout` 0 conservé (l'isolement montre que le clavier marche avec) ; bornes 4096 rectangles et complément de 4 pixels ; la cible de test sans session au départ ; l'étape d'isolement du CI limitée à la séquence et au clavier.
+
+## 2026-11-07 — ADR-0071 : une cible Windows en CI (dockur/windows)
+
+À la demande du propriétaire (« utilise `dockur/Windows` et configure un environnement Compose à lancer par la CI », sans lancement local, faute d'espace disque) : `test/integration/testdata/rdp/windows/` (`docker-compose.yml`, `prepare.sh`, `oem/install.bat`, `oem/rdp-setup.ps1`), `make test-rdp-windows`, `.github/workflows/windows-rdp.yml`. Windows Server 2022 dans une VM KVM, installée sans intervention. Une autorité de test et un certificat RDP sont créés à chaque passage, puis installés par le script OEM. NLA reste activé, et le Bloc-notes s'ouvre à chaque ouverture de session. Le test se connecte avec l'empreinte connue d'avance, joue CredSSP, l'image et l'entrée, et dépose les captures en artefacts.
+
+**Vérifié en local** : `prepare.sh` (certificat vérifié par l'autorité, SAN et EKU, PFX SHA1/3DES, `install.bat` en CRLF), `docker compose config`, la syntaxe du workflow, `go vet`, et la mise en attente du test sans `RDP_WINDOWS`.
+
+**Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
+
+**Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.

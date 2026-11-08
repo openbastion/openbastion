@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -147,6 +148,51 @@ func TestReadBitmapUpdateOverTLSAcceptsFastPathBitmap(t *testing.T) {
 	session.Close()
 }
 
+// A refused update says what it was, and keeps its identity (ADR-0071, CI run #38): here a 16-bpp
+// rectangle in a 32-bpp session.
+func TestReadBitmapUpdateDescribesTheRefusedUpdate(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	bitmapData := []byte{1, 0}
+	bitmapData = append(bitmapData, mcsTestBitmapRectangle(1, 2, 1, 1, 16, 0, []byte{0, 0, 0, 0})...)
+	packet := mcsTestFastPathBitmapPacket(bitmapData)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if tlsConn.Handshake() == nil {
+			_ = writeFull(tlsConn, packet)
+		}
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+	}
+	defer session.Close()
+	_, err = session.ReadBitmapUpdate(context.Background(), time.Second)
+	if !errors.Is(err, ErrMCSConnection) || !strings.Contains(err.Error(), "update refused: Fast-Path action 0") ||
+		!strings.Contains(err.Error(), "code 1 frag 0 comp 0") {
+		t.Fatalf("ReadBitmapUpdate error = %v", err)
+	}
+}
+
 func FuzzParseRDPFastPathBitmapUpdate(f *testing.F) {
 	bitmapData := []byte{1, 0}
 	bitmapData = append(bitmapData, mcsTestBitmapRectangle(0, 0, 1, 1, 32, 0, []byte{0, 0, 0, 0})...)
@@ -167,4 +213,87 @@ func mcsTestFastPathBitmapPacket(bitmapData []byte) []byte {
 	}
 	packetLength++
 	return append([]byte{0, 0x80 | byte(packetLength>>8), byte(packetLength)}, update...)
+}
+
+// Windows says when the user's session has opened (Save Session Info, MS-RDPBCGR 2.2.10.1.1:
+// INFOTYPE_LOGON, _LOGON_LONG, _LOGON_PLAINNOTIFY). The session records it, so that a screen that
+// stops at Windows' logon screen is told apart from an open session (ADR-0071, CI runs #39 to #42).
+// Extended logon information (3) is not a logon; and without any, nothing is recorded.
+func TestReadBitmapUpdateRecordsTheLogonNotification(t *testing.T) {
+	saveSessionInfo := func(infoType uint32) []byte {
+		share := make([]byte, 18+4+8)
+		binary.LittleEndian.PutUint16(share[:2], uint16(len(share)))
+		binary.LittleEndian.PutUint16(share[2:4], rdpShareDataPDU)
+		binary.LittleEndian.PutUint16(share[4:6], rdpServerChannelID)
+		binary.LittleEndian.PutUint32(share[6:10], 0x000103ea)
+		share[11] = 2
+		binary.LittleEndian.PutUint16(share[12:14], uint16(len(share)))
+		share[14] = 0x26
+		binary.LittleEndian.PutUint32(share[18:22], infoType)
+		mcs := []byte{mcsSendDataIndication, 0, 1, 0x03, 0xeb, 0x70}
+		mcs = appendPERLength(mcs, len(share))
+		mcs = append(mcs, share...)
+		packet := make([]byte, 7+len(mcs))
+		packet[0] = 3
+		binary.BigEndian.PutUint16(packet[2:4], uint16(len(packet)))
+		copy(packet[4:7], []byte{2, 0xf0, 0x80})
+		copy(packet[7:], mcs)
+		return packet
+	}
+	bitmap := mcsTestBitmapUpdatePacket(0x000103ea, mcsTestBitmapRectangle(1, 2, 1, 1, 32, 0, []byte{0, 0, 0xff, 0}))
+	for _, c := range []struct {
+		name   string
+		before []byte
+		want   bool
+	}{
+		{"logon", saveSessionInfo(0), true},
+		{"logon long", saveSessionInfo(1), true},
+		{"logon plain notify", saveSessionInfo(2), true},
+		{"extended logon information", saveSessionInfo(3), false},
+		{"nothing", nil, false},
+	} {
+		certificate, roots, _ := rdpTestCertificate(t)
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func(stream []byte) {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			defer conn.Close()
+			tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+			defer tlsConn.Close()
+			if tlsConn.Handshake() == nil {
+				_ = writeFull(tlsConn, stream)
+				var one [1]byte
+				_, _ = tlsConn.Read(one[:])
+			}
+		}(append(append([]byte(nil), c.before...), bitmap...))
+		conn, err := net.Dial("tcp", listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+		if err := tlsConn.Handshake(); err != nil {
+			t.Fatal(err)
+		}
+		session := &CredSSPClientSession{
+			transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+			mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+			serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+		}
+		if session.LogonNotified() {
+			t.Fatalf("%s: notified before any packet", c.name)
+		}
+		if _, err := session.ReadBitmapUpdate(context.Background(), time.Second); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got := session.LogonNotified(); got != c.want {
+			t.Errorf("%s: LogonNotified %v, want %v", c.name, got, c.want)
+		}
+		session.Close()
+		listener.Close()
+	}
 }

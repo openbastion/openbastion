@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -31,7 +32,6 @@ type RDPCodec struct {
 	DialTimeout   time.Duration
 	DesktopWidth  uint16
 	DesktopHeight uint16
-	FrenchLocale  bool
 	InputTimeout  time.Duration
 	openSession   func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 }
@@ -126,33 +126,27 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	if height == 0 {
 		height = rdpDefaultDesktopHeight
 	}
-	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, FrenchLocale: c.FrenchLocale, Timeout: c.DialTimeout}
+	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout}
 	var negotiatedWidth, negotiatedHeight uint16
-	steps := []func() error{
-		func() error { _, e := client.ConnectMCS(ctx, settings); return e },
-		func() error { _, e := client.ConnectMCSChannels(ctx, c.DialTimeout); return e },
-		func() error {
+	steps := []rdpConnectionStep{
+		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
+		{"MCS channels", func() error { _, e := client.ConnectMCSChannels(ctx, c.DialTimeout); return e }},
+		{"client info", func() error {
 			return client.SendClientInfo(ctx, rdp.RDPClientInfo{Username: cred.TargetUser, Password: cred.Material()}, c.DialTimeout)
-		},
-		func() error { return client.CompleteLicensing(ctx, c.DialTimeout) },
-		func() error {
+		}},
+		{"licensing", func() error { return client.CompleteLicensing(ctx, c.DialTimeout) }},
+		{"capabilities", func() error {
 			capabilities, e := client.ExchangeCapabilities(ctx, c.DialTimeout)
 			if e == nil {
 				negotiatedWidth, negotiatedHeight = capabilities.DesktopWidth, capabilities.DesktopHeight
 			}
 			return e
-		},
-		func() error { _, e := client.FinalizeConnection(ctx, c.DialTimeout); return e },
+		}},
+		{"finalization", func() error { _, e := client.FinalizeConnection(ctx, c.DialTimeout); return e }},
 	}
-	for _, step := range steps {
-		if ctx.Err() != nil {
-			client.Close()
-			return nil, ctx.Err()
-		}
-		if err := step(); err != nil {
-			client.Close()
-			return nil, err
-		}
+	if err := runRDPConnectionSteps(ctx, steps); err != nil {
+		client.Close()
+		return nil, err
 	}
 	if negotiatedWidth == 0 || negotiatedHeight == 0 {
 		client.Close()
@@ -160,6 +154,28 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	}
 	keep = true
 	return &rdpTargetSession{session: client, width: negotiatedWidth, height: negotiatedHeight}, nil
+}
+
+// rdpConnectionStep is one phase of the RDP connection sequence after CredSSP. Every phase fails
+// with rdp.ErrMCSConnection; the name says which (ADR-0071: against Windows, a bare error left the
+// failing phase unknown). The name is the protocol phase only: nothing of the target or the secret.
+type rdpConnectionStep struct {
+	name string
+	run  func() error
+}
+
+// runRDPConnectionSteps runs the steps in order and stops at the first failure, named; the error
+// still matches what the step returned (errors.Is), so the refusal code does not change.
+func runRDPConnectionSteps(ctx context.Context, steps []rdpConnectionStep) error {
+	for _, step := range steps {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := step.run(); err != nil {
+			return fmt.Errorf("RDP %s: %w", step.name, err)
+		}
+	}
+	return nil
 }
 
 type rdpTargetSession struct {

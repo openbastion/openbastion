@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"os"
 	"testing"
 	"time"
 )
@@ -221,13 +222,24 @@ func TestParseRDPBitmapUpdateData_SeveralCompressedRectanglesWithoutHeader(t *te
 }
 
 func TestClientCapabilities_AnnounceWhatARealServerNeeds(t *testing.T) {
-	caps := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800})
+	caps := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800}, 32)
 	extra := binary.LittleEndian.Uint16(caps[14:16])
 	if extra&rdpFastPathOutputSupported == 0 {
 		t.Error("without FASTPATH_OUTPUT_SUPPORTED, FreeRDP cannot send a bitmap")
 	}
 	if extra&rdpBitmapNoCompHdr == 0 {
 		t.Error("without NO_BITMAP_COMPRESSION_HDR, bitmapLength means two different things")
+	}
+	// TS_BITMAP_CAPABILITYSET follows the 24-byte general set.
+	bitmap := caps[24 : 24+28]
+	if binary.LittleEndian.Uint16(bitmap[0:2]) != rdpCapBitmap || binary.LittleEndian.Uint16(bitmap[20:22]) != 1 {
+		t.Error("bitmapCompressionFlag MUST be TRUE: Windows answers FALSE with ERRINFO_BADCAPABILITIES (CI run #31)")
+	}
+	for _, bpp := range []uint16{15, 16, 32} {
+		got := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800}, bpp)
+		if binary.LittleEndian.Uint16(got[24+4:24+6]) != bpp {
+			t.Errorf("preferredBitsPerPixel is not the server's %d", bpp)
+		}
 	}
 }
 
@@ -279,5 +291,30 @@ func TestFramebuffer_UnchangedKnowsOnlyWhatRepaintsTheSamePixels(t *testing.T) {
 	}
 	if framebuffer.Unchanged(RDPBitmapUpdate{}) {
 		t.Fatal("an empty update")
+	}
+}
+
+// Windows Server 2022, left as installed (16 bpp), CI run #36: the first update after the
+// finalization, as it came. The whole screen in one Fast-Path PDU, 260 tiles of 64 x 64, all
+// Interleaved RLE without header (ADR-0086). The client refused it for its rectangle count.
+func TestWindowsServer2022FirstUpdateAt16BPP(t *testing.T) {
+	packet, err := os.ReadFile("testdata/windows-server-2022-first-update-16bpp.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	update, err := parseRDPFastPathBitmapUpdateAt(packet, 1280, 800, 16)
+	if err != nil || len(update.Rectangles) != 260 {
+		t.Fatalf("%d rectangles, %v", len(update.Rectangles), err)
+	}
+	fb, err := NewRDPFramebuffer(1280, 800)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fb.Apply(update, time.Now()); err != nil {
+		t.Fatalf("framebuffer: %v", err)
+	}
+	// At 32 bpp, the same PDU is refused: its rectangles say 16.
+	if _, err := parseRDPFastPathBitmapUpdateAt(packet, 1280, 800, 32); err == nil {
+		t.Fatal("a 16-bpp update accepted in a 32-bpp session")
 	}
 }
