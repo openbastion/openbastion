@@ -403,6 +403,21 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 			}
 			return
 		}
+		// A reactivation may have changed the desktop's size (MS-RDPBCGR 1.3.1.3): the frames follow
+		// it, and so do the bounds of the operator's pointer.
+		if width, height := s.framebuffer.Dimensions(); update.DesktopWidth != 0 &&
+			(uint32(update.DesktopWidth) != width || uint32(update.DesktopHeight) != height) {
+			if err := s.framebuffer.Resize(update.DesktopWidth, update.DesktopHeight); err != nil {
+				s.mu.Lock()
+				s.err = err
+				s.mu.Unlock()
+				return
+			}
+			s.inputMu.Lock()
+			s.width, s.height = update.DesktopWidth, update.DesktopHeight
+			s.inputMu.Unlock()
+			shown = false
+		}
 		// The first frame is always sent: the operator has seen nothing yet, even of a black screen.
 		if shown && s.framebuffer.Unchanged(update) {
 			continue

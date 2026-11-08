@@ -14,7 +14,7 @@ Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC
 | `request-mic` et séquences | **Établi** : Windows ne demande pas le MIC ; le client l'envoie non demandé, à la séquence 0, flux RC4 réinitialisé, `pubKeyAuth` à 1. |
 | Fidélité des pixels, deltas RDP6 | **Établi à l'œil** : à 16 bpp (Interleaved RLE et non compressé) et à 32 bpp (RDP 6.0 planar, RLE et deltas, sur une seconde cible qui l'autorise par stratégie), écran, couleurs et texte fidèles (passage #48). Au passage #46, l'écran 32 bpp sortait blanc : Windows envoie un plan alpha de zéros, que le décodeur recopiait ; l'écran est désormais opaque. |
 | Fragments Fast-Path | **Établi au passage #54** : dès que le client annonce `TS_MULTIFRAGMENTUPDATE_CAPABILITYSET` (256 Kio), Windows fragmente ses mises à jour (après la finalisation, 4 et 5 fragments à 16 bpp, 125 à 32 bpp) ; le client les réassemble (FIRST, NEXT…, LAST d'un même code, contigus, non compressés, 256 Kio et 64 morceaux au plus ; `pkg/rdp/fastpath_fragments.go`), et les trois cibles restent fidèles à l'œil (écran, saisie, reprise). Un fragment hors séquence, un code qui change, une taille dépassée ou une séquence qu'un TPKT interrompt ferment la session. Au passage #53, le codec passait, mais les isolements, qui lisent le flux eux-mêmes, refusaient le premier fragment : ils réassemblent désormais comme lui. |
-| Réactivation | **Non rencontrée** (aucun `Deactivate All` à l'ouverture ni à la reprise de session) ; non prouvé qu'elle n'arrive jamais ; toujours refusée. |
+| Réactivation | **Mise en œuvre, éprouvée contre FreeRDP, jamais rencontrée chez Windows** (aucun `Deactivate All` à l'ouverture ni à la reprise de session, aux trois cibles). Le client répond à un `Deactivate All` du partage en cours par un Confirm Active et une nouvelle finalisation sous le nouveau partage, puis continue à la taille et à la profondeur que le serveur annonce (incrément 72, plus bas). |
 | Mises à jour non graphiques | **En partie** : pointeur (Fast-Path 5 et 9), Save Session Info, Set Error Info, toutes ignorées ou reconnues ; la liste reste fermée. |
 
 **Reprise d'une session déjà ouverte : établie au passage #52.** Déconnectée, elle est rendue à la connexion suivante, même identifiant de session (3) et même écran (`pkg/rdp/mcs_windows_reconnect_test.go`). Active à la console (troisième cible de la matrice, qui garde la session que dockur ouvre) : la connexion la reprend (session 1), bureau à l'écran, saisie reçue. L'écran d'ouverture de session des passages #39 à #42 ne s'y reproduit pas : il tenait sans doute à une connexion arrivée pendant la préparation de la cible, non à la console ; un seul passage le mesure. Au passage #48, une saisie du test d'écran à 32 bpp a perdu « b » et Entrée : le client envoyait `KBDFLAGS_DOWN` à chaque appui, alors que ce drapeau dit que la touche était déjà enfoncée (une répétition) ; un appui n'en porte plus. Au passage #49, c'est le premier appui que le test perd, aux deux profondeurs : ce test envoyait chaque événement quelques microsecondes après le clic, quand l'isolement du clavier, une seconde après le sien, n'a perdu aucune touche en huit sessions. La cause probable est que Windows remet la touche à la fenêtre qui a le focus quand il la traite ; elle n'est pas prouvée. Le test tape désormais au rythme d'une personne (une seconde après le clic, 50 ms entre les événements). **Mesuré au passage #51** (`pkg/rdp/mcs_windows_keyafterclick_test.go`, trois essais par variante, clic sur le bureau puis dans le Bloc-notes, frappe aussitôt) : sans Synchronize Event, 5 essais complets sur 6 aux deux profondeurs ; avec un Synchronize Event à l'activation, 3 sur 6 ; avec un avant chaque clic, aucun complet. Le Synchronize Event n'évite pas la perte, et le client ne l'envoie pas. Des essais disparaissent en entier, Entrée comprise : les touches partent avant que la fenêtre ait le focus, ce que le client ne peut savoir. La saisie d'un opérateur, au rythme d'une personne, n'a perdu aucune touche. RDP reste non exposé.
@@ -24,7 +24,7 @@ VNC est livré. RDP est éprouvé contre FreeRDP 3.15 (incréments 70 et 71), ja
 - la poignée de main complète, Bureau à distance et NLA activés, et les refus d'ADR-0071 §3 sur cette cible ;
 - si Windows demande `request-mic`, et comment il compte les séquences après : le passage à 1 n'est mesuré que sur FreeRDP ;
 - la fidélité des pixels à fort contraste et la lisibilité du texte, masquées par un bogue de l'encodeur de FreeRDP ; et l'arithmétique des deltas RDP6, modulo 256 ici, saturée chez FreeRDP ;
-- si une réactivation (`Deactivate All`) arrive en pratique : elle ferme aujourd'hui la session (les fragments Fast-Path, eux, sont réassemblés depuis le passage #54) ;
+- si une réactivation (`Deactivate All`) arrive en pratique chez Windows : le client la suit depuis l'incrément 72, éprouvé contre FreeRDP seulement (les fragments Fast-Path, eux, sont réassemblés depuis le passage #54) ;
 - quelles mises à jour non graphiques Windows envoie, au regard de la liste fermée d'incrément 71.
 
 **Comment, depuis le 7 novembre 2026** (demande du propriétaire du projet : « utilise `dockur/Windows` et configure un environnement Compose à lancer par la CI », sans lancement local) :
@@ -1524,3 +1524,37 @@ Premier contact de `pkg/rdp` avec un serveur réel : FreeRDP 3.15, `freerdp-shad
 **Un bogue de FreeRDP, pas du client.** La transition noir→blanc dans une tuile s'affiche en gris `0x7f`. Dans `freerdp_bitmap_planar_delta_encode_plane` (3.15), `s2c` est un `BYTE`, le test `s2c >= 0` est toujours vrai, et tout delta négatif ou supérieur à 127 est mal encodé : le décodeur de FreeRDP donnerait le même gris. Le décodeur d'OpenBastion n'est pas déformé pour le suivre. **La fidélité des pixels à fort contraste n'est donc pas prouvée.**
 
 **Preuves** : `make test-rdp-interop` ; 10 passages consécutifs verts ; `-race` vert ; 15 mutations tuées, sur le vrai serveur quand elles retirent un correctif. **Limites** : aucune cible Windows, donc le critère de l'incrément 2 reste ouvert. `Deactivate All` ferme la session, sans réactivation : le bureau doit avoir la taille demandée. Pas de fragments Fast-Path, ni d'ordres graphiques annoncés, ni de cache de glyphes. Pointeur non dessiné. Enregistrement RDP non éprouvé de bout en bout. L'Admin UI n'envoie pas de scancode, que RDP exige. **RDP reste non exposé** : `cmd/rdp-vnc-proxy` ne sélectionne pas `RDPCodec`.
+
+## ADR-0071 — incrément 72 : la réactivation
+
+**Ce que dit la spécification** (MS-RDPBCGR 1.3.1.3) : un serveur qui change ce qu'il montre (taille, profondeur, session derrière la connexion) envoie un `Deactivate All`, puis un nouveau Demand Active. Le client répond comme à la première activation, par un Confirm Active puis la finalisation, sous le nouveau partage.
+
+**Mesuré contre un vrai serveur.** Le serveur `shadow` de FreeRDP garde la taille de son écran (1280×800). Un client qui en demande une autre (1024×768) reçoit, une fois connecté, un `Deactivate All` de 13 octets, puis un Demand Active à 1280×800. Avant cet incrément, la session se fermait (`update refused: share data of 13 bytes`, `TestRDPInterop_Reactivation` rouge). Après, l'opérateur voit l'écran du serveur à 1280×800, et son pointeur atteint (1200, 700).
+
+**Décision.** `ReadBitmapUpdate` suit la séquence (`pkg/rdp/mcs_reactivation.go`) :
+- elle n'accepte qu'un `Deactivate All` du partage en cours, au format de MS-RDPBCGR 2.2.3.1 ;
+- le PDU suivant doit être un Demand Active valide, puis la finalisation complète doit arriver sous le nouveau partage ;
+- 16 réactivations au plus par session, 30 s au plus pour chacune ;
+- pendant la séquence, elle tient le verrou d'écriture : aucune entrée ne part sous un partage en cours de remplacement ;
+- l'état des ordres primaires repart de zéro ;
+- tout écart ferme la session, avec sa description.
+
+**La taille du bureau peut changer.** Chaque mise à jour porte la taille du bureau sur lequel elle se dessine. Si elle change, l'adaptateur du moteur repart d'un bureau noir de cette taille : le numéro de séquence continue et les bornes du pointeur suivent. Le flux écran portait déjà la taille de chaque image, et `proxycore` comme l'Admin UI suivent la dernière : aucun contrat ne change.
+
+**Alternatives écartées** :
+- refuser un changement de taille : le serveur de FreeRDP réactive précisément pour cela, et la session échouerait ;
+- garder la taille demandée par le client et rogner : l'opérateur ne verrait qu'une partie de l'écran, ou un écran déformé.
+
+**Preuves** :
+- `TestRDPInterop_Reactivation` contre FreeRDP 3, rouge avant ;
+- `TestReadBitmapUpdateReactivates` de bout en bout sur TLS : Confirm Active, finalisation et entrée sous le nouveau partage ;
+- 7 refus (autre partage, en-tête seul, longueur fausse, mise à jour au lieu du Demand Active, Demand Active incomplet, finalisation sous l'ancien partage, une de trop) ;
+- `TestRDPCodec_AReactivationResizesTheScreen` ;
+- 16 mutations tuées ; `-race` vert.
+
+**Limites** :
+- Windows n'a envoyé aucun `Deactivate All` en aucun passage du CI, et aucun déclencheur reproductible n'est connu sur la cible du CI : la réactivation n'est pas éprouvée contre Windows ;
+- l'enregistrement d'une session dont la taille change n'est pas éprouvé de bout en bout ;
+- RDP reste non exposé.
+
+**Choix renversables** : 16 réactivations et 30 s ; un bureau noir après un changement de taille ; le Confirm Active qui reprend la taille annoncée par le serveur, comme le client de FreeRDP.

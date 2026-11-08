@@ -125,6 +125,9 @@ type RDPBitmapRectangle struct {
 // RDPBitmapUpdate contains ordered framebuffer operations from one complete graphics update.
 type RDPBitmapUpdate struct {
 	Rectangles []RDPBitmapRectangle
+	// DesktopWidth and DesktopHeight are the desktop the rectangles are drawn on, as the server
+	// stated it at the last (re)activation: a reactivation may change it (MS-RDPBCGR 1.3.1.3).
+	DesktopWidth, DesktopHeight uint16
 }
 
 // parseRDPBitmapMCSFragment validates one TPKT/X.224/MCS envelope and returns
@@ -1520,15 +1523,22 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	}
 	conn := s.transport.Conn
 	ioChannelID := s.mcsResponse.IOChannelID
-	shareID := s.serverCapabilities.ShareID
-	desktopWidth, desktopHeight := s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight
-	sessionBPP := s.serverCapabilities.PreferredBitsPerPixel
-	if sessionBPP == 0 {
-		// Only a session built by hand has none: ExchangeCapabilities always sets a validated 15, 16
-		// or 32. Without it, the depth this client asks for.
-		sessionBPP = 32
+	var shareID uint32
+	var desktopWidth, desktopHeight, sessionBPP uint16
+	var orderState rdpPrimaryOrderState
+	// What a reactivation changes, read again after one; s.mu is held.
+	loadShare := func() {
+		shareID = s.serverCapabilities.ShareID
+		desktopWidth, desktopHeight = s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight
+		sessionBPP = s.serverCapabilities.PreferredBitsPerPixel
+		if sessionBPP == 0 {
+			// Only a session built by hand has none: ExchangeCapabilities always sets a validated 15, 16
+			// or 32. Without it, the depth this client asks for.
+			sessionBPP = 32
+		}
+		orderState = s.primaryOrderState
 	}
-	orderState := s.primaryOrderState
+	loadShare()
 	primaryOrdersEnabled := s.primaryOrdersEnabled
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
 	dstBltEnabled := s.dstBltEnabled
@@ -1574,7 +1584,9 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			s.mu.Unlock()
 			err = ErrMCSConnection
 			update = RDPBitmapUpdate{}
+			return
 		}
+		update.DesktopWidth, update.DesktopHeight = desktopWidth, desktopHeight
 	}()
 
 readUpdate:
@@ -1681,6 +1693,17 @@ readUpdate:
 		if segmentation == 1 {
 			break
 		}
+	}
+	if rdpIsDeactivateAll(assembled) {
+		err = s.reactivate(ctx, conn, assembled, deadline)
+		clear(assembled)
+		if err != nil {
+			return RDPBitmapUpdate{}, err
+		}
+		s.mu.Lock()
+		loadShare()
+		s.mu.Unlock()
+		goto readUpdate
 	}
 	if rdpShareDataIsIgnored(assembled, shareID) {
 		if rdpShareDataIsLogonNotification(assembled) {

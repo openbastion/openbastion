@@ -40,6 +40,25 @@ func NewRDPFramebuffer(width, height uint16) (*RDPFramebuffer, error) {
 	return &RDPFramebuffer{image: frame}, nil
 }
 
+// Resize replaces the desktop with an opaque black one of a new size, as a reactivation leaves it
+// (MS-RDPBCGR 1.3.1.3): the server draws it again. The sequence carries on, as the stream does.
+// The same size changes nothing.
+func (f *RDPFramebuffer) Resize(width, height uint16) error {
+	fresh, err := NewRDPFramebuffer(width, height)
+	if f == nil || err != nil {
+		return ErrRDPFramebuffer
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.image == nil {
+		return ErrRDPFramebuffer
+	}
+	if f.image.Bounds().Dx() != int(width) || f.image.Bounds().Dy() != int(height) {
+		f.image = fresh.image
+	}
+	return nil
+}
+
 // applyRDPROP2 applies the supported two-operand raster operation to RGB while
 // keeping the internal framebuffer alpha opaque.
 func applyRDPROP2(destination []byte, pen [4]byte, operation byte) {
