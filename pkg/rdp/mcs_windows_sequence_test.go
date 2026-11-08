@@ -7,8 +7,8 @@ package rdp
 // Client Info PDU, before any step of this client reads it:
 //
 //   - the sequence as the RDP codec runs it, step by step, until one fails;
-//   - on a second connection, the same steps up to Client Info, then the server's next packets as
-//     they come (TPKT length and first bytes), unparsed.
+//   - on a second connection, the same steps through Licensing, then the server's next packets as
+//     they come, unparsed (run #28 named the capability exchange: this is its Demand Active).
 //
 //	RDP_WINDOWS=1 … go test ./pkg/rdp -run TestRDPWindowsIsolation -v
 
@@ -86,7 +86,7 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 	}
 
 	// The whole sequence, as the codec runs it.
-	session, err := sequenceSession(address, pin, name, roots, user, password)
+	session, done, err := sequenceSession(address, pin, name, roots, user, password)
 	if err != nil {
 		logf("sequence: %v", err)
 	} else {
@@ -101,22 +101,23 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 			}
 			logf("sequence: %-42s ok (%v)", step.name, time.Since(started).Round(time.Millisecond))
 		}
-		session.Close()
+		done()
 	}
 	time.Sleep(2 * time.Second)
 
-	// Up to Client Info, then what Windows sends, unread by any step.
-	session, err = sequenceSession(address, pin, name, roots, user, password)
+	// Up to Licensing, then what Windows sends, unread by any step: run #28 named the capability
+	// exchange, so this is the Demand Active, in full (server capabilities, nothing secret).
+	session, done, err = sequenceSession(address, pin, name, roots, user, password)
 	if err != nil {
-		logf("after Client Info: %v", err)
+		logf("after Licensing: %v", err)
 	} else {
 		ok := true
-		for _, step := range sequenceSteps(settings, user, password, "Client Info") {
+		for _, step := range sequenceSteps(settings, user, password, "Licensing") {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := step.run(ctx, session)
 			cancel()
 			if err != nil {
-				logf("after Client Info: %s FAILED: %v", step.name, err)
+				logf("after Licensing: %s FAILED: %v", step.name, err)
 				ok = false
 				break
 			}
@@ -130,40 +131,43 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 				var netErr net.Error
 				switch {
 				case errors.As(err, &netErr) && netErr.Timeout():
-					logf("after Client Info: nothing more in 6 s")
+					logf("after Licensing: nothing more in 6 s")
 				case err != nil:
-					logf("after Client Info: packet %d: %v", i+1, err)
+					logf("after Licensing: packet %d: %v", i+1, err)
 				default:
 					head := packet
-					if len(head) > 96 {
-						head = head[:96]
+					if len(head) > 4096 {
+						head = head[:4096]
 					}
-					logf("after Client Info: packet %d, %d bytes: %s", i+1, len(packet), hex.EncodeToString(head))
+					logf("after Licensing: packet %d, %d bytes: %s", i+1, len(packet), hex.EncodeToString(head))
 					continue
 				}
 				break
 			}
 		}
-		session.Close()
+		done()
 	}
 	if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
 		_ = os.WriteFile(filepath.Join(dir, "connection-sequence.txt"), []byte(strings.Join(report, "\n")+"\n"), 0o644)
 	}
 }
 
-func sequenceSession(address, pin, name string, roots *x509.CertPool, user, password string) (*CredSSPClientSession, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+// sequenceSession dials and runs CredSSP. The transport closes when its dial context ends (run
+// #28 lost both connections to a cancel on return): the context lives until the caller's done().
+func sequenceSession(address, pin, name string, roots *x509.CertPool, user, password string) (*CredSSPClientSession, func(), error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	transport, err := DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
 	if err != nil {
-		return nil, fmt.Errorf("dial: %w", err)
+		cancel()
+		return nil, nil, fmt.Errorf("dial: %w", err)
 	}
 	session, err := transport.EstablishCredSSP(ctx, CredSSPClientConfig{Version: 6, Username: user, Password: []byte(password), Timeout: 15 * time.Second})
 	if err != nil {
 		_ = transport.Close()
-		return nil, fmt.Errorf("CredSSP: %w", err)
+		cancel()
+		return nil, nil, fmt.Errorf("CredSSP: %w", err)
 	}
-	return session, nil
+	return session, func() { session.Close(); cancel() }, nil
 }
 
 // The sequence is the codec's: the same steps, in the same order (engine/rdp.go).
@@ -177,7 +181,7 @@ func TestRDPWindowsIsolation_SequenceSteps(t *testing.T) {
 	if strings.Join(names, "|") != want {
 		t.Fatalf("steps %q", names)
 	}
-	if n := len(sequenceSteps(settings, "u", "p", "Client Info")); n != 3 {
-		t.Fatalf("through Client Info: %d steps", n)
+	if n := len(sequenceSteps(settings, "u", "p", "Licensing")); n != 4 {
+		t.Fatalf("through Licensing: %d steps", n)
 	}
 }
