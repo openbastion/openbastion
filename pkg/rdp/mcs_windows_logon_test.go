@@ -42,15 +42,19 @@ const (
 type logonCase struct {
 	name  string
 	flags uint32
+	// reactivate answers a Deactivate All as the specification asks (MS-RDPBCGR 1.3.1.3): the next
+	// Demand Active, a Confirm Active, the finalization again.
+	reactivate bool
 }
 
 func logonCases() []logonCase {
+	// Run #40: with INFO_AUTOLOGON, whatever the other flags, Windows stays 40 s on its logon
+	// screen; without it, as FreeRDP, the screen goes black and Windows closes after 5 frames,
+	// which is what a logon that starts and a reactivation left unanswered look like.
 	return []logonCase{
-		{"this client's flags", rdpInfoClientDefaultFlags},
-		{"this client's + LOGONNOTIFY", rdpInfoClientDefaultFlags | rdpInfoLogonNotify},
-		{"this client's + LOGONNOTIFY + DISABLECTRLALTDEL", rdpInfoClientDefaultFlags | rdpInfoLogonNotify | rdpInfoDisableCtrlAltDel},
-		{"FreeRDP's + AUTOLOGON", freeRDPInfoFlags | rdpInfoAutoLogon},
-		{"FreeRDP's (no AUTOLOGON)", freeRDPInfoFlags},
+		{"this client's flags", rdpInfoClientDefaultFlags, true},
+		{"FreeRDP's + AUTOLOGON, reactivation answered", freeRDPInfoFlags | rdpInfoAutoLogon, true},
+		{"FreeRDP's (no AUTOLOGON), reactivation answered", freeRDPInfoFlags, true},
 	}
 }
 
@@ -142,6 +146,30 @@ func logonRun(address, pin, name string, roots *x509.CertPool, user, password st
 		if packet[0] == 3 {
 			if note := saveSessionInfo(packet); note != "" {
 				notes = append(notes, note)
+				continue
+			}
+			described := describeRDPServerPacket(packet)
+			notes = append(notes, described)
+			if c.reactivate && strings.Contains(described, "share PDU type 6") { // Deactivate All
+				session.mu.Lock()
+				session.capabilitiesExchanged, session.connectionFinalized = false, false
+				session.mu.Unlock()
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				_, err := session.ExchangeCapabilities(ctx, timeout)
+				if err == nil {
+					_, err = session.FinalizeConnection(ctx, timeout)
+				}
+				cancel()
+				if err != nil {
+					notes = append(notes, fmt.Sprintf("reactivation: %v", err))
+					break
+				}
+				notes = append(notes, "reactivated")
+				caps = session.serverCapabilities
+				if framebuffer, err = NewRDPFramebuffer(caps.DesktopWidth, caps.DesktopHeight); err != nil {
+					notes = append(notes, err.Error())
+					break
+				}
 			}
 			continue
 		}
@@ -186,7 +214,7 @@ func saveSessionInfo(packet []byte) string {
 
 func TestRDPWindowsIsolation_LogonCases(t *testing.T) {
 	cases := logonCases()
-	if cases[0].flags != rdpInfoClientDefaultFlags {
+	if cases[0].flags != rdpInfoClientDefaultFlags || cases[2].flags&rdpInfoAutoLogon != 0 {
 		t.Fatal("the first case must be the client as it is")
 	}
 	// The client's flags are what marshalRDPClientInfo sends when none are given.
