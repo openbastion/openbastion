@@ -318,3 +318,24 @@ func TestWindowsServer2022FirstUpdateAt16BPP(t *testing.T) {
 		t.Fatal("a 16-bpp update accepted in a 32-bpp session")
 	}
 }
+
+// Windows Server 2022 with 32 bpp allowed (CI run #46): an update of 26 tiles in RDP 6.0 planar,
+// RLE, with an alpha plane of zeros. Drawn as sent, the screen was transparent, and white; the
+// screen of a remote desktop is opaque (ADR-0071).
+func TestWindowsServer2022UpdateAt32BPPIsOpaque(t *testing.T) {
+	packet, err := os.ReadFile("testdata/windows-server-2022-update-32bpp.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	update, err := parseRDPFastPathBitmapUpdateAt(packet, 1280, 800, 32)
+	if err != nil || len(update.Rectangles) != 26 {
+		t.Fatalf("%d rectangles, %v", len(update.Rectangles), err)
+	}
+	for _, rect := range update.Rectangles {
+		for i := 3; i < len(rect.Pixels); i += 4 {
+			if rect.Pixels[i] != 0xff {
+				t.Fatalf("rectangle at %d,%d: alpha %02x at byte %d", rect.X, rect.Y, rect.Pixels[i], i)
+			}
+		}
+	}
+}

@@ -170,10 +170,11 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 				}
 				if parseErr == nil {
 					decoded++
-					// The first bitmaps in full, to replay through the decoder where it can be read
-					// (run #46: at 32 bpp, every frame came out white).
-					if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && packet[0] != 3 && decoded <= 6 {
-						_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("bitmap-%02d.bin", decoded)), packet, 0o644)
+					// The bitmaps in full, to replay the session's screen through the decoder where it
+					// can be looked at (run #46: at 32 bpp, every frame came out white; run #47: the
+					// first six were black tiles of the logon, too few to judge).
+					if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && packet[0] != 3 && decoded <= 200 {
+						_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("bitmap-%03d.bin", decoded)), packet, 0o644)
 					}
 					continue
 				}
