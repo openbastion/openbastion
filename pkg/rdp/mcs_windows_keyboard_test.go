@@ -74,6 +74,7 @@ func keyboardRun(address, pin, name string, roots *x509.CertPool, user, password
 	// The stream until it is quiet for quiet, or until limit. Read here, not by ReadBitmapUpdate:
 	// a read that times out there ends the session, by design.
 	conn := session.transport.Conn
+	var assembler rdpFastPathAssembler
 	watch := func(quiet, limit time.Duration) string {
 		end := time.Now().Add(limit)
 		for time.Now().Before(end) {
@@ -86,14 +87,17 @@ func keyboardRun(address, pin, name string, roots *x509.CertPool, user, password
 			if err != nil {
 				return err.Error()
 			}
-			if packet[0] == 3 || rdpFastPathUpdateIsIgnored(packet) {
+			if packet[0] == 3 {
 				continue
 			}
-			update, err := parseRDPFastPathBitmapUpdateAt(packet, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+			update, err := reassembleFastPath(&assembler, packet, caps)
 			if err != nil {
 				return "refused: " + describeRDPServerPacket(packet)
 			}
-			if message, err := framebuffer.Apply(update, time.Now()); err == nil {
+			if update == nil {
+				continue
+			}
+			if message, err := framebuffer.Apply(*update, time.Now()); err == nil {
 				last, frames = message.PNG, frames+1
 			}
 		}

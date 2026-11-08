@@ -201,3 +201,21 @@ func fastPathTestSession(t *testing.T, stream []byte) *CredSSPClientSession {
 		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
 	}
 }
+
+// The isolations' reader reassembles as the codec does: nothing until LAST, nothing for a pointer.
+func TestReassembleFastPathForIsolations(t *testing.T) {
+	bitmap := append(binary.LittleEndian.AppendUint16(nil, rdpUpdateBitmap), 1, 0)
+	bitmap = append(bitmap, mcsTestBitmapRectangle(1, 2, 1, 1, 32, 0, []byte{0, 0, 0xff, 0})...)
+	caps := RDPServerCapabilities{DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32}
+	var a rdpFastPathAssembler
+	if u, err := reassembleFastPath(&a, fastPathPDU(9, 0, []byte{1}), caps); u != nil || err != nil {
+		t.Fatalf("pointer: %v %v", u, err)
+	}
+	if u, err := reassembleFastPath(&a, fastPathPDU(1, rdpFastPathFragmentFirst, bitmap[:6]), caps); u != nil || err != nil {
+		t.Fatalf("first: %v %v", u, err)
+	}
+	u, err := reassembleFastPath(&a, fastPathPDU(1, rdpFastPathFragmentLast, bitmap[6:]), caps)
+	if err != nil || u == nil || len(u.Rectangles) != 1 {
+		t.Fatalf("last: %v %v", u, err)
+	}
+}
