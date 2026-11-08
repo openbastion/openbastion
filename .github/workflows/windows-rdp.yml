@@ -18,6 +18,7 @@ on:
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp_windows_interop_test.go
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp.go
       - pkg/rdp/**
+      - services/proxy/rdp-vnc-proxy/internal/interfaces/rdp_recording_test.go
       - .github/workflows/windows-rdp.yml
 permissions:
   contents: read
@@ -43,6 +44,13 @@ jobs:
         include:
           - depth: 16
             session: console
+          # Windows prompts for the password at every connection: the connection starts on the
+          # logon screen and moves to the user's session, a reactivation (ADR-0071). Only the
+          # reactivation's isolation runs there: the screen and recording tests need the delegated
+          # credentials to open the session.
+          - depth: 16
+            session: prompt
+            isolation: TestRDPWindowsIsolation_Reactivation$
     env:
       DEPTH: ${{ matrix.depth }}
       SESSION: ${{ matrix.session }}
@@ -73,10 +81,34 @@ jobs:
         if: ${{ !cancelled() }}
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml up -d
       - name: RDP against Windows
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.session != 'prompt' }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           make test-rdp-windows
+      # ADR-0071: the recording against Windows. The proxy's real server with the RDP codec, the real
+      # Video Recorder on PostgreSQL: what the operator saw is, to the byte, what an auditor replays.
+      - name: PostgreSQL for the Video Recorder
+        if: ${{ !cancelled() && matrix.session != 'prompt' }}
+        run: |
+          docker build -f deploy/docker-compose/postgres/Dockerfile -t openbastion-postgres:ci .
+          docker run -d --name openbastion-postgres -e POSTGRES_USER=openbastion -e POSTGRES_PASSWORD=openbastion \
+            -e POSTGRES_DB=openbastion -p 127.0.0.1:5432:5432 \
+            --health-cmd="pg_isready -U openbastion" --health-interval=2s --health-timeout=5s --health-retries=30 openbastion-postgres:ci
+          for attempt in $(seq 1 60); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' openbastion-postgres)
+            [ "$status" = healthy ] && exit 0
+            [ "$status" = unhealthy ] && break
+            sleep 2
+          done
+          docker logs openbastion-postgres
+          exit 1
+      - name: RDP recording against Windows
+        if: ${{ !cancelled() && matrix.session != 'prompt' }}
+        env:
+          TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+        run: |
+          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          go test ./services/proxy/rdp-vnc-proxy/internal/interfaces/ -run TestRDPRecording -v -count=1 -timeout=15m
       # Runs #16 to #32 settled CredSSP, TLS, the Connect-Initial and the Confirm Active (ADR-0071):
       # only the connection sequence runs by default, before the reference clients (run #34: after
       # them, Windows answered no X.224 request); every TestRDPWindowsIsolation test stays in
@@ -84,11 +116,11 @@ jobs:
       - name: Isolate what Windows refuses after CredSSP
         if: ${{ !cancelled() }}
         env:
-          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|Reconnect)$' }}
+          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || matrix.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|Reconnect)$' }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \
-            go test ./pkg/rdp -run "$RDP_WINDOWS_ISOLATION" -v -count=1 -timeout=20m
+            go test ./pkg/rdp -run "$RDP_WINDOWS_ISOLATION" -v -count=1 -timeout=120m
       # A reference client on the same machine (ADR-0071): run #21 had FreeRDP open a full session.
       # Its log is in the artifact; its PDUs, recorded in clear for the isolation that follows (it
       # sends FreeRDP's own Connect-Initial after this client's CredSSP), hold the password and
