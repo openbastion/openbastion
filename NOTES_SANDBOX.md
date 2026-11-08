@@ -3036,6 +3036,24 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-08 — ADR-0071 : l'enregistrement RDP de bout en bout
+
+Incrément 73, sans exposer RDP (choix du propriétaire). `make test-rdp-recording` (`services/proxy/rdp-vnc-proxy/internal/interfaces/rdp_recording_test.go`) assemble le vrai serveur du proxy avec le codec RDP, le vrai Video Recorder (processus, PostgreSQL, mTLS) et FreeRDP 3. Le ticket est enregistré comme le ferait le Broker. Stockage objet, audit et autorisation sont simulés, comme dans le parcours VNC.
+
+**Mesuré** : 4 images montrées, 4 enregistrées, identiques à l'octet, enregistrement scellé, en 1280×800 puis en 1024×768. La taille change en pleine session : `xrandr` sur un Xvnc, Xvfb ne pouvant pas changer de taille. Un lecteur sans droit et l'identité du proxy sont refusés, et la lecture est auditée.
+
+**Prouvé** : 3 contre-épreuves, chacune fait échouer le test : octet ajouté à l'enregistrement, pas de scellement, pas de suivi de taille.
+
+**En CI** : une étape du job PostgreSQL, qui a Docker et la base.
+
+**Limites** :
+- pas depuis l'API publique (chemin RDP du Broker fermé) ;
+- pas contre Windows ;
+- pas de lecteur vidéo dans l'Admin UI ;
+- RDP reste non exposé.
+
+**Choix renversables** : Xvnc pour cette seule cible (`RDP_DISPLAY=resizable`) ; l'étape dans le job PostgreSQL plutôt qu'un job à part.
+
 ## 2026-11-08 — ADR-0071 : la réactivation
 
 Incrément 72. Après un `Deactivate All`, le client confirme le nouveau Demand Active et refait la finalisation sous le nouveau partage (`pkg/rdp/mcs_reactivation.go`, appelé par `ReadBitmapUpdate`). Il suit aussi un changement de taille du bureau : le moteur repart d'un bureau noir de la nouvelle taille, la séquence des images continue, et le pointeur est borné par le nouveau bureau.
