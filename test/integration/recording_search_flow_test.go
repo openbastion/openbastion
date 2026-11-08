@@ -44,7 +44,7 @@ func TestRecordingSearch_DecryptsOnTheFly_OnlyWhatTheCallerMayRead_AuditedFirst(
 	authn := startService(t, root, authnBin, "19863", "SKIP_DEMO_SEED=1")
 	// Only this test's sessions in the window: the database is shared with tests whose recordings
 	// are sealed under other keys.
-	started := time.Now().Add(-time.Second)
+	started := time.Now().UTC()
 	kms := testKMSKeyHex(t)
 	conf := t.TempDir()
 	key := writeFile(t, conf, "search-key", strings.Repeat("5a", 32)+"\n", 0o600)
@@ -96,7 +96,7 @@ func TestRecordingSearch_DecryptsOnTheFly_OnlyWhatTheCallerMayRead_AuditedFirst(
 	record(sessB, "cat /etc/shadow > /tmp/x")
 
 	window := func(from, to time.Time) string {
-		return "&from=" + neturl.QueryEscape(from.UTC().Format(time.RFC3339)) + "&to=" + neturl.QueryEscape(to.UTC().Format(time.RFC3339))
+		return "&from=" + neturl.QueryEscape(from.UTC().Format(time.RFC3339Nano)) + "&to=" + neturl.QueryEscape(to.UTC().Format(time.RFC3339Nano))
 	}
 	now := time.Now()
 	last := window(started, now.Add(time.Minute))
@@ -255,7 +255,7 @@ func TestRecordingSearch_AtTheBoundOf200Sessions_WithRealTransit_IsMeasured(t *t
 	audit := startService(t, root, auditBin, "19871")
 	authz := startService(t, root, authzBin, "19872")
 	key := writeFile(t, t.TempDir(), "search-key", strings.Repeat("6b", 32), 0o600)
-	started := time.Now().Add(-time.Second)
+	started := time.Now().UTC()
 	recorder := startService(t, root, recorderBin, "19873", "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL, "DATABASE_URL="+dsn,
 		"TRANSIT_ADDR="+bao.addr, "TRANSIT_KEY=openbastion-vault", "TRANSIT_TOKEN_FILE="+tokenFile, "SEARCH_AUDIT_KEY_FILE="+key)
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "measure-auditor", "recording:session:*", "allow")
@@ -283,7 +283,7 @@ func TestRecordingSearch_AtTheBoundOf200Sessions_WithRealTransit_IsMeasured(t *t
 			t.Fatalf("recording session %d: %d", s, resp.StatusCode)
 		}
 	}
-	q := neturl.Values{"q": {"/etc/shadow"}, "from": {started.UTC().Format(time.RFC3339)}, "to": {time.Now().Add(time.Minute).UTC().Format(time.RFC3339)},
+	q := neturl.Values{"q": {"/etc/shadow"}, "from": {started.UTC().Format(time.RFC3339Nano)}, "to": {time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano)},
 		"callerId": {"u_measure"}, "actorRoles": {"measure-auditor"}}
 	begin := time.Now()
 	resp, err := http.Get(recorder.baseURL + "/recorder/v1/search?" + q.Encode())

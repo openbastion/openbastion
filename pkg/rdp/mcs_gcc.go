@@ -33,7 +33,6 @@ const (
 	rdpClientErrInfo        = uint16(0x0001)
 	rdpClientWant32BPP      = uint16(0x0002)
 	rdpSASDel               = uint16(0xaa03)
-	rdpEncryption128Bit     = uint32(0x00000002)
 	rdpKeyboardEnhanced     = uint32(4)
 	rdpKeyboardFunctionKeys = uint32(12)
 	mcsGlobalChannelID      = uint16(1003)
@@ -43,13 +42,12 @@ const (
 var ErrMCSConnection = errors.New("rdp: malformed or unsupported MCS/GCC connection exchange")
 
 // MCSClientSettings describes the deliberately small client settings profile
-// advertised after CredSSP. FrenchLocale selects the French extEncryptionMethods form.
+// advertised after CredSSP. HYBRID uses TLS/CredSSP, not Standard RDP Security.
 // No static or dynamic virtual channels are requested.
 type MCSClientSettings struct {
 	DesktopWidth  uint16
 	DesktopHeight uint16
 	ClientName    string
-	FrenchLocale  bool
 	Timeout       time.Duration
 }
 
@@ -209,14 +207,10 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	cluster := make([]byte, 8) // flags=0, redirectedSessionID=0
 	blocks = appendGCCBlock(blocks, gccClientClusterType, cluster)
 	clear(cluster)
-	// Advertise a valid Standard RDP Security capability for protocol compliance.
-	// HYBRID remains mandatory, so this capability is never used as the security layer.
+	// TS_UD_CS_SEC applies only to Standard RDP Security. This client requires
+	// HYBRID (TLS + CredSSP), so match FreeRDP's enhanced-security baseline:
+	// both encryptionMethods and extEncryptionMethods are zero.
 	security := make([]byte, 8)
-	if settings.FrenchLocale {
-		binary.LittleEndian.PutUint32(security[4:8], rdpEncryption128Bit) // extEncryptionMethods
-	} else {
-		binary.LittleEndian.PutUint32(security[0:4], rdpEncryption128Bit) // encryptionMethods
-	}
 	blocks = appendGCCBlock(blocks, gccClientSecurityType, security)
 	clear(security)
 	if len(blocks) > maxMCSConnectData {

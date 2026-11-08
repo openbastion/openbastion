@@ -31,7 +31,6 @@ type RDPCodec struct {
 	DialTimeout   time.Duration
 	DesktopWidth  uint16
 	DesktopHeight uint16
-	FrenchLocale  bool
 	InputTimeout  time.Duration
 	openSession   func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 }
@@ -126,7 +125,7 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	if height == 0 {
 		height = rdpDefaultDesktopHeight
 	}
-	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, FrenchLocale: c.FrenchLocale, Timeout: c.DialTimeout}
+	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout}
 	var negotiatedWidth, negotiatedHeight uint16
 	steps := []func() error{
 		func() error { _, e := client.ConnectMCS(ctx, settings); return e },

@@ -100,9 +100,9 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	securityHeader := []byte{0x02, 0xc0, 0x0c, 0x00}
 	securityOffset := bytes.Index(gcc, securityHeader)
 	if securityOffset < 0 || securityOffset+12 > len(gcc) ||
-		binary.LittleEndian.Uint32(gcc[securityOffset+4:securityOffset+8]) != rdpEncryption128Bit ||
+		binary.LittleEndian.Uint32(gcc[securityOffset+4:securityOffset+8]) != 0 ||
 		binary.LittleEndian.Uint32(gcc[securityOffset+8:securityOffset+12]) != 0 {
-		t.Fatal("GCC request must advertise 128-bit security capability with no French extension")
+		t.Fatal("HYBRID GCC request must not advertise Standard RDP Security encryption methods")
 	}
 	if bytes.Contains(gcc, []byte{0x03, 0xc0}) {
 		t.Fatal("GCC request unexpectedly advertised a virtual channel")
@@ -113,24 +113,6 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 		binary.LittleEndian.Uint32(gcc[clusterOffset+4:clusterOffset+8]) != 0 ||
 		binary.LittleEndian.Uint32(gcc[clusterOffset+8:clusterOffset+12]) != 0 {
 		t.Fatal("GCC request must include an empty CS_CLUSTER block, matching the FreeRDP baseline")
-	}
-}
-
-func TestMarshalMCSConnectInitialUsesFrenchSecurityExtensionWhenRequested(t *testing.T) {
-	packet, err := MarshalMCSConnectInitial(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720, ClientName: "OpenBastion", FrenchLocale: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	gcc, err := parseMCSClientConnectInitialForTest(packet)
-	if err != nil {
-		t.Fatal(err)
-	}
-	header := []byte{0x02, 0xc0, 0x0c, 0x00}
-	offset := bytes.Index(gcc, header)
-	if offset < 0 || offset+12 > len(gcc) ||
-		binary.LittleEndian.Uint32(gcc[offset+4:offset+8]) != 0 ||
-		binary.LittleEndian.Uint32(gcc[offset+8:offset+12]) != rdpEncryption128Bit {
-		t.Fatal("French-locale CS_SECURITY must move the advertised method to extEncryptionMethods")
 	}
 }
 
