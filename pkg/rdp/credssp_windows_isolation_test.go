@@ -48,6 +48,8 @@ type authInfoCase struct {
 	name, source string
 	// requested is RDP_NEG_REQ.requestedProtocols; 0 keeps the client's (HYBRID alone).
 	requested uint32
+	// directNTLM drops SPNEGO, as FreeRDP does (CredSSPClientConfig.directNTLM).
+	directNTLM bool
 	// seal replaces the client's sealing of authInfo; nil keeps it. domain is the one it names.
 	seal func(user, password string) func(*NTLMSSPClientSecurityContext, NTLMSSPChallenge, []byte) ([]byte, error)
 }
@@ -107,6 +109,8 @@ func authInfoCases() []authInfoCase {
 		{name: "TSPasswordCreds domain: NetBIOS computer name", source: "MsvAvNbComputerName of the CHALLENGE",
 			seal: sealWithDomain(func(c NTLMSSPChallenge) string { return challengeName(c, ntlmAvNbComputerName) })},
 		{name: "requested SSL|HYBRID", source: "MS-RDPBCGR 2.2.1.1.1: with HYBRID, SSL SHOULD be set", requested: protocolSSL | protocolHybrid},
+		{name: "direct NTLM, no SPNEGO", source: "run #21: FreeRDP opens a full session this way (\"Using direct NTLM\")", directNTLM: true},
+		{name: "direct NTLM, requested SSL|HYBRID", source: "FreeRDP's request and CredSSP, both", directNTLM: true, requested: protocolSSL | protocolHybrid},
 		{name: "requested SSL|HYBRID|HYBRID_EX", source: "what Windows clients ask; 2.2.10.2: the Early User Authorization Result follows authInfo", requested: protocolSSL | protocolHybrid | protocolHybridEx},
 	}
 }
@@ -214,7 +218,7 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 	var report []string
 	for _, c := range authInfoCases() {
 		var names string
-		cfg := CredSSPClientConfig{Version: 6, Username: user, Password: []byte(password), Timeout: 15 * time.Second}
+		cfg := CredSSPClientConfig{Version: 6, Username: user, Password: []byte(password), Timeout: 15 * time.Second, directNTLM: c.directNTLM}
 		var seal func(*NTLMSSPClientSecurityContext, NTLMSSPChallenge, []byte) ([]byte, error)
 		if c.seal != nil {
 			seal = c.seal(user, password)
@@ -281,8 +285,8 @@ func TestRDPWindowsIsolation_AuthInfoCasesAreWhatTheySay(t *testing.T) {
 		t.Fatal("the control must be the client as it is")
 	}
 	for _, c := range cases[4:] {
-		if c.seal != nil || c.requested&protocolHybrid == 0 {
-			t.Fatalf("%s must change the requested protocols and nothing else, HYBRID kept", c.name)
+		if c.seal != nil || (c.requested != 0 && c.requested&protocolHybrid == 0) || (c.requested == 0 && !c.directNTLM) {
+			t.Fatalf("%s must change the requested protocols (HYBRID kept) or SPNEGO, and nothing else", c.name)
 		}
 	}
 	// The Connect-Initial names what was selected: for HYBRID, the client's own; otherwise one byte.
@@ -317,5 +321,52 @@ func TestRDPWindowsIsolation_AuthInfoCasesAreWhatTheySay(t *testing.T) {
 	}
 	if got := challengeName(challenge, ntlmAvDNSComputerName); got != "" {
 		t.Fatalf("absent name = %q, want empty", got)
+	}
+}
+
+// directNTLM is what it says: the first negoToken is the NTLM NEGOTIATE itself, not a SPNEGO
+// negTokenInit; and without it, the client's is SPNEGO. (The rest of the direct exchange is judged
+// against Windows: no fake server here speaks it.)
+func TestEstablishCredSSPDirectNTLMSendsBareNTLM(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		certificate, roots, pin := rdpTestCertificate(t)
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		first := make(chan []byte, 1)
+		go func() {
+			defer close(first)
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			if _, err := readTestTPKT(conn); err != nil || writeFull(conn, connectionConfirm(protocolHybrid)) != nil {
+				return
+			}
+			tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+			defer tlsConn.Close()
+			raw, err := readTSRequest(tlsConn)
+			if err != nil {
+				return
+			}
+			request, err := ParseTSRequest(raw)
+			if err == nil && len(request.NegoTokens) == 1 {
+				first <- request.NegoTokens[0]
+			}
+		}()
+		transport, err := DialHybrid(context.Background(), TransportConfig{Address: listener.Addr().String(), TLSFingerprint: pin, TLSRoots: roots, TLSServerName: "rdp.test", DialTimeout: time.Second})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = transport.EstablishCredSSP(context.Background(), CredSSPClientConfig{Version: 6, Username: "User", Password: []byte("Password"), Timeout: time.Second, directNTLM: direct})
+		_ = transport.Close()
+		_ = listener.Close()
+		token := <-first
+		bare := bytes.HasPrefix(token, []byte("NTLMSSP\x00\x01\x00\x00\x00"))
+		if bare != direct {
+			t.Fatalf("directNTLM %v: first negoToken % x…, bare NTLM %v", direct, token[:min(len(token), 12)], bare)
+		}
 	}
 }

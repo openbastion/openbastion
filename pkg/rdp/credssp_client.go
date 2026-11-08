@@ -38,6 +38,11 @@ type CredSSPClientConfig struct {
 	// to see how Windows answers an authInfo it must refuse or one naming another domain (ADR-0071
 	// isolation). Every other caller seals the credentials it was given with the context it proved.
 	sealAuthInfo func(security *NTLMSSPClientSecurityContext, challenge NTLMSSPChallenge, credentials []byte) ([]byte, error)
+	// directNTLM sends the NTLM messages themselves as negoTokens, without SPNEGO, as FreeRDP does:
+	// no mechListMIC, pubKeyAuth at sequence 0. Unexported, for the same isolation: CI run #21 has
+	// FreeRDP open a full session on the Windows target that closes after this client's
+	// Connect-Initial, and this is what differs most between the two.
+	directNTLM bool
 }
 
 // CredSSPClientSession represents a completed NLA exchange and owns the
@@ -138,6 +143,10 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer clear(initialToken)
+	if cfg.directNTLM {
+		initialToken = append([]byte(nil), negotiate...)
+		defer clear(initialToken)
+	}
 	initial, err := MarshalTSRequest(TSRequest{Version: cfg.Version, NegoTokens: [][]byte{initialToken}})
 	if err != nil || writeFull(t.Conn, initial) != nil {
 		clear(initial)
@@ -161,16 +170,23 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	if serverRequest.Version < negotiatedVersion {
 		negotiatedVersion = serverRequest.Version
 	}
-	serverSPNEGO, err := ParseSPNEGONegTokenResp(serverRequest.NegoTokens[0])
-	defer clear(serverSPNEGO.ResponseToken)
-	defer clear(serverSPNEGO.MechanismListMIC)
-	micRequested := err == nil && serverSPNEGO.State == spnegoStateRequestMIC
-	if err != nil || (serverSPNEGO.State != spnegoStateAcceptIncomplete && !micRequested) || !serverSPNEGO.SupportedMech.Equal(ntlmOID) ||
-		len(serverSPNEGO.ResponseToken) == 0 || len(serverSPNEGO.MechanismListMIC) != 0 {
-		return nil, credsspFailure(fmt.Sprintf("the server's SPNEGO negTokenResp: state %d, NTLM %v, token %d bytes, mechListMIC %d bytes, parse error %v",
-			serverSPNEGO.State, serverSPNEGO.SupportedMech.Equal(ntlmOID), len(serverSPNEGO.ResponseToken), len(serverSPNEGO.MechanismListMIC), err != nil), nil)
+	var challengeToken []byte
+	micRequested := false
+	if cfg.directNTLM {
+		challengeToken = serverRequest.NegoTokens[0]
+	} else {
+		serverSPNEGO, err := ParseSPNEGONegTokenResp(serverRequest.NegoTokens[0])
+		defer clear(serverSPNEGO.ResponseToken)
+		defer clear(serverSPNEGO.MechanismListMIC)
+		micRequested = err == nil && serverSPNEGO.State == spnegoStateRequestMIC
+		if err != nil || (serverSPNEGO.State != spnegoStateAcceptIncomplete && !micRequested) || !serverSPNEGO.SupportedMech.Equal(ntlmOID) ||
+			len(serverSPNEGO.ResponseToken) == 0 || len(serverSPNEGO.MechanismListMIC) != 0 {
+			return nil, credsspFailure(fmt.Sprintf("the server's SPNEGO negTokenResp: state %d, NTLM %v, token %d bytes, mechListMIC %d bytes, parse error %v",
+				serverSPNEGO.State, serverSPNEGO.SupportedMech.Equal(ntlmOID), len(serverSPNEGO.ResponseToken), len(serverSPNEGO.MechanismListMIC), err != nil), nil)
+		}
+		challengeToken = serverSPNEGO.ResponseToken
 	}
-	challenge, err := ParseNTLMSSPChallenge(serverSPNEGO.ResponseToken, ntlmSSPNegotiateFlags)
+	challenge, err := ParseNTLMSSPChallenge(challengeToken, ntlmSSPNegotiateFlags)
 	defer clear(challenge.TargetName)
 	defer clear(challenge.TargetInfo)
 	if err != nil {
@@ -209,7 +225,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer security.Close()
-	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, serverSPNEGO.ResponseToken, cfg.Username, cfg.Domain, response, bindings)
+	ntlmAuthenticate, err := MarshalNTLMSSPAuthenticateWithBindings(negotiate, challengeToken, cfg.Username, cfg.Domain, response, bindings)
 	if err != nil {
 		return nil, ErrCredSSPClient
 	}
@@ -222,18 +238,25 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	// with a MIC needs SPNEGO's mechListMIC (MS-SPNG), and Windows Server closes the connection
 	// without it (ADR-0071, measured in CI). Asked (FreeRDP), it keeps the measured exchange of its
 	// own; unasked (Windows), it is a signature of this context, and pubKeyAuth follows it.
-	var mechListMIC []byte
-	if micRequested {
-		mechListMIC, err = security.SignMechListMIC(mechTypes)
+	var finalToken []byte
+	if cfg.directNTLM {
+		// No SPNEGO, so no mechListMIC, and nothing in the server's answer but pubKeyAuth.
+		finalToken = append([]byte(nil), ntlmAuthenticate...)
+		mechTypes = nil
 	} else {
-		mechListMIC, err = security.SignMechListMICInStream(mechTypes)
-	}
-	if err != nil {
-		return nil, credsspFailure("signing the mechListMIC", nil)
-	}
-	finalToken, err := MarshalSPNEGONTLMResponse(ntlmAuthenticate, mechListMIC)
-	if err != nil {
-		return nil, ErrCredSSPClient
+		var mechListMIC []byte
+		if micRequested {
+			mechListMIC, err = security.SignMechListMIC(mechTypes)
+		} else {
+			mechListMIC, err = security.SignMechListMICInStream(mechTypes)
+		}
+		if err != nil {
+			return nil, credsspFailure("signing the mechListMIC", nil)
+		}
+		finalToken, err = MarshalSPNEGONTLMResponse(ntlmAuthenticate, mechListMIC)
+		if err != nil {
+			return nil, ErrCredSSPClient
+		}
 	}
 	defer clear(finalToken)
 	// A server that asked for the MIC finishes SPNEGO first, and reads pubKeyAuth in the next
