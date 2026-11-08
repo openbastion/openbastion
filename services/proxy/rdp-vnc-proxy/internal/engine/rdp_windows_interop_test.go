@@ -190,9 +190,14 @@ func TestRDPWindows_Screen(t *testing.T) {
 	if !ok {
 		t.Fatalf("no frame from Windows in 90 s: %v", session.Err())
 	}
-	// Quiet for 10 s: the session opens, then Notepad starts (CI run #43: after 5 s, the click came
-	// before Notepad, and the change the test saw was Notepad appearing, not the keys).
+	// The session opens, then Notepad starts, sometimes more than 10 s later (CI runs #43 and #44:
+	// the click came before Notepad, and the change the test saw was Notepad appearing, not the
+	// keys). So: quiet, then one more change within 60 s (Notepad), then quiet again. When Notepad
+	// is already there, the minute is all that is lost.
 	before := settle(first, 10*time.Second)
+	if appeared, ok := next(60 * time.Second); ok {
+		before = settle(appeared, 10*time.Second)
+	}
 	dump("windows-before.png", before)
 	t.Logf("Windows' desktop: %dx%d, %d frame(s) to settle", before.Width, before.Height, frames)
 	// A screen is not a session: Windows' logon screen streams as well as a desktop, and keys reach
