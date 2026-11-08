@@ -10,7 +10,6 @@ const (
 	rdpPDU2Input          = byte(28)
 	rdpInputEventScancode = uint16(0x0004)
 	rdpInputEventMouse    = uint16(0x8001)
-	rdpKBDFlagsDown       = uint16(0x4000)
 	rdpKBDFlagsRelease    = uint16(0x8000)
 	rdpKBDFlagsExtended   = uint16(0x0100)
 	rdpPtrFlagsMove       = uint16(0x0800)
@@ -120,7 +119,10 @@ func marshalRDPInput(userID uint16, shareID uint32, events []RDPInputEvent) ([]b
 				return nil, ErrMCSConnection
 			}
 			binary.LittleEndian.PutUint16(entry[4:6], rdpInputEventScancode)
-			flags := rdpKBDFlagsDown
+			// A press has no flag: KBDFLAGS_DOWN says the key was already down, a repeat
+			// (MS-RDPBCGR 2.2.8.1.1.3.1.1.1), as FreeRDP sends it. Set on every press, Windows took
+			// presses for repeats of keys it held up, and lost some (ADR-0071, CI run #48).
+			flags := uint16(0)
 			if event.Released {
 				flags = rdpKBDFlagsRelease
 			}

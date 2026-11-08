@@ -12,11 +12,11 @@ Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC
 |---|---|
 | Poignée de main, NLA, refus du §3 | **Établi** : CredSSP accepté, mauvais mot de passe refusé (`0xC000006D`), empreinte d'imposteur refusée avant tout octet CredSSP ; puis MCS, canaux, Client Info, licence, capacités et finalisation. |
 | `request-mic` et séquences | **Établi** : Windows ne demande pas le MIC ; le client l'envoie non demandé, à la séquence 0, flux RC4 réinitialisé, `pubKeyAuth` à 1. |
-| Fidélité des pixels, deltas RDP6 | **En partie** : à 16 bpp (Interleaved RLE et non compressé), écran et texte fidèles à l'œil. À 32 bpp, autorisé par stratégie sur une seconde cible (passage #46) : la session est négociée et chaque mise à jour décodée sans refus, **mais l'écran sort entièrement blanc** : le décodeur RDP 6.0 planar ne rend pas ce que Windows envoie. |
+| Fidélité des pixels, deltas RDP6 | **Établi à l'œil** : à 16 bpp (Interleaved RLE et non compressé) et à 32 bpp (RDP 6.0 planar, RLE et deltas, sur une seconde cible qui l'autorise par stratégie), écran, couleurs et texte fidèles (passage #48). Au passage #46, l'écran 32 bpp sortait blanc : Windows envoie un plan alpha de zéros, que le décodeur recopiait ; l'écran est désormais opaque. |
 | Fragments Fast-Path, réactivation | **Non rencontrés** dans ces sessions (aucun refus en 30 s de flux, aucun Deactivate All à l'ouverture de session) ; non prouvé qu'ils n'arrivent jamais. |
 | Mises à jour non graphiques | **En partie** : pointeur (Fast-Path 5 et 9), Save Session Info, Set Error Info, toutes ignorées ou reconnues ; la liste reste fermée. |
 
-Reste aussi la reprise d'une session déjà ouverte sur la cible. RDP reste non exposé.
+Reste aussi la reprise d'une session déjà ouverte sur la cible. Au passage #48, une saisie du test d'écran à 32 bpp a perdu « b » et Entrée : le client envoyait `KBDFLAGS_DOWN` à chaque appui, alors que ce drapeau dit que la touche était déjà enfoncée (une répétition) ; un appui n'en porte plus. RDP reste non exposé.
 
 VNC est livré. RDP est éprouvé contre FreeRDP 3.15 (incréments 70 et 71), jamais contre Windows : le critère de sortie de l'incrément 2 n'est pas tenu, et **RDP reste non exposé**. La machine Windows est en cours de mise en place par le propriétaire du projet. La validation devra établir :
 

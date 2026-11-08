@@ -35,7 +35,9 @@ func TestMarshalRDPInputBuildsBoundedSlowPathInputPDU(t *testing.T) {
 	}
 	first := share[22:34]
 	if binary.LittleEndian.Uint16(first[4:6]) != rdpInputEventScancode ||
-		binary.LittleEndian.Uint16(first[6:8]) != rdpKBDFlagsDown|rdpKBDFlagsExtended || binary.LittleEndian.Uint16(first[8:10]) != 0x1d {
+		// A press carries no KBDFLAGS_DOWN: that flag says the key was already down, a repeat
+		// (MS-RDPBCGR 2.2.8.1.1.3.1.1.1). Sent on every press, Windows lost keys (CI run #48).
+		binary.LittleEndian.Uint16(first[6:8]) != rdpKBDFlagsExtended || binary.LittleEndian.Uint16(first[8:10]) != 0x1d {
 		t.Fatalf("extended scancode event = %x", first)
 	}
 	second := share[34:46]
