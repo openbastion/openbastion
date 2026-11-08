@@ -83,6 +83,20 @@ type CredSSPClientSession struct {
 	logonNotified           bool
 }
 
+// BitsPerPixel is the colour depth of the session, as the server chose it in its Demand Active
+// (15, 16 or 32, ADR-0086), or 0 before the capability exchange.
+func (s *CredSSPClientSession) BitsPerPixel() uint16 {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.capabilitiesExchanged {
+		return 0
+	}
+	return s.serverCapabilities.PreferredBitsPerPixel
+}
+
 // LogonNotified reports whether the server has said the user's session opened (a Save Session
 // Info logon notification, MS-RDPBCGR 2.2.10.1.1). A Windows target that does not open the
 // session with the delegated credentials shows its logon screen instead, and never says so

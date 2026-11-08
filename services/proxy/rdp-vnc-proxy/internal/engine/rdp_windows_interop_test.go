@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -203,12 +204,17 @@ func TestRDPWindows_Screen(t *testing.T) {
 	// A screen is not a session: Windows' logon screen streams as well as a desktop, and keys reach
 	// it (CI runs #39 and #42). Windows says when the user's session opened; without that, the
 	// target did not open it with the delegated credentials.
-	logonNotified := false
+	logonNotified, depth := false, uint16(0)
 	if adapter, ok := session.(*rdpScreenSessionAdapter); ok {
 		if target, ok := adapter.target.(*rdpTargetSession); ok {
-			logonNotified = target.session.LogonNotified()
+			logonNotified, depth = target.session.LogonNotified(), target.session.BitsPerPixel()
 		}
 	}
+	// The depth the target allows (prepare.sh DIR DEPTH): 16 as installed, 32 by policy.
+	if want := os.Getenv("RDP_WINDOWS_BPP"); want != "" && want != strconv.Itoa(int(depth)) {
+		t.Fatalf("the session is at %d bpp, the target allows %s", depth, want)
+	}
+	t.Logf("session at %d bpp", depth)
 	if !logonNotified {
 		t.Fatal("Windows did not say the session opened: this is its logon screen, not the session the delegated credentials should open (windows-before.png)")
 	}
@@ -222,11 +228,17 @@ func TestRDPWindows_Screen(t *testing.T) {
 	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: uint16(before.Width / 2), Y: uint16(before.Height / 2)}); err != nil {
 		t.Fatalf("pointer: %v", err)
 	}
+	// At a person's pace: a second after the click, 50 ms between events. Sent microseconds after
+	// the click, Windows routed keys before Notepad had the focus, and lost some (CI runs #48 and
+	// #49, with and without KBDFLAGS_DOWN); the keyboard isolation, a second after its click, lost
+	// none at 16 and 32 bpp.
+	time.Sleep(time.Second)
 	for _, scancode := range []uint16{0x18, 0x30, 0x1c} { // o, b, Enter
 		for _, flags := range []uint8{screenstream.KeyPressed, screenstream.KeyReleased} {
 			if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: scancode, Flags: flags}); err != nil {
 				t.Fatalf("input: %v", err)
 			}
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 	changed, ok := next(20 * time.Second)

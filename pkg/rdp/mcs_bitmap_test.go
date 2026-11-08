@@ -424,7 +424,9 @@ func TestDecodeRDP6BitmapWithAlphaAndOptionalPadding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []byte{1, 5, 9, 0x80, 2, 6, 10, 0xff, 3, 7, 11, 0x40, 4, 8, 12, 0}
+	// The alpha plane (0x80, 0xff, 0x40, 0x00) is read, and the colours after it fall in place; the
+	// screen stays opaque (ADR-0071, CI run #46).
+	want := []byte{1, 5, 9, 0xff, 2, 6, 10, 0xff, 3, 7, 11, 0xff, 4, 8, 12, 0xff}
 	if string(got) != string(want) {
 		t.Fatalf("decoded RGBA = %v, want %v", got, want)
 	}
@@ -493,7 +495,9 @@ func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
 		}
 	}
 
-	// Alpha is copied, never passed through the color-space transform.
+	// The alpha plane is read and bounded, never passed through the color-space transform, and the
+	// screen stays opaque: a remote desktop has no transparency, and Windows sends its 32-bpp
+	// screen with an alpha plane of zeros (CI run #46), which drew it white (ADR-0071).
 	alphaStream := []byte{0x01}
 	alphaStream = append(alphaStream, 0x11, 0x22, 0x33, 0x44) // alpha
 	alphaStream = append(alphaStream, 128, 128, 128, 128)     // Y
@@ -503,9 +507,9 @@ func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i, alpha := range []byte{0x11, 0x22, 0x33, 0x44} {
-		if withAlpha[i*4+3] != alpha {
-			t.Fatalf("pixel %d alpha = %02x, want %02x", i, withAlpha[i*4+3], alpha)
+	for i := range 4 {
+		if withAlpha[i*4+3] != 0xff {
+			t.Fatalf("pixel %d alpha = %02x, want opaque", i, withAlpha[i*4+3])
 		}
 	}
 }
@@ -568,7 +572,8 @@ func TestDecodeRDP6AYCoCgSubsamplingExpandsOddHeight(t *testing.T) {
 	}
 }
 
-func TestDecodeRDP6AYCoCgSubsamplingPreservesAlpha(t *testing.T) {
+// The alpha plane is read and its colours fall in place: the same pixels as without it, opaque.
+func TestDecodeRDP6AYCoCgSubsamplingReadsTheAlphaPlane(t *testing.T) {
 	const width, height = 4, 3
 	stream := []byte{0x09} // CLL=1, CS=1, alpha present, raw planes.
 	for i := range width * height {
@@ -583,13 +588,17 @@ func TestDecodeRDP6AYCoCgSubsamplingPreservesAlpha(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for wireY := 0; wireY < height; wireY++ {
-		for x := 0; x < width; x++ {
-			wireIndex := wireY*width + x
-			dst := ((height-1-wireY)*width + x) * 4
-			if got[dst+3] != byte(wireIndex+1) {
-				t.Fatalf("alpha at (%d,%d) = %d, want %d", x, height-1-wireY, got[dst+3], wireIndex+1)
-			}
+	withoutAlpha := append([]byte{0x29}, stream[1+width*height:]...) // NA set, the alpha plane gone
+	want, err := decodeRDP6BitmapWithHeader(mcsTestRDP6BitmapData(width, height, withoutAlpha), width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("with the alpha plane: %v\nwithout it: %v", got, want)
+	}
+	for i := 3; i < len(got); i += 4 {
+		if got[i] != 0xff {
+			t.Fatalf("alpha %d at byte %d", got[i], i)
 		}
 	}
 }
@@ -680,8 +689,8 @@ func TestDecodeRDP6BitmapDecodesRLEARGBPlanes(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []byte{
-		14, 24, 34, 244, 15, 25, 35, 245, 16, 26, 36, 246, 17, 27, 37, 247,
-		10, 20, 30, 240, 11, 21, 31, 241, 12, 22, 32, 242, 13, 23, 33, 243,
+		14, 24, 34, 255, 15, 25, 35, 255, 16, 26, 36, 255, 17, 27, 37, 255,
+		10, 20, 30, 255, 11, 21, 31, 255, 12, 22, 32, 255, 13, 23, 33, 255,
 	}
 	if string(got) != string(want) {
 		t.Fatalf("decoded RGBA = %v, want %v", got, want)

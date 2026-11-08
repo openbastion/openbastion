@@ -1360,13 +1360,14 @@ func decodeRDP6Bitmap(stream []byte, width, height int) ([]byte, error) {
 	for i := 0; i < fullPlaneBytes; i++ {
 		wireY := i / width
 		dst := ((height-1-wireY)*width + i%width) * 4
+		// The alpha plane, when sent, is read and bounded like the others, and not shown: a remote
+		// desktop is opaque, and Windows sends its 32-bpp screen with an alpha plane of zeros
+		// (ADR-0071, CI run #46: drawn as sent, the screen was transparent, and white).
 		plane := 0
 		if !noAlpha {
-			decoded[dst+3] = plans[0][i]
 			plane = 1
-		} else {
-			decoded[dst+3] = 0xff
 		}
+		decoded[dst+3] = 0xff
 		chromaIndex := i
 		if chromaSubsampling {
 			chromaIndex = (wireY/2)*chromaWidth + (i%width)/2
@@ -1587,7 +1588,9 @@ readUpdate:
 		var readErr error
 		if fragmentCount == 0 {
 			var fastPath bool
-			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPBitmapTPKTPacket)
+			// A Fast-Path PDU is up to 0x7fff bytes (a 15-bit length): Windows fills it past
+			// 16 383 (CI run #46). A TPKT stays bounded by parseRDPBitmapMCSFragment.
+			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPFastPathPacket)
 			if readErr == nil && fastPath {
 				if rdpFastPathUpdateIsIgnored(packet) {
 					clear(packet)
@@ -1610,6 +1613,9 @@ readUpdate:
 		}
 		if readErr != nil {
 			clear(assembled)
+			if errors.Is(readErr, ErrMCSConnection) {
+				return RDPBitmapUpdate{}, readErr // what the read refused, said
+			}
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
 		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)

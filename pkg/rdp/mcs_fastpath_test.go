@@ -297,3 +297,59 @@ func TestReadBitmapUpdateRecordsTheLogonNotification(t *testing.T) {
 		listener.Close()
 	}
 }
+
+// A Fast-Path PDU is up to 0x7fff bytes (MS-RDPBCGR 2.2.9.1.2: a 15-bit length). Windows' 16-bpp
+// raw tiles fill it past 16 383 (CI run #46); the read bounded it there, and refused the update.
+// Past 0x7fff, the length cannot be said, and a TPKT of the stream stays bounded where it was.
+func TestReadBitmapUpdateAcceptsAFullSizeFastPathPDU(t *testing.T) {
+	// 64 x 80 at 32 bpp, raw: 20 480 bytes of pixels.
+	pixels := make([]byte, 64*80*4)
+	bitmapData := append([]byte{1, 0}, mcsTestBitmapRectangle(0, 0, 64, 80, 32, 0, pixels)...)
+	packet := mcsTestFastPathBitmapPacket(bitmapData)
+	if len(packet) <= 16_383 || len(packet) > 0x7fff {
+		t.Fatalf("the packet is %d bytes", len(packet))
+	}
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if tlsConn.Handshake() == nil {
+			_ = writeFull(tlsConn, packet)
+			var one [1]byte
+			_, _ = tlsConn.Read(one[:])
+		}
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 1280, DesktopHeight: 800, PreferredBitsPerPixel: 32},
+	}
+	defer session.Close()
+	update, err := session.ReadBitmapUpdate(context.Background(), time.Second)
+	if err != nil || len(update.Rectangles) != 1 {
+		t.Fatalf("ReadBitmapUpdate: %v", err)
+	}
+	// A slow-path TPKT keeps its bound: the same size there is refused.
+	tpkt := mcsTestBitmapUpdatePacket(0x000103ea, mcsTestBitmapRectangle(0, 0, 64, 80, 32, 0, pixels))
+	if _, _, err := parseRDPBitmapMCSFragment(tpkt, mcsGlobalChannelID); err == nil || len(tpkt) <= maxRDPBitmapTPKTPacket {
+		t.Fatalf("a TPKT of %d bytes: %v", len(tpkt), err)
+	}
+}

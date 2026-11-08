@@ -519,7 +519,7 @@ func readRDPServerUpdatePacket(r io.Reader, maxPacket int) ([]byte, bool, error)
 		}
 		length := int(binary.BigEndian.Uint16(rest[1:3]))
 		if rest[0] != 0 || length < 9 || length > maxPacket {
-			return nil, false, ErrMCSConnection
+			return nil, false, fmt.Errorf("%w: TPKT of %d bytes (bound %d)", ErrMCSConnection, length, maxPacket)
 		}
 		packet := make([]byte, length)
 		packet[0] = first[0]
@@ -551,7 +551,7 @@ func readRDPServerUpdatePacket(r io.Reader, maxPacket int) ([]byte, bool, error)
 	}
 	// A pointer update is as short as its 3-byte header (MS-RDPBCGR 2.2.9.1.2.1).
 	if length < headerLength+3 || length > maxPacket {
-		return nil, false, ErrMCSConnection
+		return nil, false, fmt.Errorf("%w: Fast-Path PDU of %d bytes (bound %d)", ErrMCSConnection, length, maxPacket)
 	}
 	packet := make([]byte, length)
 	packet[0], packet[1] = first[0], lengthFirst[0]

@@ -22,7 +22,7 @@ Set-ItemProperty "$rdp\WinStations\RDP-Tcp" -Name UserAuthentication -Value 1   
 Set-ItemProperty "$rdp\WinStations\RDP-Tcp" -Name SecurityLayer -Value 2        # TLS
 Get-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' | Enable-NetFirewallRule
 
-# Colour depth (ADR-0086): left as Windows installs it. To a client without the graphics pipeline,
+# Colour depth (ADR-0086): left as Windows installs it, unless prepare.sh was given 32. To a client without the graphics pipeline,
 # this Windows offers 16 bpp (RDP-Tcp\ColorDepth 3, fInheritColorDepth 0, measured in CI runs #29
 # and #30), which the client decodes: the test runs the real case. What the machine says goes to
 # the event export, as evidence of the depth the run was made at.
@@ -34,6 +34,14 @@ try {
     'Policy:'; Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -ErrorAction SilentlyContinue | Select-Object ColorDepth | Format-List | Out-String
     'Win32_TSClientSetting:'; Get-CimInstance -Namespace root\cimv2\TerminalServices -ClassName Win32_TSClientSetting -Filter "TerminalName='RDP-tcp'" | Select-Object ColorDepth, ColorDepthPolicy | Format-List | Out-String
   } 2>&1 | Out-File (Join-Path $depth 'color-depth.txt') -Encoding utf8
+  # prepare.sh DIR 32: 32 bpp allowed by the policy "Limit maximum color depth", which alone was
+  # enough in CI run #30 (the WMI method SetColorDepthPolicy is refused there).
+  if ((Get-Content 'C:\OEM\color-depth' -Raw -ErrorAction SilentlyContinue) -eq '32') {
+    $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+    New-Item -Path $policy -Force | Out-Null
+    Set-ItemProperty $policy -Name ColorDepth -Value 5 -Type DWord   # 5: 32 bpp
+    "Policy set to 32 bpp" | Out-File (Join-Path $depth 'color-depth.txt') -Append -Encoding utf8
+  }
 } catch {
   Write-Output "rdp-setup: colour depth not recorded: $_"
 }

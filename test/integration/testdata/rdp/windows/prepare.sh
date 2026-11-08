@@ -4,10 +4,15 @@
 #   - oem/: install.bat, rdp-setup.ps1, the certificate as a PFX and its password, for Windows;
 #   - shared/: where Windows copies its RDP event logs (oem/rdp-setup.ps1);
 #   - compose.env (for docker compose) and test.env (for make test-rdp-windows).
+# DEPTH, 16 by default, is the colour depth the target allows a client without the graphics
+# pipeline: 16 is Windows as installed (ADR-0086); 32 allows 32 bpp by policy, to try the 32-bpp
+# path (RDP 6.0 planar) against Windows.
 # The pin and the roots are known before Windows starts: nothing is learnt from the target.
 # Everything here is for one run and is never committed.
 set -euo pipefail
-dir=${1:?usage: prepare.sh DIR}
+dir=${1:?usage: prepare.sh DIR [DEPTH]}
+depth=${2:-16}
+case "$depth" in 16 | 32) ;; *) echo "DEPTH must be 16 or 32, not $depth" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 name=rdp-windows.test
 mkdir -p "$dir/oem" "$dir/storage" "$dir/dump" "$dir/shared"
@@ -29,6 +34,7 @@ printf '%s' "$pfx_password" > oem/rdp.pfx.pass
 # cmd.exe reads a batch file line by line on CRLF: the copy is converted, the source stays LF.
 sed 's/$/\r/' "$here/oem/install.bat" > oem/install.bat
 cp "$here/oem/rdp-setup.ps1" oem/
+printf '%s' "$depth" > oem/color-depth
 
 pin=$(openssl x509 -in rdp.pem -outform DER | openssl dgst -sha256 | awk '{print $NF}')
 # Windows rejects a password without three of: lower, upper, digit, symbol.
@@ -51,5 +57,6 @@ RDP_WINDOWS_CA_FILE=$dir/ca.pem
 RDP_WINDOWS_PIN=$pin
 RDP_WINDOWS_SERVER_NAME=$name
 RDP_WINDOWS_DUMP=$dir/dump
+RDP_WINDOWS_BPP=$depth
 ENV
 echo "prepared $dir: the RDP certificate of $name, pin $pin"
