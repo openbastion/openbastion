@@ -63,6 +63,18 @@ jobs:
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           make test-rdp-windows
+      # Runs #16 to #32 settled CredSSP, TLS, the Connect-Initial and the Confirm Active (ADR-0071):
+      # only the connection sequence runs by default, before the reference clients (run #34: after
+      # them, Windows answered no X.224 request); every TestRDPWindowsIsolation test stays in
+      # pkg/rdp, for a dispatch with this pattern widened.
+      - name: Isolate what Windows refuses after CredSSP
+        if: ${{ !cancelled() }}
+        env:
+          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_ConnectionSequence$' }}
+        run: |
+          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \
+            go test ./pkg/rdp -run "$RDP_WINDOWS_ISOLATION" -v -count=1 -timeout=20m
       # A reference client on the same machine (ADR-0071): run #21 had FreeRDP open a full session.
       # Its log is in the artifact; its PDUs, recorded in clear for the isolation that follows (it
       # sends FreeRDP's own Connect-Initial after this client's CredSSP), hold the password and
@@ -90,17 +102,6 @@ jobs:
       # ADR-0071: what Windows refuses after CredSSP — one case per fresh connection: blocks and
       # parameters of the Connect-Initial (MS-RDPBCGR §4.1.3), then authInfo (a refused one as the
       # counter-proof, the TSPasswordCreds domain, TLS 1.2). The tables are in the artifact.
-      # Runs #16 to #27 settled CredSSP, TLS and the Connect-Initial (ADR-0071): only the connection
-      # sequence after it, and the Connect-Initial as a regression check, run by default; every
-      # TestRDPWindowsIsolation test stays in pkg/rdp, for a dispatch with this pattern widened.
-      - name: Isolate what Windows refuses after CredSSP
-        if: ${{ !cancelled() }}
-        env:
-          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|MCSConnectInitial|ConfirmActive)$' }}
-        run: |
-          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
-          RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \
-            go test ./pkg/rdp -run "$RDP_WINDOWS_ISOLATION" -v -count=1 -timeout=20m
       # rdp-setup.ps1 copies the RDP event logs every 30 s: wait for the copy that follows the last
       # connection, then keep them with the rest. Absent if the share did not work.
       - name: What Windows logged

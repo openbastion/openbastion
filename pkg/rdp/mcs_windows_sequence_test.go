@@ -7,8 +7,8 @@ package rdp
 // Client Info PDU, before any step of this client reads it:
 //
 //   - the sequence as the RDP codec runs it, step by step, until one fails;
-//   - on a second connection, the same steps through the capability exchange, then the server's
-//     next packets as they come, unparsed (run #30 named the finalization).
+//   - on a second connection, the same steps through the finalization, then the server's next
+//     packets as they come, described and unparsed (run #34 refused the first update after it).
 //
 //	RDP_WINDOWS=1 … go test ./pkg/rdp -run TestRDPWindowsIsolation -v
 
@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -107,42 +108,43 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	// Through the capability exchange, then what Windows sends, unread by any step: run #30, with
-	// 32 bpp allowed on the target, passes the capability exchange and names the finalization. The
-	// packets come in full (finalization PDUs, nothing secret), TPKT or Fast-Path alike.
+	// Through the finalization, then what Windows sends, unread by any step: run #34, at 16 bpp,
+	// opens the session and refuses the first update after it. Each packet is described (TPKT and
+	// its Share Data type, or Fast-Path and each update's code, fragmentation and compression) with
+	// its first bytes; nothing secret is in the graphics stream.
 	session, done, err = sequenceSession(address, pin, name, roots, user, password)
 	if err != nil {
-		logf("after Confirm Active: %v", err)
+		logf("after Finalization: %v", err)
 	} else {
 		ok := true
-		for _, step := range sequenceSteps(settings, user, password, "Demand Active/Confirm Active") {
+		for _, step := range sequenceSteps(settings, user, password, "Finalization") {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := step.run(ctx, session)
 			cancel()
 			if err != nil {
-				logf("after Confirm Active: %s FAILED: %v", step.name, err)
+				logf("after Finalization: %s FAILED: %v", step.name, err)
 				ok = false
 				break
 			}
 		}
 		if ok {
 			conn := session.transport.Conn
-			deadline := time.Now().Add(6 * time.Second)
-			for i := 0; i < 8; i++ {
+			deadline := time.Now().Add(10 * time.Second)
+			for i := 0; i < 24; i++ {
 				_ = conn.SetReadDeadline(deadline)
 				packet, err := readSlowOrFastPathPacket(conn)
 				var netErr net.Error
 				switch {
 				case errors.As(err, &netErr) && netErr.Timeout():
-					logf("after Confirm Active: nothing more in 6 s")
+					logf("after Finalization: nothing more in 10 s")
 				case err != nil:
-					logf("after Confirm Active: packet %d: %v", i+1, err)
+					logf("after Finalization: packet %d: %v", i+1, err)
 				default:
 					head := packet
-					if len(head) > 4096 {
-						head = head[:4096]
+					if len(head) > 48 {
+						head = head[:48]
 					}
-					logf("after Confirm Active: packet %d, %d bytes: %s", i+1, len(packet), hex.EncodeToString(head))
+					logf("after Finalization: packet %d, %d bytes, %s: %s", i+1, len(packet), describeServerPacket(packet), hex.EncodeToString(head))
 					continue
 				}
 				break
@@ -187,6 +189,55 @@ func readSlowOrFastPathPacket(r io.Reader) ([]byte, error) {
 	return packet, err
 }
 
+// describeServerPacket names what a server packet carries, without decoding its graphics.
+func describeServerPacket(packet []byte) string {
+	if len(packet) > 0 && packet[0] == 3 {
+		if len(packet) < 14 || packet[7] != mcsSendDataIndication {
+			return "TPKT"
+		}
+		_, share, err := readPERLength(packet[13:])
+		if err != nil || len(share) < 6 {
+			return "TPKT, MCS"
+		}
+		kind := binary.LittleEndian.Uint16(share[2:4]) & 0x0f
+		if kind != 7 || len(share) < 20 {
+			return fmt.Sprintf("TPKT, share PDU type %d", kind)
+		}
+		text := fmt.Sprintf("TPKT, share data pduType2 0x%02x", share[14])
+		if share[14] == rdpPDU2Update {
+			text += fmt.Sprintf(", update type %d", binary.LittleEndian.Uint16(share[18:20]))
+		}
+		return text
+	}
+	if len(packet) < 2 {
+		return "?"
+	}
+	offset := 2
+	if packet[1]&0x80 != 0 {
+		offset = 3
+	}
+	var updates []string
+	for rest := packet[offset:]; len(rest) >= 3; {
+		header := rest[0]
+		size := int(binary.LittleEndian.Uint16(rest[1:3]))
+		body := 3
+		if header>>6&0x2 != 0 { // compressed: one compressionFlags byte before the size
+			if len(rest) < 4 {
+				break
+			}
+			size = int(binary.LittleEndian.Uint16(rest[2:4]))
+			body = 4
+		}
+		updates = append(updates, fmt.Sprintf("code %d frag %d comp %d size %d", header&0x0f, header>>4&0x3, header>>6, size))
+		if body+size > len(rest) {
+			updates = append(updates, "(truncated)")
+			break
+		}
+		rest = rest[body+size:]
+	}
+	return fmt.Sprintf("Fast-Path action %d [%s]", packet[0]&0x3, strings.Join(updates, "; "))
+}
+
 func sequenceSession(address, pin, name string, roots *x509.CertPool, user, password string) (*CredSSPClientSession, func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	transport, err := DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
@@ -214,8 +265,13 @@ func TestRDPWindowsIsolation_SequenceSteps(t *testing.T) {
 	if strings.Join(names, "|") != want {
 		t.Fatalf("steps %q", names)
 	}
-	if n := len(sequenceSteps(settings, "u", "p", "Demand Active/Confirm Active")); n != 5 {
-		t.Fatalf("through the capability exchange: %d steps", n)
+	if n := len(sequenceSteps(settings, "u", "p", "Finalization")); n != 6 {
+		t.Fatalf("through the finalization: %d steps", n)
+	}
+	// Two Fast-Path updates in one PDU are both named, with their fragmentation.
+	two := []byte{0x00, 10, 0x21, 2, 0, 0xaa, 0xbb, 0x03, 0, 0}
+	if got := describeServerPacket(two); got != "Fast-Path action 0 [code 1 frag 2 comp 0 size 2; code 3 frag 0 comp 0 size 0]" {
+		t.Fatalf("%q", got)
 	}
 	// A Fast-Path header is read by its own length (one or two bytes), a TPKT by its own.
 	for _, c := range []struct{ in, want []byte }{
