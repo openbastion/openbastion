@@ -1,6 +1,6 @@
 package rdp
 
-// ADR-0071, the Windows validation, third isolation. CI run #24: FreeRDP's own Connect-Initial,
+// ADR-0071, the Windows validation, third isolation (second pass: see bisectCases). CI run #24: FreeRDP's own Connect-Initial,
 // sent after this client's CredSSP and TLS, gets a Connect-Response from Windows; this client's is
 // closed 1 ms after it. The cause is what this client's Connect-Initial says. This bisects it: one
 // fresh connection per case, this client's CredSSP and TLS, then FreeRDP's Connect-Initial with one
@@ -129,27 +129,33 @@ type bisectCase struct {
 	blocks []gccDataBlock // nil: send the recorded packet as it is
 }
 
+// bisectCases: run #25 settled the blocks (FreeRDP's packet with this client's CS_CORE is closed,
+// this client's with FreeRDP's CS_CORE is answered; CS_SECURITY, CS_CLUSTER and CS_NET are not the
+// cause) and found no single field of this client's CS_CORE that breaks FreeRDP's. The cause is a
+// combination. So: this client's CS_CORE with one field of FreeRDP's (a field that alone repairs
+// it), then FreeRDP's taking this client's fields one after another, cumulatively (the step where
+// Windows stops answering names the second field of a pair; the first is among those before it).
 func bisectCases(freerdp, ours []gccDataBlock) []bisectCase {
 	core := blockOf(freerdp, gccClientCoreType)
 	ourCore := blockOf(ours, gccClientCoreType)
 	cases := []bisectCase{
 		{name: "FreeRDP's, as recorded"},
-		{name: "FreeRDP's, re-encoded by this client", blocks: freerdp},
-		{name: "FreeRDP's with this client's CS_CORE", blocks: withBlock(freerdp, gccClientCoreType, ourCore)},
-		{name: "FreeRDP's with this client's CS_SECURITY", blocks: withBlock(freerdp, gccClientSecurityType, blockOf(ours, gccClientSecurityType))},
-		{name: "FreeRDP's with this client's CS_CLUSTER", blocks: withBlock(freerdp, gccClientClusterType, blockOf(ours, gccClientClusterType))},
-		{name: "FreeRDP's without CS_NET", blocks: withBlock(freerdp, gccClientNetworkType, nil)},
-		{name: "FreeRDP's without CS_MULTITRANSPORT, CS_MCS_MSGCHANNEL", blocks: withBlock(withBlock(freerdp, gccClientMultitransportType, nil), gccClientMessageChannelType, nil)},
+		{name: "this client's", blocks: ours},
 		{name: "this client's with FreeRDP's CS_CORE", blocks: withBlock(ours, gccClientCoreType, core)},
-		{name: "this client's with FreeRDP's CS_CORE, CS_SECURITY", blocks: withBlock(withBlock(ours, gccClientCoreType, core), gccClientSecurityType, blockOf(freerdp, gccClientSecurityType))},
 	}
-	if len(core) >= 212 && len(ourCore) == 212 {
-		for _, f := range coreFields {
-			patched := append([]byte(nil), core...)
-			copy(patched[f.start:f.end], ourCore[f.start:f.end])
-			cases = append(cases, bisectCase{name: "FreeRDP's CS_CORE with this client's " + f.name, blocks: withBlock(freerdp, gccClientCoreType, patched)})
-		}
-		cases = append(cases, bisectCase{name: "FreeRDP's CS_CORE cut at serverSelectedProtocol", blocks: withBlock(freerdp, gccClientCoreType, append([]byte(nil), core[:212]...))})
+	if len(core) < 212 || len(ourCore) != 212 {
+		return cases
+	}
+	for _, f := range coreFields {
+		patched := append([]byte(nil), ourCore...)
+		copy(patched[f.start:f.end], core[f.start:f.end])
+		cases = append(cases, bisectCase{name: "this client's CS_CORE with FreeRDP's " + f.name, blocks: withBlock(ours, gccClientCoreType, patched)})
+	}
+	cases = append(cases, bisectCase{name: "this client's CS_CORE with FreeRDP's optional fields", blocks: withBlock(ours, gccClientCoreType, append(append([]byte(nil), ourCore...), core[212:]...))})
+	cumulative := append([]byte(nil), core[:212]...)
+	for n, f := range coreFields {
+		copy(cumulative[f.start:f.end], ourCore[f.start:f.end])
+		cases = append(cases, bisectCase{name: fmt.Sprintf("FreeRDP's CS_CORE (cut) with this client's fields 1–%d (… %s)", n+1, f.name), blocks: withBlock(freerdp, gccClientCoreType, append([]byte(nil), cumulative...))})
 	}
 	return cases
 }
@@ -235,7 +241,7 @@ func TestRDPWindowsIsolation_BisectPieces(t *testing.T) {
 	core := bytes.Repeat([]byte{0xee}, 230)
 	peer := []gccDataBlock{{gccClientCoreType, core}, {gccClientNetworkType, make([]byte, 4)}, {gccClientSecurityType, make([]byte, 8)}}
 	for _, c := range bisectCases(peer, ours) {
-		if !strings.HasPrefix(c.name, "FreeRDP's CS_CORE with this client's ") {
+		if !strings.HasPrefix(c.name, "this client's CS_CORE with FreeRDP's ") || strings.HasSuffix(c.name, "optional fields") {
 			continue
 		}
 		var field coreField
@@ -244,21 +250,27 @@ func TestRDPWindowsIsolation_BisectPieces(t *testing.T) {
 				field = f
 			}
 		}
+		// This client's CS_CORE, with exactly that field of the peer's (0xee) in it.
 		patched := blockOf(c.blocks, gccClientCoreType)
-		changed := 0
+		ourCore := blockOf(ours, gccClientCoreType)
+		if len(patched) != 212 {
+			t.Fatalf("%s: %d bytes", c.name, len(patched))
+		}
 		for i := range patched {
-			if patched[i] != 0xee {
-				changed++
-				if i < field.start || i >= field.end {
-					t.Errorf("%s: byte %d changed, outside [%d, %d)", c.name, i, field.start, field.end)
-				}
+			inField := i >= field.start && i < field.end
+			if inField && patched[i] != 0xee || !inField && patched[i] != ourCore[i] {
+				t.Errorf("%s: byte %d is %#x", c.name, i, patched[i])
 			}
 		}
-		if len(patched) != 230 || changed == 0 {
-			t.Errorf("%s: %d bytes, %d changed", c.name, len(patched), changed)
-		}
-		if len(c.blocks) != 3 || blockOf(c.blocks, gccClientNetworkType) == nil {
+		if len(c.blocks) != len(ours) {
 			t.Errorf("%s: the other blocks must stay", c.name)
+		}
+	}
+	cases := bisectCases(peer, ours)
+	last := blockOf(cases[len(cases)-1].blocks, gccClientCoreType)
+	for _, f := range coreFields {
+		if !bytes.Equal(last[f.start:f.end], blockOf(ours, gccClientCoreType)[f.start:f.end]) {
+			t.Errorf("cumulative: %s is not this client's", f.name)
 		}
 	}
 	if got := withBlock(peer, gccClientNetworkType, nil); len(got) != 2 || blockOf(got, gccClientNetworkType) != nil {
