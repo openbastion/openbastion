@@ -12,18 +12,27 @@ package rdp
 //     nothing, and authInfo is the suspect;
 //   - the domain of TSPasswordCreds, empty in the client: "." and the NetBIOS name the CHALLENGE
 //     gives, the two a Windows client sends for a local account;
-//   - TLS 1.2 instead of what Go negotiates (TLS 1.3 when the server offers it).
+//   - the protocols the X.224 request names. CI run #19 had Windows log, at each Connect-Initial,
+//     RDP_SEC leaving FStatePassthrough for FStateError on FEventCheckAndCompleteReadsFailed
+//     (0x8007139F, ERROR_INVALID_STATE): Windows does not expect to read at all, whatever the
+//     packet says. The client asks for HYBRID alone; MS-RDPBCGR 2.2.1.1.1 says SSL SHOULD come with
+//     it, and Windows clients also ask for HYBRID_EX, after which the server sends the Early User
+//     Authorization Result (2.2.10.2) before any MCS byte.
+//
+// (Run #16 settled TLS: Windows Server 2022 negotiates TLS 1.2 with this client.)
 //
 // Nothing here is a fix: each case is a fresh connection, and what Windows does is the result.
 //
 //	RDP_WINDOWS=1 … go test ./pkg/rdp -run TestRDPWindowsIsolation -v
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -37,7 +46,8 @@ import (
 
 type authInfoCase struct {
 	name, source string
-	tlsMax       uint16
+	// requested is RDP_NEG_REQ.requestedProtocols; 0 keeps the client's (HYBRID alone).
+	requested uint32
 	// seal replaces the client's sealing of authInfo; nil keeps it. domain is the one it names.
 	seal func(user, password string) func(*NTLMSSPClientSecurityContext, NTLMSSPChallenge, []byte) ([]byte, error)
 }
@@ -96,45 +106,94 @@ func authInfoCases() []authInfoCase {
 			seal: sealWithDomain(func(NTLMSSPChallenge) string { return "." })},
 		{name: "TSPasswordCreds domain: NetBIOS computer name", source: "MsvAvNbComputerName of the CHALLENGE",
 			seal: sealWithDomain(func(c NTLMSSPChallenge) string { return challengeName(c, ntlmAvNbComputerName) })},
-		{name: "TLS 1.2", source: "the client offers TLS 1.3 to a server that has it", tlsMax: tls.VersionTLS12},
+		{name: "requested SSL|HYBRID", source: "MS-RDPBCGR 2.2.1.1.1: with HYBRID, SSL SHOULD be set", requested: protocolSSL | protocolHybrid},
+		{name: "requested SSL|HYBRID|HYBRID_EX", source: "what Windows clients ask; 2.2.10.2: the Early User Authorization Result follows authInfo", requested: protocolSSL | protocolHybrid | protocolHybridEx},
 	}
 }
 
-// isolationDial is DialHybrid with the TLS version capped: the same X.224 request, pin, roots and
-// name, so the transport is the client's in all but that.
-func isolationDial(ctx context.Context, address, pin, name string, roots *x509.CertPool, tlsMax uint16) (*Transport, error) {
-	if tlsMax == 0 {
-		return DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
+const (
+	protocolSSL      = uint32(0x00000001)
+	protocolHybridEx = uint32(0x00000008)
+)
+
+// isolationDial is DialHybrid with other requested protocols: the same X.224 request otherwise, the
+// same pin, roots and name. It returns the protocol the server selected.
+func isolationDial(ctx context.Context, address, pin, name string, roots *x509.CertPool, requested uint32) (*Transport, uint32, error) {
+	if requested == 0 {
+		transport, err := DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
+		return transport, protocolHybrid, err
 	}
 	config, err := tlspin.ServerConfig(pin, roots, name)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	config.MaxVersion = tlsMax
 	expected, err := tlspin.ParseFingerprint(pin)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	conn, err := (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, "tcp", address)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
-	if err := writeFull(conn, connectionRequest()); err != nil {
+	request := connectionRequest()
+	binary.LittleEndian.PutUint32(request[15:19], requested)
+	if err := writeFull(conn, request); err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, 0, err
 	}
-	if err := readConnectionConfirm(conn); err != nil {
+	selected, err := readSelectedProtocol(conn)
+	if err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, 0, err
 	}
 	tlsConn := tls.Client(conn, config)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, 0, err
 	}
 	_ = tlsConn.SetDeadline(time.Time{})
-	return &Transport{Conn: tlsConn, targetServerName: name, expectedPin: expected}, nil
+	return &Transport{Conn: tlsConn, targetServerName: name, expectedPin: expected}, selected, nil
+}
+
+// readSelectedProtocol reads the X.224 Connection Confirm and returns RDP_NEG_RSP.selectedProtocol.
+func readSelectedProtocol(conn net.Conn) (uint32, error) {
+	packet, err := readTPKTPacket(conn, maxTPKTPacket)
+	if err != nil {
+		return 0, err
+	}
+	if len(packet) != 19 || packet[5] != 0xd0 {
+		return 0, fmt.Errorf("connection confirm: % x", packet)
+	}
+	if packet[11] != rdpNegResp {
+		return 0, fmt.Errorf("negotiation failure %d", binary.LittleEndian.Uint32(packet[15:19]))
+	}
+	return binary.LittleEndian.Uint32(packet[15:19]), nil
+}
+
+// connectInitialSelecting is the client's Connect-Initial with serverSelectedProtocol set to what
+// the server selected; for HYBRID, byte for byte the client's.
+func connectInitialSelecting(settings MCSClientSettings, selected uint32) ([]byte, error) {
+	blocks, err := marshalClientDataBlocks(settings)
+	if err != nil {
+		return nil, err
+	}
+	// The first block is CS_CORE; serverSelectedProtocol is the last field of its 212 bytes.
+	binary.LittleEndian.PutUint32(blocks[4+208:4+212], selected)
+	gcc, err := marshalGCCConferenceCreateRequest(blocks)
+	if err != nil {
+		return nil, err
+	}
+	mcs, err := marshalMCSConnectInitial(gcc)
+	if err != nil {
+		return nil, err
+	}
+	packet := make([]byte, 7+len(mcs))
+	packet[0] = 3
+	binary.BigEndian.PutUint16(packet[2:4], uint16(len(packet)))
+	copy(packet[4:7], []byte{2, 0xf0, 0x80})
+	copy(packet[7:], mcs)
+	return packet, nil
 }
 
 func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
@@ -151,10 +210,7 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 	if !roots.AppendCertsFromPEM(raw) {
 		t.Fatal("RDP_WINDOWS_CA_FILE holds no certificate")
 	}
-	packet, err := MarshalMCSConnectInitial(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: "OpenBastion", Timeout: 15 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
+	settings := MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: "OpenBastion", Timeout: 15 * time.Second}
 	var report []string
 	for _, c := range authInfoCases() {
 		var names string
@@ -171,7 +227,7 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 			}
 			return security.WrapClientToServer(credentials)
 		}
-		result, connection := authInfoRun(address, pin, name, roots, c.tlsMax, cfg, packet)
+		result, connection := authInfoRun(address, pin, name, roots, c.requested, cfg, settings)
 		line := fmt.Sprintf("%-46s | %s | after authInfo: %-32s | Connect-Initial: %s   [%s; CHALLENGE %s]",
 			c.name, connection, result.openAfterAuthInfo, result.answer, c.source, names)
 		t.Log(line)
@@ -183,23 +239,37 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 	}
 }
 
-// authInfoRun is one case: dial, CredSSP with the case's authInfo, 10 s for Windows to close on its
-// own, then the client's Connect-Initial. The second result names the TLS version and suite.
-func authInfoRun(address, pin, name string, roots *x509.CertPool, tlsMax uint16, cfg CredSSPClientConfig, packet []byte) (isolationResult, string) {
+// authInfoRun is one case: dial, CredSSP with the case's authInfo, then (HYBRID_EX) the Early User
+// Authorization Result, 10 s for Windows to close on its own, and the client's Connect-Initial
+// naming the selected protocol. The second result names the protocol, the TLS version and suite.
+func authInfoRun(address, pin, name string, roots *x509.CertPool, requested uint32, cfg CredSSPClientConfig, settings MCSClientSettings) (isolationResult, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	transport, err := isolationDial(ctx, address, pin, name, roots, tlsMax)
+	transport, selected, err := isolationDial(ctx, address, pin, name, roots, requested)
 	if err != nil {
 		return isolationResult{openAfterAuthInfo: "not reached", answer: fmt.Sprintf("dial: %v", err)}, "-"
 	}
 	state := transport.Conn.ConnectionState()
-	connection := fmt.Sprintf("%s %s", tls.VersionName(state.Version), tls.CipherSuiteName(state.CipherSuite))
+	connection := fmt.Sprintf("selected 0x%x, %s %s", selected, tls.VersionName(state.Version), tls.CipherSuiteName(state.CipherSuite))
+	packet, err := connectInitialSelecting(settings, selected)
+	if err != nil {
+		_ = transport.Close()
+		return isolationResult{openAfterAuthInfo: "not reached", answer: fmt.Sprintf("Connect-Initial: %v", err)}, connection
+	}
 	session, err := transport.EstablishCredSSP(ctx, cfg)
 	if err != nil {
 		_ = transport.Close()
 		return isolationResult{openAfterAuthInfo: "not reached", answer: fmt.Sprintf("CredSSP: %v", err)}, connection
 	}
 	defer session.Close()
+	if selected&protocolHybridEx != 0 {
+		var result [4]byte
+		_ = transport.Conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		if _, err := io.ReadFull(transport.Conn, result[:]); err != nil {
+			return isolationResult{openAfterAuthInfo: fmt.Sprintf("no Early User Authorization Result: %v", err), answer: "not sent"}, connection
+		}
+		connection += fmt.Sprintf(", Early User Authorization Result 0x%08x", binary.LittleEndian.Uint32(result[:]))
+	}
 	return isolationAfterCredSSP(session, 10*time.Second, packet), connection
 }
 
@@ -207,11 +277,39 @@ func authInfoRun(address, pin, name string, roots *x509.CertPool, tlsMax uint16,
 // is the client's sealing, and a flipped byte is one byte.
 func TestRDPWindowsIsolation_AuthInfoCasesAreWhatTheySay(t *testing.T) {
 	cases := authInfoCases()
-	if cases[0].seal != nil || cases[0].tlsMax != 0 {
+	if cases[0].seal != nil || cases[0].requested != 0 {
 		t.Fatal("the control must be the client as it is")
 	}
-	if cases[4].seal != nil || cases[4].tlsMax != tls.VersionTLS12 {
-		t.Fatal("the TLS case must change the TLS version and nothing else")
+	for _, c := range cases[4:] {
+		if c.seal != nil || c.requested&protocolHybrid == 0 {
+			t.Fatalf("%s must change the requested protocols and nothing else, HYBRID kept", c.name)
+		}
+	}
+	// The Connect-Initial names what was selected: for HYBRID, the client's own; otherwise one byte.
+	settings := MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: "OpenBastion", Timeout: 15 * time.Second}
+	want, err := MarshalMCSConnectInitial(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	same, err := connectInitialSelecting(settings, protocolHybrid)
+	if err != nil || !bytes.Equal(same, want) {
+		t.Fatalf("HYBRID: not the client's Connect-Initial (%v)", err)
+	}
+	ex, err := connectInitialSelecting(settings, protocolHybridEx)
+	if err != nil || len(ex) != len(want) {
+		t.Fatalf("HYBRID_EX: %v", err)
+	}
+	diff := 0
+	for i := range want {
+		if ex[i] != want[i] {
+			diff++
+			if want[i] != byte(protocolHybrid) || ex[i] != byte(protocolHybridEx) {
+				t.Fatalf("HYBRID_EX: byte %d is %#x, want the selected protocol", i, ex[i])
+			}
+		}
+	}
+	if diff != 1 {
+		t.Fatalf("HYBRID_EX: %d bytes differ, want 1", diff)
 	}
 	challenge := NTLMSSPChallenge{TargetInfo: []byte{1, 0, 4, 0, 'W', 0, 'S', 0, 0, 0, 0, 0}}
 	if got := challengeName(challenge, ntlmAvNbComputerName); got != "WS" {
