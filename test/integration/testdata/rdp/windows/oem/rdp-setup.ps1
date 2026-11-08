@@ -44,8 +44,10 @@ foreach ($log in 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational'
                  'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational',
                  'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin',
                  'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational') {
-  $file = Join-Path $out (($log -replace '[/ ]', '_') + '.txt')
-  wevtutil qe $log /c:400 /rd:true /f:text 2>&1 | Out-File $file -Encoding utf8
+  # As XML too: the text form drops the event data (the error codes) when a message is not rendered.
+  $base = Join-Path $out ($log -replace '[/ ]', '_')
+  wevtutil qe $log /c:400 /rd:true /f:text 2>&1 | Out-File "$base.txt" -Encoding utf8
+  wevtutil qe $log /c:400 /rd:true /f:xml 2>&1 | Out-File "$base.xml" -Encoding utf8
 }
 $file = Join-Path $out 'System-rdp.txt'
 wevtutil qe System "/q:*[System[Provider[@Name='TermDD' or @Name='Schannel' or @Name='Microsoft-Windows-TerminalServices-RemoteConnectionManager']]]" /c:400 /rd:true /f:text 2>&1 | Out-File $file -Encoding utf8
