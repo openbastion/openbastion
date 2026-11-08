@@ -487,3 +487,18 @@ func FuzzParseRDPDemandActive(f *testing.F) {
 		_, _ = parseRDPDemandActive(packet, mcsGlobalChannelID)
 	})
 }
+
+// BitsPerPixel is the depth the server chose, and nothing before the capability exchange.
+func TestSessionBitsPerPixel(t *testing.T) {
+	session := &CredSSPClientSession{serverCapabilities: RDPServerCapabilities{PreferredBitsPerPixel: 16}}
+	if got := session.BitsPerPixel(); got != 0 {
+		t.Fatalf("before the exchange: %d", got)
+	}
+	session.capabilitiesExchanged = true
+	if got := session.BitsPerPixel(); got != 16 {
+		t.Fatalf("after the exchange: %d", got)
+	}
+	if (*CredSSPClientSession)(nil).BitsPerPixel() != 0 {
+		t.Fatal("nil session")
+	}
+}
