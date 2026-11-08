@@ -296,7 +296,7 @@ func TestFramebuffer_UnchangedKnowsOnlyWhatRepaintsTheSamePixels(t *testing.T) {
 
 // Windows Server 2022, left as installed (16 bpp), CI run #36: the first update after the
 // finalization, as it came. The whole screen in one Fast-Path PDU, 260 tiles of 64 x 64, all
-// Interleaved RLE without header (ADR-0083). The client refused it for its rectangle count.
+// Interleaved RLE without header (ADR-0086). The client refused it for its rectangle count.
 func TestWindowsServer2022FirstUpdateAt16BPP(t *testing.T) {
 	packet, err := os.ReadFile("testdata/windows-server-2022-first-update-16bpp.bin")
 	if err != nil {

@@ -26,7 +26,7 @@ func TestParseRDPDemandActiveValidatesServerCapabilities(t *testing.T) {
 		t.Fatalf("capability types = %v", got.CapabilityTypes)
 	}
 	// 15 and 16 bpp, which Windows offers when its maximum color depth is left as installed
-	// (ADR-0083), are accepted and kept: the Confirm Active and the bitmaps follow them.
+	// (ADR-0086), are accepted and kept: the Confirm Active and the bitmaps follow them.
 	for _, bpp := range []uint16{15, 16} {
 		caps := mcsTestCapabilitySets()
 		binary.LittleEndian.PutUint16(caps[1][4:6], bpp)
@@ -82,7 +82,7 @@ func TestParseRDPDemandActiveRejectsMalformedAndUnsupportedProfile(t *testing.T)
 		binary.LittleEndian.PutUint16(caps[1][4:6], 24)
 		return caps
 	}())
-	// 15 and 16 bpp are decoded (ADR-0083); 8 bpp is not, and is refused as 24 bpp is.
+	// 15 and 16 bpp are decoded (ADR-0086); 8 bpp is not, and is refused as 24 bpp is.
 	for _, bpp := range []uint16{8, 0, 1} {
 		cases[fmt.Sprintf("server selected a %d-bpp session", bpp)] = mcsTestDemandActiveWithCaps(func() [][]byte {
 			caps := mcsTestCapabilitySets()

@@ -22,7 +22,7 @@ Set-ItemProperty "$rdp\WinStations\RDP-Tcp" -Name UserAuthentication -Value 1   
 Set-ItemProperty "$rdp\WinStations\RDP-Tcp" -Name SecurityLayer -Value 2        # TLS
 Get-NetFirewallRule -Name 'RemoteDesktop-UserMode-In-TCP' | Enable-NetFirewallRule
 
-# Colour depth (ADR-0083): left as Windows installs it. To a client without the graphics pipeline,
+# Colour depth (ADR-0086): left as Windows installs it. To a client without the graphics pipeline,
 # this Windows offers 16 bpp (RDP-Tcp\ColorDepth 3, fInheritColorDepth 0, measured in CI runs #29
 # and #30), which the client decodes: the test runs the real case. What the machine says goes to
 # the event export, as evidence of the depth the run was made at.

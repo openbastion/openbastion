@@ -219,7 +219,7 @@ func validateRDPServerCapability(typ uint16, capability []byte, result *RDPServe
 		width := binary.LittleEndian.Uint16(data[8:10])
 		height := binary.LittleEndian.Uint16(data[10:12])
 		// 32 bpp, or 15/16 bpp, which Windows offers a client without the graphics pipeline when
-		// its maximum color depth is left as installed (ADR-0083). 8 and 24 bpp are not decoded.
+		// its maximum color depth is left as installed (ADR-0086). 8 and 24 bpp are not decoded.
 		if (bpp != 32 && bpp != 16 && bpp != 15) || width == 0 || height == 0 || uint64(width)*uint64(height) > maxRDPDesktopArea ||
 			binary.LittleEndian.Uint16(data[14:16]) > 1 || binary.LittleEndian.Uint16(data[16:18]) != 1 ||
 			data[19]&^byte(0x1e) != 0 || binary.LittleEndian.Uint16(data[20:22]) != 1 {
@@ -311,7 +311,7 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	binary.LittleEndian.PutUint16(bitmap[14:16], settings.DesktopHeight)
 	// bitmapCompressionFlag "MUST be set to TRUE" (MS-RDPBCGR 2.2.7.1.2); Windows Server 2022 answers
 	// FALSE with ERRINFO_BADCAPABILITIES (ADR-0071, CI run #31). Compressed bitmaps are decoded:
-	// RDP 6.0 planar at 32 bpp, Interleaved RLE at 15 and 16 bpp (ADR-0083).
+	// RDP 6.0 planar at 32 bpp, Interleaved RLE at 15 and 16 bpp (ADR-0086).
 	binary.LittleEndian.PutUint16(bitmap[20:22], 1)
 	binary.LittleEndian.PutUint16(bitmap[24:26], 1) // multiple rectangles are mandatory
 	caps = append(caps, bitmap...)

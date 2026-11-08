@@ -3,7 +3,7 @@ package rdp
 import "encoding/binary"
 
 // Interleaved RLE (MS-RDPBCGR 2.2.9.1.1.3.1.2.4, decoding in 3.1.9) at 15 and 16 bpp: the
-// compression Windows uses for a session it caps at 16 bpp (ADR-0083). Written from the
+// compression Windows uses for a session it caps at 16 bpp (ADR-0086). Written from the
 // specification alone (ADR-0081). Every order is bounded before it writes: the output has exactly
 // the size the bitmap announces, and a stream that overruns it, stops short of it, or reads past
 // its own end is refused.

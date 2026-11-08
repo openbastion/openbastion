@@ -92,4 +92,7 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 | [ADR-0081](0081-veille-rdp-externe-et-integration-selective.md) | Veille RDP externe et intégration sélective des enseignements | Proposé |
 | [ADR-0082](0082-rsync-distant-passe-par-le-proxy-ssh-sans-shell-arbitraire.md) | rsync distant passe par le proxy SSH, sans shell arbitraire | Proposé |
-| [ADR-0083](0083-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mise en œuvre en cours |
+| [ADR-0083](0083-bibliotheque-ssh-openbastion-avec-politiques-capture-et-audit.md) | La bibliothèque SSH OpenBastion intègre politiques, capture et audit au cycle protocolaire | Proposé |
+| [ADR-0084](0084-bibliotheque-rdp-openbastion-moteur-protocolaire-instrumente.md) | La bibliothèque RDP OpenBastion sépare le moteur protocolaire des contrôles PAM | Proposé |
+| [ADR-0085](0085-bibliotheque-vnc-openbastion-moteur-rfb-instrumente.md) | La bibliothèque VNC OpenBastion sépare RFB des contrôles PAM et de l'enregistrement | Proposé |
+| [ADR-0086](0086-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mise en œuvre en cours |

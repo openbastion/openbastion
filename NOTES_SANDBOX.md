@@ -3036,16 +3036,16 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
-## 2026-11-08 — ADR-0071 et ADR-0083 : la session RDP complète contre Windows
+## 2026-11-08 — ADR-0071 et ADR-0086 : la session RDP complète contre Windows
 
-PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows Server 2022 par dockur, laissé par défaut). Détail passage par passage dans ADR-0071 ; décision de profondeur dans ADR-0083 (go du propriétaire le 8 novembre : « Option 1, décode le 15/16 bpp »).
+PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows Server 2022 par dockur, laissé par défaut). Détail passage par passage dans ADR-0071 ; décision de profondeur dans ADR-0086 (go du propriétaire le 8 novembre : « Option 1, décode le 15/16 bpp »).
 
 **Ce qui marche, mesuré contre Windows** : CredSSP (Windows ne demande pas le MIC ; le client l'envoie non demandé, RC4 réinitialisé, `pubKeyAuth` à la séquence 1), MCS, canaux, Client Info, licence, capacités, finalisation ; Windows ouvre la session avec les identifiants délégués et le notifie (`LogonNotified`) ; écran 16 bpp fidèle (Interleaved RLE et non compressé) ; clic et clavier (« ob » tapé dans le Bloc-notes).
 
 **Ce qui a été corrigé, dans l'ordre où Windows l'a montré** :
 - `supportedColorDepths` : 15, 16, 24 et 32 bpp ; avec 24 et 32 seuls, Windows coupait 1 ms après le Connect-Initial (bisection contre le Connect-Initial de FreeRDP rejoué derrière ce client).
 - `bitmapCompressionFlag` à TRUE, comme MS-RDPBCGR l'exige ; à FALSE, `ERRINFO_BADCAPABILITIES`.
-- Décodage 15/16 bpp (ADR-0083) : Windows par défaut a `RDP-Tcp\ColorDepth` 3 et propose 16 bpp à un client sans pipeline graphique.
+- Décodage 15/16 bpp (ADR-0086) : Windows par défaut a `RDP-Tcp\ColorDepth` 3 et propose 16 bpp à un client sans pipeline graphique.
 - 4096 rectangles par mise à jour bitmap (Windows envoie l'écran entier en 260 tuiles de 64 × 64), avec un bitmap au plus complété à 4 pixels de large.
 - Les refus disent ce qui a été reçu (`describeRDPServerPacket`), et le codec nomme l'étape en échec ; même code de refus.
 

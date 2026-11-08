@@ -1,6 +1,6 @@
-# ADR-0083 — Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut
+# ADR-0086 — Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut
 
-**Statut** `Accepté, mise en œuvre en cours` · 2026-11-08 · go du propriétaire du projet le 2026-11-08 : « Option 1, décode le 15/16 bpp »
+**Statut** `Accepté, mise en œuvre en cours` · 2026-11-08 · numéroté 0083 sur sa branche, renuméroté 0086 à la fusion de `main`, où ADR-0083 à 0085 venaient d'être pris · go du propriétaire du projet le 2026-11-08 : « Option 1, décode le 15/16 bpp »
 
 **Contexte** — ADR-0071 valide le client RDP contre un vrai Windows Server 2022 (dockur/windows en CI, `.github/workflows/windows-rdp.yml`). Les passages #29 et #30 l'ont mesuré :
 
@@ -34,6 +34,7 @@ Invariants touchés : aucun. Le décodage est côté proxy, sur des données de 
 - (−) 16 bpp, c'est 65 536 couleurs : l'écran et l'enregistrement d'une telle cible perdent en fidélité, et un dégradé peut se voir en bandes. C'est le choix de la cible, que l'opérateur peut lever en autorisant 32 bpp.
 - (−) Une cible plafonnée à 24 bpp ou 8 bpp reste refusée.
 - (−) Le décodeur RLE est une nouvelle surface d'analyse de données non fiables. Les bornes et le fuzzing la contiennent, ils ne la suppriment pas.
+- (−) Le client annonce aussi 24 bpp dans `supportedColorDepths`, qu'il ne décode pas : un serveur qui le choisirait serait refusé (fail-closed). ADR-0084, proposé le même jour, veut des capacités annoncées limitées aux fonctions implémentées ; retirer 24 bpp est une suite réversible, à mesurer d'abord contre Windows, puisque l'ensemble annoncé a déjà fait couper Windows (ADR-0071, passage #26).
 - (−) Aucun vecteur de référence publié par Microsoft n'est repris tel quel. Hors des vecteurs construits ici, la justesse se prouve contre Windows.
 
 **Alternatives envisagées**

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Vectors for each Interleaved RLE order, built from MS-RDPBCGR 3.1.9 (ADR-0083). Pixels are
+// Vectors for each Interleaved RLE order, built from MS-RDPBCGR 3.1.9 (ADR-0086). Pixels are
 // 16 bpp; rows are in stream order, the first row of the stream first (the bottom of the bitmap).
 
 func px(values ...uint16) []byte {

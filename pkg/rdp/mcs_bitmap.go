@@ -200,7 +200,7 @@ func parseRDPBitmapShareDataAt(userData []byte, shareID uint32, desktopWidth, de
 		update, err := parseRDPBitmapUpdateDataAt(payload[2:], desktopWidth, desktopHeight, sessionBPP)
 		return update, state, err
 	case rdpUpdateOrders:
-		// Order colors are 32-bpp here; at another depth they would mean other colors (ADR-0083).
+		// Order colors are 32-bpp here; at another depth they would mean other colors (ADR-0086).
 		if sessionBPP != 32 {
 			return RDPBitmapUpdate{}, state, ErrMCSConnection
 		}
@@ -1043,7 +1043,7 @@ func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16
 }
 
 // parseRDPBitmapUpdateDataAt decodes TS_UPDATE_BITMAP_DATA for a session of sessionBPP (15, 16 or
-// 32, ADR-0083): every rectangle carries that depth. A bitmap may be wider or taller than its
+// 32, ADR-0086): every rectangle carries that depth. A bitmap may be wider or taller than its
 // destination (Windows pads widths to four pixels): only the destination, its top-left part, is kept.
 func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, sessionBPP uint16) (RDPBitmapUpdate, error) {
 	var result RDPBitmapUpdate
