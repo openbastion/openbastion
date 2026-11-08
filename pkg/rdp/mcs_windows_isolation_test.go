@@ -154,6 +154,11 @@ func TestRDPWindowsIsolation_MCSConnectInitial(t *testing.T) {
 	}
 	settings := MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: "OpenBastion", Timeout: 15 * time.Second}
 	var report []string
+	// First, no MCS byte at all: does Windows close on its own after authInfo, and when?
+	silent := isolationSilence(t, address, user, password, pin, name, roots, 30*time.Second)
+	line := fmt.Sprintf("%-46s | %s", "authInfo, then no MCS byte for 30 s", silent)
+	t.Log(line)
+	report = append(report, line)
 	for _, c := range isolationCases() {
 		packet := isolationConnectInitial(t, settings, c)
 		if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
@@ -203,9 +208,10 @@ func isolationRun(t *testing.T, address, user, password, pin, name string, roots
 	if err := writeFull(conn, packet); err != nil {
 		return isolationResult{openAfterAuthInfo: open, answer: "write: " + err.Error()}
 	}
+	sent := time.Now()
 	response, err := readTPKTPacket(conn, maxTPKTPacket)
 	if err != nil {
-		return isolationResult{openAfterAuthInfo: open, answer: "NO ANSWER: " + err.Error()}
+		return isolationResult{openAfterAuthInfo: open, answer: fmt.Sprintf("NO ANSWER, closed %v after it: %v", time.Since(sent).Round(time.Millisecond), err)}
 	}
 	head := response
 	if len(head) > 12 {
@@ -250,5 +256,36 @@ func TestRDPWindowsIsolation_TheBaselineIsTheClientsConnectInitial(t *testing.T)
 	}
 	if network := isolationConnectInitial(t, settings, cases[2]); len(network) != len(want)+8 || !strings.Contains(hex.EncodeToString(network), "03c0080000000000") {
 		t.Fatalf("CS_NET: %d bytes, want %d with 03c0 0800 00000000", len(network), len(want)+8)
+	}
+}
+
+// isolationSilence: CredSSP, then nothing; how long Windows keeps the connection, up to wait.
+func isolationSilence(t *testing.T, address, user, password, pin, name string, roots *x509.CertPool, wait time.Duration) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), wait+30*time.Second)
+	defer cancel()
+	transport, err := DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
+	if err != nil {
+		return fmt.Sprintf("dial: %v", err)
+	}
+	session, err := transport.EstablishCredSSP(ctx, CredSSPClientConfig{Version: 6, Username: user, Password: []byte(password), Timeout: 15 * time.Second})
+	if err != nil {
+		_ = transport.Close()
+		return fmt.Sprintf("CredSSP: %v", err)
+	}
+	defer session.Close()
+	conn := session.transport.Conn
+	since := time.Now()
+	_ = conn.SetReadDeadline(since.Add(wait))
+	var one [1]byte
+	n, err := conn.Read(one[:])
+	var netErr net.Error
+	switch {
+	case n > 0:
+		return fmt.Sprintf("Windows sent 0x%02x unasked after %v", one[0], time.Since(since).Round(time.Millisecond))
+	case errors.As(err, &netErr) && netErr.Timeout():
+		return fmt.Sprintf("still open after %v: Windows waits for the client", wait)
+	default:
+		return fmt.Sprintf("CLOSED by Windows %v after authInfo: %v", time.Since(since).Round(time.Millisecond), err)
 	}
 }
