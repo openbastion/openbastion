@@ -61,6 +61,11 @@ type MCSClientSettings struct {
 	DesktopHeight uint16
 	ClientName    string
 	Timeout       time.Duration
+
+	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
+	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches
+	// Notepad and the keys do not).
+	keyboardLayout uint32
 }
 
 // MCSConnectResponse contains the only server settings accepted by this stage.
@@ -178,7 +183,7 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	put16(settings.DesktopHeight)
 	put16(rdpColor8BPP) // Ignored when postBeta2ColorDepth is present.
 	put16(rdpSASDel)
-	put32(0) // Let the server select the account's default keyboard layout.
+	put32(settings.keyboardLayout) // 0: let the server select the account's default keyboard layout.
 	put32(rdpClientBuild)
 	name := utf16.Encode([]rune(settings.ClientName))
 	for _, unit := range name {
