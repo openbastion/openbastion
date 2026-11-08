@@ -55,12 +55,16 @@ Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Ope
 # running as SYSTEM, once this script is over, logs every session off, turns dockur's autologon
 # off, and only then installs the pinned certificate and restarts Remote Desktop Services. The
 # certificate is the test's sign that the target is ready: when it comes, no session is open.
-# Reconnecting to a session already open remains to be validated.
+# prepare.sh DIR DEPTH console keeps that session, to validate taking it over by RDP.
 $ready = @"
 Start-Sleep -Seconds 20
-Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
-`$ids = (query session) -split "``n" | ForEach-Object { if (`$_ -match '\s(\d+)\s+(Active|Disc|Conn)') { [int]`$Matches[1] } } | Where-Object { `$_ -ge 1 -and `$_ -lt 65536 }
-foreach (`$id in `$ids) { logoff `$id }
+`$ids = @()
+if ((Get-Content 'C:\OEM\session' -Raw -ErrorAction SilentlyContinue) -ne 'console') {
+  Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
+  `$ids = (query session) -split "``n" | ForEach-Object { if (`$_ -match '\s(\d+)\s+(Active|Disc|Conn)') { [int]`$Matches[1] } } | Where-Object { `$_ -ge 1 -and `$_ -lt 65536 }
+  foreach (`$id in `$ids) { logoff `$id }
+}
+(query session) 2>&1 | Out-File 'C:\OEM\rdp-sessions.log' -Encoding utf8
 Start-Sleep -Seconds 10
 `$ts = Get-CimInstance -Namespace root\cimv2\TerminalServices -ClassName Win32_TSGeneralSetting -Filter "TerminalName='RDP-tcp'"
 Set-CimInstance -InputObject `$ts -Property @{ SSLCertificateSHA1Hash = '$($cert.Thumbprint)' }

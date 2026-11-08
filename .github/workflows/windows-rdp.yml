@@ -31,15 +31,21 @@ jobs:
   windows:
     # 16: Windows as installed, the real case (ADR-0086). 32: 32 bpp allowed by policy, the 32-bpp
     # path (RDP 6.0 planar) against Windows. Each on its own runner, side by side.
-    name: RDP against Windows Server 2022 (${{ matrix.depth }} bpp)
+    name: RDP against Windows Server 2022 (${{ matrix.depth }} bpp, session ${{ matrix.session }})
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
         depth: [16, 32]
+        session: [none]
+        # The session dockur opens at the console for the user, kept: taking it over by RDP.
+        include:
+          - depth: 16
+            session: console
     env:
       DEPTH: ${{ matrix.depth }}
+      SESSION: ${{ matrix.session }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,7 +68,7 @@ jobs:
         run: make test-rdp-interop
       - name: "Prepare the target (authority, certificate, password: for this run only)"
         if: ${{ !cancelled() }}
-        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" "$DEPTH"
+        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" "$DEPTH" "$SESSION"
       - name: Start Windows
         if: ${{ !cancelled() }}
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml up -d
@@ -78,7 +84,7 @@ jobs:
       - name: Isolate what Windows refuses after CredSSP
         if: ${{ !cancelled() }}
         env:
-          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_ConnectionSequence$' }}
+          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|Reconnect)$' }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \
@@ -127,7 +133,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-rdp-screens-${{ matrix.depth }}bpp
+          name: windows-rdp-screens-${{ matrix.depth }}bpp-${{ matrix.session }}
           path: ${{ runner.temp }}/windows/dump/
           if-no-files-found: ignore
           retention-days: 14
