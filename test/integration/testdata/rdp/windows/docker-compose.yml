@@ -30,4 +30,6 @@ services:
     volumes:
       - ${WINDOWS_STORAGE_DIR:?run prepare.sh first}:/storage
       - ${WINDOWS_OEM_DIR:?run prepare.sh first}:/oem:ro
+      # Shared with Windows as \\host.lan\Data: where rdp-setup.ps1 copies the RDP event logs.
+      - ${WINDOWS_SHARED_DIR:?run prepare.sh first}:/shared
     stop_grace_period: 2m

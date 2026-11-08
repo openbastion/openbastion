@@ -2,6 +2,7 @@
 # Makes, in DIR, what docker-compose.yml and the Windows interop test need (ADR-0071):
 #   - a test authority and the RDP certificate of "rdp-windows.test", signed by it;
 #   - oem/: install.bat, rdp-setup.ps1, the certificate as a PFX and its password, for Windows;
+#   - shared/: where Windows copies its RDP event logs (oem/rdp-setup.ps1);
 #   - compose.env (for docker compose) and test.env (for make test-rdp-windows).
 # The pin and the roots are known before Windows starts: nothing is learnt from the target.
 # Everything here is for one run and is never committed.
@@ -9,7 +10,7 @@ set -euo pipefail
 dir=${1:?usage: prepare.sh DIR}
 here=$(cd "$(dirname "$0")" && pwd)
 name=rdp-windows.test
-mkdir -p "$dir/oem" "$dir/storage" "$dir/dump"
+mkdir -p "$dir/oem" "$dir/storage" "$dir/dump" "$dir/shared"
 umask 077
 cd "$dir"
 
@@ -32,13 +33,14 @@ cp "$here/oem/rdp-setup.ps1" oem/
 pin=$(openssl x509 -in rdp.pem -outform DER | openssl dgst -sha256 | awk '{print $NF}')
 # Windows rejects a password without three of: lower, upper, digit, symbol.
 password="Ob-$(openssl rand -hex 12)-W1"
-chmod 755 oem storage
+chmod 755 oem storage shared
 chmod 644 oem/*
 
 cat > compose.env <<ENV
 WINDOWS_PASSWORD=$password
 WINDOWS_STORAGE_DIR=$dir/storage
 WINDOWS_OEM_DIR=$dir/oem
+WINDOWS_SHARED_DIR=$dir/shared
 ENV
 cat > test.env <<ENV
 RDP_WINDOWS=1

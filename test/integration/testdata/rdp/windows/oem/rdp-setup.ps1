@@ -29,3 +29,35 @@ Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Ope
 
 Restart-Service TermService -Force
 Write-Output "rdp-setup: done, certificate $($cert.Thumbprint)"
+
+# What Windows says about each RDP connection, for the CI (ADR-0071): every minute, the RDP logs as
+# text, copied to the share dockur exports (the container's /shared, \\host.lan\Data). The share
+# is a guest one, which Windows Server refuses by default: allowed for this test machine only. A
+# failure here is written down and leaves the target as it is.
+try {
+  Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name AllowInsecureGuestAuth -Value 1 -Type DWord
+  $export = @'
+$out = Join-Path $env:TEMP 'rdp-events'
+New-Item -ItemType Directory -Force $out | Out-Null
+foreach ($log in 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational',
+                 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Admin',
+                 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational',
+                 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin',
+                 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational') {
+  $file = Join-Path $out (($log -replace '[/ ]', '_') + '.txt')
+  wevtutil qe $log /c:400 /rd:true /f:text 2>&1 | Out-File $file -Encoding utf8
+}
+$file = Join-Path $out 'System-rdp.txt'
+wevtutil qe System "/q:*[System[Provider[@Name='TermDD' or @Name='Schannel' or @Name='Microsoft-Windows-TerminalServices-RemoteConnectionManager']]]" /c:400 /rd:true /f:text 2>&1 | Out-File $file -Encoding utf8
+foreach ($share in '\\host.lan\Data', '\\20.20.20.1\Data') {
+  try { Copy-Item (Join-Path $out '*') $share -Force -ErrorAction Stop; break } catch { $_ | Out-File (Join-Path $out 'copy-error.txt') -Append }
+}
+'@
+  Set-Content 'C:\OEM\export-rdp-events.ps1' $export
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\export-rdp-events.ps1'
+  $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
+  Register-ScheduledTask -TaskName 'OpenBastionRdpEvents' -Action $action -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+  Write-Output 'rdp-setup: RDP events exported every minute'
+} catch {
+  Write-Output "rdp-setup: no RDP event export: $_"
+}

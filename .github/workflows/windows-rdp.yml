@@ -66,6 +66,19 @@ jobs:
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           go test ./pkg/rdp -run TestRDPWindowsIsolation -v -count=1 -timeout=20m
+      # rdp-setup.ps1 copies the RDP event logs every minute: wait for the copy that follows the last
+      # connection, then keep them with the rest. Absent if the share did not work.
+      - name: What Windows logged
+        if: ${{ !cancelled() }}
+        run: |
+          sleep 75
+          mkdir -p "$RUNNER_TEMP/windows/dump/events"
+          sudo cp -r "$RUNNER_TEMP/windows/shared/." "$RUNNER_TEMP/windows/dump/events/" || true
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/windows/dump/events"
+          ls -l "$RUNNER_TEMP/windows/dump/events"
+          for f in "$RUNNER_TEMP"/windows/dump/events/*RdpCoreTS_Operational.txt "$RUNNER_TEMP"/windows/dump/events/System-rdp.txt; do
+            [ -f "$f" ] && { echo "== $f"; head -c 6000 "$f"; }
+          done
       - name: What Windows showed
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
