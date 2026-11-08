@@ -323,9 +323,9 @@ sequenceDiagram
 | `RDP_VNC_PROXY_URLS` | aucune | pool du Broker, 1 à 16 |
 | `SCREEN_ATTACH_TTL_SECONDS` | `30` | durée de vie du cookie d'attache |
 | `SCREEN_ALLOWED_ORIGINS` | vide (même origine) | origines WebSocket acceptées |
-| `RDP_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
+| `RDP_CONNECT_TIMEOUT_SECONDS` | `15` | poignée de main cible (CredSSP compris) |
 | `VNC_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
-| `RDP_ENGINE_ENABLED` | `false` | n'expose `rdp` qu'après l'incrément 3 ; valeur inconnue fatale |
+| `RDP_ENABLED` | `false` | Broker et proxy (ADR-0088, qui remplace `RDP_ENGINE_ENABLED`) : ouvre `rdp` aux opérateurs ; seuls `true` et `false` sont lus, toute autre valeur est fatale |
 
 Toute valeur absente, hors bornes ou inconnue est fatale au démarrage (`settings/security.yaml`, règle « défaut strict »).
 
@@ -1591,3 +1591,18 @@ C'est le premier critère de sortie de l'incrément 2 : « session RDP interacti
 - pas encore contre Windows ;
 - l'Admin UI n'a pas de lecteur vidéo (rejeu par l'API) ;
 - RDP reste non exposé.
+
+## ADR-0071 — incrément 74 : la route opérateur (ADR-0088)
+
+RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLED`, éteint par défaut au Broker comme au proxy. La décision, ses alternatives et ses limites sont dans ADR-0088.
+
+**Preuve sur processus réels.** `TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses` (`make test-rdp-recording`) fait le parcours depuis l'API publique jusqu'à FreeRDP 3 et retour :
+- compte RDP épinglé, session, `connect` qui répond par un chemin et un cookie `HttpOnly` ;
+- écran de la cible, clavier en scancodes reçu par la cible ;
+- fin de session : `session_revoked` ;
+- rejeu par l'auditeur, identique à l'octet ;
+- `session.revoked` et `session.terminate` à l'audit.
+
+**Contre-épreuves** : sans l'interrupteur du Broker, `connect` répond `409` avant tout scope ; sans celui du proxy, `503`.
+
+**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes, AZERTY et QWERTY vérifiés, `recording_lost` au-delà de 4 Mio. Allumer RDP reste le choix de l'exploitant.

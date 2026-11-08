@@ -25,9 +25,8 @@ func NewProtocolProxyRouter(pools map[string]*ProxyPool) (*ProtocolProxyRouter, 
 	return &ProtocolProxyRouter{pools: copyPools}, nil
 }
 func (r *ProtocolProxyRouter) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
-	if protocol == "rdp" {
-		return "", "", fmt.Errorf("RDP engine is not implemented")
-	}
+	// RDP is served by the screen proxies, VNC's pool (ADR-0088); whether it is open is the
+	// Broker's decision (RDP_ENABLED), taken before any scope, and the proxy's own again.
 	pool := r.pools[protocol]
 	if pool == nil {
 		return "", "", fmt.Errorf("no proxy pool for protocol %q", protocol)
