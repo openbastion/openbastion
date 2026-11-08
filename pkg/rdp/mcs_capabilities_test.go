@@ -67,6 +67,15 @@ func TestParseRDPDemandActiveRejectsMalformedAndUnsupportedProfile(t *testing.T)
 		binary.LittleEndian.PutUint16(caps[1][4:6], 24)
 		return caps
 	}())
+	// The Connect-Initial advertises 15 and 16 bpp too, for Windows (ADR-0071): a server that takes
+	// them up is refused all the same.
+	for _, bpp := range []uint16{15, 16} {
+		cases[fmt.Sprintf("server selected a %d-bpp session", bpp)] = mcsTestDemandActiveWithCaps(func() [][]byte {
+			caps := mcsTestCapabilitySets()
+			binary.LittleEndian.PutUint16(caps[1][4:6], bpp)
+			return caps
+		}())
+	}
 	cases["bitmap compression absent"] = mcsTestDemandActiveWithCaps(func() [][]byte {
 		caps := mcsTestCapabilitySets()
 		binary.LittleEndian.PutUint16(caps[1][20:22], 0)

@@ -30,10 +30,16 @@ const (
 	rdpColor24BPP       = uint16(0xca04)
 	rdpHighColor24BPP   = uint16(0x0018)
 	rdpSupported24BPP   = uint16(0x0001)
+	rdpSupported16BPP   = uint16(0x0002)
+	rdpSupported15BPP   = uint16(0x0004)
 	rdpSupported32BPP   = uint16(0x0008)
 	rdpEncryption128Bit = uint32(0x00000002)
-	// Keep the 24-bpp fallback advertised alongside the requested 32-bpp session.
-	rdpSupportedColorDepths     = rdpSupported24BPP | rdpSupported32BPP
+	// Every depth, as FreeRDP and Windows clients advertise: Windows Server 2022 closes the
+	// connection, 1 ms after the Connect-Initial and without an answer, when only 24 and 32 bpp are
+	// offered with these early capabilities (ADR-0071, CI run #26, pkg/rdp/mcs_windows_bisect_test.go).
+	// The session stays 32 bpp: WANT_32BPP is requested, and a Demand Active or a bitmap at any
+	// other depth is refused (mcs_capabilities.go, mcs_bitmap.go).
+	rdpSupportedColorDepths     = rdpSupported24BPP | rdpSupported16BPP | rdpSupported15BPP | rdpSupported32BPP
 	rdpClientErrInfo            = uint16(0x0001)
 	rdpClusterRedirectSupported = uint32(0x00000001)
 	rdpClusterRedirectVersion4  = uint32(0x0000000c)

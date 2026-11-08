@@ -101,7 +101,9 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	if binary.LittleEndian.Uint32(core[0:4]) != rdpClientVersion ||
 		binary.LittleEndian.Uint16(core[4:6]) != 1920 || binary.LittleEndian.Uint16(core[6:8]) != 1080 ||
 		binary.LittleEndian.Uint16(core[136:138]) != rdpHighColor24BPP ||
-		binary.LittleEndian.Uint16(core[138:140]) != 0x0009 || // 24-bpp fallback and 32-bpp support
+		// 15, 16, 24 and 32 bpp, as FreeRDP and Windows clients: Windows Server 2022 closes the
+		// connection on 24 and 32 alone with these early capabilities (ADR-0071, CI run #26).
+		binary.LittleEndian.Uint16(core[138:140]) != 0x000f ||
 		binary.LittleEndian.Uint16(core[140:142]) != rdpClientErrInfo|rdpClientWant32BPP ||
 		binary.LittleEndian.Uint32(core[208:212]) != protocolHybrid {
 		t.Fatalf("CS_CORE fields do not match the HYBRID/32-bpp profile: %x", core)
