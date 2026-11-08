@@ -129,31 +129,62 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 		}
 		if ok {
 			conn := session.transport.Conn
-			deadline := time.Now().Add(10 * time.Second)
-			for i := 0; i < 24; i++ {
+			// Run #37: the codec shows five frames, then refuses an update. Every packet now goes
+			// through the codec's own parsers, at the session's depth and size; those they accept are
+			// counted, the first they refuse is described, kept in full, and ends the watch.
+			caps := session.serverCapabilities
+			deadline := time.Now().Add(30 * time.Second)
+			ignored, decoded, slow := 0, 0, 0
+			for i := 1; i <= 400; i++ {
 				_ = conn.SetReadDeadline(deadline)
 				packet, err := readSlowOrFastPathPacket(conn)
 				var netErr net.Error
+				if errors.As(err, &netErr) && netErr.Timeout() {
+					logf("after Finalization: nothing refused in 30 s")
+					break
+				}
+				if err != nil {
+					logf("after Finalization: packet %d: %v", i, err)
+					break
+				}
+				var parseErr error
 				switch {
-				case errors.As(err, &netErr) && netErr.Timeout():
-					logf("after Finalization: nothing more in 10 s")
-				case err != nil:
-					logf("after Finalization: packet %d: %v", i+1, err)
-				default:
-					head := packet
-					if len(head) > 48 {
-						head = head[:48]
-					}
-					logf("after Finalization: packet %d, %d bytes, %s: %s", i+1, len(packet), describeServerPacket(packet), hex.EncodeToString(head))
-					// In full, to replay through the parser where it can be read (run #35: Windows'
-					// bitmaps look as expected, and the codec refuses the first update).
-					if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
-						_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("after-finalization-%02d.bin", i+1)), packet, 0o644)
-					}
+				case packet[0] != 3 && rdpFastPathUpdateIsIgnored(packet):
+					ignored++
 					continue
+				case packet[0] != 3:
+					_, parseErr = parseRDPFastPathBitmapUpdateAt(packet, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel)
+				default:
+					slow++
+					userData, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, session.mcsResponse.IOChannelID)
+					switch {
+					case fragmentErr != nil:
+						parseErr = fragmentErr
+					case segmentation != 3:
+						parseErr = fmt.Errorf("MCS segmentation %d", segmentation)
+					case rdpShareDataIsIgnored(userData, caps.ShareID):
+						ignored++
+						continue
+					default:
+						_, _, parseErr = parseRDPBitmapShareDataAt(userData, caps.ShareID, caps.DesktopWidth, caps.DesktopHeight, caps.PreferredBitsPerPixel, rdpPrimaryOrderState{})
+					}
+				}
+				if parseErr == nil {
+					decoded++
+					continue
+				}
+				head := packet
+				if len(head) > 48 {
+					head = head[:48]
+				}
+				logf("after Finalization: %d decoded, %d ignored, %d slow-path; packet %d REFUSED (%v), %d bytes, %s: %s",
+					decoded, ignored, slow, i, parseErr, len(packet), describeServerPacket(packet), hex.EncodeToString(head))
+				if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
+					_ = os.WriteFile(filepath.Join(dir, "refused-update.bin"), packet, 0o644)
 				}
 				break
 			}
+			logf("after Finalization: %d decoded, %d ignored, %d slow-path", decoded, ignored, slow)
 		}
 		done()
 	}

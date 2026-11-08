@@ -213,10 +213,10 @@ func TestBitmapUpdateAtSessionDepth(t *testing.T) {
 		"destination taller than the bitmap":   rect(0, 0, 1, 1, 2, 1, 16, 0, raw),
 		// Padding is to four pixels of width only: a bitmap larger than that would let a server make
 		// the client decode far more than it shows.
-		"bitmap wider than padding to four":    rect(0, 0, 0, 0, 8, 1, 16, 0, make([]byte, 16)),
-		"bitmap taller than its destination":   rect(0, 0, 1, 0, 2, 2, 16, 0, make([]byte, 8)),
-		"destination past the desktop":         rect(9, 0, 10, 0, 2, 1, 16, 0, raw),
-		"right before left":                    rect(1, 0, 0, 0, 2, 1, 16, 0, raw),
+		"bitmap wider than padding to four":  rect(0, 0, 0, 0, 8, 1, 16, 0, make([]byte, 16)),
+		"bitmap taller than its destination": rect(0, 0, 1, 0, 2, 2, 16, 0, make([]byte, 8)),
+		"destination past the desktop":       rect(9, 0, 10, 0, 2, 1, 16, 0, raw),
+		"right before left":                  rect(1, 0, 0, 0, 2, 1, 16, 0, raw),
 	} {
 		if _, err := parseRDPBitmapUpdateDataAt(payload, 10, 10, 16); err == nil {
 			t.Errorf("%s accepted", name)
