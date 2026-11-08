@@ -24,13 +24,14 @@ const (
 	gccServerSecurityType = uint16(0x0c02)
 	gccServerNetworkType  = uint16(0x0c03)
 
-	rdpClientVersion  = uint32(0x00080004)
-	rdpClientBuild    = uint32(1)
-	rdpColor8BPP      = uint16(0xca01)
-	rdpColor24BPP     = uint16(0xca04)
-	rdpHighColor24BPP = uint16(0x0018)
-	rdpSupported24BPP = uint16(0x0001)
-	rdpSupported32BPP = uint16(0x0008)
+	rdpClientVersion    = uint32(0x00080004)
+	rdpClientBuild      = uint32(1)
+	rdpColor8BPP        = uint16(0xca01)
+	rdpColor24BPP       = uint16(0xca04)
+	rdpHighColor24BPP   = uint16(0x0018)
+	rdpSupported24BPP   = uint16(0x0001)
+	rdpSupported32BPP   = uint16(0x0008)
+	rdpEncryption128Bit = uint32(0x00000002)
 	// Keep the 24-bpp fallback advertised alongside the requested 32-bpp session.
 	rdpSupportedColorDepths     = rdpSupported24BPP | rdpSupported32BPP
 	rdpClientErrInfo            = uint16(0x0001)
@@ -213,10 +214,11 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	binary.LittleEndian.PutUint32(cluster[:4], rdpClusterRedirectSupported|rdpClusterRedirectVersion4)
 	blocks = appendGCCBlock(blocks, gccClientClusterType, cluster)
 	clear(cluster)
-	// TS_UD_CS_SEC applies only to Standard RDP Security. This client requires
-	// HYBRID (TLS + CredSSP), so match FreeRDP's enhanced-security baseline:
-	// both encryptionMethods and extEncryptionMethods are zero.
+	// TS_UD_CS_SEC advertises a valid Standard RDP Security capability as
+	// required by MS-RDPBCGR. The negotiated protocol remains HYBRID (TLS +
+	// CredSSP); this legacy capability is not used to protect this session.
 	security := make([]byte, 8)
+	binary.LittleEndian.PutUint32(security[:4], rdpEncryption128Bit)
 	blocks = appendGCCBlock(blocks, gccClientSecurityType, security)
 	clear(security)
 	if len(blocks) > maxMCSConnectData {

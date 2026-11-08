@@ -113,9 +113,9 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	securityHeader := []byte{0x02, 0xc0, 0x0c, 0x00}
 	securityOffset := bytes.Index(gcc, securityHeader)
 	if securityOffset < 0 || securityOffset+12 > len(gcc) ||
-		binary.LittleEndian.Uint32(gcc[securityOffset+4:securityOffset+8]) != 0 ||
+		binary.LittleEndian.Uint32(gcc[securityOffset+4:securityOffset+8]) != rdpEncryption128Bit ||
 		binary.LittleEndian.Uint32(gcc[securityOffset+8:securityOffset+12]) != 0 {
-		t.Fatal("HYBRID GCC request must not advertise Standard RDP Security encryption methods")
+		t.Fatal("HYBRID GCC request must advertise a valid Standard RDP Security capability and no French-locale methods")
 	}
 	if bytes.Contains(gcc, []byte{0x03, 0xc0}) {
 		t.Fatal("GCC request unexpectedly advertised a virtual channel")
