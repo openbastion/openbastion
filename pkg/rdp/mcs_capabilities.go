@@ -281,7 +281,7 @@ func marshalRDPConfirmActive(capabilities RDPServerCapabilities, settings MCSCli
 	binary.LittleEndian.PutUint16(share[14:16], uint16(combinedLength))
 	copy(share[16:], source)
 	offset := 16 + len(source)
-	binary.LittleEndian.PutUint16(share[offset:offset+2], 5)
+	binary.LittleEndian.PutUint16(share[offset:offset+2], rdpClientCapabilitySetCount)
 	copy(share[offset+4:], caps)
 	clear(caps)
 	packet, err := marshalMCSSendDataRequest(userID, mcsGlobalChannelID, share)
@@ -342,8 +342,19 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	binary.LittleEndian.PutUint32(input[20:24], rdpKeyboardFunctionKeys)
 	caps = append(caps, input...)
 	clear(input)
+
+	// TS_MULTIFRAGMENTUPDATE_CAPABILITYSET: the size this client reassembles a fragmented
+	// Fast-Path update to, and the bound it holds the server to (fastpath_fragments.go).
+	multifragment := make([]byte, 8)
+	binary.LittleEndian.PutUint16(multifragment[:2], rdpCapMultifragmentUpdate)
+	binary.LittleEndian.PutUint16(multifragment[2:4], uint16(len(multifragment)))
+	binary.LittleEndian.PutUint32(multifragment[4:8], maxRDPFastPathReassembly)
+	caps = append(caps, multifragment...)
 	return caps
 }
+
+// rdpClientCapabilitySetCount is the number of sets marshalRDPClientCapabilitySets writes.
+const rdpClientCapabilitySetCount = 6
 
 func marshalMCSSendDataRequest(userID, channelID uint16, userData []byte) ([]byte, error) {
 	if !validMCSUserID(userID) || channelID != mcsGlobalChannelID ||

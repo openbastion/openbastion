@@ -145,11 +145,11 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 	}
 	sourceLength := int(binary.LittleEndian.Uint16(share[12:14]))
 	combinedLength := int(binary.LittleEndian.Uint16(share[14:16]))
-	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 242 {
+	if string(share[16:16+sourceLength]) != "OpenBastion" || combinedLength != 250 { // five sets, and TS_MULTIFRAGMENTUPDATE (8 bytes)
 		t.Fatalf("Confirm Active descriptor/combined length invalid: %x", share[16:])
 	}
 	combined := share[16+sourceLength:]
-	if binary.LittleEndian.Uint16(combined[:2]) != 5 || binary.LittleEndian.Uint16(combined[2:4]) != 0 {
+	if binary.LittleEndian.Uint16(combined[:2]) != rdpClientCapabilitySetCount || binary.LittleEndian.Uint16(combined[2:4]) != 0 {
 		t.Fatalf("Confirm Active capability count/padding = %x", combined[:4])
 	}
 	caps := combined[4:]
