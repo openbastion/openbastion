@@ -95,3 +95,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0083](0083-bibliotheque-ssh-openbastion-avec-politiques-capture-et-audit.md) | La bibliothèque SSH OpenBastion intègre politiques, capture et audit au cycle protocolaire | Proposé |
 | [ADR-0084](0084-bibliotheque-rdp-openbastion-moteur-protocolaire-instrumente.md) | La bibliothèque RDP OpenBastion sépare le moteur protocolaire des contrôles PAM | Proposé |
 | [ADR-0085](0085-bibliotheque-vnc-openbastion-moteur-rfb-instrumente.md) | La bibliothèque VNC OpenBastion sépare RFB des contrôles PAM et de l'enregistrement | Proposé |
+| [ADR-0086](0086-contrats-transverses-des-bibliotheques-protocolaires-ssh-rdp-vnc.md) | Les bibliothèques SSH, RDP et VNC partagent des contrats PAM sans partager leurs moteurs protocolaires | Proposé |
