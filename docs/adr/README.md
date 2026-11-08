@@ -89,4 +89,6 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0077](0077-modulariser-les-workflows-github-actions-derriere-une-porte-de-validation-stable.md) | Modulariser les workflows GitHub Actions derrière une porte de validation stable | Accepté |
 | [ADR-0078](0078-chaque-fournisseur-oidc-garde-son-emetteur-un-changement-se-declare.md) | Chaque fournisseur OIDC garde son émetteur ; un changement se déclare | Accepté |
 | [ADR-0079](0079-entra-id-est-un-profil-oidc-lie-a-un-tenant-declare.md) | Entra ID est un profil OIDC lié à un tenant déclaré | Accepté |
-| [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |\n| [ADR-0081](0081-veille-rdp-externe-et-integration-selective.md) | Veille RDP externe et intégration sélective des enseignements | Proposé |
+| [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
+| [ADR-0081](0081-veille-rdp-externe-et-integration-selective.md) | Veille RDP externe et intégration sélective des enseignements | Proposé |
+| [ADR-0082](0082-rsync-distant-passe-par-le-proxy-ssh-sans-shell-arbitraire.md) | rsync distant passe par le proxy SSH, sans shell arbitraire | Proposé |
