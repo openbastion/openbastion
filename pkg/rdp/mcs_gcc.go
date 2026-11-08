@@ -261,7 +261,7 @@ func marshalMCSConnectInitial(gccData []byte) ([]byte, error) {
 	body = appendBER(body, 0x01, []byte{0xff}) // upwardFlag TRUE
 	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{34, 2, 0, 1, 0, 1, 65535, 2}))
 	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{1, 1, 1, 1, 0, 1, 1056, 2}))
-	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{65535, 65535, 65535, 1, 0, 1, 65535, 2}))
+	body = appendBER(body, 0x30, marshalMCSDomainParameters([]uint32{65535, 64535, 65535, 1, 0, 1, 65535, 2}))
 	body = appendBER(body, 0x04, gccData)
 	return appendBERHighTag(nil, []byte{0x7f, mcsConnectInitialTag}, body), nil
 }

@@ -62,12 +62,25 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 		}
 		outer = tail
 	}
+	var maximum []byte
 	for i := 0; i < 3; i++ {
 		params, tail, readErr := readMCSBER(outer, []byte{0x30})
 		if readErr != nil || !validMCSBERDomainParameters(params) {
 			t.Fatalf("domain parameters %d invalid: %v", i, readErr)
 		}
+		if i == 2 {
+			maximum = params
+		}
 		outer = tail
+	}
+	// Match the interoperable FreeRDP/Microsoft sample maximum maxUserIds (0xFC17).
+	maxChannelIDs, maximum, readErr := readMCSBER(maximum, []byte{0x02})
+	if readErr != nil || !bytes.Equal(maxChannelIDs, []byte{0x00, 0xff, 0xff}) {
+		t.Fatalf("maximum maxChannelIds = %x, %v", maxChannelIDs, readErr)
+	}
+	maxUserIDs, _, readErr := readMCSBER(maximum, []byte{0x02})
+	if readErr != nil || !bytes.Equal(maxUserIDs, []byte{0x00, 0xfc, 0x17}) {
+		t.Fatalf("maximum maxUserIds = %x, %v; want 0xFC17", maxUserIDs, readErr)
 	}
 	gcc, tail, err := readMCSBER(outer, []byte{0x04})
 	if err != nil || len(tail) != 0 {
