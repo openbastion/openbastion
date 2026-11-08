@@ -30,36 +30,48 @@ Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Ope
 Restart-Service TermService -Force
 Write-Output "rdp-setup: done, certificate $($cert.Thumbprint)"
 
-# What Windows says about each RDP connection, for the CI (ADR-0071): every minute, the RDP logs as
-# text, copied to the share dockur exports (the container's /shared, \\host.lan\Data). The share
-# is a guest one, which Windows Server refuses by default: allowed for this test machine only. A
-# failure here is written down and leaves the target as it is.
+# What Windows says about each RDP connection, for the CI (ADR-0071): every 30 s, the RDP logs as
+# text and XML (the text drops the event data, where the error codes are), copied to the share
+# dockur exports (the container's /shared, \\host.lan\Data). A loop that sleeps, not a repeating
+# trigger: the clock of the machine jumps by hours during installation, and a trigger set before
+# the jump may never fire. The share is a guest one, which Windows Server refuses by default:
+# allowed for this test machine only. A failure here is written down and leaves the target as it is.
 try {
   Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name AllowInsecureGuestAuth -Value 1 -Type DWord
   $export = @'
-$out = Join-Path $env:TEMP 'rdp-events'
+$out = 'C:\OEM\rdp-events'
 New-Item -ItemType Directory -Force $out | Out-Null
-foreach ($log in 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational',
-                 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Admin',
-                 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational',
-                 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin',
-                 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational') {
-  # As XML too: the text form drops the event data (the error codes) when a message is not rendered.
-  $base = Join-Path $out ($log -replace '[/ ]', '_')
-  wevtutil qe $log /c:400 /rd:true /f:text 2>&1 | Out-File "$base.txt" -Encoding utf8
-  wevtutil qe $log /c:400 /rd:true /f:xml 2>&1 | Out-File "$base.xml" -Encoding utf8
-}
-$file = Join-Path $out 'System-rdp.txt'
-wevtutil qe System "/q:*[System[Provider[@Name='TermDD' or @Name='Schannel' or @Name='Microsoft-Windows-TerminalServices-RemoteConnectionManager']]]" /c:400 /rd:true /f:text 2>&1 | Out-File $file -Encoding utf8
-foreach ($share in '\\host.lan\Data', '\\20.20.20.1\Data') {
-  try { Copy-Item (Join-Path $out '*') $share -Force -ErrorAction Stop; break } catch { $_ | Out-File (Join-Path $out 'copy-error.txt') -Append }
+$logs = 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational',
+        'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Admin',
+        'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational',
+        'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin',
+        'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+$system = "/q:*[System[Provider[@Name='TermDD' or @Name='Schannel' or @Name='Microsoft-Windows-TerminalServices-RemoteConnectionManager']]]"
+while ($true) {
+  foreach ($log in $logs) {
+    $base = Join-Path $out ($log -replace '[/ ]', '_')
+    wevtutil qe $log /c:400 /rd:true /f:text 2>&1 | Out-File "$base.txt" -Encoding utf8
+    wevtutil qe $log /c:400 /rd:true /f:xml 2>&1 | Out-File "$base.xml" -Encoding utf8
+  }
+  wevtutil qe System $system /c:400 /rd:true /f:text 2>&1 | Out-File (Join-Path $out 'System-rdp.txt') -Encoding utf8
+  wevtutil qe System $system /c:400 /rd:true /f:xml 2>&1 | Out-File (Join-Path $out 'System-rdp.xml') -Encoding utf8
+  $shares = @('\\host.lan\Data')
+  $gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
+  if ($gateway) { $shares += "\\$gateway\Data" }
+  $errors = @()
+  foreach ($share in $shares) {
+    try { Copy-Item (Join-Path $out '*') $share -Force -ErrorAction Stop; $errors = @(); break } catch { $errors += "$share : $_" }
+  }
+  "$(Get-Date -Format o) shares $($shares -join ', ') errors $($errors -join ' | ')" | Out-File (Join-Path $out 'export-status.txt') -Encoding utf8
+  Start-Sleep -Seconds 30
 }
 '@
   Set-Content 'C:\OEM\export-rdp-events.ps1' $export
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\export-rdp-events.ps1'
-  $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
-  Register-ScheduledTask -TaskName 'OpenBastionRdpEvents' -Action $action -Trigger $trigger -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
-  Write-Output 'rdp-setup: RDP events exported every minute'
+  $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName 'OpenBastionRdpEvents' -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+  Start-ScheduledTask -TaskName 'OpenBastionRdpEvents'
+  Write-Output 'rdp-setup: RDP events exported every 30 s'
 } catch {
   Write-Output "rdp-setup: no RDP event export: $_"
 }
