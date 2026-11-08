@@ -24,6 +24,20 @@ func TestParseRDPDemandActiveValidatesServerCapabilities(t *testing.T) {
 	if len(got.CapabilityTypes) != 5 {
 		t.Fatalf("capability types = %v", got.CapabilityTypes)
 	}
+	// 15 and 16 bpp, which Windows offers when its maximum color depth is left as installed
+	// (ADR-0083), are accepted and kept: the Confirm Active and the bitmaps follow them.
+	for _, bpp := range []uint16{15, 16} {
+		caps := mcsTestCapabilitySets()
+		binary.LittleEndian.PutUint16(caps[1][4:6], bpp)
+		got, err := parseRDPDemandActive(mcsTestDemandActiveWithCaps(caps), mcsGlobalChannelID)
+		if err != nil || got.PreferredBitsPerPixel != bpp {
+			t.Fatalf("%d bpp: %+v, %v", bpp, got, err)
+		}
+		confirm, err := marshalRDPConfirmActive(got, MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720}, 1007)
+		if err != nil || !bytes.Contains(confirm, append([]byte{0x02, 0x00, 0x1c, 0x00}, byte(bpp), 0)) {
+			t.Fatalf("%d bpp: the Confirm Active does not echo the depth: %v", bpp, err)
+		}
+	}
 	withUnknown := append(mcsTestCapabilitySets(), []byte{0x99, 0x99, 0x04, 0x00})
 	unknown, err := parseRDPDemandActive(mcsTestDemandActiveWithCaps(withUnknown), mcsGlobalChannelID)
 	if err != nil || len(unknown.CapabilityTypes) != 6 || unknown.CapabilityTypes[5] != 0x9999 {
@@ -67,9 +81,8 @@ func TestParseRDPDemandActiveRejectsMalformedAndUnsupportedProfile(t *testing.T)
 		binary.LittleEndian.PutUint16(caps[1][4:6], 24)
 		return caps
 	}())
-	// The Connect-Initial advertises 15 and 16 bpp too, for Windows (ADR-0071): a server that takes
-	// them up is refused all the same.
-	for _, bpp := range []uint16{15, 16} {
+	// 15 and 16 bpp are decoded (ADR-0083); 8 bpp is not, and is refused as 24 bpp is.
+	for _, bpp := range []uint16{8, 0, 1} {
 		cases[fmt.Sprintf("server selected a %d-bpp session", bpp)] = mcsTestDemandActiveWithCaps(func() [][]byte {
 			caps := mcsTestCapabilitySets()
 			binary.LittleEndian.PutUint16(caps[1][4:6], bpp)
@@ -148,7 +161,7 @@ func TestMarshalRDPConfirmActiveBuildsMinimalClientProfile(t *testing.T) {
 		binary.LittleEndian.Uint16(bitmap[4:6]) != 32 || binary.LittleEndian.Uint16(bitmap[6:8]) != 1 ||
 		binary.LittleEndian.Uint16(bitmap[8:10]) != 1 || binary.LittleEndian.Uint16(bitmap[10:12]) != 1 ||
 		binary.LittleEndian.Uint16(bitmap[12:14]) != 1600 || binary.LittleEndian.Uint16(bitmap[14:16]) != 900 ||
-		binary.LittleEndian.Uint16(bitmap[20:22]) != 0 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
+		binary.LittleEndian.Uint16(bitmap[20:22]) != 1 || binary.LittleEndian.Uint16(bitmap[24:26]) != 1 {
 		t.Fatalf("client Bitmap capability = %x", bitmap)
 	}
 	// DstBlt index 0 and the shared PatBlt/OpaqueRect index 1 remain disabled:

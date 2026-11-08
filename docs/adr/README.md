@@ -92,3 +92,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 | [ADR-0081](0081-veille-rdp-externe-et-integration-selective.md) | Veille RDP externe et intégration sélective des enseignements | Proposé |
 | [ADR-0082](0082-rsync-distant-passe-par-le-proxy-ssh-sans-shell-arbitraire.md) | rsync distant passe par le proxy SSH, sans shell arbitraire | Proposé |
+| [ADR-0083](0083-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mise en œuvre en cours |

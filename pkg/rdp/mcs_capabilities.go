@@ -209,7 +209,9 @@ func validateRDPServerCapability(typ uint16, capability []byte, result *RDPServe
 		bpp := binary.LittleEndian.Uint16(data[:2])
 		width := binary.LittleEndian.Uint16(data[8:10])
 		height := binary.LittleEndian.Uint16(data[10:12])
-		if bpp != 32 || width == 0 || height == 0 || uint64(width)*uint64(height) > maxRDPDesktopArea ||
+		// 32 bpp, or 15/16 bpp, which Windows offers a client without the graphics pipeline when
+		// its maximum color depth is left as installed (ADR-0083). 8 and 24 bpp are not decoded.
+		if (bpp != 32 && bpp != 16 && bpp != 15) || width == 0 || height == 0 || uint64(width)*uint64(height) > maxRDPDesktopArea ||
 			binary.LittleEndian.Uint16(data[14:16]) > 1 || binary.LittleEndian.Uint16(data[16:18]) != 1 ||
 			data[19]&^byte(0x1e) != 0 || binary.LittleEndian.Uint16(data[20:22]) != 1 {
 			return ErrMCSConnection
@@ -244,7 +246,14 @@ func marshalRDPConfirmActive(capabilities RDPServerCapabilities, settings MCSCli
 		uint64(settings.DesktopWidth)*uint64(settings.DesktopHeight) > maxRDPDesktopArea {
 		return nil, ErrMCSConnection
 	}
-	caps := marshalRDPClientCapabilitySets(settings)
+	sessionBPP := capabilities.PreferredBitsPerPixel
+	if sessionBPP == 0 {
+		sessionBPP = 32
+	}
+	if sessionBPP != 32 && sessionBPP != 16 && sessionBPP != 15 {
+		return nil, ErrMCSConnection
+	}
+	caps := marshalRDPClientCapabilitySets(settings, sessionBPP)
 	combinedLength := 4 + len(caps)
 	if combinedLength > 0xffff || len(caps) == 0 {
 		clear(caps)
@@ -271,7 +280,7 @@ func marshalRDPConfirmActive(capabilities RDPServerCapabilities, settings MCSCli
 	return packet, err
 }
 
-func marshalRDPClientCapabilitySets(settings MCSClientSettings) []byte {
+func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint16) []byte {
 	caps := make([]byte, 0, 242)
 	general := make([]byte, 24)
 	binary.LittleEndian.PutUint16(general[0:2], rdpCapGeneral)
@@ -285,13 +294,16 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings) []byte {
 	bitmap := make([]byte, 28)
 	binary.LittleEndian.PutUint16(bitmap[0:2], rdpCapBitmap)
 	binary.LittleEndian.PutUint16(bitmap[2:4], uint16(len(bitmap)))
-	binary.LittleEndian.PutUint16(bitmap[4:6], 32)
-	binary.LittleEndian.PutUint16(bitmap[6:8], 1)   // receive 1 bpp (required legacy field)
-	binary.LittleEndian.PutUint16(bitmap[8:10], 1)  // receive 4 bpp (required legacy field)
-	binary.LittleEndian.PutUint16(bitmap[10:12], 1) // receive 8 bpp (required legacy field)
+	binary.LittleEndian.PutUint16(bitmap[4:6], sessionBPP) // the depth the server chose
+	binary.LittleEndian.PutUint16(bitmap[6:8], 1)          // receive 1 bpp (required legacy field)
+	binary.LittleEndian.PutUint16(bitmap[8:10], 1)         // receive 4 bpp (required legacy field)
+	binary.LittleEndian.PutUint16(bitmap[10:12], 1)        // receive 8 bpp (required legacy field)
 	binary.LittleEndian.PutUint16(bitmap[12:14], settings.DesktopWidth)
 	binary.LittleEndian.PutUint16(bitmap[14:16], settings.DesktopHeight)
-	binary.LittleEndian.PutUint16(bitmap[20:22], 0) // do not negotiate compressed bitmaps until a decoder is available
+	// bitmapCompressionFlag "MUST be set to TRUE" (MS-RDPBCGR 2.2.7.1.2); Windows Server 2022 answers
+	// FALSE with ERRINFO_BADCAPABILITIES (ADR-0071, CI run #31). Compressed bitmaps are decoded:
+	// RDP 6.0 planar at 32 bpp, Interleaved RLE at 15 and 16 bpp (ADR-0083).
+	binary.LittleEndian.PutUint16(bitmap[20:22], 1)
 	binary.LittleEndian.PutUint16(bitmap[24:26], 1) // multiple rectangles are mandatory
 	caps = append(caps, bitmap...)
 	clear(bitmap)

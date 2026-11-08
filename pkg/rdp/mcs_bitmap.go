@@ -168,6 +168,10 @@ type rdpPrimaryOrderState struct {
 }
 
 func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
+	return parseRDPBitmapShareDataAt(userData, shareID, desktopWidth, desktopHeight, 32, state)
+}
+
+func parseRDPBitmapShareDataAt(userData []byte, shareID uint32, desktopWidth, desktopHeight, sessionBPP uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	if len(userData) < 18+4 || len(userData) > maxRDPBitmapReassemblyBytes || shareID == 0 ||
 		desktopWidth == 0 || desktopHeight == 0 || uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
@@ -185,9 +189,13 @@ func parseRDPBitmapShareDataWithOrderState(userData []byte, shareID uint32, desk
 	}
 	switch binary.LittleEndian.Uint16(payload[:2]) {
 	case rdpUpdateBitmap:
-		update, err := parseRDPBitmapUpdateData(payload[2:], desktopWidth, desktopHeight)
+		update, err := parseRDPBitmapUpdateDataAt(payload[2:], desktopWidth, desktopHeight, sessionBPP)
 		return update, state, err
 	case rdpUpdateOrders:
+		// Order colors are 32-bpp here; at another depth they would mean other colors (ADR-0083).
+		if sessionBPP != 32 {
+			return RDPBitmapUpdate{}, state, ErrMCSConnection
+		}
 		return parseRDPOrdersUpdateData(payload[2:], desktopWidth, desktopHeight, state)
 	default:
 		return RDPBitmapUpdate{}, state, ErrMCSConnection
@@ -1023,7 +1031,17 @@ func appendRDPPrimaryRectangle(result *RDPBitmapUpdate, totalPixels *uint64, lef
 // parseRDPBitmapUpdateData decodes the shared bitmap-update body used by both
 // slow-path TS_UPDATE and fast-path TS_FP_UPDATE_BITMAP.
 func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
+	return parseRDPBitmapUpdateDataAt(payload, desktopWidth, desktopHeight, 32)
+}
+
+// parseRDPBitmapUpdateDataAt decodes TS_UPDATE_BITMAP_DATA for a session of sessionBPP (15, 16 or
+// 32, ADR-0083): every rectangle carries that depth. A bitmap may be wider or taller than its
+// destination (Windows pads widths to four pixels): only the destination, its top-left part, is kept.
+func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, sessionBPP uint16) (RDPBitmapUpdate, error) {
 	var result RDPBitmapUpdate
+	if sessionBPP != 15 && sessionBPP != 16 && sessionBPP != 32 {
+		return result, ErrMCSConnection
+	}
 	if len(payload) < 2 || desktopWidth == 0 || desktopHeight == 0 ||
 		uint64(desktopWidth)*uint64(desktopHeight) > maxRDPDesktopArea {
 		return result, ErrMCSConnection
@@ -1049,9 +1067,13 @@ func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16
 		flags := binary.LittleEndian.Uint16(payload[14:16])
 		bitmapLength := int(binary.LittleEndian.Uint16(payload[16:18]))
 		payload = payload[18:]
-		if width == 0 || height == 0 || bpp != 32 || (flags != 0 && flags != rdpBitmapCompressed && flags != rdpBitmapCompressed|rdpBitmapNoCompHdr) || bitmapLength == 0 || bitmapLength > len(payload) ||
-			uint32(left)+uint32(width) > uint32(desktopWidth) || uint32(top)+uint32(height) > uint32(desktopHeight) ||
-			right != left+width-1 || bottom != top+height-1 {
+		if width == 0 || height == 0 || bpp != sessionBPP || (flags != 0 && flags != rdpBitmapCompressed && flags != rdpBitmapCompressed|rdpBitmapNoCompHdr) || bitmapLength == 0 || bitmapLength > len(payload) ||
+			right < left || bottom < top {
+			return RDPBitmapUpdate{}, ErrMCSConnection
+		}
+		destWidth, destHeight := right-left+1, bottom-top+1
+		if destWidth > width || destHeight > height ||
+			uint32(left)+uint32(destWidth) > uint32(desktopWidth) || uint32(top)+uint32(destHeight) > uint32(desktopHeight) {
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
 		pixels := uint64(width) * uint64(height)
@@ -1060,12 +1082,23 @@ func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16
 		}
 		totalPixels += pixels
 		var decoded []byte
-		if flags == 0 {
+		switch {
+		case sessionBPP != 32:
+			var decodeErr error
+			if flags == 0 {
+				decoded, decodeErr = decodeRDPBitmapRaw16(payload[:bitmapLength], int(width), int(height), sessionBPP)
+			} else {
+				decoded, decodeErr = decodeRDPBitmapRLE16(payload[:bitmapLength], int(width), int(height), sessionBPP, flags&rdpBitmapNoCompHdr == 0)
+			}
+			if decodeErr != nil {
+				return RDPBitmapUpdate{}, ErrMCSConnection
+			}
+		case flags == 0:
 			if pixels*4 != uint64(bitmapLength) {
 				return RDPBitmapUpdate{}, ErrMCSConnection
 			}
 			decoded = decodeRDPBitmapRaw(payload, int(width), int(height))
-		} else {
+		default:
 			var decodeErr error
 			if flags&rdpBitmapNoCompHdr != 0 {
 				decoded, decodeErr = decodeRDP6Bitmap(payload[:bitmapLength], int(width), int(height))
@@ -1076,13 +1109,27 @@ func parseRDPBitmapUpdateData(payload []byte, desktopWidth, desktopHeight uint16
 				return RDPBitmapUpdate{}, ErrMCSConnection
 			}
 		}
-		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: width, Height: height, Pixels: decoded})
+		decoded = cropRDPBitmap(decoded, int(width), int(destWidth), int(destHeight))
+		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: destWidth, Height: destHeight, Pixels: decoded})
 		payload = payload[bitmapLength:]
 	}
 	if len(payload) != 0 {
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	return result, nil
+}
+
+// cropRDPBitmap keeps the top-left destWidth x destHeight pixels of a top-down RGBA bitmap.
+func cropRDPBitmap(rgba []byte, width, destWidth, destHeight int) []byte {
+	if destWidth == width && len(rgba) == width*destHeight*4 {
+		return rgba
+	}
+	out := make([]byte, destWidth*destHeight*4)
+	for y := 0; y < destHeight; y++ {
+		copy(out[y*destWidth*4:(y+1)*destWidth*4], rgba[y*width*4:y*width*4+destWidth*4])
+	}
+	clear(rgba)
+	return out
 }
 
 const (
@@ -1094,6 +1141,10 @@ const (
 // update. TLS is the security layer; fast-path RDP encryption and compression
 // remain deliberately unsupported.
 func parseRDPFastPathBitmapUpdate(packet []byte, desktopWidth, desktopHeight uint16) (RDPBitmapUpdate, error) {
+	return parseRDPFastPathBitmapUpdateAt(packet, desktopWidth, desktopHeight, 32)
+}
+
+func parseRDPFastPathBitmapUpdateAt(packet []byte, desktopWidth, desktopHeight, sessionBPP uint16) (RDPBitmapUpdate, error) {
 	var empty RDPBitmapUpdate
 	if len(packet) < 4 || len(packet) > maxRDPFastPathPacket || packet[0] != 0 {
 		return empty, ErrMCSConnection
@@ -1124,7 +1175,7 @@ func parseRDPFastPathBitmapUpdate(packet []byte, desktopWidth, desktopHeight uin
 	if size < 2 || size != len(data) || binary.LittleEndian.Uint16(data[:2]) != rdpUpdateBitmap {
 		return empty, ErrMCSConnection
 	}
-	return parseRDPBitmapUpdateData(data[2:], desktopWidth, desktopHeight)
+	return parseRDPBitmapUpdateDataAt(data[2:], desktopWidth, desktopHeight, sessionBPP)
 }
 
 // rdpFastPathUpdateIsIgnored recognizes the updates that show nothing in the screen stream: the
@@ -1441,6 +1492,12 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	ioChannelID := s.mcsResponse.IOChannelID
 	shareID := s.serverCapabilities.ShareID
 	desktopWidth, desktopHeight := s.serverCapabilities.DesktopWidth, s.serverCapabilities.DesktopHeight
+	sessionBPP := s.serverCapabilities.PreferredBitsPerPixel
+	if sessionBPP == 0 {
+		// Only a session built by hand has none: ExchangeCapabilities always sets a validated 15, 16
+		// or 32. Without it, the depth this client asks for.
+		sessionBPP = 32
+	}
 	orderState := s.primaryOrderState
 	primaryOrdersEnabled := s.primaryOrdersEnabled
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
@@ -1505,7 +1562,7 @@ readUpdate:
 					clear(packet)
 					goto readUpdate
 				}
-				update, err = parseRDPFastPathBitmapUpdate(packet, desktopWidth, desktopHeight)
+				update, err = parseRDPFastPathBitmapUpdateAt(packet, desktopWidth, desktopHeight, sessionBPP)
 				clear(packet)
 				if err != nil || ctx.Err() != nil {
 					return RDPBitmapUpdate{}, ErrMCSConnection
@@ -1556,7 +1613,7 @@ readUpdate:
 		return RDPBitmapUpdate{}, ErrMCSConnection
 	}
 	var nextOrderState rdpPrimaryOrderState
-	update, nextOrderState, err = parseRDPBitmapShareDataWithOrderState(assembled, shareID, desktopWidth, desktopHeight, orderState)
+	update, nextOrderState, err = parseRDPBitmapShareDataAt(assembled, shareID, desktopWidth, desktopHeight, sessionBPP, orderState)
 	if err != nil || ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||
 		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||

@@ -221,13 +221,24 @@ func TestParseRDPBitmapUpdateData_SeveralCompressedRectanglesWithoutHeader(t *te
 }
 
 func TestClientCapabilities_AnnounceWhatARealServerNeeds(t *testing.T) {
-	caps := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800})
+	caps := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800}, 32)
 	extra := binary.LittleEndian.Uint16(caps[14:16])
 	if extra&rdpFastPathOutputSupported == 0 {
 		t.Error("without FASTPATH_OUTPUT_SUPPORTED, FreeRDP cannot send a bitmap")
 	}
 	if extra&rdpBitmapNoCompHdr == 0 {
 		t.Error("without NO_BITMAP_COMPRESSION_HDR, bitmapLength means two different things")
+	}
+	// TS_BITMAP_CAPABILITYSET follows the 24-byte general set.
+	bitmap := caps[24 : 24+28]
+	if binary.LittleEndian.Uint16(bitmap[0:2]) != rdpCapBitmap || binary.LittleEndian.Uint16(bitmap[20:22]) != 1 {
+		t.Error("bitmapCompressionFlag MUST be TRUE: Windows answers FALSE with ERRINFO_BADCAPABILITIES (CI run #31)")
+	}
+	for _, bpp := range []uint16{15, 16, 32} {
+		got := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800}, bpp)
+		if binary.LittleEndian.Uint16(got[24+4:24+6]) != bpp {
+			t.Errorf("preferredBitsPerPixel is not the server's %d", bpp)
+		}
 	}
 }
 

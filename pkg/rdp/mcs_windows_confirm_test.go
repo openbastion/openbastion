@@ -307,16 +307,26 @@ func TestRDPWindowsIsolation_ConfirmActivePieces(t *testing.T) {
 	if err != nil || !bytes.Equal(again, ours) {
 		t.Fatalf("re-encoded: %v, equal %v", err, bytes.Equal(again, ours))
 	}
-	compressed := withCompression(sets)
-	for i := range sets {
+	// The compression case sets bitmapCompressionFlag and nothing else (the client now sends TRUE
+	// itself, so on its own sets it changes nothing).
+	zeroed := append([]capabilitySet(nil), sets...)
+	for i := range zeroed {
+		if zeroed[i].kind == rdpCapBitmap {
+			data := append([]byte(nil), zeroed[i].data...)
+			binary.LittleEndian.PutUint16(data[20:22], 0)
+			zeroed[i] = capabilitySet{kind: rdpCapBitmap, data: data}
+		}
+	}
+	compressed := withCompression(zeroed)
+	for i := range zeroed {
 		diff := 0
-		for j := range sets[i].data {
-			if sets[i].data[j] != compressed[i].data[j] {
+		for j := range zeroed[i].data {
+			if zeroed[i].data[j] != compressed[i].data[j] {
 				diff++
 			}
 		}
-		if want := map[bool]int{true: 1, false: 0}[sets[i].kind == rdpCapBitmap]; diff != want {
-			t.Fatalf("set 0x%04x: %d bytes changed", sets[i].kind, diff)
+		if want := map[bool]int{true: 1, false: 0}[zeroed[i].kind == rdpCapBitmap]; diff != want {
+			t.Fatalf("set 0x%04x: %d bytes changed", zeroed[i].kind, diff)
 		}
 	}
 	if findConfirmActive(append([]byte{0xaa, 3, 0}, ours...)) == nil {
