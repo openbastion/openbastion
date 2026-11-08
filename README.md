@@ -2,13 +2,13 @@
 
 Plateforme PAM (Privileged Access Management) open source, cloud-native, écrite en Go. Licence AGPL-3.0.
 
-> **État du projet** : implémentation du MVP en cours. Ce dépôt contient actuellement le premier incrément vertical — la partie du système qui prouve l'invariant de sécurité fondateur — pas encore l'ensemble des services du périmètre MVP. Voir `docs/roadmap.md` pour la feuille de route complète.
+> **État du projet** : implémentation du MVP en cours. Ce dépôt contient actuellement le premier incrément vertical — la partie du système qui prouve l'invariant de sécurité fondateur — pas encore l'ensemble des services du périmètre MVP. Le parcours SSH/SFTP/SCP constitue le périmètre MVP fonctionnel. Des travaux avancés sur le proxy RDP/VNC sont en cours, mais le runtime RDP reste désactivé et ne doit pas être présenté comme une fonctionnalité disponible. Voir [la feuille de route](docs/roadmap.md) et les [limites connues](docs/security/known-limitations.md).
 
 ![Architecture globale d'OpenBastion — de l'opérateur à la cible, en passant par le control plane, le proxy et l'audit](docs/architecture/assets/architecture-globale.svg)
 
 L'opérateur n'a jamais le mot de passe de la cible. Il demande une session à la Gateway, le Session Broker l'autorise puis le câble à un proxy protocolaire ; **seul ce proxy** échange un scope à usage unique contre le credential, directement auprès du Vault, s'en sert pour joindre la cible et le purge ensuite. Chaque commande est acquittée avant d'atteindre la cible, chaque geste rejoint une chaîne d'audit à clé ancrée hors de la base, et la rotation du secret se fait sur la cible elle-même.
 
-Le MVP couvre ce parcours de bout en bout pour SSH, SFTP et SCP. Les propriétés que le code ne doit jamais perdre — et l'endroit exact où chacune est tenue — sont dans [`.agents/architecture/invariants.md`](.agents/architecture/invariants.md).
+Le MVP couvre ce parcours de bout en bout pour SSH, SFTP et SCP. Le travail RDP/VNC suit une voie séparée et incrémentale : le parcours VNC a été validé de bout en bout avec TigerVNC 1.13.1 ; le moteur RDP Go pur couvre déjà plusieurs phases du protocole et certains profils graphiques, mais son runtime est encore désactivé, sa couverture graphique reste partielle et aucune interopérabilité Windows/RDS réelle n'est encore démontrée. Consultez `docs/security/known-limitations.md` avant toute évaluation. Les propriétés que le code ne doit jamais perdre — et l'endroit exact où chacune est tenue — sont dans [`.agents/architecture/invariants.md`](.agents/architecture/invariants.md).
 
 ## Démarrage rapide
 
@@ -54,7 +54,7 @@ services/recording-audit/audit-service/          audit à chaînage de hash
 services/recording-audit/command-recorder/       replay texte des sessions (commandes horodatées)
 test/integration/                                preuve inter-processus de l'invariant
 proto/                                            contrats gRPC/Protobuf (`docs/api/grpc/README.md`)
-docs/                                             les 14 documents d'architecture et guides
+docs/                                             architecture, ADR et guides
 ```
 
 ## Documentation
@@ -63,4 +63,4 @@ Toute la documentation vit sous `docs/`, une section par public : architecture, 
 
 ## Licence
 
-AGPL License 3.0 — voir `LICENSE`.
+AGPL-3.0 — voir [`LICENSE`](LICENSE).
