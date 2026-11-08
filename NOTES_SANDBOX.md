@@ -3036,6 +3036,19 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-08 — ADR-0071 : le 32 bpp éprouvé contre Windows
+
+PR #86, passages CI #46 à #50 : `.github/workflows/windows-rdp.yml` lance deux cibles en parallèle, 16 bpp (Windows tel qu'installé) et 32 bpp (autorisé par la stratégie « Limit maximum color depth », `prepare.sh DIR 32`). Le test d'écran exige la profondeur que la cible autorise (`CredSSPClientSession.BitsPerPixel`).
+
+**Mesuré** : aux deux profondeurs, la session s'ouvre, l'écran est fidèle à l'œil (RDP 6.0 planar à 32 bpp, Interleaved RLE à 16 bpp), et « ob », Entrée arrivent dans le Bloc-notes.
+
+**Corrigé** :
+- un PDU Fast-Path se lit jusqu'à 0x7fff octets (15 bits), non plus 16 383 ; un TPKT reste borné ;
+- un écran 32 bpp est opaque : Windows envoie un plan alpha de zéros, que le décodeur recopiait (écran blanc) ;
+- un appui de touche ne porte plus `KBDFLAGS_DOWN`, qui dit une répétition (MS-RDPBCGR, FreeRDP).
+
+**Limite** : des touches envoyées quelques microsecondes après un clic ont été perdues (passages #48 et #49), avec et sans `KBDFLAGS_DOWN` ; au rythme d'une personne (une seconde, 50 ms), aucune en dix sessions. Cause probable, non prouvée : le focus de Windows ; un Synchronize Event à l'activation reste à mesurer. Une installation Windows du CI a échoué une fois (passage #50, cible 16 bpp, aucun certificat en 90 min), relancée verte.
+
 ## 2026-11-08 — ADR-0071 et ADR-0086 : la session RDP complète contre Windows
 
 PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows Server 2022 par dockur, laissé par défaut). Détail passage par passage dans ADR-0071 ; décision de profondeur dans ADR-0086 (go du propriétaire le 8 novembre : « Option 1, décode le 15/16 bpp »).
