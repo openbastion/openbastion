@@ -145,6 +145,11 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 						head = head[:48]
 					}
 					logf("after Finalization: packet %d, %d bytes, %s: %s", i+1, len(packet), describeServerPacket(packet), hex.EncodeToString(head))
+					// In full, to replay through the parser where it can be read (run #35: Windows'
+					// bitmaps look as expected, and the codec refuses the first update).
+					if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
+						_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("after-finalization-%02d.bin", i+1)), packet, 0o644)
+					}
 					continue
 				}
 				break
