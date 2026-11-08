@@ -190,19 +190,26 @@ func isolationRun(t *testing.T, address, user, password, pin, name string, roots
 		return isolationResult{openAfterAuthInfo: "not reached", answer: fmt.Sprintf("CredSSP: %v", err)}
 	}
 	defer session.Close()
+	return isolationAfterCredSSP(session, 3*time.Second, packet)
+}
+
+// isolationAfterCredSSP waits up to wait for Windows to close on its own after authInfo, then
+// sends the Connect-Initial and says what came back, and when.
+func isolationAfterCredSSP(session *CredSSPClientSession, wait time.Duration, packet []byte) isolationResult {
 	conn := session.transport.Conn
 	// Still open after authInfo? A read that times out says yes; EOF says Windows closed it.
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	since := time.Now()
+	_ = conn.SetReadDeadline(since.Add(wait))
 	var one [1]byte
 	n, err := conn.Read(one[:])
-	open := "open (no byte in 3 s)"
+	open := fmt.Sprintf("open (no byte in %v)", wait)
 	var netErr net.Error
 	switch {
 	case n > 0:
 		open = fmt.Sprintf("Windows sent 0x%02x unasked", one[0])
 	case errors.As(err, &netErr) && netErr.Timeout():
 	case err != nil:
-		return isolationResult{openAfterAuthInfo: "CLOSED: " + err.Error(), answer: "not sent"}
+		return isolationResult{openAfterAuthInfo: fmt.Sprintf("CLOSED %v after it: %v", time.Since(since).Round(time.Millisecond), err), answer: "not sent"}
 	}
 	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
 	if err := writeFull(conn, packet); err != nil {

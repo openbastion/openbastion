@@ -58,9 +58,10 @@ jobs:
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           make test-rdp-windows
-      # ADR-0071: which block or parameter of the Connect-Initial Windows refuses — one case per
-      # fresh connection, each from MS-RDPBCGR §4.1.3; the table is in the artifact.
-      - name: Isolate the MCS Connect-Initial
+      # ADR-0071: what Windows refuses after CredSSP — one case per fresh connection: blocks and
+      # parameters of the Connect-Initial (MS-RDPBCGR §4.1.3), then authInfo (a refused one as the
+      # counter-proof, the TSPasswordCreds domain, TLS 1.2). The tables are in the artifact.
+      - name: Isolate what Windows refuses after CredSSP
         if: ${{ !cancelled() }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a

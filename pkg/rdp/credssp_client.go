@@ -33,6 +33,11 @@ type CredSSPClientConfig struct {
 	Domain   string
 	Password []byte
 	Timeout  time.Duration
+
+	// sealAuthInfo replaces the sealing of authInfo. Unexported: only this package's tests set it,
+	// to see how Windows answers an authInfo it must refuse or one naming another domain (ADR-0071
+	// isolation). Every other caller seals the credentials it was given with the context it proved.
+	sealAuthInfo func(security *NTLMSSPClientSecurityContext, challenge NTLMSSPChallenge, credentials []byte) ([]byte, error)
 }
 
 // CredSSPClientSession represents a completed NLA exchange and owns the
@@ -281,8 +286,14 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		return nil, ErrCredSSPClient
 	}
 	defer clear(credentials)
-	authInfo, err := security.WrapClientToServer(credentials)
-	if err != nil {
+	seal := func(security *NTLMSSPClientSecurityContext, _ NTLMSSPChallenge, credentials []byte) ([]byte, error) {
+		return security.WrapClientToServer(credentials)
+	}
+	if cfg.sealAuthInfo != nil {
+		seal = cfg.sealAuthInfo
+	}
+	authInfo, err := seal(security, challenge, credentials)
+	if err != nil || len(authInfo) == 0 {
 		return nil, ErrCredSSPClient
 	}
 	defer clear(authInfo)

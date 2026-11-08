@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 	"unicode/utf16"
@@ -87,7 +88,41 @@ func TestEstablishCredSSPRejectsInvalidServerBindingBeforeDelegating(t *testing.
 	runEstablishCredSSPOverPinnedTLS(t, true)
 }
 
+// The Windows isolation's seam (credssp_windows_isolation_test.go) does what its cases say: the
+// flipped authInfo is one a verifier refuses, and the domain case is the domain the server reads.
+func TestEstablishCredSSPAuthInfoSealSeam(t *testing.T) {
+	for _, c := range authInfoCases() {
+		if c.seal == nil {
+			continue
+		}
+		t.Run(c.name, func(t *testing.T) {
+			harness := credsspHarness{sealAuthInfo: c.seal("User", "Password"), wantDomain: "Domain"}
+			switch {
+			case strings.Contains(c.name, "flipped"):
+				harness.wantAuthInfoRefused = true
+			case strings.Contains(c.name, `"."`):
+				harness.wantDomain = "."
+			default: // NetBIOS computer name of the fake CHALLENGE
+				harness.wantDomain = "Server"
+			}
+			runEstablishCredSSPHarness(t, harness)
+		})
+	}
+}
+
+type credsspHarness struct {
+	corruptServerBinding bool
+	sealAuthInfo         func(*NTLMSSPClientSecurityContext, NTLMSSPChallenge, []byte) ([]byte, error)
+	wantDomain           string
+	wantAuthInfoRefused  bool
+}
+
 func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
+	runEstablishCredSSPHarness(t, credsspHarness{corruptServerBinding: corruptServerBinding, wantDomain: "Domain"})
+}
+
+func runEstablishCredSSPHarness(t *testing.T, harness credsspHarness) {
+	corruptServerBinding := harness.corruptServerBinding
 	certificate, roots, pin := rdpTestCertificate(t)
 	serverLeaf, err := x509.ParseCertificate(certificate.Certificate[0])
 	if err != nil {
@@ -351,13 +386,21 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 			return
 		}
 		delegated, readErr := serverSecurity.inbound.unwrap(authInfoRequest.AuthInfo)
+		if harness.wantAuthInfoRefused {
+			if readErr == nil {
+				serverResult <- errors.New("the altered authInfo passed the server's verification")
+				return
+			}
+			serverResult <- nil
+			return
+		}
 		if readErr != nil {
 			serverResult <- readErr
 			return
 		}
 		defer clear(delegated)
 		domain, username, delegatedPassword, parseErr := parseCredSSPPasswordCredentialsForTest(delegated)
-		if parseErr != nil || domain != "Domain" || username != "User" || delegatedPassword != "Password" {
+		if parseErr != nil || domain != harness.wantDomain || username != "User" || delegatedPassword != "Password" {
 			serverResult <- errors.New("delegated TSPasswordCreds did not match the expected UTF-16LE credentials")
 			return
 		}
@@ -368,7 +411,7 @@ func runEstablishCredSSPOverPinnedTLS(t *testing.T, corruptServerBinding bool) {
 	if err != nil {
 		t.Fatalf("DialHybrid: %v", err)
 	}
-	session, err := transport.EstablishCredSSP(context.Background(), CredSSPClientConfig{Version: 6, Username: "User", Domain: "Domain", Password: []byte("Password"), Timeout: 2 * time.Second})
+	session, err := transport.EstablishCredSSP(context.Background(), CredSSPClientConfig{Version: 6, Username: "User", Domain: "Domain", Password: []byte("Password"), Timeout: 2 * time.Second, sealAuthInfo: harness.sealAuthInfo})
 	if corruptServerBinding {
 		if err == nil || session != nil {
 			if session != nil {
