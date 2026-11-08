@@ -19,6 +19,7 @@ const (
 
 	gccClientCoreType     = uint16(0xc001)
 	gccClientSecurityType = uint16(0xc002)
+	gccClientClusterType  = uint16(0xc004)
 	gccServerCoreType     = uint16(0x0c01)
 	gccServerSecurityType = uint16(0x0c02)
 	gccServerNetworkType  = uint16(0x0c03)
@@ -203,6 +204,11 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	blocks := make([]byte, 0, 228)
 	blocks = appendGCCBlock(blocks, gccClientCoreType, core)
 	clear(core)
+	// Match FreeRDP's baseline GCC block sequence. CS_CLUSTER is emitted even
+	// when no redirection or redirected session is requested.
+	cluster := make([]byte, 8) // flags=0, redirectedSessionID=0
+	blocks = appendGCCBlock(blocks, gccClientClusterType, cluster)
+	clear(cluster)
 	// Advertise a valid Standard RDP Security capability for protocol compliance.
 	// HYBRID remains mandatory, so this capability is never used as the security layer.
 	security := make([]byte, 8)

@@ -107,6 +107,13 @@ func TestMarshalMCSConnectInitialBuildsStrictHybridProfile(t *testing.T) {
 	if bytes.Contains(gcc, []byte{0x03, 0xc0}) {
 		t.Fatal("GCC request unexpectedly advertised a virtual channel")
 	}
+	clusterHeader := []byte{0x04, 0xc0, 0x0c, 0x00}
+	clusterOffset := bytes.Index(gcc, clusterHeader)
+	if clusterOffset < 0 || clusterOffset+12 > len(gcc) ||
+		binary.LittleEndian.Uint32(gcc[clusterOffset+4:clusterOffset+8]) != 0 ||
+		binary.LittleEndian.Uint32(gcc[clusterOffset+8:clusterOffset+12]) != 0 {
+		t.Fatal("GCC request must include an empty CS_CLUSTER block, matching the FreeRDP baseline")
+	}
 }
 
 func TestMarshalMCSConnectInitialUsesFrenchSecurityExtensionWhenRequested(t *testing.T) {
