@@ -223,7 +223,7 @@ func TestRDPWindowsIsolation_AuthInfo(t *testing.T) {
 	// CI run #22: direct NTLM changes nothing either. FreeRDP's own Connect-Initial, recorded by
 	// FreeRDP against this machine, after this client's CredSSP and TLS: if Windows answers it, the
 	// cause is what this client's Connect-Initial says; if not, it is this client's CredSSP or TLS.
-	if file := os.Getenv("RDP_WINDOWS_FREERDP_PCAP"); file != "" {
+	if file := os.Getenv("RDP_WINDOWS_FREERDP_RECORD"); file != "" {
 		recorded, err := os.ReadFile(file)
 		freerdp := findConnectInitial(recorded)
 		clear(recorded) // FreeRDP's recording holds the password; only the Connect-Initial is kept.

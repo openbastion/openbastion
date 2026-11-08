@@ -3,14 +3,14 @@
 # installing it (mounted at /usr/local/share/ca-certificates/rdp-test.crt), and /cert:deny refuses
 # any certificate it does not vouch for: nothing is accepted on first use.
 # 124 (timeout) means the session was still up after 40 s; anything else, FreeRDP stopped it.
-# With RDP_PCAP, FreeRDP also records its PDUs in clear there: the password is in it (Client Info),
+# With RDP_RECORD, FreeRDP also records its PDUs in clear there (/dump): the password is in it (Client Info),
 # so that file stays out of any artifact; the test only takes FreeRDP's Connect-Initial from it.
 set -u
 update-ca-certificates >/dev/null 2>&1
 Xvfb :1 -screen 0 1280x800x24 >/dev/null 2>&1 &
 sleep 2
 DISPLAY=:1 timeout 40 xfreerdp3 "/v:${RDP_HOST:?}" "/u:${RDP_USER:?}" "/p:${RDP_PASSWORD:?}" \
-  /sec:nla /cert:deny /size:1280x800 /log-level:DEBUG ${RDP_PCAP:+"/pcap:$RDP_PCAP"}
+  /sec:nla /cert:deny /size:1280x800 /log-level:DEBUG ${RDP_RECORD:+"/dump:record,file:$RDP_RECORD"}
 status=$?
 echo "xfreerdp3 exit status: $status"
 exit 0

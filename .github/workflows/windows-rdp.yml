@@ -70,7 +70,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/windows/freerdp"
           docker run --rm --network host --add-host "$RDP_WINDOWS_SERVER_NAME:127.0.0.1" \
             -v "$RDP_WINDOWS_CA_FILE:/usr/local/share/ca-certificates/rdp-test.crt:ro" \
-            -v "$RUNNER_TEMP/windows/freerdp:/out" -e RDP_PCAP=/out/freerdp.pcap \
+            -v "$RUNNER_TEMP/windows/freerdp:/out" -e RDP_RECORD=/out/freerdp.dump \
             -e RDP_HOST="$RDP_WINDOWS_SERVER_NAME:3389" -e RDP_USER="$RDP_WINDOWS_USER" -e RDP_PASSWORD="$RDP_WINDOWS_PASSWORD" \
             openbastion-rdp-reference-client > "$RDP_WINDOWS_DUMP/freerdp-client.log" 2>&1 || true
           sudo chmod -R a+rX "$RUNNER_TEMP/windows/freerdp"
@@ -82,7 +82,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
-          RDP_WINDOWS_FREERDP_PCAP="$RUNNER_TEMP/windows/freerdp/freerdp.pcap" \
+          RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \
             go test ./pkg/rdp -run TestRDPWindowsIsolation -v -count=1 -timeout=20m
       # rdp-setup.ps1 copies the RDP event logs every 30 s: wait for the copy that follows the last
       # connection, then keep them with the rest. Absent if the share did not work.
