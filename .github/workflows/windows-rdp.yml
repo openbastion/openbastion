@@ -70,7 +70,7 @@ jobs:
       - name: Isolate what Windows refuses after CredSSP
         if: ${{ !cancelled() }}
         env:
-          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_ConnectionSequence$' }}
+          RDP_WINDOWS_ISOLATION: ${{ inputs.isolation || 'TestRDPWindowsIsolation_(ConnectionSequence|Logon)$' }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           RDP_WINDOWS_FREERDP_RECORD="$RUNNER_TEMP/windows/freerdp/freerdp.dump" \

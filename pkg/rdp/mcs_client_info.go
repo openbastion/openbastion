@@ -27,6 +27,11 @@ type RDPClientInfo struct {
 	Domain   string
 	Username string
 	Password []byte
+
+	// flags replaces the TS_INFO_PACKET flags; 0 keeps the client's. Unexported: only this
+	// package's tests set it, to find which flags Windows needs to open the session itself
+	// (ADR-0071 isolation, CI run #39: the session stopped at Windows' logon screen).
+	flags uint32
 }
 
 // SendClientInfo emits one minimal Unicode Client Info PDU on the MCS I/O
@@ -111,7 +116,11 @@ func marshalRDPClientInfo(userID, ioChannelID uint16, info RDPClientInfo) ([]byt
 	// includes a mandatory NUL terminator not counted by its cb* field.
 	infoPacket := make([]byte, 18, 18+len(domain)+len(username)+len(password)+10)
 	binary.LittleEndian.PutUint32(infoPacket[0:4], 0) // keyboardLayout=0: language ID ignored.
-	binary.LittleEndian.PutUint32(infoPacket[4:8], rdpInfoUnicode|rdpInfoAutoLogon|rdpInfoForceEncryptedCSPDU)
+	flags := rdpInfoUnicode | rdpInfoAutoLogon | rdpInfoForceEncryptedCSPDU
+	if info.flags != 0 {
+		flags = info.flags
+	}
+	binary.LittleEndian.PutUint32(infoPacket[4:8], flags)
 	binary.LittleEndian.PutUint16(infoPacket[8:10], uint16(len(domain)))
 	binary.LittleEndian.PutUint16(infoPacket[10:12], uint16(len(username)))
 	binary.LittleEndian.PutUint16(infoPacket[12:14], uint16(len(password)))
