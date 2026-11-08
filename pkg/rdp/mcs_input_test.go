@@ -216,3 +216,32 @@ func TestCloseInterruptsBlockedBitmapRead(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TS_SYNC_EVENT (MS-RDPBCGR 2.2.8.1.1.3.1.1.5): messageType 0, two pad bytes, the toggle keys'
+// state (scroll, num, caps, kana lock in the low four bits). Anything else in the event is refused.
+func TestMarshalRDPInputSynchronize(t *testing.T) {
+	packet, err := marshalRDPInput(1007, 0x000103ea, []RDPInputEvent{{Type: RDPInputSync, ToggleFlags: 0x2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, share, err := readPERLength(packet[7+6:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := share[22:34]
+	if binary.LittleEndian.Uint16(event[4:6]) != 0 || binary.LittleEndian.Uint16(event[6:8]) != 0 ||
+		binary.LittleEndian.Uint32(event[8:12]) != 0x2 {
+		t.Fatalf("sync event = %x", event)
+	}
+	for name, bad := range map[string]RDPInputEvent{
+		"unknown toggle bit": {Type: RDPInputSync, ToggleFlags: 0x10},
+		"with a scancode":    {Type: RDPInputSync, Scancode: 0x0f},
+		"with pointer flags": {Type: RDPInputSync, PointerFlags: rdpPtrFlagsMove},
+		"released":           {Type: RDPInputSync, Released: true},
+		"toggle on a key":    {Type: RDPInputScancode, Scancode: 0x0f, ToggleFlags: 1},
+	} {
+		if _, err := marshalRDPInput(1007, 0x000103ea, []RDPInputEvent{bad}); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}

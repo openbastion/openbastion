@@ -28,6 +28,14 @@ type RDPInputEventType byte
 const (
 	RDPInputScancode RDPInputEventType = 1
 	RDPInputMouse    RDPInputEventType = 2
+	// RDPInputSync is TS_SYNC_EVENT: the state of the toggle keys (ToggleFlags), which a client
+	// sends when it gains the focus (MS-RDPBCGR 2.2.8.1.1.3.1.1.5).
+	RDPInputSync RDPInputEventType = 3
+)
+
+const (
+	rdpInputEventSync     = uint16(0x0000)
+	rdpSyncToggleFlagsAll = uint32(0x0000000f) // scroll, num, caps and kana lock
 )
 
 // RDPInputEvent is one bounded slow-path keyboard or mouse event. Scancodes
@@ -41,6 +49,7 @@ type RDPInputEvent struct {
 	PointerFlags uint16
 	X            uint16
 	Y            uint16
+	ToggleFlags  uint32 // RDPInputSync only
 }
 
 // SendInput serializes one bounded TS_INPUT_PDU. TLS permits one concurrent
@@ -113,8 +122,16 @@ func marshalRDPInput(userID uint16, shareID uint32, events []RDPInputEvent) ([]b
 		entry := payload[4+i*12 : 4+(i+1)*12]
 		binary.LittleEndian.PutUint32(entry[0:4], 0) // eventTime is ignored by the server.
 		switch event.Type {
+		case RDPInputSync:
+			if event.Scancode != 0 || event.Extended || event.Released || event.PointerFlags != 0 ||
+				event.X != 0 || event.Y != 0 || event.ToggleFlags&^rdpSyncToggleFlagsAll != 0 {
+				clear(payload)
+				return nil, ErrMCSConnection
+			}
+			binary.LittleEndian.PutUint16(entry[4:6], rdpInputEventSync)
+			binary.LittleEndian.PutUint32(entry[8:12], event.ToggleFlags) // after two pad bytes
 		case RDPInputScancode:
-			if event.PointerFlags != 0 || event.X != 0 || event.Y != 0 || event.Scancode == 0 || event.Scancode > 0x7f {
+			if event.PointerFlags != 0 || event.X != 0 || event.Y != 0 || event.ToggleFlags != 0 || event.Scancode == 0 || event.Scancode > 0x7f {
 				clear(payload)
 				return nil, ErrMCSConnection
 			}
@@ -136,7 +153,7 @@ func marshalRDPInput(userID uint16, shareID uint32, events []RDPInputEvent) ([]b
 			buttonFlags := flags & (rdpPtrFlagsButton1 | rdpPtrFlagsButton2 | rdpPtrFlagsButton3)
 			wheelBits := flags & rdpPtrFlagsWheelMask
 			wheelValid := flags&rdpPtrFlagsWheel != 0 && wheelBits&0x00ff != 0
-			if event.Scancode != 0 || event.Extended || event.Released || flags == 0 ||
+			if event.Scancode != 0 || event.Extended || event.Released || event.ToggleFlags != 0 || flags == 0 ||
 				flags&^(rdpPtrFlagsMove|rdpPtrFlagsButton1|rdpPtrFlagsButton2|rdpPtrFlagsButton3|rdpPtrFlagsDown|rdpPtrFlagsWheel|rdpPtrFlagsWheelNeg|rdpPtrFlagsWheelMask) != 0 ||
 				flags&rdpPtrFlagsDown != 0 && buttonFlags == 0 ||
 				flags&rdpPtrFlagsWheel != 0 && !wheelValid ||
