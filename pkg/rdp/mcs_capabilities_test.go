@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -346,7 +347,10 @@ func TestCredSSPSessionExchangeCapabilitiesClosesOnInvalidDemandActive(t *testin
 		userChannelID: 1007, clientInfoSent: true, licensingComplete: true,
 		mcsSettings: MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 720, ClientName: "OpenBastion"},
 	}
-	if _, err := session.ExchangeCapabilities(context.Background(), time.Second); !errors.Is(err, ErrMCSConnection) {
+	// The refusal keeps its identity (the refusal code does not change) and says what came: a bare
+	// error left Windows' behaviour unknown (ADR-0071, CI run #38).
+	if _, err := session.ExchangeCapabilities(context.Background(), time.Second); !errors.Is(err, ErrMCSConnection) ||
+		!strings.Contains(err.Error(), "Demand Active refused: TPKT of") {
 		t.Fatalf("ExchangeCapabilities error = %v", err)
 	}
 	if session.transport != nil || session.capabilitiesExchanged {

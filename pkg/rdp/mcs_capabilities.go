@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -69,7 +71,9 @@ func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout
 		cancelStopped := stopCancel()
 		if err != nil || ctx.Err() != nil || !cancelStopped {
 			s.closeTransportLocked()
-			err = ErrMCSConnection
+			if !errors.Is(err, ErrMCSConnection) {
+				err = ErrMCSConnection // a described refusal keeps its description
+			}
 			capabilities = RDPServerCapabilities{}
 			return
 		}
@@ -88,8 +92,13 @@ func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout
 		return capabilities, ErrMCSConnection
 	}
 	capabilities, err = parseRDPDemandActive(packet, s.mcsResponse.IOChannelID)
+	if err != nil {
+		described := fmt.Errorf("%w: Demand Active refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+		clear(packet)
+		return RDPServerCapabilities{}, described
+	}
 	clear(packet)
-	if err != nil || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return RDPServerCapabilities{}, ErrMCSConnection
 	}
 	confirm, buildErr := marshalRDPConfirmActive(capabilities, s.mcsSettings, s.userChannelID)

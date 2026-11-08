@@ -16,7 +16,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -178,7 +177,7 @@ func TestRDPWindowsIsolation_ConnectionSequence(t *testing.T) {
 					head = head[:48]
 				}
 				logf("after Finalization: %d decoded, %d ignored, %d slow-path; packet %d REFUSED (%v), %d bytes, %s: %s",
-					decoded, ignored, slow, i, parseErr, len(packet), describeServerPacket(packet), hex.EncodeToString(head))
+					decoded, ignored, slow, i, parseErr, len(packet), describeRDPServerPacket(packet), hex.EncodeToString(head))
 				if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
 					_ = os.WriteFile(filepath.Join(dir, "refused-update.bin"), packet, 0o644)
 				}
@@ -225,55 +224,6 @@ func readSlowOrFastPathPacket(r io.Reader) ([]byte, error) {
 	return packet, err
 }
 
-// describeServerPacket names what a server packet carries, without decoding its graphics.
-func describeServerPacket(packet []byte) string {
-	if len(packet) > 0 && packet[0] == 3 {
-		if len(packet) < 14 || packet[7] != mcsSendDataIndication {
-			return "TPKT"
-		}
-		_, share, err := readPERLength(packet[13:])
-		if err != nil || len(share) < 6 {
-			return "TPKT, MCS"
-		}
-		kind := binary.LittleEndian.Uint16(share[2:4]) & 0x0f
-		if kind != 7 || len(share) < 20 {
-			return fmt.Sprintf("TPKT, share PDU type %d", kind)
-		}
-		text := fmt.Sprintf("TPKT, share data pduType2 0x%02x", share[14])
-		if share[14] == rdpPDU2Update {
-			text += fmt.Sprintf(", update type %d", binary.LittleEndian.Uint16(share[18:20]))
-		}
-		return text
-	}
-	if len(packet) < 2 {
-		return "?"
-	}
-	offset := 2
-	if packet[1]&0x80 != 0 {
-		offset = 3
-	}
-	var updates []string
-	for rest := packet[offset:]; len(rest) >= 3; {
-		header := rest[0]
-		size := int(binary.LittleEndian.Uint16(rest[1:3]))
-		body := 3
-		if header>>6&0x2 != 0 { // compressed: one compressionFlags byte before the size
-			if len(rest) < 4 {
-				break
-			}
-			size = int(binary.LittleEndian.Uint16(rest[2:4]))
-			body = 4
-		}
-		updates = append(updates, fmt.Sprintf("code %d frag %d comp %d size %d", header&0x0f, header>>4&0x3, header>>6, size))
-		if body+size > len(rest) {
-			updates = append(updates, "(truncated)")
-			break
-		}
-		rest = rest[body+size:]
-	}
-	return fmt.Sprintf("Fast-Path action %d [%s]", packet[0]&0x3, strings.Join(updates, "; "))
-}
-
 func sequenceSession(address, pin, name string, roots *x509.CertPool, user, password string) (*CredSSPClientSession, func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	transport, err := DialHybrid(ctx, TransportConfig{Address: address, TLSFingerprint: pin, TLSRoots: roots, TLSServerName: name, DialTimeout: 10 * time.Second})
@@ -306,7 +256,7 @@ func TestRDPWindowsIsolation_SequenceSteps(t *testing.T) {
 	}
 	// Two Fast-Path updates in one PDU are both named, with their fragmentation.
 	two := []byte{0x00, 10, 0x21, 2, 0, 0xaa, 0xbb, 0x03, 0, 0}
-	if got := describeServerPacket(two); got != "Fast-Path action 0 [code 1 frag 2 comp 0 size 2; code 3 frag 0 comp 0 size 0]" {
+	if got := describeRDPServerPacket(two); got != "Fast-Path action 0, 10 bytes [code 1 frag 2 comp 0 size 2; code 3 frag 0 comp 0 size 0]" {
 		t.Fatalf("%q", got)
 	}
 	// A Fast-Path header is read by its own length (one or two bytes), a TPKT by its own.

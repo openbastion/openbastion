@@ -3,6 +3,8 @@ package rdp
 import (
 	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -1128,6 +1130,14 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 	return result, nil
 }
 
+// shareDataType is the pduType2 of a Share Data PDU, 0 when it is too short to say.
+func shareDataType(data []byte) byte {
+	if len(data) < 15 {
+		return 0
+	}
+	return data[14]
+}
+
 // cropRDPBitmap keeps the top-left destWidth x destHeight pixels of a top-down RGBA bitmap.
 func cropRDPBitmap(rgba []byte, width, destWidth, destHeight int) []byte {
 	if destWidth == width && len(rgba) == width*destHeight*4 {
@@ -1541,7 +1551,9 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			s.mu.Lock()
 			s.closeTransportLocked()
 			s.mu.Unlock()
-			err = ErrMCSConnection
+			if !errors.Is(err, ErrMCSConnection) {
+				err = ErrMCSConnection // a described refusal keeps its description
+			}
 			update = RDPBitmapUpdate{}
 			return
 		}
@@ -1572,8 +1584,13 @@ readUpdate:
 					goto readUpdate
 				}
 				update, err = parseRDPFastPathBitmapUpdateAt(packet, desktopWidth, desktopHeight, sessionBPP)
+				if err != nil {
+					described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+					clear(packet)
+					return RDPBitmapUpdate{}, described
+				}
 				clear(packet)
-				if err != nil || ctx.Err() != nil {
+				if ctx.Err() != nil {
 					return RDPBitmapUpdate{}, ErrMCSConnection
 				}
 				return update, nil
@@ -1623,7 +1640,10 @@ readUpdate:
 	}
 	var nextOrderState rdpPrimaryOrderState
 	update, nextOrderState, err = parseRDPBitmapShareDataAt(assembled, shareID, desktopWidth, desktopHeight, sessionBPP, orderState)
-	if err != nil || ctx.Err() != nil ||
+	if err != nil {
+		return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: share data of %d bytes, pduType2 0x%02x", ErrMCSConnection, len(assembled), shareDataType(assembled))
+	}
+	if ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||
 		nextOrderState.patBltOpaqueRectUsed && !patBltOpaqueRectEnabled ||
 		nextOrderState.scrBltUsed && !scrBltEnabled ||

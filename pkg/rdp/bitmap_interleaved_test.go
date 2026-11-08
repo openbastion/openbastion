@@ -292,3 +292,12 @@ func repeat(v uint16, n int) []uint16 {
 	}
 	return out
 }
+
+// The describer reads untrusted headers on the refusal path: it must never panic.
+func FuzzDescribeRDPServerPacket(f *testing.F) {
+	f.Add([]byte{0x00, 10, 0x21, 2, 0, 0xaa, 0xbb, 0x03, 0, 0})
+	f.Add(mcsTestDemandActive())
+	f.Fuzz(func(t *testing.T, packet []byte) {
+		_ = describeRDPServerPacket(packet)
+	})
+}

@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -145,6 +146,51 @@ func TestReadBitmapUpdateOverTLSAcceptsFastPathBitmap(t *testing.T) {
 		t.Fatal(serverErr)
 	}
 	session.Close()
+}
+
+// A refused update says what it was, and keeps its identity (ADR-0071, CI run #38): here a 16-bpp
+// rectangle in a 32-bpp session.
+func TestReadBitmapUpdateDescribesTheRefusedUpdate(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	bitmapData := []byte{1, 0}
+	bitmapData = append(bitmapData, mcsTestBitmapRectangle(1, 2, 1, 1, 16, 0, []byte{0, 0, 0, 0})...)
+	packet := mcsTestFastPathBitmapPacket(bitmapData)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if tlsConn.Handshake() == nil {
+			_ = writeFull(tlsConn, packet)
+		}
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+	}
+	defer session.Close()
+	_, err = session.ReadBitmapUpdate(context.Background(), time.Second)
+	if !errors.Is(err, ErrMCSConnection) || !strings.Contains(err.Error(), "update refused: Fast-Path action 0") ||
+		!strings.Contains(err.Error(), "code 1 frag 0 comp 0") {
+		t.Fatalf("ReadBitmapUpdate error = %v", err)
+	}
 }
 
 func FuzzParseRDPFastPathBitmapUpdate(f *testing.F) {
