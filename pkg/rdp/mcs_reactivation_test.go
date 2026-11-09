@@ -306,3 +306,26 @@ func TestRDPFramebufferRefusesAFrameBeyondTheRecordableSize(t *testing.T) {
 		t.Fatalf("after the refusal: sequence %d after %d, same screen %v, %v", after.Sequence, before.Sequence, bytes.Equal(after.PNG, before.PNG), err)
 	}
 }
+
+// Draw then Frame is Apply in two steps (the cadence of ADR-0071 §8): the same frame, the same
+// sequence; Draw refuses what Apply refuses and leaves the screen as it was.
+func TestRDPFramebufferDrawThenFrameIsApply(t *testing.T) {
+	update := RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{X: 1, Y: 1, Width: 1, Height: 1, Pixels: []byte{9, 8, 7, 0xff}}}}
+	at := time.Unix(1_800_000_000, 0)
+	applied, _ := NewRDPFramebuffer(4, 4)
+	want, err := applied.Apply(update, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drawn, _ := NewRDPFramebuffer(4, 4)
+	if err := drawn.Draw(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{X: 3, Y: 3, Width: 2, Height: 1, Pixels: make([]byte, 8)}}}); err == nil {
+		t.Fatal("a rectangle outside the desktop was drawn")
+	}
+	if err := drawn.Draw(update); err != nil {
+		t.Fatal(err)
+	}
+	got, err := drawn.Frame(at)
+	if err != nil || !bytes.Equal(got.PNG, want.PNG) || got.Sequence != want.Sequence {
+		t.Fatalf("Draw+Frame: sequence %d, same PNG %v, %v", got.Sequence, bytes.Equal(got.PNG, want.PNG), err)
+	}
+}

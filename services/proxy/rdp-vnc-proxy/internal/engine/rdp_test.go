@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"image/png"
 	"sync"
 	"testing"
 	"time"
@@ -454,5 +456,65 @@ func TestRDPCodec_TheTargetEndingTheSessionIsNoFailure(t *testing.T) {
 			t.Errorf("%v: Err() = %v, failure %v", c.end, got, c.failure)
 		}
 		session.Close()
+// The frames follow a cadence (ADR-0071 §8): updates are drawn as they come, and at most one frame
+// a interval is encoded and recorded, the latest screen. The first frame goes at once, and the
+// last screen drawn is never lost.
+func TestRDPCodec_FramesFollowTheCadence(t *testing.T) {
+	var updates []rdp.RDPBitmapUpdate
+	for i := 1; i <= 40; i++ {
+		updates = append(updates, rdp.RDPBitmapUpdate{Rectangles: []rdp.RDPBitmapRectangle{{Width: 1, Height: 1, Pixels: []byte{byte(i), 0, 0, 0xff}}}})
+	}
+	target := &fakeRDPDesktop{width: 1, height: 1, updates: updates, endErr: rdp.ErrMCSConnection}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), FrameInterval: time.Hour, openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return target, nil }}
+	session, err := codec.Open(context.Background(), rdpTestCredential(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	var frames []screenstream.Message
+	for frame := range session.Frames() {
+		frames = append(frames, frame)
+	}
+	// 40 updates within the hour: the first at once, then the latest when the stream ends.
+	if len(frames) != 2 {
+		t.Fatalf("%d frame(s) for 40 updates within one interval, want 2", len(frames))
+	}
+	if frames[1].Sequence != frames[0].Sequence+1 {
+		t.Fatalf("sequences %d then %d", frames[0].Sequence, frames[1].Sequence)
+	}
+	last, err := png.Decode(bytes.NewReader(frames[1].PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, _, _, _ := last.At(0, 0).RGBA(); r>>8 != 40 {
+		t.Fatalf("the last frame shows update %d, want 40, the latest", r>>8)
+	}
+}
+
+// A screen drawn within the interval goes out when the interval is over, with no further update.
+func TestRDPCodec_AWaitingScreenGoesOutAtTheInterval(t *testing.T) {
+	pixel := func(v byte) rdp.RDPBitmapUpdate {
+		return rdp.RDPBitmapUpdate{Rectangles: []rdp.RDPBitmapRectangle{{Width: 1, Height: 1, Pixels: []byte{v, 0, 0, 0xff}}}}
+	}
+	target := &fakeRDPDesktop{width: 1, height: 1, updates: []rdp.RDPBitmapUpdate{pixel(1), pixel(2)}}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), FrameInterval: 50 * time.Millisecond, openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return target, nil }}
+	session, err := codec.Open(context.Background(), rdpTestCredential(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	for i := 1; i <= 2; i++ {
+		select {
+		case frame := <-session.Frames():
+			shown, err := png.Decode(bytes.NewReader(frame.PNG))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r, _, _, _ := shown.At(0, 0).RGBA(); r>>8 != uint32(i) {
+				t.Fatalf("frame %d shows %d", i, r>>8)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("frame %d never came: the waiting screen was not sent at the interval", i)
+		}
 	}
 }

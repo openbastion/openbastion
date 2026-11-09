@@ -316,6 +316,9 @@ sequenceDiagram
 |---|---|---|
 | `VIDEO_RECORDER_URL` | aucune | obligatoire sous `RECORDING_POLICY=required` (défaut) |
 | `RECORDING_POLICY` | `required` | inchangé ; `best-effort` est refusé pour les écrans |
+| `SCREEN_FRAME_INTERVAL_MS` | `50` | cadence des images, VNC et RDP : au plus une image par intervalle ; borné à [16, 250] |
+| `SCREEN_MAX_PIXELS` | `16777216` | borne de trame (ADR-0070) |
+
 | `SCREEN_FRAME_INTERVAL_MS` | `50` | clôture d'un segment ; borné à [16, 250] |
 | (constante) `screenstream.MaxPixels` | `16777216` | borne de trame (ADR-0070) ; **pas une variable** : elle ne pourrait que monter au-delà de ce que le contrat écran et le Video Recorder acceptent |
 | `SCREEN_INPUT_RATE_PER_SECOND` | `200` | débit d'entrée par session |
@@ -1731,6 +1734,24 @@ Une connexion qui ne fait que se fermer n'est **pas** une fin : `crypto/tls` ren
 - **contre Windows Server 2022, aux quatre cibles** : la session fermée par Windows lui-même (demande déposée sur le partage, boucle SYSTEM de la cible) finit le flux sans erreur.
 
 **Mesuré en passant** : la touche Windows (`0xE0 0x5B`) envoyée par ce client n'a pas atteint l'interface de Windows. Win+R n'a pas ouvert « Exécuter », et le « r » est allé dans le Bloc-notes, aux quatre cibles. L'encodage suit MS-RDPBCGR (`KBDFLAGS_EXTENDED`). Point ouvert : les touches étendues sont à éprouver une à une contre Windows.
+## ADR-0071 — §8 : la cadence des images RDP
+
+§8 veut une capture à intervalle (`SCREEN_FRAME_INTERVAL_MS`). Elle ne s'appliquait qu'à VNC : en RDP, chaque mise à jour qui changeait l'écran devenait une image PNG, encodée, enregistrée et acquittée, sans plafond de fréquence. Seuls les repeints identiques étaient écartés.
+
+**Désormais** :
+- l'adaptateur RDP applique chaque mise à jour au framebuffer (`RDPFramebuffer.Draw`, mêmes validations qu'`Apply`) ;
+- il n'encode et ne remet au relais qu'**une image par intervalle au plus**, celle de l'écran le plus récent (`Frame`) ;
+- la première image part sans délai, une image en attente part à l'échéance de l'intervalle, et le dernier écran dessiné part avant la fin du flux ;
+- le binaire prend le même réglage que VNC. Un intervalle nul garde une image par mise à jour, et `Apply` reste inchangé.
+
+**Preuves** :
+- `TestRDPCodec_FramesFollowTheCadence` : 40 mises à jour dans un intervalle donnent 2 images, la première et la plus récente ;
+- `TestRDPCodec_AWaitingScreenGoesOutAtTheInterval` ;
+- `TestRDPFramebufferDrawThenFrameIsApply` ;
+- 4 mutations tuées sur 4 ;
+- interopérabilité FreeRDP, enregistrement de bout en bout et route depuis l'API publique, tous verts.
+
+**Limite** : le débit n'est pas mesuré ; c'est l'incrément 5 et le lot A d'ADR-0090.
 
 ## ADR-0071 — deux bornes restent des constantes
 
