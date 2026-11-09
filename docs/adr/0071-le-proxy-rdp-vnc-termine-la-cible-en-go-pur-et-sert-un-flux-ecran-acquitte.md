@@ -96,7 +96,7 @@ Le moteur est choisi par le **protocole du compte**, transmis par le Broker, jam
 
 ### 2. Le côté cible est un client de protocole écrit dans le dépôt
 
-- `pkg/rdp` : sous-ensemble **client** RDP (X.224 + négociation, TLS, CredSSP/NLA NTLMv2, MCS/GCC, capacités, Client Info, bitmap updates, ordres de base et cache de glyphes, entrée, trame).
+- `pkg/rdp` : sous-ensemble **client** RDP (X.224 + négociation, TLS, CredSSP/NLA NTLMv2, MCS/GCC, capacités, Client Info, bitmap updates, ordres de base, entrée, trame ; le cache de glyphes est écarté par ADR-0089).
 - `pkg/vnc` : client RFB 3.8 (négociation, VeNCrypt/X.509, auth, encodages, framebuffer, entrée).
 - `pkg/tlspin` : les primitives d'épinglage TLS actuelles de `pkg/rdp` y sont déplacées et partagées par les deux moteurs.
 
@@ -115,8 +115,8 @@ La connexion cible est un client RDP qui n'accepte que ce sous-ensemble. Tout le
 | TLS | TLS ≥ 1.2, **pin SHA-256 de la feuille** | chaîne système, nom DNS/CN, confiance au premier usage |
 | Authentification | CredSSP/NLA, NTLMv2, domaine optionnel (vide = compte local) | NTLMv1, LM, mot de passe du client, repli sans NLA |
 | MCS/GCC | canal d'E/S et canal utilisateur, **zéro canal virtuel** | `cliprdr`, `rdpdr`, `rdpsnd`, `drdynvc`, `rdpecam`, tout canal virtuel |
-| Capacités | 32 bpp, bitmap RAW + RLE (RDP6), ordres de base, cache bitmap borné (v2/v3), cache de glyphes | RemoteFX, EGFX, NSCodec, cache hors écran, multi-moniteurs |
-| Ordres | DstBlt, PatBlt, ScrBlt, MemBlt, Mem3Blt, LineTo, PolygonSC, PolygonCB, EllipseSC, EllipseCB, OpaqueRect, SaveBitmap, GlyphIndex, FastIndex, MultiDstBlt, MultiPatBlt, MultiScrBlt, MultiOpaqueRect | tout ordre non annoncé : la session est refusée |
+| Capacités | 32 bpp, bitmap RAW + RLE (RDP6), ordres de base, cache bitmap borné (v2/v3) ; pas de cache de glyphes (ADR-0089) | RemoteFX, EGFX, NSCodec, cache hors écran, multi-moniteurs |
+| Ordres | DstBlt, PatBlt, ScrBlt, MemBlt, Mem3Blt, LineTo, PolygonSC, PolygonCB, EllipseSC, EllipseCB, OpaqueRect, SaveBitmap, MultiDstBlt, MultiPatBlt, MultiScrBlt, MultiOpaqueRect | tout ordre non annoncé : la session est refusée |
 | Entrée | `TS_INPUT_PDU` (scancodes, souris) | fastpath input et Unicode input dans le premier incrément |
 | Affichage | un moniteur, redimensionnement borné | multi-moniteurs, bureau au-delà de 16 777 216 px |
 | Fin | MCS Disconnect Provider Ultimatum, TLS `close_notify` | — |
@@ -353,9 +353,9 @@ Critères de sortie : poignée de main contre serveur factice et cible Windows r
 
 ### Incrément 3 — RDP : ordres, glyphes, entrée, utilisable
 
-Contenu : ordres de base et cache de glyphes, pointeur, entrée slow-path, redimensionnement, activation de la route opérateur et du protocole côté Broker.
+Contenu : ordres de base (le cache de glyphes est écarté par ADR-0089), pointeur, entrée slow-path, redimensionnement, activation de la route opérateur et du protocole côté Broker.
 
-Critères de sortie : session RDP interactive enregistrée et rejouable ; texte lisible (glyphes) ; aucune capacité non annoncée acceptée ; clavier AZERTY et QWERTY vérifiés ; touche relâchée sur perte de focus ; `session.recording_lost` sur image > 4 Mio.
+Critères de sortie : session RDP interactive enregistrée et rejouable ; texte lisible (par bitmaps, ADR-0089) ; aucune capacité non annoncée acceptée ; clavier AZERTY et QWERTY vérifiés ; touche relâchée sur perte de focus ; `session.recording_lost` sur image > 4 Mio.
 
 ### Incrément 4 — durcissement et preuves
 
@@ -1605,7 +1605,7 @@ RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLE
 
 **Contre-épreuves** : sans l'interrupteur du Broker, `connect` répond `409` avant tout scope ; sans celui du proxy, `503`.
 
-**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes (`recording_lost` au-delà de 4 Mio : tenu à l'incrément 76 ; QWERTY et AZERTY : tenus à l'incrément 77). Allumer RDP reste le choix de l'exploitant.
+**Critère de sortie de l'incrément 2** : `recording_lost` au-delà de 4 Mio, tenu à l'incrément 76 ; QWERTY et AZERTY, tenus à l'incrément 77 ; texte lisible, par bitmaps, tenu par ADR-0089. Allumer RDP reste le choix de l'exploitant.
 
 ## ADR-0071 — PR #93 : l'enregistrement et la reprise par le codec, contre Windows
 
@@ -1695,3 +1695,13 @@ Les mêmes scancodes donnent deux textes : la disposition de la cible est bien c
 - deux dispositions seulement ;
 - les touches mortes et AltGr (`@`, `€` en AZERTY) ne sont pas éprouvées ;
 - un caractère qu'aucune touche de la disposition de la cible ne donne ne peut pas être tapé (ADR-0088).
+
+## ADR-0071 — ADR-0089 : le texte reste rendu par bitmaps
+
+Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère « texte lisible (glyphes) » devient « texte lisible », et le cache de glyphes sort du périmètre de cet ADR (capacités, ordres, incrément 3).
+
+**Preuves** :
+- les captures Windows en 16 et 32 bpp, jugées à l'œil, déposées par chaque passage du CI Windows ;
+- `TestTextOrdersAreRefused` : GlyphIndex, FastIndex, FastGlyph et Cache Glyph refusés, par l'analyseur et en session.
+
+**Avec ce critère, tous les critères de sortie de l'incrément 3 sont tenus.** Allumer RDP (`RDP_ENABLED`, ADR-0088) reste le choix de l'exploitant. Restent ouverts : la réactivation jamais rencontrée chez Windows, et l'incrément 4 (durcissement et preuves).
