@@ -1714,6 +1714,14 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 
 **Preuves** : test rouge d'abord (la demande `vnc` partait en approbation), test HTTP du `409`, et 4 mutations tuées sur 4 (refus retiré, `rdp` oublié, audit retiré, `409` retiré).
 
+## ADR-0071 — le bouton Ctrl+Alt+Suppr
+
+Les conséquences de cet ADR promettaient un bouton « Ctrl+Alt+Del » pour RDP, puisqu'un navigateur garde ce raccourci pour lui. Il n'existait pas.
+
+**Désormais** : pendant une session RDP, et seulement RDP, le lecteur de l'Admin UI propose « Ctrl+Alt+Suppr ». Le bouton envoie en scancodes Ctrl, Alt et Suppr enfoncés, puis relâchés dans l'ordre inverse, et rend le focus à l'écran. VNC n'en a pas.
+
+**Preuves** : 2 tests (la séquence exacte ; aucun bouton pour VNC ni avant le HELLO). 2 mutations tuées sur 3 ; la garde interne, retirée, survit, puisque le bouton est déjà caché pour VNC : c'est une seconde défense.
+
 ## ADR-0071 — incrément 4 : les fuzzers en CI
 
 L'incrément 4 demande les fuzzers de chaque parseur, 30 s chacun, en CI. Il y en avait 22, tous dans `pkg/rdp`, et le CI n'en lançait aucun.
