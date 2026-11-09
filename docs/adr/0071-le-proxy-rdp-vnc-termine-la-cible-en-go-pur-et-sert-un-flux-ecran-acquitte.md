@@ -1605,7 +1605,7 @@ RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLE
 
 **Contre-épreuves** : sans l'interrupteur du Broker, `connect` répond `409` avant tout scope ; sans celui du proxy, `503`.
 
-**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes, AZERTY et QWERTY vérifiés (`recording_lost` au-delà de 4 Mio : tenu à l'incrément 76). Allumer RDP reste le choix de l'exploitant.
+**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes (`recording_lost` au-delà de 4 Mio : tenu à l'incrément 76 ; QWERTY et AZERTY : tenus à l'incrément 77). Allumer RDP reste le choix de l'exploitant.
 
 ## ADR-0071 — PR #93 : l'enregistrement et la reprise par le codec, contre Windows
 
@@ -1663,3 +1663,35 @@ C'est le critère de sortie « `session.recording_lost` sur image > 4 Mio » (§
 - 5 mutations tuées sur 5.
 
 **Limite** : prouvé au niveau du relais, de ses vrais écouteurs et des moteurs, pas sur processus réels contre une cible qui afficherait un écran incompressible.
+
+## ADR-0071 — incrément 77 : les dispositions QWERTY et AZERTY, vérifiées contre Windows
+
+C'est le critère de sortie « clavier AZERTY et QWERTY vérifiés ». L'opérateur envoie des touches physiques (scancodes, ADR-0088), et la cible les lit avec sa propre disposition.
+
+**La cible.** Une quatrième cible Windows a la disposition fr-FR :
+- `prepare.sh DIR DEPTH SESSION KEYBOARD` ;
+- `KEYBOARD` est passé à dockur, et `Set-WinUserLanguageList` est appliqué dans la session de l'utilisateur. La machine relève `fr-FR`, `{040C:0000040C}`.
+
+`keyboard` est une dimension de la matrice : un `include` qui ne fait qu'ajouter une clé à une combinaison existante fusionne avec elle au lieu de créer un job.
+
+**Le test.** `TestRDPWindows_KeyboardLayout` passe par le codec et l'entrée de l'opérateur :
+1. il tape dans le Bloc-notes Q, W, A, Z, la touche à droite de L, M, la touche à droite de M, 1, puis Maj+1 ;
+2. il fait enregistrer le fichier (Ctrl+S, nom « kbd », sur des touches communes aux deux dispositions) ;
+3. `rdp-setup.ps1` retrouve le fichier et le copie sur le partage ;
+4. le **texte** est comparé, pas une image.
+
+**Mesuré, aux quatre cibles** :
+
+| Cible | Texte relu |
+|---|---|
+| en-US (16 bpp, 32 bpp, console) | `qwaz;m,1!` |
+| fr-FR | `azqwm,;&1` |
+
+Les mêmes scancodes donnent deux textes : la disposition de la cible est bien celle qui s'applique. C'est la contre-épreuve, puisqu'une disposition ignorée donnerait le même texte partout. Le client annonce `keyboardLayout` 0 et Windows prend celle de l'utilisateur.
+
+**Mesuré en passant.** Le Bloc-notes lancé au logon n'enregistre pas dans `Documents` : `Desktop\Shared`, puis `System32`.
+
+**Limites** :
+- deux dispositions seulement ;
+- les touches mortes et AltGr (`@`, `€` en AZERTY) ne sont pas éprouvées ;
+- un caractère qu'aucune touche de la disposition de la cible ne donne ne peut pas être tapé (ADR-0088).

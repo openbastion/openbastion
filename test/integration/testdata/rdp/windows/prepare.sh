@@ -9,14 +9,18 @@
 # path (RDP 6.0 planar) against Windows.
 # SESSION, none by default: the target is ready with no session open, a server's common case.
 # console keeps the session dockur opens at the console for the user, to take it over by RDP.
+# KEYBOARD, en-US by default: the user's keyboard layout; fr-FR is AZERTY. The operator types
+# physical keys (scancodes) and the target reads them with its own layout (ADR-0088).
 # The pin and the roots are known before Windows starts: nothing is learnt from the target.
 # Everything here is for one run and is never committed.
 set -euo pipefail
-dir=${1:?usage: prepare.sh DIR [DEPTH] [SESSION]}
+dir=${1:?usage: prepare.sh DIR [DEPTH] [SESSION] [KEYBOARD]}
 depth=${2:-16}
 case "$depth" in 16 | 32) ;; *) echo "DEPTH must be 16 or 32, not $depth" >&2; exit 2 ;; esac
 session=${3:-none}
 case "$session" in none | console) ;; *) echo "SESSION must be none or console, not $session" >&2; exit 2 ;; esac
+keyboard=${4:-en-US}
+case "$keyboard" in en-US | fr-FR) ;; *) echo "KEYBOARD must be en-US or fr-FR, not $keyboard" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 name=rdp-windows.test
 mkdir -p "$dir/oem" "$dir/storage" "$dir/dump" "$dir/shared"
@@ -40,6 +44,7 @@ sed 's/$/\r/' "$here/oem/install.bat" > oem/install.bat
 cp "$here/oem/rdp-setup.ps1" oem/
 printf '%s' "$depth" > oem/color-depth
 printf '%s' "$session" > oem/session
+printf '%s' "$keyboard" > oem/keyboard
 
 pin=$(openssl x509 -in rdp.pem -outform DER | openssl dgst -sha256 | awk '{print $NF}')
 # Windows rejects a password without three of: lower, upper, digit, symbol.
@@ -52,6 +57,7 @@ WINDOWS_PASSWORD=$password
 WINDOWS_STORAGE_DIR=$dir/storage
 WINDOWS_OEM_DIR=$dir/oem
 WINDOWS_SHARED_DIR=$dir/shared
+WINDOWS_KEYBOARD=$keyboard
 ENV
 cat > test.env <<ENV
 RDP_WINDOWS=1
@@ -64,5 +70,7 @@ RDP_WINDOWS_SERVER_NAME=$name
 RDP_WINDOWS_DUMP=$dir/dump
 RDP_WINDOWS_BPP=$depth
 RDP_WINDOWS_SESSION=$session
+RDP_WINDOWS_KEYBOARD=$keyboard
+RDP_WINDOWS_SHARED=$dir/shared
 ENV
 echo "prepared $dir: the RDP certificate of $name, pin $pin"
