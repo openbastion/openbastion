@@ -3036,6 +3036,17 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 §3 : une fin de session par la cible se dit `session_ended`
+
+Écart de la relecture d'ADR-0071 : le Disconnect Provider Ultimatum était refusé, et l'opérateur lisait `target_unreachable` quand Windows fermait la session. Il donne désormais `rdp.ErrSessionEnded`, puis `END session_ended`. Une connexion qui ne fait que se fermer reste un échec : `crypto/tls` ne distingue pas un `close_notify` d'une cible morte.
+
+**Prouvé** :
+- tests rouges d'abord ;
+- contre-épreuve contre FreeRDP tué en pleine session ;
+- contre Windows, aux quatre cibles : la session fermée par Windows (demande sur le partage, boucle SYSTEM) finit le flux sans erreur.
+
+**Mesuré** : la touche Windows n'atteint pas l'interface de Windows. Win+R a écrit « r » dans le Bloc-notes. Les touches étendues restent à éprouver.
+
 ## 2026-11-09 — ADR-0071 §8 : le break-glass d'un écran est refusé dès sa création
 
 Écart d'ADR-0071 trouvé en relisant l'ADR : le Broker créait une demande break-glass `rdp` ou `vnc`, la mettait en approbation, et elle échouait au `connect` (le proxy refuse `break_glass`). Elle est désormais refusée dès sa création, avant toute autorisation : enregistrée `denied`, auditée (`session.breakglass_requested`, échec), `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass ; le refus du proxy reste, en seconde défense.

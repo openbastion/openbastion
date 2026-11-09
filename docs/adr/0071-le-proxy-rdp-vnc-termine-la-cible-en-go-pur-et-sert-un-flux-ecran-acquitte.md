@@ -1713,3 +1713,21 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 **Correctif** : `createSession` refuse une demande break-glass sur un compte `rdp` ou `vnc` avant toute autorisation. Comme tout refus de dérogation, la demande est enregistrée au statut `denied` et auditée (`session.breakglass_requested`, échec). L'API répond `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass. Le refus du proxy reste en place, en seconde défense.
 
 **Preuves** : test rouge d'abord (la demande `vnc` partait en approbation), test HTTP du `409`, et 4 mutations tuées sur 4 (refus retiré, `rdp` oublié, audit retiré, `409` retiré).
+
+## ADR-0071 — §3 : une fin de session par la cible se dit `session_ended`
+
+§3 accepte la fin MCS (Disconnect Provider Ultimatum). Elle était refusée comme un paquet inattendu, et l'opérateur lisait `target_unreachable` quand Windows fermait la session.
+
+**Désormais** :
+- `ReadBitmapUpdate` reconnaît l'ultimatum (TPKT exact) et rend `rdp.ErrSessionEnded` ;
+- le moteur la traite comme une fin sans erreur, que le relais dit `END session_ended`.
+
+Une connexion qui ne fait que se fermer n'est **pas** une fin : `crypto/tls` rend `io.EOF` pour un `close_notify` comme pour une cible morte, et une cible morte reste `target_unreachable`.
+
+**Preuves** :
+- tests rouges d'abord dans `pkg/rdp` : ultimatum = fin ; fermeture TLS entre deux paquets, paquet tronqué et TPKT menteur = refus ;
+- moteur : la fin donne un `Err()` nul ;
+- contre FreeRDP 3, la contre-épreuve : le serveur tué en pleine session reste un échec ;
+- **contre Windows Server 2022, aux quatre cibles** : la session fermée par Windows lui-même (demande déposée sur le partage, boucle SYSTEM de la cible) finit le flux sans erreur.
+
+**Mesuré en passant** : la touche Windows (`0xE0 0x5B`) envoyée par ce client n'a pas atteint l'interface de Windows. Win+R n'a pas ouvert « Exécuter », et le « r » est allé dans le Bloc-notes, aux quatre cibles. L'encodage suit MS-RDPBCGR (`KBDFLAGS_EXTENDED`). Point ouvert : les touches étendues sont à éprouver une à une contre Windows.
