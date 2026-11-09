@@ -316,7 +316,7 @@ sequenceDiagram
 |---|---|---|
 | `VIDEO_RECORDER_URL` | aucune | obligatoire sous `RECORDING_POLICY=required` (défaut) |
 | `RECORDING_POLICY` | `required` | inchangé ; `best-effort` est refusé pour les écrans |
-| `SCREEN_FRAME_INTERVAL_MS` | `50` | clôture d'un segment ; borné à [16, 250] |
+| `SCREEN_FRAME_INTERVAL_MS` | `50` | cadence des images, VNC et RDP : au plus une image par intervalle ; borné à [16, 250] |
 | `SCREEN_MAX_PIXELS` | `16777216` | borne de trame (ADR-0070) |
 | `SCREEN_INPUT_RATE_PER_SECOND` | `200` | débit d'entrée par session |
 | `SCREEN_INPUT_BURST` | `400` | rafale d'entrée |
@@ -1713,3 +1713,22 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 **Correctif** : `createSession` refuse une demande break-glass sur un compte `rdp` ou `vnc` avant toute autorisation. Comme tout refus de dérogation, la demande est enregistrée au statut `denied` et auditée (`session.breakglass_requested`, échec). L'API répond `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass. Le refus du proxy reste en place, en seconde défense.
 
 **Preuves** : test rouge d'abord (la demande `vnc` partait en approbation), test HTTP du `409`, et 4 mutations tuées sur 4 (refus retiré, `rdp` oublié, audit retiré, `409` retiré).
+
+## ADR-0071 — §8 : la cadence des images RDP
+
+§8 veut une capture à intervalle (`SCREEN_FRAME_INTERVAL_MS`). Elle ne s'appliquait qu'à VNC : en RDP, chaque mise à jour qui changeait l'écran devenait une image PNG, encodée, enregistrée et acquittée, sans plafond de fréquence. Seuls les repeints identiques étaient écartés.
+
+**Désormais** :
+- l'adaptateur RDP applique chaque mise à jour au framebuffer (`RDPFramebuffer.Draw`, mêmes validations qu'`Apply`) ;
+- il n'encode et ne remet au relais qu'**une image par intervalle au plus**, celle de l'écran le plus récent (`Frame`) ;
+- la première image part sans délai, une image en attente part à l'échéance de l'intervalle, et le dernier écran dessiné part avant la fin du flux ;
+- le binaire prend le même réglage que VNC. Un intervalle nul garde une image par mise à jour, et `Apply` reste inchangé.
+
+**Preuves** :
+- `TestRDPCodec_FramesFollowTheCadence` : 40 mises à jour dans un intervalle donnent 2 images, la première et la plus récente ;
+- `TestRDPCodec_AWaitingScreenGoesOutAtTheInterval` ;
+- `TestRDPFramebufferDrawThenFrameIsApply` ;
+- 4 mutations tuées sur 4 ;
+- interopérabilité FreeRDP, enregistrement de bout en bout et route depuis l'API publique, tous verts.
+
+**Limite** : le débit n'est pas mesuré ; c'est l'incrément 5 et le lot A d'ADR-0090.

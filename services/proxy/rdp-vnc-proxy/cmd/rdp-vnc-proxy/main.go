@@ -91,6 +91,8 @@ func runService() {
 		server.WithRDP(&engine.RDPCodec{
 			TLSRoots:    roots,
 			DialTimeout: time.Duration(boundedIntEnv("RDP_CONNECT_TIMEOUT_SECONDS", 15, 1, 120)) * time.Second,
+			// The cadence VNC has (ADR-0071 §8): at most one frame encoded and recorded a interval.
+			FrameInterval: vncCodec.FrameInterval,
 		})
 		rdpState = "RDP enabled"
 	default:
