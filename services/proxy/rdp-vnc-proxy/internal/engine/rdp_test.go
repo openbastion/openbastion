@@ -456,6 +456,9 @@ func TestRDPCodec_TheTargetEndingTheSessionIsNoFailure(t *testing.T) {
 			t.Errorf("%v: Err() = %v, failure %v", c.end, got, c.failure)
 		}
 		session.Close()
+	}
+}
+
 // The frames follow a cadence (ADR-0071 §8): updates are drawn as they come, and at most one frame
 // a interval is encoded and recorded, the latest screen. The first frame goes at once, and the
 // last screen drawn is never lost.

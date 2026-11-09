@@ -398,16 +398,6 @@ func (s *rdpScreenSessionAdapter) Close() error {
 func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 	defer close(s.done)
 	defer close(s.frames)
-	shown := false
-	for {
-		update, err := s.target.ReadBitmapUpdate(ctx, rdpReadTimeout)
-		if err != nil {
-			// The target ended the session (ADR-0071 §3, "Fin"): no error, which the relay says
-			// as session_ended. Anything else is a failure, kept for Err.
-			if ctx.Err() == nil && !errors.Is(err, rdp.ErrSessionEnded) {
-				s.mu.Lock()
-				s.err = err
-				s.mu.Unlock()
 	// The target's updates, read apart: a frame may be due while the next update is awaited.
 	updates := make(chan rdp.RDPBitmapUpdate)
 	readErr := make(chan error, 1)
@@ -426,8 +416,10 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 			}
 		}
 	}()
+	// The target ending the session (ADR-0071 §3, "Fin") is no failure: Err stays nil, which the
+	// relay says as session_ended. Anything else is kept for Err.
 	fail := func(err error) {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && !errors.Is(err, rdp.ErrSessionEnded) {
 			s.mu.Lock()
 			s.err = err
 			s.mu.Unlock()
