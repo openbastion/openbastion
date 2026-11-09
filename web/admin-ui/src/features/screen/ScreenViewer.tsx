@@ -1,6 +1,6 @@
 import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useRef, useState } from "react";
-import { SUBPROTOCOL, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, endMessage } from "./protocol";
-import { keysymOf, rfbButtons } from "./keys";
+import { SUBPROTOCOL, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeScancode, endMessage } from "./protocol";
+import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 
 export type ScreenSocket = Pick<WebSocket, "send" | "close" | "readyState" | "binaryType" | "onopen" | "onmessage" | "onclose" | "onerror">;
 
@@ -49,6 +49,8 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const socket = useRef<ScreenSocket | null>(null);
   const frame = useRef<{ width: number; height: number } | null>(null);
   const pressed = useRef(new Map<string, number>());
+  // The session's protocol, as the proxy's HELLO says: RDP takes scancodes, VNC keysyms (ADR-0088).
+  const protocol = useRef<"rdp" | "vnc" | null>(null);
   const moveFrame = useRef<number | null>(null);
   const pendingMove = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const buttons = useRef(0);
@@ -89,6 +91,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         return;
       }
       if (message.type === "hello") {
+        protocol.current = message.protocol;
         setPhase({ name: "live", expiresAt: message.expiresAt });
       } else if (message.type === "end") {
         finish(endMessage(message.text));
@@ -131,20 +134,23 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   }, [attach, deps]);
 
   // Keyed by physical key: the release must name what the press named, even if Shift went up first.
+  // RDP takes the physical key itself, VNC the character it gives here; before the HELLO, nothing.
   function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
-    const keysym = pressed.current.get(e.code) ?? keysymOf(e.key);
-    if (keysym === null) return;
-    pressed.current.set(e.code, keysym);
-    send(encodeKey(keysym, true));
+    const rdp = protocol.current === "rdp";
+    if (protocol.current === null) return;
+    const key = pressed.current.get(e.code) ?? (rdp ? scancodeOf(e.code) : keysymOf(e.key));
+    if (key === null) return;
+    pressed.current.set(e.code, key);
+    send(rdp ? encodeScancode(key, true) : encodeKey(key, true));
   }
 
   function onKeyUp(e: KeyboardEvent) {
     e.preventDefault();
-    const keysym = pressed.current.get(e.code);
-    if (keysym === undefined) return;
+    const key = pressed.current.get(e.code);
+    if (key === undefined) return;
     pressed.current.delete(e.code);
-    send(encodeKey(keysym, false));
+    send(protocol.current === "rdp" ? encodeScancode(key, false) : encodeKey(key, false));
   }
 
   // No key stays down on the target because the operator looked elsewhere (ADR-0071 §6).

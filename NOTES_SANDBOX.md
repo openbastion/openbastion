@@ -3036,6 +3036,34 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : la priorité MCS d'un PDU de Windows
+
+Au CI de la PR #94, Windows a envoyé un Share Data PDU en priorité MCS « top » (`0x30`), et le lecteur, qui n'acceptait que « high », a fermé la session avant la première image. Ce refus est intermittent : vert aux passages précédents. La description des refus MCS (PR #93) l'a nommé. Toute priorité est désormais lue, et les bits réservés restent refusés. Test rouge d'abord (le paquet même), puis vert ; la suite `pkg/rdp` passe.
+
+## 2026-11-09 — ADR-0088 : RDP ouvert aux opérateurs, derrière un interrupteur
+
+Go du propriétaire : « Traite la réactivation et l'enregistrement contre Windows, puis la route opérateur et finir par le lecteur vidéo dans l'Admin UI ». RDP suit la route écran de VNC, derrière `RDP_ENABLED` (`true` ou `false`, toute autre valeur est fatale), éteint par défaut au Broker comme au proxy.
+
+**Changements** :
+- **Broker** : `connect` refuse RDP avant tout scope tant que l'interrupteur est éteint ; le routeur envoie `rdp` au pool écran.
+- **Proxy** : `establish-session` accepte `rdp` seulement avec le codec RDP ; la route écran choisit le codec d'après le ticket.
+- **Gateway** : un ticket `rdp` reste derrière le cookie `HttpOnly`. Correctif de sécurité, test rouge d'abord : un ticket `rdp` serait sinon passé tel quel au navigateur.
+- **Admin UI** : scancodes Set 1 de `KeyboardEvent.code` pour une session RDP ; RDP proposé dans les formulaires ; écran ouvert pour une session RDP active.
+- **Compose** : `RDP_ENABLED` vaut `false` par défaut.
+- **Contrats** : OpenAPI à jour.
+
+**Prouvé** :
+- parcours sur processus réels depuis l'API publique jusqu'à FreeRDP 3 : écran, scancodes, `session_revoked`, rejeu identique à l'octet, audit ;
+- contre-épreuves : Broker éteint, `409` avant tout scope ; proxy éteint, `503` ;
+- tests unitaires du Broker, du proxy, de la Gateway et de l'UI (Vitest : 80 → 85 tests).
+
+**Limites** :
+- glyphes, AZERTY et QWERTY vérifiés, `recording_lost` au-delà de 4 Mio : non tenus ;
+- pas de presse-papiers ;
+- pas encore contre Windows depuis l'API publique.
+
+**Choix renversables** : deux interrupteurs plutôt qu'un ; `RDP_CONNECT_TIMEOUT_SECONDS` à 15 s ; les touches non mappées (Pause, touches multimédias) ne sont pas envoyées.
+
 ## 2026-11-09 — ADR-0071 : l'enregistrement et la reprise par le codec, contre Windows
 
 PR #93.

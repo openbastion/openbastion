@@ -66,7 +66,7 @@ export function Accounts() {
         <h2>Comptes privilégiés</h2>
         <p className="hint">Renouveler un secret le change sur la cible, par le compte de réconciliation du compte, et le vérifie avant de l'adopter : un compte sans compte de réconciliation ne peut pas être renouvelé.</p>
         <p className="hint">Le secret n'est envoyé qu'au serveur qui présente la clé d'hôte épinglée : un compte sans clé n'ouvre aucune session et n'est pas renouvelé. Relevez la clé sur la cible elle-même, pas par le réseau que vous voulez protéger.</p>
-        <p className="hint">Un compte VNC épingle de même le certificat TLS de sa cible : sans empreinte, il n'ouvre aucune session.</p>
+        <p className="hint">Un compte VNC ou RDP épingle de même le certificat TLS de sa cible : sans empreinte, il n'ouvre aucune session.</p>
       </div>
       <Notice error={error} ok={ok} />
       <div className="card">
@@ -143,7 +143,7 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
       // Only a scheduled account takes an interval (ADR-0040): the Vault refuses one elsewhere.
       const { rotationIntervalDays, ...rest } = f;
       const schedule = f.rotationPolicy === "scheduled" ? { rotationIntervalDays: Number(rotationIntervalDays) } : {};
-      // A VNC account has no host key and no rotation; its TLS pin comes next, by its own route.
+      // A VNC or RDP account has no host key and no rotation; its TLS pin comes next, by its own route.
       const shape = ssh ? { ...rest, ...schedule } : { ...rest, rotationPolicy: "manual", reconciliationAccountId: "", hostKey: "" };
       await api.request("POST", "/vault/accounts", { ...shape, approvalRequired, initialSecret: btoa(bin) });
       setF({ ...f, id: "", name: "", initialSecret: "", hostKey: "" });
@@ -166,6 +166,7 @@ function Onboard({ onDone }: { onDone: (id: string) => void }) {
           <select value={f.protocol} onChange={set("protocol")}>
             <option value="ssh">SSH</option>
             <option value="vnc">VNC</option>
+            <option value="rdp">RDP</option>
           </select>
         </label>
         {ssh ? <label>

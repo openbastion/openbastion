@@ -305,8 +305,35 @@ func TestConnect_RejectsUnsupportedProtocol(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); err == nil {
-		t.Fatal("expected Connect to reject a protocol outside MVP scope (docs/roadmap.md §2)")
+	vault, proxy := &fakeVaultAuthorizer{}, &fakeProxyClient{}
+	broker = newTestBroker(authz, vault, &fakeAudit{}, accounts, proxy)
+	sess, err = broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", "", 60)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	// RDP off (ADR-0088, the default): refused before any Vault scope, and nothing asked of a proxy.
+	if _, _, _, err := broker.Connect(context.Background(), sess.ID, sess.RequestedBy); !errors.Is(err, domain.ErrUnsupportedProtocol) {
+		t.Fatalf("Connect with RDP off = %v, want ErrUnsupportedProtocol", err)
+	}
+	if vault.calls != 0 || proxy.calls != 0 {
+		t.Fatalf("RDP off: %d Vault scope(s), %d proxy call(s) before the refusal", vault.calls, proxy.calls)
+	}
+}
+
+// RDP on (ADR-0088): the session goes the way of a VNC one, a scope for the screen proxies.
+func TestConnect_RDPWhenEnabled(t *testing.T) {
+	vault, proxy := &fakeVaultAuthorizer{}, &fakeProxyClient{}
+	broker := newTestBroker(&fakeAuthz{allowed: true}, vault, &fakeAudit{}, &fakeAccountLookup{protocol: "rdp"}, proxy).WithRDP(true)
+	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", "", 60)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, _, protocol, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy)
+	if err != nil {
+		t.Fatalf("Connect with RDP on: %v", err)
+	}
+	if protocol != "rdp" || vault.calls != 1 || vault.lastProxyID != "rdp-vnc-proxy" || proxy.calls != 1 {
+		t.Fatalf("protocol %q, %d scope(s) for %q, %d proxy call(s)", protocol, vault.calls, vault.lastProxyID, proxy.calls)
 	}
 }
 

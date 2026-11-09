@@ -323,9 +323,9 @@ sequenceDiagram
 | `RDP_VNC_PROXY_URLS` | aucune | pool du Broker, 1 à 16 |
 | `SCREEN_ATTACH_TTL_SECONDS` | `30` | durée de vie du cookie d'attache |
 | `SCREEN_ALLOWED_ORIGINS` | vide (même origine) | origines WebSocket acceptées |
-| `RDP_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
+| `RDP_CONNECT_TIMEOUT_SECONDS` | `15` | poignée de main cible (CredSSP compris) |
 | `VNC_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
-| `RDP_ENGINE_ENABLED` | `false` | n'expose `rdp` qu'après l'incrément 3 ; valeur inconnue fatale |
+| `RDP_ENABLED` | `false` | Broker et proxy (ADR-0088, qui remplace `RDP_ENGINE_ENABLED`) : ouvre `rdp` aux opérateurs ; seuls `true` et `false` sont lus, toute autre valeur est fatale |
 
 Toute valeur absente, hors bornes ou inconnue est fatale au démarrage (`settings/security.yaml`, règle « défaut strict »).
 
@@ -1592,6 +1592,21 @@ C'est le premier critère de sortie de l'incrément 2 : « session RDP interacti
 - l'Admin UI n'a pas de lecteur vidéo (rejeu par l'API) ;
 - RDP reste non exposé.
 
+## ADR-0071 — incrément 74 : la route opérateur (ADR-0088)
+
+RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLED`, éteint par défaut au Broker comme au proxy. La décision, ses alternatives et ses limites sont dans ADR-0088.
+
+**Preuve sur processus réels.** `TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses` (`make test-rdp-recording`) fait le parcours depuis l'API publique jusqu'à FreeRDP 3 et retour :
+- compte RDP épinglé, session, `connect` qui répond par un chemin et un cookie `HttpOnly` ;
+- écran de la cible, clavier en scancodes reçu par la cible ;
+- fin de session : `session_revoked` ;
+- rejeu par l'auditeur, identique à l'octet ;
+- `session.revoked` et `session.terminate` à l'audit.
+
+**Contre-épreuves** : sans l'interrupteur du Broker, `connect` répond `409` avant tout scope ; sans celui du proxy, `503`.
+
+**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes, AZERTY et QWERTY vérifiés, `recording_lost` au-delà de 4 Mio. Allumer RDP reste le choix de l'exploitant.
+
 ## ADR-0071 — PR #93 : l'enregistrement et la reprise par le codec, contre Windows
 
 **Enregistrement contre Windows** : établi aux trois cibles (16 bpp, 32 bpp, 16 bpp à la console).
@@ -1603,3 +1618,9 @@ C'est le premier critère de sortie de l'incrément 2 : « session RDP interacti
 **Le passage précédent a montré deux choses** :
 - **Un artefact contenant un fragment du mot de passe de test.** La cible `fPromptForPassword` n'a pas demandé de mot de passe sous NLA, et l'isolement l'a tapé dans le Bloc-notes. Mot de passe aléatoire, propre au passage, VM détruite à la fin du job ; l'artefact a été supprimé, et la cible comme la saisie retirées.
 - **Une reprise par le codec arrêtée sur un refus MCS non décrit.** Elle n'est survenue que sur cette cible, et sa cause reste inconnue. `ReadBitmapUpdate` décrit désormais ses refus MCS (type de PDU, canal, priorité et segmentation) : un nouveau cas dira ce que Windows envoie.
+
+## ADR-0071 — la priorité MCS d'un PDU de Windows
+
+Au CI de la PR #94, Windows Server 2022 a envoyé, à l'ouverture d'une session, un Share Data PDU de 36 octets en priorité MCS « top » (`0x30`). Le lecteur n'acceptait que la priorité « high » (`0x70`) : la session s'est fermée avant sa première image. C'est le refus que `ReadBitmapUpdate` décrit depuis la PR #93 ; il était muet avant, et c'est la cause probable de la reprise arrêtée sur la cible retirée.
+
+La priorité de données ne dit rien dont ce client dépende, et FreeRDP l'ignore : toute priorité est désormais lue, et les bits réservés doivent rester nuls. Le test rouge reproduit le paquet ; une priorité quelconque passe ; un bit réservé reste refusé.

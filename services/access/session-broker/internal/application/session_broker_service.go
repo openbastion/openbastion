@@ -110,9 +110,9 @@ type ApprovalNotifier interface {
 	Notify(ctx context.Context, n domain.ApprovalNotification)
 }
 
-// ProxySelector resolves which proxy family serves a given protocol.
-// The selector resolves the proxy family. ConnectDetails refuses RDP before issuing a Vault scope
-// until the protocol engine is implemented; the family still owns revocation for that session.
+// ProxySelector resolves which proxy family serves a given protocol. ConnectDetails refuses RDP
+// before issuing a Vault scope unless RDP_ENABLED turned it on (ADR-0088); the family owns
+// revocation for that session either way.
 type ProxySelector struct{}
 
 func (ProxySelector) Select(protocol string) (proxyServiceID string, err error) {
@@ -170,6 +170,8 @@ type SessionBrokerService struct {
 	// nil: nobody is.
 	rotator AfterUseRotator
 	logf    func(format string, args ...any)
+	// rdpEnabled opens connect to RDP sessions (ADR-0088); off by default.
+	rdpEnabled bool
 }
 
 // BreakGlassResourcePrefix prefixes the RBAC resource that governs break-glass:
@@ -285,6 +287,12 @@ func (s *SessionBrokerService) notify(ctx context.Context, n domain.ApprovalNoti
 }
 
 // WithClock replaces the clock; for tests.
+// WithRDP opens connect to RDP sessions (ADR-0088, RDP_ENABLED). Off by default.
+func (s *SessionBrokerService) WithRDP(enabled bool) *SessionBrokerService {
+	s.rdpEnabled = enabled
+	return s
+}
+
 func (s *SessionBrokerService) WithClock(now func() time.Time) *SessionBrokerService {
 	s.now = now
 	s.readRefusals.WithClock(now)
@@ -689,7 +697,9 @@ func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, ca
 	if status != domain.StatusActive {
 		return "", "", "", time.Time{}, fmt.Errorf("%w: cannot connect a session in status %q", domain.ErrConflict, status)
 	}
-	if sess.Protocol == "rdp" {
+	// RDP is opened by the operator of the installation, not by default (ADR-0088): off, it is
+	// refused here, before any Vault scope is issued.
+	if sess.Protocol == "rdp" && !s.rdpEnabled {
 		return "", "", "", time.Time{}, domain.ErrUnsupportedProtocol
 	}
 

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ScreenDeps, ScreenSocket, ScreenViewer, attachUrl } from "./ScreenViewer";
-import { SUBPROTOCOL, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, endMessage } from "./protocol";
-import { keysymOf, rfbButtons } from "./keys";
+import { SUBPROTOCOL, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeScancode, endMessage } from "./protocol";
+import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
 
@@ -25,11 +25,11 @@ function oversizedFrame(): ArrayBuffer {
   return header(1, 1n, 1, 1, payload);
 }
 const frame = (sequence: bigint, width = 100, height = 50) => header(1, sequence, width, height, PNG);
-function hello(id = "s1"): ArrayBuffer {
+function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc"): ArrayBuffer {
   const bytes = [...new TextEncoder().encode(id)];
   const p = new Uint8Array(14 + bytes.length);
   const v = new DataView(p.buffer);
-  p[0] = 2;
+  p[0] = protocol === "rdp" ? 1 : 2;
   v.setBigUint64(2, 1893456000n);
   v.setUint32(10, bytes.length);
   p.set(bytes, 14);
@@ -85,8 +85,8 @@ function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<Imag
   return { socket, urls, shown, canvas, onReconnect, onClose, view };
 }
 
-async function live(s: ReturnType<typeof setup>) {
-  s.socket.receive(hello());
+async function live(s: ReturnType<typeof setup>, protocol: "rdp" | "vnc" = "vnc") {
+  s.socket.receive(hello("s1", protocol));
   s.socket.receive(frame(1n));
   await waitFor(() => expect(s.shown.length).toBe(1));
 }
@@ -268,6 +268,40 @@ describe("the screen", () => {
     s.view.unmount();
     expect(s.socket.closed).toBe(true);
     expect([...s.socket.sent.at(-1)!]).toEqual([...encodeReleaseAll()]);
+  });
+});
+
+describe("what the operator sends to an RDP session (ADR-0088)", () => {
+  it("writes the scancode where pkg/screenstream reads it, and no keysym", () => {
+    expect([...encodeScancode(0xe048, true)]).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0xe0, 0x48, 0, 0, 0, 0, 0, 0]);
+    expect([...encodeScancode(0x1e, false)]).toEqual([1, 1, 0, 0, 0, 0, 0, 0, 0, 0x1e, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("maps the physical key, whatever character the browser's layout gives", () => {
+    expect(scancodeOf("KeyA")).toBe(0x1e);
+    expect(scancodeOf("KeyQ")).toBe(0x10);
+    expect(scancodeOf("ArrowUp")).toBe(0xe048);
+    expect(scancodeOf("AltRight")).toBe(0xe038);
+    expect(scancodeOf("Pause")).toBeNull();
+    expect(scancodeOf("toString")).toBeNull();
+  });
+
+  it("sends the scancode of the key pressed, and releases what it pressed", async () => {
+    const s = setup();
+    await live(s, "rdp");
+    // An AZERTY browser: the key that gives "a" is KeyQ, and RDP is sent KeyQ.
+    fireEvent.keyDown(s.canvas, { key: "a", code: "KeyQ" });
+    fireEvent.keyUp(s.canvas, { key: "a", code: "KeyQ" });
+    fireEvent.keyDown(s.canvas, { key: "Pause", code: "Pause" });
+    expect(s.socket.sent.map((m) => [...m])).toEqual([[...encodeScancode(0x10, true)], [...encodeScancode(0x10, false)]]);
+    s.view.unmount();
+  });
+
+  it("sends no key before the proxy has said which protocol it is", () => {
+    const s = setup();
+    fireEvent.keyDown(s.canvas, { key: "a", code: "KeyA" });
+    expect(s.socket.sent.length).toBe(0);
+    s.view.unmount();
   });
 });
 

@@ -37,3 +37,36 @@ func TestReadBitmapUpdateDescribesWhatItRefusesAtTheMCSLayer(t *testing.T) {
 		})
 	}
 }
+
+// The MCS data priority says nothing this client depends on: Windows Server 2022 sent a Share Data
+// PDU at top priority (0x30, CI of PR #94), which the reader refused, ending the session. Any
+// priority is read; the reserved bits stay zero.
+func TestReadBitmapUpdateReadsAnyMCSDataPriority(t *testing.T) {
+	bitmap := mcsTestBitmapUpdatePacket(reactivationOldShare, mcsTestBitmapRectangle(1, 2, 1, 1, 32, 0, []byte{0, 0, 0xff, 0}))
+	errorInfo := mcsTestFinalizationResponse(reactivationOldShare, 0x2f, 0, []byte{0, 0, 0, 0}) // Set Error Info, ignored
+	for _, priority := range []byte{0x00, 0x40, 0x80, 0xc0} {
+		top := append([]byte(nil), errorInfo...)
+		top[12] = priority | 0x30
+		session, _ := reactivationSession(t, func(conn net.Conn) error {
+			if err := writeFull(conn, append(top, bitmap...)); err != nil {
+				return err
+			}
+			_, _ = conn.Read(make([]byte, 64))
+			return nil
+		})
+		update, err := session.ReadBitmapUpdate(context.Background(), 2*time.Second)
+		if err != nil || len(update.Rectangles) != 1 {
+			t.Fatalf("priority 0x%02x: %v", priority, err)
+		}
+	}
+	reserved := append([]byte(nil), errorInfo...)
+	reserved[12] = 0x71
+	session, _ := reactivationSession(t, func(conn net.Conn) error {
+		_ = writeFull(conn, append(reserved, bitmap...))
+		_, _ = conn.Read(make([]byte, 64))
+		return nil
+	})
+	if _, err := session.ReadBitmapUpdate(context.Background(), 2*time.Second); !errors.Is(err, ErrMCSConnection) {
+		t.Fatalf("reserved bits set: %v", err)
+	}
+}

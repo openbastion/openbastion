@@ -1,10 +1,10 @@
 package interfaces
 
-// ADR-0071, the recording of an RDP session, end to end, without exposing RDP: the proxy's real
-// HTTP server and screen relay with the RDP codec, a real RDP server (FreeRDP 3, in Docker), and
+// ADR-0071, the recording of an RDP session, end to end: the proxy's real HTTP server and screen
+// relay with the RDP codec, a real RDP server (FreeRDP 3, in Docker), and
 // the real Video Recorder as its own process, on PostgreSQL, over mutual TLS. The ticket is
-// registered here, as the Broker would, because the proxy's establish route refuses RDP (and keeps
-// refusing it: RDP stays unexposed). Around the recorder, what VNC's flow (test/integration) also
+// registered here, as the Broker would: the operator's route from the public API is
+// test/integration's TestScreenFlow_RDPFrom… (ADR-0088). Around the recorder, what VNC's flow (test/integration) also
 // stands in for: the object store, the audit service and the authorization's answer.
 //
 // The claims: every frame the operator saw is, to the byte, the frame an auditor replays under
@@ -118,7 +118,7 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 	recorderURL := "https://127.0.0.1:" + grpcPort
 	video := startVideoRecorder(t, root, pkiDir, httpPort, grpcPort, dsn, store.URL, authzURL, auditURL)
 
-	// The proxy, as cmd/rdp-vnc-proxy builds it, with the RDP codec in place of VNC's.
+	// The proxy, as cmd/rdp-vnc-proxy builds it.
 	recorder, err := infrastructure.NewVideoRecorderClient(identity(mtls.RDPVNCProxy), recorderURL)
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,9 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 	}}
 	listener := proxycore.NewListener(proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy), proxycore.NewTerminator(noopAudit{}))
 	codec := &engine.RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DesktopWidth: target.askWidth, DesktopHeight: target.askHeight}
-	server := NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, codec, recorder, "rdp-vnc-proxy:8090", nil)
+	// As cmd/rdp-vnc-proxy builds it with RDP_ENABLED=true (ADR-0088): VNC's codec, and RDP's for an
+	// RDP ticket.
+	server := NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, &engine.VNCCodec{TLSRoots: target.roots}, recorder, "rdp-vnc-proxy:8090", nil).WithRDP(codec)
 	proxy := httptest.NewServer(server.Routes())
 	t.Cleanup(proxy.Close)
 

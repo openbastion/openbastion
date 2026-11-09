@@ -340,6 +340,26 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
     vi.unstubAllGlobals();
   });
 
+  // ADR-0088: an RDP session opens the same screen, attached the same way.
+  it("offers the screen of an active RDP session", async () => {
+    const socketOpen = vi.fn(function () {
+      return { close: vi.fn(), send: vi.fn(), readyState: 0 };
+    });
+    vi.stubGlobal("WebSocket", socketOpen);
+    const { api, calls } = fakeApi({ "GET /sessions": page([]), "POST /sessions": { status: 201, body: { ...session, protocol: "rdp" } }, "POST /sessions/sess_v/connect": { body: { protocol: "rdp", attach: "/sessions/sess_v/screen", expiresAt: "2030-01-01T00:00:00Z" } } });
+    signedIn(api, <Sessions />);
+    const form = await screen.findByRole("form", { name: "Demander une session" });
+    const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    field("Compte", "acc_r");
+    field("Protocole du compte", "rdp");
+    field("Justification", "patch");
+    fireEvent.submit(form);
+    fireEvent.click(await screen.findByText("Ouvrir l'écran"));
+    await waitFor(() => expect(socketOpen).toHaveBeenCalledOnce());
+    expect(calls.find((c) => c.path === "/sessions")?.body).toMatchObject({ protocol: "rdp" });
+    vi.unstubAllGlobals();
+  });
+
   it("offers no screen for an SSH session, nor one that is not active", async () => {
     const { api } = fakeApi({ "GET /sessions": page([]), "GET /sessions/sess_v": { body: { ...session, protocol: "ssh" } }, "GET /sessions/sess_w": { body: { ...session, status: "pending_approval" } } });
     signedIn(api, <Sessions />);

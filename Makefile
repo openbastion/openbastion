@@ -206,8 +206,10 @@ test-rdp-interop:
 ## The recording of an RDP session, end to end (ADR-0071): the proxy's real server with the RDP codec,
 ## the real Video Recorder on PostgreSQL (TEST_DATABASE_URL), FreeRDP 3 in Docker whose display
 ## shrinks mid-session. RDP stays unexposed: the test registers the ticket the Broker would.
+## Then the operator's route (ADR-0088): from the public API, eight services on real processes, RDP on.
 test-rdp-recording:
 	RDP_INTEROP=1 $(GO) test ./services/proxy/rdp-vnc-proxy/internal/interfaces/ -run TestRDPRecording -v -count=1 -timeout=600s
+	RDP_INTEROP=1 $(GO) test ./test/integration/ -run TestScreenFlow_RDPFrom -v -count=1 -timeout=900s
 
 ## A real Windows target (ADR-0071), in CI: .github/workflows/windows-rdp.yml starts it
 ## (test/integration/testdata/rdp/windows) and exports the RDP_WINDOWS_* variables of its test.env.
