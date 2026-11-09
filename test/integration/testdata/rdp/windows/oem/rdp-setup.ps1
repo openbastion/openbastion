@@ -46,6 +46,21 @@ try {
   Write-Output "rdp-setup: colour depth not recorded: $_"
 }
 
+# The user's keyboard layout (prepare.sh KEYBOARD, ADR-0088): the operator sends physical keys,
+# which the target reads with this layout. This script runs in the user's first session, where
+# Set-WinUserLanguageList applies. What the machine ends up with goes to the event export.
+try {
+  $keyboard = (Get-Content 'C:\OEM\keyboard' -Raw -ErrorAction SilentlyContinue)
+  if ($keyboard -eq 'fr-FR') {
+    Set-WinUserLanguageList -LanguageList fr-FR -Force
+  }
+  New-Item -ItemType Directory -Force 'C:\OEM\rdp-events' | Out-Null
+  "asked: $keyboard" | Out-File 'C:\OEM\rdp-events\keyboard.txt' -Encoding utf8
+  Get-WinUserLanguageList | Format-List | Out-String | Out-File 'C:\OEM\rdp-events\keyboard.txt' -Append -Encoding utf8
+} catch {
+  Write-Output "rdp-setup: keyboard layout not set: $_"
+}
+
 # Something the test can type into and see: Notepad, at every logon.
 Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OpenBastionNotepad -Value 'notepad.exe'
 
@@ -102,6 +117,8 @@ while ($true) {
   }
   wevtutil qe System $system /c:400 /rd:true /f:text 2>&1 | Out-File (Join-Path $out 'System-rdp.txt') -Encoding utf8
   wevtutil qe System $system /c:400 /rd:true /f:xml 2>&1 | Out-File (Join-Path $out 'System-rdp.xml') -Encoding utf8
+  # What the keyboard test saved from Notepad (ADR-0088): the text the target read from the keys.
+  Get-ChildItem 'C:\Users\*\Documents\*.txt' -ErrorAction SilentlyContinue | Copy-Item -Destination $out -Force -ErrorAction SilentlyContinue
   $shares = @('\\host.lan\Data')
   $gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
   if ($gateway) { $shares += "\\$gateway\Data" }

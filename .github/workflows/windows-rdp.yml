@@ -32,7 +32,7 @@ jobs:
   windows:
     # 16: Windows as installed, the real case (ADR-0086). 32: 32 bpp allowed by policy, the 32-bpp
     # path (RDP 6.0 planar) against Windows. Each on its own runner, side by side.
-    name: RDP against Windows Server 2022 (${{ matrix.depth }} bpp, session ${{ matrix.session }})
+    name: RDP against Windows Server 2022 (${{ matrix.depth }} bpp, session ${{ matrix.session }}${{ matrix.keyboard != 'en-US' && format(', {0}', matrix.keyboard) || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
@@ -40,13 +40,22 @@ jobs:
       matrix:
         depth: [16, 32]
         session: [none]
+        # A dimension, not a key added by include: an include that matches a combination and only
+        # adds a key merges into it instead of making a job of its own.
+        keyboard: [en-US]
         # The session dockur opens at the console for the user, kept: taking it over by RDP.
         include:
           - depth: 16
             session: console
+            keyboard: en-US
+          # AZERTY (ADR-0088): the operator's physical keys, read by the target's own layout.
+          - depth: 16
+            session: none
+            keyboard: fr-FR
     env:
       DEPTH: ${{ matrix.depth }}
       SESSION: ${{ matrix.session }}
+      KEYBOARD: ${{ matrix.keyboard || 'en-US' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,7 +78,7 @@ jobs:
         run: make test-rdp-interop
       - name: "Prepare the target (authority, certificate, password: for this run only)"
         if: ${{ !cancelled() }}
-        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" "$DEPTH" "$SESSION"
+        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" "$DEPTH" "$SESSION" "$KEYBOARD"
       - name: Start Windows
         if: ${{ !cancelled() }}
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml up -d
@@ -160,7 +169,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-rdp-screens-${{ matrix.depth }}bpp-${{ matrix.session }}
+          name: windows-rdp-screens-${{ matrix.depth }}bpp-${{ matrix.session }}-${{ matrix.keyboard || 'en-US' }}
           path: ${{ runner.temp }}/windows/dump/
           if-no-files-found: ignore
           retention-days: 14

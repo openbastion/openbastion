@@ -19,6 +19,8 @@ services:
       DISK_SIZE: 40G
       RAM_SIZE: 6G
       CPU_CORES: "2"
+      # The installation's keyboard layout (prepare.sh KEYBOARD); rdp-setup.ps1 sets the user's too.
+      KEYBOARD: ${WINDOWS_KEYBOARD:-en-US}
     devices:
       - /dev/kvm
       - /dev/net/tun

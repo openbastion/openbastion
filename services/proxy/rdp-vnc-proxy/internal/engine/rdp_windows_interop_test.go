@@ -252,3 +252,119 @@ func TestRDPWindows_Screen(t *testing.T) {
 	}
 	t.Logf("%d frame(s) in all; the dumps show what a person must judge (pixel fidelity, text)", frames)
 }
+
+// The keyboard layouts (ADR-0071's exit criterion, ADR-0088): the operator sends physical keys
+// (scancodes) and the target reads them with its own layout. Keys whose character differs between
+// QWERTY and AZERTY are typed into Notepad, which saves them (Ctrl+S, "kbd"); rdp-setup.ps1 copies
+// the file to the share the runner reads, and the text is compared to what the target's layout
+// gives — the text, not a picture of it.
+func TestRDPWindows_KeyboardLayout(t *testing.T) {
+	target := windowsTarget(t)
+	shared := os.Getenv("RDP_WINDOWS_SHARED")
+	if shared == "" {
+		t.Skip("RDP_WINDOWS_SHARED not set: the share rdp-setup.ps1 copies Notepad's file to (prepare.sh)")
+	}
+	// Q, W, A, Z, the key right of L, M, the key right of M, 1, then Shift+1.
+	keys := []uint16{0x10, 0x11, 0x1e, 0x2c, 0x27, 0x32, 0x33, 0x02}
+	want := map[string]string{"en-US": "qwaz;m,1!", "fr-FR": "azqwm,;&1"}[os.Getenv("RDP_WINDOWS_KEYBOARD")]
+	if want == "" {
+		want = "qwaz;m,1!" // prepare.sh's default, en-US
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	var last screenstream.Message
+	settle := func(quiet, limit time.Duration) {
+		end := time.After(limit)
+		for {
+			select {
+			case m, ok := <-session.Frames():
+				if !ok {
+					t.Fatalf("the stream ended: %v", session.Err())
+				}
+				last = m
+			case <-time.After(quiet):
+				return
+			case <-end:
+				return
+			}
+		}
+	}
+	settle(10*time.Second, 90*time.Second)
+	if last.Width == 0 {
+		t.Fatal("no frame from Windows")
+	}
+	press := func(code uint16, pressed bool) {
+		flags := screenstream.KeyReleased
+		if pressed {
+			flags = screenstream.KeyPressed
+		}
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: code, Flags: flags}); err != nil {
+			t.Fatalf("key 0x%x: %v", code, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	key := func(code uint16) { press(code, true); press(code, false) }
+	chord := func(modifier, code uint16) { press(modifier, true); key(code); press(modifier, false) }
+	// Into Notepad, at the end of what the other tests typed, on a line of its own.
+	x, y := uint16(last.Width/2), uint16(last.Height/2)
+	for _, buttons := range []byte{1, 0} {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: x, Y: y, Buttons: buttons}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+	chord(0x1d, 0xe04f) // Ctrl+End
+	key(0x1c)
+	for _, code := range keys {
+		key(code)
+	}
+	chord(0x2a, 0x02) // Shift+1
+	settle(2*time.Second, 10*time.Second)
+	if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "keyboard-typed.png"), last.PNG, 0o644)
+	}
+	// Ctrl+S, then the name "kbd" in Save As: S, K, B and D are where QWERTY and AZERTY agree.
+	chord(0x1d, 0x1f)
+	settle(2*time.Second, 10*time.Second)
+	for _, code := range []uint16{0x25, 0x30, 0x20} {
+		key(code)
+	}
+	key(0x1c)
+	settle(2*time.Second, 10*time.Second)
+	path := filepath.Join(shared, "kbd.txt")
+	var raw []byte
+	for deadline := time.Now().Add(2 * time.Minute); ; {
+		if raw, err = os.ReadFile(path); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Notepad's file never reached the share (%s): %v", path, err)
+		}
+		time.Sleep(5 * time.Second)
+	}
+	text := strings.TrimPrefix(string(raw), "\xef\xbb\xbf") // a UTF-8 BOM, if Notepad wrote one
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	got := ""
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) != "" {
+			got = lines[i]
+			break
+		}
+	}
+	t.Logf("layout %s: typed %q", os.Getenv("RDP_WINDOWS_KEYBOARD"), got)
+	if got != want {
+		t.Fatalf("the target read %q, want %q for layout %q", got, want, os.Getenv("RDP_WINDOWS_KEYBOARD"))
+	}
+}
