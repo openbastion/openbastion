@@ -139,10 +139,11 @@ func parseRDPBitmapMCSFragment(packet []byte, expectedChannelID uint16) ([]byte,
 		return nil, 0, ErrMCSConnection
 	}
 	mcs := packet[7:]
-	// Priority must remain HIGH and the four reserved padding bits must be 0.
-	// Bits 5..4 carry the MCS begin/end segmentation flags.
+	// Bits 7..6 are the data priority, which says nothing this client depends on: Windows Server
+	// 2022 sends some Share Data at top priority (CI of PR #94), FreeRDP ignores it. Bits 5..4
+	// carry the MCS begin/end segmentation flags; the four reserved padding bits must be 0.
 	if mcs[0] != mcsSendDataIndication ||
-		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5]&0xcf != 0x40 {
+		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5]&0x0f != 0 {
 		return nil, 0, ErrMCSConnection
 	}
 	length, userData, err := readPERLength(mcs[6:])
@@ -1668,9 +1669,11 @@ readUpdate:
 		}
 		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)
 		if fragmentErr != nil {
+			// Said, not bare: a reconnection to Windows ended here with nothing to go on (ADR-0071).
+			described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
 			clear(packet)
 			clear(assembled)
-			return RDPBitmapUpdate{}, ErrMCSConnection
+			return RDPBitmapUpdate{}, described
 		}
 		if fragmentCount == 0 && segmentation == 3 {
 			assembled = append(assembled, fragment...)

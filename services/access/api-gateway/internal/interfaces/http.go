@@ -812,14 +812,16 @@ func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid connection response", http.StatusBadGateway)
 		return
 	}
-	if ticket.Protocol != "vnc" {
+	// A screen ticket (VNC, and RDP since ADR-0088) never reaches the browser: only SSH's answer
+	// goes through as it came.
+	if ticket.Protocol != "vnc" && ticket.Protocol != "rdp" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
 		_, _ = w.Write(data)
 		return
 	}
 	if g.screenAttaches == nil || g.screenDialer == nil || ticket.Ticket == "" || ticket.ProxyEndpoint == "" || !ticket.ExpiresAt.After(time.Now()) {
-		// Do not leak a VNC ticket to the browser when the secure attach path is unavailable.
+		// Do not leak a screen ticket to the browser when the secure attach path is unavailable.
 		http.Error(w, "screen attach unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -840,7 +842,7 @@ func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Reque
 	}
 	http.SetCookie(w, &http.Cookie{Name: "ob_screen_attach", Value: attachToken, Path: attachPath, Expires: expires, MaxAge: maxAge, HttpOnly: true, Secure: g.screenCookieSecure, SameSite: http.SameSiteStrictMode})
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(screenAttachResponse{Protocol: "vnc", Attach: attachPath, ExpiresAt: expires})
+	_ = json.NewEncoder(w).Encode(screenAttachResponse{Protocol: ticket.Protocol, Attach: attachPath, ExpiresAt: expires})
 }
 
 func (g *GatewayServer) handleScreenAttach(w http.ResponseWriter, r *http.Request, sessionID string) {

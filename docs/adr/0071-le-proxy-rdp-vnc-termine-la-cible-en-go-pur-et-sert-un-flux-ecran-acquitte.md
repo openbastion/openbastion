@@ -14,7 +14,7 @@ Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC
 | `request-mic` et séquences | **Établi** : Windows ne demande pas le MIC ; le client l'envoie non demandé, à la séquence 0, flux RC4 réinitialisé, `pubKeyAuth` à 1. |
 | Fidélité des pixels, deltas RDP6 | **Établi à l'œil** : à 16 bpp (Interleaved RLE et non compressé) et à 32 bpp (RDP 6.0 planar, RLE et deltas, sur une seconde cible qui l'autorise par stratégie), écran, couleurs et texte fidèles (passage #48). Au passage #46, l'écran 32 bpp sortait blanc : Windows envoie un plan alpha de zéros, que le décodeur recopiait ; l'écran est désormais opaque. |
 | Fragments Fast-Path | **Établi au passage #54** : dès que le client annonce `TS_MULTIFRAGMENTUPDATE_CAPABILITYSET` (256 Kio), Windows fragmente ses mises à jour (après la finalisation, 4 et 5 fragments à 16 bpp, 125 à 32 bpp) ; le client les réassemble (FIRST, NEXT…, LAST d'un même code, contigus, non compressés, 256 Kio et 64 morceaux au plus ; `pkg/rdp/fastpath_fragments.go`), et les trois cibles restent fidèles à l'œil (écran, saisie, reprise). Un fragment hors séquence, un code qui change, une taille dépassée ou une séquence qu'un TPKT interrompt ferment la session. Au passage #53, le codec passait, mais les isolements, qui lisent le flux eux-mêmes, refusaient le premier fragment : ils réassemblent désormais comme lui. |
-| Réactivation | **Mise en œuvre, éprouvée contre FreeRDP, jamais rencontrée chez Windows** (aucun `Deactivate All` à l'ouverture ni à la reprise de session, aux trois cibles). Le client répond à un `Deactivate All` du partage en cours par un Confirm Active et une nouvelle finalisation sous le nouveau partage, puis continue à la taille et à la profondeur que le serveur annonce (incrément 72, plus bas). |
+| Réactivation | **Mise en œuvre, éprouvée contre FreeRDP ; jamais envoyée par Windows** (incrément 72). Mesuré à la PR #93 : le codec reprend la session déconnectée sans `Deactivate All`, aux trois cibles. Une cible qui exige le mot de passe à chaque connexion (`fPromptForPassword`) ne l'a pas exigé sous NLA : la session s'est ouverte avec les identifiants délégués. Aucun déclencheur reproductible n'est connu sur Windows. |
 | Mises à jour non graphiques | **En partie** : pointeur (Fast-Path 5 et 9), Save Session Info, Set Error Info, toutes ignorées ou reconnues ; la liste reste fermée. |
 
 **Reprise d'une session déjà ouverte : établie au passage #52.** Déconnectée, elle est rendue à la connexion suivante, même identifiant de session (3) et même écran (`pkg/rdp/mcs_windows_reconnect_test.go`). Active à la console (troisième cible de la matrice, qui garde la session que dockur ouvre) : la connexion la reprend (session 1), bureau à l'écran, saisie reçue. L'écran d'ouverture de session des passages #39 à #42 ne s'y reproduit pas : il tenait sans doute à une connexion arrivée pendant la préparation de la cible, non à la console ; un seul passage le mesure. Au passage #48, une saisie du test d'écran à 32 bpp a perdu « b » et Entrée : le client envoyait `KBDFLAGS_DOWN` à chaque appui, alors que ce drapeau dit que la touche était déjà enfoncée (une répétition) ; un appui n'en porte plus. Au passage #49, c'est le premier appui que le test perd, aux deux profondeurs : ce test envoyait chaque événement quelques microsecondes après le clic, quand l'isolement du clavier, une seconde après le sien, n'a perdu aucune touche en huit sessions. La cause probable est que Windows remet la touche à la fenêtre qui a le focus quand il la traite ; elle n'est pas prouvée. Le test tape désormais au rythme d'une personne (une seconde après le clic, 50 ms entre les événements). **Mesuré au passage #51** (`pkg/rdp/mcs_windows_keyafterclick_test.go`, trois essais par variante, clic sur le bureau puis dans le Bloc-notes, frappe aussitôt) : sans Synchronize Event, 5 essais complets sur 6 aux deux profondeurs ; avec un Synchronize Event à l'activation, 3 sur 6 ; avec un avant chaque clic, aucun complet. Le Synchronize Event n'évite pas la perte, et le client ne l'envoie pas. Des essais disparaissent en entier, Entrée comprise : les touches partent avant que la fenêtre ait le focus, ce que le client ne peut savoir. La saisie d'un opérateur, au rythme d'une personne, n'a perdu aucune touche. RDP reste non exposé.
@@ -323,9 +323,9 @@ sequenceDiagram
 | `RDP_VNC_PROXY_URLS` | aucune | pool du Broker, 1 à 16 |
 | `SCREEN_ATTACH_TTL_SECONDS` | `30` | durée de vie du cookie d'attache |
 | `SCREEN_ALLOWED_ORIGINS` | vide (même origine) | origines WebSocket acceptées |
-| `RDP_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
+| `RDP_CONNECT_TIMEOUT_SECONDS` | `15` | poignée de main cible (CredSSP compris) |
 | `VNC_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
-| `RDP_ENGINE_ENABLED` | `false` | n'expose `rdp` qu'après l'incrément 3 ; valeur inconnue fatale |
+| `RDP_ENABLED` | `false` | Broker et proxy (ADR-0088, qui remplace `RDP_ENGINE_ENABLED`) : ouvre `rdp` aux opérateurs ; seuls `true` et `false` sont lus, toute autre valeur est fatale |
 
 Toute valeur absente, hors bornes ou inconnue est fatale au démarrage (`settings/security.yaml`, règle « défaut strict »).
 
@@ -1591,6 +1591,39 @@ C'est le premier critère de sortie de l'incrément 2 : « session RDP interacti
 - pas encore contre Windows ;
 - l'Admin UI n'a pas de lecteur vidéo (rejeu par l'API) ;
 - RDP reste non exposé.
+
+## ADR-0071 — incrément 74 : la route opérateur (ADR-0088)
+
+RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLED`, éteint par défaut au Broker comme au proxy. La décision, ses alternatives et ses limites sont dans ADR-0088.
+
+**Preuve sur processus réels.** `TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses` (`make test-rdp-recording`) fait le parcours depuis l'API publique jusqu'à FreeRDP 3 et retour :
+- compte RDP épinglé, session, `connect` qui répond par un chemin et un cookie `HttpOnly` ;
+- écran de la cible, clavier en scancodes reçu par la cible ;
+- fin de session : `session_revoked` ;
+- rejeu par l'auditeur, identique à l'octet ;
+- `session.revoked` et `session.terminate` à l'audit.
+
+**Contre-épreuves** : sans l'interrupteur du Broker, `connect` répond `409` avant tout scope ; sans celui du proxy, `503`.
+
+**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes, AZERTY et QWERTY vérifiés, `recording_lost` au-delà de 4 Mio. Allumer RDP reste le choix de l'exploitant.
+
+## ADR-0071 — PR #93 : l'enregistrement et la reprise par le codec, contre Windows
+
+**Enregistrement contre Windows** : établi aux trois cibles (16 bpp, 32 bpp, 16 bpp à la console).
+- `TestRDPRecording` tourne avec le vrai serveur du proxy, le vrai Video Recorder sur PostgreSQL, et Windows comme cible : clic dans le Bloc-notes, « ob », Entrée.
+- Images montrées, toutes enregistrées, identiques à l'octet, enregistrement scellé : 11 à 16 bpp, 12 à 32 bpp, 8 à la console.
+
+**Reprise par le codec** : `TestRDPWindowsIsolation_Reactivation` reprend deux fois la session déconnectée par le `ReadBitmapUpdate` du codec. Le flux se termine sans erreur, Windows n'envoie aucun `Deactivate All`, et l'isolement de reprise ne voit aucun PDU slow-path inconnu.
+
+**Le passage précédent a montré deux choses** :
+- **Un artefact contenant un fragment du mot de passe de test.** La cible `fPromptForPassword` n'a pas demandé de mot de passe sous NLA, et l'isolement l'a tapé dans le Bloc-notes. Mot de passe aléatoire, propre au passage, VM détruite à la fin du job ; l'artefact a été supprimé, et la cible comme la saisie retirées.
+- **Une reprise par le codec arrêtée sur un refus MCS non décrit.** Elle n'est survenue que sur cette cible, et sa cause reste inconnue. `ReadBitmapUpdate` décrit désormais ses refus MCS (type de PDU, canal, priorité et segmentation) : un nouveau cas dira ce que Windows envoie.
+
+## ADR-0071 — la priorité MCS d'un PDU de Windows
+
+Au CI de la PR #94, Windows Server 2022 a envoyé, à l'ouverture d'une session, un Share Data PDU de 36 octets en priorité MCS « top » (`0x30`). Le lecteur n'acceptait que la priorité « high » (`0x70`) : la session s'est fermée avant sa première image. C'est le refus que `ReadBitmapUpdate` décrit depuis la PR #93 ; il était muet avant, et c'est la cause probable de la reprise arrêtée sur la cible retirée.
+
+La priorité de données ne dit rien dont ce client dépende, et FreeRDP l'ignore : toute priorité est désormais lue, et les bits réservés doivent rester nuls. Le test rouge reproduit le paquet ; une priorité quelconque passe ; un bit réservé reste refusé.
 
 ## ADR-0071 — incrément 75 : le lecteur de l'écran enregistré, dans l'Admin UI
 

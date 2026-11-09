@@ -14,12 +14,21 @@ import (
 // it says so.
 func describeRDPServerPacket(packet []byte) string {
 	if len(packet) > 0 && packet[0] == 3 {
-		if len(packet) < 14 || packet[7] != mcsSendDataIndication {
+		if len(packet) < 8 {
 			return fmt.Sprintf("TPKT of %d bytes", len(packet))
 		}
+		// The MCS PDU type: Send Data Indication, or what is not (a Disconnect Provider Ultimatum,
+		// 0x80 to 0x83, says the server ends the connection).
+		if len(packet) < 14 || packet[7] != mcsSendDataIndication {
+			return fmt.Sprintf("TPKT of %d bytes, MCS PDU 0x%02x", len(packet), packet[7])
+		}
+		channel := fmt.Sprintf("channel %d, priority/segmentation 0x%02x", binary.BigEndian.Uint16(packet[10:12]), packet[12])
 		_, share, err := readPERLength(packet[13:])
 		if err != nil || len(share) < 6 {
-			return fmt.Sprintf("TPKT of %d bytes, MCS", len(packet))
+			return fmt.Sprintf("TPKT of %d bytes, MCS %s", len(packet), channel)
+		}
+		if binary.BigEndian.Uint16(packet[10:12]) != mcsGlobalChannelID || packet[12]&0x0f != 0 || packet[12]>>4&3 != 3 {
+			return fmt.Sprintf("TPKT of %d bytes, MCS %s, share PDU type %d", len(packet), channel, binary.LittleEndian.Uint16(share[2:4])&0x0f)
 		}
 		kind := binary.LittleEndian.Uint16(share[2:4]) & 0x0f
 		switch {

@@ -84,6 +84,14 @@ export function encodeKey(keysym: number, pressed: boolean): Uint8Array<ArrayBuf
   return bytes;
 }
 
+// RDP's key (ADR-0088): the physical key's Set-1 scancode, no keysym.
+export function encodeScancode(scancode: number, pressed: boolean): Uint8Array<ArrayBuffer> {
+  const { bytes, view } = inputMessage(1);
+  bytes[2] = pressed ? 1 : 0;
+  view.setUint16(8, scancode);
+  return bytes;
+}
+
 // wheel is one notch at most: up (1) or down (-1).
 export function encodePointer(x: number, y: number, buttons: number, wheel: -1 | 0 | 1 = 0): Uint8Array<ArrayBuffer> {
   const { bytes, view } = inputMessage(2);

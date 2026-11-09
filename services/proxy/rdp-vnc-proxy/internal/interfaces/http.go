@@ -18,9 +18,11 @@ import (
 const screenSubprotocol = "openbastion.screen.v1"
 
 type HTTPServer struct {
-	pending        *infrastructure.PendingScreenSessions
-	listener       *proxycore.Listener
-	codec          proxycore.ScreenCodec
+	pending  *infrastructure.PendingScreenSessions
+	listener *proxycore.Listener
+	codec    proxycore.ScreenCodec
+	// rdpCodec is set only when RDP is on (ADR-0088, RDP_ENABLED): nil, RDP is refused.
+	rdpCodec       proxycore.ScreenCodec
 	recorder       *infrastructure.VideoRecorderClient
 	gate           proxycore.ScreenRecorderGate
 	endpoint       string
@@ -30,6 +32,13 @@ type HTTPServer struct {
 func NewHTTPServer(p *infrastructure.PendingScreenSessions, l *proxycore.Listener, codec proxycore.ScreenCodec, recorder *infrastructure.VideoRecorderClient, endpoint string, origins []string) *HTTPServer {
 	return &HTTPServer{pending: p, listener: l, codec: codec, recorder: recorder, gate: recorder, endpoint: endpoint, allowedOrigins: append([]string(nil), origins...)}
 }
+
+// WithRDP opens the RDP route with its codec (ADR-0088). Without it, establish-session refuses rdp.
+func (s *HTTPServer) WithRDP(codec proxycore.ScreenCodec) *HTTPServer {
+	s.rdpCodec = codec
+	return s
+}
+
 func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -65,12 +74,17 @@ func (s *HTTPServer) establish(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid screen session request", http.StatusBadRequest)
 		return
 	}
-	if req.Protocol != "vnc" {
-		// RDP is deliberately not exposed until its engine and security tests exist.
+	var protocol screenstream.Protocol
+	switch {
+	case req.Protocol == "vnc":
+		protocol = screenstream.ProtocolVNC
+	case req.Protocol == "rdp" && s.rdpCodec != nil:
+		protocol = screenstream.ProtocolRDP
+	default:
+		// RDP is opened by the installation's operator (ADR-0088), not by default.
 		http.Error(w, "screen protocol is unavailable", http.StatusConflict)
 		return
 	}
-	protocol := screenstream.ProtocolVNC
 	if s.listener == nil || s.listener.Live == nil || s.pending == nil || s.gate == nil {
 		http.Error(w, "screen service unavailable", http.StatusServiceUnavailable)
 		return
@@ -181,7 +195,18 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 	// the audit of the expiry and the purge of the credential run on.
 	ctx := r.Context()
 	meta := proxycore.SessionMetadata{SessionID: pending.SessionID, ScopeToken: pending.ScopeToken, ScreenProtocol: pending.Protocol, ExpiresAt: pending.ExpiresAt}
-	if err := s.listener.ServeScreen(ctx, meta, s.codec, s.recorder, s.gate, sink); err != nil {
+	// The codec is the ticket's protocol's, which the Broker took from the session: never the
+	// browser's choice.
+	codec := s.codec
+	if pending.Protocol == screenstream.ProtocolRDP {
+		codec = s.rdpCodec
+	}
+	if codec == nil {
+		writeTicketEnd()
+		_ = conn.Close(websocket.StatusPolicyViolation, "screen protocol is unavailable")
+		return
+	}
+	if err := s.listener.ServeScreen(ctx, meta, codec, s.recorder, s.gate, sink); err != nil {
 		log.Printf("rdp-vnc-proxy: graphical session ended: %v", err)
 	}
 }

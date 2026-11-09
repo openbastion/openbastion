@@ -22,7 +22,14 @@ func (unusedScreenDialer) Dial(context.Context, string, string) (*websocket.Conn
 	return nil, nil
 }
 
+// VNC, and RDP since ADR-0088: a screen ticket never reaches the browser.
 func TestConnectVNC_HidesProxyTicketBehindOneUseHttpOnlyCookie(t *testing.T) {
+	for _, protocol := range []string{"vnc", "rdp"} {
+		t.Run(protocol, func(t *testing.T) { testScreenTicketHidden(t, protocol) })
+	}
+}
+
+func testScreenTicketHidden(t *testing.T, protocol string) {
 	expires := time.Now().Add(5 * time.Minute).UTC().Truncate(time.Second)
 	broker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -34,7 +41,7 @@ func TestConnectVNC_HidesProxyTicketBehindOneUseHttpOnlyCookie(t *testing.T) {
 			t.Errorf("caller=%q", body["callerId"])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"proxyEndpoint": "rdp-vnc-proxy:8090", "ticket": "secret-ticket-never-returned", "protocol": "vnc", "expiresAt": expires})
+		_ = json.NewEncoder(w).Encode(map[string]any{"proxyEndpoint": "rdp-vnc-proxy:8090", "ticket": "secret-ticket-never-returned", "protocol": protocol, "expiresAt": expires})
 	}))
 	defer broker.Close()
 	g := NewGatewayServer(nil, nil, nil, "", "", "", "", "").WithScreenAttach(unusedScreenDialer{}, false)
@@ -59,7 +66,7 @@ func TestConnectVNC_HidesProxyTicketBehindOneUseHttpOnlyCookie(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if response["protocol"] != "vnc" || response["attach"] != "/sessions/session-1/screen" {
+	if response["protocol"] != protocol || response["attach"] != "/sessions/session-1/screen" {
 		t.Fatalf("response=%v", response)
 	}
 	attach, err := g.screenAttaches.Consume(c.Value, "session-1", time.Now())

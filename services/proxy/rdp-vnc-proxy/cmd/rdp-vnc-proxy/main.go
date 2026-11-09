@@ -1,5 +1,5 @@
-// Command rdp-vnc-proxy runs the Go-native graphical proxy. RDP remains disabled
-// until its protocol engine and attack tests are implemented (ADR-0071).
+// Command rdp-vnc-proxy runs the Go-native graphical proxy: VNC, and RDP when RDP_ENABLED says so
+// (ADR-0071, ADR-0088).
 package main
 
 import (
@@ -59,7 +59,7 @@ func runService() {
 	}
 	rootsFile := os.Getenv("TARGET_TLS_ROOTS_FILE")
 	if rootsFile == "" {
-		log.Fatal("rdp-vnc-proxy: TARGET_TLS_ROOTS_FILE must name explicit PEM roots for VNC target verification")
+		log.Fatal("rdp-vnc-proxy: TARGET_TLS_ROOTS_FILE must name explicit PEM roots for VNC and RDP target verification")
 	}
 	pem, err := os.ReadFile(rootsFile)
 	if err != nil {
@@ -82,11 +82,25 @@ func runService() {
 	}
 	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
 	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)
+	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
+	// Off, the RDP codec is not built and establish-session refuses rdp.
+	rdpState := "RDP disabled"
+	switch v := os.Getenv("RDP_ENABLED"); v {
+	case "", "false":
+	case "true":
+		server.WithRDP(&engine.RDPCodec{
+			TLSRoots:    roots,
+			DialTimeout: time.Duration(boundedIntEnv("RDP_CONNECT_TIMEOUT_SECONDS", 15, 1, 120)) * time.Second,
+		})
+		rdpState = "RDP enabled"
+	default:
+		log.Fatalf("rdp-vnc-proxy: RDP_ENABLED must be true or false, got %q", v)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- rt.ListenAndServe(":"+port, server.Routes(), interfaces.CallerRules()) }()
-	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; RDP disabled", port)
+	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088)", port, rdpState)
 	log.Printf("rdp-vnc-proxy: Video Recorder %s; target roots loaded from configured PEM file", recorderURL)
 	select {
 	case <-ctx.Done():

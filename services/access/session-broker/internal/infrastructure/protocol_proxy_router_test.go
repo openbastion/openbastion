@@ -29,10 +29,12 @@ func TestProtocolProxyRouterRoutesVNCWithoutSSHFallback(t *testing.T) {
 	if vnc.establishes != 1 || ssh.establishes != 0 {
 		t.Fatalf("VNC calls=%d SSH calls=%d", vnc.establishes, ssh.establishes)
 	}
-	if _, _, err := router.EstablishSession(context.Background(), "r1", "rdp", "target:3389", "operator", "scope", time.Minute, false); err == nil {
-		t.Fatal("RDP must remain unavailable")
+	// RDP goes to the screen proxies, never to SSH's (ADR-0088): whether it is open is decided
+	// before, by the Broker, and again by the proxy.
+	if _, _, err := router.EstablishSession(context.Background(), "r1", "rdp", "target:3389", "operator", "scope", time.Minute, false); err != nil {
+		t.Fatal(err)
 	}
-	if vnc.establishes != 1 || ssh.establishes != 0 {
-		t.Fatal("unsupported RDP fell back to a proxy")
+	if vnc.establishes != 2 || ssh.establishes != 0 {
+		t.Fatalf("RDP: VNC calls=%d SSH calls=%d", vnc.establishes, ssh.establishes)
 	}
 }

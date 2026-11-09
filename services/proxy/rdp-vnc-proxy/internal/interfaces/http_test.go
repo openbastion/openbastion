@@ -72,6 +72,60 @@ func TestEstablishSessionRefusesRDPAndRecorderOutageBeforeTicket(t *testing.T) {
 	}
 }
 
+// RDP on (ADR-0088): the ticket carries the RDP protocol, which the screen route reads to pick the
+// codec; the request's protocol never picks it.
+func TestEstablishSessionIssuesAnRDPTicketWhenRDPIsOn(t *testing.T) {
+	s := testHTTPServer(readyGate{}).WithRDP(&engine.RDPCodec{TLSRoots: x509.NewCertPool()})
+	w := httptest.NewRecorder()
+	s.establish(w, httptest.NewRequest(http.MethodPost, "/internal/v1/establish-session", strings.NewReader(`{"session_id":"r1","vault_scope_token":"scope","protocol":"rdp","ttl_seconds":60}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var out establishResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := s.pending.Consume(out.ConnectionTicket, time.Now().UTC())
+	if err != nil || pending.Protocol != screenstream.ProtocolRDP {
+		t.Fatalf("pending=%#v err=%v", pending, err)
+	}
+	w = httptest.NewRecorder()
+	s.establish(w, httptest.NewRequest(http.MethodPost, "/internal/v1/establish-session", strings.NewReader(`{"session_id":"r2","vault_scope_token":"scope","protocol":"spice","ttl_seconds":60}`)))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("an unknown protocol: status=%d", w.Code)
+	}
+}
+
+// An RDP ticket on a proxy without RDP (switched off after the ticket, or never on) ends at once,
+// before any target is dialed.
+func TestScreenRefusesAnRDPTicketWithoutTheRDPCodec(t *testing.T) {
+	s := testHTTPServer(readyGate{})
+	s.codec = &engine.VNCCodec{TLSRoots: x509.NewCertPool()}
+	s.recorder = &infrastructure.VideoRecorderClient{}
+	ticket, err := s.pending.Register(infrastructure.PendingScreenSession{SessionID: "r1", ScopeToken: "scope", Protocol: screenstream.ProtocolRDP, ExpiresAt: time.Now().Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(s.screen))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), &websocket.DialOptions{
+		Subprotocols: []string{screenSubprotocol}, HTTPHeader: http.Header{"Authorization": {"Bearer " + ticket}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := screenstream.Decode(data)
+	if err != nil || m.Type != screenstream.TypeEnd || m.EndCode != screenstream.EndCodeTicketInvalid {
+		t.Fatalf("%+v %v, want END ticket_invalid", m, err)
+	}
+}
+
 func TestScreenRejectsInvalidProxyTicketWithStableEndCode(t *testing.T) {
 	s := testHTTPServer(readyGate{})
 	s.codec = &engine.VNCCodec{TLSRoots: x509.NewCertPool()}

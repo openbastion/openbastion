@@ -172,6 +172,17 @@ func runService() {
 		maxPending = n
 	}
 	svc.WithMaxPendingPerRequester(maxPending)
+	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
+	rdpEnabled := false
+	switch v := os.Getenv("RDP_ENABLED"); v {
+	case "", "false":
+	case "true":
+		rdpEnabled = true
+	default:
+		log.Fatalf("session-broker: RDP_ENABLED must be true or false, got %q", v)
+	}
+	svc.WithRDP(rdpEnabled)
+	log.Printf("session-broker: RDP sessions %s (RDP_ENABLED, ADR-0088)", map[bool]string{true: "can be connected", false: "are refused at connect"}[rdpEnabled])
 	// The format of the ticket an account that requires approval asks for (ADR-0067). A
 	// pattern that does not compile stops the service: a typo must not turn into the
 	// default format, nor into refusing every request without saying why.

@@ -126,7 +126,7 @@ export function Sessions() {
             </dl>
             {found.status === "active" ? (
               <div className="form-actions">
-                {found.protocol === "vnc" ? <button type="button" className="primary" onClick={() => openScreen(found.id)}>Ouvrir l'écran</button> : null}
+                {found.protocol === "vnc" || found.protocol === "rdp" ? <button type="button" className="primary" onClick={() => openScreen(found.id)}>Ouvrir l'écran</button> : null}
                 <button type="button" className="danger" onClick={() => window.confirm(`Mettre fin à ${found.id} ?`) && act(`${found.id} terminée`, () => api.request("DELETE", `/sessions/${id(found)}`))}>Mettre fin</button>
               </div>
             ) : null}
@@ -177,6 +177,7 @@ function Request({ onDone }: { onDone: (s: Session) => void }) {
           <select value={f.protocol} onChange={set("protocol")}>
             <option value="ssh">SSH</option>
             <option value="vnc">VNC</option>
+            <option value="rdp">RDP</option>
           </select>
         </label>
         <label>Durée (minutes)<input type="number" min={1} value={f.durationMinutes} onChange={set("durationMinutes")} required /></label>
