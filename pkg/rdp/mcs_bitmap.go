@@ -1573,8 +1573,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			s.mu.Lock()
 			s.closeTransportLocked()
 			s.mu.Unlock()
-			if !errors.Is(err, ErrMCSConnection) {
-				err = ErrMCSConnection // a described refusal keeps its description
+			if !errors.Is(err, ErrMCSConnection) && !errors.Is(err, ErrSessionEnded) {
+				err = ErrMCSConnection // a described refusal keeps its description, an end says it is one
 			}
 			update = RDPBitmapUpdate{}
 			return
@@ -1667,6 +1667,10 @@ readUpdate:
 			}
 			return RDPBitmapUpdate{}, ErrMCSConnection
 		}
+		if fragmentCount == 0 && rdpIsDisconnectUltimatum(packet) {
+			clear(packet)
+			return RDPBitmapUpdate{}, ErrSessionEnded
+		}
 		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)
 		if fragmentErr != nil {
 			// Said, not bare: a reconnection to Windows ended here with nothing to go on (ADR-0071).
@@ -1744,4 +1748,12 @@ readUpdate:
 	s.primaryOrderState = nextOrderState
 	s.mu.Unlock()
 	return update, nil
+}
+
+// rdpIsDisconnectUltimatum recognizes an MCS Disconnect Provider Ultimatum (T.125 choice 8, its
+// reason in the low bits): how a server ends a session (ADR-0071 §3, "Fin"). The whole TPKT is
+// that PDU and nothing else.
+func rdpIsDisconnectUltimatum(packet []byte) bool {
+	return len(packet) == 9 && packet[0] == 3 && packet[1] == 0 && int(binary.BigEndian.Uint16(packet[2:4])) == len(packet) &&
+		equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) && packet[7]&0xfc == 0x20
 }

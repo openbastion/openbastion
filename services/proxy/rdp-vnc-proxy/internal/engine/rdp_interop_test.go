@@ -301,3 +301,50 @@ func TestRDPInterop_Reactivation(t *testing.T) {
 		t.Fatalf("pointer at the server's size: %v", err)
 	}
 }
+
+// A target that dies is not a session that ended (ADR-0071 §3, "Fin"), against a real server:
+// FreeRDP's shadow server is killed mid-session (its container: PID 1 ignores SIGTERM). The stream
+// ends with an error, which the relay says as target_unreachable, never as session_ended: only a
+// Disconnect Provider Ultimatum is an end (pkg/rdp, and Windows' logoff in CI).
+func TestRDPInterop_AServerThatDiesIsNoEndOfSession(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+	select {
+	case _, ok := <-session.Frames():
+		if !ok {
+			t.Fatalf("no frame: %v", session.Err())
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("no frame in 20 s")
+	}
+	if out, err := exec.Command("docker", "kill", target.container).CombinedOutput(); err != nil {
+		t.Fatalf("stopping the server: %v\n%s", err, out)
+	}
+	for deadline := time.After(30 * time.Second); ; {
+		select {
+		case _, ok := <-session.Frames():
+			if ok {
+				continue
+			}
+			if err := session.Err(); err == nil || errors.Is(err, rdp.ErrSessionEnded) {
+				t.Fatalf("a dead server was taken for a session that ended: %v", err)
+			}
+			return
+		case <-deadline:
+			t.Fatal("the stream did not end after the server stopped")
+		}
+	}
+}

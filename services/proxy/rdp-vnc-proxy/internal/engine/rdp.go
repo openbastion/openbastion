@@ -396,7 +396,9 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 	for {
 		update, err := s.target.ReadBitmapUpdate(ctx, rdpReadTimeout)
 		if err != nil {
-			if ctx.Err() == nil {
+			// The target ended the session (ADR-0071 §3, "Fin"): no error, which the relay says
+			// as session_ended. Anything else is a failure, kept for Err.
+			if ctx.Err() == nil && !errors.Is(err, rdp.ErrSessionEnded) {
 				s.mu.Lock()
 				s.err = err
 				s.mu.Unlock()

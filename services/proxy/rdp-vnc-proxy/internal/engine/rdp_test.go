@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +24,8 @@ type fakeRDPDesktop struct {
 	height   uint16
 	inputs   [][]rdp.RDPInputEvent
 	inputErr error
+	// endErr, when set, is what the read returns once the updates are spent.
+	endErr error
 }
 
 func (f *fakeRDPDesktop) ReadBitmapUpdate(ctx context.Context, _ time.Duration) (rdp.RDPBitmapUpdate, error) {
@@ -34,7 +37,11 @@ func (f *fakeRDPDesktop) ReadBitmapUpdate(ctx context.Context, _ time.Duration) 
 		f.mu.Unlock()
 		return update, nil
 	}
+	endErr := f.endErr
 	f.mu.Unlock()
+	if endErr != nil {
+		return rdp.RDPBitmapUpdate{}, endErr
+	}
 	<-ctx.Done()
 	return rdp.RDPBitmapUpdate{}, ctx.Err()
 }
@@ -423,5 +430,29 @@ func TestRDPCodec_AScreenTooLargeToRecordEndsTheStreamSayingSo(t *testing.T) {
 	}
 	if err := session.Err(); !errors.Is(err, screenstream.ErrFrameTooLarge) {
 		t.Fatalf("Err() = %v, want ErrFrameTooLarge", err)
+	}
+}
+
+// The target ending the session (rdp.ErrSessionEnded) is an end, not a failure: the stream closes
+// with no error, which the relay says as session_ended (ADR-0071 §3, "Fin"). A refusal stays one.
+func TestRDPCodec_TheTargetEndingTheSessionIsNoFailure(t *testing.T) {
+	for _, c := range []struct {
+		end     error
+		failure bool
+	}{{rdp.ErrSessionEnded, false}, {fmt.Errorf("%w: update refused", rdp.ErrMCSConnection), true}} {
+		target := &fakeRDPDesktop{width: 1, height: 1, endErr: c.end, updates: []rdp.RDPBitmapUpdate{
+			{Rectangles: []rdp.RDPBitmapRectangle{{Width: 1, Height: 1, Pixels: []byte{0xff, 0xff, 0xff, 0xff}}}},
+		}}
+		codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return target, nil }}
+		session, err := codec.Open(context.Background(), rdpTestCredential(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for range session.Frames() {
+		}
+		if got := session.Err(); (got != nil) != c.failure {
+			t.Errorf("%v: Err() = %v, failure %v", c.end, got, c.failure)
+		}
+		session.Close()
 	}
 }

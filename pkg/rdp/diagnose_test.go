@@ -12,14 +12,16 @@ import (
 // What ReadBitmapUpdate refuses at the MCS layer is said (ADR-0071): a reconnection to Windows ended
 // with a bare refusal, which left nothing to go on.
 func TestReadBitmapUpdateDescribesWhatItRefusesAtTheMCSLayer(t *testing.T) {
-	ultimatum := []byte{3, 0, 0, 9, 2, 0xf0, 0x80, 0x21, 0x80} // Disconnect Provider Ultimatum
+	// An MCS PDU that is not data and not an end (Attach User Confirm, 0x2e): a Disconnect Provider
+	// Ultimatum is no refusal, it ends the session (session_end_test.go).
+	ultimatum := []byte{3, 0, 0, 9, 2, 0xf0, 0x80, 0x2e, 0x00}
 	otherChannel := mcsTestServerShare(testDeactivateAll(reactivationOldShare))
 	otherChannel[11] = 0xef // channel 1007, the user's, not the I/O channel
 	for name, c := range map[string]struct {
 		packet []byte
 		want   string
 	}{
-		"a Disconnect Provider Ultimatum": {ultimatum, "MCS PDU 0x21"},
+		"an MCS PDU that carries no data": {ultimatum, "MCS PDU 0x2e"},
 		"a PDU on another channel":        {otherChannel, "channel 1007"},
 	} {
 		t.Run(name, func(t *testing.T) {

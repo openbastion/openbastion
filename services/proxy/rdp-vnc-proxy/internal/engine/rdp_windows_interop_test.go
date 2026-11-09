@@ -368,3 +368,71 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 		t.Fatalf("the target read %q, want %q for layout %q", got, want, os.Getenv("RDP_WINDOWS_KEYBOARD"))
 	}
 }
+
+// The target ending the session (ADR-0071 §3, "Fin"): the user logs off (Win+R, "logoff", Enter;
+// keys that QWERTY and AZERTY share). Windows ends the connection the way the protocol does, and
+// the stream ends with no error, which the relay says as session_ended. Last in this file: it
+// closes the user's session, and the next connection opens a new one.
+func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	// The desktop, settled.
+	for quiet := time.After(90 * time.Second); ; {
+		select {
+		case _, ok := <-session.Frames():
+			if !ok {
+				t.Fatalf("the stream ended before the logoff: %v", session.Err())
+			}
+			quiet = time.After(10 * time.Second)
+			continue
+		case <-quiet:
+		}
+		break
+	}
+	press := func(code uint16, pressed bool) {
+		flags := screenstream.KeyReleased
+		if pressed {
+			flags = screenstream.KeyPressed
+		}
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: code, Flags: flags}); err != nil {
+			t.Fatalf("key 0x%x: %v", code, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	key := func(code uint16) { press(code, true); press(code, false) }
+	press(0xe05b, true) // Win+R
+	key(0x13)
+	press(0xe05b, false)
+	time.Sleep(2 * time.Second)
+	for _, code := range []uint16{0x26, 0x18, 0x22, 0x18, 0x21, 0x21, 0x1c} { // l o g o f f Enter
+		key(code)
+	}
+	for deadline := time.After(90 * time.Second); ; {
+		select {
+		case _, ok := <-session.Frames():
+			if ok {
+				continue
+			}
+			if err := session.Err(); err != nil {
+				t.Fatalf("Windows' logoff was taken for a failure: %v", err)
+			}
+			t.Log("the logoff ended the stream with no error: session_ended")
+			return
+		case <-deadline:
+			t.Fatal("the stream did not end after the logoff")
+		}
+	}
+}
