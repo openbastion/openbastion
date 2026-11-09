@@ -55,6 +55,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const pendingMove = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const buttons = useRef(0);
   const [phase, setPhase] = useState<Phase>({ name: "connecting" });
+  const [isRDP, setIsRDP] = useState(false);
   const [hasFrame, setHasFrame] = useState(false);
 
   const send = useCallback((message: Uint8Array<ArrayBuffer>) => {
@@ -92,6 +93,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       }
       if (message.type === "hello") {
         protocol.current = message.protocol;
+        setIsRDP(message.protocol === "rdp");
         setPhase({ name: "live", expiresAt: message.expiresAt });
       } else if (message.type === "end") {
         finish(endMessage(message.text));
@@ -153,6 +155,15 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
     send(protocol.current === "rdp" ? encodeScancode(key, false) : encodeKey(key, false));
   }
 
+  // Ctrl+Alt+Del, which the browser keeps for itself (ADR-0071, consequences): pressed and released
+  // in order, as scancodes, for an RDP session only.
+  function ctrlAltDel() {
+    if (protocol.current !== "rdp") return;
+    for (const code of [0x1d, 0x38, 0xe053]) send(encodeScancode(code, true));
+    for (const code of [0xe053, 0x38, 0x1d]) send(encodeScancode(code, false));
+    canvas.current?.focus();
+  }
+
   // No key stays down on the target because the operator looked elsewhere (ADR-0071 §6).
   function onBlur() {
     pressed.current.clear();
@@ -211,6 +222,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
     <div className="screen">
       <div className="form-actions">
         <button type="button" onClick={onClose}>Fermer l'écran</button>
+        {phase.name === "live" && isRDP ? <button type="button" onClick={ctrlAltDel}>Ctrl+Alt+Suppr</button> : null}
         {phase.name === "ended" ? <button type="button" className="primary" onClick={onReconnect}>Se reconnecter</button> : null}
       </div>
       {phase.name === "connecting" ? <p className="notice ok" role="status">Connexion à la cible…</p> : null}
