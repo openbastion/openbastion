@@ -389,19 +389,33 @@ func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
 		t.Fatalf("opening the screen of Windows: %v", err)
 	}
 	defer session.Close()
-	// The desktop, settled.
-	for quiet := time.After(90 * time.Second); ; {
-		select {
-		case _, ok := <-session.Frames():
-			if !ok {
-				t.Fatalf("the stream ended before the logoff: %v", session.Err())
-			}
-			quiet = time.After(10 * time.Second)
-			continue
-		case <-quiet:
+	// What was on the screen at each step, to judge by eye when the logoff does not end the stream.
+	var last screenstream.Message
+	dump := func(name string) {
+		if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && last.PNG != nil {
+			_ = os.WriteFile(filepath.Join(dir, name), last.PNG, 0o644)
 		}
-		break
 	}
+	settle := func(quiet, limit time.Duration) int {
+		frames := 0
+		end := time.After(limit)
+		for {
+			select {
+			case m, ok := <-session.Frames():
+				if !ok {
+					t.Fatalf("the stream ended before the logoff: %v", session.Err())
+				}
+				last, frames = m, frames+1
+				continue
+			case <-time.After(quiet):
+			case <-end:
+			}
+			return frames
+		}
+	}
+	// The desktop, settled.
+	settle(10*time.Second, 90*time.Second)
+	dump("logoff-0-desktop.png")
 	press := func(code uint16, pressed bool) {
 		flags := screenstream.KeyReleased
 		if pressed {
@@ -416,14 +430,24 @@ func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
 	press(0xe05b, true) // Win+R
 	key(0x13)
 	press(0xe05b, false)
-	time.Sleep(2 * time.Second)
-	for _, code := range []uint16{0x26, 0x18, 0x22, 0x18, 0x21, 0x21, 0x1c} { // l o g o f f Enter
+	settle(2*time.Second, 5*time.Second)
+	dump("logoff-1-run.png")
+	for _, code := range []uint16{0x26, 0x18, 0x22, 0x18, 0x21, 0x21} { // l o g o f f
 		key(code)
 	}
+	settle(time.Second, 3*time.Second)
+	dump("logoff-2-typed.png")
+	key(0x1c) // Enter
+	frames := 0
+	defer func() {
+		t.Logf("%d frame(s) after Enter", frames)
+		dump("logoff-3-last.png")
+	}()
 	for deadline := time.After(90 * time.Second); ; {
 		select {
-		case _, ok := <-session.Frames():
+		case m, ok := <-session.Frames():
 			if ok {
+				last, frames = m, frames+1
 				continue
 			}
 			if err := session.Err(); err != nil {
