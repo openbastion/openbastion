@@ -61,8 +61,9 @@ const (
 )
 
 func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
-	if os.Getenv("RDP_INTEROP") == "" {
-		t.Skip("RDP_INTEROP not set: this test builds and starts a real RDP server in Docker")
+	windows := os.Getenv("RDP_WINDOWS") != ""
+	if os.Getenv("RDP_INTEROP") == "" && !windows {
+		t.Skip("RDP_INTEROP (FreeRDP in Docker) or RDP_WINDOWS (a Windows target, test.env) is needed")
 	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
@@ -70,7 +71,12 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 	}
 	_, here, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(here), "..", "..", "..", "..", "..")
-	target := startRecordingRDPTarget(t, root)
+	var target recordingRDPTarget
+	if windows {
+		target = recordingWindowsTarget(t)
+	} else {
+		target = startRecordingRDPTarget(t, root)
+	}
 
 	// The deployment's identities, as make pki makes them.
 	pkiDir := t.TempDir()
@@ -124,11 +130,11 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 		return recorder.Ready(ctx) == nil
 	})
 	vault := recordingVault{fetched: proxycore.Fetched{
-		Type: "password", Material: []byte(recordingRDPPassword), TargetHost: target.address,
-		TargetUser: recordingRDPUser, TLSCertificateSHA256: target.pin, TargetDomain: recordingRDPName,
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
 	}}
 	listener := proxycore.NewListener(proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy), proxycore.NewTerminator(noopAudit{}))
-	codec := &engine.RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second, DesktopWidth: 1024, DesktopHeight: 768}
+	codec := &engine.RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DesktopWidth: target.askWidth, DesktopHeight: target.askHeight}
 	// As cmd/rdp-vnc-proxy builds it with RDP_ENABLED=true (ADR-0088): VNC's codec, and RDP's for an
 	// RDP ticket.
 	server := NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, &engine.VNCCodec{TLSRoots: target.roots}, recorder, "rdp-vnc-proxy:8090", nil).WithRDP(codec)
@@ -146,7 +152,7 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 	}
 
 	// The operator.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(proxy.URL, "http")+"/internal/v1/screen", &websocket.DialOptions{
 		Subprotocols: []string{screenSubprotocol}, HTTPHeader: http.Header{"Authorization": {"Bearer " + ticket}},
@@ -199,13 +205,6 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 			}
 		}
 	}
-	read(5 * time.Second)
-	if len(shown) == 0 || last.Width != 1280 || last.Height != 800 {
-		t.Fatalf("%d frame(s), the last %dx%d: not the server's 1280x800", len(shown), last.Width, last.Height)
-	}
-	before := last
-	// xterm runs `cat`: the keys show only if they reached the desktop. No window manager: the
-	// keyboard goes to the window under the pointer.
 	send := func(e screenstream.InputEvent) {
 		data, err := screenstream.EncodeInput(e)
 		if err != nil {
@@ -215,23 +214,65 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	send(screenstream.InputEvent{Type: screenstream.InputPointer, X: 100, Y: 100})
-	for _, scancode := range []uint16{0x1e, 0x30, 0x1c} { // a, b, Enter
+	key := func(scancode uint16) {
 		send(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: scancode, Flags: screenstream.KeyPressed})
+		time.Sleep(target.keyPace)
 		send(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: scancode, Flags: screenstream.KeyReleased})
+		time.Sleep(target.keyPace)
 	}
-	read(3 * time.Second)
-	if bytes.Equal(last.PNG, before.PNG) {
-		t.Fatal("the keys changed nothing on the screen")
+	if windows {
+		// Windows' desktop, then Notepad, which may appear more than 10 s after it (rdp-setup.ps1).
+		for deadline := time.Now().Add(90 * time.Second); len(shown) == 0; {
+			if time.Now().After(deadline) {
+				t.Fatal("no frame from Windows in 90 s")
+			}
+			read(2 * time.Second)
+		}
+		read(10 * time.Second)
+		read(10 * time.Second)
+		if len(shown) == 0 || last.Width != 1280 || last.Height != 800 {
+			t.Fatalf("%d frame(s), the last %dx%d: not the 1280x800 asked for", len(shown), last.Width, last.Height)
+		}
+		before := last
+		// Into Notepad, then o, b, Enter at a person's pace (the screen test's, ADR-0071).
+		send(screenstream.InputEvent{Type: screenstream.InputPointer, X: 640, Y: 400, Buttons: 1})
+		send(screenstream.InputEvent{Type: screenstream.InputPointer, X: 640, Y: 400})
+		time.Sleep(time.Second)
+		for _, scancode := range []uint16{0x18, 0x30, 0x1c} {
+			key(scancode)
+		}
+		read(8 * time.Second)
+		if bytes.Equal(last.PNG, before.PNG) {
+			t.Fatal("the keys changed nothing on the screen")
+		}
+	} else {
+		read(5 * time.Second)
+		if len(shown) == 0 || last.Width != 1280 || last.Height != 800 {
+			t.Fatalf("%d frame(s), the last %dx%d: not the server's 1280x800", len(shown), last.Width, last.Height)
+		}
+		before := last
+		// xterm runs `cat`: the keys show only if they reached the desktop. No window manager:
+		// the keyboard goes to the window under the pointer.
+		send(screenstream.InputEvent{Type: screenstream.InputPointer, X: 100, Y: 100})
+		for _, scancode := range []uint16{0x1e, 0x30, 0x1c} { // a, b, Enter
+			key(scancode)
+		}
+		read(3 * time.Second)
+		if bytes.Equal(last.PNG, before.PNG) {
+			t.Fatal("the keys changed nothing on the screen")
+		}
+		// The target's display shrinks during the session: the server reactivates at the new
+		// size, and the recording goes on at it.
+		if out, err := exec.Command("docker", "exec", target.container, "sh", "-c", "DISPLAY=:1 xrandr -s 1024x768").CombinedOutput(); err != nil {
+			t.Fatalf("xrandr: %v\n%s", err, out)
+		}
+		read(5 * time.Second)
+		if last.Width != 1024 || last.Height != 768 {
+			t.Fatalf("after the display shrank, the last frame is %dx%d, not 1024x768", last.Width, last.Height)
+		}
 	}
-	// The target's display shrinks during the session: the server reactivates at the new size,
-	// and the recording goes on at it.
-	if out, err := exec.Command("docker", "exec", target.container, "sh", "-c", "DISPLAY=:1 xrandr -s 1024x768").CombinedOutput(); err != nil {
-		t.Fatalf("xrandr: %v\n%s", err, out)
-	}
-	read(5 * time.Second)
-	if last.Width != 1024 || last.Height != 768 {
-		t.Fatalf("after the display shrank, the last frame is %dx%d, not 1024x768", last.Width, last.Height)
+	if dir := os.Getenv("RDP_WINDOWS_DUMP"); windows && dir != "" {
+		_ = os.WriteFile(filepath.Join(dir, "recording-shown-last.png"), last.PNG, 0o644)
 	}
 	// The operator leaves: the relay ends and the recording is sealed.
 	_ = conn.Close(websocket.StatusNormalClosure, "operator left")
@@ -294,8 +335,8 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 		sizes[fmt.Sprintf("%dx%d", config.Width, config.Height)]++
 	}
 	t.Logf("%d frame(s) shown, %d recorded, sealed; sizes recorded: %v", len(shown), len(replayed), sizes)
-	if sizes["1280x800"] == 0 || sizes["1024x768"] == 0 {
-		t.Fatalf("the recording does not hold both sizes of the session: %v", sizes)
+	if sizes["1280x800"] == 0 || !windows && sizes["1024x768"] == 0 {
+		t.Fatalf("the recording does not hold the sizes of the session: %v", sizes)
 	}
 	if !audit.saw("auditor-1", sessionID) {
 		t.Fatal("the read is not on the audit record")
@@ -327,8 +368,28 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 // -- the RDP target ---------------------------------------------------------------------------
 
 type recordingRDPTarget struct {
-	address, pin, container string
-	roots                   *x509.CertPool
+	address, pin, container, user, password, name string
+	roots                                         *x509.CertPool
+	// What the codec asks for: FreeRDP's server answers another size with a reactivation.
+	askWidth, askHeight uint16
+	keyPace             time.Duration
+}
+
+// recordingWindowsTarget is the Windows of test.env (test/integration/testdata/rdp/windows), ready:
+// this runs after the screen test, which waits for the installation.
+func recordingWindowsTarget(t *testing.T) recordingRDPTarget {
+	t.Helper()
+	raw, err := os.ReadFile(os.Getenv("RDP_WINDOWS_CA_FILE"))
+	if err != nil {
+		t.Fatalf("RDP_WINDOWS_CA_FILE: %v", err)
+	}
+	target := recordingRDPTarget{address: os.Getenv("RDP_WINDOWS_ADDRESS"), pin: os.Getenv("RDP_WINDOWS_PIN"),
+		user: os.Getenv("RDP_WINDOWS_USER"), password: os.Getenv("RDP_WINDOWS_PASSWORD"), name: os.Getenv("RDP_WINDOWS_SERVER_NAME"),
+		roots: x509.NewCertPool(), askWidth: 1280, askHeight: 800, keyPace: 50 * time.Millisecond}
+	if !target.roots.AppendCertsFromPEM(raw) || target.address == "" || target.pin == "" || target.user == "" || target.password == "" || target.name == "" {
+		t.Fatal("RDP_WINDOWS_ADDRESS, _USER, _PASSWORD, _PIN, _SERVER_NAME and _CA_FILE are all needed")
+	}
+	return target
 }
 
 func startRecordingRDPTarget(t *testing.T, root string) recordingRDPTarget {
@@ -347,7 +408,8 @@ func startRecordingRDPTarget(t *testing.T, root string) recordingRDPTarget {
 	if err != nil {
 		t.Fatalf("docker port: %v", err)
 	}
-	target := recordingRDPTarget{address: strings.TrimSpace(strings.Split(string(port), "\n")[0]), container: container}
+	target := recordingRDPTarget{address: strings.TrimSpace(strings.Split(string(port), "\n")[0]), container: container,
+		user: recordingRDPUser, password: recordingRDPPassword, name: recordingRDPName, askWidth: 1024, askHeight: 768}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		raw, err := exec.Command("docker", "exec", container, "sh", "-c", "grep -qs :0D3D /proc/net/tcp /proc/net/tcp6 && cat ~/.config/freerdp/shadow/shadow.crt").Output()

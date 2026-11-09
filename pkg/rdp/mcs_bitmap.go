@@ -1668,9 +1668,11 @@ readUpdate:
 		}
 		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)
 		if fragmentErr != nil {
+			// Said, not bare: a reconnection to Windows ended here with nothing to go on (ADR-0071).
+			described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
 			clear(packet)
 			clear(assembled)
-			return RDPBitmapUpdate{}, ErrMCSConnection
+			return RDPBitmapUpdate{}, described
 		}
 		if fragmentCount == 0 && segmentation == 3 {
 			assembled = append(assembled, fragment...)
