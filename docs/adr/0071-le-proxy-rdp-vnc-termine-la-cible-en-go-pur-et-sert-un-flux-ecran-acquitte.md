@@ -1618,3 +1618,9 @@ RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLE
 **Le passage précédent a montré deux choses** :
 - **Un artefact contenant un fragment du mot de passe de test.** La cible `fPromptForPassword` n'a pas demandé de mot de passe sous NLA, et l'isolement l'a tapé dans le Bloc-notes. Mot de passe aléatoire, propre au passage, VM détruite à la fin du job ; l'artefact a été supprimé, et la cible comme la saisie retirées.
 - **Une reprise par le codec arrêtée sur un refus MCS non décrit.** Elle n'est survenue que sur cette cible, et sa cause reste inconnue. `ReadBitmapUpdate` décrit désormais ses refus MCS (type de PDU, canal, priorité et segmentation) : un nouveau cas dira ce que Windows envoie.
+
+## ADR-0071 — la priorité MCS d'un PDU de Windows
+
+Au CI de la PR #94, Windows Server 2022 a envoyé, à l'ouverture d'une session, un Share Data PDU de 36 octets en priorité MCS « top » (`0x30`). Le lecteur n'acceptait que la priorité « high » (`0x70`) : la session s'est fermée avant sa première image. C'est le refus que `ReadBitmapUpdate` décrit depuis la PR #93 ; il était muet avant, et c'est la cause probable de la reprise arrêtée sur la cible retirée.
+
+La priorité de données ne dit rien dont ce client dépende, et FreeRDP l'ignore : toute priorité est désormais lue, et les bits réservés doivent rester nuls. Le test rouge reproduit le paquet ; une priorité quelconque passe ; un bit réservé reste refusé.

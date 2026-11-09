@@ -27,7 +27,7 @@ func describeRDPServerPacket(packet []byte) string {
 		if err != nil || len(share) < 6 {
 			return fmt.Sprintf("TPKT of %d bytes, MCS %s", len(packet), channel)
 		}
-		if binary.BigEndian.Uint16(packet[10:12]) != mcsGlobalChannelID || packet[12]&0xcf != 0x40 || packet[12]>>4&3 != 3 {
+		if binary.BigEndian.Uint16(packet[10:12]) != mcsGlobalChannelID || packet[12]&0x0f != 0 || packet[12]>>4&3 != 3 {
 			return fmt.Sprintf("TPKT of %d bytes, MCS %s, share PDU type %d", len(packet), channel, binary.LittleEndian.Uint16(share[2:4])&0x0f)
 		}
 		kind := binary.LittleEndian.Uint16(share[2:4]) & 0x0f

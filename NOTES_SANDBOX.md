@@ -3036,6 +3036,10 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : la priorité MCS d'un PDU de Windows
+
+Au CI de la PR #94, Windows a envoyé un Share Data PDU en priorité MCS « top » (`0x30`), et le lecteur, qui n'acceptait que « high », a fermé la session avant la première image. Ce refus est intermittent : vert aux passages précédents. La description des refus MCS (PR #93) l'a nommé. Toute priorité est désormais lue, et les bits réservés restent refusés. Test rouge d'abord (le paquet même), puis vert ; la suite `pkg/rdp` passe.
+
 ## 2026-11-09 — ADR-0088 : RDP ouvert aux opérateurs, derrière un interrupteur
 
 Go du propriétaire : « Traite la réactivation et l'enregistrement contre Windows, puis la route opérateur et finir par le lecteur vidéo dans l'Admin UI ». RDP suit la route écran de VNC, derrière `RDP_ENABLED` (`true` ou `false`, toute autre valeur est fatale), éteint par défaut au Broker comme au proxy.
