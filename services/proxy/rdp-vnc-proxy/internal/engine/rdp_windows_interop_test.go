@@ -368,3 +368,81 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 		t.Fatalf("the target read %q, want %q for layout %q", got, want, os.Getenv("RDP_WINDOWS_KEYBOARD"))
 	}
 }
+
+// The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
+// a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
+// do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no
+// error, which the relay says as session_ended. Last in this file: it closes the user's session,
+// and the next connection opens a new one.
+func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	// What was on the screen at each step, to judge by eye when the logoff does not end the stream.
+	var last screenstream.Message
+	dump := func(name string) {
+		if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && last.PNG != nil {
+			_ = os.WriteFile(filepath.Join(dir, name), last.PNG, 0o644)
+		}
+	}
+	settle := func(quiet, limit time.Duration) int {
+		frames := 0
+		end := time.After(limit)
+		for {
+			select {
+			case m, ok := <-session.Frames():
+				if !ok {
+					t.Fatalf("the stream ended before the logoff: %v", session.Err())
+				}
+				last, frames = m, frames+1
+				continue
+			case <-time.After(quiet):
+			case <-end:
+			}
+			return frames
+		}
+	}
+	// The desktop, settled.
+	settle(10*time.Second, 90*time.Second)
+	dump("logoff-0-desktop.png")
+	shared := os.Getenv("RDP_WINDOWS_SHARED")
+	if shared == "" {
+		t.Skip("RDP_WINDOWS_SHARED not set: the share the logoff is asked through (prepare.sh)")
+	}
+	if err := os.WriteFile(filepath.Join(shared, "logoff-request"), []byte("logoff\n"), 0o644); err != nil {
+		t.Fatalf("asking for the logoff: %v", err)
+	}
+	frames := 0
+	defer func() {
+		t.Logf("%d frame(s) after the logoff was asked", frames)
+		dump("logoff-3-last.png")
+	}()
+	for deadline := time.After(3 * time.Minute); ; {
+		select {
+		case m, ok := <-session.Frames():
+			if ok {
+				last, frames = m, frames+1
+				continue
+			}
+			if err := session.Err(); err != nil {
+				t.Fatalf("Windows' logoff was taken for a failure: %v", err)
+			}
+			t.Log("the logoff ended the stream with no error: session_ended")
+			return
+		case <-deadline:
+			t.Fatal("the stream did not end within 3 minutes of the logoff request")
+		}
+	}
+}

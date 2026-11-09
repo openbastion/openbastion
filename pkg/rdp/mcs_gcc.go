@@ -53,6 +53,12 @@ const (
 // ErrMCSConnection reports a malformed or unsupported MCS/GCC connection exchange.
 var ErrMCSConnection = errors.New("rdp: malformed or unsupported MCS/GCC connection exchange")
 
+// ErrSessionEnded says the target ended the session the way the protocol ends one (ADR-0071 §3,
+// "Fin"): an MCS Disconnect Provider Ultimatum. It is an end, not a failure: the operator is told
+// the session ended. A connection that only closes is not one: crypto/tls gives io.EOF for a
+// close_notify and for a dead target alike, and a dead target is not a session that ended.
+var ErrSessionEnded = errors.New("rdp: the target ended the session")
+
 // MCSClientSettings describes the deliberately small client settings profile
 // advertised after CredSSP. HYBRID uses TLS/CredSSP, not Standard RDP Security.
 // No static or dynamic virtual channels are requested.
