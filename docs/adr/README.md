@@ -99,3 +99,4 @@ Chaque ADR suit un gabarit léger (inspiré de Michael Nygard / MADR) : **Contex
 | [ADR-0087](0087-contrats-transverses-des-bibliotheques-protocolaires-ssh-rdp-vnc.md) | Les bibliothèques SSH, RDP et VNC partagent des contrats PAM sans partager leurs moteurs protocolaires | Proposé |
 | [ADR-0088](0088-rdp-ouvert-aux-operateurs-par-la-route-ecran-derriere-un-interrupteur.md) | RDP est ouvert aux opérateurs par la route écran de VNC, derrière un interrupteur éteint par défaut | Accepté, mise en œuvre en cours |
 | [ADR-0089](0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md) | Le texte RDP reste rendu par bitmaps : le cache de glyphes n'est pas implémenté tant qu'une mesure ne le demande pas | Accepté |
+| [ADR-0090](0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md) | RDP en v0.0.2 : glyphes, ordres graphiques, canaux virtuels et protocoles, par incréments prouvés | Proposé |
