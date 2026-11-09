@@ -335,3 +335,26 @@ func TestCreateSession_NonStringTicketIsAuditedAsARefusal(t *testing.T) {
 		t.Fatalf("malformed ticket audit = %+v", got)
 	}
 }
+
+// vncAccount is a graphical account, pinned: only break-glass keeps it from a session.
+type vncAccount struct{}
+
+func (vncAccount) CheckAccount(context.Context, string) (bool, string, error) {
+	return false, "vnc", nil
+}
+
+func (vncAccount) GetAccount(context.Context, string) (string, string, error) {
+	return "10.0.0.6:5900", "operator", nil
+}
+
+// A break-glass request on a screen is a 409 that says why (ADR-0071 §8): its recording cannot be
+// waived, whatever the platform's break-glass settings.
+func TestCreateSession_ABreakGlassOnAScreenIsA409(t *testing.T) {
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), allowAuthz{}, pinlessVault{}, quietAudit{}, vncAccount{}, failingProxy{}).WithBreakGlass(60)
+	rec := httptest.NewRecorder()
+	body := `{"requestedBy":"alice","actorRoles":["dba"],"targetAccountId":"acc1","protocol":"vnc","justification":"incident 42","durationMinutes":30,"breakGlass":true}`
+	interfaces.NewHTTPServer(svc).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/sessions", strings.NewReader(body)))
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "recording cannot be waived") {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+}

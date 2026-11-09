@@ -462,6 +462,15 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		return nil, fmt.Errorf("%w: requested %s, account is %s", domain.ErrProtocolMismatch, protocol, accountProtocol)
 	}
 
+	// A screen's recording cannot be waived (ADR-0069 rule 5, ADR-0071 §8): a break-glass request
+	// on an RDP or VNC account could never start, so it is refused now, recorded and audited like
+	// any refused waiver, before anybody is asked to approve it (ADR-0043).
+	if breakGlass && (protocol == "rdp" || protocol == "vnc") {
+		sess.Status = domain.StatusDenied
+		_ = s.sessions.Save(ctx, sess)
+		_ = s.audit.EmitEvent(ctx, requestedBy, "session.breakglass_requested", "session", sess.ID, false)
+		return nil, domain.ErrBreakGlassNotForScreens
+	}
 	if breakGlass {
 		// A break-glass request keeps its own rules and its own approvers (ADR-0011). It
 		// waits when the platform says break-glass waits — and, whatever the platform

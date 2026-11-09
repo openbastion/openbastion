@@ -22,8 +22,11 @@ var (
 	ErrForbidden           = errors.New("forbidden")
 	ErrUnsupportedProtocol = errors.New("unsupported session protocol")
 	ErrProtocolMismatch    = errors.New("session protocol does not match the privileged account")
-	ErrConflict            = errors.New("conflict")
-	ErrUnavailable         = errors.New("a dependency is unavailable")
+	// ErrBreakGlassNotForScreens: a graphical session's recording cannot be waived (ADR-0069
+	// rule 5, ADR-0071 §8), so an RDP or VNC account has no break-glass.
+	ErrBreakGlassNotForScreens = errors.New("break-glass is not available for RDP and VNC sessions: their recording cannot be waived")
+	ErrConflict                = errors.New("conflict")
+	ErrUnavailable             = errors.New("a dependency is unavailable")
 
 	// ErrTooManyPending is a break-glass request refused because its requester
 	// already has as many waiting for a decision as the platform allows (ADR-0013).
