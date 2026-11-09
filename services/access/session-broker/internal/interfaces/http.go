@@ -143,6 +143,9 @@ func (s *HTTPServer) handleSessionsCollection(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, domain.ErrProtocolMismatch):
 		http.Error(w, domain.ErrProtocolMismatch.Error(), http.StatusConflict)
 		return
+	case errors.Is(err, domain.ErrBreakGlassNotForScreens):
+		http.Error(w, domain.ErrBreakGlassNotForScreens.Error(), http.StatusConflict)
+		return
 	case errors.Is(err, domain.ErrAccountNotFound):
 		http.Error(w, domain.ErrAccountNotFound.Error(), http.StatusNotFound)
 		return

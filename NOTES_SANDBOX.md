@@ -3036,6 +3036,20 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 §8 : le break-glass d'un écran est refusé dès sa création
+
+Écart d'ADR-0071 trouvé en relisant l'ADR : le Broker créait une demande break-glass `rdp` ou `vnc`, la mettait en approbation, et elle échouait au `connect` (le proxy refuse `break_glass`). Elle est désormais refusée dès sa création, avant toute autorisation : enregistrée `denied`, auditée (`session.breakglass_requested`, échec), `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass ; le refus du proxy reste, en seconde défense.
+
+**Prouvé** : test rouge d'abord, test HTTP du `409`, 4 mutations tuées sur 4.
+
+**Écarts restants d'ADR-0071** :
+- une fin de session par la cible donne `target_unreachable` au lieu de `session_ended` ;
+- RDP n'a pas de cadence d'images ;
+- ni bouton Ctrl+Alt+Suppr, ni pointeur ;
+- `SCREEN_MAX_PIXELS` et `SCREEN_ATTACH_TTL_SECONDS` ne sont pas des réglages ;
+- les fuzzers ne tournent pas en CI ;
+- la matrice n'a ni Windows 2019 ni RealVNC, et rien n'est mesuré.
+
 ## 2026-11-09 — ADR-0089 (accepté) : le texte RDP reste rendu par bitmaps
 
 Dernier critère de sortie d'ADR-0071 : « texte lisible (glyphes) ». Le client n'annonce ni ordre ni cache de glyphes. Windows et FreeRDP envoient donc le texte déjà rendu, en bitmaps, lisible à l'œil sur les captures Windows en 16 et 32 bpp.
