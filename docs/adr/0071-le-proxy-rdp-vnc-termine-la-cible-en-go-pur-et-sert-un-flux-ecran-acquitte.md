@@ -317,11 +317,11 @@ sequenceDiagram
 | `VIDEO_RECORDER_URL` | aucune | obligatoire sous `RECORDING_POLICY=required` (défaut) |
 | `RECORDING_POLICY` | `required` | inchangé ; `best-effort` est refusé pour les écrans |
 | `SCREEN_FRAME_INTERVAL_MS` | `50` | clôture d'un segment ; borné à [16, 250] |
-| `SCREEN_MAX_PIXELS` | `16777216` | borne de trame (ADR-0070) |
+| (constante) `screenstream.MaxPixels` | `16777216` | borne de trame (ADR-0070) ; **pas une variable** : elle ne pourrait que monter au-delà de ce que le contrat écran et le Video Recorder acceptent |
 | `SCREEN_INPUT_RATE_PER_SECOND` | `200` | débit d'entrée par session |
 | `SCREEN_INPUT_BURST` | `400` | rafale d'entrée |
 | `RDP_VNC_PROXY_URLS` | aucune | pool du Broker, 1 à 16 |
-| `SCREEN_ATTACH_TTL_SECONDS` | `30` | durée de vie du cookie d'attache |
+| (constante de la Gateway) | `30` | durée de vie du cookie d'attache ; **pas une variable** : §7 la borne à 30 s au plus, un réglage ne pourrait que l'allonger |
 | `SCREEN_ALLOWED_ORIGINS` | vide (même origine) | origines WebSocket acceptées |
 | `RDP_CONNECT_TIMEOUT_SECONDS` | `15` | poignée de main cible (CredSSP compris) |
 | `VNC_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
@@ -1713,3 +1713,13 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 **Correctif** : `createSession` refuse une demande break-glass sur un compte `rdp` ou `vnc` avant toute autorisation. Comme tout refus de dérogation, la demande est enregistrée au statut `denied` et auditée (`session.breakglass_requested`, échec). L'API répond `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass. Le refus du proxy reste en place, en seconde défense.
 
 **Preuves** : test rouge d'abord (la demande `vnc` partait en approbation), test HTTP du `409`, et 4 mutations tuées sur 4 (refus retiré, `rdp` oublié, audit retiré, `409` retiré).
+
+## ADR-0071 — deux bornes restent des constantes
+
+La configuration proposée annonçait `SCREEN_MAX_PIXELS` et `SCREEN_ATTACH_TTL_SECONDS`. Ni l'une ni l'autre n'a été implémentée en variable : `screenstream.MaxPixels` (16 777 216) et la durée de 30 s de l'attache dans la Gateway sont des constantes.
+
+**Décision : elles le restent.** Une variable ne pourrait qu'affaiblir l'une ou l'autre :
+- relever la borne de pixels au-delà de ce que le contrat écran, l'Admin UI et le Video Recorder acceptent (ADR-0070) ;
+- allonger l'attache au-delà des 30 s maximum fixées par §7.
+
+Les baisser ne protège de rien de mesuré. Le tableau de configuration est corrigé en ce sens. Choix modifiable si une installation démontre un besoin de les abaisser.
