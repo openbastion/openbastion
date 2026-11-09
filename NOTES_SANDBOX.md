@@ -3036,6 +3036,12 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : le bouton Ctrl+Alt+Suppr
+
+Écart de la relecture d'ADR-0071 : le bouton promis pour RDP n'existait pas. Le lecteur l'offre désormais pendant une session RDP. Il envoie Ctrl, Alt, Suppr enfoncés puis relâchés, en scancodes ; VNC n'en a pas.
+
+**Prouvé** : 2 tests Vitest (91 → 93), 2 mutations tuées sur 3. La garde interne survit, le bouton étant déjà caché pour VNC.
+
 ## 2026-11-09 — ADR-0071 §8 : le break-glass d'un écran est refusé dès sa création
 
 Écart d'ADR-0071 trouvé en relisant l'ADR : le Broker créait une demande break-glass `rdp` ou `vnc`, la mettait en approbation, et elle échouait au `connect` (le proxy refuse `break_glass`). Elle est désormais refusée dès sa création, avant toute autorisation : enregistrée `denied`, auditée (`session.breakglass_requested`, échec), `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass ; le refus du proxy reste, en seconde défense.
