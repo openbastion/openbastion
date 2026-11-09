@@ -3036,6 +3036,18 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0089 (proposé) : le texte RDP reste rendu par bitmaps
+
+Dernier critère de sortie d'ADR-0071 : « texte lisible (glyphes) ». Le client n'annonce ni ordre ni cache de glyphes. Windows et FreeRDP envoient donc le texte déjà rendu, en bitmaps, lisible à l'œil sur les captures Windows en 16 et 32 bpp.
+
+L'opérateur et l'enregistrement reçoivent des PNG complets : des glyphes n'économiseraient que du débit entre la cible et le proxy, jamais mesuré comme un problème, au prix du plus gros parseur restant. ADR-0089 propose de garder les bitmaps et de réécrire le critère en « texte lisible ».
+
+**En attente** du go du propriétaire : l'ADR réécrit un critère d'un ADR accepté.
+
+**Ajouté** : `TestTextOrdersAreRefused`. GlyphIndex, FastIndex, FastGlyph et Cache Glyph sont refusés par l'analyseur d'ordres et dans une session, qui n'annonce aucun ordre. Mutations :
+- la garde de session, retirée, est attrapée ;
+- la vérification des drapeaux de l'analyseur, retirée, survit, parce qu'une vérification plus loin refuse aussi l'ordre : deux couches se couvrent.
+
 ## 2026-11-09 — ADR-0071 : QWERTY et AZERTY vérifiés contre Windows
 
 Incrément 77, critère de sortie « clavier AZERTY et QWERTY vérifiés ». Une quatrième cible Windows a la disposition fr-FR (`prepare.sh … KEYBOARD`, `KEYBOARD` de dockur, `Set-WinUserLanguageList`).

@@ -2676,3 +2676,32 @@ func TestRDPFramebufferAppliesLineToXorROP2(t *testing.T) {
 		}
 	}
 }
+
+// ADR-0089: text stays in the bitmaps. This client announces neither text orders nor a glyph cache,
+// so a server's GlyphIndex (0x1b), FastIndex (0x13), FastGlyph (0x18) or Cache Glyph secondary order
+// (0x03) is refused: by the orders parser, and in a session, which announced no order at all.
+func TestTextOrdersAreRefused(t *testing.T) {
+	cacheGlyph := []byte{0x03, 4, 0, 0, 0, 0x03, 1, 0, 0, 0, 0, 0, 0} // standard|secondary, TS_CACHE_GLYPH
+	orders := map[string][]byte{
+		"GlyphIndex":  mcsTestOpaqueRectOrderWithType(0x09, 0x1b, true, 1, 1, 2, 2, 1, 2, 3),
+		"FastIndex":   mcsTestOpaqueRectOrderWithType(0x09, 0x13, true, 1, 1, 2, 2, 1, 2, 3),
+		"FastGlyph":   mcsTestOpaqueRectOrderWithType(0x09, 0x18, true, 1, 1, 2, 2, 1, 2, 3),
+		"Cache Glyph": cacheGlyph,
+	}
+	for name, order := range orders {
+		t.Run(name, func(t *testing.T) {
+			share := mcsTestOrdersShareData(reactivationOldShare, 1, order, 0, 0)
+			if _, err := parseRDPBitmapShareData(share, reactivationOldShare, 8, 8); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("parser: %v, want ErrMCSConnection", err)
+			}
+			session, _ := reactivationSession(t, func(conn net.Conn) error {
+				_ = writeFull(conn, mcsTestServerShare(share))
+				_, _ = conn.Read(make([]byte, 64))
+				return nil
+			})
+			if _, err := session.ReadBitmapUpdate(context.Background(), 2*time.Second); !errors.Is(err, ErrMCSConnection) {
+				t.Fatalf("session: %v, want ErrMCSConnection", err)
+			}
+		})
+	}
+}
