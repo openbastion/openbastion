@@ -1,6 +1,6 @@
 # ADR-0089 — Le texte RDP reste rendu par bitmaps : le cache de glyphes n'est pas implémenté tant qu'une mesure ne le demande pas
 
-**Statut** `Proposé` · 9 novembre 2026 · en attente du go du propriétaire du projet : la décision réécrit un critère de sortie d'ADR-0071, qui est `Accepté`.
+**Statut** `Accepté` · 9 novembre 2026 · go du propriétaire du projet le 9 novembre 2026, à la question « garder le texte rendu en bitmaps ou implémenter le cache de glyphes » : « Garder les bitmaps ». La décision réécrit un critère de sortie d'ADR-0071.
 
 ## Contexte
 
@@ -27,7 +27,7 @@ C'est un nouveau parseur exposé à la cible, plus large que tous les ordres dé
 
 **Ce que le cache de glyphes ne changerait pas.** L'opérateur et l'enregistrement reçoivent des images PNG complètes du framebuffer du proxy (ADR-0071 §6, ADR-0070). Que le texte arrive en glyphes ou en bitmaps, l'image montrée et l'image rejouée sont les mêmes pixels. Les glyphes n'économisent que du débit entre la cible et le proxy, d'ordinaire sur le même réseau. Ce débit n'a jamais été mesuré comme un problème.
 
-## Décision proposée
+## Décision
 
 1. **Le texte reste rendu par bitmaps.** Le client continue de n'annoncer ni ordre de texte ni cache de glyphes. « Aucune capacité non annoncée acceptée » reste vrai : un GlyphIndex, FastIndex, FastGlyph ou Cache Glyph reçu est refusé et ferme la session, comme aujourd'hui.
 2. **Le critère de sortie devient « texte lisible »**, au lieu de « texte lisible (glyphes) ». Sa preuve :
