@@ -3,6 +3,7 @@ package proxycore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"sync"
@@ -873,4 +874,24 @@ type openedCodec struct {
 func (c openedCodec) Open(context.Context, *Credential) (ScreenSession, error) {
 	close(c.opened)
 	return c.session, nil
+}
+
+// A screen past 4 MiB cannot be recorded (ADR-0070): the session ends as a recording loss, said to
+// the operator and audited, whatever engine found it out (ADR-0071 §8).
+func TestServeScreen_AFrameBeyondTheRecordableSizeIsARecordingLoss(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	session := newFakeScreenSession()
+	session.err = fmt.Errorf("rdp: invalid framebuffer update: %w", screenstream.ErrFrameTooLarge)
+	sink := &fakeScreenSink{}
+	err := l.ServeScreen(context.Background(), screenMeta(), &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	if !errors.Is(err, ErrRecordingLost) {
+		t.Fatalf("error = %v, want ErrRecordingLost", err)
+	}
+	if last := sink.messages[len(sink.messages)-1]; last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeRecordingLost {
+		t.Fatalf("END = %#v, want recording_lost", last)
+	}
+	if !reflect.DeepEqual(audit.events, []string{"session.recording_lost", "session.terminate"}) {
+		t.Fatalf("audit events %v", audit.events)
+	}
 }

@@ -524,7 +524,11 @@ func (s *Session) emitFrame() error {
 	if err := png.Encode(&buf, s.framebuffer); err != nil {
 		return err
 	}
-	if buf.Len() == 0 || buf.Len() > screenstream.MaxPNGBytes {
+	if buf.Len() > screenstream.MaxPNGBytes {
+		// A screen that cannot be recorded ends the session as a recording loss (ADR-0070).
+		return fmt.Errorf("%w: %d-byte PNG: %w", ErrInvalidFramebuffer, buf.Len(), screenstream.ErrFrameTooLarge)
+	}
+	if buf.Len() == 0 {
 		return ErrInvalidFramebuffer
 	}
 	s.sequence++

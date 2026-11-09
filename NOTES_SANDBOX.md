@@ -3036,6 +3036,22 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : une image trop grande pour l'enregistrement est une perte d'enregistrement
+
+Incrément 76, critère de sortie « `session.recording_lost` sur image > 4 Mio ». Une image dont le PNG dépasse 4 Mio n'est toujours pas dessinée. Le moteur RDP comme VNC renvoie désormais `screenstream.ErrFrameTooLarge`, que `proxycore` traduit en `ErrRecordingLost` :
+- l'opérateur reçoit `END recording_lost` ;
+- l'audit reçoit `session.recording_lost` puis `session.terminate`, et le credential est purgé.
+
+Avant, c'était `target_unreachable` (RDP) ou `codec_unsupported` (VNC), sans audit de perte.
+
+**Prouvé** : tests rouges d'abord (relais, framebuffer RDP, `emitFrame` VNC, code de fin VNC), maillon du moteur RDP, 5 mutations tuées sur 5.
+
+**Mesuré en passant** : un écran de bruit opaque de 1280×1024 tient sous 4 Mio (PNG en RGB, 3,9 Mo). Il faut 1600×1200 pour le dépasser.
+
+**Limite** : pas sur processus réels contre une cible à l'écran incompressible.
+
+**Reste** des critères de sortie : glyphes, AZERTY et QWERTY vérifiés.
+
 ## 2026-11-09 — ADR-0071 : le lecteur de l'écran enregistré, dans l'Admin UI
 
 Incrément 75. La page « Enregistrements » relit l'écran d'une session RDP ou VNC (`web/admin-ui/src/features/audit/VideoReplay.tsx`) :
@@ -3074,7 +3090,7 @@ Go du propriétaire : « Traite la réactivation et l'enregistrement contre Wind
 - tests unitaires du Broker, du proxy, de la Gateway et de l'UI (Vitest : 80 → 85 tests).
 
 **Limites** :
-- glyphes, AZERTY et QWERTY vérifiés, `recording_lost` au-delà de 4 Mio : non tenus ;
+- glyphes, AZERTY et QWERTY vérifiés : non tenus (`recording_lost` au-delà de 4 Mio : tenu, incrément 76) ;
 - pas de presse-papiers ;
 - pas encore contre Windows depuis l'API publique.
 

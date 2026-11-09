@@ -3,6 +3,7 @@ package rdp
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
@@ -344,7 +345,8 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		}
 	}
 	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, f.image); err != nil || encoded.Len() == 0 || encoded.Len() > screenstream.MaxPNGBytes {
+	encodeErr := png.Encode(&encoded, f.image)
+	if encodeErr != nil || encoded.Len() == 0 || encoded.Len() > screenstream.MaxPNGBytes {
 		for i := len(update.Rectangles) - 1; i >= 0; i-- {
 			rect := update.Rectangles[i]
 			switch rect.operation {
@@ -378,6 +380,11 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 		}
 		for _, old := range previous {
 			clear(old)
+		}
+		if encodeErr == nil && encoded.Len() > screenstream.MaxPNGBytes {
+			// Not drawn, and said: a screen that cannot be recorded ends the session as a
+			// recording loss (ADR-0070), never truncated.
+			return screenstream.Message{}, fmt.Errorf("%w: %d-byte PNG: %w", ErrRDPFramebuffer, encoded.Len(), screenstream.ErrFrameTooLarge)
 		}
 		return screenstream.Message{}, ErrRDPFramebuffer
 	}

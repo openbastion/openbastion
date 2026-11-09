@@ -480,6 +480,11 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 				if ctx.Err() != nil {
 					return screenContextEnd(ctx)
 				}
+				// A screen too large to record ends the session as a recording loss (ADR-0070):
+				// said so to the operator, and audited as one.
+				if err := session.Err(); errors.Is(err, screenstream.ErrFrameTooLarge) {
+					return fmt.Errorf("%w: %w", ErrRecordingLost, err)
+				}
 				return session.Err()
 			}
 			if frame.Type != screenstream.TypeFrame || frame.Sequence != sequence || frame.Timestamp.IsZero() {

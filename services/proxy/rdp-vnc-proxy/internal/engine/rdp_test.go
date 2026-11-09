@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/x509"
 	"errors"
 	"sync"
@@ -389,5 +390,38 @@ func TestRDPCodec_AReactivationResizesTheScreen(t *testing.T) {
 	}
 	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 3, Y: 3}); err == nil {
 		t.Fatal("a point of the old desktop only was sent")
+	}
+}
+
+// A screen too large to record ends the stream with the error that says so: the relay turns it
+// into a recording loss, said to the operator and audited (ADR-0070, pkg/proxycore).
+func TestRDPCodec_AScreenTooLargeToRecordEndsTheStreamSayingSo(t *testing.T) {
+	const width, height = 1600, 1200
+	noise := make([]byte, width*height*4)
+	if _, err := rand.Read(noise); err != nil {
+		t.Fatal(err)
+	}
+	for i := 3; i < len(noise); i += 4 {
+		noise[i] = 0xff
+	}
+	target := &fakeRDPDesktop{width: width, height: height, updates: []rdp.RDPBitmapUpdate{
+		{Rectangles: []rdp.RDPBitmapRectangle{{Width: width, Height: height, Pixels: noise}}, DesktopWidth: width, DesktopHeight: height},
+	}}
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return target, nil }}
+	session, err := codec.Open(context.Background(), rdpTestCredential(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	select {
+	case frame, ok := <-session.Frames():
+		if ok {
+			t.Fatalf("a frame of %d bytes was sent", len(frame.PNG))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream did not end")
+	}
+	if err := session.Err(); !errors.Is(err, screenstream.ErrFrameTooLarge) {
+		t.Fatalf("Err() = %v, want ErrFrameTooLarge", err)
 	}
 }

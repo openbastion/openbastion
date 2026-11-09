@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 	"github.com/openbastion/openbastion/pkg/vnc"
 )
 
@@ -72,6 +73,8 @@ func TestVNCRefusalsSayWhatADR0071Promises(t *testing.T) {
 		{vnc.ErrPasswordTruncation, "codec_unsupported"},
 		{vnc.ErrUnsupportedProtocol, "codec_unsupported"},
 		{vnc.ErrInvalidFramebuffer, "codec_unsupported"},
+		// A screen too large to record is a recording loss (ADR-0070), not an unsupported codec.
+		{fmt.Errorf("%w: %w", vnc.ErrInvalidFramebuffer, screenstream.ErrFrameTooLarge), "recording_lost"},
 		{vnc.ErrInvalidTarget, "pin_missing"},
 		{vnc.ErrTLSVerification, "pin_mismatch"},
 		{vnc.ErrAuthentication, "target_unreachable"},
