@@ -297,6 +297,26 @@ describe("what the operator sends to an RDP session (ADR-0088)", () => {
     s.view.unmount();
   });
 
+  // The browser keeps Ctrl+Alt+Del for itself: a button sends it, to an RDP session only.
+  it("sends Ctrl+Alt+Del from its button, pressed then released in order", async () => {
+    const s = setup();
+    await live(s, "rdp");
+    fireEvent.click(screen.getByText("Ctrl+Alt+Suppr"));
+    expect(s.socket.sent.map((m) => [...m])).toEqual([
+      [...encodeScancode(0x1d, true)], [...encodeScancode(0x38, true)], [...encodeScancode(0xe053, true)],
+      [...encodeScancode(0xe053, false)], [...encodeScancode(0x38, false)], [...encodeScancode(0x1d, false)],
+    ]);
+    s.view.unmount();
+  });
+
+  it("offers no Ctrl+Alt+Del to a VNC session, nor before the session is live", async () => {
+    const s = setup();
+    expect(screen.queryByText("Ctrl+Alt+Suppr")).toBeNull();
+    await live(s, "vnc");
+    expect(screen.queryByText("Ctrl+Alt+Suppr")).toBeNull();
+    s.view.unmount();
+  });
+
   it("sends no key before the proxy has said which protocol it is", () => {
     const s = setup();
     fireEvent.keyDown(s.canvas, { key: "a", code: "KeyA" });

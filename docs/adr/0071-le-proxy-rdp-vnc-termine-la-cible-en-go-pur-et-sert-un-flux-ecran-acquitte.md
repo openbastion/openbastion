@@ -318,10 +318,13 @@ sequenceDiagram
 | `RECORDING_POLICY` | `required` | inchangé ; `best-effort` est refusé pour les écrans |
 | `SCREEN_FRAME_INTERVAL_MS` | `50` | cadence des images, VNC et RDP : au plus une image par intervalle ; borné à [16, 250] |
 | `SCREEN_MAX_PIXELS` | `16777216` | borne de trame (ADR-0070) |
+
+| `SCREEN_FRAME_INTERVAL_MS` | `50` | clôture d'un segment ; borné à [16, 250] |
+| (constante) `screenstream.MaxPixels` | `16777216` | borne de trame (ADR-0070) ; **pas une variable** : elle ne pourrait que monter au-delà de ce que le contrat écran et le Video Recorder acceptent |
 | `SCREEN_INPUT_RATE_PER_SECOND` | `200` | débit d'entrée par session |
 | `SCREEN_INPUT_BURST` | `400` | rafale d'entrée |
 | `RDP_VNC_PROXY_URLS` | aucune | pool du Broker, 1 à 16 |
-| `SCREEN_ATTACH_TTL_SECONDS` | `30` | durée de vie du cookie d'attache |
+| (constante de la Gateway) | `30` | durée de vie du cookie d'attache ; **pas une variable** : §7 la borne à 30 s au plus, un réglage ne pourrait que l'allonger |
 | `SCREEN_ALLOWED_ORIGINS` | vide (même origine) | origines WebSocket acceptées |
 | `RDP_CONNECT_TIMEOUT_SECONDS` | `15` | poignée de main cible (CredSSP compris) |
 | `VNC_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
@@ -1732,3 +1735,35 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 - interopérabilité FreeRDP, enregistrement de bout en bout et route depuis l'API publique, tous verts.
 
 **Limite** : le débit n'est pas mesuré ; c'est l'incrément 5 et le lot A d'ADR-0090.
+
+## ADR-0071 — deux bornes restent des constantes
+
+La configuration proposée annonçait `SCREEN_MAX_PIXELS` et `SCREEN_ATTACH_TTL_SECONDS`. Ni l'une ni l'autre n'a été implémentée en variable : `screenstream.MaxPixels` (16 777 216) et la durée de 30 s de l'attache dans la Gateway sont des constantes.
+
+**Décision : elles le restent.** Une variable ne pourrait qu'affaiblir l'une ou l'autre :
+- relever la borne de pixels au-delà de ce que le contrat écran, l'Admin UI et le Video Recorder acceptent (ADR-0070) ;
+- allonger l'attache au-delà des 30 s maximum fixées par §7.
+
+Les baisser ne protège de rien de mesuré. Le tableau de configuration est corrigé en ce sens. Choix modifiable si une installation démontre un besoin de les abaisser.
+## ADR-0071 — le bouton Ctrl+Alt+Suppr
+
+Les conséquences de cet ADR promettaient un bouton « Ctrl+Alt+Del » pour RDP, puisqu'un navigateur garde ce raccourci pour lui. Il n'existait pas.
+
+**Désormais** : pendant une session RDP, et seulement RDP, le lecteur de l'Admin UI propose « Ctrl+Alt+Suppr ». Le bouton envoie en scancodes Ctrl, Alt et Suppr enfoncés, puis relâchés dans l'ordre inverse, et rend le focus à l'écran. VNC n'en a pas.
+
+**Preuves** : 2 tests (la séquence exacte ; aucun bouton pour VNC ni avant le HELLO). 2 mutations tuées sur 3 ; la garde interne, retirée, survit, puisque le bouton est déjà caché pour VNC : c'est une seconde défense.
+
+## ADR-0071 — incrément 4 : les fuzzers en CI
+
+L'incrément 4 demande les fuzzers de chaque parseur, 30 s chacun, en CI. Il y en avait 22, tous dans `pkg/rdp`, et le CI n'en lançait aucun.
+
+**Ajouté** :
+- quatre fuzzers :
+  - `pkg/vnc` : `FuzzReadServerInit` et `FuzzReadServerMessage` (mises à jour, rectangles, encodages, redimensionnements, sonnerie, texte du presse-papiers, sur une fausse connexion ; le framebuffer doit rester dans ses bornes) ;
+  - `pkg/screenstream` : `FuzzDecode` et `FuzzDecodeInput`, avec aller-retour par l'encodeur et pointeur dans la trame ;
+- `make fuzz` : chaque cible de `FUZZ_PACKAGES`, `FUZZTIME` chacune ;
+- `.github/workflows/fuzz.yml` : un job par paquet, 30 s par cible, à chaque PR qui touche ces paquets et chaque mardi. L'entrée fautive est gardée en artefact.
+
+**Contre-épreuve** : la borne « largeur ou hauteur nulle » de `readServerInit`, retirée, est trouvée par `FuzzReadServerInit` en 0,18 s. Son entrée reste comme graine dans `pkg/vnc/testdata/fuzz`.
+
+**Limite** : la négociation VeNCrypt et l'authentification VNC n'ont pas de fuzzer propre. Elles passent par `Open`, qui demande un serveur TLS ; leurs refus sont couverts par les tests contre un serveur factice.

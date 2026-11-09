@@ -10,6 +10,9 @@ ci:
     frontend: .github/workflows/frontend.yml
     security: .github/workflows/security.yml
     containers: .github/workflows/containers.yml
+  standalone_workflows:                  # hors de la porte requise
+    windows_rdp: .github/workflows/windows-rdp.yml   # Windows Server 2022 (dockur), ADR-0071 ; PR touchant pkg/rdp…, lundi
+    fuzz: .github/workflows/fuzz.yml                 # make fuzz, 30 s par cible, pkg/rdp, pkg/vnc, pkg/screenstream ; PR qui les touche, mardi ; entrée fautive en artefact
   local_actions:
     setup_go: .github/actions/setup-go/action.yml
     setup_node: .github/actions/setup-node/action.yml
