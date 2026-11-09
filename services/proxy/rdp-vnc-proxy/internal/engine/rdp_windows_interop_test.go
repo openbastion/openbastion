@@ -369,10 +369,11 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 	}
 }
 
-// The target ending the session (ADR-0071 §3, "Fin"): the user logs off (Win+R, "logoff", Enter;
-// keys that QWERTY and AZERTY share). Windows ends the connection the way the protocol does, and
-// the stream ends with no error, which the relay says as session_ended. Last in this file: it
-// closes the user's session, and the next connection opens a new one.
+// The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
+// a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
+// do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no
+// error, which the relay says as session_ended. Last in this file: it closes the user's session,
+// and the next connection opens a new one.
 func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
 	target := windowsTarget(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
@@ -416,34 +417,19 @@ func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
 	// The desktop, settled.
 	settle(10*time.Second, 90*time.Second)
 	dump("logoff-0-desktop.png")
-	press := func(code uint16, pressed bool) {
-		flags := screenstream.KeyReleased
-		if pressed {
-			flags = screenstream.KeyPressed
-		}
-		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: code, Flags: flags}); err != nil {
-			t.Fatalf("key 0x%x: %v", code, err)
-		}
-		time.Sleep(50 * time.Millisecond)
+	shared := os.Getenv("RDP_WINDOWS_SHARED")
+	if shared == "" {
+		t.Skip("RDP_WINDOWS_SHARED not set: the share the logoff is asked through (prepare.sh)")
 	}
-	key := func(code uint16) { press(code, true); press(code, false) }
-	press(0xe05b, true) // Win+R
-	key(0x13)
-	press(0xe05b, false)
-	settle(2*time.Second, 5*time.Second)
-	dump("logoff-1-run.png")
-	for _, code := range []uint16{0x26, 0x18, 0x22, 0x18, 0x21, 0x21} { // l o g o f f
-		key(code)
+	if err := os.WriteFile(filepath.Join(shared, "logoff-request"), []byte("logoff\n"), 0o644); err != nil {
+		t.Fatalf("asking for the logoff: %v", err)
 	}
-	settle(time.Second, 3*time.Second)
-	dump("logoff-2-typed.png")
-	key(0x1c) // Enter
 	frames := 0
 	defer func() {
-		t.Logf("%d frame(s) after Enter", frames)
+		t.Logf("%d frame(s) after the logoff was asked", frames)
 		dump("logoff-3-last.png")
 	}()
-	for deadline := time.After(90 * time.Second); ; {
+	for deadline := time.After(3 * time.Minute); ; {
 		select {
 		case m, ok := <-session.Frames():
 			if ok {
@@ -456,7 +442,7 @@ func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
 			t.Log("the logoff ended the stream with no error: session_ended")
 			return
 		case <-deadline:
-			t.Fatal("the stream did not end after the logoff")
+			t.Fatal("the stream did not end within 3 minutes of the logoff request")
 		}
 	}
 }

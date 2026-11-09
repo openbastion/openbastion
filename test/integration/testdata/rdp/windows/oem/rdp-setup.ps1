@@ -134,6 +134,17 @@ while ($true) {
     try { Copy-Item (Join-Path $out '*') $share -Force -ErrorAction Stop; $errors = @(); break } catch { $errors += "$share : $_" }
   }
   "$(Get-Date -Format o) shares $($shares -join ', ') errors $($errors -join ' | ')" | Out-File (Join-Path $out 'export-status.txt') -Encoding utf8
+  # The logoff test (ADR-0071 §3, "Fin"): the runner asks by a file on the share, and Windows itself
+  # logs the user's sessions off; no key is needed (the Windows key did not reach the shell, PR #101).
+  foreach ($share in $shares) {
+    if (Test-Path (Join-Path $share 'logoff-request') -ErrorAction SilentlyContinue) {
+      $ids = (query session) -split "`n" | ForEach-Object { if ($_ -match '\s(\d+)\s+(Active|Disc)') { [int]$Matches[1] } } | Where-Object { $_ -ge 1 -and $_ -lt 65536 }
+      foreach ($id in $ids) { logoff $id }
+      Remove-Item (Join-Path $share 'logoff-request') -Force -ErrorAction SilentlyContinue
+      "$(Get-Date -Format o) logged off: $($ids -join ', ')" | Out-File (Join-Path $out 'logoff-done.txt') -Encoding utf8
+      break
+    }
+  }
   Start-Sleep -Seconds 30
 }
 '@
