@@ -3036,6 +3036,25 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : le bouton Ctrl+Alt+Suppr
+
+Écart de la relecture d'ADR-0071 : le bouton promis pour RDP n'existait pas. Le lecteur l'offre désormais pendant une session RDP. Il envoie Ctrl, Alt, Suppr enfoncés puis relâchés, en scancodes ; VNC n'en a pas.
+
+**Prouvé** : 2 tests Vitest (91 → 93), 2 mutations tuées sur 3. La garde interne survit, le bouton étant déjà caché pour VNC.
+
+## 2026-11-09 — ADR-0071, incrément 4 : les fuzzers en CI
+
+Écart de la relecture d'ADR-0071 : 22 fuzzers dans `pkg/rdp`, aucun dans `pkg/vnc` ni `pkg/screenstream`, et aucun lancé par le CI.
+
+**Ajouté** :
+- quatre fuzzers : `ServerInit` et messages serveur VNC, décodage du flux écran et de l'entrée, avec aller-retour ;
+- `make fuzz` ;
+- `fuzz.yml` : 30 s par cible, un job par paquet, à chaque PR qui touche ces paquets et le mardi, entrée fautive en artefact.
+
+**Prouvé** : chaque nouveau fuzzer tient 20 s sans échec. Une borne retirée de `readServerInit` est trouvée en 0,18 s, et son entrée est gardée comme graine.
+
+**Limite** : VeNCrypt et l'authentification VNC n'ont pas de fuzzer propre.
+
 ## 2026-11-09 — ADR-0071 §8 : le break-glass d'un écran est refusé dès sa création
 
 Écart d'ADR-0071 trouvé en relisant l'ADR : le Broker créait une demande break-glass `rdp` ou `vnc`, la mettait en approbation, et elle échouait au `connect` (le proxy refuse `break_glass`). Elle est désormais refusée dès sa création, avant toute autorisation : enregistrée `denied`, auditée (`session.breakglass_requested`, échec), `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass ; le refus du proxy reste, en seconde défense.

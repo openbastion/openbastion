@@ -1,4 +1,4 @@
-# The RDP proxy against a real Windows (ADR-0071): Windows Server 2022 in a KVM virtual machine
+# The RDP proxy against a real Windows (ADR-0071): Windows Server 2022, and 2019, in a KVM virtual machine
 # (dockur/windows), installed unattended at each run. Not a required check: an installation takes
 # tens of minutes. It runs when the target, its test or the RDP stack change, every Monday, and on
 # demand.
@@ -32,7 +32,7 @@ jobs:
   windows:
     # 16: Windows as installed, the real case (ADR-0086). 32: 32 bpp allowed by policy, the 32-bpp
     # path (RDP 6.0 planar) against Windows. Each on its own runner, side by side.
-    name: RDP against Windows Server 2022 (${{ matrix.depth }} bpp, session ${{ matrix.session }}${{ matrix.keyboard != 'en-US' && format(', {0}', matrix.keyboard) || '' }})
+    name: RDP against Windows Server ${{ matrix.version }} (${{ matrix.depth }} bpp, session ${{ matrix.session }}${{ matrix.keyboard != 'en-US' && format(', {0}', matrix.keyboard) || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
@@ -43,19 +43,28 @@ jobs:
         # A dimension, not a key added by include: an include that matches a combination and only
         # adds a key merges into it instead of making a job of its own.
         keyboard: [en-US]
+        version: ["2022"]
         # The session dockur opens at the console for the user, kept: taking it over by RDP.
         include:
           - depth: 16
             session: console
             keyboard: en-US
+            version: "2022"
           # AZERTY (ADR-0088): the operator's physical keys, read by the target's own layout.
           - depth: 16
             session: none
             keyboard: fr-FR
+            version: "2022"
+          # Windows Server 2019 (ADR-0071, increment 4: the matrix of real targets), as installed.
+          - depth: 16
+            session: none
+            keyboard: en-US
+            version: "2019"
     env:
       DEPTH: ${{ matrix.depth }}
       SESSION: ${{ matrix.session }}
       KEYBOARD: ${{ matrix.keyboard || 'en-US' }}
+      WINDOWS_VERSION: ${{ matrix.version || '2022' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,7 +87,7 @@ jobs:
         run: make test-rdp-interop
       - name: "Prepare the target (authority, certificate, password: for this run only)"
         if: ${{ !cancelled() }}
-        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" "$DEPTH" "$SESSION" "$KEYBOARD"
+        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" "$DEPTH" "$SESSION" "$KEYBOARD" "$WINDOWS_VERSION"
       - name: Start Windows
         if: ${{ !cancelled() }}
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml up -d
@@ -169,7 +178,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: windows-rdp-screens-${{ matrix.depth }}bpp-${{ matrix.session }}-${{ matrix.keyboard || 'en-US' }}
+          name: windows-rdp-screens-${{ matrix.version }}-${{ matrix.depth }}bpp-${{ matrix.session }}-${{ matrix.keyboard || 'en-US' }}
           path: ${{ runner.temp }}/windows/dump/
           if-no-files-found: ignore
           retention-days: 14

@@ -1723,3 +1723,25 @@ La configuration proposée annonçait `SCREEN_MAX_PIXELS` et `SCREEN_ATTACH_TTL_
 - allonger l'attache au-delà des 30 s maximum fixées par §7.
 
 Les baisser ne protège de rien de mesuré. Le tableau de configuration est corrigé en ce sens. Choix modifiable si une installation démontre un besoin de les abaisser.
+## ADR-0071 — le bouton Ctrl+Alt+Suppr
+
+Les conséquences de cet ADR promettaient un bouton « Ctrl+Alt+Del » pour RDP, puisqu'un navigateur garde ce raccourci pour lui. Il n'existait pas.
+
+**Désormais** : pendant une session RDP, et seulement RDP, le lecteur de l'Admin UI propose « Ctrl+Alt+Suppr ». Le bouton envoie en scancodes Ctrl, Alt et Suppr enfoncés, puis relâchés dans l'ordre inverse, et rend le focus à l'écran. VNC n'en a pas.
+
+**Preuves** : 2 tests (la séquence exacte ; aucun bouton pour VNC ni avant le HELLO). 2 mutations tuées sur 3 ; la garde interne, retirée, survit, puisque le bouton est déjà caché pour VNC : c'est une seconde défense.
+
+## ADR-0071 — incrément 4 : les fuzzers en CI
+
+L'incrément 4 demande les fuzzers de chaque parseur, 30 s chacun, en CI. Il y en avait 22, tous dans `pkg/rdp`, et le CI n'en lançait aucun.
+
+**Ajouté** :
+- quatre fuzzers :
+  - `pkg/vnc` : `FuzzReadServerInit` et `FuzzReadServerMessage` (mises à jour, rectangles, encodages, redimensionnements, sonnerie, texte du presse-papiers, sur une fausse connexion ; le framebuffer doit rester dans ses bornes) ;
+  - `pkg/screenstream` : `FuzzDecode` et `FuzzDecodeInput`, avec aller-retour par l'encodeur et pointeur dans la trame ;
+- `make fuzz` : chaque cible de `FUZZ_PACKAGES`, `FUZZTIME` chacune ;
+- `.github/workflows/fuzz.yml` : un job par paquet, 30 s par cible, à chaque PR qui touche ces paquets et chaque mardi. L'entrée fautive est gardée en artefact.
+
+**Contre-épreuve** : la borne « largeur ou hauteur nulle » de `readServerInit`, retirée, est trouvée par `FuzzReadServerInit` en 0,18 s. Son entrée reste comme graine dans `pkg/vnc/testdata/fuzz`.
+
+**Limite** : la négociation VeNCrypt et l'authentification VNC n'ont pas de fuzzer propre. Elles passent par `Open`, qui demande un serveur TLS ; leurs refus sont couverts par les tests contre un serveur factice.
