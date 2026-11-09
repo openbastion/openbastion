@@ -50,7 +50,7 @@ ADR-0069 fixe les garanties d'un proxy RDP : NLA obligatoire, empreinte épingl�
 
 - (+) Un opérateur peut demander, faire approuver et ouvrir une session RDP depuis l'Admin UI, enregistrée et rejouable, avec les mêmes contrôles qu'une session VNC. Les preuves sont tirées de processus réels : parcours de bout en bout contre FreeRDP 3, depuis l'API publique.
 - (+) Une installation qui n'allume rien garde exactement le comportement d'avant : RDP refusé avant tout scope.
-- (−) Le critère de sortie restant d'ADR-0071 n'est pas tenu : le texte par le cache de glyphes. (`recording_lost` au-delà de 4 Mio et les dispositions QWERTY et AZERTY sont tenus depuis le 9 novembre 2026, ADR-0071 incréments 76 et 77.) Allumer RDP est le choix de l'exploitant, en connaissance de ces limites (`docs/security/known-limitations.md`).
+- (−) Les critères de sortie d'ADR-0071 sont tenus depuis le 9 novembre 2026 : `recording_lost` au-delà de 4 Mio et QWERTY et AZERTY (incréments 76 et 77), texte lisible par bitmaps (ADR-0089). Allumer RDP reste le choix de l'exploitant. Allumer RDP est le choix de l'exploitant, en connaissance de ces limites (`docs/security/known-limitations.md`).
 - (−) Un Broker allumé devant un proxy éteint émet un scope Vault inutile, borné par la durée de la session ; il n'est jamais échangé.
 - (−) Le clavier passe par les touches physiques. Un caractère qu'aucune touche de la disposition de la cible ne donne ne s'envoie pas, et le presse-papiers est fermé.
 
