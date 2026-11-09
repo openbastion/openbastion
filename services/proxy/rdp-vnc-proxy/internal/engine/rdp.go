@@ -33,6 +33,10 @@ type RDPCodec struct {
 	DesktopWidth  uint16
 	DesktopHeight uint16
 	InputTimeout  time.Duration
+	// FrameInterval is the cadence of the frames (SCREEN_FRAME_INTERVAL_MS, ADR-0071 §8): updates
+	// are drawn as they come, and at most one frame a interval is encoded, recorded and shown.
+	// Zero makes a frame of every update that changes the screen.
+	FrameInterval time.Duration
 	openSession   func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 }
 
@@ -94,7 +98,7 @@ func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 		inputTimeout = rdpInputTimeout
 	}
 	s := &rdpScreenSessionAdapter{target: target, framebuffer: framebuffer, frames: make(chan screenstream.Message), cancel: cancel, done: make(chan struct{}),
-		inputTimeout: inputTimeout, width: width, height: height, pressedKeys: make(map[uint16]bool)}
+		inputTimeout: inputTimeout, width: width, height: height, pressedKeys: make(map[uint16]bool), frameInterval: c.FrameInterval}
 	go s.readLoop(sessionCtx)
 	return s, nil
 }
@@ -203,13 +207,15 @@ type rdpScreenSessionAdapter struct {
 	mu           sync.Mutex
 	inputMu      sync.Mutex
 	inputTimeout time.Duration
-	width        uint16
-	height       uint16
-	pointerX     uint16
-	pointerY     uint16
-	pointerBtns  byte
-	pressedKeys  map[uint16]bool
-	err          error
+	// frameInterval: at most one frame a interval (RDPCodec.FrameInterval).
+	frameInterval time.Duration
+	width         uint16
+	height        uint16
+	pointerX      uint16
+	pointerY      uint16
+	pointerBtns   byte
+	pressedKeys   map[uint16]bool
+	err           error
 }
 
 func (s *rdpScreenSessionAdapter) Frames() <-chan screenstream.Message { return s.frames }
@@ -392,48 +398,99 @@ func (s *rdpScreenSessionAdapter) Close() error {
 func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 	defer close(s.done)
 	defer close(s.frames)
-	shown := false
-	for {
-		update, err := s.target.ReadBitmapUpdate(ctx, rdpReadTimeout)
-		if err != nil {
-			if ctx.Err() == nil {
-				s.mu.Lock()
-				s.err = err
-				s.mu.Unlock()
-			}
-			return
-		}
-		// A reactivation may have changed the desktop's size (MS-RDPBCGR 1.3.1.3): the frames follow
-		// it, and so do the bounds of the operator's pointer.
-		if width, height := s.framebuffer.Dimensions(); update.DesktopWidth != 0 &&
-			(uint32(update.DesktopWidth) != width || uint32(update.DesktopHeight) != height) {
-			if err := s.framebuffer.Resize(update.DesktopWidth, update.DesktopHeight); err != nil {
-				s.mu.Lock()
-				s.err = err
-				s.mu.Unlock()
+	// The target's updates, read apart: a frame may be due while the next update is awaited.
+	updates := make(chan rdp.RDPBitmapUpdate)
+	readErr := make(chan error, 1)
+	go func() {
+		for {
+			update, err := s.target.ReadBitmapUpdate(ctx, rdpReadTimeout)
+			if err != nil {
+				readErr <- err
 				return
 			}
-			s.inputMu.Lock()
-			s.width, s.height = update.DesktopWidth, update.DesktopHeight
-			s.inputMu.Unlock()
-			shown = false
+			select {
+			case updates <- update:
+			case <-ctx.Done():
+				readErr <- ctx.Err()
+				return
+			}
 		}
-		// The first frame is always sent: the operator has seen nothing yet, even of a black screen.
-		if shown && s.framebuffer.Unchanged(update) {
-			continue
-		}
-		shown = true
-		frame, err := s.framebuffer.Apply(update, time.Now().UTC())
-		if err != nil {
+	}()
+	fail := func(err error) {
+		if ctx.Err() == nil {
 			s.mu.Lock()
 			s.err = err
 			s.mu.Unlock()
-			return
+		}
+	}
+	shown, dirty := false, false
+	var lastFrame time.Time
+	var due <-chan time.Time
+	// emit encodes the desktop as it is now and hands it to the relay, which records it first.
+	emit := func() bool {
+		frame, err := s.framebuffer.Frame(time.Now().UTC())
+		if err != nil {
+			fail(err)
+			return false
 		}
 		select {
 		case s.frames <- frame:
 		case <-ctx.Done():
+			return false
+		}
+		shown, dirty, lastFrame, due = true, false, time.Now(), nil
+		return true
+	}
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case err := <-readErr:
+			// What was drawn and not yet shown is still the target's screen: it goes out first.
+			if dirty && !emit() {
+				return
+			}
+			fail(err)
+			return
+		case <-due:
+			due = nil
+			if dirty && !emit() {
+				return
+			}
+		case update := <-updates:
+			// A reactivation may have changed the desktop's size (MS-RDPBCGR 1.3.1.3): the frames
+			// follow it, and so do the bounds of the operator's pointer.
+			if width, height := s.framebuffer.Dimensions(); update.DesktopWidth != 0 &&
+				(uint32(update.DesktopWidth) != width || uint32(update.DesktopHeight) != height) {
+				if err := s.framebuffer.Resize(update.DesktopWidth, update.DesktopHeight); err != nil {
+					fail(err)
+					return
+				}
+				s.inputMu.Lock()
+				s.width, s.height = update.DesktopWidth, update.DesktopHeight
+				s.inputMu.Unlock()
+				shown = false
+			}
+			// The first frame is always sent: the operator has seen nothing yet, even of a black
+			// screen. After it, a repaint of the same pixels changes nothing.
+			if shown && s.framebuffer.Unchanged(update) {
+				continue
+			}
+			if err := s.framebuffer.Draw(update); err != nil {
+				fail(err)
+				return
+			}
+			dirty = true
+			// One frame a interval at most, the latest screen; the first one at once.
+			wait := s.frameInterval - time.Since(lastFrame)
+			switch {
+			case !shown || wait <= 0:
+				if !emit() {
+					return
+				}
+			case due == nil:
+				due = time.After(wait)
+			}
 		}
 	}
 }

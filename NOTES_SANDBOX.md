@@ -3036,6 +3036,14 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 §8 : la cadence des images RDP
+
+Écart n°3 de la relecture d'ADR-0071 : RDP faisait une image (PNG, enregistrement, acquittement) de chaque mise à jour qui changeait l'écran. Désormais l'adaptateur applique chaque mise à jour au framebuffer (`Draw`) et n'émet qu'une image par `SCREEN_FRAME_INTERVAL_MS` au plus (`Frame`), celle de l'écran le plus récent. La première part sans délai, celle en attente à l'échéance, la dernière avant la fin.
+
+**Prouvé** : 40 mises à jour dans un intervalle donnent 2 images (la première et la plus récente) ; une image en attente part à l'échéance ; `Draw` puis `Frame` équivaut à `Apply` ; 4 mutations tuées sur 4. Interopérabilité FreeRDP, enregistrement et route publique verts.
+
+**Choix renversable** : le même intervalle que VNC (50 ms par défaut).
+
 ## 2026-11-09 — ADR-0071 : le bouton Ctrl+Alt+Suppr
 
 Écart de la relecture d'ADR-0071 : le bouton promis pour RDP n'existait pas. Le lecteur l'offre désormais pendant une session RDP. Il envoie Ctrl, Alt, Suppr enfoncés puis relâchés, en scancodes ; VNC n'en a pas.

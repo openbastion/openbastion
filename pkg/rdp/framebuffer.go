@@ -150,6 +150,48 @@ func (f *RDPFramebuffer) Unchanged(update RDPBitmapUpdate) bool {
 // operations, and returns the next complete PNG frame. Sequence numbers are
 // strictly increasing and committed only after PNG encoding succeeds.
 func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (screenstream.Message, error) {
+	return f.apply(update, timestamp, true)
+}
+
+// Draw applies an update without making a frame of it: the frames are taken at a cadence (Frame),
+// not one per update (ADR-0071 §8). It validates exactly as Apply does, and leaves the
+// framebuffer as it was on any refusal.
+func (f *RDPFramebuffer) Draw(update RDPBitmapUpdate) error {
+	_, err := f.apply(update, time.Now(), false)
+	return err
+}
+
+// Frame encodes the desktop as it is now, as the next frame. A screen whose PNG is past 4 MiB
+// cannot be recorded: screenstream.ErrFrameTooLarge, which ends the session as a recording loss.
+func (f *RDPFramebuffer) Frame(timestamp time.Time) (screenstream.Message, error) {
+	if f == nil {
+		return screenstream.Message{}, ErrRDPFramebuffer
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.image == nil || timestamp.IsZero() || f.sequence == ^uint64(0) {
+		return screenstream.Message{}, ErrRDPFramebuffer
+	}
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, f.image); err != nil || encoded.Len() == 0 {
+		return screenstream.Message{}, ErrRDPFramebuffer
+	}
+	if encoded.Len() > screenstream.MaxPNGBytes {
+		return screenstream.Message{}, fmt.Errorf("%w: %d-byte PNG: %w", ErrRDPFramebuffer, encoded.Len(), screenstream.ErrFrameTooLarge)
+	}
+	bounds := f.image.Bounds()
+	message := screenstream.Message{
+		Type: screenstream.TypeFrame, Sequence: f.sequence + 1, Timestamp: timestamp.UTC(),
+		Width: uint32(bounds.Dx()), Height: uint32(bounds.Dy()), PNG: encoded.Bytes(),
+	}
+	if _, err := screenstream.Encode(message); err != nil {
+		return screenstream.Message{}, ErrRDPFramebuffer
+	}
+	f.sequence++
+	return message, nil
+}
+
+func (f *RDPFramebuffer) apply(update RDPBitmapUpdate, timestamp time.Time, encode bool) (screenstream.Message, error) {
 	if f == nil {
 		return screenstream.Message{}, ErrRDPFramebuffer
 	}
@@ -343,6 +385,12 @@ func (f *RDPFramebuffer) Apply(update RDPBitmapUpdate, timestamp time.Time) (scr
 			}
 			clear(source)
 		}
+	}
+	if !encode {
+		for _, old := range previous {
+			clear(old)
+		}
+		return screenstream.Message{}, nil
 	}
 	var encoded bytes.Buffer
 	encodeErr := png.Encode(&encoded, f.image)
