@@ -3036,6 +3036,22 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : QWERTY et AZERTY vérifiés contre Windows
+
+Incrément 77, critère de sortie « clavier AZERTY et QWERTY vérifiés ». Une quatrième cible Windows a la disposition fr-FR (`prepare.sh … KEYBOARD`, `KEYBOARD` de dockur, `Set-WinUserLanguageList`).
+
+`TestRDPWindows_KeyboardLayout` tape par le codec, en scancodes comme l'opérateur, des touches dont le caractère diffère entre les deux dispositions. Le Bloc-notes enregistre le texte, que le partage rapporte au runner, et le test le compare.
+
+**Mesuré** : `qwaz;m,1!` sur les trois cibles en-US, `azqwm,;&1` sur la cible fr-FR. Les mêmes touches donnent deux textes : la disposition de la cible s'applique (`keyboardLayout` 0, celle de l'utilisateur).
+
+**Premier passage rouge** : texte juste à l'écran, mais le Bloc-notes n'enregistre pas dans `Documents` (`Desktop\Shared`, `System32`). L'export cherche désormais le fichier.
+
+**Limites** : deux dispositions ; ni touches mortes ni AltGr.
+
+**Reste** des critères de sortie : le texte par le cache de glyphes.
+
+**Choix renversables** : fr-FR comme seconde disposition ; une quatrième VM Windows par passage.
+
 ## 2026-11-09 — ADR-0071 : une image trop grande pour l'enregistrement est une perte d'enregistrement
 
 Incrément 76, critère de sortie « `session.recording_lost` sur image > 4 Mio ». Une image dont le PNG dépasse 4 Mio n'est toujours pas dessinée. Le moteur RDP comme VNC renvoie désormais `screenstream.ErrFrameTooLarge`, que `proxycore` traduit en `ErrRecordingLost` :
@@ -3050,7 +3066,7 @@ Avant, c'était `target_unreachable` (RDP) ou `codec_unsupported` (VNC), sans au
 
 **Limite** : pas sur processus réels contre une cible à l'écran incompressible.
 
-**Reste** des critères de sortie : glyphes, AZERTY et QWERTY vérifiés.
+**Reste** des critères de sortie : glyphes (QWERTY et AZERTY : incrément 77).
 
 ## 2026-11-09 — ADR-0071 : le lecteur de l'écran enregistré, dans l'Admin UI
 
