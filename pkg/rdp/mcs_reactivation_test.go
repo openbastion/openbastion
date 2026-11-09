@@ -3,6 +3,7 @@ package rdp
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/binary"
 	"errors"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/openbastion/openbastion/pkg/screenstream"
 )
 
 const (
@@ -270,5 +273,36 @@ func TestRDPFramebufferResizeKeepsTheSequence(t *testing.T) {
 		if framebuffer.Resize(bad[0], bad[1]) == nil {
 			t.Errorf("resized to %dx%d", bad[0], bad[1])
 		}
+	}
+}
+
+// A screen whose PNG is past 4 MiB is not drawn, and the error says it cannot be recorded
+// (screenstream.ErrFrameTooLarge), which the relay turns into a recording loss (ADR-0070).
+func TestRDPFramebufferRefusesAFrameBeyondTheRecordableSize(t *testing.T) {
+	// Opaque noise: Go writes it as RGB, 3 bytes a pixel, which no deflate brings under 4 MiB.
+	const width, height = 1600, 1200
+	framebuffer, err := NewRDPFramebuffer(width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noise := make([]byte, width*height*4)
+	if _, err := rand.Read(noise); err != nil {
+		t.Fatal(err)
+	}
+	for i := 3; i < len(noise); i += 4 {
+		noise[i] = 0xff
+	}
+	before, err := framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{X: 0, Y: 0, Width: 1, Height: 1, Pixels: []byte{1, 2, 3, 0xff}}}}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{Width: width, Height: height, Pixels: noise}}}, time.Now())
+	if !errors.Is(err, screenstream.ErrFrameTooLarge) {
+		t.Fatalf("a %d-byte screen of noise: %v, want ErrFrameTooLarge", len(noise), err)
+	}
+	// Nothing of it was kept: the next frame is the previous screen, at the next sequence.
+	after, err := framebuffer.Apply(RDPBitmapUpdate{Rectangles: []RDPBitmapRectangle{{X: 0, Y: 0, Width: 1, Height: 1, Pixels: []byte{1, 2, 3, 0xff}}}}, time.Now())
+	if err != nil || !bytes.Equal(after.PNG, before.PNG) || after.Sequence != before.Sequence+1 {
+		t.Fatalf("after the refusal: sequence %d after %d, same screen %v, %v", after.Sequence, before.Sequence, bytes.Equal(after.PNG, before.PNG), err)
 	}
 }

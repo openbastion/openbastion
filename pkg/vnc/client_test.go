@@ -790,3 +790,23 @@ func TestNegotiationSaysWhatTheTargetLacks(t *testing.T) {
 		})
 	}
 }
+
+// A screen whose PNG is past 4 MiB is not sent, and the error says it cannot be recorded
+// (screenstream.ErrFrameTooLarge), which the relay turns into a recording loss (ADR-0070).
+func TestEmitFrameRefusesAScreenBeyondTheRecordableSize(t *testing.T) {
+	// Opaque noise: written as RGB, 3 bytes a pixel, which no deflate brings under 4 MiB.
+	noise := image.NewRGBA(image.Rect(0, 0, 1600, 1200))
+	if _, err := rand.Read(noise.Pix); err != nil {
+		t.Fatal(err)
+	}
+	for i := 3; i < len(noise.Pix); i += 4 {
+		noise.Pix[i] = 0xff
+	}
+	s := &Session{frames: make(chan screenstream.Message, 1), width: 1600, height: 1200, framebuffer: noise, done: make(chan struct{})}
+	if err := s.emitFrame(); !errors.Is(err, screenstream.ErrFrameTooLarge) || !errors.Is(err, ErrInvalidFramebuffer) {
+		t.Fatalf("emitFrame = %v, want ErrFrameTooLarge", err)
+	}
+	if len(s.frames) != 0 || s.sequence != 0 {
+		t.Fatalf("%d frame(s) sent, sequence %d", len(s.frames), s.sequence)
+	}
+}

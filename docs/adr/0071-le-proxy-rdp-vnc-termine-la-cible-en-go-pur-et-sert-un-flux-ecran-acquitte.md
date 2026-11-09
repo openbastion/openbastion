@@ -1605,7 +1605,7 @@ RDP est ouvert aux opérateurs par la route écran de VNC, derrière `RDP_ENABLE
 
 **Contre-épreuves** : sans l'interrupteur du Broker, `connect` répond `409` avant tout scope ; sans celui du proxy, `503`.
 
-**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes, AZERTY et QWERTY vérifiés, `recording_lost` au-delà de 4 Mio. Allumer RDP reste le choix de l'exploitant.
+**Le reste du critère de sortie de l'incrément 2 n'est pas tenu** : glyphes, AZERTY et QWERTY vérifiés (`recording_lost` au-delà de 4 Mio : tenu à l'incrément 76). Allumer RDP reste le choix de l'exploitant.
 
 ## ADR-0071 — PR #93 : l'enregistrement et la reprise par le codec, contre Windows
 
@@ -1645,3 +1645,21 @@ Un refus de l'API s'affiche tel quel. La fin dit si l'enregistrement a été sce
 - ni export vidéo, ni recherche dans l'image, ni lecture des frappes (ADR-0069 : le rejeu est visuel) ;
 - le lecteur n'a pas été vu dans un navigateur réel contre un enregistrement réel, seulement sous jsdom ;
 - `vite build` passe.
+
+## ADR-0071 — incrément 76 : une image trop grande pour l'enregistrement est une perte d'enregistrement
+
+C'est le critère de sortie « `session.recording_lost` sur image > 4 Mio » (§8, ADR-0070).
+
+**Avant** : une image dont le PNG dépassait 4 Mio n'était pas dessinée (`RDPFramebuffer.Apply`, `vnc.Session.emitFrame`), mais la session se fermait sans le dire ni l'auditer comme une perte d'enregistrement : `target_unreachable` pour RDP, `codec_unsupported` pour VNC, aucun `session.recording_lost`.
+
+**Après** :
+- les deux moteurs renvoient `screenstream.ErrFrameTooLarge`, enveloppée dans leur propre erreur ;
+- le relais (`proxycore`) la traduit en `ErrRecordingLost` : l'opérateur reçoit `END recording_lost`, l'audit `session.recording_lost` puis `session.terminate`, et le credential est purgé ;
+- l'image n'est ni tronquée ni sautée, et le framebuffer RDP garde l'écran d'avant.
+
+**Preuves** :
+- tests rouges d'abord : le relais (`ErrFrameTooLarge` → `recording_lost` et audit), le framebuffer RDP (un écran de bruit opaque de 1600×1200, incompressible sous 4 Mio : le bruit de 1280×1024, écrit en RGB, y tient), VNC (`emitFrame`), et le code de fin VNC ;
+- le maillon du moteur RDP : la mise à jour de bruit ferme le flux, et `Err()` dit `ErrFrameTooLarge` ;
+- 5 mutations tuées sur 5.
+
+**Limite** : prouvé au niveau du relais, de ses vrais écouteurs et des moteurs, pas sur processus réels contre une cible qui afficherait un écran incompressible.

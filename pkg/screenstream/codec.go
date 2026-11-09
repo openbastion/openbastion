@@ -59,6 +59,10 @@ var (
 	ErrMalformedMessage = errors.New("screenstream: malformed message")
 	ErrUnsupported      = errors.New("screenstream: unsupported message")
 	ErrOutOfBounds      = errors.New("screenstream: value outside allowed bounds")
+	// ErrFrameTooLarge is a screen whose PNG is past MaxPNGBytes: it cannot be recorded, and a
+	// session that cannot be recorded ends as a recording loss (ADR-0070, ADR-0071 §8), never
+	// with the frame truncated or skipped.
+	ErrFrameTooLarge = errors.New("screenstream: frame beyond the recordable size")
 )
 
 type Message struct {

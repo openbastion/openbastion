@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 	"github.com/openbastion/openbastion/pkg/vnc"
 )
 
@@ -51,6 +52,8 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 // code of its own in that list: it stays target_unreachable, like every other cause not named.
 func vncEndCode(err error) string {
 	switch {
+	case errors.Is(err, screenstream.ErrFrameTooLarge):
+		return "recording_lost"
 	case errors.Is(err, vnc.ErrPasswordTruncation):
 		return "codec_unsupported"
 	case errors.Is(err, vnc.ErrInvalidTarget):
