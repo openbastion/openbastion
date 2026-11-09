@@ -1705,3 +1705,11 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 - `TestTextOrdersAreRefused` : GlyphIndex, FastIndex, FastGlyph et Cache Glyph refusés, par l'analyseur et en session.
 
 **Avec ce critère, tous les critères de sortie de l'incrément 3 sont tenus.** Allumer RDP (`RDP_ENABLED`, ADR-0088) reste le choix de l'exploitant. Restent ouverts : la réactivation jamais rencontrée chez Windows, et l'incrément 4 (durcissement et preuves).
+
+## ADR-0071 — §8 : le break-glass d'un écran est refusé dès sa création
+
+§8 voulait que le Broker refuse de créer une session break-glass `rdp` ou `vnc`. Il ne le faisait pas : la demande était créée, mise en approbation, puis échouait au `connect`, parce que le proxy refuse `break_glass` (`400`). Le refus arrivait trop tard, contre ADR-0043 : une session qui ne pourrait jamais démarrer n'est pas créée.
+
+**Correctif** : `createSession` refuse une demande break-glass sur un compte `rdp` ou `vnc` avant toute autorisation. Comme tout refus de dérogation, la demande est enregistrée au statut `denied` et auditée (`session.breakglass_requested`, échec). L'API répond `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass. Le refus du proxy reste en place, en seconde défense.
+
+**Preuves** : test rouge d'abord (la demande `vnc` partait en approbation), test HTTP du `409`, et 4 mutations tuées sur 4 (refus retiré, `rdp` oublié, audit retiré, `409` retiré).

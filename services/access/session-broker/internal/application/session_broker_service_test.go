@@ -375,3 +375,30 @@ func TestCreateSessionAllowsVNCOnlyWhenAccountProtocolMatches(t *testing.T) {
 		t.Fatalf("session=%#v", sess)
 	}
 }
+
+// A graphical session's recording cannot be waived (ADR-0069 rule 5, ADR-0071 §8): a break-glass
+// request on an RDP or VNC account is refused at creation, recorded and audited, before anybody is
+// asked to approve a session that could never start (ADR-0043). SSH keeps its break-glass.
+func TestCreateBreakGlassSessionRefusesGraphicalProtocols(t *testing.T) {
+	for _, protocol := range []string{"rdp", "vnc"} {
+		t.Run(protocol, func(t *testing.T) {
+			vault, audit, proxy := &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeProxyClient{}
+			broker := newTestBroker(&fakeAuthz{allowed: true}, vault, audit, &fakeAccountLookup{protocol: protocol}, proxy).WithBreakGlass(60)
+			sess, err := broker.CreateBreakGlassSession(context.Background(), "user1", []string{"dba"}, "acc1", protocol, "incident 42", 30)
+			if !errors.Is(err, domain.ErrBreakGlassNotForScreens) || sess != nil {
+				t.Fatalf("CreateBreakGlassSession(%s) = %v, %v; want ErrBreakGlassNotForScreens", protocol, sess, err)
+			}
+			if vault.calls != 0 || proxy.calls != 0 {
+				t.Fatalf("%d Vault scope(s), %d proxy call(s) for a refused request", vault.calls, proxy.calls)
+			}
+			if len(audit.events) != 1 || audit.events[0] != "session.breakglass_requested" {
+				t.Fatalf("audit events %v, want one refused session.breakglass_requested", audit.events)
+			}
+		})
+	}
+	// The same request on an SSH account is granted: only screens lose break-glass.
+	broker := newTestBroker(&fakeAuthz{allowed: true}, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{protocol: "ssh"}, &fakeProxyClient{}).WithBreakGlass(60)
+	if _, err := broker.CreateBreakGlassSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "incident 42", 30); err != nil {
+		t.Fatalf("SSH break-glass: %v", err)
+	}
+}

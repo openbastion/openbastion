@@ -531,6 +531,12 @@ paths:
         que la plateforme n'a pas fixé cette limite. Chaque demande, accordée
         ou refusée, est auditée (`session.breakglass_requested`).
 
+        **Jamais pour un écran (ADR-0071 §8).** L'enregistrement d'une session
+        `rdp` ou `vnc` ne se déroge pas : une demande `breakGlass` sur un tel
+        compte est refusée dès sa création (`409`), enregistrée comme refusée et
+        auditée (`session.breakglass_requested`, échec), avant qu'aucune
+        approbation ne soit demandée.
+
         **Double validation (ADR-0011).** Par défaut
         (`BREAKGLASS_APPROVAL=required`), une demande `breakGlass` qui remplit
         ces conditions n'est **pas accordée** : elle est créée au statut
@@ -1727,7 +1733,8 @@ components:
             une session break-glass, `durationMinutes` est borné par la limite
             de la plateforme (30 minutes par exemple), pas par 480. La demande
             attend l'approbation d'une autre personne (ADR-0011) sauf si la
-            plateforme a désactivé la double validation par son nom.
+            plateforme a désactivé la double validation par son nom. Refusé
+            (`409`) pour un compte `rdp` ou `vnc` (ADR-0071 §8).
         ticket:
           type: string
           maxLength: 128
