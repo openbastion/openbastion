@@ -29,7 +29,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
+.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -199,6 +199,18 @@ test: proto-gen
 ##                            vivant ; refus de démarrer sans identité propre
 ## - postgres_flow_test.go  : SKIP sans TEST_DATABASE_URL — voir
 ##                            `make test-postgres`
+## Fuzz every parser a target or a browser feeds (ADR-0071, increment 4): each Fuzz target of the
+## protocol packages, FUZZTIME each. A failure leaves its input in the package's testdata/fuzz.
+FUZZTIME ?= 30s
+FUZZ_PACKAGES ?= ./pkg/rdp ./pkg/vnc ./pkg/screenstream
+fuzz:
+	@set -e; for p in $(FUZZ_PACKAGES); do \
+		for t in $$($(GO) test -list '^Fuzz' $$p | grep '^Fuzz'); do \
+			echo "fuzz $$p $$t ($(FUZZTIME))"; \
+			$(GO) test $$p -run '^$$' -fuzz "^$$t\$$" -fuzztime $(FUZZTIME); \
+		done; \
+	done
+
 # A real RDP server in Docker, FreeRDP 3 (ADR-0071). Not Windows.
 test-rdp-interop:
 	RDP_INTEROP=1 $(GO) test ./services/proxy/rdp-vnc-proxy/internal/engine/ -run TestRDPInterop -v -count=1 -timeout=300s

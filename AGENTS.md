@@ -96,6 +96,7 @@ make test-integration             # scénarios sur processus réels
 make test-postgres                # tests PostgreSQL réels (TEST_DATABASE_URL requis)
 make test-compose                 # pile docker-compose réelle et parcours du MVP (Docker requis, ADR-0033)
 make test-rdp-interop             # pkg/rdp contre un vrai serveur RDP, FreeRDP 3 en Docker (ADR-0071)
+make fuzz                         # chaque fuzzer de pkg/rdp, pkg/vnc et pkg/screenstream, FUZZTIME (30 s) chacun ; en CI : fuzz.yml (ADR-0071)
 make test-rdp-recording           # RDP de bout en bout : enregistrement (proxy et Video Recorder réels), puis route opérateur depuis l'API publique, RDP allumé ; TEST_DATABASE_URL, FreeRDP 3 en Docker (ADR-0071, ADR-0088)
 make test-rdp-windows             # pkg/rdp contre un vrai Windows Server 2022 (dockur/windows) : en CI seulement, KVM et ~40 Go (ADR-0071)
 make ui-test ui-build             # Admin UI : tests (Vitest) et construction (web/admin-ui, ADR-0036)

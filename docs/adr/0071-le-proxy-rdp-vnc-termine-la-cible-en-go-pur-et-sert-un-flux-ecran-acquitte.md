@@ -1713,3 +1713,18 @@ Go du propriétaire le 9 novembre 2026 : « Garder les bitmaps ». Le critère �
 **Correctif** : `createSession` refuse une demande break-glass sur un compte `rdp` ou `vnc` avant toute autorisation. Comme tout refus de dérogation, la demande est enregistrée au statut `denied` et auditée (`session.breakglass_requested`, échec). L'API répond `409` (`ErrBreakGlassNotForScreens`). SSH garde son break-glass. Le refus du proxy reste en place, en seconde défense.
 
 **Preuves** : test rouge d'abord (la demande `vnc` partait en approbation), test HTTP du `409`, et 4 mutations tuées sur 4 (refus retiré, `rdp` oublié, audit retiré, `409` retiré).
+
+## ADR-0071 — incrément 4 : les fuzzers en CI
+
+L'incrément 4 demande les fuzzers de chaque parseur, 30 s chacun, en CI. Il y en avait 22, tous dans `pkg/rdp`, et le CI n'en lançait aucun.
+
+**Ajouté** :
+- quatre fuzzers :
+  - `pkg/vnc` : `FuzzReadServerInit` et `FuzzReadServerMessage` (mises à jour, rectangles, encodages, redimensionnements, sonnerie, texte du presse-papiers, sur une fausse connexion ; le framebuffer doit rester dans ses bornes) ;
+  - `pkg/screenstream` : `FuzzDecode` et `FuzzDecodeInput`, avec aller-retour par l'encodeur et pointeur dans la trame ;
+- `make fuzz` : chaque cible de `FUZZ_PACKAGES`, `FUZZTIME` chacune ;
+- `.github/workflows/fuzz.yml` : un job par paquet, 30 s par cible, à chaque PR qui touche ces paquets et chaque mardi. L'entrée fautive est gardée en artefact.
+
+**Contre-épreuve** : la borne « largeur ou hauteur nulle » de `readServerInit`, retirée, est trouvée par `FuzzReadServerInit` en 0,18 s. Son entrée reste comme graine dans `pkg/vnc/testdata/fuzz`.
+
+**Limite** : la négociation VeNCrypt et l'authentification VNC n'ont pas de fuzzer propre. Elles passent par `Open`, qui demande un serveur TLS ; leurs refus sont couverts par les tests contre un serveur factice.
