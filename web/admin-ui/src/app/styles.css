@@ -963,3 +963,19 @@ main.login {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+
+/* The replay of a screen recording (VideoReplay): the frame, then its controls under it. */
+.replay {
+  margin-top: 1rem;
+}
+
+.replay-controls {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.replay-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}

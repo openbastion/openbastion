@@ -3036,6 +3036,22 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-09 — ADR-0071 : le lecteur de l'écran enregistré, dans l'Admin UI
+
+Incrément 75. La page « Enregistrements » relit l'écran d'une session RDP ou VNC (`web/admin-ui/src/features/audit/VideoReplay.tsx`) :
+- les PNG acquittés, au rythme enregistré (écarts bornés entre 40 ms et 2 s, vitesse ×1, ×2 ou ×4), image par image ou par le curseur ;
+- les segments lus au fil de la relecture, cinq images d'avance au plus, chacun audité au nom de l'auditeur ;
+- refus d'un segment invalide (PNG, 4 Mio, horodatage, nombre d'images) ; arrêt au-delà de 256 Mio chargés ;
+- la fin dit si l'enregistrement a été scellé ou interrompu.
+
+**Prouvé** : 6 tests Vitest (85 → 91 une fois la PR #94 fusionnée), 6 mutations tuées sur 6, `vite build` passe.
+
+**Limites** :
+- pas vu dans un navigateur réel contre un enregistrement réel ;
+- ni export vidéo, ni recherche dans l'image.
+
+**Choix renversables** : les bornes de rythme ; 256 Mio ; cinq images d'avance ; le libellé « Session de l'écran », distinct du champ de la relecture des commandes.
+
 ## 2026-11-09 — ADR-0071 : la priorité MCS d'un PDU de Windows
 
 Au CI de la PR #94, Windows a envoyé un Share Data PDU en priorité MCS « top » (`0x30`), et le lecteur, qui n'acceptait que « high », a fermé la session avant la première image. Ce refus est intermittent : vert aux passages précédents. La description des refus MCS (PR #93) l'a nommé. Toute priorité est désormais lue, et les bits réservés restent refusés. Test rouge d'abord (le paquet même), puis vert ; la suite `pkg/rdp` passe.
