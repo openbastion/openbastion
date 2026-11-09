@@ -2,13 +2,19 @@
 
 Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
-## 0. État d'avancement — 8 novembre 2026
+## 0. État d'avancement — 9 novembre 2026
 
 La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
 
 - **MVP SSH/SFTP/SCP** : parcours fonctionnel de référence, avec Gateway, Broker, Vault, proxy SSH, audit et replay texte.
 - **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API et dans l'Admin UI (lecteur d'écran enregistré, page « Enregistrements ») ; plusieurs fonctions de redirection restent à faire.
-- **RDP** : moteur Go pur en développement avancé. X.224/HYBRID, TLS épinglé, CredSSP/NTLMv2, MCS/GCC, licensing partiel, négociation de capacités et décodage graphique partiel sont présents. **Le runtime RDP reste désactivé** ; la couverture des ordres graphiques et Fast-Path est incomplète ; l'interopérabilité Windows/RDS réelle, les licences CAL complètes et les canaux virtuels ne sont pas validés.
+- **RDP** : moteur Go pur ([ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md)), éprouvé contre FreeRDP 3 et Windows Server 2022 en CI :
+  - CredSSP/NTLMv2 avec certificat épinglé avant tout secret ;
+  - image en 15, 16 et 32 bpp, fragments Fast-Path, réactivation ;
+  - clavier QWERTY et AZERTY vérifiés, reprise de session ;
+  - enregistrement rejouable à l'octet, `recording_lost` au-delà de 4 Mio.
+
+  Il est ouvert aux opérateurs **derrière `RDP_ENABLED`, éteint par défaut** ([ADR-0088](adr/0088-rdp-ouvert-aux-operateurs-par-la-route-ecran-derriere-un-interrupteur.md)). Le texte est rendu par bitmaps, sans cache de glyphes ([ADR-0089](adr/0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md)). Ni ordres graphiques annoncés, ni canaux virtuels, ni Kerberos, ni RD Gateway : c'est le plan v0.0.2 ([ADR-0090](adr/0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md), proposé).
 - **Veille externe** : ADR-0081 propose une veille hebdomadaire de gopher-rdp, gordp et Casvisor afin d'identifier les évolutions utiles sans adopter automatiquement leur code ou leurs choix de sécurité.
 
 La source de vérité opérationnelle pour les capacités réellement présentes, leurs tests et leurs limites est [`docs/security/known-limitations.md`](security/known-limitations.md). Toute activation runtime ou preuve d'interopérabilité doit être reflétée ici et dans le README.
@@ -56,7 +62,15 @@ Deux règles guident l'ordre de livraison :
 | Plateforme | Scheduler complet (rotation planifiée et post-usage) |
 | Clients | User Portal, Desktop Client (Tauri), SDK Go |
 
-**État RDP/VNC dans cette phase** : VNC possède une preuve de parcours de bout en bout, mais n'est pas encore une expérience complète (lecteur vidéo UI, clipboard et interopérabilité RealVNC notamment). RDP reste un moteur en cours d'activation : l'ouverture de session contre FreeRDP 3.15 est un test d'interopérabilité de développement, **pas** une preuve Windows/RDS. La sortie de cette capacité exige un runtime RDP activé, validation stricte des certificats, enregistrement obligatoire, tests négatifs et interopérabilité réelle Windows Server/RDS. Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md), [ADR-0081](adr/0081-veille-rdp-externe-et-integration-selective.md) et [les limites connues](security/known-limitations.md).
+**État RDP/VNC dans cette phase** :
+- **VNC** : parcours de bout en bout, rejoué dans l'Admin UI. Ni presse-papiers, ni interopérabilité RealVNC.
+- **RDP** :
+  - critères de sortie de l'incrément 3 d'ADR-0071 tenus contre Windows Server 2022 : session enregistrée et rejouable, texte lisible (par bitmaps, ADR-0089), capacités non annoncées refusées, QWERTY et AZERTY, `recording_lost` au-delà de 4 Mio ;
+  - parcours depuis l'API publique prouvé contre FreeRDP 3 ;
+  - l'ouverture aux opérateurs est le choix de l'exploitant (`RDP_ENABLED`, ADR-0088) ;
+  - restent ouverts : la réactivation, jamais envoyée par Windows, et l'incrément 4 (durcissement et preuves).
+
+Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md), [ADR-0081](adr/0081-veille-rdp-externe-et-integration-selective.md) et [les limites connues](security/known-limitations.md).
 
 **Explicitement hors périmètre v0.0.1** : Docker Proxy, Hypervisor Console Proxy, WinRM Proxy, Telnet/Serial-IPMI Proxy, HTTP/HTTPS Web Proxy, Risk Engine, Reporting Service, SDK Python/Java/JavaScript.
 
@@ -76,6 +90,7 @@ Deux règles guident l'ordre de livraison :
 | Sécurité & Intelligence | Anomaly Detection / Risk Engine (moteur à règles + brique ML optionnelle et détachable) |
 | Enregistrement & Audit | Reporting Service, forensics avancés (détection copier/coller, capture clipboard/transfert de fichiers/impression) |
 | Clients | SDK Python, SDK Java, SDK JavaScript |
+| RDP ([ADR-0090](adr/0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md), proposé) | Mesures d'abord (débit, encodage, latence) ; ordres graphiques et caches, dont le cache de glyphes ; pipeline graphique RDPGFX sans perte ; canaux virtuels sous ADR-0069 §6 (Display Control, presse-papiers, lecteurs, impression) ; entrée Fast-Path et Unicode, pointeur, reconnexion automatique, redirection de ferme RDS, Kerberos, RD Gateway |
 
 **Critères de sortie**
 - Les six familles de systèmes cibles de `docs/architecture/system-overview.md` sont couvertes.
@@ -91,7 +106,7 @@ Deux règles guident l'ordre de livraison :
 | Authorization Service | ✅ (RBAC) | ABAC | |
 | Session Broker | ✅ | | |
 | SSH/SFTP/SCP Proxy | ✅ | | |
-| RDP/VNC Proxy | | ⚠️ (VNC E2E validé ; RDP runtime désactivé) | |
+| RDP/VNC Proxy | | ✅ VNC E2E ; RDP derrière `RDP_ENABLED`, éteint par défaut (ADR-0088) | RDP : glyphes, ordres, canaux virtuels, protocoles (ADR-0090) |
 | Database Proxy | | ✅ | |
 | Kubernetes Proxy | | ✅ | |
 | Docker Proxy | | | ✅ |
