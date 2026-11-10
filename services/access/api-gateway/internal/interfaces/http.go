@@ -239,7 +239,7 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
@@ -298,7 +298,7 @@ func (g *GatewayServer) handleOIDC(upstream string) http.HandlerFunc {
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := g.httpClient.Do(req)
 		if err != nil {
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		defer resp.Body.Close()
@@ -398,7 +398,7 @@ func internalError(w http.ResponseWriter, err error) {
 func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
@@ -802,7 +802,7 @@ func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Reque
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
@@ -811,7 +811,7 @@ func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Reque
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
