@@ -442,6 +442,13 @@ func TestRDPWindows_ExtendedKeys(t *testing.T) {
 	dump("extended-1-windows-key.png")
 	key(0x01) // Esc
 	settle(2*time.Second, 6*time.Second)
+	// Ctrl+Esc opens the same Start menu with no extended key: it tells the Windows key's loss
+	// (PR #101, #119) from a Start menu that does not open on this machine.
+	chord(0x1d, 0x01)
+	settle(2*time.Second, 6*time.Second)
+	dump("extended-1b-ctrl-esc.png")
+	key(0x01)
+	settle(2*time.Second, 6*time.Second)
 
 	for _, code := range []uint16{0x1d, 0x38, 0xe053} { // Ctrl+Alt+Del, as the Admin UI's button
 		press(code, true)
