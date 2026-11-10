@@ -14,7 +14,7 @@ func rejectUpstreamError(w http.ResponseWriter, resp *http.Response) bool {
 		return false
 	}
 
-	if resp.StatusCode >= http.StatusInternalServerError {
+	if resp.StatusCode < http.StatusBadRequest || resp.StatusCode >= http.StatusInternalServerError {
 		log.Printf("api-gateway: upstream returned failure status %d", resp.StatusCode)
 		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return true
