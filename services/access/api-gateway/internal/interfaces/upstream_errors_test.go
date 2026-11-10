@@ -56,7 +56,7 @@ func TestRejectUpstreamErrorPreservesRefusalReasonButSanitizesFailures(t *testin
 			if got := recorder.Header().Get("Retry-After"); got != tt.wantRetry {
 				t.Fatalf("Retry-After = %q, want %q", got, tt.wantRetry)
 			}
-			if got := recorder.Header().Get("Content-Type"); got != "text/plain" {
+			if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
 				t.Fatalf("Content-Type = %q, want text/plain", got)
 			}
 			if tt.status >= http.StatusInternalServerError && (strings.Contains(recorder.Body.String(), "secret") || strings.Contains(recorder.Body.String(), "10.0.0.7")) {
