@@ -129,9 +129,9 @@ func TestAuditLogin_ATokenIsWrittenBeforeItIsIssued_AndTheAuditDownNobodyLogsIn(
 			t.Fatalf("a wrong password with the audit down: %d", s)
 		}
 		spy.setDown(false)
-		// Not reset: the account still asks for its code.
-		if _, out := login(admin, "pw-"+admin); out["mfa"] != "enrollment_required" {
-			t.Fatalf("after a refused reset: %v, want enrollment_required because no factor was enrolled", out)
+		// Not reset: the enrolled factor is still required.
+		if _, out := login(admin, "pw-"+admin); out["mfa"] != "required" {
+			t.Fatalf("after a refused reset: %v, want required because the enrolled factor remains active", out)
 		}
 	})
 
