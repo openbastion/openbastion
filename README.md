@@ -57,9 +57,11 @@ proto/                                            contrats gRPC/Protobuf (`docs/
 docs/                                             architecture, ADR et guides
 ```
 
-## Documentation
+## Documentation et contributions
 
 Toute la documentation vit sous `docs/`, une section par public : architecture, ADR, API, sécurité, développement, déploiement, administration, guide utilisateur. Le plan, et la correspondance avec les anciens documents numérotés, sont dans [`docs/README.md`](docs/README.md).
+
+Pour contribuer, consultez [`CONTRIBUTING.md`](CONTRIBUTING.md) et le [Developer Certificate of Origin](DCO). Chaque commit soumis doit porter un trailer `Signed-off-by` conforme au DCO 1.1.
 
 ## Licence
 

@@ -1,0 +1,5 @@
+# DCO2 validates every non-merge commit in each pull request.
+# Individual remediation lets an author correct a missing sign-off without
+# rewriting already-published history. Third-party sign-off is deliberately off.
+allowRemediationCommits:
+  individual: true
