@@ -50,7 +50,7 @@ jobs:
           name: openbastion-supply-chain-${{ github.sha }}
           path: |
             ${{ runner.temp }}/openbastion-source-sbom.cdx.json
-          "$RUNNER_TEMP/trivy" image --format cyclonedx \
             ${{ runner.temp }}/openbastion-runtime-sbom.cdx.json
+            ${{ runner.temp }}/openbastion-license-report.json
           if-no-files-found: ignore
           retention-days: 30
