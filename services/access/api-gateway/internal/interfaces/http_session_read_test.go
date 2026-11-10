@@ -91,9 +91,9 @@ func answeringBroker(t *testing.T, status int, body string) string {
 	return srv.URL
 }
 
-// What the Broker answers — a session, a refusal, "not found", "try again" — is relayed as it
-// was: the Gateway adds no reading of its own and keeps no copy of a refusal.
-func TestSessionRead_WhatTheBrokerAnswersIsRelayedAsItIs(t *testing.T) {
+// Public refusals retain their service-defined reason. Internal upstream failures do not
+// cross the Gateway boundary (ADR-0043).
+func TestSessionRead_PublicRefusalsArePreservedAndUpstreamFailuresSanitized(t *testing.T) {
 	for name, c := range map[string]struct {
 		status int
 		body   string
@@ -109,8 +109,12 @@ func TestSessionRead_WhatTheBrokerAnswersIsRelayedAsItIs(t *testing.T) {
 			gw := newTestGateway(t, authSrv.URL, answeringBroker(t, c.status, c.body)).Routes()
 
 			rec := do(gw, http.MethodGet, "/sessions/s-1", "", true)
-			if rec.Code != c.status || !strings.Contains(rec.Body.String(), c.body) {
-				t.Fatalf("%d %q, want %d and %q", rec.Code, rec.Body.String(), c.status, c.body)
+			wantStatus, wantBody := c.status, c.body
+			if c.status >= http.StatusInternalServerError {
+				wantStatus, wantBody = http.StatusServiceUnavailable, "upstream unavailable"
+			}
+			if rec.Code != wantStatus || !strings.Contains(rec.Body.String(), wantBody) {
+				t.Fatalf("%d %q, want %d and %q", rec.Code, rec.Body.String(), wantStatus, wantBody)
 			}
 		})
 	}

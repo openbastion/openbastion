@@ -56,7 +56,7 @@ func (g *GatewayServer) serveProviders(w http.ResponseWriter, r *http.Request, c
 		}
 		resp, err := g.httpClient.Do(req)
 		if err != nil {
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		var in map[string]json.RawMessage
@@ -71,7 +71,7 @@ func (g *GatewayServer) serveProviders(w http.ResponseWriter, r *http.Request, c
 			err = json.Unmarshal(in[key], &items)
 		}
 		if resp.StatusCode != http.StatusOK || err != nil {
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if items == nil {
@@ -117,10 +117,13 @@ func (g *GatewayServer) handleLDAPLogin(w http.ResponseWriter, r *http.Request) 
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, io.LimitReader(resp.Body, 64<<10))

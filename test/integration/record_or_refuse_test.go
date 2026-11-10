@@ -401,8 +401,8 @@ func TestRecordOrRefuse_ARecorderOutageRefusesAndEndsSessions_AcrossEightRealPro
 		if ticket != "" {
 			t.Fatal("a ticket was issued for a session that cannot be recorded")
 		}
-		if !strings.Contains(body, "recording unavailable") {
-			t.Fatalf("the refusal does not say why: %s", body)
+		if !strings.Contains(body, "upstream unavailable") {
+			t.Fatalf("the refusal does not use the Gateway's sanitized upstream error: %s", body)
 		}
 		if strings.Contains(body, "18609") || strings.Contains(body, "connection refused") {
 			t.Fatalf("the refusal leaks the recorder's address: %s", body)

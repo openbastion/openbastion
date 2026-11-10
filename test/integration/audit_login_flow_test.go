@@ -54,16 +54,28 @@ func TestAuditLogin_ATokenIsWrittenBeforeItIsIssued_AndTheAuditDownNobodyLogsIn(
 	})
 
 	t.Run("the second factor's code, enrollment and login are in the chain, in their order", func(t *testing.T) {
-		_, out := login(admin, "pw-"+admin)
-		ch := out["challenge"].(string)
+		loginStatus, out := login(admin, "pw-"+admin)
+		if loginStatus != http.StatusUnauthorized || out["mfa"] != "enrollment_required" {
+			t.Fatalf("MFA enrollment challenge: %d %v, want 401 enrollment_required", loginStatus, out)
+		}
+		ch, ok := out["challenge"].(string)
+		if !ok || ch == "" {
+			t.Fatalf("MFA login did not return a challenge: %v", out)
+		}
 		s, issued := postJSONTo(t, authn.baseURL+"/auth/v1/mfa/enrollment-codes", map[string]string{"source": "local", "loginName": admin})
 		if s != http.StatusOK {
 			t.Fatalf("issue a code: %d %v", s, issued)
 		}
 		spy.waitFor(t, "auth.mfa_enrollment_code_issued", "local:"+admin, true)
 		ec := issued["enrollmentCode"].(string)
-		_, e := postJSONTo(t, gateway.baseURL+"/auth/mfa/enroll", map[string]string{"challenge": ch, "enrollmentCode": ec})
-		secret := e["secret"].(string)
+		enrollStatus, e := postJSONTo(t, gateway.baseURL+"/auth/mfa/enroll", map[string]string{"challenge": ch, "enrollmentCode": ec})
+		if enrollStatus != http.StatusOK {
+			t.Fatalf("enroll MFA: %d %v", enrollStatus, e)
+		}
+		secret, ok := e["secret"].(string)
+		if !ok || secret == "" {
+			t.Fatalf("MFA enrollment did not return a secret: %v", e)
+		}
 		secrets = append(secrets, ch, ec, secret)
 		if s, done := postJSONTo(t, gateway.baseURL+"/auth/mfa/enroll/confirm", map[string]string{"challenge": ch, "code": totpCode(t, secret, time.Now())}); s != http.StatusOK || done["accessToken"] == nil {
 			t.Fatalf("confirm: %d %v", s, done)
@@ -117,9 +129,9 @@ func TestAuditLogin_ATokenIsWrittenBeforeItIsIssued_AndTheAuditDownNobodyLogsIn(
 			t.Fatalf("a wrong password with the audit down: %d", s)
 		}
 		spy.setDown(false)
-		// Not reset: the account still asks for its code.
+		// Not reset: the enrolled factor is still required.
 		if _, out := login(admin, "pw-"+admin); out["mfa"] != "required" {
-			t.Fatalf("after a refused reset: %v", out)
+			t.Fatalf("after a refused reset: %v, want required because the enrolled factor remains active", out)
 		}
 	})
 

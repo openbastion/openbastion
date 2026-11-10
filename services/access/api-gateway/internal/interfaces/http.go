@@ -239,10 +239,13 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -295,10 +298,13 @@ func (g *GatewayServer) handleOIDC(upstream string) http.HandlerFunc {
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := g.httpClient.Do(req)
 		if err != nil {
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		defer resp.Body.Close()
+		if rejectUpstreamError(w, resp) {
+			return
+		}
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
 		_, _ = io.Copy(w, io.LimitReader(resp.Body, 64<<10))
@@ -392,10 +398,15 @@ func internalError(w http.ResponseWriter, err error) {
 func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
+		// A transport failure is a Bad Gateway, not an upstream HTTP response.
+		// Keep the public body generic so the internal address is never exposed.
 		http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -793,13 +804,16 @@ func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Reque
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
