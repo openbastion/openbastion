@@ -93,7 +93,7 @@ func answeringBroker(t *testing.T, status int, body string) string {
 
 // Public refusals retain their service-defined reason. Internal upstream failures do not
 // cross the Gateway boundary (ADR-0043).
-func TestSessionRead_WhatTheBrokerAnswersIsRelayedAsItIs(t *testing.T) {
+func TestSessionRead_PublicRefusalsArePreservedAndUpstreamFailuresSanitized(t *testing.T) {
 	for name, c := range map[string]struct {
 		status int
 		body   string
