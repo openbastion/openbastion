@@ -30,7 +30,11 @@ jobs:
           tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
       - name: Validate project licence metadata and notices
         run: make license-check
-      - name: Test CycloneDX contract validator
+      - name: Install pinned CycloneDX JSON Schema validator
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input --target "$RUNNER_TEMP/cyclonedx-python" -r scripts/requirements-cyclonedx-schema.txt
+          echo "PYTHONPATH=$RUNNER_TEMP/cyclonedx-python" >> "$GITHUB_ENV"
+      - name: Test CycloneDX contract and official schema validator
         run: bash scripts/test-check-cyclonedx-sbom.sh
       - name: Generate source SBOM (CycloneDX)
         run: |

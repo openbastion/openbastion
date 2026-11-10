@@ -1,6 +1,6 @@
 # Contrats de confiance de la chaîne de livraison
 
-**Référence :** ADR-0093 · **Version du contrat :** `1.1.0` · **Statut :** phase B en cours
+**Référence :** ADR-0093 · **Version du contrat :** `1.2.0` · **Statut :** phase B en cours
 **Portée :** contrat de phase B en cours d'implémentation ; les attestations GitHub ne seront émises que lors d'un tag de confiance. Aucun artefact OCI n'est publié et aucune vérification d'admission n'est activée.
 
 Ce document fixe les contrats des phases B à E. La phase B utilise les attestations d'artefacts GitHub sur une archive Docker exportée (`docker save`) ; elle ne prétend pas attester un digest de manifeste OCI. Le digest OCI ne sera attesté qu'après une décision explicite de publication et l'existence d'un artefact OCI distribué. Les exemples sont des fragments illustratifs, jamais des preuves valides. Les valeurs entre chevrons sont des placeholders et doivent être remplacées par des valeurs observées et vérifiées ; elles ne doivent jamais être acceptées par un vérificateur.
@@ -117,7 +117,7 @@ La valeur SAN exacte produite par Sigstore dépend du mécanisme d'émission ret
 ### 4.1 Format
 
 - Format de référence : CycloneDX JSON.
-- Le SBOM doit être valide selon le schéma CycloneDX correspondant à sa propriété `specVersion`. Le validateur ajouté à cette phase contrôle les invariants structurels contractuels (format, version, identifiant, métadonnées et composants) ; il ne constitue pas à lui seul un validateur JSON Schema complet.
+- Le SBOM doit être valide selon le schéma CycloneDX correspondant à sa propriété `specVersion`. Le schéma officiel CycloneDX 1.7 est versionné localement sous `third_party/cyclonedx/1.7/`, avec sa révision amont, sa licence et son SHA-256. Le validateur applique d’abord les invariants OpenBastion, puis le JSON Schema Draft 7 complet avec contrôle des formats (`jsonschema[format]`). Toute erreur de schéma ou de format entraîne un refus.
 - Trivy `0.76.1`, téléchargé et vérifié par SHA-256, a produit `specVersion: "1.7"` lors d'un scan source réel le 10 novembre 2026. La génération runtime n'a pas encore été exécutée sur un runner GitHub ; la CI doit vérifier explicitement `bomFormat`, `specVersion`, `serialNumber`, `version`, `metadata` et `components` avant l'attestation.
 - La version de schéma contractuelle est `1.7`. Toute mise à jour de Trivy qui change ce champ exige une modification explicite du contrat et de ses tests.
 - Le document doit inclure `bomFormat: "CycloneDX"`, `specVersion`, `serialNumber` et `version` conformément au schéma choisi.
@@ -250,7 +250,7 @@ Ces observations sont un état initial, pas une promesse de comportement futur. 
 - [x] Phase B : workflow dédié aux tags SemVer, commit vérifié comme ancêtre de `main`, actions épinglées.
 - [x] Phase B : export de l'archive Docker runtime et attestation par digest de fichier configurés, sans revendiquer un digest OCI.
 - [x] Phase B : validateur des invariants CycloneDX `1.7` et tests positifs/négatifs ajoutés.
-- [ ] Phase B : validation complète du JSON Schema officiel CycloneDX `1.7` intégrée à la CI.
+- [x] Phase B : validation complète du JSON Schema officiel CycloneDX `1.7` intégrée à la CI ; schéma amont épinglé par révision et SHA-256.
 - [ ] Phase B : premier run tag de confiance ayant produit les deux attestations GitHub et permettant la capture de l'identité SAN et de l'audience réelles.
 - [ ] Phase B : vérification indépendante réussie des attestations et des sujets à l'aide de GitHub CLI.
 

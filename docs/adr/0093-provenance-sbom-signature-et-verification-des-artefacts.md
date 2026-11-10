@@ -101,7 +101,7 @@ Adopter une chaîne de confiance composée de six étapes indépendantes et vér
 
 | Phase | Livrable | Critère de sortie |
 |---|---|---|
-| A — Inventaire et contrats | [Contrats de confiance version 1.1.0](../security/supply-chain-contracts.md) : schéma de provenance, identité des workflows, politique de vérification, SBOM et tests négatifs | Contrats versionnés ; prérequis d'implémentation identifiés ; aucune permission élargie |
+| A — Inventaire et contrats | [Contrats de confiance version 1.2.0](../security/supply-chain-contracts.md) : schéma de provenance, identité des workflows, politique de vérification, SBOM et tests négatifs | Contrats versionnés ; prérequis d'implémentation identifiés ; aucune permission élargie |
 | B — Attestation en CI | Provenance SLSA v1.0 et SBOM CycloneDX attestés pour les builds de tags de confiance ; sujet de phase B = archive Docker exportée et son SHA-256 fichier | Vérification indépendante du sujet, du commit, du workflow et des matériaux ; attestations invalides rejetées ; aucun digest OCI revendiqué ni publication |
 | C — Signature | Signature Cosign keyless des artefacts publiés lorsque la publication aura été autorisée | Vérification par digest et identité exacte ; aucun secret de signature longue durée |
 | D — Vérification de déploiement | Contrôle d'admission ou étape de déploiement vérifiant signature, provenance, SBOM et digest | Déploiement valide accepté ; mutations, absence de preuve et identité non autorisée refusées |
@@ -114,7 +114,7 @@ Aucune phase ne s'active automatiquement du seul fait de l'acceptation de cet AD
 ## Conséquences
 
 - (+) La chaîne de confiance devient vérifiable indépendamment de la personne qui a lancé le build : commit, workflow, builder, matériaux et digest sont liés.
-- (+) Le SBOM runtime est destiné à être attesté avec l'archive Docker exportée ; le SBOM source reste un rapport de composition distinct tant qu'un artefact source immuable n'est pas défini. Le validateur de phase B vérifie les invariants structurels du document, mais la validation complète du JSON Schema CycloneDX 1.7 reste à intégrer avant clôture de la phase.
+- (+) Le SBOM runtime est destiné à être attesté avec l'archive Docker exportée ; le SBOM source reste un rapport de composition distinct tant qu'un artefact source immuable n'est pas défini. Le validateur de phase B vérifie les invariants structurels du contrat OpenBastion puis applique le JSON Schema officiel CycloneDX 1.7 (Draft 7), avec vérification des formats. Le schéma est conservé dans `third_party/cyclonedx/1.7/`, accompagné de sa provenance amont, de son SHA-256 et de sa licence Apache 2.0.
 - (+) La signature keyless évite de gérer une clé privée de signature permanente dans les secrets CI.
 - (+) Le déploiement peut refuser une image non signée, reconstruite depuis une source non autorisée, ou accompagnée de preuves incohérentes.
 - (+) L'architecture conserve la politique de publication explicite d'ADR-0063 et ne donne pas de droits d'écriture globaux à la CI.
