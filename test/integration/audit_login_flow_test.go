@@ -55,8 +55,8 @@ func TestAuditLogin_ATokenIsWrittenBeforeItIsIssued_AndTheAuditDownNobodyLogsIn(
 
 	t.Run("the second factor's code, enrollment and login are in the chain, in their order", func(t *testing.T) {
 		loginStatus, out := login(admin, "pw-"+admin)
-		if loginStatus != http.StatusOK {
-			t.Fatalf("MFA login: %d %v", loginStatus, out)
+		if loginStatus != http.StatusUnauthorized || out["mfa"] != "enrollment_required" {
+			t.Fatalf("MFA enrollment challenge: %d %v, want 401 enrollment_required", loginStatus, out)
 		}
 		ch, ok := out["challenge"].(string)
 		if !ok || ch == "" {
@@ -130,8 +130,8 @@ func TestAuditLogin_ATokenIsWrittenBeforeItIsIssued_AndTheAuditDownNobodyLogsIn(
 		}
 		spy.setDown(false)
 		// Not reset: the account still asks for its code.
-		if _, out := login(admin, "pw-"+admin); out["mfa"] != "required" {
-			t.Fatalf("after a refused reset: %v", out)
+		if _, out := login(admin, "pw-"+admin); out["mfa"] != "enrollment_required" {
+			t.Fatalf("after a refused reset: %v, want enrollment_required because no factor was enrolled", out)
 		}
 	})
 
