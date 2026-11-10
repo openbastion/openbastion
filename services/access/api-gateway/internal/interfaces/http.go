@@ -243,6 +243,9 @@ func (g *GatewayServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -299,6 +302,9 @@ func (g *GatewayServer) handleOIDC(upstream string) http.HandlerFunc {
 			return
 		}
 		defer resp.Body.Close()
+		if rejectUpstreamError(w, resp) {
+			return
+		}
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
 		_, _ = io.Copy(w, io.LimitReader(resp.Body, 64<<10))
@@ -396,6 +402,9 @@ func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -797,6 +806,9 @@ func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
 		http.Error(w, "upstream unavailable", http.StatusBadGateway)
