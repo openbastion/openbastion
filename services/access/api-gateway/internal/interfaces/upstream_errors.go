@@ -10,7 +10,7 @@ import (
 // a stable generic reason; upstream failures are normalized to 503. Never log
 // the upstream body: it may contain credentials, internal URLs, or host details.
 func rejectUpstreamError(w http.ResponseWriter, resp *http.Response) bool {
-	if resp == nil || resp.StatusCode < http.StatusBadRequest {
+	if resp == nil || (resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices) {
 		return false
 	}
 
