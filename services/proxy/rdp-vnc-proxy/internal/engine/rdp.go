@@ -24,9 +24,9 @@ const (
 	rdpInputTimeout         = 2 * time.Second
 )
 
-// RDPCodec adapts the strict RDP client to the shared screen lifecycle. It is
-// deliberately not selected by the proxy runtime until real Windows/RDS
-// interoperability and end-to-end recording have been validated.
+// RDPCodec adapts the strict RDP client to the shared screen lifecycle. The
+// proxy runtime selects it when RDP_ENABLED=true; the Broker independently
+// gates RDP session creation with the same opt-in (ADR-0088).
 type RDPCodec struct {
 	TLSRoots      *x509.CertPool
 	DialTimeout   time.Duration
