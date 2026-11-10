@@ -41,8 +41,8 @@ func TestRejectUpstreamErrorPreservesRefusalReasonButSanitizesFailures(t *testin
 			}
 			upstream := &http.Response{
 				StatusCode: tt.status,
-				Header: header,
-				Body: io.NopCloser(strings.NewReader(tt.body)),
+				Header:     header,
+				Body:       io.NopCloser(strings.NewReader(tt.body)),
 			}
 			if !rejectUpstreamError(recorder, upstream) {
 				t.Fatal("expected upstream error to be handled")
