@@ -1,40 +1,36 @@
 package interfaces
 
 import (
+	"io"
 	"log"
 	"net/http"
 )
 
-// rejectUpstreamError prevents an upstream error body from crossing the public
-// Gateway boundary (ADR-0043). Refusals retain their HTTP status but expose only
-// a stable generic reason; upstream failures are normalized to 503. Never log
-// the upstream body: it may contain credentials, internal URLs, or host details.
+// rejectUpstreamError keeps the Gateway's public error contract (ADR-0043):
+// explicit 4xx refusals retain their service-defined reason and retry metadata;
+// upstream 5xx responses never cross the boundary and become a generic 503.
+// Transport failures are handled by the caller as 502. Only the small set of
+// public response headers is copied; hop-by-hop and internal headers are not.
 func rejectUpstreamError(w http.ResponseWriter, resp *http.Response) bool {
 	if resp == nil || (resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices) {
 		return false
 	}
 
-	if resp.StatusCode < http.StatusBadRequest || resp.StatusCode >= http.StatusInternalServerError {
+	if resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode < http.StatusBadRequest {
 		log.Printf("api-gateway: upstream returned failure status %d", resp.StatusCode)
 		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 		return true
 	}
 
-	message := "request rejected"
-	switch resp.StatusCode {
-	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		message = "invalid request"
-	case http.StatusUnauthorized:
-		message = "authentication failed"
-	case http.StatusForbidden:
-		message = "access denied"
-	case http.StatusNotFound:
-		message = "not found"
-	case http.StatusConflict:
-		message = "request conflict"
-	case http.StatusTooManyRequests:
-		message = "too many requests"
+	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
 	}
-	http.Error(w, message, resp.StatusCode)
+	if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" && resp.StatusCode == http.StatusTooManyRequests {
+		w.Header().Set("Retry-After", retryAfter)
+	}
+	w.WriteHeader(resp.StatusCode)
+	if resp.Body != nil {
+		_, _ = io.Copy(w, io.LimitReader(resp.Body, 64<<10))
+	}
 	return true
 }
