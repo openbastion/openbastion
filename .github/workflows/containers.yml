@@ -22,6 +22,35 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/trivy.tgz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           echo "${TRIVY_SHA256}  $RUNNER_TEMP/trivy.tgz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
+      - name: Validate project licence metadata and notices
+        run: make license-check
+      - name: Generate source SBOM (CycloneDX)
+        run: |
+          "$RUNNER_TEMP/trivy" fs --include-dev-deps --format cyclonedx \
+            --output "$RUNNER_TEMP/openbastion-source-sbom.cdx.json" .
+      - name: Inventory source and dependency licences
+        run: |
+          "$RUNNER_TEMP/trivy" fs --include-dev-deps --scanners license --license-full \
+            --format json --output "$RUNNER_TEMP/openbastion-license-report.json" .
+      - name: Enforce restricted and forbidden licence policy
+        run: |
+          "$RUNNER_TEMP/trivy" fs --include-dev-deps --scanners license \
+            --severity HIGH,CRITICAL --exit-code 1 .
       # HIGH/CRITICAL vulnerabilities with a fix fail unless explicitly accepted by path and expiry.
       # Release tags use VERSION; other refs use VERSION plus the commit, as before.
       - run: make scan-images TRIVY="$RUNNER_TEMP/trivy" ${{ github.ref_type == 'tag' && 'BUILD_VERSION=$(cat VERSION)' || '' }}
+      - name: Generate runtime image SBOM (CycloneDX)
+        run: |
+          "$RUNNER_TEMP/trivy" image --format cyclonedx \
+            --output "$RUNNER_TEMP/openbastion-runtime-sbom.cdx.json" openbastion:scan
+      - name: Upload SBOM and licence inventory
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: openbastion-supply-chain-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/openbastion-source-sbom.cdx.json
+          "$RUNNER_TEMP/trivy" image --format cyclonedx \
+            ${{ runner.temp }}/openbastion-runtime-sbom.cdx.json
+          if-no-files-found: ignore
+          retention-days: 30

@@ -10,10 +10,10 @@ For development and small on-premise installations; not a high-availability setu
 
 ```sh
 deploy/docker-compose/init.sh          # once: draws the secrets into deploy/docker-compose/.env (0600)
-docker compose -f deploy/docker-compose/docker-compose.yml up -d --build --wait
+SOURCE_REVISION=$(git rev-parse HEAD) docker compose -f deploy/docker-compose/docker-compose.yml up -d --build --wait
 ```
 
-Compose builds the shared Go runtime image once (on `authentication`), the tools image once (on `pki`) and a hardened PostgreSQL 16 image. The PostgreSQL image starts from a pinned upstream multi-architecture digest and applies available Debian security updates during the build; the `postgres` and optional `video-recorder-db-init` services reuse it.
+Compose builds the shared Go runtime image once (on `authentication`), the tools image once (on `pki`) and a hardened PostgreSQL 16 image. Set `SOURCE_REVISION` to the full Git commit SHA as shown above: the Admin UI then links to the exact source tree and licence file embedded in that build. For a GitHub fork, also set `SOURCE_REPOSITORY=https://github.com/<owner>/<repo>`. If building from a source archive without Git metadata, provide the original full commit SHA explicitly; otherwise the UI marks the revision as unidentified. The PostgreSQL image starts from a pinned upstream multi-architecture digest and applies available Debian security updates during the build; the `postgres` and optional `video-recorder-db-init` services reuse it.
 
 `init.sh` refuses to overwrite an existing `.env`: its keys are what makes the audit chain,
 the vault and the recordings readable. **Keep a copy of it outside the host, never in git.**

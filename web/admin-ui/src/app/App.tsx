@@ -9,6 +9,7 @@ import { Accounts } from "../features/accounts/Accounts";
 import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
+import { LegalNotice } from "../shared/LegalNotice";
 
 const tabs = {
   accounts: { label: "Comptes", icon: Users },
@@ -39,8 +40,8 @@ export function App({ api: given, location = window.location, navigate = (u: str
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
 
   if (!token) {
-    if (location.pathname.startsWith("/ui/oidc/callback")) return <OidcCallback api={api} onToken={onToken} location={location} />;
-    return <Login api={api} onToken={onToken} navigate={navigate} />;
+    if (location.pathname.startsWith("/ui/oidc/callback")) return <><OidcCallback api={api} onToken={onToken} location={location} /><LegalNotice /></>;
+    return <><Login api={api} onToken={onToken} navigate={navigate} /><LegalNotice /></>;
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
@@ -73,6 +74,7 @@ export function App({ api: given, location = window.location, navigate = (u: str
         {tab === "sessions" && <Sessions />}
         {tab === "audit" && <Recording />}
       </main>
+      <LegalNotice />
     </SignedInContext.Provider>
   );
 }

@@ -75,6 +75,9 @@ services:
       context: ../..
       dockerfile: deploy/docker-compose/Dockerfile
       target: runtime
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+        SOURCE_REPOSITORY: ${SOURCE_REPOSITORY:-https://github.com/openbastion/openbastion}
     entrypoint: ["/usr/local/bin/authentication"]
     environment:
       <<: *tls

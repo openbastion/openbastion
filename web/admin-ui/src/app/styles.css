@@ -730,7 +730,7 @@ dl.session dd button {
 main.login {
   display: grid;
   place-items: center;
-  min-height: 100vh;
+  min-height: calc(100vh - 3.5rem);
   max-width: none;
   padding: 1.5rem;
   margin: 0;
@@ -978,4 +978,36 @@ main.login {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+
+/* AGPL network-source and licence notice, visible on login and authenticated screens. */
+.legal-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem clamp(1rem, 3vw, 2rem);
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  background: var(--surface);
+  font-size: 0.76rem;
+}
+
+.legal-notice nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+
+.legal-notice a {
+  color: var(--brand-strong);
+}
+
+@media (max-width: 600px) {
+  .legal-notice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

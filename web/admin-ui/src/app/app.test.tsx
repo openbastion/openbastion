@@ -38,9 +38,18 @@ describe("App", () => {
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+    expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Code source/ }).getAttribute("href")).toContain("github.com/openbastion/openbastion");
+    expect(screen.getByRole("link", { name: "Texte de la licence" }).getAttribute("href")).toContain("/LICENSE");
     fireEvent.click(screen.getByText("Se déconnecter"));
     await waitFor(() => expect(screen.getByLabelText("Utilisateur")).toBeTruthy());
     expect(api.hasToken()).toBe(false);
+  });
+
+  it("shows the AGPL source and licence notice before authentication", () => {
+    render(<App location={{ pathname: "/ui/", search: "" } as Location} navigate={vi.fn()} />);
+    expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Code source/ })).toBeTruthy();
   });
 
   it("is the OIDC return page at /ui/oidc/callback", async () => {

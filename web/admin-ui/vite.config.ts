@@ -18,6 +18,14 @@ const previewHosts = [process.env.BASE44_SANDBOX_HOST_DOMAIN, process.env.BASE44
 // no inline data beyond images: nothing is inlined into the page.
 export default defineConfig({
   base: preview ? "/" : "/ui/",
+  define: {
+    __OPENBASTION_SOURCE_REPOSITORY__: JSON.stringify(
+      process.env.OPENBASTION_SOURCE_REPOSITORY ?? "https://github.com/openbastion/openbastion",
+    ),
+    __OPENBASTION_SOURCE_REVISION__: JSON.stringify(
+      process.env.OPENBASTION_SOURCE_REVISION ?? process.env.GITHUB_SHA ?? "unknown",
+    ),
+  },
   plugins: [react()],
   server: preview
     ? {
