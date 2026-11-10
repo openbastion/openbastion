@@ -103,7 +103,7 @@ Les claims suivants doivent être vérifiés lorsqu'ils sont présents dans le c
 - `ref` : tag `refs/tags/vX.Y.Z` ;
 - `sha` : SHA complet du commit source ;
 - `workflow_ref` et `workflow_sha` : identité et révision du workflow appelant ;
-- `job_workflow_ref` et `job_workflow_sha` : identité et révision du workflow réutilisable, si le job est exécuté dans un reusable workflow ;
+- `job_workflow_ref` et `job_workflow_sha` : claims complémentaires à contrôler s'ils sont présents ; ils ne sont pas exigés pour le job d'attestation, qui est un job normal du workflow appelant et non un job exécuté dans le workflow réutilisable ;
 - `runner_environment` : information complémentaire de politique, jamais preuve suffisante à elle seule.
 
 Le vérificateur échoue si un claim requis manque, a un format inattendu, ou contredit un autre claim. Il ne doit pas accepter de wildcard sur le dépôt, la référence, le chemin de workflow, l'émetteur ou l'audience.
@@ -224,9 +224,9 @@ Tests positifs complémentaires : artefact et digest concordants, signature émi
 ## 7. État observé du dépôt au début de la phase A et mise en œuvre B
 
 - `.github/workflows/ci.yml` est le workflow appelant ; il déclenche CI sur `push` de `main`, `push` de tags `v*`, `pull_request` et `schedule`.
-- `.github/workflows/containers.yml` est un workflow réutilisable (`workflow_call`). Le job `images` déclare les permissions nécessaires aux attestations, mais l'appel CI général ne lui délègue que `contents: read` ; seul le workflow tag dédié délègue `id-token: write`, `attestations: write` et `artifact-metadata: write`.
+- `.github/workflows/containers.yml` est un workflow réutilisable (`workflow_call`) limité à `contents: read`. Il construit, analyse et téléverse les fichiers nécessaires. Le workflow tag dédié consomme cet artefact dans un job séparé qui possède seul `id-token: write`, `attestations: write` et `artifact-metadata: write`.
 - `containers.yml` utilise Trivy `0.76.1`, vérifié par SHA-256, produit un SBOM source et un SBOM de l'image locale `openbastion:scan`, plus un inventaire de licences. Le SBOM source observé est CycloneDX `1.7` (validation locale sur Trivy `0.76.1`, le 10 novembre 2026) ; la même version est imposée au SBOM runtime par le validateur CI, mais reste à confirmer sur un vrai run GitHub.
-- Les rapports sont téléversés comme artefacts GitHub pour 30 jours. Lorsqu'un tag de confiance déclenchera le nouveau workflow, l'archive runtime `docker save` sera ajoutée au même artefact et attestée par GitHub Artifact Attestations.
+- Les rapports sont téléversés comme artefacts GitHub pour 30 jours. Lorsqu'un tag de confiance déclenchera le nouveau workflow, l'archive runtime `docker save` sera ajoutée au même artefact ; un job séparé la téléchargera et l'attestera via GitHub Artifact Attestations.
 - `make scan-images` construit localement l'image runtime `openbastion:scan` et l'image PostgreSQL `openbastion-postgres:scan`, les scanne, mais ne les publie pas dans un registre.
 - Le workflow CI historique ne produit pas de digest de manifeste OCI destiné à la livraison. La phase B exporte l'image runtime vers une archive fichier et atteste son SHA-256 ; ce digest n'est pas un digest de manifeste OCI.
 - Le SBOM PostgreSQL n'est pas actuellement généré dans `containers.yml`.
@@ -254,4 +254,4 @@ Ces observations sont un état initial, pas une promesse de comportement futur. 
 - [ ] Phase B : premier run tag de confiance ayant produit les deux attestations GitHub et permettant la capture de l'identité SAN et de l'audience réelles.
 - [ ] Phase B : vérification indépendante réussie des attestations et des sujets à l'aide de GitHub CLI.
 
-L'identité SAN exacte reste un prérequis de vérification indépendante et de la phase C ; elle sera capturée depuis le bundle réel produit par le premier run de phase B. La phase B n'active aucun droit OIDC dans le workflow CI générique : le job de build appelé depuis le workflow tag dédié reçoit `id-token: write`, `attestations: write` et `artifact-metadata: write`. Le workflow CI général ne délègue que `contents: read`, ce qui plafonne les permissions du workflow réutilisable même si son job déclare les permissions d'attestation. Le job de validation refuse aussi tout tag dont l'acteur n'est pas `eldorplus`. Aucun droit `packages: write`, aucune publication OCI et aucune release ne sont ajoutés.
+L'identité SAN exacte reste un prérequis de vérification indépendante et de la phase C ; elle sera capturée depuis le bundle réel produit par le premier run de phase B. La phase B n'active aucun droit OIDC dans le workflow CI générique : le workflow réutilisable de build conserve `contents: read` et téléverse l'archive ainsi que le SBOM runtime. Un job distinct du workflow tag télécharge cet artefact et reçoit seul `id-token: write`, `attestations: write` et `artifact-metadata: write`. Le workflow CI général ne délègue que `contents: read` au workflow réutilisable ; aucun job de build ne peut donc demander des permissions supérieures à celles de son appelant. Le job de validation refuse aussi tout tag dont l'acteur n'est pas `eldorplus`. Aucun droit `packages: write`, aucune publication OCI et aucune release ne sont ajoutés.

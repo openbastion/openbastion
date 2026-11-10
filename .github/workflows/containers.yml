@@ -15,9 +15,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     env:
       # Do not use trivy-action or setup-trivy: download the release archive and verify its digest.
       TRIVY_VERSION: 0.76.1
@@ -84,17 +81,6 @@ jobs:
           docker save openbastion:scan | gzip -n > "$RUNNER_TEMP/openbastion-runtime-image.tar.gz"
           test -s "$RUNNER_TEMP/openbastion-runtime-image.tar.gz"
           sha256sum "$RUNNER_TEMP/openbastion-runtime-image.tar.gz"
-      - name: Generate SLSA build provenance attestation
-        if: ${{ inputs.attest }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-path: ${{ runner.temp }}/openbastion-runtime-image.tar.gz
-      - name: Generate CycloneDX SBOM attestation
-        if: ${{ inputs.attest }}
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-path: ${{ runner.temp }}/openbastion-runtime-image.tar.gz
-          sbom-path: ${{ runner.temp }}/openbastion-runtime-sbom.cdx.json
       - name: Upload SBOM and licence inventory
         if: always()
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3

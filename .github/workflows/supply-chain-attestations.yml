@@ -45,14 +45,44 @@ jobs:
             echo "tag commit $SOURCE_SHA is not reachable from origin/main" >&2
             exit 1
           }
-  attest:
-    name: Build, scan and attest runtime image archive
+  build:
+    name: Build and scan runtime image archive
     needs: version
     uses: ./.github/workflows/containers.yml
     with:
       attest: true
     permissions:
       contents: read
+  attest:
+    name: Attest trusted runtime image archive
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
       id-token: write
       attestations: write
       artifact-metadata: write
+    steps:
+      - name: Download runtime image and SBOM from the build job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: openbastion-supply-chain-${{ github.sha }}
+          path: ${{ runner.temp }}/supply-chain
+      - name: Require attestation subjects
+        env:
+          IMAGE_ARCHIVE: ${{ runner.temp }}/supply-chain/openbastion-runtime-image.tar.gz
+          RUNTIME_SBOM: ${{ runner.temp }}/supply-chain/openbastion-runtime-sbom.cdx.json
+        run: |
+          test -s "$IMAGE_ARCHIVE"
+          test -s "$RUNTIME_SBOM"
+          sha256sum "$IMAGE_ARCHIVE"
+      - name: Generate SLSA build provenance attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/supply-chain/openbastion-runtime-image.tar.gz
+      - name: Generate CycloneDX SBOM attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/supply-chain/openbastion-runtime-image.tar.gz
+          sbom-path: ${{ runner.temp }}/supply-chain/openbastion-runtime-sbom.cdx.json
