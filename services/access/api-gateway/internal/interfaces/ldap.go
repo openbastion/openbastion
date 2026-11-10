@@ -121,6 +121,9 @@ func (g *GatewayServer) handleLDAPLogin(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer resp.Body.Close()
+	if rejectUpstreamError(w, resp) {
+		return
+	}
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, io.LimitReader(resp.Body, 64<<10))
