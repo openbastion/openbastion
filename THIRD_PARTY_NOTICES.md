@@ -2,7 +2,7 @@
 
 ## Agent skills from samber/cc-skills-golang
 
-The repository contains 45 skill files whose frontmatter identifies the MIT
+The repository contains 46 skill files whose frontmatter identifies the MIT
 licence, author samber, and upstream project
 [samber/cc-skills-golang](https://github.com/samber/cc-skills-golang).
 
