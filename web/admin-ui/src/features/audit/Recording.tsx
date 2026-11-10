@@ -1,7 +1,9 @@
 import { FormEvent, useState } from "react";
-import { RecordingPage } from "../../shared/api";
-import { Notice } from "../../shared/Notice";
+import { RecordingPage, sessionPath } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
+import { AdminPage } from "../../shared/ui/AdminPage";
+import { FormCard } from "../../shared/ui/FormCard";
+import { Pager } from "../../shared/ui/Pager";
 import { VideoReplay } from "./VideoReplay";
 
 const pageSize = 100;
@@ -17,7 +19,7 @@ export function Recording() {
   async function read(n: number) {
     setError(undefined);
     try {
-      setPage(await api.request<RecordingPage>("GET", `/sessions/${encodeURIComponent(sessionId)}/recording?page=${n}&pageSize=${pageSize}`));
+      setPage(await api.request<RecordingPage>("GET", `${sessionPath(sessionId)}/recording?page=${n}&pageSize=${pageSize}`));
     } catch (err) {
       setPage(undefined);
       setError(err);
@@ -25,35 +27,34 @@ export function Recording() {
   }
 
   return (
-    <section className="page">
-      <div className="page-head">
-        <h2>Enregistrements</h2>
-        <p className="hint">Chaque page relue est un événement d'audit à votre nom.</p>
-      </div>
-      <form onSubmit={(e: FormEvent) => { e.preventDefault(); void read(1); }} aria-label="Relire un enregistrement" className="card form-card">
-        <div className="fields">
-          <label>Session<input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required /></label>
-        </div>
-        <Notice error={error} />
-        <div className="form-actions">
-          <button type="submit" className="primary">Relire</button>
-        </div>
-      </form>
+    <AdminPage title="Enregistrements" hints={["Chaque page relue est un événement d'audit à votre nom."]}>
+      <FormCard
+        label="Relire un enregistrement"
+        submitLabel="Relire"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          void read(1);
+        }}
+        error={error}
+      >
+        <label>
+          Session
+          <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
+        </label>
+      </FormCard>
       {page ? (
         <div className="card commands-card">
           <ol className="commands" start={(page.page - 1) * page.pageSize + 1}>
             {page.entries.map((e, i) => (
-              <li key={i}><time>{e.timestamp}</time> <code>{e.command}</code></li>
+              <li key={i}>
+                <time>{e.timestamp}</time> <code>{e.command}</code>
+              </li>
             ))}
           </ol>
-          <p className="pager">
-            <button type="button" disabled={page.page <= 1} onClick={() => read(page.page - 1)}>Précédent</button>
-            <span>page {page.page} — {page.totalEntries} commande(s)</span>
-            <button type="button" disabled={page.page * page.pageSize >= page.totalEntries} onClick={() => read(page.page + 1)}>Suivant</button>
-          </p>
+          <Pager page={page.page} pageSize={page.pageSize} totalItems={page.totalEntries} noun="commande(s)" onPage={read} />
         </div>
       ) : null}
       <VideoReplay />
-    </section>
+    </AdminPage>
   );
 }

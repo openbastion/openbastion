@@ -11,9 +11,10 @@ Règles : `rules/frontend.md`. Décision : ADR-0036.
 
 ```
 web/admin-ui/src/
-  app/        App.tsx (routes, navigation), main.tsx (UNE instance d'Api), styles.css (variables CSS)
-  features/   un dossier par écran : accounts/, sessions/, policies/, audit/, login/
-  shared/     api.ts (client et types de l'API publique), session.tsx (contexte connecté), Notice.tsx
+  app/        App.tsx (routes, navigation), AppHeader.tsx (en-tête et sections), main.tsx (UNE instance d'Api), styles.css (variables CSS)
+  features/   un dossier par écran : accounts/, sessions/, policies/, audit/, login/ — le conteneur de l'écran et ses composants
+  shared/     api.ts (client, types et chemins de l'API publique), session.tsx (contexte connecté), Notice.tsx,
+              ui/ (AdminPage, Pager, FormCard : la présentation partagée des écrans)
   test-helpers.ts   fakeApi, fakeToken
 ```
 

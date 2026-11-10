@@ -2,12 +2,12 @@ import { FormEvent, useState } from "react";
 import { Api } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { Credentials, register, sign } from "../../shared/webauthn";
+import { Challenge } from "./sources";
 
 // The second step of a login whose password was right, when its roles require a second factor
 // (ADR-0062, ADR-0065): a security key or the code of the authenticator application — whichever
 // the challenge accepts; for a strict role, the key only — or, not yet enrolled, the
 // administrator's enrollment code, then the factor to enroll.
-export type Challenge = { kind: "required" | "enrollment_required"; challenge: string; factors: string[]; webauthn?: unknown };
 
 export function SecondFactor({
   api,
