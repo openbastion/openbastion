@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,12 +28,15 @@ func TestRejectUpstreamErrorDoesNotRelayBody(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			upstream := &http.Response{StatusCode: tt.status}
+			upstream := &http.Response{StatusCode: tt.status, Body: io.NopCloser(strings.NewReader("dial tcp 10.0.0.7:8080: internal-service-token"))}
 			if !rejectUpstreamError(recorder, upstream) {
 				t.Fatal("expected upstream error to be rejected")
 			}
 			if recorder.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
+			}
+			if strings.Contains(recorder.Body.String(), "internal-service-token") || strings.Contains(recorder.Body.String(), "10.0.0.7") {
+				t.Fatalf("upstream details leaked: %q", recorder.Body.String())
 			}
 			if body := strings.TrimSpace(recorder.Body.String()); body != tt.wantBody {
 				t.Fatalf("body = %q, want %q", body, tt.wantBody)
