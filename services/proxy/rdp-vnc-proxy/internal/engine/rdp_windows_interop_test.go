@@ -369,6 +369,136 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 	}
 }
 
+// The extended keys (E0-prefixed scancodes, KBDFLAGS_EXTENDED), against Windows (ADR-0071, ADR-0088).
+// PR #101 saw the Windows key not reach Windows' shell: Win+R typed "r" into Notepad. Measured here,
+// key by key, by what the operator's path sends (the codec's Input):
+//   - the Windows key alone, which should open the Start menu: a PNG to judge by eye;
+//   - Ctrl+Alt+Del, as the Admin UI's button sends it, which should show the security screen: a PNG;
+//   - keys whose character proves the flag, read back from Notepad's file: the keypad's "/" (E0 35;
+//     without the flag, the key right of the full stop, "!" in AZERTY), and in AZERTY AltGr (E0 38)
+//     with 0 and E, "@" and "€" (without the flag, AltGr is Alt).
+//
+// Before the logoff test, which closes the session.
+func TestRDPWindows_ExtendedKeys(t *testing.T) {
+	target := windowsTarget(t)
+	shared := os.Getenv("RDP_WINDOWS_SHARED")
+	if shared == "" {
+		t.Skip("RDP_WINDOWS_SHARED not set: the share Notepad's file comes back through (prepare.sh)")
+	}
+	azerty := os.Getenv("RDP_WINDOWS_KEYBOARD") == "fr-FR"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	var last screenstream.Message
+	settle := func(quiet, limit time.Duration) {
+		end := time.After(limit)
+		for {
+			select {
+			case m, ok := <-session.Frames():
+				if !ok {
+					t.Fatalf("the stream ended: %v", session.Err())
+				}
+				last = m
+				continue
+			case <-time.After(quiet):
+			case <-end:
+			}
+			return
+		}
+	}
+	dump := func(name string) {
+		if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" && last.PNG != nil {
+			_ = os.WriteFile(filepath.Join(dir, name), last.PNG, 0o644)
+		}
+	}
+	press := func(code uint16, pressed bool) {
+		flags := screenstream.KeyReleased
+		if pressed {
+			flags = screenstream.KeyPressed
+		}
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: code, Flags: flags}); err != nil {
+			t.Fatalf("key 0x%x: %v", code, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	key := func(code uint16) { press(code, true); press(code, false) }
+	chord := func(modifier, code uint16) { press(modifier, true); key(code); press(modifier, false) }
+	settle(10*time.Second, 90*time.Second)
+	dump("extended-0-desktop.png")
+
+	key(0xe05b) // the Windows key, alone: the Start menu
+	settle(2*time.Second, 6*time.Second)
+	dump("extended-1-windows-key.png")
+	key(0x01) // Esc
+	settle(2*time.Second, 6*time.Second)
+
+	for _, code := range []uint16{0x1d, 0x38, 0xe053} { // Ctrl+Alt+Del, as the Admin UI's button
+		press(code, true)
+	}
+	for _, code := range []uint16{0xe053, 0x38, 0x1d} {
+		press(code, false)
+	}
+	settle(2*time.Second, 8*time.Second)
+	dump("extended-2-ctrl-alt-del.png")
+	key(0x01) // Esc: back to the desktop
+	settle(2*time.Second, 8*time.Second)
+
+	// Into Notepad, a line of its own, then the keys the flag decides; Ctrl+S saves kbd.txt again.
+	x, y := uint16(last.Width/2), uint16(last.Height/2)
+	for _, buttons := range []byte{1, 0} {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: x, Y: y, Buttons: buttons}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+	chord(0x1d, 0xe04f) // Ctrl+End
+	key(0x1c)
+	key(0xe035) // keypad "/"
+	want := "/"
+	if azerty {
+		chord(0xe038, 0x0b) // AltGr+0: "@"
+		chord(0xe038, 0x12) // AltGr+E: "€"
+		want = "/@€"
+	}
+	settle(2*time.Second, 6*time.Second)
+	dump("extended-3-typed.png")
+	chord(0x1d, 0x1f) // Ctrl+S: kbd.txt, saved before by the keyboard test
+	settle(2*time.Second, 6*time.Second)
+
+	path := filepath.Join(shared, "kbd.txt")
+	got := ""
+	for deadline := time.Now().Add(2 * time.Minute); ; {
+		if raw, err := os.ReadFile(path); err == nil {
+			lines := strings.Split(strings.ReplaceAll(strings.TrimPrefix(string(raw), "\xef\xbb\xbf"), "\r\n", "\n"), "\n")
+			for i := len(lines) - 1; i >= 0; i-- {
+				if strings.TrimSpace(lines[i]) != "" {
+					got = lines[i]
+					break
+				}
+			}
+			if got == want {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Notepad's last line is %q, want %q: an extended key did not reach Windows as one (extended-3-typed.png)", got, want)
+		}
+		time.Sleep(5 * time.Second)
+	}
+	t.Logf("extended keys read back as %q; the Windows key and Ctrl+Alt+Del are in extended-1 and extended-2 PNGs", got)
+}
+
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
 // a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
 // do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no
