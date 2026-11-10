@@ -63,6 +63,9 @@ func (g *GatewayServer) handleMFA(upstream string, fields ...string) http.Handle
 			return
 		}
 		defer resp.Body.Close()
+		if rejectUpstreamError(w, resp) {
+			return
+		}
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		if cc := resp.Header.Get("Cache-Control"); cc != "" {
 			w.Header().Set("Cache-Control", cc) // the enrollment's secret is not to be kept
