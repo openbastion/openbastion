@@ -59,7 +59,7 @@ func (g *GatewayServer) handleMFA(upstream string, fields ...string) http.Handle
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := g.httpClient.Do(req)
 		if err != nil {
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		defer resp.Body.Close()
