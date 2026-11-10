@@ -398,7 +398,9 @@ func internalError(w http.ResponseWriter, err error) {
 func (g *GatewayServer) doAndRelay(w http.ResponseWriter, req *http.Request) {
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+		// A transport failure is a Bad Gateway, not an upstream HTTP response.
+		// Keep the public body generic so the internal address is never exposed.
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
