@@ -32,9 +32,13 @@ jobs:
         run: |
           "$RUNNER_TEMP/trivy" fs --include-dev-deps --scanners license --license-full \
             --format json --output "$RUNNER_TEMP/openbastion-license-report.json" .
-      - name: Enforce restricted and forbidden licence policy
+      - name: Enforce restricted and forbidden third-party licence policy
         run: |
+          # AGPL-3.0-only is the project's declared licence and is compatible
+          # with the repository's AGPL policy. Keep it in the full inventory,
+          # but do not classify it as a forbidden third-party dependency.
           "$RUNNER_TEMP/trivy" fs --include-dev-deps --scanners license \
+            --ignored-licenses AGPL-3.0-only \
             --severity HIGH,CRITICAL --exit-code 1 .
       # HIGH/CRITICAL vulnerabilities with a fix fail unless explicitly accepted by path and expiry.
       # Release tags use VERSION; other refs use VERSION plus the commit, as before.
@@ -50,7 +54,7 @@ jobs:
           name: openbastion-supply-chain-${{ github.sha }}
           path: |
             ${{ runner.temp }}/openbastion-source-sbom.cdx.json
-          "$RUNNER_TEMP/trivy" image --format cyclonedx \
             ${{ runner.temp }}/openbastion-runtime-sbom.cdx.json
+            ${{ runner.temp }}/openbastion-license-report.json
           if-no-files-found: ignore
           retention-days: 30
