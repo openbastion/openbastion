@@ -9,7 +9,7 @@ import (
 // rejectUpstreamError keeps the Gateway's public error contract (ADR-0043):
 // explicit 4xx refusals retain their service-defined reason and retry metadata;
 // upstream 5xx responses never cross the boundary and become a generic 503.
-// Transport failures are handled by the caller as 502. Only the small set of
+// Transport failures are handled by each route with a generic gateway error. Only the small set of
 // public response headers is copied; hop-by-hop and internal headers are not.
 func rejectUpstreamError(w http.ResponseWriter, resp *http.Response) bool {
 	if resp == nil || (resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices) {
