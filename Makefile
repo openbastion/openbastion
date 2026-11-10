@@ -12,6 +12,8 @@ export GOFLAGS :=
 ## de chaque service.
 VERSION := $(shell cat VERSION)
 GIT_SHA := $(shell git rev-parse --short=12 HEAD 2>/dev/null)
+GIT_SHA_FULL := $(shell git rev-parse HEAD 2>/dev/null)
+SOURCE_REPOSITORY ?= https://github.com/openbastion/openbastion
 BUILD_VERSION ?= $(VERSION)$(if $(GIT_SHA),+$(GIT_SHA))
 LDFLAGS := -X github.com/openbastion/openbastion/pkg/buildinfo.Version=$(BUILD_VERSION)
 
@@ -29,7 +31,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean
+.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean license-check
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -238,7 +240,7 @@ ui-icons:
 ui-test: ui-icons
 	cd web/admin-ui && npm ci --no-audit --no-fund && npm test
 ui-build: ui-icons
-	cd web/admin-ui && npm ci --no-audit --no-fund && npm run build
+	cd web/admin-ui && OPENBASTION_SOURCE_REVISION=${OPENBASTION_SOURCE_REVISION:-$(GIT_SHA_FULL)} npm ci --no-audit --no-fund && OPENBASTION_SOURCE_REVISION=${OPENBASTION_SOURCE_REVISION:-$(GIT_SHA_FULL)} npm run build
 
 ## Les vulnérabilités connues (ADR-0052) : govulncheck, épinglé, sur chaque module du go.work
 ## (une vulnérabilité dont le code est appelé fait échouer), puis npm audit sur les deux lockfiles.
@@ -249,6 +251,10 @@ vuln: proto-gen
 	done
 	cd web/admin-ui && npm audit
 	cd web/openbastion-icons && npm audit
+
+## Vérifie les déclarations de licence et la conservation des notices tierces.
+license-check:
+	bash scripts/check-license-metadata.sh
 
 ## Construit et démarre la pile docker-compose réelle (deploy/docker-compose, ADR-0033) et
 ## y joue le parcours du MVP sur les seuls ports publiés. Docker requis ; quelques minutes.
@@ -297,7 +303,7 @@ test-postgres: proto-gen
 ## TRIVY : le binaire, vérifié contre son empreinte (la CI le fait) ; Docker requis.
 TRIVY ?= trivy
 scan-images: scan-postgres-image
-	docker build --progress=plain -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) -t openbastion:scan .
+	docker build --progress=plain -f deploy/docker-compose/Dockerfile --target runtime --build-arg VERSION=$(BUILD_VERSION) --build-arg SOURCE_REVISION=$(GIT_SHA_FULL) --build-arg SOURCE_REPOSITORY=$(SOURCE_REPOSITORY) -t openbastion:scan .
 	@for bin in openbastion-cli openbastion-pki api-gateway audit-service ssh-proxy password-vault; do \
 		got=$$(docker run --rm --entrypoint /usr/local/bin/$$bin openbastion:scan version --short); \
 		[ "$$got" = "$(BUILD_VERSION)" ] || { echo "$$bin : version $$got ≠ $(BUILD_VERSION)"; exit 1; }; \

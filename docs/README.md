@@ -29,6 +29,10 @@ Une page de cette documentation décrit ce que fait le code. Ce qui est prévu s
 | [`operations/`](operations/README.md) | Index : ce qui existe ailleurs, et les pages prévues |
 | [`compliance/`](compliance/README.md) | Index : ce qui existe ailleurs, et les pages prévues |
 
+## Licences et provenance
+
+La licence du projet, les notices tierces, l'inventaire des Agent Skills, les contrôles CI et la disponibilité du code source sont décrits dans [`licensing/`](licensing/README.md).
+
 ## Ancien document → nouveau fichier
 
 Jusqu'au 31 octobre 2026, la documentation était une séquence de documents numérotés (`docs/architecture/OpenBastion_NN_*.md`, `docs/api/OpenBastion_05_OpenAPI.md`, `docs/guides/OpenBastion_*.md`). Leur contenu a été repris à l'identique dans les fichiers ci-dessous ; seules les sections qui ne décrivaient que l'ordre de rédaction (« Prochaine étape », « Document suivant », « Clôture de la séquence ») ont été retirées. Les migrations SQL déjà appliquées gardent leurs commentaires d'origine, que leur texte ne peut plus changer (ADR-0030) : cette table sert à les lire, ainsi que l'historique git. Un document déplacé en entier garde sa numérotation : « doc 06 §3 » est la section 3 de [`architecture/data-architecture.md`](architecture/data-architecture.md).
