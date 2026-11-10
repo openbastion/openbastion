@@ -1,0 +1,58 @@
+# Trusted-tag artifact attestations (ADR-0093). This workflow never publishes images or releases.
+name: Supply chain attestations
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  version:
+    name: Validate trusted release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Require the project owner to create trusted tags
+        env:
+          ACTOR: ${{ github.actor }}
+        run: test "$ACTOR" = "eldorplus"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version: "1.27.3"
+      - name: Validate SemVer tag and VERSION
+        env:
+          TAG: ${{ github.ref_name }}
+        run: make version-check TAG="$TAG"
+      - name: Require tag commit to be reachable from main
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          TAG_COMMIT="$(git rev-parse "$GITHUB_REF^{commit}")"
+          test "$TAG_COMMIT" = "$SOURCE_SHA" || {
+            echo "tag ref resolves to $TAG_COMMIT, not event SHA $SOURCE_SHA" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main || {
+            echo "tag commit $SOURCE_SHA is not reachable from origin/main" >&2
+            exit 1
+          }
+  attest:
+    name: Build, scan and attest runtime image archive
+    needs: version
+    uses: ./.github/workflows/containers.yml
+    with:
+      attest: true
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
