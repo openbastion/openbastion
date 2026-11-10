@@ -1784,3 +1784,18 @@ L'incrément 4 demande les fuzzers de chaque parseur, 30 s chacun, en CI. Il y e
 **Contre-épreuve** : la borne « largeur ou hauteur nulle » de `readServerInit`, retirée, est trouvée par `FuzzReadServerInit` en 0,18 s. Son entrée reste comme graine dans `pkg/vnc/testdata/fuzz`.
 
 **Limite** : la négociation VeNCrypt et l'authentification VNC n'ont pas de fuzzer propre. Elles passent par `Open`, qui demande un serveur TLS ; leurs refus sont couverts par les tests contre un serveur factice.
+
+## ADR-0071 — les touches étendues, éprouvées contre Windows
+
+La PR #101 avait vu la touche Windows ne pas atteindre l'interface de Windows. `TestRDPWindows_ExtendedKeys` mesure touche par touche, par le chemin de l'opérateur, aux cinq cibles (Windows Server 2022 et 2019).
+
+| Touche | Résultat |
+|---|---|
+| « / » du pavé numérique (`E0 35`) | relu `/` aux cinq cibles ; en AZERTY, sans le drapeau étendu, ce serait « ! » |
+| AltGr+0, AltGr+E (`E0 38`), en AZERTY | relu `@€` ; sans le drapeau, AltGr serait Alt |
+| Ctrl+Alt+Suppr, comme le bouton de l'Admin UI (PR #104) | l'écran de sécurité de Windows s'affiche (capture) |
+| La touche Windows seule (`E0 5B`) | **le menu Démarrer ne s'ouvre pas** (capture), alors que Ctrl+Échap l'ouvre |
+
+Le drapeau `KBDFLAGS_EXTENDED` est donc bien transmis et lu. Seule la touche Windows n'est pas honorée. La cause n'est pas établie : même encodage, même chemin, et le clavier annoncé est celui de FreeRDP. **Limite** : l'opérateur ouvre le menu Démarrer par Ctrl+Échap.
+
+**Corrigé au passage** : l'export de la cible relisait le mauvais `kbd.txt`, une copie restée sur le partage. Il prend le plus récent, hors du partage.
