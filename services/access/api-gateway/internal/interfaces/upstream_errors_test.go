@@ -23,6 +23,7 @@ func TestRejectUpstreamErrorDoesNotRelayBody(t *testing.T) {
 		{name: "rate limited", status: http.StatusTooManyRequests, wantStatus: http.StatusTooManyRequests, wantBody: "too many requests"},
 		{name: "internal error", status: http.StatusInternalServerError, wantStatus: http.StatusServiceUnavailable, wantBody: "upstream unavailable"},
 		{name: "bad gateway", status: http.StatusBadGateway, wantStatus: http.StatusServiceUnavailable, wantBody: "upstream unavailable"},
+		{name: "redirect", status: http.StatusFound, wantStatus: http.StatusServiceUnavailable, wantBody: "upstream unavailable"},
 	}
 
 	for _, tt := range tests {
