@@ -5,7 +5,7 @@ info:
   summary: API publique OpenBastion — périmètre MVP
   license:
     name: AGPL-3.0
-    identifier: AGPL-3.0
+    identifier: AGPL-3.0-only
   description: >
     API REST de la plateforme PAM OpenBastion. Ce document ne couvre que le
     périmètre MVP (voir docs/roadmap.md). Les endpoints liés aux
