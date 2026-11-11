@@ -191,12 +191,10 @@ func parseRDPColorPointer(data []byte, bpp int) (RDPPointerUpdate, error) {
 		(width == 0) != (height == 0) {
 		return RDPPointerUpdate{}, ErrRDPPointer
 	}
-	// An empty shape is legal and shows nothing; its hot spot can only be its origin.
-	if width == 0 {
-		if hotX != 0 || hotY != 0 {
-			return RDPPointerUpdate{}, ErrRDPPointer
-		}
-	} else if hotX >= width || hotY >= height {
+	// The hot spot is bounded as a shape is, not by this shape: MS-RDPBCGR does not put it inside,
+	// and FreeRDP's shadow server sends a 1x2 shape whose hot spot is (0,2) (CI of PR #124). The
+	// drawing clips whatever falls off the desktop. An empty shape is legal and shows nothing.
+	if hotX >= rdpPointerMaxSide || hotY >= rdpPointerMaxSide {
 		return RDPPointerUpdate{}, ErrRDPPointer
 	}
 	xorLine := evenBytes((width*bpp + 7) / 8)

@@ -31,7 +31,7 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
 
 1. **Le pointeur fait partie de l'image** montrée et enregistrée. Il est composé à l'encodage seulement : le framebuffer ne le garde pas, et les ordres et bitmaps suivants n'en héritent pas.
 2. **Forme** : celle de la cible, décodée et bornée.
-   - RDP : `TS_COLORPOINTERATTRIBUTE` et `TS_POINTERATTRIBUTE` en 24 et 32 bpp, masques XOR et AND, au plus 32 × 32 pixels, la borne de MS-RDPBCGR 2.2.9.1.1.4.4 quand le client n'annonce pas de grands pointeurs (corrigé le 11 novembre 2026, le texte d'origine disait 96 × 96). Un cache de pointeurs est annoncé avec une taille bornée, 25 entrées comme FreeRDP. Une référence à une entrée absente ferme la session.
+   - RDP : `TS_COLORPOINTERATTRIBUTE` et `TS_POINTERATTRIBUTE` en 24 et 32 bpp, masques XOR et AND, au plus 32 × 32 pixels, la borne de MS-RDPBCGR 2.2.9.1.1.4.4 quand le client n'annonce pas de grands pointeurs (corrigé le 11 novembre 2026, le texte d'origine disait 96 × 96). Un cache de pointeurs est annoncé avec une taille bornée, 25 entrées comme FreeRDP. Une référence à une entrée absente ferme la session. Le point chaud est borné comme la forme (< 32), non par elle : FreeRDP en envoie un hors de la forme (corrigé le 11 novembre 2026).
    - VNC : `Cursor`, 32 bpp, bitmask 1 bit, mêmes bornes.
    - Une forme invalide ferme la session, comme tout PDU hors profil.
 3. **Position** : la dernière connue, venant de l'opérateur ou de la cible. Elle est bornée par le bureau ; le point chaud est respecté.

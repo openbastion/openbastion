@@ -181,11 +181,11 @@ func TestPointerUpdatesOutsideTheProfileAreRefused(t *testing.T) {
 		"cache index 25": func() (RDPPointerUpdate, error) {
 			return parseRDPFastPathPointer(rdpFastPathPointerColor, set16(valid, 0, 25))
 		},
-		"hot spot x out": func() (RDPPointerUpdate, error) {
-			return parseRDPFastPathPointer(rdpFastPathPointerColor, set16(valid, 2, 1))
+		"hot spot x at 32": func() (RDPPointerUpdate, error) {
+			return parseRDPFastPathPointer(rdpFastPathPointerColor, set16(valid, 2, 32))
 		},
-		"hot spot y out": func() (RDPPointerUpdate, error) {
-			return parseRDPFastPathPointer(rdpFastPathPointerColor, set16(valid, 4, 1))
+		"hot spot y at 32": func() (RDPPointerUpdate, error) {
+			return parseRDPFastPathPointer(rdpFastPathPointerColor, set16(valid, 4, 32))
 		},
 		"AND length + 2": func() (RDPPointerUpdate, error) {
 			return parseRDPFastPathPointer(rdpFastPathPointerColor, set16(valid, 10, 4))
@@ -266,6 +266,17 @@ func TestPointerUpdatesOutsideTheProfileAreRefused(t *testing.T) {
 	wide := make([][]byte, 32)
 	for i := range wide {
 		wide[i] = pixel
+	}
+	// A hot spot off the shape, within the bound: FreeRDP's shadow server sends a 1x2 shape whose
+	// hot spot is (0,2), and an empty shape may have one too.
+	for _, hot := range [][2]uint16{{0, 2}, {31, 31}} {
+		offShape := set16(set16(colorPointer(0, 0, 0, 1, 2, 24, [][]byte{pixel, pixel}, [][]bool{{true}, {true}}), 2, hot[0]), 4, hot[1])
+		if update, err := parseRDPFastPathPointer(rdpFastPathPointerColor, append(offShape, 0)); err != nil || update.Shape.HotY != int(hot[1]) {
+			t.Fatalf("hot spot %v off a 1x2 shape: %+v, %v", hot, update, err)
+		}
+	}
+	if _, err := parseRDPFastPathPointer(rdpFastPathPointerColor, set16(colorPointer(0, 0, 0, 0, 0, 24, nil, nil), 2, 5)); err != nil {
+		t.Fatalf("an empty shape with a hot spot: %v", err)
 	}
 	if _, err := parseRDPFastPathPointer(rdpFastPathPointerColor, colorPointer(0, 31, 0, 32, 1, 24, wide, [][]bool{make([]bool, 32)})); err != nil {
 		t.Fatalf("a 32-pixel shape is the bound, not beyond it: %v", err)

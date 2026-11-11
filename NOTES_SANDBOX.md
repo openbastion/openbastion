@@ -3051,6 +3051,8 @@ Le propriétaire a choisi un **drapeau dans `HELLO`** (plutôt qu'un réticule l
 
 **Limite** : un décodeur antérieur refuse un `HELLO` qui porte le drapeau. L'UI et le proxy sont livrés ensemble ; un client tiers devra suivre.
 
+**Corrigé au passage (défaut de l'incrément 1)** : la CI de la PR #124 a refusé une forme du serveur shadow de FreeRDP, et la description du refus l'a dite entière : `xorBpp 24, cache 0, hot spot 0,2, 1x2`, avec un octet de padding. Le point chaud était hors de la forme, ce que MS-RDPBCGR n'interdit pas. Il est désormais borné par la taille maximale d'une forme (< 32), plus par la forme elle-même ; le dessin découpe ce qui sort du bureau. Cette forme n'arrive pas à chaque session : c'est vraisemblablement la cause de l'échec du parcours RDP par l'API publique, vu une fois sur la PR #123 et passé à la relance. Test et 3 mutations tuées, dont le retour à l'ancienne règle.
+
 ## 2026-11-11 — ADR-0091, incrément 2 : le pointeur RDP dessiné dans l'image
 
 Le pointeur est branché de bout en bout, derrière `SCREEN_DRAW_POINTER` (allumé par défaut ; `false` rend le comportement antérieur, toute autre valeur arrête le service) :
