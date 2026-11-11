@@ -149,7 +149,7 @@ PostgreSQL metadata and retain the Transit key independently.
 - Base images are pinned by digest (ADR-0051), which means they are not updated by themselves: to
   update one, read its new index digest (`docker buildx imagetools inspect <name>:<tag>`), replace it
   in the `Dockerfile` or here, build, and run `make test-compose`. `test/integration/images_test.go`
-  refuses an image pulled without a digest. The build images use Go 1.27.3, the version of the CI (ADR-0052).
+  refuses an image pulled without a digest. The build images use Go 1.27.4, the version of the CI (ADR-0052).
 - One instance of each service.
 
 ## Test

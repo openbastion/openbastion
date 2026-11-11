@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -85,6 +86,16 @@ func runService() {
 	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
 	// Off, the RDP codec is not built and establish-session refuses rdp.
 	rdpState := "RDP disabled"
+	// The pointer drawn into the frames, shown and recorded alike (ADR-0091): on unless said
+	// "false"; anything but "true" or "false" stops the service.
+	drawPointer := true
+	switch v := os.Getenv("SCREEN_DRAW_POINTER"); v {
+	case "", "true":
+	case "false":
+		drawPointer = false
+	default:
+		log.Fatalf("rdp-vnc-proxy: SCREEN_DRAW_POINTER must be true or false, got %q", v)
+	}
 	switch v := os.Getenv("RDP_ENABLED"); v {
 	case "", "false":
 	case "true":
@@ -93,8 +104,9 @@ func runService() {
 			DialTimeout: time.Duration(boundedIntEnv("RDP_CONNECT_TIMEOUT_SECONDS", 15, 1, 120)) * time.Second,
 			// The cadence VNC has (ADR-0071 §8): at most one frame encoded and recorded a interval.
 			FrameInterval: vncCodec.FrameInterval,
+			DrawPointer:   drawPointer,
 		})
-		rdpState = "RDP enabled"
+		rdpState = fmt.Sprintf("RDP enabled, pointer drawn %t (SCREEN_DRAW_POINTER)", drawPointer)
 	default:
 		log.Fatalf("rdp-vnc-proxy: RDP_ENABLED must be true or false, got %q", v)
 	}

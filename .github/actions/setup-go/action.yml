@@ -4,7 +4,7 @@ inputs:
   go-version:
     description: Go version used by the workflow.
     required: false
-    default: "1.27.3"
+    default: "1.27.4"
 runs:
   using: composite
   steps:
