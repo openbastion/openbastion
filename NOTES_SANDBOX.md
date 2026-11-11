@@ -3297,3 +3297,7 @@ PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows S
 **Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
 
 **Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.
+
+## Go 1.27.4 : GO-2026-6859 (`net/http`)
+
+Le 11 novembre 2026, `make vuln` (Security, PR #120) échoue : GO-2026-6859, trouvée dans `net/http@go1.27.3`, corrigée en 1.27.4, appelée par la CLI (`openbastion.userCreate`). La chaîne passe en 1.27.4 partout où 1.27.3 était épinglée : `GO_VERSION` des workflows, l'action `setup-go`, et les images `golang:1.27.4-alpine` de `deploy/docker-compose` et `deploy/base44`, épinglées au digest Docker Hub du 10 novembre (`sha256:0a5f7fe7…`). Les chaînes `go1.27.3` des tests de `buildinfo` et `command` sont des données d'exemple, laissées telles quelles. **Preuve** : le scan rouge sous 1.27.3 (run 42980977310), puis vert sous 1.27.4 dans la CI de cette PR. **Non vérifié en local** : `govulncheck` y est tué par l'environnement (voir plus haut).

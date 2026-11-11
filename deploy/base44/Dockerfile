@@ -8,7 +8,7 @@
 # The Protobuf contracts are not generated in git (`make proto-gen`, .gitignore keeps *.pb.go
 # out): buf and its two plugins are installed here, and the `proto` service generated the
 # packages into the bind-mounted source before the Go services start.
-FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS warm
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS warm
 ARG BUF_VERSION=v1.75.0
 ARG PROTOBUF_GO_VERSION=v1.36.4
 ARG PROTOBUF_GRPC_VERSION=v1.5.1
@@ -26,12 +26,12 @@ RUN set -e; buf generate; for m in $(awk '/^[[:space:]]+\.\//{print $1}' go.work
 
 # The preview's VNC target (vnc-target.sh), on the same pinned base. The volumes take the owner of
 # the directories they are mounted on, so an unprivileged user can write them.
-FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS vnc-target
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS vnc-target
 RUN apk add --no-cache bash openssl tigervnc xterm font-misc-misc \
  && mkdir -p /key /trust && chown 1000:1000 /key /trust
 USER 1000:1000
 
-FROM golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf
 RUN apk add --no-cache bash curl openssl
 ENV CGO_ENABLED=0 GOWORK=/src/go.work
 COPY --from=warm /go/bin/buf /go/bin/protoc-gen-go /go/bin/protoc-gen-go-grpc /usr/local/bin/
