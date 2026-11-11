@@ -31,7 +31,7 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
 
 1. **Le pointeur fait partie de l'image** montrée et enregistrée. Il est composé à l'encodage seulement : le framebuffer ne le garde pas, et les ordres et bitmaps suivants n'en héritent pas.
 2. **Forme** : celle de la cible, décodée et bornée.
-   - RDP : `TS_COLORPOINTERATTRIBUTE` et `TS_POINTERATTRIBUTE` en 24 et 32 bpp, masques XOR et AND, au plus 96 × 96 pixels sans annonce de grands pointeurs. Un cache de pointeurs est annoncé avec une taille bornée, 25 entrées comme FreeRDP. Une référence à une entrée absente ferme la session.
+   - RDP : `TS_COLORPOINTERATTRIBUTE` et `TS_POINTERATTRIBUTE` en 24 et 32 bpp, masques XOR et AND, au plus 32 × 32 pixels, la borne de MS-RDPBCGR 2.2.9.1.1.4.4 quand le client n'annonce pas de grands pointeurs (corrigé le 11 novembre 2026, le texte d'origine disait 96 × 96). Un cache de pointeurs est annoncé avec une taille bornée, 25 entrées comme FreeRDP. Une référence à une entrée absente ferme la session.
    - VNC : `Cursor`, 32 bpp, bitmask 1 bit, mêmes bornes.
    - Une forme invalide ferme la session, comme tout PDU hors profil.
 3. **Position** : la dernière connue, venant de l'opérateur ou de la cible. Elle est bornée par le bureau ; le point chaud est respecté.
@@ -53,3 +53,10 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
 - **B, le pointeur à part** : écartée. Deux contrats changent (flux écran et segments vidéo), et le rejeu devient une recomposition, qui n'est plus l'image acquittée (ADR-0071 §4). Elle ne vaudrait que si le volume d'images de A, une fois mesuré, se révélait insupportable.
 - **C, rien** : écartée comme cible, gardée comme option éteinte. Un PAM qui enregistre l'écran sans le pointeur prive l'auditeur de la moitié du geste.
 - **Dessiner le pointeur dans le framebuffer lui-même** : écartée. Les mises à jour suivantes de la cible recouvriraient des pixels déjà modifiés, et le framebuffer cesserait d'être l'écran de la cible.
+
+## Incréments
+
+1. **Fait** : parseurs Fast-Path et slow-path, formes 24 et 32 bpp, cache de 25 formes, dessin sur une copie du bureau, flèche par défaut (`pkg/rdp/pointer.go`). Le tout est prouvé par des tests, un fuzzer et 24 mutations tuées. Rien n'est branché pour l'instant.
+2. Branchement RDP : capacité annoncée à 25, mises à jour suivies par la session, position de l'opérateur, dessin dans `Frame`, `SCREEN_DRAW_POINTER`. Il sera éprouvé contre FreeRDP et Windows.
+3. VNC : l'encodage `Cursor` est suivi et dessiné de la même façon.
+4. Admin UI : `cursor: none` quand le pointeur est dessiné.

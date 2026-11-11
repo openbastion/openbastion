@@ -3036,6 +3036,36 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0091, incrément 1 : les formes du pointeur RDP, décodées et bornées
+
+`pkg/rdp/pointer.go` décode les mises à jour de pointeur :
+- Fast-Path : codes 5 (caché), 6 (défaut), 8 (position), 9 (couleur), 10 (en cache) et 11 (nouveau) ;
+- slow-path : PDU 0x1b, avec ses messages système, position, couleur, en cache et nouveau.
+
+Il les suit dans `RDPPointer`, avec un cache de 25 formes, puis les dessine sur une **copie** du bureau (`DrawOn`), jamais dans le framebuffer.
+
+- **Formes** : 24 et 32 bpp, au plus 32 × 32 pixels (la borne de MS-RDPBCGR sans `LARGE_POINTER_FLAG`). Les masques sont lus de bas en haut, chaque ligne paddée à deux octets, avec des longueurs exactement celles que la taille impose, et un octet de padding final au plus.
+- **Rendu** : là où AND est à 0, la couleur XOR est opaque. Là où AND est à 1, le bureau est combiné par un ou exclusif avec la couleur XOR : le blanc inverse, le noir laisse transparaître. En 32 bpp, l'alpha est appliqué ; une forme dont l'alpha est nul partout est lue comme une forme 24 bpp.
+- **Refus** : tout le reste ferme la session (`ErrRDPPointer`, qui est un `ErrMCSConnection`). Cela couvre une autre profondeur, une forme trop grande, un point chaud hors de la forme, un index hors du cache et une entrée de cache jamais remplie.
+- **Défaut** : `SYSPTR_DEFAULT` ne transporte pas de forme ; le proxy dessine sa propre flèche, noire bordée de blanc. Rien n'est dessiné tant qu'aucune position n'est connue. Une réactivation (`Reset`) vide le cache et garde la position.
+
+**Corrigé dans l'ADR-0091** : il annonçait « 96 × 96 sans annonce de grands pointeurs ». MS-RDPBCGR 2.2.9.1.1.4.4 dit 32 × 32 sans `LARGE_POINTER_FLAG`.
+
+**Prouvé** :
+- 7 tests et un fuzzer, `FuzzParseRDPPointer` : 30 s, sans échec ;
+- **24 mutations, 24 tuées**. Au premier passage, 6 ont survécu et ont mis au jour 6 tests manquants, ajoutés depuis : des longueurs qui se compensent, une forme 16 bpp bien formée, une hauteur sans largeur, un pixel inversant dans une forme avec alpha, le pointeur dessiné avant toute position, et le masquage seul ;
+- toute la suite de `pkg/rdp`, et `-race` sur ces tests.
+
+**Non branché** : le Pointer Capability Set annonce toujours un cache de taille 0, `ReadBitmapUpdate` ignore encore ces mises à jour, et `Frame` ne dessine pas de pointeur. Le branchement fait l'objet de l'incrément 2 : capacité à 25, mises à jour suivies, position de l'opérateur, `SCREEN_DRAW_POINTER`. Il sera éprouvé contre FreeRDP et Windows.
+
+**Non vérifié** : les formes de Windows. On ne sait pas encore si le 32 bpp y est prémultiplié, ni si des formes 1 bpp y arrivent ; une forme refusée fermerait la session, et c'est l'incrément 2 qui le dira.
+
+**Choix renversables** : 24 et 32 bpp seulement ; l'alpha lu comme non prémultiplié ; la forme vide 0 × 0 acceptée ; le dessin de la flèche par défaut.
+
+## 2026-11-11 — Go 1.27.4 : GO-2026-6859 (`net/http`)
+
+Le 11 novembre 2026, `make vuln` (Security, PR #120) échoue : GO-2026-6859, trouvée dans `net/http@go1.27.3`, corrigée en 1.27.4, appelée par la CLI (`openbastion.userCreate`). La chaîne passe en 1.27.4 partout où 1.27.3 était épinglée : `GO_VERSION` des workflows, l'action `setup-go`, et les images `golang:1.27.4-alpine` de `deploy/docker-compose` et `deploy/base44`, épinglées au digest Docker Hub du 10 novembre (`sha256:0a5f7fe7…`). Les chaînes `go1.27.3` des tests de `buildinfo` et `command` sont des données d'exemple, laissées telles quelles. **Preuve** : le scan rouge sous 1.27.3 (run 42980977310), puis vert sous 1.27.4 dans la CI de cette PR. **Non vérifié en local** : `govulncheck` y est tué par l'environnement (voir plus haut).
+
 ## 2026-11-11 — ADR-0071 : les touches étendues contre Windows
 
 `TestRDPWindows_ExtendedKeys`, aux cinq cibles :
@@ -3297,7 +3327,3 @@ PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows S
 **Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
 
 **Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.
-
-## Go 1.27.4 : GO-2026-6859 (`net/http`)
-
-Le 11 novembre 2026, `make vuln` (Security, PR #120) échoue : GO-2026-6859, trouvée dans `net/http@go1.27.3`, corrigée en 1.27.4, appelée par la CLI (`openbastion.userCreate`). La chaîne passe en 1.27.4 partout où 1.27.3 était épinglée : `GO_VERSION` des workflows, l'action `setup-go`, et les images `golang:1.27.4-alpine` de `deploy/docker-compose` et `deploy/base44`, épinglées au digest Docker Hub du 10 novembre (`sha256:0a5f7fe7…`). Les chaînes `go1.27.3` des tests de `buildinfo` et `command` sont des données d'exemple, laissées telles quelles. **Preuve** : le scan rouge sous 1.27.3 (run 42980977310), puis vert sous 1.27.4 dans la CI de cette PR. **Non vérifié en local** : `govulncheck` y est tué par l'environnement (voir plus haut).
