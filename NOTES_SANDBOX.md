@@ -3036,6 +3036,25 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0090, lot A : les premiers chiffres RDP
+
+Le banc de la PR #130 a tourné sur les cinq cibles Windows de la CI (run 43068035637) et contre FreeRDP en local. Le tableau et les conclusions sont dans ADR-0090, « Résultats du lot A » ; les fichiers `measure.json` sont dans l'artefact de chaque cible.
+
+**En bref** :
+- Windows n'envoie **rien** au repos, et 11 à 80 Kio/s en frappe. Le serveur FreeRDP, lui, repeint en continu (2,2 Mio/s), et le proxy écarte ces repeints identiques.
+- Le volume **enregistré** domine : une image PNG entière par changement, de 30 à 202 Ko selon le fond d'écran. Cela donne 420 à 2 370 Kio/s en frappe, et 500 à 2 650 Kio/s quand seul le pointeur bouge, alors que la cible n'envoie alors rien.
+- L'encodage coûte 9 à 27 ms par image (39 ms au pire).
+- Latence touche → image : médiane 37 à 84 ms.
+- Pic du tas : 6 à 20 Mio.
+
+**Conclusion** : les lots B et C ne sont pas justifiés par la mesure, et ADR-0089 tient. Le levier est le format d'enregistrement (des images partielles), qui demande sa propre décision.
+
+**Limites du banc** :
+- le pic du tas est celui de tout le processus de test ;
+- la latence est mesurée sur le même hôte ;
+- la scène « texte dense » est une fenêtre du Bloc-notes repeinte (Ctrl+Début), non une page de texte plein écran ;
+- non mesurés : l'acquittement du Video Recorder, une vidéo, plusieurs sessions simultanées.
+
 ## 2026-11-11 — ADR-0091, incrément 3 : le pointeur VNC dessiné dans l'image
 
 Avec l'encodage `Cursor`, la cible VNC laisse son pointeur hors de son tampon d'image et en envoie la forme. Le proxy la jetait ; il la dessine désormais, derrière le même `SCREEN_DRAW_POINTER`.
