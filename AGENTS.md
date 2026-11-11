@@ -111,7 +111,7 @@ make run-<service>                # lance un service en local (mTLS par défaut 
 
 | Besoin | Fichier |
 |---|---|
-| Pourquoi cette décision | `docs/adr/` (un fichier par ADR, index dans `docs/adr/README.md`) |
+| Pourquoi cette décision | `docs/adr/` (un fichier par ADR ; `docs/adr/README.md` les indexe par catégorie, dans l'ordre de mise en œuvre, puis par numéro) |
 | Ce qui est fait, les limites, les écarts, les chiffres de tests | `NOTES_SANDBOX.md` |
 | Ce qui reste à faire | `.agents/tasks/backlog.md` |
 | Structure du dépôt, patron d'un service | `.agents/architecture/` |
