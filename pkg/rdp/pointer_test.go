@@ -227,7 +227,7 @@ func TestPointerUpdatesOutsideTheProfileAreRefused(t *testing.T) {
 		"new at 16 bpp": func() (RDPPointerUpdate, error) {
 			return parseRDPFastPathPointer(rdpFastPathPointerNew, newPointer(16, valid))
 		},
-		"new at 1 bpp": func() (RDPPointerUpdate, error) {
+		"new at 1 bpp, 24-bit lengths": func() (RDPPointerUpdate, error) {
 			return parseRDPFastPathPointer(rdpFastPathPointerNew, newPointer(1, valid))
 		},
 		"new without bpp":  func() (RDPPointerUpdate, error) { return parseRDPFastPathPointer(rdpFastPathPointerNew, []byte{24}) },
@@ -409,6 +409,7 @@ func FuzzParseRDPPointer(f *testing.F) {
 	f.Add(byte(rdpFastPathPointerNew), newPointer(32, colorPointer(2, 1, 0, 2, 1, 32, [][]byte{pixel, pixel}, [][]bool{{false, true}})))
 	f.Add(byte(rdpFastPathPointerPosition), []byte{1, 0, 2, 0})
 	f.Add(byte(rdpFastPathPointerCached), []byte{1, 0})
+	f.Add(byte(rdpFastPathPointerNew), append(newPointer(1, []byte{0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 2, 0, 2, 0}), 0x80, 0, 0, 0))
 	f.Add(byte(0), pointerPDU(rdpPointerMessageNew, newPointer(24, colorPointer(0, 0, 0, 1, 1, 24, [][]byte{pixel[:3]}, [][]bool{{false}}))))
 	f.Fuzz(func(t *testing.T, code byte, payload []byte) {
 		updates := []func() (RDPPointerUpdate, error){
@@ -441,4 +442,46 @@ func FuzzParseRDPPointer(f *testing.F) {
 			p.DrawOn(desktop(8, 8, 0))
 		}
 	})
+}
+
+// A refusal says the header of the shape, never its pixels.
+func TestDescribeRDPPointerHeaderSaysTheFieldsNotThePixels(t *testing.T) {
+	attribute := colorPointer(2, 1, 0, 2, 1, 32, [][]byte{{0xde, 0xad, 0xbe, 0xef}, {0xde, 0xad, 0xbe, 0xef}}, [][]bool{{false, false}})
+	got := describeRDPPointerHeader(rdpFastPathPointerNew, newPointer(32, attribute))
+	want := "pointer code 11, 26 bytes, xorBpp 32, cache 2, hot spot 1,0, 2x1, AND 2 bytes, XOR 8 bytes, 10 byte(s) of masks"
+	if got != want {
+		t.Fatalf("%q\nwant %q", got, want)
+	}
+	if got := describeRDPPointerHeader(rdpFastPathPointerPosition, []byte{1, 2, 3}); got != "pointer code 8, 3 bytes" {
+		t.Fatalf("%q", got)
+	}
+	if got := describeRDPPointerHeader(rdpFastPathPointerNew, []byte{1}); got != "pointer code 11, 1 bytes" {
+		t.Fatalf("%q", got)
+	}
+}
+
+// A monochrome shape, as Windows Server 2019 sends them: one bit of XOR, one of AND, both masks
+// top-down (FreeRDP reads them so against Windows), white and black opaque, inverting, and clear.
+func TestNewPointerAt1BitIsReadTopDown(t *testing.T) {
+	attribute := make([]byte, 14)
+	binary.LittleEndian.PutUint16(attribute[6:8], 2)   // width
+	binary.LittleEndian.PutUint16(attribute[8:10], 2)  // height
+	binary.LittleEndian.PutUint16(attribute[10:12], 4) // AND: 2 lines of 2 bytes
+	binary.LittleEndian.PutUint16(attribute[12:14], 4) // XOR: 2 lines of 2 bytes
+	attribute = append(attribute, 0x80, 0, 0x80, 0)    // XOR, top line first: set, clear; set, clear
+	attribute = append(attribute, 0, 0, 0xc0, 0)       // AND: clear, clear; set, set
+	update, err := parseRDPFastPathPointer(rdpFastPathPointerNew, newPointer(1, attribute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shape := update.Shape
+	if rgbaAt(shape, 0, 0) != [4]byte{0xff, 0xff, 0xff, 0xff} || rgbaAt(shape, 1, 0) != [4]byte{0, 0, 0, 0xff} {
+		t.Fatalf("top line %v %v, want opaque white then black", rgbaAt(shape, 0, 0), rgbaAt(shape, 1, 0))
+	}
+	if !shape.XOR[2] || shape.XOR[3] || rgbaAt(shape, 1, 1) != [4]byte{} {
+		t.Fatalf("bottom line: inverting %v, then clear %v", shape.XOR[2], rgbaAt(shape, 1, 1))
+	}
+	if shape.XOR[0] || shape.XOR[1] {
+		t.Fatal("the top line inverts: the masks were read bottom-up")
+	}
 }

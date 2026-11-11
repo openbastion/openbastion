@@ -158,14 +158,15 @@ func parseRDPCachedPointer(data []byte) (RDPPointerUpdate, error) {
 	return RDPPointerUpdate{Kind: RDPPointerCached, CacheIndex: index}, nil
 }
 
-// TS_POINTERATTRIBUTE: xorBpp, then a colour pointer of that depth. Only 24 and 32 bits per pixel
-// are decoded (ADR-0091); the other depths close the session.
+// TS_POINTERATTRIBUTE: xorBpp, then a colour pointer of that depth. 1, 24 and 32 bits per pixel
+// are decoded (ADR-0091: 1 bit since Windows Server 2019 sends its pointers so); the other depths
+// close the session.
 func parseRDPNewPointer(data []byte) (RDPPointerUpdate, error) {
 	if len(data) < 2 {
 		return RDPPointerUpdate{}, ErrRDPPointer
 	}
 	bpp := int(binary.LittleEndian.Uint16(data[:2]))
-	if bpp != 24 && bpp != 32 {
+	if bpp != 1 && bpp != 24 && bpp != 32 {
 		return RDPPointerUpdate{}, ErrRDPPointer
 	}
 	return parseRDPColorPointer(data[2:], bpp)
@@ -228,10 +229,24 @@ func parseRDPColorPointer(data []byte, bpp int) (RDPPointerUpdate, error) {
 	}
 	step := bpp / 8
 	for y := 0; y < height; y++ {
-		source := height - 1 - y // bottom-up
+		// Colour masks are bottom-up. A monochrome shape is read top-down, as FreeRDP reads the ones
+		// Windows Server 2019 sends (freerdp_image_copy_from_pointer_data: no flip at 1 bpp).
+		source := height - 1 - y
+		if bpp == 1 {
+			source = y
+		}
 		for x := 0; x < width; x++ {
-			pixel := xorMask[source*xorLine+x*step:]
-			blue, green, red := pixel[0], pixel[1], pixel[2]
+			var blue, green, red byte
+			var pixel []byte
+			if bpp == 1 {
+				// One bit: white where set, black where clear.
+				if xorMask[source*xorLine+x/8]&(0x80>>(x%8)) != 0 {
+					blue, green, red = 0xff, 0xff, 0xff
+				}
+			} else {
+				pixel = xorMask[source*xorLine+x*step:]
+				blue, green, red = pixel[0], pixel[1], pixel[2]
+			}
 			andBit := andMask[source*andLine+x/8]&(0x80>>(x%8)) != 0
 			i := y*width + x
 			out := shape.RGBA[i*4 : i*4+4]
@@ -251,6 +266,25 @@ func parseRDPColorPointer(data []byte, bpp int) (RDPPointerUpdate, error) {
 		}
 	}
 	return RDPPointerUpdate{Kind: RDPPointerShape, CacheIndex: index, Shape: shape}, nil
+}
+
+// describeRDPPointerHeader says what a refused Fast-Path pointer update announced: its header
+// fields, never a pixel. A refusal against a real target then says which bound it crossed.
+func describeRDPPointerHeader(code byte, data []byte) string {
+	attribute := data
+	description := fmt.Sprintf("pointer code %d, %d bytes", code, len(data))
+	if code == rdpFastPathPointerNew && len(data) >= 2 {
+		description += fmt.Sprintf(", xorBpp %d", binary.LittleEndian.Uint16(data))
+		attribute = data[2:]
+	} else if code != rdpFastPathPointerColor {
+		return description
+	}
+	if len(attribute) < 14 {
+		return description
+	}
+	field := func(at int) uint16 { return binary.LittleEndian.Uint16(attribute[at:]) }
+	return description + fmt.Sprintf(", cache %d, hot spot %d,%d, %dx%d, AND %d bytes, XOR %d bytes, %d byte(s) of masks",
+		field(0), field(2), field(4), field(6), field(8), field(10), field(12), len(attribute)-14)
 }
 
 func evenBytes(n int) int { return (n + 1) &^ 1 }

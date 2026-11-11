@@ -1647,7 +1647,7 @@ readUpdate:
 				if pointerShapes && rdpFastPathCodeIsPointer(code) {
 					pointer, pointerErr := parseRDPFastPathPointer(code, data)
 					if pointerErr != nil {
-						described := fmt.Errorf("%w: pointer update refused: %s", ErrRDPPointer, describeRDPServerPacket(packet))
+						described := fmt.Errorf("%w: pointer update refused: %s, %s", ErrRDPPointer, describeRDPServerPacket(packet), describeRDPPointerHeader(code, data))
 						clear(packet)
 						return RDPBitmapUpdate{}, described
 					}
