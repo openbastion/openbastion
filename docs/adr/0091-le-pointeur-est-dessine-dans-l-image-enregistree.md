@@ -1,6 +1,6 @@
 # ADR-0091 — Le pointeur est dessiné dans l'image, celle que l'opérateur voit et que l'auditeur rejoue
 
-**Statut** `Proposé` · 11 novembre 2026 · go du propriétaire du projet pour l'écrire le 11 novembre 2026 : « Go pour l'ADR du pointeur ». La décision engage le contrat de l'écran et le contenu des enregistrements : son acceptation revient au propriétaire.
+**Statut** `Accepté` · 11 novembre 2026 · go du propriétaire du projet pour l'écrire le 11 novembre 2026 : « Go pour l'ADR du pointeur » ; accepté le même jour : « Go pour l'option A ». L'option A, l'interrupteur allumé par défaut et `cursor: none` dans l'Admin UI sont acceptés.
 
 ## Contexte
 
@@ -27,7 +27,7 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
 
 **C. Rien.** Le navigateur garde sa flèche, l'enregistrement reste sans pointeur. C'est la limite actuelle, assumée et documentée.
 
-## Décision proposée : A
+## Décision : A
 
 1. **Le pointeur fait partie de l'image** montrée et enregistrée. Il est composé à l'encodage seulement : le framebuffer ne le garde pas, et les ordres et bitmaps suivants n'en héritent pas.
 2. **Forme** : celle de la cible, décodée et bornée.
