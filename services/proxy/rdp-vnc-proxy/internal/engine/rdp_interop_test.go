@@ -143,6 +143,30 @@ func TestRDPInterop_CredSSP(t *testing.T) {
 	})
 }
 
+// The pointer drawn into the frames (ADR-0091), against FreeRDP.
+func TestRDPInterop_Pointer(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second, DrawPointer: true}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+	provePointerIsDrawn(t, session, false, func(name string, frame screenstream.Message) {
+		if dir := os.Getenv("RDP_INTEROP_DUMP"); dir != "" {
+			_ = os.WriteFile(filepath.Join(dir, name), frame.PNG, 0o600)
+		}
+	})
+}
+
 func TestRDPInterop_Screen(t *testing.T) {
 	target := startRDPInteropTarget(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

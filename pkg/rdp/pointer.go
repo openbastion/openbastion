@@ -296,6 +296,11 @@ func (p *RDPPointer) Apply(update RDPPointerUpdate) error {
 	return nil
 }
 
+// FromTarget says whether the shape is one the target sent, not the proxy's default arrow.
+func (p *RDPPointer) FromTarget() bool {
+	return p != nil && p.shape != nil && p.shape != rdpDefaultPointer
+}
+
 // MoveTo places the pointer: where the operator's input sent it, or where the target moved it.
 func (p *RDPPointer) MoveTo(x, y int) { p.x, p.y, p.placed = x, y, true }
 
@@ -309,10 +314,15 @@ func (p *RDPPointer) Reset() {
 // encoded, never the framebuffer itself (ADR-0091 §1). The shape is clipped by the desktop, and
 // nothing is drawn while the pointer is hidden or has no known position.
 func (p *RDPPointer) DrawOn(desktop *image.RGBA) {
-	if p == nil || desktop == nil || p.hidden || !p.placed || p.shape == nil {
+	if desktop == nil || !p.drawable() {
 		return
 	}
 	drawRDPPointer(desktop, p.shape, p.x, p.y)
+}
+
+// drawable says whether DrawOn would draw anything.
+func (p *RDPPointer) drawable() bool {
+	return p != nil && !p.hidden && p.placed && p.shape != nil && p.shape.Width > 0
 }
 
 func drawRDPPointer(desktop *image.RGBA, shape *RDPPointerImage, x, y int) {

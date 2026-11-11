@@ -12,6 +12,7 @@ import (
 
 const (
 	rdpPDU2Update           = byte(2)
+	rdpPDU2Pointer          = byte(0x1b)
 	rdpUpdateOrders         = uint16(0)
 	rdpUpdateBitmap         = uint16(1)
 	rdpOrderStandard        = byte(0x01)
@@ -128,6 +129,11 @@ type RDPBitmapUpdate struct {
 	// DesktopWidth and DesktopHeight are the desktop the rectangles are drawn on, as the server
 	// stated it at the last (re)activation: a reactivation may change it (MS-RDPBCGR 1.3.1.3).
 	DesktopWidth, DesktopHeight uint16
+	// Pointer is a pointer update, with no rectangles, when MCSClientSettings.PointerShapes is on.
+	Pointer *RDPPointerUpdate
+	// Reactivated says a reactivation came before this update: the pointer cache is gone with the
+	// old share (MS-RDPBCGR 1.3.1.3).
+	Reactivated bool
 }
 
 // parseRDPBitmapMCSFragment validates one TPKT/X.224/MCS envelope and returns
@@ -1540,6 +1546,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		orderState = s.primaryOrderState
 	}
 	loadShare()
+	pointerShapes := s.mcsSettings.PointerShapes
+	reactivated := false
 	primaryOrdersEnabled := s.primaryOrdersEnabled
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
 	dstBltEnabled := s.dstBltEnabled
@@ -1588,6 +1596,7 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 			return
 		}
 		update.DesktopWidth, update.DesktopHeight = desktopWidth, desktopHeight
+		update.Reactivated = reactivated
 	}()
 
 readUpdate:
@@ -1634,6 +1643,16 @@ readUpdate:
 							return RDPBitmapUpdate{}, fmt.Errorf("%w: a Fast-Path update interrupted mid-fragments", ErrMCSConnection)
 						}
 					}
+				}
+				if pointerShapes && rdpFastPathCodeIsPointer(code) {
+					pointer, pointerErr := parseRDPFastPathPointer(code, data)
+					if pointerErr != nil {
+						described := fmt.Errorf("%w: pointer update refused: %s", ErrRDPPointer, describeRDPServerPacket(packet))
+						clear(packet)
+						return RDPBitmapUpdate{}, described
+					}
+					clear(packet)
+					return RDPBitmapUpdate{Pointer: &pointer}, nil
 				}
 				if rdpFastPathCodeIsIgnored(code) {
 					clear(packet)
@@ -1710,7 +1729,16 @@ readUpdate:
 		s.mu.Lock()
 		loadShare()
 		s.mu.Unlock()
+		reactivated = true
 		goto readUpdate
+	}
+	if pointerShapes && rdpShareDataIsIgnored(assembled, shareID) && assembled[14] == rdpPDU2Pointer {
+		pointer, pointerErr := parseRDPPointerPDU(assembled[18:])
+		clear(assembled)
+		if pointerErr != nil {
+			return RDPBitmapUpdate{}, fmt.Errorf("%w: slow-path pointer update refused", ErrRDPPointer)
+		}
+		return RDPBitmapUpdate{Pointer: &pointer}, nil
 	}
 	if rdpShareDataIsIgnored(assembled, shareID) {
 		if rdpShareDataIsLogonNotification(assembled) {

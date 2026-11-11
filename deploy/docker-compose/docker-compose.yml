@@ -296,6 +296,8 @@ services:
       TARGET_TLS_ROOTS_FILE: /run/secrets/screen-target-ca
       # RDP is opened by name, here and at the Broker (ADR-0088): off unless both say true.
       RDP_ENABLED: ${RDP_ENABLED:-false}
+      # The pointer drawn into each frame, shown and recorded alike (ADR-0091); "false" to leave it out.
+      SCREEN_DRAW_POINTER: ${SCREEN_DRAW_POINTER:-true}
     secrets: [screen-target-ca]
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}

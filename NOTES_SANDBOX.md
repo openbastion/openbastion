@@ -3036,6 +3036,23 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0091, incrément 2 : le pointeur RDP dessiné dans l'image
+
+Le pointeur est branché de bout en bout, derrière `SCREEN_DRAW_POINTER` (allumé par défaut ; `false` rend le comportement antérieur, toute autre valeur arrête le service) :
+- **`pkg/rdp`** : `MCSClientSettings.PointerShapes` annonce un cache de 25 formes, couleur et nouvelles, dans le Pointer Capability Set. `ReadBitmapUpdate` rend alors les mises à jour de pointeur (`RDPBitmapUpdate.Pointer`, sans rectangle), en Fast-Path comme en slow-path, et dit qu'une réactivation a eu lieu (`Reactivated`). Éteint, rien ne change : pas de cache, mises à jour ignorées. Une mise à jour hors profil est refusée (`ErrRDPPointer`, avec la description du paquet).
+- **`FrameWithPointer`** dessine le pointeur sur une copie du bureau, encode cette copie, puis la jette.
+- **Moteur** : `RDPCodec.DrawPointer`. Les mises à jour de la cible sont appliquées au fil de la lecture, et le déplacement de l'opérateur (`Input`) place le pointeur. Chaque changement passe par la cadence : une image par intervalle au plus, la dernière position. Un clic sur place ne fait pas d'image. Une réactivation vide le cache, et une mise à jour de pointeur que le client n'a pas demandée ferme le flux.
+
+**Prouvé** :
+- unitaires : 3 tests `pkg/rdp` sur TLS réel (Fast-Path et slow-path dans l'ordre, refus selon le réglage, capacité), le dessin sur copie, et 5 tests moteur (pointeur de l'opérateur, pointeur de la cible et son cache, refus, réglage éteint, cadence), sous `-race` ;
+- **20 mutations : 19 tuées, une ne peut l'être que contre une cible réelle** (le réglage non transmis à la session). Le test Windows exige donc des mises à jour de pointeur de la cible ;
+- **contre FreeRDP 3** (`TestRDPInterop_Pointer`, local) : la session vit et le pointeur est dans l'image (69 pixels changés sous lui). Le serveur de test n'envoie **aucune** mise à jour de pointeur, c'est donc la flèche du proxy qui est dessinée, jugée sur PNG ;
+- contre Windows : `TestRDPWindows_Pointer` (avant le logoff), et l'enregistrement RDP de bout en bout tourne désormais pointeur dessiné. **Résultat attendu de la CI de la PR.**
+
+**Limites** : l'Admin UI montre encore la flèche du navigateur en plus de celle de l'image (incrément 4) ; VNC sans pointeur (incrément 3) ; chaque mise à jour de pointeur de la cible fait une image, même invisible (une forme non placée) ; le volume enregistré n'a pas été mesuré (lot A d'ADR-0090).
+
+**Choix renversables** : allumé par défaut (ADR-0091) ; une image pour chaque mise à jour de pointeur ; la position de l'opérateur prime jusqu'à la prochaine position de la cible, et inversement.
+
 ## 2026-11-11 — ADR-0091, incrément 1 : les formes du pointeur RDP, décodées et bornées
 
 `pkg/rdp/pointer.go` décode les mises à jour de pointeur :

@@ -155,6 +155,9 @@ func TestReadBitmapUpdateReactivates(t *testing.T) {
 	if update.DesktopWidth != 1024 || update.DesktopHeight != 768 || len(update.Rectangles) != 1 || update.Rectangles[0].X != 1000 {
 		t.Fatalf("update %dx%d, %d rectangle(s)", update.DesktopWidth, update.DesktopHeight, len(update.Rectangles))
 	}
+	if !update.Reactivated {
+		t.Fatal("the update after a reactivation does not say so: the pointer cache of the old share would be kept (ADR-0091)")
+	}
 	if session.reactivations != 1 || session.serverCapabilities.ShareID != reactivationNewShare {
 		t.Fatalf("%d reactivation(s), share %#x", session.reactivations, session.serverCapabilities.ShareID)
 	}

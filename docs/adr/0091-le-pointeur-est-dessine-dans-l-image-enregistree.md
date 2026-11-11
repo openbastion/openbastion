@@ -57,6 +57,6 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
 ## Incréments
 
 1. **Fait** : parseurs Fast-Path et slow-path, formes 24 et 32 bpp, cache de 25 formes, dessin sur une copie du bureau, flèche par défaut (`pkg/rdp/pointer.go`). Le tout est prouvé par des tests, un fuzzer et 24 mutations tuées. Rien n'est branché pour l'instant.
-2. Branchement RDP : capacité annoncée à 25, mises à jour suivies par la session, position de l'opérateur, dessin dans `Frame`, `SCREEN_DRAW_POINTER`. Il sera éprouvé contre FreeRDP et Windows.
+2. **Fait** : branchement RDP. La capacité est annoncée à 25 quand le pointeur est dessiné, `ReadBitmapUpdate` rend les mises à jour de pointeur, et le moteur suit celles de la cible et la position de l'opérateur. Il dessine le pointeur dans chaque image (`FrameWithPointer`) au rythme de la cadence. Une réactivation vide le cache. `SCREEN_DRAW_POINTER` est allumé par défaut. Éprouvé contre FreeRDP (le serveur de test n'envoie aucun pointeur : flèche du proxy), et contre Windows en CI.
 3. VNC : l'encodage `Cursor` est suivi et dessiné de la même façon.
 4. Admin UI : `cursor: none` quand le pointeur est dessiné.

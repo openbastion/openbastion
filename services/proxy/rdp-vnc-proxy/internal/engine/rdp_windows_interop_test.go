@@ -253,6 +253,31 @@ func TestRDPWindows_Screen(t *testing.T) {
 	t.Logf("%d frame(s) in all; the dumps show what a person must judge (pixel fidelity, text)", frames)
 }
 
+// The pointer drawn into the frames (ADR-0091), against Windows: its shapes stay within the profile,
+// and the operator's pointer is in the frame. Before the logoff test, which closes the session.
+func TestRDPWindows_Pointer(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DrawPointer: true}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows, the pointer drawn: %v", err)
+	}
+	defer session.Close()
+	provePointerIsDrawn(t, session, true, func(name string, frame screenstream.Message) {
+		if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
+			_ = os.WriteFile(filepath.Join(dir, name), frame.PNG, 0o644)
+		}
+	})
+}
+
 // The keyboard layouts (ADR-0071's exit criterion, ADR-0088): the operator sends physical keys
 // (scancodes) and the target reads them with its own layout. Keys whose character differs between
 // QWERTY and AZERTY are typed into Notepad, which saves them (Ctrl+S, "kbd"); rdp-setup.ps1 copies
