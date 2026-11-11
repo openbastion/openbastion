@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 env:
-  GO_VERSION: "1.27.3"
+  GO_VERSION: "1.27.4"
   GOPROXY: direct
   TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
   PURGE: TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts, sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials, identity_provider_bindings RESTART IDENTITY CASCADE;
