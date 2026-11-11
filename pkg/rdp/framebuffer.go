@@ -25,6 +25,25 @@ type RDPFramebuffer struct {
 	mu       sync.Mutex
 	image    *image.RGBA
 	sequence uint64
+	// partial makes key frames and partial frames (ADR-0092) when set: EnablePartialFrames.
+	partial *screenstream.FrameEncoder
+}
+
+// EnablePartialFrames has the frames be partial ones, of what changed since the frame before,
+// anchored on key frames every keyInterval or keyFrames frames (ADR-0092). Zero takes the defaults.
+func (f *RDPFramebuffer) EnablePartialFrames(keyInterval time.Duration, keyFrames int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.partial = &screenstream.FrameEncoder{KeyInterval: keyInterval, KeyFrames: keyFrames}
+}
+
+// ForceKeyFrame has the next frame be a key frame: after a reactivation (ADR-0092 §3).
+func (f *RDPFramebuffer) ForceKeyFrame() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.partial != nil {
+		f.partial.Reset()
+	}
 }
 
 // NewRDPFramebuffer allocates a bounded 32-bit RGBA framebuffer.
@@ -183,6 +202,22 @@ func (f *RDPFramebuffer) FrameWithPointer(timestamp time.Time, pointer *RDPPoint
 	if pointer.drawable() {
 		picture = &image.RGBA{Pix: append([]byte(nil), f.image.Pix...), Stride: f.image.Stride, Rect: f.image.Rect}
 		pointer.DrawOn(picture)
+	}
+	if f.partial != nil {
+		// The pointer's old and new places are what differs from the frame before: two small
+		// rectangles (ADR-0092 §4). An unchanged picture is screenstream.ErrUnchanged: no frame.
+		message, err := f.partial.Encode(picture, f.sequence+1, timestamp)
+		if errors.Is(err, screenstream.ErrUnchanged) {
+			return screenstream.Message{}, err
+		}
+		if errors.Is(err, screenstream.ErrFrameTooLarge) {
+			return screenstream.Message{}, fmt.Errorf("%w: %w", ErrRDPFramebuffer, err)
+		}
+		if err != nil {
+			return screenstream.Message{}, ErrRDPFramebuffer
+		}
+		f.sequence++
+		return message, nil
 	}
 	var encoded bytes.Buffer
 	if err := png.Encode(&encoded, picture); err != nil || encoded.Len() == 0 {
