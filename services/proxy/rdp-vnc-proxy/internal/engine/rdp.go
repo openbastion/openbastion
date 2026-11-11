@@ -37,7 +37,11 @@ type RDPCodec struct {
 	// are drawn as they come, and at most one frame a interval is encoded, recorded and shown.
 	// Zero makes a frame of every update that changes the screen.
 	FrameInterval time.Duration
-	openSession   func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
+	// DrawPointer draws the target's pointer into each frame, shown and recorded alike
+	// (SCREEN_DRAW_POINTER, ADR-0091): the client announces a pointer cache and follows the
+	// target's shapes, and the operator's position. Off, the pointer is ignored, as before.
+	DrawPointer bool
+	openSession func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 }
 
 var _ proxycore.ScreenCodec = (*RDPCodec)(nil)
@@ -99,6 +103,9 @@ func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 	}
 	s := &rdpScreenSessionAdapter{target: target, framebuffer: framebuffer, frames: make(chan screenstream.Message), cancel: cancel, done: make(chan struct{}),
 		inputTimeout: inputTimeout, width: width, height: height, pressedKeys: make(map[uint16]bool), frameInterval: c.FrameInterval}
+	if c.DrawPointer {
+		s.pointer, s.pointerMoved = rdp.NewRDPPointer(), make(chan struct{}, 1)
+	}
 	go s.readLoop(sessionCtx)
 	return s, nil
 }
@@ -130,7 +137,8 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	if height == 0 {
 		height = rdpDefaultDesktopHeight
 	}
-	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout}
+	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
+		PointerShapes: c.DrawPointer}
 	var negotiatedWidth, negotiatedHeight uint16
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
@@ -214,8 +222,17 @@ type rdpScreenSessionAdapter struct {
 	pointerX      uint16
 	pointerY      uint16
 	pointerBtns   byte
+	pointerPlaced bool // the operator has placed the pointer once
 	pressedKeys   map[uint16]bool
 	err           error
+	// pointer is the pointer drawn into each frame, nil when it is not (RDPCodec.DrawPointer). The
+	// reader applies the target's updates, Input the operator's moves: pointerMu orders them, and
+	// pointerMoved tells the reader a move wants a frame.
+	pointer      *rdp.RDPPointer
+	pointerMu    sync.Mutex
+	pointerMoved chan struct{}
+	// pointerUpdates counts the target's pointer updates, for the interoperability tests.
+	pointerUpdates int
 }
 
 func (s *rdpScreenSessionAdapter) Frames() <-chan screenstream.Message { return s.frames }
@@ -308,7 +325,18 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 	if err := s.sendInputEvents(events); err != nil {
 		return err
 	}
+	moved := input.Type == screenstream.InputPointer && (x != s.pointerX || y != s.pointerY || !s.pointerPlaced)
 	s.pressedKeys, s.pointerBtns, s.pointerX, s.pointerY = keys, buttons, x, y
+	if s.pointer != nil && moved {
+		s.pointerPlaced = true
+		s.pointerMu.Lock()
+		s.pointer.MoveTo(int(x), int(y))
+		s.pointerMu.Unlock()
+		select {
+		case s.pointerMoved <- struct{}{}:
+		default: // a frame is already wanted
+		}
+	}
 	return nil
 }
 
@@ -430,7 +458,9 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 	var due <-chan time.Time
 	// emit encodes the desktop as it is now and hands it to the relay, which records it first.
 	emit := func() bool {
-		frame, err := s.framebuffer.Frame(time.Now().UTC())
+		s.pointerMu.Lock()
+		frame, err := s.framebuffer.FrameWithPointer(time.Now().UTC(), s.pointer)
+		s.pointerMu.Unlock()
 		if err != nil {
 			fail(err)
 			return false
@@ -441,6 +471,19 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 			return false
 		}
 		shown, dirty, lastFrame, due = true, false, time.Now(), nil
+		return true
+	}
+	// changed: the screen differs from the last frame. One frame a interval at most, the latest
+	// screen; the first one at once.
+	changed := func() bool {
+		dirty = true
+		wait := s.frameInterval - time.Since(lastFrame)
+		switch {
+		case !shown || wait <= 0:
+			return emit()
+		case due == nil:
+			due = time.After(wait)
+		}
 		return true
 	}
 	for {
@@ -459,6 +502,10 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 			if dirty && !emit() {
 				return
 			}
+		case <-s.pointerMoved: // nil, and never ready, when the pointer is not drawn
+			if shown && !changed() {
+				return
+			}
 		case update := <-updates:
 			// A reactivation may have changed the desktop's size (MS-RDPBCGR 1.3.1.3): the frames
 			// follow it, and so do the bounds of the operator's pointer.
@@ -473,6 +520,29 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 				s.inputMu.Unlock()
 				shown = false
 			}
+			if update.Reactivated && s.pointer != nil {
+				s.pointerMu.Lock()
+				s.pointer.Reset() // the cache went with the old share
+				s.pointerMu.Unlock()
+			}
+			if update.Pointer != nil {
+				if s.pointer == nil {
+					fail(rdp.ErrRDPPointer) // never asked for
+					return
+				}
+				s.pointerMu.Lock()
+				err := s.pointer.Apply(*update.Pointer)
+				s.pointerUpdates++
+				s.pointerMu.Unlock()
+				if err != nil {
+					fail(err)
+					return
+				}
+				if shown && !changed() {
+					return
+				}
+				continue
+			}
 			// The first frame is always sent: the operator has seen nothing yet, even of a black
 			// screen. After it, a repaint of the same pixels changes nothing.
 			if shown && s.framebuffer.Unchanged(update) {
@@ -482,16 +552,8 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 				fail(err)
 				return
 			}
-			dirty = true
-			// One frame a interval at most, the latest screen; the first one at once.
-			wait := s.frameInterval - time.Since(lastFrame)
-			switch {
-			case !shown || wait <= 0:
-				if !emit() {
-					return
-				}
-			case due == nil:
-				due = time.After(wait)
+			if !changed() {
+				return
 			}
 		}
 	}

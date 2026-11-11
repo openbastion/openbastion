@@ -67,6 +67,10 @@ type MCSClientSettings struct {
 	DesktopHeight uint16
 	ClientName    string
 	Timeout       time.Duration
+	// PointerShapes announces a cache of 25 pointer shapes and has ReadBitmapUpdate return the
+	// pointer updates, decoded and bounded, rather than ignore them (ADR-0091). Off, the pointer is
+	// ignored as before and no cache is announced.
+	PointerShapes bool
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches

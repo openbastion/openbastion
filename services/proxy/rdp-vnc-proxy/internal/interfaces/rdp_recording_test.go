@@ -134,7 +134,9 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
 	}}
 	listener := proxycore.NewListener(proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy), proxycore.NewTerminator(noopAudit{}))
-	codec := &engine.RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DesktopWidth: target.askWidth, DesktopHeight: target.askHeight}
+	// The pointer drawn, as SCREEN_DRAW_POINTER is by default (ADR-0091): recorded as shown.
+	codec := &engine.RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DesktopWidth: target.askWidth, DesktopHeight: target.askHeight,
+		DrawPointer: true}
 	// As cmd/rdp-vnc-proxy builds it with RDP_ENABLED=true (ADR-0088): VNC's codec, and RDP's for an
 	// RDP ticket.
 	server := NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, &engine.VNCCodec{TLSRoots: target.roots}, recorder, "rdp-vnc-proxy:8090", nil).WithRDP(codec)
