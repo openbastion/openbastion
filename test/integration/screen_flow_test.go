@@ -251,8 +251,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		defer conn.Close(websocket.StatusNormalClosure, "")
 
 		hello := readScreen(t, conn)
-		// VNC draws no pointer yet (ADR-0091, increment 3): the page keeps the browser's.
-		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 0 {
+		// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
+		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1 {
 			t.Fatalf("first message: %+v", hello)
 		}
 		first := readFrame(t, conn)

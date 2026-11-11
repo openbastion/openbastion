@@ -286,3 +286,29 @@ func TestRDPCodec_TheSessionSaysWhetherItDrawsThePointer(t *testing.T) {
 		}
 	}
 }
+
+// The VNC session's word passes through the wrapper that maps its errors: an embedded interface
+// would hide it.
+func TestVNCScreenSessionPassesOnWhetherItDrawsThePointer(t *testing.T) {
+	if drawn := (vncScreenSession{drawingSession{true}}).PointerDrawn(); !drawn {
+		t.Fatal("a VNC session drawing the pointer is said not to")
+	}
+	if (vncScreenSession{drawingSession{false}}).PointerDrawn() || (vncScreenSession{silentSession{}}).PointerDrawn() {
+		t.Fatal("a VNC session not drawing the pointer is said to")
+	}
+}
+
+type silentSession struct{}
+
+func (silentSession) Frames() <-chan screenstream.Message { return nil }
+func (silentSession) Input(screenstream.InputEvent) error { return nil }
+func (silentSession) Err() error                          { return nil }
+func (silentSession) Close() error                        { return nil }
+
+type drawingSession struct{ drawn bool }
+
+func (d drawingSession) Frames() <-chan screenstream.Message { return nil }
+func (d drawingSession) Input(screenstream.InputEvent) error { return nil }
+func (d drawingSession) Err() error                          { return nil }
+func (d drawingSession) Close() error                        { return nil }
+func (d drawingSession) PointerDrawn() bool                  { return d.drawn }
