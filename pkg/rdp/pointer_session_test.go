@@ -221,3 +221,57 @@ func decodePNG(t *testing.T, data []byte) *image.RGBA {
 	draw.Draw(img, img.Bounds(), decoded, image.Point{}, draw.Src)
 	return img
 }
+
+// ServerBytes counts what the target sent, to the byte: the throughput ADR-0090 (lot A) measures.
+func TestServerBytesCountsWhatTheTargetSent(t *testing.T) {
+	stream := pointerStream()
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		tlsConn := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		defer tlsConn.Close()
+		if tlsConn.Handshake() == nil {
+			_ = writeFull(tlsConn, stream)
+			var one [1]byte
+			_, _ = tlsConn.Read(one[:])
+		}
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+	session := &CredSSPClientSession{
+		transport: &Transport{Conn: tlsConn}, connectionFinalized: true, capabilitiesExchanged: true,
+		mcsResponse:        MCSConnectResponse{IOChannelID: mcsGlobalChannelID},
+		mcsSettings:        MCSClientSettings{PointerShapes: true},
+		serverCapabilities: RDPServerCapabilities{ShareID: 0x000103ea, DesktopWidth: 8, DesktopHeight: 8, PreferredBitsPerPixel: 32},
+	}
+	defer session.Close()
+	if session.ServerBytes() != 0 {
+		t.Fatal("bytes counted before any read")
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := session.ReadBitmapUpdate(context.Background(), 2*time.Second); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := session.ServerBytes(); got != uint64(len(stream)) {
+		t.Fatalf("ServerBytes %d, want the %d bytes the target sent", got, len(stream))
+	}
+	if (*CredSSPClientSession)(nil).ServerBytes() != 0 {
+		t.Fatal("a nil session counts something")
+	}
+}
