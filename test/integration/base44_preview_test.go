@@ -13,8 +13,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/png"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -89,7 +91,8 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 		id, attach := newAttach(t)
 		conn := dialScreen(t, preview, attach.path, attach.cookie)
 		defer conn.Close(websocket.StatusNormalClosure, "")
-		if hello := readScreen(t, conn); hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id {
+		// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
+		if hello := readScreen(t, conn); hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1 {
 			t.Fatalf("first message: %+v", hello)
 		}
 		before := readFrame(t, conn)
@@ -107,6 +110,23 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 		}
 		if !changed {
 			t.Fatal("the screen did not change after the keys: they did not reach the target")
+		}
+
+		// The pointer (ADR-0091): TigerVNC sends its shape (Cursor pseudo-encoding) and leaves it out
+		// of its framebuffer; the proxy draws it where the operator put it, in the recorded frame.
+		const px, py = 300, 200
+		quiet := readFrameOrNothing(t, conn, 2*time.Second, before)
+		writeScreen(t, conn, inputPointer(px, py, 0))
+		drawn := false
+		for deadline := time.Now().Add(10 * time.Second); !drawn && time.Now().Before(deadline); {
+			frame := readFrame(t, conn)
+			drawn = differsAround(t, quiet.png, frame.png, px, py)
+			if dir := os.Getenv("BASE44_PREVIEW_DUMP"); dir != "" && drawn {
+				_ = os.WriteFile(filepath.Join(dir, "vnc-pointer.png"), frame.png, 0o600)
+			}
+		}
+		if !drawn {
+			t.Fatal("no frame shows the pointer where the operator put it")
 		}
 
 		if status, raw := api.call(token, http.MethodDelete, "/sessions/"+id, nil); status/100 != 2 {
@@ -155,4 +175,42 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 			readFrame(t, conn)
 		})
 	}
+}
+
+// readFrameOrNothing reads frames until none comes for quiet, and returns the last (or fallback).
+func readFrameOrNothing(t *testing.T, conn *websocket.Conn, quiet time.Duration, fallback screenMessage) screenMessage {
+	t.Helper()
+	last := fallback
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), quiet)
+		typ, data, err := conn.Read(ctx)
+		cancel()
+		if err != nil {
+			return last
+		}
+		if typ == websocket.MessageBinary && len(data) >= 32 && data[1] == 1 {
+			last = screenMessage{kind: 1, png: data[32:]}
+		}
+	}
+}
+
+// differsAround says whether two frames differ in the 32×32 square at (x, y).
+func differsAround(t *testing.T, before, after []byte, x, y int) bool {
+	t.Helper()
+	a, err := png.Decode(bytes.NewReader(before))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := png.Decode(bytes.NewReader(after))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for dy := -16; dy < 16; dy++ {
+		for dx := -16; dx < 16; dx++ {
+			if a.At(x+dx, y+dy) != b.At(x+dx, y+dy) {
+				return true
+			}
+		}
+	}
+	return false
 }
