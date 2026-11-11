@@ -56,6 +56,8 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const buttons = useRef(0);
   const [phase, setPhase] = useState<Phase>({ name: "connecting" });
   const [isRDP, setIsRDP] = useState(false);
+  // The pointer is in the frames (HELLO, ADR-0091): the browser's own arrow would be a second one.
+  const [pointerDrawn, setPointerDrawn] = useState(false);
   const [hasFrame, setHasFrame] = useState(false);
 
   const send = useCallback((message: Uint8Array<ArrayBuffer>) => {
@@ -94,6 +96,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       if (message.type === "hello") {
         protocol.current = message.protocol;
         setIsRDP(message.protocol === "rdp");
+        setPointerDrawn(message.pointerDrawn);
         setPhase({ name: "live", expiresAt: message.expiresAt });
       } else if (message.type === "end") {
         finish(endMessage(message.text));
@@ -235,7 +238,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       {phase.name === "ended" ? <p className="notice error" role="alert">{phase.message}</p> : null}
       <canvas
         ref={canvas}
-        className="screen-canvas"
+        className={pointerDrawn ? "screen-canvas pointer-drawn" : "screen-canvas"}
         tabIndex={0}
         role="img"
         aria-label="Écran distant de la session, non lisible par un lecteur d'écran"

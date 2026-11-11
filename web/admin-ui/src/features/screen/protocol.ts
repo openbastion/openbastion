@@ -13,7 +13,8 @@ const INPUT_SIZE = 16;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 export type ScreenMessage =
-  | { type: "hello"; protocol: "rdp" | "vnc"; expiresAt: Date; sessionId: string }
+  // pointerDrawn: the frames carry the target's pointer (ADR-0091), the page hides its own.
+  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; expiresAt: Date; sessionId: string }
   | { type: "frame"; sequence: bigint; width: number; height: number; png: Uint8Array<ArrayBuffer> }
   | { type: "end"; sequence: bigint; code: number; text: string };
 
@@ -22,6 +23,8 @@ export class ScreenProtocolError extends Error {}
 function refuse(what: string): never {
   throw new ScreenProtocolError(what);
 }
+
+const HELLO_POINTER_DRAWN = 0x01;
 
 export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
   if (data.byteLength < HEADER_SIZE) refuse("short message");
@@ -44,11 +47,12 @@ export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
     case 2: {
       if (sequence !== 0n || width !== 0 || height !== 0 || length < 14) refuse("malformed hello");
       const protocol = payload[0] === 1 ? "rdp" : payload[0] === 2 ? "vnc" : refuse("unknown protocol");
-      if (payload[1] !== 0) refuse("malformed hello");
+      // The flags byte: bit 0 says the pointer is drawn; the others are reserved and zero.
+      if ((payload[1] & ~HELLO_POINTER_DRAWN) !== 0) refuse("malformed hello");
       const fields = new DataView(data, HEADER_SIZE);
       const idLength = fields.getUint32(10);
       if (idLength === 0 || idLength > MAX_SESSION_ID_BYTES || idLength !== length - 14) refuse("malformed hello");
-      return { type: "hello", protocol, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
+      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
     }
     case 3: {
       if (sequence === 0n || width !== 0 || height !== 0 || length < 4) refuse("malformed end");

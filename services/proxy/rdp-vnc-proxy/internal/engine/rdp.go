@@ -237,6 +237,10 @@ type rdpScreenSessionAdapter struct {
 
 func (s *rdpScreenSessionAdapter) Frames() <-chan screenstream.Message { return s.frames }
 
+// PointerDrawn says the frames carry the pointer (RDPCodec.DrawPointer, ADR-0091): the HELLO says
+// so, and the operator's browser hides its own.
+func (s *rdpScreenSessionAdapter) PointerDrawn() bool { return s.pointer != nil }
+
 // Input translates bounded ScreenStream events to RDP slow-path input PDUs.
 // Keysym-only input and extended mouse buttons are rejected rather than guessed.
 func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {

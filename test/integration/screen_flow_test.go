@@ -251,7 +251,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		defer conn.Close(websocket.StatusNormalClosure, "")
 
 		hello := readScreen(t, conn)
-		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id {
+		// VNC draws no pointer yet (ADR-0091, increment 3): the page keeps the browser's.
+		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 0 {
 			t.Fatalf("first message: %+v", hello)
 		}
 		first := readFrame(t, conn)
@@ -602,6 +603,7 @@ type screenMessage struct {
 	sequence      uint64
 	png           []byte
 	helloProtocol byte
+	helloFlags    byte // bit 0: the pointer is in the frames (ADR-0091)
 	helloSession  string
 	endText       string
 }
@@ -628,7 +630,7 @@ func readScreenWithin(t *testing.T, conn *websocket.Conn, limit time.Duration) s
 	case 1:
 		m.png = payload
 	case 2:
-		m.helloProtocol = payload[0]
+		m.helloProtocol, m.helloFlags = payload[0], payload[1]
 		m.helloSession = string(payload[14:])
 	case 3:
 		m.endText = string(payload[4:])

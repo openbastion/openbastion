@@ -25,11 +25,12 @@ function oversizedFrame(): ArrayBuffer {
   return header(1, 1n, 1, 1, payload);
 }
 const frame = (sequence: bigint, width = 100, height = 50) => header(1, sequence, width, height, PNG);
-function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc"): ArrayBuffer {
+function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc", pointerDrawn = false): ArrayBuffer {
   const bytes = [...new TextEncoder().encode(id)];
   const p = new Uint8Array(14 + bytes.length);
   const v = new DataView(p.buffer);
   p[0] = protocol === "rdp" ? 1 : 2;
+  p[1] = pointerDrawn ? 1 : 0;
   v.setBigUint64(2, 1893456000n);
   v.setUint32(10, bytes.length);
   p.set(bytes, 14);
@@ -117,6 +118,8 @@ describe("the screen contract (ADR-0071 §6)", () => {
       "PNG over 4 MiB": oversizedFrame(),
       "hello with a frame size": tampered((b) => (b[23] = 1), hello()),
       "hello unknown protocol": tampered((b) => (b[32] = 3), hello()),
+      "hello reserved flag": tampered((b) => (b[33] = 2), hello()),
+      "hello reserved flag beside the pointer": tampered((b) => (b[33] = 0x81), hello()),
       "end sequence zero": end("x", 0n),
       "end text not UTF-8": header(3, 1n, 0, 0, [0, 0, 0, 2, 0xc3, 0x28]),
     };
@@ -177,6 +180,24 @@ describe("where the socket goes (ADR-0071 §7)", () => {
     expect(s.urls[0][1]).toBe(SUBPROTOCOL);
     expect(s.socket.binaryType).toBe("arraybuffer");
     s.view.unmount();
+  });
+});
+
+describe("the pointer drawn into the frames (ADR-0091)", () => {
+  it("reads the HELLO's flag", () => {
+    expect(decodeScreenMessage(hello("s1", "rdp", true))).toMatchObject({ type: "hello", pointerDrawn: true });
+    expect(decodeScreenMessage(hello("s1", "rdp", false))).toMatchObject({ type: "hello", pointerDrawn: false });
+  });
+
+  it("hides the browser's arrow only when the frames carry the pointer", async () => {
+    for (const drawn of [true, false]) {
+      const s = setup();
+      s.socket.receive(hello("s1", "rdp", drawn));
+      s.socket.receive(frame(1n));
+      await waitFor(() => expect(s.shown.length).toBe(1));
+      expect(s.canvas.classList.contains("pointer-drawn")).toBe(drawn);
+      s.view.unmount();
+    }
   });
 });
 

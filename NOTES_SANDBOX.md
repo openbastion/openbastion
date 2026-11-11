@@ -3036,6 +3036,23 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0091, incrément 4 : l'Admin UI ne montre plus deux pointeurs
+
+Le propriétaire a choisi un **drapeau dans `HELLO`** (plutôt qu'un réticule local, ou `cursor: none` pour tout RDP). Le bit 0 de l'octet qui suit le protocole, jusque-là réservé à zéro, dit que le pointeur est dans les images (`screenstream.HelloPointerDrawn`). Les autres bits restent réservés : posés, ils font refuser le message, côté Go comme côté UI.
+- Une session qui dessine le pointeur le dit (`proxycore.PointerDrawer`), et `ServeScreen` le reporte dans le `HELLO`. L'adaptateur RDP le dit quand `DrawPointer` est vrai ; VNC ne dit rien, donc 0.
+- L'Admin UI lit le drapeau et met alors la classe `pointer-drawn` sur le canvas (`cursor: none`). Sans le drapeau, la flèche du navigateur reste.
+- ADR-0071 §6 (contrat) et ADR-0091 §5 amendés.
+
+**Prouvé** :
+- Go : aller-retour du codec et bits réservés refusés, `HELLO` du relais (dessiné, non dessiné, session muette), adaptateur RDP ;
+- UI : décodage, bits réservés refusés, classe posée seulement avec le drapeau ;
+- **9 mutations, 9 tuées**. La règle CSS ne s'éprouve pas sous jsdom : c'est la classe qui est testée ;
+- processus réels : le parcours RDP par l'API publique reçoit le drapeau à 1, le parcours VNC à 0 (base PostgreSQL jetable en local, deux tests verts).
+
+**Limite** : un décodeur antérieur refuse un `HELLO` qui porte le drapeau. L'UI et le proxy sont livrés ensemble ; un client tiers devra suivre.
+
+**Corrigé au passage (défaut de l'incrément 1)** : la CI de la PR #124 a refusé une forme du serveur shadow de FreeRDP, et la description du refus l'a dite entière : `xorBpp 24, cache 0, hot spot 0,2, 1x2`, avec un octet de padding. Le point chaud était hors de la forme, ce que MS-RDPBCGR n'interdit pas. Il est désormais borné par la taille maximale d'une forme (< 32), plus par la forme elle-même ; le dessin découpe ce qui sort du bureau. Cette forme n'arrive pas à chaque session : c'est vraisemblablement la cause de l'échec du parcours RDP par l'API publique, vu une fois sur la PR #123 et passé à la relance. Test et 3 mutations tuées, dont le retour à l'ancienne règle.
+
 ## 2026-11-11 — ADR-0091, incrément 2 : le pointeur RDP dessiné dans l'image
 
 Le pointeur est branché de bout en bout, derrière `SCREEN_DRAW_POINTER` (allumé par défaut ; `false` rend le comportement antérieur, toute autre valeur arrête le service) :

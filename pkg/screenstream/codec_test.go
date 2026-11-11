@@ -169,3 +169,34 @@ func TestInputRejectsUnexpectedFields(t *testing.T) {
 		t.Fatalf("release-all with wheel data error = %v, want malformed message", err)
 	}
 }
+
+// The pointer flag (ADR-0091): bit 0 of the byte after the protocol, which was reserved and zero.
+// A HELLO without it is the HELLO of before; a reserved bit set is still refused.
+func TestHelloSaysWhetherThePointerIsDrawn(t *testing.T) {
+	for _, drawn := range []bool{false, true} {
+		in := Message{Type: TypeHello, Timestamp: time.Unix(100, 0).UTC(), Protocol: ProtocolRDP,
+			ExpiresAt: time.Unix(200, 0).UTC(), SessionID: "s", PointerDrawn: drawn}
+		wire, err := Encode(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := byte(0)
+		if drawn {
+			want = HelloPointerDrawn
+		}
+		if wire[HeaderSize+1] != want {
+			t.Fatalf("drawn %v: flags byte %#x, want %#x", drawn, wire[HeaderSize+1], want)
+		}
+		got, err := Decode(wire)
+		if err != nil || got.PointerDrawn != drawn {
+			t.Fatalf("drawn %v: decoded %v, %v", drawn, got.PointerDrawn, err)
+		}
+		for _, reserved := range []byte{0x02, 0x80, 0x03} {
+			bad := append([]byte(nil), wire...)
+			bad[HeaderSize+1] = reserved
+			if _, err := Decode(bad); err == nil {
+				t.Fatalf("a reserved flag %#x is accepted", reserved)
+			}
+		}
+	}
+}

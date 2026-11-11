@@ -274,3 +274,15 @@ func provePointerIsDrawn(t *testing.T, session proxycore.ScreenSession, targetSe
 		t.Fatal("no pointer update from the target: the pointer cache was not announced, or the updates are still ignored")
 	}
 }
+
+// The session says whether it draws the pointer: the HELLO carries it to the operator's browser.
+func TestRDPCodec_TheSessionSaysWhetherItDrawsThePointer(t *testing.T) {
+	for _, draw := range []bool{false, true} {
+		target := &fakeRDPDesktop{width: 16, height: 16, updates: []rdp.RDPBitmapUpdate{grayDesktop(16, 16)}}
+		session := openPointerSession(t, target, draw)
+		drawer, ok := session.(proxycore.PointerDrawer)
+		if !ok || drawer.PointerDrawn() != draw {
+			t.Fatalf("DrawPointer %v: the session says %v (%v)", draw, ok && drawer.PointerDrawn(), ok)
+		}
+	}
+}

@@ -895,3 +895,39 @@ func TestServeScreen_AFrameBeyondTheRecordableSizeIsARecordingLoss(t *testing.T)
 		t.Fatalf("audit events %v", audit.events)
 	}
 }
+
+// drawingScreenSession is a session that says whether it draws the pointer (ADR-0091).
+type drawingScreenSession struct {
+	*fakeScreenSession
+	drawn bool
+}
+
+func (s drawingScreenSession) PointerDrawn() bool { return s.drawn }
+
+type drawingScreenCodec struct{ session ScreenSession }
+
+func (c drawingScreenCodec) Open(context.Context, *Credential) (ScreenSession, error) {
+	return c.session, nil
+}
+
+// The HELLO says what the session says: the pointer is in the frames, or it is not; a session that
+// says nothing draws none.
+func TestServeScreen_TheHelloSaysWhetherThePointerIsDrawn(t *testing.T) {
+	for name, c := range map[string]struct {
+		session ScreenSession
+		want    bool
+	}{
+		"drawn":     {drawingScreenSession{newFakeScreenSession(validScreenFrame(1)), true}, true},
+		"not drawn": {drawingScreenSession{newFakeScreenSession(validScreenFrame(1)), false}, false},
+		"silent":    {newFakeScreenSession(validScreenFrame(1)), false},
+	} {
+		l, _ := screenListener(&fakeVault{material: []byte("ephemeral-secret")})
+		sink := &fakeScreenSink{}
+		if err := l.ServeScreen(context.Background(), screenMeta(), drawingScreenCodec{c.session}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(sink.messages) == 0 || sink.messages[0].Type != screenstream.TypeHello || sink.messages[0].PointerDrawn != c.want {
+			t.Fatalf("%s: HELLO %+v, want PointerDrawn %v", name, sink.messages, c.want)
+		}
+	}
+}
