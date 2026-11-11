@@ -3036,6 +3036,24 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0091, incrément 3 : le pointeur VNC dessiné dans l'image
+
+Avec l'encodage `Cursor`, la cible VNC laisse son pointeur hors de son tampon d'image et en envoie la forme. Le proxy la jetait ; il la dessine désormais, derrière le même `SCREEN_DRAW_POINTER`.
+- **Décodage** (`pkg/vnc/pointer.go`) : 32 bpp au format de la session, masque d'un bit, ligne par ligne, bit de poids fort d'abord. La borne est de 128 × 128 pixels, point chaud compris (RFB n'en fixe pas, les thèmes X vont au-delà de 32). Une forme vide cache le pointeur ; une forme hors borne ferme la session.
+- **Dessin** : sur une copie du tampon, à la position de l'opérateur, et seulement quand une forme a été reçue. Sinon, la cible dessine son pointeur elle-même, et il n'en faut pas deux.
+- **Déplacements** : la cible ne répond pas à un simple déplacement. `pointerLoop` fait une image de chaque déplacement, à la cadence. Un verrou (`frameMu`) ordonne ses images et celles du lecteur sur un seul tampon et une seule séquence. Le lecteur attend la fin de la boucle avant de fermer le canal des images.
+- La session le dit (`PointerDrawn`) : le `HELLO` VNC porte désormais le drapeau à 1, et l'Admin UI cache la flèche du navigateur.
+
+**Prouvé** :
+- 7 tests et un fuzzer (`FuzzReadCursor`, 20 s), sous `-race` ;
+- **16 mutations, 16 tuées**. Au premier passage, 2 ont survécu (un pixel transparent sur un fond noir, le découpage au bord droit) ; le test a été renforcé ;
+- parcours VNC et RDP sur processus réels (base PostgreSQL jetable) : drapeau à 1 dans les deux ;
+- **contre TigerVNC réel** (le `vnc-target` du bac à sable Base44, sondé depuis l'hôte avec `pkg/vnc`) : TigerVNC envoie le curseur texte de xterm (9 × 16, point chaud 4,8), dessiné à la position de l'opérateur et jugé sur PNG.
+
+**Non vérifié** : le parcours complet Base44 (`TestBase44Preview`, désormais étendu au pointeur). Le bac à sable local a son Video Recorder en boucle de redémarrage : SeaweedFS ne tourne pas, et le job PKI ne peut pas télécharger un module Go faute de réseau. Ce problème est antérieur à ce changement.
+
+**Choix renversables** : la borne 128 ; rien dessiné tant que la cible n'a pas envoyé de forme ; une image par déplacement, à la cadence.
+
 ## 2026-11-11 — ADR-0091, incrément 4 : l'Admin UI ne montre plus deux pointeurs
 
 Le propriétaire a choisi un **drapeau dans `HELLO`** (plutôt qu'un réticule local, ou `cursor: none` pour tout RDP). Le bit 0 de l'octet qui suit le protocole, jusque-là réservé à zéro, dit que le pointeur est dans les images (`screenstream.HelloPointerDrawn`). Les autres bits restent réservés : posés, ils font refuser le message, côté Go comme côté UI.
