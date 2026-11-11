@@ -102,11 +102,11 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 			writeScreen(t, conn, inputKey(key, true))
 			writeScreen(t, conn, inputKey(key, false))
 		}
-		changed := false
+		changed, last := false, before
 		deadline := time.Now().Add(15 * time.Second)
 		for !changed && time.Now().Before(deadline) {
-			frame := readFrame(t, conn)
-			changed = !bytes.Equal(frame.png, before.png)
+			last = readFrame(t, conn)
+			changed = !bytes.Equal(last.png, before.png)
 		}
 		if !changed {
 			t.Fatal("the screen did not change after the keys: they did not reach the target")
@@ -115,12 +115,12 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 		// The pointer (ADR-0091): TigerVNC sends its shape (Cursor pseudo-encoding) and leaves it out
 		// of its framebuffer; the proxy draws it where the operator put it, in the recorded frame.
 		const px, py = 300, 200
-		quiet := readFrameOrNothing(t, conn, 2*time.Second, before)
+		// Far from the text `cat` echoes at the top of the terminal: only the pointer changes there.
 		writeScreen(t, conn, inputPointer(px, py, 0))
 		drawn := false
 		for deadline := time.Now().Add(10 * time.Second); !drawn && time.Now().Before(deadline); {
 			frame := readFrame(t, conn)
-			drawn = differsAround(t, quiet.png, frame.png, px, py)
+			drawn = differsAround(t, last.png, frame.png, px, py)
 			if dir := os.Getenv("BASE44_PREVIEW_DUMP"); dir != "" && drawn {
 				_ = os.WriteFile(filepath.Join(dir, "vnc-pointer.png"), frame.png, 0o600)
 			}
@@ -174,23 +174,6 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 			defer conn.Close(websocket.StatusNormalClosure, "")
 			readFrame(t, conn)
 		})
-	}
-}
-
-// readFrameOrNothing reads frames until none comes for quiet, and returns the last (or fallback).
-func readFrameOrNothing(t *testing.T, conn *websocket.Conn, quiet time.Duration, fallback screenMessage) screenMessage {
-	t.Helper()
-	last := fallback
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), quiet)
-		typ, data, err := conn.Read(ctx)
-		cancel()
-		if err != nil {
-			return last
-		}
-		if typ == websocket.MessageBinary && len(data) >= 32 && data[1] == 1 {
-			last = screenMessage{kind: 1, png: data[32:]}
-		}
 	}
 }
 
