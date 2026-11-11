@@ -40,7 +40,9 @@ const (
 	rdpInteropName     = "rdp-target"
 )
 
-func startRDPInteropTarget(t *testing.T) rdpInteropTarget {
+// startRDPInteropTarget starts FreeRDP's shadow server; env adds to its container's environment
+// (RDP_DISPLAY=resizable: Xvnc, which also gives the shadow server a pointer to send).
+func startRDPInteropTarget(t *testing.T, env ...string) rdpInteropTarget {
 	t.Helper()
 	if os.Getenv("RDP_INTEROP") == "" {
 		t.Skip("RDP_INTEROP not set: this test builds and starts a real RDP server in Docker")
@@ -52,8 +54,12 @@ func startRDPInteropTarget(t *testing.T) rdpInteropTarget {
 		t.Fatalf("docker build: %v\n%s", err, out)
 	}
 	container := fmt.Sprintf("ob-rdp-interop-%d", os.Getpid())
-	if out, err := exec.Command("docker", "run", "-d", "--rm", "--name", container, "-p", "127.0.0.1::3389",
-		"-e", "RDP_USER="+rdpInteropUser, "-e", "RDP_PASSWORD="+rdpInteropPassword, image).CombinedOutput(); err != nil {
+	args := []string{"run", "-d", "--rm", "--name", container, "-p", "127.0.0.1::3389",
+		"-e", "RDP_USER=" + rdpInteropUser, "-e", "RDP_PASSWORD=" + rdpInteropPassword}
+	for _, variable := range env {
+		args = append(args, "-e", variable)
+	}
+	if out, err := exec.Command("docker", append(args, image)...).CombinedOutput(); err != nil {
 		t.Fatalf("docker run: %v\n%s", err, out)
 	}
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", container).Run() })
@@ -139,6 +145,30 @@ func TestRDPInterop_CredSSP(t *testing.T) {
 		time.Sleep(time.Second)
 		if logs := target.logs(t)[len(before):]; strings.Contains(logs, "NTLM") || strings.Contains(logs, "AcceptSecurityContext") {
 			t.Fatalf("the target received CredSSP: %s", logs)
+		}
+	})
+}
+
+// The pointer drawn into the frames (ADR-0091), against FreeRDP, on Xvnc as the recording test.
+func TestRDPInterop_Pointer(t *testing.T) {
+	target := startRDPInteropTarget(t, "RDP_DISPLAY=resizable")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second, DrawPointer: true}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+	provePointerIsDrawn(t, session, false, func(name string, frame screenstream.Message) {
+		if dir := os.Getenv("RDP_INTEROP_DUMP"); dir != "" {
+			_ = os.WriteFile(filepath.Join(dir, name), frame.PNG, 0o600)
 		}
 	})
 }

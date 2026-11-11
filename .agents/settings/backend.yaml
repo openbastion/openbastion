@@ -1,5 +1,5 @@
 go:
-  version: "go.mod : 1.22 (12 modules) ou 1.26.0 (5) ; chaîne de la CI 1.27.3 (GO_VERSION de ci.yml) — la chaîne locale peut être plus ancienne : make vuln avec GOTOOLCHAIN=go1.27.3, sinon govulncheck signale la bibliothèque standard locale"
+  version: "go.mod : 1.22 (12 modules) ou 1.26.0 (5) ; chaîne de la CI 1.27.4 (GO_VERSION de ci.yml) — la chaîne locale peut être plus ancienne : make vuln avec GOTOOLCHAIN=go1.27.4, sinon govulncheck signale la bibliothèque standard locale"
   workspace: go.work         # export GOWORK=$PWD/go.work
   formatting: gofmt sur les fichiers modifiés seulement
   vet: obligatoire

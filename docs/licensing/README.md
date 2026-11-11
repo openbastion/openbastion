@@ -4,7 +4,7 @@ OpenBastion est distribué sous GNU AGPL v3.0 only (`AGPL-3.0-only`). Le texte c
 
 ## Contrôles automatisés
 
-- `make license-check` vérifie les déclarations SPDX des paquets npm, des lockfiles, d'OpenAPI et des paramètres du projet, ainsi que la présence et la cohérence des notices.
+- `make license-check` vérifie les déclarations SPDX des paquets npm, des lockfiles, d'OpenAPI et des paramètres du projet. Il contrôle également l'inventaire des Agent Skills, leurs hashes de contenu, leurs révisions sources, leurs licences et les notices tierces.
 - Le workflow CI `Containers` génère des SBOM CycloneDX source et image runtime, ainsi qu'un rapport JSON des licences avec Trivy, en incluant les dépendances de développement npm.
 - Le contrôle des licences de dépendances échoue sur les licences classées `HIGH` ou `CRITICAL` par Trivy. L'identifiant `AGPL-3.0-only` est explicitement ignoré **uniquement dans ce contrôle bloquant**, car c'est la licence du projet et elle est admise par sa politique de compatibilité ; il reste présent dans l'inventaire complet des licences et le SBOM. Cette exception ne s'étend à aucune autre licence. Le rapport complet inclut également les fichiers source et documents. Les résultats `UNKNOWN` et les classifications moins sévères restent dans le rapport artefact et nécessitent une revue humaine ; le scanner ne décide pas à lui seul de la compatibilité juridique.
 - Les artefacts `openbastion-source-sbom.cdx.json`, `openbastion-runtime-sbom.cdx.json` et `openbastion-license-report.json` sont publiés sous `openbastion-supply-chain-<commit>` pendant 30 jours.
@@ -24,4 +24,4 @@ Pour une offre hébergée ou une version modifiée, l'exploitant doit publier le
 
 ## Inventaire des Agent Skills
 
-Voir [`skills-provenance.md`](skills-provenance.md) et [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md). Les éléments dont la provenance est inconnue restent bloqués pour approbation jusqu'à leur vérification ; aucune licence n'est inférée par défaut.
+Voir l'[inventaire de provenance](skills-provenance.md), le [manifeste vérifiable](skills-provenance.json) et les [notices tierces](../../THIRD_PARTY_NOTICES.md). L'inventaire distingue 85 compétences importées sous MIT et 10 compétences originales OpenBastion sous AGPL-3.0-only. Les écarts locaux par rapport aux sources amont sont explicitement documentés ; aucune compétence n'est déclarée originale ou tierce sans rattachement à une source ou à un historique Git.

@@ -3036,6 +3036,65 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0091, incrément 2 : le pointeur RDP dessiné dans l'image
+
+Le pointeur est branché de bout en bout, derrière `SCREEN_DRAW_POINTER` (allumé par défaut ; `false` rend le comportement antérieur, toute autre valeur arrête le service) :
+- **`pkg/rdp`** : `MCSClientSettings.PointerShapes` annonce un cache de 25 formes, couleur et nouvelles, dans le Pointer Capability Set. `ReadBitmapUpdate` rend alors les mises à jour de pointeur (`RDPBitmapUpdate.Pointer`, sans rectangle), en Fast-Path comme en slow-path, et dit qu'une réactivation a eu lieu (`Reactivated`). Éteint, rien ne change : pas de cache, mises à jour ignorées. Une mise à jour hors profil est refusée (`ErrRDPPointer`, avec la description du paquet).
+- **`FrameWithPointer`** dessine le pointeur sur une copie du bureau, encode cette copie, puis la jette.
+- **Moteur** : `RDPCodec.DrawPointer`. Les mises à jour de la cible sont appliquées au fil de la lecture, et le déplacement de l'opérateur (`Input`) place le pointeur. Chaque changement passe par la cadence : une image par intervalle au plus, la dernière position. Un clic sur place ne fait pas d'image. Une réactivation vide le cache, et une mise à jour de pointeur que le client n'a pas demandée ferme le flux.
+
+**Prouvé** :
+- unitaires : 3 tests `pkg/rdp` sur TLS réel (Fast-Path et slow-path dans l'ordre, refus selon le réglage, capacité), le dessin sur copie, et 5 tests moteur (pointeur de l'opérateur, pointeur de la cible et son cache, refus, réglage éteint, cadence), sous `-race` ;
+- **20 mutations : 19 tuées, une ne peut l'être que contre une cible réelle** (le réglage non transmis à la session). Le test Windows exige donc des mises à jour de pointeur de la cible ;
+- **contre FreeRDP 3** (`TestRDPInterop_Pointer`, local) : la session vit et le pointeur est dans l'image (69 pixels changés sous lui). Le serveur de test n'envoie **aucune** mise à jour de pointeur, c'est donc la flèche du proxy qui est dessinée, jugée sur PNG ;
+- contre Windows (CI de la PR #123, premier passage) : sur Windows Server 2022 en 16 et 32 bpp, **9 à 12 mises à jour de pointeur**, toutes des formes de Windows, toutes acceptées, et le pointeur est dans l'image. **Windows Server 2019 a fermé la session** sur une forme « nouvelle » de 272 octets : un pointeur monochrome 32 × 32 à 1 bpp, que l'ADR ne prévoyait pas. Le 1 bpp est désormais décodé : blanc ou noir, inversant ou clair selon AND, masques lus de haut en bas comme FreeRDP le fait contre Windows. Test et 4 mutations sur 4 tuées. L'orientation reste à juger sur la PNG de la CI suivante ;
+- l'enregistrement RDP de bout en bout contre FreeRDP sur Xvnc (CI PostgreSQL) a aussi fermé la session sur une forme « nouvelle » de 29 octets, que la sonde locale n'a pas reproduite. Les refus disent désormais l'en-tête de la forme (profondeur, taille, point chaud, longueurs), jamais un pixel (`describeRDPPointerHeader`). `TestRDPInterop_Pointer` tourne désormais sur Xvnc.
+
+**Limites** : l'Admin UI montre encore la flèche du navigateur en plus de celle de l'image (incrément 4) ; VNC sans pointeur (incrément 3) ; chaque mise à jour de pointeur de la cible fait une image, même invisible (une forme non placée) ; le volume enregistré n'a pas été mesuré (lot A d'ADR-0090).
+
+**Choix renversables** : allumé par défaut (ADR-0091) ; une image pour chaque mise à jour de pointeur ; la position de l'opérateur prime jusqu'à la prochaine position de la cible, et inversement.
+
+## 2026-11-11 — ADR-0091, incrément 1 : les formes du pointeur RDP, décodées et bornées
+
+`pkg/rdp/pointer.go` décode les mises à jour de pointeur :
+- Fast-Path : codes 5 (caché), 6 (défaut), 8 (position), 9 (couleur), 10 (en cache) et 11 (nouveau) ;
+- slow-path : PDU 0x1b, avec ses messages système, position, couleur, en cache et nouveau.
+
+Il les suit dans `RDPPointer`, avec un cache de 25 formes, puis les dessine sur une **copie** du bureau (`DrawOn`), jamais dans le framebuffer.
+
+- **Formes** : 24 et 32 bpp, au plus 32 × 32 pixels (la borne de MS-RDPBCGR sans `LARGE_POINTER_FLAG`). Les masques sont lus de bas en haut, chaque ligne paddée à deux octets, avec des longueurs exactement celles que la taille impose, et un octet de padding final au plus.
+- **Rendu** : là où AND est à 0, la couleur XOR est opaque. Là où AND est à 1, le bureau est combiné par un ou exclusif avec la couleur XOR : le blanc inverse, le noir laisse transparaître. En 32 bpp, l'alpha est appliqué ; une forme dont l'alpha est nul partout est lue comme une forme 24 bpp.
+- **Refus** : tout le reste ferme la session (`ErrRDPPointer`, qui est un `ErrMCSConnection`). Cela couvre une autre profondeur, une forme trop grande, un point chaud hors de la forme, un index hors du cache et une entrée de cache jamais remplie.
+- **Défaut** : `SYSPTR_DEFAULT` ne transporte pas de forme ; le proxy dessine sa propre flèche, noire bordée de blanc. Rien n'est dessiné tant qu'aucune position n'est connue. Une réactivation (`Reset`) vide le cache et garde la position.
+
+**Corrigé dans l'ADR-0091** : il annonçait « 96 × 96 sans annonce de grands pointeurs ». MS-RDPBCGR 2.2.9.1.1.4.4 dit 32 × 32 sans `LARGE_POINTER_FLAG`.
+
+**Prouvé** :
+- 7 tests et un fuzzer, `FuzzParseRDPPointer` : 30 s, sans échec ;
+- **24 mutations, 24 tuées**. Au premier passage, 6 ont survécu et ont mis au jour 6 tests manquants, ajoutés depuis : des longueurs qui se compensent, une forme 16 bpp bien formée, une hauteur sans largeur, un pixel inversant dans une forme avec alpha, le pointeur dessiné avant toute position, et le masquage seul ;
+- toute la suite de `pkg/rdp`, et `-race` sur ces tests.
+
+**Non branché** : le Pointer Capability Set annonce toujours un cache de taille 0, `ReadBitmapUpdate` ignore encore ces mises à jour, et `Frame` ne dessine pas de pointeur. Le branchement fait l'objet de l'incrément 2 : capacité à 25, mises à jour suivies, position de l'opérateur, `SCREEN_DRAW_POINTER`. Il sera éprouvé contre FreeRDP et Windows.
+
+**Non vérifié** : les formes de Windows. On ne sait pas encore si le 32 bpp y est prémultiplié, ni si des formes 1 bpp y arrivent ; une forme refusée fermerait la session, et c'est l'incrément 2 qui le dira.
+
+**Choix renversables** : 24 et 32 bpp seulement ; l'alpha lu comme non prémultiplié ; la forme vide 0 × 0 acceptée ; le dessin de la flèche par défaut.
+
+## 2026-11-11 — Go 1.27.4 : GO-2026-6859 (`net/http`)
+
+Le 11 novembre 2026, `make vuln` (Security, PR #120) échoue : GO-2026-6859, trouvée dans `net/http@go1.27.3`, corrigée en 1.27.4, appelée par la CLI (`openbastion.userCreate`). La chaîne passe en 1.27.4 partout où 1.27.3 était épinglée : `GO_VERSION` des workflows, l'action `setup-go`, et les images `golang:1.27.4-alpine` de `deploy/docker-compose` et `deploy/base44`, épinglées au digest Docker Hub du 10 novembre (`sha256:0a5f7fe7…`). Les chaînes `go1.27.3` des tests de `buildinfo` et `command` sont des données d'exemple, laissées telles quelles. **Preuve** : le scan rouge sous 1.27.3 (run 42980977310), puis vert sous 1.27.4 dans la CI de cette PR. **Non vérifié en local** : `govulncheck` y est tué par l'environnement (voir plus haut).
+
+## 2026-11-11 — ADR-0071 : les touches étendues contre Windows
+
+`TestRDPWindows_ExtendedKeys`, aux cinq cibles :
+- les touches étendues arrivent : « / » du pavé, et AltGr+0 et AltGr+E en AZERTY (`/@€`) ;
+- le bouton Ctrl+Alt+Suppr affiche l'écran de sécurité ;
+- **la touche Windows seule n'ouvre pas le menu Démarrer**, alors que Ctrl+Échap l'ouvre. La cause n'est pas établie ; c'est une limite, et Ctrl+Échap en est l'équivalent.
+
+**Corrigé** : l'export de la cible prend le `kbd.txt` le plus récent, hors du partage.
+
+**Vu une fois de plus** : sur la cible console, après le logoff, Windows a cessé de répondre (X.224), et l'enregistrement et les isolements sont tombés. La même cible était passée à la PR #101.
+
 ## 2026-11-09 — ADR-0071 §3 : une fin de session par la cible se dit `session_ended`
 
 Écart de la relecture d'ADR-0071 : le Disconnect Provider Ultimatum était refusé, et l'opérateur lisait `target_unreachable` quand Windows fermait la session. Il donne désormais `rdp.ErrSessionEnded`, puis `END session_ended`. Une connexion qui ne fait que se fermer reste un échec : `crypto/tls` ne distingue pas un `close_notify` d'une cible morte.

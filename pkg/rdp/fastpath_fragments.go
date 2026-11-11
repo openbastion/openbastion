@@ -89,6 +89,17 @@ func (a *rdpFastPathAssembler) add(code, fragmentation byte, data []byte) ([]byt
 	}
 }
 
+// rdpFastPathCodeIsPointer is the closed list of the pointer's updates, decoded when the pointer is
+// drawn (ADR-0091) and ignored otherwise.
+func rdpFastPathCodeIsPointer(code byte) bool {
+	switch code {
+	case rdpFastPathPointerHidden, rdpFastPathPointerDefault, rdpFastPathPointerPosition,
+		rdpFastPathPointerColor, rdpFastPathPointerCached, rdpFastPathPointerNew:
+		return true
+	}
+	return false
+}
+
 // rdpFastPathCodeIsIgnored is the closed list of updates that show nothing in the screen stream:
 // synchronize, and the pointer, which the operator's browser draws itself.
 func rdpFastPathCodeIsIgnored(code byte) bool {

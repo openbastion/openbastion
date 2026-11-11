@@ -317,8 +317,8 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	caps = append(caps, bitmap...)
 	clear(bitmap)
 
-	// Advertise only the mandatory baseline: no primary orders, no pointer
-	// cache, and scancodes only (no fast-path, Unicode or extended mouse input).
+	// Advertise only the mandatory baseline: no primary orders, a pointer cache only when the
+	// pointer is drawn (PointerShapes), and scancodes only (no fast-path, Unicode or extended mouse input).
 	order := make([]byte, 88)
 	binary.LittleEndian.PutUint16(order[:2], rdpCapOrder)
 	binary.LittleEndian.PutUint16(order[2:4], uint16(len(order)))
@@ -331,6 +331,11 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	binary.LittleEndian.PutUint16(pointer[:2], rdpCapPointer)
 	binary.LittleEndian.PutUint16(pointer[2:4], uint16(len(pointer)))
 	binary.LittleEndian.PutUint16(pointer[4:6], 1) // Color Pointer Update is mandatory.
+	if settings.PointerShapes {
+		// colorPointerCacheSize and pointerCacheSize: the shapes RDPPointer keeps (ADR-0091).
+		binary.LittleEndian.PutUint16(pointer[6:8], rdpPointerCacheSize)
+		binary.LittleEndian.PutUint16(pointer[8:10], rdpPointerCacheSize)
+	}
 	caps = append(caps, pointer...)
 	clear(pointer)
 

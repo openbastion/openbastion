@@ -164,6 +164,13 @@ func (f *RDPFramebuffer) Draw(update RDPBitmapUpdate) error {
 // Frame encodes the desktop as it is now, as the next frame. A screen whose PNG is past 4 MiB
 // cannot be recorded: screenstream.ErrFrameTooLarge, which ends the session as a recording loss.
 func (f *RDPFramebuffer) Frame(timestamp time.Time) (screenstream.Message, error) {
+	return f.FrameWithPointer(timestamp, nil)
+}
+
+// FrameWithPointer is Frame with the pointer drawn over the desktop (ADR-0091): on a copy, which
+// is the image encoded, shown and recorded; the framebuffer itself stays the target's screen. A nil,
+// hidden or unplaced pointer draws nothing, and the frame is Frame's.
+func (f *RDPFramebuffer) FrameWithPointer(timestamp time.Time, pointer *RDPPointer) (screenstream.Message, error) {
 	if f == nil {
 		return screenstream.Message{}, ErrRDPFramebuffer
 	}
@@ -172,8 +179,13 @@ func (f *RDPFramebuffer) Frame(timestamp time.Time) (screenstream.Message, error
 	if f.image == nil || timestamp.IsZero() || f.sequence == ^uint64(0) {
 		return screenstream.Message{}, ErrRDPFramebuffer
 	}
+	picture := f.image
+	if pointer.drawable() {
+		picture = &image.RGBA{Pix: append([]byte(nil), f.image.Pix...), Stride: f.image.Stride, Rect: f.image.Rect}
+		pointer.DrawOn(picture)
+	}
 	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, f.image); err != nil || encoded.Len() == 0 {
+	if err := png.Encode(&encoded, picture); err != nil || encoded.Len() == 0 {
 		return screenstream.Message{}, ErrRDPFramebuffer
 	}
 	if encoded.Len() > screenstream.MaxPNGBytes {
