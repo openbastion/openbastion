@@ -5,8 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"sort"
+	"sync/atomic"
 	"time"
 )
 
@@ -1511,6 +1513,28 @@ func parseRDPBitmapUpdate(packet []byte, expectedChannelID uint16, shareID uint3
 	return parseRDPBitmapShareData(userData, shareID, desktopWidth, desktopHeight)
 }
 
+// countingReader counts the bytes read through it.
+type countingReader struct {
+	reader io.Reader
+	count  *atomic.Uint64
+}
+
+func (c countingReader) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	c.count.Add(uint64(n))
+	return n, err
+}
+
+// ServerBytes is the number of bytes of updates the target has sent since the connection was
+// finalized, as read from TLS (record payloads, not their framing): the throughput ADR-0090 (lot A)
+// measures. A reactivation's exchange is not counted.
+func (s *CredSSPClientSession) ServerBytes() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.serverBytes.Load()
+}
+
 // ReadBitmapUpdate reads and decodes one complete server graphics update after
 // connection finalization. It accepts bitmap updates and strict primary-order
 // subsets. The packet is bounded to a larger TPKT than the handshake path.
@@ -1529,6 +1553,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 		return update, ErrMCSConnection
 	}
 	conn := s.transport.Conn
+	// What the target sends, counted for the measurements of ADR-0090 (lot A).
+	counted := countingReader{reader: conn, count: &s.serverBytes}
 	ioChannelID := s.mcsResponse.IOChannelID
 	var shareID uint32
 	var desktopWidth, desktopHeight, sessionBPP uint16
@@ -1612,7 +1638,7 @@ readUpdate:
 			var fastPath bool
 			// A Fast-Path PDU is up to 0x7fff bytes (a 15-bit length): Windows fills it past
 			// 16 383 (CI run #46). A TPKT stays bounded by parseRDPBitmapMCSFragment.
-			packet, fastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPFastPathPacket)
+			packet, fastPath, readErr = readRDPServerUpdatePacket(counted, maxRDPFastPathPacket)
 			if readErr == nil && fastPath {
 				// One update per PDU, whole or in fragments (FIRST, NEXT..., LAST of one code),
 				// reassembled to the size this client announced, then shown or ignored.
@@ -1634,7 +1660,7 @@ readUpdate:
 					if !complete {
 						clear(packet)
 						var nextFastPath bool
-						packet, nextFastPath, readErr = readRDPServerUpdatePacket(conn, maxRDPFastPathPacket)
+						packet, nextFastPath, readErr = readRDPServerUpdatePacket(counted, maxRDPFastPathPacket)
 						if readErr != nil || !nextFastPath || ctx.Err() != nil {
 							clear(packet)
 							if errors.Is(readErr, ErrMCSConnection) {
@@ -1677,7 +1703,7 @@ readUpdate:
 				return update, nil
 			}
 		} else {
-			packet, readErr = readTPKTPacket(conn, maxRDPBitmapTPKTPacket)
+			packet, readErr = readTPKTPacket(counted, maxRDPBitmapTPKTPacket)
 		}
 		if readErr != nil {
 			clear(assembled)

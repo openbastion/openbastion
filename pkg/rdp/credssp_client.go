@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,9 +50,11 @@ type CredSSPClientConfig struct {
 // already verified TLS transport. The NTLM confidentiality keys are erased
 // immediately after the one-shot authInfo message is sent.
 type CredSSPClientSession struct {
-	mu                      sync.Mutex
-	readMu                  sync.Mutex
-	writeMu                 sync.Mutex
+	mu      sync.Mutex
+	readMu  sync.Mutex
+	writeMu sync.Mutex
+	// serverBytes counts what ReadBitmapUpdate reads from the target (ServerBytes, ADR-0090 lot A).
+	serverBytes             atomic.Uint64
 	transport               *Transport
 	version                 uint32
 	credentialsDelegated    bool
