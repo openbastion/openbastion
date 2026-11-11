@@ -36,13 +36,13 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
    - Une forme invalide ferme la session, comme tout PDU hors profil.
 3. **Position** : la dernière connue, venant de l'opérateur ou de la cible. Elle est bornée par le bureau ; le point chaud est respecté.
 4. **Cadence** : un déplacement du pointeur change l'image et part à la cadence `SCREEN_FRAME_INTERVAL_MS` (ADR-0071 §8). Aucun flux d'images par pixel parcouru.
-5. **Admin UI** : le canvas cache la flèche du navigateur (`cursor: none`) au-dessus de l'écran, pour que l'opérateur ne voie pas deux pointeurs. Le pointeur qu'il voit est celui de l'image, avec la latence d'un aller-retour par le proxy et l'acquittement.
+5. **Admin UI** : le canvas cache la flèche du navigateur (`cursor: none`) au-dessus de l'écran, pour que l'opérateur ne voie pas deux pointeurs. Le pointeur qu'il voit est celui de l'image, avec la latence d'un aller-retour par le proxy et l'acquittement. **Amendé le 11 novembre 2026** : l'Admin UI ne cache sa flèche que si le `HELLO` le lui dit. Le bit 0 de l'octet qui suit le protocole, jusque-là réservé à zéro, signifie « le pointeur est dans les images ». Avec le réglage éteint, ou en VNC tant que l'incrément 3 n'est pas fait, la flèche du navigateur reste. Le propriétaire a choisi cette voie (« Drapeau dans HELLO ») plutôt qu'un réticule local ou `cursor: none` pour tout RDP.
 6. **Interrupteur** : `SCREEN_DRAW_POINTER`, allumé par défaut. Éteint, c'est le comportement d'aujourd'hui, flèche du navigateur et pointeur absent de l'enregistrement, pour l'installation qui préfère la réactivité au témoignage.
 
 ## Conséquences
 
 - (+) L'auditeur voit où l'opérateur a pointé et cliqué, et la forme que la cible montrait. Le rejeu reste l'image acquittée, octet pour octet.
-- (+) Aucun contrat public ne change : ni le flux écran, ni l'API de rejeu, ni le Video Recorder.
+- (+) Ni l'API de rejeu ni le Video Recorder ne changent. Le flux écran gagne un drapeau dans `HELLO` (§5, amendé) : un `HELLO` sans ce drapeau reste celui d'avant, mais un décodeur antérieur refuse celui qui le porte. L'Admin UI et le proxy sont livrés ensemble.
 - (−) Un nouveau parseur exposé à la cible : formes RDP et VNC, cache RDP. Il aura des bornes, des tests d'attaque et un fuzzer, comme les autres.
 - (−) Plus d'images : chaque déplacement en produit une, à la cadence. Le volume enregistré augmente d'autant pendant que la souris bouge. Non mesuré ; à mesurer avec le lot A d'ADR-0090.
 - (−) L'opérateur voit son pointeur avec la latence du proxy : encodage, acquittement, réseau. Sur une liaison lente, il sera en retard sur sa main. L'option éteinte rend la flèche locale.
@@ -59,4 +59,4 @@ ADR-0071 (incrément 3) range « pointeur » parmi le contenu de l'écran RDP ; 
 1. **Fait** : parseurs Fast-Path et slow-path, formes 24 et 32 bpp, cache de 25 formes, dessin sur une copie du bureau, flèche par défaut (`pkg/rdp/pointer.go`). Le tout est prouvé par des tests, un fuzzer et 24 mutations tuées. Rien n'est branché pour l'instant.
 2. **Fait** : branchement RDP. La capacité est annoncée à 25 quand le pointeur est dessiné, `ReadBitmapUpdate` rend les mises à jour de pointeur, et le moteur suit celles de la cible et la position de l'opérateur. Il dessine le pointeur dans chaque image (`FrameWithPointer`) au rythme de la cadence. Une réactivation vide le cache. `SCREEN_DRAW_POINTER` est allumé par défaut. Éprouvé contre FreeRDP (le serveur de test n'envoie aucun pointeur : flèche du proxy), et contre Windows en CI : Windows Server 2022 envoie 9 à 12 mises à jour à l'ouverture, toutes acceptées. **Élargi par la mesure** : Windows Server 2019 envoie des formes monochromes (1 bpp, 32 × 32). Elles sont décodées depuis le 11 novembre 2026, masques lus de haut en bas comme FreeRDP le fait contre Windows. Le §2, qui ne retenait que 24 et 32 bpp, est élargi en ce sens ; c'est un choix renversable.
 3. VNC : l'encodage `Cursor` est suivi et dessiné de la même façon.
-4. Admin UI : `cursor: none` quand le pointeur est dessiné.
+4. **Fait** : drapeau `HELLO` (`screenstream.HelloPointerDrawn`, `proxycore.PointerDrawer`), posé par la session RDP qui dessine le pointeur. L'Admin UI le lit et met alors `cursor: none`. Prouvé de bout en bout sur processus réels (RDP : drapeau à 1 ; VNC : à 0).

@@ -190,6 +190,12 @@ type ScreenSession interface {
 	Close() error
 }
 
+// PointerDrawer is a ScreenSession that may draw the target's pointer into its frames (ADR-0091);
+// the HELLO then tells the client, which hides its own pointer. A session that is not one draws none.
+type PointerDrawer interface {
+	PointerDrawn() bool
+}
+
 type FrameRecorder interface {
 	Record(context.Context, string, screenstream.Message) (uint64, error)
 	Seal(context.Context, string, uint64) error
@@ -443,6 +449,9 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	hello := screenstream.Message{
 		Type: screenstream.TypeHello, Sequence: 0, Timestamp: time.Now().UTC(),
 		Protocol: meta.ScreenProtocol, ExpiresAt: meta.ExpiresAt, SessionID: meta.SessionID,
+	}
+	if drawer, ok := session.(PointerDrawer); ok {
+		hello.PointerDrawn = drawer.PointerDrawn()
 	}
 	if _, err := screenstream.Encode(hello); err != nil {
 		return fmt.Errorf("proxycore: invalid screen HELLO: %w", err)

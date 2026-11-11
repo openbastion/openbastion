@@ -149,7 +149,7 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			case 1:
 				m.png = payload
 			case 2:
-				m.helloProtocol, m.helloSession = payload[0], string(payload[14:])
+				m.helloProtocol, m.helloFlags, m.helloSession = payload[0], payload[1], string(payload[14:])
 			case 3:
 				m.endText = string(payload[4:])
 			}
@@ -167,7 +167,8 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			return screenMessage{}, false
 		}
 	}
-	if hello, ok := next(20 * time.Second); !ok || hello.kind != 2 || hello.helloProtocol != 1 || hello.helloSession != id {
+	// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
+	if hello, ok := next(20 * time.Second); !ok || hello.kind != 2 || hello.helloProtocol != 1 || hello.helloSession != id || hello.helloFlags != 1 {
 		t.Fatalf("first message: %+v", hello)
 	}
 	shown := map[uint64][]byte{}
