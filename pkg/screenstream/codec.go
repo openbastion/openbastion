@@ -28,7 +28,16 @@ const (
 	TypeFrame MessageType = 1
 	TypeHello MessageType = 2
 	TypeEnd   MessageType = 3
+	// TypeFrameDelta is a partial frame (ADR-0092): the rectangles that changed since the frame of
+	// the previous sequence, each a PNG. A FRAME is the key frame it builds on.
+	TypeFrameDelta MessageType = 4
 )
+
+// MaxDeltaRects bounds the rectangles of one partial frame (ADR-0092 §2).
+const MaxDeltaRects = 64
+
+// deltaRectHeader is x, y, width, height and the PNG's length, each a uint32.
+const deltaRectHeader = 20
 
 // Stable END codes are part of the v1 screen-stream wire contract (ADR-0071).
 const (
@@ -73,6 +82,9 @@ type Message struct {
 	Height    uint32
 	PNG       []byte
 
+	// FRAME_DELTA-only: the changed rectangles, in the frame of Width x Height.
+	Rects []Rect
+
 	// HELLO-only fields.
 	Protocol  Protocol
 	ExpiresAt time.Time
@@ -84,6 +96,13 @@ type Message struct {
 	// END-only fields. Text is a stable public message, never an internal error.
 	EndCode uint16
 	Text    string
+}
+
+// Rect is one changed rectangle of a partial frame: where it goes, and its pixels as a PNG of
+// exactly Width x Height.
+type Rect struct {
+	X, Y, Width, Height uint32
+	PNG                 []byte
 }
 
 // HelloPointerDrawn is the HELLO flag saying the frames carry the pointer (ADR-0091). It was a
@@ -101,6 +120,26 @@ func Encode(m Message) ([]byte, error) {
 		out := make([]byte, HeaderSize+len(m.PNG))
 		putHeader(out, m)
 		copy(out[HeaderSize:], m.PNG)
+		return out, nil
+	case TypeFrameDelta:
+		size, err := validateDelta(m)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]byte, HeaderSize+size)
+		putHeader(out, m)
+		p := out[HeaderSize:]
+		binary.BigEndian.PutUint16(p, uint16(len(m.Rects)))
+		at := 2
+		for _, r := range m.Rects {
+			binary.BigEndian.PutUint32(p[at:], r.X)
+			binary.BigEndian.PutUint32(p[at+4:], r.Y)
+			binary.BigEndian.PutUint32(p[at+8:], r.Width)
+			binary.BigEndian.PutUint32(p[at+12:], r.Height)
+			binary.BigEndian.PutUint32(p[at+16:], uint32(len(r.PNG)))
+			copy(p[at+deltaRectHeader:], r.PNG)
+			at += deltaRectHeader + len(r.PNG)
+		}
 		return out, nil
 	case TypeHello:
 		if m.Sequence != 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 ||
@@ -157,6 +196,15 @@ func Decode(data []byte) (Message, error) {
 		if err := validateFrame(m); err != nil {
 			return Message{}, err
 		}
+	case TypeFrameDelta:
+		rects, err := decodeDeltaRects(data[HeaderSize:])
+		if err != nil {
+			return Message{}, err
+		}
+		m.Rects = rects
+		if _, err := validateDelta(m); err != nil {
+			return Message{}, err
+		}
 	case TypeHello:
 		if m.Sequence != 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || payloadLen < 14 {
 			return Message{}, ErrMalformedMessage
@@ -208,6 +256,8 @@ func putHeader(out []byte, m Message) {
 	switch m.Type {
 	case TypeFrame:
 		binary.BigEndian.PutUint32(out[28:32], uint32(len(m.PNG)))
+	case TypeFrameDelta:
+		binary.BigEndian.PutUint32(out[28:32], uint32(len(out)-HeaderSize))
 	case TypeHello:
 		binary.BigEndian.PutUint32(out[28:32], uint32(14+len(m.SessionID)))
 	case TypeEnd:
@@ -215,8 +265,71 @@ func putHeader(out []byte, m Message) {
 	}
 }
 
-func validateFrame(m Message) error {
+// validateDelta checks a partial frame against ADR-0092 §2 and returns its payload's size: a
+// sequence and a frame size as a FRAME's, 1 to MaxDeltaRects rectangles, each non-empty, inside the
+// frame and carrying a PNG, and the whole within MaxPNGBytes, the bound of what can be recorded.
+func validateDelta(m Message) (int, error) {
 	if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width == 0 || m.Height == 0 {
+		return 0, ErrMalformedMessage
+	}
+	pixels := uint64(m.Width) * uint64(m.Height)
+	if pixels > MaxPixels || len(m.Rects) == 0 || len(m.Rects) > MaxDeltaRects || m.PNG != nil {
+		return 0, ErrOutOfBounds
+	}
+	size := 2
+	for _, r := range m.Rects {
+		if r.Width == 0 || r.Height == 0 || uint64(r.X)+uint64(r.Width) > uint64(m.Width) ||
+			uint64(r.Y)+uint64(r.Height) > uint64(m.Height) || len(r.PNG) == 0 {
+			return 0, ErrOutOfBounds
+		}
+		if len(r.PNG) < 8 || string(r.PNG[:8]) != "\x89PNG\r\n\x1a\n" {
+			return 0, fmt.Errorf("%w: invalid PNG signature", ErrMalformedMessage)
+		}
+		size += deltaRectHeader + len(r.PNG)
+		if size > MaxPNGBytes {
+			return 0, fmt.Errorf("%w: %w", ErrOutOfBounds, ErrFrameTooLarge)
+		}
+	}
+	return size, nil
+}
+
+// decodeDeltaRects reads a partial frame's payload: the count, then each rectangle's header and
+// PNG. Nothing may be left over, and no length may run past the payload.
+func decodeDeltaRects(p []byte) ([]Rect, error) {
+	if len(p) < 2 {
+		return nil, ErrMalformedMessage
+	}
+	count := int(binary.BigEndian.Uint16(p))
+	if count == 0 || count > MaxDeltaRects {
+		return nil, ErrOutOfBounds
+	}
+	rects := make([]Rect, 0, count)
+	at := 2
+	for i := 0; i < count; i++ {
+		if len(p)-at < deltaRectHeader {
+			return nil, ErrMalformedMessage
+		}
+		r := Rect{
+			X: binary.BigEndian.Uint32(p[at:]), Y: binary.BigEndian.Uint32(p[at+4:]),
+			Width: binary.BigEndian.Uint32(p[at+8:]), Height: binary.BigEndian.Uint32(p[at+12:]),
+		}
+		n := binary.BigEndian.Uint32(p[at+16:])
+		at += deltaRectHeader
+		if uint64(n) > uint64(len(p)-at) {
+			return nil, ErrMalformedMessage
+		}
+		r.PNG = append([]byte(nil), p[at:at+int(n)]...)
+		at += int(n)
+		rects = append(rects, r)
+	}
+	if at != len(p) {
+		return nil, ErrMalformedMessage
+	}
+	return rects, nil
+}
+
+func validateFrame(m Message) error {
+	if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width == 0 || m.Height == 0 || m.Rects != nil {
 		return ErrMalformedMessage
 	}
 	pixels := uint64(m.Width) * uint64(m.Height)

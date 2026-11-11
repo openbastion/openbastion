@@ -3036,6 +3036,21 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-11 — ADR-0092, incrément 1 : le format des images partielles
+
+`pkg/screenstream` connaît `FRAME_DELTA` (type 4). Le message porte la séquence et la taille de l'image, comme un `FRAME`, puis 1 à 64 rectangles, chacun avec `x`, `y`, largeur, hauteur, longueur du PNG et le PNG lui-même.
+- **Bornes** (ADR-0092 §2) : chaque rectangle est non vide, contenu dans l'image et porte un PNG ; le tout tient en 4 Mio (`ErrFrameTooLarge`). Rien ne reste après le dernier rectangle, et aucune longueur ne dépasse le message. Un `FRAME` qui porterait des rectangles est refusé.
+- **Composition de référence** (`Composer`) : une image clé remplace l'écran ; une image partielle remplace les pixels de ses rectangles, sans mélange, sur l'image de séquence précédente et sur nulle autre.
+- **Refus** : une image partielle sans image clé avant elle (`ErrNoKeyFrame`), un trou de séquence (`ErrSequenceGap`), une autre taille d'écran, un PNG d'une autre taille que son rectangle, un PNG illisible. Tous rendent le compositeur inutilisable jusqu'à l'image clé suivante.
+
+**Prouvé** :
+- l'écran recomposé à partir d'une image clé et de deux images partielles est, octet pour octet, celui d'une image clé du même moment ;
+- aller-retour du codec, chaque borne à l'encodage et au décodage, refus du compositeur, remplacement sans mélange ;
+- fuzzers `FuzzDecode` (graine `FRAME_DELTA`) et `FuzzComposer`, 20 s chacun ;
+- **18 mutations : 17 tuées, une équivalente** (le décompte nul au décodage est déjà refusé par la validation commune). Au premier passage, le remplacement « sans mélange » survivait, parce que toutes les couleurs du test étaient opaques : un test l'éprouve désormais avec un pixel transparent.
+
+**Pas encore** : aucun codec n'émet d'images partielles. Le relais, le Video Recorder et l'Admin UI ne les connaissent pas, et l'Admin UI refuse le type 4. Ce sont les incréments 2 à 4, derrière `SCREEN_PARTIAL_FRAMES`, qui restera éteint jusque-là.
+
 ## 2026-11-11 — ADR-0090, lot A : les premiers chiffres RDP
 
 Le banc de la PR #130 a tourné sur les cinq cibles Windows de la CI (run 43068035637) et contre FreeRDP en local. Le tableau et les conclusions sont dans ADR-0090, « Résultats du lot A » ; les fichiers `measure.json` sont dans l'artefact de chaque cible.

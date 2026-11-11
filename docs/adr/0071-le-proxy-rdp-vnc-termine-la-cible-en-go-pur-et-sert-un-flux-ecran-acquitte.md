@@ -153,7 +153,7 @@ Une seule version (`openbastion.screen.v1`). Trame serveur → client :
 | Octet | Champ | Valeur |
 |---|---|---|
 | 0 | version | `1` |
-| 1 | type | `1` FRAME, `2` HELLO, `3` END |
+| 1 | type | `1` FRAME, `2` HELLO, `3` END, `4` FRAME_DELTA (image partielle, ADR-0092) |
 | 2–3 | drapeaux | `0` |
 | 4–11 | séquence | `uint64`, croissante, à partir de 1 |
 | 12–19 | horodatage | `int64` Unix nanosecondes, UTC |
@@ -162,7 +162,7 @@ Une seule version (`openbastion.screen.v1`). Trame serveur → client :
 | 28–31 | longueur PNG | `uint32`, ≤ 4 194 304 |
 | 32… | PNG | octets acquittés par le recorder |
 
-`HELLO` est le préambule de contrôle de séquence `0` ; les `FRAME` commencent à `1` et sont strictement croissants ; `END` utilise le prochain numéro après la dernière frame acquittée (ou `1` si aucune frame n'a été envoyée). `HELLO` porte en plus le protocole (`u8` : `1` RDP, `2` VNC), un octet de drapeaux (bit 0 : le pointeur est dessiné dans les images, ADR-0091 ; les autres bits sont réservés à zéro, et un bit réservé posé ferme la session), l'échéance de session (`u64`, Unix), la longueur de l'identifiant (`u32`) et l'identifiant de session. `END` porte un code stable (`u16`, voir §12), la longueur du texte (`u16`) et un texte UTF-8 de 200 octets au plus, jamais une cause interne.
+`FRAME_DELTA` (ADR-0092) partage la séquence des `FRAME` et porte, à la place du PNG, un nombre de rectangles (`u16`, 1 à 64), puis pour chacun `x`, `y`, largeur, hauteur et longueur du PNG (`u32` chacun) et le PNG du rectangle ; le tout est contenu dans l'image et tient en 4 Mio. Il s'applique à l'image de séquence précédente, et à elle seule. `HELLO` est le préambule de contrôle de séquence `0` ; les `FRAME` commencent à `1` et sont strictement croissants ; `END` utilise le prochain numéro après la dernière frame acquittée (ou `1` si aucune frame n'a été envoyée). `HELLO` porte en plus le protocole (`u8` : `1` RDP, `2` VNC), un octet de drapeaux (bit 0 : le pointeur est dessiné dans les images, ADR-0091 ; les autres bits sont réservés à zéro, et un bit réservé posé ferme la session), l'échéance de session (`u64`, Unix), la longueur de l'identifiant (`u32`) et l'identifiant de session. `END` porte un code stable (`u16`, voir §12), la longueur du texte (`u16`) et un texte UTF-8 de 200 octets au plus, jamais une cause interne.
 
 Entrée client → serveur, message fixe de 16 octets : version, type (`1` KEY, `2` POINTER, `3` RELEASE_ALL), drapeaux (`KEY` : appui/relâchement), `keysym` X11, scancode PS/2 set 1, coordonnées, boutons, molette. Tout message de plus de 64 octets, tout type inconnu, toute coordonnée hors trame, tout bouton hors masque, toute touche hors table **ferme la session** — l'entrée n'est jamais interprétée « au mieux ».
 
