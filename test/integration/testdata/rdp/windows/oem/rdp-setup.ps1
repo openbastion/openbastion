@@ -119,9 +119,11 @@ while ($true) {
   wevtutil qe System $system /c:400 /rd:true /f:xml 2>&1 | Out-File (Join-Path $out 'System-rdp.xml') -Encoding utf8
   # What the keyboard test saved from Notepad (ADR-0088): the text the target read from the keys.
   # Where Notepad saves depends on how it was started (PR #97: not in Documents), so the file is
-  # looked for, and where it was found is written down.
-  $kbd = @(Get-ChildItem 'C:\Users' -Filter 'kbd.txt' -Recurse -Depth 8 -Force -ErrorAction SilentlyContinue) +
-         @(Get-Item 'C:\Windows\System32\kbd.txt', 'C:\Windows\kbd.txt', 'C:\kbd.txt' -ErrorAction SilentlyContinue)
+  # looked for, the latest written taken, and where it was found written down. Desktop\Shared is the
+  # share itself, which holds the copy made here (PR #119): never the source.
+  $kbd = @(@(Get-ChildItem 'C:\Users' -Filter 'kbd.txt' -Recurse -Depth 8 -Force -ErrorAction SilentlyContinue) +
+         @(Get-Item 'C:\Windows\System32\kbd.txt', 'C:\Windows\kbd.txt', 'C:\kbd.txt' -ErrorAction SilentlyContinue) |
+         Where-Object { $_.FullName -notlike '*\Desktop\Shared\*' } | Sort-Object LastWriteTime -Descending)
   if ($kbd.Count -gt 0) {
     Copy-Item $kbd[0].FullName (Join-Path $out 'kbd.txt') -Force -ErrorAction SilentlyContinue
     $kbd.FullName -join "`n" | Out-File (Join-Path $out 'kbd-where.txt') -Encoding utf8
