@@ -189,7 +189,7 @@ Le stockage des sessions enregistrées, leur relecture et leur recherche.
 | Ordre | ID | Titre | Statut |
 |---|---|---|---|
 | 1 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté |
-| 2 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Proposé |
+| 2 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté |
 | 3 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 
 ### 13. Interfaces et notifications
@@ -314,4 +314,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0089](0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md) | Le texte RDP reste rendu par bitmaps : le cache de glyphes n'est pas implémenté tant qu'une mesure ne le demande pas | Accepté | Proxy écran RDP et VNC |
 | [ADR-0090](0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md) | RDP en v0.0.2 : glyphes, ordres graphiques, canaux virtuels et protocoles, par incréments prouvés | Proposé | Proxy écran RDP et VNC |
 | [ADR-0091](0091-le-pointeur-est-dessine-dans-l-image-enregistree.md) | Le pointeur est dessiné dans l'image, celle que l'opérateur voit et que l'auditeur rejoue | Accepté | Proxy écran RDP et VNC |
-| [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Proposé | Enregistrement et relecture |
+| [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté | Enregistrement et relecture |

@@ -1,6 +1,6 @@
 # ADR-0092 — L'écran s'enregistre en images partielles, ancrées sur des images clés
 
-**Statut** `Proposé` · 11 novembre 2026 · demandé par le propriétaire du projet le 11 novembre 2026 : « go pour l'ADR », après la publication des premiers chiffres du lot A d'ADR-0090. La décision change le flux écran (ADR-0071 §4 et §6) et le format des segments du Video Recorder (ADR-0070) : son acceptation revient au propriétaire.
+**Statut** `Accepté` · 11 novembre 2026 · demandé par le propriétaire du projet le 11 novembre 2026 : « go pour l'ADR », après la publication des premiers chiffres du lot A d'ADR-0090 ; accepté le même jour : « Go pour l'option A ». La décision change le flux écran (ADR-0071 §4 et §6) et le format des segments du Video Recorder (ADR-0070). L'option A est acceptée, avec ses bornes (64 rectangles, moitié de l'écran, une image clé toutes les 10 s ou 300 images) et l'interrupteur éteint jusqu'à la nouvelle mesure.
 
 ## Contexte
 
@@ -44,7 +44,7 @@ Les deux cibles savent déjà ce qui a changé. RDP envoie des rectangles (Bitma
 
 **D. Ne rien changer.** L'enregistrement continue de coûter 0,4 à 2,6 Mio/s par session active, et un tiers de cœur pour l'encodage.
 
-## Décision proposée : A
+## Décision : A
 
 1. **Deux sortes d'images dans le flux écran.**
    - `FRAME` reste l'image clé.
