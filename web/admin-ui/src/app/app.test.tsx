@@ -33,11 +33,33 @@ describe("App", () => {
     fireEvent.click(screen.getByText("Se connecter"));
     expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
     const navigation = screen.getByRole("navigation", { name: "Sections" });
+    expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
+    expect(screen.getByRole("main").parentElement?.classList.contains("app-workspace")).toBe(true);
     for (const label of ["Comptes", "Politiques", "Sessions", "Enregistrements"]) {
       const button = within(navigation).getByRole("button", { name: label });
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+
+    // The shell exposes accessible collapse, mobile and theme controls without persisting state.
+    const collapse = screen.getByRole("button", { name: "Réduire la navigation" });
+    fireEvent.click(collapse);
+    expect(screen.getByRole("button", { name: "Développer la navigation" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Développer la navigation" }));
+    const darkTheme = screen.getByRole("button", { name: "Activer le thème sombre" });
+    fireEvent.click(darkTheme);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(screen.getByRole("button", { name: "Activer le thème clair" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Activer le thème clair" }));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    const openNavigation = screen.getByRole("button", { name: "Ouvrir la navigation" });
+    fireEvent.click(openNavigation);
+    expect(screen.getByRole("button", { name: "Fermer le panneau de navigation" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    const restoredMenuButton = screen.getByRole("button", { name: "Ouvrir la navigation" });
+    expect(restoredMenuButton).toBeTruthy();
+    expect(document.activeElement).toBe(restoredMenuButton);
+
     expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Code source/ }).getAttribute("href")).toContain("github.com/openbastion/openbastion");
     expect(screen.getByRole("link", { name: "Texte de la licence" }).getAttribute("href")).toContain("/LICENSE");

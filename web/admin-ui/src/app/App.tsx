@@ -8,7 +8,7 @@ import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
 import { LegalNotice } from "../shared/LegalNotice";
-import { AppHeader, Tab } from "./AppHeader";
+import { AppShell, Tab } from "./AppShell";
 
 export function App({
   api: given,
@@ -57,13 +57,12 @@ export function App({
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
-      <AppHeader who={who} tab={tab} onTab={setTab} onSignOut={signOut} />
-      <main>
+      <AppShell who={who} tab={tab} onTab={setTab} onSignOut={signOut}>
         {tab === "accounts" && <Accounts />}
         {tab === "policies" && <Policies />}
         {tab === "sessions" && <Sessions />}
         {tab === "audit" && <Recording />}
-      </main>
+      </AppShell>
       <LegalNotice />
     </SignedInContext.Provider>
   );

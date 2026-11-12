@@ -20,6 +20,12 @@ accounts (list, onboard, rotate, disable); creating a policy; break-glass reques
 a session by id, terminating it; reading back a recording. What it cannot do, because the API
 cannot: list policies, list audit events.
 
+The signed-in operator shell (ADR-0073 UX-01) groups only implemented screens in a collapsible
+side navigation, adapts it to a keyboard-operable mobile panel, and provides light/dark themes.
+The theme is an in-memory display preference; it is not persisted. A skip link, visible focus,
+Escape-to-close behavior and focus restoration are part of the shell. The UI still uses only the
+public same-origin Gateway API and does not add runtime dependencies.
+
 Rules it keeps (tested): the token lives in memory only — reloading signs out; the OIDC code and
 state are wiped from the address bar before they are sent; everything shown is text, never
 markup; nothing is inlined into the page, which runs under `script-src 'self'`.
