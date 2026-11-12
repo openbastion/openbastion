@@ -1607,72 +1607,10 @@ main.login {
 }
 
 /* ---------- Overview and Security Center (ADR-0073 UX-04) ---------- */
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.overview-metric {
-  display: grid;
-  align-content: start;
-  gap: 0.45rem;
-  min-height: 9rem;
-  padding: 1.15rem;
-}
-
-.overview-metric-label {
-  color: var(--ink-3);
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.overview-metric-value {
-  color: var(--ink-1);
-  font-size: clamp(1.8rem, 4vw, 2.5rem);
-  font-weight: 700;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.metric-total {
-  color: var(--ink-3);
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.overview-metric-detail {
-  color: var(--ink-3);
-  font-size: 0.8rem;
-}
-
-.overview-metric-unavailable {
-  color: var(--danger-strong);
-  font-size: 1rem;
-  font-weight: 650;
-}
-
 .overview-guidance,
 .security-limitations {
   color: var(--ink-2);
   font-size: 0.9rem;
-}
-
-.scope-note {
-  padding: 0.75rem 0.9rem;
-  color: var(--ink-2);
-  background: var(--surface-3);
-  border-left: 3px solid var(--brand);
-  border-radius: var(--radius-sm);
-  font-size: 0.84rem;
-}
-
-.security-section-heading,
-.security-finding-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
 }
 
 .security-findings,
@@ -1707,15 +1645,6 @@ main.login {
 }
 
 @media (max-width: 760px) {
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .overview-metric {
-    min-height: 0;
-  }
-
-  .security-section-heading,
   .security-finding-title {
     align-items: flex-start;
     flex-direction: column;

@@ -20,6 +20,7 @@ describe("Security Center — ADR-0073 UX-04", () => {
         { id: "rdp-incomplete", name: "Windows", protocol: "rdp", targetHost: "host-b:3389", rotationPolicy: "scheduled", createdAt: "2026-11-01T00:00:00Z", tlsCertificateSha256: "", targetDomain: "", rotationFailures: 2 },
       ] } },
     });
+    expect((await screen.findByRole("group", { name: "Indicateurs de sécurité" })).className).toContain("ob-stat-grid");
     expect(await screen.findByText("Clé d’hôte SSH non épinglée")).toBeTruthy();
     expect(screen.getByText("Identité TLS de la cible incomplète")).toBeTruthy();
     expect(screen.getByText("Échecs de rotation consécutifs : 2")).toBeTruthy();

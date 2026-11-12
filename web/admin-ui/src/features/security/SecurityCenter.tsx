@@ -49,31 +49,31 @@ export function SecurityCenter() {
   return (
     <AdminPage title="Centre de sécurité" hints={["Contrôles de configuration calculés à partir des métadonnées des comptes retournées par le Vault. Ce centre n’est ni un score de risque ni un audit de conformité."]}>
       <Notice error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined} />
-      {loading ? <p className="empty card" role="status">Analyse des métadonnées des comptes…</p> : null}
+      {loading ? <p className="ob-empty-state" role="status">Analyse des métadonnées des comptes…</p> : null}
       {!loading && data ? (
         <>
-          <div className="overview-grid security-metrics">
-            <article className="card overview-metric">
-              <p className="overview-metric-label">Comptes examinés</p>
-              <p className="overview-metric-value">{data.items.length}<span className="metric-total"> / {data.totalItems}</span></p>
-              <p className="overview-metric-detail">{incomplete ? "Échantillon partiel — première page uniquement." : "Inventaire complet retourné par le Vault."}</p>
+          <div className="ob-stat-grid" role="group" aria-label="Indicateurs de sécurité">
+            <article className="ob-stat-card">
+              <p className="ob-stat-label">Comptes examinés</p>
+              <p className="ob-stat-value">{data.items.length}<span className="ob-stat-total"> / {data.totalItems}</span></p>
+              <p className="ob-stat-detail">{incomplete ? "Échantillon partiel — première page uniquement." : "Inventaire complet retourné par le Vault."}</p>
             </article>
-            <article className="card overview-metric">
-              <p className="overview-metric-label">Configurations à corriger</p>
-              <p className="overview-metric-value">{findings.length}</p>
-              <p className="overview-metric-detail">Comptes avec au moins un signal explicite ci-dessous.</p>
+            <article className="ob-stat-card">
+              <p className="ob-stat-label">Configurations à corriger</p>
+              <p className="ob-stat-value">{findings.length}</p>
+              <p className="ob-stat-detail">Comptes avec au moins un signal explicite ci-dessous.</p>
             </article>
-            <article className="card overview-metric">
-              <p className="overview-metric-label">Rotations en anomalie</p>
-              <p className="overview-metric-value">{findings.filter((finding) => finding.reasons.some((reason) => reason.toLocaleLowerCase("fr").includes("rotation"))).length}</p>
-              <p className="overview-metric-detail">Rotation due, échouée ou échue selon les champs du Vault.</p>
+            <article className="ob-stat-card">
+              <p className="ob-stat-label">Rotations en anomalie</p>
+              <p className="ob-stat-value">{findings.filter((finding) => finding.reasons.some((reason) => reason.toLocaleLowerCase("fr").includes("rotation"))).length}</p>
+              <p className="ob-stat-detail">Rotation due, échouée ou échue selon les champs du Vault.</p>
             </article>
           </div>
-          <section className="card panel" aria-labelledby="security-findings-title">
-            <div className="security-section-heading">
+          <section className="ob-surface ob-panel" aria-labelledby="security-findings-title">
+            <div className="ob-section-heading">
               <div>
                 <h3 id="security-findings-title">Points à examiner</h3>
-                <p className="hint">Les signaux sont présentés sans pondération ni interprétation supplémentaire.</p>
+                <p className="ob-hint">Les signaux sont présentés sans pondération ni interprétation supplémentaire.</p>
               </div>
               <Badge>{findings.length} compte(s)</Badge>
             </div>
@@ -90,16 +90,16 @@ export function SecurityCenter() {
                   </li>
                 ))}
               </ul>
-            ) : <p className="empty">Aucun signal parmi les métadonnées des comptes examinés.</p>}
+            ) : <p className="ob-empty-state">Aucun signal parmi les métadonnées des comptes examinés.</p>}
           </section>
-          {incomplete ? <p className="scope-note" role="note">Analyse incomplète : {data.items.length} comptes examinés sur {data.totalItems}. Les comptes des pages suivantes ne sont pas inclus dans ces résultats.</p> : null}
-          <section className="card panel security-limitations">
+          {incomplete ? <p className="ob-note" role="note">Analyse incomplète : {data.items.length} comptes examinés sur {data.totalItems}. Les comptes des pages suivantes ne sont pas inclus dans ces résultats.</p> : null}
+          <section className="ob-surface ob-panel security-limitations">
             <h3>Ce que cette vue ne mesure pas</h3>
             <p>Le journal d’audit, les alertes comportementales, la conformité, la santé des proxies et les scores de risque ne sont pas exposés ici. La Gateway ne fournit actuellement aucune route publique de recherche d’événements d’audit ; aucune requête directe vers le service Audit ou sa base n’est effectuée.</p>
           </section>
         </>
       ) : null}
-      {!loading && !data && !error ? <p className="empty card">Aucune donnée de compte disponible.</p> : null}
+      {!loading && !data && !error ? <p className="ob-empty-state">Aucune donnée de compte disponible.</p> : null}
     </AdminPage>
   );
 }

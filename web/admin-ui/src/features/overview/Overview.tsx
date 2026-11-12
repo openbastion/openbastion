@@ -7,12 +7,12 @@ type Widget<T> = { data?: Page<T>; error?: unknown; loading: boolean };
 
 function Metric({ label, value, detail, loading, error }: { label: string; value?: number; detail: string; loading: boolean; error?: unknown }) {
   return (
-    <article className="card overview-metric">
-      <p className="overview-metric-label">{label}</p>
-      {loading ? <p className="overview-metric-value" role="status">…</p>
-        : error ? <p className="overview-metric-unavailable">Indisponible</p>
-        : <p className="overview-metric-value">{value ?? "—"}</p>}
-      <p className="overview-metric-detail">{error ? "L’API n’a pas fourni cette donnée." : detail}</p>
+    <article className="ob-stat-card">
+      <p className="ob-stat-label">{label}</p>
+      {loading ? <p className="ob-stat-value" role="status">…</p>
+        : error ? <p className="ob-stat-unavailable">Indisponible</p>
+        : <p className="ob-stat-value">{value ?? "—"}</p>}
+      <p className="ob-stat-detail">{error ? "L’API n’a pas fourni cette donnée." : detail}</p>
     </article>
   );
 }
@@ -41,18 +41,18 @@ export function Overview() {
 
   return (
     <AdminPage title="Vue générale" hints={["Synthèse des données que votre identité est autorisée à consulter. Chaque indicateur est fourni par l’API publique ; aucune estimation ni score de risque n’est calculé ici."]}>
-      <div className="overview-grid" aria-label="Indicateurs opérationnels">
+      <div className="ob-stat-grid" role="group" aria-label="Indicateurs opérationnels">
         <Metric label="Comptes privilégiés" value={accounts.data?.totalItems} detail="Comptes actifs visibles dans le coffre-fort." loading={accounts.loading} error={accounts.error} />
         <Metric label="Approbations en attente" value={approvals.data?.totalItems} detail="Demandes que votre identité peut décider maintenant." loading={approvals.loading} error={approvals.error} />
         <Metric label="Rotations à examiner" value={rotationAttention} detail="Comptes chargés avec rotation due ou échecs signalés." loading={accounts.loading} error={accounts.error} />
       </div>
-      <section className="card panel overview-guidance" aria-labelledby="overview-scope-title">
+      <section className="ob-surface ob-panel overview-guidance" aria-labelledby="overview-scope-title">
         <h3 id="overview-scope-title">Périmètre des données</h3>
         <p>Les comptes et les demandes d’approbation sont lus séparément via la Gateway. Un refus ou une indisponibilité est indiqué sur le widget concerné, sans être transformé en valeur nulle.</p>
         {accounts.data && accounts.data.totalItems > accounts.data.items.length ? (
-          <p className="scope-note">L’indicateur de rotation porte sur {accounts.data.items.length} comptes chargés sur {accounts.data.totalItems} ; ouvrez le coffre-fort pour parcourir les pages restantes.</p>
+          <p className="ob-note">L’indicateur de rotation porte sur {accounts.data.items.length} comptes chargés sur {accounts.data.totalItems} ; ouvrez le coffre-fort pour parcourir les pages restantes.</p>
         ) : null}
-        {approvals.data?.truncated ? <p className="scope-note">La liste des demandes est tronquée par le service ; elle ne représente pas nécessairement toutes les demandes éligibles.</p> : null}
+        {approvals.data?.truncated ? <p className="ob-note">La liste des demandes est tronquée par le service ; elle ne représente pas nécessairement toutes les demandes éligibles.</p> : null}
       </section>
     </AdminPage>
   );

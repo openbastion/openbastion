@@ -1,5 +1,22 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : Overview et Security Center (étape 5A)
+
+Les écrans Overview et Security Center consomment maintenant les patterns
+opérationnels partagés : grille responsive d’indicateurs, cartes de statistiques,
+surfaces de section, notes contextuelles, en-têtes de section et états vides.
+Les groupes d’indicateurs sont nommés avec role=group pour exposer leur contexte
+aux technologies d’assistance. Les métriques restent exclusivement issues des
+réponses des endpoints existants ; aucun chiffre ou état synthétique n’est
+introduit. Les classes locales de présentation des deux écrans sont réduites
+aux détails métier propres aux constats de sécurité.
+
+Validation : make ui-test ui-build réussit (14 fichiers Vitest, 147 tests,
+TypeScript et build Vite). Le contrôle des 36 paires de contraste reste vert.
+La migration des écrans comptes, politiques, sessions et replay est à venir ;
+aucun contrôle visuel multi-viewport n’a été réalisé faute de navigateur
+headless sur LT209227.
+
 ## 2026-11-12 — ADR-0073 Design System : primitives UI partagées (étape 4)
 
 Le package privé `web/packages/ui/` fournit les primitives CSS framework-neutral

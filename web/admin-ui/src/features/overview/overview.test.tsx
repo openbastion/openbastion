@@ -18,6 +18,7 @@ describe("Overview — ADR-0073 UX-04", () => {
       "GET /vault/accounts": { body: { items: [{ id: "a1", rotationOwedSince: "2026-11-11T10:00:00Z" }], page: 1, pageSize: 100, totalItems: 8 } },
       "GET /sessions": { body: { items: [], page: 1, pageSize: 100, totalItems: 3 } },
     });
+    expect(screen.getByRole("group", { name: "Indicateurs opérationnels" }).className).toContain("ob-stat-grid");
     expect(await screen.findByText("8")).toBeTruthy();
     expect(screen.getByText("3")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
