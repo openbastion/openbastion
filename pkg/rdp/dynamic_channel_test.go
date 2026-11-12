@@ -196,8 +196,11 @@ func TestDynamicChannels_SendOneDataPDUOnAnOpenChannel(t *testing.T) {
 	if err != nil || !bytes.Equal(pdu, append([]byte{0x30, 3}, "layout"...)) {
 		t.Fatalf("% x %v", pdu, err)
 	}
-	if _, err := d.dataPDU("other", []byte("x")); !errors.Is(err, ErrRDPDynamicChannel) {
+	if _, err := d.dataPDU("other", []byte("x")); !errors.Is(err, ErrRDPDynamicChannelClosed) {
 		t.Fatalf("a channel not open: %v", err)
+	}
+	if _, err := d.dataPDU(RDPDisplayControlChannel, nil); errors.Is(err, ErrRDPDynamicChannelClosed) {
+		t.Fatal("an empty message said as a closed channel")
 	}
 	for _, size := range []int{0, maxDynvcSendBytes + 1} {
 		if _, err := d.dataPDU(RDPDisplayControlChannel, make([]byte, size)); !errors.Is(err, ErrRDPDynamicChannel) {

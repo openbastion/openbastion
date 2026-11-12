@@ -49,6 +49,11 @@ var rdpDynamicChannelsAllowed = map[string]bool{RDPDisplayControlChannel: true}
 // ErrRDPDynamicChannel reports a dynamic channel message outside MS-RDPEDYC or its bounds.
 var ErrRDPDynamicChannel = errors.New("rdp: dynamic channel message refused")
 
+// ErrRDPDynamicChannelClosed says the channel to send on is not open now: the target closed it, as
+// Windows does while it reactivates, and may open it again (CI of PR #155). It is no fault of the
+// session's: the caller may drop what it meant to send.
+var ErrRDPDynamicChannelClosed = fmt.Errorf("%w: the channel is not open", ErrRDPDynamicChannel)
+
 // rdpDynamicChannels is the state of the dynamic channels of one session: which names may open,
 // which are open under which ID, the message being reassembled on each, and the names refused.
 type rdpDynamicChannels struct {
@@ -270,7 +275,7 @@ func (d *rdpDynamicChannels) dataPDU(name string, data []byte) ([]byte, error) {
 			return append(pdu, data...), nil
 		}
 	}
-	return nil, fmt.Errorf("%w: no open channel %q", ErrRDPDynamicChannel, name)
+	return nil, fmt.Errorf("%w: %q", ErrRDPDynamicChannelClosed, name)
 }
 
 // EnableDynamicChannels opens, among the dynamic channels the target proposes on drdynvc, those of

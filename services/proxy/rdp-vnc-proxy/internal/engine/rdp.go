@@ -156,7 +156,7 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
 		{"MCS channels", func() error {
 			if c.Resize {
-				if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel}, nil, target.displayControlMessage); e != nil {
+				if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel}, target.displayControlOpened, target.displayControlMessage); e != nil {
 					return e
 				}
 			}
@@ -214,6 +214,8 @@ func runRDPConnectionSteps(ctx context.Context, steps []rdpConnectionStep) error
 type rdpTargetSession struct {
 	session       *rdp.CredSSPClientSession
 	width, height uint16
+	// send sends on a dynamic channel: the session's, or a test's.
+	send func(ctx context.Context, name string, data []byte, timeout time.Duration) error
 	// resize is RDPCodec.Resize; displayCaps is what the target's display control accepts, once it
 	// said so (displayReady): a resize asked before that is ignored.
 	resize       bool
@@ -229,8 +231,17 @@ type rdpResizer interface {
 	Resize(ctx context.Context, width, height uint16, timeout time.Duration) error
 }
 
+// displayControlOpened is told when the display control opens, and opens again: Windows closes it
+// while it reactivates, then opens it and states its capabilities anew (CI of PR #155). Until it
+// does, a resize is ignored.
+func (s *rdpTargetSession) displayControlOpened(name string) {
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
+	s.displayReady = false
+}
+
 // displayControlMessage reads what the target sends on the display control: its capabilities,
-// once. Anything else ends the session (ADR-0095 §4).
+// once each time it opens. Anything else ends the session (ADR-0095 §4).
 func (s *rdpTargetSession) displayControlMessage(name string, message []byte) error {
 	if name != rdp.RDPDisplayControlChannel {
 		return fmt.Errorf("%w: a message on %q", rdp.ErrRDPDisplayControl, name)
@@ -262,7 +273,14 @@ func (s *rdpTargetSession) Resize(ctx context.Context, width, height uint16, tim
 	if err != nil {
 		return err
 	}
-	if err := s.session.SendDynamicChannelMessage(ctx, rdp.RDPDisplayControlChannel, layout, timeout); err != nil {
+	send := s.send
+	if send == nil {
+		send = s.session.SendDynamicChannelMessage
+	}
+	if err := send(ctx, rdp.RDPDisplayControlChannel, layout, timeout); err != nil {
+		if errors.Is(err, rdp.ErrRDPDynamicChannelClosed) {
+			return nil // closed while the target reactivates: the operator's next resize will do
+		}
 		return err
 	}
 	s.displayMu.Lock()

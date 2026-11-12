@@ -74,3 +74,39 @@ func TestRDPAdapter_ResizableOnlyWithResizeOn(t *testing.T) {
 		t.Fatalf("a resize to a session that cannot: %v", err)
 	}
 }
+
+// Windows closes the display control while it reactivates, then opens it again with its
+// capabilities (CI of PR #155): a resize meanwhile is dropped, not a fault; the capabilities that
+// follow the reopening are taken; any other send failure is one.
+func TestRDPTargetSession_FollowsTheDisplayControlClosingAndOpening(t *testing.T) {
+	caps := rdp.RDPDisplayControlCaps{MaxNumMonitors: 1, MaxMonitorAreaFactorA: 4096, MaxMonitorAreaFactorB: 4096}
+	sent := 0
+	var failure error
+	s := &rdpTargetSession{resize: true, displayReady: true, displayCaps: caps,
+		send: func(context.Context, string, []byte, time.Duration) error { sent++; return failure }}
+	if err := s.Resize(context.Background(), 1024, 768, time.Second); err != nil || sent != 1 {
+		t.Fatalf("open: %v, %d sent", err, sent)
+	}
+	failure = rdp.ErrRDPDynamicChannelClosed
+	if err := s.Resize(context.Background(), 1024, 768, time.Second); err != nil {
+		t.Fatalf("closed meanwhile: %v, want dropped", err)
+	}
+	failure = errors.New("transport down")
+	if err := s.Resize(context.Background(), 1024, 768, time.Second); err == nil {
+		t.Fatal("a broken transport taken for a closed channel")
+	}
+	s.displayControlOpened(rdp.RDPDisplayControlChannel)
+	if s.displayReady {
+		t.Fatal("reopened: the old capabilities still taken")
+	}
+	failure, sent = nil, 0
+	if err := s.Resize(context.Background(), 1024, 768, time.Second); err != nil || sent != 0 {
+		t.Fatalf("before the new capabilities: %v, %d sent", err, sent)
+	}
+	if err := s.displayControlMessage(rdp.RDPDisplayControlChannel, displayCapsPDU(1, 2560, 1600)); err != nil {
+		t.Fatalf("the capabilities after a reopening: %v", err)
+	}
+	if err := s.Resize(context.Background(), 1024, 768, time.Second); err != nil || sent != 1 {
+		t.Fatalf("after them: %v, %d sent", err, sent)
+	}
+}
