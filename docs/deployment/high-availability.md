@@ -17,7 +17,7 @@
 |---|---|
 | Microservices stateless (Gateway, Authn, Authz, Broker, Workflow, Approval, connecteurs…) | Plusieurs répliques K8s, `PodDisruptionBudget`, `HorizontalPodAutoscaler`, sondes `readiness`/`liveness` dédiées |
 | Autorité de certification interne et émission des certificats de service (ADR-0010) | Composant de rang 1 **hors ligne par défaut** : les services lisent des fichiers et ne dépendent pas de l'autorité à l'exécution, mais ne se renouvellent que si elle (ou cert-manager/SPIRE) émet à temps — l'autorité doit être sauvegardée (clé hors des services) et son émission supervisée. Une autorité tombée n'arrête rien jusqu'à la première échéance ; **c'est l'échéance qui fait la panne** (§4) |
-| PostgreSQL | Primaire + répliques en streaming replication, bascule automatisée (ex. Patroni), pooling de connexions (PgBouncer) devant chaque service |
+| PostgreSQL | Primaire + répliques en streaming replication, bascule automatisée (ex. Patroni), pooling de connexions (PgBouncer) devant chaque service. Chaque instance d'un service garde au plus **10 connexions** : prévoir `max_connections` (100 par défaut) au-dessus de 10 × le nombre d'instances qui partagent la base, plus la marge des outils et de la réplication |
 | Redis | Redis Sentinel (ou Cluster) — perte du cache tolérée en dégradé (§4), perte de l'état de session Broker traitée en fail-closed sur les nouvelles créations |
 | Stockage objet S3-compatible | Clusterisation/réplication selon le fournisseur ; SeaweedFS du Compose mono-hôte n'est pas hautement disponible |
 | Video Recorder | Plusieurs réplicas possibles avec le même PostgreSQL, stockage objet et Transit ; indisponibilité de l'un de ces composants refuse les nouveaux segments et les replays concernés |
