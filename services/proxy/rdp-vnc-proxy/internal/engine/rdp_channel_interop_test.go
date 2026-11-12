@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
@@ -41,13 +42,29 @@ func (l *channelLog) snapshot() [][]byte {
 // then reads the screen for read, and returns what came on the channel.
 func openWithStaticChannel(t *testing.T, client *rdp.CredSSPClientSession, user, password string, read time.Duration) [][]byte {
 	t.Helper()
+	return openWithChannels(t, client, user, password, read, nil)
+}
+
+// dynamicLog is what the dynamic channels did: opened, and the messages on each.
+type dynamicLog struct {
+	mu       sync.Mutex
+	opened   []string
+	messages map[string][][]byte
+}
+
+// openWithChannels is openWithStaticChannel; with dynamic set, the dynamic channels of the closed
+// list are enabled too, and dynamic records what they do.
+func openWithChannels(t *testing.T, client *rdp.CredSSPClientSession, user, password string, read time.Duration, dynamic *dynamicLog) [][]byte {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	defer client.Close()
 	settings := rdp.MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: rdpClientName,
 		Timeout: 15 * time.Second, DynamicChannels: true}
 	var log channelLog
-	client.SetChannelHandler(log.handle)
+	if dynamic == nil {
+		client.SetChannelHandler(log.handle)
+	}
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error {
 			response, e := client.ConnectMCS(ctx, settings)
@@ -56,7 +73,27 @@ func openWithStaticChannel(t *testing.T, client *rdp.CredSSPClientSession, user,
 			}
 			return e
 		}},
-		{"MCS channels", func() error { _, e := client.ConnectMCSChannels(ctx, 15*time.Second); return e }},
+		{"MCS channels", func() error {
+			if dynamic != nil {
+				dynamic.messages = map[string][][]byte{}
+				if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel},
+					func(name string) {
+						dynamic.mu.Lock()
+						dynamic.opened = append(dynamic.opened, name)
+						dynamic.mu.Unlock()
+					},
+					func(name string, data []byte) error {
+						dynamic.mu.Lock()
+						dynamic.messages[name] = append(dynamic.messages[name], append([]byte(nil), data...))
+						dynamic.mu.Unlock()
+						return nil
+					}); e != nil {
+					return e
+				}
+			}
+			_, e := client.ConnectMCSChannels(ctx, 15*time.Second)
+			return e
+		}},
 		{"client info", func() error {
 			return client.SendClientInfo(ctx, rdp.RDPClientInfo{Username: user, Password: []byte(password)}, 15*time.Second)
 		}},
@@ -102,5 +139,45 @@ func TestRDPInterop_StaticChannel(t *testing.T) {
 	messages := openWithStaticChannel(t, client, rdpInteropUser, rdpInteropPassword, 5*time.Second)
 	if len(messages) > 0 && messages[0][0]>>4 != 0x05 {
 		t.Fatalf("FreeRDP's first drdynvc message has Cmd %d, not the capabilities request (5)", messages[0][0]>>4)
+	}
+}
+
+// The dynamic channels of ADR-0095 (increment 2): the capabilities answered, the display control
+// opened, every other name refused, and what the target sends on the display control: first its
+// capabilities, DISPLAYCONTROL_CAPS_PDU (MS-RDPEDISP 2.2.2.1: Type 5, Length 20).
+func readDynamicChannels(t *testing.T, client *rdp.CredSSPClientSession, user, password string, read time.Duration) *dynamicLog {
+	t.Helper()
+	var dynamic dynamicLog
+	openWithChannels(t, client, user, password, read, &dynamic)
+	refused, refusals := client.DynamicChannelRefusals()
+	dynamic.mu.Lock()
+	defer dynamic.mu.Unlock()
+	t.Logf("dynamic channels opened %q; %d refused: %q", dynamic.opened, refusals, refused)
+	for name, messages := range dynamic.messages {
+		for i, m := range messages {
+			if len(m) >= 8 {
+				t.Logf("%s message %d: %d bytes, Type %d, Length %d", name, i, len(m), binary.LittleEndian.Uint32(m[:4]), binary.LittleEndian.Uint32(m[4:8]))
+			} else {
+				t.Logf("%s message %d: %d bytes", name, i, len(m))
+			}
+		}
+	}
+	return &dynamic
+}
+
+func TestRDPInterop_DynamicChannels(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, rdpInteropPassword)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	// FreeRDP's shadow server asks for the capabilities, then proposes AUDIO_INPUT (microphone
+	// redirection): refused by the protocol's answer, and the session goes on (ADR-0095 §3, §8).
+	dynamic := readDynamicChannels(t, client, rdpInteropUser, rdpInteropPassword, 5*time.Second)
+	refused, _ := client.DynamicChannelRefusals()
+	if len(dynamic.opened) != 0 || len(refused) == 0 || refused[0] != "AUDIO_INPUT" {
+		t.Fatalf("opened %q, refused %q: want nothing opened and AUDIO_INPUT refused", dynamic.opened, refused)
 	}
 }
