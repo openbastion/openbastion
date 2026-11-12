@@ -1,5 +1,18 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — Empreinte de provenance du skill design system corrigée
+
+La migration du guide interne `ui-ux-design-system` vers les tokens canoniques
+avait modifié son `SKILL.md` sans mettre à jour son empreinte SHA-256 dans
+`docs/licensing/skills-provenance.json`. Le contrôle `make license-check` échouait
+avant même le scan Trivy des images. Le manifeste porte maintenant l'empreinte
+du fichier réellement versionné ; l'origine historique, les auteurs et la
+licence restent inchangés.
+
+Validation : `make license-check` confirme les 95 skills (85 tiers, 10 internes),
+les 95 empreintes de fichiers, les 85 hashes Skills CLI v1, les révisions, les
+licences et les notices.
+
 ## 2026-11-12 — Charte graphique formalisée dans ADR-0073 et ADR-0075
 
 La décision de conception OpenBastion Infrastructure est maintenant inscrite
