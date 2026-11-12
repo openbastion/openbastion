@@ -68,14 +68,19 @@ func TestPartialFramesAreRecordedAndReadBackAsWritten(t *testing.T) {
 	if err := writer.Complete(context.Background(), 3); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []domain.VideoSegment{key, partial} {
-		got, complete, err := svc.ReadSegment(context.Background(), "u_reader", []string{"auditor"}, "s1", want.FirstSequence)
-		if err != nil || !complete || len(got.Frames) != len(want.Frames) {
-			t.Fatalf("segment %d: %+v %v %v", want.FirstSequence, got, complete, err)
+	// From the key frame, the whole run (ADR-0093); from the first partial frame, the rest of it.
+	all := append(append([]domain.VideoFrame(nil), key.Frames...), partial.Frames...)
+	for _, c := range []struct {
+		first int64
+		want  []domain.VideoFrame
+	}{{1, all}, {2, partial.Frames}} {
+		got, complete, err := svc.ReadSegment(context.Background(), "u_reader", []string{"auditor"}, "s1", c.first)
+		if err != nil || !complete || len(got.Frames) != len(c.want) || got.FirstSequence != c.first || got.LastSequence != 3 {
+			t.Fatalf("read from %d: %d..%d, %d frame(s), %v %v", c.first, got.FirstSequence, got.LastSequence, len(got.Frames), complete, err)
 		}
-		for i := range want.Frames {
-			if got.Frames[i].Codec != want.Frames[i].Codec || !bytes.Equal(got.Frames[i].Data, want.Frames[i].Data) {
-				t.Fatalf("segment %d, frame %d is not what was written", want.FirstSequence, i)
+		for i := range c.want {
+			if got.Frames[i].Codec != c.want[i].Codec || !bytes.Equal(got.Frames[i].Data, c.want[i].Data) {
+				t.Fatalf("read from %d, frame %d is not what was written", c.first, i)
 			}
 		}
 	}

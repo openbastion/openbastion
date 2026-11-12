@@ -15,6 +15,8 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"strconv"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -25,9 +27,14 @@ import (
 )
 
 const (
-	dependencyTimeout             = 5 * time.Second
-	MaxFrameBytes                 = 4 << 20
-	MaxSegmentBytes               = 4 << 20
+	dependencyTimeout = 5 * time.Second
+	MaxFrameBytes     = 4 << 20
+	MaxSegmentBytes   = 4 << 20
+	// A read serves the run of segments from its first, up to these bounds (ADR-0093): the
+	// Gateway's 4 MiB, and half a minute of frames at 50 ms.
+	MaxReadFrames                 = 600
+	MaxReadBytes                  = 4 << 20
+	readFetchConcurrency          = 16
 	MaxFramePixels                = int64(16_777_216)
 	MaxSegmentDuration            = 250 * time.Millisecond
 	DefaultReadAuditBurst         = 10
@@ -348,47 +355,105 @@ func (s *RecorderService) ReadSegment(ctx context.Context, callerID string, acto
 		return domain.VideoSegment{}, false, domain.ErrForbidden
 	}
 
+	// The run of stored segments from firstSequence, without a gap (ADR-0093): one segment per frame
+	// as the proxy records them, so at most MaxReadFrames of them.
 	depCtx, cancel = dependencyContext(ctx)
-	stored, err := s.repo.GetSegment(depCtx, sessionID, firstSequence)
+	stored, err := s.repo.GetSegmentsFrom(depCtx, sessionID, firstSequence, MaxReadFrames)
 	cancel()
 	if err != nil {
 		return domain.VideoSegment{}, false, err
 	}
+	if len(stored) == 0 || stored[0].FirstSequence != firstSequence {
+		return domain.VideoSegment{}, false, domain.ErrNotFound
+	}
+	run := 1
+	for run < len(stored) && stored[run].FirstSequence == stored[run-1].LastSequence+1 &&
+		stored[run].KeyID == stored[0].KeyID {
+		run++
+	}
+	stored = stored[:run]
+	// One audit event for the read, before anything is fetched or decrypted, naming the range
+	// it may serve: what is served is that range or a beginning of it (ADR-0070, ADR-0093).
 	depCtx, cancel = dependencyContext(ctx)
-	err = s.audit.EmitEvent(depCtx, callerID, AuditActionRead, "session", sessionID, true)
+	err = s.audit.EmitEvent(depCtx, callerID, AuditActionRead, "session", sessionID, true, map[string]string{
+		"first_sequence": strconv.FormatInt(firstSequence, 10),
+		"last_sequence":  strconv.FormatInt(stored[len(stored)-1].LastSequence, 10),
+	})
 	cancel()
 	if err != nil {
 		return domain.VideoSegment{}, false, fmt.Errorf("%w: recording the video read: %v", domain.ErrUnavailable, err)
 	}
-	depCtx, cancel = dependencyContext(ctx)
-	ciphertext, err := s.objects.Get(depCtx, stored.ObjectKey)
-	cancel()
+	ciphertexts, err := s.fetchSegments(ctx, stored)
 	if err != nil {
-		return domain.VideoSegment{}, false, fmt.Errorf("%w: reading encrypted video segment: %v", domain.ErrUnavailable, err)
-	}
-	if len(ciphertext) > MaxCiphertextBytes {
-		return domain.VideoSegment{}, false, domain.ErrIntegrity
-	}
-	sum := sha256.Sum256(ciphertext)
-	if len(stored.SHA256) != len(sum) || subtle.ConstantTimeCompare(sum[:], stored.SHA256) != 1 {
-		return domain.VideoSegment{}, false, domain.ErrIntegrity
+		return domain.VideoSegment{}, false, err
 	}
 	depCtx, cancel = dependencyContext(ctx)
-	dek, err := s.keys.Unwrap(depCtx, stored.WrappedDEK, dekAAD(stored.KeyID, sessionID))
+	dek, err := s.keys.Unwrap(depCtx, stored[0].WrappedDEK, dekAAD(stored[0].KeyID, sessionID))
 	cancel()
 	if err != nil {
 		return domain.VideoSegment{}, false, fmt.Errorf("%w: unwrapping video data key: %v", domain.ErrUnavailable, err)
 	}
 	defer zero(dek)
-	segment, err := openSegment(dek, ciphertext, sessionID, stored.FirstSequence, stored.LastSequence)
-	if err != nil {
-		return domain.VideoSegment{}, false, domain.ErrIntegrity
+	// Each segment verified on its own before it joins the answer; one that fails refuses all of
+	// it. The answer stops before MaxReadFrames frames or MaxReadBytes of frame data, and always
+	// holds its first segment.
+	result := domain.VideoSegment{SessionID: sessionID, FirstSequence: firstSequence}
+	var frameBytes int
+	for i, meta := range stored {
+		sum := sha256.Sum256(ciphertexts[i])
+		if len(meta.SHA256) != len(sum) || subtle.ConstantTimeCompare(sum[:], meta.SHA256) != 1 {
+			return domain.VideoSegment{}, false, domain.ErrIntegrity
+		}
+		segment, err := openSegment(dek, ciphertexts[i], sessionID, meta.FirstSequence, meta.LastSequence)
+		if err != nil || segment.SessionID != sessionID ||
+			segment.FirstSequence != meta.FirstSequence || segment.LastSequence != meta.LastSequence {
+			return domain.VideoSegment{}, false, domain.ErrIntegrity
+		}
+		size := 0
+		for _, frame := range segment.Frames {
+			size += len(frame.Data)
+		}
+		if i > 0 && (len(result.Frames)+len(segment.Frames) > MaxReadFrames || frameBytes+size > MaxReadBytes) {
+			break
+		}
+		result.Frames = append(result.Frames, segment.Frames...)
+		result.LastSequence = segment.LastSequence
+		frameBytes += size
 	}
-	if segment.SessionID != sessionID ||
-		segment.FirstSequence != stored.FirstSequence || segment.LastSequence != stored.LastSequence {
-		return domain.VideoSegment{}, false, domain.ErrIntegrity
+	return result, stored[0].Complete, nil
+}
+
+// fetchSegments reads the encrypted segments from the object store, a few at a time and in order.
+func (s *RecorderService) fetchSegments(ctx context.Context, stored []domain.StoredSegment) ([][]byte, error) {
+	out := make([][]byte, len(stored))
+	errs := make([]error, len(stored))
+	limit := make(chan struct{}, readFetchConcurrency)
+	var wg sync.WaitGroup
+	for i, meta := range stored {
+		wg.Add(1)
+		limit <- struct{}{}
+		go func(i int, key string) {
+			defer wg.Done()
+			defer func() { <-limit }()
+			depCtx, cancel := dependencyContext(ctx)
+			defer cancel()
+			ciphertext, err := s.objects.Get(depCtx, key)
+			if err == nil && len(ciphertext) > MaxCiphertextBytes {
+				err = domain.ErrIntegrity
+			}
+			out[i], errs[i] = ciphertext, err
+		}(i, meta.ObjectKey)
 	}
-	return segment, stored.Complete, nil
+	wg.Wait()
+	for _, err := range errs {
+		if errors.Is(err, domain.ErrIntegrity) {
+			return nil, err
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: reading encrypted video segment: %v", domain.ErrUnavailable, err)
+		}
+	}
+	return out, nil
 }
 
 func (s *RecorderService) auditRefusedRead(ctx context.Context, callerID, sessionID string) {
@@ -400,7 +465,7 @@ func (s *RecorderService) auditRefusedRead(ctx context.Context, callerID, sessio
 		return
 	}
 	depCtx, cancel := dependencyContext(ctx)
-	err := s.audit.EmitEvent(depCtx, callerID, AuditActionRead, "session", sessionID, false)
+	err := s.audit.EmitEvent(depCtx, callerID, AuditActionRead, "session", sessionID, false, nil)
 	cancel()
 	if err != nil {
 		log.Printf("video-recorder: refusal of video read for session %q by user %q could not be audited: %v", sessionID, callerID, err)

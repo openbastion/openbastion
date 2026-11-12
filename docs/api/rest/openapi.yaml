@@ -1160,14 +1160,19 @@ paths:
         in: path
         required: true
         schema: { type: integer, format: int64, minimum: 1 }
-        description: Première séquence du segment à relire.
+        description: Première séquence à relire ; la réponse sert la suite de segments qui en part.
     get:
       tags: [sessions]
       summary: Récupère un segment vidéo enregistré d'une session
       description: >
         Le Video Recorder vérifie l'action `recording:session:read` pour
         `recording:session:{sessionId}`, puis écrit `recording.read` à l'Audit
-        Service avant de déchiffrer et de servir le segment (ADR-0070). La
+        Service avant de déchiffrer et de servir (ADR-0070). Une lecture sert,
+        à partir de `firstSequence`, la suite de segments enregistrés sans trou,
+        jusqu'à 600 images ou 4 Mio de données d'images (ADR-0093) ;
+        `lastSequence` dit où elle s'arrête, et la lecture suivante part de
+        `lastSequence + 1`. Un seul événement `recording.read` couvre la plage,
+        et un segment qui ne se vérifie pas refuse toute la réponse. La
         Gateway transmet exclusivement l'utilisateur et les rôles du jeton
         vérifié ; les paramètres, le corps et les en-têtes du client ne peuvent
         pas choisir cette identité. Les images sont renvoyées en base64 dans

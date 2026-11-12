@@ -321,8 +321,9 @@ func recordAndReplay(t *testing.T, partial bool) {
 	reader := recordingv1.NewVideoRecordingClient(grpcConn)
 	replayed := map[uint64]*recordingv1.VideoFrameData{}
 	var complete bool
+	reads := 0 // the reads a replay of the whole session takes (ADR-0093)
 	waitFor(t, 30*time.Second, "the sealed recording", video, func() bool {
-		replayed, complete = map[uint64]*recordingv1.VideoFrameData{}, false
+		replayed, complete, reads = map[uint64]*recordingv1.VideoFrameData{}, false, 0
 		// Segment after segment, until there is none: the last one says whether it is sealed.
 		for first := int64(1); ; {
 			segment, err := reader.GetVideoSegment(ctx, &recordingv1.GetVideoSegmentRequest{
@@ -333,6 +334,7 @@ func recordAndReplay(t *testing.T, partial bool) {
 			if err != nil {
 				return false
 			}
+			reads++
 			for i, frame := range segment.GetFrames() {
 				replayed[uint64(segment.GetFirstSequence())+uint64(i)] = frame
 			}
@@ -391,7 +393,11 @@ func recordAndReplay(t *testing.T, partial bool) {
 	if !bytes.Equal(auditor.Screen().Pix, composer.Screen().Pix) {
 		t.Fatal("the screen composed from the recording is not the screen the operator saw last")
 	}
-	t.Logf("%d frame(s) shown (%d key, %d partial), %d recorded, sealed; sizes recorded: %v", len(shown), keyFrames, partialFrames, len(replayed), sizes)
+	t.Logf("%d frame(s) shown (%d key, %d partial), %d recorded, sealed, replayed in %d read(s); sizes recorded: %v", len(shown), keyFrames, partialFrames, len(replayed), reads, sizes)
+	// A read serves the run of segments (ADR-0093): the whole of this short session in one.
+	if reads != 1 {
+		t.Fatalf("%d reads for %d frames: a read does not serve the run of segments", reads, len(replayed))
+	}
 	if partial && partialFrames == 0 {
 		t.Fatal("no partial frame in a session meant to send them")
 	}

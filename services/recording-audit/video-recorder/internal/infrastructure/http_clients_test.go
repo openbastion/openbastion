@@ -84,7 +84,7 @@ func TestAuditHTTPClientRequiresSuccessfulStructuredAuditResponse(t *testing.T) 
 			defer server.Close()
 
 			client := AuditHTTPClient{BaseURL: server.URL, Client: server.Client()}
-			err := client.EmitEvent(context.Background(), "u_reader", "recording.read", "session", "s1", true)
+			err := client.EmitEvent(context.Background(), "u_reader", "recording.read", "session", "s1", true, nil)
 			if (err != nil) != test.wantErr {
 				t.Fatalf("EmitEvent error = %v, wantErr=%v", err, test.wantErr)
 			}
@@ -117,7 +117,7 @@ func TestClientsFailWhenNoHTTPClientIsConfigured(t *testing.T) {
 		t.Fatal("authorization client without a transport was accepted")
 	}
 	audit := AuditHTTPClient{BaseURL: "https://audit-service:8082"}
-	if err := audit.EmitEvent(context.Background(), "u1", "recording.read", "session", "s1", true); err == nil {
+	if err := audit.EmitEvent(context.Background(), "u1", "recording.read", "session", "s1", true, nil); err == nil {
 		t.Fatal("audit client without a transport was accepted")
 	}
 }

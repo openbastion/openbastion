@@ -108,7 +108,7 @@ func runService() {
 	grpcServer := interfaces.NewGRPCServer(svc, runtime)
 	log.Printf("video-recorder: HTTP health on :%d; gRPC on :%d", httpPort, grpcPort)
 	log.Printf("  -> authorization: %s", authzURL)
-	log.Printf("  -> audit: %s (every served segment is audited before decryption)", auditURL)
+	log.Printf("  -> audit: %s (every read, a run of segments, is audited before decryption)", auditURL)
 	log.Printf("  -> S3 endpoint: %s; bucket: %q", safeEndpoint(os.Getenv("S3_ENDPOINT")), os.Getenv("S3_BUCKET"))
 	if err := serve(ctx, httpServer, grpcServer, httpPort, grpcPort, runtime.Enabled()); err != nil {
 		log.Fatal(err)

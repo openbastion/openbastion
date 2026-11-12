@@ -51,6 +51,9 @@ type Repository interface {
 	AppendSegment(ctx context.Context, segment SegmentMetadata) error
 	CompleteRecording(ctx context.Context, sessionID string, throughSequence int64) error
 	GetSegment(ctx context.Context, sessionID string, firstSequence int64) (StoredSegment, error)
+	// GetSegmentsFrom returns, in order, at most limit segments of the session whose first
+	// sequence is firstSequence or later (ADR-0093): the caller keeps the run without a gap.
+	GetSegmentsFrom(ctx context.Context, sessionID string, firstSequence int64, limit int) ([]StoredSegment, error)
 	Ready(ctx context.Context) error
 }
 
@@ -72,5 +75,6 @@ type AuthorizationClient interface {
 }
 
 type AuditEmitter interface {
-	EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error
+	// details are the event's bounded details (ADR-0068), nil for none: the range a read served.
+	EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool, details map[string]string) error
 }

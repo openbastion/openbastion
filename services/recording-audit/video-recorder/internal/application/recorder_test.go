@@ -77,15 +77,17 @@ type auditEvent struct {
 }
 
 type auditEmitter struct {
-	events []auditEvent
-	err    error
+	events  []auditEvent
+	details []map[string]string
+	err     error
 }
 
-func (a *auditEmitter) EmitEvent(_ context.Context, actor, action, resourceType, resourceID string, success bool) error {
+func (a *auditEmitter) EmitEvent(_ context.Context, actor, action, resourceType, resourceID string, success bool, details map[string]string) error {
 	if a.err != nil {
 		return a.err
 	}
 	a.events = append(a.events, auditEvent{actor, action, resourceType, resourceID, success})
+	a.details = append(a.details, details)
 	return nil
 }
 
