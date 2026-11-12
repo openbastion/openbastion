@@ -26,7 +26,8 @@ export interface DeltaRect {
 
 export type ScreenMessage =
   // pointerDrawn: the frames carry the target's pointer (ADR-0091), the page hides its own.
-  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; expiresAt: Date; sessionId: string }
+  // resizable: the session follows the size of the page's screen area (ADR-0095), which then sends it.
+  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; resizable: boolean; expiresAt: Date; sessionId: string }
   | { type: "frame"; sequence: bigint; width: number; height: number; png: Uint8Array<ArrayBuffer> }
   // A partial frame (ADR-0092): its rectangles replace pixels of the frame of the sequence before.
   | { type: "delta"; sequence: bigint; width: number; height: number; rects: DeltaRect[] }
@@ -39,6 +40,7 @@ function refuse(what: string): never {
 }
 
 const HELLO_POINTER_DRAWN = 0x01;
+const HELLO_RESIZABLE = 0x02;
 
 export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
   if (data.byteLength < HEADER_SIZE) refuse("short message");
@@ -61,12 +63,13 @@ export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
     case 2: {
       if (sequence !== 0n || width !== 0 || height !== 0 || length < 14) refuse("malformed hello");
       const protocol = payload[0] === 1 ? "rdp" : payload[0] === 2 ? "vnc" : refuse("unknown protocol");
-      // The flags byte: bit 0 says the pointer is drawn; the others are reserved and zero.
-      if ((payload[1] & ~HELLO_POINTER_DRAWN) !== 0) refuse("malformed hello");
+      // The flags byte: bit 0 says the pointer is drawn, bit 1 that the session resizes; the others
+      // are reserved and zero.
+      if ((payload[1] & ~(HELLO_POINTER_DRAWN | HELLO_RESIZABLE)) !== 0) refuse("malformed hello");
       const fields = new DataView(data, HEADER_SIZE);
       const idLength = fields.getUint32(10);
       if (idLength === 0 || idLength > MAX_SESSION_ID_BYTES || idLength !== length - 14) refuse("malformed hello");
-      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
+      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, resizable: (payload[1] & HELLO_RESIZABLE) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
     }
     case 3: {
       if (sequence === 0n || width !== 0 || height !== 0 || length < 4) refuse("malformed end");
@@ -152,6 +155,25 @@ export function encodePointer(x: number, y: number, buttons: number, wheel: -1 |
 
 export function encodeReleaseAll(): Uint8Array<ArrayBuffer> {
   return inputMessage(3).bytes;
+}
+
+// The bounds of a resize (ADR-0095 §4), as the proxy holds them: past 2560 x 1600 a key frame risks
+// the 4 MiB of a segment. The width is even.
+export const RESIZE_BOUNDS = { minWidth: 640, minHeight: 480, maxWidth: 2560, maxHeight: 1600 } as const;
+
+export function clampResize(width: number, height: number): { width: number; height: number } {
+  const w = Math.min(Math.max(Math.floor(width), RESIZE_BOUNDS.minWidth), RESIZE_BOUNDS.maxWidth);
+  const h = Math.min(Math.max(Math.floor(height), RESIZE_BOUNDS.minHeight), RESIZE_BOUNDS.maxHeight);
+  return { width: w - (w % 2), height: h };
+}
+
+// A size for the target's desktop (ADR-0095 §5): the width in X, the height in Y, within the bounds.
+export function encodeResize(width: number, height: number): Uint8Array<ArrayBuffer> {
+  const size = clampResize(width, height);
+  const { bytes, view } = inputMessage(4);
+  view.setUint16(10, size.width);
+  view.setUint16(12, size.height);
+  return bytes;
 }
 
 // What an END means for the operator. The codes are the stable ones of ADR-0071 §12; the proxy's
