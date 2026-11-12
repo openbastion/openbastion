@@ -394,9 +394,20 @@ func recordAndReplay(t *testing.T, partial bool) {
 		t.Fatal("the screen composed from the recording is not the screen the operator saw last")
 	}
 	t.Logf("%d frame(s) shown (%d key, %d partial), %d recorded, sealed, replayed in %d read(s); sizes recorded: %v", len(shown), keyFrames, partialFrames, len(replayed), reads, sizes)
-	// A read serves the run of segments (ADR-0093): the whole of this short session in one.
-	if reads != 1 {
-		t.Fatalf("%d reads for %d frames: a read does not serve the run of segments", reads, len(replayed))
+	// A read serves the run of segments (ADR-0093), up to its bounds: 600 frames and 4 MiB of frame
+	// data. A short session of small frames is one read; 168 key frames of 25 KB, more than 4 MiB,
+	// are two (CI, PR #149). The reads the bounds call for, counted as the Recorder fills a response:
+	// a segment that would pass 4 MiB starts the next one.
+	want, count, size := 1, 0, 0
+	for sequence := uint64(1); sequence <= uint64(len(replayed)); sequence++ {
+		n := len(replayed[sequence].GetFrameData())
+		if count > 0 && (count+1 > 600 || size+n > 4<<20) {
+			want, count, size = want+1, 0, 0
+		}
+		count, size = count+1, size+n
+	}
+	if reads != want {
+		t.Fatalf("%d reads for %d frames, where the bounds call for %d: a read does not serve the run of segments", reads, len(replayed), want)
 	}
 	if partial && partialFrames == 0 {
 		t.Fatal("no partial frame in a session meant to send them")
