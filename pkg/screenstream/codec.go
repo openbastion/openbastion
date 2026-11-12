@@ -92,6 +92,8 @@ type Message struct {
 	// PointerDrawn says the frames carry the target's pointer (ADR-0091): the client hides its own.
 	// Bit 0 of the HELLO's flags byte; the other bits are reserved and zero.
 	PointerDrawn bool
+	// Resizable says the session follows InputResize (ADR-0095 §6): bit 1 of the flags byte.
+	Resizable bool
 
 	// END-only fields. Text is a stable public message, never an internal error.
 	EndCode uint16
@@ -108,6 +110,10 @@ type Rect struct {
 // HelloPointerDrawn is the HELLO flag saying the frames carry the pointer (ADR-0091). It was a
 // reserved zero byte: a HELLO without it is what it always was.
 const HelloPointerDrawn = byte(0x01)
+
+// HelloResizable is the HELLO flag saying the session follows InputResize (ADR-0095 §6): the client
+// may send the size of its window. A HELLO without it is what it always was.
+const HelloResizable = byte(0x02)
 
 // Encode serializes one v1 server-to-client message. It copies the payload into
 // the returned buffer; callers may safely reuse their input slices afterwards.
@@ -153,7 +159,10 @@ func Encode(m Message) ([]byte, error) {
 		putHeader(out, m)
 		out[HeaderSize] = byte(m.Protocol)
 		if m.PointerDrawn {
-			out[HeaderSize+1] = HelloPointerDrawn
+			out[HeaderSize+1] |= HelloPointerDrawn
+		}
+		if m.Resizable {
+			out[HeaderSize+1] |= HelloResizable
 		}
 		binary.BigEndian.PutUint64(out[HeaderSize+2:], uint64(m.ExpiresAt.Unix()))
 		binary.BigEndian.PutUint32(out[HeaderSize+10:], uint32(len(m.SessionID)))
@@ -211,10 +220,11 @@ func Decode(data []byte) (Message, error) {
 		}
 		p := data[HeaderSize:]
 		m.Protocol = Protocol(p[0])
-		if p[1]&^HelloPointerDrawn != 0 {
+		if p[1]&^(HelloPointerDrawn|HelloResizable) != 0 {
 			return Message{}, ErrMalformedMessage
 		}
 		m.PointerDrawn = p[1]&HelloPointerDrawn != 0
+		m.Resizable = p[1]&HelloResizable != 0
 		expires := binary.BigEndian.Uint64(p[2:10])
 		if expires > math.MaxInt64 {
 			return Message{}, ErrOutOfBounds

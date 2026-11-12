@@ -44,7 +44,11 @@ type RDPCodec struct {
 	// PartialFrames sends partial frames anchored on key frames (ADR-0092), not a whole frame for
 	// every change. Not yet offered by the runtime: the Video Recorder does not store them yet.
 	PartialFrames bool
-	openSession   func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
+	// Resize opens the display control (SCREEN_RESIZE, ADR-0095): drdynvc is announced, the
+	// display control is the one dynamic channel accepted, and InputResize asks the target for a
+	// desktop of the operator's size. Off, no channel is announced, as before.
+	Resize      bool
+	openSession func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 }
 
 var _ proxycore.ScreenCodec = (*RDPCodec)(nil)
@@ -145,11 +149,20 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		height = rdpDefaultDesktopHeight
 	}
 	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
-		PointerShapes: c.DrawPointer}
+		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize, DesktopResize: c.Resize}
+	target := &rdpTargetSession{session: client, resize: c.Resize}
 	var negotiatedWidth, negotiatedHeight uint16
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
-		{"MCS channels", func() error { _, e := client.ConnectMCSChannels(ctx, c.DialTimeout); return e }},
+		{"MCS channels", func() error {
+			if c.Resize {
+				if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel}, target.displayControlOpened, target.displayControlMessage); e != nil {
+					return e
+				}
+			}
+			_, e := client.ConnectMCSChannels(ctx, c.DialTimeout)
+			return e
+		}},
 		{"client info", func() error {
 			return client.SendClientInfo(ctx, rdp.RDPClientInfo{Username: cred.TargetUser, Password: cred.Material()}, c.DialTimeout)
 		}},
@@ -172,7 +185,8 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		return nil, rdp.ErrMCSConnection
 	}
 	keep = true
-	return &rdpTargetSession{session: client, width: negotiatedWidth, height: negotiatedHeight}, nil
+	target.width, target.height = negotiatedWidth, negotiatedHeight
+	return target, nil
 }
 
 // rdpConnectionStep is one phase of the RDP connection sequence after CredSSP. Every phase fails
@@ -200,6 +214,79 @@ func runRDPConnectionSteps(ctx context.Context, steps []rdpConnectionStep) error
 type rdpTargetSession struct {
 	session       *rdp.CredSSPClientSession
 	width, height uint16
+	// send sends on a dynamic channel: the session's, or a test's.
+	send func(ctx context.Context, name string, data []byte, timeout time.Duration) error
+	// resize is RDPCodec.Resize; displayCaps is what the target's display control accepts, once it
+	// said so (displayReady): a resize asked before that is ignored.
+	resize       bool
+	displayMu    sync.Mutex
+	displayCaps  rdp.RDPDisplayControlCaps
+	displayReady bool
+	// resizesSent counts the layouts sent, for the interoperability tests.
+	resizesSent int
+}
+
+// rdpResizer is a target session that can ask for another desktop size (ADR-0095).
+type rdpResizer interface {
+	Resize(ctx context.Context, width, height uint16, timeout time.Duration) error
+}
+
+// displayControlOpened is told when the display control opens, and opens again: Windows closes it
+// while it reactivates, then opens it and states its capabilities anew (CI of PR #155). Until it
+// does, a resize is ignored.
+func (s *rdpTargetSession) displayControlOpened(name string) {
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
+	s.displayReady = false
+}
+
+// displayControlMessage reads what the target sends on the display control: its capabilities,
+// once each time it opens. Anything else ends the session (ADR-0095 §4).
+func (s *rdpTargetSession) displayControlMessage(name string, message []byte) error {
+	if name != rdp.RDPDisplayControlChannel {
+		return fmt.Errorf("%w: a message on %q", rdp.ErrRDPDisplayControl, name)
+	}
+	caps, err := rdp.ParseDisplayControlCaps(message)
+	if err != nil {
+		return err
+	}
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
+	if s.displayReady {
+		return fmt.Errorf("%w: capabilities twice", rdp.ErrRDPDisplayControl)
+	}
+	s.displayCaps, s.displayReady = caps, true
+	return nil
+}
+
+// Resize asks the target for one monitor of width x height, brought within the bounds of
+// ADR-0095 §4; it is ignored before the target's capabilities, or past them.
+func (s *rdpTargetSession) Resize(ctx context.Context, width, height uint16, timeout time.Duration) error {
+	s.displayMu.Lock()
+	caps, ready := s.displayCaps, s.displayReady
+	s.displayMu.Unlock()
+	width, height = screenstream.ClampResize(width, height)
+	if !s.resize || !ready || !caps.Fits(uint32(width), uint32(height)) {
+		return nil
+	}
+	layout, err := rdp.MarshalDisplayControlLayout(uint32(width), uint32(height))
+	if err != nil {
+		return err
+	}
+	send := s.send
+	if send == nil {
+		send = s.session.SendDynamicChannelMessage
+	}
+	if err := send(ctx, rdp.RDPDisplayControlChannel, layout, timeout); err != nil {
+		if errors.Is(err, rdp.ErrRDPDynamicChannelClosed) {
+			return nil // closed while the target reactivates: the operator's next resize will do
+		}
+		return err
+	}
+	s.displayMu.Lock()
+	s.resizesSent++
+	s.displayMu.Unlock()
+	return nil
 }
 
 func (s *rdpTargetSession) ReadBitmapUpdate(ctx context.Context, timeout time.Duration) (rdp.RDPBitmapUpdate, error) {
@@ -264,6 +351,13 @@ func (s *rdpScreenSessionAdapter) Frames() <-chan screenstream.Message { return 
 // so, and the operator's browser hides its own.
 func (s *rdpScreenSessionAdapter) PointerDrawn() bool { return s.pointer != nil }
 
+// Resizable says the session follows InputResize (RDPCodec.Resize, ADR-0095): the HELLO says so,
+// and the operator's browser may send the size of its window.
+func (s *rdpScreenSessionAdapter) Resizable() bool {
+	target, ok := s.target.(*rdpTargetSession)
+	return ok && target.resize
+}
+
 // Input translates bounded ScreenStream events to RDP slow-path input PDUs.
 // Keysym-only input and extended mouse buttons are rejected rather than guessed.
 func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
@@ -271,6 +365,17 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 	defer s.inputMu.Unlock()
 	if s.target == nil {
 		return screenstream.ErrUnsupported
+	}
+	if input.Type == screenstream.InputResize {
+		// A size for the target's desktop, not an input event: the display control asks for it,
+		// and the target reactivates at the new size, which the reader follows (ADR-0095).
+		resizer, ok := s.target.(rdpResizer)
+		if !ok || !s.Resizable() {
+			return nil // a session that cannot resize ignores it
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), s.inputTimeout)
+		defer cancel()
+		return resizer.Resize(ctx, input.X, input.Y, s.inputTimeout)
 	}
 	keys := make(map[uint16]bool, len(s.pressedKeys))
 	for code, down := range s.pressedKeys {

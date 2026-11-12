@@ -3114,6 +3114,13 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-12 — ADR-0095, incrément 3 : le redimensionnement
+
+`InputResize` et le bit 1 du `HELLO` dans le contrat écran ; le relais borne et rythme (un par seconde, le dernier seul attend) ; le contrôle d'affichage dans `pkg/rdp` ; `RDPCodec.Resize` derrière `SCREEN_RESIZE`, éteint par défaut (compose : `SCREEN_RESIZE: ${SCREEN_RESIZE:-false}`).
+- **Windows (incrément 2, CI de #154)** : le contrôle d'affichage s'ouvre et sa capacité arrive sur les cinq cibles. Windows propose aussi `Geometry::v08.01` (4 à 5 fois), `Video::Control`, `Video::Data`, `Telemetry`, `Input` et `ECHO`, tous refusés.
+- **FreeRDP** n'offre pas de contrôle d'affichage : `SCREEN_RESIZE` allumé, le redimensionnement est ignoré et la session va son chemin.
+- **À ne pas allumer encore** : l'Admin UI refuserait un `HELLO` au bit 1 tant que l'incrément 4 n'est pas fait.
+
 ## 2026-11-12 — ADR-0095, incrément 2 : les canaux dynamiques
 
 `pkg/rdp/dynamic_channel.go` : la réponse aux capacités (version 2, sans compression), l'ouverture du seul contrôle d'affichage, le refus de tout autre nom par la réponse du protocole, les données bornées, la fermeture. Rien ne l'appelle hors des tests.

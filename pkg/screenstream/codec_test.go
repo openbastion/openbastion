@@ -191,12 +191,77 @@ func TestHelloSaysWhetherThePointerIsDrawn(t *testing.T) {
 		if err != nil || got.PointerDrawn != drawn {
 			t.Fatalf("drawn %v: decoded %v, %v", drawn, got.PointerDrawn, err)
 		}
-		for _, reserved := range []byte{0x02, 0x80, 0x03} {
+		for _, reserved := range []byte{0x04, 0x80, 0x05} {
 			bad := append([]byte(nil), wire...)
 			bad[HeaderSize+1] = reserved
 			if _, err := Decode(bad); err == nil {
 				t.Fatalf("a reserved flag %#x is accepted", reserved)
 			}
+		}
+	}
+}
+
+// The HELLO's bit 1 says the session follows InputResize (ADR-0095 §6), next to bit 0.
+func TestHelloSaysWhetherTheSessionResizes(t *testing.T) {
+	for _, c := range []struct {
+		drawn, resizable bool
+		flags            byte
+	}{{false, false, 0}, {false, true, HelloResizable}, {true, true, HelloPointerDrawn | HelloResizable}} {
+		in := Message{Type: TypeHello, Timestamp: time.Unix(100, 0).UTC(), Protocol: ProtocolRDP,
+			ExpiresAt: time.Unix(200, 0).UTC(), SessionID: "s", PointerDrawn: c.drawn, Resizable: c.resizable}
+		wire, err := Encode(in)
+		if err != nil || wire[HeaderSize+1] != c.flags {
+			t.Fatalf("%+v: flags %#x, %v", c, wire[HeaderSize+1], err)
+		}
+		got, err := Decode(wire)
+		if err != nil || got.Resizable != c.resizable || got.PointerDrawn != c.drawn {
+			t.Fatalf("%+v: decoded %+v, %v", c, got, err)
+		}
+	}
+}
+
+func TestInputResizeCarriesASizeAndNothingElse(t *testing.T) {
+	wire, err := EncodeInput(InputEvent{Type: InputResize, X: 1920, Y: 1080})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A size, not a point: a frame smaller than it does not refuse it.
+	got, err := DecodeInput(wire, 1280, 800)
+	if err != nil || got.Type != InputResize || got.X != 1920 || got.Y != 1080 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	for name, e := range map[string]InputEvent{
+		"no width":  {Type: InputResize, X: 0, Y: 1080},
+		"no height": {Type: InputResize, X: 1920, Y: 0},
+		"a flag":    {Type: InputResize, X: 1920, Y: 1080, Flags: 1},
+		"a key":     {Type: InputResize, X: 1920, Y: 1080, Scancode: 0x1e},
+		"a keysym":  {Type: InputResize, X: 1920, Y: 1080, Keysym: 0x61},
+		"buttons":   {Type: InputResize, X: 1920, Y: 1080, Buttons: 1},
+		"a wheel":   {Type: InputResize, X: 1920, Y: 1080, Wheel: 1},
+	} {
+		raw := make([]byte, InputMessageSize)
+		raw[0], raw[1], raw[2] = Version, byte(e.Type), e.Flags
+		binary.BigEndian.PutUint32(raw[4:8], e.Keysym)
+		binary.BigEndian.PutUint16(raw[8:10], e.Scancode)
+		binary.BigEndian.PutUint16(raw[10:12], e.X)
+		binary.BigEndian.PutUint16(raw[12:14], e.Y)
+		raw[14], raw[15] = e.Buttons, byte(e.Wheel)
+		if _, err := DecodeInput(raw, 4000, 4000); !errors.Is(err, ErrMalformedMessage) {
+			t.Errorf("%s: %v, want refused", name, err)
+		}
+	}
+}
+
+func TestClampResize_KeepsWithinTheBoundsAndEven(t *testing.T) {
+	for _, c := range [][4]uint16{
+		{1920, 1080, 1920, 1080},
+		{1921, 1081, 1920, 1081},
+		{100, 100, MinResizeWidth, MinResizeHeight},
+		{9000, 9000, MaxResizeWidth, MaxResizeHeight},
+		{641, 480, 640, 480},
+	} {
+		if w, h := ClampResize(c[0], c[1]); w != c[2] || h != c[3] {
+			t.Errorf("ClampResize(%d, %d) = %d x %d, want %d x %d", c[0], c[1], w, h, c[2], c[3])
 		}
 	}
 }

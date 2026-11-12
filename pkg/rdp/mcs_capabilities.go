@@ -312,6 +312,9 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	// bitmapCompressionFlag "MUST be set to TRUE" (MS-RDPBCGR 2.2.7.1.2); Windows Server 2022 answers
 	// FALSE with ERRINFO_BADCAPABILITIES (ADR-0071, CI run #31). Compressed bitmaps are decoded:
 	// RDP 6.0 planar at 32 bpp, Interleaved RLE at 15 and 16 bpp (ADR-0086).
+	if settings.DesktopResize {
+		binary.LittleEndian.PutUint16(bitmap[18:20], 1) // desktopResizeFlag (ADR-0095)
+	}
 	binary.LittleEndian.PutUint16(bitmap[20:22], 1)
 	binary.LittleEndian.PutUint16(bitmap[24:26], 1) // multiple rectangles are mandatory
 	caps = append(caps, bitmap...)
