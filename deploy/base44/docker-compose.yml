@@ -488,6 +488,12 @@ services:
       # The preview's public host may differ from the Host the Gateway receives (ADR-0071, increment
       # 0): only that suffix is added. Unset, only the Gateway's own origin opens a screen.
       SCREEN_ALLOWED_ORIGINS: ${BASE44_PUBLIC_HOST_SUFFIX:+*.${BASE44_PUBLIC_HOST_SUFFIX}}
+      # The whole UI reaches the Gateway from one address, the Vite relay's: logins, pages and the
+      # replay's segments share one per-address budget. The preview's is wider than the default (60,
+      # then 60 a minute), so that a replay, one segment per frame, is not cut short. The per-user
+      # limits on sessions and actions are unchanged.
+      CLIENT_REQUEST_BURST: "600"
+      CLIENT_REQUEST_RATE_PER_MINUTE: "1200"
     volumes:
       - ../..:/src
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: api-gateway}}
