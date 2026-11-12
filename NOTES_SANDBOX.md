@@ -3485,6 +3485,12 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-12 — ADR-0095, incrément 2 : les canaux dynamiques
+
+`pkg/rdp/dynamic_channel.go` : la réponse aux capacités (version 2, sans compression), l'ouverture du seul contrôle d'affichage, le refus de tout autre nom par la réponse du protocole, les données bornées, la fermeture. Rien ne l'appelle hors des tests.
+- **Contre FreeRDP 3** : FreeRDP propose `AUDIO_INPUT` une fois les capacités échangées ; il est refusé, et la session continue.
+- **Windows (incrément 1, CI de #153)** : les cinq cibles envoient sur `drdynvc` 8 ou 9 messages, une demande de capacités puis des créations de canaux, même avant d'avoir reçu la réponse. Leurs noms seront dans le journal de `TestRDPWindows_DynamicChannels`.
+
 ## 2026-11-12 — ADR-0095, incrément 1 : le canal statique drdynvc
 
 ADR-0095 accepté (option B, « Go pour le B »). Premier incrément, dans `pkg/rdp` seulement : `MCSClientSettings.DynamicChannels` annonce `drdynvc` dans `CS_NET`, le joint, et lit ce qui y arrive, borné (64 Kio par message, fragments stricts, aucune compression, aucun canal non joint). Rien ne l'allume hors des tests : le proxy négocie comme avant.

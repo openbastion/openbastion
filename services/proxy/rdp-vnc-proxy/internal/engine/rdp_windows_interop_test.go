@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -669,6 +670,28 @@ func TestRDPWindows_StaticChannel(t *testing.T) {
 	}
 	if messages[0][0]>>4 != 0x05 {
 		t.Fatalf("Windows' first drdynvc message has Cmd %d, not the capabilities request (5)", messages[0][0]>>4)
+	}
+}
+
+// The dynamic channels of ADR-0095 (increment 2) against Windows: the display control opened, the
+// other names Windows proposes refused (logged), and the display control's capabilities received.
+func TestRDPWindows_DynamicChannels(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dynamic := readDynamicChannels(t, client, target.user, target.password, 20*time.Second)
+	dynamic.mu.Lock()
+	defer dynamic.mu.Unlock()
+	if len(dynamic.opened) != 1 || dynamic.opened[0] != rdp.RDPDisplayControlChannel {
+		t.Fatalf("opened %q, want the display control alone", dynamic.opened)
+	}
+	caps := dynamic.messages[rdp.RDPDisplayControlChannel]
+	if len(caps) == 0 || len(caps[0]) < 8 || binary.LittleEndian.Uint32(caps[0][:4]) != 5 {
+		t.Fatalf("no DISPLAYCONTROL_CAPS_PDU from Windows: %d message(s)", len(caps))
 	}
 }
 
