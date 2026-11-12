@@ -225,9 +225,21 @@ func (v *screenView) read(t *testing.T, conn *websocket.Conn) screenMessage {
 	t.Helper()
 	for {
 		m := readScreen(t, conn)
-		switch m.kind {
-		case 3:
+		if m.kind == 3 {
 			t.Fatalf("the session ended before a frame: %q", m.endText)
+		}
+		if shown, ok := v.apply(t, m); ok {
+			return shown
+		}
+	}
+}
+
+// apply composes a frame, key or partial, and returns the screen it makes, as a PNG; anything else
+// is not a frame (false).
+func (v *screenView) apply(t *testing.T, m screenMessage) (screenMessage, bool) {
+	t.Helper()
+	{
+		switch m.kind {
 		case 1:
 			decoded, err := png.Decode(bytes.NewReader(m.png))
 			if err != nil {
@@ -254,14 +266,14 @@ func (v *screenView) read(t *testing.T, conn *websocket.Conn) screenMessage {
 				at += 20 + n
 			}
 		default:
-			continue
+			return screenMessage{}, false
 		}
 		v.sequence = m.sequence
 		var encoded bytes.Buffer
 		if err := png.Encode(&encoded, v.screen); err != nil {
 			t.Fatal(err)
 		}
-		return screenMessage{kind: 1, sequence: m.sequence, png: encoded.Bytes()}
+		return screenMessage{kind: 1, sequence: m.sequence, png: encoded.Bytes()}, true
 	}
 }
 
