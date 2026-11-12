@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ScreenDeps, ScreenSocket, ScreenViewer, attachUrl } from "./ScreenViewer";
-import { SUBPROTOCOL, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeScancode, endMessage } from "./protocol";
+import { RESIZE_DEBOUNCE_MS, ScreenDeps, ScreenSocket, ScreenViewer, attachUrl } from "./ScreenViewer";
+import { SUBPROTOCOL, clampResize, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
@@ -25,12 +25,12 @@ function oversizedFrame(): ArrayBuffer {
   return header(1, 1n, 1, 1, payload);
 }
 const frame = (sequence: bigint, width = 100, height = 50) => header(1, sequence, width, height, PNG);
-function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc", pointerDrawn = false): ArrayBuffer {
+function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc", pointerDrawn = false, resizable = false): ArrayBuffer {
   const bytes = [...new TextEncoder().encode(id)];
   const p = new Uint8Array(14 + bytes.length);
   const v = new DataView(p.buffer);
   p[0] = protocol === "rdp" ? 1 : 2;
-  p[1] = pointerDrawn ? 1 : 0;
+  p[1] = (pointerDrawn ? 1 : 0) | (resizable ? 2 : 0);
   v.setBigUint64(2, 1893456000n);
   v.setUint32(10, bytes.length);
   p.set(bytes, 14);
@@ -65,7 +65,7 @@ class FakeSocket implements ScreenSocket {
   }
 }
 
-function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<ImageBitmap>) {
+function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<ImageBitmap>, measure?: ScreenDeps["measure"]) {
   const socket = new FakeSocket();
   const urls: [string, string][] = [];
   const shown: { width: number; height: number }[] = [];
@@ -84,6 +84,7 @@ function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<Imag
       painted.push(`frame ${width}x${height}`);
     },
     patch: (_canvas, image, x, y) => painted.push(`rect ${x},${y} ${image.width}x${image.height}`),
+    measure,
   };
   const onReconnect = vi.fn();
   const onClose = vi.fn();
@@ -145,7 +146,7 @@ describe("the screen contract (ADR-0071 §6)", () => {
       "PNG over 4 MiB": oversizedFrame(),
       "hello with a frame size": tampered((b) => (b[23] = 1), hello()),
       "hello unknown protocol": tampered((b) => (b[32] = 3), hello()),
-      "hello reserved flag": tampered((b) => (b[33] = 2), hello()),
+      "hello reserved flag": tampered((b) => (b[33] = 4), hello()),
       "hello reserved flag beside the pointer": tampered((b) => (b[33] = 0x81), hello()),
       "end sequence zero": end("x", 0n),
       "end text not UTF-8": header(3, 1n, 0, 0, [0, 0, 0, 2, 0xc3, 0x28]),
@@ -561,5 +562,63 @@ describe("what the operator sends", () => {
     fireEvent.keyDown(s.canvas, { key: "a", code: "KeyA" });
     expect(s.socket.sent).toEqual([]);
     s.view.unmount();
+  });
+});
+
+// The resize of ADR-0095: the HELLO's bit 1, the input of type 4, and the page asking a resizable
+// session for the size of its screen area.
+describe("the resize", () => {
+  it("reads the HELLO's resize flag, beside the pointer's", () => {
+    expect(decodeScreenMessage(hello("s1", "rdp", false, true))).toMatchObject({ type: "hello", resizable: true, pointerDrawn: false });
+    expect(decodeScreenMessage(hello("s1", "rdp", true, true))).toMatchObject({ type: "hello", resizable: true, pointerDrawn: true });
+    expect(decodeScreenMessage(hello("s1", "rdp", true, false))).toMatchObject({ type: "hello", resizable: false });
+  });
+
+  it("encodes a size as an input of type 4, within the bounds and even", () => {
+    const sent = encodeResize(1921, 1081);
+    const view = new DataView(sent.buffer);
+    expect([sent[0], sent[1], view.getUint16(10), view.getUint16(12)]).toEqual([1, 4, 1920, 1081]);
+    expect([...sent.slice(2, 10), ...sent.slice(14)]).toEqual(new Array(10).fill(0));
+    expect(clampResize(100, 100)).toEqual({ width: 640, height: 480 });
+    expect(clampResize(9000, 9000)).toEqual({ width: 2560, height: 1600 });
+    expect(clampResize(1023.7, 768.9)).toEqual({ width: 1022, height: 768 });
+  });
+
+  function resizes(sent: Uint8Array<ArrayBuffer>[]): string[] {
+    return sent.filter((m) => m[1] === 4).map((m) => {
+      const v = new DataView(m.buffer);
+      return `${v.getUint16(10)}x${v.getUint16(12)}`;
+    });
+  }
+
+  it("asks a resizable session for the room the page has, and again when it changes", async () => {
+    let room = { width: 1200, height: 700 };
+    const s = setup("/sessions/s1/screen", undefined, () => room);
+    s.socket.receive(hello("s1", "rdp", false, true));
+    await waitFor(() => expect(resizes(s.socket.sent)).toEqual(["1200x700"]));
+    // A window that stops changing: one more resize, after the pause; the same size again, none.
+    room = { width: 1001, height: 650 };
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(resizes(s.socket.sent)).toEqual(["1200x700"]);
+    await waitFor(() => expect(resizes(s.socket.sent)).toEqual(["1200x700", "1000x650"]), { timeout: RESIZE_DEBOUNCE_MS * 4 });
+    room = { width: 1000, height: 650 };
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, RESIZE_DEBOUNCE_MS * 2));
+    expect(resizes(s.socket.sent)).toEqual(["1200x700", "1000x650"]);
+  });
+
+  it("asks a session that does not resize for nothing", async () => {
+    const s = setup("/sessions/s1/screen", undefined, () => ({ width: 1200, height: 700 }));
+    s.socket.receive(hello("s1", "rdp", false, false));
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    await new Promise((resolve) => setTimeout(resolve, RESIZE_DEBOUNCE_MS * 2));
+    expect(resizes(s.socket.sent)).toEqual([]);
   });
 });

@@ -3114,6 +3114,12 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre
+
+La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins 112 px. Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
+- **Bac à sable** : il n'a pas de cible RDP. La vérification dans un vrai navigateur demande une cible Windows, qui n'existe qu'en CI : c'est l'incrément 5.
+- **Choix renversables** : 112 px pour les boutons et la ligne d'état ; 500 ms d'attente ; la taille en pixels CSS, sans le facteur de l'écran (un écran à 200 % aurait un bureau de la moitié de ses pixels physiques, mais un texte à taille de lecture).
+
 ## 2026-11-12 — ADR-0095, incrément 3 : le redimensionnement
 
 `InputResize` et le bit 1 du `HELLO` dans le contrat écran ; le relais borne et rythme (un par seconde, le dernier seul attend) ; le contrôle d'affichage dans `pkg/rdp` ; `RDPCodec.Resize` derrière `SCREEN_RESIZE`, éteint par défaut (compose : `SCREEN_RESIZE: ${SCREEN_RESIZE:-false}`).

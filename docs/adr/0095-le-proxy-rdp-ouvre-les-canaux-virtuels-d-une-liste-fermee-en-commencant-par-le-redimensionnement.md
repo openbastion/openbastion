@@ -88,7 +88,13 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
   - une réactivation rendait la session « non finalisée », et un second redimensionnement arrivé pendant ce temps était refusé, ce qui fermait la session (Windows Server 2019). Les canaux appartiennent à la connexion MCS et non au partage : ils envoient dès qu'ils sont joints, réactivation comprise. Un test rouge d'abord l'a reproduit.
   - Windows ferme le contrôle d'affichage pendant une réactivation, puis le rouvre et redonne sa capacité (Server 2022, 32 bpp). Un redimensionnement arrivé entre les deux était refusé, et la capacité redonnée l'aurait été aussi. Désormais, `SendDynamicChannelMessage` dit `ErrRDPDynamicChannelClosed`, et le codec abandonne ce redimensionnement : le suivant passera. Chaque réouverture attend une nouvelle capacité.
 - **Prouvé contre Windows**, les trois correctifs en place (CI de #155, cinq cibles, Server 2019 et 2022, 16 et 32 bpp, fr-FR, session console) : demande de 1 023 × 768, et une image clé de 1 022 × 768 en 0,5 à 0,9 s.
-- **Reste** : l'Admin UI (incrément 4) ; elle ne connaît pas encore le bit 1 du `HELLO`, et `SCREEN_RESIZE` doit rester éteint jusque-là.
+
+
+**Incrément 4, fait (12 novembre 2026) : l'Admin UI.**
+- **Protocole** (`web/admin-ui/src/features/screen/protocol.ts`) : le bit 1 du `HELLO` (`resizable`), et `encodeResize`, une entrée de type 4 ramenée dans les mêmes bornes que le proxy (`clampResize`).
+- **Visionneuse** : quand la session dit qu'elle redimensionne, la page lui demande la place qu'elle a pour l'écran : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins les boutons et la ligne d'état (112 px). Elle le demande une première fois au `HELLO`, puis chaque fois que la fenêtre a cessé de changer de taille depuis 500 ms, et seulement si la taille change. Le proxy rythme aussi, à un par seconde.
+- **Prouvé** : 4 tests (le drapeau, l'encodage, l'envoi et son rythme, rien pour une session qui ne redimensionne pas) ; 7 mutations tuées ; les 117 tests de l'Admin UI passent, et sa construction aussi.
+- **Reste** (incrément 5) : la vérification dans un vrai navigateur, contre une cible Windows. Le bac à sable n'en a pas : il n'a qu'une cible VNC, qui ne redimensionne pas. Puis la décision d'allumer `SCREEN_RESIZE` par défaut, qui revient au propriétaire.
 
 ## Conséquences
 
