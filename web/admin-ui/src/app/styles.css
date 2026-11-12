@@ -1713,3 +1713,156 @@ main.login {
     outline-offset: -1px;
   }
 }
+
+/* ADR-0073 — account filters arranged as an explicit, accessible rule builder. */
+.account-filter-bar {
+  gap: 0.8rem;
+  padding: 1rem 1.1rem;
+}
+
+.account-filter-toolbar,
+.account-filter-trigger,
+.account-filter-builder-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.account-filter-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.account-filter-trigger {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.75rem;
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-filter-trigger:hover,
+.account-filter-trigger[aria-expanded="true"] {
+  background: var(--surface-3);
+  border-color: var(--brand);
+}
+
+.account-filter-trigger:focus-visible,
+.account-filter-join:focus-visible {
+  outline: 2px solid var(--ob-color-focus);
+  outline-offset: 2px;
+}
+
+.account-filter-trigger-icon { font-size: 1rem; }
+.account-filter-chevron { color: var(--ink-3); }
+.account-filter-count {
+  min-width: 1.45rem;
+  min-height: 1.45rem;
+  display: inline-grid;
+  place-items: center;
+  padding-inline: 0.25rem;
+  color: var(--ink-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.account-filter-builder {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-filter-context {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr);
+  align-items: end;
+  gap: 0.65rem;
+}
+
+.account-filter-where,
+.account-filter-join {
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.account-filter-search,
+.account-filter-rule label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.account-filter-search input { width: 100%; }
+.account-filter-rules { display: grid; gap: 0.45rem; }
+
+.account-filter-rule {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(8rem, 1.1fr) minmax(6rem, 0.55fr) minmax(10rem, 1.5fr);
+  align-items: end;
+  gap: 0.65rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.account-filter-rule:last-child { border-bottom: 0; }
+.account-filter-join { padding: 0.7rem 0.25rem; }
+.account-filter-chip,
+.account-filter-rule select {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.7rem;
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.84rem;
+}
+.account-filter-operator .account-filter-chip { background: var(--surface); }
+.account-filter-builder-footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 760px) {
+  .account-filter-rule {
+    grid-template-columns: 2.4rem minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.45rem;
+  }
+  .account-filter-rule .account-filter-join { grid-row: 1 / span 2; }
+  .account-filter-field { grid-column: 2; }
+  .account-filter-operator { grid-column: 3; }
+  .account-filter-value { grid-column: 2 / 4; }
+}
+
+@media (max-width: 420px) {
+  .account-filter-builder { padding: 0.7rem; }
+  .account-filter-context { grid-template-columns: 1fr; gap: 0.25rem; }
+  .account-filter-rule { grid-template-columns: 2rem minmax(0, 1fr); }
+  .account-filter-rule .account-filter-join { grid-row: 1 / span 3; }
+  .account-filter-field,
+  .account-filter-operator,
+  .account-filter-value { grid-column: 2; }
+}

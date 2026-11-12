@@ -4190,3 +4190,10 @@ visuels réels à 320/768/1024/1440 px ainsi que le parcours lecteur d'écran
 (VoiceOver/NVDA) restent à faire ; aucune conformité WCAG globale n'est
 revendiquée. `origin/main` a été récupéré avant l'incrément ; aucun commit
 additionnel n'était à intégrer (branche en avance de 50 commits, sans retard).
+
+
+## 2026-11-12 — Constructeur de filtres de la page Comptes (ADR-0073)
+
+La barre de filtres de l'inventaire est réorganisée selon la référence visuelle fournie : déclencheur repliable « Filtres avancés », compteur de critères actifs, panneau structuré en lignes Champ / Opérateur / Valeur et connecteurs ET. La recherche textuelle locale est présentée comme la première condition « OÙ ». Les quatre filtres catégoriels existants, les vues sauvegardées et leur stockage versionné sont conservés ; la recherche ne quitte pas la page déjà chargée et aucun endpoint supplémentaire n'est appelé. Le panneau et ses contrôles restent utilisables au clavier et se réorganisent sur mobile.
+
+Un test de composant vérifie l'état ARIA du déclencheur, la structure du constructeur, le compteur après activation d'un critère et le repli/dépli du panneau. Une première exécution des tests a révélé que le libellé accessible historique du champ de recherche avait été modifié ; il a été restauré afin de préserver les contrats d'accessibilité existants.

@@ -34,6 +34,7 @@ export function Accounts() {
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const [filter, setFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [viewFilters, setViewFilters] = useState<AccountViewFilters>(emptyAccountViewFilters);
   const [savedViews, setSavedViews] = useState<SavedAccountView[]>(readSavedAccountViews);
   const [selectedSavedView, setSelectedSavedView] = useState("");
@@ -64,6 +65,14 @@ export function Accounts() {
 
   // Filtering is deliberately limited to the server page already loaded; it never implies a
   // complete inventory when the public API has not defined a search contract.
+  const activeFilterCount = [
+    filter.trim().length > 0,
+    viewFilters.protocol !== "all",
+    viewFilters.approval !== "all",
+    viewFilters.identity !== "all",
+    viewFilters.rotation !== "all",
+  ].filter(Boolean).length;
+
   const filteredAccounts = (data?.items ?? []).filter((account) => {
     const query = filter.trim().toLocaleLowerCase("fr");
     if (query && ![account.id, account.name, account.username, account.targetHost, account.protocol]
@@ -174,71 +183,105 @@ export function Accounts() {
         {loading ? <p className="ob-empty-state" role="status">Chargement des comptes privilégiés…</p> : null}
         {!loading && data && data.items.length === 0 ? <p className="ob-empty-state">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
         {!loading && data && data.items.length > 0 ? (
-          <div className="ob-filter-bar">
-            <label htmlFor="account-page-filter">Filtrer les comptes de cette page</label>
-            <input
-              id="account-page-filter"
-              type="search"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
-            />
-            <p className="ob-filter-help">Filtre local limité aux {data.items.length} comptes chargés sur cette page ; il ne lance pas de recherche globale. Le texte saisi n'est jamais enregistré dans une vue.</p>
-            <div className="ob-filter-grid">
-              <label>
-                Filtrer par protocole
-                <select value={viewFilters.protocol} onChange={(event) => setViewFilters((current) => ({ ...current, protocol: event.target.value as AccountViewFilters["protocol"] }))}>
-                  <option value="all">Tous</option>
-                  <option value="ssh">SSH</option>
-                  <option value="rdp">RDP</option>
-                  <option value="vnc">VNC</option>
-                </select>
-              </label>
-              <label>
-                Approbation
-                <select value={viewFilters.approval} onChange={(event) => setViewFilters((current) => ({ ...current, approval: event.target.value as AccountViewFilters["approval"] }))}>
-                  <option value="all">Toutes</option>
-                  <option value="required">Requise</option>
-                  <option value="not-required">Non requise</option>
-                </select>
-              </label>
-              <label>
-                Identité de la cible
-                <select value={viewFilters.identity} onChange={(event) => setViewFilters((current) => ({ ...current, identity: event.target.value as AccountViewFilters["identity"] }))}>
-                  <option value="all">Toutes</option>
-                  <option value="pinned">Épinglée</option>
-                  <option value="missing">Non épinglée</option>
-                </select>
-              </label>
-              <label>
-                Rotation
-                <select value={viewFilters.rotation} onChange={(event) => setViewFilters((current) => ({ ...current, rotation: event.target.value as AccountViewFilters["rotation"] }))}>
-                  <option value="all">Toutes</option>
-                  <option value="due">À renouveler</option>
-                  <option value="failed">En échec</option>
-                </select>
-              </label>
+          <div className="ob-filter-bar account-filter-bar">
+            <div className="account-filter-toolbar">
+              <button
+                className="account-filter-trigger"
+                type="button"
+                aria-expanded={filtersOpen}
+                aria-controls="account-filter-builder"
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <span className="account-filter-trigger-icon" aria-hidden="true">☷</span>
+                <span>Filtres avancés</span>
+                <span className="account-filter-count" aria-label={`${activeFilterCount} filtre(s) actif(s)`}>{activeFilterCount}</span>
+                <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
+              </button>
+              {activeFilterCount > 0 ? <Button type="button" onClick={() => { setFilter(""); setViewFilters(emptyAccountViewFilters); setSelectedSavedView(""); }}>Réinitialiser</Button> : null}
             </div>
-            <div className="ob-saved-views">
-              <label>
-                Vues enregistrées
-                <select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
-                  <option value="">Choisir une vue…</option>
-                  {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
-                </select>
-              </label>
-              <form className="ob-saved-view-form" onSubmit={saveCurrentView}>
-                <label>
-                  Nom de la vue
-                  <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder="Ex. SSH à renouveler" />
-                </label>
-                <Button type="submit">Enregistrer la vue</Button>
-              </form>
-              <Button disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</Button>
-            </div>
-            {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
-            <p className="ob-filter-help">Les vues conservent uniquement ces filtres catégoriels et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
-            <p className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</p>
+            {filtersOpen ? (
+              <div id="account-filter-builder" className="account-filter-builder" aria-label="Constructeur de filtres">
+                <div className="account-filter-context">
+                  <span className="account-filter-where">OÙ</span>
+                  <label className="account-filter-search">
+                    <span>Filtrer les comptes de cette page</span>
+                    <input
+                      id="account-page-filter"
+                      type="search"
+                      value={filter}
+                      onChange={(event) => setFilter(event.target.value)}
+                      placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
+                    />
+                  </label>
+                </div>
+                <p className="ob-filter-help">La recherche et les critères ci-dessous s'appliquent uniquement aux {data.items.length} comptes chargés sur cette page ; aucune recherche globale n'est lancée. Le texte saisi n'est jamais enregistré dans une vue.</p>
+                <div className="account-filter-rules" aria-label="Critères combinés avec ET">
+                  <div className="account-filter-rule">
+                    <span className="account-filter-join">ET</span>
+                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Protocole</span></label>
+                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
+                    <label className="account-filter-value"><span>Valeur</span>
+                      <select aria-label="Filtrer par protocole" value={viewFilters.protocol} onChange={(event) => setViewFilters((current) => ({ ...current, protocol: event.target.value as AccountViewFilters["protocol"] }))}>
+                        <option value="all">Tous les protocoles</option><option value="ssh">SSH</option><option value="rdp">RDP</option><option value="vnc">VNC</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="account-filter-rule">
+                    <span className="account-filter-join">ET</span>
+                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Approbation</span></label>
+                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
+                    <label className="account-filter-value"><span>Valeur</span>
+                      <select aria-label="Approbation" value={viewFilters.approval} onChange={(event) => setViewFilters((current) => ({ ...current, approval: event.target.value as AccountViewFilters["approval"] }))}>
+                        <option value="all">Toutes</option><option value="required">Requise</option><option value="not-required">Non requise</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="account-filter-rule">
+                    <span className="account-filter-join">ET</span>
+                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Identité de la cible</span></label>
+                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
+                    <label className="account-filter-value"><span>Valeur</span>
+                      <select aria-label="Identité de la cible" value={viewFilters.identity} onChange={(event) => setViewFilters((current) => ({ ...current, identity: event.target.value as AccountViewFilters["identity"] }))}>
+                        <option value="all">Toutes</option><option value="pinned">Épinglée</option><option value="missing">Non épinglée</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="account-filter-rule">
+                    <span className="account-filter-join">ET</span>
+                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Rotation</span></label>
+                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
+                    <label className="account-filter-value"><span>Valeur</span>
+                      <select aria-label="Rotation" value={viewFilters.rotation} onChange={(event) => setViewFilters((current) => ({ ...current, rotation: event.target.value as AccountViewFilters["rotation"] }))}>
+                        <option value="all">Toutes</option><option value="due">À renouveler</option><option value="failed">En échec</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+                <div className="account-filter-builder-footer">
+                  <span className="ob-filter-help">Les critères sont combinés avec ET.</span>
+                  <span className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</span>
+                </div>
+                <div className="ob-saved-views">
+                  <label>
+                    Vues enregistrées
+                    <select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
+                      <option value="">Choisir une vue…</option>
+                      {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
+                    </select>
+                  </label>
+                  <form className="ob-saved-view-form" onSubmit={saveCurrentView}>
+                    <label>
+                      Nom de la vue
+                      <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder="Ex. SSH à renouveler" />
+                    </label>
+                    <Button type="submit">Enregistrer la vue</Button>
+                  </form>
+                  <Button disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</Button>
+                </div>
+                {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
+                <p className="ob-filter-help">Les vues conservent uniquement les filtres catégoriels et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {!loading && data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}

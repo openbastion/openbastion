@@ -40,6 +40,22 @@ describe("Accounts", () => {
     expect(calls.some((call) => call.method === "DELETE" && call.path === "/vault/accounts/acc_1")).toBe(true);
   });
 
+  it("presents account filters as an accessible rule builder and reports active criteria", async () => {
+    const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } } });
+    signedIn(api, <Accounts />);
+    const trigger = await screen.findByRole("button", { name: /Filtres avancés/ });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Constructeur de filtres")).toBeTruthy();
+    expect(screen.getByLabelText("Critères combinés avec ET").textContent).toContain("ET");
+    fireEvent.change(screen.getByLabelText("Filtrer par protocole"), { target: { value: "ssh" } });
+    expect(screen.getByLabelText("1 filtre(s) actif(s)").textContent).toBe("1");
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("Constructeur de filtres")).toBeNull();
+    fireEvent.click(trigger);
+    expect(screen.getByLabelText("Constructeur de filtres")).toBeTruthy();
+  });
+
   it("filters only the accounts on the loaded page without making another API request", async () => {
     const rows = [account, { ...account, id: "acc_2", name: "web frontend", targetHost: "web:22" }, { ...account, id: "acc_3", name: "cache", targetHost: "redis:6379", protocol: "ssh" }];
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 27 } } });
@@ -50,7 +66,7 @@ describe("Accounts", () => {
     expect(screen.queryByText("prod db")).toBeNull();
     expect(screen.queryByText("cache")).toBeNull();
     expect(screen.getByText(/1 sur 3 compte\(s\)/).textContent).toContain("1 sur 3 compte(s)");
-    expect(screen.getByText(/Filtre local limité aux 3 comptes chargés/)).toBeTruthy();
+    expect(screen.getByText(/La recherche et les critères ci-dessous s.appliquent uniquement aux 3 comptes chargés/)).toBeTruthy();
     expect(calls.filter((call) => call.method === "GET" && call.path.startsWith("/vault/accounts")).length).toBe(1);
   });
 

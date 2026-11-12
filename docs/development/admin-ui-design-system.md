@@ -137,6 +137,7 @@ Le changement visuel ne supprime ni ne redéfinit les fonctionnalités UX-01 à 
 - Vue générale et Centre de sécurité limités aux données et couvertures effectivement renvoyées par l'API ; aucune métrique, alerte, recherche ou capacité simulée ;
 - thèmes, densité, état réduit, destination initiale, favoris, dialogue de préférences et vues de comptes sauvegardées ;
 - clés de stockage `openbastion.admin-ui.preferences.v1` et `openbastion.admin-ui.account-views.v1` conservées. Aucun jeton, secret, compte, hôte, identifiant de session, recherche libre ou donnée personnelle n'est ajouté au stockage navigateur.
+- sur Comptes, le filtrage est présenté comme un constructeur de règles : bouton repliable avec compteur de critères actifs, recherche locale « OÙ », puis lignes Champ / Opérateur / Valeur reliées par ET. Les quatre critères existants (protocole, approbation, identité épinglée et rotation) et les vues enregistrées sont conservés ; la recherche reste limitée à la page déjà chargée.
 
 Les vues sauvegardées restent limitées à 12, avec un nom de 32 caractères maximum et les filtres déjà définis ; elles s'appliquent uniquement aux 20 comptes de la page déjà chargée. Aucun comportement de recherche globale ou de synchronisation multi-appareils n'est ajouté implicitement. Toute migration de format de préférence doit être explicite, testée et réversible.
 
