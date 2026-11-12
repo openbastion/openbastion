@@ -19,6 +19,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/screenstream"
@@ -174,7 +175,9 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
-	s := &Session{conn: tlsConn, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
+	// What the target sends from here on is counted (ServerBytes, ADR-0090 lot A).
+	counted := &countingConn{Conn: tlsConn}
+	s := &Session{conn: counted, counted: counted, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
 	if cfg.DrawPointer {
 		s.drawPointer, s.pointerMoved = true, make(chan struct{}, 1)
 	}
@@ -201,6 +204,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 // never dropped: backpressure propagates to the target reader and recorder.
 type Session struct {
 	conn            net.Conn
+	counted         *countingConn
 	frames          chan screenstream.Message
 	width, height   uint32
 	framebuffer     *image.RGBA
@@ -952,4 +956,25 @@ func reverseBits(v byte) byte {
 	v = (v&0xF0)>>4 | (v&0x0F)<<4
 	v = (v&0xCC)>>2 | (v&0x33)<<2
 	return (v&0xAA)>>1 | (v&0x55)<<1
+}
+
+// countingConn counts the bytes read through it.
+type countingConn struct {
+	net.Conn
+	n atomic.Uint64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.n.Add(uint64(n))
+	return n, err
+}
+
+// ServerBytes is the number of bytes the target has sent since the session opened, as read from TLS
+// (record payloads): the throughput ADR-0090 (lot A) measures.
+func (s *Session) ServerBytes() uint64 {
+	if s == nil || s.counted == nil {
+		return 0
+	}
+	return s.counted.n.Load()
 }

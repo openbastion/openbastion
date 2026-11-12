@@ -94,7 +94,32 @@ Les deux cibles savent déjà ce qui a changé. RDP envoie des rectangles (Bitma
    - **En rejeu** : l'image suivante, si elle est partielle, est posée sur celle du canvas ; toute autre image est recomposée depuis l'image clé qui la précède.
    - **Réglage** : `SCREEN_PARTIAL_FRAMES` est offert par le runtime, éteint par défaut (§8). Le contrat REST admet le codec `png-delta-v1`.
 5. **Fait** : VNC. Le client VNC passe par le même `FrameEncoder` que RDP. Il fait une image clé à la demande du relais, même sur un écran immobile et même sans forme de curseur. Une nouvelle taille du bureau donne une image clé. Éprouvé contre le TigerVNC du bac à sable Base44, en images entières et en images partielles. Constat : xterm cache le pointeur pendant la frappe, et TigerVNC ne renvoie sa forme qu'après un mouvement suivant. En images partielles, le premier mouvement ne fait donc pas d'image, à juste titre.
-6. Nouvelle mesure du lot A, puis décision d'allumer `SCREEN_PARTIAL_FRAMES` par défaut.
+6. **Mesuré** (12 novembre 2026). **Décision du propriétaire, le même jour** : « Après un vrai navigateur ». `SCREEN_PARTIAL_FRAMES` reste éteint par défaut. Il sera allumé dès qu'une session en direct et un rejeu auront été vérifiés dans un vrai navigateur, sur le bac à sable Base44 avec `SCREEN_PARTIAL_FRAMES=true`.
+
+## Résultats (12 novembre 2026)
+
+Mêmes scènes et même banc que le lot A d'ADR-0090, dans les deux modes et dans la même session de test. Pointeur dessiné, cadence de 50 ms. « Enregistré » est le débit des images que le Video Recorder stocke.
+
+| Cible | Scène | Images entières | Images partielles |
+|---|---|---|---|
+| Windows Server 2019 et 2022, 5 cibles (CI, PR #134) | Frappe, enregistré | 450 à 2 700 Kio/s | **8 à 118 Kio/s** |
+| | Seul le pointeur bouge, enregistré | 540 à 2 970 Kio/s | **5 à 10 Kio/s** |
+| | Encodage d'une image | 14 à 48 ms | **0,1 à 0,5 ms** |
+| | Latence touche → image, médiane | 52 à 114 ms | 39 à 53 ms |
+| FreeRDP 3 (local) | Frappe, enregistré | 297 Kio/s | **4,1 Kio/s** |
+| | Encodage d'une image | 12 ms | **0,2 ms** |
+| TigerVNC, 800 × 600 (bac à sable Base44) | Frappe, enregistré | 155 Kio/s | **5,5 Kio/s** |
+| | Pointeur, enregistré | 221 Kio/s | **15,4 Kio/s** (dont une image clé périodique) |
+| | Encodage d'une image | 3,8 ms | **0,2 à 0,7 ms** |
+| | Latence touche → image, médiane | 13,8 ms | 10,2 ms |
+
+- **Gain** : le volume enregistré baisse de 20 à 300 fois en frappe et quand le pointeur bouge, et le coût d'encodage d'une image de 20 à 100 fois. La latence ne se dégrade nulle part.
+- **Limites des chiffres** :
+  - le défilement n'est pas comparable d'un mode à l'autre, la cible n'ayant pas envoyé autant dans les deux passages ;
+  - la scène pointeur de FreeRDP ne mesure rien, xterm y cachant le pointeur ;
+  - le pic du tas est celui du processus de test ;
+  - la latence se mesure sur le même hôte que la cible.
+- **Non éprouvé** : l'Admin UI dans un vrai navigateur (direct et rejeu). La composition y repose sur `clearRect` puis `drawImage` ; elle n'est vérifiée qu'en Go (`Composer`, et la composition indépendante du test Base44) et en tests de composant.
 
 ## Alternatives envisagées
 

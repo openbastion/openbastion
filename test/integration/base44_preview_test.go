@@ -100,7 +100,11 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 		}
 		var view screenView
 		before := view.read(t, conn)
-
+		// No window manager: the keyboard goes to the window under the pointer, which the X server
+		// keeps from one session to the next. xterm is at the top left. After the first frame: the
+		// pointer's place is checked against its size.
+		writeScreen(t, conn, inputPointer(100, 100, 0))
+		time.Sleep(300 * time.Millisecond)
 		// `cat` echoes: what TigerVNC shows changes only if the key reached the desktop.
 		for _, key := range []uint32{0x6f, 0x62, 0xff0d} {
 			writeScreen(t, conn, inputKey(key, true))
@@ -110,7 +114,9 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 		deadline := time.Now().Add(15 * time.Second)
 		for !changed && time.Now().Before(deadline) {
 			last = view.read(t, conn)
-			changed = !bytes.Equal(last.png, before.png)
+			// Anywhere in the terminal (80x24 at the top left), where `cat` writes, but around the
+			// pointer at (100,100): its drawing is no proof the keys arrived.
+			changed = differsIn(t, before.png, last.png, image.Rect(0, 0, 480, 316), image.Rect(80, 80, 120, 120))
 		}
 		if !changed {
 			t.Fatal("the screen did not change after the keys: they did not reach the target")
@@ -257,4 +263,25 @@ func (v *screenView) read(t *testing.T, conn *websocket.Conn) screenMessage {
 		}
 		return screenMessage{kind: 1, sequence: m.sequence, png: encoded.Bytes()}
 	}
+}
+
+// differsIn says whether two frames differ inside a rectangle, outside another.
+func differsIn(t *testing.T, before, after []byte, area, except image.Rectangle) bool {
+	t.Helper()
+	a, err := png.Decode(bytes.NewReader(before))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := png.Decode(bytes.NewReader(after))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := area.Min.Y; y < area.Max.Y; y++ {
+		for x := area.Min.X; x < area.Max.X; x++ {
+			if !image.Pt(x, y).In(except) && a.At(x, y) != b.At(x, y) {
+				return true
+			}
+		}
+	}
+	return false
 }

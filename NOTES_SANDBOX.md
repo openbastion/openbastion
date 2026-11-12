@@ -3036,6 +3036,20 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
+
+Le tableau complet est dans ADR-0092, « Résultats ». En résumé : en frappe et quand le pointeur bouge, le volume enregistré baisse de 20 à 300 fois ; l'encodage d'une image passe de 4 à 48 ms à moins de 1 ms ; la latence ne se dégrade nulle part.
+
+**Nouveau** :
+- `vnc.Session.ServerBytes` compte les octets de la cible (`countingConn`) ; un test de l'ouverture le vérifie, avec sa contre-épreuve ;
+- `TestVNCMeasure` (moteur) mesure une vraie cible VNC dans les deux modes, avec `VNC_MEASURE_ADDR`, `_CA`, `_NAME`, `_PASSWORD` et `_DUMP`. Il a été lancé contre le TigerVNC du bac à sable, à son adresse sur le réseau Docker.
+
+**Constat** : la première mesure en images partielles semblait figée : aucun octet de la cible pendant 50 s. La cause n'est pas le proxy. Sans gestionnaire de fenêtres, le clavier va à la fenêtre sous le pointeur, et le serveur X garde la position du pointeur d'une session à l'autre ; la session précédente l'avait laissé hors de xterm. Le banc place désormais le pointeur sur xterm avant de taper, comme le faisait déjà la mesure FreeRDP.
+
+**Test Base44 rendu robuste** : il échouait après la mesure VNC. D'abord, le serveur X garde la position du pointeur d'une session à l'autre, et la mesure l'avait laissé hors de xterm. Ensuite, le terminal avait défilé : le texte de `cat` s'écrit en bas, et non plus en haut. Le test place donc le pointeur sur xterm, après la première image (le relais vérifie les coordonnées contre sa taille), et compare toute la fenêtre de xterm hors du carré du pointeur. Il passe avec `SCREEN_PARTIAL_FRAMES` allumé.
+
+**Décision du propriétaire** (« Après un vrai navigateur ») : `SCREEN_PARTIAL_FRAMES` reste éteint par défaut, jusqu'à la vérification d'une session en direct et d'un rejeu dans un vrai navigateur. Une PR en brouillon l'allume.
+
 ## 2026-11-12 — ADR-0092, incrément 5 : VNC envoie des images partielles
 
 `pkg/vnc` passe par le même `screenstream.FrameEncoder` que RDP (`Config.PartialFrames`, `VNCCodec.PartialFrames`, `SCREEN_PARTIAL_FRAMES` désormais pour RDP et VNC).
