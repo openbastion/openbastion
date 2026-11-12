@@ -1,7 +1,7 @@
 # Design System — OpenBastion Infrastructure
 
 **Périmètre :** Admin UI et socle visuel partagé avec le User Portal
-**Décisions de référence :** ADR-0073 §3 et ADR-0075 §3
+**Décisions de référence :** ADR-0073 §3.1 et ADR-0075 §3.1
 **État :** charte produit sélectionnée ; implémentation progressive
 
 ## 1. Direction artistique et ergonomique
@@ -145,7 +145,7 @@ Un composant peut être remplacé uniquement si ses comportements, libellés acc
 | Étape | Livrable | Contrôles de sortie |
 |---|---|---|
 | 0 — Baseline | Inventaire UX-01..05, captures de référence si disponibles, état des tests et audit des couleurs existantes | Baseline `make ui-test ui-build`, inventaire des usages CSS et aucune modification fonctionnelle |
-| 1 — Charte et contrats | ADR-0073/0075 précisés, présente spécification, frontières de packages et plan validés | Relecture des décisions, `git diff --check` |
+| 1 — Charte et contrats (livré) | ADR-0073 §3.1 et ADR-0075 §3.1 formalisent OpenBastion Infrastructure, ses frontières de packages et sa spécification | Relecture des décisions, liens documentaires et `git diff --check` |
 | 2 — Tokens (livré) | Package CSS `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques, import reproductible et contrôle de contraste intégré à Make | `make ui-tokens-test` : 18 paires contrôlées à cette étape ; `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis |
 | 3 — Shell (implémenté) | En-tête clair, sidebar sombre, navigation active, densité, thèmes, responsive et focus | `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis ; 26 paires vérifiées ; revue visuelle multi-viewport à faire |
 | 4 — Primitives (implémenté) | Package CSS partagé `web/packages/ui/` : boutons, badges, notices, surfaces, en-têtes, formulaires, tableaux, filtres, détails structurés et pagination ; wrappers React propres à l’Admin UI | 14 fichiers Vitest, 147 tests ; 36 paires de contraste ; TypeScript et Vite réussis |

@@ -96,7 +96,7 @@ Le package `contracts` ne devient pas une seconde source de vérité : OpenAPI e
 
 ### 3.1 Charte graphique partagée : OpenBastion Infrastructure
 
-Les deux applications adoptent une même identité visuelle nommée **OpenBastion Infrastructure**. La direction recherchée reprend les qualités fonctionnelles d'une console d'infrastructure moderne, notamment celles observées dans UniFi Network : navigation latérale persistante, hiérarchie de page nette, densité d'information maîtrisée, tableaux lisibles, filtres explicites, états opérationnels visibles et interactions prévisibles. Il s'agit d'une inspiration ergonomique, pas d'une reproduction : aucun logo, pictogramme, code, capture, texte propriétaire, illustration ni agencement distinctif de Ubiquiti/UniFi n'est repris.
+Les deux applications adoptent une même identité visuelle nommée **OpenBastion Infrastructure**. Pour l'Admin UI, cette charte formalise la direction prise à l'ADR-0073 §3.1 ; la présente ADR l'étend au User Portal sans fusionner les parcours métier. La direction recherchée reprend les qualités fonctionnelles d'une console d'infrastructure moderne, notamment celles observées dans UniFi Network : navigation latérale persistante, hiérarchie de page nette, densité d'information maîtrisée, tableaux lisibles, filtres explicites, états opérationnels visibles et interactions prévisibles. Il s'agit d'une inspiration ergonomique, pas d'une reproduction : aucun logo, pictogramme, code, capture, texte propriétaire, illustration ni agencement distinctif de Ubiquiti/UniFi n'est repris.
 
 La charte s'applique aux deux applications sans fusionner leurs responsabilités :
 

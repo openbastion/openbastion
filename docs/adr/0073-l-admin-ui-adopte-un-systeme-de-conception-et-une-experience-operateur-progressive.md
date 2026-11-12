@@ -14,7 +14,7 @@ Plusieurs idées de l'évolution UX dépassent toutefois les capacités actuelle
 
 La présente décision porte donc sur le socle d'expérience et la manière de faire évoluer l'interface. Elle ne prétend pas que toutes les fonctions proposées sont déjà disponibles.
 
-La direction visuelle retenue pour concrétiser le langage visuel du §3 est **OpenBastion Infrastructure** : une console d'exploitation structurée, dense mais lisible, avec une navigation persistante, des tableaux informatifs, des états explicites et des surfaces sobres. L'expérience s'inspire des qualités d'ergonomie observées dans les consoles d'infrastructure telles que UniFi Network ; cette référence ne vaut pas autorisation de reproduire son identité. Aucun logo, pictogramme, code, capture, texte propriétaire ou agencement distinctif ne sera repris. Cette précision documente la matérialisation visuelle de la décision existante ; le texte de décision accepté ci-dessous reste inchangé.
+La direction visuelle retenue pour concrétiser le langage visuel du §3 est **OpenBastion Infrastructure** : une console d'exploitation structurée, dense mais lisible, avec une navigation persistante, des tableaux informatifs, des états explicites et des surfaces sobres. L'expérience s'inspire des qualités d'ergonomie observées dans les consoles d'infrastructure telles que UniFi Network ; cette référence ne vaut pas autorisation de reproduire son identité. Aucun logo, pictogramme, code, capture, texte propriétaire ou agencement distinctif ne sera repris. Cette direction constitue une décision de conception de l’Admin UI et est formalisée au §3.1 ; son partage avec le User Portal suit les frontières de l’ADR-0075.
 
 ## Décision
 
@@ -65,9 +65,43 @@ Les thèmes clair et sombre sont deux thèmes du même système de tokens. Ils d
 
 Le package local `web/openbastion-icons` reste la source des icônes de produit. Les icônes ne remplacent jamais un libellé nécessaire et leur rendu doit rester compatible avec la CSP de l'ADR-0036.
 
+#### 3.1. Adopter la charte graphique OpenBastion Infrastructure
+
+**OpenBastion Infrastructure** est l'identité visuelle normative de l'Admin UI. La direction recherchée est proche de l'ergonomie des consoles d'infrastructure telles que UniFi Network — navigation latérale persistante, hiérarchie de page stable, tableaux lisibles, filtres explicites, densité d'information maîtrisée et états opérationnels visibles — sans reprendre les éléments distinctifs de leur identité.
+
+Les règles suivantes sont obligatoires :
+
+1. **Structure opérationnelle** : barre latérale sombre persistante sur grand écran, en-tête compact, titre et contexte de page, zone de contenu clairement délimitée ; navigation accessible en panneau sur petit écran.
+2. **Tableaux avant les cartes** : un tableau est privilégié pour parcourir ou comparer des ressources ; une carte est réservée à une synthèse, un regroupement ou un formulaire qui le justifie.
+3. **Densité maîtrisée** : colonnes alignées, nombres tabulaires, filtres explicites, pagination conforme aux contrats réels et espaces réguliers. La densité compacte ne réduit ni la taille du texte, ni le focus, ni les cibles tactiles.
+4. **Surfaces sobres** : fonds neutres, séparateurs explicites, rayons cohérents, ombres discrètes ; aucun dégradé décoratif, aucune grille uniforme de cartes et aucune animation permanente.
+5. **États explicites** : succès, avertissement, danger, sélection, indisponibilité et focus ne reposent jamais uniquement sur la couleur ; un libellé, un pictogramme ou un texte accessible complète le signal visuel.
+6. **Identité originale** : aucun logo, pictogramme, code, capture, texte propriétaire, illustration ou agencement distinctif d'Ubiquiti/UniFi ou d'un autre produit tiers n'est repris.
+
+La palette sémantique de référence est :
+
+| Rôle | Thème clair | Thème sombre |
+|---|---|---|
+| Fond de page | #F5F7FA | #0F1720 |
+| Surface principale | #FFFFFF | #17222D |
+| Texte principal | #17212B | #F3F6F9 |
+| Texte secondaire | #526171 | #B4C0CB |
+| Accent et focus | #1769AA | #66B8FF |
+| Succès | #126B4F | #66D6A5 |
+| Avertissement | #8A5700 | #FFD27A |
+| Danger | #B42318 | #FF8D86 |
+
+Les valeurs complètes, fonds sémantiques, ratios mesurés et règles d'utilisation sont maintenus dans `docs/development/admin-ui-design-system.md`. Les composants consomment exclusivement des tokens sémantiques ; aucune couleur primitive ou valeur hexadécimale n'est codée directement dans un composant.
+
+Les thèmes light et dark exposent les mêmes informations, actions, priorités et états. La préférence initiale suit le système (system) ; un choix explicite est une préférence d'affichage locale et non sensible. Les modes compact et comfortable ne modifient ni la lisibilité ni les cibles tactiles. La charte respecte prefers-reduced-motion, forced-colors, le zoom et une largeur minimale de 320 px.
+
+L'objectif d'accessibilité est **WCAG 2.2 AA**. Les ratios de la spécification couvrent uniquement les paires explicitement mesurées ; aucune conformité globale n'est revendiquée avant vérification du rendu réel, des états interactifs, du clavier et des lecteurs d'écran.
+
+Les frontières d'implémentation sont celles de l'ADR-0075 : tokens dans web/packages/design-tokens/, primitives CSS génériques dans web/packages/ui/, icônes dans web/openbastion-icons/ et wrappers React propres à l'Admin UI dans web/admin-ui/src/shared/ui/. Les wrappers et les composants de page conservent les libellés, les appels API et les états métier. Cette charte n'ajoute aucune dépendance npm externe à l'exécution et ne modifie pas le socle de sécurité de l'ADR-0036.
+
 ### 4. Construire une bibliothèque de composants interne et limitée
 
-Les composants partagés vivent dans la zone `shared` déjà présente dans `web/admin-ui/src/`. Les fonctionnalités métier restent dans `features`, et l'assemblage de l'application dans `app`.
+Les wrappers React propres à l'Admin UI vivent dans `web/admin-ui/src/shared/ui/`. Les fonctionnalités métier restent dans `features`, et l'assemblage de l'application dans `app`. Les tokens et primitives CSS génériques partagés avec le User Portal vivent respectivement dans `web/packages/design-tokens/` et `web/packages/ui/`, conformément à l'ADR-0075 ; les icônes restent dans `web/openbastion-icons/`.
 
 La bibliothèque couvre progressivement les primitives utiles :
 

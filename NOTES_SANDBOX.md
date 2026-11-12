@@ -1,5 +1,20 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — Charte graphique formalisée dans ADR-0073 et ADR-0075
+
+La décision de conception OpenBastion Infrastructure est maintenant inscrite
+explicitement dans ADR-0073 §3.1, avec sa direction ergonomique inspirée des
+consoles d'infrastructure, ses limites de propriété intellectuelle, sa palette
+clair/sombre, les thèmes système/explicites, les exigences responsive et la
+cible WCAG 2.2 AA. La section 4 d'ADR-0073 précise la frontière entre wrappers
+React de l'Admin UI et packages frontend partagés.
+
+ADR-0075 §3.1 relie explicitement cette décision à l'identité commune du User
+Portal, sans fusionner les parcours métier. Les packages tokens, primitives
+CSS et icônes restent les sources de vérité partagées. Aucun nouvel ADR ni
+nouvelle dépendance runtime n'a été ajouté ; le statut proposé d'ADR-0075 est
+préservé.
+
 ## 2026-11-12 — ADR-0073 Design System : commandes enregistrées et replay vidéo (étape 5D)
 
 Les commandes enregistrées sont présentées dans une surface partagée avec un
