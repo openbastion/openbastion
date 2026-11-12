@@ -33,6 +33,7 @@ describe("App", () => {
     fireEvent.click(screen.getByText("Se connecter"));
     expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
     const navigation = screen.getByRole("navigation", { name: "Sections" });
+    expect(within(navigation).getByRole("button", { name: "Vue générale" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
     expect(screen.getByRole("main").parentElement?.classList.contains("app-workspace")).toBe(true);
     for (const label of ["Vue générale", "Comptes", "Politiques", "Sessions", "Enregistrements", "Centre de sécurité"]) {

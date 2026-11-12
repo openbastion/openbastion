@@ -107,7 +107,7 @@ Leur navigation métier, leurs autorisations, leurs états et leurs données res
 
 Principes visuels obligatoires :
 
-1. **Structure avant décoration** : barre latérale structurée, en-tête compact, titre et contexte de page, contenu principal clairement délimité ; les cartes ne remplacent pas les tableaux lorsque l'utilisateur doit comparer ou parcourir des lignes.
+1. **Structure avant décoration** : barre latérale sombre structurée, en-tête clair compact, titre et contexte de page, contenu principal clairement délimité ; les cartes ne remplacent pas les tableaux lorsque l'utilisateur doit comparer ou parcourir des lignes.
 2. **Densité lisible** : priorité aux informations utiles, colonnes alignées, nombres tabulaires, filtres visibles, pagination conforme aux contrats réels ; la compacité ne réduit ni la lisibilité ni les cibles tactiles.
 3. **Surfaces sobres** : fonds neutres, séparateurs explicites, ombres rares et faibles, rayons cohérents ; pas de dégradés décoratifs, de grandes cartes uniformes ni d'animation permanente.
 4. **Sémantique explicite** : succès, avertissement, danger, sélection, indisponibilité et focus sont identifiables par leur libellé ou pictogramme en plus de leur couleur.

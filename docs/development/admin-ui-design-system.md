@@ -38,6 +38,10 @@ Les valeurs ci-dessous sont les couleurs de départ de la charte. Les composants
 | Succès | `#126B4F` | `#66D6A5` |
 | Avertissement | `#8A5700` | `#FFD27A` |
 | Danger | `#B42318` | `#FF8D86` |
+| Fond de navigation latérale | `#17222D` | `#17222D` |
+| Texte principal de navigation | `#F3F6F9` | `#F3F6F9` |
+| Texte secondaire de navigation | `#B4C0CB` | `#B4C0CB` |
+| Accent de navigation | `#66B8FF` | `#66B8FF` |
 
 ### Contrastes mesurés
 
@@ -53,6 +57,10 @@ Ratios calculés à partir des valeurs hexadécimales ci-dessus selon la formule
 | Danger / surface | 6,57:1 | 7,22:1 | 4,5:1 |
 | Bordure de contrôle / surface | 4,76:1 | 4,29:1 | 3:1 |
 | Texte sur action primaire / accent | 5,77:1 | 8,48:1 | 4,5:1 |
+| Texte principal navigation / fond navigation | 14,86:1 | 14,86:1 | 4,5:1 |
+| Texte secondaire navigation / fond navigation | 8,70:1 | 8,70:1 | 4,5:1 |
+| Accent navigation / fond navigation | 7,57:1 | 7,57:1 | 4,5:1 |
+| Accent navigation active / fond sélectionné | 5,88:1 | 5,88:1 | 4,5:1 |
 
 Le séparateur léger n'est pas destiné à être l'unique contour d'un contrôle interactif. Les contrôles, indicateurs de focus et éléments graphiques nécessaires à la compréhension utilisent des tokens de contraste adaptés. Les valeurs sont à revalider si un fond, une opacité ou une composition change.
 
@@ -85,8 +93,8 @@ Les modes de densité `compact` et `comfortable` restent disponibles. Le mode co
 
 ### Structure de la console
 
-- En-tête compact avec marque, recherche/commandes, préférences et identité de session.
-- Barre latérale persistante, sections groupées et état courant évident ; mode réduit avec infobulles accessibles.
+- En-tête clair et compact avec marque, recherche/commandes, préférences et identité de session.
+- Barre latérale sombre persistante, sections groupées et état courant évident ; mode réduit avec infobulles accessibles.
 - En-tête de page avec titre, description, fil d'Ariane si utile et action principale.
 - Contenu en largeur maîtrisée ; les tableaux défilent localement si nécessaire.
 - Sur petit écran, navigation en panneau modal avec focus géré et retour au déclencheur.
@@ -133,8 +141,8 @@ Un composant peut être remplacé uniquement si ses comportements, libellés acc
 |---|---|---|
 | 0 — Baseline | Inventaire UX-01..05, captures de référence si disponibles, état des tests et audit des couleurs existantes | Baseline `make ui-test ui-build`, inventaire des usages CSS et aucune modification fonctionnelle |
 | 1 — Charte et contrats | ADR-0073/0075 précisés, présente spécification, frontières de packages et plan validés | Relecture des décisions, `git diff --check` |
-| 2 — Tokens (livré) | Package CSS `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques, import reproductible et contrôle de contraste intégré à Make | `make ui-tokens-test` : 18 paires contrôlées ; `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis |
-| 3 — Shell | En-tête, sidebar, navigation active, densité, thèmes, responsive et focus | Tests de navigation, préférences inchangées, vérification 320/768/1024/1440 px |
+| 2 — Tokens (livré) | Package CSS `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques, import reproductible et contrôle de contraste intégré à Make | `make ui-tokens-test` : 18 paires contrôlées à cette étape ; `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis |
+| 3 — Shell (implémenté) | En-tête clair, sidebar sombre, navigation active, densité, thèmes, responsive et focus | `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis ; 26 paires vérifiées ; revue visuelle multi-viewport à faire |
 | 4 — Primitives | Boutons, champs, tables, badges, alertes, skeletons et confirmations | Tests unitaires et d'accessibilité ciblés, états complet/chargement/vide/refus/erreur |
 | 5 — Migration des écrans | Migration progressive Vue générale, comptes, politiques, sessions, relecture et Centre de sécurité | Parcours et assertions API inchangés ; aucune donnée simulée ; tests existants conservés |
 | 6 — Finition et audit | Réduction des valeurs locales, revue clavier/lecteur d'écran, thèmes, mouvement et responsive | `make ui-test ui-build`, audit des contrastes rendus, `git diff --check`, limites consignées |

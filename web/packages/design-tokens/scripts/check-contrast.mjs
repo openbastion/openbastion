@@ -56,6 +56,10 @@ const pairs = [
   ["bordure de contrôle", "--ob-color-border-control", "--ob-color-bg-surface", 3],
   ["focus", "--ob-color-focus", "--ob-color-bg-surface", 3],
   ["texte sur action primaire", "--ob-color-text-on-accent", "--ob-color-accent", 4.5],
+  ["texte navigation", "--ob-color-chrome-text", "--ob-color-chrome-background", 4.5],
+  ["texte secondaire navigation", "--ob-color-chrome-muted", "--ob-color-chrome-background", 4.5],
+  ["accent navigation", "--ob-color-chrome-accent", "--ob-color-chrome-background", 4.5],
+  ["accent navigation active", "--ob-color-chrome-accent", "--ob-color-chrome-accent-subtle", 4.5],
 ];
 
 const lightValues = declarations(":root");

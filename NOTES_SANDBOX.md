@@ -1,5 +1,28 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : shell opérateur (étape 3)
+
+Le shell de l'Admin UI adopte désormais un en-tête clair et une barre latérale
+sombre persistante, avec navigation groupée, état actif bleu, favoris, footer
+et états de focus adaptés au chrome sombre. La largeur de navigation est de
+256 px (72 px repliée), l'en-tête de 64 px. La navigation mobile reste un panneau
+avec backdrop, focus initial et fermeture par Échap. Les contrôles de navigation
+et les actions de l'en-tête conservent une hauteur minimale de 40 px, y compris
+en densité compacte et à 320 px.
+
+Les boutons primaires utilisent maintenant le couple accent/texte-sur-accent,
+qui conserve le contraste en thème clair comme sombre. Le nom accessible des
+boutons de navigation est explicite même lorsque leurs libellés sont masqués
+dans la barre latérale repliée. Les favoris restent disponibles dans le panneau
+mobile. Les clés et le format des préférences UX-05 ne changent pas.
+
+Validation : `make ui-test ui-build` réussit (13 fichiers Vitest, 142 tests,
+TypeScript et build Vite). `make ui-tokens-test` vérifie 26 paires de contraste
+(13 par thème). Aucun navigateur headless n'est installé sur LT209227 ; aucun
+contrôle par capture d'écran ou test visuel automatisé n'a donc été revendiqué.
+Les avertissements React des attributs SVG `stroke-width`, `stroke-linecap` et
+`stroke-linejoin` restent préexistants dans les icônes.
+
 ## 2026-11-12 — ADR-0073 Design System : fondations de tokens (étape 2)
 
 Le package privé `web/packages/design-tokens/` fournit les tokens CSS canoniques

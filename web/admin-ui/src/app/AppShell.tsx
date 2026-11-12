@@ -162,6 +162,7 @@ export function AppShell({
         <button
           type="button"
           className="nav-item"
+          aria-label={tabs[key].label}
           aria-current={tab === key ? "page" : undefined}
           title={collapsed ? tabs[key].description : undefined}
           onClick={() => chooseTab(key)}
