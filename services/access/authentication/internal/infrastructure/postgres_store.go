@@ -20,7 +20,7 @@ import (
 )
 
 func OpenPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := sql.Open("postgres", dsn)
+	db, err := openPool(dsn)
 	if err != nil {
 		return nil, err
 	}
