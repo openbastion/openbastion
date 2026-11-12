@@ -5,6 +5,8 @@ import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { Pager } from "../../shared/ui/Pager";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
+import { Button } from "../../shared/ui/Button";
+import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
@@ -168,11 +170,11 @@ export function Accounts() {
       ]}
     >
       <Notice error={accountAction ? undefined : error} ok={accountAction ? undefined : ok} />
-      <div className="card">
-        {loading ? <p className="empty" role="status">Chargement des comptes privilégiés…</p> : null}
-        {!loading && data && data.items.length === 0 ? <p className="empty">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
+      <section className="ob-surface account-inventory" aria-label="Inventaire des comptes privilégiés">
+        {loading ? <p className="ob-empty-state" role="status">Chargement des comptes privilégiés…</p> : null}
+        {!loading && data && data.items.length === 0 ? <p className="ob-empty-state">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
         {!loading && data && data.items.length > 0 ? (
-          <div className="page-filter">
+          <div className="ob-filter-bar">
             <label htmlFor="account-page-filter">Filtrer les comptes de cette page</label>
             <input
               id="account-page-filter"
@@ -181,8 +183,8 @@ export function Accounts() {
               onChange={(event) => setFilter(event.target.value)}
               placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
             />
-            <p className="filter-help">Filtre local limité aux {data.items.length} comptes chargés sur cette page ; il ne lance pas de recherche globale. Le texte saisi n'est jamais enregistré dans une vue.</p>
-            <div className="account-view-filters">
+            <p className="ob-filter-help">Filtre local limité aux {data.items.length} comptes chargés sur cette page ; il ne lance pas de recherche globale. Le texte saisi n'est jamais enregistré dans une vue.</p>
+            <div className="ob-filter-grid">
               <label>
                 Filtrer par protocole
                 <select value={viewFilters.protocol} onChange={(event) => setViewFilters((current) => ({ ...current, protocol: event.target.value as AccountViewFilters["protocol"] }))}>
@@ -217,7 +219,7 @@ export function Accounts() {
                 </select>
               </label>
             </div>
-            <div className="account-saved-views">
+            <div className="ob-saved-views">
               <label>
                 Vues enregistrées
                 <select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
@@ -225,24 +227,24 @@ export function Accounts() {
                   {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
                 </select>
               </label>
-              <form className="save-view-form" onSubmit={saveCurrentView}>
+              <form className="ob-saved-view-form" onSubmit={saveCurrentView}>
                 <label>
                   Nom de la vue
                   <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder="Ex. SSH à renouveler" />
                 </label>
-                <button type="submit">Enregistrer la vue</button>
+                <Button type="submit">Enregistrer la vue</Button>
               </form>
-              <button type="button" disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</button>
+              <Button disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</Button>
             </div>
-            {viewNotice ? <p className="view-notice" role="status">{viewNotice}</p> : null}
-            <p className="filter-help">Les vues conservent uniquement ces filtres catégoriels et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
-            <p className="filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</p>
+            {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
+            <p className="ob-filter-help">Les vues conservent uniquement ces filtres catégoriels et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
+            <p className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</p>
           </div>
         ) : null}
         {!loading && data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}
-        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="empty">Aucun compte de cette page ne correspond aux filtres actuels.</p> : null}
+        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="ob-empty-state">Aucun compte de cette page ne correspond aux filtres actuels.</p> : null}
         {!loading && data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
-      </div>
+      </section>
       <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />
       {accountAction ? (
         <ConfirmDialog

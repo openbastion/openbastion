@@ -1,5 +1,19 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : inventaire des comptes et formulaires (étape 5B)
+
+L’inventaire des comptes utilise maintenant la table partagée avec en-têtes
+sémantiques, caption accessible, densité structurée et défilement horizontal
+local. Les filtres et vues enregistrées utilisent les patterns partagés de
+barre de filtres, grille responsive et formulaire de sauvegarde. Les actions
+de ligne conservent leur confirmation, leurs appels API et leurs états d’erreur.
+Le formulaire d’enregistrement des comptes et celui des politiques utilisent
+les surfaces, champs et actions du package UI.
+
+Les vues enregistrées restent limitées aux filtres catégoriels de la page
+chargée ; la recherche libre n’est pas persistée et aucune donnée de compte
+n’est ajoutée au stockage local. Le contrat des endpoints n’a pas changé.
+
 ## 2026-11-12 — ADR-0073 Design System : Overview et Security Center (étape 5A)
 
 Les écrans Overview et Security Center consomment maintenant les patterns

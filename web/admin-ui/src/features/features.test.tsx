@@ -92,6 +92,7 @@ describe("Accounts — host key (ADR-0039)", () => {
   it("shows each account's fingerprint, and the accounts that are not pinned", async () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [pinned, unpinned], page: 1, pageSize: 20, totalItems: 2 } } });
     signedIn(api, <Accounts />);
+    expect((await screen.findByRole("table")).className).toContain("ob-data-table");
     expect(await screen.findByText("SHA256:old")).toBeTruthy();
     expect(screen.getByText("non épinglée")).toBeTruthy();
     expect(screen.getByText("Épingler la clé d'hôte")).toBeTruthy();
@@ -312,6 +313,7 @@ describe("Policies", () => {
   it("creates a policy with what the form says — the creator is the Gateway's business", async () => {
     const { api, calls } = fakeApi({ "POST /policies": { status: 201, body: {} } });
     signedIn(api, <Policies />);
+    expect((await screen.findByRole("form", { name: "Créer une politique" })).className).toContain("ob-surface");
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Nom", "dba-on-prod");
     field("Rôle", "dba");

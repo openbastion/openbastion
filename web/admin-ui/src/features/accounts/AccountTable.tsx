@@ -14,19 +14,20 @@ export interface AccountActions {
 
 export function AccountTable({ accounts, actions }: { accounts: Account[]; actions: AccountActions }) {
   return (
-    <div className="table-wrap">
-      <table>
+    <div className="ob-table-wrap">
+      <table className="ob-data-table">
+        <caption className="ob-visually-hidden">Comptes privilégiés enregistrés dans le Vault</caption>
         <thead>
           <tr>
-            <th>Identifiant</th>
-            <th>Nom</th>
-            <th>Cible</th>
-            <th>Utilisateur</th>
-            <th>Identité de la cible</th>
-            <th>Rotation</th>
-            <th>Dernière rotation</th>
-            <th>Approbation</th>
-            <th />
+            <th scope="col">Identifiant</th>
+            <th scope="col">Nom</th>
+            <th scope="col">Cible</th>
+            <th scope="col">Utilisateur</th>
+            <th scope="col">Identité de la cible</th>
+            <th scope="col">Rotation</th>
+            <th scope="col">Dernière rotation</th>
+            <th scope="col">Approbation</th>
+            <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -46,27 +47,29 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
               </td>
               <td>{a.lastRotatedAt ?? "—"}</td>
               <td>{a.approvalRequired ? <Badge>requise</Badge> : "—"}</td>
-              <td className="actions">
-                {a.protocol === "ssh" ? (
-                  <Button onClick={() => actions.pinKey(a)}>
-                    {a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}
+              <td className="ob-table-actions">
+                <div>
+                  {a.protocol === "ssh" ? (
+                    <Button onClick={() => actions.pinKey(a)}>
+                      {a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}
+                    </Button>
+                  ) : (
+                    <Button onClick={() => actions.pinTls(a)}>
+                      {a.tlsCertificateSha256 ? "Changer le certificat TLS" : "Épingler le certificat TLS"}
+                    </Button>
+                  )}
+                  <Button onClick={() => actions.toggleApproval(a)}>
+                    {a.approvalRequired ? "Ne plus exiger l'approbation" : "Exiger l'approbation"}
                   </Button>
-                ) : (
-                  <Button onClick={() => actions.pinTls(a)}>
-                    {a.tlsCertificateSha256 ? "Changer le certificat TLS" : "Épingler le certificat TLS"}
+                  {a.protocol === "ssh" ? (
+                    <Button onClick={() => actions.rotate(a)}>
+                      Renouveler le secret
+                    </Button>
+                  ) : null}
+                  <Button variant="danger" onClick={() => actions.disable(a)}>
+                    Désactiver
                   </Button>
-                )}
-                <Button onClick={() => actions.toggleApproval(a)}>
-                  {a.approvalRequired ? "Ne plus exiger l'approbation" : "Exiger l'approbation"}
-                </Button>
-                {a.protocol === "ssh" ? (
-                  <Button onClick={() => actions.rotate(a)}>
-                    Renouveler le secret
-                  </Button>
-                ) : null}
-                <Button variant="danger" onClick={() => actions.disable(a)}>
-                  Désactiver
-                </Button>
+                </div>
               </td>
             </tr>
           ))}

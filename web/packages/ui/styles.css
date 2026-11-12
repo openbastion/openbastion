@@ -333,3 +333,192 @@
     flex-direction: column;
   }
 }
+
+/* Dense, readable data tables and filter controls shared by inventory screens. */
+.ob-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  border-radius: var(--ob-radius-lg);
+}
+
+.ob-data-table {
+  width: 100%;
+  min-width: 68rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: transparent;
+  font-size: 0.86rem;
+}
+
+.ob-data-table caption {
+  caption-side: top;
+}
+
+.ob-data-table thead th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  padding: 0.65rem 0.8rem;
+  color: var(--ob-color-text-tertiary);
+  background: var(--ob-color-bg-surface-muted);
+  border-bottom: 1px solid var(--ob-color-border-subtle);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ob-data-table thead th:first-child {
+  border-top-left-radius: var(--ob-radius-lg);
+}
+
+.ob-data-table thead th:last-child {
+  border-top-right-radius: var(--ob-radius-lg);
+}
+
+.ob-data-table tbody td {
+  padding: 0.68rem 0.8rem;
+  color: var(--ob-color-text-secondary);
+  border-bottom: 1px solid var(--ob-color-border-subtle);
+  vertical-align: middle;
+}
+
+.ob-data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ob-data-table tbody tr:hover {
+  background: var(--ob-color-bg-surface-muted);
+}
+
+.ob-data-table td code {
+  white-space: nowrap;
+}
+
+.ob-data-table td.ob-table-actions {
+  min-width: 20rem;
+}
+
+.ob-data-table td.ob-table-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.ob-data-table td.ob-table-actions .ob-button {
+  min-height: 2.5rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.ob-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ob-filter-bar {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--ob-color-border-subtle);
+}
+
+.ob-filter-bar > label,
+.ob-filter-grid label,
+.ob-saved-views label {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--ob-color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.ob-filter-bar > input {
+  width: 100%;
+  max-width: 34rem;
+}
+
+.ob-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.ob-filter-grid select,
+.ob-saved-views select,
+.ob-saved-view-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.ob-filter-help,
+.ob-filter-count {
+  color: var(--ob-color-text-tertiary);
+  font-size: 0.76rem;
+}
+
+.ob-filter-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-saved-views {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.4fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--ob-color-border-subtle);
+}
+
+.ob-saved-view-form {
+  display: flex;
+  align-items: end;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.ob-saved-view-form label {
+  flex: 1;
+}
+
+.ob-saved-view-form > .ob-button,
+.ob-saved-views > .ob-button {
+  min-height: 2.5rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .ob-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ob-saved-views {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .ob-saved-view-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .ob-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}

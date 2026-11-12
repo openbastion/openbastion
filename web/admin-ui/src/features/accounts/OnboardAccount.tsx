@@ -100,7 +100,7 @@ export function OnboardAccount({ onDone }: { onDone: (id: string) => void }) {
           <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
         </label>
       ) : (
-        <p className="hint wide">Une fois le compte enregistré, épinglez le certificat TLS de sa cible : sans lui, le compte n'ouvre aucune session.</p>
+        <p className="ob-hint wide">Une fois le compte enregistré, épinglez le certificat TLS de sa cible : sans lui, le compte n'ouvre aucune session.</p>
       )}
       <label className="check">
         <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
