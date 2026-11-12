@@ -3036,6 +3036,20 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0090, lot A : l'acquittement du Video Recorder, seul et à plusieurs
+
+`TestVideoRecorderAckLatency` (`services/proxy/rdp-vnc-proxy/internal/interfaces`, `RECORDER_MEASURE=1`, `TEST_DATABASE_URL`, `RECORDER_MEASURE_DUMP`) mesure le temps entre l'envoi d'une image et son acquittement : le délai que chaque image attend avant d'être montrée. Il utilise le vrai Recorder sur PostgreSQL et le vrai client du proxy, avec 1, 5 et 10 sessions de 60 images à 50 ms.
+
+Le tableau est dans ADR-0090. En bref : 15 à 30 ms en médiane jusqu'à 10 sessions, pour les images partielles et les petites images clés ; avec de grosses images clés (184 Ko), une queue de 0,1 à 0,5 s au 95ᵉ centile et jusqu'à 1,3 s au maximum dès 5 sessions.
+
+**Limites** :
+- tout tourne sur un seul hôte de 6 cœurs ;
+- le stockage objet est en mémoire : la latence propre de S3 n'est pas comptée ;
+- les mesures sont bruitées (deux passages, deux queues différentes) ;
+- au-delà de 10 sessions, rien n'est mesuré.
+
+**Défaut du harnais, corrigé** : au premier passage, l'image clé de départ des sessions partielles faisait 64 × 64, et le Recorder refusait à bon droit des images partielles de 1280 × 800.
+
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
 **Video Recorder.** Une lecture sert, à partir de `first`, la suite de segments stockés sans trou, bornée à 600 images et 4 Mio de données d'images (`MaxReadFrames`, `MaxReadBytes`).
