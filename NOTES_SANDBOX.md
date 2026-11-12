@@ -1,5 +1,25 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : sessions et approbations (étape 5C)
+
+Les demandes d’approbation et de break-glass utilisent la table partagée avec
+caption accessible, en-têtes explicites, défilement horizontal local et actions
+à cibles de 40 px. Les états de chargement et d’absence de demande utilisent
+l’état vide partagé ; la pagination, les badges de statut, les confirmations
+et les décisions API restent inchangés. Les avertissements de troncature sont
+annoncés comme notices de statut.
+
+La recherche d’une session et son détail utilisent les surfaces, formulaires,
+détails structurés et actions partagés. L’ouverture d’écran, la reconnexion,
+la révocation et les demandes de décision conservent leurs handlers et leurs
+contrats API. Les tables HTML globales et leurs styles applicatifs ont été
+retirés : les inventaires et les demandes passent tous par les primitives UI.
+
+Validation : make ui-test ui-build réussit (14 fichiers Vitest, 147 tests,
+TypeScript et build Vite) ; 36 paires de contraste vérifiées. La migration du
+replay vidéo et des commandes enregistrées reste à faire. La revue visuelle
+multi-viewport et l’audit lecteur d’écran restent à effectuer.
+
 ## 2026-11-12 — ADR-0073 Design System : inventaire des comptes et formulaires (étape 5B)
 
 L’inventaire des comptes utilise maintenant la table partagée avec en-têtes

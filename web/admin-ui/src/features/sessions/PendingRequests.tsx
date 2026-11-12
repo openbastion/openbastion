@@ -2,6 +2,7 @@ import { Page, Session } from "../../shared/api";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { Badge } from "../../shared/ui/Badge";
 import { Button } from "../../shared/ui/Button";
+import { InlineNotice } from "../../shared/ui/InlineNotice";
 
 // The requests waiting for this user's decision — break-glass (ADR-0012) and approval (ADR-0067).
 // The screen owns the call and the notice; the table only says which request each button names.
@@ -17,25 +18,26 @@ export function PendingRequests({
   onReject: (s: Session) => void;
 }) {
   return (
-    <div className="card">
-      <div className="card-head">
-        <h3>Demandes à décider</h3>
+    <section className="ob-surface ob-panel pending-requests" aria-labelledby="pending-requests-title">
+      <div className="ob-section-heading">
+        <h3 id="pending-requests-title">Demandes à décider</h3>
       </div>
-      {loading ? <p className="empty" role="status">Chargement des demandes en attente…</p> : null}
-      {!loading && pending && pending.items.length === 0 ? <p className="empty">Aucune demande en attente.</p> : null}
+      {loading ? <p className="ob-empty-state" role="status">Chargement des demandes en attente…</p> : null}
+      {!loading && pending && pending.items.length === 0 ? <p className="ob-empty-state">Aucune demande en attente.</p> : null}
       {!loading && pending && pending.items.length > 0 ? (
-        <div className="table-wrap">
-          <table>
+        <div className="ob-table-wrap">
+          <table className="ob-data-table">
+            <caption className="ob-visually-hidden">Demandes de sessions privilégiées en attente de décision</caption>
             <thead>
               <tr>
-                <th>Session</th>
-                <th>Type</th>
-                <th>Demandeur</th>
-                <th>Compte</th>
-                <th>Justification</th>
-                <th>Ticket</th>
-                <th>Échéance</th>
-                <th />
+                <th scope="col">Session</th>
+                <th scope="col">Type</th>
+                <th scope="col">Demandeur</th>
+                <th scope="col">Compte</th>
+                <th scope="col">Justification</th>
+                <th scope="col">Ticket</th>
+                <th scope="col">Échéance</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -55,13 +57,15 @@ export function PendingRequests({
                   <td>{s.justification}</td>
                   <td>{s.ticket ? <code>{s.ticket}</code> : "—"}</td>
                   <td>{s.expiresAt}</td>
-                  <td className="actions">
-                    <Button aria-label={`Approuver la session ${s.id}`} onClick={() => onApprove(s)}>
-                      Approuver
-                    </Button>
-                    <Button variant="danger" aria-label={`Refuser la session ${s.id}`} onClick={() => onReject(s)}>
-                      Refuser
-                    </Button>
+                  <td className="ob-table-actions">
+                    <div>
+                      <Button aria-label={`Approuver la session ${s.id}`} onClick={() => onApprove(s)}>
+                        Approuver
+                      </Button>
+                      <Button variant="danger" aria-label={`Refuser la session ${s.id}`} onClick={() => onReject(s)}>
+                        Refuser
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -69,7 +73,7 @@ export function PendingRequests({
           </table>
         </div>
       ) : null}
-      {!loading && pending?.truncated ? <p className="card-foot hint">D'autres demandes attendent : décidez celles-ci d'abord.</p> : null}
-    </div>
+      {!loading && pending?.truncated ? <InlineNotice tone="warning">D'autres demandes attendent : décidez celles-ci d'abord.</InlineNotice> : null}
+    </section>
   );
 }

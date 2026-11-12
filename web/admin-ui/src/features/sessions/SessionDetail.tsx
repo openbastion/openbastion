@@ -1,5 +1,6 @@
 import { Session } from "../../shared/api";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
+import { Button } from "../../shared/ui/Button";
 
 // The attached screen of the session being looked at: each connection is another attach, and the
 // key restarts the viewer on the new one.
@@ -22,7 +23,7 @@ export function SessionDetail({
 }) {
   return (
     <>
-      <dl className="session">
+      <dl className="ob-detail-list" aria-label="Détails de la session">
         <dt>Statut</dt>
         <dd>
           <StatusBadge status={session.status} />
@@ -65,15 +66,15 @@ export function SessionDetail({
         ) : null}
       </dl>
       {session.status === "active" ? (
-        <div className="form-actions">
+        <div className="ob-form-actions">
           {session.protocol === "vnc" || session.protocol === "rdp" ? (
-            <button type="button" className="primary" onClick={() => onOpenScreen(session.id)}>
+            <Button variant="primary" onClick={() => onOpenScreen(session.id)}>
               Ouvrir l'écran
-            </button>
+            </Button>
           ) : null}
-          <button type="button" className="danger" onClick={() => onTerminate(session)}>
+          <Button variant="danger" onClick={() => onTerminate(session)}>
             Mettre fin
-          </button>
+          </Button>
         </div>
       ) : null}
     </>

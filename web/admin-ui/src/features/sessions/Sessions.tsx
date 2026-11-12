@@ -8,6 +8,7 @@ import { AttachedScreen, SessionDetail } from "./SessionDetail";
 import { PendingRequests } from "./PendingRequests";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
+import { Button } from "../../shared/ui/Button";
 
 // A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
 // the requests waiting for this user's decision (break-glass, ADR-0012, and approval, ADR-0067),
@@ -133,19 +134,17 @@ export function Sessions({
         onApprove={(s) => askDecision("approve", s)}
         onReject={(s) => askDecision("reject", s)}
       />
-      <div className="card panel">
-        <h3>Une session</h3>
+      <section className="ob-surface ob-panel session-lookup" aria-labelledby="session-lookup-title">
+        <h3 id="session-lookup-title">Une session</h3>
         <form onSubmit={find} aria-label="Chercher une session">
-          <div className="fields">
+          <div className="ob-form-fields">
             <label>
               Identifiant
               <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required />
             </label>
           </div>
-          <div className="form-actions">
-            <button type="submit" className="primary">
-              Afficher
-            </button>
+          <div className="ob-form-actions">
+            <Button type="submit" variant="primary">Afficher</Button>
           </div>
         </form>
         {found ? <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={terminate} /> : null}
@@ -157,7 +156,7 @@ export function Sessions({
             onClose={() => setScreen(undefined)}
           />
         ) : null}
-      </div>
+      </section>
       {decision ? (
         <ConfirmDialog
           title={decision.kind === "approve" ? "Approuver cette demande ?" : decision.kind === "reject" ? "Refuser cette demande ?" : "Mettre fin à cette session ?"}

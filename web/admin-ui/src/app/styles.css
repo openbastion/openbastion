@@ -272,8 +272,7 @@ main {
    sideways instead of scrolling inside its own card. */
 .page > *,
 .card,
-.card-head > *,
-.table-wrap {
+.card-head > * {
   min-width: 0;
 }
 
@@ -316,13 +315,6 @@ main {
   border-bottom: 1px solid var(--line);
 }
 
-.card-foot {
-  padding: 0.75rem 1.1rem;
-  border-top: 1px solid var(--line);
-  background: var(--surface-2);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-}
-
 .commands-card {
   overflow: hidden;
 }
@@ -330,82 +322,6 @@ main {
 .commands-card .commands {
   border-radius: 0;
   max-height: 30rem;
-}
-
-.commands-card .pager {
-  border-radius: 0;
-}
-
-.table-wrap {
-  overflow-x: auto;
-  border-radius: var(--radius-lg);
-}
-
-table {
-  border-collapse: separate;
-  border-spacing: 0;
-  width: 100%;
-  min-width: 40rem;
-  background: transparent;
-  font-size: 0.9rem;
-}
-
-thead th {
-  position: sticky;
-  top: 0;
-  background: var(--surface-2);
-  font-size: 0.7rem;
-  font-weight: 650;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  text-align: left;
-  padding: 0.65rem 0.85rem;
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-thead th:first-child {
-  border-top-left-radius: var(--radius-lg);
-}
-
-thead th:last-child {
-  border-top-right-radius: var(--radius-lg);
-}
-
-tbody td {
-  padding: 0.7rem 0.85rem;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink-2);
-  vertical-align: middle;
-}
-
-tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-tbody tr {
-  transition: background-color 150ms var(--ease);
-}
-
-tbody tr:hover {
-  background: #f9fbfd;
-}
-
-td code {
-  white-space: nowrap;
-}
-
-td.actions {
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-td.actions button {
-  font-size: 0.82rem;
-  padding: 0.28rem 0.55rem;
 }
 
 .empty {
@@ -577,53 +493,6 @@ button.danger:hover {
 
 .app-header :focus-visible {
   outline-color: var(--ob-color-focus);
-}
-
-/* ---------- Pager ---------- */
-
-.pager {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0;
-  padding: 0.7rem 0.85rem;
-  border-top: 1px solid var(--line);
-  background: var(--surface-2);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  color: var(--ink-3);
-  font-size: 0.84rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---------- Session detail ---------- */
-
-dl.session {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.55rem 1.25rem;
-  margin: 0;
-  padding: 0.25rem 0 0;
-  font-size: 0.9rem;
-}
-
-dl.session dt {
-  color: var(--ink-3);
-  font-size: 0.76rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding-top: 0.15rem;
-}
-
-dl.session dd {
-  margin: 0;
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
-}
-
-dl.session dd button {
-  margin-top: 0.15rem;
 }
 
 /* ---------- Recorded commands ---------- */
@@ -851,14 +720,6 @@ main.login {
     padding-bottom: 3rem;
   }
 
-  dl.session {
-    grid-template-columns: 1fr;
-    gap: 0.2rem;
-  }
-
-  dl.session dd {
-    margin-bottom: 0.6rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
