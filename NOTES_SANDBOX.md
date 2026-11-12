@@ -3089,7 +3089,7 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 - Le script note ce qu'il fait dans `video-status-<utilisateur>.txt` sur le partage, que la CI joint à ses artefacts.
 - `TestRDPWindows_Measure` ajoute la scène `video`, en images entières puis partielles. Moins de 50 images dans la scène est une erreur : la vidéo n'a pas joué.
 
-**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène ; mais chaque demande a joué deux fois (deux noms pour le même partage). Les chiffres sont dans ADR-0090 : la cible envoie de 0,7 à 2,8 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien.
+**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène ; mais chaque demande a joué deux fois (deux noms pour le même partage). Au troisième passage (exécution 43245190987), une lecture par demande, les cinq jobs Windows verts : la cible envoie de 0,7 à 3,0 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien. Les chiffres sont dans ADR-0090.
 
 **Deux défauts du script, corrigés au second passage** :
 - chaque demande jouait deux fois : `\\host.lan\Data` et `\\<passerelle>\Data` sont le même dossier. Une demande est maintenant reconnue à sa date d'écriture, quel que soit le nom par lequel on la lit, et le journal n'est écrit qu'une fois ;

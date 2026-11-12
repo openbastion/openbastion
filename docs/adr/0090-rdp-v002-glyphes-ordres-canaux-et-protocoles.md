@@ -111,17 +111,17 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Avec S3 à 50 sessions**, la médiane monte de 50 à 235 ms et le maximum atteint 2 à 3 s pour les images clés. Le SeaweedFS à nœud unique devient le goulet. Une session active voit ces délais à chaque image clé, et à chaque image si l'écran change beaucoup.
 - **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages.
 
-**Mesuré ensuite (12 novembre 2026) : une scène vidéo contre Windows.** `rdp-video.ps1` joue, à la demande du test par le partage, 10 s de blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde sur tout l'écran : le pire cas pour PNG, un majorant pour une vidéo. CI Windows de la PR #149, cinq cibles 1280 × 800. Dans ce passage, chaque demande a joué **deux fois** : le script la voyait sous les deux noms du même partage, défaut corrigé depuis. Une scène de 21 à 26 s couvre donc environ 20 s de vidéo. Les débits par seconde en donnent le régime ; les nombres d'images par scène sont doublés.
+**Mesuré ensuite (12 novembre 2026) : une scène vidéo contre Windows.** `rdp-video.ps1` joue, à la demande du test par le partage, 10 s de blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde sur tout l'écran : le pire cas pour PNG, un majorant pour une vidéo. CI Windows de la PR #149 (exécution 43245190987), cinq cibles 1280 × 800, en images entières puis partielles. L'écran ne change que pendant les 10 s de lecture : les débits ci-dessous sont rapportés à ces 10 s. La scène elle-même dure 12 à 20 s, ouverture de la fenêtre et retour au calme compris. Au premier passage, chaque demande jouait deux fois (deux noms pour le même partage) : les débits concordaient, les nombres d'images étaient doublés.
 
-| Cible | Cible → proxy | Images | PNG par image | Enregistré | Encodage |
+| Cible | Cible → proxy | Images en 10 s | PNG par image | Enregistré | Encodage |
 |---|---|---|---|---|---|
-| 2019, 16 bpp | 890 à 1 088 Kio/s | 309 à 312 (12 à 14/s) | 89 à 93 Ko | 1 087 à 1 245 Kio/s | 11 à 21 ms |
-| 2022, 16 bpp (trois cibles) | 710 à 846 Kio/s | 240 à 271 (11 à 13/s) | 91 à 94 Ko | 972 à 1 142 Kio/s | 12 à 26 ms |
-| 2022, 32 bpp | 2 240 à 2 835 Kio/s | 301 à 307 (12 à 15/s) | 89 à 102 Ko | 1 192 à 1 272 Kio/s | 11 à 12 ms |
+| 2019, 16 bpp | 1 090 à 1 107 Kio/s | 135 à 136 | 90 à 93 Ko | 1 200 à 1 228 Kio/s | 35 ms |
+| 2022, 16 bpp (trois cibles) | 712 à 846 Kio/s | 115 à 127 | 90 à 94 Ko | 1 010 à 1 170 Kio/s | 17 à 43 ms |
+| 2022, 32 bpp | 2 868 à 3 048 Kio/s | 130 à 132 | 97 à 101 Ko | 1 254 à 1 281 Kio/s | 20 à 21 ms |
 
-- **Le lien cible → proxy devient un coût**, pour la première fois : 0,7 à 2,8 Mio/s, contre 11 à 80 Kio/s en frappe. À 32 bpp, Windows envoie trois fois plus qu'à 16 bpp pour la même scène.
-- **L'enregistrement reste du même ordre** : 1,0 à 1,3 Mio/s, soit autant que la cible envoie à 16 bpp. Tout l'écran change à chaque image : les images partielles n'apportent rien (presque toutes sont des images clés), comme prévu par ADR-0092.
-- **La cadence plafonne sous 20 images/s** : en moyenne sur la scène, 11 à 15 images/s. L'encodage, 11 à 26 ms par image, n'explique pas seul ce plafond.
+- **Le lien cible → proxy devient un coût**, pour la première fois : 0,7 à 3,0 Mio/s, contre 11 à 80 Kio/s en frappe. À 32 bpp, Windows envoie trois à quatre fois plus qu'à 16 bpp pour la même scène.
+- **L'enregistrement reste du même ordre** : 1,0 à 1,3 Mio/s, un peu plus que ce que la cible envoie à 16 bpp. Tout l'écran change à chaque image : les images partielles n'apportent rien (presque toutes sont des images clés), comme prévu par ADR-0092.
+- **La cadence plafonne sous 20 images/s** : 11,5 à 13,6 images par seconde de vidéo, pour 25 changements par seconde à l'écran et un plafond de 20 (une image toutes les 50 ms). L'encodage, 17 à 43 ms par image, en explique une partie ; la cadence que Windows envoie n'a pas été mesurée à part.
 - **Ce que ça décide** : rien de nouveau pour les lots B et C. Une vidéo réelle serait plus légère que ce bruit. Si l'on voulait réduire le lien cible → proxy en vidéo, c'est RDPGFX (lot C) qui le ferait, et ses codecs sans perte resteraient lourds sur un tel contenu. Le lot A est clos, sauf le S3 distant.
 
 ### Lot B — Ordres graphiques
