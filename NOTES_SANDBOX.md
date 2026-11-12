@@ -13,6 +13,18 @@ Validation : `make license-check` confirme les 95 skills (85 tiers, 10 internes)
 les 95 empreintes de fichiers, les 85 hashes Skills CLI v1, les révisions, les
 licences et les notices.
 
+## 2026-11-12 — Le build Docker de l'Admin UI embarque les packages partagés
+
+Le premier build d'image après la migration du design system échouait parce que
+le Dockerfile copiait l'Admin UI et les icônes, mais omettait les packages locaux
+`web/packages/design-tokens` et `web/packages/ui` référencés par les dépendances
+`file:` du lockfile. Le stage UI copie désormais ces deux répertoires à leurs
+chemins relatifs attendus avant `npm ci`.
+
+Validation : `docker build --target ui -f deploy/docker-compose/Dockerfile`
+construit l'image UI, résout les trois packages locaux, exécute TypeScript et
+Vite et produit `/ui/dist`.
+
 ## 2026-11-12 — Charte graphique formalisée dans ADR-0073 et ADR-0075
 
 La décision de conception OpenBastion Infrastructure est maintenant inscrite

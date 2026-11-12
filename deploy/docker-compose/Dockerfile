@@ -57,6 +57,11 @@ RUN npm ci --no-audit --no-fund
 COPY web/openbastion-icons/ ./
 RUN npm run build
 
+# The Admin UI lockfile uses local file: dependencies for the shared frontend packages.
+# Keep their source trees at the same relative paths as in the repository build context.
+COPY web/packages/design-tokens/ /packages/design-tokens/
+COPY web/packages/ui/ /packages/ui/
+
 WORKDIR /ui
 COPY web/admin-ui/package.json web/admin-ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
