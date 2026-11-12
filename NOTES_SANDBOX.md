@@ -3154,6 +3154,19 @@ Le tableau est dans ADR-0090. En bref : 15 à 30 ms en médiane jusqu'à 10 sess
 
 **Défaut du harnais, corrigé** : au premier passage, l'image clé de départ des sessions partielles faisait 64 × 64, et le Recorder refusait à bon droit des images partielles de 1280 × 800.
 
+## 2026-11-12 — ADR-0090, lot A : l'acquittement avec un vrai S3
+
+`TestVideoRecorderAckLatency` accepte `RECORDER_MEASURE_S3_ENDPOINT` : le Recorder écrit alors dans ce S3 au lieu du stockage en mémoire de l'épreuve. Il faut un accès en HTTP clair, la clé `test` et le secret `test-secret` ; le seau `screens` est créé s'il manque. Mesuré contre un SeaweedFS 4.52 jetable (`weed server -s3`, image déjà présente), sur le même hôte.
+
+Le tableau est dans ADR-0090. En bref : médiane de 12 à 74 ms avec S3 (11 à 33 ms en mémoire) ; 95ᵉ centile jusqu'à 0,4 s ; maximum au-delà d'une seconde dans deux cas (1,1 et 2,4 s, à 10 sessions).
+
+**Limites** :
+- deux passages S3 seulement, très bruités ;
+- SeaweedFS en nœud unique sur le même hôte, sans réseau ni TLS : un S3 distant ajoute son aller-retour ;
+- toujours pas de scène vidéo, ni plus de 10 sessions.
+
+**Défaut trouvé en chemin, non corrigé** : quand l'adresse de PostgreSQL ne répond pas (paquets perdus, sans refus), le Video Recorder reste bloqué au démarrage, malgré son délai de 10 s. Ici, le conteneur PostgreSQL du bac à sable avait redémarré et changé d'adresse. La cause : `sql.Open("postgres", …)` passe par `Driver.Open`, sans contexte, et lib/pq compose alors le numéro sans délai si le DSN n'a pas de `connect_timeout`. Le `PingContext` n'y peut rien. Les sept services qui ouvrent PostgreSQL ainsi sont concernés. Inscrit au backlog.
+
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
 **Video Recorder.** Une lecture sert, à partir de `first`, la suite de segments stockés sans trou, bornée à 600 images et 4 Mio de données d'images (`MaxReadFrames`, `MaxReadBytes`).
