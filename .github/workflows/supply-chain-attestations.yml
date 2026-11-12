@@ -1,4 +1,4 @@
-# Trusted-tag artifact attestations (ADR-0093). This workflow never publishes images or releases.
+# Trusted-tag artifact attestations (ADR-0094). This workflow never publishes images or releases.
 name: Supply chain attestations
 on:
   push:

@@ -1,4 +1,4 @@
-# ADR-0093 — La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement
+# ADR-0093 — Une relecture lit plusieurs segments par requête
 
 **Statut** `Accepté` · 10 novembre 2026 · décision du propriétaire du projet (« C'est Accepté »). Cet ADR définit une architecture cible et ses étapes de migration ; son acceptation n'autorise ni publication, ni déploiement, ni changement immédiat des workflows.
 

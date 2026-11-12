@@ -1,4 +1,4 @@
-# Container image construction, scanning and optional trusted-tag attestations (ADR-0093).
+# Container image construction, scanning and optional trusted-tag attestations (ADR-0094).
 name: Container image checks
 on:
   workflow_call:
