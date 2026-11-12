@@ -11,11 +11,25 @@ const MAX_SESSION_ID_BYTES = 1024;
 const MAX_END_TEXT_BYTES = 200;
 const INPUT_SIZE = 16;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+// A partial frame (ADR-0092): at most this many rectangles, each with a 20-byte header.
+const MAX_DELTA_RECTS = 64;
+const DELTA_RECT_HEADER = 20;
+
+// A changed rectangle of a partial frame: where it goes, and its pixels as a PNG of its size.
+export interface DeltaRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  png: Uint8Array<ArrayBuffer>;
+}
 
 export type ScreenMessage =
   // pointerDrawn: the frames carry the target's pointer (ADR-0091), the page hides its own.
   | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; expiresAt: Date; sessionId: string }
   | { type: "frame"; sequence: bigint; width: number; height: number; png: Uint8Array<ArrayBuffer> }
+  // A partial frame (ADR-0092): its rectangles replace pixels of the frame of the sequence before.
+  | { type: "delta"; sequence: bigint; width: number; height: number; rects: DeltaRect[] }
   | { type: "end"; sequence: bigint; code: number; text: string };
 
 export class ScreenProtocolError extends Error {}
@@ -61,9 +75,39 @@ export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
       if (textLength > MAX_END_TEXT_BYTES || textLength !== length - 4) refuse("malformed end");
       return { type: "end", sequence, code: fields.getUint16(0), text: decodeText(text, payload.subarray(4)) };
     }
+    case 4: {
+      if (sequence === 0n || width === 0 || height === 0 || width * height > MAX_PIXELS) refuse("partial frame out of bounds");
+      if (length > MAX_PNG_BYTES) refuse("partial frame too large");
+      return { type: "delta", sequence, width, height, rects: decodeRects(data, width, height) };
+    }
     default:
       return refuse("unknown message type");
   }
+}
+
+// The rectangles of a partial frame, as strict as pkg/screenstream: 1 to 64, each non-empty, inside
+// the frame, a PNG; nothing left over and no length past the message.
+function decodeRects(data: ArrayBuffer, width: number, height: number): DeltaRect[] {
+  const view = new DataView(data, HEADER_SIZE);
+  if (view.byteLength < 2) refuse("malformed partial frame");
+  const count = view.getUint16(0);
+  if (count === 0 || count > MAX_DELTA_RECTS) refuse("partial frame out of bounds");
+  const rects: DeltaRect[] = [];
+  let at = 2;
+  for (let i = 0; i < count; i++) {
+    if (view.byteLength - at < DELTA_RECT_HEADER) refuse("malformed partial frame");
+    const x = view.getUint32(at), y = view.getUint32(at + 4), w = view.getUint32(at + 8), h = view.getUint32(at + 12);
+    const n = view.getUint32(at + 16);
+    at += DELTA_RECT_HEADER;
+    if (n > view.byteLength - at) refuse("malformed partial frame");
+    if (w === 0 || h === 0 || x + w > width || y + h > height || n < PNG_SIGNATURE.length) refuse("rectangle out of bounds");
+    const png = new Uint8Array(data, HEADER_SIZE + at, n);
+    if (PNG_SIGNATURE.some((b, j) => png[j] !== b)) refuse("not a PNG");
+    rects.push({ x, y, width: w, height: h, png });
+    at += n;
+  }
+  if (at !== view.byteLength) refuse("malformed partial frame");
+  return rects;
 }
 
 function decodeText(decoder: TextDecoder, bytes: Uint8Array): string {

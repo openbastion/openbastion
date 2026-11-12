@@ -3036,6 +3036,19 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092, incrément 4 : l'Admin UI affiche et rejoue les images partielles
+
+- **Décodage** (`protocol.ts`) : `FRAME_DELTA`, avec les bornes de `pkg/screenstream` (1 à 64 rectangles, chacun non vide, dans l'image, un PNG ; rien de reste, aucune longueur au-delà).
+- **En direct** (`ScreenViewer`) : une chaîne de promesses peint les images strictement dans l'ordre. Ce qui précède la dernière image clé reçue n'est même pas décodé : elle remplace tout. Une image partielle doit suivre l'image reçue juste avant elle et avoir la taille de l'écran, et chaque rectangle doit être un PNG de sa taille ; sinon la session se ferme. Chaque rectangle remplace ses pixels (`clearRect` puis `drawImage`), sans mélange. Les images clés peuvent arriver après un trou (le relais remplace ce qu'une page lente n'a pas pris), jamais une image partielle.
+- **En rejeu** (`VideoReplay`) : les segments portent les deux codecs. Une image partielle doit être celle de sa propre séquence. L'image suivante, si elle est partielle, est posée sur celle du canvas ; toute autre position est recomposée depuis l'image clé qui la précède, dont la taille (IHDR du PNG) doit être celle de l'image partielle.
+- **Runtime** : `SCREEN_PARTIAL_FRAMES` (`true`/`false`, éteint par défaut, toute autre valeur arrête le service) allume les images partielles pour RDP. Le compose suit, et l'OpenAPI admet le codec `png-delta-v1`.
+
+**Prouvé** :
+- Vitest : 112 tests (décodage et refus, peinture en ordre malgré un décodage lent, reprise à une image clé après un trou, refus en direct et en rejeu, pas à pas sans recomposition, sauts en avant et en arrière, changement d'image clé) ; `tsc` et `vite build` passent ;
+- **14 mutations, 14 tuées**. Au premier passage, un codec inconnu portant un vrai PNG survivait : un test le couvre désormais.
+
+**Non vérifié** : le direct et le rejeu dans un vrai navigateur. La composition repose sur `clearRect` puis `drawImage`, éprouvée en Go (`Composer`) mais pas sur un canvas réel. Le bac à sable Base44 n'a que VNC, qui reste en images entières (incrément 5).
+
 ## 2026-11-12 — ADR-0092, incrément 3 : le Video Recorder et le relais acceptent les images partielles
 
 **Le Video Recorder :**

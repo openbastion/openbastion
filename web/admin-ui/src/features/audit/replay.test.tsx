@@ -19,18 +19,20 @@ const path = (first: number) => `GET /sessions/sess_r/recording/video/segments/$
 
 function deps() {
   const drawn: number[] = [];
+  const patched: string[] = [];
   const pending: (() => void)[] = [];
   const delays: number[] = [];
   const replay: ReplayDeps = {
     decode: async (bytes) => ({ id: bytes[8], close: vi.fn() }) as unknown as ImageBitmap,
     draw: (_canvas, image) => drawn.push((image as unknown as { id: number }).id),
+    patch: (_canvas, image, x, y) => patched.push(`${x},${y} ${image.width}x${image.height}`),
     schedule: (run, delayMs) => {
       pending.push(run);
       delays.push(delayMs);
       return () => {};
     },
   };
-  return { replay, drawn, pending, delays };
+  return { replay, drawn, patched, pending, delays };
 }
 
 async function open(api: Api, d: ReturnType<typeof deps>) {
@@ -116,5 +118,132 @@ describe("the replay of a screen recording", () => {
       expect(d.drawn).toEqual([]);
       view.unmount();
     }
+  });
+});
+
+// A key frame whose PNG says its size (IHDR) and, at byte 24, which frame it is.
+function keyPNG(id: number, width: number, height: number): number[] {
+  const out = new Uint8Array(25);
+  out.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  const view = new DataView(out.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  out[24] = id;
+  return [...out];
+}
+// A rectangle's fake PNG: the signature, then its width and height.
+const rectPNG = (w: number, h: number) => [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, w, h];
+// A partial frame as the recorder stores it: the screen-stream FRAME_DELTA message.
+function deltaMessage(sequence: number, width: number, height: number, rects: { x: number; y: number; w: number; h: number; png?: number[] }[]): number[] {
+  const payload: number[] = [0, rects.length];
+  for (const r of rects) {
+    const png = r.png ?? rectPNG(r.w, r.h);
+    const head = new DataView(new ArrayBuffer(20));
+    head.setUint32(0, r.x);
+    head.setUint32(4, r.y);
+    head.setUint32(8, r.w);
+    head.setUint32(12, r.h);
+    head.setUint32(16, png.length);
+    payload.push(...new Uint8Array(head.buffer), ...png);
+  }
+  const out = new Uint8Array(32 + payload.length);
+  const view = new DataView(out.buffer);
+  out[0] = 1;
+  out[1] = 4;
+  view.setBigUint64(4, BigInt(sequence));
+  view.setBigInt64(12, 1_000_000_000n);
+  view.setUint32(20, width);
+  view.setUint32(24, height);
+  view.setUint32(28, payload.length);
+  out.set(payload, 32);
+  return [...out];
+}
+const b64 = (bytes: number[]) => btoa(String.fromCharCode(...bytes));
+type Recorded = { codec: "png"; bytes: number[] } | { codec: "png-delta-v1"; bytes: number[] };
+const mixed = (first: number, frames: Recorded[], complete = true) => ({
+  sessionId: "sess_r", firstSequence: first, lastSequence: first + frames.length - 1, complete,
+  frames: frames.map((f, i) => ({ timestamp: at(first + i), frameData: b64(f.bytes), codec: f.codec })),
+});
+
+function partialDeps() {
+  const d = deps();
+  d.replay.decode = async (bytes) =>
+    (bytes.length >= 25 ? { id: bytes[24], close: vi.fn() } : { width: bytes[8], height: bytes[9], close: vi.fn() }) as unknown as ImageBitmap;
+  return d;
+}
+
+describe("the replay of partial frames (ADR-0092)", () => {
+  const recording = mixed(1, [
+    { codec: "png", bytes: keyPNG(1, 8, 4) },
+    { codec: "png-delta-v1", bytes: deltaMessage(2, 8, 4, [{ x: 1, y: 2, w: 3, h: 2 }]) },
+    { codec: "png-delta-v1", bytes: deltaMessage(3, 8, 4, [{ x: 0, y: 0, w: 2, h: 2 }, { x: 7, y: 3, w: 1, h: 1 }]) },
+    { codec: "png", bytes: keyPNG(4, 8, 4) },
+    { codec: "png-delta-v1", bytes: deltaMessage(5, 8, 4, [{ x: 5, y: 1, w: 1, h: 1 }]) },
+  ]);
+
+  it("steps from frame to frame, putting only the next rectangles in place", async () => {
+    const { api } = fakeApi({ [path(1)]: { body: recording } });
+    const d = partialDeps();
+    await open(api, d);
+    await screen.findByText(/scellé/);
+    await waitFor(() => expect(d.drawn).toEqual([1]));
+    fireEvent.click(screen.getByText("Image suivante"));
+    await waitFor(() => expect(d.patched).toEqual(["1,2 3x2"]));
+    fireEvent.click(screen.getByText("Image suivante"));
+    await waitFor(() => expect(d.patched).toEqual(["1,2 3x2", "0,0 2x2", "7,3 1x1"]));
+    expect(d.drawn).toEqual([1]); // never composed again from the key frame
+  });
+
+  it("composes a frame reached out of order from its key frame", async () => {
+    const { api } = fakeApi({ [path(1)]: { body: recording } });
+    const d = partialDeps();
+    await open(api, d);
+    await screen.findByText(/scellé/);
+    await waitFor(() => expect(d.drawn).toEqual([1]));
+    // Straight to frame 3: frames 2 and 3 on the key frame on the canvas.
+    fireEvent.change(screen.getByLabelText("Position"), { target: { value: "2" } });
+    await waitFor(() => expect(d.patched).toEqual(["1,2 3x2", "0,0 2x2", "7,3 1x1"]));
+    // Back to frame 2: from its key frame again, then its own rectangle.
+    fireEvent.change(screen.getByLabelText("Position"), { target: { value: "1" } });
+    await waitFor(() => expect(d.drawn).toEqual([1, 1]));
+    await waitFor(() => expect(d.patched.slice(3)).toEqual(["1,2 3x2"]));
+    // To frame 5: its own key frame, 4, then its rectangle.
+    fireEvent.change(screen.getByLabelText("Position"), { target: { value: "4" } });
+    await waitFor(() => expect(d.drawn).toEqual([1, 1, 4]));
+    await waitFor(() => expect(d.patched.slice(4)).toEqual(["5,1 1x1"]));
+  });
+
+  it.each([
+    ["a partial frame of another sequence", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "png-delta-v1", bytes: deltaMessage(3, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]) }])],
+    ["a key frame under the partial codec", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "png-delta-v1", bytes: keyPNG(2, 8, 4) }])],
+    ["an unknown codec", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "png-delta-v9" as "png-delta-v1", bytes: deltaMessage(2, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]) }])],
+    ["an unknown codec around a PNG", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "jpeg" as "png", bytes: keyPNG(2, 8, 4) }])],
+  ])("shows nothing of a segment with %s", async (_what, body) => {
+    const { api } = fakeApi({ [path(1)]: { body } });
+    const d = partialDeps();
+    await open(api, d);
+    expect((await screen.findByRole("alert")).textContent).toContain("n'est pas valide");
+    expect(d.drawn).toEqual([]);
+  });
+
+  it.each([
+    ["a partial frame of another size than its screen", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "png-delta-v1", bytes: deltaMessage(2, 16, 4, [{ x: 0, y: 0, w: 1, h: 1 }]) }])],
+    ["a rectangle whose PNG is not of its size", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "png-delta-v1", bytes: deltaMessage(2, 8, 4, [{ x: 0, y: 0, w: 2, h: 2, png: rectPNG(1, 1) }]) }])],
+  ])("stops at %s", async (_what, body) => {
+    const { api } = fakeApi({ [path(1)]: { body } });
+    const d = partialDeps();
+    await open(api, d);
+    await screen.findByText(/scellé/);
+    fireEvent.click(screen.getByText("Image suivante"));
+    expect((await screen.findByRole("alert")).textContent).toContain("ne se décode pas");
+    expect(d.patched).toEqual([]);
+  });
+
+  it("refuses a recording that starts with a partial frame", async () => {
+    const { api } = fakeApi({ [path(1)]: { body: mixed(1, [{ codec: "png-delta-v1", bytes: deltaMessage(1, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]) }]) } });
+    const d = partialDeps();
+    await open(api, d);
+    expect((await screen.findByRole("alert")).textContent).toContain("ne se décode pas");
+    expect(d.patched).toEqual([]);
   });
 });
