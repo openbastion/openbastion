@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Makes, in DIR, what docker-compose.yml and the Windows interop test need (ADR-0071):
 #   - a test authority and the RDP certificate of "rdp-windows.test", signed by it;
-#   - oem/: install.bat, rdp-setup.ps1, the certificate as a PFX and its password, for Windows;
+#   - oem/: install.bat, rdp-setup.ps1, rdp-video.ps1, the certificate as a PFX and its password, for Windows;
 #   - shared/: where Windows copies its RDP event logs (oem/rdp-setup.ps1);
 #   - compose.env (for docker compose) and test.env (for make test-rdp-windows).
 # DEPTH, 16 by default, is the colour depth the target allows a client without the graphics
@@ -46,6 +46,7 @@ printf '%s' "$pfx_password" > oem/rdp.pfx.pass
 # cmd.exe reads a batch file line by line on CRLF: the copy is converted, the source stays LF.
 sed 's/$/\r/' "$here/oem/install.bat" > oem/install.bat
 cp "$here/oem/rdp-setup.ps1" oem/
+cp "$here/oem/rdp-video.ps1" oem/
 printf '%s' "$depth" > oem/color-depth
 printf '%s' "$session" > oem/session
 printf '%s' "$keyboard" > oem/keyboard

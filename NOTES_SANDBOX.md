@@ -3081,6 +3081,16 @@ Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session
 
 **Renversable** : 10 s ; un fichier par service plutôt qu'un module `pkg/` partagé (un module de plus aurait touché `go.work`, le Makefile et une dizaine de documents pour quinze lignes).
 
+## 2026-11-12 — ADR-0090, lot A : une scène vidéo contre Windows (en cours)
+
+Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le shell (PR #101) : le test ne peut lancer aucun programme au clavier. Il demande donc la scène par un fichier du partage, comme le test de déconnexion.
+- `oem/rdp-video.ps1`, lancé caché à chaque ouverture de session (entrée `Run` posée par `rdp-setup.ps1`), surveille `video-request` sur le partage.
+- Chaque nouvelle demande (sa date d'écriture change) joue une scène : une fenêtre sans bord sur tout l'écran, des blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde, pendant 10 s. C'est le pire cas pour PNG : un majorant pour une vidéo.
+- Le script note ce qu'il fait dans `video-status-<utilisateur>.txt` sur le partage, que la CI joint à ses artefacts.
+- `TestRDPWindows_Measure` ajoute la scène `video`, en images entières puis partielles. Moins de 50 images dans la scène est une erreur : la vidéo n'a pas joué.
+
+**Non vérifié en local** : la syntaxe et le comportement du script PowerShell (pas de PowerShell ici, pas de Windows en local). Le premier passage en CI le dira.
+
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
 **Video Recorder.** Une lecture sert, à partir de `first`, la suite de segments stockés sans trou, bornée à 600 images et 4 Mio de données d'images (`MaxReadFrames`, `MaxReadBytes`).

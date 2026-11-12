@@ -63,6 +63,8 @@ try {
 
 # Something the test can type into and see: Notepad, at every logon.
 Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OpenBastionNotepad -Value 'notepad.exe'
+# The video scene of the measurement (ADR-0090, lot A), asked through the share: see rdp-video.ps1.
+Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name OpenBastionVideo -Value 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\OEM\rdp-video.ps1'
 
 # Ready, in a known state (ADR-0071, CI runs #39 to #42): dockur logs the user on at the console to
 # run this script, and a test that came while that session was there found Windows' logon screen in
