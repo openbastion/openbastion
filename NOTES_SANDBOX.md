@@ -3036,6 +3036,22 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092, incrément 5 : VNC envoie des images partielles
+
+`pkg/vnc` passe par le même `screenstream.FrameEncoder` que RDP (`Config.PartialFrames`, `VNCCodec.PartialFrames`, `SCREEN_PARTIAL_FRAMES` désormais pour RDP et VNC).
+- **Image inchangée** : pas d'image.
+- **Image clé** : à la demande du relais (`RequestKeyFrame`), servie par la boucle qui sert déjà le pointeur, même sur un écran immobile et sans forme de curseur. Une nouvelle taille du bureau donne aussi une image clé.
+- **Enveloppe du moteur** : elle transmet la demande (`vncScreenSession.RequestKeyFrame`).
+
+**Prouvé** :
+- 4 tests VNC : seul ce qui change voyage, une copie à l'identique ne fait pas d'image, le pointeur donne ses tuiles, l'image clé demandée égale l'écran composé, une nouvelle taille donne une image clé, et `Open` n'active tout cela que sur demande. S'y ajoutent un test de l'enveloppe, sous `-race` ;
+- **9 mutations, 9 tuées**. Au premier passage, deux avaient survécu : une demande d'image clé sans forme de curseur, et la ligne d'`Open` que mes tests contournaient. Les tests les couvrent désormais ;
+- **contre le TigerVNC du bac à sable Base44** : `TestBase44Preview` passe en images entières puis avec `SCREEN_PARTIAL_FRAMES=true`, posé le temps du test dans le compose du bac à sable puis retiré à l'identique. Le test compose désormais lui-même les images partielles, à partir du format du fil, indépendamment de `pkg/screenstream`.
+
+**Constat** : en images partielles, le parcours s'est d'abord bloqué. xterm cache le pointeur pendant la frappe (forme vide), et TigerVNC n'en renvoie la forme qu'au mouvement suivant : le premier déplacement ne change pas l'écran, et à juste titre aucune image ne part. En images entières, une image identique partait. Le test déplace désormais le pointeur en trois pas.
+
+**Non vérifié** : l'Admin UI dans un vrai navigateur, en direct et en rejeu ; aucun outil de navigateur dans cet environnement. Les chiffres VNC en images partielles ne sont pas mesurés (incrément 6).
+
 ## 2026-11-12 — ADR-0092, incrément 4 : l'Admin UI affiche et rejoue les images partielles
 
 - **Décodage** (`protocol.ts`) : `FRAME_DELTA`, avec les bornes de `pkg/screenstream` (1 à 64 rectangles, chacun non vide, dans l'image, un PNG ; rien de reste, aucune longueur au-delà).

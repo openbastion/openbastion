@@ -93,7 +93,7 @@ Les deux cibles savent déjà ce qui a changé. RDP envoie des rectangles (Bitma
    - **En direct** : les images sont peintes strictement dans l'ordre. Ce qui précède la dernière image clé reçue est sauté, puisqu'elle remplace tout l'écran. Une image partielle doit suivre l'image reçue avant elle et avoir sa taille, et chaque rectangle doit être un PNG de sa taille ; sinon la session se ferme.
    - **En rejeu** : l'image suivante, si elle est partielle, est posée sur celle du canvas ; toute autre image est recomposée depuis l'image clé qui la précède.
    - **Réglage** : `SCREEN_PARTIAL_FRAMES` est offert par le runtime, éteint par défaut (§8). Le contrat REST admet le codec `png-delta-v1`.
-5. VNC.
+5. **Fait** : VNC. Le client VNC passe par le même `FrameEncoder` que RDP. Il fait une image clé à la demande du relais, même sur un écran immobile et même sans forme de curseur. Une nouvelle taille du bureau donne une image clé. Éprouvé contre le TigerVNC du bac à sable Base44, en images entières et en images partielles. Constat : xterm cache le pointeur pendant la frappe, et TigerVNC ne renvoie sa forme qu'après un mouvement suivant. En images partielles, le premier mouvement ne fait donc pas d'image, à juste titre.
 6. Nouvelle mesure du lot A, puis décision d'allumer `SCREEN_PARTIAL_FRAMES` par défaut.
 
 ## Alternatives envisagées

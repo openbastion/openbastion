@@ -606,6 +606,7 @@ type screenMessage struct {
 	helloFlags    byte // bit 0: the pointer is in the frames (ADR-0091)
 	helloSession  string
 	endText       string
+	raw           []byte // the whole message, for a partial frame's rectangles (ADR-0092)
 }
 
 func readScreen(t *testing.T, conn *websocket.Conn) screenMessage {
@@ -624,7 +625,7 @@ func readScreenWithin(t *testing.T, conn *websocket.Conn, limit time.Duration) s
 	if typ != websocket.MessageBinary || len(data) < 32 || data[0] != 1 {
 		t.Fatalf("not a screen message: type %v, %d bytes", typ, len(data))
 	}
-	m := screenMessage{kind: data[1], sequence: binary.BigEndian.Uint64(data[4:12])}
+	m := screenMessage{kind: data[1], sequence: binary.BigEndian.Uint64(data[4:12]), raw: data}
 	payload := data[32:]
 	switch m.kind {
 	case 1:
