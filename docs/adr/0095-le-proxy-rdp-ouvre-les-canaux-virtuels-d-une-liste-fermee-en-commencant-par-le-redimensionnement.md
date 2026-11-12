@@ -75,7 +75,16 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Envoi** : `SendDynamicChannelMessage` envoie un seul `DATA`, de 1 594 octets au plus.
 - **Verrous** : les rappels (`onOpen`, `onMessage`) sont appelés une fois le verrou de la session relâché et les réponses envoyées. Un rappel peut donc envoyer à son tour : un test le prouve, et la mutation qui les appelle sous le verrou est tuée.
 - **Prouvé** : 10 tests, 18 mutations tuées, un fuzzer (`FuzzDynamicChannels`, 30 s). Contre FreeRDP 3 (`TestRDPInterop_DynamicChannels`) : capacités échangées, `AUDIO_INPUT` proposé puis refusé, session poursuivie (81 mises à jour d'écran).
-- **À prouver en CI** : `TestRDPWindows_DynamicChannels`, le contrôle d'affichage ouvert et sa capacité (`DISPLAYCONTROL_CAPS_PDU`) reçue, et la liste des noms que Windows propose.
+- **Prouvé contre Windows** (CI de #154, cinq cibles) : le contrôle d'affichage s'ouvre, et sa capacité arrive (`DISPLAYCONTROL_CAPS_PDU`, 20 octets). Windows propose aussi, et chaque fois reçoit un refus : `Microsoft::Windows::RDS::Geometry::v08.01` (4 à 5 fois par session), `Microsoft::Windows::RDS::Video::Control::v08.01`, `Microsoft::Windows::RDS::Video::Data::v08.01`, `Microsoft::Windows::RDS::Telemetry`, `Microsoft::Windows::RDS::Input` et `ECHO`. La session continue.
+
+**Incrément 3, fait (12 novembre 2026) : le redimensionnement.**
+- **Contrat écran** (`pkg/screenstream`) : `InputResize` (type 4 : la largeur en `X`, la hauteur en `Y`, rien d'autre), et le bit 1 des drapeaux du `HELLO` (`HelloResizable`). `ClampResize` ramène une taille entre 640 × 480 et 2 560 × 1 600, largeur paire.
+- **Relais** (`pkg/proxycore`) : le `HELLO` dit ce que la session dit (`Resizer`). Une session qui ne redimensionne pas ne reçoit aucun `InputResize`. Sinon, la taille est ramenée dans les bornes, et un redimensionnement au plus par seconde est transmis : ceux qui arrivent plus tôt attendent, et seul le dernier passe à son tour. Ils sont hors du budget d'entrée.
+- **Contrôle d'affichage** (`pkg/rdp/display_control.go`) : lecture stricte de `DISPLAYCONTROL_CAPS_PDU`, écriture d'un `DISPLAYCONTROL_MONITOR_LAYOUT_PDU` à un écran, principal, à l'origine, à 100 %.
+- **Codec RDP** (`RDPCodec.Resize`, `SCREEN_RESIZE`, éteint par défaut) : annonce `drdynvc`, n'accepte que le contrôle d'affichage, et lit sa capacité une fois (tout autre message ferme la session). Un redimensionnement demandé avant cette capacité, ou au-delà de la surface qu'elle permet, est ignoré. Windows se réactive alors à la nouvelle taille, ce que le lecteur suit déjà, et l'image clé de la nouvelle taille est enregistrée.
+- **Prouvé** : tests du contrat, du relais (le `HELLO`, l'ignorance, les bornes, le rythme, le budget), du contrôle d'affichage et du codec ; 16 mutations tuées ; `FuzzParseDisplayControlCaps`. Contre FreeRDP, qui n'offre pas de contrôle d'affichage : `SCREEN_RESIZE` allumé, la session va son chemin et le redimensionnement est ignoré.
+- **À prouver en CI** : `TestRDPWindows_Resize`, une image de 1 022 × 768 après la demande de 1 023 × 768.
+- **Reste** : l'Admin UI (incrément 4) ; elle ne connaît pas encore le bit 1 du `HELLO`, et `SCREEN_RESIZE` doit rester éteint jusque-là.
 
 ## Conséquences
 

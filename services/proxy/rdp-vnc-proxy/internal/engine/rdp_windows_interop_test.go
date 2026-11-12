@@ -695,6 +695,64 @@ func TestRDPWindows_DynamicChannels(t *testing.T) {
 	}
 }
 
+// The resize of ADR-0095 (increment 3) against Windows, through the codec as the proxy runs it with
+// SCREEN_RESIZE on: the display control opened, its capabilities read, then InputResize asks for
+// 1024 x 768 and Windows reactivates at that size; the frames follow. The size asked is odd on
+// purpose: it is brought to the bounds first (1023 -> 1022).
+func TestRDPWindows_Resize(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DrawPointer: true,
+		FrameInterval: 50 * time.Millisecond, Resize: true}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	if resizer, ok := session.(proxycore.Resizer); !ok || !resizer.Resizable() {
+		t.Fatal("the session does not say it resizes: the HELLO would not tell the browser")
+	}
+	sizeOf := func(m screenstream.Message) [2]uint32 { return [2]uint32{m.Width, m.Height} }
+	var first screenstream.Message
+	select {
+	case first = <-session.Frames():
+	case <-time.After(90 * time.Second):
+		t.Fatalf("no frame from Windows: %v", session.Err())
+	}
+	t.Logf("first frame %dx%d", first.Width, first.Height)
+	want := [2]uint32{1022, 768}
+	for deadline := time.After(60 * time.Second); ; {
+		// The capabilities come over the display control once it opens: asked every 2 s until a frame
+		// of the size comes, the codec ignoring what comes before them.
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputResize, X: 1023, Y: 768}); err != nil {
+			t.Fatalf("resize refused: %v", err)
+		}
+		select {
+		case m, ok := <-session.Frames():
+			if !ok {
+				t.Fatalf("the stream ended: %v", session.Err())
+			}
+			if sizeOf(m) == want {
+				t.Logf("a %dx%d frame (sequence %d, type %d): Windows followed the resize", m.Width, m.Height, m.Sequence, m.Type)
+				if m.Type != screenstream.TypeFrame {
+					t.Fatalf("the first frame at the new size is not a key frame (type %d)", m.Type)
+				}
+				return
+			}
+		case <-time.After(2 * time.Second):
+		case <-deadline:
+			t.Fatalf("no %dx%d frame within 60 s of the resize: %v", want[0], want[1], session.Err())
+		}
+	}
+}
+
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
 // a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
 // do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no

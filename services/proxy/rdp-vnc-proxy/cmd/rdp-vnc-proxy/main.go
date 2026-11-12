@@ -95,6 +95,16 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_PARTIAL_FRAMES must be true or false, got %q", v)
 	}
+	// The resize of the target's desktop to the operator's window (ADR-0095), RDP only: off unless
+	// said "true"; anything but "true" or "false" stops the service.
+	resize := false
+	switch v := os.Getenv("SCREEN_RESIZE"); v {
+	case "", "false":
+	case "true":
+		resize = true
+	default:
+		log.Fatalf("rdp-vnc-proxy: SCREEN_RESIZE must be true or false, got %q", v)
+	}
 	vncCodec := &engine.VNCCodec{
 		TLSRoots:      roots,
 		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
@@ -117,6 +127,7 @@ func runService() {
 			FrameInterval: vncCodec.FrameInterval,
 			DrawPointer:   drawPointer,
 			PartialFrames: partialFrames,
+			Resize:        resize,
 		})
 		rdpState = "RDP enabled"
 	default:
@@ -126,7 +137,7 @@ func runService() {
 	defer stop()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- rt.ListenAndServe(":"+port, server.Routes(), interfaces.CallerRules()) }()
-	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092)", port, rdpState, drawPointer, partialFrames)
+	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092); resize %t (SCREEN_RESIZE, ADR-0095)", port, rdpState, drawPointer, partialFrames, resize)
 	log.Printf("rdp-vnc-proxy: Video Recorder %s; target roots loaded from configured PEM file", recorderURL)
 	select {
 	case <-ctx.Done():
