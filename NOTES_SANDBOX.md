@@ -3081,7 +3081,7 @@ Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session
 
 **Renversable** : 10 s ; un fichier par service plutôt qu'un module `pkg/` partagé (un module de plus aurait touché `go.work`, le Makefile et une dizaine de documents pour quinze lignes).
 
-## 2026-11-12 — ADR-0090, lot A : une scène vidéo contre Windows (en cours)
+## 2026-11-12 — ADR-0090, lot A : une scène vidéo contre Windows
 
 Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le shell (PR #101) : le test ne peut lancer aucun programme au clavier. Il demande donc la scène par un fichier du partage, comme le test de déconnexion.
 - `oem/rdp-video.ps1`, lancé caché à chaque ouverture de session (entrée `Run` posée par `rdp-setup.ps1`), surveille `video-request` sur le partage.
@@ -3089,7 +3089,9 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 - Le script note ce qu'il fait dans `video-status-<utilisateur>.txt` sur le partage, que la CI joint à ses artefacts.
 - `TestRDPWindows_Measure` ajoute la scène `video`, en images entières puis partielles. Moins de 50 images dans la scène est une erreur : la vidéo n'a pas joué.
 
-**Non vérifié en local** : la syntaxe et le comportement du script PowerShell (pas de PowerShell ici, pas de Windows en local). Le premier passage en CI le dira.
+**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène. Les chiffres sont dans ADR-0090 : la cible envoie de 0,7 à 2,8 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien.
+
+**Assertion corrigée en chemin** : `TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays` exigeait une seule lecture pour relire la session. Sur deux cibles, 168 images clés d'environ 25 Ko dépassaient les 4 Mio d'une réponse, et deux lectures étaient donc justes. Le test compte maintenant les lectures que les bornes imposent (600 images, 4 Mio), comme le Recorder remplit une réponse.
 
 ## 2026-11-12 — À 50 sessions, le Video Recorder perdait des images : le pool PostgreSQL
 

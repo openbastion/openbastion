@@ -78,7 +78,8 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Les grosses images clés** (bureau à fond d'écran) font grimper la queue dès 5 sessions : de 0,1 à 0,5 s au 95ᵉ centile, et jusqu'à 1,3 s au maximum. Deux passages ont donné des queues différentes : c'est bruité. Avec les images partielles, une image clé ne revient qu'à l'ouverture, au redimensionnement et toutes les 10 s, mais c'est la limite de capacité à surveiller.
 - **Avec un vrai S3** : voir ci-dessous.
 - **Au-delà de 10 sessions** : voir plus bas.
-- **Pas encore mesuré** : une scène vidéo, et un S3 distant ou sous TLS.
+- **Scène vidéo** : voir plus bas.
+- **Pas encore mesuré** : un S3 distant ou sous TLS.
 
 **Mesuré ensuite (12 novembre 2026) : le même acquittement, avec un vrai S3.** Même épreuve, mais le Recorder écrit dans un SeaweedFS 4.52 (`RECORDER_MEASURE_S3_ENDPOINT`) : un nœud unique, en conteneur sur le même hôte, en HTTP clair. Deux passages S3, et un passage en mémoire juste avant, comme témoin.
 
@@ -108,7 +109,20 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Après le correctif, plus aucune image perdue**, à 10, 20 et 50 sessions, en mémoire comme avec S3, sur quatre passages.
 - **En mémoire**, les images partielles et les petites images clés restent sous 20 ms en médiane à 50 sessions. À 20 sessions, médiane de 8 à 18 ms.
 - **Avec S3 à 50 sessions**, la médiane monte de 50 à 235 ms et le maximum atteint 2 à 3 s pour les images clés. Le SeaweedFS à nœud unique devient le goulet. Une session active voit ces délais à chaque image clé, et à chaque image si l'écran change beaucoup.
-- **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages ; aucune scène vidéo.
+- **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages.
+
+**Mesuré ensuite (12 novembre 2026) : une scène vidéo contre Windows.** `rdp-video.ps1` joue, à la demande du test par le partage, 10 s de blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde sur tout l'écran : le pire cas pour PNG, un majorant pour une vidéo. CI Windows de la PR #149, cinq cibles 1280 × 800. La scène dure de la demande au retour au calme (21 à 26 s) : le démarrage de la fenêtre y est compté, et les débits par seconde sont donc des moyennes sur la scène, pas le régime de la vidéo.
+
+| Cible | Cible → proxy | Images | PNG par image | Enregistré | Encodage |
+|---|---|---|---|---|---|
+| 2019, 16 bpp | 890 à 1 088 Kio/s | 309 à 312 (12 à 14/s) | 89 à 93 Ko | 1 087 à 1 245 Kio/s | 11 à 21 ms |
+| 2022, 16 bpp (trois cibles) | 710 à 846 Kio/s | 240 à 271 (11 à 13/s) | 91 à 94 Ko | 972 à 1 142 Kio/s | 12 à 26 ms |
+| 2022, 32 bpp | 2 240 à 2 835 Kio/s | 301 à 307 (12 à 15/s) | 89 à 102 Ko | 1 192 à 1 272 Kio/s | 11 à 12 ms |
+
+- **Le lien cible → proxy devient un coût**, pour la première fois : 0,7 à 2,8 Mio/s, contre 11 à 80 Kio/s en frappe. À 32 bpp, Windows envoie trois fois plus qu'à 16 bpp pour la même scène.
+- **L'enregistrement reste du même ordre** : 1,0 à 1,3 Mio/s, soit autant que la cible envoie à 16 bpp. Tout l'écran change à chaque image : les images partielles n'apportent rien (presque toutes sont des images clés), comme prévu par ADR-0092.
+- **La cadence plafonne sous 20 images/s** : en moyenne sur la scène, 11 à 15 images/s. L'encodage, 11 à 26 ms par image, n'explique pas seul ce plafond.
+- **Ce que ça décide** : rien de nouveau pour les lots B et C. Une vidéo réelle serait plus légère que ce bruit. Si l'on voulait réduire le lien cible → proxy en vidéo, c'est RDPGFX (lot C) qui le ferait, et ses codecs sans perte resteraient lourds sur un tel contenu. Le lot A est clos, sauf le S3 distant.
 
 ### Lot B — Ordres graphiques
 
