@@ -2,7 +2,7 @@ admin_ui:
   path: web/admin-ui
   adr: ADR-0036
   runtime_dependencies: [react, react-dom]
-  shared_ui_radix_peer_dependencies: ["@radix-ui/react-dialog", "@radix-ui/react-alert-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-popover", "@radix-ui/react-tooltip"]
+  shared_ui_radix_peer_dependencies: ["@radix-ui/react-dialog", "@radix-ui/react-alert-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-popover", "@radix-ui/react-tooltip", "@radix-ui/react-accordion", "@radix-ui/react-collapsible", "@radix-ui/react-context-menu", "@radix-ui/react-hover-card", "@radix-ui/react-menubar", "@radix-ui/react-navigation-menu", "@radix-ui/react-tabs"]
   node: "24 constaté dans le codespace"
   install: npm ci                             # versions exactes, lockfile commité
   commands:

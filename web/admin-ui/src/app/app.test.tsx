@@ -56,7 +56,7 @@ describe("App", () => {
     const openNavigation = screen.getByRole("button", { name: "Ouvrir la navigation" });
     fireEvent.click(openNavigation);
     expect(screen.getByRole("button", { name: "Fermer le panneau de navigation" })).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Escape" });
     const restoredMenuButton = screen.getByRole("button", { name: "Ouvrir la navigation" });
     expect(restoredMenuButton).toBeTruthy();
     expect(document.activeElement).toBe(restoredMenuButton);
@@ -104,7 +104,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
       "GET /sessions/sess_42": { body: session },
     });
     await signIn(api);
-    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
     const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
     expect(document.activeElement).toBe(query);
     fireEvent.change(query, { target: { value: "sess_42" } });
@@ -122,7 +122,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
       "GET /sessions/private-session": { status: 403, body: "forbidden" },
     });
     await signIn(api);
-    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    fireEvent.keyDown(document.body, { key: "k", metaKey: true });
     const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
     fireEvent.change(query, { target: { value: "private-session" } });
     fireEvent.keyDown(query, { key: "Enter" });

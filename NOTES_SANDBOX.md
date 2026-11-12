@@ -4085,3 +4085,24 @@ branche `refactor/admin-ui-infrastructure` a intégré cette évolution sans
 conflit. Les tests UI complets (17 fichiers, 166 tests), TypeScript, build Vite
 isolé, audit npm (0 vulnérabilité), contrôle de licence et `go test ./pkg/rdp/...`
 passent après intégration.
+
+## 2026-11-12 — Navigation partagée de `@openbastion/ui` (ADR-0073, en cours)
+
+Le catalogue ajoute `Accordion`, `Collapsible`, `Breadcrumb`, `Command`,
+`ContextMenu`, `HoverCard`, `Menubar`, `NavigationMenu`, `Pagination`,
+`Sidebar` et `Tabs`. Les disclosures et menus complexes sont des wrappers
+Radix ; Breadcrumb, Pagination, Sidebar et Command sont des composants
+OpenBastion natifs. `Command` filtre ses options par valeur et permet le
+parcours clavier avec les flèches ; le menu latéral conserve `aria-current`
+pour la destination active. Les composants de navigation ne déclenchent aucun
+appel API et ne prennent aucune décision métier.
+
+Les tests complets passent : 18 fichiers, 177 tests ; TypeScript ; build Vite
+avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-navigation` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-test` (contrastes
+Light/Dark et absence de couleurs codées en dur). Les 11 tests ciblés couvrent
+disclosure, collapsible, breadcrumb, tabs, recherche et navigation clavier de
+Command, sidebar, pagination, menubar, navigation menu, context menu et hover
+card. Les tests UX-02 de la palette de commandes sont conservés ; leurs événements
+clavier partent désormais de `document.body`, ce qui reproduit le vrai élément
+cible d'une frappe clavier au lieu de synthétiser un événement sur `document`.
