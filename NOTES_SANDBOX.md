@@ -1,5 +1,20 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — Base44 monte les packages frontend locaux
+
+Le serveur Vite Base44 installait les dépendances de l'Admin UI depuis son
+lockfile, mais le conteneur ne montait ni `web/packages/design-tokens` ni
+`web/packages/ui`. Les liens symboliques créés par npm pointaient donc vers
+`/packages`, absent du conteneur, et Vite ne pouvait pas résoudre
+`@openbastion/design-tokens/tokens.css`. Le service `web` monte maintenant
+`web/packages` en lecture seule à `/packages`, chemin attendu par les dépendances
+`file:../packages/*`.
+
+Validation : `docker compose config` passe ; après recréation, le service `web`
+est healthy, les deux CSS sont résolus depuis `/packages`, la transformation Vite
+de `src/app/main.tsx` réussit et `/` répond HTTP 200. `npm test` passe (14
+fichiers, 148 tests) et `npm run build` passe (TypeScript et Vite).
+
 ## 2026-11-12 — Empreinte de provenance du skill design system corrigée
 
 La migration du guide interne `ui-ux-design-system` vers les tokens canoniques

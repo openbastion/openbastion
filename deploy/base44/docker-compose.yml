@@ -530,6 +530,8 @@ services:
     volumes:
       - ../../web/admin-ui:/app
       - ../../web/openbastion-icons:/openbastion-icons
+      # npm resolves file:../packages/* from /app to /packages inside this container.
+      - ../../web/packages:/packages:ro
       - node_modules:/app/node_modules
       - icons_node_modules:/openbastion-icons/node_modules
     ports:
