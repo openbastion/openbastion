@@ -3036,6 +3036,12 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — Bac à sable Base44 : un compte auditeur pour relire les enregistrements
+
+Le propriétaire n'a pas pu relire une session dans l'Admin UI : `403 — access denied: no policy matches this resource for the caller's roles`. Ce n'est pas un défaut. Relire un enregistrement demande `recording:session:read` (ADR-0070), et le seed ne donnait ce droit à personne. `operator` (`platform-admin`, `vault-admin`) n'est pas auditeur.
+
+Le seed crée désormais un compte distinct, `auditor` / `openbastion-demo` (rôle `session-auditor`, par la CLI comme `operator`), et la politique `session-auditor-recordings` (`recording:session:*`, par l'API publique). C'est idempotent : ni le compte ni la politique ne sont réécrits s'ils existent. On garde ainsi la séparation entre qui tient la session et qui la relit. Appliqué au bac à sable par `restart seed` : `user auditor created`, `recording read policy -> HTTP 201`. Par l'API, sur la session écran du propriétaire, `operator` reçoit 403 et `auditor` 200 (segment scellé).
+
 ## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
 
 Le tableau complet est dans ADR-0092, « Résultats ». En résumé : en frappe et quand le pointeur bouge, le volume enregistré baisse de 20 à 300 fois ; l'encodage d'une image passe de 4 à 48 ms à moins de 1 ms ; la latence ne se dégrade nulle part.

@@ -10,6 +10,8 @@ GATEWAY=${GATEWAY_URL:-http://api-gateway:8080}
 AUTHN=${AUTHENTICATION_URL:-https://authentication:8086}
 USER_NAME=${OPERATOR_USERNAME:-operator}
 PASSWORD=${OPERATOR_PASSWORD:-openbastion-demo}
+AUDITOR_NAME=${AUDITOR_USERNAME:-auditor}
+AUDITOR_PASSWORD=${AUDITOR_PASSWORD:-openbastion-demo}
 
 log() { echo "seed: $*"; }
 
@@ -80,6 +82,18 @@ seed_ssh() {
   step 'SSH host key' PUT /vault/accounts/acc_demo/host-key "{\"hostKey\":\"$SSH_HOST_KEY\"}"
 }
 
+# Who may replay a recording (ADR-0070): an auditor, not the operator who held the session. A
+# separate account, with the session-auditor role and the policy that reads any recording of the
+# preview. The account through the CLI, like the operator; the policy through the public API.
+seed_auditor() {
+  token=$1
+  printf '%s\n' "$AUDITOR_PASSWORD" | go run github.com/openbastion/openbastion/cli/openbastion-cli user create \
+    -authn "$AUTHN" -username "$AUDITOR_NAME" -display "Auditeur" \
+    -roles session-auditor 2>&1 | sed 's/^/seed: /' || true
+  step 'recording read policy' POST /policies \
+    '{"name":"session-auditor-recordings","role":"session-auditor","resourcePattern":"recording:session:*","effect":"allow"}'
+}
+
 step() {
   code=$(curl -sS -o /dev/null -w '%{http_code}' -X "$2" "$GATEWAY$3" \
     -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d "$4")
@@ -95,6 +109,7 @@ if [ -n "$TOKEN" ]; then
   log "$USER_NAME already exists"
   seed_ssh "$TOKEN"
   seed_vnc "$TOKEN"
+  seed_auditor "$TOKEN"
   exit 0
 fi
 
@@ -115,5 +130,6 @@ curl -sS -o /dev/null -w 'seed: policy -> HTTP %{http_code}\n' -X POST "$GATEWAY
 
 seed_ssh "$TOKEN"
 seed_vnc "$TOKEN"
+seed_auditor "$TOKEN"
 
-log "done — log in as $USER_NAME"
+log "done — log in as $USER_NAME, and as $AUDITOR_NAME to replay a recording"
