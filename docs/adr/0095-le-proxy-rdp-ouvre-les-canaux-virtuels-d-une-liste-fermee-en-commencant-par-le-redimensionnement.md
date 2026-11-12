@@ -67,6 +67,16 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Prouvé** : tests unitaires de l'annonce, de `SC_NET`, du cadrage, du routage et de la finalisation ; 15 mutations tuées, plus une contre FreeRDP (sans la jonction, FreeRDP refuse la connexion). Deux fuzzers (`FuzzRDPChannelAssembler`, `FuzzRDPChannelPacket`). Contre FreeRDP 3 (`TestRDPInterop_StaticChannel`) : canal joint, 88 mises à jour d'écran, et la demande de capacités DRDYNVC (Cmd 5, 4 octets) reçue par la boucle de lecture. Éteint, la connexion est celle d'avant : tous les tests existants passent, FreeRDP compris.
 - **À prouver en CI** : `TestRDPWindows_StaticChannel`, le même parcours contre les cinq cibles Windows.
 
+**Incrément 2, fait (12 novembre 2026) : les canaux dynamiques.** `pkg/rdp/dynamic_channel.go`, derrière `EnableDynamicChannels`, que rien n'appelle encore hors des tests :
+- **Capacités** : la réponse annonce la version 2 au plus, qui n'a pas de compression. Une deuxième demande de capacités, ou une longueur fausse pour sa version, ferme la session.
+- **Création** : un nom n'est accepté que s'il est dans la liste fermée (`RDPDisplayControlChannel`), une seule fois à la fois. Tout autre nom reçoit un refus (`E_ACCESSDENIED`) et la session continue ; les 32 premiers noms refusés et leur nombre sont gardés (`DynamicChannelRefusals`). Ferment la session : un nom vide, de plus de 255 octets ou hors de l'ASCII imprimable, un identifiant déjà ouvert, une création avant les capacités.
+- **Données** : 64 Kio au plus par message reconstitué. Ferment la session : des données sur un canal non ouvert, un `DATA_FIRST` dans un autre, des données plus longues qu'annoncé, la compression, et toute commande hors du protocole (dont la resynchronisation de la version 3).
+- **Fermeture** : la cible ferme un canal, le client lui répond par sa propre fermeture, et le nom peut se rouvrir.
+- **Envoi** : `SendDynamicChannelMessage` envoie un seul `DATA`, de 1 594 octets au plus.
+- **Verrous** : les rappels (`onOpen`, `onMessage`) sont appelés une fois le verrou de la session relâché et les réponses envoyées. Un rappel peut donc envoyer à son tour : un test le prouve, et la mutation qui les appelle sous le verrou est tuée.
+- **Prouvé** : 10 tests, 18 mutations tuées, un fuzzer (`FuzzDynamicChannels`, 30 s). Contre FreeRDP 3 (`TestRDPInterop_DynamicChannels`) : capacités échangées, `AUDIO_INPUT` proposé puis refusé, session poursuivie (81 mises à jour d'écran).
+- **À prouver en CI** : `TestRDPWindows_DynamicChannels`, le contrôle d'affichage ouvert et sa capacité (`DISPLAYCONTROL_CAPS_PDU`) reçue, et la liste des noms que Windows propose.
+
 ## Conséquences
 
 - (+) Le socle des canaux existe, borné, et il est prouvé par un canal réel contre Windows avant qu'un canal à contenu ne s'y appuie.
