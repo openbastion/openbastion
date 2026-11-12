@@ -66,7 +66,17 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 2. **Le coût est l'enregistrement d'images entières.** Chaque changement, même d'un caractère ou d'une position du pointeur, produit un PNG complet. Le volume enregistré est 6 à 60 fois celui que la cible envoie : jusqu'à 2,6 Mio/s pendant que la souris bouge sur un bureau à fond d'écran. Ce levier est hors de cet ADR. Il passerait par des images partielles, c'est-à-dire les seuls rectangles changés, dans le flux écran et dans le Video Recorder : un changement de contrat qui demande sa propre décision.
 3. **L'encodage PNG coûte 9 à 27 ms par image** sur le runner de CI, jusqu'à 39 ms. À 15 images par seconde, une session active occupe environ un tiers d'un cœur. C'est la limite de capacité à mesurer ensuite, avec plusieurs sessions à la fois.
 
-**Pas encore mesuré** : la latence d'acquittement par le Video Recorder, une scène vidéo, et plusieurs sessions simultanées.
+**Mesuré ensuite (12 novembre 2026) : l'acquittement du Video Recorder, seul et à plusieurs sessions.** `TestVideoRecorderAckLatency` (proxy, `RECORDER_MEASURE=1`) fait tourner le vrai Recorder sur PostgreSQL et le vrai client du proxy sous mTLS. Chaque session enregistre 60 images à 50 ms d'écart, une image par segment comme le proxy. Hôte de 6 cœurs, tout sur la même machine. Le stockage objet est celui, en mémoire, de l'épreuve d'enregistrement : la latence propre de S3 n'y est pas.
+
+| Image | Sessions | Acquittement p50 | p95 | max |
+|---|---|---|---|---|
+| Partielle, 1,5 Ko | 1 / 5 / 10 | 15 / 18 / 31 ms | 23 / 49 / 58 ms | 65 / 71 / 85 ms |
+| Clé, 33 Ko | 1 / 5 / 10 | 16 / 21 / 31 ms | 29 / 32 / 59 ms | 69 / 67 / 95 ms |
+| Clé, 184 Ko | 1 / 5 / 10 | 19 / 31 / 80 ms | 30 / 102 à 463 / 281 ms | 40 / 459 à 1 289 / 946 à 1 205 ms |
+
+- L'acquittement ajoute 15 à 30 ms en médiane avant qu'une image soit montrée, jusqu'à 10 sessions, pour les images partielles (le cas par défaut, ADR-0092) comme pour les petites images clés.
+- **Les grosses images clés** (bureau à fond d'écran) font grimper la queue dès 5 sessions : de 0,1 à 0,5 s au 95ᵉ centile, et jusqu'à 1,3 s au maximum. Deux passages ont donné des queues différentes : c'est bruité. Avec les images partielles, une image clé ne revient qu'à l'ouverture, au redimensionnement et toutes les 10 s, mais c'est la limite de capacité à surveiller.
+- **Pas encore mesuré** : avec un vrai S3, une scène vidéo, et au-delà de 10 sessions.
 
 ### Lot B — Ordres graphiques
 

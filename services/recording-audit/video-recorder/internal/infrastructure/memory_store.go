@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/domain"
@@ -97,6 +98,35 @@ func (s *MemoryStore) GetSegment(_ context.Context, sessionID string, firstSeque
 		SegmentMetadata: segment, KeyID: recording.keyID,
 		WrappedDEK: append([]byte(nil), recording.wrappedDEK...), Complete: recording.status == "complete",
 	}, nil
+}
+
+func (s *MemoryStore) GetSegmentsFrom(_ context.Context, sessionID string, firstSequence int64, limit int) ([]domain.StoredSegment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	recording := s.recordings[sessionID]
+	if recording == nil || limit < 1 {
+		return nil, nil
+	}
+	firsts := make([]int64, 0, len(recording.segments))
+	for first := range recording.segments {
+		if first >= firstSequence {
+			firsts = append(firsts, first)
+		}
+	}
+	sort.Slice(firsts, func(i, j int) bool { return firsts[i] < firsts[j] })
+	if len(firsts) > limit {
+		firsts = firsts[:limit]
+	}
+	out := make([]domain.StoredSegment, 0, len(firsts))
+	for _, first := range firsts {
+		segment := recording.segments[first]
+		segment.SHA256 = append([]byte(nil), segment.SHA256...)
+		out = append(out, domain.StoredSegment{
+			SegmentMetadata: segment, KeyID: recording.keyID,
+			WrappedDEK: append([]byte(nil), recording.wrappedDEK...), Complete: recording.status == "complete",
+		})
+	}
+	return out, nil
 }
 
 func (s *MemoryStore) Ready(context.Context) error { return nil }

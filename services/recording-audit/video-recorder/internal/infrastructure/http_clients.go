@@ -73,6 +73,8 @@ type emitEventRequestBody struct {
 	ResourceType string `json:"resource_type"`
 	ResourceID   string `json:"resource_id"`
 	Success      bool   `json:"success"`
+	// Details are bounded by the Audit Service (ADR-0068); omitted when there are none.
+	Details map[string]string `json:"details,omitempty"`
 }
 
 // emitEventResponseBody is what the Audit ingestion route answers.
@@ -80,8 +82,8 @@ type emitEventResponseBody struct {
 	EventID string `json:"event_id"`
 }
 
-func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
-	body, err := json.Marshal(emitEventRequestBody{ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success})
+func (c *AuditHTTPClient) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool, details map[string]string) error {
+	body, err := json.Marshal(emitEventRequestBody{ActorID: actorID, Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success, Details: details})
 	if err != nil {
 		return fmt.Errorf("encoding audit event: %w", err)
 	}

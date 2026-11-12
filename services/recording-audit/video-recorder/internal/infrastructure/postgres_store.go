@@ -156,6 +156,36 @@ func (s *PostgresStore) GetSegment(ctx context.Context, sessionID string, firstS
 	return out, nil
 }
 
+func (s *PostgresStore) GetSegmentsFrom(ctx context.Context, sessionID string, firstSequence int64, limit int) ([]domain.StoredSegment, error) {
+	if limit < 1 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT s.session_id, s.first_sequence, s.last_sequence,
+		s.object_key, s.ciphertext_sha256, r.key_id, r.wrapped_dek, (r.status = 'complete')
+		FROM video_recording_segments s
+		JOIN video_recordings r ON r.session_id = s.session_id
+		WHERE s.session_id = $1 AND s.first_sequence >= $2
+		ORDER BY s.first_sequence
+		LIMIT $3`, sessionID, firstSequence, limit)
+	if err != nil {
+		return nil, fmt.Errorf("reading video segment metadata: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.StoredSegment
+	for rows.Next() {
+		var segment domain.StoredSegment
+		if err := rows.Scan(&segment.SessionID, &segment.FirstSequence, &segment.LastSequence, &segment.ObjectKey,
+			&segment.SHA256, &segment.KeyID, &segment.WrappedDEK, &segment.Complete); err != nil {
+			return nil, fmt.Errorf("reading video segment metadata: %w", err)
+		}
+		out = append(out, segment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading video segment metadata: %w", err)
+	}
+	return out, nil
+}
+
 func (s *PostgresStore) Ready(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

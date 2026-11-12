@@ -3075,6 +3075,37 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0090, lot A : l'acquittement du Video Recorder, seul et à plusieurs
+
+`TestVideoRecorderAckLatency` (`services/proxy/rdp-vnc-proxy/internal/interfaces`, `RECORDER_MEASURE=1`, `TEST_DATABASE_URL`, `RECORDER_MEASURE_DUMP`) mesure le temps entre l'envoi d'une image et son acquittement : le délai que chaque image attend avant d'être montrée. Il utilise le vrai Recorder sur PostgreSQL et le vrai client du proxy, avec 1, 5 et 10 sessions de 60 images à 50 ms.
+
+Le tableau est dans ADR-0090. En bref : 15 à 30 ms en médiane jusqu'à 10 sessions, pour les images partielles et les petites images clés ; avec de grosses images clés (184 Ko), une queue de 0,1 à 0,5 s au 95ᵉ centile et jusqu'à 1,3 s au maximum dès 5 sessions.
+
+**Limites** :
+- tout tourne sur un seul hôte de 6 cœurs ;
+- le stockage objet est en mémoire : la latence propre de S3 n'est pas comptée ;
+- les mesures sont bruitées (deux passages, deux queues différentes) ;
+- au-delà de 10 sessions, rien n'est mesuré.
+
+**Défaut du harnais, corrigé** : au premier passage, l'image clé de départ des sessions partielles faisait 64 × 64, et le Recorder refusait à bon droit des images partielles de 1280 × 800.
+
+## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
+
+**Video Recorder.** Une lecture sert, à partir de `first`, la suite de segments stockés sans trou, bornée à 600 images et 4 Mio de données d'images (`MaxReadFrames`, `MaxReadBytes`).
+- **Lecture** : `GetSegmentsFrom` (PostgreSQL et mémoire) ; objets récupérés seize à la fois.
+- **Vérification** : chaque segment est vérifié ; un seul défaut refuse toute la réponse.
+- **Audit** : un seul `recording.read`, émis avant toute récupération, avec la plage dans ses détails. L'émetteur d'audit du Recorder transmet désormais des détails (ADR-0068).
+- **Introuvable** : une lecture demandée à une séquence où aucun segment ne commence.
+
+**Prouvé** :
+- contrat de plage des dépôts, en mémoire et **sur PostgreSQL réel** ;
+- tests du service : suite entière, borne de 600 images y compris avec des segments de plusieurs images, borne de 4 Mio, trou, séquence absente, segment corrompu au milieu, un audit avant toute récupération ;
+- test de plage à la Gateway ;
+- **14 mutations sur 14 tuées**. Au premier passage, deux tests manquaient (une séquence absente, des segments de plusieurs images) ; ils sont ajoutés ;
+- de bout en bout contre FreeRDP, avec le Recorder réel : chaque session se relit en **1 lecture**.
+
+**Mesuré sur le bac à sable** : la session du propriétaire (213 images) se relit en 1 requête, au lieu de 213. Le budget élargi du bac à sable (600, puis 1 200 par minute) est **retiré** : la relecture et le parcours Base44 passent avec les limites par défaut.
+
 ## 2026-11-12 — ADR-0092 : les images partielles allumées par défaut
 
 Le propriétaire a vérifié une session en direct dans un vrai navigateur, sur le bac à sable Base44 avec `SCREEN_PARTIAL_FRAMES` allumé (« Vérifié dans le navigateur »). Son rejeu a d'abord été refusé : un 403 (`operator` n'est pas auditeur ; le seed crée désormais `auditor`), puis un 502 (la Gateway n'admettait pas `png-delta-v1`, corrigé), puis un 429 (le budget par adresse du bac à sable, élargi depuis). Ensuite, le propriétaire a vérifié le rejeu dans un navigateur : « Rejeu vérifié ». `TestScreenFlow_RDPFrom…` compose désormais les images partielles, puisqu'elles sont allumées par défaut. `SCREEN_PARTIAL_FRAMES` vaut désormais `true` sauf `false`, dans le proxy et dans le compose. Toute autre valeur arrête le service, comme avant.
@@ -3096,7 +3127,7 @@ Le propriétaire n'a pas pu relire une session dans l'Admin UI : `403 — access
 
 Le seed crée désormais un compte distinct, `auditor` / `openbastion-demo` (rôle `session-auditor`, par la CLI comme `operator`), et la politique `session-auditor-recordings` (`recording:session:*`, par l'API publique). C'est idempotent : ni le compte ni la politique ne sont réécrits s'ils existent. On garde ainsi la séparation entre qui tient la session et qui la relit. Appliqué au bac à sable par `restart seed` : `user auditor created`, `recording read policy -> HTTP 201`. Par l'API, sur la session écran du propriétaire, `operator` reçoit 403 et `auditor` 200 (segment scellé).
 
-**Budget de requêtes du bac à sable** : en auditeur, la relecture s'arrêtait en 429. Toute l'UI arrive à la Gateway depuis l'adresse du relais Vite, et la limite par adresse (60 en rafale, puis 60 par minute) était partagée entre les connexions, les pages et les segments. Une relecture lit un segment par image. Le compose du bac à sable élargit ce budget (`CLIENT_REQUEST_BURST=600`, `CLIENT_REQUEST_RATE_PER_MINUTE=1200`) ; les limites par utilisateur sur les sessions et les actions ne changent pas, ni les défauts de production. Vérifié : l'auditeur relit les 213 segments de la session du propriétaire, jusqu'au 404 de fin. **Reste à traiter** : en production, une relecture rapide d'une longue session peut atteindre la limite par adresse ; regrouper plusieurs images par segment (ADR-0070 le permet) en est le remède de fond.
+**Budget de requêtes du bac à sable** : en auditeur, la relecture s'arrêtait en 429. Toute l'UI arrive à la Gateway depuis l'adresse du relais Vite, et la limite par adresse (60 en rafale, puis 60 par minute) était partagée entre les connexions, les pages et les segments. Une relecture lit un segment par image. Le compose du bac à sable élargit ce budget (`CLIENT_REQUEST_BURST=600`, `CLIENT_REQUEST_RATE_PER_MINUTE=1200`) ; les limites par utilisateur sur les sessions et les actions ne changent pas, ni les défauts de production. Vérifié : l'auditeur relit les 213 segments de la session du propriétaire, jusqu'au 404 de fin. **Traité depuis** (ADR-0093) : une relecture lit la suite de segments en une requête, et ce budget élargi a été retiré.
 
 ## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
 
