@@ -3036,6 +3036,18 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092 : la Gateway refusait de servir une image partielle (corrigé)
+
+**Défaut** : le propriétaire, en auditeur, recevait `502 — video recording unavailable` en relisant sa session écran. La Gateway revalide chaque segment que le Recorder lui rend, et n'admettait que le codec `png` : un segment contenant une image partielle était « invalid » (`frame 0 is invalid` dans son journal). L'incrément 3 avait oublié cette couche. L'épreuve de bout en bout relisait par le gRPC du Recorder, sans passer par la Gateway, et ne pouvait pas le voir.
+
+**Correctif** : la Gateway admet `png-delta-v1`, et vérifie de nouveau qu'il s'agit du message `FRAME_DELTA` de sa propre séquence, car le Recorder est une frontière de confiance.
+
+**Prouvé** :
+- test rouge d'abord, avec exactement l'erreur vue ; puis servi tel quel, et refusé quand il s'agit d'une autre séquence, d'autre chose qu'un message, ou d'une image clé sous le codec partiel ;
+- **3 mutations, 3 tuées**. Au premier passage, une image clé sous le codec partiel survivait : le cas est désormais testé ;
+- **sur le bac à sable** (Gateway redémarrée sur ce correctif), l'auditeur relit la session du propriétaire : 63 images, 1 clé et 62 partielles.
+
+**Constat à traiter à part** : le segment 64 a été refusé en 429. La Gateway limite les requêtes par adresse (60 en rafale, puis une par seconde), et le proxy enregistre chaque image comme un segment à elle seule : un rejeu de plus d'une image par seconde finit par s'arrêter. C'est antérieur aux images partielles.
 ## 2026-11-12 — Bac à sable Base44 : un compte auditeur pour relire les enregistrements
 
 Le propriétaire n'a pas pu relire une session dans l'Admin UI : `403 — access denied: no policy matches this resource for the caller's roles`. Ce n'est pas un défaut. Relire un enregistrement demande `recording:session:read` (ADR-0070), et le seed ne donnait ce droit à personne. `operator` (`platform-admin`, `vault-admin`) n'est pas auditeur.
