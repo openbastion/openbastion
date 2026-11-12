@@ -11,6 +11,9 @@ export interface ScreenDeps {
   // Decodes without an <img>: the page's policy allows no blob: image, and needs none.
   decode: (png: Uint8Array<ArrayBuffer>) => Promise<ImageBitmap>;
   draw: (canvas: HTMLCanvasElement, image: ImageBitmap, width: number, height: number) => void;
+  // Puts a rectangle of a partial frame in place: its pixels replace those under it, without
+  // blending (ADR-0092 §6).
+  patch: (canvas: HTMLCanvasElement, image: ImageBitmap, x: number, y: number) => void;
 }
 
 const browserDeps: ScreenDeps = {
@@ -20,6 +23,11 @@ const browserDeps: ScreenDeps = {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
     canvas.getContext("2d")?.drawImage(image, 0, 0);
+  },
+  patch: (canvas, image, x, y) => {
+    const context = canvas.getContext("2d");
+    context?.clearRect(x, y, image.width, image.height);
+    context?.drawImage(image, x, y);
   },
 };
 
@@ -75,8 +83,15 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
     ws.binaryType = "arraybuffer";
     socket.current = ws;
     let ended = false;
-    let lastShown = 0n;
     let lastReceived = 0n;
+    // The size of the screen the last key frame set, and that key frame's sequence: a partial frame
+    // applies to the frame just before it, on that screen, and to nothing else (ADR-0092 §1).
+    let screen: { width: number; height: number } | null = null;
+    let latestKey = 0n;
+    // Frames are painted one after the other, in order: a partial frame changes the screen the
+    // frames before it made. What came before the latest key frame is not painted: that key frame
+    // replaces it whole.
+    let painting: Promise<void> = Promise.resolve();
     const finish = (message: string) => {
       if (ended) return;
       ended = true;
@@ -101,28 +116,48 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       } else if (message.type === "end") {
         finish(endMessage(message.text));
       } else {
-        // Strictly increasing, with gaps: the proxy replaces what a slow page has not taken yet.
+        // Strictly increasing. Key frames may come with gaps (the proxy replaces what a slow page
+        // has not taken yet); a partial frame never: it follows the frame before it, on its screen.
         if (message.sequence <= lastReceived) {
           finish(UNREADABLE);
           return;
         }
+        if (message.type === "delta") {
+          if (!screen || message.sequence !== lastReceived + 1n || message.width !== screen.width || message.height !== screen.height) {
+            finish(UNREADABLE);
+            return;
+          }
+        } else {
+          screen = { width: message.width, height: message.height };
+          latestKey = message.sequence;
+        }
         lastReceived = message.sequence;
-        const { sequence, width, height } = message;
-        deps.decode(message.png).then(
-          (image) => {
-            // Decoding takes its time: an older frame never paints over a newer one.
-            if (ended || sequence <= lastShown || !canvas.current) {
+        const received = message;
+        painting = painting.then(async () => {
+          if (ended || received.sequence < latestKey) return;
+          if (received.type === "frame") {
+            const image = await deps.decode(received.png);
+            if (ended || received.sequence < latestKey || !canvas.current) {
               image.close();
               return;
             }
-            lastShown = sequence;
-            deps.draw(canvas.current, image, width, height);
+            deps.draw(canvas.current, image, received.width, received.height);
             image.close();
-            frame.current = { width, height };
-            setHasFrame(true);
-          },
-          () => finish(UNREADABLE),
-        );
+          } else {
+            const images = await Promise.all(received.rects.map((rect) => deps.decode(rect.png)));
+            try {
+              if (images.some((image, i) => image.width !== received.rects[i].width || image.height !== received.rects[i].height)) {
+                throw new Error("a rectangle of another size than announced");
+              }
+              if (ended || received.sequence < latestKey || !canvas.current) return;
+              received.rects.forEach((rect, i) => deps.patch(canvas.current as HTMLCanvasElement, images[i], rect.x, rect.y));
+            } finally {
+              images.forEach((image) => image.close());
+            }
+          }
+          frame.current = { width: received.width, height: received.height };
+          setHasFrame(true);
+        }).catch(() => finish(UNREADABLE));
       }
     };
     ws.onclose = () => finish(CLOSED_WITHOUT_END);

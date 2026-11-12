@@ -33,6 +33,7 @@ type sceneMeasure struct {
 	TargetBytes    uint64  `json:"targetBytes"`
 	TargetKiBps    float64 `json:"targetKiBps"`
 	Frames         int     `json:"frames"`
+	KeyFrames      int     `json:"keyFrames"`
 	FramesPerSec   float64 `json:"framesPerSecond"`
 	PNGBytesMean   int     `json:"pngBytesMean"`
 	PNGBytesMax    int     `json:"pngBytesMax"`
@@ -46,6 +47,17 @@ type sceneMeasure struct {
 type frameArrival struct {
 	at   time.Time
 	size int
+	key  bool
+}
+
+// frameBytes is what a frame weighs once recorded: a key frame's PNG, or a partial frame's
+// rectangles (ADR-0092).
+func frameBytes(m screenstream.Message) int {
+	n := len(m.PNG)
+	for _, r := range m.Rects {
+		n += len(r.PNG)
+	}
+	return n
 }
 
 type sessionMeter struct {
@@ -67,7 +79,7 @@ func newSessionMeter(t *testing.T, target string, session proxycore.ScreenSessio
 	go func() {
 		for frame := range session.Frames() {
 			m.mu.Lock()
-			m.arrivals = append(m.arrivals, frameArrival{at: time.Now(), size: len(frame.PNG)})
+			m.arrivals = append(m.arrivals, frameArrival{at: time.Now(), size: frameBytes(frame), key: frame.Type == screenstream.TypeFrame})
 			m.last = frame
 			m.mu.Unlock()
 		}
@@ -184,6 +196,9 @@ func (m *sessionMeter) scene(name string, act func()) *sceneMeasure {
 	total := 0
 	for _, f := range frames {
 		total += f.size
+		if f.key {
+			result.KeyFrames++
+		}
 		if f.size > result.PNGBytesMax {
 			result.PNGBytesMax = f.size
 		}
@@ -192,11 +207,11 @@ func (m *sessionMeter) scene(name string, act func()) *sceneMeasure {
 		result.PNGBytesMean = total / len(frames)
 	}
 	result.PNGKiBps = round(float64(total)/1024/seconds, 1)
-	result.EncodeMsMedian = round(encodeMedianMs(m.t, last.PNG), 1)
+	result.EncodeMsMedian = round(encodeMedianMs(m.t, last), 1)
 	result.HeapMiBPeak = round(peak/(1<<20), 1)
 	m.results = append(m.results, result)
-	m.t.Logf("MEASURE %s %s: %.2f s, target %d bytes (%.1f KiB/s), %d frame(s) (%.1f/s), PNG mean %d max %d bytes (%.1f KiB/s), encode %.1f ms, heap peak %.1f MiB",
-		m.target, name, seconds, result.TargetBytes, result.TargetKiBps, result.Frames, result.FramesPerSec,
+	m.t.Logf("MEASURE %s %s: %.2f s, target %d bytes (%.1f KiB/s), %d frame(s) (%d key, %.1f/s), PNG mean %d max %d bytes (%.1f KiB/s), encode %.1f ms, heap peak %.1f MiB",
+		m.target, name, seconds, result.TargetBytes, result.TargetKiBps, result.Frames, result.KeyFrames, result.FramesPerSec,
 		result.PNGBytesMean, result.PNGBytesMax, result.PNGKiBps, result.EncodeMsMedian, result.HeapMiBPeak)
 	return &m.results[len(m.results)-1]
 }
@@ -261,8 +276,20 @@ func (m *sessionMeter) publish(dir string) {
 }
 
 // encodeMedianMs re-encodes a frame as the codec does (image/png, default compression), five
-// times, and returns the median: the cost of one frame of that screen.
-func encodeMedianMs(t *testing.T, frame []byte) float64 {
+// times, and returns the median: the cost of one frame of that screen. A partial frame costs the
+// encoding of its rectangles.
+func encodeMedianMs(t *testing.T, m screenstream.Message) float64 {
+	if m.Type == screenstream.TypeFrameDelta {
+		total := 0.0
+		for _, r := range m.Rects {
+			total += encodeOneMedianMs(t, r.PNG)
+		}
+		return total
+	}
+	return encodeOneMedianMs(t, m.PNG)
+}
+
+func encodeOneMedianMs(t *testing.T, frame []byte) float64 {
 	if len(frame) == 0 {
 		return 0
 	}

@@ -312,3 +312,25 @@ func (d drawingSession) Input(screenstream.InputEvent) error { return nil }
 func (d drawingSession) Err() error                          { return nil }
 func (d drawingSession) Close() error                        { return nil }
 func (d drawingSession) PointerDrawn() bool                  { return d.drawn }
+
+type keyRequestingSession struct {
+	silentSession
+	asked *int
+}
+
+func (k keyRequestingSession) RequestKeyFrame() { *k.asked++ }
+
+// The relay's request for a key frame reaches the VNC session through the wrapper (ADR-0092).
+func TestVNCScreenSessionPassesOnAKeyFrameRequest(t *testing.T) {
+	asked := 0
+	var session proxycore.ScreenSession = vncScreenSession{keyRequestingSession{asked: &asked}}
+	requester, ok := session.(proxycore.KeyFrameRequester)
+	if !ok {
+		t.Fatal("the VNC wrapper cannot be asked for a key frame")
+	}
+	requester.RequestKeyFrame()
+	if asked != 1 {
+		t.Fatalf("the request reached the session %d time(s)", asked)
+	}
+	vncScreenSession{silentSession{}}.RequestKeyFrame() // a session that cannot: nothing happens
+}

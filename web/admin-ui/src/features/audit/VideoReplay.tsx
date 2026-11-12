@@ -2,9 +2,12 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, VideoRecordingSegment } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
+import { DeltaRect, decodeScreenMessage } from "../screen/protocol";
 
-// The replay of a graphical session (ADR-0071, ADR-0088): the very PNG frames the Video Recorder
-// acknowledged, in order, at the pace they were recorded. Segments are read as the replay goes,
+// The replay of a graphical session (ADR-0071, ADR-0088): the very frames the Video Recorder
+// acknowledged, in order, at the pace they were recorded. A key frame is a whole PNG; a partial frame
+// (ADR-0092) changes rectangles of the frame before it, so a frame is shown by composing from the
+// key frame at or before it. Segments are read as the replay goes,
 // never all at once: each read is an audit event in the auditor's name, and a long session would
 // not fit in a page. What does not parse is not shown: the replay stops and says so.
 
@@ -22,6 +25,8 @@ export interface ReplayDeps {
   // Decodes without an <img>, as the live screen does: the page's policy allows no blob: image.
   decode: (png: Uint8Array<ArrayBuffer>) => Promise<ImageBitmap>;
   draw: (canvas: HTMLCanvasElement, image: ImageBitmap) => void;
+  // Puts a rectangle of a partial frame in place, replacing the pixels under it (ADR-0092 §6).
+  patch: (canvas: HTMLCanvasElement, image: ImageBitmap, x: number, y: number) => void;
   schedule: (run: () => void, delayMs: number) => () => void;
 }
 
@@ -32,21 +37,32 @@ const browserDeps: ReplayDeps = {
     if (canvas.height !== image.height) canvas.height = image.height;
     canvas.getContext("2d")?.drawImage(image, 0, 0);
   },
+  patch: (canvas, image, x, y) => {
+    const context = canvas.getContext("2d");
+    context?.clearRect(x, y, image.width, image.height);
+    context?.drawImage(image, x, y);
+  },
   schedule: (run, delayMs) => {
     const id = window.setTimeout(run, delayMs);
     return () => window.clearTimeout(id);
   },
 };
 
-interface Frame {
-  sequence: number;
-  at: Date;
-  png: Uint8Array<ArrayBuffer>;
+type Frame =
+  | { kind: "key"; sequence: number; at: Date; bytes: number; png: Uint8Array<ArrayBuffer> }
+  | { kind: "delta"; sequence: number; at: Date; bytes: number; width: number; height: number; rects: DeltaRect[] };
+
+// The size a key frame's PNG says (IHDR), or null: a partial frame is checked against it.
+function pngSize(png: Uint8Array): { width: number; height: number } | null {
+  if (png.length < 24 || String.fromCharCode(...png.subarray(12, 16)) !== "IHDR") return null;
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
 class UnreadableSegment extends Error {}
 
-// A segment's frames, checked: base64, a PNG of at most 4 MiB, a date, and as many as it says.
+// A segment's frames, checked: base64, at most 4 MiB, a date, as many as it says, and each a PNG
+// (codec png) or the partial frame of its own sequence (codec png-delta-v1).
 function framesOf(segment: VideoRecordingSegment): Frame[] {
   if (!Number.isSafeInteger(segment.firstSequence) || !Number.isSafeInteger(segment.lastSequence) ||
       segment.firstSequence < 1 || segment.lastSequence - segment.firstSequence + 1 !== segment.frames.length) {
@@ -60,12 +76,29 @@ function framesOf(segment: VideoRecordingSegment): Frame[] {
       throw new UnreadableSegment();
     }
     if (binary.length === 0 || binary.length > MAX_FRAME_BYTES) throw new UnreadableSegment();
-    const png = new Uint8Array(binary.length);
-    for (let j = 0; j < binary.length; j++) png[j] = binary.charCodeAt(j);
+    const data = new Uint8Array(binary.length);
+    for (let j = 0; j < binary.length; j++) data[j] = binary.charCodeAt(j);
     const at = new Date(frame.timestamp);
-    if (PNG_SIGNATURE.some((b, j) => png[j] !== b) || Number.isNaN(at.getTime())) throw new UnreadableSegment();
-    return { sequence: segment.firstSequence + i, at, png };
+    if (Number.isNaN(at.getTime())) throw new UnreadableSegment();
+    const sequence = segment.firstSequence + i;
+    if (frame.codec === "png-delta-v1") {
+      let message;
+      try {
+        message = decodeScreenMessage(data.buffer);
+      } catch {
+        throw new UnreadableSegment();
+      }
+      if (message.type !== "delta" || message.sequence !== BigInt(sequence)) throw new UnreadableSegment();
+      return { kind: "delta", sequence, at, bytes: data.length, width: message.width, height: message.height, rects: message.rects };
+    }
+    if (frame.codec !== "png" || PNG_SIGNATURE.some((b, j) => data[j] !== b)) throw new UnreadableSegment();
+    return { kind: "key", sequence, at, bytes: data.length, png: data };
   });
+}
+
+// A key frame's size, from its PNG; what a partial frame after it must match.
+function pngSizeOf(frame: Frame): { width: number; height: number } | null {
+  return frame.kind === "key" ? pngSize(frame.png) : null;
 }
 
 type End = "more" | "sealed" | "interrupted" | "memory";
@@ -85,6 +118,11 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   const next = useRef(1);
   const loadedBytes = useRef(0);
   const generation = useRef(0);
+  // The index of the frame on the canvas, null for none: the next frame, a partial one, is put on
+  // it directly; any other is composed again from its key frame.
+  const painted = useRef<number | null>(null);
+  const framesNow = useRef<Frame[]>([]);
+  framesNow.current = frames;
   // Whether the last segment read says the recording was sealed (its terminal marker came).
   const lastComplete = useRef(false);
 
@@ -98,7 +136,7 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
       const got = framesOf(segment);
       if (got.length === 0 || segment.firstSequence !== next.current) throw new UnreadableSegment();
       next.current = segment.lastSequence + 1;
-      loadedBytes.current += got.reduce((n, f) => n + f.png.length, 0);
+      loadedBytes.current += got.reduce((n, f) => n + f.bytes, 0);
       lastComplete.current = segment.complete;
       setFrames((had) => had.concat(got));
       if (loadedBytes.current > MAX_LOADED_BYTES) setEnd("memory");
@@ -123,6 +161,7 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
     loadedBytes.current = 0;
     lastComplete.current = false;
     setFrames([]);
+    painted.current = null;
     setIndex(0);
     setPlaying(false);
     setEnd("more");
@@ -131,24 +170,58 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
     await loadMore(sessionId, generation.current);
   }
 
-  // The frame under the cursor, drawn once (a segment read ahead does not redraw it); an older
-  // decode never paints over a newer one.
+  // The frame under the cursor, drawn once (a segment read ahead does not redraw it): from the
+  // frame on the canvas when it is just before, otherwise from the key frame at or before it. A
+  // newer position stops an older one between two frames: an older frame never paints over it.
   const shown = frames[index];
   useEffect(() => {
-    const frame = shown;
-    if (!frame) return;
+    if (!shown) return;
     let current = true;
-    deps.decode(frame.png).then(
-      (image) => {
-        if (current && canvas.current) deps.draw(canvas.current, image);
-        image.close();
-      },
-      () => {
-        if (!current) return;
-        setPlaying(false);
-        setError(new Error("Une image enregistrée ne se décode pas : la relecture s'arrête là."));
-      },
-    );
+    const target = framesNow.current.indexOf(shown);
+    const paint = async () => {
+      const all = framesNow.current;
+      let key = target;
+      while (key >= 0 && all[key].kind !== "key") key--;
+      if (key < 0) throw new Error("a partial frame without a key frame before it");
+      const from = painted.current;
+      let start = key;
+      if (from !== null && from >= key && from < target) start = from + 1;
+      else if (from === target) return;
+      let screenSize = pngSizeOf(all[key]);
+      for (let i = start; i <= target; i++) {
+        const frame = all[i];
+        if (frame.kind === "key") {
+          const image = await deps.decode(frame.png);
+          if (!current || !canvas.current) {
+            image.close();
+            return;
+          }
+          deps.draw(canvas.current, image);
+          image.close();
+          screenSize = pngSizeOf(frame);
+        } else {
+          if (!screenSize || frame.width !== screenSize.width || frame.height !== screenSize.height) {
+            throw new Error("a partial frame of another size than its screen");
+          }
+          const images = await Promise.all(frame.rects.map((rect) => deps.decode(rect.png)));
+          try {
+            if (images.some((image, j) => image.width !== frame.rects[j].width || image.height !== frame.rects[j].height)) {
+              throw new Error("a rectangle of another size than announced");
+            }
+            if (!current || !canvas.current) return;
+            frame.rects.forEach((rect, j) => deps.patch(canvas.current as HTMLCanvasElement, images[j], rect.x, rect.y));
+          } finally {
+            images.forEach((image) => image.close());
+          }
+        }
+        painted.current = i;
+      }
+    };
+    paint().catch(() => {
+      if (!current) return;
+      setPlaying(false);
+      setError(new Error("Une image enregistrée ne se décode pas : la relecture s'arrête là."));
+    });
     return () => {
       current = false;
     };

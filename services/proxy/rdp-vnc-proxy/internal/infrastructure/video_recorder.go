@@ -121,11 +121,19 @@ func (c *VideoRecorderClient) Ready(ctx context.Context) error {
 // Record sends one frame and returns only after the Video Recorder acknowledges
 // the persisted sequence. An ambiguous or mismatched acknowledgement fails closed.
 func (c *VideoRecorderClient) Record(ctx context.Context, sessionID string, frame screenstream.Message) (uint64, error) {
-	if ctx == nil || !usableVideoSessionID(sessionID) || frame.Type != screenstream.TypeFrame || frame.Sequence == 0 || frame.Sequence > math.MaxInt64 {
+	if ctx == nil || !usableVideoSessionID(sessionID) || (frame.Type != screenstream.TypeFrame && frame.Type != screenstream.TypeFrameDelta) ||
+		frame.Sequence == 0 || frame.Sequence > math.MaxInt64 {
 		return 0, ErrVideoRecorderProtocol
 	}
-	if _, err := screenstream.Encode(frame); err != nil {
+	wire, err := screenstream.Encode(frame)
+	if err != nil {
 		return 0, fmt.Errorf("%w: invalid frame", ErrVideoRecorderProtocol)
+	}
+	// A key frame is its PNG; a partial frame is its FRAME_DELTA message, as the operator receives
+	// it (ADR-0092 §5): the Recorder stores what was shown.
+	data, codec := append([]byte(nil), frame.PNG...), "png"
+	if frame.Type == screenstream.TypeFrameDelta {
+		data, codec = wire, "png-delta-v1"
 	}
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -145,7 +153,7 @@ func (c *VideoRecorderClient) Record(ctx context.Context, sessionID string, fram
 	message := &recordingv1.VideoSegment{
 		SessionId: sessionID, FirstSequence: int64(frame.Sequence), LastSequence: int64(frame.Sequence),
 		Frames: []*recordingv1.VideoFrameData{{
-			Ts: timestamppb.New(frame.Timestamp.UTC()), FrameData: append([]byte(nil), frame.PNG...), Codec: "png",
+			Ts: timestamppb.New(frame.Timestamp.UTC()), FrameData: data, Codec: codec,
 		}},
 	}
 	if err := message.GetFrames()[0].GetTs().CheckValid(); err != nil {

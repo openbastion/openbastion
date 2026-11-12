@@ -19,6 +19,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/screenstream"
@@ -78,6 +79,9 @@ type Config struct {
 	// (SCREEN_DRAW_POINTER, ADR-0091): its shape comes from the Cursor pseudo-encoding. Off, the
 	// shape is read and thrown away, as before, and no frame carries a pointer.
 	DrawPointer bool
+	// PartialFrames sends partial frames anchored on key frames (SCREEN_PARTIAL_FRAMES, ADR-0092):
+	// what differs from the frame before, not the whole screen at every change.
+	PartialFrames bool
 }
 
 // Client opens one target session. A Client is intended for one session only.
@@ -171,9 +175,17 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
-	s := &Session{conn: tlsConn, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
+	// What the target sends from here on is counted (ServerBytes, ADR-0090 lot A).
+	counted := &countingConn{Conn: tlsConn}
+	s := &Session{conn: counted, counted: counted, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
 	if cfg.DrawPointer {
-		s.drawPointer, s.pointerMoved, s.pointerLoopDone = true, make(chan struct{}, 1), make(chan struct{})
+		s.drawPointer, s.pointerMoved = true, make(chan struct{}, 1)
+	}
+	if cfg.PartialFrames {
+		s.partial, s.keyWanted = &screenstream.FrameEncoder{}, make(chan struct{}, 1)
+	}
+	if s.drawPointer || s.partial != nil {
+		s.pointerLoopDone = make(chan struct{})
 	}
 	if err := s.requestUpdate(false); err != nil {
 		return nil, err
@@ -181,7 +193,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	stopCancel()
 	s.stopCancel = context.AfterFunc(ctx, func() { s.signalDone(); _ = conn.Close() })
 	ok = true
-	if s.drawPointer {
+	if s.pointerLoopDone != nil {
 		go s.pointerLoop()
 	}
 	go s.readLoop()
@@ -192,6 +204,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 // never dropped: backpressure propagates to the target reader and recorder.
 type Session struct {
 	conn            net.Conn
+	counted         *countingConn
 	frames          chan screenstream.Message
 	width, height   uint32
 	framebuffer     *image.RGBA
@@ -219,6 +232,22 @@ type Session struct {
 	pointerPlaced   bool
 	pointerMoved    chan struct{}
 	pointerLoopDone chan struct{}
+	// partial makes the frames of ADR-0092 (Config.PartialFrames); keyWanted tells pointerLoop the
+	// relay wants a key frame (RequestKeyFrame). Both nil without partial frames.
+	partial   *screenstream.FrameEncoder
+	keyWanted chan struct{}
+}
+
+// RequestKeyFrame makes a key frame now, even on a still screen: the operator's display, fallen
+// behind, dropped partial frames and waits for it (ADR-0092).
+func (s *Session) RequestKeyFrame() {
+	if s.keyWanted == nil {
+		return
+	}
+	select {
+	case s.keyWanted <- struct{}{}:
+	default: // one is already wanted
+	}
 }
 
 // PointerDrawn says the frames carry the pointer: the HELLO tells the operator's browser, which
@@ -588,6 +617,26 @@ func (s *Session) emitFrame() error {
 		picture = &image.RGBA{Pix: append([]byte(nil), s.framebuffer.Pix...), Stride: s.framebuffer.Stride, Rect: s.framebuffer.Rect}
 		s.cursor.drawOn(picture, x, y)
 	}
+	if s.partial != nil {
+		// What differs from the frame before; nothing, no frame (ADR-0092).
+		msg, err := s.partial.Encode(picture, s.sequence+1, time.Now().UTC())
+		if errors.Is(err, screenstream.ErrUnchanged) {
+			return nil
+		}
+		if errors.Is(err, screenstream.ErrFrameTooLarge) {
+			return fmt.Errorf("%w: %w", ErrInvalidFramebuffer, err)
+		}
+		if err != nil {
+			return err
+		}
+		s.sequence++
+		select {
+		case s.frames <- msg:
+			return nil
+		case <-s.done:
+			return net.ErrClosed
+		}
+	}
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, picture); err != nil {
 		return err
@@ -621,11 +670,15 @@ func (s *Session) pointerLoop() {
 		select {
 		case <-s.done:
 			return
-		case <-s.pointerMoved:
+		case <-s.pointerMoved: // nil, and never ready, when the pointer is not drawn
+		case <-s.keyWanted: // nil without partial frames
+			s.frameMu.Lock()
+			s.partial.Reset()
+			s.frameMu.Unlock()
 		}
 		s.frameMu.Lock()
 		var err error
-		if s.sequence > 0 && s.cursor != nil {
+		if s.sequence > 0 && (s.cursor != nil || s.partial != nil) {
 			err = s.emitFrame()
 		}
 		s.frameMu.Unlock()
@@ -903,4 +956,25 @@ func reverseBits(v byte) byte {
 	v = (v&0xF0)>>4 | (v&0x0F)<<4
 	v = (v&0xCC)>>2 | (v&0x33)<<2
 	return (v&0xAA)>>1 | (v&0x55)<<1
+}
+
+// countingConn counts the bytes read through it.
+type countingConn struct {
+	net.Conn
+	n atomic.Uint64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.n.Add(uint64(n))
+	return n, err
+}
+
+// ServerBytes is the number of bytes the target has sent since the session opened, as read from TLS
+// (record payloads): the throughput ADR-0090 (lot A) measures.
+func (s *Session) ServerBytes() uint64 {
+	if s == nil || s.counted == nil {
+		return 0
+	}
+	return s.counted.n.Load()
 }

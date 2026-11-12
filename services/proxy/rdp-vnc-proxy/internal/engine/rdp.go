@@ -41,7 +41,10 @@ type RDPCodec struct {
 	// (SCREEN_DRAW_POINTER, ADR-0091): the client announces a pointer cache and follows the
 	// target's shapes, and the operator's position. Off, the pointer is ignored, as before.
 	DrawPointer bool
-	openSession func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
+	// PartialFrames sends partial frames anchored on key frames (ADR-0092), not a whole frame for
+	// every change. Not yet offered by the runtime: the Video Recorder does not store them yet.
+	PartialFrames bool
+	openSession   func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 }
 
 var _ proxycore.ScreenCodec = (*RDPCodec)(nil)
@@ -105,6 +108,10 @@ func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 		inputTimeout: inputTimeout, width: width, height: height, pressedKeys: make(map[uint16]bool), frameInterval: c.FrameInterval}
 	if c.DrawPointer {
 		s.pointer, s.pointerMoved = rdp.NewRDPPointer(), make(chan struct{}, 1)
+	}
+	if c.PartialFrames {
+		framebuffer.EnablePartialFrames(0, 0)
+		s.keyWanted = make(chan struct{}, 1)
 	}
 	go s.readLoop(sessionCtx)
 	return s, nil
@@ -233,6 +240,22 @@ type rdpScreenSessionAdapter struct {
 	pointerMoved chan struct{}
 	// pointerUpdates counts the target's pointer updates, for the interoperability tests.
 	pointerUpdates int
+	// keyWanted tells the reader the relay wants a key frame (RequestKeyFrame, ADR-0092): nil
+	// without partial frames.
+	keyWanted chan struct{}
+}
+
+// RequestKeyFrame makes the next frame a key frame, and makes one now if the screen stays still:
+// the operator's display, fallen behind, dropped partial frames and waits for it (ADR-0092).
+func (s *rdpScreenSessionAdapter) RequestKeyFrame() {
+	if s.keyWanted == nil {
+		return
+	}
+	s.framebuffer.ForceKeyFrame()
+	select {
+	case s.keyWanted <- struct{}{}:
+	default: // one is already wanted
+	}
 }
 
 func (s *rdpScreenSessionAdapter) Frames() <-chan screenstream.Message { return s.frames }
@@ -465,6 +488,11 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 		s.pointerMu.Lock()
 		frame, err := s.framebuffer.FrameWithPointer(time.Now().UTC(), s.pointer)
 		s.pointerMu.Unlock()
+		if errors.Is(err, screenstream.ErrUnchanged) {
+			// What was drawn is the screen already shown: no frame (ADR-0092).
+			dirty, due = false, nil
+			return true
+		}
 		if err != nil {
 			fail(err)
 			return false
@@ -506,6 +534,10 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 			if dirty && !emit() {
 				return
 			}
+		case <-s.keyWanted: // nil without partial frames
+			if shown && !changed() {
+				return
+			}
 		case <-s.pointerMoved: // nil, and never ready, when the pointer is not drawn
 			if shown && !changed() {
 				return
@@ -523,6 +555,9 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 				s.width, s.height = update.DesktopWidth, update.DesktopHeight
 				s.inputMu.Unlock()
 				shown = false
+			}
+			if update.Reactivated {
+				s.framebuffer.ForceKeyFrame() // ADR-0092 §3
 			}
 			if update.Reactivated && s.pointer != nil {
 				s.pointerMu.Lock()
