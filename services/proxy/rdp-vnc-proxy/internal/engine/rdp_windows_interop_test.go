@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -529,6 +530,104 @@ func TestRDPWindows_ExtendedKeys(t *testing.T) {
 		time.Sleep(5 * time.Second)
 	}
 	t.Logf("extended keys read back as %q; the Windows key and Ctrl+Alt+Del are in extended-1 and extended-2 PNGs", got)
+}
+
+// The measurements of ADR-0090 (lot A) against Windows: in Notepad, an idle desktop, a key's way
+// to the screen, typing, a window of dense text, scrolling, and the drawn pointer. The figures go to
+// the log (MEASURE) and to measure.json beside the screens. Before the logoff test, which closes the
+// session; Notepad is emptied and saved at the end, so that nothing asks to be saved at logoff.
+// The scenes run twice: whole frames, then partial frames (ADR-0092), for the figures of both.
+func TestRDPWindows_Measure(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		name := "whole-frames"
+		if partial {
+			name = "partial-frames"
+		}
+		t.Run(name, func(t *testing.T) { measureWindows(t, partial) })
+	}
+}
+
+func measureWindows(t *testing.T, partial bool) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// As the proxy runs by default: the pointer drawn, at most one frame each 50 ms.
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DrawPointer: true,
+		FrameInterval: 50 * time.Millisecond, PartialFrames: partial}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	label := fmt.Sprintf("windows-%s-%sbpp-%s-%s", os.Getenv("RDP_WINDOWS_VERSION"), os.Getenv("RDP_WINDOWS_BPP"),
+		os.Getenv("RDP_WINDOWS_SESSION"), os.Getenv("RDP_WINDOWS_KEYBOARD"))
+	dump := os.Getenv("RDP_WINDOWS_DUMP")
+	if partial {
+		label += "-partial"
+		if dump != "" {
+			dump = filepath.Join(dump, "partial")
+			_ = os.MkdirAll(dump, 0o755)
+		}
+	}
+	m := newSessionMeter(t, label, session, rdpServerBytes(t, session))
+	m.settle(10*time.Second, 90*time.Second)
+	m.mu.Lock()
+	width, height := int(m.last.Width), int(m.last.Height)
+	m.mu.Unlock()
+	if width == 0 {
+		t.Fatal("no frame from Windows")
+	}
+	ctrl, ctrlA := uint16(0x1d), uint16(0x1e)
+	if os.Getenv("RDP_WINDOWS_KEYBOARD") == "fr-FR" {
+		ctrlA = 0x10 // A sits where Q does in AZERTY
+	}
+	// Into Notepad, at the end of its text, on a line of its own.
+	for _, buttons := range []byte{1, 0} {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: uint16(width / 2), Y: uint16(height / 2), Buttons: buttons}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+	rdpChord(t, session, ctrl, 0xe04f) // Ctrl+End
+	rdpKeys(t, session, 50*time.Millisecond, 0x1c)
+	m.settle(2*time.Second, 20*time.Second)
+
+	m.scene("idle", func() { time.Sleep(10 * time.Second) })
+	m.latency("key-to-frame", 10, func() { rdpKeys(t, session, 0, 0x2d) }, func() { rdpKeys(t, session, 0, 0x0e) })
+	m.scene("typing", func() { rdpKeys(t, session, 30*time.Millisecond, append(rdpSentence, 0x1c)...) })
+	// Seven doublings of Notepad's text: a window full of lines, out of any scene.
+	for i := 0; i < 7; i++ {
+		rdpChord(t, session, ctrl, ctrlA)
+		rdpChord(t, session, ctrl, 0x2e) // Ctrl+C
+		rdpChord(t, session, ctrl, 0xe04f)
+		rdpChord(t, session, ctrl, 0x2f) // Ctrl+V
+		m.settle(time.Second, 20*time.Second)
+	}
+	m.scene("dense-text", func() { rdpChord(t, session, ctrl, 0xe047) }) // Ctrl+Home: the window repainted, full of text
+	m.mu.Lock()
+	dense := m.last
+	m.mu.Unlock()
+	m.scene("scrolling", func() {
+		for i := 0; i < 20; i++ {
+			rdpKeys(t, session, 150*time.Millisecond, 0xe051) // Page Down
+		}
+	})
+	m.scene("pointer", func() { m.pointerCircle(width/2, height/2, 200, 50, 20*time.Millisecond) })
+	if dump != "" && dense.Type == screenstream.TypeFrame {
+		_ = os.WriteFile(filepath.Join(dump, "measure-dense-text.png"), dense.PNG, 0o644)
+	}
+	// Nothing left to save at logoff: the text emptied, the file saved.
+	rdpChord(t, session, ctrl, ctrlA)
+	rdpKeys(t, session, 50*time.Millisecond, 0xe053) // Delete
+	rdpChord(t, session, ctrl, 0x1f)                 // Ctrl+S
+	m.settle(2*time.Second, 20*time.Second)
+	m.publish(dump)
 }
 
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by

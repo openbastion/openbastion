@@ -251,7 +251,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		defer conn.Close(websocket.StatusNormalClosure, "")
 
 		hello := readScreen(t, conn)
-		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id {
+		// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
+		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1 {
 			t.Fatalf("first message: %+v", hello)
 		}
 		first := readFrame(t, conn)
@@ -602,8 +603,10 @@ type screenMessage struct {
 	sequence      uint64
 	png           []byte
 	helloProtocol byte
+	helloFlags    byte // bit 0: the pointer is in the frames (ADR-0091)
 	helloSession  string
 	endText       string
+	raw           []byte // the whole message, for a partial frame's rectangles (ADR-0092)
 }
 
 func readScreen(t *testing.T, conn *websocket.Conn) screenMessage {
@@ -622,13 +625,13 @@ func readScreenWithin(t *testing.T, conn *websocket.Conn, limit time.Duration) s
 	if typ != websocket.MessageBinary || len(data) < 32 || data[0] != 1 {
 		t.Fatalf("not a screen message: type %v, %d bytes", typ, len(data))
 	}
-	m := screenMessage{kind: data[1], sequence: binary.BigEndian.Uint64(data[4:12])}
+	m := screenMessage{kind: data[1], sequence: binary.BigEndian.Uint64(data[4:12]), raw: data}
 	payload := data[32:]
 	switch m.kind {
 	case 1:
 		m.png = payload
 	case 2:
-		m.helloProtocol = payload[0]
+		m.helloProtocol, m.helloFlags = payload[0], payload[1]
 		m.helloSession = string(payload[14:])
 	case 3:
 		m.endText = string(payload[4:])

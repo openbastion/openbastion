@@ -13,6 +13,9 @@ func FuzzDecode(f *testing.F) {
 	end, _ := Encode(Message{Type: TypeEnd, Sequence: 1, Timestamp: time.Unix(1, 0), EndCode: EndCodeSessionEnded, Text: "session_ended"})
 	f.Add(hello)
 	f.Add(end)
+	partial, _ := Encode(Message{Type: TypeFrameDelta, Sequence: 2, Timestamp: time.Unix(1, 0), Width: 8, Height: 4,
+		Rects: []Rect{{X: 1, Y: 1, Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nIHDR")}}})
+	f.Add(partial)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		m, err := Decode(data)
 		if err != nil {

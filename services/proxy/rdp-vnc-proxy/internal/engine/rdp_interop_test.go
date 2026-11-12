@@ -173,6 +173,64 @@ func TestRDPInterop_Pointer(t *testing.T) {
 	})
 }
 
+// The measurements of ADR-0090 (lot A) against FreeRDP: the harness Windows runs, on scenes a
+// terminal running `cat` can show.
+func TestRDPInterop_Measure(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		name := "whole-frames"
+		if partial {
+			name = "partial-frames"
+		}
+		t.Run(name, func(t *testing.T) { measureFreeRDP(t, partial) })
+	}
+}
+
+func measureFreeRDP(t *testing.T, partial bool) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second, DrawPointer: true,
+		FrameInterval: 50 * time.Millisecond, PartialFrames: partial}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+	label := "freerdp"
+	if partial {
+		label += "-partial"
+	}
+	m := newSessionMeter(t, label, session, rdpServerBytes(t, session))
+	m.settle(3*time.Second, 30*time.Second)
+	// No window manager: the keyboard goes to the window under the pointer, xterm at the top left.
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: 100, Y: 100}); err != nil {
+		t.Fatal(err)
+	}
+	m.settle(time.Second, 10*time.Second)
+	m.scene("idle", func() { time.Sleep(5 * time.Second) })
+	m.latency("key-to-frame", 10, func() { rdpKeys(t, session, 0, 0x1e) }, func() { rdpKeys(t, session, 0, 0x0e) })
+	m.scene("typing", func() { rdpKeys(t, session, 30*time.Millisecond, rdpSentence...) })
+	m.scene("scrolling", func() {
+		for i := 0; i < 40; i++ {
+			rdpKeys(t, session, 50*time.Millisecond, 0x1c)
+		}
+	})
+	m.scene("pointer", func() { m.pointerCircle(640, 400, 150, 50, 20*time.Millisecond) })
+	if dir := os.Getenv("RDP_INTEROP_DUMP"); dir != "" {
+		dir = filepath.Join(dir, label)
+		_ = os.MkdirAll(dir, 0o755)
+		m.publish(dir)
+	} else {
+		m.publish("")
+	}
+}
+
 func TestRDPInterop_Screen(t *testing.T) {
 	target := startRDPInteropTarget(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

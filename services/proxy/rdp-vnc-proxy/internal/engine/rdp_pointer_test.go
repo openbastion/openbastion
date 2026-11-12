@@ -274,3 +274,63 @@ func provePointerIsDrawn(t *testing.T, session proxycore.ScreenSession, targetSe
 		t.Fatal("no pointer update from the target: the pointer cache was not announced, or the updates are still ignored")
 	}
 }
+
+// The session says whether it draws the pointer: the HELLO carries it to the operator's browser.
+func TestRDPCodec_TheSessionSaysWhetherItDrawsThePointer(t *testing.T) {
+	for _, draw := range []bool{false, true} {
+		target := &fakeRDPDesktop{width: 16, height: 16, updates: []rdp.RDPBitmapUpdate{grayDesktop(16, 16)}}
+		session := openPointerSession(t, target, draw)
+		drawer, ok := session.(proxycore.PointerDrawer)
+		if !ok || drawer.PointerDrawn() != draw {
+			t.Fatalf("DrawPointer %v: the session says %v (%v)", draw, ok && drawer.PointerDrawn(), ok)
+		}
+	}
+}
+
+// The VNC session's word passes through the wrapper that maps its errors: an embedded interface
+// would hide it.
+func TestVNCScreenSessionPassesOnWhetherItDrawsThePointer(t *testing.T) {
+	if drawn := (vncScreenSession{drawingSession{true}}).PointerDrawn(); !drawn {
+		t.Fatal("a VNC session drawing the pointer is said not to")
+	}
+	if (vncScreenSession{drawingSession{false}}).PointerDrawn() || (vncScreenSession{silentSession{}}).PointerDrawn() {
+		t.Fatal("a VNC session not drawing the pointer is said to")
+	}
+}
+
+type silentSession struct{}
+
+func (silentSession) Frames() <-chan screenstream.Message { return nil }
+func (silentSession) Input(screenstream.InputEvent) error { return nil }
+func (silentSession) Err() error                          { return nil }
+func (silentSession) Close() error                        { return nil }
+
+type drawingSession struct{ drawn bool }
+
+func (d drawingSession) Frames() <-chan screenstream.Message { return nil }
+func (d drawingSession) Input(screenstream.InputEvent) error { return nil }
+func (d drawingSession) Err() error                          { return nil }
+func (d drawingSession) Close() error                        { return nil }
+func (d drawingSession) PointerDrawn() bool                  { return d.drawn }
+
+type keyRequestingSession struct {
+	silentSession
+	asked *int
+}
+
+func (k keyRequestingSession) RequestKeyFrame() { *k.asked++ }
+
+// The relay's request for a key frame reaches the VNC session through the wrapper (ADR-0092).
+func TestVNCScreenSessionPassesOnAKeyFrameRequest(t *testing.T) {
+	asked := 0
+	var session proxycore.ScreenSession = vncScreenSession{keyRequestingSession{asked: &asked}}
+	requester, ok := session.(proxycore.KeyFrameRequester)
+	if !ok {
+		t.Fatal("the VNC wrapper cannot be asked for a key frame")
+	}
+	requester.RequestKeyFrame()
+	if asked != 1 {
+		t.Fatalf("the request reached the session %d time(s)", asked)
+	}
+	vncScreenSession{silentSession{}}.RequestKeyFrame() // a session that cannot: nothing happens
+}

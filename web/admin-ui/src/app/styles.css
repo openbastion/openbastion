@@ -955,6 +955,11 @@ main.login {
 }
 
 /* display above would otherwise show an empty canvas before the first frame. */
+/* The frames carry the target's pointer (ADR-0091): the browser's arrow would be a second one. */
+.screen-canvas.pointer-drawn {
+  cursor: none;
+}
+
 .screen-canvas[hidden] {
   display: none;
 }
@@ -964,11 +969,7 @@ main.login {
   outline-offset: 2px;
 }
 
-/* The replay of a screen recording (VideoReplay): the frame, then its controls under it. */
-.replay {
-  margin-top: 1rem;
-}
-
+/* The replay of a screen recording (ReplayControls): the controls under the frame. */
 .replay-controls {
   flex-wrap: wrap;
   align-items: center;

@@ -19,6 +19,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/screenstream"
@@ -74,6 +75,13 @@ type Config struct {
 	// §8). The next update is asked for only then: the target coalesces what changed meanwhile,
 	// and nothing is dropped. Zero asks at once.
 	FrameInterval time.Duration
+	// DrawPointer draws the target's pointer into each frame, where the operator put it
+	// (SCREEN_DRAW_POINTER, ADR-0091): its shape comes from the Cursor pseudo-encoding. Off, the
+	// shape is read and thrown away, as before, and no frame carries a pointer.
+	DrawPointer bool
+	// PartialFrames sends partial frames anchored on key frames (SCREEN_PARTIAL_FRAMES, ADR-0092):
+	// what differs from the frame before, not the whole screen at every change.
+	PartialFrames bool
 }
 
 // Client opens one target session. A Client is intended for one session only.
@@ -167,13 +175,27 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return nil, err
 	}
-	s := &Session{conn: tlsConn, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
+	// What the target sends from here on is counted (ServerBytes, ADR-0090 lot A).
+	counted := &countingConn{Conn: tlsConn}
+	s := &Session{conn: counted, counted: counted, frames: make(chan screenstream.Message), width: width, height: height, framebuffer: image.NewRGBA(image.Rect(0, 0, int(width), int(height))), pressed: make(map[uint32]struct{}), done: make(chan struct{}), frameInterval: cfg.FrameInterval}
+	if cfg.DrawPointer {
+		s.drawPointer, s.pointerMoved = true, make(chan struct{}, 1)
+	}
+	if cfg.PartialFrames {
+		s.partial, s.keyWanted = &screenstream.FrameEncoder{}, make(chan struct{}, 1)
+	}
+	if s.drawPointer || s.partial != nil {
+		s.pointerLoopDone = make(chan struct{})
+	}
 	if err := s.requestUpdate(false); err != nil {
 		return nil, err
 	}
 	stopCancel()
 	s.stopCancel = context.AfterFunc(ctx, func() { s.signalDone(); _ = conn.Close() })
 	ok = true
+	if s.pointerLoopDone != nil {
+		go s.pointerLoop()
+	}
 	go s.readLoop()
 	return s, nil
 }
@@ -182,6 +204,7 @@ func (c *Client) Open(ctx context.Context) (*Session, error) {
 // never dropped: backpressure propagates to the target reader and recorder.
 type Session struct {
 	conn            net.Conn
+	counted         *countingConn
 	frames          chan screenstream.Message
 	width, height   uint32
 	framebuffer     *image.RGBA
@@ -199,7 +222,37 @@ type Session struct {
 	forceFullUpdate bool
 	frameInterval   time.Duration
 	stopCancel      func() bool
+	// The pointer drawn into the frames (Config.DrawPointer, ADR-0091). frameMu orders the frames
+	// of the reader (an update applied, then encoded) and of pointerLoop (a move, encoded): one
+	// framebuffer, one sequence. cursor is the reader's; pointerPlaced, like pointerX and pointerY,
+	// is under mu.
+	drawPointer     bool
+	frameMu         sync.Mutex
+	cursor          *cursor
+	pointerPlaced   bool
+	pointerMoved    chan struct{}
+	pointerLoopDone chan struct{}
+	// partial makes the frames of ADR-0092 (Config.PartialFrames); keyWanted tells pointerLoop the
+	// relay wants a key frame (RequestKeyFrame). Both nil without partial frames.
+	partial   *screenstream.FrameEncoder
+	keyWanted chan struct{}
 }
+
+// RequestKeyFrame makes a key frame now, even on a still screen: the operator's display, fallen
+// behind, dropped partial frames and waits for it (ADR-0092).
+func (s *Session) RequestKeyFrame() {
+	if s.keyWanted == nil {
+		return
+	}
+	select {
+	case s.keyWanted <- struct{}{}:
+	default: // one is already wanted
+	}
+}
+
+// PointerDrawn says the frames carry the pointer: the HELLO tells the operator's browser, which
+// hides its own (ADR-0091).
+func (s *Session) PointerDrawn() bool { return s.drawPointer }
 
 func (s *Session) signalDone() { s.doneOnce.Do(func() { close(s.done) }) }
 
@@ -242,7 +295,15 @@ func (s *Session) Input(e screenstream.InputEvent) error {
 		if uint32(e.X) >= s.width || uint32(e.Y) >= s.height || e.Buttons & ^screenstream.AllowedPointerButtons != 0 || e.Wheel < -1 || e.Wheel > 1 {
 			return screenstream.ErrOutOfBounds
 		}
+		moved := e.X != s.pointerX || e.Y != s.pointerY || !s.pointerPlaced
 		s.pointerX, s.pointerY = e.X, e.Y
+		if s.drawPointer && moved {
+			s.pointerPlaced = true
+			select {
+			case s.pointerMoved <- struct{}{}:
+			default: // a frame is already wanted
+			}
+		}
 		mask := e.Buttons
 		if e.Wheel > 0 {
 			mask |= 1 << 3
@@ -325,6 +386,11 @@ func (s *Session) requestUpdate(incremental bool) error {
 
 func (s *Session) readLoop() {
 	defer close(s.frames)
+	if s.pointerLoopDone != nil {
+		// pointerLoop sends frames too: it stops before the channel closes.
+		defer func() { <-s.pointerLoopDone }()
+		defer s.signalDone()
+	}
 	for {
 		if err := s.readServerMessage(); err != nil {
 			s.mu.Lock()
@@ -344,6 +410,16 @@ func (s *Session) readServerMessage() error {
 	}
 	switch kind[0] {
 	case 0:
+		// The update is applied and encoded whole before a pointer frame may come between.
+		s.frameMu.Lock()
+		locked := true
+		unlock := func() {
+			if locked {
+				locked = false
+				s.frameMu.Unlock()
+			}
+		}
+		defer unlock()
 		var hdr [3]byte
 		if _, err := io.ReadFull(s.conn, hdr[:]); err != nil {
 			return err
@@ -377,6 +453,7 @@ func (s *Session) readServerMessage() error {
 			if err := s.emitFrame(); err != nil {
 				return err
 			}
+			unlock()
 			if err := s.waitFrameInterval(); err != nil {
 				return err
 			}
@@ -485,7 +562,18 @@ func (s *Session) readRectangle(allowLastRect bool) (bool, error) {
 			return false, ErrUnsupportedProtocol
 		}
 		return s.resize(uint32(w), uint32(h))
-	case -239: // Cursor shape: consume pixels and 1-bit mask, never send clipboard/cursor metadata.
+	case -239: // Cursor shape: pixels and a 1-bit mask; drawn when the pointer is (ADR-0091).
+		if s.drawPointer {
+			shape, err := readCursor(s.conn, x, y, w, h)
+			if err != nil {
+				return false, err
+			}
+			s.cursor = shape
+			s.mu.Lock()
+			placed := s.pointerPlaced
+			s.mu.Unlock()
+			return placed, nil // a new shape where the pointer shows is a new frame
+		}
 		if uint64(w)*uint64(h)*4 > maxFramebufferBytes {
 			return false, ErrInvalidFramebuffer
 		}
@@ -520,8 +608,37 @@ func (s *Session) resize(w, h uint32) (bool, error) {
 	return false, nil
 }
 func (s *Session) emitFrame() error {
+	picture := s.framebuffer
+	s.mu.Lock()
+	placed, x, y := s.pointerPlaced, int(s.pointerX), int(s.pointerY)
+	s.mu.Unlock()
+	if s.drawPointer && placed && s.cursor != nil && s.cursor.width > 0 {
+		// On a copy: the framebuffer stays the target's screen (ADR-0091 §1).
+		picture = &image.RGBA{Pix: append([]byte(nil), s.framebuffer.Pix...), Stride: s.framebuffer.Stride, Rect: s.framebuffer.Rect}
+		s.cursor.drawOn(picture, x, y)
+	}
+	if s.partial != nil {
+		// What differs from the frame before; nothing, no frame (ADR-0092).
+		msg, err := s.partial.Encode(picture, s.sequence+1, time.Now().UTC())
+		if errors.Is(err, screenstream.ErrUnchanged) {
+			return nil
+		}
+		if errors.Is(err, screenstream.ErrFrameTooLarge) {
+			return fmt.Errorf("%w: %w", ErrInvalidFramebuffer, err)
+		}
+		if err != nil {
+			return err
+		}
+		s.sequence++
+		select {
+		case s.frames <- msg:
+			return nil
+		case <-s.done:
+			return net.ErrClosed
+		}
+	}
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, s.framebuffer); err != nil {
+	if err := png.Encode(&buf, picture); err != nil {
 		return err
 	}
 	if buf.Len() > screenstream.MaxPNGBytes {
@@ -541,6 +658,42 @@ func (s *Session) emitFrame() error {
 		return nil
 	case <-s.done:
 		return net.ErrClosed
+	}
+}
+
+// pointerLoop makes a frame of the operator's moves, which the target does not answer: with the
+// Cursor pseudo-encoding the pointer is not in its framebuffer. One frame a interval at most, the
+// latest position; none before the first frame of the target, nor before it sent a shape.
+func (s *Session) pointerLoop() {
+	defer close(s.pointerLoopDone)
+	for {
+		select {
+		case <-s.done:
+			return
+		case <-s.pointerMoved: // nil, and never ready, when the pointer is not drawn
+		case <-s.keyWanted: // nil without partial frames
+			s.frameMu.Lock()
+			s.partial.Reset()
+			s.frameMu.Unlock()
+		}
+		s.frameMu.Lock()
+		var err error
+		if s.sequence > 0 && (s.cursor != nil || s.partial != nil) {
+			err = s.emitFrame()
+		}
+		s.frameMu.Unlock()
+		if err != nil {
+			s.mu.Lock()
+			if s.err == nil && !errors.Is(err, net.ErrClosed) {
+				s.err = err
+			}
+			s.mu.Unlock()
+			_ = s.conn.Close() // the reader stops, and the session ends with this error
+			return
+		}
+		if s.waitFrameInterval() != nil {
+			return
+		}
 	}
 }
 
@@ -803,4 +956,25 @@ func reverseBits(v byte) byte {
 	v = (v&0xF0)>>4 | (v&0x0F)<<4
 	v = (v&0xCC)>>2 | (v&0x33)<<2
 	return (v&0xAA)>>1 | (v&0x55)<<1
+}
+
+// countingConn counts the bytes read through it.
+type countingConn struct {
+	net.Conn
+	n atomic.Uint64
+}
+
+func (c *countingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.n.Add(uint64(n))
+	return n, err
+}
+
+// ServerBytes is the number of bytes the target has sent since the session opened, as read from TLS
+// (record payloads): the throughput ADR-0090 (lot A) measures.
+func (s *Session) ServerBytes() uint64 {
+	if s == nil || s.counted == nil {
+		return 0
+	}
+	return s.counted.n.Load()
 }

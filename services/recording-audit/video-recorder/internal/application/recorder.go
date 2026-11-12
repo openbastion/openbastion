@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/pkg/refusalbudget"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/domain"
 )
 
@@ -38,9 +39,17 @@ const (
 	ActionRead                    = "recording:session:read"
 	RecordingResource             = "recording:session:"
 	recordingFormat               = "openbastion/video-segment/v1"
-	MaxCiphertextBytes            = 8 << 20
-	maxActorRoles                 = 100
-	maxActorRoleBytes             = 128
+	// recordingFormatV2 seals a segment that holds a partial frame (ADR-0092 §5). A segment of key
+	// frames only keeps the format 1, byte for byte; a segment opened as format 1 may hold no
+	// partial frame, so a format 2 segment cannot pass for an older one.
+	recordingFormatV2 = "openbastion/video-segment/v2"
+	// CodecPNG is a key frame: a whole PNG. CodecPNGDelta is a partial frame: the screen-stream
+	// FRAME_DELTA message, as the operator received it (ADR-0092).
+	CodecPNG           = "png"
+	CodecPNGDelta      = "png-delta-v1"
+	MaxCiphertextBytes = 8 << 20
+	maxActorRoles      = 100
+	maxActorRoleBytes  = 128
 )
 
 type RecorderService struct {
@@ -59,6 +68,9 @@ type RecordingWriter struct {
 	sessionID string
 	dek       []byte
 	closed    bool
+	// The screen a partial frame applies to: the size of the last key frame. A partial frame before
+	// any key frame, or of another size, is refused (ADR-0092 §2).
+	screenWidth, screenHeight int
 }
 
 func NewRecorderService(repo domain.Repository, objects domain.ObjectStore, keys domain.KeyWrapper, authz domain.AuthorizationClient, audit domain.AuditEmitter) *RecorderService {
@@ -119,8 +131,8 @@ func ValidateSegment(segment domain.VideoSegment) error {
 	var total int64
 	var firstTime, lastTime time.Time
 	for i, frame := range segment.Frames {
-		if frame.Codec != "png" {
-			return fmt.Errorf("%w: only PNG frames are accepted", domain.ErrInvalidSegment)
+		if frame.Codec != CodecPNG && frame.Codec != CodecPNGDelta {
+			return fmt.Errorf("%w: only PNG key frames and partial frames are accepted", domain.ErrInvalidSegment)
 		}
 		if frame.Timestamp.IsZero() {
 			return fmt.Errorf("%w: frame %d has no timestamp", domain.ErrInvalidSegment, i)
@@ -132,8 +144,11 @@ func ValidateSegment(segment domain.VideoSegment) error {
 		if total > MaxSegmentBytes {
 			return fmt.Errorf("%w: segment exceeds the size limit", domain.ErrInvalidSegment)
 		}
-		cfg, err := png.DecodeConfig(bytes.NewReader(frame.Data))
-		if err != nil || cfg.Width < 1 || cfg.Height < 1 || int64(cfg.Width)*int64(cfg.Height) > MaxFramePixels {
+		if frame.Codec == CodecPNGDelta {
+			if _, _, err := validateDeltaFrame(frame, segment.FirstSequence+int64(i)); err != nil {
+				return fmt.Errorf("%w: frame %d: %v", domain.ErrInvalidSegment, i, err)
+			}
+		} else if _, _, err := pngSize(frame.Data); err != nil {
 			return fmt.Errorf("%w: frame %d is not an allowed PNG image", domain.ErrInvalidSegment, i)
 		}
 		ts := frame.Timestamp.UTC()
@@ -147,6 +162,71 @@ func ValidateSegment(segment domain.VideoSegment) error {
 	if lastTime.Sub(firstTime) > MaxSegmentDuration {
 		return fmt.Errorf("%w: segment duration exceeds the limit", domain.ErrInvalidSegment)
 	}
+	return nil
+}
+
+// pngSize reads a PNG's size and checks it is a screen the Recorder accepts.
+func pngSize(data []byte) (int, int, error) {
+	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+	if err != nil || cfg.Width < 1 || cfg.Height < 1 || int64(cfg.Width)*int64(cfg.Height) > MaxFramePixels {
+		return 0, 0, errors.New("not an allowed PNG image")
+	}
+	return cfg.Width, cfg.Height, nil
+}
+
+// validateDeltaFrame checks a partial frame (ADR-0092): a FRAME_DELTA message within its bounds, of
+// the sequence and the time the segment gives it, each rectangle a PNG of exactly its size. It
+// returns the size of the screen the frame applies to.
+func validateDeltaFrame(frame domain.VideoFrame, sequence int64) (int, int, error) {
+	message, err := screenstream.Decode(frame.Data)
+	if err != nil {
+		return 0, 0, err
+	}
+	if message.Type != screenstream.TypeFrameDelta || int64(message.Sequence) != sequence ||
+		!message.Timestamp.Equal(frame.Timestamp) ||
+		int64(message.Width)*int64(message.Height) > MaxFramePixels {
+		return 0, 0, errors.New("not the partial frame of this sequence and time")
+	}
+	for j, rect := range message.Rects {
+		width, height, err := pngSize(rect.PNG)
+		if err != nil || uint32(width) != rect.Width || uint32(height) != rect.Height {
+			return 0, 0, fmt.Errorf("rectangle %d is not a PNG of its size", j)
+		}
+	}
+	return int(message.Width), int(message.Height), nil
+}
+
+// segmentFormat is the format a segment is sealed in: 2 when it holds a partial frame.
+func segmentFormat(segment domain.VideoSegment) string {
+	for _, frame := range segment.Frames {
+		if frame.Codec == CodecPNGDelta {
+			return recordingFormatV2
+		}
+	}
+	return recordingFormat
+}
+
+// followScreen checks that each partial frame of the segment applies to the screen of the key
+// frame before it, and keeps that screen's size for the next segment.
+func (w *RecordingWriter) followScreen(segment domain.VideoSegment) error {
+	width, height := w.screenWidth, w.screenHeight
+	for i, frame := range segment.Frames {
+		if frame.Codec == CodecPNG {
+			var err error
+			if width, height, err = pngSize(frame.Data); err != nil {
+				return fmt.Errorf("%w: frame %d is not an allowed PNG image", domain.ErrInvalidSegment, i)
+			}
+			continue
+		}
+		deltaWidth, deltaHeight, err := validateDeltaFrame(frame, segment.FirstSequence+int64(i))
+		if err != nil {
+			return fmt.Errorf("%w: frame %d: %v", domain.ErrInvalidSegment, i, err)
+		}
+		if width == 0 || deltaWidth != width || deltaHeight != height {
+			return fmt.Errorf("%w: frame %d is a partial frame without the key frame of its screen", domain.ErrInvalidSegment, i)
+		}
+	}
+	w.screenWidth, w.screenHeight = width, height
 	return nil
 }
 
@@ -187,12 +267,15 @@ func (w *RecordingWriter) RecordSegment(ctx context.Context, segment domain.Vide
 	if segment.Terminal {
 		return fmt.Errorf("%w: terminal markers are not data segments", domain.ErrInvalidSegment)
 	}
+	if err := w.followScreen(segment); err != nil {
+		return err
+	}
 	plain, err := json.Marshal(segment)
 	if err != nil {
 		return fmt.Errorf("encoding video segment: %w", err)
 	}
 	defer zero(plain)
-	ciphertext, err := seal(w.dek, plain, segmentAAD(segment.SessionID, segment.FirstSequence, segment.LastSequence))
+	ciphertext, err := seal(w.dek, plain, segmentAAD(segmentFormat(segment), segment.SessionID, segment.FirstSequence, segment.LastSequence))
 	if err != nil {
 		return fmt.Errorf("encrypting video segment: %w", err)
 	}
@@ -297,16 +380,11 @@ func (s *RecorderService) ReadSegment(ctx context.Context, callerID string, acto
 		return domain.VideoSegment{}, false, fmt.Errorf("%w: unwrapping video data key: %v", domain.ErrUnavailable, err)
 	}
 	defer zero(dek)
-	plain, err := open(dek, ciphertext, segmentAAD(sessionID, stored.FirstSequence, stored.LastSequence))
+	segment, err := openSegment(dek, ciphertext, sessionID, stored.FirstSequence, stored.LastSequence)
 	if err != nil {
 		return domain.VideoSegment{}, false, domain.ErrIntegrity
 	}
-	defer zero(plain)
-	var segment domain.VideoSegment
-	if err := json.Unmarshal(plain, &segment); err != nil {
-		return domain.VideoSegment{}, false, domain.ErrIntegrity
-	}
-	if err := ValidateSegment(segment); err != nil || segment.SessionID != sessionID ||
+	if segment.SessionID != sessionID ||
 		segment.FirstSequence != stored.FirstSequence || segment.LastSequence != stored.LastSequence {
 		return domain.VideoSegment{}, false, domain.ErrIntegrity
 	}
@@ -371,12 +449,36 @@ func zero(b []byte) {
 	}
 }
 
+// openSegment decrypts a stored segment under format 1, then format 2, and keeps it only if the
+// format it opened under is the one its frames call for (ADR-0092 §5): a format 2 segment cannot
+// pass for a format 1 one, nor the reverse.
+func openSegment(dek, ciphertext []byte, sessionID string, first, last int64) (domain.VideoSegment, error) {
+	format := recordingFormat
+	plain, err := open(dek, ciphertext, segmentAAD(format, sessionID, first, last))
+	if err != nil {
+		format = recordingFormatV2
+		plain, err = open(dek, ciphertext, segmentAAD(format, sessionID, first, last))
+	}
+	if err != nil {
+		return domain.VideoSegment{}, domain.ErrIntegrity
+	}
+	defer zero(plain)
+	var segment domain.VideoSegment
+	if err := json.Unmarshal(plain, &segment); err != nil {
+		return domain.VideoSegment{}, domain.ErrIntegrity
+	}
+	if err := ValidateSegment(segment); err != nil || segmentFormat(segment) != format {
+		return domain.VideoSegment{}, domain.ErrIntegrity
+	}
+	return segment, nil
+}
+
 func dekAAD(keyID, sessionID string) []byte {
 	return []byte(fmt.Sprintf("openbastion/video-dek/v1|%d:%s|%d:%s", len(keyID), keyID, len(sessionID), sessionID))
 }
 
-func segmentAAD(sessionID string, first, last int64) []byte {
-	return []byte(fmt.Sprintf("%s|%d:%s|%d|%d", recordingFormat, len(sessionID), sessionID, first, last))
+func segmentAAD(format, sessionID string, first, last int64) []byte {
+	return []byte(fmt.Sprintf("%s|%d:%s|%d|%d", format, len(sessionID), sessionID, first, last))
 }
 
 func seal(key, plaintext, aad []byte) ([]byte, error) {
