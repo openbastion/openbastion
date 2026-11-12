@@ -144,7 +144,7 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			if err != nil || len(data) < 32 {
 				return
 			}
-			m := screenMessage{kind: data[1], sequence: binary.BigEndian.Uint64(data[4:12])}
+			m := screenMessage{kind: data[1], sequence: binary.BigEndian.Uint64(data[4:12]), raw: data}
 			switch payload := data[32:]; m.kind {
 			case 1:
 				m.png = payload
@@ -171,8 +171,11 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	if hello, ok := next(20 * time.Second); !ok || hello.kind != 2 || hello.helloProtocol != 1 || hello.helloSession != id || hello.helloFlags != 1 {
 		t.Fatalf("first message: %+v", hello)
 	}
+	// What was shown, frame by frame, as the recorder stores it: a key frame's PNG, a partial frame's
+	// message (ADR-0092). last is the screen the operator's page composes.
 	shown := map[uint64][]byte{}
 	var last screenMessage
+	var view screenView
 	// Frames until none comes for quiet; the first one may take its time.
 	settle := func(quiet time.Duration) {
 		limit := 20 * time.Second
@@ -187,8 +190,11 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			if m.kind == 3 {
 				t.Fatalf("the session ended: %q", m.endText)
 			}
-			if m.kind == 1 {
-				shown[m.sequence], last, limit = m.png, m, quiet
+			if screen, ok := view.apply(t, m); ok {
+				shown[m.sequence], last, limit = m.png, screen, quiet
+				if m.kind == 4 {
+					shown[m.sequence] = m.raw
+				}
 			}
 		}
 	}

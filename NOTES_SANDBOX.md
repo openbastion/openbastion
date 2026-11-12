@@ -3036,6 +3036,9 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092 : les images partielles allumées par défaut
+
+Le propriétaire a vérifié une session en direct dans un vrai navigateur, sur le bac à sable Base44 avec `SCREEN_PARTIAL_FRAMES` allumé (« Vérifié dans le navigateur »). Son rejeu a d'abord été refusé : un 403 (`operator` n'est pas auditeur ; le seed crée désormais `auditor`), puis un 502 (la Gateway n'admettait pas `png-delta-v1`, corrigé), puis un 429 (le budget par adresse du bac à sable, élargi depuis). Ensuite, le propriétaire a vérifié le rejeu dans un navigateur : « Rejeu vérifié ». `TestScreenFlow_RDPFrom…` compose désormais les images partielles, puisqu'elles sont allumées par défaut. `SCREEN_PARTIAL_FRAMES` vaut désormais `true` sauf `false`, dans le proxy et dans le compose. Toute autre valeur arrête le service, comme avant.
 ## 2026-11-12 — ADR-0092 : la Gateway refusait de servir une image partielle (corrigé)
 
 **Défaut** : le propriétaire, en auditeur, recevait `502 — video recording unavailable` en relisant sa session écran. La Gateway revalide chaque segment que le Recorder lui rend, et n'admettait que le codec `png` : un segment contenant une image partielle était « invalid » (`frame 0 is invalid` dans son journal). L'incrément 3 avait oublié cette couche. L'épreuve de bout en bout relisait par le gRPC du Recorder, sans passer par la Gateway, et ne pouvait pas le voir.
