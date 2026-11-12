@@ -3081,6 +3081,23 @@ Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session
 
 **Renversable** : 10 s ; un fichier par service plutôt qu'un module `pkg/` partagé (un module de plus aurait touché `go.work`, le Makefile et une dizaine de documents pour quinze lignes).
 
+## 2026-11-12 — À 50 sessions, le Video Recorder perdait des images : le pool PostgreSQL
+
+`RECORDER_MEASURE_SESSIONS` (par exemple `10,20,50`) fixe le nombre de sessions de `TestVideoRecorderAckLatency`.
+
+**Trouvé** : à 50 sessions, des images n'étaient pas acquittées (`waiting for frame acknowledgement`). Le journal du Recorder disait `cannot assign requested address` : il ouvrait et fermait une connexion PostgreSQL presque à chaque image, faute de connexions gardées (`database/sql` en garde 2 par défaut), jusqu'à épuiser les ports de l'hôte. Une image perdue coupe sa session.
+
+**Corrigé** : les sept services gardent 10 connexions (`poolSize`, dans `postgres_open.go`), au plus ouvertes et gardées inactives. L'essai a comparé le défaut, 10 et 25 à 50 sessions : 48 sessions sur 50 coupées par une image non acquittée avec le défaut, aucune avec 10 ou 25, et 10 aussi rapide que 25.
+- **Test rouge d'abord** : `TestPostgres_PoolKeepsItsConnections` (sous `TEST_DATABASE_URL`) échouait sans le correctif, le pool n'ayant aucune borne.
+- **Mutations** : sans `SetMaxIdleConns`, 2 connexions sur 10 restent ; sans `SetMaxOpenConns`, le pool n'a plus de plafond.
+- **Mesuré après** : aucune image perdue à 10, 20 et 50 sessions, en mémoire comme avec S3 (SeaweedFS jetable), sur quatre passages. Le tableau est dans ADR-0090.
+
+**Non corrigé, défaut du harnais** : `freePort` libère le port avant que le Recorder ne le prenne. Trois passages sur une douzaine sont tombés sur `address already in use` ; je les ai refaits.
+
+**Instable sous charge, non lié** : `TestPostgresFlow_TransitKeepsTheKeys…/a_periodic_token_outlives_its_period` a échoué une fois dans toute la suite, et passe seul.
+
+**Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
+
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
 **Video Recorder.** Une lecture sert, à partir de `first`, la suite de segments stockés sans trou, bornée à 600 images et 4 Mio de données d'images (`MaxReadFrames`, `MaxReadBytes`).
