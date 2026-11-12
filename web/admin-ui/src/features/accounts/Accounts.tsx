@@ -235,8 +235,8 @@ export function Accounts() {
                             value={rule.join}
                             onChange={(event) => updateFilterRule(index, { join: event.target.value as AccountFilterRule["join"] })}
                           >
-                            <option value="AND">AND</option>
-                            <option value="OR">OR</option>
+                            <option value="AND">ET</option>
+                            <option value="OR">OU</option>
                           </select>
                         </label>
                       ) : <span className="account-filter-join-placeholder" aria-hidden="true">OÙ</span>}
@@ -297,7 +297,7 @@ export function Accounts() {
                   {filterRules.length > 0 ? <span className="ob-filter-help">4 blocs maximum, un par champ. Les combinaisons sont évaluées de gauche à droite.</span> : <span className="ob-filter-help">Ajoutez une règle pour affiner les comptes affichés.</span>}
                 </div>
                 <div className="account-filter-builder-footer">
-                  <span className="ob-filter-help">La recherche textuelle est toujours combinée aux règles avec AND.</span>
+                  <span className="ob-filter-help">La recherche textuelle est toujours combinée aux règles avec ET.</span>
                   <span className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</span>
                 </div>
                 <div className="ob-saved-views">

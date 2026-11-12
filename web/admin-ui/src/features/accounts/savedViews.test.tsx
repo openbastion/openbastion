@@ -87,7 +87,10 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
     expect(screen.queryByText("SSH account")).toBeNull();
     expect(screen.queryByText("VNC account")).toBeNull();
 
-    fireEvent.change(screen.getByLabelText("Combinaison avant la règle 2"), { target: { value: "OR" } });
+    const join = screen.getByLabelText("Combinaison avant la règle 2") as HTMLSelectElement;
+    expect(Array.from(join.options).map((option) => option.textContent)).toEqual(["ET", "OU"]);
+    expect(Array.from(join.options).map((option) => option.value)).toEqual(["AND", "OR"]);
+    fireEvent.change(join, { target: { value: "OR" } });
     expect(screen.getByText("SSH account")).toBeTruthy();
     expect(screen.getByText("VNC account")).toBeTruthy();
 
