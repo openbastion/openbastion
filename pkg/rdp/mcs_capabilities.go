@@ -281,7 +281,7 @@ func marshalRDPConfirmActive(capabilities RDPServerCapabilities, settings MCSCli
 	binary.LittleEndian.PutUint16(share[14:16], uint16(combinedLength))
 	copy(share[16:], source)
 	offset := 16 + len(source)
-	binary.LittleEndian.PutUint16(share[offset:offset+2], rdpClientCapabilitySetCount)
+	binary.LittleEndian.PutUint16(share[offset:offset+2], rdpClientCapabilitySetCountFor(settings))
 	copy(share[offset+4:], caps)
 	clear(caps)
 	packet, err := marshalMCSSendDataRequest(userID, mcsGlobalChannelID, share)
@@ -355,14 +355,42 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	binary.LittleEndian.PutUint16(multifragment[2:4], uint16(len(multifragment)))
 	binary.LittleEndian.PutUint32(multifragment[4:8], maxRDPFastPathReassembly)
 	caps = append(caps, multifragment...)
+
+	// TS_VIRTUALCHANNEL_CAPABILITYSET, when a channel is announced (ADR-0095): no compression
+	// (VCCAPS_NO_COMPR). The chunk size is the server's to state; this client sends 1600-byte chunks.
+	if len(rdpStaticChannelNames(settings)) > 0 {
+		virtualChannel := make([]byte, 8)
+		binary.LittleEndian.PutUint16(virtualChannel[:2], rdpCapVirtualChannel)
+		binary.LittleEndian.PutUint16(virtualChannel[2:4], uint16(len(virtualChannel)))
+		caps = append(caps, virtualChannel...)
+	}
 	return caps
 }
 
-// rdpClientCapabilitySetCount is the number of sets marshalRDPClientCapabilitySets writes.
+// rdpClientCapabilitySetCount is the number of sets marshalRDPClientCapabilitySets writes with no
+// channel announced.
 const rdpClientCapabilitySetCount = 6
 
+// rdpClientCapabilitySetCountFor is the number of sets marshalRDPClientCapabilitySets writes for
+// settings: one more, the virtual channel's, when a channel is announced.
+func rdpClientCapabilitySetCountFor(settings MCSClientSettings) uint16 {
+	if len(rdpStaticChannelNames(settings)) > 0 {
+		return rdpClientCapabilitySetCount + 1
+	}
+	return rdpClientCapabilitySetCount
+}
+
 func marshalMCSSendDataRequest(userID, channelID uint16, userData []byte) ([]byte, error) {
-	if !validMCSUserID(userID) || channelID != mcsGlobalChannelID ||
+	if channelID != mcsGlobalChannelID {
+		return nil, ErrMCSConnection
+	}
+	return marshalMCSSendDataRequestOn(userID, channelID, userData)
+}
+
+// marshalMCSSendDataRequestOn is marshalMCSSendDataRequest on any channel: the caller says which
+// (the I/O channel, or a static channel joined, ADR-0095).
+func marshalMCSSendDataRequestOn(userID, channelID uint16, userData []byte) ([]byte, error) {
+	if !validMCSUserID(userID) || channelID == 0 ||
 		len(userData) == 0 || len(userData) > maxTPKTPacket-16 {
 		return nil, ErrMCSConnection
 	}
