@@ -3116,6 +3116,9 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 ## 2026-11-12 — ADR-0095, incrément 5 : le redimensionnement dans un navigateur sans interface (en cours)
 
+Premier passage CI (run 43307816046) : l'étape échouait avant le navigateur. Le flux compile chaque service avec `GOPROXY=off`, et les modules des autres services n'étaient pas dans le cache du job. `make build` les télécharge d'abord, comme dans `integration.yml`.
+- Dans le même passage, sur Windows Server 2022 en 16 bpp, Windows a fermé la première connexion d'écran 0,19 s après son ouverture, juste après CredSSP, puis n'en a plus accepté aucune (`target_unreachable`). C'est la deuxième fois en deux passages. Si cela revient, l'étudier à part, en partant des journaux d'événements que la CI exporte.
+
 `TestScreenFlow_RDPResizeInAHeadlessBrowser`, en CI Windows seulement : nouvelle étape « The resize in a headless browser » de `windows-rdp.yml`, qui construit l'Admin UI (Node 24.21.0, comme `frontend.yml`). Chrome est piloté par le protocole DevTools (`test/integration/cdp_test.go`). En local, ni Windows ni Chrome : l'épreuve se saute. Elle n'a pas encore tourné.
 
 ## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre

@@ -137,7 +137,9 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
         run: |
-          make ui-build
+          # The flow builds every service with GOPROXY=off: their modules are fetched here, as
+          # integration.yml does (make build).
+          make build ui-build
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           go test ./test/integration/ -run TestScreenFlow_RDPResizeInAHeadlessBrowser -v -count=1 -timeout=20m
       # Runs #16 to #32 settled CredSSP, TLS, the Connect-Initial and the Confirm Active (ADR-0071):
