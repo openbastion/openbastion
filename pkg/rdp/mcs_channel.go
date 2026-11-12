@@ -94,7 +94,7 @@ func validMCSUserID(userID uint16) bool {
 }
 
 // ConnectMCSChannels performs Erect Domain, Attach User and the two sequential
-// Channel Join exchanges required by the no-static-channel profile.
+// Channel Join exchanges: the user's channel, the I/O channel, then each static channel announced.
 func (s *CredSSPClientSession) ConnectMCSChannels(ctx context.Context, timeout time.Duration) (channels MCSChannelConnection, err error) {
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
 		return channels, ErrMCSConnection
@@ -154,7 +154,7 @@ func (s *CredSSPClientSession) ConnectMCSChannels(ctx context.Context, timeout t
 	}
 
 	ioChannelID := s.mcsResponse.IOChannelID
-	for _, channelID := range []uint16{userID, ioChannelID} {
+	for _, channelID := range append([]uint16{userID, ioChannelID}, s.mcsResponse.StaticChannelIDs...) {
 		request := marshalMCSChannelJoinRequest(userID, channelID)
 		if request == nil {
 			return channels, ErrMCSConnection

@@ -61,7 +61,7 @@ var ErrSessionEnded = errors.New("rdp: the target ended the session")
 
 // MCSClientSettings describes the deliberately small client settings profile
 // advertised after CredSSP. HYBRID uses TLS/CredSSP, not Standard RDP Security.
-// No static or dynamic virtual channels are requested.
+// No virtual channel is requested unless DynamicChannels is on.
 type MCSClientSettings struct {
 	DesktopWidth  uint16
 	DesktopHeight uint16
@@ -71,6 +71,9 @@ type MCSClientSettings struct {
 	// pointer updates, decoded and bounded, rather than ignore them (ADR-0091). Off, the pointer is
 	// ignored as before and no cache is announced.
 	PointerShapes bool
+	// DynamicChannels announces the one static channel of the closed list, drdynvc, and joins it
+	// (ADR-0095). Off, no channel is announced and the connection is as it was, to the byte.
+	DynamicChannels bool
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches
@@ -83,6 +86,8 @@ type MCSClientSettings struct {
 type MCSConnectResponse struct {
 	ServerVersion uint32
 	IOChannelID   uint16
+	// StaticChannelIDs are the IDs of the announced static channels, in the order announced.
+	StaticChannelIDs []uint16
 }
 
 // MarshalMCSConnectInitial builds the TPKT/X.224/MCS Connect-Initial PDU with
@@ -129,6 +134,12 @@ func MarshalMCSConnectInitial(settings MCSClientSettings) ([]byte, error) {
 // ParseMCSConnectResponse validates a complete server Connect-Response and the
 // strict HYBRID/no-virtual-channel settings profile requested by this client.
 func ParseMCSConnectResponse(packet []byte) (MCSConnectResponse, error) {
+	return parseMCSConnectResponse(packet, 0)
+}
+
+// parseMCSConnectResponse is ParseMCSConnectResponse for a client that announced the given number
+// of static channels: SC_NET must give each its own ID (ADR-0095 §1).
+func parseMCSConnectResponse(packet []byte, announcedChannels int) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	if len(packet) < 7+2 || len(packet) > maxTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
 		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) {
@@ -159,7 +170,7 @@ func ParseMCSConnectResponse(packet []byte) (MCSConnectResponse, error) {
 	if err != nil || len(body) != 0 || len(userData) == 0 || len(userData) > maxMCSConnectData {
 		return response, fmt.Errorf("%w: MCS Connect-Response userData", ErrMCSConnection)
 	}
-	response, err = parseGCCConferenceCreateResponse(userData)
+	response, err = parseGCCConferenceCreateResponse(userData, announcedChannels)
 	if err != nil {
 		return MCSConnectResponse{}, fmt.Errorf("%w: GCC ConferenceCreate-Response: %v", ErrMCSConnection, err)
 	}
@@ -242,6 +253,14 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	binary.LittleEndian.PutUint32(security[:4], rdpEncryption128Bit)
 	blocks = appendGCCBlock(blocks, gccClientSecurityType, security)
 	clear(security)
+	if names := rdpStaticChannelNames(settings); len(names) > 0 {
+		network, err := marshalClientNetworkData(names)
+		if err != nil {
+			clear(blocks)
+			return nil, err
+		}
+		blocks = appendGCCBlock(blocks, gccClientNetworkType, network)
+	}
 	if len(blocks) > maxMCSConnectData {
 		clear(blocks)
 		return nil, ErrMCSConnection
@@ -417,7 +436,7 @@ func readPERLength(data []byte) (int, []byte, error) {
 	return int(first&0x3f)<<8 | int(data[1]), data[2:], nil
 }
 
-func parseGCCConferenceCreateResponse(data []byte) (MCSConnectResponse, error) {
+func parseGCCConferenceCreateResponse(data []byte, announcedChannels int) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	if len(data) < 16 || len(data) > maxMCSConnectData || !equalBytes(data[:7], []byte{0x00, 0x05, 0x00, 0x14, 0x7c, 0x00, 0x01}) {
 		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response header", ErrMCSConnection)
@@ -442,14 +461,14 @@ func parseGCCConferenceCreateResponse(data []byte) (MCSConnectResponse, error) {
 	if err != nil || userDataLength == 0 || userDataLength > maxMCSConnectData || len(rest) != userDataLength {
 		return response, fmt.Errorf("%w: GCC ConferenceCreate-Response server data length", ErrMCSConnection)
 	}
-	response, err = parseServerDataBlocks(rest)
+	response, err = parseServerDataBlocks(rest, announcedChannels)
 	if err != nil {
 		return MCSConnectResponse{}, fmt.Errorf("%w: GCC server data blocks: %v", ErrMCSConnection, err)
 	}
 	return response, nil
 }
 
-func parseServerDataBlocks(data []byte) (MCSConnectResponse, error) {
+func parseServerDataBlocks(data []byte, announcedChannels int) (MCSConnectResponse, error) {
 	var response MCSConnectResponse
 	seen := map[uint16]bool{}
 	for len(data) > 0 {
@@ -477,10 +496,11 @@ func parseServerDataBlocks(data []byte) (MCSConnectResponse, error) {
 				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_SECURITY profile", ErrMCSConnection)
 			}
 		case gccServerNetworkType:
-			if len(payload) != 4 || binary.LittleEndian.Uint16(payload[:2]) != mcsGlobalChannelID || binary.LittleEndian.Uint16(payload[2:4]) != 0 {
-				return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC SC_NET channels", ErrMCSConnection)
+			ioChannelID, staticIDs, err := parseServerNetworkData(payload, announcedChannels)
+			if err != nil {
+				return MCSConnectResponse{}, err
 			}
-			response.IOChannelID = mcsGlobalChannelID
+			response.IOChannelID, response.StaticChannelIDs = ioChannelID, staticIDs
 		default:
 			return MCSConnectResponse{}, fmt.Errorf("%w: unsupported GCC server data block type 0x%04x", ErrMCSConnection, blockType)
 		}

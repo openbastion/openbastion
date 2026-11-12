@@ -98,7 +98,11 @@ func (s *CredSSPClientSession) reactivate(ctx context.Context, conn *tls.Conn, d
 	if writeErr != nil || ctx.Err() != nil {
 		return ErrMCSConnection
 	}
-	if _, err := finalizeRDPConnection(ctx, conn, ioChannelID, capabilities.ShareID, userID); err != nil {
+	s.mu.Lock()
+	channels := s.mcsResponse.StaticChannelIDs
+	s.mu.Unlock()
+	_, pending, err := finalizeRDPConnection(ctx, conn, ioChannelID, capabilities.ShareID, userID, channels)
+	if err != nil {
 		return fmt.Errorf("%w: reactivation: finalization refused", ErrMCSConnection)
 	}
 	// Back to the deadlines of the read in progress: none for writes, the caller's for reads.
@@ -111,7 +115,13 @@ func (s *CredSSPClientSession) reactivate(ctx context.Context, conn *tls.Conn, d
 	s.primaryOrderState = rdpPrimaryOrderState{}
 	s.capabilitiesExchanged, s.connectionFinalized = true, true
 	s.reactivations++
+	// The channels outlive the share: what they sent meanwhile is read next (ADR-0095).
+	s.pendingChannelPackets = append(s.pendingChannelPackets, pending...)
+	tooMany := len(s.pendingChannelPackets) > maxRDPChannelPending
 	s.mu.Unlock()
+	if tooMany {
+		return fmt.Errorf("%w: reactivation: too many channel packets", ErrRDPChannel)
+	}
 	return nil
 }
 
