@@ -2,7 +2,7 @@
 
 > Règle : applique-la à chaque ligne que tu écris. Si elle te paraît fausse pour un cas précis, ne l'enfreins pas en silence : suis-la, ou signale l'exception dans le rapport. Les interdictions absolues sont dans `policies/`.
 
-1. React + Vite + TypeScript, versions exactes, lockfile commité, `npm ci`. À l'exécution : React seulement.
+1. React + Vite + TypeScript, versions exactes, lockfile commité, `npm ci`. Les applications fournissent React/React DOM et les peer dependencies Radix exigées par `@openbastion/ui` ; aucune autre dépendance UI ne doit être ajoutée hors du package partagé.
 2. L'UI ne parle qu'à l'**API publique**, sur la même origine (servie par la Gateway sous `/ui/`) ; aucune origine tierce, aucun script en ligne : la CSP stricte de la Gateway ne se relâche pas pour l'UI.
 3. Le jeton vit **en mémoire** seulement (jamais `localStorage`, `sessionStorage` ni cookie posé par l'UI) ; une seule instance d'`Api` est passée à `App` (`src/app/main.tsx`) — une valeur par défaut recréée à chaque rendu perdait le jeton.
 4. Un secret saisi (secret initial d'un compte) est envoyé une fois, puis effacé du formulaire ; il n'est jamais affiché ni relu.

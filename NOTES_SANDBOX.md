@@ -4045,3 +4045,27 @@ Aucune dépendance externe n'a été ajoutée dans cet incrément.
 Limites : les overlays Radix, la navigation, les composants avancés et les
 notifications restent à réaliser dans les incréments suivants. Le catalogue
 complet n'est pas livré.
+
+## 2026-11-12 — Overlays accessibles de `@openbastion/ui` (ADR-0073, en cours)
+
+Le package ajoute `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`,
+`Sheet` et `Drawer`. Les cinq primitives Radix sont des peer dependencies de
+`@openbastion/ui`, fournies par chaque application ; `Sheet` et `Drawer` sont
+composés à partir de Dialog. Les wrappers n'exposent pas les types Radix. Le
+bundler conserve les liens symboliques npm et déduplique React pour que les
+primitives et le renderer utilisent la même instance.
+
+Les tests complets passent : Vitest, 17 fichiers et 166 tests ; TypeScript ;
+build Vite avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-overlays` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-tokens-test`
+(36 paires, deux thèmes). Les tests couvrent ouverture/fermeture et Escape,
+confirmation explicite, sélection de menu, popover, tooltip et composition
+Sheet/Drawer.
+
+Le premier essai a révélé une deuxième instance React provenant du peer installé
+dans le répertoire du package. Les primitives Radix sont désormais des peer
+dependencies exactes, fournies par l'application, et Vite préserve les liens
+symboliques tout en dédupliquant React. Les chemins TypeScript résolvent les
+primitives depuis le `node_modules` de l'application. Après `npm ci` dans
+l'Admin UI et suppression des `node_modules` locaux du package, les tests et le
+build passent sans dépendance cachée dans le répertoire source.
