@@ -69,3 +69,26 @@ func FuzzParseDisplayControlCaps(f *testing.F) {
 		}
 	})
 }
+
+// desktopResizeFlag says the client follows a new desktop size by reactivation: set only when asked
+// (ADR-0095). Without it, Windows did not apply a display control layout (CI of PR #155).
+func TestBitmapCapabilities_DesktopResizeFlagOnlyWhenAsked(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		caps := marshalRDPClientCapabilitySets(MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, DesktopResize: on}, 32)
+		var flag uint16 = 0xffff
+		for rest := caps; len(rest) >= 4; {
+			length := int(binary.LittleEndian.Uint16(rest[2:4]))
+			if binary.LittleEndian.Uint16(rest[:2]) == rdpCapBitmap {
+				flag = binary.LittleEndian.Uint16(rest[18:20])
+			}
+			rest = rest[length:]
+		}
+		want := uint16(0)
+		if on {
+			want = 1
+		}
+		if flag != want {
+			t.Fatalf("DesktopResize %v: desktopResizeFlag %d, want %d", on, flag, want)
+		}
+	}
+}

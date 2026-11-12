@@ -149,7 +149,7 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		height = rdpDefaultDesktopHeight
 	}
 	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
-		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize}
+		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize, DesktopResize: c.Resize}
 	target := &rdpTargetSession{session: client, resize: c.Resize}
 	var negotiatedWidth, negotiatedHeight uint16
 	steps := []rdpConnectionStep{
@@ -220,6 +220,8 @@ type rdpTargetSession struct {
 	displayMu    sync.Mutex
 	displayCaps  rdp.RDPDisplayControlCaps
 	displayReady bool
+	// resizesSent counts the layouts sent, for the interoperability tests.
+	resizesSent int
 }
 
 // rdpResizer is a target session that can ask for another desktop size (ADR-0095).
@@ -260,7 +262,13 @@ func (s *rdpTargetSession) Resize(ctx context.Context, width, height uint16, tim
 	if err != nil {
 		return err
 	}
-	return s.session.SendDynamicChannelMessage(ctx, rdp.RDPDisplayControlChannel, layout, timeout)
+	if err := s.session.SendDynamicChannelMessage(ctx, rdp.RDPDisplayControlChannel, layout, timeout); err != nil {
+		return err
+	}
+	s.displayMu.Lock()
+	s.resizesSent++
+	s.displayMu.Unlock()
+	return nil
 }
 
 func (s *rdpTargetSession) ReadBitmapUpdate(ctx context.Context, timeout time.Duration) (rdp.RDPBitmapUpdate, error) {

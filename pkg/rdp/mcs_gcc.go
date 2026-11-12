@@ -74,6 +74,11 @@ type MCSClientSettings struct {
 	// DynamicChannels announces the one static channel of the closed list, drdynvc, and joins it
 	// (ADR-0095). Off, no channel is announced and the connection is as it was, to the byte.
 	DynamicChannels bool
+	// DesktopResize sets desktopResizeFlag in the bitmap capabilities: the client follows a new
+	// desktop size by a Deactivation-Reactivation Sequence, which is how Windows applies a display
+	// control layout without the graphics pipeline (ADR-0095; MS-RDPBCGR 2.2.7.1.2). Off, the flag
+	// stays 0, as before.
+	DesktopResize bool
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches

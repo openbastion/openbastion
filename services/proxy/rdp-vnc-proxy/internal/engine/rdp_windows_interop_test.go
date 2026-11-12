@@ -748,7 +748,16 @@ func TestRDPWindows_Resize(t *testing.T) {
 			}
 		case <-time.After(2 * time.Second):
 		case <-deadline:
-			t.Fatalf("no %dx%d frame within 60 s of the resize: %v", want[0], want[1], session.Err())
+			diagnosis := "not an RDP target session"
+			if adapter, ok := session.(*rdpScreenSessionAdapter); ok {
+				if target, ok := adapter.target.(*rdpTargetSession); ok {
+					target.displayMu.Lock()
+					diagnosis = fmt.Sprintf("display control caps %+v (received %v), %d layout(s) sent",
+						target.displayCaps, target.displayReady, target.resizesSent)
+					target.displayMu.Unlock()
+				}
+			}
+			t.Fatalf("no %dx%d frame within 60 s of the resize: %v; %s", want[0], want[1], session.Err(), diagnosis)
 		}
 	}
 }
