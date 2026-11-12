@@ -87,7 +87,7 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
   - le jeu de capacités Bitmap annonçait `desktopResizeFlag = 0`, si bien qu'aucune des cinq cibles n'appliquait la disposition (aucune image à la nouvelle taille en 60 s). `MCSClientSettings.DesktopResize` le pose, avec `Resize` ;
   - une réactivation rendait la session « non finalisée », et un second redimensionnement arrivé pendant ce temps était refusé, ce qui fermait la session (Windows Server 2019). Les canaux appartiennent à la connexion MCS et non au partage : ils envoient dès qu'ils sont joints, réactivation comprise. Un test rouge d'abord l'a reproduit.
   - Windows ferme le contrôle d'affichage pendant une réactivation, puis le rouvre et redonne sa capacité (Server 2022, 32 bpp). Un redimensionnement arrivé entre les deux était refusé, et la capacité redonnée l'aurait été aussi. Désormais, `SendDynamicChannelMessage` dit `ErrRDPDynamicChannelClosed`, et le codec abandonne ce redimensionnement : le suivant passera. Chaque réouverture attend une nouvelle capacité.
-- **Prouvé contre Windows** : demande de 1 023 × 768, et une image clé de 1 022 × 768 en 0,5 à 0,9 s, sur Windows Server 2019 et trois cibles Server 2022 avec les deux premiers correctifs. Le troisième est à confirmer en CI sur les cinq.
+- **Prouvé contre Windows**, les trois correctifs en place (CI de #155, cinq cibles, Server 2019 et 2022, 16 et 32 bpp, fr-FR, session console) : demande de 1 023 × 768, et une image clé de 1 022 × 768 en 0,5 à 0,9 s.
 - **Reste** : l'Admin UI (incrément 4) ; elle ne connaît pas encore le bit 1 du `HELLO`, et `SCREEN_RESIZE` doit rester éteint jusque-là.
 
 ## Conséquences
