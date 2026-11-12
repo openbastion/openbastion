@@ -969,11 +969,7 @@ main.login {
   outline-offset: 2px;
 }
 
-/* The replay of a screen recording (VideoReplay): the frame, then its controls under it. */
-.replay {
-  margin-top: 1rem;
-}
-
+/* The replay of a screen recording (ReplayControls): the controls under the frame. */
 .replay-controls {
   flex-wrap: wrap;
   align-items: center;

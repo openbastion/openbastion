@@ -1,18 +1,15 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, VideoRecordingSegment } from "../../shared/api";
-import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
-import { DeltaRect, decodeScreenMessage } from "../screen/protocol";
+import { FormCard } from "../../shared/ui/FormCard";
+import { Frame, framesOf, paintFrame, ReplayPainter, UnreadableSegment } from "./replayFrames";
+import { ReplayControls } from "./ReplayControls";
 
-// The replay of a graphical session (ADR-0071, ADR-0088): the very frames the Video Recorder
-// acknowledged, in order, at the pace they were recorded. A key frame is a whole PNG; a partial frame
-// (ADR-0092) changes rectangles of the frame before it, so a frame is shown by composing from the
-// key frame at or before it. Segments are read as the replay goes,
-// never all at once: each read is an audit event in the auditor's name, and a long session would
-// not fit in a page. What does not parse is not shown: the replay stops and says so.
+// The replay of a graphical session (ADR-0071, ADR-0088, ADR-0092): the very frames the Video
+// Recorder acknowledged, in order, at the pace they were recorded. Segments are read as the replay
+// goes, never all at once: each read is an audit event in the auditor's name, and a long session
+// would not fit in a page. What does not parse is not shown: the replay stops and says so.
 
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-const MAX_FRAME_BYTES = 4 << 20;
 // What a replay keeps in memory: past it, it reads no further, and says so.
 const MAX_LOADED_BYTES = 256 << 20;
 // The gap between two frames is the recording's, within these bounds: a quiet minute on the
@@ -21,14 +18,9 @@ const MIN_DELAY_MS = 40;
 const MAX_DELAY_MS = 2000;
 const PREFETCH = 5;
 
-export interface ReplayDeps {
-  // Decodes without an <img>, as the live screen does: the page's policy allows no blob: image.
-  decode: (png: Uint8Array<ArrayBuffer>) => Promise<ImageBitmap>;
-  draw: (canvas: HTMLCanvasElement, image: ImageBitmap) => void;
-  // Puts a rectangle of a partial frame in place, replacing the pixels under it (ADR-0092 §6).
-  patch: (canvas: HTMLCanvasElement, image: ImageBitmap, x: number, y: number) => void;
+export type ReplayDeps = ReplayPainter & {
   schedule: (run: () => void, delayMs: number) => () => void;
-}
+};
 
 const browserDeps: ReplayDeps = {
   decode: (png) => createImageBitmap(new Blob([png], { type: "image/png" })),
@@ -48,60 +40,14 @@ const browserDeps: ReplayDeps = {
   },
 };
 
-type Frame =
-  | { kind: "key"; sequence: number; at: Date; bytes: number; png: Uint8Array<ArrayBuffer> }
-  | { kind: "delta"; sequence: number; at: Date; bytes: number; width: number; height: number; rects: DeltaRect[] };
-
-// The size a key frame's PNG says (IHDR), or null: a partial frame is checked against it.
-function pngSize(png: Uint8Array): { width: number; height: number } | null {
-  if (png.length < 24 || String.fromCharCode(...png.subarray(12, 16)) !== "IHDR") return null;
-  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
-  return { width: view.getUint32(16), height: view.getUint32(20) };
-}
-
-class UnreadableSegment extends Error {}
-
-// A segment's frames, checked: base64, at most 4 MiB, a date, as many as it says, and each a PNG
-// (codec png) or the partial frame of its own sequence (codec png-delta-v1).
-function framesOf(segment: VideoRecordingSegment): Frame[] {
-  if (!Number.isSafeInteger(segment.firstSequence) || !Number.isSafeInteger(segment.lastSequence) ||
-      segment.firstSequence < 1 || segment.lastSequence - segment.firstSequence + 1 !== segment.frames.length) {
-    throw new UnreadableSegment();
-  }
-  return segment.frames.map((frame, i) => {
-    let binary: string;
-    try {
-      binary = atob(frame.frameData);
-    } catch {
-      throw new UnreadableSegment();
-    }
-    if (binary.length === 0 || binary.length > MAX_FRAME_BYTES) throw new UnreadableSegment();
-    const data = new Uint8Array(binary.length);
-    for (let j = 0; j < binary.length; j++) data[j] = binary.charCodeAt(j);
-    const at = new Date(frame.timestamp);
-    if (Number.isNaN(at.getTime())) throw new UnreadableSegment();
-    const sequence = segment.firstSequence + i;
-    if (frame.codec === "png-delta-v1") {
-      let message;
-      try {
-        message = decodeScreenMessage(data.buffer);
-      } catch {
-        throw new UnreadableSegment();
-      }
-      if (message.type !== "delta" || message.sequence !== BigInt(sequence)) throw new UnreadableSegment();
-      return { kind: "delta", sequence, at, bytes: data.length, width: message.width, height: message.height, rects: message.rects };
-    }
-    if (frame.codec !== "png" || PNG_SIGNATURE.some((b, j) => data[j] !== b)) throw new UnreadableSegment();
-    return { kind: "key", sequence, at, bytes: data.length, png: data };
-  });
-}
-
-// A key frame's size, from its PNG; what a partial frame after it must match.
-function pngSizeOf(frame: Frame): { width: number; height: number } | null {
-  return frame.kind === "key" ? pngSize(frame.png) : null;
-}
-
 type End = "more" | "sealed" | "interrupted" | "memory";
+
+const endText: Record<End, string> = {
+  more: "",
+  sealed: "Fin de l'enregistrement, scellé à la fin de la session.",
+  interrupted: "Enregistrement interrompu : la session s'est arrêtée sans marqueur de fin.",
+  memory: "Limite de mémoire de la relecture atteinte : la suite n'est pas chargée.",
+};
 
 export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   const { api } = useSignedIn();
@@ -170,58 +116,30 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
     await loadMore(sessionId, generation.current);
   }
 
-  // The frame under the cursor, drawn once (a segment read ahead does not redraw it): from the
-  // frame on the canvas when it is just before, otherwise from the key frame at or before it. A
-  // newer position stops an older one between two frames: an older frame never paints over it.
+  // The frame under the cursor, drawn once (a segment read ahead does not redraw it).
   const shown = frames[index];
   useEffect(() => {
-    if (!shown) return;
+    const target = shown ? framesNow.current.indexOf(shown) : -1;
+    const surface = canvas.current;
+    if (target < 0 || !surface) return;
     let current = true;
-    const target = framesNow.current.indexOf(shown);
-    const paint = async () => {
-      const all = framesNow.current;
-      let key = target;
-      while (key >= 0 && all[key].kind !== "key") key--;
-      if (key < 0) throw new Error("a partial frame without a key frame before it");
-      const from = painted.current;
-      let start = key;
-      if (from !== null && from >= key && from < target) start = from + 1;
-      else if (from === target) return;
-      let screenSize = pngSizeOf(all[key]);
-      for (let i = start; i <= target; i++) {
-        const frame = all[i];
-        if (frame.kind === "key") {
-          const image = await deps.decode(frame.png);
-          if (!current || !canvas.current) {
-            image.close();
-            return;
-          }
-          deps.draw(canvas.current, image);
-          image.close();
-          screenSize = pngSizeOf(frame);
-        } else {
-          if (!screenSize || frame.width !== screenSize.width || frame.height !== screenSize.height) {
-            throw new Error("a partial frame of another size than its screen");
-          }
-          const images = await Promise.all(frame.rects.map((rect) => deps.decode(rect.png)));
-          try {
-            if (images.some((image, j) => image.width !== frame.rects[j].width || image.height !== frame.rects[j].height)) {
-              throw new Error("a rectangle of another size than announced");
-            }
-            if (!current || !canvas.current) return;
-            frame.rects.forEach((rect, j) => deps.patch(canvas.current as HTMLCanvasElement, images[j], rect.x, rect.y));
-          } finally {
-            images.forEach((image) => image.close());
-          }
-        }
-        painted.current = i;
-      }
-    };
-    paint().catch(() => {
-      if (!current) return;
-      setPlaying(false);
-      setError(new Error("Une image enregistrée ne se décode pas : la relecture s'arrête là."));
-    });
+    paintFrame({
+      frames: framesNow.current,
+      target,
+      from: painted.current,
+      canvas: surface,
+      painter: deps,
+      stopped: () => !current,
+    }).then(
+      (last) => {
+        if (last !== null && canvas.current === surface) painted.current = last;
+      },
+      () => {
+        if (!current) return;
+        setPlaying(false);
+        setError(new Error("Une image enregistrée ne se décode pas : la relecture s'arrête là."));
+      },
+    );
     return () => {
       current = false;
     };
@@ -247,51 +165,46 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   }, [playing, index, frames, speed, end, deps]);
 
   const frame = frames[index];
-  const endText: Record<End, string> = {
-    more: loading ? "Lecture du segment suivant…" : "",
-    sealed: "Fin de l'enregistrement, scellé à la fin de la session.",
-    interrupted: "Enregistrement interrompu : la session s'est arrêtée sans marqueur de fin.",
-    memory: "Limite de mémoire de la relecture atteinte : la suite n'est pas chargée.",
-  };
 
   return (
-    <div className="card form-card">
-      <form onSubmit={open} aria-label="Relire l'écran d'une session">
-        <h3>Écran d'une session RDP ou VNC</h3>
-        <p className="hint">Chaque segment relu est un événement d'audit à votre nom ; la suite n'est lue qu'au fil de la relecture.</p>
-        <div className="fields">
-          <label>Session de l'écran<input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required /></label>
-        </div>
-        <div className="form-actions">
-          <button type="submit" className="primary">Relire l'écran</button>
-        </div>
-      </form>
-      <Notice error={error} />
+    <>
+      <FormCard
+        label="Relire l'écran d'une session"
+        title="Écran d'une session RDP ou VNC"
+        hint="Chaque segment relu est un événement d'audit à votre nom ; la suite n'est lue qu'au fil de la relecture."
+        submitLabel="Relire l'écran"
+        onSubmit={open}
+        error={error}
+      >
+        <label>
+          Session de l'écran
+          <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
+        </label>
+      </FormCard>
       {frame ? (
-        <div className="replay">
+        <div className="card form-card">
           <canvas ref={canvas} className="screen-canvas" role="img" aria-label="Image enregistrée de l'écran de la session, non lisible par un lecteur d'écran" />
-          <div className="form-actions replay-controls">
-            <button type="button" className="primary" onClick={() => setPlaying((p) => !p)}>{playing ? "Pause" : "Lire"}</button>
-            <button type="button" disabled={index === 0} onClick={() => { setPlaying(false); setIndex((i) => i - 1); }}>Image précédente</button>
-            <button type="button" disabled={index >= frames.length - 1} onClick={() => { setPlaying(false); setIndex((i) => i + 1); }}>Image suivante</button>
-            <label>
-              Position
-              <input type="range" min={0} max={frames.length - 1} value={index} onChange={(e) => { setPlaying(false); setIndex(Number(e.target.value)); }} />
-            </label>
-            <label>
-              Vitesse
-              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-                <option value={1}>×1</option>
-                <option value={2}>×2</option>
-                <option value={4}>×4</option>
-              </select>
-            </label>
-          </div>
-          <p className="hint" role="status">
-            Image {frame.sequence} ({index + 1} sur {frames.length} chargées), enregistrée le <time dateTime={frame.at.toISOString()}>{frame.at.toLocaleString("fr-FR")}</time>. {endText[end]}
-          </p>
+          <ReplayControls
+            playing={playing}
+            position={index}
+            speed={speed}
+            loaded={frames.length}
+            sequence={frame.sequence}
+            at={frame.at}
+            endText={end === "more" && loading ? "Lecture du segment suivant…" : endText[end]}
+            onPlay={() => setPlaying((p) => !p)}
+            onStep={(delta) => {
+              setPlaying(false);
+              setIndex((i) => i + delta);
+            }}
+            onSeek={(position) => {
+              setPlaying(false);
+              setIndex(position);
+            }}
+            onSpeed={setSpeed}
+          />
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
