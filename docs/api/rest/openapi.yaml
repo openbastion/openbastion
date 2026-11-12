@@ -1858,8 +1858,12 @@ components:
         frameData:
           type: string
           format: byte
-          description: Image PNG encodée en base64 ; taille brute maximale de 4 Mio par segment.
-        codec: { type: string, enum: [png] }
+          description: >-
+            En base64. Codec `png` : une image clé, le PNG entier. Codec `png-delta-v1` : une
+            image partielle (ADR-0092), le message `FRAME_DELTA` du flux écran (ADR-0071 §6) tel
+            que l'opérateur l'a reçu ; ses rectangles remplacent les pixels de l'image de la
+            séquence précédente. Taille brute maximale de 4 Mio par segment.
+        codec: { type: string, enum: [png, png-delta-v1] }
 
     PrivilegedAccountInput:
       type: object

@@ -85,6 +85,17 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_DRAW_POINTER must be true or false, got %q", v)
 	}
+	// Partial frames anchored on key frames (ADR-0092): off unless said "true", until the figures
+	// with them are published and the owner turns them on; anything else stops the service. RDP
+	// only for now: VNC sends whole frames.
+	partialFrames := false
+	switch v := os.Getenv("SCREEN_PARTIAL_FRAMES"); v {
+	case "", "false":
+	case "true":
+		partialFrames = true
+	default:
+		log.Fatalf("rdp-vnc-proxy: SCREEN_PARTIAL_FRAMES must be true or false, got %q", v)
+	}
 	vncCodec := &engine.VNCCodec{
 		TLSRoots:      roots,
 		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
@@ -105,6 +116,7 @@ func runService() {
 			// The cadence VNC has (ADR-0071 §8): at most one frame encoded and recorded a interval.
 			FrameInterval: vncCodec.FrameInterval,
 			DrawPointer:   drawPointer,
+			PartialFrames: partialFrames,
 		})
 		rdpState = "RDP enabled"
 	default:
@@ -114,7 +126,7 @@ func runService() {
 	defer stop()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- rt.ListenAndServe(":"+port, server.Routes(), interfaces.CallerRules()) }()
-	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091)", port, rdpState, drawPointer)
+	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092)", port, rdpState, drawPointer, partialFrames)
 	log.Printf("rdp-vnc-proxy: Video Recorder %s; target roots loaded from configured PEM file", recorderURL)
 	select {
 	case <-ctx.Done():

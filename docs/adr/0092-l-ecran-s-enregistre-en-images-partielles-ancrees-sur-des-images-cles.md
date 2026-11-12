@@ -88,7 +88,11 @@ Les deux cibles savent déjà ce qui a changé. RDP envoie des rectangles (Bitma
 3. **Fait** : le Video Recorder et le relais. Une image partielle voyage dans `frame_data` sous la forme de son message `FRAME_DELTA`, avec le codec `png-delta-v1`. Le Recorder la valide avant d'acquitter : message, séquence, horodatage, PNG de la taille de chaque rectangle, et image clé de même taille avant elle, d'un segment à l'autre. Un segment qui en contient est scellé au format 2, les autres restent au format 1, et un segment ne s'ouvre que sous le format que ses images demandent. Le relais n'accepte une image partielle qu'après une image clé et à sa taille, et donne au Recorder sa propre copie des rectangles. Prouvé de bout en bout contre FreeRDP : chaque image montrée, clé ou partielle, est relue octet pour octet, et l'écran que l'auditeur recompose est celui de l'opérateur.
 
    **Complément (12 novembre 2026) : l'opérateur en retard.** Pour ne jamais bloquer ni l'enregistrement ni l'entrée, le relais remplaçait l'image en attente par la plus récente (ADR-0071 §11). Une image partielle ne peut pas être sautée (§1). L'affichage la met donc en file, au plus 32 images partielles ou 4 Mio. Au-delà, il les abandonne et demande une image clé au codec (`proxycore.KeyFrameRequester`), qui la produit même sur un écran immobile, puis il n'envoie rien d'autre jusqu'à elle. Une image clé remplace toujours ce qui attend. L'opérateur saute d'un écran entier au suivant ; l'enregistrement, lui, garde tout.
-4. Admin UI : composition en direct et en rejeu, positionnement par image clé.
+4. **Fait** : l'Admin UI.
+   - **Décodage** : `FRAME_DELTA`, aussi strict que `pkg/screenstream`.
+   - **En direct** : les images sont peintes strictement dans l'ordre. Ce qui précède la dernière image clé reçue est sauté, puisqu'elle remplace tout l'écran. Une image partielle doit suivre l'image reçue avant elle et avoir sa taille, et chaque rectangle doit être un PNG de sa taille ; sinon la session se ferme.
+   - **En rejeu** : l'image suivante, si elle est partielle, est posée sur celle du canvas ; toute autre image est recomposée depuis l'image clé qui la précède.
+   - **Réglage** : `SCREEN_PARTIAL_FRAMES` est offert par le runtime, éteint par défaut (§8). Le contrat REST admet le codec `png-delta-v1`.
 5. VNC.
 6. Nouvelle mesure du lot A, puis décision d'allumer `SCREEN_PARTIAL_FRAMES` par défaut.
 
