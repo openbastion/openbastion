@@ -21,7 +21,7 @@ La direction visuelle retenue pour concrétiser le langage visuel du §3 est **O
 ### 1. Préserver le socle de sécurité et la pile de l'ADR-0036
 
 1. Conserver `web/admin-ui/`, React, TypeScript, Vite, Vitest, jsdom et Testing Library.
-2. Ne pas ajouter, dans le cadre de cette décision, de routeur, de bibliothèque de composants, de framework CSS, de gestionnaire d'état, de moteur de recherche client ou de dépendance d'interface à l'exécution.
+2. Ne pas ajouter de routeur, de framework CSS, de gestionnaire d'état ou de moteur de recherche client. Le socle partagé `@openbastion/ui` peut encapsuler des primitives Radix UI ciblées pour les interactions complexes décrites au §4 ; ces dépendances restent confinées au package partagé et ne sont jamais exposées par son API publique. Les primitives simples restent natives et React.
 3. Continuer à servir l'application par la Gateway sous `/ui/`, sur la même origine que l'API.
 4. L'interface appelle exclusivement les routes publiques documentées de la Gateway. Elle ne contacte directement aucun microservice, base de données, bus, moteur de recherche ou stockage objet.
 5. Conserver la CSP stricte, l'absence de scripts inline, le rendu des données non fiables comme du texte, et le jeton d'accès en mémoire seulement. Aucun jeton, secret, ticket de session, code MFA, code OIDC ou credential ne doit être persisté dans `localStorage`, `sessionStorage`, IndexedDB, une URL ou un journal.
@@ -63,7 +63,7 @@ Un système de tokens CSS centralise les couleurs sémantiques, typographies, es
 
 Les thèmes clair et sombre sont deux thèmes du même système de tokens. Ils doivent conserver les mêmes contrastes, états, niveaux d'information et affordances. Le choix du thème est une préférence d'affichage non sensible ; il ne modifie ni les permissions ni les données chargées.
 
-Le package local `web/openbastion-icons` reste la source des icônes de produit. Les icônes ne remplacent jamais un libellé nécessaire et leur rendu doit rester compatible avec la CSP de l'ADR-0036.
+Le package local `web/packages/icons/` est la source unique des icônes de produit (`@openbastion/icons`). Les icônes ne remplacent jamais un libellé nécessaire et leur rendu doit rester compatible avec la CSP de l'ADR-0036.
 
 #### 3.1. Adopter la charte graphique OpenBastion Infrastructure
 
@@ -97,7 +97,9 @@ Les thèmes light et dark exposent les mêmes informations, actions, priorités 
 
 L'objectif d'accessibilité est **WCAG 2.2 AA**. Les ratios de la spécification couvrent uniquement les paires explicitement mesurées ; aucune conformité globale n'est revendiquée avant vérification du rendu réel, des états interactifs, du clavier et des lecteurs d'écran.
 
-Les frontières d'implémentation sont celles de l'ADR-0075 : tokens dans web/packages/design-tokens/, primitives CSS génériques dans web/packages/ui/, icônes dans web/openbastion-icons/ et wrappers React propres à l'Admin UI dans web/admin-ui/src/shared/ui/. Les wrappers et les composants de page conservent les libellés, les appels API et les états métier. Cette charte n'ajoute aucune dépendance npm externe à l'exécution et ne modifie pas le socle de sécurité de l'ADR-0036.
+Les frontières d'implémentation sont : tokens dans `web/packages/design-tokens/`, composants React et styles partagés dans `web/packages/ui/`, icônes dans `web/packages/icons/` et composants métier propres à l'Admin UI dans `web/admin-ui/src/shared/` et `features/`. Le package `@openbastion/ui` est partagé avec le User Portal conformément aux frontières de l'ADR-0075. Les composants conservent les libellés, les appels API et les états métier dans les applications ; les packages partagés ne connaissent aucun endpoint ni modèle PAM.
+
+**Amendement explicite du propriétaire — 12 novembre 2026** : la stratégie initiale sans bibliothèque de composants externes est précisée par l'option C. React et les éléments HTML natifs restent le choix par défaut ; Radix UI est autorisé uniquement derrière les composants OpenBastion pour les dialogues, menus, popovers et interactions composites qui nécessitent une gestion robuste du focus, du clavier, des portails et des états ARIA. Aucun composant Radix brut ni aucune API Radix ne sont exposés aux applications. Le déplacement du package d'icônes vers `web/packages/icons/` et la centralisation de sa documentation sont également intégrés à cette décision ; aucun ADR distinct ne porte cette évolution.
 
 ### 4. Construire une bibliothèque de composants interne et limitée
 
@@ -114,6 +116,24 @@ La bibliothèque couvre progressivement les primitives utiles :
 Chaque composant partagé possède une API explicite, des états documentés et des tests ciblés. Une abstraction n'est créée que lorsqu'au moins deux usages réels en justifient la réutilisation ; les écrans ne doivent pas être transformés en framework générique prématuré.
 
 Les composants métier restent responsables de leurs libellés, règles de validation et appels API. Les primitives partagées ne connaissent ni les endpoints ni les modèles des microservices.
+
+#### 4.1 Catalogue commun et ordre d'implémentation
+
+`@openbastion/ui` est le catalogue commun destiné à `admin-ui` et `user-portal`. Il expose des composants React/TypeScript depuis `web/packages/ui/src/`, des styles sémantiques pilotés par `@openbastion/design-tokens`, et aucune logique métier PAM.
+
+Le catalogue cible est organisé ainsi :
+
+- **Structure et navigation** : Accordion, AspectRatio, Avatar, Breadcrumb, Card, Carousel, Collapsible, Command, Menubar, NavigationMenu, Pagination, Resizable, ScrollArea, Separator, Sidebar, Skeleton, Tabs.
+- **Actions et overlays** : AlertDialog, Alert, Button, ContextMenu, Dialog, Drawer, DropdownMenu, HoverCard, Popover, Sheet, Sonner, Toast, Toaster, Tooltip.
+- **Formulaires** : Checkbox, Form, Input, InputOTP, Label, RadioGroup, Select, Slider, Switch, Table, Textarea, Toggle, ToggleGroup.
+- **Présentation avancée** : Calendar, Chart, Image, Progress.
+- **Utilitaires** : `image-helpers.js`, `useToast`.
+
+`AspectRatio` n'est compté qu'une fois. `image-helpers.js` et `useToast` sont des utilitaires, pas des composants visuels. Les noms d'API publics sont en PascalCase lorsque le composant React est nommé ainsi (`InputOTP`, `RadioGroup`, `AlertDialog`).
+
+L'implémentation suit cet ordre : (1) fondations natives ; (2) formulaires avancés natifs ; (3) overlays complexes avec primitives Radix encapsulées ; (4) navigation ; (5) composants avancés de présentation et de structure ; (6) notifications et utilitaires. Les lots déjà réalisés et les validations chiffrées sont tenus dans `docs/development/admin-ui-design-system.md` et `NOTES_SANDBOX.md`. Chaque incrément doit inclure types, styles, tests de clavier/accessibilité et documentation. Un élément du catalogue n'est considéré livré que lorsque son implémentation et ses tests sont présents et que son export public est vérifié.
+
+La stratégie **C** s'applique strictement : HTML natif et React pour les contrôles simples (Input, Select, Checkbox, RadioGroup, Slider, Switch, Textarea, InputOTP) ; Radix UI uniquement pour les interactions complexes (Dialog, AlertDialog, DropdownMenu, Popover, Tooltip, ContextMenu, HoverCard, NavigationMenu et composants composites). `Sheet` et `Drawer` sont des compositions OpenBastion de Dialog, pas des dépendances tierces autonomes. Les composants OpenBastion ne réexportent aucun type, composant ou primitive Radix.
 
 ### 5. Normaliser les états et les retours d'interaction
 
@@ -203,7 +223,7 @@ Pour chaque comportement ajouté, les tests Vitest/Testing Library couvrent les 
 - (+) La recherche et la palette restent des raccourcis vers les capacités autorisées, et non un nouveau chemin d'accès aux données.
 - (+) La séparation `app / features / shared` existante est renforcée sans déplacer les responsabilités métier dans les composants génériques.
 - (+) Les exigences d'accessibilité, de responsive et de sécurité UX deviennent des critères de revue et de test.
-- (+) Aucun nouveau paquet npm à l'exécution, aucune route API et aucun service ne sont requis par la décision elle-même.
+- (+) Les dépendances Radix sont limitées aux primitives réellement nécessaires et encapsulées dans `@openbastion/ui` ; aucune route API ni aucun service ne sont requis.
 - (+) La charte OpenBastion Infrastructure et son plan d'implémentation sont détaillés dans [`../development/admin-ui-design-system.md`](../development/admin-ui-design-system.md) ; les tokens et primitives destinés à être partagés suivent les frontières de l'ADR-0075.
 - (−) Cette ADR est une décision d'architecture : elle ne livre ni le shell, ni le dashboard, ni la recherche, ni la bibliothèque de composants.
 - (−) L'API actuelle ne permet pas encore toutes les vues souhaitées, notamment une recherche globale complète, une liste exhaustive des politiques et une vue générale agrégée. Ces capacités restent absentes jusqu'à livraison de contrats dédiés.
@@ -214,7 +234,7 @@ Pour chaque comportement ajouté, les tests Vitest/Testing Library couvrent les 
 
 ## Alternatives envisagées
 
-- **Adopter immédiatement une bibliothèque UI complète** : écarté pour préserver la pile minimale et la CSP de l'ADR-0036, éviter une dépendance runtime supplémentaire et garder le contrôle sur les composants sensibles. Une réévaluation reste possible sur preuve d'un besoin et par décision dédiée.
+- **Adopter immédiatement une bibliothèque UI complète** : écarté pour préserver la maîtrise du design system et éviter de diffuser des API tierces dans les applications. Les primitives Radix ne sont utilisées que derrière des composants OpenBastion ciblés.
 - **Introduire un routeur et un gestionnaire d'état tiers dès maintenant** : écarté ; la navigation et les besoins d'état doivent d'abord être éprouvés avec les parcours réels. Un besoin démontré pourra faire l'objet d'un ADR distinct.
 - **Créer un dashboard et une recherche en agrégeant directement les bases ou services internes** : refusé ; cela contournerait la Gateway, l'autorisation, les contrats publics et les frontières de service.
 - **Afficher des compteurs, scores ou alertes simulés en attendant les API** : refusé ; cela donnerait à l'opérateur une représentation fausse de la posture de sécurité.

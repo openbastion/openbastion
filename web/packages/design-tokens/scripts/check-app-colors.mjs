@@ -3,7 +3,7 @@ import { resolve, relative, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
-const roots = ["web/admin-ui/src", "web/packages/ui", "web/openbastion-icons/src"].map((path) => resolve(repository, path));
+const roots = ["web/admin-ui/src", "web/packages/ui", "web/packages/icons/src"].map((path) => resolve(repository, path));
 const extensions = new Set([".css", ".ts", ".tsx"]);
 const literalColor = /(?:#[\da-f]{3,8}\b|\brgba?\s*\(|\bhsla?\s*\()/i;
 const violations = [];

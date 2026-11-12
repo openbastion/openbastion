@@ -26,7 +26,6 @@ import (
 )
 
 const (
-	gccClientNetworkType        = uint16(0xc003)
 	gccClientMessageChannelType = uint16(0xc006)
 	gccClientMultitransportType = uint16(0xc00a)
 )

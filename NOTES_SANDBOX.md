@@ -1,5 +1,89 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0073)
+
+Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
+`web/packages/icons/`, sans changement de son nom npm, de ses exports ni de son
+contenu fonctionnel. La dépendance locale de l’Admin UI et son lockfile pointent
+maintenant vers `../packages/icons`. Les commandes Make, le cache Node de la CI,
+Dependabot, le contrôle de licence, le contrôle des couleurs et les scripts de
+build/audit utilisent le nouvel emplacement.
+
+`deploy/base44/docker-compose.yml` monte les packages communs en lecture seule
+mais donne au seul package d’icônes un montage imbriqué inscriptible : tsup y
+écrit un fichier de configuration temporaire et `dist/`. Son `node_modules`
+reste dans un volume dédié ;
+`deploy/docker-compose/Dockerfile` le construit depuis `web/packages/icons/`.
+L’arborescence, le guide Design System, le skill frontend et l’ADR-0075 (encore
+proposé) sont alignés. L’ADR-0073 porte désormais la décision normative : le package d’icônes est
+centralisé sous `web/packages/icons/` et la documentation active pointe vers
+ce nouvel emplacement. Les relevés historiques conservent le chemin observé
+à leur date de rédaction.
+
+Pour la branche de travail longue, `origin/main` a été récupéré au début de
+l’incrément (`2a7de575`, déjà ancêtre), puis à nouveau avant les validations.
+La seconde vérification a trouvé `7784ba7` (PR #149) ; ce changement a été intégré
+sans conflit dans `806a54f` avant la poursuite. Le contrôle sera répété avant
+chaque incrément significatif et avant chaque push ; toute avance de `main` sera
+intégrée dans cette branche avant de poursuivre.
+
+## 2026-11-12 — La sidebar respecte le thème clair
+
+La navigation latérale utilisait les mêmes tokens sombres dans les deux thèmes.
+Les tokens `chrome` sont maintenant réellement thématiques : en mode clair, la
+sidebar utilise une surface neutre `#F0F3F7`, des textes foncés et un accent bleu
+sobre ; en mode sombre, elle conserve la surface `#17222D`, les textes clairs et
+l’accent lumineux. Les états de survol, sélection, bordure et favoris suivent
+les mêmes tokens, sans surcharge CSS spécifique au composant.
+
+Validation : `make ui-tokens-test` passe avec 18 paires contrôlées par thème ;
+les quatre paires de navigation dépassent 4,5:1 dans les deux thèmes. `npm test`
+passe (14 fichiers, 148 tests). TypeScript et le build Vite passent avec une
+sortie isolée sous `/tmp/openbastion-admin-ui-build-check`. Le build standard
+`make ui-build` n’a pas pu nettoyer `web/admin-ui/dist/assets` : des artefacts
+préexistants appartiennent à `root` (EACCES). Le serveur Vite Base44 transforme
+bien `main.tsx` avec les nouveaux tokens.
+
+## 2026-11-12 — Base44 monte les packages frontend locaux
+
+Le serveur Vite Base44 installait les dépendances de l'Admin UI depuis son
+lockfile, mais le conteneur ne montait ni `web/packages/design-tokens` ni
+`web/packages/ui`. Les liens symboliques créés par npm pointaient donc vers
+`/packages`, absent du conteneur, et Vite ne pouvait pas résoudre
+`@openbastion/design-tokens/tokens.css`. Le service `web` monte maintenant
+`web/packages` en lecture seule à `/packages`, chemin attendu par les dépendances
+`file:../packages/*`.
+
+Validation : `docker compose config` passe ; après recréation, le service `web`
+est healthy, les deux CSS sont résolus depuis `/packages`, la transformation Vite
+de `src/app/main.tsx` réussit et `/` répond HTTP 200. `npm test` passe (14
+fichiers, 148 tests) et `npm run build` passe (TypeScript et Vite).
+
+## 2026-11-12 — Empreinte de provenance du skill design system corrigée
+
+La migration du guide interne `ui-ux-design-system` vers les tokens canoniques
+avait modifié son `SKILL.md` sans mettre à jour son empreinte SHA-256 dans
+`docs/licensing/skills-provenance.json`. Le contrôle `make license-check` échouait
+avant même le scan Trivy des images. Le manifeste porte maintenant l'empreinte
+du fichier réellement versionné ; l'origine historique, les auteurs et la
+licence restent inchangés.
+
+Validation : `make license-check` confirme les 95 skills (85 tiers, 10 internes),
+les 95 empreintes de fichiers, les 85 hashes Skills CLI v1, les révisions, les
+licences et les notices.
+
+## 2026-11-12 — Le build Docker de l'Admin UI embarque les packages partagés
+
+Le premier build d'image après la migration du design system échouait parce que
+le Dockerfile copiait l'Admin UI et les icônes, mais omettait les packages locaux
+`web/packages/design-tokens` et `web/packages/ui` référencés par les dépendances
+`file:` du lockfile. Le stage UI copie désormais ces deux répertoires à leurs
+chemins relatifs attendus avant `npm ci`.
+
+Validation : `docker build --target ui -f deploy/docker-compose/Dockerfile`
+construit l'image UI, résout les trois packages locaux, exécute TypeScript et
+Vite et produit `/ui/dist`.
+
 ## 2026-11-12 — Charte graphique formalisée dans ADR-0073 et ADR-0075
 
 La décision de conception OpenBastion Infrastructure est maintenant inscrite
@@ -3368,6 +3452,22 @@ Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session
 
 **Renversable** : 10 s ; un fichier par service plutôt qu'un module `pkg/` partagé (un module de plus aurait touché `go.work`, le Makefile et une dizaine de documents pour quinze lignes).
 
+## 2026-11-12 — ADR-0090, lot A : une scène vidéo contre Windows
+
+Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le shell (PR #101) : le test ne peut lancer aucun programme au clavier. Il demande donc la scène par un fichier du partage, comme le test de déconnexion.
+- `oem/rdp-video.ps1`, lancé caché à chaque ouverture de session (entrée `Run` posée par `rdp-setup.ps1`), surveille `video-request` sur le partage.
+- Chaque nouvelle demande (sa date d'écriture change) joue une scène : une fenêtre sans bord sur tout l'écran, des blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde, pendant 10 s. C'est le pire cas pour PNG : un majorant pour une vidéo.
+- Le script note ce qu'il fait dans `video-status-<utilisateur>.txt` sur le partage, que la CI joint à ses artefacts.
+- `TestRDPWindows_Measure` ajoute la scène `video`, en images entières puis partielles. Moins de 50 images dans la scène est une erreur : la vidéo n'a pas joué.
+
+**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène ; mais chaque demande a joué deux fois (deux noms pour le même partage). Au troisième passage (exécution 43245190987), une lecture par demande, les cinq jobs Windows verts : la cible envoie de 0,7 à 3,0 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien. Les chiffres sont dans ADR-0090.
+
+**Deux défauts du script, corrigés au second passage** :
+- chaque demande jouait deux fois : `\\host.lan\Data` et `\\<passerelle>\Data` sont le même dossier. Une demande est maintenant reconnue à sa date d'écriture, quel que soit le nom par lequel on la lit, et le journal n'est écrit qu'une fois ;
+- `powershell -WindowStyle Hidden` montre sa console avant de la cacher, et prenait le clavier à Notepad pendant que les tests de clavier tapaient. Au second passage, deux tests de clavier ont échoué : sur la cible fr-FR, le texte tapé était à l'écran, mais l'enregistrement du fichier n'a pas eu lieu ; sur la cible 32 bpp, les touches étendues ne sont pas arrivées. Le script est maintenant lancé par `rdp-video.vbs` (`wscript`), sans aucune fenêtre.
+
+**Assertion corrigée en chemin** : `TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays` exigeait une seule lecture pour relire la session. Sur deux cibles, 168 images clés d'environ 25 Ko dépassaient les 4 Mio d'une réponse, et deux lectures étaient donc justes. Le test compte maintenant les lectures que les bornes imposent (600 images, 4 Mio), comme le Recorder remplit une réponse.
+
 ## 2026-11-12 — À 50 sessions, le Video Recorder perdait des images : le pool PostgreSQL
 
 `RECORDER_MEASURE_SESSIONS` (par exemple `10,20,50`) fixe le nombre de sessions de `TestVideoRecorderAckLatency`.
@@ -3384,6 +3484,20 @@ Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session
 **Instable sous charge, non lié** : `TestPostgresFlow_TransitKeepsTheKeys…/a_periodic_token_outlives_its_period` a échoué une fois dans toute la suite, et passe seul.
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
+
+## 2026-11-12 — ADR-0095, incrément 2 : les canaux dynamiques
+
+`pkg/rdp/dynamic_channel.go` : la réponse aux capacités (version 2, sans compression), l'ouverture du seul contrôle d'affichage, le refus de tout autre nom par la réponse du protocole, les données bornées, la fermeture. Rien ne l'appelle hors des tests.
+- **Contre FreeRDP 3** : FreeRDP propose `AUDIO_INPUT` une fois les capacités échangées ; il est refusé, et la session continue.
+- **Windows (incrément 1, CI de #153)** : les cinq cibles envoient sur `drdynvc` 8 ou 9 messages, une demande de capacités puis des créations de canaux, même avant d'avoir reçu la réponse. Leurs noms seront dans le journal de `TestRDPWindows_DynamicChannels`.
+
+## 2026-11-12 — ADR-0095, incrément 1 : le canal statique drdynvc
+
+ADR-0095 accepté (option B, « Go pour le B »). Premier incrément, dans `pkg/rdp` seulement : `MCSClientSettings.DynamicChannels` annonce `drdynvc` dans `CS_NET`, le joint, et lit ce qui y arrive, borné (64 Kio par message, fragments stricts, aucune compression, aucun canal non joint). Rien ne l'allume hors des tests : le proxy négocie comme avant.
+
+- **Contre FreeRDP 3** (`make test-rdp-interop`, `TestRDPInterop_StaticChannel`) : canal joint, 88 mises à jour d'écran en 5 s, et un message de 4 octets sur `drdynvc` : la demande de capacités (Cmd 5).
+- **Contre Windows** : `TestRDPWindows_StaticChannel`, en CI seulement.
+- `TestRDPWindows_StaticChannel` est placé avant le test de déconnexion, qui ferme la session.
 
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
@@ -3889,3 +4003,140 @@ PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows S
 **Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
 
 **Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.
+
+
+## 2026-11-12 — Premiers composants React de `@openbastion/ui`
+
+La stratégie choisie pour la bibliothèque partagée est l'option C : React natif
+et HTML pour les primitives simples ; Radix UI sera réservé aux interactions
+complexes, encapsulé derrière les composants OpenBastion. `@openbastion/ui`
+expose maintenant `Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Input`,
+`Label`, `Separator`, `Skeleton`, `Switch` et `Textarea` avec des props
+TypeScript. React est déclaré comme peer dependency pour éviter une seconde
+instance dans les applications. Les façades `admin-ui/src/shared/ui/` pour
+Button, Badge et InlineNotice réexportent les implémentations partagées.
+
+Le premier lot n'ajoute aucune dépendance d'exécution tierce. Les tests de
+contrat du package sont exécutés depuis Vitest Admin UI : 15 fichiers et 153
+tests ont réussi après configuration de la déduplication React dans Vite. Le
+contrôle TypeScript a réussi ; le build Vite initial a rencontré un `EACCES`
+sur l'ancien répertoire `dist/` appartenant à root, et sera relancé avec un
+dossier de sortie temporaire. L'ADR-0075 reste `Proposé` : seule la stratégie
+technique des composants partagés est inscrite, l'architecture complète du
+User Portal n'est pas déclarée acceptée.
+
+Ce lot ne livre pas encore le catalogue complet (Radix overlays, navigation,
+calendrier, graphiques, notifications et helpers d'image restent à faire). Le
+User Portal n'est pas encore présent dans le dépôt ; sa consommation devra être
+validée lors de sa création.
+
+## 2026-11-12 — Synchronisation de la PR #151 avec main
+
+`origin/main` a avancé jusqu'à `c1c5a2f` (PR #152, ADR-0095 sur les canaux
+virtuels RDP). Le conflit dans `docs/adr/README.md` provenait de deux entrées
+ADR-0095 concurrentes. L'entrée RDP de `main` est conservée. À la demande
+explicite du propriétaire, la décision de déplacement du package d'icônes est
+intégrée à l'ADR-0073 ; aucun ADR autonome n'est maintenu pour cette évolution.
+
+## 2026-11-12 — Formulaires avancés de `@openbastion/ui` (ADR-0073)
+
+Le catalogue partagé ajoute les primitives natives `Form`, `FormField`,
+`FormDescription`, `InputOTP`, `RadioGroup`, `RadioGroupItem`, `Select` et
+`Slider`. `FormField` relie le contrôle à son libellé, à sa description et à
+son erreur via `aria-describedby`/`aria-invalid`. Les groupes radio sont
+composables, supportent les modes contrôlé et non contrôlé, et conservent la
+sémantique native. Select et Slider restent des contrôles HTML ; InputOTP
+utilise le contrat navigateur `autocomplete=one-time-code`, `inputMode=numeric`
+et une longueur bornée. Aucun composant ne valide une règle métier ni ne fait
+d'appel réseau.
+
+Validation mesurée : Vitest Admin UI, 16 fichiers et 159 tests réussis ;
+TypeScript réussi ; build Vite réussi avec une sortie isolée dans
+`/tmp/openbastion-admin-ui-refactor-build-forms` (le répertoire `dist` habituel
+contient des artefacts root non nettoyables par l'utilisateur courant).
+Aucune dépendance externe n'a été ajoutée dans cet incrément.
+
+Limites : les overlays Radix, la navigation, les composants avancés et les
+notifications restent à réaliser dans les incréments suivants. Le catalogue
+complet n'est pas livré.
+
+## 2026-11-12 — Overlays accessibles de `@openbastion/ui` (ADR-0073, en cours)
+
+Le package ajoute `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`,
+`Sheet` et `Drawer`. Les cinq primitives Radix sont des peer dependencies de
+`@openbastion/ui`, fournies par chaque application ; `Sheet` et `Drawer` sont
+composés à partir de Dialog. Les wrappers n'exposent pas les types Radix. Le
+bundler conserve les liens symboliques npm et déduplique React pour que les
+primitives et le renderer utilisent la même instance.
+
+Les tests complets passent : Vitest, 17 fichiers et 166 tests ; TypeScript ;
+build Vite avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-overlays` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-tokens-test`
+(36 paires, deux thèmes). Les tests couvrent ouverture/fermeture et Escape,
+confirmation explicite, sélection de menu, popover, tooltip et composition
+Sheet/Drawer.
+
+Le premier essai a révélé une deuxième instance React provenant du peer installé
+dans le répertoire du package. Les primitives Radix sont désormais des peer
+dependencies exactes, fournies par l'application, et Vite préserve les liens
+symboliques tout en dédupliquant React. Les chemins TypeScript résolvent les
+primitives depuis le `node_modules` de l'application. Après `npm ci` dans
+l'Admin UI et suppression des `node_modules` locaux du package, les tests et le
+build passent sans dépendance cachée dans le répertoire source.
+
+## 2026-11-12 — Synchronisation suivante de la PR #151
+
+`origin/main` a avancé jusqu'à `706dc9c` (PR #153, canal statique RDP). La
+branche `refactor/admin-ui-infrastructure` a intégré cette évolution sans
+conflit. Les tests UI complets (17 fichiers, 166 tests), TypeScript, build Vite
+isolé, audit npm (0 vulnérabilité), contrôle de licence et `go test ./pkg/rdp/...`
+passent après intégration.
+
+## 2026-11-12 — Navigation partagée de `@openbastion/ui` (ADR-0073, en cours)
+
+Le catalogue ajoute `Accordion`, `Collapsible`, `Breadcrumb`, `Command`,
+`ContextMenu`, `HoverCard`, `Menubar`, `NavigationMenu`, `Pagination`,
+`Sidebar` et `Tabs`. Les disclosures et menus complexes sont des wrappers
+Radix ; Breadcrumb, Pagination, Sidebar et Command sont des composants
+OpenBastion natifs. `Command` filtre ses options par valeur et permet le
+parcours clavier avec les flèches ; le menu latéral conserve `aria-current`
+pour la destination active. Les composants de navigation ne déclenchent aucun
+appel API et ne prennent aucune décision métier.
+
+Les tests complets passent : 18 fichiers, 177 tests ; TypeScript ; build Vite
+avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-navigation` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-test` (contrastes
+Light/Dark et absence de couleurs codées en dur). Les 11 tests ciblés couvrent
+disclosure, collapsible, breadcrumb, tabs, recherche et navigation clavier de
+Command, sidebar, pagination, menubar, navigation menu, context menu et hover
+card. Les tests UX-02 de la palette de commandes sont conservés ; leurs événements
+clavier partent désormais de `document.body`, ce qui reproduit le vrai élément
+cible d'une frappe clavier au lieu de synthétiser un événement sur `document`.
+
+## 2026-11-12 — Synchronisation de la PR #151 avec main (PR #154)
+
+`origin/main` a avancé jusqu'à `20bcb96` (PR #154, canaux dynamiques RDP,
+ADR-0095 incrément 2). L'intégration dans `refactor/admin-ui-infrastructure`
+a été automatique, sans conflit. Après intégration : `make ui-test` (18 fichiers,
+177 tests, tokens et couleurs), TypeScript, build Vite isolé, `npm audit`
+(0 vulnérabilité), `make license-check` et `go test ./pkg/rdp/...` réussissent.
+
+## 2026-11-12 — Présentation avancée de `@openbastion/ui` (ADR-0073, en cours)
+
+Le package ajoute `AspectRatio`, `Avatar`, `Calendar`, `Carousel`, `Chart`,
+`Image`, `Progress`, `Resizable`, `ScrollArea`, `Toggle`, `ToggleGroup` et les
+utilitaires `isSafeImageSource`/`resolveImageSource` dans
+`web/packages/ui/src/lib/image-helpers.js`. Calendar s'appuie sur le contrôle
+natif date du navigateur ; Chart dessine des graphiques SVG simples ; Carousel
+est contrôlé ou non contrôlé ; Resizable accepte le redimensionnement natif
+par pointeur et les flèches clavier. Les sources Image/Avatar n'acceptent que
+HTTPS ou des chemins relatifs locaux, jamais `data:`, `javascript:` ou les URL
+protocol-relative. Image essaie une seule fois la source de secours et évite
+les boucles de rechargement si elle échoue également.
+
+Les validations complètes passent : 19 fichiers Vitest, 189 tests ; TypeScript ;
+build Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-advanced` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-test` (tokens,
+contrastes et audit des couleurs). Les tests couvrent aussi les sources HTTPS,
+le rejet des schémas exécutables et protocol-relative, le fallback d'image et
+l'absence de boucle si la source de secours échoue.

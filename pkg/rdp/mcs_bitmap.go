@@ -1573,6 +1573,8 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	}
 	loadShare()
 	pointerShapes := s.mcsSettings.PointerShapes
+	// The static channels joined (ADR-0095): their data goes to its channel, not to the screen.
+	staticChannels := s.mcsResponse.StaticChannelIDs
 	reactivated := false
 	primaryOrdersEnabled := s.primaryOrdersEnabled
 	patBltOpaqueRectEnabled := s.patBltOpaqueRectEnabled
@@ -1626,6 +1628,15 @@ func (s *CredSSPClientSession) ReadBitmapUpdate(ctx context.Context, timeout tim
 	}()
 
 readUpdate:
+	// What the channels sent during a finalization, first, in the order it came.
+	if pending := s.takePendingChannelPacket(); pending != nil {
+		_, channelErr := s.readChannelPacket(pending, staticChannels)
+		clear(pending)
+		if channelErr != nil {
+			return RDPBitmapUpdate{}, fmt.Errorf("%w: %w", ErrMCSConnection, channelErr)
+		}
+		goto readUpdate
+	}
 	var assembled []byte
 	for fragmentCount := 0; ; fragmentCount++ {
 		if fragmentCount >= maxRDPBitmapFragments || ctx.Err() != nil {
@@ -1715,6 +1726,17 @@ readUpdate:
 		if fragmentCount == 0 && rdpIsDisconnectUltimatum(packet) {
 			clear(packet)
 			return RDPBitmapUpdate{}, ErrSessionEnded
+		}
+		if onChannel, channelErr := s.readChannelPacket(packet, staticChannels); channelErr != nil || onChannel {
+			clear(packet)
+			if channelErr != nil {
+				clear(assembled)
+				return RDPBitmapUpdate{}, fmt.Errorf("%w: %w", ErrMCSConnection, channelErr)
+			}
+			if fragmentCount == 0 {
+				goto readUpdate
+			}
+			continue
 		}
 		fragment, segmentation, fragmentErr := parseRDPBitmapMCSFragment(packet, ioChannelID)
 		if fragmentErr != nil {

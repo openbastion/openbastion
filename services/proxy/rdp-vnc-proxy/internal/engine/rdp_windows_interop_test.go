@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -619,6 +620,27 @@ func measureWindows(t *testing.T, partial bool) {
 		}
 	})
 	m.scene("pointer", func() { m.pointerCircle(width/2, height/2, 200, 50, 20*time.Millisecond) })
+	// A video (ADR-0090, lot A): the whole screen changing 25 times a second, for 10 s, played by
+	// rdp-video.ps1 when asked through the share (the Windows key does not reach the shell, so no
+	// program can be started from the keyboard). Random 8-pixel blocks: the worst case for PNG.
+	if shared := os.Getenv("RDP_WINDOWS_SHARED"); shared != "" {
+		video := m.scene("video", func() {
+			if err := os.WriteFile(filepath.Join(shared, "video-request"), []byte("10\n"), 0o644); err != nil {
+				t.Fatalf("asking for the video: %v", err)
+			}
+			time.Sleep(12 * time.Second) // the request seen within 250 ms, the window up within a second or two
+		})
+		if video.Frames < 50 {
+			t.Errorf("the video scene made %d frame(s): rdp-video.ps1 did not play (video-status-*.txt on the share)", video.Frames)
+		}
+		// Notepad again, the window closed: the clean-up below types into it.
+		for _, buttons := range []byte{1, 0} {
+			if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: uint16(width / 2), Y: uint16(height / 2), Buttons: buttons}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		m.settle(2*time.Second, 20*time.Second)
+	}
 	if dump != "" && dense.Type == screenstream.TypeFrame {
 		_ = os.WriteFile(filepath.Join(dump, "measure-dense-text.png"), dense.PNG, 0o644)
 	}
@@ -628,6 +650,49 @@ func measureWindows(t *testing.T, partial bool) {
 	rdpChord(t, session, ctrl, 0x1f)                 // Ctrl+S
 	m.settle(2*time.Second, 20*time.Second)
 	m.publish(dump)
+}
+
+// The static channel of ADR-0095 (increment 1) against Windows: drdynvc announced, given an ID,
+// joined, and what Windows sends on it read off the screen's stream (rdp_channel_interop_test.go).
+// The first message should be the capabilities request (Cmd 5); what follows says which dynamic
+// channels Windows proposes, for increment 2. Before the logoff test, which closes the session.
+func TestRDPWindows_StaticChannel(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := openWithStaticChannel(t, client, target.user, target.password, 20*time.Second)
+	if len(messages) == 0 {
+		t.Fatal("nothing from Windows on drdynvc in 20 s")
+	}
+	if messages[0][0]>>4 != 0x05 {
+		t.Fatalf("Windows' first drdynvc message has Cmd %d, not the capabilities request (5)", messages[0][0]>>4)
+	}
+}
+
+// The dynamic channels of ADR-0095 (increment 2) against Windows: the display control opened, the
+// other names Windows proposes refused (logged), and the display control's capabilities received.
+func TestRDPWindows_DynamicChannels(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dynamic := readDynamicChannels(t, client, target.user, target.password, 20*time.Second)
+	dynamic.mu.Lock()
+	defer dynamic.mu.Unlock()
+	if len(dynamic.opened) != 1 || dynamic.opened[0] != rdp.RDPDisplayControlChannel {
+		t.Fatalf("opened %q, want the display control alone", dynamic.opened)
+	}
+	caps := dynamic.messages[rdp.RDPDisplayControlChannel]
+	if len(caps) == 0 || len(caps[0]) < 8 || binary.LittleEndian.Uint32(caps[0][:4]) != 5 {
+		t.Fatalf("no DISPLAYCONTROL_CAPS_PDU from Windows: %d message(s)", len(caps))
+	}
 }
 
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by

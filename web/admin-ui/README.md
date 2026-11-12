@@ -6,7 +6,7 @@ as the public API, so that nothing is opened to another origin. It talks to the 
 answer.
 
 ```sh
-(cd ../openbastion-icons && npm ci && npm run build) # local icon package
+(cd ../packages/icons && npm ci && npm run build) # local icon package
 npm ci                                               # from package-lock.json, exact versions
 npm test                                             # Vitest + Testing Library under jsdom
 npm run build                                        # type check, then dist/ — what ADMIN_UI_DIR points to

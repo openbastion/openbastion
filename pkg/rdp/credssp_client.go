@@ -85,6 +85,12 @@ type CredSSPClientSession struct {
 	primaryOrderState       rdpPrimaryOrderState
 	logonNotified           bool
 	reactivations           int
+	// The static channels (ADR-0095): one assembler each, in the order of mcsResponse's IDs, the
+	// packets that came during the finalization, kept for ReadBitmapUpdate, and who reads the messages.
+	channelAssemblers     []rdpChannelAssembler
+	pendingChannelPackets [][]byte
+	channelHandler        func(channel string, message []byte) error
+	dynamicChannels       *rdpDynamicChannels
 }
 
 // BitsPerPixel is the colour depth of the session, as the server chose it in its Demand Active
@@ -425,7 +431,7 @@ func (s *CredSSPClientSession) ConnectMCS(ctx context.Context, cfg MCSClientSett
 		s.closeTransportLocked()
 		return response, fmt.Errorf("%w: reading MCS Connect-Response TPKT: %v", ErrMCSConnection, readErr)
 	}
-	response, err = ParseMCSConnectResponse(serverPacket)
+	response, err = parseMCSConnectResponse(serverPacket, len(rdpStaticChannelNames(cfg)))
 	clear(serverPacket)
 	cancelStopped := stopCancel()
 	if err != nil || ctx.Err() != nil || !cancelStopped {

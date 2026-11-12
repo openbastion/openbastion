@@ -30,3 +30,8 @@ web/admin-ui/src/
 - Recréer `Api` dans un rendu (valeur par défaut d'un paramètre de composant) : le jeton se perd — défaut réel déjà corrigé (`main.tsx`).
 - Stocker le jeton ailleurs qu'en mémoire ; ajouter une dépendance d'exécution sans demander.
 - `dangerouslySetInnerHTML`, `eval`, styles en ligne qui exigeraient d'assouplir la CSP.
+
+
+## Composants partagés
+
+Les composants génériques réutilisés par plusieurs applications vivent dans `web/packages/ui/src/` et sont exportés par `@openbastion/ui`. Les applications conservent leurs composants métier et consomment les contrats publics du package ; aucun import direct depuis `packages/ui/src/components/*` n'est autorisé. React est une peer dependency fournie par l'application. Utiliser les éléments natifs pour les primitives simples et encapsuler Radix UI pour les interactions complexes.

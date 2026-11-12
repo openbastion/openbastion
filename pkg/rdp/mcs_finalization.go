@@ -79,12 +79,19 @@ func (s *CredSSPClientSession) FinalizeConnection(ctx context.Context, timeout t
 		s.connectionFinalized = true
 	}()
 
-	return finalizeRDPConnection(ctx, conn, s.mcsResponse.IOChannelID, s.serverCapabilities.ShareID, s.userChannelID)
+	result, pending, err := finalizeRDPConnection(ctx, conn, s.mcsResponse.IOChannelID, s.serverCapabilities.ShareID, s.userChannelID, s.mcsResponse.StaticChannelIDs)
+	if err == nil {
+		s.pendingChannelPackets = append(s.pendingChannelPackets, pending...)
+		s.channelAssemblers = make([]rdpChannelAssembler, len(s.mcsResponse.StaticChannelIDs))
+	}
+	return result, err
 }
 
 // finalizeRDPConnection sends the client's finalization PDUs and validates the server's answers, in
 // protocol order: at the first activation and at each reactivation (MS-RDPBCGR 1.3.1.1, 1.3.1.3).
-func finalizeRDPConnection(ctx context.Context, conn io.ReadWriter, ioChannelID uint16, shareID uint32, userID uint16) (result RDPFinalizationResult, err error) {
+// A packet on one of channels, the static channels joined, may come between the server's answers
+// (ADR-0095): it is kept, maxRDPChannelPending at most, and returned for the screen's reader.
+func finalizeRDPConnection(ctx context.Context, conn io.ReadWriter, ioChannelID uint16, shareID uint32, userID uint16, channels []uint16) (result RDPFinalizationResult, pending [][]byte, err error) {
 	for _, payload := range [][]byte{
 		marshalRDPClientSynchronize(shareID, userID),
 		marshalRDPClientControl(shareID, userID, rdpControlCooperate),
@@ -93,12 +100,12 @@ func finalizeRDPConnection(ctx context.Context, conn io.ReadWriter, ioChannelID 
 	} {
 		if len(payload) == 0 || ctx.Err() != nil {
 			clear(payload)
-			return RDPFinalizationResult{}, ErrMCSConnection
+			return RDPFinalizationResult{}, nil, ErrMCSConnection
 		}
 		writeErr := writeFull(conn, payload)
 		clear(payload)
 		if writeErr != nil {
-			return RDPFinalizationResult{}, ErrMCSConnection
+			return RDPFinalizationResult{}, nil, ErrMCSConnection
 		}
 	}
 
@@ -113,13 +120,27 @@ func finalizeRDPConnection(ctx context.Context, conn io.ReadWriter, ioChannelID 
 	} {
 		packet, readErr := readMCSConnectResponse(conn)
 		if readErr != nil {
-			return RDPFinalizationResult{}, ErrMCSConnection
+			return RDPFinalizationResult{}, nil, ErrMCSConnection
+		}
+		for len(channels) > 0 {
+			_, _, onChannel, channelErr := rdpChannelPacket(packet, channels)
+			if channelErr != nil || (onChannel && len(pending) >= maxRDPChannelPending) {
+				clear(packet)
+				return RDPFinalizationResult{}, nil, ErrMCSConnection
+			}
+			if !onChannel {
+				break
+			}
+			pending = append(pending, packet)
+			if packet, readErr = readMCSConnectResponse(conn); readErr != nil {
+				return RDPFinalizationResult{}, nil, ErrMCSConnection
+			}
 		}
 		entries, parseErr := parseRDPFinalizationResponse(packet, ioChannelID,
 			shareID, userID, expected.typ, expected.action)
 		clear(packet)
 		if parseErr != nil || ctx.Err() != nil {
-			return RDPFinalizationResult{}, ErrMCSConnection
+			return RDPFinalizationResult{}, nil, ErrMCSConnection
 		}
 		switch expected.typ {
 		case rdpPDU2Synchronize:
@@ -135,9 +156,9 @@ func finalizeRDPConnection(ctx context.Context, conn io.ReadWriter, ioChannelID 
 		}
 	}
 	if !result.ServerSynchronized || !result.ServerCooperated || !result.ControlGranted {
-		return RDPFinalizationResult{}, ErrMCSConnection
+		return RDPFinalizationResult{}, nil, ErrMCSConnection
 	}
-	return result, nil
+	return result, pending, nil
 }
 
 func marshalRDPShareData(userID uint16, shareID uint32, streamID, pduType2 byte, payload []byte) ([]byte, error) {
