@@ -1007,6 +1007,8 @@ main.login {
 
   .mobile-navigation-open .nav-favorite-toggle {
     display: grid;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .navigation-backdrop {
@@ -1420,6 +1422,29 @@ main.login {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-size: 1.05rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
+/* L'étoile reste accessible au clavier, mais discrète tant que l'entrée n'est pas ciblée. */
+.nav-favorite-toggle:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: hover) {
+  .nav-entry:hover .nav-favorite-toggle {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none) {
+  .nav-favorite-toggle {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .nav-favorite-toggle[aria-pressed="true"] {
