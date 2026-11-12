@@ -3046,7 +3046,7 @@ Le tableau complet est dans ADR-0092, « Résultats ». En résumé : en frappe 
 
 **Constat** : la première mesure en images partielles semblait figée : aucun octet de la cible pendant 50 s. La cause n'est pas le proxy. Sans gestionnaire de fenêtres, le clavier va à la fenêtre sous le pointeur, et le serveur X garde la position du pointeur d'une session à l'autre ; la session précédente l'avait laissé hors de xterm. Le banc place désormais le pointeur sur xterm avant de taper, comme le faisait déjà la mesure FreeRDP.
 
-**Décision en attente** : allumer `SCREEN_PARTIAL_FRAMES` par défaut. Le direct et le rejeu de l'Admin UI n'ont pas été éprouvés dans un vrai navigateur.
+**Décision du propriétaire** (« Après un vrai navigateur ») : `SCREEN_PARTIAL_FRAMES` reste éteint par défaut, jusqu'à la vérification d'une session en direct et d'un rejeu dans un vrai navigateur. Une PR en brouillon l'allume.
 
 ## 2026-11-12 — ADR-0092, incrément 5 : VNC envoie des images partielles
 
