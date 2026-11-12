@@ -2,6 +2,8 @@
 
 Official OpenBastion React icon library.
 
+Source package in this monorepo: `web/packages/icons/` (ADR-0095). The npm package name and public exports remain `@openbastion/icons`.
+
 Secure Access. Total Control.
 
 ## Installation
@@ -62,7 +64,8 @@ SVG assets are available through:
 ## Development
 
 ```bash
-npm install
+cd web/packages/icons
+npm ci
 npm run audit:icons
 npm run typecheck
 npm run build

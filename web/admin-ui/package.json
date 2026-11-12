@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@openbastion/design-tokens": "file:../packages/design-tokens",
-    "@openbastion/icons": "file:../openbastion-icons",
+    "@openbastion/icons": "file:../packages/icons",
     "@openbastion/ui": "file:../packages/ui",
     "react": "19.3.1",
     "react-dom": "19.3.1"

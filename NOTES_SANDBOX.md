@@ -1,5 +1,29 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0095)
+
+Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
+`web/packages/icons/`, sans changement de son nom npm, de ses exports ni de son
+contenu fonctionnel. La dépendance locale de l’Admin UI et son lockfile pointent
+maintenant vers `../packages/icons`. Les commandes Make, le cache Node de la CI,
+Dependabot, le contrôle de licence, le contrôle des couleurs et les scripts de
+build/audit utilisent le nouvel emplacement.
+
+`deploy/base44/docker-compose.yml` monte les packages communs en lecture seule
+mais donne au seul package d’icônes un montage imbriqué inscriptible : tsup y
+écrit un fichier de configuration temporaire et `dist/`. Son `node_modules`
+reste dans un volume dédié ;
+`deploy/docker-compose/Dockerfile` le construit depuis `web/packages/icons/`.
+L’arborescence, le guide Design System, le skill frontend et l’ADR-0075 (encore
+proposé) sont alignés. L’ADR-0073 est accepté et n’est pas réécrit : ses mentions
+de l’ancien chemin, comme les relevés de tests des ADR antérieurs, sont des
+traces historiques explicitement remplacées pour l’emplacement par l’ADR-0095.
+
+Pour la branche de travail longue, `origin/main` a été récupéré au début de
+l’incrément : `2a7de575` était déjà ancêtre de `refactor/admin-ui-infrastructure`.
+Le contrôle sera répété avant les validations et avant chaque push ; toute
+avance de `main` sera intégrée dans cette branche avant de poursuivre.
+
 ## 2026-11-12 — La sidebar respecte le thème clair
 
 La navigation latérale utilisait les mêmes tokens sombres dans les deux thèmes.

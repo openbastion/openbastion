@@ -121,7 +121,7 @@ Les dimensions exactes du shell sont des valeurs d'implémentation réversibles 
 
 ## 5. Composants et frontières
 
-Les tokens sont dans `web/packages/design-tokens/`. Les primitives CSS réutilisées par plusieurs applications résident dans `web/packages/ui/styles.css` ; les wrappers React, libellés et états propres à une application restent dans son `src/shared/ui/`. Les icônes OpenBastion existantes restent dans `web/openbastion-icons/`. Les composants et styles strictement propres à l'Admin UI peuvent rester dans `web/admin-ui/src/shared/` ; ils ne sont déplacés dans le package partagé qu'après preuve de réutilisation.
+Les tokens sont dans `web/packages/design-tokens/`. Les primitives CSS réutilisées par plusieurs applications résident dans `web/packages/ui/styles.css` ; les wrappers React, libellés et états propres à une application restent dans son `src/shared/ui/`. Les icônes OpenBastion sont centralisées dans `web/packages/icons/` depuis l’ADR-0095 ; les références historiques à `web/openbastion-icons/` désignent l’ancien emplacement. Les composants et styles strictement propres à l'Admin UI peuvent rester dans `web/admin-ui/src/shared/` ; ils ne sont déplacés dans le package partagé qu'après preuve de réutilisation.
 
 La bibliothèque évolue par besoin réel : shell/navigation, page header, boutons et champs, tables, badges d'état, alertes, skeletons, dialogues de confirmation, pagination, timeline et visualisation de commandes. Les composants partagés n'importent aucun client API et ne connaissent aucun domaine PAM.
 

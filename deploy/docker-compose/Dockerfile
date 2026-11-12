@@ -51,10 +51,10 @@ ARG SOURCE_REVISION=unknown
 ARG SOURCE_REPOSITORY=https://github.com/openbastion/openbastion
 ENV OPENBASTION_SOURCE_REVISION=${SOURCE_REVISION}
 ENV OPENBASTION_SOURCE_REPOSITORY=${SOURCE_REPOSITORY}
-WORKDIR /openbastion-icons
-COPY web/openbastion-icons/package.json web/openbastion-icons/package-lock.json ./
+WORKDIR /packages/icons
+COPY web/packages/icons/package.json web/packages/icons/package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY web/openbastion-icons/ ./
+COPY web/packages/icons/ ./
 RUN npm run build
 
 # The Admin UI lockfile uses local file: dependencies for the shared frontend packages.

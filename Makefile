@@ -239,7 +239,7 @@ ui-tokens-test:
 	node web/packages/design-tokens/scripts/check-contrast.mjs
 	node web/packages/design-tokens/scripts/check-app-colors.mjs
 ui-icons:
-	cd web/openbastion-icons && npm ci --no-audit --no-fund && npm run build
+	cd web/packages/icons && npm ci --no-audit --no-fund && npm run build
 ui-test: ui-icons ui-tokens-test
 	cd web/admin-ui && npm ci --no-audit --no-fund && npm test
 ui-build: ui-icons ui-tokens-test
@@ -253,7 +253,7 @@ vuln: proto-gen
 		echo "govulncheck $$m"; $(GO) run $(GOVULNCHECK) -C $$m ./...; \
 	done
 	cd web/admin-ui && npm audit
-	cd web/openbastion-icons && npm audit
+	cd web/packages/icons && npm audit
 
 ## Vérifie les déclarations de licence et la conservation des notices tierces.
 license-check:

@@ -81,8 +81,8 @@ openbastion/
 ├── web/
 │   ├── admin-ui/                 # React / TypeScript / Vite — interface opérateur
 │   ├── user-portal/              # React / TypeScript / Vite — interface self-service
-│   ├── openbastion-icons/        # package React/SVG des icônes OpenBastion
 │   ├── packages/
+│   │   ├── icons/                # package React/SVG des icônes OpenBastion
 │   │   ├── ui/                   # primitives UI génériques partagées
 │   │   ├── design-tokens/        # tokens et thèmes partagés
 │   │   ├── api-client/           # client de l'API publique Gateway
@@ -210,11 +210,11 @@ web/
 │       ├── types/
 │       └── test/
 │
-├── openbastion-icons/
 │   ├── src/
 │   └── ...
 │
 ├── packages/
+│   ├── icons/
 │   ├── ui/
 │   ├── design-tokens/
 │   ├── api-client/
@@ -230,7 +230,7 @@ web/
 |---|---|
 | `admin-ui/` | Interface opérateur et administration ; aucun parcours self-service propre au portail |
 | `user-portal/` | Interface self-service : ressources, demandes, sessions, approbations conditionnelles, activité et profil |
-| `openbastion-icons/` | Source commune des icônes de marque et fonctionnelles |
+| `packages/icons/` | Source commune des icônes de marque et fonctionnelles |
 | `packages/ui/` | Primitives visuelles génériques, sans connaissance des domaines PAM |
 | `packages/design-tokens/` | Tokens sémantiques et thèmes clair/sombre |
 | `packages/api-client/` | Client HTTP de l'API publique Gateway uniquement |
@@ -241,7 +241,7 @@ web/
 Règles de dépendance :
 
 1. `admin-ui` et `user-portal` sont indépendants ; aucune importation directe entre leurs fonctionnalités ou leurs composants métier.
-2. Les deux applications peuvent consommer `openbastion-icons` et les packages partagés via leurs interfaces publiques.
+2. Les deux applications peuvent consommer `packages/icons` et les packages partagés via leurs interfaces publiques.
 3. Les packages partagés ne dépendent d'aucune application ; les cycles de dépendances sont interdits.
 4. Les composants réutilisés par plusieurs applications et réellement génériques vont dans `packages/ui/`. Un composant propre au portail reste dans `user-portal/src/components/` ou dans sa feature.
 5. `packages/api-client/` ne contacte que l'API publique Gateway. Le navigateur n'accède jamais directement aux microservices, bases, bus, Redis, OpenSearch ou MinIO.

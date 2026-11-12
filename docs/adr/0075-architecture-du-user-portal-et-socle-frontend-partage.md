@@ -8,7 +8,7 @@ OpenBastion possède une application d'administration `web/admin-ui/`, dont la p
 
 Ces deux interfaces partagent des besoins transverses (tokens visuels, primitives accessibles, icônes, client API et types de contrats), mais ne partagent ni les mêmes parcours, ni les mêmes responsabilités métier. Faire du portail une section de l'Admin UI mélangerait les usages opérateur et self-service et compliquerait leur évolution indépendante.
 
-La structure de référence du dépôt est `docs/development/repository-structure.md`, en particulier sa section 5. La présente ADR formalise l'arborescence frontend détaillée retenue : applications indépendantes sous `web/`, package d'icônes dédié et packages frontend partagés. Elle ne crée pas de nouvelle capacité backend et ne prétend pas que les parcours décrits sont déjà tous exposés par l'API.
+La structure de référence du dépôt est `docs/development/repository-structure.md`, en particulier sa section 5. La présente ADR formalise l'arborescence frontend détaillée retenue : applications indépendantes sous `web/`, package d'icônes au sein des packages frontend partagés. Elle ne crée pas de nouvelle capacité backend et ne prétend pas que les parcours décrits sont déjà tous exposés par l'API.
 
 L'ADR-0036 reste applicable : les interfaces web communiquent exclusivement avec l'API publique de l'API Gateway, sont servies sous la même origine et ne stockent pas de jeton d'accès dans un stockage persistant du navigateur. Les services, bases de données, bus, moteurs de recherche et stockages objets ne sont jamais accessibles directement depuis le navigateur.
 
@@ -63,11 +63,10 @@ web/
 │       ├── types/
 │       └── test/
 │
-├── openbastion-icons/
-│   ├── src/
-│   └── ...
-│
 ├── packages/
+│   ├── icons/
+│   │   ├── src/
+│   │   └── ...
 │   ├── ui/
 │   ├── design-tokens/
 │   ├── api-client/
@@ -83,7 +82,7 @@ Le manifeste racine `web/package.json` coordonne les outils et scripts communs a
 
 | Emplacement | Responsabilité | Interdictions |
 |---|---|---|
-| `web/openbastion-icons/` | Icônes de marque et icônes fonctionnelles OpenBastion, exports React/SVG et ressources associées | Pas de logique métier ni d'accès réseau |
+| `web/packages/icons/` | Icônes de marque et icônes fonctionnelles OpenBastion, exports React/SVG et ressources associées | Pas de logique métier ni d'accès réseau |
 | `web/packages/design-tokens/` | Source de vérité de la charte OpenBastion Infrastructure : palettes primitives et sémantiques, typographie, espacements, densité, rayons, bordures, élévation, focus, mouvement, points de rupture et thèmes clair/sombre | Pas de composants, de préférences utilisateur, de données métier ni de décision d'autorisation |
 | `web/packages/ui/` | Primitives CSS génériques (boutons, badges, notices, surfaces, en-têtes, formulaires, tableaux, filtres, indicateurs, états vides et détails structurés), accessibles et construites exclusivement avec les tokens partagés ; wrappers React et logique de présentation propres à chaque application | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège ; pas de copie de composants propriétaires tiers |
 | `web/packages/api-client/` | Transport HTTP vers l'API publique Gateway, gestion cohérente des erreurs et des identifiants de corrélation | Aucun appel direct aux microservices ; aucun stockage persistant de jeton ou de secret |
@@ -114,7 +113,7 @@ Principes visuels obligatoires :
 5. **Thèmes équivalents** : clair et sombre exposent les mêmes actions, informations, niveaux de priorité et états. Le thème système est utilisé par défaut ; le choix explicite reste une préférence locale non sensible.
 6. **Accessibilité et adaptation** : navigation clavier, focus visible, zoom, réduction du mouvement, mode contraste forcé et fonctionnement à partir de 320 px ; les tableaux peuvent défiler dans leur conteneur sans imposer un débordement horizontal à toute la page.
 
-La palette normative, les rôles de tokens, les règles de typographie, d'espacement, de densité, de mouvement et le plan de migration sont définis dans [`../development/admin-ui-design-system.md`](../development/admin-ui-design-system.md). Les composants consomment exclusivement des tokens sémantiques ; les valeurs primitives ne sont jamais utilisées directement dans les composants. Les icônes restent issues de `web/openbastion-icons/` et héritent de `currentColor`.
+La palette normative, les rôles de tokens, les règles de typographie, d'espacement, de densité, de mouvement et le plan de migration sont définis dans [`../development/admin-ui-design-system.md`](../development/admin-ui-design-system.md). Les composants consomment exclusivement des tokens sémantiques ; les valeurs primitives ne sont jamais utilisées directement dans les composants. Les icônes restent issues de `web/packages/icons/` et héritent de `currentColor`.
 
 La cible d'accessibilité est WCAG 2.2 AA. Les ratios documentés dans la spécification portent uniquement sur les paires de couleurs explicitement mesurées ; ils ne constituent pas une déclaration de conformité de l'application. Les états, contrôles, bordures, focus, icônes, graphiques et composants composés doivent être vérifiés sur leurs surfaces effectivement rendues, dans les deux thèmes.
 
