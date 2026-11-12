@@ -1,5 +1,37 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 UX-05 : personnalisation et productivité
+
+Le stockage UX-05 est **local au navigateur**, versionné et limité aux préférences
+de présentation et de navigation. Il n'est ni lié à une identité OpenBastion, ni
+synchronisé entre appareils. Un navigateur partagé partage donc ces préférences
+entre ses utilisateurs : ne pas y placer d'information personnelle ou sensible.
+
+- `openbastion.admin-ui.preferences.v1` conserve le thème (système/clair/sombre),
+  la densité, l'état réduit de la navigation, la destination initiale et les
+  identifiants de sections favorites. Aucun jeton, cookie, compte, hôte ou
+  identifiant de session n'y est écrit.
+- `openbastion.admin-ui.account-views.v1` conserve au plus 12 vues, nommées
+  (32 caractères maximum), avec quatre filtres catégoriels : protocole,
+  approbation, identité épinglée et rotation due/en échec. Le texte de recherche
+  libre, les identifiants de comptes, noms de ressources, utilisateurs et
+  cibles ne sont jamais sauvegardés. Les vues s'appliquent uniquement à la page
+  de comptes déjà chargée (20 lignes) ; elles ne déclenchent aucune recherche
+  globale et ne prétendent pas couvrir l'inventaire complet.
+- Les deux formats sont versionnés, validés à la lecture, bornés et tolèrent un
+  stockage absent, corrompu ou refusé. Les secrets et jetons restent soumis à
+  la règle frontend : mémoire uniquement.
+- Le thème système suit les changements de préférence OS. Les raccourcis
+  complémentaires sont `Alt+Maj+1..6` pour les sections, ignorés dans les
+  champs éditables ; `Ctrl/⌘+K` ouvre toujours la palette.
+- Les changements de section déplacent le focus vers la zone principale. Le
+  dialogue de préférences gère focus initial, boucle de tabulation, Échap et
+  restauration du focus déclencheur.
+
+Aucune API, table PostgreSQL, règle d'autorisation, dépendance runtime, route
+Gateway ou événement d'audit n'est ajouté. La persistance multi-appareils et
+les vues globales/partagées restent hors de ce lot.
+
 ## 2026-11-12 — ADR-0073 UX-04 : tableau de bord et centre de sécurité
 
 La Vue générale affiche les totaux renvoyés par `GET /vault/accounts` et

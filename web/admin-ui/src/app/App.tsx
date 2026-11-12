@@ -11,6 +11,7 @@ import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
 import { LegalNotice } from "../shared/LegalNotice";
 import { AppShell, Tab } from "./AppShell";
+import { readOperatorPreferences } from "../shared/operatorPreferences";
 
 export function App({
   api: given,
@@ -28,7 +29,7 @@ export function App({
   if (!given && !own.current) own.current = new Api();
   const api = given ?? own.current!;
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(() => readOperatorPreferences().defaultTab);
   const [sessionLookup, setSessionLookup] = useState<string | null>(null);
   const onToken = useCallback(
     (t: string) => {
@@ -65,7 +66,7 @@ export function App({
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
-      <AppShell who={who} tab={tab} onTab={setTab} onSignOut={signOut} onFindSession={findSession}>
+      <AppShell who={who} tab={tab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
         {tab === "overview" && <Overview />}
         {tab === "accounts" && <Accounts />}
         {tab === "policies" && <Policies />}

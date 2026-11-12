@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Account, ApiError, Page, accountPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
@@ -8,6 +8,13 @@ import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
+import {
+  AccountViewFilters,
+  emptyAccountViewFilters,
+  readSavedAccountViews,
+  SavedAccountView,
+  writeSavedAccountViews,
+} from "../../shared/savedAccountViews";
 
 const pageSize = 20;
 
@@ -25,6 +32,11 @@ export function Accounts() {
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const [filter, setFilter] = useState("");
+  const [viewFilters, setViewFilters] = useState<AccountViewFilters>(emptyAccountViewFilters);
+  const [savedViews, setSavedViews] = useState<SavedAccountView[]>(readSavedAccountViews);
+  const [selectedSavedView, setSelectedSavedView] = useState("");
+  const [newViewName, setNewViewName] = useState("");
+  const [viewNotice, setViewNotice] = useState<string>();
   const [accountAction, setAccountAction] = useState<{ kind: "disable" | "rotate"; account: Account }>();
 
   const load = useCallback(() => {
@@ -52,10 +64,66 @@ export function Accounts() {
   // complete inventory when the public API has not defined a search contract.
   const filteredAccounts = (data?.items ?? []).filter((account) => {
     const query = filter.trim().toLocaleLowerCase("fr");
-    if (!query) return true;
-    return [account.id, account.name, account.username, account.targetHost, account.protocol]
-      .some((value) => value.toLocaleLowerCase("fr").includes(query));
+    if (query && ![account.id, account.name, account.username, account.targetHost, account.protocol]
+      .some((value) => value.toLocaleLowerCase("fr").includes(query))) return false;
+    if (viewFilters.protocol !== "all" && account.protocol !== viewFilters.protocol) return false;
+    if (viewFilters.approval === "required" && !account.approvalRequired) return false;
+    if (viewFilters.approval === "not-required" && account.approvalRequired) return false;
+    const identityPinned = account.protocol === "ssh"
+      ? Boolean(account.hostKeyFingerprint)
+      : Boolean(account.tlsCertificateSha256);
+    if (viewFilters.identity === "pinned" && !identityPinned) return false;
+    if (viewFilters.identity === "missing" && identityPinned) return false;
+    if (viewFilters.rotation === "due" && !account.rotationOwedSince) return false;
+    if (viewFilters.rotation === "failed" && !((account.rotationFailures ?? 0) > 0)) return false;
+    return true;
   });
+
+  function saveCurrentView(event: FormEvent) {
+    event.preventDefault();
+    const name = newViewName.trim().slice(0, 32);
+    if (name.length < 2) {
+      setViewNotice(undefined);
+      setError("Donnez un nom de deux caractères au minimum.");
+      return;
+    }
+    const next = [
+      ...savedViews.filter((view) => view.name.toLocaleLowerCase("fr") !== name.toLocaleLowerCase("fr")),
+      { name, filters: viewFilters },
+    ].slice(-12);
+    setViewNotice(undefined);
+    if (!writeSavedAccountViews(next)) {
+      setError("Impossible d'enregistrer cette vue dans le stockage local du navigateur.");
+      return;
+    }
+    setError(undefined);
+    setSavedViews(next);
+    setSelectedSavedView(name);
+    setNewViewName("");
+    setViewNotice("Vue enregistrée dans ce navigateur.");
+  }
+
+  function applySavedView(name: string) {
+    setSelectedSavedView(name);
+    const view = savedViews.find((item) => item.name === name);
+    if (view) {
+      setViewFilters(view.filters);
+      setFilter("");
+    }
+  }
+
+  function deleteSavedView() {
+    const next = savedViews.filter((view) => view.name !== selectedSavedView);
+    setViewNotice(undefined);
+    if (!writeSavedAccountViews(next)) {
+      setError("Impossible de supprimer cette vue du stockage local du navigateur.");
+      return;
+    }
+    setError(undefined);
+    setSavedViews(next);
+    setSelectedSavedView("");
+    setViewNotice("Vue supprimée de ce navigateur.");
+  }
 
   const actions: AccountActions = {
     pinKey(a) {
@@ -113,12 +181,66 @@ export function Accounts() {
               onChange={(event) => setFilter(event.target.value)}
               placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
             />
-            <p className="filter-help">Filtre local limité aux {data.items.length} comptes chargés sur cette page ; il ne lance pas de recherche globale.</p>
+            <p className="filter-help">Filtre local limité aux {data.items.length} comptes chargés sur cette page ; il ne lance pas de recherche globale. Le texte saisi n'est jamais enregistré dans une vue.</p>
+            <div className="account-view-filters">
+              <label>
+                Filtrer par protocole
+                <select value={viewFilters.protocol} onChange={(event) => setViewFilters((current) => ({ ...current, protocol: event.target.value as AccountViewFilters["protocol"] }))}>
+                  <option value="all">Tous</option>
+                  <option value="ssh">SSH</option>
+                  <option value="rdp">RDP</option>
+                  <option value="vnc">VNC</option>
+                </select>
+              </label>
+              <label>
+                Approbation
+                <select value={viewFilters.approval} onChange={(event) => setViewFilters((current) => ({ ...current, approval: event.target.value as AccountViewFilters["approval"] }))}>
+                  <option value="all">Toutes</option>
+                  <option value="required">Requise</option>
+                  <option value="not-required">Non requise</option>
+                </select>
+              </label>
+              <label>
+                Identité de la cible
+                <select value={viewFilters.identity} onChange={(event) => setViewFilters((current) => ({ ...current, identity: event.target.value as AccountViewFilters["identity"] }))}>
+                  <option value="all">Toutes</option>
+                  <option value="pinned">Épinglée</option>
+                  <option value="missing">Non épinglée</option>
+                </select>
+              </label>
+              <label>
+                Rotation
+                <select value={viewFilters.rotation} onChange={(event) => setViewFilters((current) => ({ ...current, rotation: event.target.value as AccountViewFilters["rotation"] }))}>
+                  <option value="all">Toutes</option>
+                  <option value="due">À renouveler</option>
+                  <option value="failed">En échec</option>
+                </select>
+              </label>
+            </div>
+            <div className="account-saved-views">
+              <label>
+                Vues enregistrées
+                <select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
+                  <option value="">Choisir une vue…</option>
+                  {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
+                </select>
+              </label>
+              <form className="save-view-form" onSubmit={saveCurrentView}>
+                <label>
+                  Nom de la vue
+                  <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder="Ex. SSH à renouveler" />
+                </label>
+                <button type="submit">Enregistrer la vue</button>
+              </form>
+              <button type="button" disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</button>
+            </div>
+            {viewNotice ? <p className="view-notice" role="status">{viewNotice}</p> : null}
+            <p className="filter-help">Les vues conservent uniquement ces filtres catégoriels et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
             <p className="filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</p>
           </div>
         ) : null}
         {!loading && data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}
-        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="empty">Aucun compte de cette page ne correspond à ce filtre.</p> : null}
+        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="empty">Aucun compte de cette page ne correspond aux filtres actuels.</p> : null}
         {!loading && data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
       </div>
       <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />

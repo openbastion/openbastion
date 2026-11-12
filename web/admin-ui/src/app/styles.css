@@ -1833,3 +1833,378 @@ main.login {
     flex-direction: column;
   }
 }
+
+/* ---------- ADR-0073 UX-05: operator preferences and saved views ---------- */
+.preferences-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.7rem;
+  color: #e9eef8;
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 0.65rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.preferences-trigger:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.13);
+  border-color: rgb(255 255 255 / 0.3);
+}
+
+.nav-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.nav-entry .nav-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-favorite-toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.35rem;
+  min-width: 2.35rem;
+  min-height: 2.35rem;
+  padding: 0;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  font-size: 1.05rem;
+}
+
+.nav-favorite-toggle[aria-pressed="true"] {
+  color: var(--warning);
+}
+
+.nav-favorite-toggle:hover {
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.preferences-backdrop {
+  position: fixed;
+  z-index: 110;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background: rgb(5 12 22 / 0.64);
+  backdrop-filter: blur(3px);
+}
+
+.preferences-dialog {
+  display: grid;
+  gap: 1.2rem;
+  width: min(100%, 42rem);
+  max-height: min(90dvh, 54rem);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--ink-1);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.32);
+}
+
+.preferences-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.preferences-dialog-head > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.preferences-dialog-head h2 {
+  font-size: 1.25rem;
+}
+
+.preferences-close {
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  font-size: 1.3rem;
+}
+
+.preferences-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.preferences-fields label,
+.account-view-filters label,
+.account-saved-views label,
+.save-view-form label {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.preferences-fields select,
+.account-view-filters select,
+.account-saved-views select,
+.save-view-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.preferences-fields .preferences-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  align-self: center;
+  min-height: 2.7rem;
+}
+
+.preferences-checkbox input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--brand);
+}
+
+.shortcut-help {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.shortcut-help h3 {
+  font-size: 0.9rem;
+}
+
+.shortcut-help dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.shortcut-help dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.shortcut-help dt {
+  color: var(--ink-2);
+  font-size: 0.84rem;
+}
+
+.shortcut-help dd {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.shortcut-help kbd {
+  padding: 0.12rem 0.4rem;
+  color: var(--ink-1);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.preferences-storage-error {
+  padding: 0.7rem 0.85rem;
+  color: var(--danger-strong);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.account-view-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.account-saved-views {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 1.4fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.save-view-form {
+  display: flex;
+  align-items: end;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.save-view-form label {
+  flex: 1;
+}
+
+.account-saved-views > button,
+.save-view-form > button {
+  min-height: 2.5rem;
+  white-space: nowrap;
+}
+
+.account-saved-views > button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.view-notice {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
+:root[data-density="compact"] .app-sidebar {
+  padding-block: 0.65rem;
+}
+
+:root[data-density="compact"] .app-sidebar nav {
+  gap: 0.75rem;
+}
+
+:root[data-density="compact"] .nav-group {
+  gap: 0.1rem;
+}
+
+:root[data-density="compact"] .nav-item {
+  min-height: 2.2rem;
+  padding-block: 0.35rem;
+}
+
+:root[data-density="compact"] .nav-favorite-toggle {
+  min-height: 2rem;
+}
+
+:root[data-density="compact"] .page {
+  gap: 0.75rem;
+}
+
+:root[data-density="compact"] .panel {
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+:root[data-density="compact"] .card-head {
+  padding-block: 0.7rem;
+}
+
+@media (max-width: 760px) {
+  .preferences-trigger {
+    width: 2.5rem;
+    padding-inline: 0.5rem;
+  }
+
+  .preferences-trigger span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .preferences-fields,
+  .account-view-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .account-saved-views {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .save-view-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .preferences-fields,
+  .account-view-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preferences-dialog {
+    scroll-behavior: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-header {
+    gap: 0.25rem;
+    padding-inline: 0.5rem;
+  }
+
+  .brand-name,
+  .brand-tag {
+    display: none;
+  }
+
+  .header-actions {
+    flex: 1;
+    gap: 0.25rem;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .command-trigger,
+  .preferences-trigger,
+  .mobile-menu-toggle,
+  .theme-toggle {
+    flex: 0 0 2.2rem;
+    width: 2.2rem;
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+    padding-inline: 0.25rem;
+  }
+
+  .session-chip {
+    gap: 0;
+  }
+
+  .session-chip .avatar {
+    display: none;
+  }
+
+  .session-chip .ghost {
+    padding-inline: 0.35rem;
+    font-size: 0.72rem;
+  }
+}
