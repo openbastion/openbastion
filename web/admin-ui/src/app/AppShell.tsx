@@ -54,6 +54,8 @@ export function AppShell({
   const paletteButton = useRef<HTMLButtonElement>(null);
   const preferencesButton = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const mobileWasOpen = useRef(false);
   const paletteWasOpen = useRef(false);
   const preferencesWereOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
@@ -141,13 +143,37 @@ export function AppShell({
   }, [preferencesOpen]);
 
   useEffect(() => {
+    if (mobileWasOpen.current && !mobileOpen) menuButton.current?.focus();
+    mobileWasOpen.current = mobileOpen;
+  }, [mobileOpen]);
+
+  useEffect(() => {
     if (!mobileOpen) return;
-    const firstItem = document.querySelector<HTMLElement>(".app-sidebar nav button");
-    firstItem?.focus();
+    const sidebar = sidebarRef.current;
+    const focusable = () => Array.from(sidebar?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]):not(.sidebar-collapse-toggle), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    focusable()[0]?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setMobileOpen(false);
-        menuButton.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !sidebar?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !sidebar?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -186,8 +212,8 @@ export function AppShell({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">Aller au contenu principal</a>
-      <header className="app-header">
+      <a className="skip-link" href="#main-content" inert={mobileOpen}>Aller au contenu principal</a>
+      <header className="app-header" inert={mobileOpen}>
         <div className="brand">
           <BrandMark />
           <span className="brand-name">OpenBastion</span>
@@ -269,14 +295,19 @@ export function AppShell({
           <button
             type="button"
             className="navigation-backdrop"
-            aria-label="Fermer le panneau de navigation"
-            onClick={() => {
-              setMobileOpen(false);
-              menuButton.current?.focus();
-            }}
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => setMobileOpen(false)}
           />
         )}
-        <aside id="admin-navigation" className="app-sidebar" aria-label="Navigation principale">
+        <aside
+          ref={sidebarRef}
+          id="admin-navigation"
+          className="app-sidebar"
+          aria-label="Navigation principale"
+          role={mobileOpen ? "dialog" : undefined}
+          aria-modal={mobileOpen ? "true" : undefined}
+        >
           <div className="sidebar-heading">
             <span className="sidebar-heading-label">ESPACE DE TRAVAIL</span>
             <button
@@ -309,7 +340,7 @@ export function AppShell({
             <span className="sidebar-status-label">Console d'administration</span>
           </div>
         </aside>
-        <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1}>
+        <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
           {children}
         </main>
       </div>

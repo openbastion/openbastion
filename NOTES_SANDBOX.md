@@ -4162,3 +4162,31 @@ fichier de ce répertoire n'a été supprimé ni modifié. Le build isolé réus
 Les quatre tests ciblés couvrent notification et fermeture manuelle, rôle
 assertif pour danger, expiration automatique, composition Sonner et limite de
 file. Un test Table confirme la sémantique native, les en-têtes et la légende.
+
+
+## 2026-11-12 — Audit accessibilité mobile (ADR-0073, étape 6)
+
+La navigation latérale mobile se comporte désormais comme un dialogue modal :
+`role=dialog`, `aria-modal=true`, nom accessible, arrière-plan (skip link,
+en-tête et contenu principal) rendu `inert`, focus initial dans la navigation,
+piégeage de Tab/Shift+Tab, fermeture avec Échap et restitution du focus au
+déclencheur après fermeture ou sélection d'une rubrique. Le bouton de backdrop
+est retiré de l'ordre de tabulation et de l'arbre d'accessibilité. Les champs
+conservent un indicateur de focus système visible en mode Windows `forced-colors`.
+
+Le test rouge a d'abord échoué car la navigation mobile n'exposait aucun
+dialogue ; après correction, le test couvre le rôle modal, l'inertie du fond,
+les deux sens de bouclage du focus, Échap et la sélection d'une rubrique.
+Validation : Vitest séquentiel, 21 fichiers et 194 tests ; TypeScript ; build
+Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-a11y` ; contrôles de
+contraste (36 paires, thèmes clair/sombre), audit des couleurs codées en dur.
+La première exécution Vitest parallèle a subi un dépassement de délai sur le
+test de raccourci UX-05 ; ce même fichier passe seul et la suite complète passe
+avec `--maxWorkers=1`.
+
+Limites : aucune installation de navigateur ni d'outil d'audit d'accessibilité
+n'est disponible sur LT209227 dans cet environnement. Les captures et essais
+visuels réels à 320/768/1024/1440 px ainsi que le parcours lecteur d'écran
+(VoiceOver/NVDA) restent à faire ; aucune conformité WCAG globale n'est
+revendiquée. `origin/main` a été récupéré avant l'incrément ; aucun commit
+additionnel n'était à intégrer (branche en avance de 50 commits, sans retard).

@@ -1695,6 +1695,14 @@ main.login {
     outline-color: Highlight;
   }
 
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+
   .app-sidebar,
   .sidebar-footer {
     border-color: CanvasText;

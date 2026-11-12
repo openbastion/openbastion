@@ -55,11 +55,31 @@ describe("App", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
     const openNavigation = screen.getByRole("button", { name: "Ouvrir la navigation" });
     fireEvent.click(openNavigation);
-    expect(screen.getByRole("button", { name: "Fermer le panneau de navigation" })).toBeTruthy();
+    const mobileDialog = screen.getByRole("dialog", { name: "Navigation principale" });
+    expect(mobileDialog.getAttribute("aria-modal")).toBe("true");
+    expect(screen.getAllByRole("banner")[0].hasAttribute("inert")).toBe(true);
+    expect(screen.getByRole("main").hasAttribute("inert")).toBe(true);
+    const mobileNavigation = within(mobileDialog).getByRole("navigation", { name: "Sections" });
+    const firstNavigationItem = within(mobileNavigation).getByRole("button", { name: "Vue générale" });
+    expect(document.activeElement).toBe(firstNavigationItem);
+    const navigationItems = within(mobileNavigation).getAllByRole("button");
+    const lastNavigationItem = navigationItems[navigationItems.length - 1];
+    fireEvent.keyDown(firstNavigationItem, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(lastNavigationItem);
+    fireEvent.keyDown(lastNavigationItem, { key: "Tab" });
+    expect(document.activeElement).toBe(firstNavigationItem);
     fireEvent.keyDown(document, { key: "Escape" });
     const restoredMenuButton = screen.getByRole("button", { name: "Ouvrir la navigation" });
     expect(restoredMenuButton).toBeTruthy();
     expect(document.activeElement).toBe(restoredMenuButton);
+    expect(screen.getByRole("main").hasAttribute("inert")).toBe(false);
+
+    fireEvent.click(restoredMenuButton);
+    const accountsNavigationItem = within(screen.getByRole("dialog", { name: "Navigation principale" }))
+      .getByRole("button", { name: "Comptes" });
+    fireEvent.click(accountsNavigationItem);
+    expect(document.activeElement).toBe(restoredMenuButton);
+    expect(screen.getByRole("main").hasAttribute("inert")).toBe(false);
 
     expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Code source/ }).getAttribute("href")).toContain("github.com/openbastion/openbastion");
