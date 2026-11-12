@@ -56,6 +56,22 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
     expect(window.localStorage.getItem("openbastion.admin-ui.account-views.v1")).toContain('"views":[]');
   });
 
+  it("adds at most four distinct field blocks", async () => {
+    window.localStorage.clear();
+    renderAccounts({
+      "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
+    });
+    await screen.findByText("SSH account");
+    const add = screen.getByRole("button", { name: "+ Ajouter un filtre" });
+    for (let index = 0; index < 4; index += 1) fireEvent.click(add);
+    expect(screen.getByLabelText("Champ de la règle 1")).toBeTruthy();
+    expect(screen.getByLabelText("Champ de la règle 2")).toBeTruthy();
+    expect(screen.getByLabelText("Champ de la règle 3")).toBeTruthy();
+    expect(screen.getByLabelText("Champ de la règle 4")).toBeTruthy();
+    expect(add).toHaveProperty("disabled", true);
+    expect(screen.getByText("4 blocs maximum, un par champ. Les combinaisons sont évaluées de gauche à droite.")).toBeTruthy();
+  });
+
   it("updates values from the selected field and applies AND / OR to account results", async () => {
     window.localStorage.clear();
     renderAccounts({

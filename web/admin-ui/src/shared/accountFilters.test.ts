@@ -57,6 +57,19 @@ describe("account filter rule evaluation", () => {
     }]);
   });
 
+  it("limits rules to the four available fields and rejects duplicate fields", () => {
+    const four: AccountFilterRule[] = [
+      { field: "protocol", comparison: "is", value: "ssh", join: "AND" },
+      { field: "approval", comparison: "is", value: "required", join: "OR" },
+      { field: "identity", comparison: "is", value: "pinned", join: "AND" },
+      { field: "rotation", comparison: "is", value: "due", join: "OR" },
+    ];
+    expect(matchesAccountFilterRules(ssh, four)).toBe(true);
+    expect(parseSavedAccountViews([{ name: "Quatre champs", rules: four }])).toHaveLength(1);
+    expect(parseSavedAccountViews([{ name: "Trop de règles", rules: [...four, four[0]] }])).toEqual([]);
+    expect(parseSavedAccountViews([{ name: "Champ dupliqué", rules: [four[0], { ...four[0], value: "rdp" }] }])).toEqual([]);
+  });
+
   it("rejects malformed or unsupported saved filter values", () => {
     expect(parseSavedAccountViews([{
       name: "Valeur invalide",

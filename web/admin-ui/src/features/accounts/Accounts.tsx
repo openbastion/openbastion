@@ -12,7 +12,9 @@ import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
 import {
   AccountFilterRule,
+  accountFilterFields,
   defaultAccountFilterValue,
+  maxAccountFilterRules,
   isAccountFilterField,
   matchesAccountFilterRules,
   readSavedAccountViews,
@@ -81,10 +83,16 @@ export function Accounts() {
   }
 
   function addFilterRule() {
-    setFilterRules((current) => current.length >= 10 ? current : [
-      ...current,
-      { field: "protocol", comparison: "is", value: "ssh", join: "AND" },
-    ]);
+    setFilterRules((current) => {
+      const nextField = accountFilterFields.find((field) => !current.some((rule) => rule.field === field));
+      if (!nextField || current.length >= maxAccountFilterRules) return current;
+      return [...current, {
+        field: nextField,
+        comparison: "is",
+        value: defaultAccountFilterValue(nextField),
+        join: "AND",
+      }];
+    });
   }
 
   function removeFilterRule(index: number) {
@@ -242,10 +250,10 @@ export function Accounts() {
                             updateFilterRule(index, { field: event.target.value, value: defaultAccountFilterValue(event.target.value) });
                           }}
                         >
-                          <option value="protocol">Protocole</option>
-                          <option value="approval">Approbation</option>
-                          <option value="identity">Identité de la cible</option>
-                          <option value="rotation">Rotation</option>
+                          <option value="protocol" disabled={filterRules.some((other, position) => position !== index && other.field === "protocol")}>Protocole</option>
+                          <option value="approval" disabled={filterRules.some((other, position) => position !== index && other.field === "approval")}>Approbation</option>
+                          <option value="identity" disabled={filterRules.some((other, position) => position !== index && other.field === "identity")}>Identité de la cible</option>
+                          <option value="rotation" disabled={filterRules.some((other, position) => position !== index && other.field === "rotation")}>Rotation</option>
                         </select>
                       </label>
                       <label className="account-filter-operator">
@@ -285,8 +293,8 @@ export function Accounts() {
                   ))}
                 </div>
                 <div className="account-filter-actions">
-                  <Button type="button" disabled={filterRules.length >= 10} onClick={addFilterRule}>+ Ajouter un filtre</Button>
-                  {filterRules.length > 0 ? <span className="ob-filter-help">Jusqu'à 10 règles. Les combinaisons sont évaluées de gauche à droite.</span> : <span className="ob-filter-help">Ajoutez une règle pour affiner les comptes affichés.</span>}
+                  <Button type="button" disabled={filterRules.length >= maxAccountFilterRules} onClick={addFilterRule}>+ Ajouter un filtre</Button>
+                  {filterRules.length > 0 ? <span className="ob-filter-help">4 blocs maximum, un par champ. Les combinaisons sont évaluées de gauche à droite.</span> : <span className="ob-filter-help">Ajoutez une règle pour affiner les comptes affichés.</span>}
                 </div>
                 <div className="account-filter-builder-footer">
                   <span className="ob-filter-help">La recherche textuelle est toujours combinée aux règles avec AND.</span>

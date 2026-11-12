@@ -4208,3 +4208,10 @@ Les vues sauvegardées stockent désormais les règles (enveloppe version 2), sa
 Validation : 'make ui-test' passe (22 fichiers, 200 tests), dont les tests de sélection dynamique, comparateur négatif, AND/OR sur les résultats, migration des vues version 1 et absence de persistance des termes de recherche. 'make ui-tokens-test' (inclus dans 'make ui-test') passe : contrôles de contraste clair/sombre et absence de couleurs codées en dur. 'npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-filter-rules' passe, TypeScript compris. 'make ui-build' atteint la compilation mais reste bloqué au nettoyage du 'dist' préexistant par un EACCES sur un asset appartenant à root ; aucun asset préexistant n'a été supprimé ou modifié.
 
 Limite : le rendu n'a pas été contrôlé dans un navigateur réel ; le conteneur Base44 actif dépend du checkout principal et n'a pas été redémarré ni modifié.
+
+
+## 2026-11-12 — Limiter le constructeur de filtres à quatre champs (ADR-0073)
+
+Le constructeur n'autorise désormais que quatre blocs, un par champ disponible : Protocole, Approbation, Identité de la cible et Rotation. L'ajout choisit automatiquement le premier champ encore inutilisé ; le bouton est désactivé lorsque les quatre blocs sont présents et les champs déjà utilisés dans les autres blocs ne peuvent pas être sélectionnés. Le modèle de vues sauvegardées refuse également plus de quatre règles ou des champs dupliqués.
+
+Validation : make ui-test passe, 22 fichiers et 202 tests. Les tests couvrent quatre blocs distincts, le refus des doublons et le refus d'une cinquième règle dans les vues persistées. Aucun changement d'API ou de portée du filtrage.

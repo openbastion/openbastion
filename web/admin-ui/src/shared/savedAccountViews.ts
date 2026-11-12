@@ -4,6 +4,11 @@ export type AccountFilterField = "protocol" | "approval" | "identity" | "rotatio
 export type AccountFilterComparison = "is" | "is-not";
 export type AccountFilterJoin = "AND" | "OR";
 
+export const accountFilterFields: readonly AccountFilterField[] = [
+  "protocol", "approval", "identity", "rotation",
+];
+export const maxAccountFilterRules = accountFilterFields.length;
+
 export interface AccountFilterRule {
   field: AccountFilterField;
   comparison: AccountFilterComparison;
@@ -38,13 +43,15 @@ export function defaultAccountFilterValue(field: AccountFilterField): string {
 }
 
 export function parseAccountFilterRules(value: unknown): AccountFilterRule[] | undefined {
-  if (!Array.isArray(value) || value.length > 10) return undefined;
+  if (!Array.isArray(value) || value.length > maxAccountFilterRules) return undefined;
   const rules: AccountFilterRule[] = [];
+  const usedFields = new Set<AccountFilterField>();
   for (const item of value) {
     if (!isRecord(item) || !isAccountFilterField(item.field)) return undefined;
     const comparison = item.comparison === "is-not" ? "is-not" : item.comparison === "is" ? "is" : undefined;
     const join = item.join === "OR" ? "OR" : item.join === "AND" ? "AND" : undefined;
-    if (!comparison || !join || typeof item.value !== "string" || !allowedValues[item.field].includes(item.value)) return undefined;
+    if (!comparison || !join || usedFields.has(item.field) || typeof item.value !== "string" || !allowedValues[item.field].includes(item.value)) return undefined;
+    usedFields.add(item.field);
     rules.push({ field: item.field, comparison, value: item.value, join });
   }
   return rules;
