@@ -1,5 +1,7 @@
-# The video scene of the Windows measurement (ADR-0090, lot A): started at every logon, hidden, by
-# rdp-setup.ps1's Run entry. The Windows key does not reach the shell (PR #101), so the test cannot
+# The video scene of the Windows measurement (ADR-0090, lot A): started at every logon, with no
+# window at all, by rdp-video.vbs from rdp-setup.ps1's Run entry. "powershell -WindowStyle Hidden"
+# showed its console before hiding it, and took the keyboard from Notepad as the keyboard tests
+# typed (PR #149, second CI run). The Windows key does not reach the shell (PR #101), so the test cannot
 # start a program from the keyboard: it asks by a file on the share, as the logoff test does. Each
 # new video-request (its write time changes) plays one scene: a borderless window over the whole
 # screen, every pixel changing 25 times a second, in 8-pixel blocks of random colour — the worst
@@ -11,10 +13,13 @@ $shares = @('\\host.lan\Data')
 $gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
 if ($gateway) { $shares += "\\$gateway\Data" }
 $log = Join-Path $env:TEMP 'rdp-video.log'
+# The share's two names are one folder: written once, through the first that takes it.
 function Note($text) {
   $line = "$(Get-Date -Format o) $text"
   Add-Content $log $line -ErrorAction SilentlyContinue
-  foreach ($share in $shares) { Add-Content (Join-Path $share "video-status-$env:USERNAME.txt") $line -ErrorAction SilentlyContinue }
+  foreach ($share in $shares) {
+    try { Add-Content (Join-Path $share "video-status-$env:USERNAME.txt") $line -ErrorAction Stop; break } catch {}
+  }
 }
 
 function Play([int]$seconds) {
@@ -61,22 +66,27 @@ function Play([int]$seconds) {
 }
 
 Note "watching for video-request on $($shares -join ', ')"
-$seen = @{}
-foreach ($share in $shares) {
-  $item = Get-Item (Join-Path $share 'video-request') -ErrorAction SilentlyContinue
-  if ($item) { $seen[$share] = $item.LastWriteTimeUtc } # a request older than this logon is not one
-}
-while ($true) {
+# One request plays once: the share's two names are one folder, and each shows the same file (PR
+# #149, first CI run: every scene played twice). The request is known by its write time, whichever
+# name it was read through; one older than this logon is not one.
+function Request {
   foreach ($share in $shares) {
     $item = Get-Item (Join-Path $share 'video-request') -ErrorAction SilentlyContinue
-    if ($item -and $seen[$share] -ne $item.LastWriteTimeUtc) {
-      $seen[$share] = $item.LastWriteTimeUtc
-      $seconds = 10
-      $asked = (Get-Content $item.FullName -Raw -ErrorAction SilentlyContinue)
-      if ($asked -match '^\s*(\d+)') { $seconds = [math]::Min([int]$Matches[1], 60) }
-      Note "playing $seconds s"
-      try { $frames = Play $seconds; Note "played: $frames frame(s)" } catch { Note "failed: $_" }
-    }
+    if ($item) { return $item }
+  }
+  return $null
+}
+$seen = (Request)
+if ($seen) { $seen = $seen.LastWriteTimeUtc }
+while ($true) {
+  $item = Request
+  if ($item -and $seen -ne $item.LastWriteTimeUtc) {
+    $seen = $item.LastWriteTimeUtc
+    $seconds = 10
+    $asked = (Get-Content $item.FullName -Raw -ErrorAction SilentlyContinue)
+    if ($asked -match '^\s*(\d+)') { $seconds = [math]::Min([int]$Matches[1], 60) }
+    Note "playing $seconds s"
+    try { $frames = Play $seconds; Note "played: $frames frame(s)" } catch { Note "failed: $_" }
   }
   Start-Sleep -Milliseconds 250
 }

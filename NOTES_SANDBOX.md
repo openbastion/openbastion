@@ -3089,7 +3089,11 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 - Le script note ce qu'il fait dans `video-status-<utilisateur>.txt` sur le partage, que la CI joint à ses artefacts.
 - `TestRDPWindows_Measure` ajoute la scène `video`, en images entières puis partielles. Moins de 50 images dans la scène est une erreur : la vidéo n'a pas joué.
 
-**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène. Les chiffres sont dans ADR-0090 : la cible envoie de 0,7 à 2,8 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien.
+**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène ; mais chaque demande a joué deux fois (deux noms pour le même partage). Les chiffres sont dans ADR-0090 : la cible envoie de 0,7 à 2,8 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien.
+
+**Deux défauts du script, corrigés au second passage** :
+- chaque demande jouait deux fois : `\\host.lan\Data` et `\\<passerelle>\Data` sont le même dossier. Une demande est maintenant reconnue à sa date d'écriture, quel que soit le nom par lequel on la lit, et le journal n'est écrit qu'une fois ;
+- `powershell -WindowStyle Hidden` montre sa console avant de la cacher, et prenait le clavier à Notepad pendant que les tests de clavier tapaient. Au second passage, deux tests de clavier ont échoué : sur la cible fr-FR, le texte tapé était à l'écran, mais l'enregistrement du fichier n'a pas eu lieu ; sur la cible 32 bpp, les touches étendues ne sont pas arrivées. Le script est maintenant lancé par `rdp-video.vbs` (`wscript`), sans aucune fenêtre.
 
 **Assertion corrigée en chemin** : `TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays` exigeait une seule lecture pour relire la session. Sur deux cibles, 168 images clés d'environ 25 Ko dépassaient les 4 Mio d'une réponse, et deux lectures étaient donc justes. Le test compte maintenant les lectures que les bornes imposent (600 images, 4 Mio), comme le Recorder remplit une réponse.
 

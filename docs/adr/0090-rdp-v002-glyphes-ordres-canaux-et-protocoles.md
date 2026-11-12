@@ -111,7 +111,7 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Avec S3 à 50 sessions**, la médiane monte de 50 à 235 ms et le maximum atteint 2 à 3 s pour les images clés. Le SeaweedFS à nœud unique devient le goulet. Une session active voit ces délais à chaque image clé, et à chaque image si l'écran change beaucoup.
 - **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages.
 
-**Mesuré ensuite (12 novembre 2026) : une scène vidéo contre Windows.** `rdp-video.ps1` joue, à la demande du test par le partage, 10 s de blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde sur tout l'écran : le pire cas pour PNG, un majorant pour une vidéo. CI Windows de la PR #149, cinq cibles 1280 × 800. La scène dure de la demande au retour au calme (21 à 26 s) : le démarrage de la fenêtre y est compté, et les débits par seconde sont donc des moyennes sur la scène, pas le régime de la vidéo.
+**Mesuré ensuite (12 novembre 2026) : une scène vidéo contre Windows.** `rdp-video.ps1` joue, à la demande du test par le partage, 10 s de blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde sur tout l'écran : le pire cas pour PNG, un majorant pour une vidéo. CI Windows de la PR #149, cinq cibles 1280 × 800. Dans ce passage, chaque demande a joué **deux fois** : le script la voyait sous les deux noms du même partage, défaut corrigé depuis. Une scène de 21 à 26 s couvre donc environ 20 s de vidéo. Les débits par seconde en donnent le régime ; les nombres d'images par scène sont doublés.
 
 | Cible | Cible → proxy | Images | PNG par image | Enregistré | Encodage |
 |---|---|---|---|---|---|
