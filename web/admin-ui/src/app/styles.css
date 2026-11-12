@@ -1,34 +1,43 @@
-/* Design tokens: one neutral scale, one teal accent, one danger. */
+/* Application compatibility aliases; canonical values live in @openbastion/design-tokens. */
 :root {
-  color-scheme: light;
-  --canvas: #f4f6fa;
-  --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #eef2f7;
-  --ink-1: #101828;
-  --ink-2: #3a4759;
-  --ink-3: #5d6b80;
-  --line: #e2e8f0;
-  --line-strong: #c9d3e0;
-  --brand: #0f766e;
-  --ob-icon-accent: var(--brand);
-  --brand-strong: #115e59;
-  --brand-ink: #0b4f4a;
-  --brand-soft: #e6f5f2;
-  --danger: #b42318;
-  --danger-strong: #912018;
-  --danger-soft: #fef3f2;
-  --ok: #067647;
-  --ok-soft: #ecfdf3;
-  --navy: #0b1524;
-  --navy-2: #142238;
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 18px;
-  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.08);
-  --shadow: 0 18px 40px -24px rgb(16 24 40 / 0.35);
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --canvas: var(--ob-color-bg-canvas);
+  --surface: var(--ob-color-bg-surface);
+  --surface-2: var(--ob-color-bg-surface-muted);
+  --surface-3: var(--ob-color-bg-surface-subtle);
+  --ink-1: var(--ob-color-text-primary);
+  --ink-2: var(--ob-color-text-secondary);
+  --ink-3: var(--ob-color-text-tertiary);
+  --line: var(--ob-color-border-subtle);
+  --line-strong: var(--ob-color-border-control);
+  --brand: var(--ob-color-accent);
+  --ob-icon-accent: var(--ob-color-accent);
+  --brand-strong: var(--ob-color-accent-strong);
+  --brand-ink: var(--ob-color-accent-ink);
+  --brand-soft: var(--ob-color-accent-subtle);
+  --danger: var(--ob-color-status-danger);
+  --danger-strong: var(--ob-color-status-danger-strong);
+  --danger-soft: var(--ob-color-status-danger-subtle);
+  --ok: var(--ob-color-status-success);
+  --ok-soft: var(--ob-color-status-success-subtle);
+  --warning: var(--ob-color-status-warning);
+  --warning-soft: var(--ob-color-status-warning-subtle);
+  --navy: var(--ob-color-chrome-background);
+  --navy-2: var(--ob-color-chrome-background-raised);
+  --radius-sm: var(--ob-radius-sm);
+  --radius: var(--ob-radius-md);
+  --radius-lg: var(--ob-radius-lg);
+  --shadow-sm: var(--ob-shadow-sm);
+  --shadow: var(--ob-shadow-overlay);
+  --ease: var(--ob-motion-ease-standard);
+  --font-sans: var(--ob-font-family-sans);
+  --space-1: var(--ob-space-1);
+  --space-2: var(--ob-space-2);
+  --space-3: var(--ob-space-3);
+  --space-4: var(--ob-space-4);
+  --space-5: var(--ob-space-5);
+  --space-6: var(--ob-space-6);
+  --focus-ring: var(--ob-color-focus-shadow);
+  font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
   color: var(--ink-1);
@@ -44,11 +53,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(1200px 480px at 15% -10%, #e8f2f0 0%, transparent 60%),
-    radial-gradient(900px 420px at 100% 0%, #e9eefb 0%, transparent 55%),
-    var(--canvas);
-  background-attachment: fixed;
+  background: var(--canvas);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -1014,42 +1019,6 @@ main.login {
 }
 
 /* ---------- ADR-0073 UX-01: operator shell, navigation and themes ---------- */
-:root {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --focus-ring: 0 0 0 3px rgb(15 118 110 / 0.22);
-  font-family: var(--font-sans);
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --canvas: #0d1420;
-  --surface: #151f2e;
-  --surface-2: #1b293a;
-  --surface-3: #243449;
-  --ink-1: #edf3fb;
-  --ink-2: #c5d1df;
-  --ink-3: #91a2b8;
-  --line: #2b3b50;
-  --line-strong: #40536b;
-  --brand: #5eead4;
-  --brand-strong: #2dd4bf;
-  --brand-ink: #a7f3e8;
-  --brand-soft: #123b3b;
-  --danger: #fda29b;
-  --danger-strong: #f97066;
-  --danger-soft: #421f25;
-  --ok: #75e0a7;
-  --ok-soft: #12382b;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.2);
-  --shadow: 0 18px 40px -24px rgb(0 0 0 / 0.8);
-}
-
 :root[data-theme="dark"] body {
   background: var(--canvas);
 }
@@ -1635,10 +1604,6 @@ main.login {
 }
 
 /* ---------- ADR-0073 UX-03: PAM workflow states and confirmations ---------- */
-:root {
-  --warning: #a15c07;
-  --warning-soft: #fff7e6;
-}
 
 .status-badge {
   font-weight: 650;

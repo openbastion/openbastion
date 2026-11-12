@@ -133,7 +133,7 @@ Un composant peut être remplacé uniquement si ses comportements, libellés acc
 |---|---|---|
 | 0 — Baseline | Inventaire UX-01..05, captures de référence si disponibles, état des tests et audit des couleurs existantes | Baseline `make ui-test ui-build`, inventaire des usages CSS et aucune modification fonctionnelle |
 | 1 — Charte et contrats | ADR-0073/0075 précisés, présente spécification, frontières de packages et plan validés | Relecture des décisions, `git diff --check` |
-| 2 — Tokens | Package `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques et import reproductible | Contrastes automatisés des paires déclarées, `npm ci`, `make ui-test ui-build` |
+| 2 — Tokens (livré) | Package CSS `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques, import reproductible et contrôle de contraste intégré à Make | `make ui-tokens-test` : 18 paires contrôlées ; `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis |
 | 3 — Shell | En-tête, sidebar, navigation active, densité, thèmes, responsive et focus | Tests de navigation, préférences inchangées, vérification 320/768/1024/1440 px |
 | 4 — Primitives | Boutons, champs, tables, badges, alertes, skeletons et confirmations | Tests unitaires et d'accessibilité ciblés, états complet/chargement/vide/refus/erreur |
 | 5 — Migration des écrans | Migration progressive Vue générale, comptes, politiques, sessions, relecture et Centre de sécurité | Parcours et assertions API inchangés ; aucune donnée simulée ; tests existants conservés |

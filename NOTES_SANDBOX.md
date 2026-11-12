@@ -1,5 +1,31 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : fondations de tokens (étape 2)
+
+Le package privé `web/packages/design-tokens/` fournit les tokens CSS canoniques
+OpenBastion Infrastructure : palettes clair/sombre, rôles sémantiques, focus,
+statuts, chrome, espacements, rayons, ombres, typographie et mouvement. Il ne
+contient aucun JavaScript navigateur ni dépendance tierce. L'Admin UI l'importe
+avant ses styles applicatifs ; `styles.css` conserve uniquement des alias de
+compatibilité vers les tokens partagés.
+
+`main.tsx` applique le thème et la densité depuis les préférences de présentation
+non sensibles avant le premier rendu React. Les clés de stockage et leur format
+restent inchangés ; aucun jeton, secret ou identifiant de ressource n'est lu ou
+écrit par ce mécanisme.
+
+`make ui-tokens-test` vérifie avec Node.js les paires de contraste opaques
+déclarées pour les deux thèmes. Les valeurs mesurées et leurs limites restent
+documentées dans `docs/development/admin-ui-design-system.md` : elles ne valent
+pas audit de tous les composants rendus.
+
+Validation sur LT209227 : `make ui-test ui-build` réussit ; 13 fichiers Vitest,
+142 tests réussis, vérification TypeScript et build Vite réussis. Le build du
+package `@openbastion/icons` réussit également. Vitest signale encore des
+avertissements React préexistants sur `stroke-width`, `stroke-linecap` et
+`stroke-linejoin` dans des SVG d'icônes ; ils ne font pas échouer les tests et
+ne sont pas introduits par le package de tokens.
+
 ## 2026-11-12 — ADR-0073 UX-05 : personnalisation et productivité
 
 Le stockage UX-05 est **local au navigateur**, versionné et limité aux préférences
