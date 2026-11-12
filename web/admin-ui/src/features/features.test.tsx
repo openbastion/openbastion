@@ -46,8 +46,10 @@ describe("Accounts", () => {
     const trigger = await screen.findByRole("button", { name: /Filtres avancés/ });
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByLabelText("Constructeur de filtres")).toBeTruthy();
-    expect(screen.getByLabelText("Critères combinés avec ET").textContent).toContain("ET");
-    fireEvent.change(screen.getByLabelText("Filtrer par protocole"), { target: { value: "ssh" } });
+    expect(screen.getByLabelText("Règles de filtrage")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
+    expect(screen.getByLabelText("Champ de la règle 1")).toBeTruthy();
+    expect(screen.getByLabelText("Valeur de la règle 1")).toBeTruthy();
     expect(screen.getByLabelText("1 filtre(s) actif(s)").textContent).toBe("1");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");

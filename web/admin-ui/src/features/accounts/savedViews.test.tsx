@@ -17,23 +17,27 @@ function renderAccounts(routes: Record<string, { status?: number; body?: unknown
 }
 
 describe("Accounts — ADR-0073 UX-05 saved views", () => {
-  it("saves and reapplies categorical filters without persisting search terms or resource data", async () => {
+  it("saves and reapplies dynamic rules without persisting search terms or resource data", async () => {
     window.localStorage.clear();
     const { calls } = renderAccounts({
       "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
     });
     expect(await screen.findByText("SSH account")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Filtrer par protocole"), { target: { value: "ssh" } });
-    fireEvent.change(screen.getByLabelText("Approbation"), { target: { value: "required" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
+    fireEvent.change(screen.getByLabelText("Champ de la règle 2"), { target: { value: "approval" } });
+    fireEvent.change(screen.getByLabelText("Valeur de la règle 2"), { target: { value: "required" } });
     fireEvent.change(screen.getByLabelText("Filtrer les comptes de cette page"), { target: { value: "sensitive-search-term" } });
     fireEvent.change(screen.getByLabelText("Nom de la vue"), { target: { value: "SSH avec approbation" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer la vue" }));
 
     expect(await screen.findByText("Vue enregistrée dans ce navigateur.")).toBeTruthy();
     const stored = window.localStorage.getItem("openbastion.admin-ui.account-views.v1") ?? "";
-    expect(stored).toContain('"protocol":"ssh"');
-    expect(stored).toContain('"approval":"required"');
+    expect(stored).toContain('"field":"protocol"');
+    expect(stored).toContain('"field":"approval"');
+    expect(stored).toContain('"value":"required"');
+    expect(stored).toContain('"version":2');
     expect(stored).not.toContain("sensitive-search-term");
     expect(stored).not.toContain("acc_ssh");
     expect(stored).not.toContain("ssh.internal");
@@ -52,13 +56,41 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
     expect(window.localStorage.getItem("openbastion.admin-ui.account-views.v1")).toContain('"views":[]');
   });
 
+  it("updates values from the selected field and applies AND / OR to account results", async () => {
+    window.localStorage.clear();
+    renderAccounts({
+      "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
+    });
+    expect(await screen.findByText("SSH account")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
+    fireEvent.change(screen.getByLabelText("Champ de la règle 2"), { target: { value: "approval" } });
+    expect(screen.getByRole("option", { name: "Requise" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Valeur de la règle 2"), { target: { value: "not-required" } });
+    expect(screen.queryByText("SSH account")).toBeNull();
+    expect(screen.queryByText("VNC account")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Combinaison avant la règle 2"), { target: { value: "OR" } });
+    expect(screen.getByText("SSH account")).toBeTruthy();
+    expect(screen.getByText("VNC account")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Opérateur de la règle 2"), { target: { value: "is-not" } });
+    expect(screen.getByText("SSH account")).toBeTruthy();
+    expect(screen.queryByText("VNC account")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Supprimer la règle 2" }));
+    expect(screen.getByText("SSH account")).toBeTruthy();
+    expect(screen.queryByText("VNC account")).toBeNull();
+  });
+
   it("shows a storage refusal and does not claim that the view was saved", async () => {
     window.localStorage.clear();
     renderAccounts({
       "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
     });
     await screen.findByText("SSH account");
-    fireEvent.change(screen.getByLabelText("Filtrer par protocole"), { target: { value: "ssh" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
     fireEvent.change(screen.getByLabelText("Nom de la vue"), { target: { value: "Vue SSH" } });
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function () { throw new Error("blocked"); };

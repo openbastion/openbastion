@@ -1866,3 +1866,113 @@ main.login {
   .account-filter-operator,
   .account-filter-value { grid-column: 2; }
 }
+
+
+/* ADR-0073 — dynamic account filter rules, inspired by the supplied builder references. */
+.account-filter-toolbar { gap: 0.75rem; }
+.account-filter-trigger {
+  min-height: 2.75rem;
+  padding-inline: 1rem;
+  background: var(--surface);
+  border-color: var(--ob-color-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ob-color-focus) 12%, transparent);
+}
+.account-filter-builder {
+  gap: 1rem;
+  padding: clamp(0.8rem, 2vw, 1.25rem);
+  border-radius: calc(var(--radius-lg) + 0.2rem);
+}
+.account-filter-rules { gap: 0.55rem; }
+.account-filter-rule {
+  grid-template-columns: minmax(5rem, 0.48fr) minmax(9rem, 1.1fr) minmax(7.5rem, 0.75fr) minmax(10rem, 1.3fr) 2rem;
+  align-items: end;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.account-filter-rule:last-child { border-bottom: 1px solid var(--line); }
+.account-filter-rule label { gap: 0.35rem; }
+.account-filter-rule select,
+.account-filter-chip {
+  min-height: 2.7rem;
+  background: var(--surface);
+  border-color: var(--line-strong);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+}
+.account-filter-join-control {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.account-filter-join-control select {
+  min-height: 2.7rem;
+  padding-inline: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.account-filter-join-placeholder {
+  align-self: center;
+  padding: 0.7rem 0.4rem;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.account-filter-remove {
+  width: 2rem;
+  height: 2.7rem;
+  align-self: end;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  background: transparent;
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+.account-filter-remove:hover { color: var(--danger); background: var(--surface); }
+.account-filter-remove:focus-visible,
+.account-filter-join-control select:focus-visible,
+.account-filter-rule select:focus-visible {
+  outline: 2px solid var(--ob-color-focus);
+  outline-offset: 2px;
+}
+.account-filter-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.account-filter-actions > button {
+  min-height: 2.5rem;
+  border-style: dashed;
+}
+.account-filter-builder-footer {
+  padding: 0.85rem 0 0.25rem;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .account-filter-rule {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2rem;
+  }
+  .account-filter-join-control,
+  .account-filter-join-placeholder { grid-column: 1 / -1; }
+  .account-filter-field { grid-column: 1; }
+  .account-filter-operator { grid-column: 2; }
+  .account-filter-value { grid-column: 1 / 3; }
+  .account-filter-remove { grid-column: 3; grid-row: 2 / span 2; }
+}
+@media (max-width: 420px) {
+  .account-filter-rule { grid-template-columns: minmax(0, 1fr) 2rem; }
+  .account-filter-join-control,
+  .account-filter-join-placeholder,
+  .account-filter-field,
+  .account-filter-operator,
+  .account-filter-value { grid-column: 1; }
+  .account-filter-remove { grid-column: 2; grid-row: 2 / span 3; }
+}

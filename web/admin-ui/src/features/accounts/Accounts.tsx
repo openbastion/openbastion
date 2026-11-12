@@ -11,8 +11,10 @@ import { AccountActions, AccountTable } from "./AccountTable";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
 import {
-  AccountViewFilters,
-  emptyAccountViewFilters,
+  AccountFilterRule,
+  defaultAccountFilterValue,
+  isAccountFilterField,
+  matchesAccountFilterRules,
   readSavedAccountViews,
   SavedAccountView,
   writeSavedAccountViews,
@@ -35,7 +37,7 @@ export function Accounts() {
   const [ok, setOk] = useState<string>();
   const [filter, setFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(true);
-  const [viewFilters, setViewFilters] = useState<AccountViewFilters>(emptyAccountViewFilters);
+  const [filterRules, setFilterRules] = useState<AccountFilterRule[]>([]);
   const [savedViews, setSavedViews] = useState<SavedAccountView[]>(readSavedAccountViews);
   const [selectedSavedView, setSelectedSavedView] = useState("");
   const [newViewName, setNewViewName] = useState("");
@@ -65,30 +67,29 @@ export function Accounts() {
 
   // Filtering is deliberately limited to the server page already loaded; it never implies a
   // complete inventory when the public API has not defined a search contract.
-  const activeFilterCount = [
-    filter.trim().length > 0,
-    viewFilters.protocol !== "all",
-    viewFilters.approval !== "all",
-    viewFilters.identity !== "all",
-    viewFilters.rotation !== "all",
-  ].filter(Boolean).length;
+  const activeFilterCount = Number(filter.trim().length > 0) + filterRules.length;
 
   const filteredAccounts = (data?.items ?? []).filter((account) => {
     const query = filter.trim().toLocaleLowerCase("fr");
     if (query && ![account.id, account.name, account.username, account.targetHost, account.protocol]
       .some((value) => value.toLocaleLowerCase("fr").includes(query))) return false;
-    if (viewFilters.protocol !== "all" && account.protocol !== viewFilters.protocol) return false;
-    if (viewFilters.approval === "required" && !account.approvalRequired) return false;
-    if (viewFilters.approval === "not-required" && account.approvalRequired) return false;
-    const identityPinned = account.protocol === "ssh"
-      ? Boolean(account.hostKeyFingerprint)
-      : Boolean(account.tlsCertificateSha256);
-    if (viewFilters.identity === "pinned" && !identityPinned) return false;
-    if (viewFilters.identity === "missing" && identityPinned) return false;
-    if (viewFilters.rotation === "due" && !account.rotationOwedSince) return false;
-    if (viewFilters.rotation === "failed" && !((account.rotationFailures ?? 0) > 0)) return false;
-    return true;
+    return matchesAccountFilterRules(account, filterRules);
   });
+
+  function updateFilterRule(index: number, patch: Partial<AccountFilterRule>) {
+    setFilterRules((current) => current.map((rule, position) => position === index ? { ...rule, ...patch } : rule));
+  }
+
+  function addFilterRule() {
+    setFilterRules((current) => current.length >= 10 ? current : [
+      ...current,
+      { field: "protocol", comparison: "is", value: "ssh", join: "AND" },
+    ]);
+  }
+
+  function removeFilterRule(index: number) {
+    setFilterRules((current) => current.filter((_, position) => position !== index));
+  }
 
   function saveCurrentView(event: FormEvent) {
     event.preventDefault();
@@ -100,7 +101,7 @@ export function Accounts() {
     }
     const next = [
       ...savedViews.filter((view) => view.name.toLocaleLowerCase("fr") !== name.toLocaleLowerCase("fr")),
-      { name, filters: viewFilters },
+      { name, rules: filterRules },
     ].slice(-12);
     setViewNotice(undefined);
     if (!writeSavedAccountViews(next)) {
@@ -118,7 +119,7 @@ export function Accounts() {
     setSelectedSavedView(name);
     const view = savedViews.find((item) => item.name === name);
     if (view) {
-      setViewFilters(view.filters);
+      setFilterRules(view.rules);
       setFilter("");
     }
   }
@@ -197,7 +198,7 @@ export function Accounts() {
                 <span className="account-filter-count" aria-label={`${activeFilterCount} filtre(s) actif(s)`}>{activeFilterCount}</span>
                 <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
               </button>
-              {activeFilterCount > 0 ? <Button type="button" onClick={() => { setFilter(""); setViewFilters(emptyAccountViewFilters); setSelectedSavedView(""); }}>Réinitialiser</Button> : null}
+              {activeFilterCount > 0 ? <Button type="button" onClick={() => { setFilter(""); setFilterRules([]); setSelectedSavedView(""); }}>Réinitialiser</Button> : null}
             </div>
             {filtersOpen ? (
               <div id="account-filter-builder" className="account-filter-builder" aria-label="Constructeur de filtres">
@@ -215,50 +216,80 @@ export function Accounts() {
                   </label>
                 </div>
                 <p className="ob-filter-help">La recherche et les critères ci-dessous s'appliquent uniquement aux {data.items.length} comptes chargés sur cette page ; aucune recherche globale n'est lancée. Le texte saisi n'est jamais enregistré dans une vue.</p>
-                <div className="account-filter-rules" aria-label="Critères combinés avec ET">
-                  <div className="account-filter-rule">
-                    <span className="account-filter-join">ET</span>
-                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Protocole</span></label>
-                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
-                    <label className="account-filter-value"><span>Valeur</span>
-                      <select aria-label="Filtrer par protocole" value={viewFilters.protocol} onChange={(event) => setViewFilters((current) => ({ ...current, protocol: event.target.value as AccountViewFilters["protocol"] }))}>
-                        <option value="all">Tous les protocoles</option><option value="ssh">SSH</option><option value="rdp">RDP</option><option value="vnc">VNC</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="account-filter-rule">
-                    <span className="account-filter-join">ET</span>
-                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Approbation</span></label>
-                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
-                    <label className="account-filter-value"><span>Valeur</span>
-                      <select aria-label="Approbation" value={viewFilters.approval} onChange={(event) => setViewFilters((current) => ({ ...current, approval: event.target.value as AccountViewFilters["approval"] }))}>
-                        <option value="all">Toutes</option><option value="required">Requise</option><option value="not-required">Non requise</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="account-filter-rule">
-                    <span className="account-filter-join">ET</span>
-                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Identité de la cible</span></label>
-                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
-                    <label className="account-filter-value"><span>Valeur</span>
-                      <select aria-label="Identité de la cible" value={viewFilters.identity} onChange={(event) => setViewFilters((current) => ({ ...current, identity: event.target.value as AccountViewFilters["identity"] }))}>
-                        <option value="all">Toutes</option><option value="pinned">Épinglée</option><option value="missing">Non épinglée</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="account-filter-rule">
-                    <span className="account-filter-join">ET</span>
-                    <label className="account-filter-field"><span>Champ</span><span className="account-filter-chip">Rotation</span></label>
-                    <label className="account-filter-operator"><span>Opérateur</span><span className="account-filter-chip">est</span></label>
-                    <label className="account-filter-value"><span>Valeur</span>
-                      <select aria-label="Rotation" value={viewFilters.rotation} onChange={(event) => setViewFilters((current) => ({ ...current, rotation: event.target.value as AccountViewFilters["rotation"] }))}>
-                        <option value="all">Toutes</option><option value="due">À renouveler</option><option value="failed">En échec</option>
-                      </select>
-                    </label>
-                  </div>
+                <div className="account-filter-rules" aria-label="Règles de filtrage">
+                  {filterRules.map((rule, index) => (
+                    <div className="account-filter-rule" key={index}>
+                      {index > 0 ? (
+                        <label className="account-filter-join-control">
+                          <span>Combinaison</span>
+                          <select
+                            aria-label={`Combinaison avant la règle ${index + 1}`}
+                            value={rule.join}
+                            onChange={(event) => updateFilterRule(index, { join: event.target.value as AccountFilterRule["join"] })}
+                          >
+                            <option value="AND">AND</option>
+                            <option value="OR">OR</option>
+                          </select>
+                        </label>
+                      ) : <span className="account-filter-join-placeholder" aria-hidden="true">OÙ</span>}
+                      <label className="account-filter-field">
+                        <span>Champ</span>
+                        <select
+                          aria-label={`Champ de la règle ${index + 1}`}
+                          value={rule.field}
+                          onChange={(event) => {
+                            if (!isAccountFilterField(event.target.value)) return;
+                            updateFilterRule(index, { field: event.target.value, value: defaultAccountFilterValue(event.target.value) });
+                          }}
+                        >
+                          <option value="protocol">Protocole</option>
+                          <option value="approval">Approbation</option>
+                          <option value="identity">Identité de la cible</option>
+                          <option value="rotation">Rotation</option>
+                        </select>
+                      </label>
+                      <label className="account-filter-operator">
+                        <span>Opérateur</span>
+                        <select
+                          aria-label={`Opérateur de la règle ${index + 1}`}
+                          value={rule.comparison}
+                          onChange={(event) => updateFilterRule(index, { comparison: event.target.value as AccountFilterRule["comparison"] })}
+                        >
+                          <option value="is">est</option>
+                          <option value="is-not">n'est pas</option>
+                        </select>
+                      </label>
+                      <label className="account-filter-value">
+                        <span>Valeur</span>
+                        <select
+                          aria-label={`Valeur de la règle ${index + 1}`}
+                          value={rule.value}
+                          onChange={(event) => updateFilterRule(index, { value: event.target.value })}
+                        >
+                          {rule.field === "protocol" ? <>
+                            <option value="ssh">SSH</option><option value="rdp">RDP</option><option value="vnc">VNC</option>
+                          </> : null}
+                          {rule.field === "approval" ? <>
+                            <option value="required">Requise</option><option value="not-required">Non requise</option>
+                          </> : null}
+                          {rule.field === "identity" ? <>
+                            <option value="pinned">Épinglée</option><option value="missing">Non épinglée</option>
+                          </> : null}
+                          {rule.field === "rotation" ? <>
+                            <option value="due">À renouveler</option><option value="failed">En échec</option><option value="none">Aucune rotation en attente</option>
+                          </> : null}
+                        </select>
+                      </label>
+                      <button className="account-filter-remove" type="button" aria-label={`Supprimer la règle ${index + 1}`} onClick={() => removeFilterRule(index)}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="account-filter-actions">
+                  <Button type="button" disabled={filterRules.length >= 10} onClick={addFilterRule}>+ Ajouter un filtre</Button>
+                  {filterRules.length > 0 ? <span className="ob-filter-help">Jusqu'à 10 règles. Les combinaisons sont évaluées de gauche à droite.</span> : <span className="ob-filter-help">Ajoutez une règle pour affiner les comptes affichés.</span>}
                 </div>
                 <div className="account-filter-builder-footer">
-                  <span className="ob-filter-help">Les critères sont combinés avec ET.</span>
+                  <span className="ob-filter-help">La recherche textuelle est toujours combinée aux règles avec AND.</span>
                   <span className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</span>
                 </div>
                 <div className="ob-saved-views">
@@ -279,7 +310,7 @@ export function Accounts() {
                   <Button disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</Button>
                 </div>
                 {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
-                <p className="ob-filter-help">Les vues conservent uniquement les filtres catégoriels et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
+                <p className="ob-filter-help">Les vues conservent uniquement les règles de filtrage et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
               </div>
             ) : null}
           </div>
