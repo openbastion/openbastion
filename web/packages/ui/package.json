@@ -4,9 +4,21 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
-  "sideEffects": ["styles.css"],
+  "sideEffects": [
+    "styles.css"
+  ],
   "exports": {
+    ".": "./src/index.ts",
     "./styles.css": "./styles.css",
     "./package.json": "./package.json"
+  },
+  "types": "./src/index.ts",
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": false
+    }
   }
 }

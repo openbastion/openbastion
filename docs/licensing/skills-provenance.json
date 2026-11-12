@@ -1529,7 +1529,7 @@
       "originCoAuthors": [
         "Claude Opus 5.5"
       ],
-      "skillMdSha256": "d5785b78a8de51e7637e2d1732cf065508902d2135fe81aa1db380eb9874e2d5"
+      "skillMdSha256": "b87b98dedc9ea66f10f4ec79ffe415dea5fa90269dea7473149676924446344b"
     },
     {
       "name": "ui-ux-design-system",
@@ -1544,7 +1544,7 @@
       "originCoAuthors": [
         "GitHub Copilot"
       ],
-      "skillMdSha256": "1a115c6795bd8ce1b553a6d186be2ed08419984f757bc716aeffef0d64b2f44d"
+      "skillMdSha256": "100cf7ff119be3cb8c92b558854c09b4ce5829caec4077c64434839e4d73cba7"
     },
     {
       "name": "web-application-security",

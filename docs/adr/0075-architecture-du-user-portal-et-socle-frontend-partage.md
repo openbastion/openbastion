@@ -84,7 +84,7 @@ Le manifeste racine `web/package.json` coordonne les outils et scripts communs a
 |---|---|---|
 | `web/packages/icons/` | Icônes de marque et icônes fonctionnelles OpenBastion, exports React/SVG et ressources associées | Pas de logique métier ni d'accès réseau |
 | `web/packages/design-tokens/` | Source de vérité de la charte OpenBastion Infrastructure : palettes primitives et sémantiques, typographie, espacements, densité, rayons, bordures, élévation, focus, mouvement, points de rupture et thèmes clair/sombre | Pas de composants, de préférences utilisateur, de données métier ni de décision d'autorisation |
-| `web/packages/ui/` | Primitives CSS génériques (boutons, badges, notices, surfaces, en-têtes, formulaires, tableaux, filtres, indicateurs, états vides et détails structurés), accessibles et construites exclusivement avec les tokens partagés ; wrappers React et logique de présentation propres à chaque application | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège ; pas de copie de composants propriétaires tiers |
+| `web/packages/ui/` | Bibliothèque React/TypeScript de composants visuels et interactifs partagés (API publiques typées, états, variantes, styles et tests) construits sur les tokens ; consommée par Admin UI et User Portal | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège ; pas de copie de composants propriétaires tiers |
 | `web/packages/api-client/` | Transport HTTP vers l'API publique Gateway, gestion cohérente des erreurs et des identifiants de corrélation | Aucun appel direct aux microservices ; aucun stockage persistant de jeton ou de secret |
 | `web/packages/contracts/` | Types et schémas frontend dérivés des contrats API publics versionnés | Pas de modèles internes copiés depuis les bases ou les domaines privés des services |
 | `web/packages/utilities/` | Fonctions frontend génériques sans dépendance métier | Pas de logique d'autorisation faisant autorité |
@@ -130,6 +130,14 @@ Les domaines fonctionnels du portail sont :
 - **profile** : préférences non sensibles et informations d'identité exposées par les API prévues.
 
 Les composants communs propres au portail résident dans `user-portal/src/components/`. Les composants spécifiques à une fonctionnalité restent dans son dossier `features/<domaine>/` tant qu'ils n'ont pas de réutilisation réelle. Un composant ne rejoint `packages/ui/` que s'il est indépendant du métier et utile à plusieurs applications.
+
+### Stratégie des composants React partagés
+
+- `@openbastion/ui` expose des composants React/TypeScript depuis `web/packages/ui/src/`, avec des contrats typés et des tests exécutés par le pipeline frontend. React est une peer dependency fournie par chaque application ; le package ne crée pas une seconde instance de React.
+- **Option C** : éléments HTML natifs et React pour les primitives simples (boutons, champs, cases à cocher, badges, alertes, cartes, séparateurs, skeletons) ; Radix UI est réservé aux interactions complexes qui exigent une gestion éprouvée du focus, du clavier, des portails et de l'état ARIA (dialogues, menus, popovers, accordions complexes). Chaque primitive Radix est enveloppée par une API OpenBastion et stylée avec les tokens ; aucune API Radix ne fuit dans les contrats publics du package.
+- Les composants ne contiennent ni accès réseau, ni client API, ni logique d'autorisation, ni connaissance du domaine PAM. Les applications gardent leurs libellés métier, leurs états de chargement liés aux API et leurs règles de présentation propres.
+- Le CSS commun reste dans `styles.css` et les styles propres à chaque application restent dans l'application. Les thèmes clair et sombre sont pilotés exclusivement par `@openbastion/design-tokens`.
+- L'implémentation est incrémentale : fondations natives, formulaires, overlays/navigation complexes, puis composants avancés et notifications. Les consommateurs valident le package au moyen de tests de contrat partagés.
 
 ### 5. Parcours et séparation des rôles
 

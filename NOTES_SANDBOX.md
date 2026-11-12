@@ -3988,3 +3988,29 @@ PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows S
 **Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
 
 **Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.
+
+
+## 2026-11-12 — Premiers composants React de `@openbastion/ui`
+
+La stratégie choisie pour la bibliothèque partagée est l'option C : React natif
+et HTML pour les primitives simples ; Radix UI sera réservé aux interactions
+complexes, encapsulé derrière les composants OpenBastion. `@openbastion/ui`
+expose maintenant `Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Input`,
+`Label`, `Separator`, `Skeleton`, `Switch` et `Textarea` avec des props
+TypeScript. React est déclaré comme peer dependency pour éviter une seconde
+instance dans les applications. Les façades `admin-ui/src/shared/ui/` pour
+Button, Badge et InlineNotice réexportent les implémentations partagées.
+
+Le premier lot n'ajoute aucune dépendance d'exécution tierce. Les tests de
+contrat du package sont exécutés depuis Vitest Admin UI : 15 fichiers et 153
+tests ont réussi après configuration de la déduplication React dans Vite. Le
+contrôle TypeScript a réussi ; le build Vite initial a rencontré un `EACCES`
+sur l'ancien répertoire `dist/` appartenant à root, et sera relancé avec un
+dossier de sortie temporaire. L'ADR-0075 reste `Proposé` : seule la stratégie
+technique des composants partagés est inscrite, l'architecture complète du
+User Portal n'est pas déclarée acceptée.
+
+Ce lot ne livre pas encore le catalogue complet (Radix overlays, navigation,
+calendrier, graphiques, notifications et helpers d'image restent à faire). Le
+User Portal n'est pas encore présent dans le dépôt ; sa consommation devra être
+validée lors de sa création.

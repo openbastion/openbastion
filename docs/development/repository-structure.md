@@ -231,7 +231,7 @@ web/
 | `admin-ui/` | Interface opérateur et administration ; aucun parcours self-service propre au portail |
 | `user-portal/` | Interface self-service : ressources, demandes, sessions, approbations conditionnelles, activité et profil |
 | `packages/icons/` | Source commune des icônes de marque et fonctionnelles |
-| `packages/ui/` | Primitives visuelles génériques, sans connaissance des domaines PAM |
+| `packages/ui/` | Composants React/TypeScript génériques et styles tokenisés, sans connaissance des domaines PAM |
 | `packages/design-tokens/` | Tokens sémantiques et thèmes clair/sombre |
 | `packages/api-client/` | Client HTTP de l'API publique Gateway uniquement |
 | `packages/contracts/` | Types frontend issus des contrats API publics ; OpenAPI reste la source de vérité |

@@ -1,12 +1,33 @@
 # @openbastion/ui
 
-Primitives CSS partagées de la charte OpenBastion Infrastructure (ADR-0075).
+Bibliothèque React/TypeScript partagée d’OpenBastion Infrastructure (ADR-0075). Elle fournit des composants accessibles, typés et sans logique métier, réutilisables par `admin-ui` et `user-portal`.
 
-Le package fournit des classes visuelles génériques, sans logique métier, sans JavaScript navigateur et sans dépendance tierce :
+## Contrat
 
-- `.ob-button` et ses variantes `primary`, `secondary`, `danger`, `ghost` et `icon` ;
-- `.ob-badge` et ses tons `neutral`, `info`, `success`, `warning` et `danger` ;
-- `.ob-notice` et ses tons sémantiques ;
-- `.ob-surface`, `.ob-page`, `.ob-page-header`, `.ob-hint`, `.ob-form-fields`, `.ob-form-actions`, `.ob-stat-grid`, `.ob-stat-card`, `.ob-empty-state`, `.ob-note` et `.ob-section-heading`, `.ob-table-wrap`, `.ob-data-table`, `.ob-filter-bar`, `.ob-filter-grid` et `.ob-saved-views` et `.ob-detail-list`.
+- React 19 est une peer dependency fournie par l’application consommatrice.
+- Les composants simples utilisent les éléments HTML natifs et React. Radix UI est réservé aux interactions complexes (dialogues, menus, popovers et widgets composites) ; les composants OpenBastion encapsulent ces primitives sans exposer leurs API internes.
+- Les styles sont pilotés par `@openbastion/design-tokens` et importés via `@openbastion/ui/styles.css`.
+- Aucun composant n'appelle l'API, ne connaît les ressources PAM ou ne décide des autorisations.
+- Les composants exposent des props TypeScript, conservent les attributs natifs et les refs lorsque pertinent, et ont des tests de contrat.
 
-Importer `@openbastion/design-tokens/tokens.css` avant `@openbastion/ui/styles.css`, puis les styles applicatifs. Les applications restent propriétaires de leurs wrappers React, de leurs libellés, de leur état et de leurs règles métier.
+## Fondations disponibles
+
+`Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Label`, `Separator`, `Skeleton`, `Switch` et `Textarea`. Le reste du catalogue est migré par lots ; sa présence dans la roadmap ne signifie pas qu'il est déjà exporté.
+
+Importer `@openbastion/design-tokens/tokens.css` avant `@openbastion/ui/styles.css`, puis les styles applicatifs. Les anciennes façades `admin-ui/src/shared/ui/` restent temporairement disponibles pour préserver les imports existants.
+
+## Catalogue cible
+
+| État | Composants / utilitaires |
+|---|---|
+| Implémentés | Alert, Badge, Button, Card, Checkbox, Input, Label, Separator, Skeleton, Switch, Textarea |
+| À réaliser — structure et navigation | Accordion, AspectRatio, Breadcrumb, Collapsible, Command, Menubar, NavigationMenu, Pagination, Resizable, ScrollArea, Sidebar, Tabs |
+| À réaliser — actions et overlays | AlertDialog, ContextMenu, Dialog, Drawer, DropdownMenu, HoverCard, Popover, Sheet, Tooltip |
+| À réaliser — formulaires | Calendar, Form, InputOTP, RadioGroup, Select, Slider, Toggle, ToggleGroup |
+| À réaliser — présentation | Avatar, Carousel, Chart, Image, Progress, Table |
+| À réaliser — notifications et utilitaires | Sonner, Toast, Toaster, useToast, `image-helpers.js` |
+
+`AspectRatio` figurait deux fois dans la demande initiale ; il n'est compté qu'une
+fois. `image-helpers.js` et `useToast` sont des utilitaires/hooks, pas des
+composants visuels autonomes. Chaque entrée est exportée seulement une fois son
+implémentation, ses tests et ses contrats validés.
