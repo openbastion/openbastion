@@ -61,6 +61,17 @@ const (
 )
 
 func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
+	recordAndReplay(t, false)
+}
+
+// The same session with partial frames (ADR-0092): each frame shown, key or partial, is what the
+// Recorder replays, byte for byte, and the screen an auditor composes from the recording is the
+// screen the operator composed.
+func TestRDPRecording_PartialFramesReplayAsShown(t *testing.T) {
+	recordAndReplay(t, true)
+}
+
+func recordAndReplay(t *testing.T, partial bool) {
 	windows := os.Getenv("RDP_WINDOWS") != ""
 	if os.Getenv("RDP_INTEROP") == "" && !windows {
 		t.Skip("RDP_INTEROP (FreeRDP in Docker) or RDP_WINDOWS (a Windows target, test.env) is needed")
@@ -136,7 +147,7 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 	listener := proxycore.NewListener(proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy), proxycore.NewTerminator(noopAudit{}))
 	// The pointer drawn, as SCREEN_DRAW_POINTER is by default (ADR-0091): recorded as shown.
 	codec := &engine.RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DesktopWidth: target.askWidth, DesktopHeight: target.askHeight,
-		DrawPointer: true}
+		DrawPointer: true, PartialFrames: partial}
 	// As cmd/rdp-vnc-proxy builds it with RDP_ENABLED=true (ADR-0088): VNC's codec, and RDP's for an
 	// RDP ticket.
 	server := NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, &engine.VNCCodec{TLSRoots: target.roots}, recorder, "rdp-vnc-proxy:8090", nil).WithRDP(codec)
@@ -178,7 +189,12 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 		}
 	}()
 	shown := map[uint64]screenstream.Message{}
+	shownBytes := map[uint64][]byte{}
+	// last is the screen as the operator composes it: a key frame replaces it, a partial frame
+	// changes it (ADR-0092). Its PNG is that screen, encoded, for comparing two moments.
 	var last screenstream.Message
+	var composer screenstream.Composer
+	keyFrames, partialFrames := 0, 0
 	read := func(quiet time.Duration) {
 		for {
 			var data []byte
@@ -202,8 +218,21 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 				}
 			case screenstream.TypeEnd:
 				t.Fatalf("END %d %q\n%s", m.EndCode, m.Text, video.out.String())
-			case screenstream.TypeFrame:
-				shown[m.Sequence], last = m, m
+			case screenstream.TypeFrame, screenstream.TypeFrameDelta:
+				if err := composer.Apply(m); err != nil {
+					t.Fatalf("frame %d (%v) does not compose: %v", m.Sequence, m.Type, err)
+				}
+				shown[m.Sequence], shownBytes[m.Sequence] = m, data
+				var encoded bytes.Buffer
+				if err := png.Encode(&encoded, composer.Screen()); err != nil {
+					t.Fatal(err)
+				}
+				last = screenstream.Message{Type: screenstream.TypeFrame, Sequence: m.Sequence, Width: m.Width, Height: m.Height, PNG: encoded.Bytes()}
+				if m.Type == screenstream.TypeFrame {
+					keyFrames++
+				} else {
+					partialFrames++
+				}
 			}
 		}
 	}
@@ -325,18 +354,47 @@ func TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays(t *testing.T) {
 		if got == nil {
 			t.Fatalf("frame %d was shown and not recorded", sequence)
 		}
-		if !bytes.Equal(got.GetFrameData(), frame.PNG) {
-			t.Fatalf("frame %d: %d bytes replayed differ from the %d shown", sequence, len(got.GetFrameData()), len(frame.PNG))
+		// A key frame is its PNG; a partial frame, the message the operator received (ADR-0092 §5).
+		want, codec := frame.PNG, "png"
+		if frame.Type == screenstream.TypeFrameDelta {
+			want, codec = shownBytes[sequence], "png-delta-v1"
+		}
+		if got.GetCodec() != codec || !bytes.Equal(got.GetFrameData(), want) {
+			t.Fatalf("frame %d: %d bytes (%s) replayed differ from the %d shown (%s)", sequence, len(got.GetFrameData()), got.GetCodec(), len(want), codec)
 		}
 	}
-	for _, frame := range replayed {
-		config, err := png.DecodeConfig(bytes.NewReader(frame.GetFrameData()))
-		if err != nil {
-			t.Fatalf("a recorded frame is not a PNG: %v", err)
+	// The auditor composes the recording, frame after frame, from its first key frame: the screen
+	// they reach is the one the operator saw last.
+	var auditor screenstream.Composer
+	for sequence := uint64(1); sequence <= uint64(len(replayed)); sequence++ {
+		frame := replayed[sequence]
+		var m screenstream.Message
+		if frame.GetCodec() == "png-delta-v1" {
+			decoded, err := screenstream.Decode(frame.GetFrameData())
+			if err != nil {
+				t.Fatalf("recorded frame %d: %v", sequence, err)
+			}
+			m = decoded
+		} else {
+			config, err := png.DecodeConfig(bytes.NewReader(frame.GetFrameData()))
+			if err != nil {
+				t.Fatalf("a recorded frame is not a PNG: %v", err)
+			}
+			m = screenstream.Message{Type: screenstream.TypeFrame, Sequence: sequence, Timestamp: frame.GetTs().AsTime(),
+				Width: uint32(config.Width), Height: uint32(config.Height), PNG: frame.GetFrameData()}
 		}
-		sizes[fmt.Sprintf("%dx%d", config.Width, config.Height)]++
+		if err := auditor.Apply(m); err != nil {
+			t.Fatalf("recorded frame %d (%s) does not compose: %v", sequence, frame.GetCodec(), err)
+		}
+		sizes[fmt.Sprintf("%dx%d", m.Width, m.Height)]++
 	}
-	t.Logf("%d frame(s) shown, %d recorded, sealed; sizes recorded: %v", len(shown), len(replayed), sizes)
+	if !bytes.Equal(auditor.Screen().Pix, composer.Screen().Pix) {
+		t.Fatal("the screen composed from the recording is not the screen the operator saw last")
+	}
+	t.Logf("%d frame(s) shown (%d key, %d partial), %d recorded, sealed; sizes recorded: %v", len(shown), keyFrames, partialFrames, len(replayed), sizes)
+	if partial && partialFrames == 0 {
+		t.Fatal("no partial frame in a session meant to send them")
+	}
 	if sizes["1280x800"] == 0 || !windows && sizes["1024x768"] == 0 {
 		t.Fatalf("the recording does not hold the sizes of the session: %v", sizes)
 	}

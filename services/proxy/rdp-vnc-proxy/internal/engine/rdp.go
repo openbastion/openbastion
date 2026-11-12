@@ -111,6 +111,7 @@ func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 	}
 	if c.PartialFrames {
 		framebuffer.EnablePartialFrames(0, 0)
+		s.keyWanted = make(chan struct{}, 1)
 	}
 	go s.readLoop(sessionCtx)
 	return s, nil
@@ -239,6 +240,22 @@ type rdpScreenSessionAdapter struct {
 	pointerMoved chan struct{}
 	// pointerUpdates counts the target's pointer updates, for the interoperability tests.
 	pointerUpdates int
+	// keyWanted tells the reader the relay wants a key frame (RequestKeyFrame, ADR-0092): nil
+	// without partial frames.
+	keyWanted chan struct{}
+}
+
+// RequestKeyFrame makes the next frame a key frame, and makes one now if the screen stays still:
+// the operator's display, fallen behind, dropped partial frames and waits for it (ADR-0092).
+func (s *rdpScreenSessionAdapter) RequestKeyFrame() {
+	if s.keyWanted == nil {
+		return
+	}
+	s.framebuffer.ForceKeyFrame()
+	select {
+	case s.keyWanted <- struct{}{}:
+	default: // one is already wanted
+	}
 }
 
 func (s *rdpScreenSessionAdapter) Frames() <-chan screenstream.Message { return s.frames }
@@ -515,6 +532,10 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 		case <-due:
 			due = nil
 			if dirty && !emit() {
+				return
+			}
+		case <-s.keyWanted: // nil without partial frames
+			if shown && !changed() {
 				return
 			}
 		case <-s.pointerMoved: // nil, and never ready, when the pointer is not drawn

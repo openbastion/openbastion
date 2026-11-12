@@ -135,3 +135,27 @@ func TestRDPCodec_AReactivationMakesAKeyFrame(t *testing.T) {
 		t.Fatalf("frames %v: want key, partial, key after the reactivation", kinds)
 	}
 }
+
+// The relay's display, fallen behind, asks for a key frame: one comes, even on a still screen.
+func TestRDPCodec_AKeyFrameComesWhenTheDisplayAsks(t *testing.T) {
+	target := &fakeRDPDesktop{width: 64, height: 64, updates: []rdp.RDPBitmapUpdate{grayDesktop(64, 64), redPixel(1, 1)}}
+	session := openPartialSession(t, target)
+	nextMessage(t, session, "the desktop")
+	if m := nextMessage(t, session, "one pixel"); m.Type != screenstream.TypeFrameDelta {
+		t.Fatalf("%v", m.Type)
+	}
+	requester, ok := session.(proxycore.KeyFrameRequester)
+	if !ok {
+		t.Fatal("the RDP session cannot be asked for a key frame")
+	}
+	requester.RequestKeyFrame()
+	key := nextMessage(t, session, "the key frame asked for")
+	if key.Type != screenstream.TypeFrame {
+		t.Fatalf("asked for a key frame, got a %v", key.Type)
+	}
+	var c screenstream.Composer
+	if err := c.Apply(key); err != nil || c.Screen().RGBAAt(1, 1).R != 0xff {
+		t.Fatalf("the key frame is not the screen as it is: %v", err)
+	}
+	noFrame(t, session, "after the key frame")
+}

@@ -3036,6 +3036,26 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092, incrément 3 : le Video Recorder et le relais acceptent les images partielles
+
+**Le Video Recorder :**
+- **Transport** : une image partielle voyage dans `frame_data` sous la forme de son message `FRAME_DELTA`, avec le codec `png-delta-v1` (le schéma Protobuf ne change pas).
+- **Validation** avant d'acquitter : message lisible, séquence et horodatage de l'image, chaque rectangle un PNG de sa taille. `RecordingWriter.followScreen` refuse en outre une image partielle sans image clé de même taille avant elle, d'un segment à l'autre.
+- **Format** : un segment qui contient une image partielle est scellé au format 2 (données associées) ; un segment d'images clés reste au format 1, octet pour octet. `openSegment` n'accepte un segment que sous le format que ses images demandent : ni un segment 2 qui se ferait passer pour un 1, ni l'inverse.
+
+**Le relais et le client gRPC :**
+- **Relais** (`proxycore`) : une image partielle n'est acceptée qu'après une image clé et à sa taille, et le Recorder reçoit sa propre copie des rectangles.
+- **Client** du proxy : un `FRAME_DELTA` part sous `png-delta-v1`.
+
+**L'opérateur en retard** (complément à ADR-0092) : le relais remplaçait l'image en attente par la plus récente. Il ne le peut plus pour une image partielle. L'affichage la met en file (32 images ou 4 Mio au plus). Au-delà, il demande une image clé (`proxycore.KeyFrameRequester`, que RDP produit même sur un écran immobile) et n'envoie plus rien jusqu'à elle.
+
+**Prouvé** :
+- **de bout en bout contre FreeRDP 3**, avec le vrai proxy, le vrai Video Recorder et PostgreSQL : en images partielles, 2 images clés (dont celle du passage en 1024 × 768) et 3 images partielles. Chaque image montrée est relue octet pour octet sous son codec, et l'écran recomposé par l'auditeur à partir de l'enregistrement est celui de l'opérateur. La même épreuve en images entières passe toujours ;
+- unitaires : Recorder (aller-retour, refus, formats 1 et 2 dans les quatre sens), relais (copie des rectangles, refus), client gRPC (codec, octets), affichage (file, borne en nombre et en octets, demande unique, rien après le débordement, reprise), demande d'image clé côté RDP ;
+- **20 mutations : 18 tuées, 2 équivalentes**. Les deux équivalentes : une image partielle de taille non nulle est déjà refusée devant un écran de taille 0, au relais comme au Recorder. Au premier passage, deux tests manquaient dans l'affichage ; ils sont ajoutés.
+
+**Pas encore** : l'Admin UI ne sait ni afficher en direct ni rejouer une image partielle (incrément 4), et `SCREEN_PARTIAL_FRAMES` n'est donc pas offert par le runtime. VNC reste en images entières (incrément 5).
+
 ## 2026-11-12 — ADR-0092, incrément 2 : RDP envoie des images partielles
 
 `screenstream.FrameEncoder` produit les images d'ADR-0092. Il compare l'image à montrer à la précédente, par tuiles de 32 pixels. Les tuiles changées d'une rangée forment des segments, et un segment se fond avec celui du dessus quand il couvre les mêmes colonnes.

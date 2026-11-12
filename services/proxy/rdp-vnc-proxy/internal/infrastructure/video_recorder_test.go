@@ -29,6 +29,8 @@ type videoRecorderTestServer struct {
 	ready     bool
 	ackOffset int64
 	frames    []uint64
+	codecs    []string
+	data      [][]byte
 	complete  bool
 }
 
@@ -77,6 +79,8 @@ func (s *videoRecorderTestServer) StreamVideoSegments(stream grpc.BidiStreamingS
 		through = message.GetLastSequence()
 		s.mu.Lock()
 		s.frames = append(s.frames, uint64(through))
+		s.codecs = append(s.codecs, message.GetFrames()[0].GetCodec())
+		s.data = append(s.data, message.GetFrames()[0].GetFrameData())
 		ackOffset := s.ackOffset
 		s.mu.Unlock()
 		if err := stream.Send(&recordingv1.VideoSegmentAck{SessionId: sessionID, ThroughSequence: through + ackOffset}); err != nil {
@@ -214,5 +218,35 @@ func TestVideoRecorderClientRejectsSequenceGap(t *testing.T) {
 	client := newVideoRecorderTestClient(t, &videoRecorderTestServer{ready: true})
 	if _, err := client.Record(context.Background(), "session-vnc-gap", testScreenFrame(t, 2)); !errors.Is(err, ErrVideoRecorderProtocol) {
 		t.Fatalf("Record sequence gap = %v, want ErrVideoRecorderProtocol", err)
+	}
+}
+
+// A partial frame goes to the Recorder as the operator receives it: its FRAME_DELTA message, under
+// codec png-delta-v1; a key frame stays its PNG (ADR-0092 §5).
+func TestVideoRecorderClientSendsPartialFramesAsTheyAreShown(t *testing.T) {
+	server := &videoRecorderTestServer{ready: true}
+	client := newVideoRecorderTestClient(t, server)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	key := testScreenFrame(t, 1)
+	if _, err := client.Record(ctx, "session-vnc-1", key); err != nil {
+		t.Fatal(err)
+	}
+	delta := screenstream.Message{Type: screenstream.TypeFrameDelta, Sequence: 2, Timestamp: key.Timestamp.Add(time.Millisecond),
+		Width: key.Width, Height: key.Height, Rects: []screenstream.Rect{{Width: 1, Height: 1, PNG: key.PNG}}}
+	if ack, err := client.Record(ctx, "session-vnc-1", delta); err != nil || ack != 2 {
+		t.Fatalf("Record of a partial frame = %d, %v", ack, err)
+	}
+	wire, err := screenstream.Encode(delta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if len(server.codecs) != 2 || server.codecs[0] != "png" || server.codecs[1] != "png-delta-v1" {
+		t.Fatalf("codecs %v", server.codecs)
+	}
+	if !bytes.Equal(server.data[0], key.PNG) || !bytes.Equal(server.data[1], wire) {
+		t.Fatal("the Recorder did not get the key frame's PNG and the partial frame's message")
 	}
 }
