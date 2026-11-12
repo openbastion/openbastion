@@ -3114,6 +3114,10 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-12 — ADR-0095, incrément 5 : le redimensionnement dans un navigateur sans interface (en cours)
+
+`TestScreenFlow_RDPResizeInAHeadlessBrowser`, en CI Windows seulement : nouvelle étape « The resize in a headless browser » de `windows-rdp.yml`, qui construit l'Admin UI (Node 24.21.0, comme `frontend.yml`). Chrome est piloté par le protocole DevTools (`test/integration/cdp_test.go`). En local, ni Windows ni Chrome : l'épreuve se saute. Elle n'a pas encore tourné.
+
 ## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre
 
 La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins 112 px. Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.

@@ -96,6 +96,11 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Prouvé** : 4 tests (le drapeau, l'encodage, l'envoi et son rythme, rien pour une session qui ne redimensionne pas) ; 7 mutations tuées ; les 117 tests de l'Admin UI passent, et sa construction aussi.
 - **Reste** (incrément 5) : la vérification dans un vrai navigateur, contre une cible Windows. Le bac à sable n'en a pas : il n'a qu'une cible VNC, qui ne redimensionne pas. Puis la décision d'allumer `SCREEN_RESIZE` par défaut, qui revient au propriétaire.
 
+**Incrément 5, en cours (12 novembre 2026) : la vérification dans un vrai navigateur, en CI.** Le propriétaire a choisi un navigateur sans interface dans la CI Windows, puisque le bac à sable n'a pas de cible Windows.
+- `TestScreenFlow_RDPResizeInAHeadlessBrowser` (`test/integration`) démarre les huit services sur de vrais processus, avec `SCREEN_RESIZE` allumé et l'Admin UI servie par la Gateway, contre la cible Windows de la CI.
+- Le Chrome du runner, sans interface, est piloté par le protocole DevTools (`cdp_test.go`, sur le client WebSocket que le module a déjà : aucune dépendance nouvelle). Il se connecte, ouvre l'écran par les boutons de la page, puis la fenêtre est redimensionnée deux fois. Le bureau distant doit suivre, à chaque fois, la taille que la page demande, et la session doit continuer. Les captures vont dans les artefacts (`browser-resize-*.png`).
+- L'épreuve RDP de bout en bout prête sa mise en place (`startRDPScreenStack`) ; contre FreeRDP, elle passe toujours.
+
 ## Conséquences
 
 - (+) Le socle des canaux existe, borné, et il est prouvé par un canal réel contre Windows avant qu'un canal à contenu ne s'y appuie.
