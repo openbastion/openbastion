@@ -13,7 +13,7 @@ La direction est proche de l'expérience ergonomique de consoles d'infrastructur
 ### Principes
 
 - **Opérationnel d'abord :** la structure et les données utiles priment sur la décoration.
-- **Navigation constante :** navigation latérale sur grand écran, réduite sans perte de repères, panneau accessible sur petit écran.
+- **Navigation constante :** navigation latérale sur grand écran, réduite sans perte de repères, panneau accessible sur petit écran. En thème clair, la sidebar est une surface neutre claire avec textes foncés ; en thème sombre, elle devient une surface sombre. L’accent bleu est réservé à la sélection, au focus et aux actions pertinentes.
 - **Tableaux avant les cartes :** utiliser un tableau pour comparer, trier ou parcourir des ressources ; réserver les cartes aux regroupements et synthèses qui ont un sens.
 - **Densité maîtrisée :** informations scannables, colonnes alignées, nombres à chasse fixe, filtres explicites et espaces réguliers.
 - **Surfaces neutres :** fonds sobres, séparateurs visibles, ombres discrètes, rayons limités ; pas de gradients décoratifs, de grille de cartes uniforme ou d'animation permanente.
@@ -38,10 +38,12 @@ Les valeurs ci-dessous sont les couleurs de départ de la charte. Les composants
 | Succès | `#126B4F` | `#66D6A5` |
 | Avertissement | `#8A5700` | `#FFD27A` |
 | Danger | `#B42318` | `#FF8D86` |
-| Fond de navigation latérale | `#17222D` | `#17222D` |
-| Texte principal de navigation | `#F3F6F9` | `#F3F6F9` |
-| Texte secondaire de navigation | `#B4C0CB` | `#B4C0CB` |
-| Accent de navigation | `#66B8FF` | `#66B8FF` |
+| Fond de navigation latérale | `#F0F3F7` | `#17222D` |
+| Fond de survol navigation | `#E8EDF3` | `#1D2B38` |
+| Texte principal de navigation | `#17212B` | `#F3F6F9` |
+| Texte secondaire de navigation | `#526171` | `#B4C0CB` |
+| Accent de navigation | `#1769AA` | `#66B8FF` |
+| Fond de sélection navigation | `#E8F2FA` | `#18364E` |
 
 ### Contrastes mesurés
 
@@ -57,10 +59,10 @@ Ratios calculés à partir des valeurs hexadécimales ci-dessus selon la formule
 | Danger / surface | 6,57:1 | 7,22:1 | 4,5:1 |
 | Bordure de contrôle / surface | 4,76:1 | 4,29:1 | 3:1 |
 | Texte sur action primaire / accent | 5,77:1 | 8,48:1 | 4,5:1 |
-| Texte principal navigation / fond navigation | 14,86:1 | 14,86:1 | 4,5:1 |
-| Texte secondaire navigation / fond navigation | 8,70:1 | 8,70:1 | 4,5:1 |
-| Accent navigation / fond navigation | 7,57:1 | 7,57:1 | 4,5:1 |
-| Accent navigation active / fond sélectionné | 5,88:1 | 5,88:1 | 4,5:1 |
+| Texte principal navigation / fond navigation | 14,64:1 | 14,86:1 | 4,5:1 |
+| Texte secondaire navigation / fond navigation | 5,71:1 | 8,70:1 | 4,5:1 |
+| Accent navigation / fond navigation | 5,19:1 | 7,57:1 | 4,5:1 |
+| Accent navigation active / fond sélectionné | 5,09:1 | 5,88:1 | 4,5:1 |
 | Badge info / fond info | 5,09:1 | 5,88:1 | 4,5:1 |
 | Badge succès / fond succès | 5,80:1 | 6,88:1 | 4,5:1 |
 | Badge avertissement / fond avertissement | 5,64:1 | 8,59:1 | 4,5:1 |
@@ -99,7 +101,7 @@ Les modes de densité `compact` et `comfortable` restent disponibles. Le mode co
 ### Structure de la console
 
 - En-tête clair et compact avec marque, recherche/commandes, préférences et identité de session.
-- Barre latérale sombre persistante, sections groupées et état courant évident ; mode réduit avec infobulles accessibles.
+- Barre latérale persistante, adaptée au thème actif : surface claire en `light`, sombre en `dark`, sections groupées et état courant évident ; mode réduit avec infobulles accessibles.
 - En-tête de page avec titre, description, fil d'Ariane si utile et action principale.
 - Contenu en largeur maîtrisée ; les tableaux défilent localement si nécessaire.
 - Sur petit écran, navigation en panneau modal avec focus géré et retour au déclencheur.
@@ -147,7 +149,7 @@ Un composant peut être remplacé uniquement si ses comportements, libellés acc
 | 0 — Baseline | Inventaire UX-01..05, captures de référence si disponibles, état des tests et audit des couleurs existantes | Baseline `make ui-test ui-build`, inventaire des usages CSS et aucune modification fonctionnelle |
 | 1 — Charte et contrats (livré) | ADR-0073 §3.1 et ADR-0075 §3.1 formalisent OpenBastion Infrastructure, ses frontières de packages et sa spécification | Relecture des décisions, liens documentaires et `git diff --check` |
 | 2 — Tokens (livré) | Package CSS `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques, import reproductible et contrôle de contraste intégré à Make | `make ui-tokens-test` : 18 paires contrôlées à cette étape ; `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis |
-| 3 — Shell (implémenté) | En-tête clair, sidebar sombre, navigation active, densité, thèmes, responsive et focus | `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis ; 26 paires vérifiées ; revue visuelle multi-viewport à faire |
+| 3 — Shell (implémenté) | En-tête clair, sidebar claire en thème `light` et sombre en thème `dark`, navigation active, densité, thèmes, responsive et focus | `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis ; 26 paires vérifiées ; revue visuelle multi-viewport à faire |
 | 4 — Primitives (implémenté) | Package CSS partagé `web/packages/ui/` : boutons, badges, notices, surfaces, en-têtes, formulaires, tableaux, filtres, détails structurés et pagination ; wrappers React propres à l’Admin UI | 14 fichiers Vitest, 147 tests ; 36 paires de contraste ; TypeScript et Vite réussis |
 | 5 — Migration des écrans (implémentée) | Vue générale, Centre de sécurité, comptes, politiques, sessions, commandes enregistrées et replay vidéo utilisent les patterns partagés | 14 fichiers Vitest, 148 tests ; TypeScript et Vite réussis ; contrats API et comportements UX-01 à UX-05 conservés ; revue visuelle multi-viewport à faire |
 | 6 — Finition et audit | Réduction des valeurs locales, revue clavier/lecteur d'écran, thèmes, mouvement et responsive | `make ui-test ui-build`, audit des contrastes rendus, `git diff --check`, limites consignées |

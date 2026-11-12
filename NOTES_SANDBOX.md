@@ -1,5 +1,22 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — La sidebar respecte le thème clair
+
+La navigation latérale utilisait les mêmes tokens sombres dans les deux thèmes.
+Les tokens `chrome` sont maintenant réellement thématiques : en mode clair, la
+sidebar utilise une surface neutre `#F0F3F7`, des textes foncés et un accent bleu
+sobre ; en mode sombre, elle conserve la surface `#17222D`, les textes clairs et
+l’accent lumineux. Les états de survol, sélection, bordure et favoris suivent
+les mêmes tokens, sans surcharge CSS spécifique au composant.
+
+Validation : `make ui-tokens-test` passe avec 18 paires contrôlées par thème ;
+les quatre paires de navigation dépassent 4,5:1 dans les deux thèmes. `npm test`
+passe (14 fichiers, 148 tests). TypeScript et le build Vite passent avec une
+sortie isolée sous `/tmp/openbastion-admin-ui-build-check`. Le build standard
+`make ui-build` n’a pas pu nettoyer `web/admin-ui/dist/assets` : des artefacts
+préexistants appartiennent à `root` (EACCES). Le serveur Vite Base44 transforme
+bien `main.tsx` avec les nouveaux tokens.
+
 ## 2026-11-12 — Base44 monte les packages frontend locaux
 
 Le serveur Vite Base44 installait les dépendances de l'Admin UI depuis son
