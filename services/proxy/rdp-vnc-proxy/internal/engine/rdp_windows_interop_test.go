@@ -536,7 +536,18 @@ func TestRDPWindows_ExtendedKeys(t *testing.T) {
 // to the screen, typing, a window of dense text, scrolling, and the drawn pointer. The figures go to
 // the log (MEASURE) and to measure.json beside the screens. Before the logoff test, which closes the
 // session; Notepad is emptied and saved at the end, so that nothing asks to be saved at logoff.
+// The scenes run twice: whole frames, then partial frames (ADR-0092), for the figures of both.
 func TestRDPWindows_Measure(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		name := "whole-frames"
+		if partial {
+			name = "partial-frames"
+		}
+		t.Run(name, func(t *testing.T) { measureWindows(t, partial) })
+	}
+}
+
+func measureWindows(t *testing.T, partial bool) {
 	target := windowsTarget(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -549,13 +560,21 @@ func TestRDPWindows_Measure(t *testing.T) {
 	}
 	// As the proxy runs by default: the pointer drawn, at most one frame each 50 ms.
 	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second, DrawPointer: true,
-		FrameInterval: 50 * time.Millisecond}).Open(ctx, cred)
+		FrameInterval: 50 * time.Millisecond, PartialFrames: partial}).Open(ctx, cred)
 	if err != nil {
 		t.Fatalf("opening the screen of Windows: %v", err)
 	}
 	defer session.Close()
 	label := fmt.Sprintf("windows-%s-%sbpp-%s-%s", os.Getenv("RDP_WINDOWS_VERSION"), os.Getenv("RDP_WINDOWS_BPP"),
 		os.Getenv("RDP_WINDOWS_SESSION"), os.Getenv("RDP_WINDOWS_KEYBOARD"))
+	dump := os.Getenv("RDP_WINDOWS_DUMP")
+	if partial {
+		label += "-partial"
+		if dump != "" {
+			dump = filepath.Join(dump, "partial")
+			_ = os.MkdirAll(dump, 0o755)
+		}
+	}
 	m := newSessionMeter(t, label, session, rdpServerBytes(t, session))
 	m.settle(10*time.Second, 90*time.Second)
 	m.mu.Lock()
@@ -600,15 +619,15 @@ func TestRDPWindows_Measure(t *testing.T) {
 		}
 	})
 	m.scene("pointer", func() { m.pointerCircle(width/2, height/2, 200, 50, 20*time.Millisecond) })
-	if dir := os.Getenv("RDP_WINDOWS_DUMP"); dir != "" {
-		_ = os.WriteFile(filepath.Join(dir, "measure-dense-text.png"), dense.PNG, 0o644)
+	if dump != "" && dense.Type == screenstream.TypeFrame {
+		_ = os.WriteFile(filepath.Join(dump, "measure-dense-text.png"), dense.PNG, 0o644)
 	}
 	// Nothing left to save at logoff: the text emptied, the file saved.
 	rdpChord(t, session, ctrl, ctrlA)
 	rdpKeys(t, session, 50*time.Millisecond, 0xe053) // Delete
 	rdpChord(t, session, ctrl, 0x1f)                 // Ctrl+S
 	m.settle(2*time.Second, 20*time.Second)
-	m.publish(os.Getenv("RDP_WINDOWS_DUMP"))
+	m.publish(dump)
 }
 
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by

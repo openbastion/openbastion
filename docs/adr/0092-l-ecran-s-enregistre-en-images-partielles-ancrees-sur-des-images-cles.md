@@ -84,7 +84,7 @@ Les deux cibles savent déjà ce qui a changé. RDP envoie des rectangles (Bitma
 ## Mise en œuvre envisagée, par incréments
 
 1. **Fait** : le format. `FRAME_DELTA` dans `pkg/screenstream` (encodage, décodage, bornes, fuzzer), et la composition de référence en Go (`Composer`). Un écran recomposé est prouvé égal, octet pour octet, à l'image clé du même moment ; 17 mutations tuées, plus une équivalente.
-2. RDP : le framebuffer suit les rectangles touchés depuis la dernière image, et le moteur émet images partielles et images clés selon le §3. Le pointeur suit le §4.
+2. **Fait** : RDP. Plutôt que de suivre chaque opération, `screenstream.FrameEncoder` compare l'image à montrer à la précédente, par tuiles de 32 pixels, et envoie les tuiles changées regroupées en rectangles. La différence couvre donc tout (bitmaps, ordres, pointeur, §4) ; ce mécanisme servira aussi à VNC. Une image identique ne fait pas d'image, et une réactivation force une image clé. Le moteur l'active par `RDPCodec.PartialFrames`, que le runtime n'offre pas encore : le Video Recorder ne stocke pas encore ces images (incrément 3).
 3. Video Recorder : `png-delta-v1`, format de segment 2, validation avant acquittement, rejeu.
 4. Admin UI : composition en direct et en rejeu, positionnement par image clé.
 5. VNC.

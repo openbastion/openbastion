@@ -3036,6 +3036,29 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092, incrément 2 : RDP envoie des images partielles
+
+`screenstream.FrameEncoder` produit les images d'ADR-0092. Il compare l'image à montrer à la précédente, par tuiles de 32 pixels. Les tuiles changées d'une rangée forment des segments, et un segment se fond avec celui du dessus quand il couvre les mêmes colonnes.
+- **Image clé** : à la première image, à chaque changement de taille, toutes les 10 s ou 300 images, et à la place d'une image partielle qui aurait plus de 64 rectangles, couvrirait plus de la moitié de l'écran ou dépasserait 4 Mio.
+- **Image inchangée** : pas d'image (`ErrUnchanged`). En images entières, le proxy envoyait des images identiques, par exemple pour un pointeur caché qui bouge.
+- **Câblage RDP** : `RDPFramebuffer.EnablePartialFrames` et `ForceKeyFrame` (à la réactivation), `RDPCodec.PartialFrames` dans le moteur. Le runtime ne l'offre pas encore : le Video Recorder refuserait ces images, ce sera l'incrément 3.
+
+**Prouvé** :
+- `pkg/screenstream` : 200 étapes de changements aléatoires (tailles non multiples de 32), où chaque image encodée puis décodée et composée redonne l'image, octet pour octet. S'y ajoutent chaque règle d'image clé, l'image inchangée, le pointeur et la réactivation ;
+- moteur : un pixel donne une tuile, le pointeur donne ses tuiles (la zone quittée est repeinte), une réactivation donne une image clé, et l'écran composé égale une image clé du même moment ;
+- **18 mutations : 17 tuées**. La survivante est quasi équivalente : après une image inchangée, `dirty` resté vrai ne cause qu'une tentative de plus, elle-même inchangée.
+
+**Mesuré contre FreeRDP 3** (local, 1280 × 800, xterm) :
+
+| Scène | Images entières | Images partielles |
+|---|---|---|
+| Frappe, enregistré | 297 Kio/s, 19,7 Ko par image | **4,1 Kio/s**, 247 octets par image |
+| Défilement, enregistré | 109 Kio/s | **11,5 Kio/s** (une image clé) |
+| Encodage par image | 12 ms | **0,2 ms** |
+| Latence touche → image, médiane | 97 ms | 59 ms |
+
+La scène du pointeur ne mesure rien chez FreeRDP : xterm cache le pointeur pendant la frappe, et la cible l'annonce caché (forme, puis « caché »). Les images partielles le reconnaissent et n'envoient rien ; les images entières envoyaient 18 images identiques. Windows mesurera le pointeur : la CI de la PR fait tourner la mesure Windows dans les deux modes.
+
 ## 2026-11-11 — ADR-0092, incrément 1 : le format des images partielles
 
 `pkg/screenstream` connaît `FRAME_DELTA` (type 4). Le message porte la séquence et la taille de l'image, comme un `FRAME`, puis 1 à 64 rectangles, chacun avec `x`, `y`, largeur, hauteur, longueur du PNG et le PNG lui-même.
