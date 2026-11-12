@@ -297,3 +297,52 @@ func keyFrameMessage(t *testing.T, sequence uint64, at time.Time) []byte {
 	}
 	return data
 }
+
+// A read that spans several stored segments (ADR-0093) is served whole: key and partial frames,
+// each partial frame checked at its own sequence within the range.
+func TestVideoRecordingRoute_ServesARangeOfSegments(t *testing.T) {
+	at := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	delta := func(sequence uint64) []byte {
+		data, err := screenstream.Encode(screenstream.Message{Type: screenstream.TypeFrameDelta, Sequence: sequence, Timestamp: at,
+			Width: 8, Height: 4, Rects: []screenstream.Rect{{Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nrect")}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-verified", "alice", []string{"auditor"})
+	t.Cleanup(authSrv.Close)
+	recorder := &fakeVideoRecorder{response: &recordingv1.GetVideoSegmentResponse{
+		SessionId: "s-1", FirstSequence: 5, LastSequence: 7, Complete: true,
+		Frames: []*recordingv1.VideoFrameData{
+			{Ts: timestamppb.New(at), FrameData: []byte("png-data"), Codec: "png"},
+			{Ts: timestamppb.New(at), FrameData: delta(6), Codec: "png-delta-v1"},
+			{Ts: timestamppb.New(at), FrameData: delta(7), Codec: "png-delta-v1"},
+		},
+	}}
+	gateway := newTestGateway(t, authSrv.URL, "").WithVideoRecorderClient(recorder).Routes()
+	request := httptest.NewRequest(http.MethodGet, "/sessions/s-1/recording/video/segments/5", nil)
+	request.Header.Set("Authorization", "Bearer tok-alice")
+	response := httptest.NewRecorder()
+	gateway.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("a range of segments returned %d: %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		FirstSequence int64 `json:"firstSequence"`
+		LastSequence  int64 `json:"lastSequence"`
+		Frames        []struct {
+			Codec string `json:"codec"`
+		} `json:"frames"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.FirstSequence != 5 || body.LastSequence != 7 || len(body.Frames) != 3 {
+		t.Fatalf("range served as %+v, %v", body, err)
+	}
+	// The same range with the partial frames out of their place is refused.
+	recorder.response.Frames[1].FrameData, recorder.response.Frames[2].FrameData = delta(7), delta(6)
+	response = httptest.NewRecorder()
+	gateway.ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("partial frames out of their place in a range: %d, want 502", response.Code)
+	}
+}

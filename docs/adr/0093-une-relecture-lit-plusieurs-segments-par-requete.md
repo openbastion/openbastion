@@ -53,7 +53,14 @@ La relecture lit un segment par requête (`GET /sessions/{id}/recording/video/se
 - (−) L'audit perd la granularité par image : un événement couvre une plage. Un auditeur qui ne regarde que le début d'une plage est tout de même inscrit pour toute la plage.
 - (−) Un segment corrompu au milieu d'une plage refuse toute la plage. Il faut recommencer la lecture juste après le segment fautif pour lire ce qui le suit ; l'Admin UI s'arrête là, comme aujourd'hui sur un segment invalide.
 
-## Mise en œuvre envisagée
+## Mise en œuvre (12 novembre 2026)
+
+**Fait** :
+- Video Recorder : `GetSegmentsFrom` (PostgreSQL et mémoire), lecture de la suite sans trou bornée à 600 images et 4 Mio, chaque segment vérifié (empreinte, déchiffrement, format), objets récupérés seize à la fois. Un événement `recording.read` par lecture, émis avant toute récupération, avec `first_sequence` et `last_sequence` dans ses détails. Cette plage est celle des segments repérés : un majorant de ce qui est servi quand la borne de 4 Mio arrête la lecture plus tôt.
+- Gateway : la plage passait déjà ; un test le prouve, et refuse des images partielles hors de leur place dans la plage.
+- **Mesuré** : l'épreuve de bout en bout relit chaque session en une lecture. Sur le bac à sable, la session du propriétaire (213 images) se relit en **1 requête au lieu de 213**. Le budget élargi du bac à sable est retiré : la relecture et le parcours Base44 passent avec les limites par défaut.
+
+## Mise en œuvre envisagée (plan d'origine)
 
 1. Video Recorder : lecture d'une plage bornée (dépôt PostgreSQL et mémoire), vérification de chaque segment, un audit par réponse avec sa plage. Tests de bornes, de trou, de segment corrompu au milieu, et mutations.
 2. Gateway : la réponse à plusieurs segments est déjà acceptée (même borne de 4 Mio) ; test d'une plage.

@@ -172,3 +172,46 @@ func TestAReadStopsAtAGapAndRefusesACorruptSegment(t *testing.T) {
 		t.Fatalf("after the corrupt segment: %d..%d, %v", got.FirstSequence, got.LastSequence, err)
 	}
 }
+
+// A read asked at a sequence no segment starts at is not found: the run after it is never served
+// under its number.
+func TestAReadAtASequenceNoSegmentStartsAtIsNotFound(t *testing.T) {
+	kek, err := infrastructure.NewLocalKEKFromHexKey("abababababababababababababababababababababababababababababababab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := infrastructure.NewMemoryStore()
+	objects := newObjectStore()
+	recordFrames(t, application.NewRecorderService(repo, objects, kek, &authorization{allowed: true}, &auditEmitter{}), 6, smallPNG)
+	audit := &auditEmitter{}
+	gapped := application.NewRecorderService(gapRepository{Repository: repo, missing: 4}, objects, kek, &authorization{allowed: true}, audit)
+	got, _, err := gapped.ReadSegment(context.Background(), "u_reader", []string{"auditor"}, "s1", 4)
+	if !errors.Is(err, domain.ErrNotFound) || len(got.Frames) != 0 || len(audit.events) != 0 {
+		t.Fatalf("read at the missing 4: %d..%d, %d frame(s), %v, %d audit event(s)", got.FirstSequence, got.LastSequence, len(got.Frames), err, len(audit.events))
+	}
+}
+
+// The 600-frame bound holds when segments hold several frames each.
+func TestAReadCountsFramesNotSegments(t *testing.T) {
+	svc := newRecorder(t, &authorization{allowed: true}, &auditEmitter{}, newObjectStore())
+	writer, err := svc.BeginRecording(context.Background(), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const segments = application.MaxReadFrames/2 + 2 // two frames each: past 600 frames
+	for i := 0; i < segments; i++ {
+		first := int64(2*i + 1)
+		at := rangeAt.Add(time.Duration(i) * time.Second)
+		segment := domain.VideoSegment{SessionID: "s1", FirstSequence: first, LastSequence: first + 1, Frames: []domain.VideoFrame{
+			{Timestamp: at, Data: testPNG(), Codec: application.CodecPNG},
+			{Timestamp: at.Add(time.Millisecond), Data: testPNG(), Codec: application.CodecPNG},
+		}}
+		if err := writer.RecordSegment(context.Background(), segment); err != nil {
+			t.Fatalf("segment %d: %v", first, err)
+		}
+	}
+	got, err := read(t, svc, 1)
+	if err != nil || len(got.Frames) != application.MaxReadFrames || got.LastSequence != int64(application.MaxReadFrames) {
+		t.Fatalf("read: %d frame(s) to %d, %v; want %d", len(got.Frames), got.LastSequence, err, application.MaxReadFrames)
+	}
+}

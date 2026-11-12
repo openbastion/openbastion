@@ -128,3 +128,61 @@ func TestPostgresStore_ConcurrentSequenceAppendHasOneWinner(t *testing.T) {
 		t.Fatalf("append results: %d success, %d conflicts; want one each", successes, conflicts)
 	}
 }
+
+// The run of segments a read serves (ADR-0093): from the first sequence asked, in order, bounded,
+// with the recording's key and status; nothing from another session.
+func runSegmentRangeContract(t *testing.T, repository domain.Repository) {
+	t.Helper()
+	ctx := context.Background()
+	sessionID := uniqueSessionID("range")
+	other := uniqueSessionID("other")
+	for _, id := range []string{sessionID, other} {
+		if err := repository.BeginRecording(ctx, id, "kek-v1", []byte("wrapped")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := int64(1); i <= 5; i++ {
+		if err := repository.AppendSegment(ctx, domain.SegmentMetadata{SessionID: sessionID, FirstSequence: i, LastSequence: i,
+			ObjectKey: fmt.Sprintf("test/%s/%d", sessionID, i), SHA256: make([]byte, 32)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repository.AppendSegment(ctx, domain.SegmentMetadata{SessionID: other, FirstSequence: 1, LastSequence: 1,
+		ObjectKey: "test/other/1", SHA256: make([]byte, 32)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.CompleteRecording(ctx, sessionID, 5); err != nil {
+		t.Fatal(err)
+	}
+	firsts := func(segments []domain.StoredSegment) []int64 {
+		var out []int64
+		for _, s := range segments {
+			if s.SessionID != sessionID || s.KeyID != "kek-v1" || !s.Complete || s.LastSequence != s.FirstSequence {
+				t.Fatalf("segment %+v", s)
+			}
+			out = append(out, s.FirstSequence)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		first int64
+		limit int
+		want  string
+	}{{1, 10, "[1 2 3 4 5]"}, {3, 10, "[3 4 5]"}, {2, 2, "[2 3]"}, {6, 10, "[]"}, {1, 0, "[]"}} {
+		got, err := repository.GetSegmentsFrom(ctx, sessionID, c.first, c.limit)
+		if err != nil || fmt.Sprint(firsts(got)) != c.want {
+			t.Fatalf("from %d, limit %d: %v, %v; want %s", c.first, c.limit, firsts(got), err, c.want)
+		}
+	}
+	if got, err := repository.GetSegmentsFrom(ctx, "no-such-session", 1, 10); err != nil || len(got) != 0 {
+		t.Fatalf("an unknown session: %v, %v", got, err)
+	}
+}
+
+func TestMemoryStore_SegmentRangeContract(t *testing.T) {
+	runSegmentRangeContract(t, infrastructure.NewMemoryStore())
+}
+
+func TestPostgresStore_SegmentRangeContract(t *testing.T) {
+	runSegmentRangeContract(t, infrastructure.NewPostgresStore(testDB(t)))
+}
