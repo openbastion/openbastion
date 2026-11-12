@@ -25,10 +25,12 @@ export function CommandPalette({
 
   const commands = useMemo<Command[]>(() => {
     const destinations: { tab: Tab; label: string; detail: string; keywords: string }[] = [
+      { tab: "overview", label: "Vue générale", detail: "Pilotage", keywords: "dashboard synthèse accueil" },
       { tab: "accounts", label: "Comptes privilégiés", detail: "Accès privilégiés", keywords: "comptes vault secrets" },
       { tab: "policies", label: "Politiques", detail: "Accès privilégiés", keywords: "policies autorisations règles" },
       { tab: "sessions", label: "Sessions", detail: "Opérations", keywords: "sessions demandes approbations" },
-      { tab: "audit", label: "Enregistrements", detail: "Opérations", keywords: "audit replay relecture vidéo commandes" },
+      { tab: "audit", label: "Enregistrements", detail: "Opérations", keywords: "replay relecture vidéo commandes" },
+      { tab: "security", label: "Centre de sécurité", detail: "Sécurité", keywords: "posture rotation épinglage configuration" },
     ];
     const normalized = query.trim().toLocaleLowerCase("fr");
     const navigation: Command[] = destinations

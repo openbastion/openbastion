@@ -1,5 +1,38 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 UX-04 : tableau de bord et centre de sécurité
+
+La Vue générale affiche les totaux renvoyés par `GET /vault/accounts` et
+`GET /sessions?status=pending_approval`. Les sources gardent leurs états de
+chargement et d'erreur séparés : un refus n'est jamais converti en zéro. Le
+compteur de rotations à examiner porte uniquement sur les comptes effectivement
+chargés et les champs explicites `rotationOwedSince` / `rotationFailures`.
+
+Le Centre de sécurité examine au plus 100 comptes de la première page et
+signale uniquement des faits déduits de leurs métadonnées : clé d'hôte SSH
+absente, identité TLS VNC/RDP incomplète, rotation après usage due, échecs de
+rotation ou rotation planifiée échue. Lorsque le total dépasse la page chargée,
+la couverture partielle est explicitement indiquée. Aucun score de risque,
+état de conformité ou agrégat extrapolé n'est produit.
+
+**Limite d'API constatée** : bien que `/audit/events` figure dans
+`docs/api/rest/openapi.yaml`, la Gateway n'enregistre actuellement aucune
+route publique correspondante. Le Centre de sécurité n'appelle donc ni cette
+route non implémentée, ni directement l'Audit Service ou sa base. Le flux
+d'audit, les alertes comportementales, la santé des proxies et les scores
+explicables nécessiteront des contrats publics et contrôles d'accès dédiés.
+
+Aucune route Gateway, règle d'autorisation, dépendance runtime, donnée
+persistée côté navigateur ou nouveau service n'est ajouté. Le tableau de bord
+et le Centre de sécurité utilisent exclusivement la même API publique et
+l'instance `Api` existante.
+
+Validation : `VITEST_MAX_WORKERS=1 make ui-test` — 9 fichiers, 128 tests
+réussis ; `make ui-build` — TypeScript et build Vite réussis ; `git diff
+--check` propre. Le mode Vitest mono-worker est utilisé pour éviter les
+timeouts de tests existants observés avec la concurrence par défaut sur
+LT209227 ; le code de production et les dépendances ne changent pas.
+
 ## 2026-11-12 — ADR-0073 UX-03 : parcours PAM cohérents
 
 Les états connus du Session Broker (`pending_approval`, `active`, `terminated`, `expired`, `denied`)

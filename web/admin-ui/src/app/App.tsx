@@ -4,6 +4,8 @@ import { SignedInContext } from "../shared/session";
 import { Login } from "../features/login/Login";
 import { OidcCallback } from "../features/login/OidcCallback";
 import { Accounts } from "../features/accounts/Accounts";
+import { Overview } from "../features/overview/Overview";
+import { SecurityCenter } from "../features/security/SecurityCenter";
 import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
@@ -26,7 +28,7 @@ export function App({
   if (!given && !own.current) own.current = new Api();
   const api = given ?? own.current!;
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("accounts");
+  const [tab, setTab] = useState<Tab>("overview");
   const [sessionLookup, setSessionLookup] = useState<string | null>(null);
   const onToken = useCallback(
     (t: string) => {
@@ -64,10 +66,12 @@ export function App({
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
       <AppShell who={who} tab={tab} onTab={setTab} onSignOut={signOut} onFindSession={findSession}>
+        {tab === "overview" && <Overview />}
         {tab === "accounts" && <Accounts />}
         {tab === "policies" && <Policies />}
         {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
         {tab === "audit" && <Recording />}
+        {tab === "security" && <SecurityCenter />}
       </AppShell>
       <LegalNotice />
     </SignedInContext.Provider>

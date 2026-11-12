@@ -35,7 +35,7 @@ describe("App", () => {
     const navigation = screen.getByRole("navigation", { name: "Sections" });
     expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
     expect(screen.getByRole("main").parentElement?.classList.contains("app-workspace")).toBe(true);
-    for (const label of ["Comptes", "Politiques", "Sessions", "Enregistrements"]) {
+    for (const label of ["Vue générale", "Comptes", "Politiques", "Sessions", "Enregistrements", "Centre de sécurité"]) {
       const button = within(navigation).getByRole("button", { name: label });
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
@@ -98,8 +98,8 @@ describe("Command palette — ADR-0073 UX-02", () => {
     };
     const { api, calls } = fakeApi({
       "POST /auth/login": { body: { accessToken: fakeToken("alice", ["platform-admin"]), expiresIn: 3600 } },
-      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } },
-      "GET /sessions?status=pending_approval": { body: { items: [], page: 1, pageSize: 50, totalItems: 0 } },
+      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
+      "GET /sessions?status=pending_approval": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
       "GET /sessions/sess_42": { body: session },
     });
     await signIn(api);
@@ -132,7 +132,8 @@ describe("Command palette — ADR-0073 UX-02", () => {
   it("filters navigation commands and restores focus when the palette is cancelled", async () => {
     const { api, calls } = fakeApi({
       "POST /auth/login": { body: { accessToken: fakeToken("alice", ["platform-admin"]), expiresIn: 3600 } },
-      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } },
+      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
+      "GET /sessions?status=pending_approval": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
     });
     await signIn(api);
     const trigger = screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" });

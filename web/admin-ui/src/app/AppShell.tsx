@@ -1,14 +1,16 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { Audit, Policies as PoliciesIcon, Session, Users } from "@openbastion/icons";
+import { Audit, Dashboard, Policies as PoliciesIcon, Session, Shield, Users } from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import { BrandMark } from "../shared/BrandMark";
 import { CommandPalette } from "../shared/ui/CommandPalette";
 
 const tabs = {
+  overview: { label: "Vue générale", description: "Synthèse opérationnelle", icon: Dashboard, group: "Pilotage" },
   accounts: { label: "Comptes", description: "Comptes privilégiés", icon: Users, group: "Accès privilégiés" },
   policies: { label: "Politiques", description: "Politiques d'accès", icon: PoliciesIcon, group: "Accès privilégiés" },
   sessions: { label: "Sessions", description: "Sessions privilégiées", icon: Session, group: "Opérations" },
   audit: { label: "Enregistrements", description: "Enregistrements de sessions", icon: Audit, group: "Opérations" },
+  security: { label: "Centre de sécurité", description: "Posture des comptes", icon: Shield, group: "Sécurité" },
 } as const;
 
 export type Tab = keyof typeof tabs;
@@ -170,7 +172,7 @@ export function AppShell({
             </button>
           </div>
           <nav aria-label="Sections">
-            {(["Accès privilégiés", "Opérations"] as const).map((group) => (
+            {(["Pilotage", "Accès privilégiés", "Opérations", "Sécurité"] as const).map((group) => (
               <div className="nav-group" key={group}>
                 <h2 className="nav-group-title">{group}</h2>
                 {(Object.keys(tabs) as Tab[]).filter((key) => tabs[key].group === group).map((key) => {
