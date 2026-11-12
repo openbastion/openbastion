@@ -153,7 +153,7 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 9 | [ADR-0085](0085-bibliotheque-vnc-openbastion-moteur-rfb-instrumente.md) | La bibliothèque VNC OpenBastion sépare RFB des contrôles PAM et de l'enregistrement | Proposé |
 | 10 | [ADR-0087](0087-contrats-transverses-des-bibliotheques-protocolaires-ssh-rdp-vnc.md) | Les bibliothèques SSH, RDP et VNC partagent des contrats PAM sans partager leurs moteurs protocolaires | Proposé |
 | 11 | [ADR-0090](0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md) | RDP en v0.0.2 : glyphes, ordres graphiques, canaux virtuels et protocoles, par incréments prouvés | Proposé |
-| 12 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Proposé |
+| 12 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté |
 
 ### 10. Chaîne d'audit
 
@@ -320,4 +320,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté | Enregistrement et relecture |
 | [ADR-0093](0093-une-relecture-lit-plusieurs-segments-par-requete.md) | Une relecture lit plusieurs segments par requête | Accepté | Enregistrement et relecture |
 | [ADR-0094](0094-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté | Déploiement, CI et chaîne d’approvisionnement |
-| [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Proposé | Proxy écran RDP et VNC |
+| [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté | Proxy écran RDP et VNC |

@@ -1,6 +1,6 @@
 # ADR-0095 — Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement
 
-**Statut** `Proposé` · 12 novembre 2026 · demandé par le propriétaire du projet le 12 novembre 2026 : « go pour le lot D » (ADR-0090). `Accepté` seulement avec son go, cité avec sa date. La décision lève en partie ADR-0069 §6 : elle ouvre le socle des canaux, et un seul canal, qui ne transporte aucune donnée de l'opérateur vers la cible en dehors de la taille de son écran.
+**Statut** `Accepté` · 12 novembre 2026 · demandé par le propriétaire du projet le 12 novembre 2026 : « go pour le lot D » (ADR-0090) ; accepté le même jour : « Go pour le B ». L'option B est acceptée, avec ses bornes (64 Kio par message de canal, 640 × 480 à 2 560 × 1 600, un redimensionnement par seconde) et `SCREEN_RESIZE` éteint par défaut. La décision lève en partie ADR-0069 §6 : elle ouvre le socle des canaux, et un seul canal, qui ne transporte aucune donnée de l'opérateur vers la cible en dehors de la taille de son écran.
 
 ## Contexte
 
@@ -26,7 +26,7 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 
 **C. Le socle et le presse-papiers d'abord.** C'est le canal le plus demandé, mais il transporte du contenu dans les deux sens : il demande d'abord une politique par sens, l'enregistrement chiffré du contenu et un audit par transfert (ADR-0090, lot D, point 2). Deux décisions de sécurité d'un coup, sur un socle pas encore éprouvé.
 
-## Décision proposée : B
+## Décision : B
 
 1. **Liste fermée des canaux statiques** : le client annonce dans `CS_NET` le seul canal `drdynvc`, et seulement si un canal dynamique est permis (point 5). Sinon, rien ne change : aucun canal n'est annoncé.
    - Un `SC_NET` qui ne rend pas exactement un identifiant de canal par canal annoncé, distinct du canal d'E/S et de l'utilisateur, ferme la connexion.
