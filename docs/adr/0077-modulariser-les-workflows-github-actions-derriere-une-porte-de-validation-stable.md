@@ -29,7 +29,7 @@ La protection de branche connaît actuellement les huit noms de jobs ci-dessus. 
    - `frontend.yml` : tests et build des interfaces web ;
    - `security.yml` : `govulncheck` et `npm audit` ;
    - `containers.yml` : construction et analyse des images avec Trivy.
-   
+
    Les frontières définitives et les dépendances entre ces workflows seront confirmées pendant l'implémentation, sans changer la couverture des contrôles. Le contrôle `version` reste obligatoire et peut être placé dans le workflow Go ou dans un workflow de validation dédié si cela rend son contrat plus clair.
 3. **Mutualiser uniquement le bootstrap technique** avec des actions composites locales sous `.github/actions/` lorsque plusieurs domaines partagent réellement la même séquence (par exemple installation/configuration Go ou Node). Les commandes métier restent explicites dans les workflows et le Makefile demeure la source de vérité des commandes de build et de test.
 4. **Créer une porte de validation unique et stable** dans le workflow d'entrée : workflow nommé `CI`, job nommé `Required checks`, attendu sous le contexte GitHub `CI / Required checks`. Ce job dépend de tous les workflows spécialisés et utilise `if: always()` afin de s'exécuter même si un contrôle amont échoue, est annulé ou est ignoré. Il réussit uniquement si chacun des résultats attendus est exactement `success`. Tout résultat `failure`, `cancelled` ou `skipped`, ainsi que toute absence de résultat attendu, fait échouer la porte.
@@ -44,7 +44,7 @@ La protection de branche connaît actuellement les huit noms de jobs ci-dessus. 
 7. **Migrer les Required status checks en deux temps** :
    - d'abord créer et exécuter la nouvelle porte sur une pull request réelle, puis vérifier dans GitHub le nom exact du check run, son application émettrice et son comportement lorsque chaque dépendance est en échec, annulée ou ignorée ;
    - seulement après cette preuve, remplacer les huit anciens contextes requis par le seul contexte `CI / Required checks`.
-   
+
    Ne jamais retirer les anciens contextes requis avant que le nouveau soit visible et validé. Ne pas maintenir durablement les anciens et le nouveau jeu de contextes comme exigences simultanées.
 8. **Conserver les deux protections de fusion** : `Require status checks to pass before merging` reste activé et exige `CI / Required checks` ; `Require branches to be up to date before merging` reste également activé. Cette seconde option est le mode strict de fraîcheur de branche, pas un contrôle de statut et ne remplace pas le premier réglage.
 9. **Ne pas introduire de merge queue dans cet incrément**. Si elle est adoptée ultérieurement, ajouter et valider explicitement l'événement `merge_group` et ses contrôles avant de l'activer.

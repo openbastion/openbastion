@@ -1,14 +1,20 @@
-# Container image construction and vulnerability scanning (ADR-0060, ADR-0077).
+# Container image construction, scanning and optional trusted-tag attestations (ADR-0094).
 name: Container image checks
 on:
   workflow_call:
-permissions:
-  contents: read
+    inputs:
+      attest:
+        description: "Generate trusted-tag attestations for the exported runtime image archive"
+        required: false
+        type: boolean
+        default: false
 jobs:
   images:
     name: Images — Trivy (HIGH, CRITICAL)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
     env:
       # Do not use trivy-action or setup-trivy: download the release archive and verify its digest.
       TRIVY_VERSION: 0.76.1
@@ -24,6 +30,12 @@ jobs:
           tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP" trivy
       - name: Validate project licence metadata and notices
         run: make license-check
+      - name: Install pinned CycloneDX JSON Schema validator
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input --target "$RUNNER_TEMP/cyclonedx-python" -r scripts/requirements-cyclonedx-schema.txt
+          echo "PYTHONPATH=$RUNNER_TEMP/cyclonedx-python" >> "$GITHUB_ENV"
+      - name: Test CycloneDX contract and official schema validator
+        run: bash scripts/test-check-cyclonedx-sbom.sh
       - name: Generate source SBOM (CycloneDX)
         run: |
           "$RUNNER_TEMP/trivy" fs --include-dev-deps --format cyclonedx \
@@ -47,6 +59,32 @@ jobs:
         run: |
           "$RUNNER_TEMP/trivy" image --format cyclonedx \
             --output "$RUNNER_TEMP/openbastion-runtime-sbom.cdx.json" openbastion:scan
+      - name: Validate source and runtime CycloneDX contracts
+        run: |
+          bash scripts/check-cyclonedx-sbom.sh "$RUNNER_TEMP/openbastion-source-sbom.cdx.json"
+          bash scripts/check-cyclonedx-sbom.sh "$RUNNER_TEMP/openbastion-runtime-sbom.cdx.json"
+      - name: Guard trusted-tag attestation context
+        if: ${{ inputs.attest }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          test "$EVENT_NAME" = push
+          test "$REPOSITORY" = openbastion/openbastion
+          test "$REPOSITORY_ID" = 1405264581
+          test "$REPOSITORY_OWNER_ID" = 322037689
+          [[ "$REF" =~ ^refs/tags/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$WORKFLOW_REF" == "openbastion/openbastion/.github/workflows/supply-chain-attestations.yml@$REF" ]]
+      - name: Export runtime image as an attestation subject
+        if: ${{ inputs.attest }}
+        run: |
+          docker save openbastion:scan | gzip -n > "$RUNNER_TEMP/openbastion-runtime-image.tar.gz"
+          test -s "$RUNNER_TEMP/openbastion-runtime-image.tar.gz"
+          sha256sum "$RUNNER_TEMP/openbastion-runtime-image.tar.gz"
       - name: Upload SBOM and licence inventory
         if: always()
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
@@ -56,5 +94,6 @@ jobs:
             ${{ runner.temp }}/openbastion-source-sbom.cdx.json
             ${{ runner.temp }}/openbastion-runtime-sbom.cdx.json
             ${{ runner.temp }}/openbastion-license-report.json
+            ${{ runner.temp }}/openbastion-runtime-image.tar.gz
           if-no-files-found: ignore
           retention-days: 30

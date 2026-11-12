@@ -61,7 +61,7 @@ Les dix commandes de service conservent le démarrage normal sans argument. Leur
 
 ### 2. Contrat de version, identique sur les douze exécutables
 
-<binaire> version écrit exactement quatre champs, dans cet ordre, sur la sortie standard :
+`<binaire>` version écrit exactement quatre champs, dans cet ordre, sur la sortie standard :
 
     Version:           dev
     Go version:        go1.27.3
@@ -75,7 +75,7 @@ Les valeurs sont dynamiques et proviennent du binaire exécuté, pas de constant
 - Built : révision VCS enregistrée par runtime/debug.ReadBuildInfo, limitée à sept caractères hexadécimaux ; unknown si la révision n'est pas disponible ;
 - OS/Arch : runtime.GOOS + "/" + runtime.GOARCH.
 
-<binaire> version --short écrit uniquement la valeur de Version suivie d'un saut de ligne, sans libellé, préfixe, décoration ni autre sortie. Le contrat d'acceptation comprend cet exemple exact :
+`<binaire>` version --short écrit uniquement la valeur de Version suivie d'un saut de ligne, sans libellé, préfixe, décoration ni autre sortie. Le contrat d'acceptation comprend cet exemple exact :
 
     $ openbastion-cli version --short
     dev
@@ -140,7 +140,7 @@ Les paramètres obligatoires sont validés avant tout appel réseau. -local et -
         init.go
         issue.go
         all.go
-    services/<domaine>/<service>/cmd/<binaire>/
+    services/`<domaine>`/<service>/cmd/`<binaire>`/
       main.go
       command.go
 
