@@ -20,9 +20,11 @@ de l’ancien chemin, comme les relevés de tests des ADR antérieurs, sont des
 traces historiques explicitement remplacées pour l’emplacement par l’ADR-0095.
 
 Pour la branche de travail longue, `origin/main` a été récupéré au début de
-l’incrément : `2a7de575` était déjà ancêtre de `refactor/admin-ui-infrastructure`.
-Le contrôle sera répété avant les validations et avant chaque push ; toute
-avance de `main` sera intégrée dans cette branche avant de poursuivre.
+l’incrément (`2a7de575`, déjà ancêtre), puis à nouveau avant les validations.
+La seconde vérification a trouvé `7784ba7` (PR #149) ; ce changement a été intégré
+sans conflit dans `806a54f` avant la poursuite. Le contrôle sera répété avant
+chaque incrément significatif et avant chaque push ; toute avance de `main` sera
+intégrée dans cette branche avant de poursuivre.
 
 ## 2026-11-12 — La sidebar respecte le thème clair
 
