@@ -66,7 +66,7 @@ func (grpcAuthz) CheckAccess(context.Context, []string, string, string) (bool, s
 
 type grpcAudit struct{}
 
-func (grpcAudit) EmitEvent(context.Context, string, string, string, string, bool) error {
+func (grpcAudit) EmitEvent(context.Context, string, string, string, string, bool, map[string]string) error {
 	return nil
 }
 
