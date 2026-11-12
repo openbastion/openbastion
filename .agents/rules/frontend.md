@@ -8,6 +8,6 @@
 4. Un secret saisi (secret initial d'un compte) est envoyé une fois, puis effacé du formulaire ; il n'est jamais affiché ni relu.
 5. Tout ce qui vient de l'API est rendu **comme du texte** (jamais `dangerouslySetInnerHTML`) : un enregistrement de session contient ce qu'un opérateur a tapé.
 6. Les refus de l'API sont affichés tels quels (`Notice`, rôle `alert`) ; les succès en rôle `status`.
-7. Libellés en français ; styles par variables CSS de `src/app/styles.css` ; formulaires étiquetés (`label`), utilisables au clavier.
+7. Libellés en français ; tokens sémantiques canoniques depuis `web/packages/design-tokens/tokens.css`, primitives CSS partagées depuis `web/packages/ui/styles.css`, styles applicatifs dans `src/app/styles.css` ; formulaires étiquetés (`label`), utilisables au clavier.
 8. `BASE44_PREVIEW_MODE=1` est le **seul** drapeau qui change la configuration Vite (base `/` et relais vers la Gateway) ; sans lui, un `vite build` reste servi sous `/ui/`.
 9. Tests : Vitest + Testing Library, avec `fakeApi` (`src/test-helpers.ts`) ; chaque écran a un test du cas heureux et du refus. `make ui-test ui-build` passe avant un commit qui touche l'UI.

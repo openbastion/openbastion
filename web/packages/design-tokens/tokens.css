@@ -1,0 +1,129 @@
+/* OpenBastion Infrastructure — canonical visual tokens. */
+:root {
+  color-scheme: light;
+
+  /* Primitive palette: each value is assigned to a semantic role below. */
+  --ob-palette-neutral-0: #FFFFFF;
+  --ob-palette-neutral-25: #F5F7FA;
+  --ob-palette-neutral-50: #F8FAFC;
+  --ob-palette-neutral-100: #F0F3F7;
+  --ob-palette-neutral-200: #D8E0E8;
+  --ob-palette-neutral-500: #64748B;
+  --ob-palette-neutral-600: #526171;
+  --ob-palette-neutral-700: #667789;
+  --ob-palette-neutral-900: #17212B;
+  --ob-palette-neutral-950: #0F1720;
+  --ob-palette-neutral-1000: #F3F6F9;
+
+  --ob-palette-surface: #FFFFFF;
+  --ob-palette-surface-muted: #F8FAFC;
+  --ob-palette-surface-subtle: #F0F3F7;
+  --ob-palette-surface-raised: #FFFFFF;
+
+  --ob-palette-blue-100: #E8F2FA;
+  --ob-palette-blue-700: #1769AA;
+  --ob-palette-blue-800: #145A92;
+  --ob-palette-blue-900: #124F80;
+  --ob-palette-green-100: #EAF5EF;
+  --ob-palette-green-800: #126B4F;
+  --ob-palette-amber-100: #FFF5E4;
+  --ob-palette-amber-800: #8A5700;
+  --ob-palette-red-100: #FBEFEE;
+  --ob-palette-red-700: #B42318;
+  --ob-palette-red-800: #912018;
+
+  --ob-palette-chrome-background: #17222D;
+  --ob-palette-chrome-background-raised: #1D2B38;
+  --ob-palette-chrome-text: #F3F6F9;
+  --ob-palette-chrome-muted: #B4C0CB;
+  --ob-palette-overlay: rgb(15 23 32 / 0.58);
+  --ob-palette-focus-ring: rgb(23 105 170 / 0.24);
+
+  /* Semantic palette: components consume these roles, never primitives. */
+  --ob-color-bg-canvas: var(--ob-palette-neutral-25);
+  --ob-color-bg-surface: var(--ob-palette-surface);
+  --ob-color-bg-surface-muted: var(--ob-palette-surface-muted);
+  --ob-color-bg-surface-subtle: var(--ob-palette-surface-subtle);
+  --ob-color-bg-surface-raised: var(--ob-palette-surface-raised);
+  --ob-color-text-primary: var(--ob-palette-neutral-900);
+  --ob-color-text-secondary: var(--ob-palette-neutral-600);
+  --ob-color-text-tertiary: var(--ob-palette-neutral-700);
+  --ob-color-border-subtle: var(--ob-palette-neutral-200);
+  --ob-color-border-control: var(--ob-palette-neutral-500);
+  --ob-color-accent: var(--ob-palette-blue-700);
+  --ob-color-accent-strong: var(--ob-palette-blue-800);
+  --ob-color-accent-ink: var(--ob-palette-blue-900);
+  --ob-color-accent-subtle: var(--ob-palette-blue-100);
+  --ob-color-text-on-accent: var(--ob-palette-neutral-0);
+  --ob-color-focus: var(--ob-palette-blue-700);
+  --ob-color-focus-shadow: 0 0 0 3px var(--ob-palette-focus-ring);
+  --ob-color-status-success: var(--ob-palette-green-800);
+  --ob-color-status-success-subtle: var(--ob-palette-green-100);
+  --ob-color-status-warning: var(--ob-palette-amber-800);
+  --ob-color-status-warning-subtle: var(--ob-palette-amber-100);
+  --ob-color-status-danger: var(--ob-palette-red-700);
+  --ob-color-status-danger-strong: var(--ob-palette-red-800);
+  --ob-color-status-danger-subtle: var(--ob-palette-red-100);
+  --ob-color-chrome-background: var(--ob-palette-chrome-background);
+  --ob-color-chrome-background-raised: var(--ob-palette-chrome-background-raised);
+  --ob-color-chrome-text: var(--ob-palette-chrome-text);
+  --ob-color-chrome-muted: var(--ob-palette-chrome-muted);
+  --ob-color-chrome-border: rgb(180 192 203 / 0.2);
+  --ob-color-chrome-accent: #66B8FF;
+  --ob-color-chrome-accent-subtle: #18364E;
+  --ob-color-overlay: var(--ob-palette-overlay);
+
+  --ob-shadow-sm: 0 1px 2px rgb(15 23 32 / 0.06), 0 1px 3px rgb(15 23 32 / 0.08);
+  --ob-shadow-overlay: 0 18px 40px -24px rgb(15 23 32 / 0.28);
+  --ob-radius-sm: 4px;
+  --ob-radius-md: 6px;
+  --ob-radius-lg: 8px;
+  --ob-space-1: 0.25rem;
+  --ob-space-2: 0.5rem;
+  --ob-space-3: 0.75rem;
+  --ob-space-4: 1rem;
+  --ob-space-5: 1.25rem;
+  --ob-space-6: 1.5rem;
+  --ob-font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ob-motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ob-motion-duration-fast: 120ms;
+  --ob-motion-duration-standard: 180ms;
+  --ob-icon-accent: var(--ob-color-accent);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ob-palette-neutral-25: #0F1720;
+  --ob-palette-neutral-50: #17222D;
+  --ob-palette-neutral-100: #1D2B38;
+  --ob-palette-neutral-200: #334353;
+  --ob-palette-neutral-500: #72869A;
+  --ob-palette-neutral-600: #B4C0CB;
+  --ob-palette-neutral-700: #8D9EAF;
+  --ob-palette-neutral-900: #F3F6F9;
+
+  --ob-palette-surface: #17222D;
+  --ob-palette-surface-muted: #1A2734;
+  --ob-palette-surface-subtle: #1D2B38;
+  --ob-palette-surface-raised: #1D2B38;
+
+  --ob-palette-blue-100: #18364E;
+  --ob-palette-blue-700: #66B8FF;
+  --ob-palette-blue-800: #93CEFF;
+  --ob-palette-blue-900: #B9DFFF;
+  --ob-palette-green-100: #1E3A31;
+  --ob-palette-green-800: #66D6A5;
+  --ob-palette-amber-100: #41331F;
+  --ob-palette-amber-800: #FFD27A;
+  --ob-palette-red-100: #40252A;
+  --ob-palette-red-700: #FF8D86;
+  --ob-palette-red-800: #FFAAA3;
+  --ob-palette-focus-ring: rgb(102 184 255 / 0.28);
+
+  --ob-color-text-on-accent: var(--ob-palette-neutral-950);
+  --ob-color-focus: var(--ob-palette-blue-700);
+  --ob-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.24), 0 1px 3px rgb(0 0 0 / 0.2);
+  --ob-shadow-overlay: 0 18px 40px -24px rgb(0 0 0 / 0.72);
+  --ob-icon-accent: var(--ob-color-accent);
+}
