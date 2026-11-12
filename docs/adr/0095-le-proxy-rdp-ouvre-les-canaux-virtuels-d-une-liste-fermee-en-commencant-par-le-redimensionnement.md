@@ -58,6 +58,15 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 4. Admin UI : envoyer la taille de la fenêtre, au plus une fois par seconde, quand le `HELLO` le permet. Tests Vitest.
 5. Mesure et vérification dans un vrai navigateur, comme pour ADR-0092, avant d'allumer `SCREEN_RESIZE` par défaut. Ce dernier pas demandera le go du propriétaire.
 
+## Mise en œuvre
+
+**Incrément 1, fait (12 novembre 2026) : le canal statique.** `pkg/rdp`, derrière `MCSClientSettings.DynamicChannels`, que rien n'allume encore hors des tests :
+- `CS_NET` annonce le seul `drdynvc` (options `INITIALIZED | ENCRYPT_RDP`) ; `SC_NET` doit lui donner un identifiant, distinct du canal d'E/S, avec le bourrage d'un compte impair. Le canal est joint après le canal d'E/S. Le Confirm Active ajoute alors le jeu de capacités des canaux virtuels, sans compression.
+- Cadrage (`mcs_virtual_channel.go`) : un message reconstitué fait au plus 64 Kio ; un fragment hors de son message, une longueur qui change, des données plus longues ou plus courtes qu'annoncé, un drapeau autre que `FIRST`, `LAST` et `SHOW_PROTOCOL` (dont la compression), un segment MCS découpé, ou une donnée sur un canal non joint ferment la session. L'envoi découpe en morceaux de 1 600 octets.
+- Les paquets d'un canal arrivés pendant la finalisation (ou une réactivation) sont gardés, 16 au plus, et lus en premier par `ReadBitmapUpdate`. Les messages complets vont au lecteur que `SetChannelHandler` désigne ; sans lecteur, ils sont jetés.
+- **Prouvé** : tests unitaires de l'annonce, de `SC_NET`, du cadrage, du routage et de la finalisation ; 15 mutations tuées, plus une contre FreeRDP (sans la jonction, FreeRDP refuse la connexion). Deux fuzzers (`FuzzRDPChannelAssembler`, `FuzzRDPChannelPacket`). Contre FreeRDP 3 (`TestRDPInterop_StaticChannel`) : canal joint, 88 mises à jour d'écran, et la demande de capacités DRDYNVC (Cmd 5, 4 octets) reçue par la boucle de lecture. Éteint, la connexion est celle d'avant : tous les tests existants passent, FreeRDP compris.
+- **À prouver en CI** : `TestRDPWindows_StaticChannel`, le même parcours contre les cinq cibles Windows.
+
 ## Conséquences
 
 - (+) Le socle des canaux existe, borné, et il est prouvé par un canal réel contre Windows avant qu'un canal à contenu ne s'y appuie.

@@ -3114,6 +3114,14 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-12 — ADR-0095, incrément 1 : le canal statique drdynvc
+
+ADR-0095 accepté (option B, « Go pour le B »). Premier incrément, dans `pkg/rdp` seulement : `MCSClientSettings.DynamicChannels` annonce `drdynvc` dans `CS_NET`, le joint, et lit ce qui y arrive, borné (64 Kio par message, fragments stricts, aucune compression, aucun canal non joint). Rien ne l'allume hors des tests : le proxy négocie comme avant.
+
+- **Contre FreeRDP 3** (`make test-rdp-interop`, `TestRDPInterop_StaticChannel`) : canal joint, 88 mises à jour d'écran en 5 s, et un message de 4 octets sur `drdynvc` : la demande de capacités (Cmd 5).
+- **Contre Windows** : `TestRDPWindows_StaticChannel`, en CI seulement.
+- `TestRDPWindows_StaticChannel` est placé avant le test de déconnexion, qui ferme la session.
+
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
 **Video Recorder.** Une lecture sert, à partir de `first`, la suite de segments stockés sans trou, bornée à 600 images et 4 Mio de données d'images (`MaxReadFrames`, `MaxReadBytes`).

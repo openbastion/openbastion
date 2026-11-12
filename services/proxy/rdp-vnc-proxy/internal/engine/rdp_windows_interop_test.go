@@ -651,6 +651,27 @@ func measureWindows(t *testing.T, partial bool) {
 	m.publish(dump)
 }
 
+// The static channel of ADR-0095 (increment 1) against Windows: drdynvc announced, given an ID,
+// joined, and what Windows sends on it read off the screen's stream (rdp_channel_interop_test.go).
+// The first message should be the capabilities request (Cmd 5); what follows says which dynamic
+// channels Windows proposes, for increment 2. Before the logoff test, which closes the session.
+func TestRDPWindows_StaticChannel(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := openWithStaticChannel(t, client, target.user, target.password, 20*time.Second)
+	if len(messages) == 0 {
+		t.Fatal("nothing from Windows on drdynvc in 20 s")
+	}
+	if messages[0][0]>>4 != 0x05 {
+		t.Fatalf("Windows' first drdynvc message has Cmd %d, not the capabilities request (5)", messages[0][0]>>4)
+	}
+}
+
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
 // a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
 // do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no
