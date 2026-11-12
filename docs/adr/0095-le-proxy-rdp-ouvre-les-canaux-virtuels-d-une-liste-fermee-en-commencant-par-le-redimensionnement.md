@@ -83,7 +83,10 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Contrôle d'affichage** (`pkg/rdp/display_control.go`) : lecture stricte de `DISPLAYCONTROL_CAPS_PDU`, écriture d'un `DISPLAYCONTROL_MONITOR_LAYOUT_PDU` à un écran, principal, à l'origine, à 100 %.
 - **Codec RDP** (`RDPCodec.Resize`, `SCREEN_RESIZE`, éteint par défaut) : annonce `drdynvc`, n'accepte que le contrôle d'affichage, et lit sa capacité une fois (tout autre message ferme la session). Un redimensionnement demandé avant cette capacité, ou au-delà de la surface qu'elle permet, est ignoré. Windows se réactive alors à la nouvelle taille, ce que le lecteur suit déjà, et l'image clé de la nouvelle taille est enregistrée.
 - **Prouvé** : tests du contrat, du relais (le `HELLO`, l'ignorance, les bornes, le rythme, le budget), du contrôle d'affichage et du codec ; 16 mutations tuées ; `FuzzParseDisplayControlCaps`. Contre FreeRDP, qui n'offre pas de contrôle d'affichage : `SCREEN_RESIZE` allumé, la session va son chemin et le redimensionnement est ignoré.
-- **À prouver en CI** : `TestRDPWindows_Resize`, une image de 1 022 × 768 après la demande de 1 023 × 768.
+- **Deux défauts trouvés par la CI Windows de #155, corrigés** :
+  - le jeu de capacités Bitmap annonçait `desktopResizeFlag = 0`, si bien qu'aucune des cinq cibles n'appliquait la disposition (aucune image à la nouvelle taille en 60 s). `MCSClientSettings.DesktopResize` le pose, avec `Resize` ;
+  - une réactivation rendait la session « non finalisée », et un second redimensionnement arrivé pendant ce temps était refusé, ce qui fermait la session (Windows Server 2019). Les canaux appartiennent à la connexion MCS et non au partage : ils envoient dès qu'ils sont joints, réactivation comprise. Un test rouge d'abord l'a reproduit.
+- **Prouvé contre Windows** (Server 2022, quatre cibles, avec le premier correctif) : demande de 1 023 × 768, et une image clé de 1 022 × 768 en 0,6 s environ. Windows Server 2019 est à revoir avec le second correctif.
 - **Reste** : l'Admin UI (incrément 4) ; elle ne connaît pas encore le bit 1 du `HELLO`, et `SCREEN_RESIZE` doit rester éteint jusque-là.
 
 ## Conséquences
