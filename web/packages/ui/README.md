@@ -12,7 +12,7 @@ Bibliothèque React/TypeScript partagée d’OpenBastion Infrastructure (ADR-007
 
 ## Fondations disponibles
 
-`Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Label`, `Separator`, `Skeleton`, `Switch` et `Textarea`. Le reste du catalogue est migré par lots ; sa présence dans la roadmap ne signifie pas qu'il est déjà exporté.
+`Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Form`, `FormField`, `FormDescription`, `Input`, `InputOTP`, `Label`, `RadioGroup`, `RadioGroupItem`, `Select`, `Separator`, `Skeleton`, `Slider`, `Switch` et `Textarea`. Le reste du catalogue est migré par lots ; sa présence dans la roadmap ne signifie pas qu'il est déjà exporté.
 
 Importer `@openbastion/design-tokens/tokens.css` avant `@openbastion/ui/styles.css`, puis les styles applicatifs. Les anciennes façades `admin-ui/src/shared/ui/` restent temporairement disponibles pour préserver les imports existants.
 
@@ -20,10 +20,10 @@ Importer `@openbastion/design-tokens/tokens.css` avant `@openbastion/ui/styles.c
 
 | État | Composants / utilitaires |
 |---|---|
-| Implémentés | Alert, Badge, Button, Card, Checkbox, Input, Label, Separator, Skeleton, Switch, Textarea |
+| Implémentés | Alert, Badge, Button, Card, Checkbox, Form, FormField, FormDescription, Input, InputOTP, Label, RadioGroup, RadioGroupItem, Select, Separator, Skeleton, Slider, Switch, Textarea |
 | À réaliser — structure et navigation | Accordion, AspectRatio, Breadcrumb, Collapsible, Command, Menubar, NavigationMenu, Pagination, Resizable, ScrollArea, Sidebar, Tabs |
 | À réaliser — actions et overlays | AlertDialog, ContextMenu, Dialog, Drawer, DropdownMenu, HoverCard, Popover, Sheet, Tooltip |
-| À réaliser — formulaires | Calendar, Form, InputOTP, RadioGroup, Select, Slider, Toggle, ToggleGroup |
+| À réaliser — formulaires | Calendar, Toggle, ToggleGroup |
 | À réaliser — présentation | Avatar, Carousel, Chart, Image, Progress, Table |
 | À réaliser — notifications et utilitaires | Sonner, Toast, Toaster, useToast, `image-helpers.js` |
 

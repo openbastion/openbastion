@@ -1,6 +1,6 @@
 # Notes sur les contraintes de cet environnement de build
 
-## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0096)
+## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0073)
 
 Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
 `web/packages/icons/`, sans changement de son nom npm, de ses exports ni de son
@@ -15,9 +15,10 @@ mais donne au seul package d’icônes un montage imbriqué inscriptible : tsup 
 reste dans un volume dédié ;
 `deploy/docker-compose/Dockerfile` le construit depuis `web/packages/icons/`.
 L’arborescence, le guide Design System, le skill frontend et l’ADR-0075 (encore
-proposé) sont alignés. L’ADR-0073 est accepté et n’est pas réécrit : ses mentions
-de l’ancien chemin, comme les relevés de tests des ADR antérieurs, sont des
-traces historiques explicitement remplacées pour l’emplacement par l’ADR-0096.
+proposé) sont alignés. L’ADR-0073 porte désormais la décision normative : le package d’icônes est
+centralisé sous `web/packages/icons/` et la documentation active pointe vers
+ce nouvel emplacement. Les relevés historiques conservent le chemin observé
+à leur date de rédaction.
 
 Pour la branche de travail longue, `origin/main` a été récupéré au début de
 l’incrément (`2a7de575`, déjà ancêtre), puis à nouveau avant les validations.
@@ -4018,10 +4019,29 @@ validée lors de sa création.
 ## 2026-11-12 — Synchronisation de la PR #151 avec main
 
 `origin/main` a avancé jusqu'à `c1c5a2f` (PR #152, ADR-0095 sur les canaux
-virtuels RDP). La synchronisation de `refactor/admin-ui-infrastructure` ne
-présentait qu'un conflit de contenu dans `docs/adr/README.md` : les deux
-branches avaient attribué le numéro ADR-0095 à des décisions différentes.
-L'ADR-0095 de `main` est conservé ; la décision déjà acceptée sur le package
-d'icônes est renumérotée ADR-0096 et ses références actives sont mises à jour.
-Les deux décisions et leurs entrées d'index sont conservées. Aucun code produit
-n'a été modifié pour résoudre ce conflit.
+virtuels RDP). Le conflit dans `docs/adr/README.md` provenait de deux entrées
+ADR-0095 concurrentes. L'entrée RDP de `main` est conservée. À la demande
+explicite du propriétaire, la décision de déplacement du package d'icônes est
+intégrée à l'ADR-0073 ; aucun ADR autonome n'est maintenu pour cette évolution.
+
+## 2026-11-12 — Formulaires avancés de `@openbastion/ui` (ADR-0073)
+
+Le catalogue partagé ajoute les primitives natives `Form`, `FormField`,
+`FormDescription`, `InputOTP`, `RadioGroup`, `RadioGroupItem`, `Select` et
+`Slider`. `FormField` relie le contrôle à son libellé, à sa description et à
+son erreur via `aria-describedby`/`aria-invalid`. Les groupes radio sont
+composables, supportent les modes contrôlé et non contrôlé, et conservent la
+sémantique native. Select et Slider restent des contrôles HTML ; InputOTP
+utilise le contrat navigateur `autocomplete=one-time-code`, `inputMode=numeric`
+et une longueur bornée. Aucun composant ne valide une règle métier ni ne fait
+d'appel réseau.
+
+Validation mesurée : Vitest Admin UI, 16 fichiers et 159 tests réussis ;
+TypeScript réussi ; build Vite réussi avec une sortie isolée dans
+`/tmp/openbastion-admin-ui-refactor-build-forms` (le répertoire `dist` habituel
+contient des artefacts root non nettoyables par l'utilisateur courant).
+Aucune dépendance externe n'a été ajoutée dans cet incrément.
+
+Limites : les overlays Radix, la navigation, les composants avancés et les
+notifications restent à réaliser dans les incréments suivants. Le catalogue
+complet n'est pas livré.
