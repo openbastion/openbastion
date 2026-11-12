@@ -26,8 +26,10 @@ import (
 // The measurements ADR-0090 (lot A) left open: how long the Video Recorder takes to acknowledge a
 // frame, the delay every frame waits before the operator sees it (ADR-0070, ADR-0071 §4), alone and
 // with several sessions at once. The real Video Recorder on PostgreSQL (TEST_DATABASE_URL), the
-// real proxy client over mTLS; the object store is the in-process one of the recording test, so
-// S3's own latency is not in these figures. RECORDER_MEASURE=1; RECORDER_MEASURE_DUMP for the JSON.
+// real proxy client over mTLS. The object store is the in-process one of the recording test, so S3's
+// own latency is not in the figures, unless RECORDER_MEASURE_S3_ENDPOINT names a real S3 endpoint:
+// plain HTTP, access key "test", secret "test-secret", bucket "screens" created if absent (the
+// settings startVideoRecorder gives). RECORDER_MEASURE=1; RECORDER_MEASURE_DUMP for the JSON.
 
 type ackMeasure struct {
 	Frame      string  `json:"frame"`
@@ -68,14 +70,17 @@ func TestVideoRecorderAckLatency(t *testing.T) {
 		}
 		return rt
 	}
-	store := newRecordingObjectStore(t)
+	s3URL := os.Getenv("RECORDER_MEASURE_S3_ENDPOINT")
+	if s3URL == "" {
+		s3URL = newRecordingObjectStore(t).URL
+	}
 	audit := &recordingAuditSpy{}
 	auditURL := serveAs(t, identity(mtls.AuditService), http.MethodPost, "/audit/v1/emit-event", audit.ServeHTTP)
 	authzURL := serveAs(t, identity(mtls.Authorization), http.MethodPost, "/authz/v1/check-access", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"allowed": false, "decision_reason": "no reads here"})
 	})
 	httpPort, grpcPort := freePort(t), freePort(t)
-	video := startVideoRecorder(t, root, pkiDir, httpPort, grpcPort, dsn, store.URL, authzURL, auditURL)
+	video := startVideoRecorder(t, root, pkiDir, httpPort, grpcPort, dsn, s3URL, authzURL, auditURL)
 	recorder, err := infrastructure.NewVideoRecorderClient(identity(mtls.RDPVNCProxy), "https://127.0.0.1:"+grpcPort)
 	if err != nil {
 		t.Fatal(err)
