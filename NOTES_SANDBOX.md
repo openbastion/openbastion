@@ -4112,3 +4112,11 @@ Command, sidebar, pagination, menubar, navigation menu, context menu et hover
 card. Les tests UX-02 de la palette de commandes sont conservés ; leurs événements
 clavier partent désormais de `document.body`, ce qui reproduit le vrai élément
 cible d'une frappe clavier au lieu de synthétiser un événement sur `document`.
+
+## 2026-11-12 — Synchronisation de la PR #151 avec main (PR #154)
+
+`origin/main` a avancé jusqu'à `20bcb96` (PR #154, canaux dynamiques RDP,
+ADR-0095 incrément 2). L'intégration dans `refactor/admin-ui-infrastructure`
+a été automatique, sans conflit. Après intégration : `make ui-test` (18 fichiers,
+177 tests, tokens et couleurs), TypeScript, build Vite isolé, `npm audit`
+(0 vulnérabilité), `make license-check` et `go test ./pkg/rdp/...` réussissent.
