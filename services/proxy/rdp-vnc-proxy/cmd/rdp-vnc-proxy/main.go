@@ -85,9 +85,9 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_DRAW_POINTER must be true or false, got %q", v)
 	}
-	// Partial frames anchored on key frames (ADR-0092): off unless said "true", until the figures
-	// with them are published and the owner turns them on; anything else stops the service. RDP
-	// only for now: VNC sends whole frames.
+	// Partial frames anchored on key frames (ADR-0092), RDP and VNC: off unless said "true", until
+	// the figures with them are published and the owner turns them on; anything else stops the
+	// service.
 	partialFrames := false
 	switch v := os.Getenv("SCREEN_PARTIAL_FRAMES"); v {
 	case "", "false":
@@ -101,6 +101,7 @@ func runService() {
 		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
 		FrameInterval: time.Duration(boundedIntEnv("SCREEN_FRAME_INTERVAL_MS", 50, 16, 250)) * time.Millisecond,
 		DrawPointer:   drawPointer,
+		PartialFrames: partialFrames,
 	}
 	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
 	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)

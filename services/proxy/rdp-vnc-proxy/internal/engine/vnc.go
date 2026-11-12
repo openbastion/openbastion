@@ -24,6 +24,8 @@ type VNCCodec struct {
 	FrameInterval time.Duration
 	// DrawPointer draws the target's pointer into each frame (SCREEN_DRAW_POINTER, ADR-0091).
 	DrawPointer bool
+	// PartialFrames sends partial frames anchored on key frames (SCREEN_PARTIAL_FRAMES, ADR-0092).
+	PartialFrames bool
 }
 
 var _ proxycore.ScreenCodec = (*VNCCodec)(nil)
@@ -43,6 +45,7 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 		DialTimeout:    c.DialTimeout,
 		FrameInterval:  c.FrameInterval,
 		DrawPointer:    c.DrawPointer,
+		PartialFrames:  c.PartialFrames,
 	}}
 	session, err := client.Open(ctx)
 	if err == nil {
@@ -81,6 +84,13 @@ type vncScreenSession struct{ proxycore.ScreenSession }
 func (s vncScreenSession) PointerDrawn() bool {
 	drawer, ok := s.ScreenSession.(proxycore.PointerDrawer)
 	return ok && drawer.PointerDrawn()
+}
+
+// RequestKeyFrame passes the relay's request on (ADR-0092), as PointerDrawn does its word.
+func (s vncScreenSession) RequestKeyFrame() {
+	if requester, ok := s.ScreenSession.(proxycore.KeyFrameRequester); ok {
+		requester.RequestKeyFrame()
+	}
 }
 
 func (s vncScreenSession) Err() error {
