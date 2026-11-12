@@ -9,6 +9,7 @@ require (
 	github.com/openbastion/openbastion/pkg/migrate v0.0.0
 	github.com/openbastion/openbastion/pkg/mtls v0.0.0
 	github.com/openbastion/openbastion/pkg/refusalbudget v0.0.0
+	github.com/openbastion/openbastion/pkg/screenstream v0.0.0
 	github.com/openbastion/openbastion/pkg/transit v0.0.0
 	github.com/openbastion/openbastion/proto v0.0.0
 	google.golang.org/grpc v1.83.2
@@ -44,6 +45,7 @@ replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 
 replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/refusalbudget
+replace github.com/openbastion/openbastion/pkg/screenstream => ../../../pkg/screenstream
 
 replace github.com/openbastion/openbastion/pkg/transit => ../../../pkg/transit
 

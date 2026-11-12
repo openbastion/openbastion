@@ -931,3 +931,47 @@ func TestServeScreen_TheHelloSaysWhetherThePointerIsDrawn(t *testing.T) {
 		}
 	}
 }
+
+func validDeltaFrame(seq uint64, w, h uint32) screenstream.Message {
+	return screenstream.Message{Type: screenstream.TypeFrameDelta, Sequence: seq, Timestamp: time.Unix(int64(seq), 0).UTC(), Width: w, Height: h,
+		Rects: []screenstream.Rect{{Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nrect")}}}
+}
+
+// Partial frames go through the relay as key frames do, recorded before shown (ADR-0092); the
+// Recorder gets its own copy of their rectangles. A partial frame first, or of another size than the
+// screen it changes, ends the session.
+func TestServeScreen_RelaysPartialFramesOnTheirScreen(t *testing.T) {
+	recorder := &fakeFrameRecorder{mutateRecord: true}
+	sink := &fakeScreenSink{}
+	l, _ := screenListener(&fakeVault{material: []byte("ephemeral-secret")})
+	codec := &fakeScreenCodec{session: newFakeScreenSession(validScreenFrame(1), validDeltaFrame(2, 1, 1))}
+	if err := l.ServeScreen(context.Background(), screenMeta(), codec, recorder, &fakeScreenGate{}, sink); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.frames) != 2 || recorder.frames[1].Type != screenstream.TypeFrameDelta ||
+		len(sink.messages) != 4 || sink.messages[2].Type != screenstream.TypeFrameDelta {
+		t.Fatalf("recorded %d, shown %+v", len(recorder.frames), sink.messages)
+	}
+	// The recorder wrote into its copy of the rectangle; the operator's is untouched.
+	recorder.frames[1].Rects[0].PNG[8] = 'X'
+	if string(sink.messages[2].Rects[0].PNG[8:]) != "rect" {
+		t.Fatal("the recorder shares the rectangles shown to the operator")
+	}
+
+	for name, frames := range map[string][]screenstream.Message{
+		"a partial frame first":           {validDeltaFrame(1, 1, 1)},
+		"of another size than its screen": {validScreenFrame(1), validDeltaFrame(2, 2, 1)},
+	} {
+		recorder := &fakeFrameRecorder{}
+		codec := &fakeScreenCodec{session: newFakeScreenSession(frames...)}
+		l, _ := screenListener(&fakeVault{material: []byte("ephemeral-secret")})
+		if err := l.ServeScreen(context.Background(), screenMeta(), codec, recorder, &fakeScreenGate{}, &fakeScreenSink{}); !errors.Is(err, ErrScreenSequence) {
+			t.Errorf("%s: %v, want ErrScreenSequence", name, err)
+		}
+		for _, f := range recorder.frames {
+			if f.Type == screenstream.TypeFrameDelta {
+				t.Errorf("%s: the partial frame was recorded", name)
+			}
+		}
+	}
+}
