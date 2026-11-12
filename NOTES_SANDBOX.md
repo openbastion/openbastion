@@ -3449,6 +3449,22 @@ Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session
 
 **Renversable** : 10 s ; un fichier par service plutôt qu'un module `pkg/` partagé (un module de plus aurait touché `go.work`, le Makefile et une dizaine de documents pour quinze lignes).
 
+## 2026-11-12 — ADR-0090, lot A : une scène vidéo contre Windows
+
+Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le shell (PR #101) : le test ne peut lancer aucun programme au clavier. Il demande donc la scène par un fichier du partage, comme le test de déconnexion.
+- `oem/rdp-video.ps1`, lancé caché à chaque ouverture de session (entrée `Run` posée par `rdp-setup.ps1`), surveille `video-request` sur le partage.
+- Chaque nouvelle demande (sa date d'écriture change) joue une scène : une fenêtre sans bord sur tout l'écran, des blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde, pendant 10 s. C'est le pire cas pour PNG : un majorant pour une vidéo.
+- Le script note ce qu'il fait dans `video-status-<utilisateur>.txt` sur le partage, que la CI joint à ses artefacts.
+- `TestRDPWindows_Measure` ajoute la scène `video`, en images entières puis partielles. Moins de 50 images dans la scène est une erreur : la vidéo n'a pas joué.
+
+**Vérifié en CI** (PR #149) : la vidéo a joué sur les cinq cibles, 240 à 312 images par scène ; mais chaque demande a joué deux fois (deux noms pour le même partage). Au troisième passage (exécution 43245190987), une lecture par demande, les cinq jobs Windows verts : la cible envoie de 0,7 à 3,0 Mio/s, l'enregistrement reçoit de 1,0 à 1,3 Mio/s, et les images partielles n'y changent rien. Les chiffres sont dans ADR-0090.
+
+**Deux défauts du script, corrigés au second passage** :
+- chaque demande jouait deux fois : `\\host.lan\Data` et `\\<passerelle>\Data` sont le même dossier. Une demande est maintenant reconnue à sa date d'écriture, quel que soit le nom par lequel on la lit, et le journal n'est écrit qu'une fois ;
+- `powershell -WindowStyle Hidden` montre sa console avant de la cacher, et prenait le clavier à Notepad pendant que les tests de clavier tapaient. Au second passage, deux tests de clavier ont échoué : sur la cible fr-FR, le texte tapé était à l'écran, mais l'enregistrement du fichier n'a pas eu lieu ; sur la cible 32 bpp, les touches étendues ne sont pas arrivées. Le script est maintenant lancé par `rdp-video.vbs` (`wscript`), sans aucune fenêtre.
+
+**Assertion corrigée en chemin** : `TestRDPRecording_WhatTheOperatorSawIsWhatAnAuditorReplays` exigeait une seule lecture pour relire la session. Sur deux cibles, 168 images clés d'environ 25 Ko dépassaient les 4 Mio d'une réponse, et deux lectures étaient donc justes. Le test compte maintenant les lectures que les bornes imposent (600 images, 4 Mio), comme le Recorder remplit une réponse.
+
 ## 2026-11-12 — À 50 sessions, le Video Recorder perdait des images : le pool PostgreSQL
 
 `RECORDER_MEASURE_SESSIONS` (par exemple `10,20,50`) fixe le nombre de sessions de `TestVideoRecorderAckLatency`.
