@@ -66,7 +66,7 @@ export function OperatorPreferencesDialog({
         <header className="preferences-dialog-head">
           <div>
             <h2 id="operator-preferences-title">Préférences et raccourcis</h2>
-            <p className="hint">Ces réglages sont conservés uniquement dans ce navigateur.</p>
+            <p className="ob-hint">Ces réglages sont conservés uniquement dans ce navigateur.</p>
           </div>
           <Button variant="icon" className="preferences-close" aria-label="Fermer les préférences" onClick={onClose}>×</Button>
         </header>
@@ -119,10 +119,10 @@ export function OperatorPreferencesDialog({
               <div><dt>Accéder à une section (1 à 6)</dt><dd><kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>1–6</kbd></dd></div>
               <div><dt>Fermer un panneau ou une palette</dt><dd><kbd>Échap</kbd></dd></div>
             </dl>
-            <p className="hint">Les raccourcis de navigation sont ignorés lorsque le curseur se trouve dans un champ de saisie.</p>
+            <p className="ob-hint">Les raccourcis de navigation sont ignorés lorsque le curseur se trouve dans un champ de saisie.</p>
           </section>
           {storageError ? <p className="preferences-storage-error" role="alert">Impossible d'enregistrer les préférences dans le stockage local de ce navigateur. Vérifiez ses paramètres de confidentialité et réessayez.</p> : null}
-          <div className="form-actions">
+          <div className="ob-form-actions">
             <Button onClick={onClose}>Annuler</Button>
             <Button type="submit" variant="primary">Enregistrer les préférences</Button>
           </div>

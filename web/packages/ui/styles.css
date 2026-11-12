@@ -188,6 +188,10 @@
   font-size: 0.88rem;
 }
 
+.ob-hint code {
+  font-size: 0.84em;
+}
+
 .ob-form-card {
   display: grid;
   gap: 0.85rem;
@@ -199,6 +203,10 @@
   grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
   gap: 0.85rem;
   min-width: 0;
+}
+
+.ob-form-fields .wide {
+  grid-column: 1 / -1;
 }
 
 .ob-form-actions {

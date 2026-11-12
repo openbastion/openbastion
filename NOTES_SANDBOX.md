@@ -1,5 +1,24 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : commandes enregistrées et replay vidéo (étape 5D)
+
+Les commandes enregistrées sont présentées dans une surface partagée avec un
+entête de section accessible, le compteur de commandes, la pagination et les
+états vides. Le terminal de replay utilise désormais les tokens chrome pour
+son fond, son texte, ses marqueurs et ses horodatages ; aucune commande n’est
+interprétée ou exécutée par l’interface.
+
+La relecture vidéo utilise une surface dédiée, des contrôles partagés et des
+états de chargement accessibles. Les commandes de lecture, pause, arrêt, pas à
+pas, vitesse, chargement des segments, limitation mémoire et état de fin sont
+préservés. Le canvas garde son focus visible avec l’accent chrome adapté au fond
+sombre. Les contrats API et les limites de replay ne changent pas.
+
+Validation : make ui-test ui-build réussit (14 fichiers Vitest, 148 tests,
+TypeScript et build Vite) ; les 36 paires de contraste restent conformes. Les
+avertissements React préexistants sur les attributs SVG des icônes subsistent.
+La revue visuelle multi-viewport et l’audit lecteur d’écran restent à effectuer.
+
 ## 2026-11-12 — ADR-0073 Design System : sessions et approbations (étape 5C)
 
 Les demandes d’approbation et de break-glass utilisent la table partagée avec

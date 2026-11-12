@@ -51,11 +51,11 @@ export function Recording() {
           <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
         </label>
       </FormCard>
-      {loading ? <p className="card empty" role="status">Chargement de l'enregistrement…</p> : null}
-      {!loading && hasRead && page && page.entries.length === 0 ? <p className="card empty">Aucune commande enregistrée pour cette session.</p> : null}
+      {loading ? <p className="ob-empty-state" role="status">Chargement de l'enregistrement…</p> : null}
+      {!loading && hasRead && page && page.entries.length === 0 ? <p className="ob-empty-state">Aucune commande enregistrée pour cette session.</p> : null}
       {!loading && page && page.entries.length > 0 ? (
-        <div className="card commands-card">
-          <div className="card-head"><h3>Commandes de la session <code>{page.sessionId}</code></h3><Badge>{page.totalEntries} commande(s)</Badge></div>
+        <section className="ob-surface commands-card" aria-labelledby="recorded-commands-title">
+          <div className="ob-section-heading"><h3 id="recorded-commands-title">Commandes de la session <code>{page.sessionId}</code></h3><Badge>{page.totalEntries} commande(s)</Badge></div>
           <ol className="commands" start={(page.page - 1) * page.pageSize + 1}>
             {page.entries.map((e, i) => (
               <li key={`${e.timestamp}-${i}`}>
@@ -64,7 +64,7 @@ export function Recording() {
             ))}
           </ol>
           <Pager page={page.page} pageSize={page.pageSize} totalItems={page.totalEntries} noun="commande(s)" onPage={(next) => void read(next, page.sessionId)} />
-        </div>
+        </section>
       ) : null}
       <VideoReplay />
     </AdminPage>

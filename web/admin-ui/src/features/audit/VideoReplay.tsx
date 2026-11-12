@@ -181,8 +181,9 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
           <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
         </label>
       </FormCard>
+      {loading && !frame ? <p className="ob-empty-state" role="status">Chargement des images enregistrées…</p> : null}
       {frame ? (
-        <div className="card form-card">
+        <section className="ob-surface ob-panel video-replay-card" aria-label="Relecture vidéo de la session">
           <canvas ref={canvas} className="screen-canvas" role="img" aria-label="Image enregistrée de l'écran de la session, non lisible par un lecteur d'écran" />
           <ReplayControls
             playing={playing}
@@ -203,7 +204,7 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
             }}
             onSpeed={setSpeed}
           />
-        </div>
+        </section>
       ) : null}
     </>
   );

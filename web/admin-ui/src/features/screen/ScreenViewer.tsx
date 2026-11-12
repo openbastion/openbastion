@@ -260,7 +260,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
 
   return (
     <div className="screen">
-      <div className="form-actions">
+      <div className="ob-form-actions">
         <Button onClick={onClose}>Fermer l'écran</Button>
         {phase.name === "live" && isRDP ? <Button onClick={ctrlAltDel}>Ctrl+Alt+Suppr</Button> : null}
         {phase.name === "ended" ? <Button variant="primary" onClick={onReconnect}>Se reconnecter</Button> : null}
@@ -268,7 +268,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       {phase.name === "connecting" ? <InlineNotice tone="info">Connexion à la cible…</InlineNotice> : null}
       {phase.name === "live" && !hasFrame ? <InlineNotice tone="success">Connecté. En attente de la première image enregistrée…</InlineNotice> : null}
       {phase.name === "live" && hasFrame ? (
-        <p className="hint" role="status">
+        <p className="ob-hint" role="status">
           Session enregistrée{phase.expiresAt ? `, jusqu'à ${phase.expiresAt.toLocaleString("fr-FR")}` : ""}. Cliquez sur l'écran pour saisir. Le navigateur garde pour lui certains raccourcis (Alt+Tab, touche Windows).
         </p>
       ) : null}

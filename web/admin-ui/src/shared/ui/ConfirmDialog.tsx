@@ -68,7 +68,7 @@ export function ConfirmDialog({
         <h2 id="confirm-title">{title}</h2>
         <p id="confirm-description">{description}</p>
         {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
-        <div className="form-actions">
+        <div className="ob-form-actions">
           <Button ref={cancel} disabled={working} onClick={onCancel}>Annuler</Button>
           <Button ref={confirm} variant={danger ? "danger" : "primary"} disabled={working} onClick={() => void submit()}>
             {working ? "Traitement…" : confirmLabel}
