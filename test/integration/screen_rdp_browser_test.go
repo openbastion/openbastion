@@ -52,6 +52,7 @@ func TestScreenFlow_RDPResizeInAHeadlessBrowser(t *testing.T) {
 	id := jsonField(t, raw, "id")
 
 	page := startHeadlessChrome(t, chrome)
+	page.dump = dump
 	page.viewport(1400, 1000)
 	page.call("Page.navigate", map[string]any{"url": stack.gatewayURL + "/ui/"})
 	page.waitTrue("the login form", `!!document.querySelector('input[name="username"]')`, 30*time.Second)

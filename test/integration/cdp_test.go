@@ -38,6 +38,8 @@ type cdpPage struct {
 	t    *testing.T
 	conn *websocket.Conn
 	next int
+	// dump is where a failed wait leaves its screenshot, when set.
+	dump string
 }
 
 // startHeadlessChrome starts chrome with nothing of the user's, and returns its first page.
@@ -157,7 +159,10 @@ func (p *cdpPage) waitTrue(what, expression string, limit time.Duration) {
 			return
 		}
 		if time.Now().After(deadline) {
-			p.t.Fatalf("waited %s for %s", limit, what)
+			// What the page shows, to say why: its text, and a screenshot in the dump.
+			text := p.eval(`document.body ? document.body.innerText.slice(0, 1500) : "(no body)"`)
+			p.screenshot(p.dump, "browser-wait-failed.png")
+			p.t.Fatalf("waited %s for %s; the page says: %s", limit, what, text)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
