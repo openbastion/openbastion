@@ -1,5 +1,7 @@
 import { Page, Session } from "../../shared/api";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
+import { Badge } from "../../shared/ui/Badge";
+import { Button } from "../../shared/ui/Button";
 
 // The requests waiting for this user's decision — break-glass (ADR-0012) and approval (ADR-0067).
 // The screen owns the call and the notice; the table only says which request each button names.
@@ -45,7 +47,7 @@ export function PendingRequests({
                   <td>
                     <div className="request-kind">
                       <StatusBadge status={s.status} />
-                      {s.breakGlass ? <span className="badge warn">Urgence</span> : <span className="badge">Approbation</span>}
+                      {s.breakGlass ? <Badge tone="warning">Urgence</Badge> : <Badge>Approbation</Badge>}
                     </div>
                   </td>
                   <td>{s.requestedBy}</td>
@@ -54,12 +56,12 @@ export function PendingRequests({
                   <td>{s.ticket ? <code>{s.ticket}</code> : "—"}</td>
                   <td>{s.expiresAt}</td>
                   <td className="actions">
-                    <button type="button" aria-label={`Approuver la session ${s.id}`} onClick={() => onApprove(s)}>
+                    <Button aria-label={`Approuver la session ${s.id}`} onClick={() => onApprove(s)}>
                       Approuver
-                    </button>
-                    <button type="button" className="danger" aria-label={`Refuser la session ${s.id}`} onClick={() => onReject(s)}>
+                    </Button>
+                    <Button variant="danger" aria-label={`Refuser la session ${s.id}`} onClick={() => onReject(s)}>
                       Refuser
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}

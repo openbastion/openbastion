@@ -1,4 +1,6 @@
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Button } from "./Button";
+import { InlineNotice } from "./InlineNotice";
 
 // Explicit confirmation for privileged or destructive actions. The caller owns the API request;
 // this component only guards the gesture and keeps focus inside the alert dialog.
@@ -65,12 +67,12 @@ export function ConfirmDialog({
       <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-busy={working} aria-labelledby="confirm-title" aria-describedby="confirm-description" onKeyDown={keys}>
         <h2 id="confirm-title">{title}</h2>
         <p id="confirm-description">{description}</p>
-        {error ? <p className="notice error" role="alert">{error}</p> : null}
+        {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
         <div className="form-actions">
-          <button ref={cancel} type="button" disabled={working} onClick={onCancel}>Annuler</button>
-          <button ref={confirm} type="button" className={danger ? "danger" : "primary"} disabled={working} onClick={() => void submit()}>
+          <Button ref={cancel} disabled={working} onClick={onCancel}>Annuler</Button>
+          <Button ref={confirm} variant={danger ? "danger" : "primary"} disabled={working} onClick={() => void submit()}>
             {working ? "Traitement…" : confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

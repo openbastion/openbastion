@@ -4,6 +4,7 @@ import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { FormCard } from "../../shared/ui/FormCard";
 import { Pager } from "../../shared/ui/Pager";
+import { Badge } from "../../shared/ui/Badge";
 import { VideoReplay } from "./VideoReplay";
 
 const pageSize = 100;
@@ -54,7 +55,7 @@ export function Recording() {
       {!loading && hasRead && page && page.entries.length === 0 ? <p className="card empty">Aucune commande enregistrée pour cette session.</p> : null}
       {!loading && page && page.entries.length > 0 ? (
         <div className="card commands-card">
-          <div className="card-head"><h3>Commandes de la session <code>{page.sessionId}</code></h3><span className="badge">{page.totalEntries} commande(s)</span></div>
+          <div className="card-head"><h3>Commandes de la session <code>{page.sessionId}</code></h3><Badge>{page.totalEntries} commande(s)</Badge></div>
           <ol className="commands" start={(page.page - 1) * page.pageSize + 1}>
             {page.entries.map((e, i) => (
               <li key={`${e.timestamp}-${i}`}>

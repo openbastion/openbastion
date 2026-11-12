@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 // are what an operator must know before acting on the screen, never a tour of it.
 export function AdminPage({ title, hints = [], children }: { title: string; hints?: ReactNode[]; children?: ReactNode }) {
   return (
-    <section className="page">
+    <section className="ob-page">
       <PageHead title={title} hints={hints} />
       {children}
     </section>
@@ -13,13 +13,13 @@ export function AdminPage({ title, hints = [], children }: { title: string; hint
 
 export function PageHead({ title, hints = [] }: { title: string; hints?: ReactNode[] }) {
   return (
-    <div className="page-head">
+    <header className="ob-page-header">
       <h2 tabIndex={-1} data-confirm-focus-fallback>{title}</h2>
       {hints.map((hint, i) => (
-        <p className="hint" key={i}>
+        <p className="ob-hint" key={i}>
           {hint}
         </p>
       ))}
-    </div>
+    </header>
   );
 }

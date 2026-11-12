@@ -1,5 +1,25 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 Design System : primitives UI partagées (étape 4)
+
+Le package privé `web/packages/ui/` fournit les primitives CSS framework-neutral
+(boutons, badges, notices, surfaces, en-têtes, formulaires et pagination). Il
+consomme exclusivement les tokens sémantiques et ne contient ni logique métier,
+ni JavaScript navigateur, ni dépendance tierce. Les wrappers React, libellés et
+états API restent dans `web/admin-ui/src/shared/ui/`, conformément à ADR-0075.
+
+L’Admin UI utilise ces primitives pour les badges de statut, les messages
+d’erreur/succès, les formulaires partagés, les confirmations, la pagination,
+les préférences, les actions de comptes et les contrôles de la console d’écran.
+Les états inconnus du Broker restent visibles avec un badge neutre ; les notices
+d’erreur exposent `role=alert`, les confirmations d’état `role=status`.
+
+Validation : `make ui-test ui-build` réussit (14 fichiers Vitest, 147 tests,
+TypeScript et build Vite). `make ui-tokens-test` vérifie 36 paires de contraste
+(18 par thème), y compris les fonds sémantiques des badges et notices. Les
+avertissements React sur les attributs SVG des icônes restent préexistants.
+La revue visuelle multi-viewport et l’audit lecteur d’écran restent à effectuer.
+
 ## 2026-11-12 — ADR-0073 Design System : shell opérateur (étape 3)
 
 Le shell de l'Admin UI adopte désormais un en-tête clair et une barre latérale

@@ -1,4 +1,6 @@
 import { Account } from "../../shared/api";
+import { Badge } from "../../shared/ui/Badge";
+import { Button } from "../../shared/ui/Button";
 
 // What a row can ask of its account. The screen owns the calls and the notices; the table only
 // says which account each button names.
@@ -43,28 +45,28 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
                 <Rotation account={a} />
               </td>
               <td>{a.lastRotatedAt ?? "—"}</td>
-              <td>{a.approvalRequired ? <span className="badge">requise</span> : "—"}</td>
+              <td>{a.approvalRequired ? <Badge>requise</Badge> : "—"}</td>
               <td className="actions">
                 {a.protocol === "ssh" ? (
-                  <button type="button" onClick={() => actions.pinKey(a)}>
+                  <Button onClick={() => actions.pinKey(a)}>
                     {a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}
-                  </button>
+                  </Button>
                 ) : (
-                  <button type="button" onClick={() => actions.pinTls(a)}>
+                  <Button onClick={() => actions.pinTls(a)}>
                     {a.tlsCertificateSha256 ? "Changer le certificat TLS" : "Épingler le certificat TLS"}
-                  </button>
+                  </Button>
                 )}
-                <button type="button" onClick={() => actions.toggleApproval(a)}>
+                <Button onClick={() => actions.toggleApproval(a)}>
                   {a.approvalRequired ? "Ne plus exiger l'approbation" : "Exiger l'approbation"}
-                </button>
+                </Button>
                 {a.protocol === "ssh" ? (
-                  <button type="button" onClick={() => actions.rotate(a)}>
+                  <Button onClick={() => actions.rotate(a)}>
                     Renouveler le secret
-                  </button>
+                  </Button>
                 ) : null}
-                <button type="button" className="danger" onClick={() => actions.disable(a)}>
+                <Button variant="danger" onClick={() => actions.disable(a)}>
                   Désactiver
-                </button>
+                </Button>
               </td>
             </tr>
           ))}
@@ -78,9 +80,9 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
 // graphical target (ADR-0071). An account without one opens no session.
 function TargetIdentity({ account: a }: { account: Account }) {
   if (a.protocol === "ssh") {
-    return a.hostKeyFingerprint ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code> : <span className="badge warn">non épinglée</span>;
+    return a.hostKeyFingerprint ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code> : <Badge tone="warning">non épinglée</Badge>;
   }
-  return a.tlsCertificateSha256 ? <code title={a.targetDomain}>{a.tlsCertificateSha256}</code> : <span className="badge warn">non épinglée</span>;
+  return a.tlsCertificateSha256 ? <code title={a.targetDomain}>{a.tlsCertificateSha256}</code> : <Badge tone="warning">non épinglée</Badge>;
 }
 
 // The rotation a secret is under, and what the Vault reports about it: a cadence (ADR-0040), a
@@ -88,27 +90,27 @@ function TargetIdentity({ account: a }: { account: Account }) {
 function Rotation({ account: a }: { account: Account }) {
   return (
     <>
-      <span className="badge">{a.rotationPolicy}</span>
+      <Badge>{a.rotationPolicy}</Badge>
       {a.rotationIntervalDays ? (
         <span className="cell-note">
           tous les {a.rotationIntervalDays} j — prochaine : {a.nextRotationAt ?? "—"}
         </span>
       ) : null}
       {a.rotationOwedSince ? (
-        <span
-          className="badge warn"
+        <Badge
+          tone="warning"
           title={`Une session s'est terminée le ${a.rotationOwedSince} : le Vault fait tourner ce secret, et réessaie tant qu'il n'y arrive pas.`}
         >
           renouvellement dû
-        </span>
+        </Badge>
       ) : null}
       {a.rotationFailures ? (
-        <span
-          className="badge warn"
+        <Badge
+          tone="warning"
           title="Rotations planifiées échouées d'affilée : le secret n'a pas changé. Voir le journal du Vault."
         >
           en échec ({a.rotationFailures})
-        </span>
+        </Badge>
       ) : null}
     </>
   );

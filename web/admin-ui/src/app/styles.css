@@ -415,18 +415,6 @@ td.actions button {
   font-size: 0.9rem;
 }
 
-.badge {
-  display: inline-block;
-  padding: 0.14rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  background: var(--surface-3);
-  border: 1px solid var(--line);
-  white-space: nowrap;
-}
-
 /* A line of detail under a cell's value (the next scheduled rotation, ADR-0040). */
 .cell-note {
   display: block;
@@ -436,12 +424,6 @@ td.actions button {
 }
 
 /* An account whose target's host key is not pinned (ADR-0039): it gets no session. */
-.badge.warn {
-  color: var(--danger-strong);
-  background: var(--danger-soft);
-  border-color: var(--danger);
-}
-
 /* ---------- Forms ---------- */
 
 form {
@@ -595,56 +577,6 @@ button.danger:hover {
 
 .app-header :focus-visible {
   outline-color: var(--ob-color-focus);
-}
-
-/* ---------- Notices ---------- */
-
-.notice {
-  display: flex;
-  gap: 0.55rem;
-  align-items: flex-start;
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-size: 0.88rem;
-  line-height: 1.45;
-}
-
-.notice::before {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 1.1rem;
-  height: 1.1rem;
-  margin-top: 0.05rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.notice.error {
-  color: #7a1c14;
-  background: var(--danger-soft);
-  border-color: #f4cdc9;
-}
-
-.notice.error::before {
-  content: "!";
-  color: #ffffff;
-  background: var(--danger);
-}
-
-.notice.ok {
-  color: #075e39;
-  background: var(--ok-soft);
-  border-color: #bde8cf;
-}
-
-.notice.ok::before {
-  content: "✓";
-  color: #ffffff;
-  background: var(--ok);
 }
 
 /* ---------- Pager ---------- */
@@ -1623,34 +1555,6 @@ main.login {
 }
 
 /* ---------- ADR-0073 UX-03: PAM workflow states and confirmations ---------- */
-
-.status-badge {
-  font-weight: 650;
-}
-
-.status-active {
-  color: var(--ok);
-  background: var(--ok-soft);
-  border-color: color-mix(in srgb, var(--ok) 28%, transparent);
-}
-
-.status-pending {
-  color: var(--warning);
-  background: var(--warning-soft);
-  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
-}
-
-.status-danger {
-  color: var(--danger-strong);
-  background: var(--danger-soft);
-  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
-}
-
-.status-muted,
-.status-unknown {
-  color: var(--ink-3);
-  background: var(--surface-3);
-}
 
 .request-kind {
   display: grid;

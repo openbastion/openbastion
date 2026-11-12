@@ -3,6 +3,7 @@ import { Account, ApiError, Page } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
+import { Badge } from "../../shared/ui/Badge";
 
 type Finding = { account: Account; reasons: string[] };
 
@@ -74,7 +75,7 @@ export function SecurityCenter() {
                 <h3 id="security-findings-title">Points à examiner</h3>
                 <p className="hint">Les signaux sont présentés sans pondération ni interprétation supplémentaire.</p>
               </div>
-              <span className="badge">{findings.length} compte(s)</span>
+              <Badge>{findings.length} compte(s)</Badge>
             </div>
             {findings.length ? (
               <ul className="security-findings">

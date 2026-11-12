@@ -61,6 +61,11 @@ Ratios calculés à partir des valeurs hexadécimales ci-dessus selon la formule
 | Texte secondaire navigation / fond navigation | 8,70:1 | 8,70:1 | 4,5:1 |
 | Accent navigation / fond navigation | 7,57:1 | 7,57:1 | 4,5:1 |
 | Accent navigation active / fond sélectionné | 5,88:1 | 5,88:1 | 4,5:1 |
+| Badge info / fond info | 5,09:1 | 5,88:1 | 4,5:1 |
+| Badge succès / fond succès | 5,80:1 | 6,88:1 | 4,5:1 |
+| Badge avertissement / fond avertissement | 5,64:1 | 8,59:1 | 4,5:1 |
+| Badge danger / fond danger | 5,85:1 | 6,20:1 | 4,5:1 |
+| Badge neutre / surface subtile | 5,71:1 | 7,80:1 | 4,5:1 |
 
 Le séparateur léger n'est pas destiné à être l'unique contour d'un contrôle interactif. Les contrôles, indicateurs de focus et éléments graphiques nécessaires à la compréhension utilisent des tokens de contraste adaptés. Les valeurs sont à revalider si un fond, une opacité ou une composition change.
 
@@ -114,7 +119,7 @@ Les dimensions exactes du shell sont des valeurs d'implémentation réversibles 
 
 ## 5. Composants et frontières
 
-Les tokens sont dans `web/packages/design-tokens/`. Les primitives réutilisées par plusieurs applications résident dans `web/packages/ui/`. Les icônes OpenBastion existantes restent dans `web/openbastion-icons/`. Les composants et styles strictement propres à l'Admin UI peuvent rester dans `web/admin-ui/src/shared/` ; ils ne sont déplacés dans le package partagé qu'après preuve de réutilisation.
+Les tokens sont dans `web/packages/design-tokens/`. Les primitives CSS réutilisées par plusieurs applications résident dans `web/packages/ui/styles.css` ; les wrappers React, libellés et états propres à une application restent dans son `src/shared/ui/`. Les icônes OpenBastion existantes restent dans `web/openbastion-icons/`. Les composants et styles strictement propres à l'Admin UI peuvent rester dans `web/admin-ui/src/shared/` ; ils ne sont déplacés dans le package partagé qu'après preuve de réutilisation.
 
 La bibliothèque évolue par besoin réel : shell/navigation, page header, boutons et champs, tables, badges d'état, alertes, skeletons, dialogues de confirmation, pagination, timeline et visualisation de commandes. Les composants partagés n'importent aucun client API et ne connaissent aucun domaine PAM.
 
@@ -143,7 +148,7 @@ Un composant peut être remplacé uniquement si ses comportements, libellés acc
 | 1 — Charte et contrats | ADR-0073/0075 précisés, présente spécification, frontières de packages et plan validés | Relecture des décisions, `git diff --check` |
 | 2 — Tokens (livré) | Package CSS `web/packages/design-tokens/`, palettes clair/sombre, tokens sémantiques, import reproductible et contrôle de contraste intégré à Make | `make ui-tokens-test` : 18 paires contrôlées à cette étape ; `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis |
 | 3 — Shell (implémenté) | En-tête clair, sidebar sombre, navigation active, densité, thèmes, responsive et focus | `make ui-test ui-build` : 13 fichiers, 142 tests, TypeScript et Vite réussis ; 26 paires vérifiées ; revue visuelle multi-viewport à faire |
-| 4 — Primitives | Boutons, champs, tables, badges, alertes, skeletons et confirmations | Tests unitaires et d'accessibilité ciblés, états complet/chargement/vide/refus/erreur |
+| 4 — Primitives (implémenté) | Package CSS partagé `web/packages/ui/` : boutons, badges, notices, surfaces, en-têtes, formulaires et pagination ; wrappers React propres à l’Admin UI | 14 fichiers Vitest, 147 tests ; 36 paires de contraste ; TypeScript et Vite réussis |
 | 5 — Migration des écrans | Migration progressive Vue générale, comptes, politiques, sessions, relecture et Centre de sécurité | Parcours et assertions API inchangés ; aucune donnée simulée ; tests existants conservés |
 | 6 — Finition et audit | Réduction des valeurs locales, revue clavier/lecteur d'écran, thèmes, mouvement et responsive | `make ui-test ui-build`, audit des contrastes rendus, `git diff --check`, limites consignées |
 

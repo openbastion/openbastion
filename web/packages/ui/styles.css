@@ -1,0 +1,234 @@
+/* OpenBastion Infrastructure — shared, framework-neutral UI primitives. */
+.ob-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.85rem;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-control);
+  border-radius: var(--ob-radius-sm);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 550;
+  line-height: 1.25;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--ob-motion-duration-fast) var(--ob-motion-ease-standard),
+    border-color var(--ob-motion-duration-fast) var(--ob-motion-ease-standard),
+    color var(--ob-motion-duration-fast) var(--ob-motion-ease-standard);
+}
+
+.ob-button:hover:not(:disabled) {
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface-muted);
+  border-color: var(--ob-color-border-control);
+}
+
+.ob-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.ob-button:focus-visible {
+  outline: 2px solid var(--ob-color-focus);
+  outline-offset: 2px;
+}
+
+.ob-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ob-button--primary {
+  color: var(--ob-color-text-on-accent);
+  background: var(--ob-color-accent);
+  border-color: var(--ob-color-accent);
+}
+
+.ob-button--primary:hover:not(:disabled) {
+  color: var(--ob-color-text-on-accent);
+  background: var(--ob-color-accent-strong);
+  border-color: var(--ob-color-accent-strong);
+}
+
+.ob-button--danger {
+  color: var(--ob-color-status-danger);
+  background: var(--ob-color-bg-surface);
+  border-color: var(--ob-color-status-danger);
+}
+
+.ob-button--danger:hover:not(:disabled) {
+  color: var(--ob-color-status-danger);
+  background: var(--ob-color-status-danger-subtle);
+  border-color: var(--ob-color-status-danger);
+}
+
+.ob-button--ghost {
+  color: var(--ob-color-text-secondary);
+  background: transparent;
+  border-color: transparent;
+}
+
+.ob-button--ghost:hover:not(:disabled) {
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface-muted);
+  border-color: transparent;
+}
+
+.ob-button--icon {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0;
+}
+
+.ob-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.5rem;
+  padding: 0.14rem 0.5rem;
+  color: var(--ob-color-text-secondary);
+  background: var(--ob-color-bg-surface-subtle);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-badge--info {
+  color: var(--ob-color-accent);
+  background: var(--ob-color-accent-subtle);
+  border-color: var(--ob-color-accent);
+}
+
+.ob-badge--success {
+  color: var(--ob-color-status-success);
+  background: var(--ob-color-status-success-subtle);
+  border-color: var(--ob-color-status-success);
+}
+
+.ob-badge--warning {
+  color: var(--ob-color-status-warning);
+  background: var(--ob-color-status-warning-subtle);
+  border-color: var(--ob-color-status-warning);
+}
+
+.ob-badge--danger {
+  color: var(--ob-color-status-danger);
+  background: var(--ob-color-status-danger-subtle);
+  border-color: var(--ob-color-status-danger);
+}
+
+.ob-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.7rem 0.9rem;
+  color: var(--ob-color-text-secondary);
+  background: var(--ob-color-bg-surface-muted);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-radius-md);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.ob-notice--danger {
+  color: var(--ob-color-status-danger);
+  background: var(--ob-color-status-danger-subtle);
+  border-color: var(--ob-color-status-danger);
+}
+
+.ob-notice--success {
+  color: var(--ob-color-status-success);
+  background: var(--ob-color-status-success-subtle);
+  border-color: var(--ob-color-status-success);
+}
+
+.ob-notice--warning {
+  color: var(--ob-color-status-warning);
+  background: var(--ob-color-status-warning-subtle);
+  border-color: var(--ob-color-status-warning);
+}
+
+.ob-notice--info {
+  color: var(--ob-color-accent);
+  background: var(--ob-color-accent-subtle);
+  border-color: var(--ob-color-accent);
+}
+
+.ob-surface {
+  min-width: 0;
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-radius-lg);
+  box-shadow: var(--ob-shadow-sm);
+}
+
+.ob-page {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.ob-page-header {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ob-hint {
+  max-width: 68ch;
+  color: var(--ob-color-text-tertiary);
+  font-size: 0.88rem;
+}
+
+.ob-form-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.ob-form-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.ob-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.ob-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  color: var(--ob-color-text-tertiary);
+  background: var(--ob-color-bg-surface-muted);
+  border-top: 1px solid var(--ob-color-border-subtle);
+  border-radius: 0 0 var(--ob-radius-lg) var(--ob-radius-lg);
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-button {
+    transition: none;
+  }
+
+  .ob-button:active:not(:disabled) {
+    transform: none;
+  }
+}

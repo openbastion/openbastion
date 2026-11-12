@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { AdminTab, DensityPreference, OperatorPreferences, ThemePreference } from "../operatorPreferences";
+import { Button } from "./Button";
 
 const destinations: { value: AdminTab; label: string }[] = [
   { value: "overview", label: "Vue générale" },
@@ -67,7 +68,7 @@ export function OperatorPreferencesDialog({
             <h2 id="operator-preferences-title">Préférences et raccourcis</h2>
             <p className="hint">Ces réglages sont conservés uniquement dans ce navigateur.</p>
           </div>
-          <button type="button" className="preferences-close" aria-label="Fermer les préférences" onClick={onClose}>×</button>
+          <Button variant="icon" className="preferences-close" aria-label="Fermer les préférences" onClick={onClose}>×</Button>
         </header>
         <form onSubmit={submit}>
           <div className="preferences-fields">
@@ -122,8 +123,8 @@ export function OperatorPreferencesDialog({
           </section>
           {storageError ? <p className="preferences-storage-error" role="alert">Impossible d'enregistrer les préférences dans le stockage local de ce navigateur. Vérifiez ses paramètres de confidentialité et réessayez.</p> : null}
           <div className="form-actions">
-            <button type="button" onClick={onClose}>Annuler</button>
-            <button type="submit" className="primary">Enregistrer les préférences</button>
+            <Button onClick={onClose}>Annuler</Button>
+            <Button type="submit" variant="primary">Enregistrer les préférences</Button>
           </div>
         </form>
       </section>

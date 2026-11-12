@@ -60,6 +60,11 @@ const pairs = [
   ["texte secondaire navigation", "--ob-color-chrome-muted", "--ob-color-chrome-background", 4.5],
   ["accent navigation", "--ob-color-chrome-accent", "--ob-color-chrome-background", 4.5],
   ["accent navigation active", "--ob-color-chrome-accent", "--ob-color-chrome-accent-subtle", 4.5],
+  ["badge info", "--ob-color-accent", "--ob-color-accent-subtle", 4.5],
+  ["badge succès", "--ob-color-status-success", "--ob-color-status-success-subtle", 4.5],
+  ["badge avertissement", "--ob-color-status-warning", "--ob-color-status-warning-subtle", 4.5],
+  ["badge danger", "--ob-color-status-danger", "--ob-color-status-danger-subtle", 4.5],
+  ["badge neutre", "--ob-color-text-secondary", "--ob-color-bg-surface-subtle", 4.5],
 ];
 
 const lightValues = declarations(":root");
