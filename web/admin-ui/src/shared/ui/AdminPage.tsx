@@ -14,7 +14,7 @@ export function AdminPage({ title, hints = [], children }: { title: string; hint
 export function PageHead({ title, hints = [] }: { title: string; hints?: ReactNode[] }) {
   return (
     <div className="page-head">
-      <h2>{title}</h2>
+      <h2 tabIndex={-1} data-confirm-focus-fallback>{title}</h2>
       {hints.map((hint, i) => (
         <p className="hint" key={i}>
           {hint}

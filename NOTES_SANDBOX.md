@@ -1,5 +1,26 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 UX-03 : parcours PAM cohérents
+
+Les états connus du Session Broker (`pending_approval`, `active`, `terminated`, `expired`, `denied`)
+sont traduits dans un badge commun ; les valeurs inconnues restent visibles sans leur attribuer une
+sémantique inventée. Les écrans comptes et approbations distinguent désormais chargement, résultat
+vide et données disponibles. La relecture de commandes présente la session et le volume associé,
+avec un état vide explicite ; les commandes restent du texte échappé. Le changement de page d'une
+relecture conserve l'identifiant de session initial, même si le champ de saisie est modifié.
+
+Une confirmation accessible (dialogue d'alerte, focus initial sur Annuler, boucle de tabulation,
+Échap, retour du focus) précède le renouvellement d'un secret, la désactivation d'un compte, l'approbation ou le refus
+d'une session, et la terminaison. Elle décrit la ressource et l'effet attendu, notamment la vérification du secret par le Vault avant adoption. Une terminaison n'est pas
+annoncée comme réussie avant le retour du Broker, qui confirme après révocation par le proxy. Les
+échecs gardent le dialogue ouvert et affichent la notice existante. Aucun appel API n'est émis à
+l'annulation.
+
+Aucun endpoint, rôle, règle d'autorisation, dépendance runtime, stockage de secret, ou nouveau flux
+d'audit n'est ajouté. Le Gateway/Broker/Vault restent les autorités ; les secrets restent
+write-only côté UI.
+
+
 ## 2026-11-12 — ADR-0073 UX-02 : productivité opérateur
 
 La palette de commandes est accessible depuis l'en-tête et par `Ctrl+K` / `Cmd+K`. Elle filtre

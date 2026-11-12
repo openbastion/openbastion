@@ -19,8 +19,25 @@ describe("Accounts", () => {
     signedIn(api, <Accounts />);
     expect(await screen.findByText("prod db")).toBeTruthy();
     fireEvent.click(screen.getByText("Renouveler le secret"));
+    expect(screen.getByRole("alertdialog").textContent).toContain("compte de réconciliation");
+    expect(calls.some((call) => call.method === "POST" && call.path.endsWith("/rotate"))).toBe(false);
+    fireEvent.click(screen.getByText("Renouveler le secret", { selector: ".confirm-dialog button" }));
     expect((await screen.findByRole("status")).textContent).toContain("Secret de acc_1 renouvelé sur la cible");
     expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts/acc_1/rotate")).toBe(true);
+  });
+
+  it("requires explicit confirmation before disabling a privileged account", async () => {
+    const { api, calls } = fakeApi({
+      "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } },
+      "DELETE /vault/accounts/acc_1": { status: 200, body: "{}" },
+    });
+    signedIn(api, <Accounts />);
+    fireEvent.click(await screen.findByText("Désactiver"));
+    expect(screen.getByRole("alertdialog").textContent).toContain("ne pourra plus être utilisé");
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false);
+    fireEvent.click(screen.getByText("Désactiver le compte"));
+    expect((await screen.findByRole("status")).textContent).toContain("acc_1 désactivé");
+    expect(calls.some((call) => call.method === "DELETE" && call.path === "/vault/accounts/acc_1")).toBe(true);
   });
 
   it("filters only the accounts on the loaded page without making another API request", async () => {
@@ -41,7 +58,9 @@ describe("Accounts", () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { status: 409, body: "the account has no usable reconciliation account: it cannot be rotated" } });
     signedIn(api, <Accounts />);
     fireEvent.click(await screen.findByText("Renouveler le secret"));
+    fireEvent.click(screen.getByText("Renouveler le secret", { selector: ".confirm-dialog button" }));
     expect((await screen.findByRole("alert")).textContent).toContain("409 — the account has no usable reconciliation account");
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 
   it("onboards an account with its secret as bytes, and never shows it again", async () => {
@@ -178,9 +197,59 @@ describe("Sessions", () => {
     const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [req], page: 1, pageSize: 50, totalItems: 1 } }, "POST /sessions/sess_1/approve": { body: req } });
     signedIn(api, <Sessions />);
     expect(await screen.findByText("incident 42")).toBeTruthy();
-    fireEvent.click(screen.getByText("Approuver"));
+    fireEvent.click(screen.getByRole("button", { name: "Approuver la session sess_1" }));
+    expect(screen.getByRole("alertdialog").textContent).toContain("Justification : incident 42");
+    expect(calls.some((call) => call.path.endsWith("/approve"))).toBe(false);
+    fireEvent.click(screen.getByText("Confirmer l'approbation"));
     expect((await screen.findByRole("status")).textContent).toContain("sess_1 approuvée");
     expect(calls[0].path).toBe("/sessions?status=pending_approval");
+  });
+});
+
+describe("Session confirmation safety", () => {
+  it("cancels an approval with Escape, restores focus, and sends no decision request", async () => {
+    const req = { id: "sess_cancel", status: "pending_approval", protocol: "ssh", requestedBy: "bob", privilegedAccountId: "acc_1", justification: "incident", breakGlass: false, expiresAt: "2026-10-30T11:00:00Z" };
+    const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [req], page: 1, pageSize: 50, totalItems: 1 } } });
+    signedIn(api, <Sessions />);
+    const trigger = await screen.findByRole("button", { name: "Approuver la session sess_cancel" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Annuler" }));
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(calls.some((call) => call.method === "POST" && /approve|reject/.test(call.path))).toBe(false);
+  });
+
+  it("keeps a refused decision in the dialog and explains the Gateway response", async () => {
+    const req = { id: "sess_forbidden", status: "pending_approval", protocol: "ssh", requestedBy: "bob", privilegedAccountId: "acc_1", justification: "incident", breakGlass: false, expiresAt: "2026-10-30T11:00:00Z" };
+    const { api, calls } = fakeApi({
+      "GET /sessions": { body: { items: [req], page: 1, pageSize: 50, totalItems: 1 } },
+      "POST /sessions/sess_forbidden/approve": { status: 403, body: "forbidden" },
+    });
+    signedIn(api, <Sessions />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approuver la session sess_forbidden" }));
+    fireEvent.click(screen.getByText("Confirmer l'approbation"));
+    await waitFor(() => expect(screen.getAllByRole("alert").some((notice) => notice.textContent?.includes("403 — forbidden"))).toBe(true));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    expect(calls.some((call) => call.path === "/sessions/sess_forbidden/approve")).toBe(true);
+  });
+
+  it("requires explicit confirmation before terminating an active session", async () => {
+    const session = { id: "sess_active", status: "active", protocol: "ssh", requestedBy: "alice", privilegedAccountId: "acc_1", justification: "maintenance", breakGlass: false, expiresAt: "2030-01-01T00:00:00Z" };
+    const { api, calls } = fakeApi({
+      "GET /sessions": { body: { items: [], page: 1, pageSize: 50, totalItems: 0 } },
+      "GET /sessions/sess_active": { body: session },
+      "DELETE /sessions/sess_active": { body: { ...session, status: "terminated" } },
+    });
+    signedIn(api, <Sessions />);
+    fireEvent.change(screen.getByLabelText("Identifiant"), { target: { value: "sess_active" } });
+    fireEvent.click(screen.getByText("Afficher"));
+    fireEvent.click(await screen.findByText("Mettre fin"));
+    expect(screen.getByRole("alertdialog").textContent).toContain("révoquée sur le proxy");
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false);
+    fireEvent.click(screen.getByText("Mettre fin à la session"));
+    expect((await screen.findByRole("status")).textContent).toContain("sess_active terminée");
   });
 });
 
@@ -230,8 +299,10 @@ describe("Approval with a ticket (ADR-0067)", () => {
     const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [req], page: 1, pageSize: 20, totalItems: 1 } }, "POST /sessions/sess_9/reject": { body: req } });
     signedIn(api, <Sessions />);
     expect(await screen.findByText("CHG0001234")).toBeTruthy();
-    expect(screen.getByText("approbation")).toBeTruthy();
-    fireEvent.click(screen.getByText("Refuser"));
+    expect(screen.getByText("Approbation")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Refuser la session sess_9" }));
+    expect(screen.getByRole("alertdialog").textContent).toContain("CHG0001234");
+    fireEvent.click(screen.getByText("Confirmer le refus"));
     expect((await screen.findByRole("status")).textContent).toContain("sess_9 refusée");
     expect(calls.some((c) => c.method === "POST" && c.path === "/sessions/sess_9/reject")).toBe(true);
   });
@@ -380,7 +451,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
     const find = async (id: string) => {
       fireEvent.change(screen.getByLabelText("Identifiant"), { target: { value: id } });
       fireEvent.submit(screen.getByRole("form", { name: "Chercher une session" }));
-      await screen.findByText(id === "sess_v" ? "ssh" : "pending_approval");
+      await screen.findByText(id === "sess_v" ? "ssh" : "En attente");
     };
     await screen.findByLabelText("Identifiant");
     await find("sess_v");

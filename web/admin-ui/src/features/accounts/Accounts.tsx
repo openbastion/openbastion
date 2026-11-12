@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Account, Page, accountPath } from "../../shared/api";
+import { Account, ApiError, Page, accountPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { Pager } from "../../shared/ui/Pager";
+import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
@@ -20,12 +21,18 @@ export function Accounts() {
   const { api } = useSignedIn();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Account>>();
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const [filter, setFilter] = useState("");
+  const [accountAction, setAccountAction] = useState<{ kind: "disable" | "rotate"; account: Account }>();
 
   const load = useCallback(() => {
-    api.request<Page<Account>>("GET", `/vault/accounts?page=${page}&pageSize=${pageSize}`).then(setData, setError);
+    setLoading(true);
+    api.request<Page<Account>>("GET", `/vault/accounts?page=${page}&pageSize=${pageSize}`)
+      .then((result) => { setData(result); setError(undefined); })
+      .catch(setError)
+      .finally(() => setLoading(false));
   }, [api, page]);
   useEffect(load, [load]);
 
@@ -72,10 +79,14 @@ export function Accounts() {
       );
     },
     rotate(a) {
-      act(`Secret de ${a.id} renouvelé sur la cible`, () => api.request("POST", `${accountPath(a.id)}/rotate`));
+      setError(undefined);
+      setOk(undefined);
+      setAccountAction({ kind: "rotate", account: a });
     },
     disable(a) {
-      if (window.confirm(`Désactiver ${a.id} ?`)) act(`${a.id} désactivé`, () => api.request("DELETE", accountPath(a.id)));
+      setError(undefined);
+      setOk(undefined);
+      setAccountAction({ kind: "disable", account: a });
     },
   };
 
@@ -88,10 +99,11 @@ export function Accounts() {
         "Un compte VNC ou RDP épingle de même le certificat TLS de sa cible : sans empreinte, il n'ouvre aucune session.",
       ]}
     >
-      <Notice error={error} ok={ok} />
+      <Notice error={accountAction ? undefined : error} ok={accountAction ? undefined : ok} />
       <div className="card">
-        {data && data.items.length === 0 ? <p className="empty">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
-        {data && data.items.length > 0 ? (
+        {loading ? <p className="empty" role="status">Chargement des comptes privilégiés…</p> : null}
+        {!loading && data && data.items.length === 0 ? <p className="empty">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
+        {!loading && data && data.items.length > 0 ? (
           <div className="page-filter">
             <label htmlFor="account-page-filter">Filtrer les comptes de cette page</label>
             <input
@@ -105,11 +117,37 @@ export function Accounts() {
             <p className="filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</p>
           </div>
         ) : null}
-        {data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}
-        {data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="empty">Aucun compte de cette page ne correspond à ce filtre.</p> : null}
-        {data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
+        {!loading && data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}
+        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="empty">Aucun compte de cette page ne correspond à ce filtre.</p> : null}
+        {!loading && data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
       </div>
       <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />
+      {accountAction ? (
+        <ConfirmDialog
+          title={accountAction.kind === "disable" ? "Désactiver ce compte privilégié ?" : "Renouveler le secret de ce compte ?"}
+          description={accountAction.kind === "disable"
+            ? `Le compte ${accountAction.account.id} ne pourra plus être utilisé pour ouvrir de nouvelles sessions. Cette action sera auditée par la plateforme.`
+            : `Le Vault va renouveler le secret de ${accountAction.account.id} sur la cible via son compte de réconciliation, vérifier le nouveau secret puis l'adopter. Le secret ne sera jamais affiché. Cette opération peut être refusée si la cible ou l'identité épinglée n'est pas vérifiable.`}
+          confirmLabel={accountAction.kind === "disable" ? "Désactiver le compte" : "Renouveler le secret"}
+          danger={accountAction.kind === "disable"}
+          error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
+          onCancel={() => setAccountAction(undefined)}
+          onConfirm={async () => {
+            const { kind, account } = accountAction;
+            try {
+              await api.request(kind === "disable" ? "DELETE" : "POST", kind === "disable" ? accountPath(account.id) : `${accountPath(account.id)}/rotate`);
+              setOk(kind === "disable" ? `${account.id} désactivé` : `Secret de ${account.id} renouvelé sur la cible`);
+              setError(undefined);
+              setAccountAction(undefined);
+              load();
+              return true;
+            } catch (err) {
+              setError(err);
+              return false;
+            }
+          }}
+        />
+      ) : null}
     </AdminPage>
   );
 }

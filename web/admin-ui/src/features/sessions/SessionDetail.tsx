@@ -1,4 +1,5 @@
 import { Session } from "../../shared/api";
+import { StatusBadge } from "../../shared/ui/StatusBadge";
 
 // The attached screen of the session being looked at: each connection is another attach, and the
 // key restarts the viewer on the new one.
@@ -24,7 +25,7 @@ export function SessionDetail({
       <dl className="session">
         <dt>Statut</dt>
         <dd>
-          <span className="badge">{session.status}</span>
+          <StatusBadge status={session.status} />
         </dd>
         <dt>Protocole</dt>
         <dd>{session.protocol}</dd>
@@ -42,6 +43,12 @@ export function SessionDetail({
             <dd>
               <code>{session.ticket}</code>
             </dd>
+          </>
+        ) : null}
+        {session.decidedAt ? (
+          <>
+            <dt>Décision le</dt>
+            <dd><time dateTime={session.decidedAt}>{new Date(session.decidedAt).toLocaleString("fr-FR")}</time></dd>
           </>
         ) : null}
         {session.approvalRequired ? (

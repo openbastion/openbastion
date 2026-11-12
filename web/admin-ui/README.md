@@ -41,3 +41,14 @@ markup; nothing is inlined into the page, which runs under `script-src 'self'`.
 Dependencies: `react`, `react-dom`, and the local `@openbastion/icons` package at run time;
 the icon package must be built before testing or building the UI. `npm audit`: 0 known
 vulnerabilities on 30 October 2026.
+
+
+The PAM workflow screens (ADR-0073 UX-03) share translated, neutral-by-default session states,
+explicit loading and empty states, and a confirmation dialog for secret rotation, account deactivation, approval,
+rejection and session termination. The dialog names the affected resource and relevant request
+context, explains the Vault reconciliation/verification flow for rotation and proxy revocation for
+termination, supports Escape/cancel and focus return, and never sends the mutation before confirmation.
+Termination copy explains that the Broker confirms only after proxy revocation; the UI does not
+optimistically claim a session has ended. Recording reads show their session, command count, and
+empty/loading states; command text remains escaped and paging remains tied to the session whose
+recording was opened. Secrets remain write-only: this UX slice does not reveal or cache them.

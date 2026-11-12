@@ -14,15 +14,23 @@ export function Recording() {
   const { api } = useSignedIn();
   const [sessionId, setSessionId] = useState("");
   const [page, setPage] = useState<RecordingPage>();
+  const [loading, setLoading] = useState(false);
+  const [hasRead, setHasRead] = useState(false);
   const [error, setError] = useState<unknown>();
 
-  async function read(n: number) {
+  async function read(n: number, targetSessionId = sessionId) {
     setError(undefined);
+    setPage(undefined);
+    setLoading(true);
     try {
-      setPage(await api.request<RecordingPage>("GET", `${sessionPath(sessionId)}/recording?page=${n}&pageSize=${pageSize}`));
+      setPage(await api.request<RecordingPage>("GET", `${sessionPath(targetSessionId)}/recording?page=${n}&pageSize=${pageSize}`));
+      setHasRead(true);
     } catch (err) {
       setPage(undefined);
       setError(err);
+      setHasRead(true);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -42,16 +50,19 @@ export function Recording() {
           <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
         </label>
       </FormCard>
-      {page ? (
+      {loading ? <p className="card empty" role="status">Chargement de l'enregistrement…</p> : null}
+      {!loading && hasRead && page && page.entries.length === 0 ? <p className="card empty">Aucune commande enregistrée pour cette session.</p> : null}
+      {!loading && page && page.entries.length > 0 ? (
         <div className="card commands-card">
+          <div className="card-head"><h3>Commandes de la session <code>{page.sessionId}</code></h3><span className="badge">{page.totalEntries} commande(s)</span></div>
           <ol className="commands" start={(page.page - 1) * page.pageSize + 1}>
             {page.entries.map((e, i) => (
-              <li key={i}>
-                <time>{e.timestamp}</time> <code>{e.command}</code>
+              <li key={`${e.timestamp}-${i}`}>
+                <time dateTime={e.timestamp}>{e.timestamp}</time> <code>{e.command}</code>
               </li>
             ))}
           </ol>
-          <Pager page={page.page} pageSize={page.pageSize} totalItems={page.totalEntries} noun="commande(s)" onPage={read} />
+          <Pager page={page.page} pageSize={page.pageSize} totalItems={page.totalEntries} noun="commande(s)" onPage={(next) => void read(next, page.sessionId)} />
         </div>
       ) : null}
       <VideoReplay />

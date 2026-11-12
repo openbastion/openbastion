@@ -1,11 +1,12 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Page, Session, sessionPath } from "../../shared/api";
+import { ApiError, Page, Session, sessionPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { ScreenViewer } from "../screen/ScreenViewer";
 import { AttachedScreen, SessionDetail } from "./SessionDetail";
 import { PendingRequests } from "./PendingRequests";
+import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
 
 // A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
@@ -20,6 +21,8 @@ export function Sessions({
 } = {}) {
   const { api } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [decision, setDecision] = useState<{ kind: "approve" | "reject" | "terminate"; session: Session }>();
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const [lookup, setLookup] = useState("");
@@ -27,7 +30,11 @@ export function Sessions({
   const [screen, setScreen] = useState<AttachedScreen>();
 
   const load = useCallback(() => {
-    api.request<Page<Session>>("GET", "/sessions?status=pending_approval").then(setPending, setError);
+    setPendingLoading(true);
+    api.request<Page<Session>>("GET", "/sessions?status=pending_approval")
+      .then((result) => { setPending(result); setError(undefined); })
+      .catch(setError)
+      .finally(() => setPendingLoading(false));
   }, [api]);
   useEffect(load, [load]);
 
@@ -77,13 +84,38 @@ export function Sessions({
     }
   }
 
+  function askDecision(kind: "approve" | "reject" | "terminate", session: Session) {
+    setError(undefined);
+    setOk(undefined);
+    setDecision({ kind, session });
+  }
+
   function terminate(s: Session) {
-    if (window.confirm(`Mettre fin à ${s.id} ?`)) act(`${s.id} terminée`, () => api.request("DELETE", sessionPath(s.id)));
+    askDecision("terminate", s);
+  }
+
+  async function confirmDecision(): Promise<boolean> {
+    if (!decision) return false;
+    const { kind, session } = decision;
+    const endpoint = kind === "approve" ? `${sessionPath(session.id)}/approve`
+      : kind === "reject" ? `${sessionPath(session.id)}/reject` : sessionPath(session.id);
+    const method = kind === "terminate" ? "DELETE" : "POST";
+    try {
+      await api.request(method, endpoint);
+      setError(undefined);
+      setOk(kind === "approve" ? `${session.id} approuvée` : kind === "reject" ? `${session.id} refusée` : `${session.id} terminée`);
+      setDecision(undefined);
+      load();
+      return true;
+    } catch (err) {
+      setError(err);
+      return false;
+    }
   }
 
   return (
     <AdminPage title="Sessions">
-      <Notice error={error} ok={ok} />
+      <Notice error={decision ? undefined : error} ok={decision ? undefined : ok} />
       <SessionRequest
         onDone={(s) => {
           setLookup(s.id);
@@ -97,8 +129,9 @@ export function Sessions({
       />
       <PendingRequests
         pending={pending}
-        onApprove={(s) => act(`${s.id} approuvée`, () => api.request("POST", `${sessionPath(s.id)}/approve`))}
-        onReject={(s) => act(`${s.id} refusée`, () => api.request("POST", `${sessionPath(s.id)}/reject`))}
+        loading={pendingLoading}
+        onApprove={(s) => askDecision("approve", s)}
+        onReject={(s) => askDecision("reject", s)}
       />
       <div className="card panel">
         <h3>Une session</h3>
@@ -125,6 +158,19 @@ export function Sessions({
           />
         ) : null}
       </div>
+      {decision ? (
+        <ConfirmDialog
+          title={decision.kind === "approve" ? "Approuver cette demande ?" : decision.kind === "reject" ? "Refuser cette demande ?" : "Mettre fin à cette session ?"}
+          description={decision.kind === "terminate"
+            ? `La session ${decision.session.id} sera révoquée sur le proxy. Les connexions actives seront coupées ; l'opération n'est confirmée qu'après la réponse du proxy.`
+            : `${decision.session.breakGlass ? "Demande d'urgence" : "Demande d'accès"} ${decision.session.id}, formulée par ${decision.session.requestedBy} pour ${decision.session.privilegedAccountId}. Justification : ${decision.session.justification}. Ticket : ${decision.session.ticket ?? "aucun"}. Échéance : ${decision.session.expiresAt}.`}
+          confirmLabel={decision.kind === "approve" ? "Confirmer l'approbation" : decision.kind === "reject" ? "Confirmer le refus" : "Mettre fin à la session"}
+          danger={decision.kind !== "approve"}
+          error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
+          onCancel={() => setDecision(undefined)}
+          onConfirm={confirmDecision}
+        />
+      ) : null}
     </AdminPage>
   );
 }
