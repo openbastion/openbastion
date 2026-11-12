@@ -3048,6 +3048,13 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 - **sur le bac à sable** (Gateway redémarrée sur ce correctif), l'auditeur relit la session du propriétaire : 63 images, 1 clé et 62 partielles.
 
 **Constat à traiter à part** : le segment 64 a été refusé en 429. La Gateway limite les requêtes par adresse (60 en rafale, puis une par seconde), et le proxy enregistre chaque image comme un segment à elle seule : un rejeu de plus d'une image par seconde finit par s'arrêter. C'est antérieur aux images partielles.
+## 2026-11-12 — Bac à sable Base44 : un compte auditeur pour relire les enregistrements
+
+Le propriétaire n'a pas pu relire une session dans l'Admin UI : `403 — access denied: no policy matches this resource for the caller's roles`. Ce n'est pas un défaut. Relire un enregistrement demande `recording:session:read` (ADR-0070), et le seed ne donnait ce droit à personne. `operator` (`platform-admin`, `vault-admin`) n'est pas auditeur.
+
+Le seed crée désormais un compte distinct, `auditor` / `openbastion-demo` (rôle `session-auditor`, par la CLI comme `operator`), et la politique `session-auditor-recordings` (`recording:session:*`, par l'API publique). C'est idempotent : ni le compte ni la politique ne sont réécrits s'ils existent. On garde ainsi la séparation entre qui tient la session et qui la relit. Appliqué au bac à sable par `restart seed` : `user auditor created`, `recording read policy -> HTTP 201`. Par l'API, sur la session écran du propriétaire, `operator` reçoit 403 et `auditor` 200 (segment scellé).
+
+**Budget de requêtes du bac à sable** : en auditeur, la relecture s'arrêtait en 429. Toute l'UI arrive à la Gateway depuis l'adresse du relais Vite, et la limite par adresse (60 en rafale, puis 60 par minute) était partagée entre les connexions, les pages et les segments. Une relecture lit un segment par image. Le compose du bac à sable élargit ce budget (`CLIENT_REQUEST_BURST=600`, `CLIENT_REQUEST_RATE_PER_MINUTE=1200`) ; les limites par utilisateur sur les sessions et les actions ne changent pas, ni les défauts de production. Vérifié : l'auditeur relit les 213 segments de la session du propriétaire, jusqu'au 404 de fin. **Reste à traiter** : en production, une relecture rapide d'une longue session peut atteindre la limite par adresse ; regrouper plusieurs images par segment (ADR-0070 le permet) en est le remède de fond.
 
 ## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
 
