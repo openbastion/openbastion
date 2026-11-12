@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"crypto/x509"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -76,16 +75,6 @@ func runService() {
 		RatePerSecond: boundedIntEnv("SCREEN_INPUT_RATE_PER_SECOND", proxycore.DefaultScreenInputRate, 1, 10000),
 		Burst:         boundedIntEnv("SCREEN_INPUT_BURST", proxycore.DefaultScreenInputBurst, 1, 100000),
 	}
-	vncCodec := &engine.VNCCodec{
-		TLSRoots:      roots,
-		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
-		FrameInterval: time.Duration(boundedIntEnv("SCREEN_FRAME_INTERVAL_MS", 50, 16, 250)) * time.Millisecond,
-	}
-	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
-	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)
-	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
-	// Off, the RDP codec is not built and establish-session refuses rdp.
-	rdpState := "RDP disabled"
 	// The pointer drawn into the frames, shown and recorded alike (ADR-0091): on unless said
 	// "false"; anything but "true" or "false" stops the service.
 	drawPointer := true
@@ -96,6 +85,29 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_DRAW_POINTER must be true or false, got %q", v)
 	}
+	// Partial frames anchored on key frames (ADR-0092), RDP and VNC: off unless said "true", until
+	// the figures with them are published and the owner turns them on; anything else stops the
+	// service.
+	partialFrames := false
+	switch v := os.Getenv("SCREEN_PARTIAL_FRAMES"); v {
+	case "", "false":
+	case "true":
+		partialFrames = true
+	default:
+		log.Fatalf("rdp-vnc-proxy: SCREEN_PARTIAL_FRAMES must be true or false, got %q", v)
+	}
+	vncCodec := &engine.VNCCodec{
+		TLSRoots:      roots,
+		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
+		FrameInterval: time.Duration(boundedIntEnv("SCREEN_FRAME_INTERVAL_MS", 50, 16, 250)) * time.Millisecond,
+		DrawPointer:   drawPointer,
+		PartialFrames: partialFrames,
+	}
+	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
+	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)
+	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
+	// Off, the RDP codec is not built and establish-session refuses rdp.
+	rdpState := "RDP disabled"
 	switch v := os.Getenv("RDP_ENABLED"); v {
 	case "", "false":
 	case "true":
@@ -105,8 +117,9 @@ func runService() {
 			// The cadence VNC has (ADR-0071 §8): at most one frame encoded and recorded a interval.
 			FrameInterval: vncCodec.FrameInterval,
 			DrawPointer:   drawPointer,
+			PartialFrames: partialFrames,
 		})
-		rdpState = fmt.Sprintf("RDP enabled, pointer drawn %t (SCREEN_DRAW_POINTER)", drawPointer)
+		rdpState = "RDP enabled"
 	default:
 		log.Fatalf("rdp-vnc-proxy: RDP_ENABLED must be true or false, got %q", v)
 	}
@@ -114,7 +127,7 @@ func runService() {
 	defer stop()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- rt.ListenAndServe(":"+port, server.Routes(), interfaces.CallerRules()) }()
-	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088)", port, rdpState)
+	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092)", port, rdpState, drawPointer, partialFrames)
 	log.Printf("rdp-vnc-proxy: Video Recorder %s; target roots loaded from configured PEM file", recorderURL)
 	select {
 	case <-ctx.Done():

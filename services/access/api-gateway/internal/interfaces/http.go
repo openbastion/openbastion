@@ -727,8 +727,17 @@ func toVideoSegmentResponse(response *recordingv1.GetVideoSegmentResponse, sessi
 	var lastTimestamp time.Time
 	for index, frame := range response.GetFrames() {
 		if frame == nil || frame.GetTs() == nil || frame.GetTs().CheckValid() != nil ||
-			frame.GetCodec() != "png" || len(frame.GetFrameData()) == 0 || len(frame.GetFrameData()) > 4<<20 {
+			(frame.GetCodec() != "png" && frame.GetCodec() != "png-delta-v1") ||
+			len(frame.GetFrameData()) == 0 || len(frame.GetFrameData()) > 4<<20 {
 			return videoSegmentResponse{}, fmt.Errorf("frame %d is invalid", index)
+		}
+		// A partial frame (ADR-0092) is the FRAME_DELTA message of its own sequence, as the Recorder
+		// validated it: checked again here, as the Recorder is a trust boundary.
+		if frame.GetCodec() == "png-delta-v1" {
+			message, err := screenstream.Decode(frame.GetFrameData())
+			if err != nil || message.Type != screenstream.TypeFrameDelta || int64(message.Sequence) != firstSequence+int64(index) {
+				return videoSegmentResponse{}, fmt.Errorf("frame %d is not the partial frame of its sequence", index)
+			}
 		}
 		totalBytes += int64(len(frame.GetFrameData()))
 		if totalBytes > 4<<20 {

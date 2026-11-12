@@ -3036,6 +3036,181 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092 : la Gateway refusait de servir une image partielle (corrigé)
+
+**Défaut** : le propriétaire, en auditeur, recevait `502 — video recording unavailable` en relisant sa session écran. La Gateway revalide chaque segment que le Recorder lui rend, et n'admettait que le codec `png` : un segment contenant une image partielle était « invalid » (`frame 0 is invalid` dans son journal). L'incrément 3 avait oublié cette couche. L'épreuve de bout en bout relisait par le gRPC du Recorder, sans passer par la Gateway, et ne pouvait pas le voir.
+
+**Correctif** : la Gateway admet `png-delta-v1`, et vérifie de nouveau qu'il s'agit du message `FRAME_DELTA` de sa propre séquence, car le Recorder est une frontière de confiance.
+
+**Prouvé** :
+- test rouge d'abord, avec exactement l'erreur vue ; puis servi tel quel, et refusé quand il s'agit d'une autre séquence, d'autre chose qu'un message, ou d'une image clé sous le codec partiel ;
+- **3 mutations, 3 tuées**. Au premier passage, une image clé sous le codec partiel survivait : le cas est désormais testé ;
+- **sur le bac à sable** (Gateway redémarrée sur ce correctif), l'auditeur relit la session du propriétaire : 63 images, 1 clé et 62 partielles.
+
+**Constat à traiter à part** : le segment 64 a été refusé en 429. La Gateway limite les requêtes par adresse (60 en rafale, puis une par seconde), et le proxy enregistre chaque image comme un segment à elle seule : un rejeu de plus d'une image par seconde finit par s'arrêter. C'est antérieur aux images partielles.
+## 2026-11-12 — Bac à sable Base44 : un compte auditeur pour relire les enregistrements
+
+Le propriétaire n'a pas pu relire une session dans l'Admin UI : `403 — access denied: no policy matches this resource for the caller's roles`. Ce n'est pas un défaut. Relire un enregistrement demande `recording:session:read` (ADR-0070), et le seed ne donnait ce droit à personne. `operator` (`platform-admin`, `vault-admin`) n'est pas auditeur.
+
+Le seed crée désormais un compte distinct, `auditor` / `openbastion-demo` (rôle `session-auditor`, par la CLI comme `operator`), et la politique `session-auditor-recordings` (`recording:session:*`, par l'API publique). C'est idempotent : ni le compte ni la politique ne sont réécrits s'ils existent. On garde ainsi la séparation entre qui tient la session et qui la relit. Appliqué au bac à sable par `restart seed` : `user auditor created`, `recording read policy -> HTTP 201`. Par l'API, sur la session écran du propriétaire, `operator` reçoit 403 et `auditor` 200 (segment scellé).
+
+**Budget de requêtes du bac à sable** : en auditeur, la relecture s'arrêtait en 429. Toute l'UI arrive à la Gateway depuis l'adresse du relais Vite, et la limite par adresse (60 en rafale, puis 60 par minute) était partagée entre les connexions, les pages et les segments. Une relecture lit un segment par image. Le compose du bac à sable élargit ce budget (`CLIENT_REQUEST_BURST=600`, `CLIENT_REQUEST_RATE_PER_MINUTE=1200`) ; les limites par utilisateur sur les sessions et les actions ne changent pas, ni les défauts de production. Vérifié : l'auditeur relit les 213 segments de la session du propriétaire, jusqu'au 404 de fin. **Reste à traiter** : en production, une relecture rapide d'une longue session peut atteindre la limite par adresse ; regrouper plusieurs images par segment (ADR-0070 le permet) en est le remède de fond.
+
+## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
+
+Le tableau complet est dans ADR-0092, « Résultats ». En résumé : en frappe et quand le pointeur bouge, le volume enregistré baisse de 20 à 300 fois ; l'encodage d'une image passe de 4 à 48 ms à moins de 1 ms ; la latence ne se dégrade nulle part.
+
+**Nouveau** :
+- `vnc.Session.ServerBytes` compte les octets de la cible (`countingConn`) ; un test de l'ouverture le vérifie, avec sa contre-épreuve ;
+- `TestVNCMeasure` (moteur) mesure une vraie cible VNC dans les deux modes, avec `VNC_MEASURE_ADDR`, `_CA`, `_NAME`, `_PASSWORD` et `_DUMP`. Il a été lancé contre le TigerVNC du bac à sable, à son adresse sur le réseau Docker.
+
+**Constat** : la première mesure en images partielles semblait figée : aucun octet de la cible pendant 50 s. La cause n'est pas le proxy. Sans gestionnaire de fenêtres, le clavier va à la fenêtre sous le pointeur, et le serveur X garde la position du pointeur d'une session à l'autre ; la session précédente l'avait laissé hors de xterm. Le banc place désormais le pointeur sur xterm avant de taper, comme le faisait déjà la mesure FreeRDP.
+
+**Test Base44 rendu robuste** : il échouait après la mesure VNC. D'abord, le serveur X garde la position du pointeur d'une session à l'autre, et la mesure l'avait laissé hors de xterm. Ensuite, le terminal avait défilé : le texte de `cat` s'écrit en bas, et non plus en haut. Le test place donc le pointeur sur xterm, après la première image (le relais vérifie les coordonnées contre sa taille), et compare toute la fenêtre de xterm hors du carré du pointeur. Il passe avec `SCREEN_PARTIAL_FRAMES` allumé.
+
+**Décision du propriétaire** (« Après un vrai navigateur ») : `SCREEN_PARTIAL_FRAMES` reste éteint par défaut, jusqu'à la vérification d'une session en direct et d'un rejeu dans un vrai navigateur. Une PR en brouillon l'allume.
+
+## 2026-11-12 — ADR-0092, incrément 5 : VNC envoie des images partielles
+
+`pkg/vnc` passe par le même `screenstream.FrameEncoder` que RDP (`Config.PartialFrames`, `VNCCodec.PartialFrames`, `SCREEN_PARTIAL_FRAMES` désormais pour RDP et VNC).
+- **Image inchangée** : pas d'image.
+- **Image clé** : à la demande du relais (`RequestKeyFrame`), servie par la boucle qui sert déjà le pointeur, même sur un écran immobile et sans forme de curseur. Une nouvelle taille du bureau donne aussi une image clé.
+- **Enveloppe du moteur** : elle transmet la demande (`vncScreenSession.RequestKeyFrame`).
+
+**Prouvé** :
+- 4 tests VNC : seul ce qui change voyage, une copie à l'identique ne fait pas d'image, le pointeur donne ses tuiles, l'image clé demandée égale l'écran composé, une nouvelle taille donne une image clé, et `Open` n'active tout cela que sur demande. S'y ajoutent un test de l'enveloppe, sous `-race` ;
+- **9 mutations, 9 tuées**. Au premier passage, deux avaient survécu : une demande d'image clé sans forme de curseur, et la ligne d'`Open` que mes tests contournaient. Les tests les couvrent désormais ;
+- **contre le TigerVNC du bac à sable Base44** : `TestBase44Preview` passe en images entières puis avec `SCREEN_PARTIAL_FRAMES=true`, posé le temps du test dans le compose du bac à sable puis retiré à l'identique. Le test compose désormais lui-même les images partielles, à partir du format du fil, indépendamment de `pkg/screenstream`.
+
+**Constat** : en images partielles, le parcours s'est d'abord bloqué. xterm cache le pointeur pendant la frappe (forme vide), et TigerVNC n'en renvoie la forme qu'au mouvement suivant : le premier déplacement ne change pas l'écran, et à juste titre aucune image ne part. En images entières, une image identique partait. Le test déplace désormais le pointeur en trois pas.
+
+**Non vérifié** : l'Admin UI dans un vrai navigateur, en direct et en rejeu ; aucun outil de navigateur dans cet environnement. Les chiffres VNC en images partielles ne sont pas mesurés (incrément 6).
+
+## 2026-11-12 — ADR-0092, incrément 4 : l'Admin UI affiche et rejoue les images partielles
+
+- **Décodage** (`protocol.ts`) : `FRAME_DELTA`, avec les bornes de `pkg/screenstream` (1 à 64 rectangles, chacun non vide, dans l'image, un PNG ; rien de reste, aucune longueur au-delà).
+- **En direct** (`ScreenViewer`) : une chaîne de promesses peint les images strictement dans l'ordre. Ce qui précède la dernière image clé reçue n'est même pas décodé : elle remplace tout. Une image partielle doit suivre l'image reçue juste avant elle et avoir la taille de l'écran, et chaque rectangle doit être un PNG de sa taille ; sinon la session se ferme. Chaque rectangle remplace ses pixels (`clearRect` puis `drawImage`), sans mélange. Les images clés peuvent arriver après un trou (le relais remplace ce qu'une page lente n'a pas pris), jamais une image partielle.
+- **En rejeu** (`VideoReplay`) : les segments portent les deux codecs. Une image partielle doit être celle de sa propre séquence. L'image suivante, si elle est partielle, est posée sur celle du canvas ; toute autre position est recomposée depuis l'image clé qui la précède, dont la taille (IHDR du PNG) doit être celle de l'image partielle.
+- **Runtime** : `SCREEN_PARTIAL_FRAMES` (`true`/`false`, éteint par défaut, toute autre valeur arrête le service) allume les images partielles pour RDP. Le compose suit, et l'OpenAPI admet le codec `png-delta-v1`.
+
+**Prouvé** :
+- Vitest : 112 tests (décodage et refus, peinture en ordre malgré un décodage lent, reprise à une image clé après un trou, refus en direct et en rejeu, pas à pas sans recomposition, sauts en avant et en arrière, changement d'image clé) ; `tsc` et `vite build` passent ;
+- **14 mutations, 14 tuées**. Au premier passage, un codec inconnu portant un vrai PNG survivait : un test le couvre désormais.
+
+**Non vérifié** : le direct et le rejeu dans un vrai navigateur. La composition repose sur `clearRect` puis `drawImage`, éprouvée en Go (`Composer`) mais pas sur un canvas réel. Le bac à sable Base44 n'a que VNC, qui reste en images entières (incrément 5).
+
+## 2026-11-12 — ADR-0092, incrément 3 : le Video Recorder et le relais acceptent les images partielles
+
+**Le Video Recorder :**
+- **Transport** : une image partielle voyage dans `frame_data` sous la forme de son message `FRAME_DELTA`, avec le codec `png-delta-v1` (le schéma Protobuf ne change pas).
+- **Validation** avant d'acquitter : message lisible, séquence et horodatage de l'image, chaque rectangle un PNG de sa taille. `RecordingWriter.followScreen` refuse en outre une image partielle sans image clé de même taille avant elle, d'un segment à l'autre.
+- **Format** : un segment qui contient une image partielle est scellé au format 2 (données associées) ; un segment d'images clés reste au format 1, octet pour octet. `openSegment` n'accepte un segment que sous le format que ses images demandent : ni un segment 2 qui se ferait passer pour un 1, ni l'inverse.
+
+**Le relais et le client gRPC :**
+- **Relais** (`proxycore`) : une image partielle n'est acceptée qu'après une image clé et à sa taille, et le Recorder reçoit sa propre copie des rectangles.
+- **Client** du proxy : un `FRAME_DELTA` part sous `png-delta-v1`.
+
+**L'opérateur en retard** (complément à ADR-0092) : le relais remplaçait l'image en attente par la plus récente. Il ne le peut plus pour une image partielle. L'affichage la met en file (32 images ou 4 Mio au plus). Au-delà, il demande une image clé (`proxycore.KeyFrameRequester`, que RDP produit même sur un écran immobile) et n'envoie plus rien jusqu'à elle.
+
+**Prouvé** :
+- **de bout en bout contre FreeRDP 3**, avec le vrai proxy, le vrai Video Recorder et PostgreSQL : en images partielles, 2 images clés (dont celle du passage en 1024 × 768) et 3 images partielles. Chaque image montrée est relue octet pour octet sous son codec, et l'écran recomposé par l'auditeur à partir de l'enregistrement est celui de l'opérateur. La même épreuve en images entières passe toujours ;
+- unitaires : Recorder (aller-retour, refus, formats 1 et 2 dans les quatre sens), relais (copie des rectangles, refus), client gRPC (codec, octets), affichage (file, borne en nombre et en octets, demande unique, rien après le débordement, reprise), demande d'image clé côté RDP ;
+- **20 mutations : 18 tuées, 2 équivalentes**. Les deux équivalentes : une image partielle de taille non nulle est déjà refusée devant un écran de taille 0, au relais comme au Recorder. Au premier passage, deux tests manquaient dans l'affichage ; ils sont ajoutés.
+
+**Pas encore** : l'Admin UI ne sait ni afficher en direct ni rejouer une image partielle (incrément 4), et `SCREEN_PARTIAL_FRAMES` n'est donc pas offert par le runtime. VNC reste en images entières (incrément 5).
+
+## 2026-11-12 — ADR-0092, incrément 2 : RDP envoie des images partielles
+
+`screenstream.FrameEncoder` produit les images d'ADR-0092. Il compare l'image à montrer à la précédente, par tuiles de 32 pixels. Les tuiles changées d'une rangée forment des segments, et un segment se fond avec celui du dessus quand il couvre les mêmes colonnes.
+- **Image clé** : à la première image, à chaque changement de taille, toutes les 10 s ou 300 images, et à la place d'une image partielle qui aurait plus de 64 rectangles, couvrirait plus de la moitié de l'écran ou dépasserait 4 Mio.
+- **Image inchangée** : pas d'image (`ErrUnchanged`). En images entières, le proxy envoyait des images identiques, par exemple pour un pointeur caché qui bouge.
+- **Câblage RDP** : `RDPFramebuffer.EnablePartialFrames` et `ForceKeyFrame` (à la réactivation), `RDPCodec.PartialFrames` dans le moteur. Le runtime ne l'offre pas encore : le Video Recorder refuserait ces images, ce sera l'incrément 3.
+
+**Prouvé** :
+- `pkg/screenstream` : 200 étapes de changements aléatoires (tailles non multiples de 32), où chaque image encodée puis décodée et composée redonne l'image, octet pour octet. S'y ajoutent chaque règle d'image clé, l'image inchangée, le pointeur et la réactivation ;
+- moteur : un pixel donne une tuile, le pointeur donne ses tuiles (la zone quittée est repeinte), une réactivation donne une image clé, et l'écran composé égale une image clé du même moment ;
+- **18 mutations : 17 tuées**. La survivante est quasi équivalente : après une image inchangée, `dirty` resté vrai ne cause qu'une tentative de plus, elle-même inchangée.
+
+**Mesuré contre FreeRDP 3** (local, 1280 × 800, xterm) :
+
+| Scène | Images entières | Images partielles |
+|---|---|---|
+| Frappe, enregistré | 297 Kio/s, 19,7 Ko par image | **4,1 Kio/s**, 247 octets par image |
+| Défilement, enregistré | 109 Kio/s | **11,5 Kio/s** (une image clé) |
+| Encodage par image | 12 ms | **0,2 ms** |
+| Latence touche → image, médiane | 97 ms | 59 ms |
+
+La scène du pointeur ne mesure rien chez FreeRDP : xterm cache le pointeur pendant la frappe, et la cible l'annonce caché (forme, puis « caché »). Les images partielles le reconnaissent et n'envoient rien ; les images entières envoyaient 18 images identiques. Windows mesurera le pointeur : la CI de la PR fait tourner la mesure Windows dans les deux modes.
+
+## 2026-11-11 — ADR-0092, incrément 1 : le format des images partielles
+
+`pkg/screenstream` connaît `FRAME_DELTA` (type 4). Le message porte la séquence et la taille de l'image, comme un `FRAME`, puis 1 à 64 rectangles, chacun avec `x`, `y`, largeur, hauteur, longueur du PNG et le PNG lui-même.
+- **Bornes** (ADR-0092 §2) : chaque rectangle est non vide, contenu dans l'image et porte un PNG ; le tout tient en 4 Mio (`ErrFrameTooLarge`). Rien ne reste après le dernier rectangle, et aucune longueur ne dépasse le message. Un `FRAME` qui porterait des rectangles est refusé.
+- **Composition de référence** (`Composer`) : une image clé remplace l'écran ; une image partielle remplace les pixels de ses rectangles, sans mélange, sur l'image de séquence précédente et sur nulle autre.
+- **Refus** : une image partielle sans image clé avant elle (`ErrNoKeyFrame`), un trou de séquence (`ErrSequenceGap`), une autre taille d'écran, un PNG d'une autre taille que son rectangle, un PNG illisible. Tous rendent le compositeur inutilisable jusqu'à l'image clé suivante.
+
+**Prouvé** :
+- l'écran recomposé à partir d'une image clé et de deux images partielles est, octet pour octet, celui d'une image clé du même moment ;
+- aller-retour du codec, chaque borne à l'encodage et au décodage, refus du compositeur, remplacement sans mélange ;
+- fuzzers `FuzzDecode` (graine `FRAME_DELTA`) et `FuzzComposer`, 20 s chacun ;
+- **18 mutations : 17 tuées, une équivalente** (le décompte nul au décodage est déjà refusé par la validation commune). Au premier passage, le remplacement « sans mélange » survivait, parce que toutes les couleurs du test étaient opaques : un test l'éprouve désormais avec un pixel transparent.
+
+**Pas encore** : aucun codec n'émet d'images partielles. Le relais, le Video Recorder et l'Admin UI ne les connaissent pas, et l'Admin UI refuse le type 4. Ce sont les incréments 2 à 4, derrière `SCREEN_PARTIAL_FRAMES`, qui restera éteint jusque-là.
+
+## 2026-11-11 — ADR-0090, lot A : les premiers chiffres RDP
+
+Le banc de la PR #130 a tourné sur les cinq cibles Windows de la CI (run 43068035637) et contre FreeRDP en local. Le tableau et les conclusions sont dans ADR-0090, « Résultats du lot A » ; les fichiers `measure.json` sont dans l'artefact de chaque cible.
+
+**En bref** :
+- Windows n'envoie **rien** au repos, et 11 à 80 Kio/s en frappe. Le serveur FreeRDP, lui, repeint en continu (2,2 Mio/s), et le proxy écarte ces repeints identiques.
+- Le volume **enregistré** domine : une image PNG entière par changement, de 30 à 202 Ko selon le fond d'écran. Cela donne 420 à 2 370 Kio/s en frappe, et 500 à 2 650 Kio/s quand seul le pointeur bouge, alors que la cible n'envoie alors rien.
+- L'encodage coûte 9 à 27 ms par image (39 ms au pire).
+- Latence touche → image : médiane 37 à 84 ms.
+- Pic du tas : 6 à 20 Mio.
+
+**Conclusion** : les lots B et C ne sont pas justifiés par la mesure, et ADR-0089 tient. Le levier est le format d'enregistrement (des images partielles), qui demande sa propre décision.
+
+**Limites du banc** :
+- le pic du tas est celui de tout le processus de test ;
+- la latence est mesurée sur le même hôte ;
+- la scène « texte dense » est une fenêtre du Bloc-notes repeinte (Ctrl+Début), non une page de texte plein écran ;
+- non mesurés : l'acquittement du Video Recorder, une vidéo, plusieurs sessions simultanées.
+
+## 2026-11-11 — ADR-0091, incrément 3 : le pointeur VNC dessiné dans l'image
+
+Avec l'encodage `Cursor`, la cible VNC laisse son pointeur hors de son tampon d'image et en envoie la forme. Le proxy la jetait ; il la dessine désormais, derrière le même `SCREEN_DRAW_POINTER`.
+- **Décodage** (`pkg/vnc/pointer.go`) : 32 bpp au format de la session, masque d'un bit, ligne par ligne, bit de poids fort d'abord. La borne est de 128 × 128 pixels, point chaud compris (RFB n'en fixe pas, les thèmes X vont au-delà de 32). Une forme vide cache le pointeur ; une forme hors borne ferme la session.
+- **Dessin** : sur une copie du tampon, à la position de l'opérateur, et seulement quand une forme a été reçue. Sinon, la cible dessine son pointeur elle-même, et il n'en faut pas deux.
+- **Déplacements** : la cible ne répond pas à un simple déplacement. `pointerLoop` fait une image de chaque déplacement, à la cadence. Un verrou (`frameMu`) ordonne ses images et celles du lecteur sur un seul tampon et une seule séquence. Le lecteur attend la fin de la boucle avant de fermer le canal des images.
+- La session le dit (`PointerDrawn`) : le `HELLO` VNC porte désormais le drapeau à 1, et l'Admin UI cache la flèche du navigateur.
+
+**Prouvé** :
+- 7 tests et un fuzzer (`FuzzReadCursor`, 20 s), sous `-race` ;
+- **16 mutations, 16 tuées**. Au premier passage, 2 ont survécu (un pixel transparent sur un fond noir, le découpage au bord droit) ; le test a été renforcé ;
+- parcours VNC et RDP sur processus réels (base PostgreSQL jetable) : drapeau à 1 dans les deux ;
+- **contre TigerVNC réel** (le `vnc-target` du bac à sable Base44, sondé depuis l'hôte avec `pkg/vnc`) : TigerVNC envoie le curseur texte de xterm (9 × 16, point chaud 4,8), dessiné à la position de l'opérateur et jugé sur PNG.
+
+**Vérifié ensuite (PR suivante)** : le parcours complet Base44 (`TestBase44Preview`). Le bac à sable était en panne : le job PKI, sans réseau par construction, ne trouvait pas `golang.org/x/net v0.62.0` dans une image construite avant cette montée de version ; sans PKI, SeaweedFS ne démarrait pas, et le Video Recorder redémarrait en boucle. `up -d --build` l'a réparé (consigné dans `local.yaml`). Le test étendu au pointeur avait lui-même un défaut : une lecture WebSocket bornée par un délai **ferme** la connexion (`coder/websocket`). La ligne de base est désormais la dernière image lue. Résultats : SSH et écran passent ; le `HELLO` VNC porte le drapeau ; l'image change sous le pointeur, où l'on voit sur PNG le curseur de xterm, à travers la Gateway, le relais et l'enregistrement. **Contre-épreuve** : `SCREEN_DRAW_POINTER=false` dans le compose du bac à sable, le test échoue (`helloFlags:0`) ; le compose a ensuite été rétabli à l'octet près.
+
+**Choix renversables** : la borne 128 ; rien dessiné tant que la cible n'a pas envoyé de forme ; une image par déplacement, à la cadence.
+
+## 2026-11-11 — ADR-0091, incrément 4 : l'Admin UI ne montre plus deux pointeurs
+
+Le propriétaire a choisi un **drapeau dans `HELLO`** (plutôt qu'un réticule local, ou `cursor: none` pour tout RDP). Le bit 0 de l'octet qui suit le protocole, jusque-là réservé à zéro, dit que le pointeur est dans les images (`screenstream.HelloPointerDrawn`). Les autres bits restent réservés : posés, ils font refuser le message, côté Go comme côté UI.
+- Une session qui dessine le pointeur le dit (`proxycore.PointerDrawer`), et `ServeScreen` le reporte dans le `HELLO`. L'adaptateur RDP le dit quand `DrawPointer` est vrai ; VNC ne dit rien, donc 0.
+- L'Admin UI lit le drapeau et met alors la classe `pointer-drawn` sur le canvas (`cursor: none`). Sans le drapeau, la flèche du navigateur reste.
+- ADR-0071 §6 (contrat) et ADR-0091 §5 amendés.
+
+**Prouvé** :
+- Go : aller-retour du codec et bits réservés refusés, `HELLO` du relais (dessiné, non dessiné, session muette), adaptateur RDP ;
+- UI : décodage, bits réservés refusés, classe posée seulement avec le drapeau ;
+- **9 mutations, 9 tuées**. La règle CSS ne s'éprouve pas sous jsdom : c'est la classe qui est testée ;
+- processus réels : le parcours RDP par l'API publique reçoit le drapeau à 1, le parcours VNC à 0 (base PostgreSQL jetable en local, deux tests verts).
+
+**Limite** : un décodeur antérieur refuse un `HELLO` qui porte le drapeau. L'UI et le proxy sont livrés ensemble ; un client tiers devra suivre.
+
+**Corrigé au passage (défaut de l'incrément 1)** : la CI de la PR #124 a refusé une forme du serveur shadow de FreeRDP, et la description du refus l'a dite entière : `xorBpp 24, cache 0, hot spot 0,2, 1x2`, avec un octet de padding. Le point chaud était hors de la forme, ce que MS-RDPBCGR n'interdit pas. Il est désormais borné par la taille maximale d'une forme (< 32), plus par la forme elle-même ; le dessin découpe ce qui sort du bureau. Cette forme n'arrive pas à chaque session : c'est vraisemblablement la cause de l'échec du parcours RDP par l'API publique, vu une fois sur la PR #123 et passé à la relance. Test et 3 mutations tuées, dont le retour à l'ancienne règle.
+
 ## 2026-11-11 — ADR-0091, incrément 2 : le pointeur RDP dessiné dans l'image
 
 Le pointeur est branché de bout en bout, derrière `SCREEN_DRAW_POINTER` (allumé par défaut ; `false` rend le comportement antérieur, toute autre valeur arrête le service) :

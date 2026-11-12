@@ -25,11 +25,12 @@ function oversizedFrame(): ArrayBuffer {
   return header(1, 1n, 1, 1, payload);
 }
 const frame = (sequence: bigint, width = 100, height = 50) => header(1, sequence, width, height, PNG);
-function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc"): ArrayBuffer {
+function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc", pointerDrawn = false): ArrayBuffer {
   const bytes = [...new TextEncoder().encode(id)];
   const p = new Uint8Array(14 + bytes.length);
   const v = new DataView(p.buffer);
   p[0] = protocol === "rdp" ? 1 : 2;
+  p[1] = pointerDrawn ? 1 : 0;
   v.setBigUint64(2, 1893456000n);
   v.setUint32(10, bytes.length);
   p.set(bytes, 14);
@@ -68,21 +69,48 @@ function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<Imag
   const socket = new FakeSocket();
   const urls: [string, string][] = [];
   const shown: { width: number; height: number }[] = [];
+  // What reached the canvas, in order: whole frames and rectangles put in place.
+  const painted: string[] = [];
   const closeImage = vi.fn();
   const deps: ScreenDeps = {
     open: (url, protocol) => {
       urls.push([url, protocol]);
       return socket;
     },
-    decode: decodeResult ?? (async () => ({ close: closeImage }) as unknown as ImageBitmap),
-    draw: (_canvas, _image, width, height) => shown.push({ width, height }),
+    // A fake PNG says its own size in its two bytes after the signature (rectPNG below).
+    decode: decodeResult ?? (async (png) => ({ close: closeImage, width: png[8], height: png[9] }) as unknown as ImageBitmap),
+    draw: (_canvas, _image, width, height) => {
+      shown.push({ width, height });
+      painted.push(`frame ${width}x${height}`);
+    },
+    patch: (_canvas, image, x, y) => painted.push(`rect ${x},${y} ${image.width}x${image.height}`),
   };
   const onReconnect = vi.fn();
   const onClose = vi.fn();
   const view = render(<ScreenViewer attach={attach} deps={deps} onReconnect={onReconnect} onClose={onClose} />);
   const canvas = view.container.querySelector("canvas") as HTMLCanvasElement;
   vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({ left: 10, top: 20, width: 200, height: 100, right: 210, bottom: 120, x: 10, y: 20, toJSON: () => ({}) });
-  return { socket, urls, shown, canvas, onReconnect, onClose, view };
+  return { socket, urls, shown, painted, canvas, onReconnect, onClose, view };
+}
+
+// A partial frame (ADR-0092): its rectangles, each a fake PNG saying its size.
+function rectPNG(width: number, height: number): number[] {
+  return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, width, height];
+}
+function delta(sequence: bigint, width: number, height: number, rects: { x: number; y: number; w: number; h: number; png?: number[] }[]): ArrayBuffer {
+  const parts: number[] = [0, rects.length];
+  for (const r of rects) {
+    const png = r.png ?? rectPNG(r.w, r.h);
+    const head = new Uint8Array(20);
+    const v = new DataView(head.buffer);
+    v.setUint32(0, r.x);
+    v.setUint32(4, r.y);
+    v.setUint32(8, r.w);
+    v.setUint32(12, r.h);
+    v.setUint32(16, png.length);
+    parts.push(...head, ...png);
+  }
+  return header(4, sequence, width, height, parts);
 }
 
 async function live(s: ReturnType<typeof setup>, protocol: "rdp" | "vnc" = "vnc") {
@@ -117,6 +145,8 @@ describe("the screen contract (ADR-0071 §6)", () => {
       "PNG over 4 MiB": oversizedFrame(),
       "hello with a frame size": tampered((b) => (b[23] = 1), hello()),
       "hello unknown protocol": tampered((b) => (b[32] = 3), hello()),
+      "hello reserved flag": tampered((b) => (b[33] = 2), hello()),
+      "hello reserved flag beside the pointer": tampered((b) => (b[33] = 0x81), hello()),
       "end sequence zero": end("x", 0n),
       "end text not UTF-8": header(3, 1n, 0, 0, [0, 0, 0, 2, 0xc3, 0x28]),
     };
@@ -180,6 +210,108 @@ describe("where the socket goes (ADR-0071 §7)", () => {
   });
 });
 
+describe("the pointer drawn into the frames (ADR-0091)", () => {
+  it("reads the HELLO's flag", () => {
+    expect(decodeScreenMessage(hello("s1", "rdp", true))).toMatchObject({ type: "hello", pointerDrawn: true });
+    expect(decodeScreenMessage(hello("s1", "rdp", false))).toMatchObject({ type: "hello", pointerDrawn: false });
+  });
+
+  it("hides the browser's arrow only when the frames carry the pointer", async () => {
+    for (const drawn of [true, false]) {
+      const s = setup();
+      s.socket.receive(hello("s1", "rdp", drawn));
+      s.socket.receive(frame(1n));
+      await waitFor(() => expect(s.shown.length).toBe(1));
+      expect(s.canvas.classList.contains("pointer-drawn")).toBe(drawn);
+      s.view.unmount();
+    }
+  });
+});
+
+describe("partial frames, live (ADR-0092)", () => {
+  it("decodes them as strictly as the proxy encodes them", () => {
+    expect(decodeScreenMessage(delta(2n, 8, 4, [{ x: 1, y: 2, w: 3, h: 2 }]))).toMatchObject({
+      type: "delta", sequence: 2n, width: 8, height: 4, rects: [{ x: 1, y: 2, width: 3, height: 2 }],
+    });
+    const cases: Record<string, ArrayBuffer> = {
+      "no rectangle": delta(2n, 8, 4, []),
+      "past the right edge": delta(2n, 8, 4, [{ x: 7, y: 0, w: 2, h: 1 }]),
+      "past the bottom edge": delta(2n, 8, 4, [{ x: 0, y: 3, w: 1, h: 2 }]),
+      "an empty rectangle": delta(2n, 8, 4, [{ x: 0, y: 0, w: 0, h: 1 }]),
+      "not a PNG": delta(2n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1, png: [1, 2, 3, 4, 5, 6, 7, 8, 9] }]),
+      "sequence zero": delta(0n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]),
+      "a byte left over": (() => {
+        const good = new Uint8Array(delta(2n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]));
+        const out = new Uint8Array(good.length + 1);
+        out.set(good);
+        new DataView(out.buffer).setUint32(28, out.length - 32);
+        return out.buffer;
+      })(),
+      "a count past the rectangles": (() => {
+        const b = new Uint8Array(delta(2n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]).slice(0));
+        b[33] = 2;
+        return b.buffer;
+      })(),
+    };
+    for (const [what, data] of Object.entries(cases)) {
+      expect(() => decodeScreenMessage(data), what).toThrow();
+    }
+  });
+
+  it("puts each rectangle in place, after the frame before it", async () => {
+    const s = setup();
+    s.socket.receive(hello("s1", "rdp", true));
+    s.socket.receive(frame(1n, 8, 4));
+    s.socket.receive(delta(2n, 8, 4, [{ x: 1, y: 2, w: 3, h: 2 }, { x: 7, y: 3, w: 1, h: 1 }]));
+    s.socket.receive(delta(3n, 8, 4, [{ x: 0, y: 0, w: 2, h: 2 }]));
+    await waitFor(() => expect(s.painted).toEqual(["frame 8x4", "rect 1,2 3x2", "rect 7,3 1x1", "rect 0,0 2x2"]));
+    expect(s.socket.closed).toBe(false);
+    s.view.unmount();
+  });
+
+  it("waits for the frame before it to be painted, however long it decodes", async () => {
+    const resolvers: (() => void)[] = [];
+    const s = setup("/sessions/s1/screen", async () => {
+      await new Promise<void>((resolve) => resolvers.push(resolve));
+      return { close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap;
+    });
+    s.socket.receive(hello());
+    s.socket.receive(frame(1n, 8, 4));
+    s.socket.receive(delta(2n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]));
+    await waitFor(() => expect(resolvers.length).toBe(1)); // the rectangle waits for the key frame
+    await act(async () => resolvers[0]());
+    await waitFor(() => expect(resolvers.length).toBe(2));
+    await act(async () => resolvers[1]());
+    await waitFor(() => expect(s.painted).toEqual(["frame 8x4", "rect 0,0 1x1"]));
+    s.view.unmount();
+  });
+
+  it.each([
+    ["a partial frame before any key frame", [delta(1n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }])]],
+    ["a partial frame after a gap", [frame(1n, 8, 4), delta(3n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }])]],
+    ["a partial frame of another size", [frame(1n, 8, 4), delta(2n, 16, 4, [{ x: 0, y: 0, w: 1, h: 1 }])]],
+    ["a rectangle whose PNG is not of its size", [frame(1n, 8, 4), delta(2n, 8, 4, [{ x: 0, y: 0, w: 2, h: 2, png: rectPNG(1, 1) }])]],
+  ])("closes on %s", async (_what, messages) => {
+    const s = setup();
+    s.socket.receive(hello());
+    for (const m of messages) s.socket.receive(m);
+    await waitFor(() => expect(s.socket.closed).toBe(true));
+    expect(s.painted.filter((p) => p.startsWith("rect"))).toEqual([]);
+    s.view.unmount();
+  });
+
+  it("goes on at a key frame that comes after a gap", async () => {
+    const s = setup();
+    s.socket.receive(hello());
+    s.socket.receive(frame(1n, 8, 4));
+    s.socket.receive(frame(9n, 8, 4)); // the proxy dropped what a slow page could not take
+    s.socket.receive(delta(10n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]));
+    await waitFor(() => expect(s.painted).toEqual(["frame 8x4", "rect 0,0 1x1"]));
+    expect(s.socket.closed).toBe(false);
+    s.view.unmount();
+  });
+});
+
 describe("the screen", () => {
   it("waits, then shows the frame, sized as the proxy says", async () => {
     const s = setup();
@@ -203,17 +335,17 @@ describe("the screen", () => {
     s.view.unmount();
   });
 
-  it("never paints an older frame over a newer one that decoded first", async () => {
+  it("never paints an older frame once a newer key frame has come", async () => {
     const resolvers: ((b: ImageBitmap) => void)[] = [];
     const s = setup("/sessions/s1/screen", () => new Promise((resolve) => resolvers.push(resolve)));
     s.socket.receive(hello());
     s.socket.receive(frame(1n, 11, 11));
     s.socket.receive(frame(2n, 22, 22));
     const close = vi.fn();
-    await act(async () => resolvers[1]({ close } as unknown as ImageBitmap));
+    await waitFor(() => expect(resolvers.length).toBe(1)); // frame 1 is not even decoded
     await act(async () => resolvers[0]({ close } as unknown as ImageBitmap));
     expect(s.shown).toEqual([{ width: 22, height: 22 }]);
-    expect(close).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(1);
     s.view.unmount();
   });
 

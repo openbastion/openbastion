@@ -99,19 +99,46 @@ func (b *screenInputBudget) admit(e screenstream.InputEvent, now time.Time) scre
 	return screenInputRefuse
 }
 
+// KeyFrameRequester is a ScreenSession that can make its next frame a key frame (ADR-0092): the
+// display asks for one when the operator has fallen too far behind to receive every partial frame.
+type KeyFrameRequester interface {
+	RequestKeyFrame()
+}
+
+// The partial frames the display holds for a slow browser, at most (ADR-0092): past them, it drops
+// them and waits for a key frame.
+const (
+	maxPendingDeltas     = 32
+	maxPendingDeltaBytes = screenstream.MaxPNGBytes
+)
+
 // screenDisplay sends acknowledged frames to the operator without ever holding up the relay: a
 // stalled browser must not stop the recording nor the input (ADR-0071 §11). One frame is in
-// flight, one waits, and a newer one replaces the one that waits: frames are complete, so nothing
-// is lost but an intermediate picture, which the recorder has anyway.
+// flight and the others wait. A key frame replaces whatever waits: it is the whole screen, so
+// nothing is lost but intermediate pictures, which the recorder has anyway. A partial frame cannot
+// be skipped (ADR-0092 §1): it waits behind the others, and past a bound the display drops the
+// waiting partial frames, asks the codec for a key frame, and sends nothing more until it comes.
 type screenDisplay struct {
-	sink    ScreenSink
-	ctx     context.Context
-	cancel  context.CancelFunc
-	mu      sync.Mutex
-	pending *screenstream.Message
-	sending bool
-	failed  chan error
-	idle    chan struct{}
+	sink         ScreenSink
+	ctx          context.Context
+	cancel       context.CancelFunc
+	mu           sync.Mutex
+	pending      []screenstream.Message
+	pendingBytes int
+	needKey      bool
+	requestKey   func()
+	sending      bool
+	failed       chan error
+	idle         chan struct{}
+}
+
+// frameSize is what a partial frame weighs while it waits: its rectangles.
+func frameSize(frame screenstream.Message) int {
+	n := len(frame.PNG)
+	for _, r := range frame.Rects {
+		n += len(r.PNG)
+	}
+	return n
 }
 
 // The display does not end with the relay's context: an interrupted write closes a WebSocket, and
@@ -124,8 +151,24 @@ func newScreenDisplay(ctx context.Context, sink ScreenSink) *screenDisplay {
 func (d *screenDisplay) offer(frame screenstream.Message) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if frame.Type == screenstream.TypeFrame {
+		d.needKey = false
+	} else if d.needKey {
+		return // until the key frame asked for: what came between is in the recording
+	}
 	if d.sending {
-		d.pending = &frame
+		switch {
+		case frame.Type == screenstream.TypeFrame:
+			d.pending, d.pendingBytes = []screenstream.Message{frame}, 0
+		case len(d.pending) >= maxPendingDeltas || d.pendingBytes+frameSize(frame) > maxPendingDeltaBytes:
+			d.pending, d.pendingBytes, d.needKey = nil, 0, true
+			if d.requestKey != nil {
+				d.requestKey()
+			}
+		default:
+			d.pending = append(d.pending, frame)
+			d.pendingBytes += frameSize(frame)
+		}
 		return
 	}
 	d.sending = true
@@ -138,7 +181,7 @@ func (d *screenDisplay) run(frame screenstream.Message, idle chan struct{}) {
 	for {
 		if err := d.sink.Send(d.ctx, frame); err != nil {
 			d.mu.Lock()
-			d.sending, d.pending = false, nil
+			d.sending, d.pending, d.pendingBytes = false, nil, 0
 			d.mu.Unlock()
 			select {
 			case d.failed <- err:
@@ -147,13 +190,16 @@ func (d *screenDisplay) run(frame screenstream.Message, idle chan struct{}) {
 			return
 		}
 		d.mu.Lock()
-		if d.pending == nil {
+		if len(d.pending) == 0 {
 			d.sending = false
 			d.mu.Unlock()
 			return
 		}
-		frame = *d.pending
-		d.pending = nil
+		frame = d.pending[0]
+		d.pending = d.pending[1:]
+		if frame.Type == screenstream.TypeFrameDelta {
+			d.pendingBytes -= frameSize(frame)
+		}
 		d.mu.Unlock()
 	}
 }
@@ -188,6 +234,12 @@ type ScreenSession interface {
 	Input(screenstream.InputEvent) error
 	Err() error
 	Close() error
+}
+
+// PointerDrawer is a ScreenSession that may draw the target's pointer into its frames (ADR-0091);
+// the HELLO then tells the client, which hides its own pointer. A session that is not one draws none.
+type PointerDrawer interface {
+	PointerDrawn() bool
 }
 
 type FrameRecorder interface {
@@ -387,6 +439,9 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	}
 	lastAck := uint64(0)
 	display := newScreenDisplay(ctx, sink)
+	if requester, ok := session.(KeyFrameRequester); ok {
+		display.requestKey = requester.RequestKeyFrame
+	}
 	// Ending a session cuts the target at once (ADR-0018), even with an acknowledgement under way.
 	// Once, and over before the relay returns: whoever comes second waits for the first.
 	closeTarget := sync.OnceValue(session.Close)
@@ -444,6 +499,9 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 		Type: screenstream.TypeHello, Sequence: 0, Timestamp: time.Now().UTC(),
 		Protocol: meta.ScreenProtocol, ExpiresAt: meta.ExpiresAt, SessionID: meta.SessionID,
 	}
+	if drawer, ok := session.(PointerDrawer); ok {
+		hello.PointerDrawn = drawer.PointerDrawn()
+	}
 	if _, err := screenstream.Encode(hello); err != nil {
 		return fmt.Errorf("proxycore: invalid screen HELLO: %w", err)
 	}
@@ -487,7 +545,11 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 				}
 				return session.Err()
 			}
-			if frame.Type != screenstream.TypeFrame || frame.Sequence != sequence || frame.Timestamp.IsZero() {
+			// A key frame, or a partial frame on the screen of the frame before it (ADR-0092): never a
+			// partial frame first, nor one of another size than the screen it changes.
+			partial := frame.Type == screenstream.TypeFrameDelta
+			if (frame.Type != screenstream.TypeFrame && !partial) || frame.Sequence != sequence || frame.Timestamp.IsZero() ||
+				partial && (lastAck == 0 || frame.Width != frameWidth || frame.Height != frameHeight) {
 				return ErrScreenSequence
 			}
 			if _, err := screenstream.Encode(frame); err != nil {
@@ -497,6 +559,13 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			// buggy adapter cannot mutate the exact frame we later display.
 			recordFrame := frame
 			recordFrame.PNG = append([]byte(nil), frame.PNG...)
+			if partial {
+				recordFrame.Rects = make([]screenstream.Rect, len(frame.Rects))
+				for i, r := range frame.Rects {
+					r.PNG = append([]byte(nil), r.PNG...)
+					recordFrame.Rects[i] = r
+				}
+			}
 			ack, err := recordScreenFrame(ctx, recorder, meta.SessionID, recordFrame, ackTimeout)
 			if err != nil || ack != frame.Sequence {
 				return fmt.Errorf("%w: frame acknowledgement missing or ambiguous", ErrRecordingLost)

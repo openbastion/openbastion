@@ -22,6 +22,10 @@ type VNCCodec struct {
 	DialTimeout time.Duration
 	// FrameInterval is SCREEN_FRAME_INTERVAL_MS: the least time between two frames of a session.
 	FrameInterval time.Duration
+	// DrawPointer draws the target's pointer into each frame (SCREEN_DRAW_POINTER, ADR-0091).
+	DrawPointer bool
+	// PartialFrames sends partial frames anchored on key frames (SCREEN_PARTIAL_FRAMES, ADR-0092).
+	PartialFrames bool
 }
 
 var _ proxycore.ScreenCodec = (*VNCCodec)(nil)
@@ -40,6 +44,8 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 		TLSServerName:  cred.TargetDomain,
 		DialTimeout:    c.DialTimeout,
 		FrameInterval:  c.FrameInterval,
+		DrawPointer:    c.DrawPointer,
+		PartialFrames:  c.PartialFrames,
 	}}
 	session, err := client.Open(ctx)
 	if err == nil {
@@ -73,6 +79,19 @@ func vncEndCode(err error) string {
 // vncScreenSession gives what ends a running session the same codes as what refuses its opening:
 // a target that sends a rectangle out of bounds is not a target that cannot be reached.
 type vncScreenSession struct{ proxycore.ScreenSession }
+
+// PointerDrawn passes on what the session says (ADR-0091): the embedded interface would hide it.
+func (s vncScreenSession) PointerDrawn() bool {
+	drawer, ok := s.ScreenSession.(proxycore.PointerDrawer)
+	return ok && drawer.PointerDrawn()
+}
+
+// RequestKeyFrame passes the relay's request on (ADR-0092), as PointerDrawn does its word.
+func (s vncScreenSession) RequestKeyFrame() {
+	if requester, ok := s.ScreenSession.(proxycore.KeyFrameRequester); ok {
+		requester.RequestKeyFrame()
+	}
+}
 
 func (s vncScreenSession) Err() error {
 	err := s.ScreenSession.Err()

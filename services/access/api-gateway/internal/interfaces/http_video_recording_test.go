@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/screenstream"
 	recordingv1 "github.com/openbastion/openbastion/proto/recording/v1"
 	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -238,4 +239,61 @@ func segmentResponseWithFrame(sessionID string, sequence int64, frame *recording
 		SessionId: sessionID, FirstSequence: sequence, LastSequence: sequence,
 		Frames: []*recordingv1.VideoFrameData{frame}, Complete: true,
 	}
+}
+
+// A partial frame (ADR-0092) is served as the Recorder gave it: the FRAME_DELTA message of its own
+// sequence, under codec png-delta-v1. Anything that is not that is refused, as a bad PNG is.
+func TestVideoRecordingRoute_ServesPartialFrames(t *testing.T) {
+	at := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	delta := func(sequence uint64) []byte {
+		data, err := screenstream.Encode(screenstream.Message{Type: screenstream.TypeFrameDelta, Sequence: sequence, Timestamp: at,
+			Width: 8, Height: 4, Rects: []screenstream.Rect{{Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nrect")}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	serve := func(response *recordingv1.GetVideoSegmentResponse) *httptest.ResponseRecorder {
+		authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-verified", "alice", []string{"auditor"})
+		t.Cleanup(authSrv.Close)
+		gateway := newTestGateway(t, authSrv.URL, "").WithVideoRecorderClient(&fakeVideoRecorder{response: response}).Routes()
+		request := httptest.NewRequest(http.MethodGet, "/sessions/s-1/recording/video/segments/5", nil)
+		request.Header.Set("Authorization", "Bearer tok-alice")
+		recorder := httptest.NewRecorder()
+		gateway.ServeHTTP(recorder, request)
+		return recorder
+	}
+	good := serve(segmentResponseWithFrame("s-1", 5, &recordingv1.VideoFrameData{Ts: timestamppb.New(at), FrameData: delta(5), Codec: "png-delta-v1"}))
+	if good.Code != http.StatusOK {
+		t.Fatalf("a segment with a partial frame returned %d: %s", good.Code, good.Body.String())
+	}
+	var body struct {
+		Frames []struct {
+			FrameData []byte `json:"frameData"`
+			Codec     string `json:"codec"`
+		} `json:"frames"`
+	}
+	if err := json.NewDecoder(good.Body).Decode(&body); err != nil || len(body.Frames) != 1 ||
+		body.Frames[0].Codec != "png-delta-v1" || string(body.Frames[0].FrameData) != string(delta(5)) {
+		t.Fatalf("the partial frame was not served as the Recorder gave it: %+v %v", body, err)
+	}
+	for name, frame := range map[string]*recordingv1.VideoFrameData{
+		"a partial frame of another sequence": {Ts: timestamppb.New(at), FrameData: delta(6), Codec: "png-delta-v1"},
+		"not a partial frame":                 {Ts: timestamppb.New(at), FrameData: []byte("png-data"), Codec: "png-delta-v1"},
+		"a key frame under the partial codec": {Ts: timestamppb.New(at), FrameData: keyFrameMessage(t, 5, at), Codec: "png-delta-v1"},
+	} {
+		if got := serve(segmentResponseWithFrame("s-1", 5, frame)); got.Code != http.StatusBadGateway {
+			t.Errorf("%s: %d, want 502", name, got.Code)
+		}
+	}
+}
+
+func keyFrameMessage(t *testing.T, sequence uint64, at time.Time) []byte {
+	t.Helper()
+	data, err := screenstream.Encode(screenstream.Message{Type: screenstream.TypeFrame, Sequence: sequence, Timestamp: at,
+		Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nkey")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
