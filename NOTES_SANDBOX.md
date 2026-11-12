@@ -4077,3 +4077,11 @@ symboliques tout en dédupliquant React. Les chemins TypeScript résolvent les
 primitives depuis le `node_modules` de l'application. Après `npm ci` dans
 l'Admin UI et suppression des `node_modules` locaux du package, les tests et le
 build passent sans dépendance cachée dans le répertoire source.
+
+## 2026-11-12 — Synchronisation suivante de la PR #151
+
+`origin/main` a avancé jusqu'à `706dc9c` (PR #153, canal statique RDP). La
+branche `refactor/admin-ui-infrastructure` a intégré cette évolution sans
+conflit. Les tests UI complets (17 fichiers, 166 tests), TypeScript, build Vite
+isolé, audit npm (0 vulnérabilité), contrôle de licence et `go test ./pkg/rdp/...`
+passent après intégration.
