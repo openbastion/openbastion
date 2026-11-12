@@ -3348,7 +3348,42 @@ Le tableau est dans ADR-0090. En bref : médiane de 12 à 74 ms avec S3 (11 à 3
 - SeaweedFS en nœud unique sur le même hôte, sans réseau ni TLS : un S3 distant ajoute son aller-retour ;
 - toujours pas de scène vidéo, ni plus de 10 sessions.
 
-**Défaut trouvé en chemin, non corrigé** : quand l'adresse de PostgreSQL ne répond pas (paquets perdus, sans refus), le Video Recorder reste bloqué au démarrage, malgré son délai de 10 s. Ici, le conteneur PostgreSQL du bac à sable avait redémarré et changé d'adresse. La cause : `sql.Open("postgres", …)` passe par `Driver.Open`, sans contexte, et lib/pq compose alors le numéro sans délai si le DSN n'a pas de `connect_timeout`. Le `PingContext` n'y peut rien. Les sept services qui ouvrent PostgreSQL ainsi sont concernés. Inscrit au backlog.
+**Défaut trouvé en chemin, non corrigé** : quand l'adresse de PostgreSQL ne répond pas (paquets perdus, sans refus), le Video Recorder reste bloqué au démarrage, malgré son délai de 10 s. Ici, le conteneur PostgreSQL du bac à sable avait redémarré et changé d'adresse. La cause : `sql.Open("postgres", …)` passe par `Driver.Open`, sans contexte, et lib/pq compose alors le numéro sans délai si le DSN n'a pas de `connect_timeout`. Le `PingContext` n'y peut rien. Les sept services qui ouvrent PostgreSQL ainsi sont concernés. Inscrit au backlog. Corrigé ensuite : voir la section suivante.
+
+## 2026-11-12 — Une adresse PostgreSQL muette n'arrête plus le démarrage
+
+Les sept services qui ouvrent PostgreSQL (Authentication, Authorization, Session Broker, Password Vault, Audit Service, Command Recorder, Video Recorder) passent maintenant par un connecteur lib/pq (`openPool`, dans `postgres_open.go` de chacun), et non plus par `sql.Open("postgres", …)`.
+- **Délai par défaut** : une connexion sans `connect_timeout` dans le DSN reçoit 10 s. Ce délai couvre la composition du numéro et l'échange de démarrage de PostgreSQL. Un `connect_timeout` donné par le DSN l'emporte.
+- **Contexte** : il borne désormais aussi la composition du numéro de chaque connexion.
+
+**Prouvé** :
+- `TestOpenPostgres_GivesUpOnASilentServer` : contre un serveur qui accepte la connexion sans jamais répondre, l'ouverture abandonne (`i/o timeout`). Rouge d'abord : sans le correctif, elle attendait encore au bout de 5 s.
+- `TestOpenPostgres_KeepsTheDSNsConnectTimeout` : le délai du DSN l'emporte sur le défaut.
+- Mutations : sans le défaut, le premier test échoue ; avec un défaut qui écrase le DSN, le second échoue.
+- Les tests PostgreSQL des sept services passent sur une base neuve, ainsi que `TestScreenFlow`.
+
+**Non prouvé** : une adresse qui perd les paquets à la composition du numéro, faute d'adresse muette hermétique. C'est le même délai qui s'applique, et le cas du 12 novembre en relevait.
+
+**Écart local connu** : sous WSL, `TestPostgresFlow_FederatedLoginWithOIDC_RolesFromTheDeclaredMapOnly` échoue sur « must refuse to start ». Il échoue de même sur main, sans ce changement (un port fermé y donne un délai, pas un refus).
+
+**Renversable** : 10 s ; un fichier par service plutôt qu'un module `pkg/` partagé (un module de plus aurait touché `go.work`, le Makefile et une dizaine de documents pour quinze lignes).
+
+## 2026-11-12 — À 50 sessions, le Video Recorder perdait des images : le pool PostgreSQL
+
+`RECORDER_MEASURE_SESSIONS` (par exemple `10,20,50`) fixe le nombre de sessions de `TestVideoRecorderAckLatency`.
+
+**Trouvé** : à 50 sessions, des images n'étaient pas acquittées (`waiting for frame acknowledgement`). Le journal du Recorder disait `cannot assign requested address` : il ouvrait et fermait une connexion PostgreSQL presque à chaque image, faute de connexions gardées (`database/sql` en garde 2 par défaut), jusqu'à épuiser les ports de l'hôte. Une image perdue coupe sa session.
+
+**Corrigé** : les sept services gardent 10 connexions (`poolSize`, dans `postgres_open.go`), au plus ouvertes et gardées inactives. L'essai a comparé le défaut, 10 et 25 à 50 sessions : 48 sessions sur 50 coupées par une image non acquittée avec le défaut, aucune avec 10 ou 25, et 10 aussi rapide que 25.
+- **Test rouge d'abord** : `TestPostgres_PoolKeepsItsConnections` (sous `TEST_DATABASE_URL`) échouait sans le correctif, le pool n'ayant aucune borne.
+- **Mutations** : sans `SetMaxIdleConns`, 2 connexions sur 10 restent ; sans `SetMaxOpenConns`, le pool n'a plus de plafond.
+- **Mesuré après** : aucune image perdue à 10, 20 et 50 sessions, en mémoire comme avec S3 (SeaweedFS jetable), sur quatre passages. Le tableau est dans ADR-0090.
+
+**Non corrigé, défaut du harnais** : `freePort` libère le port avant que le Recorder ne le prenne. Trois passages sur une douzaine sont tombés sur `address already in use` ; je les ai refaits.
+
+**Instable sous charge, non lié** : `TestPostgresFlow_TransitKeepsTheKeys…/a_periodic_token_outlives_its_period` a échoué une fois dans toute la suite, et passe seul.
+
+**Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
 ## 2026-11-12 — ADR-0093 : une relecture lit la suite de segments
 
