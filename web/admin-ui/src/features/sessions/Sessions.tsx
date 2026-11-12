@@ -11,7 +11,13 @@ import { SessionRequest } from "./SessionRequest";
 // A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
 // the requests waiting for this user's decision (break-glass, ADR-0012, and approval, ADR-0067),
 // and a session by its identifier.
-export function Sessions() {
+export function Sessions({
+  requestedSessionId,
+  onSessionLookupComplete,
+}: {
+  requestedSessionId?: string | null;
+  onSessionLookupComplete?: () => void;
+} = {}) {
   const { api } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
   const [error, setError] = useState<unknown>();
@@ -25,6 +31,23 @@ export function Sessions() {
   }, [api]);
   useEffect(load, [load]);
 
+  const findById = useCallback(async (id: string) => {
+    setLookup(id);
+    setFound(undefined);
+    setError(undefined);
+    try {
+      setFound(await api.request<Session>("GET", sessionPath(id)));
+    } catch (err) {
+      setError(err);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    if (!requestedSessionId) return;
+    void findById(requestedSessionId);
+    onSessionLookupComplete?.();
+  }, [findById, onSessionLookupComplete, requestedSessionId]);
+
   async function act(what: string, run: () => Promise<unknown>) {
     setError(undefined);
     setOk(undefined);
@@ -37,15 +60,9 @@ export function Sessions() {
     }
   }
 
-  async function find(e: FormEvent) {
+  function find(e: FormEvent) {
     e.preventDefault();
-    setFound(undefined);
-    setError(undefined);
-    try {
-      setFound(await api.request<Session>("GET", sessionPath(lookup)));
-    } catch (err) {
-      setError(err);
-    }
+    void findById(lookup);
   }
 
   async function openScreen(sessionId: string) {
@@ -89,7 +106,7 @@ export function Sessions() {
           <div className="fields">
             <label>
               Identifiant
-              <input value={lookup} onChange={(e) => setLookup(e.target.value)} required />
+              <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required />
             </label>
           </div>
           <div className="form-actions">

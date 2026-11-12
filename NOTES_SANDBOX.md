@@ -1,5 +1,23 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — ADR-0073 UX-02 : productivité opérateur
+
+La palette de commandes est accessible depuis l'en-tête et par `Ctrl+K` / `Cmd+K`. Elle filtre
+uniquement les quatre destinations Admin UI réellement implémentées et permet de rechercher une
+session par identifiant via `GET /sessions/{sessionId}`. L'API Gateway reste l'autorité : les refus
+403/404/503 sont rendus par la notice existante, sans contournement ni recherche directe dans un
+service. Le focus entre et sort de la palette, `Escape` ferme, les flèches changent la commande
+active et `Entrée` l'exécute.
+
+La liste des comptes possède un filtre local qui ne s'applique qu'à la page déjà chargée (20 au
+maximum). L'interface annonce explicitement ce périmètre ; aucun filtrage local n'est présenté
+comme une recherche exhaustive. Aucun endpoint, dépendance npm à l'exécution, stockage navigateur
+ou donnée sensible persistée n'a été ajouté.
+
+Les recherches globales d'audit, les filtres serveur et l'indexation de ressources non exposées
+restent hors de portée tant que les contrats API publics correspondants n'existent pas.
+
+
 Ce fichier documente une contrainte réelle rencontrée en démarrant l'implémentation, et les décisions prises en réponse — à lire avant de juger que le transport HTTP/JSON ci-dessous est un écart d'architecture. Ce n'en est pas un : c'est une substitution de transport documentée, réversible, qui n'a touché aucun contrat.
 
 ## Ce qui a été découvert

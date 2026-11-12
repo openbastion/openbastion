@@ -81,3 +81,74 @@ describe("App", () => {
     expect(await screen.findByText("oidc:sub-1 (dba)")).toBeTruthy();
   });
 });
+
+describe("Command palette — ADR-0073 UX-02", () => {
+  async function signIn(api: ReturnType<typeof fakeApi>["api"]) {
+    render(<App api={api} location={{ pathname: "/ui/", search: "" } as Location} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
+  }
+
+  it("opens with Ctrl+K, searches a session through the public API and displays its detail", async () => {
+    const session = {
+      id: "sess_42", status: "active", protocol: "ssh", requestedBy: "alice", privilegedAccountId: "acc_prod",
+      justification: "incident 42", breakGlass: false, expiresAt: "2026-11-12T11:00:00Z",
+    };
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { body: { accessToken: fakeToken("alice", ["platform-admin"]), expiresIn: 3600 } },
+      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } },
+      "GET /sessions?status=pending_approval": { body: { items: [], page: 1, pageSize: 50, totalItems: 0 } },
+      "GET /sessions/sess_42": { body: session },
+    });
+    await signIn(api);
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
+    expect(document.activeElement).toBe(query);
+    fireEvent.change(query, { target: { value: "sess_42" } });
+    fireEvent.keyDown(query, { key: "Enter" });
+    expect(await screen.findByText("incident 42")).toBeTruthy();
+    expect(calls.some((call) => call.method === "GET" && call.path === "/sessions/sess_42")).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps authorization authoritative when a session lookup is refused", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { body: { accessToken: fakeToken("alice", ["platform-admin"]), expiresIn: 3600 } },
+      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } },
+      "GET /sessions?status=pending_approval": { body: { items: [], page: 1, pageSize: 50, totalItems: 0 } },
+      "GET /sessions/private-session": { status: 403, body: "forbidden" },
+    });
+    await signIn(api);
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
+    fireEvent.change(query, { target: { value: "private-session" } });
+    fireEvent.keyDown(query, { key: "Enter" });
+    expect((await screen.findByRole("alert")).textContent).toContain("403 — forbidden");
+    expect(calls.some((call) => call.method === "GET" && call.path === "/sessions/private-session")).toBe(true);
+  });
+
+  it("filters navigation commands and restores focus when the palette is cancelled", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { body: { accessToken: fakeToken("alice", ["platform-admin"]), expiresIn: 3600 } },
+      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } },
+    });
+    await signIn(api);
+    const trigger = screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" });
+    fireEvent.click(trigger);
+    const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
+    fireEvent.change(query, { target: { value: "politiques" } });
+    expect(screen.getByRole("option", { name: /Politiques/ })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /Comptes privilégiés/ })).toBeNull();
+    fireEvent.keyDown(query, { key: "Tab", shiftKey: true });
+    const close = screen.getByRole("button", { name: "Fermer" });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(close, { key: "Tab" });
+    expect(document.activeElement).toBe(query);
+    fireEvent.keyDown(query, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(calls.filter((call) => call.method === "GET" && call.path.startsWith("/sessions/")).length).toBe(0);
+  });
+});

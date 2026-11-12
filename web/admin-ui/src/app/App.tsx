@@ -27,6 +27,7 @@ export function App({
   const api = given ?? own.current!;
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("accounts");
+  const [sessionLookup, setSessionLookup] = useState<string | null>(null);
   const onToken = useCallback(
     (t: string) => {
       api.setToken(t);
@@ -34,6 +35,11 @@ export function App({
     },
     [api],
   );
+  const findSession = useCallback((id: string) => {
+    setTab("sessions");
+    setSessionLookup(id);
+  }, []);
+  const clearSessionLookup = useCallback(() => setSessionLookup(null), []);
   const signOut = useCallback(() => {
     api.setToken(null);
     setToken(null);
@@ -57,10 +63,10 @@ export function App({
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
-      <AppShell who={who} tab={tab} onTab={setTab} onSignOut={signOut}>
+      <AppShell who={who} tab={tab} onTab={setTab} onSignOut={signOut} onFindSession={findSession}>
         {tab === "accounts" && <Accounts />}
         {tab === "policies" && <Policies />}
-        {tab === "sessions" && <Sessions />}
+        {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
         {tab === "audit" && <Recording />}
       </AppShell>
       <LegalNotice />

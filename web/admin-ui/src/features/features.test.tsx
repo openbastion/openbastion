@@ -23,6 +23,20 @@ describe("Accounts", () => {
     expect(calls.some((c) => c.method === "POST" && c.path === "/vault/accounts/acc_1/rotate")).toBe(true);
   });
 
+  it("filters only the accounts on the loaded page without making another API request", async () => {
+    const rows = [account, { ...account, id: "acc_2", name: "web frontend", targetHost: "web:22" }, { ...account, id: "acc_3", name: "cache", targetHost: "redis:6379", protocol: "ssh" }];
+    const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 27 } } });
+    signedIn(api, <Accounts />);
+    expect(await screen.findByText("prod db")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Filtrer les comptes de cette page"), { target: { value: "web" } });
+    expect(screen.getByText("web frontend")).toBeTruthy();
+    expect(screen.queryByText("prod db")).toBeNull();
+    expect(screen.queryByText("cache")).toBeNull();
+    expect(screen.getByText(/1 sur 3 compte\(s\)/).textContent).toContain("1 sur 3 compte(s)");
+    expect(screen.getByText(/Filtre local limité aux 3 comptes chargés/)).toBeTruthy();
+    expect(calls.filter((call) => call.method === "GET" && call.path.startsWith("/vault/accounts")).length).toBe(1);
+  });
+
   it("says why a rotation is refused", async () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { status: 409, body: "the account has no usable reconciliation account: it cannot be rotated" } });
     signedIn(api, <Accounts />);

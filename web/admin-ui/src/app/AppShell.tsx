@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { Audit, Policies as PoliciesIcon, Session, Users } from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import { BrandMark } from "../shared/BrandMark";
+import { CommandPalette } from "../shared/ui/CommandPalette";
 
 const tabs = {
   accounts: { label: "Comptes", description: "Comptes privilégiés", icon: Users, group: "Accès privilégiés" },
@@ -20,20 +21,25 @@ export function AppShell({
   tab,
   onTab,
   onSignOut,
+  onFindSession,
   children,
 }: {
   who: TokenClaims | null;
   tab: Tab;
   onTab: (tab: Tab) => void;
   onSignOut: () => void;
+  onFindSession: (id: string) => void;
   children: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() =>
     window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light",
   );
   const menuButton = useRef<HTMLButtonElement>(null);
+  const paletteButton = useRef<HTMLButtonElement>(null);
+  const paletteWasOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
 
   useEffect(() => {
@@ -42,6 +48,22 @@ export function AppShell({
       delete document.documentElement.dataset.theme;
     };
   }, [theme]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (paletteWasOpen.current && !paletteOpen) paletteButton.current?.focus();
+    paletteWasOpen.current = paletteOpen;
+  }, [paletteOpen]);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -74,6 +96,19 @@ export function AppShell({
         </div>
         <div className="header-actions">
           <button
+            ref={paletteButton}
+            type="button"
+            className="command-trigger"
+            onClick={() => setPaletteOpen(true)}
+            aria-haspopup="dialog"
+            aria-keyshortcuts="Control+K Meta+K"
+            aria-label="Ouvrir la recherche et les commandes"
+          >
+            <span aria-hidden="true">⌕</span>
+            <span>Rechercher</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+          <button
             ref={menuButton}
             type="button"
             className="icon-button mobile-menu-toggle"
@@ -101,6 +136,13 @@ export function AppShell({
           </div>
         </div>
       </header>
+      {paletteOpen ? (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          onNavigate={chooseTab}
+          onFindSession={onFindSession}
+        />
+      ) : null}
       <div className={`app-workspace${collapsed ? " sidebar-collapsed" : ""}${mobileOpen ? " mobile-navigation-open" : ""}`}>
         {mobileOpen && (
           <button

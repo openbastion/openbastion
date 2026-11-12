@@ -22,6 +22,7 @@ export function Accounts() {
   const [data, setData] = useState<Page<Account>>();
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
+  const [filter, setFilter] = useState("");
 
   const load = useCallback(() => {
     api.request<Page<Account>>("GET", `/vault/accounts?page=${page}&pageSize=${pageSize}`).then(setData, setError);
@@ -39,6 +40,15 @@ export function Accounts() {
       setError(err);
     }
   }
+
+  // Filtering is deliberately limited to the server page already loaded; it never implies a
+  // complete inventory when the public API has not defined a search contract.
+  const filteredAccounts = (data?.items ?? []).filter((account) => {
+    const query = filter.trim().toLocaleLowerCase("fr");
+    if (!query) return true;
+    return [account.id, account.name, account.username, account.targetHost, account.protocol]
+      .some((value) => value.toLocaleLowerCase("fr").includes(query));
+  });
 
   const actions: AccountActions = {
     pinKey(a) {
@@ -81,7 +91,22 @@ export function Accounts() {
       <Notice error={error} ok={ok} />
       <div className="card">
         {data && data.items.length === 0 ? <p className="empty">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
-        {data && data.items.length > 0 ? <AccountTable accounts={data.items} actions={actions} /> : null}
+        {data && data.items.length > 0 ? (
+          <div className="page-filter">
+            <label htmlFor="account-page-filter">Filtrer les comptes de cette page</label>
+            <input
+              id="account-page-filter"
+              type="search"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
+            />
+            <p className="filter-help">Filtre local limité aux {data.items.length} comptes chargés sur cette page ; il ne lance pas de recherche globale.</p>
+            <p className="filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</p>
+          </div>
+        ) : null}
+        {data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}
+        {data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="empty">Aucun compte de cette page ne correspond à ce filtre.</p> : null}
         {data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
       </div>
       <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />
