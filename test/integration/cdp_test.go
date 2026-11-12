@@ -179,11 +179,12 @@ func (p *cdpPage) fill(selector, value string) {
 		el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`, sel, sel, val))
 }
 
-// clickButton clicks the button whose text is text.
+// clickButton clicks the button whose shown text is text: innerText, what a person reads, not
+// textContent, which holds an icon's text too (run 43317319173: the section buttons).
 func (p *cdpPage) clickButton(text string) {
 	p.t.Helper()
 	label, _ := json.Marshal(text)
-	p.eval(fmt.Sprintf(`(() => { const b = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === %s);
+	p.eval(fmt.Sprintf(`(() => { const b = [...document.querySelectorAll("button")].find((b) => b.innerText.trim() === %s);
 		if (!b) throw new Error("no button " + %s); b.click(); return true; })()`, label, label))
 }
 
