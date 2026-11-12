@@ -298,8 +298,8 @@ services:
       RDP_ENABLED: ${RDP_ENABLED:-false}
       # The pointer drawn into each frame, shown and recorded alike (ADR-0091); "false" to leave it out.
       SCREEN_DRAW_POINTER: ${SCREEN_DRAW_POINTER:-true}
-      # Partial frames anchored on key frames (ADR-0092), RDP and VNC: "true" to turn them on.
-      SCREEN_PARTIAL_FRAMES: ${SCREEN_PARTIAL_FRAMES:-false}
+      # Partial frames anchored on key frames (ADR-0092), RDP and VNC: "false" to send whole frames.
+      SCREEN_PARTIAL_FRAMES: ${SCREEN_PARTIAL_FRAMES:-true}
     secrets: [screen-target-ca]
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}

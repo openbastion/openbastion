@@ -85,14 +85,13 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_DRAW_POINTER must be true or false, got %q", v)
 	}
-	// Partial frames anchored on key frames (ADR-0092), RDP and VNC: off unless said "true", until
-	// the figures with them are published and the owner turns them on; anything else stops the
-	// service.
-	partialFrames := false
+	// Partial frames anchored on key frames (ADR-0092), RDP and VNC: on unless said "false"
+	// (the owner's decision, once a real browser showed them); anything else stops the service.
+	partialFrames := true
 	switch v := os.Getenv("SCREEN_PARTIAL_FRAMES"); v {
-	case "", "false":
-	case "true":
-		partialFrames = true
+	case "", "true":
+	case "false":
+		partialFrames = false
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_PARTIAL_FRAMES must be true or false, got %q", v)
 	}
