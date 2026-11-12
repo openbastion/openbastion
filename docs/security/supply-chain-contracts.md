@@ -1,6 +1,6 @@
 # Contrats de confiance de la chaîne de livraison
 
-**Référence :** ADR-0093 · **Version du contrat :** `1.2.0` · **Statut :** phase B en cours
+**Référence :** ADR-0094 · **Version du contrat :** `1.2.0` · **Statut :** phase B en cours
 **Portée :** contrat de phase B en cours d'implémentation ; les attestations GitHub ne seront émises que lors d'un tag de confiance. Aucun artefact OCI n'est publié et aucune vérification d'admission n'est activée.
 
 Ce document fixe les contrats des phases B à E. La phase B utilise les attestations d'artefacts GitHub sur une archive Docker exportée (`docker save`) ; elle ne prétend pas attester un digest de manifeste OCI. Le digest OCI ne sera attesté qu'après une décision explicite de publication et l'existence d'un artefact OCI distribué. Les exemples sont des fragments illustratifs, jamais des preuves valides. Les valeurs entre chevrons sont des placeholders et doivent être remplacées par des valeurs observées et vérifiées ; elles ne doivent jamais être acceptées par un vérificateur.

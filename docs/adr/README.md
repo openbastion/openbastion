@@ -23,7 +23,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 9 | [Proxy écran RDP et VNC](#9-proxy-écran-rdp-et-vnc) | 11 |
 | 10 | [Chaîne d'audit](#10-chaîne-daudit) | 9 |
 | 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
-| 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 3 |
+| 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 4 |
 | 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 4 |
 | 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
 
@@ -190,7 +190,8 @@ Le stockage des sessions enregistrées, leur relecture et leur recherche.
 |---|---|---|---|
 | 1 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté |
 | 2 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté |
-| 3 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
+| 3 | [ADR-0093](0093-une-relecture-lit-plusieurs-segments-par-requete.md) | Une relecture lit plusieurs segments par requête | Accepté |
+| 4 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 
 ### 13. Interfaces et notifications
 
@@ -216,7 +217,7 @@ Installer, vérifier à chaque commit, épingler, analyser et mettre à jour les
 | 5 | [ADR-0052](0052-les-vulnerabilites-connues-se-cherchent-a-chaque-commit-et-chaque-semaine.md) | Les vulnérabilités connues se cherchent à chaque commit et chaque semaine, sur les modules sous leur vrai nom | Accepté |
 | 6 | [ADR-0059](0059-dependabot-propose-une-dependance-a-la-fois-la-ci-decide.md) | Dependabot propose les mises à jour, une dépendance à la fois et après sept jours ; la CI décide | Accepté |
 | 7 | [ADR-0060](0060-les-images-sont-analysees-par-trivy-verifie-contre-son-empreinte.md) | Les images sont analysées par Trivy, un binaire vérifié contre son empreinte, jamais par ses actions ; ce qui est accepté l'est par écrit, par chemin et jusqu'à une date | Accepté |
-| 8 | [ADR-0093](0093-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté |
+| 8 | [ADR-0094](0094-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté |
 
 ## Index numérique
 
@@ -316,5 +317,5 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0090](0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md) | RDP en v0.0.2 : glyphes, ordres graphiques, canaux virtuels et protocoles, par incréments prouvés | Proposé | Proxy écran RDP et VNC |
 | [ADR-0091](0091-le-pointeur-est-dessine-dans-l-image-enregistree.md) | Le pointeur est dessiné dans l'image, celle que l'opérateur voit et que l'auditeur rejoue | Accepté | Proxy écran RDP et VNC |
 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté | Enregistrement et relecture |
-
-| [ADR-0093](0093-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté | Déploiement, CI et chaîne d’approvisionnement |
+| [ADR-0094](0094-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté | Déploiement, CI et chaîne d’approvisionnement |
+| [ADR-0093](0093-une-relecture-lit-plusieurs-segments-par-requete.md) | Une relecture lit plusieurs segments par requête | Accepté | Enregistrement et relecture |
