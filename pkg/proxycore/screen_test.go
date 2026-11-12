@@ -975,3 +975,133 @@ func TestServeScreen_RelaysPartialFramesOnTheirScreen(t *testing.T) {
 		}
 	}
 }
+
+// resizingScreenSession is a session that says whether it follows InputResize (ADR-0095).
+type resizingScreenSession struct {
+	*fakeScreenSession
+	resizable bool
+}
+
+func (s resizingScreenSession) Resizable() bool { return s.resizable }
+
+// scriptedInputSink gives the relay the inputs of script, each when the test sends on next.
+type scriptedInputSink struct {
+	fakeScreenSink
+	next chan []byte
+}
+
+func (s *scriptedInputSink) ReceiveInput(ctx context.Context) ([]byte, error) {
+	select {
+	case data := <-s.next:
+		return data, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func resizeInput(t *testing.T, w, h uint16) []byte {
+	t.Helper()
+	raw, err := screenstream.EncodeInput(screenstream.InputEvent{Type: screenstream.InputResize, X: w, Y: h})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func (s *fakeScreenSession) snapshotInputs() []screenstream.InputEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]screenstream.InputEvent(nil), s.inputs...)
+}
+
+// serveResizing runs a session that stays open, gives it the inputs, waits, and returns what the
+// session received.
+func serveResizing(t *testing.T, resizable bool, limits ScreenInputLimits, wait time.Duration, inputs ...[]byte) ([]screenstream.InputEvent, []screenstream.Message, error) {
+	t.Helper()
+	l, _ := screenListener(&fakeVault{material: []byte("ephemeral-secret")})
+	l.ScreenInput = limits
+	session := &fakeScreenSession{frames: make(chan screenstream.Message)}
+	sink := &scriptedInputSink{next: make(chan []byte)}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() {
+		served <- l.ServeScreen(ctx, screenMeta(), drawingScreenCodec{resizingScreenSession{session, resizable}}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink)
+	}()
+	for _, input := range inputs {
+		select {
+		case sink.next <- input:
+		case err := <-served:
+			cancel()
+			return session.snapshotInputs(), sink.snapshot(), err
+		}
+	}
+	time.Sleep(wait)
+	cancel()
+	err := <-served
+	if errors.Is(err, context.Canceled) {
+		err = nil
+	}
+	return session.snapshotInputs(), sink.snapshot(), err
+}
+
+func TestServeScreen_TheHelloSaysWhetherTheSessionResizes(t *testing.T) {
+	for name, c := range map[string]struct {
+		session ScreenSession
+		want    bool
+	}{
+		"resizable":     {resizingScreenSession{newFakeScreenSession(validScreenFrame(1)), true}, true},
+		"not resizable": {resizingScreenSession{newFakeScreenSession(validScreenFrame(1)), false}, false},
+		"silent":        {newFakeScreenSession(validScreenFrame(1)), false},
+	} {
+		l, _ := screenListener(&fakeVault{material: []byte("ephemeral-secret")})
+		sink := &fakeScreenSink{}
+		if err := l.ServeScreen(context.Background(), screenMeta(), drawingScreenCodec{c.session}, &fakeFrameRecorder{}, &fakeScreenGate{}, sink); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(sink.messages) == 0 || sink.messages[0].Resizable != c.want {
+			t.Fatalf("%s: HELLO %+v, want Resizable %v", name, sink.messages, c.want)
+		}
+	}
+}
+
+func TestServeScreen_ASessionThatCannotResizeReceivesNone(t *testing.T) {
+	inputs, _, err := serveResizing(t, false, ScreenInputLimits{}, 100*time.Millisecond, resizeInput(t, 1920, 1080))
+	if err != nil || len(inputs) != 0 {
+		t.Fatalf("inputs %+v, %v: want none, and the session going on", inputs, err)
+	}
+}
+
+func TestServeScreen_AResizeIsBroughtWithinTheBounds(t *testing.T) {
+	inputs, _, err := serveResizing(t, true, ScreenInputLimits{}, 100*time.Millisecond, resizeInput(t, 9001, 100))
+	if err != nil || len(inputs) != 1 || inputs[0].X != screenstream.MaxResizeWidth || inputs[0].Y != screenstream.MinResizeHeight {
+		t.Fatalf("inputs %+v, %v: want one resize of %d x %d", inputs, err, screenstream.MaxResizeWidth, screenstream.MinResizeHeight)
+	}
+}
+
+// One resize a second: the first goes at once, those that follow sooner wait, and only the latest
+// of them goes, once its turn comes.
+func TestServeScreen_ResizesArePacedAndOnlyTheLatestWaits(t *testing.T) {
+	start := time.Now()
+	inputs, _, err := serveResizing(t, true, ScreenInputLimits{}, MinResizeInterval+300*time.Millisecond,
+		resizeInput(t, 1024, 768), resizeInput(t, 1280, 800), resizeInput(t, 1920, 1080))
+	if err != nil || len(inputs) != 2 || inputs[0].X != 1024 || inputs[1].X != 1920 || inputs[1].Y != 1080 {
+		t.Fatalf("inputs %+v, %v: want 1024 x 768 then 1920 x 1080 alone", inputs, err)
+	}
+	if time.Since(start) < MinResizeInterval {
+		t.Fatal("the second resize went before its turn")
+	}
+	inputs, _, _ = serveResizing(t, true, ScreenInputLimits{}, MinResizeInterval/2,
+		resizeInput(t, 1024, 768), resizeInput(t, 1920, 1080))
+	if len(inputs) != 1 {
+		t.Fatalf("%d resizes within half a second, want 1", len(inputs))
+	}
+}
+
+// The resizes are paced on their own, out of the input budget: a budget of one does not refuse them.
+func TestServeScreen_ResizesAreOutOfTheInputBudget(t *testing.T) {
+	inputs, _, err := serveResizing(t, true, ScreenInputLimits{RatePerSecond: 1, Burst: 1}, 50*time.Millisecond,
+		resizeInput(t, 1024, 768), resizeInput(t, 1280, 800), resizeInput(t, 1920, 1080), resizeInput(t, 1600, 900))
+	if err != nil || len(inputs) != 1 {
+		t.Fatalf("inputs %+v, %v: want the first resize forwarded and the session going on", inputs, err)
+	}
+}

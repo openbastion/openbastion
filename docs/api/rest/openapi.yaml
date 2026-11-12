@@ -1087,6 +1087,10 @@ paths:
         de bearer token ni de ticket dans l'URL. La Gateway consomme le cookie puis relaie le flux
         binaire vers le proxy sous mTLS ; le proxy n'envoie une frame qu'après son acquittement
         durable par Video Recorder (ADR-0071). Les frames sont limitées à 4 Mio et l'entrée à 16 octets.
+        Le bit 1 des drapeaux du HELLO dit que la session suit le redimensionnement (ADR-0095,
+        SCREEN_RESIZE, RDP) : le client peut alors envoyer une entrée de type 4 (InputResize), sa
+        largeur en X et sa hauteur en Y ; le proxy la ramène entre 640 × 480 et 2 560 × 1 600, largeur
+        paire, et n'en transmet qu'une par seconde. Une session qui ne redimensionne pas l'ignore.
       security: []
       responses:
         "101": { description: Connexion WebSocket établie ; le flux transporte HELLO, FRAME et END binaires }

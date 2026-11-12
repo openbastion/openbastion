@@ -3,10 +3,13 @@ package rdp
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"io"
+	"net"
 	"testing"
+	"time"
 )
 
 // The static channels of ADR-0095: announced only when asked, the closed list, the framing bounded.
@@ -338,4 +341,53 @@ func FuzzRDPChannelPacket(f *testing.F) {
 			t.Fatalf("%d %d %v", index, len(data), err)
 		}
 	})
+}
+
+// A channel belongs to the MCS connection, not to the share a reactivation replaces: a message is
+// sent while the session reactivates (Windows Server 2019 reactivated at a resize, and a second
+// resize then ended the session: CI of PR #155). Before the channels are joined, nothing is sent.
+func TestSendChannelMessage_DuringAReactivation(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	received := make(chan []byte, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		server := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		if server.Handshake() != nil {
+			return
+		}
+		packet, _ := readTestTPKT(server)
+		received <- packet
+	}()
+	client, err := tls.Dial("tcp", listener.Addr().String(), &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	s := &CredSSPClientSession{transport: &Transport{Conn: client}, mcsSettings: MCSClientSettings{DynamicChannels: true},
+		mcsResponse: MCSConnectResponse{IOChannelID: 1003, StaticChannelIDs: []uint16{1004}}, userChannelID: 1007,
+		channelsConnected: true, connectionFinalized: false}
+	if err := s.SendChannelMessage(context.Background(), RDPChannelDynamic, []byte("layout"), time.Second); err != nil {
+		t.Fatalf("a message during a reactivation: %v", err)
+	}
+	select {
+	case packet := <-received:
+		if len(packet) < 14 || binary.BigEndian.Uint16(packet[10:12]) != 1004 {
+			t.Fatalf("sent % x, not on channel 1004", packet)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing sent")
+	}
+	s.channelsConnected = false
+	if err := s.SendChannelMessage(context.Background(), RDPChannelDynamic, []byte("layout"), time.Second); !errors.Is(err, ErrRDPChannel) {
+		t.Fatalf("a message before the channels are joined: %v", err)
+	}
 }

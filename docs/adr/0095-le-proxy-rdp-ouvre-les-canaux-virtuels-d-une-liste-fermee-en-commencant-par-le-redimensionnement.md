@@ -75,7 +75,26 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Envoi** : `SendDynamicChannelMessage` envoie un seul `DATA`, de 1 594 octets au plus.
 - **Verrous** : les rappels (`onOpen`, `onMessage`) sont appelés une fois le verrou de la session relâché et les réponses envoyées. Un rappel peut donc envoyer à son tour : un test le prouve, et la mutation qui les appelle sous le verrou est tuée.
 - **Prouvé** : 10 tests, 18 mutations tuées, un fuzzer (`FuzzDynamicChannels`, 30 s). Contre FreeRDP 3 (`TestRDPInterop_DynamicChannels`) : capacités échangées, `AUDIO_INPUT` proposé puis refusé, session poursuivie (81 mises à jour d'écran).
-- **À prouver en CI** : `TestRDPWindows_DynamicChannels`, le contrôle d'affichage ouvert et sa capacité (`DISPLAYCONTROL_CAPS_PDU`) reçue, et la liste des noms que Windows propose.
+- **Prouvé contre Windows** (CI de #154, cinq cibles) : le contrôle d'affichage s'ouvre, et sa capacité arrive (`DISPLAYCONTROL_CAPS_PDU`, 20 octets). Windows propose aussi, et chaque fois reçoit un refus : `Microsoft::Windows::RDS::Geometry::v08.01` (4 à 5 fois par session), `Microsoft::Windows::RDS::Video::Control::v08.01`, `Microsoft::Windows::RDS::Video::Data::v08.01`, `Microsoft::Windows::RDS::Telemetry`, `Microsoft::Windows::RDS::Input` et `ECHO`. La session continue.
+
+**Incrément 3, fait (12 novembre 2026) : le redimensionnement.**
+- **Contrat écran** (`pkg/screenstream`) : `InputResize` (type 4 : la largeur en `X`, la hauteur en `Y`, rien d'autre), et le bit 1 des drapeaux du `HELLO` (`HelloResizable`). `ClampResize` ramène une taille entre 640 × 480 et 2 560 × 1 600, largeur paire.
+- **Relais** (`pkg/proxycore`) : le `HELLO` dit ce que la session dit (`Resizer`). Une session qui ne redimensionne pas ne reçoit aucun `InputResize`. Sinon, la taille est ramenée dans les bornes, et un redimensionnement au plus par seconde est transmis : ceux qui arrivent plus tôt attendent, et seul le dernier passe à son tour. Ils sont hors du budget d'entrée.
+- **Contrôle d'affichage** (`pkg/rdp/display_control.go`) : lecture stricte de `DISPLAYCONTROL_CAPS_PDU`, écriture d'un `DISPLAYCONTROL_MONITOR_LAYOUT_PDU` à un écran, principal, à l'origine, à 100 %.
+- **Codec RDP** (`RDPCodec.Resize`, `SCREEN_RESIZE`, éteint par défaut) : annonce `drdynvc`, n'accepte que le contrôle d'affichage, et lit sa capacité une fois (tout autre message ferme la session). Un redimensionnement demandé avant cette capacité, ou au-delà de la surface qu'elle permet, est ignoré. Windows se réactive alors à la nouvelle taille, ce que le lecteur suit déjà, et l'image clé de la nouvelle taille est enregistrée.
+- **Prouvé** : tests du contrat, du relais (le `HELLO`, l'ignorance, les bornes, le rythme, le budget), du contrôle d'affichage et du codec ; 16 mutations tuées ; `FuzzParseDisplayControlCaps`. Contre FreeRDP, qui n'offre pas de contrôle d'affichage : `SCREEN_RESIZE` allumé, la session va son chemin et le redimensionnement est ignoré.
+- **Deux défauts trouvés par la CI Windows de #155, corrigés** :
+  - le jeu de capacités Bitmap annonçait `desktopResizeFlag = 0`, si bien qu'aucune des cinq cibles n'appliquait la disposition (aucune image à la nouvelle taille en 60 s). `MCSClientSettings.DesktopResize` le pose, avec `Resize` ;
+  - une réactivation rendait la session « non finalisée », et un second redimensionnement arrivé pendant ce temps était refusé, ce qui fermait la session (Windows Server 2019). Les canaux appartiennent à la connexion MCS et non au partage : ils envoient dès qu'ils sont joints, réactivation comprise. Un test rouge d'abord l'a reproduit.
+  - Windows ferme le contrôle d'affichage pendant une réactivation, puis le rouvre et redonne sa capacité (Server 2022, 32 bpp). Un redimensionnement arrivé entre les deux était refusé, et la capacité redonnée l'aurait été aussi. Désormais, `SendDynamicChannelMessage` dit `ErrRDPDynamicChannelClosed`, et le codec abandonne ce redimensionnement : le suivant passera. Chaque réouverture attend une nouvelle capacité.
+- **Prouvé contre Windows**, les trois correctifs en place (CI de #155, cinq cibles, Server 2019 et 2022, 16 et 32 bpp, fr-FR, session console) : demande de 1 023 × 768, et une image clé de 1 022 × 768 en 0,5 à 0,9 s.
+
+
+**Incrément 4, fait (12 novembre 2026) : l'Admin UI.**
+- **Protocole** (`web/admin-ui/src/features/screen/protocol.ts`) : le bit 1 du `HELLO` (`resizable`), et `encodeResize`, une entrée de type 4 ramenée dans les mêmes bornes que le proxy (`clampResize`).
+- **Visionneuse** : quand la session dit qu'elle redimensionne, la page lui demande la place qu'elle a pour l'écran : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins les boutons et la ligne d'état (112 px). Elle le demande une première fois au `HELLO`, puis chaque fois que la fenêtre a cessé de changer de taille depuis 500 ms, et seulement si la taille change. Le proxy rythme aussi, à un par seconde.
+- **Prouvé** : 4 tests (le drapeau, l'encodage, l'envoi et son rythme, rien pour une session qui ne redimensionne pas) ; 7 mutations tuées ; les 117 tests de l'Admin UI passent, et sa construction aussi.
+- **Reste** (incrément 5) : la vérification dans un vrai navigateur, contre une cible Windows. Le bac à sable n'en a pas : il n'a qu'une cible VNC, qui ne redimensionne pas. Puis la décision d'allumer `SCREEN_RESIZE` par défaut, qui revient au propriétaire.
 
 ## Conséquences
 

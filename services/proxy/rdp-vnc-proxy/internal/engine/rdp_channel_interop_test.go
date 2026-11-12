@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/pkg/rdp"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 )
 
 // The static channel of ADR-0095 (increment 1), against real servers: drdynvc announced, given an ID
@@ -179,5 +181,44 @@ func TestRDPInterop_DynamicChannels(t *testing.T) {
 	refused, _ := client.DynamicChannelRefusals()
 	if len(dynamic.opened) != 0 || len(refused) == 0 || refused[0] != "AUDIO_INPUT" {
 		t.Fatalf("opened %q, refused %q: want nothing opened and AUDIO_INPUT refused", dynamic.opened, refused)
+	}
+}
+
+// SCREEN_RESIZE on against FreeRDP, whose shadow server offers no display control: the codec opens,
+// frames come, and a resize asked is ignored, the session going on (ADR-0095).
+func TestRDPInterop_ResizeOnWithoutADisplayControl(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(rdpInteropPassword), TargetHost: target.address,
+		TargetUser: rdpInteropUser, TLSCertificateSHA256: target.pin, TargetDomain: rdpInteropName,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 10 * time.Second, Resize: true}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	defer session.Close()
+	if err := session.Input(screenstream.InputEvent{Type: screenstream.InputResize, X: 1024, Y: 768}); err != nil {
+		t.Fatalf("a resize with no display control: %v", err)
+	}
+	frames := 0
+	for deadline := time.After(5 * time.Second); ; {
+		select {
+		case _, ok := <-session.Frames():
+			if !ok {
+				t.Fatalf("the stream ended after %d frame(s): %v\n%s", frames, session.Err(), target.logs(t))
+			}
+			frames++
+			continue
+		case <-deadline:
+		}
+		break
+	}
+	if frames == 0 {
+		t.Fatal("no frame with SCREEN_RESIZE on")
 	}
 }

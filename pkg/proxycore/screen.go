@@ -242,6 +242,16 @@ type PointerDrawer interface {
 	PointerDrawn() bool
 }
 
+// Resizer is a ScreenSession that may follow InputResize (ADR-0095): the HELLO then tells the
+// client, which may send the size of its window. A session that is not one receives none.
+type Resizer interface {
+	Resizable() bool
+}
+
+// MinResizeInterval paces the resizes (ADR-0095 §4): each costs the target a reactivation and the
+// recording a key frame. One asked sooner waits, and only the latest asked is kept.
+const MinResizeInterval = time.Second
+
 type FrameRecorder interface {
 	Record(context.Context, string, screenstream.Message) (uint64, error)
 	Seal(context.Context, string, uint64) error
@@ -502,6 +512,13 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	if drawer, ok := session.(PointerDrawer); ok {
 		hello.PointerDrawn = drawer.PointerDrawn()
 	}
+	if resizer, ok := session.(Resizer); ok {
+		hello.Resizable = resizer.Resizable()
+	}
+	// The resizes: the last one forwarded, and the latest one waiting for its turn.
+	var lastResize time.Time
+	var pendingResize *screenstream.InputEvent
+	var resizeDue <-chan time.Time
 	if _, err := screenstream.Encode(hello); err != nil {
 		return fmt.Errorf("proxycore: invalid screen HELLO: %w", err)
 	}
@@ -520,6 +537,25 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			if err != nil {
 				return fmt.Errorf("%w: invalid operator input", ErrScreenInputInvalid)
 			}
+			if event.Type == screenstream.InputResize {
+				// Not an input to the target, and paced on its own: out of the input budget.
+				if !hello.Resizable {
+					continue // a session that cannot resize receives none
+				}
+				event.X, event.Y = screenstream.ClampResize(event.X, event.Y)
+				if wait := MinResizeInterval - time.Since(lastResize); wait > 0 {
+					pendingResize = &event
+					if resizeDue == nil {
+						resizeDue = time.After(wait)
+					}
+					continue
+				}
+				lastResize = time.Now()
+				if err := session.Input(event); err != nil {
+					return fmt.Errorf("%w: protocol engine rejected a resize", ErrScreenInputInvalid)
+				}
+				continue
+			}
 			switch budget.admit(event, time.Now()) {
 			case screenInputCoalesce:
 				continue
@@ -528,6 +564,15 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			}
 			if err := session.Input(event); err != nil {
 				return fmt.Errorf("%w: protocol engine rejected input", ErrScreenInputInvalid)
+			}
+		case <-resizeDue:
+			resizeDue = nil
+			if pendingResize != nil {
+				event := *pendingResize
+				pendingResize, lastResize = nil, time.Now()
+				if err := session.Input(event); err != nil {
+					return fmt.Errorf("%w: protocol engine rejected a resize", ErrScreenInputInvalid)
+				}
 			}
 		case err := <-display.failed:
 			return err

@@ -1,5 +1,5 @@
 import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useRef, useState } from "react";
-import { SUBPROTOCOL, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeScancode, endMessage } from "./protocol";
+import { SUBPROTOCOL, clampResize, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
@@ -16,6 +16,18 @@ export interface ScreenDeps {
   // Puts a rectangle of a partial frame in place: its pixels replace those under it, without
   // blending (ADR-0092 §6).
   patch: (canvas: HTMLCanvasElement, image: ImageBitmap, x: number, y: number) => void;
+  // The room the page has for the screen, in CSS pixels (ADR-0095): what a resizable session is
+  // asked to be. Without it, the browser's own measure.
+  measure?: (area: HTMLElement) => { width: number; height: number };
+}
+
+// What is above the canvas in its area (the buttons and a line of status): left out of the height.
+const SCREEN_CHROME = 112;
+// A resize is sent once the window has stopped moving for this long; the proxy paces them too.
+export const RESIZE_DEBOUNCE_MS = 500;
+
+function measureArea(area: HTMLElement): { width: number; height: number } {
+  return { width: area.clientWidth, height: window.innerHeight - area.getBoundingClientRect().top - SCREEN_CHROME };
 }
 
 const browserDeps: ScreenDeps = {
@@ -56,6 +68,7 @@ const UNREADABLE = "Le flux reçu n'est pas valide : la connexion a été fermé
 // back on its own, the operator asks for a new one (onReconnect, another POST /connect).
 export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps }: { attach: string; onReconnect: () => void; onClose: () => void; deps?: ScreenDeps }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const area = useRef<HTMLDivElement>(null);
   const socket = useRef<ScreenSocket | null>(null);
   const frame = useRef<{ width: number; height: number } | null>(null);
   const pressed = useRef(new Map<string, number>());
@@ -68,6 +81,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const [isRDP, setIsRDP] = useState(false);
   // The pointer is in the frames (HELLO, ADR-0091): the browser's own arrow would be a second one.
   const [pointerDrawn, setPointerDrawn] = useState(false);
+  const [resizable, setResizable] = useState(false);
   const [hasFrame, setHasFrame] = useState(false);
 
   const send = useCallback((message: Uint8Array<ArrayBuffer>) => {
@@ -114,6 +128,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         protocol.current = message.protocol;
         setIsRDP(message.protocol === "rdp");
         setPointerDrawn(message.pointerDrawn);
+        setResizable(message.resizable);
         setPhase({ name: "live", expiresAt: message.expiresAt });
       } else if (message.type === "end") {
         finish(endMessage(message.text));
@@ -174,6 +189,34 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       pendingMove.current = null;
     };
   }, [attach, deps]);
+
+  // A resizable session (ADR-0095) is asked for the size of the room the page has: once it says it
+  // resizes, then each time the window has stopped changing size, and only when that size changes.
+  useEffect(() => {
+    if (!resizable) return;
+    let last = "";
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ask = () => {
+      timer = null;
+      if (!area.current) return;
+      const measured = (deps.measure ?? measureArea)(area.current);
+      const size = clampResize(measured.width, measured.height);
+      const key = `${size.width}x${size.height}`;
+      if (key === last) return;
+      last = key;
+      send(encodeResize(size.width, size.height));
+    };
+    const later = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(ask, RESIZE_DEBOUNCE_MS);
+    };
+    ask();
+    window.addEventListener("resize", later);
+    return () => {
+      window.removeEventListener("resize", later);
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [resizable, deps, send]);
 
   // Keyed by physical key: the release must name what the press named, even if Shift went up first.
   // RDP takes the physical key itself, VNC the character it gives here; before the HELLO, nothing.
@@ -259,7 +302,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   }
 
   return (
-    <div className="screen">
+    <div className="screen" ref={area}>
       <div className="ob-form-actions">
         <Button onClick={onClose}>Fermer l'écran</Button>
         {phase.name === "live" && isRDP ? <Button onClick={ctrlAltDel}>Ctrl+Alt+Suppr</Button> : null}

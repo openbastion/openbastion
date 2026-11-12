@@ -288,7 +288,7 @@ func (s *CredSSPClientSession) readChannelPacket(packet []byte, channels []uint1
 }
 
 // SendChannelMessage sends message on the static channel named channel, in chunks of 1600 bytes
-// at most, after the connection's finalization. Only a joined channel of the closed list is one.
+// at most, once the channels are joined. Only a joined channel of the closed list is one.
 func (s *CredSSPClientSession) SendChannelMessage(ctx context.Context, channel string, message []byte, timeout time.Duration) (err error) {
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
 		return ErrMCSConnection
@@ -311,7 +311,9 @@ func (s *CredSSPClientSession) SendChannelMessage(ctx context.Context, channel s
 			channelID = s.mcsResponse.StaticChannelIDs[i]
 		}
 	}
-	if channelID == 0 || s.transport == nil || s.transport.Conn == nil || !s.connectionFinalized ||
+	// The channels belong to the MCS connection, not to the share: joined, they carry messages
+	// while a reactivation replaces the share (Windows Server 2019 reactivates at a resize).
+	if channelID == 0 || s.transport == nil || s.transport.Conn == nil || !s.channelsConnected ||
 		!validMCSUserID(s.userChannelID) || !s.transport.Conn.ConnectionState().HandshakeComplete {
 		s.mu.Unlock()
 		return fmt.Errorf("%w: no channel %q to send on", ErrRDPChannel, channel)

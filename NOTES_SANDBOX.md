@@ -3485,6 +3485,20 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre
+
+La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins 112 px. Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
+- **CI Windows intermittente** (dernier passage de #155, run 43296146528, code identique au passage précédent tout vert) : sur une cible, Windows ne répondait plus après CredSSP (`target_unreachable`) ; sur une autre, la relecture du clavier, les touches étendues et la vidéo ont échoué, le partage fonctionnant. Relancés tels quels, les deux jobs passent. À surveiller : si les épreuves qui passent par Notepad et le partage échouent de nouveau, chercher ce qui prend le focus.
+- **Bac à sable** : il n'a pas de cible RDP. La vérification dans un vrai navigateur demande une cible Windows, qui n'existe qu'en CI : c'est l'incrément 5.
+- **Choix renversables** : 112 px pour les boutons et la ligne d'état ; 500 ms d'attente ; la taille en pixels CSS, sans le facteur de l'écran (un écran à 200 % aurait un bureau de la moitié de ses pixels physiques, mais un texte à taille de lecture).
+
+## 2026-11-12 — ADR-0095, incrément 3 : le redimensionnement
+
+`InputResize` et le bit 1 du `HELLO` dans le contrat écran ; le relais borne et rythme (un par seconde, le dernier seul attend) ; le contrôle d'affichage dans `pkg/rdp` ; `RDPCodec.Resize` derrière `SCREEN_RESIZE`, éteint par défaut (compose : `SCREEN_RESIZE: ${SCREEN_RESIZE:-false}`).
+- **Windows (incrément 2, CI de #154)** : le contrôle d'affichage s'ouvre et sa capacité arrive sur les cinq cibles. Windows propose aussi `Geometry::v08.01` (4 à 5 fois), `Video::Control`, `Video::Data`, `Telemetry`, `Input` et `ECHO`, tous refusés.
+- **FreeRDP** n'offre pas de contrôle d'affichage : `SCREEN_RESIZE` allumé, le redimensionnement est ignoré et la session va son chemin.
+- **À ne pas allumer encore** : l'Admin UI refuserait un `HELLO` au bit 1 tant que l'incrément 4 n'est pas fait.
+
 ## 2026-11-12 — ADR-0095, incrément 2 : les canaux dynamiques
 
 `pkg/rdp/dynamic_channel.go` : la réponse aux capacités (version 2, sans compression), l'ouverture du seul contrôle d'affichage, le refus de tout autre nom par la réponse du protocole, les données bornées, la fermeture. Rien ne l'appelle hors des tests.
@@ -4215,3 +4229,18 @@ Limite : le rendu n'a pas été contrôlé dans un navigateur réel ; le contene
 Le constructeur n'autorise désormais que quatre blocs, un par champ disponible : Protocole, Approbation, Identité de la cible et Rotation. L'ajout choisit automatiquement le premier champ encore inutilisé ; le bouton est désactivé lorsque les quatre blocs sont présents et les champs déjà utilisés dans les autres blocs ne peuvent pas être sélectionnés. Le modèle de vues sauvegardées refuse également plus de quatre règles ou des champs dupliqués.
 
 Validation : make ui-test passe, 22 fichiers et 202 tests. Les tests couvrent quatre blocs distincts, le refus des doublons et le refus d'une cinquième règle dans les vues persistées. Aucun changement d'API ou de portée du filtrage.
+
+## 2026-11-12 — Synchronisation de `refactor/refactor-admin-ui` avec `main`
+
+La branche intègre `origin/main` jusqu'à `a97c2e1` (PR #156). Elle récupère
+notamment le redimensionnement à la demande des sessions RDP (ADR-0095,
+implémentation proxy, flux d'écran et visionneuse). Le seul conflit concernait
+`ScreenViewer.tsx` : la mesure et l'envoi des dimensions issus de `main` sont
+conservés, tout en gardant les composants partagés `Button` et `InlineNotice`
+et les classes de présentation de la refonte Admin UI.
+
+Validation après résolution : `make ui-test` passe (22 fichiers, 206 tests),
+`npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-main-sync`
+réussit (TypeScript et Vite, 244 modules), et `go test` passe pour `pkg/rdp`,
+`pkg/proxycore`, `pkg/screenstream` et tous les packages de
+`services/proxy/rdp-vnc-proxy`.
