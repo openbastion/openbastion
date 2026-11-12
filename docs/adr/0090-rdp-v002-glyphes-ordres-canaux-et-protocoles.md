@@ -76,7 +76,22 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 
 - L'acquittement ajoute 15 à 30 ms en médiane avant qu'une image soit montrée, jusqu'à 10 sessions, pour les images partielles (le cas par défaut, ADR-0092) comme pour les petites images clés.
 - **Les grosses images clés** (bureau à fond d'écran) font grimper la queue dès 5 sessions : de 0,1 à 0,5 s au 95ᵉ centile, et jusqu'à 1,3 s au maximum. Deux passages ont donné des queues différentes : c'est bruité. Avec les images partielles, une image clé ne revient qu'à l'ouverture, au redimensionnement et toutes les 10 s, mais c'est la limite de capacité à surveiller.
-- **Pas encore mesuré** : avec un vrai S3, une scène vidéo, et au-delà de 10 sessions.
+- **Avec un vrai S3** : voir ci-dessous.
+- **Pas encore mesuré** : une scène vidéo, au-delà de 10 sessions, et un S3 distant ou sous TLS.
+
+**Mesuré ensuite (12 novembre 2026) : le même acquittement, avec un vrai S3.** Même épreuve, mais le Recorder écrit dans un SeaweedFS 4.52 (`RECORDER_MEASURE_S3_ENDPOINT`) : un nœud unique, en conteneur sur le même hôte, en HTTP clair. Deux passages S3, et un passage en mémoire juste avant, comme témoin.
+
+| Image | Sessions | Mémoire p50 / p95 / max | S3 p50 | S3 p95 | S3 max |
+|---|---|---|---|---|---|
+| Partielle, 1,5 Ko | 1 / 5 / 10 | 12 / 29 / 97 · 14 / 41 / 83 · 25 / 110 / 251 ms | 12 à 29 / 14 à 37 / 31 à 74 ms | 17 à 71 / 26 à 155 / 87 à 417 ms | 23 à 450 / 71 à 676 / 194 à 1 147 ms |
+| Clé, 33 Ko | 1 / 5 / 10 | 12 / 32 / 83 · 11 / 23 / 65 · 22 / 69 / 138 ms | 17 à 25 / 30 à 35 / 41 à 45 ms | 24 à 58 / 141 à 185 / 185 ms | 40 à 131 / 308 à 866 / 489 à 2 397 ms |
+| Clé, 184 Ko | 1 / 5 / 10 | 25 / 59 / 129 · 18 / 59 / 87 · 33 / 136 / 245 ms | 18 à 45 / 25 à 39 / 44 à 61 ms | 36 à 117 / 75 à 151 / 124 à 164 ms | 77 à 226 / 146 à 471 / 323 à 362 ms |
+
+- **La médiane tient** : 12 à 74 ms avec S3, contre 11 à 33 ms en mémoire. S3 ajoute de 0 à 50 ms en médiane, le plus à 10 sessions.
+- **La queue s'allonge** : le 95ᵉ centile monte jusqu'à 0,4 s, et le maximum dépasse la seconde dans deux cas (1,1 s et 2,4 s, à 10 sessions). L'opérateur verrait alors l'écran figé pendant ce temps.
+- **Très bruité** : d'un passage S3 à l'autre, le même cas varie d'un facteur 2 à 20 sur le maximum. Le premier passage, sur un SeaweedFS tout juste démarré, est le plus lent. Deux passages ne suffisent pas à classer les cas entre eux.
+- **Ce n'est pas un plafond** : SeaweedFS sur le même hôte n'a ni réseau ni TLS. Un S3 distant ajoute au moins son aller-retour à chaque image. Il faudra le mesurer sur la cible de déploiement.
+- **Pas de décision à prendre ici** : rien ne justifie encore de regrouper les images à l'enregistrement (ADR-0093, option B écartée). La queue au-delà d'une seconde est à surveiller sur un vrai déploiement.
 
 ### Lot B — Ordres graphiques
 
