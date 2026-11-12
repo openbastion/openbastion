@@ -619,6 +619,27 @@ func measureWindows(t *testing.T, partial bool) {
 		}
 	})
 	m.scene("pointer", func() { m.pointerCircle(width/2, height/2, 200, 50, 20*time.Millisecond) })
+	// A video (ADR-0090, lot A): the whole screen changing 25 times a second, for 10 s, played by
+	// rdp-video.ps1 when asked through the share (the Windows key does not reach the shell, so no
+	// program can be started from the keyboard). Random 8-pixel blocks: the worst case for PNG.
+	if shared := os.Getenv("RDP_WINDOWS_SHARED"); shared != "" {
+		video := m.scene("video", func() {
+			if err := os.WriteFile(filepath.Join(shared, "video-request"), []byte("10\n"), 0o644); err != nil {
+				t.Fatalf("asking for the video: %v", err)
+			}
+			time.Sleep(12 * time.Second) // the request seen within 250 ms, the window up within a second or two
+		})
+		if video.Frames < 50 {
+			t.Errorf("the video scene made %d frame(s): rdp-video.ps1 did not play (video-status-*.txt on the share)", video.Frames)
+		}
+		// Notepad again, the window closed: the clean-up below types into it.
+		for _, buttons := range []byte{1, 0} {
+			if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: uint16(width / 2), Y: uint16(height / 2), Buttons: buttons}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		m.settle(2*time.Second, 20*time.Second)
+	}
 	if dump != "" && dense.Type == screenstream.TypeFrame {
 		_ = os.WriteFile(filepath.Join(dump, "measure-dense-text.png"), dense.PNG, 0o644)
 	}

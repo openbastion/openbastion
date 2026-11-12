@@ -78,7 +78,8 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Les grosses images clés** (bureau à fond d'écran) font grimper la queue dès 5 sessions : de 0,1 à 0,5 s au 95ᵉ centile, et jusqu'à 1,3 s au maximum. Deux passages ont donné des queues différentes : c'est bruité. Avec les images partielles, une image clé ne revient qu'à l'ouverture, au redimensionnement et toutes les 10 s, mais c'est la limite de capacité à surveiller.
 - **Avec un vrai S3** : voir ci-dessous.
 - **Au-delà de 10 sessions** : voir plus bas.
-- **Pas encore mesuré** : une scène vidéo, et un S3 distant ou sous TLS.
+- **Scène vidéo** : voir plus bas.
+- **Pas encore mesuré** : un S3 distant ou sous TLS.
 
 **Mesuré ensuite (12 novembre 2026) : le même acquittement, avec un vrai S3.** Même épreuve, mais le Recorder écrit dans un SeaweedFS 4.52 (`RECORDER_MEASURE_S3_ENDPOINT`) : un nœud unique, en conteneur sur le même hôte, en HTTP clair. Deux passages S3, et un passage en mémoire juste avant, comme témoin.
 
@@ -108,7 +109,20 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Après le correctif, plus aucune image perdue**, à 10, 20 et 50 sessions, en mémoire comme avec S3, sur quatre passages.
 - **En mémoire**, les images partielles et les petites images clés restent sous 20 ms en médiane à 50 sessions. À 20 sessions, médiane de 8 à 18 ms.
 - **Avec S3 à 50 sessions**, la médiane monte de 50 à 235 ms et le maximum atteint 2 à 3 s pour les images clés. Le SeaweedFS à nœud unique devient le goulet. Une session active voit ces délais à chaque image clé, et à chaque image si l'écran change beaucoup.
-- **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages ; aucune scène vidéo.
+- **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages.
+
+**Mesuré ensuite (12 novembre 2026) : une scène vidéo contre Windows.** `rdp-video.ps1` joue, à la demande du test par le partage, 10 s de blocs de 8 pixels de couleur au hasard, renouvelés 25 fois par seconde sur tout l'écran : le pire cas pour PNG, un majorant pour une vidéo. CI Windows de la PR #149 (exécution 43245190987), cinq cibles 1280 × 800, en images entières puis partielles. L'écran ne change que pendant les 10 s de lecture : les débits ci-dessous sont rapportés à ces 10 s. La scène elle-même dure 12 à 20 s, ouverture de la fenêtre et retour au calme compris. Au premier passage, chaque demande jouait deux fois (deux noms pour le même partage) : les débits concordaient, les nombres d'images étaient doublés.
+
+| Cible | Cible → proxy | Images en 10 s | PNG par image | Enregistré | Encodage |
+|---|---|---|---|---|---|
+| 2019, 16 bpp | 1 090 à 1 107 Kio/s | 135 à 136 | 90 à 93 Ko | 1 200 à 1 228 Kio/s | 35 ms |
+| 2022, 16 bpp (trois cibles) | 712 à 846 Kio/s | 115 à 127 | 90 à 94 Ko | 1 010 à 1 170 Kio/s | 17 à 43 ms |
+| 2022, 32 bpp | 2 868 à 3 048 Kio/s | 130 à 132 | 97 à 101 Ko | 1 254 à 1 281 Kio/s | 20 à 21 ms |
+
+- **Le lien cible → proxy devient un coût**, pour la première fois : 0,7 à 3,0 Mio/s, contre 11 à 80 Kio/s en frappe. À 32 bpp, Windows envoie trois à quatre fois plus qu'à 16 bpp pour la même scène.
+- **L'enregistrement reste du même ordre** : 1,0 à 1,3 Mio/s, un peu plus que ce que la cible envoie à 16 bpp. Tout l'écran change à chaque image : les images partielles n'apportent rien (presque toutes sont des images clés), comme prévu par ADR-0092.
+- **La cadence plafonne sous 20 images/s** : 11,5 à 13,6 images par seconde de vidéo, pour 25 changements par seconde à l'écran et un plafond de 20 (une image toutes les 50 ms). L'encodage, 17 à 43 ms par image, en explique une partie ; la cadence que Windows envoie n'a pas été mesurée à part.
+- **Ce que ça décide** : rien de nouveau pour les lots B et C. Une vidéo réelle serait plus légère que ce bruit. Si l'on voulait réduire le lien cible → proxy en vidéo, c'est RDPGFX (lot C) qui le ferait, et ses codecs sans perte resteraient lourds sur un tel contenu. Le lot A est clos, sauf le S3 distant.
 
 ### Lot B — Ordres graphiques
 
