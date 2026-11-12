@@ -3036,6 +3036,10 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 **Choix renversables** : `q` facultatif ; 500 sessions regardées par page ; le format du curseur ; le demandeur et le décideur sans événement, comme pour la lecture.
 
+## 2026-11-12 — ADR-0092 : les images partielles allumées par défaut
+
+Le propriétaire a vérifié dans un vrai navigateur, sur le bac à sable Base44 avec `SCREEN_PARTIAL_FRAMES` allumé, une session en direct et son rejeu : « Vérifié dans le navigateur ». `SCREEN_PARTIAL_FRAMES` vaut désormais `true` sauf `false`, dans le proxy et dans le compose. Toute autre valeur arrête le service, comme avant.
+
 ## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
 
 Le tableau complet est dans ADR-0092, « Résultats ». En résumé : en frappe et quand le pointeur bouge, le volume enregistré baisse de 20 à 300 fois ; l'encodage d'une image passe de 4 à 48 ms à moins de 1 ms ; la latence ne se dégrade nulle part.
