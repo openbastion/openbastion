@@ -1,4 +1,4 @@
-# ADR-0095 — Le package d’icônes rejoint le socle frontend partagé
+# ADR-0096 — Le package d’icônes rejoint le socle frontend partagé
 
 **Statut** `Accepté` · 12 novembre 2026 · décision demandée explicitement par le propriétaire du projet.
 

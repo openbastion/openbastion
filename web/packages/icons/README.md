@@ -2,7 +2,7 @@
 
 Official OpenBastion React icon library.
 
-Source package in this monorepo: `web/packages/icons/` (ADR-0095). The npm package name and public exports remain `@openbastion/icons`.
+Source package in this monorepo: `web/packages/icons/` (ADR-0096). The npm package name and public exports remain `@openbastion/icons`.
 
 Secure Access. Total Control.
 

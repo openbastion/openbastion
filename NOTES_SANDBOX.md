@@ -1,6 +1,6 @@
 # Notes sur les contraintes de cet environnement de build
 
-## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0095)
+## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0096)
 
 Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
 `web/packages/icons/`, sans changement de son nom npm, de ses exports ni de son
@@ -17,7 +17,7 @@ reste dans un volume dédié ;
 L’arborescence, le guide Design System, le skill frontend et l’ADR-0075 (encore
 proposé) sont alignés. L’ADR-0073 est accepté et n’est pas réécrit : ses mentions
 de l’ancien chemin, comme les relevés de tests des ADR antérieurs, sont des
-traces historiques explicitement remplacées pour l’emplacement par l’ADR-0095.
+traces historiques explicitement remplacées pour l’emplacement par l’ADR-0096.
 
 Pour la branche de travail longue, `origin/main` a été récupéré au début de
 l’incrément (`2a7de575`, déjà ancêtre), puis à nouveau avant les validations.
@@ -4014,3 +4014,14 @@ Ce lot ne livre pas encore le catalogue complet (Radix overlays, navigation,
 calendrier, graphiques, notifications et helpers d'image restent à faire). Le
 User Portal n'est pas encore présent dans le dépôt ; sa consommation devra être
 validée lors de sa création.
+
+## 2026-11-12 — Synchronisation de la PR #151 avec main
+
+`origin/main` a avancé jusqu'à `c1c5a2f` (PR #152, ADR-0095 sur les canaux
+virtuels RDP). La synchronisation de `refactor/admin-ui-infrastructure` ne
+présentait qu'un conflit de contenu dans `docs/adr/README.md` : les deux
+branches avaient attribué le numéro ADR-0095 à des décisions différentes.
+L'ADR-0095 de `main` est conservé ; la décision déjà acceptée sur le package
+d'icônes est renumérotée ADR-0096 et ses références actives sont mises à jour.
+Les deux décisions et leurs entrées d'index sont conservées. Aucun code produit
+n'a été modifié pour résoudre ce conflit.
