@@ -47,3 +47,8 @@ export { ScrollArea, type ScrollAreaProps } from "./components/ScrollArea";
 export { Toggle, type ToggleProps } from "./components/Toggle";
 export { ToggleGroup, ToggleGroupItem, type ToggleGroupProps, type ToggleGroupItemProps } from "./components/ToggleGroup";
 export { isSafeImageSource, resolveImageSource } from "./lib/image-helpers.js";
+export { Toast, type ToastProps } from "./components/Toast";
+export { Toaster, type ToasterProps } from "./components/Toaster";
+export { Sonner, type SonnerProps } from "./components/Sonner";
+export { ToastProvider, useToast, type ToastProviderProps, type ToastOptions, type ToastEntry, type ToastVariant } from "./hooks/use-toast";
+export { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell, TableCaption, type TableProps, type TableHeaderProps, type TableBodyProps, type TableFooterProps, type TableRowProps, type TableHeadProps, type TableCellProps, type TableCaptionProps } from "./components/Table";

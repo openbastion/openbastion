@@ -4109,9 +4109,9 @@ avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-navigation` ;
 Light/Dark et absence de couleurs codées en dur). Les 11 tests ciblés couvrent
 disclosure, collapsible, breadcrumb, tabs, recherche et navigation clavier de
 Command, sidebar, pagination, menubar, navigation menu, context menu et hover
-card. Les tests UX-02 de la palette de commandes sont conservés ; leurs événements
-clavier partent désormais de `document.body`, ce qui reproduit le vrai élément
-cible d'une frappe clavier au lieu de synthétiser un événement sur `document`.
+card. Les tests UX-02 de la palette de commandes sont conservés ; leurs événements clavier partent de `document`, cible réelle des écouteurs globaux
+installés par l'application ; les tests vérifient ainsi le même chemin que les
+interactions clavier de l'opérateur.
 
 ## 2026-11-12 — Synchronisation de la PR #151 avec main (PR #154)
 
@@ -4140,3 +4140,25 @@ build Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-advanced` ;
 contrastes et audit des couleurs). Les tests couvrent aussi les sources HTTPS,
 le rejet des schémas exécutables et protocol-relative, le fallback d'image et
 l'absence de boucle si la source de secours échoue.
+
+## 2026-11-12 — Notifications de `@openbastion/ui` (ADR-0073, en cours)
+
+Le catalogue ajoute `ToastProvider`, `Toast`, `Toaster`, `Sonner` et le hook
+`useToast`. Les applications peuvent soit utiliser `Sonner` (provider +
+Toaster prêt à l'emploi), soit composer explicitement `ToastProvider` et
+`Toaster`. Les notifications supportent les variantes default/success/warning/
+danger, les rôles accessibles `status`/`alert`, la fermeture manuelle,
+l'expiration automatique configurable et une file visible limitée à cinq
+éléments. Aucun service externe ni dépendance supplémentaire n'est requis.
+
+La validation sur `refactor/refactor-admin-ui` passe : `make ui-test` (21 fichiers,
+194 tests), TypeScript et build Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-verify` ;
+`npm audit --audit-level=high` (0 vulnérabilité dans les deux packages) ;
+`make license-check` ; contrôles de contraste et audit des couleurs. Le build
+standard `make ui-build` est bloqué par des fichiers préexistants appartenant à
+root dans `web/admin-ui/dist/assets` (`EACCES` lors du nettoyage Vite) ; aucun
+fichier de ce répertoire n'a été supprimé ni modifié. Le build isolé réussit.
+`git diff --check` passe.
+Les quatre tests ciblés couvrent notification et fermeture manuelle, rôle
+assertif pour danger, expiration automatique, composition Sonner et limite de
+file. Un test Table confirme la sémantique native, les en-têtes et la légende.

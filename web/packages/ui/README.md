@@ -12,22 +12,20 @@ Bibliothèque React/TypeScript partagée d’OpenBastion Infrastructure (ADR-007
 
 ## Fondations disponibles
 
-`Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Form`, `FormField`, `FormDescription`, `Input`, `InputOTP`, `Label`, `RadioGroup`, `RadioGroupItem`, `Select`, `Separator`, `Skeleton`, `Slider`, `Switch` et `Textarea`. Les overlays disponibles sont `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Sheet` et `Drawer`, avec leurs sous-composants typés. Les primitives de navigation et de divulgation sont `Accordion`, `Collapsible`, `Breadcrumb`, `Command`, `ContextMenu`, `HoverCard`, `Menubar`, `NavigationMenu`, `Pagination`, `Sidebar` et `Tabs`. Les composants avancés incluent `AspectRatio`, `Avatar`, `Calendar`, `Carousel`, `Chart`, `Image`, `Progress`, `Resizable`, `ScrollArea`, `Toggle` et `ToggleGroup` ; les fonctions `isSafeImageSource` et `resolveImageSource` centralisent la validation des sources d'image. Le reste du catalogue est migré par lots ; sa présence dans la roadmap ne signifie pas qu'il est déjà exporté.
+`Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Form`, `FormField`, `FormDescription`, `Input`, `InputOTP`, `Label`, `RadioGroup`, `RadioGroupItem`, `Select`, `Separator`, `Skeleton`, `Slider`, `Switch`, `Table`, `Textarea` et tous les composants du catalogue listés ci-dessous. Les overlays disponibles sont `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Sheet` et `Drawer`, avec leurs sous-composants typés. Les primitives de navigation et de divulgation sont `Accordion`, `Collapsible`, `Breadcrumb`, `Command`, `ContextMenu`, `HoverCard`, `Menubar`, `NavigationMenu`, `Pagination`, `Sidebar` et `Tabs`. Les composants avancés incluent `AspectRatio`, `Avatar`, `Calendar`, `Carousel`, `Chart`, `Image`, `Progress`, `Resizable`, `ScrollArea`, `Toggle` et `ToggleGroup` ; les fonctions `isSafeImageSource` et `resolveImageSource` centralisent la validation des sources d'image. Le système de notifications comprend `Sonner`, `ToastProvider`, `Toast`, `Toaster` et `useToast` ; la file visible est limitée à cinq notifications. Tous les composants demandés sont maintenant exportés depuis l'entrée publique `@openbastion/ui` ; leurs API et leurs tests sont suivis par ADR-0073.
 
 Importer `@openbastion/design-tokens/tokens.css` avant `@openbastion/ui/styles.css`, puis les styles applicatifs. Les applications consommatrices doivent déclarer les peer dependencies de Radix listées dans `package.json` et préserver une seule instance React dans leur bundler. Les anciennes façades `admin-ui/src/shared/ui/` restent temporairement disponibles pour préserver les imports existants.
 
-## Catalogue cible
+## Catalogue livré
 
-| État | Composants / utilitaires |
+| Domaine | Composants / utilitaires |
 |---|---|
-| Implémentés | Alert, Badge, Button, Card, Checkbox, Form, FormField, FormDescription, Input, InputOTP, Label, RadioGroup, RadioGroupItem, Select, Separator, Skeleton, Slider, Switch, Textarea, AlertDialog, Dialog, Drawer, DropdownMenu, Popover, Sheet, Tooltip |
-| À réaliser — structure et navigation | Accordion, AspectRatio, Breadcrumb, Collapsible, Command, Menubar, NavigationMenu, Pagination, Resizable, ScrollArea, Sidebar, Tabs |
-| À réaliser — actions et overlays | ContextMenu, HoverCard |
-| À réaliser — formulaires | Calendar, Toggle, ToggleGroup |
-| À réaliser — présentation | Avatar, Carousel, Chart, Image, Progress, Table |
-| À réaliser — notifications et utilitaires | Sonner, Toast, Toaster, useToast, `image-helpers.js` |
+| Structure | Accordion, AspectRatio, Avatar, Card, Collapsible, Resizable, ScrollArea, Separator, Skeleton |
+| Navigation | Breadcrumb, Command, Menubar, NavigationMenu, Pagination, Sidebar, Tabs |
+| Actions et overlays | AlertDialog, Alert, Button, ContextMenu, Dialog, Drawer, DropdownMenu, HoverCard, Popover, Sheet, Tooltip |
+| Formulaires | Checkbox, Form, Input, InputOTP, Label, RadioGroup, Select, Slider, Switch, Table, Textarea, Toggle, ToggleGroup |
+| Présentation | Badge, Calendar, Carousel, Chart, Image, Progress |
+| Notifications | Sonner, Toast, ToastProvider, Toaster, useToast |
+| Utilitaires | `image-helpers.js`, `isSafeImageSource`, `resolveImageSource` |
 
-`AspectRatio` figurait deux fois dans la demande initiale ; il n'est compté qu'une
-fois. `image-helpers.js` et `useToast` sont des utilitaires/hooks, pas des
-composants visuels autonomes. Chaque entrée est exportée seulement une fois son
-implémentation, ses tests et ses contrats validés.
+`AspectRatio` n'est compté qu'une fois (il figurait deux fois dans la demande). `image-helpers.js` et `useToast` sont des utilitaires/hooks et non des composants visuels autonomes.

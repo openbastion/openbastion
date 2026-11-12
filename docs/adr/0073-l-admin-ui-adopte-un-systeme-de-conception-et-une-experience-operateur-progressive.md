@@ -103,7 +103,7 @@ Les frontières d'implémentation sont : tokens dans `web/packages/design-tokens
 
 ### 4. Construire une bibliothèque de composants interne et limitée
 
-Les wrappers React propres à l'Admin UI vivent dans `web/admin-ui/src/shared/ui/`. Les fonctionnalités métier restent dans `features`, et l'assemblage de l'application dans `app`. Les tokens et primitives CSS génériques partagés avec le User Portal vivent respectivement dans `web/packages/design-tokens/` et `web/packages/ui/`, conformément à l'ADR-0075 ; les icônes restent dans `web/openbastion-icons/`.
+Les wrappers React propres à l'Admin UI vivent dans `web/admin-ui/src/shared/ui/`. Les fonctionnalités métier restent dans `features`, et l'assemblage de l'application dans `app`. Les tokens et primitives CSS génériques partagés avec le User Portal vivent respectivement dans `web/packages/design-tokens/` et `web/packages/ui/`, conformément à l'ADR-0075 ; les icônes sont centralisées dans `web/packages/icons/`.
 
 La bibliothèque couvre progressivement les primitives utiles :
 

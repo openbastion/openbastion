@@ -157,9 +157,10 @@ Un composant peut être remplacé uniquement si ses comportements, libellés acc
 | 5 quater — Overlays (livré) | Dialog, AlertDialog, DropdownMenu, Popover, Tooltip, Sheet et Drawer encapsulent les primitives Radix ; aucune API Radix n'est exposée | 17 fichiers Vitest, 166 tests ; TypeScript et build Vite isolé réussis ; `npm audit` : 0 vulnérabilité ; `make license-check` et `make ui-tokens-test` réussis |
 | 5 quinquies — Navigation (livré) | Accordion, Collapsible, Breadcrumb, Command, ContextMenu, HoverCard, Menubar, NavigationMenu, Pagination, Sidebar et Tabs | 18 fichiers Vitest, 177 tests ; TypeScript et build Vite isolé réussis ; `npm audit` : 0 vulnérabilité ; contrôle de licence réussi |
 | 5 sexies — Présentation avancée (livré) | AspectRatio, Avatar, Calendar, Carousel, Chart, Image, Progress, Resizable, ScrollArea, Toggle, ToggleGroup et image-helpers | 19 fichiers Vitest, 189 tests ; TypeScript et build Vite isolé réussis ; `npm audit` : 0 vulnérabilité ; contrôle de licence réussi |
+| 5 septies — Notifications et table (livré) | Sonner, ToastProvider, Toast, Toaster, useToast et Table/sections/cellules ; fermeture manuelle/automatique, rôles status/alert, file plafonnée à cinq | 21 fichiers Vitest, 194 tests ; TypeScript et build Vite isolé réussis ; `npm audit` : 0 vulnérabilité ; contrôle de licence réussi |
 | 6 — Finition et audit | Réduction des valeurs locales, revue clavier/lecteur d'écran, thèmes, mouvement et responsive | `make ui-test ui-build`, audit des contrastes rendus, `git diff --check`, limites consignées |
 
-Chaque étape constitue un incrément cohérent : fichiers explicitement sélectionnés, commit DCO, push sur `refactor/admin-ui-infrastructure`, puis validation avant l'étape suivante. `origin/main` est récupéré avant chaque incrément significatif et avant chaque push ; ses changements sont intégrés avant de poursuivre. Aucun changement n'est poussé directement sur `main`.
+Chaque étape constitue un incrément cohérent : fichiers explicitement sélectionnés, commit DCO, push sur `refactor/refactor-admin-ui`, puis validation avant l'étape suivante. `origin/main` est récupéré avant chaque incrément significatif et avant chaque push ; ses changements sont intégrés avant de poursuivre. Aucun changement n'est poussé directement sur `main`.
 
 ## 8. Risques et limites connus
 
