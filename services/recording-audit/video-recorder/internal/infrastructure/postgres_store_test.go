@@ -148,7 +148,7 @@ func runSegmentRangeContract(t *testing.T, repository domain.Repository) {
 		}
 	}
 	if err := repository.AppendSegment(ctx, domain.SegmentMetadata{SessionID: other, FirstSequence: 1, LastSequence: 1,
-		ObjectKey: "test/other/1", SHA256: make([]byte, 32)}); err != nil {
+		ObjectKey: "test/" + other + "/1", SHA256: make([]byte, 32)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.CompleteRecording(ctx, sessionID, 5); err != nil {
