@@ -3038,7 +3038,7 @@ ADR accepté par le propriétaire le même jour. `GET /recordings/search?q&from&
 
 ## 2026-11-12 — ADR-0092 : les images partielles allumées par défaut
 
-Le propriétaire a vérifié une session en direct dans un vrai navigateur, sur le bac à sable Base44 avec `SCREEN_PARTIAL_FRAMES` allumé (« Vérifié dans le navigateur »). Son rejeu a été refusé (403 `no policy matches`) : `operator` n'est pas auditeur, et le bac à sable n'en avait aucun. Le seed en crée désormais un (PR à part). Le rejeu en images partielles reste à voir dans un navigateur. `SCREEN_PARTIAL_FRAMES` vaut désormais `true` sauf `false`, dans le proxy et dans le compose. Toute autre valeur arrête le service, comme avant.
+Le propriétaire a vérifié une session en direct dans un vrai navigateur, sur le bac à sable Base44 avec `SCREEN_PARTIAL_FRAMES` allumé (« Vérifié dans le navigateur »). Son rejeu a d'abord été refusé : un 403 (`operator` n'est pas auditeur ; le seed crée désormais `auditor`), puis un 502 (la Gateway n'admettait pas `png-delta-v1`, corrigé), puis un 429 (le budget par adresse du bac à sable, élargi depuis). Ensuite, le propriétaire a vérifié le rejeu dans un navigateur : « Rejeu vérifié ». `TestScreenFlow_RDPFrom…` compose désormais les images partielles, puisqu'elles sont allumées par défaut. `SCREEN_PARTIAL_FRAMES` vaut désormais `true` sauf `false`, dans le proxy et dans le compose. Toute autre valeur arrête le service, comme avant.
 
 ## 2026-11-12 — ADR-0092, incrément 6 : les chiffres des images partielles
 
