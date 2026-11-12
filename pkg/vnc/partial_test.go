@@ -162,6 +162,10 @@ func TestOpenWithPartialFramesMakesKeyFramesOnRequest(t *testing.T) {
 		if frame := nextVNCMessage(t, session, "the first frame"); frame.Type != screenstream.TypeFrame {
 			t.Fatalf("the first frame is a %v", frame.Type)
 		}
+		// What the target sent is counted: at least the update of the first frame.
+		if session.ServerBytes() < 16 {
+			t.Fatalf("%d byte(s) counted from the target after a framebuffer update", session.ServerBytes())
+		}
 		if partial {
 			session.RequestKeyFrame()
 			if frame := nextVNCMessage(t, session, "the key frame asked for"); frame.Type != screenstream.TypeFrame || frame.Sequence != 2 {
