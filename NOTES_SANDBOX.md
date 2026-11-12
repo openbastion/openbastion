@@ -3114,6 +3114,16 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-13 — CI Windows : les clics dans Notepad évitent le menu Démarrer
+
+Sur Windows Server 2022 en 32 bpp, deux passages ont perdu les touches des épreuves de clavier et de mesure. Les captures du dernier passage (`extended-1b-ctrl-esc.png`, `extended-3-typed.png`) montrent pourquoi :
+- Ctrl+Échap ouvre le menu Démarrer, et l'Échap suivant ne l'a pas toujours refermé ;
+- le clic qui redonne la main à Notepad visait le centre de l'écran (640, 400), et le menu s'étend jusqu'à x = 648 : le clic tombait dans le menu, et les touches allaient à sa recherche.
+
+Les épreuves cliquent désormais dans Notepad aux trois quarts de la largeur (`notepadPoint`), hors du menu, ce qui le referme. La touche Windows seule n'ouvre toujours pas Démarrer (`extended-1-windows-key.png`, la limite de PR #101 reste).
+
+**Windows Server 2019, navigateur sans interface** (même passage) : la session s'est terminée 5 s après son ouverture, sur un fragment Fast-Path `LAST` sans `FIRST` (`update refused: Fast-Path action 0, 1475 bytes [code 1 frag 1 comp 0 size 1469]`). C'est un seul cas, de cause inconnue. À instrumenter s'il revient.
+
 ## 2026-11-12 — ADR-0095, incrément 5 : le redimensionnement dans un navigateur sans interface (en cours)
 
 Premier passage CI (run 43307816046) : l'étape échouait avant le navigateur. Le flux compile chaque service avec `GOPROXY=off`, et les modules des autres services n'étaient pas dans le cache du job. `make build` les télécharge d'abord, comme dans `integration.yml`.
