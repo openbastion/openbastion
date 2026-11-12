@@ -1,6 +1,6 @@
 # ADR-0093 — Une relecture lit plusieurs segments par requête
 
-**Statut** `Proposé` · 12 novembre 2026 · demandé par le propriétaire du projet le 12 novembre 2026 : « Go pour le regroupement des images par segment ». La décision change ce que sert une lecture du Video Recorder (ADR-0070) et la granularité de son audit : son acceptation revient au propriétaire.
+**Statut** `Accepté` · 12 novembre 2026 · demandé par le propriétaire du projet le 12 novembre 2026 : « Go pour le regroupement des images par segment » ; accepté le même jour : « Go pour l'option A ». L'option A est acceptée, avec ses bornes (4 Mio, 600 images) et l'audit par plage. La décision change ce que sert une lecture du Video Recorder (ADR-0070) et la granularité de son audit.
 
 ## Contexte
 
@@ -32,7 +32,7 @@ La relecture lit un segment par requête (`GET /sessions/{id}/recording/video/se
 
 **D. Rien** : le rejeu d'une longue session reste coupé en 429, sauf à élargir le budget par adresse partout.
 
-## Décision proposée : A
+## Décision : A
 
 1. **Une lecture sert les segments consécutifs** à partir de `first` : tous ceux qui existent, dans l'ordre et sans trou, tant que la réponse reste sous ses bornes. La première borne atteinte arrête la lecture :
    - **4 Mio** de données d'images, la borne qu'applique déjà la Gateway ;
