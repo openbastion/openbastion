@@ -15,6 +15,35 @@ CSS et icônes restent les sources de vérité partagées. Aucun nouvel ADR ni
 nouvelle dépendance runtime n'a été ajouté ; le statut proposé d'ADR-0075 est
 préservé.
 
+## 2026-11-12 — ADR-0073 Design System : connexion, icônes et garde-fous de tokens (étape 5E)
+
+Les écrans de connexion locale, de second facteur et le retour OIDC utilisent les
+surfaces, champs, détails et boutons partagés. Le secret TOTP d'enrôlement reste
+affiché une seule fois et les parcours MFA/OIDC conservent leurs contrats et
+leur ordre d'exécution ; le test OIDC vérifie aussi l'adoption de la surface
+partagée.
+
+Les icônes React utilisent les propriétés SVG compatibles JSX et héritent de
+`currentColor` pour leur accent au lieu d'une couleur cyan codée en dur. Le
+fichier CSS du package d'icônes ne définit plus une palette concurrente : il
+s'appuie sur le token d'accent partagé. Les styles Admin UI remplacent les
+couleurs et ombres restantes de cette tranche par les tokens sémantiques et
+ajoutent des adaptations `forced-colors` aux primitives et au shell.
+
+Le contrôle `check-app-colors.mjs`, branché à `make ui-tokens-test`, refuse les
+couleurs CSS littérales dans les sources de l'Admin UI, des primitives partagées
+et des icônes React. Il complète, sans les remplacer, les mesures de contraste
+opaques du script de tokens.
+
+Validation : `make ui-test ui-build` réussit (14 fichiers Vitest, 148 tests,
+TypeScript et build Vite) avant le dernier ajustement du retour OIDC ; ce dernier
+est couvert par le même test de flux et sera revalidé après modification.
+Le contrôle de contraste mesure 36 paires conformes dans les deux thèmes ; le
+contrôle de couleurs littérales passe. `npm run audit:icons` ne rapporte aucune
+erreur, mais conserve 125 avertissements de géométrie similaire entre variantes
+claire/sombre. La revue visuelle multi-viewport et l'audit lecteur d'écran restent
+à effectuer.
+
 ## 2026-11-12 — ADR-0073 Design System : commandes enregistrées et replay vidéo (étape 5D)
 
 Les commandes enregistrées sont présentées dans une surface partagée avec un

@@ -4,6 +4,7 @@ import { SecondFactor } from "./SecondFactor";
 import { Challenge, mfaChallenge, useLoginSources } from "./sources";
 import { Notice } from "../../shared/Notice";
 import { BrandMark } from "../../shared/BrandMark";
+import { Button } from "../../shared/ui/Button";
 
 // "local", or "ldap:<id>" ("ldap:" for the directory of the LDAP_* variables, whose id is empty).
 type Source = string;
@@ -60,19 +61,19 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
 
   return (
     <main className="login">
-      <div className="login-card">
+      <div className="ob-surface ob-panel login-card">
         <div className="login-head">
           <BrandMark />
           <div>
             <h1>OpenBastion</h1>
-            <p className="login-sub">Console d'administration des accès privilégiés</p>
+            <p className="ob-hint login-sub">Console d'administration des accès privilégiés</p>
           </div>
         </div>
         {challenge ? (
           <SecondFactor api={api} challenge={challenge} onToken={onToken} onCancel={() => setChallenge(null)} />
         ) : (
           <>
-            <form onSubmit={local} aria-label={source === "local" ? "Connexion locale" : "Connexion par l'annuaire"}>
+            <form className="ob-form-fields" onSubmit={local} aria-label={source === "local" ? "Connexion locale" : "Connexion par l'annuaire"}>
               {directories.length > 0 && (
                 <fieldset className="login-source">
                   <legend>Compte</legend>
@@ -94,15 +95,15 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
                 Mot de passe
                 <input name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </label>
-              <button type="submit" className="primary" disabled={busy}>
+              <Button type="submit" variant="primary" disabled={busy}>
                 Se connecter
-              </button>
+              </Button>
             </form>
             {(oidc === null || oidc.length > 0) && <p className="or">ou</p>}
             {(oidc ?? [{ id: "", label: "" }]).map((p) => (
-              <button key={p.id} type="button" onClick={() => federated(p.id)} disabled={busy}>
+              <Button key={p.id} onClick={() => federated(p.id)} disabled={busy}>
                 {p.label ? `Se connecter avec ${p.label}` : "Se connecter avec le fournisseur d'identité"}
-              </button>
+              </Button>
             ))}
           </>
         )}

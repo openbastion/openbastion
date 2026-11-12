@@ -59,8 +59,8 @@ body {
 }
 
 ::selection {
-  background: #b8e6df;
-  color: var(--brand-ink);
+  background: var(--ob-color-accent-subtle);
+  color: var(--ob-color-accent-ink);
 }
 
 h1,
@@ -121,7 +121,7 @@ code {
   color: var(--ink-1);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  box-shadow: 0 1px 2px rgb(15 23 32 / 0.04);
+  box-shadow: var(--ob-shadow-sm);
 }
 
 .brand {
@@ -361,13 +361,13 @@ textarea {
 }
 
 input::placeholder {
-  color: #9aa6b8;
+  color: var(--ob-color-text-tertiary);
 }
 
 input:hover,
 select:hover,
 textarea:hover {
-  border-color: #a9b6c8;
+  border-color: var(--ob-color-border-control);
 }
 
 input:focus,
@@ -375,7 +375,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.14);
+  box-shadow: var(--ob-color-focus-shadow);
 }
 
 /* ---------- Buttons ---------- */
@@ -395,7 +395,7 @@ button {
 
 button:hover {
   background: var(--surface-2);
-  border-color: #a9b6c8;
+  border-color: var(--ob-color-border-control);
 }
 
 button:active {
@@ -409,29 +409,6 @@ button:disabled {
 
 button:disabled:active {
   transform: none;
-}
-
-button.primary {
-  color: var(--ob-color-text-on-accent);
-  background: var(--brand);
-  border-color: var(--brand);
-  box-shadow: none;
-}
-
-button.primary:hover {
-  background: var(--brand-strong);
-  border-color: var(--brand-strong);
-}
-
-button.danger {
-  color: var(--danger);
-  border-color: #f0c2bd;
-  background: var(--surface);
-}
-
-button.danger:hover {
-  background: var(--danger-soft);
-  border-color: #e2a59e;
 }
 
 :focus-visible {
@@ -495,10 +472,6 @@ main.login {
   display: grid;
   gap: 1.1rem;
   padding: clamp(1.5rem, 4vw, 2.25rem);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
 }
 
 .login-head {
@@ -546,28 +519,6 @@ main.login {
 
 .second-factor form button[type="submit"] {
   width: 100%;
-}
-
-.enrollment {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.4rem 0.75rem;
-  margin: 0;
-  padding: 0.75rem;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-}
-
-.enrollment dt {
-  font-size: 0.78rem;
-  font-weight: 550;
-  color: var(--ink-3);
-}
-
-.enrollment dd {
-  margin: 0;
-  min-width: 0;
 }
 
 .enrollment code {
@@ -853,7 +804,7 @@ main.login {
   overflow-y: auto;
   color: var(--ob-color-chrome-muted);
   background: var(--ob-color-chrome-background);
-  border-right: 1px solid rgb(243 246 249 / 0.1);
+  border-right: 1px solid var(--ob-color-chrome-border);
 }
 
 .sidebar-heading {
@@ -956,7 +907,7 @@ main.login {
   padding: 1rem 0.55rem 0.25rem;
   color: var(--ob-color-chrome-muted);
   font-size: 0.72rem;
-  border-top: 1px solid rgb(243 246 249 / 0.12);
+  border-top: 1px solid var(--ob-color-chrome-border);
 }
 
 .sidebar-status-dot {
@@ -974,24 +925,6 @@ main.login {
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 2.5rem) clamp(1rem, 3vw, 2.5rem) 4rem;
   background: var(--canvas);
-}
-
-:root[data-theme="dark"] tbody tr:hover {
-  background: #1b2a3b;
-}
-
-:root[data-theme="dark"] .notice.error {
-  color: #fecaca;
-  border-color: #71333a;
-}
-
-:root[data-theme="dark"] .notice.ok {
-  color: #a7f3d0;
-  border-color: #245c43;
-}
-
-:root[data-theme="dark"] button.danger {
-  border-color: #71333a;
 }
 
 :root[data-theme="dark"] .legal-notice {
@@ -1203,7 +1136,7 @@ main.login {
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.32);
+  box-shadow: var(--ob-shadow-overlay);
 }
 
 .command-palette > input {
@@ -1372,7 +1305,7 @@ main.login {
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.3);
+  box-shadow: var(--ob-shadow-overlay);
 }
 
 .confirm-dialog p {
@@ -1523,7 +1456,7 @@ main.login {
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.32);
+  box-shadow: var(--ob-shadow-overlay);
 }
 
 .preferences-dialog-head {
@@ -1752,5 +1685,23 @@ main.login {
   .session-chip .ghost {
     padding-inline: 0.35rem;
     font-size: 0.72rem;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible,
+  .skip-link:focus-visible,
+  .screen-canvas:focus-visible {
+    outline-color: Highlight;
+  }
+
+  .app-sidebar,
+  .sidebar-footer {
+    border-color: CanvasText;
+  }
+
+  .nav-item.active {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
   }
 }

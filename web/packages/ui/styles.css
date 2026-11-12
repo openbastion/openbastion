@@ -570,3 +570,24 @@
     padding-bottom: 0.5rem;
   }
 }
+
+@media (forced-colors: active) {
+  .ob-surface,
+  .ob-stat-card,
+  .ob-detail-list,
+  .ob-empty-state,
+  .ob-note,
+  .ob-data-table thead th,
+  .ob-data-table tbody td,
+  .ob-filter-bar,
+  .ob-pager,
+  .ob-badge,
+  .ob-notice {
+    border-color: CanvasText;
+  }
+
+  .ob-button:focus-visible,
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

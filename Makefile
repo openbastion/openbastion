@@ -237,6 +237,7 @@ test-integration: build
 ## L'Admin UI (web/admin-ui, ADR-0036) : tokens, dépendances depuis les lockfiles, tests et construction.
 ui-tokens-test:
 	node web/packages/design-tokens/scripts/check-contrast.mjs
+	node web/packages/design-tokens/scripts/check-app-colors.mjs
 ui-icons:
 	cd web/openbastion-icons && npm ci --no-audit --no-fund && npm run build
 ui-test: ui-icons ui-tokens-test

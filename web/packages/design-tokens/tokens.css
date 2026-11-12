@@ -68,6 +68,7 @@
   --ob-color-chrome-background-raised: var(--ob-palette-chrome-background-raised);
   --ob-color-chrome-text: var(--ob-palette-chrome-text);
   --ob-color-chrome-muted: var(--ob-palette-chrome-muted);
+  --ob-color-chrome-border: rgb(180 192 203 / 0.2);
   --ob-color-chrome-accent: #66B8FF;
   --ob-color-chrome-accent-subtle: #18364E;
   --ob-color-overlay: var(--ob-palette-overlay);
