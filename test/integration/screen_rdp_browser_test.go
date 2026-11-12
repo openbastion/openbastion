@@ -68,10 +68,10 @@ func TestScreenFlow_RDPResizeInAHeadlessBrowser(t *testing.T) {
 	page.clickButton("Ouvrir l'écran")
 	page.waitTrue("the first frame", `(() => { const c = document.querySelector("canvas.screen-canvas"); return !!c && !c.hidden && c.width > 0; })()`, 120*time.Second)
 
-	// The size the page asks for, as ScreenViewer measures it: the width of its area, the height of
-	// the window below it, less what stands above the canvas; within the bounds, the width even.
-	const wanted = `(() => { const a = document.querySelector(".screen"); const r = a.getBoundingClientRect();
-		const w = Math.min(Math.max(Math.floor(a.clientWidth), 640), 2560); const h = Math.min(Math.max(Math.floor(window.innerHeight - r.top - 112), 480), 1600);
+	// The size the page asks for, as ScreenViewer measures it: the width of its area, the window's
+	// height less what stands with the canvas; within the bounds, the width even.
+	const wanted = `(() => { const a = document.querySelector(".screen");
+		const w = Math.min(Math.max(Math.floor(a.clientWidth), 640), 2560); const h = Math.min(Math.max(Math.floor(window.innerHeight - 112), 480), 1600);
 		return [w - (w % 2), h]; })()`
 	const shown = `(() => { const c = document.querySelector("canvas.screen-canvas"); return [c.width, c.height]; })()`
 	follow := func(step string) [2]int {

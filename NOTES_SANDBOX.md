@@ -3123,7 +3123,7 @@ Premier passage CI (run 43307816046) : l'étape échouait avant le navigateur. L
 
 ## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre
 
-La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins 112 px. Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
+La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre moins 112 px (d'abord la hauteur sous la zone : 480 px seulement, corrigé à l'incrément 5). Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
 - **CI Windows intermittente** (dernier passage de #155, run 43296146528, code identique au passage précédent tout vert) : sur une cible, Windows ne répondait plus après CredSSP (`target_unreachable`) ; sur une autre, la relecture du clavier, les touches étendues et la vidéo ont échoué, le partage fonctionnant. Relancés tels quels, les deux jobs passent. À surveiller : si les épreuves qui passent par Notepad et le partage échouent de nouveau, chercher ce qui prend le focus.
 - **Bac à sable** : il n'a pas de cible RDP. La vérification dans un vrai navigateur demande une cible Windows, qui n'existe qu'en CI : c'est l'incrément 5.
 - **Choix renversables** : 112 px pour les boutons et la ligne d'état ; 500 ms d'attente ; la taille en pixels CSS, sans le facteur de l'écran (un écran à 200 % aurait un bureau de la moitié de ses pixels physiques, mais un texte à taille de lecture).
