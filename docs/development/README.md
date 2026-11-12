@@ -7,6 +7,7 @@ Pour contribuer à OpenBastion : construire, tester, étendre. Le *pourquoi* des
 | [`prerequisites.md`](prerequisites.md) | Les outils |
 | [`local-environment.md`](local-environment.md) | Démarrer en local, mTLS ou non, essayer chaque fonctionnalité |
 | [`repository-structure.md`](repository-structure.md) | L'arborescence du monorepo, la structure d'un service, les conventions de nommage |
+| [`admin-ui-design-system.md`](admin-ui-design-system.md) | Charte OpenBastion Infrastructure, tokens, règles visuelles, invariants UX-01 à UX-05 et plan d'implémentation |
 | [`testing.md`](testing.md) | Les niveaux de tests |
 | [`versioning.md`](versioning.md) | Semantic Versioning : le fichier `VERSION`, ce qu'un binaire dit de lui, publier une version (ADR-0063) |
 | [`debugging.md`](debugging.md) | L'observabilité en développement |

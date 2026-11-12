@@ -14,6 +14,8 @@ Plusieurs idées de l'évolution UX dépassent toutefois les capacités actuelle
 
 La présente décision porte donc sur le socle d'expérience et la manière de faire évoluer l'interface. Elle ne prétend pas que toutes les fonctions proposées sont déjà disponibles.
 
+La direction visuelle retenue pour concrétiser le langage visuel du §3 est **OpenBastion Infrastructure** : une console d'exploitation structurée, dense mais lisible, avec une navigation persistante, des tableaux informatifs, des états explicites et des surfaces sobres. L'expérience s'inspire des qualités d'ergonomie observées dans les consoles d'infrastructure telles que UniFi Network ; cette référence ne vaut pas autorisation de reproduire son identité. Aucun logo, pictogramme, code, capture, texte propriétaire ou agencement distinctif ne sera repris. Cette précision documente la matérialisation visuelle de la décision existante ; le texte de décision accepté ci-dessous reste inchangé.
+
 ## Décision
 
 ### 1. Préserver le socle de sécurité et la pile de l'ADR-0036
@@ -168,6 +170,7 @@ Pour chaque comportement ajouté, les tests Vitest/Testing Library couvrent les 
 - (+) La séparation `app / features / shared` existante est renforcée sans déplacer les responsabilités métier dans les composants génériques.
 - (+) Les exigences d'accessibilité, de responsive et de sécurité UX deviennent des critères de revue et de test.
 - (+) Aucun nouveau paquet npm à l'exécution, aucune route API et aucun service ne sont requis par la décision elle-même.
+- (+) La charte OpenBastion Infrastructure et son plan d'implémentation sont détaillés dans [`../development/admin-ui-design-system.md`](../development/admin-ui-design-system.md) ; les tokens et primitives destinés à être partagés suivent les frontières de l'ADR-0075.
 - (−) Cette ADR est une décision d'architecture : elle ne livre ni le shell, ni le dashboard, ni la recherche, ni la bibliothèque de composants.
 - (−) L'API actuelle ne permet pas encore toutes les vues souhaitées, notamment une recherche globale complète, une liste exhaustive des politiques et une vue générale agrégée. Ces capacités restent absentes jusqu'à livraison de contrats dédiés.
 - (−) Le maintien d'une pile frontend volontairement minimale demande de construire et maintenir certains composants en interne ; les composants complexes ne doivent pas être réinventés sans besoin démontré.

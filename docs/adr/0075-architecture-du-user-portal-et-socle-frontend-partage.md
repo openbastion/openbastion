@@ -84,8 +84,8 @@ Le manifeste racine `web/package.json` coordonne les outils et scripts communs a
 | Emplacement | Responsabilité | Interdictions |
 |---|---|---|
 | `web/openbastion-icons/` | Icônes de marque et icônes fonctionnelles OpenBastion, exports React/SVG et ressources associées | Pas de logique métier ni d'accès réseau |
-| `web/packages/design-tokens/` | Tokens de couleurs sémantiques, typographie, espacements, rayons, focus, thèmes clair/sombre | Pas de composants métier ni de décision d'autorisation |
-| `web/packages/ui/` | Primitives visuelles et interactives génériques, accessibles et testées | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège |
+| `web/packages/design-tokens/` | Source de vérité de la charte OpenBastion Infrastructure : palettes primitives et sémantiques, typographie, espacements, densité, rayons, bordures, élévation, focus, mouvement, points de rupture et thèmes clair/sombre | Pas de composants, de préférences utilisateur, de données métier ni de décision d'autorisation |
+| `web/packages/ui/` | Primitives visuelles et interactives génériques, accessibles et testées, construites exclusivement avec les tokens partagés | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège ; pas de copie de composants propriétaires tiers |
 | `web/packages/api-client/` | Transport HTTP vers l'API publique Gateway, gestion cohérente des erreurs et des identifiants de corrélation | Aucun appel direct aux microservices ; aucun stockage persistant de jeton ou de secret |
 | `web/packages/contracts/` | Types et schémas frontend dérivés des contrats API publics versionnés | Pas de modèles internes copiés depuis les bases ou les domaines privés des services |
 | `web/packages/utilities/` | Fonctions frontend génériques sans dépendance métier | Pas de logique d'autorisation faisant autorité |
@@ -93,6 +93,30 @@ Le manifeste racine `web/package.json` coordonne les outils et scripts communs a
 Les applications consomment les packages partagés par leurs interfaces publiques. Les packages partagés ne dépendent jamais d'une application. Les dépendances entre packages doivent rester orientées vers les couches les plus génériques ; les cycles sont interdits.
 
 Le package `contracts` ne devient pas une seconde source de vérité : OpenAPI et les contrats publics restent la référence backend. Les types TypeScript sont générés ou synchronisés depuis ces contrats selon un processus vérifiable. Les messages gRPC internes et les modèles de persistance ne sont pas exposés au navigateur.
+
+### 3.1 Charte graphique partagée : OpenBastion Infrastructure
+
+Les deux applications adoptent une même identité visuelle nommée **OpenBastion Infrastructure**. La direction recherchée reprend les qualités fonctionnelles d'une console d'infrastructure moderne, notamment celles observées dans UniFi Network : navigation latérale persistante, hiérarchie de page nette, densité d'information maîtrisée, tableaux lisibles, filtres explicites, états opérationnels visibles et interactions prévisibles. Il s'agit d'une inspiration ergonomique, pas d'une reproduction : aucun logo, pictogramme, code, capture, texte propriétaire, illustration ni agencement distinctif de Ubiquiti/UniFi n'est repris.
+
+La charte s'applique aux deux applications sans fusionner leurs responsabilités :
+
+- l'Admin UI reste une console d'exploitation, d'administration, de gouvernance et d'audit ;
+- le User Portal reste un espace de self-service centré sur les ressources, les demandes, les sessions et l'activité personnelle.
+
+Leur navigation métier, leurs autorisations, leurs états et leurs données restent indépendants. Seuls l'identité visuelle, les tokens, les primitives réellement génériques et les règles d'accessibilité sont partagés.
+
+Principes visuels obligatoires :
+
+1. **Structure avant décoration** : barre latérale structurée, en-tête compact, titre et contexte de page, contenu principal clairement délimité ; les cartes ne remplacent pas les tableaux lorsque l'utilisateur doit comparer ou parcourir des lignes.
+2. **Densité lisible** : priorité aux informations utiles, colonnes alignées, nombres tabulaires, filtres visibles, pagination conforme aux contrats réels ; la compacité ne réduit ni la lisibilité ni les cibles tactiles.
+3. **Surfaces sobres** : fonds neutres, séparateurs explicites, ombres rares et faibles, rayons cohérents ; pas de dégradés décoratifs, de grandes cartes uniformes ni d'animation permanente.
+4. **Sémantique explicite** : succès, avertissement, danger, sélection, indisponibilité et focus sont identifiables par leur libellé ou pictogramme en plus de leur couleur.
+5. **Thèmes équivalents** : clair et sombre exposent les mêmes actions, informations, niveaux de priorité et états. Le thème système est utilisé par défaut ; le choix explicite reste une préférence locale non sensible.
+6. **Accessibilité et adaptation** : navigation clavier, focus visible, zoom, réduction du mouvement, mode contraste forcé et fonctionnement à partir de 320 px ; les tableaux peuvent défiler dans leur conteneur sans imposer un débordement horizontal à toute la page.
+
+La palette normative, les rôles de tokens, les règles de typographie, d'espacement, de densité, de mouvement et le plan de migration sont définis dans [`../development/admin-ui-design-system.md`](../development/admin-ui-design-system.md). Les composants consomment exclusivement des tokens sémantiques ; les valeurs primitives ne sont jamais utilisées directement dans les composants. Les icônes restent issues de `web/openbastion-icons/` et héritent de `currentColor`.
+
+La cible d'accessibilité est WCAG 2.2 AA. Les ratios documentés dans la spécification portent uniquement sur les paires de couleurs explicitement mesurées ; ils ne constituent pas une déclaration de conformité de l'application. Les états, contrôles, bordures, focus, icônes, graphiques et composants composés doivent être vérifiés sur leurs surfaces effectivement rendues, dans les deux thèmes.
 
 ### 4. Responsabilités propres au User Portal
 
