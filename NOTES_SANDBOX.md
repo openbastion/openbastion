@@ -4120,3 +4120,23 @@ ADR-0095 incrément 2). L'intégration dans `refactor/admin-ui-infrastructure`
 a été automatique, sans conflit. Après intégration : `make ui-test` (18 fichiers,
 177 tests, tokens et couleurs), TypeScript, build Vite isolé, `npm audit`
 (0 vulnérabilité), `make license-check` et `go test ./pkg/rdp/...` réussissent.
+
+## 2026-11-12 — Présentation avancée de `@openbastion/ui` (ADR-0073, en cours)
+
+Le package ajoute `AspectRatio`, `Avatar`, `Calendar`, `Carousel`, `Chart`,
+`Image`, `Progress`, `Resizable`, `ScrollArea`, `Toggle`, `ToggleGroup` et les
+utilitaires `isSafeImageSource`/`resolveImageSource` dans
+`web/packages/ui/src/lib/image-helpers.js`. Calendar s'appuie sur le contrôle
+natif date du navigateur ; Chart dessine des graphiques SVG simples ; Carousel
+est contrôlé ou non contrôlé ; Resizable accepte le redimensionnement natif
+par pointeur et les flèches clavier. Les sources Image/Avatar n'acceptent que
+HTTPS ou des chemins relatifs locaux, jamais `data:`, `javascript:` ou les URL
+protocol-relative. Image essaie une seule fois la source de secours et évite
+les boucles de rechargement si elle échoue également.
+
+Les validations complètes passent : 19 fichiers Vitest, 189 tests ; TypeScript ;
+build Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-advanced` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-test` (tokens,
+contrastes et audit des couleurs). Les tests couvrent aussi les sources HTTPS,
+le rejet des schémas exécutables et protocol-relative, le fallback d'image et
+l'absence de boucle si la source de secours échoue.

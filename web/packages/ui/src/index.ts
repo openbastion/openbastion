@@ -34,3 +34,16 @@ export { Sidebar, SidebarHeader, SidebarContent, SidebarFooter, SidebarGroup, Si
 export { Tabs, TabsList, TabsTrigger, TabsContent, type TabsProps, type TabsListProps, type TabsTriggerProps, type TabsContentProps } from "./components/Tabs";
 export { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel, type ContextMenuProps, type ContextMenuTriggerProps, type ContextMenuContentProps, type ContextMenuItemProps, type ContextMenuSeparatorProps, type ContextMenuLabelProps } from "./components/ContextMenu";
 export { HoverCard, HoverCardTrigger, HoverCardContent, type HoverCardProps, type HoverCardTriggerProps, type HoverCardContentProps } from "./components/HoverCard";
+
+export { AspectRatio, type AspectRatioProps, type AspectRatioValue } from "./components/AspectRatio";
+export { Avatar, type AvatarProps } from "./components/Avatar";
+export { Calendar, type CalendarProps } from "./components/Calendar";
+export { Carousel, type CarouselProps } from "./components/Carousel";
+export { Chart, type ChartProps, type ChartDatum } from "./components/Chart";
+export { Image, type ImageProps } from "./components/Image";
+export { Progress, type ProgressProps } from "./components/Progress";
+export { Resizable, type ResizableProps } from "./components/Resizable";
+export { ScrollArea, type ScrollAreaProps } from "./components/ScrollArea";
+export { Toggle, type ToggleProps } from "./components/Toggle";
+export { ToggleGroup, ToggleGroupItem, type ToggleGroupProps, type ToggleGroupItemProps } from "./components/ToggleGroup";
+export { isSafeImageSource, resolveImageSource } from "./lib/image-helpers.js";
