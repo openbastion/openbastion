@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -29,7 +31,8 @@ import (
 // real proxy client over mTLS. The object store is the in-process one of the recording test, so S3's
 // own latency is not in the figures, unless RECORDER_MEASURE_S3_ENDPOINT names a real S3 endpoint:
 // plain HTTP, access key "test", secret "test-secret", bucket "screens" created if absent (the
-// settings startVideoRecorder gives). RECORDER_MEASURE=1; RECORDER_MEASURE_DUMP for the JSON.
+// settings startVideoRecorder gives). RECORDER_MEASURE_SESSIONS lists the numbers of sessions at
+// once (1,5,10 by default). RECORDER_MEASURE=1; RECORDER_MEASURE_DUMP for the JSON.
 
 type ackMeasure struct {
 	Frame      string  `json:"frame"`
@@ -107,7 +110,7 @@ func TestVideoRecorderAckLatency(t *testing.T) {
 	}
 	var results []ackMeasure
 	for _, kind := range kinds {
-		for _, sessions := range []int{1, 5, 10} {
+		for _, sessions := range measureSessions(t) {
 			r := measureAcks(t, recorder, kind.name, kind.frame, sessions, 60, 50*time.Millisecond)
 			results = append(results, r)
 			t.Logf("MEASURE ack %s (%d bytes), %d session(s): %d frame(s), p50 %.1f ms, p95 %.1f ms, max %.1f ms, %.0f frames/s in all",
@@ -118,6 +121,24 @@ func TestVideoRecorderAckLatency(t *testing.T) {
 		raw, _ := json.MarshalIndent(results, "", "  ")
 		_ = os.WriteFile(filepath.Join(dir, "ack.json"), raw, 0o644)
 	}
+}
+
+// measureSessions is RECORDER_MEASURE_SESSIONS, a comma-separated list of numbers of sessions at
+// once, from 1 to 200; 1, 5 and 10 when it is not set.
+func measureSessions(t *testing.T) []int {
+	raw := os.Getenv("RECORDER_MEASURE_SESSIONS")
+	if raw == "" {
+		return []int{1, 5, 10}
+	}
+	var out []int
+	for _, field := range strings.Split(raw, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(field))
+		if err != nil || n < 1 || n > 200 {
+			t.Fatalf("RECORDER_MEASURE_SESSIONS: %q is not a number of sessions from 1 to 200", field)
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 func keyFrameOf(pngData []byte) func(seq uint64) screenstream.Message {

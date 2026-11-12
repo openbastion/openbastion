@@ -77,7 +77,8 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - L'acquittement ajoute 15 à 30 ms en médiane avant qu'une image soit montrée, jusqu'à 10 sessions, pour les images partielles (le cas par défaut, ADR-0092) comme pour les petites images clés.
 - **Les grosses images clés** (bureau à fond d'écran) font grimper la queue dès 5 sessions : de 0,1 à 0,5 s au 95ᵉ centile, et jusqu'à 1,3 s au maximum. Deux passages ont donné des queues différentes : c'est bruité. Avec les images partielles, une image clé ne revient qu'à l'ouverture, au redimensionnement et toutes les 10 s, mais c'est la limite de capacité à surveiller.
 - **Avec un vrai S3** : voir ci-dessous.
-- **Pas encore mesuré** : une scène vidéo, au-delà de 10 sessions, et un S3 distant ou sous TLS.
+- **Au-delà de 10 sessions** : voir plus bas.
+- **Pas encore mesuré** : une scène vidéo, et un S3 distant ou sous TLS.
 
 **Mesuré ensuite (12 novembre 2026) : le même acquittement, avec un vrai S3.** Même épreuve, mais le Recorder écrit dans un SeaweedFS 4.52 (`RECORDER_MEASURE_S3_ENDPOINT`) : un nœud unique, en conteneur sur le même hôte, en HTTP clair. Deux passages S3, et un passage en mémoire juste avant, comme témoin.
 
@@ -92,6 +93,22 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Très bruité** : d'un passage S3 à l'autre, le même cas varie d'un facteur 2 à 20 sur le maximum. Le premier passage, sur un SeaweedFS tout juste démarré, est le plus lent. Deux passages ne suffisent pas à classer les cas entre eux.
 - **Ce n'est pas un plafond** : SeaweedFS sur le même hôte n'a ni réseau ni TLS. Un S3 distant ajoute au moins son aller-retour à chaque image. Il faudra le mesurer sur la cible de déploiement.
 - **Pas de décision à prendre ici** : rien ne justifie encore de regrouper les images à l'enregistrement (ADR-0093, option B écartée). La queue au-delà d'une seconde est à surveiller sur un vrai déploiement.
+- Ces deux passages précèdent le correctif du pool ci-dessous : une partie de leur queue venait sans doute de lui.
+
+**Mesuré ensuite (12 novembre 2026) : 20 et 50 sessions, et une perte d'images trouvée.** `RECORDER_MEASURE_SESSIONS` fixe le nombre de sessions simultanées. À 50 sessions, en mémoire, le Recorder perdait des images : avec les grosses images clés, 48 sessions sur 50 ont eu une image non acquittée (l'épreuve arrête une session à sa première perte), toutes en `cannot assign requested address`. Une image perdue coupe sa session : le proxy ne montre pas ce qui n'est pas enregistré.
+- **Cause** : `database/sql` garde par défaut 2 connexions inactives et en ouvre autant qu'on lui en demande. À 50 sessions, le Recorder ouvrait et fermait une connexion PostgreSQL presque à chaque image, jusqu'à épuiser les ports de l'hôte.
+- **Correctif** : les sept services qui ouvrent PostgreSQL gardent 10 connexions, ouvertes au plus et gardées inactives. Sept services restent ainsi sous les 100 connexions par défaut de PostgreSQL. 10 a fait aussi bien que 25 à l'essai.
+
+| 50 sessions | Avant (pool par défaut) p50 / p95 / max | Après, en mémoire (2 passages) p50 / p95 / max | Après, S3 (2 passages) p50 / p95 / max |
+|---|---|---|---|
+| Partielle, 1,5 Ko | 50 / 127 / 314 ms · 139 / 390 / 1 980 ms | 12 à 19 / 39 à 46 / 95 à 259 ms | 51 à 94 / 152 à 238 / 384 à 547 ms |
+| Clé, 33 Ko | 46 / 136 / 610 ms · 240 / 622 / 1 677 ms | 14 à 21 / 35 à 47 / 175 à 204 ms | 59 à 235 / 161 à 1 031 / 457 à 2 851 ms |
+| Clé, 184 Ko | 147 / 712 / 948 ms, **48 sessions sur 50 coupées** | 59 à 74 / 612 à 642 / 807 à 817 ms | 164 à 218 / 535 à 691 / 2 163 à 3 192 ms |
+
+- **Après le correctif, plus aucune image perdue**, à 10, 20 et 50 sessions, en mémoire comme avec S3, sur quatre passages.
+- **En mémoire**, les images partielles et les petites images clés restent sous 20 ms en médiane à 50 sessions. À 20 sessions, médiane de 8 à 18 ms.
+- **Avec S3 à 50 sessions**, la médiane monte de 50 à 235 ms et le maximum atteint 2 à 3 s pour les images clés. Le SeaweedFS à nœud unique devient le goulet. Une session active voit ces délais à chaque image clé, et à chaque image si l'écran change beaucoup.
+- **Limites** : un seul hôte de 6 cœurs pour tout (Recorder, PostgreSQL, S3, client), sans réseau ni TLS vers S3 ; peu de passages ; aucune scène vidéo.
 
 ### Lot B — Ordres graphiques
 
