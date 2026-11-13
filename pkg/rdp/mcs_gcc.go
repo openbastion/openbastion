@@ -79,6 +79,9 @@ type MCSClientSettings struct {
 	// control layout without the graphics pipeline (ADR-0095; MS-RDPBCGR 2.2.7.1.2). Off, the flag
 	// stays 0, as before.
 	DesktopResize bool
+	// ClipboardChannel announces the static channel of the clipboard, cliprdr, and joins it
+	// (ADR-0096): text only, in each direction its session allows. Off, it is not announced.
+	ClipboardChannel bool
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches

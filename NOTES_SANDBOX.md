@@ -3485,6 +3485,15 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-13 — ADR-0096, incrément 1 : le canal cliprdr
+
+`pkg/rdp/clipboard.go` : MS-RDPECLIP, texte seul (`CF_UNICODETEXT`), chaque sens selon son droit, borné à 65 526 octets UTF-16. Chaque canal statique a son lecteur. Rien ne l'allume hors des tests.
+- **FreeRDP** (`TestRDPInterop_Clipboard`) : son serveur n'ouvre pas son presse-papiers (pas de Monitor Ready) ; la session continue.
+- **Windows** (`TestRDPWindows_Clipboard`, en CI) : copie du texte de Notepad (un marqueur tapé avec des lettres placées de même en QWERTY et en AZERTY), puis collage d'un texte et relecture.
+- **Premier passage en CI, les cinq Windows, même échec** : Windows envoie ses capacités et Monitor Ready (`received map[1:1 7:1]`), puis plus rien. Même pas la réponse à notre liste de formats, alors que le texte est copié dans Notepad. Cause supposée : nos fragments `cliprdr` partaient sans `CHANNEL_FLAG_SHOW_PROTOCOL`, que mstsc et FreeRDP posent sur ce canal (avec `CHANNEL_OPTION_SHOW_PROTOCOL` dans sa définition). Le serveur ignore l'option : c'est le drapeau de chaque fragment qui décide si `rdpclip` reçoit l'en-tête (MS-RDPBCGR 2.2.1.3.4.1). Les deux sont posés désormais, pour `cliprdr` seulement. **Confirmé par la CI** : les cinq Windows répondent désormais à la liste de formats (`received map[1:1 3:1 7:1]`). Windows Server 2019 et 2022 en 32 bpp copient et collent, « é » et « € » compris.
+- **Les trois 2022 en 16 bpp** : Notepad est resté vide, parce que le clic, aux 3/4 de la largeur, tombait sur le bureau. Leur fenêtre de Notepad fait 800 pixels de large en haut à gauche, sans doute laissée ainsi par les tests précédents. Le test trouve désormais la zone de texte à l'écran (le premier carré blanc de 120 pixels) avant de cliquer.
+- **`TestRDPWindows_Resize` sur 2022 en 32 bpp** a échoué une fois sur ce passage, après avoir réussi au précédent : capacités reçues, aucune mise en page envoyée. L'hypothèse est un canal Display Control fermé par Windows et jamais rouvert, puisque l'envoi refusé pour canal fermé est silencieux. Cause non établie. Le diagnostic compte désormais ces envois retenus.
+
 ## 2026-11-13 — ADR-0095 terminé : `SCREEN_RESIZE` allumé par défaut
 
 Décision du propriétaire (« Oui, tu peux continuer »), une fois les cinq cibles Windows suivies dans un vrai navigateur (#157, #158). Au proxy, `SCREEN_RESIZE` vaut `true` sauf si l'on dit `false` (compose : `${SCREEN_RESIZE:-true}`). En RDP, le `HELLO` porte désormais le bit 1 en plus du bit 0 : l'épreuve RDP de bout en bout attend `3`. VNC n'est pas concerné.

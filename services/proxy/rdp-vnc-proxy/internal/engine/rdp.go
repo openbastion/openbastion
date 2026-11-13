@@ -225,8 +225,9 @@ type rdpTargetSession struct {
 	// wantedSize is the size last asked for, askedSize the one last sent to the target: a size
 	// asked before the target is ready is sent when it is.
 	wantedSize, askedSize [2]uint16
-	// resizesSent counts the layouts sent, for the interoperability tests.
-	resizesSent int
+	// resizesSent counts the layouts sent, resizesDeferred those the closed channel kept back,
+	// for the interoperability tests' word.
+	resizesSent, resizesDeferred int
 }
 
 // rdpResizer is a target session that can ask for another desktop size (ADR-0095).
@@ -300,6 +301,9 @@ func (s *rdpTargetSession) applySize(ctx context.Context, timeout time.Duration)
 	}
 	if err := send(ctx, rdp.RDPDisplayControlChannel, layout, timeout); err != nil {
 		if errors.Is(err, rdp.ErrRDPDynamicChannelClosed) {
+			s.displayMu.Lock()
+			s.resizesDeferred++
+			s.displayMu.Unlock()
 			return nil // closed while the target reactivates: asked again with its next capabilities
 		}
 		return err

@@ -90,7 +90,11 @@ type CredSSPClientSession struct {
 	channelAssemblers     []rdpChannelAssembler
 	pendingChannelPackets [][]byte
 	channelHandler        func(channel string, message []byte) error
-	dynamicChannels       *rdpDynamicChannels
+	// channelReaders read one static channel each (drdynvc, cliprdr); channelHandler reads the
+	// channels none of them reads.
+	channelReaders  map[string]func(message []byte) error
+	clipboard       *rdpClipboard
+	dynamicChannels *rdpDynamicChannels
 }
 
 // BitsPerPixel is the colour depth of the session, as the server chose it in its Demand Active

@@ -775,14 +775,27 @@ func TestRDPWindows_Resize(t *testing.T) {
 			if adapter, ok := session.(*rdpScreenSessionAdapter); ok {
 				if target, ok := adapter.target.(*rdpTargetSession); ok {
 					target.displayMu.Lock()
-					diagnosis = fmt.Sprintf("display control caps %+v (received %v), %d layout(s) sent",
-						target.displayCaps, target.displayReady, target.resizesSent)
+					diagnosis = fmt.Sprintf("display control caps %+v (received %v), %d layout(s) sent, %d kept back by a closed channel",
+						target.displayCaps, target.displayReady, target.resizesSent, target.resizesDeferred)
 					target.displayMu.Unlock()
 				}
 			}
 			t.Fatalf("no %dx%d frame within 60 s of the resize: %v; %s", want[0], want[1], session.Err(), diagnosis)
 		}
 	}
+}
+
+// The clipboard of ADR-0096 (increment 1) against Windows: Notepad's text copied, then a text
+// pasted in it and copied back (rdp_clipboard_interop_test.go).
+func TestRDPWindows_Clipboard(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clipboardAgainstWindows(t, client, target.user, target.password)
 }
 
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by

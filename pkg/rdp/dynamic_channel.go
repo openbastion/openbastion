@@ -302,10 +302,10 @@ func (s *CredSSPClientSession) EnableDynamicChannels(names []string, onOpen func
 	dynamic := &rdpDynamicChannels{allowed: allowed, open: map[uint32]string{},
 		assembling: map[uint32]*dynvcAssembly{}}
 	s.dynamicChannels = dynamic
-	s.channelHandler = func(channel string, message []byte) error {
-		if channel != RDPChannelDynamic {
-			return fmt.Errorf("%w: a message on %q", ErrRDPChannel, channel)
-		}
+	if s.channelReaders == nil {
+		s.channelReaders = map[string]func([]byte) error{}
+	}
+	s.channelReaders[RDPChannelDynamic] = func(message []byte) error {
 		s.mu.Lock()
 		answers, err := dynamic.handle(message)
 		opened, delivered := dynamic.take()
