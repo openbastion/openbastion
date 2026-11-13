@@ -17,6 +17,9 @@ type PendingScreenSession struct {
 	ScopeToken string
 	Protocol   screenstream.Protocol
 	ExpiresAt  time.Time
+
+	// The clipboard directions the Broker granted at creation (ADR-0096 §1): RDP only.
+	ClipboardToTarget, ClipboardFromTarget bool
 }
 
 // PendingScreenSessions stores only one-use admission tickets, never credentials.

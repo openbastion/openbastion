@@ -54,6 +54,9 @@ type establishRequest struct {
 	Protocol        string `json:"protocol"`
 	TTLSeconds      int    `json:"ttl_seconds"`
 	BreakGlass      bool   `json:"break_glass"`
+	// The clipboard directions the Broker granted (ADR-0096 §1); absent means refused.
+	ClipboardToTarget   bool `json:"clipboard_to_target"`
+	ClipboardFromTarget bool `json:"clipboard_from_target"`
 }
 type establishResponse struct {
 	ProxyEndpoint    string `json:"proxy_endpoint"`
@@ -85,6 +88,12 @@ func (s *HTTPServer) establish(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "screen protocol is unavailable", http.StatusConflict)
 		return
 	}
+	// Only RDP has a clipboard channel (ADR-0096). A right for another protocol is a Broker
+	// that got something wrong: refused, like a break-glass request for a screen.
+	if protocol != screenstream.ProtocolRDP && (req.ClipboardToTarget || req.ClipboardFromTarget) {
+		http.Error(w, "invalid screen session request", http.StatusBadRequest)
+		return
+	}
 	if s.listener == nil || s.listener.Live == nil || s.pending == nil || s.gate == nil {
 		http.Error(w, "screen service unavailable", http.StatusServiceUnavailable)
 		return
@@ -101,7 +110,7 @@ func (s *HTTPServer) establish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := time.Now().UTC().Add(time.Duration(req.TTLSeconds) * time.Second)
-	ticket, err := s.pending.Register(infrastructure.PendingScreenSession{SessionID: req.SessionID, ScopeToken: req.VaultScopeToken, Protocol: protocol, ExpiresAt: expires})
+	ticket, err := s.pending.Register(infrastructure.PendingScreenSession{SessionID: req.SessionID, ScopeToken: req.VaultScopeToken, Protocol: protocol, ExpiresAt: expires, ClipboardToTarget: req.ClipboardToTarget, ClipboardFromTarget: req.ClipboardFromTarget})
 	if err != nil {
 		http.Error(w, "ticket generation unavailable", http.StatusServiceUnavailable)
 		return
@@ -194,7 +203,7 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 	// The Listener applies ExpiresAt to the relay alone. A deadline here would also end the context
 	// the audit of the expiry and the purge of the credential run on.
 	ctx := r.Context()
-	meta := proxycore.SessionMetadata{SessionID: pending.SessionID, ScopeToken: pending.ScopeToken, ScreenProtocol: pending.Protocol, ExpiresAt: pending.ExpiresAt}
+	meta := screenMetadata(pending)
 	// The codec is the ticket's protocol's, which the Broker took from the session: never the
 	// browser's choice.
 	codec := s.codec
@@ -232,4 +241,14 @@ func (s *websocketScreenSink) ReceiveInput(context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("invalid screen input message")
 	}
 	return data, nil
+}
+
+// screenMetadata is what a consumed ticket tells the Listener: the session, its scope, its
+// protocol and end, and the clipboard directions the Broker granted (ADR-0096 §1). Nothing in it
+// comes from the browser.
+func screenMetadata(p infrastructure.PendingScreenSession) proxycore.SessionMetadata {
+	return proxycore.SessionMetadata{
+		SessionID: p.SessionID, ScopeToken: p.ScopeToken, ScreenProtocol: p.Protocol, ExpiresAt: p.ExpiresAt,
+		ClipboardToTarget: p.ClipboardToTarget, ClipboardFromTarget: p.ClipboardFromTarget,
+	}
 }

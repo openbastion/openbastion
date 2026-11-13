@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,10 +16,22 @@ type fakeAuthz struct {
 	allowed bool
 	reason  string
 	calls   int
+
+	// Per resource, when set: a decision that overrides allowed, or an error.
+	byResource map[string]bool
+	errFor     map[string]error
+	asked      []string // "action resource", in order
 }
 
 func (f *fakeAuthz) CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (bool, string, error) {
 	f.calls++
+	f.asked = append(f.asked, action+" "+resource)
+	if err, ok := f.errFor[resource]; ok {
+		return true, "", err // an error with a "yes": the caller must not take the yes
+	}
+	if v, ok := f.byResource[resource]; ok {
+		return v, f.reason, nil
+	}
 	return f.allowed, f.reason, nil
 }
 
@@ -97,6 +110,7 @@ type fakeProxyClient struct {
 	lastTargetHost   string
 	lastTargetUser   string
 	lastBreakGlass   bool
+	lastClipboard    domain.ClipboardRights
 	connectionTicket string
 	proxyEndpoint    string
 	establishErr     error
@@ -119,8 +133,9 @@ func (f *fakeProxyClient) RevokeSession(ctx context.Context, protocol, sessionID
 	return f.revokeErr
 }
 
-func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
+func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
 	f.calls++
+	f.lastClipboard = clipboard
 	f.lastBreakGlass = breakGlass
 	f.lastScopeToken = scopeToken
 	f.lastTargetHost = targetHost
@@ -401,4 +416,99 @@ func TestCreateBreakGlassSessionRefusesGraphicalProtocols(t *testing.T) {
 	if _, err := broker.CreateBreakGlassSession(context.Background(), "user1", []string{"dba"}, "acc1", "ssh", "incident 42", 30); err != nil {
 		t.Fatalf("SSH break-glass: %v", err)
 	}
+}
+
+// The clipboard of an RDP session (ADR-0096 §1, §4): each direction is its own right, asked of
+// the Authorization Service at creation, refused unless granted, kept with the session and
+// carried to the proxy at connect.
+func TestCreateSession_RDPClipboardRightsPerDirection(t *testing.T) {
+	to, from := application.ClipboardToTargetResourcePrefix+"acc1", application.ClipboardFromTargetResourcePrefix+"acc1"
+	for name, c := range map[string]struct {
+		grant map[string]bool
+		want  domain.ClipboardRights
+	}{
+		"none":      {map[string]bool{to: false, from: false}, domain.ClipboardRights{}},
+		"to only":   {map[string]bool{to: true, from: false}, domain.ClipboardRights{ToTarget: true}},
+		"from only": {map[string]bool{to: false, from: true}, domain.ClipboardRights{FromTarget: true}},
+		"both":      {map[string]bool{to: true, from: true}, domain.ClipboardRights{ToTarget: true, FromTarget: true}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			authz := &fakeAuthz{allowed: true, byResource: c.grant}
+			proxy := &fakeProxyClient{}
+			broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{protocol: "rdp"}, proxy).WithRDP(true)
+			sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", "", 60)
+			if err != nil {
+				t.Fatalf("CreateSession: %v", err)
+			}
+			if got := (domain.ClipboardRights{ToTarget: sess.ClipboardToTarget, FromTarget: sess.ClipboardFromTarget}); got != c.want {
+				t.Fatalf("session rights %+v, want %+v", got, c.want)
+			}
+			for _, r := range []string{to, from} {
+				if !contains(authz.asked, "session:clipboard "+r) {
+					t.Fatalf("the Authorization Service was not asked for %q: %v", r, authz.asked)
+				}
+			}
+			if _, _, _, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy); err != nil {
+				t.Fatalf("Connect: %v", err)
+			}
+			if proxy.lastClipboard != c.want {
+				t.Fatalf("the proxy received %+v, want %+v", proxy.lastClipboard, c.want)
+			}
+		})
+	}
+}
+
+// An Authorization Service that cannot answer grants nothing, even if it says yes alongside its
+// error; the session opens all the same, without the clipboard (ADR-0096 §1, fail closed).
+func TestCreateSession_RDPClipboardRefusedWhenAuthorizationFails(t *testing.T) {
+	for _, failing := range []string{application.ClipboardToTargetResourcePrefix + "acc1", application.ClipboardFromTargetResourcePrefix + "acc1"} {
+		authz := &fakeAuthz{allowed: true, errFor: map[string]error{failing: errors.New("authz unreachable")}}
+		proxy := &fakeProxyClient{}
+		broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{protocol: "rdp"}, proxy).WithRDP(true)
+		sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", "rdp", "justification", "", 60)
+		if err != nil {
+			t.Fatalf("%s failing: CreateSession: %v", failing, err)
+		}
+		toFails := failing == application.ClipboardToTargetResourcePrefix+"acc1"
+		if sess.ClipboardToTarget == toFails || sess.ClipboardFromTarget != toFails {
+			t.Fatalf("%s failing: rights to=%v from=%v; the failed direction must be refused, the other granted", failing, sess.ClipboardToTarget, sess.ClipboardFromTarget)
+		}
+	}
+}
+
+// Only RDP has a clipboard channel (ADR-0096): an SSH or VNC session is never granted one, and the
+// Authorization Service is not asked.
+func TestCreateSession_NoClipboardOutsideRDP(t *testing.T) {
+	for _, protocol := range []string{"ssh", "vnc"} {
+		authz := &fakeAuthz{allowed: true}
+		proxy := &fakeProxyClient{}
+		broker := newTestBroker(authz, &fakeVaultAuthorizer{}, &fakeAudit{}, &fakeAccountLookup{protocol: protocol}, proxy)
+		sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "acc1", protocol, "justification", "", 60)
+		if err != nil {
+			t.Fatalf("%s: CreateSession: %v", protocol, err)
+		}
+		if sess.ClipboardToTarget || sess.ClipboardFromTarget {
+			t.Fatalf("%s: clipboard granted: %+v", protocol, sess)
+		}
+		for _, a := range authz.asked {
+			if strings.HasPrefix(a, "session:clipboard ") {
+				t.Fatalf("%s: the clipboard was asked about: %v", protocol, authz.asked)
+			}
+		}
+		if _, _, _, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy); err != nil {
+			t.Fatalf("%s: Connect: %v", protocol, err)
+		}
+		if proxy.lastClipboard != (domain.ClipboardRights{}) {
+			t.Fatalf("%s: the proxy received %+v", protocol, proxy.lastClipboard)
+		}
+	}
+}
+
+func contains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

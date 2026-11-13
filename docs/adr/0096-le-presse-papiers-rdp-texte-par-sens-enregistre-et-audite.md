@@ -48,6 +48,14 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 4. Contrat écran et Admin UI : les deux messages, les boutons et le panneau. Tests Vitest.
 5. Vérification dans le navigateur sans interface de la CI Windows (comme ADR-0095) : coller vers Notepad, copier depuis Notepad, relire la session et y trouver les deux transferts.
 
+## Mise en œuvre
+
+**Incrément 2, fait (13 novembre 2026) : les droits, du Broker au proxy.** Rien ne s'ouvre encore : le proxy reçoit les droits, le moteur RDP ne les lit pas avant l'incrément 3.
+- **Évaluation** : à la création d'une session RDP, et d'une session RDP seulement, le Broker demande à l'Authorization Service `clipboard:to-target:<compte>` et `clipboard:from-target:<compte>`, action `session:clipboard`, avec les rôles du demandeur. Un sens non accordé est refusé, de même qu'un sens sur lequel l'Authorization Service n'a pas pu répondre, même s'il dit « oui » avec son erreur. La session s'ouvre dans tous les cas, sans ce sens. SSH et VNC ne posent pas la question.
+- **Conservation** : deux colonnes de `sessions` (`clipboard_to_target`, `clipboard_from_target`, migration `006`, fausses par défaut, donc fausses pour toute session antérieure). Elles sont fixées à la création : une sauvegarde ultérieure (une terminaison), même depuis une copie différente, ne les change pas.
+- **Transport** : à `connect`, le Broker les passe au proxy dans `EstablishSession` (`clipboard_to_target`, `clipboard_from_target`, champs 9 et 10 du proto), sous mTLS, et non dans le scope du Vault comme l'écrivait le §1 : le scope est échangé au Vault et le proxy ne le lit pas. Ce choix est renversable. Le proxy les porte sur le ticket à usage unique jusqu'aux métadonnées de la session (`proxycore.SessionMetadata`). Il **refuse** (`400`, avant tout ticket) un droit de presse-papiers pour une session VNC : seul RDP a ce canal, et un tel droit trahirait un Broker en défaut. Le proxy SSH ne lit pas ces champs.
+- **Prouvé** : tests de chaque sens (aucun, l'un, l'autre, les deux) de l'Authorization Service jusqu'au proxy, refus sur erreur, aucune question hors RDP, aller-retour PostgreSQL réel (`TestPostgresStore_ClipboardRightsRoundTrip`), refus VNC au proxy, contrat proto↔JSON ; 12 mutations, 12 tuées.
+
 ## Conséquences
 
 - (+) Le besoin le plus demandé des opérateurs, sans trou dans la trace : chaque transfert est enregistré, chiffré, audité et refusable par politique, dans chaque sens séparément.
