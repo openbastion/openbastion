@@ -1664,7 +1664,7 @@ readUpdate:
 						data, complete, err = assembler.add(code, fragmentation, piece)
 					}
 					if err != nil {
-						described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+						described := fmt.Errorf("%w: update refused: %s: %v", ErrMCSConnection, describeRDPServerPacket(packet), err)
 						clear(packet)
 						return RDPBitmapUpdate{}, described
 					}

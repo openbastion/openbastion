@@ -3122,7 +3122,7 @@ Sur Windows Server 2022 en 32 bpp, deux passages ont perdu les touches des épre
 
 Les épreuves cliquent désormais dans Notepad aux trois quarts de la largeur (`notepadPoint`), hors du menu, ce qui le referme. La touche Windows seule n'ouvre toujours pas Démarrer (`extended-1-windows-key.png`, la limite de PR #101 reste).
 
-**Windows Server 2019, navigateur sans interface** (même passage) : la session s'est terminée 5 s après son ouverture, sur un fragment Fast-Path `LAST` sans `FIRST` (`update refused: Fast-Path action 0, 1475 bytes [code 1 frag 1 comp 0 size 1469]`). C'est un seul cas, de cause inconnue. À instrumenter s'il revient.
+**Windows Server 2019, navigateur sans interface** (même passage) : la session s'est terminée 5 s après son ouverture, sur un fragment Fast-Path `LAST` sans `FIRST` (`update refused: Fast-Path action 0, 1475 bytes [code 1 frag 1 comp 0 size 1469]`). Revenu au passage suivant, au deuxième redimensionnement (`13978 bytes [code 1 frag 1 comp 0 size 13972]`). Le message décrivait le fragment en cours, pas la règle qui le refusait : un `LAST` peut fermer une reconstitution qui dépasse 64 fragments ou les 256 Kio que ce client annonce. L'assembleur dit désormais quelle règle refuse, et un test le vérifie.
 
 ## 2026-11-12 — ADR-0095, incrément 5 : le redimensionnement dans un navigateur sans interface (en cours)
 
