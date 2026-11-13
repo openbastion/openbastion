@@ -775,8 +775,8 @@ func TestRDPWindows_Resize(t *testing.T) {
 			if adapter, ok := session.(*rdpScreenSessionAdapter); ok {
 				if target, ok := adapter.target.(*rdpTargetSession); ok {
 					target.displayMu.Lock()
-					diagnosis = fmt.Sprintf("display control caps %+v (received %v), %d layout(s) sent",
-						target.displayCaps, target.displayReady, target.resizesSent)
+					diagnosis = fmt.Sprintf("display control caps %+v (received %v), %d layout(s) sent, %d kept back by a closed channel",
+						target.displayCaps, target.displayReady, target.resizesSent, target.resizesDeferred)
 					target.displayMu.Unlock()
 				}
 			}

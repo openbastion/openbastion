@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +41,50 @@ func (l *clipboardLog) capture(t *testing.T, name string) {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(dir, name), frame.PNG, 0o644)
+}
+
+// editPoint is a point in Notepad's text: the centre of the first all-white square of the screen,
+// whatever size and place earlier tests left its window at. ok is false when there is none.
+func (l *clipboardLog) editPoint() (x, y uint16, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.screen == nil {
+		return 0, 0, false
+	}
+	frame, err := l.screen.Frame(time.Now())
+	if err != nil {
+		return 0, 0, false
+	}
+	img, err := png.Decode(bytes.NewReader(frame.PNG))
+	if err != nil {
+		return 0, 0, false
+	}
+	return whiteSquareCentre(img, 120)
+}
+
+// whiteSquareCentre finds, scanning from the top left on an 8-pixel grid, the first side×side
+// square whose every fourth pixel is white, and returns its centre. A window's text area is white;
+// the desktop, the taskbar and the Start menu are not.
+func whiteSquareCentre(img image.Image, side int) (uint16, uint16, bool) {
+	b := img.Bounds()
+	white := func(x, y int) bool {
+		r, g, bl, _ := img.At(x, y).RGBA()
+		return r>>8 >= 0xf8 && g>>8 >= 0xf8 && bl>>8 >= 0xf8
+	}
+	for y := b.Min.Y; y+side <= b.Max.Y; y += 8 {
+	next:
+		for x := b.Min.X; x+side <= b.Max.X; x += 8 {
+			for dy := 0; dy < side; dy += 4 {
+				for dx := 0; dx < side; dx += 4 {
+					if !white(x+dx, y+dy) {
+						continue next
+					}
+				}
+			}
+			return uint16(x + side/2), uint16(y + side/2), true
+		}
+	}
+	return 0, 0, false
 }
 
 func (l *clipboardLog) offer() { l.mu.Lock(); l.offers++; l.mu.Unlock() }
@@ -189,8 +236,15 @@ func clipboardAgainstWindows(t *testing.T, client *rdp.CredSSPClientSession, use
 	if !client.ClipboardReady() {
 		t.Fatal("Windows did not open its clipboard (no Monitor Ready) in 10 s")
 	}
-	// Into Notepad, right of the Start menu (notepadPoint), then everything selected and copied.
-	x, y := notepadPoint(1280, 800)
+	// Into Notepad's text, found on the screen: earlier tests leave its window at different sizes
+	// and places (Windows Server 2022 at 16 bpp: 800 pixels wide at the top left, where the fixed
+	// notepadPoint, three quarters of the width, fell on the desktop). Then everything selected
+	// and copied.
+	x, y, found := log.editPoint()
+	if !found {
+		x, y = notepadPoint(1280, 800)
+		t.Logf("no white text area on the screen: clicking at (%d, %d)", x, y)
+	}
 	for _, buttons := range []rdp.RDPInputEvent{
 		{Type: rdp.RDPInputMouse, PointerFlags: 0x9000, X: x, Y: y}, // PTRFLAGS_DOWN | PTRFLAGS_BUTTON1
 		{Type: rdp.RDPInputMouse, PointerFlags: 0x1000, X: x, Y: y}, // PTRFLAGS_BUTTON1
