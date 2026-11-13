@@ -24,7 +24,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 10 | [Chaîne d'audit](#10-chaîne-daudit) | 9 |
 | 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
 | 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 4 |
-| 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 5 |
+| 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 6 |
 | 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
 
 ### 1. Fondations du code
@@ -205,6 +205,7 @@ Admin UI, portail utilisateur, système de conception, notifications vers les me
 | 1 | [ADR-0036](0036-l-admin-ui-react-vite-et-typescript-servie-par-la-gateway.md) | L'Admin UI : React, Vite et TypeScript, servie par la Gateway sous `/ui/`, de même origine que l'API, sous une CSP stricte | Accepté |
 | 2 | [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Accepté, mise en œuvre en cours |
 | 3 | [ADR-0075](0075-architecture-du-user-portal-et-socle-frontend-partage.md) | Architecture du User Portal et socle frontend partagé | Proposé |
+| 4 | [ADR-0098](0098-le-client-desktop-est-natif-go-et-construit-avec-fyne.md) | Le client Desktop OpenBastion est une application native Go construite avec Fyne | Proposé |
 | 5 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté |
 
 ### 14. Déploiement, CI et chaîne d'approvisionnement
@@ -325,3 +326,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté | Proxy écran RDP et VNC |
 | [ADR-0096](0096-le-presse-papiers-rdp-texte-par-sens-enregistre-et-audite.md) | Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité | Accepté | Proxy écran RDP et VNC |
 | [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Accepté | Proxy écran RDP et VNC |
+| [ADR-0098](0098-le-client-desktop-est-natif-go-et-construit-avec-fyne.md) | Le client Desktop OpenBastion est une application native Go construite avec Fyne | Proposé | Interfaces et notifications |
