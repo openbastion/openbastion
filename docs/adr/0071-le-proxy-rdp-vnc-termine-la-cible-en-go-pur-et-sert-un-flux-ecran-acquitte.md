@@ -25,7 +25,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 **Écarts restants.**
 | Écart | État |
 |---|---|
-| Refus intermittent de Windows juste après CredSSP | Quatre occurrences depuis le 12 novembre, sur des cibles différentes ; relancé, le job passe. Cause non établie (`NOTES_SANDBOX.md`, 13 novembre). |
+| Refus intermittent de Windows en CI | **Deux cas distincts, mesurés le 13 novembre sur 255 jobs** (`NOTES_SANDBOX.md`).<br>**À l'ouverture** (4 jobs sur 205 avant la PR #158, 0 sur 50 après) : cause établie. Le certificat épinglé prend effet avant la fin du redémarrage des services Bureau à distance ; depuis #158, le test attend en plus le marqueur `rdp-ready.txt`, et cette attente s'est produite 2 fois sur 50. Clos.<br>**En cours de job** (3 jobs sur 40 entre le 11 novembre, 20:15, et le 12 novembre, 09:30 UTC ; 0 sur 165 depuis, la mesure tournant dans chacun) : la machine Windows cesse de répondre jusqu'à la fin du job. Plus aucune réponse X.224, et l'export de ses journaux s'arrête, sans redémarrage. Cause non établie, aucun changement du test ou de la cible ne l'explique, et l'écart ne s'est plus reproduit. |
 | Réactivation (`Deactivate All`) | Mise en œuvre, éprouvée contre FreeRDP seulement ; jamais envoyée par Windows, aucun déclencheur connu. |
 | Mises à jour non graphiques | En partie : la liste reste fermée, et le reste est refusé. |
 | Licence RDS | Personal Terminal Server seulement. Ni émission, ni mise à niveau, ni Platform Challenge, ni certificats propriétaires anciens. |

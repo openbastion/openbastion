@@ -3510,6 +3510,17 @@ Quatre fois depuis le 12 novembre (#144 fr-FR, dernier passage de #155, deux pas
 
 **Hypothèse retenue, corrigée** : la tâche de fin d'installation (`rdp-setup.ps1`) installe le certificat épinglé puis redémarre les services Bureau à distance. Le certificat prend effet avant le redémarrage, si bien que le test, qui attendait ce seul certificat, commençait trop tôt : CredSSP passait en quelques secondes, puis le redémarrage coupait la première connexion d'écran et refusait les suivantes le temps qu'il dure. Les étapes suivantes du même job fonctionnaient, ce qui va dans ce sens. La tâche écrit maintenant `rdp-ready.txt` une fois le redémarrage fini, que la boucle SYSTEM copie sur le partage ; `windowsTarget` attend ce fichier en plus du certificat. Le journal dira si l'écart existe (« the pinned certificate is presented, but … rdp-ready.txt is not there yet »). Ce défaut est antérieur au redimensionnement (ADR-0095).
 
+**Bilan mesuré le 13 novembre 2026** sur tous les jobs Windows non annulés depuis le 11 novembre (255 jobs, journaux lus par l'API) : deux cas distincts, que `target_unreachable` confondait.
+- **A, refus à l'ouverture.** `TestRDPWindows_CredSSP` passe, puis la première connexion d'écran se ferme en 0,1 à 3 s, et les suivantes du même test échouent.
+  - 4 jobs sur 205 avant #158, 0 sur 50 après.
+  - Le mécanisme est observé directement : sur 2 des 50 jobs suivants, le certificat épinglé était présenté alors que `rdp-ready.txt` manquait encore, et le test a attendu (« the pinned certificate is presented, but … rdp-ready.txt is not there yet »).
+  - Cause établie, correctif en place. **Clos.**
+- **B, cible perdue en cours de job.** Tout se passe bien jusqu'à `TestRDPWindows_Measure`, puis une session ne s'ouvre plus. À partir de là, plus rien jusqu'à la fin du job, cinq minutes et plus : les épreuves suivantes reçoivent `target_unreachable`, les isolements « reading X.224 connection confirm failed ».
+  - Les journaux exportés de Windows s'arrêtent au même moment (fr-FR, run 43191279407 : dernier export à 01:37:13, heure de Windows, soit 09:37:13 UTC ; échec à 09:38:07). La console de QEMU ne montre aucun redémarrage : autant de démarrages que dans les jobs verts.
+  - Une fois, la session d'avant n'avait déjà plus reçu d'image pendant 50 s : la machine se figeait.
+  - 3 jobs sur 40 entre l'arrivée de la mesure en deux sessions (11 novembre, 20:15 UTC) et le 12 novembre, 09:30 UTC ; 0 sur 165 depuis, la mesure ayant tourné dans chacun.
+  - Aucun changement du test, de la cible ou de l'image dockur ne l'explique. **Cause non établie ; non reproduit depuis.** S'il revient, il faudra capturer l'écran de la machine (console de QEMU) au moment de la perte.
+
 ## 2026-11-13 — CI Windows : les clics dans Notepad évitent le menu Démarrer
 
 Sur Windows Server 2022 en 32 bpp, deux passages ont perdu les touches des épreuves de clavier et de mesure. Les captures du dernier passage (`extended-1b-ctrl-esc.png`, `extended-3-typed.png`) montrent pourquoi :
