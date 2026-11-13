@@ -4331,3 +4331,10 @@ Vérifié : `make build vet test` ; tests Broker avec `TEST_DATABASE_URL` sur un
 Le message `CLIPBOARD` (type 5) du flux écran, enregistré sous le codec `clipboard-text-v1` dans la suite des images, scellé au format 3, servi par la Gateway à la relecture. Rien ne le produit encore : le relais (3b) et `SCREEN_CLIPBOARD` viennent ensuite. La relecture de l'Admin UI refuse ce codec jusqu'à l'incrément 4.
 
 Vérifié : tests de `pkg/screenstream`, du Video Recorder, de la Gateway et du proxy ; `FuzzDecode` 20 s ; 14 mutations, 14 tuées.
+
+## 2026-11-13 — ADR-0096, incrément 3b : le relais du presse-papiers, derrière `SCREEN_CLIPBOARD`
+
+`pkg/proxycore/clipboard.go` : un transfert est contrôlé (contrat), borné (10 par minute et par session), audité (`session.clipboard`, sens, taille et empreinte, jamais le texte), enregistré et acquitté, puis livré. Un refus est audité en échec et la session continue ; un enregistrement perdu la termine. Le relais décale les images du nombre de textes passés pour garder une seule suite, et la file d'affichage ne jette jamais un texte. Le moteur RDP annonce `cliprdr` selon les droits, demande le texte dès que la cible en propose un, et en garde quatre au plus en attente. `SCREEN_CLIPBOARD` est éteint par défaut ; le compose l'expose.
+
+Vérifié : `pkg/proxycore` sous `-race`, moteur, auditeur, contrat, Vitest ; 21 mutations, 21 tuées. **Non fait** : aucun transfert à travers le relais complet contre Windows ni dans un navigateur (incréments 4 et 5) ; coller depuis la page n'existe pas encore.
+

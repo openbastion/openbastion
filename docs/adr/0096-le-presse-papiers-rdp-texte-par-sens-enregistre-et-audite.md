@@ -71,6 +71,20 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 - **Limite** : la relecture de l'Admin UI refuse encore ce codec, comme tout codec inconnu. Elle le montrera à l'incrément 4. D'ici là, `SCREEN_CLIPBOARD` reste éteint et aucun enregistrement n'en contient.
 - **Prouvé** : aller-retour et refus du message, fuzzing de `Decode` ; écriture et relecture à l'identique au Video Recorder, sans texte en clair dans le stockage ; formats ; refus d'une entrée hors de sa place ; Gateway et client du proxy ; 14 mutations, 14 tuées.
 
+**Incrément 3b, fait (13 novembre 2026) : le relais, l'audit et la borne.**
+- **Ouverture** : le proxy n'ouvre le presse-papiers que si les trois conditions sont réunies : un droit pour la session, un codec qui le sait (RDP) et un auditeur. Ce dernier n'est branché que si `SCREEN_CLIPBOARD=true` (éteint par défaut, §7). Le moteur annonce alors `cliprdr` et l'ouvre dans les sens accordés. Le texte qui sort de la cible n'est lu qu'avec le droit de copier.
+- **Un transfert**, dans cet ordre :
+  1. le texte doit tenir dans le contrat ;
+  2. la borne : 10 par minute et par session, les deux sens ensemble ;
+  3. l'audit `session.clipboard` : le sens, la taille et l'empreinte SHA-256 dans les détails d'ADR-0068, jamais le texte ;
+  4. l'enregistrement et son acquittement ;
+  5. la livraison (le texte collé est offert à la cible ; le texte copié, comme le collé, est envoyé à la page).
+  Sans l'événement d'audit, pas de transfert. Un refus (texte hors contrat, borne, audit indisponible) est audité en échec, et la session continue. Un enregistrement non acquitté termine la session (`recording_lost`), comme pour une image.
+- **Une seule suite** : le moteur numérote ses images, le relais les décale du nombre de textes passés avant elles, de sorte que l'enregistrement et la page reçoivent la même suite. La file d'affichage ne jette jamais un texte : ni pour une image clé, ni quand les images partielles débordent, ni en attendant une image clé.
+- **Copier** : quand la cible propose un texte, le moteur le demande aussitôt. Quatre textes au plus attendent le relais ; au-delà, un texte est perdu, jamais livré ni enregistré.
+- **Admin UI** : la page lit le message `CLIPBOARD` et suit sa séquence ; la relecture parcourt ces entrées sans changer l'écran. Les montrer, et coller depuis la page, est l'incrément 4.
+- **Prouvé** : ordre audit → enregistrement → livraison, refus sans audit, borne de 10 par minute, refus hors contrat, transfert non acquitté non livré, place dans la suite (image clé, texte, image partielle), conditions d'ouverture, file d'affichage ; moteur, auditeur, Admin UI ; 21 mutations, 21 tuées (une a d'abord survécu : le relais lisait-il les textes de la cible sans le droit de copier ? un test le dit désormais).
+
 ## Conséquences
 
 - (+) Le besoin le plus demandé des opérateurs, sans trou dans la trace : chaque transfert est enregistré, chiffré, audité et refusable par politique, dans chaque sens séparément.

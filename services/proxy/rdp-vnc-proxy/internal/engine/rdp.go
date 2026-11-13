@@ -47,8 +47,30 @@ type RDPCodec struct {
 	// Resize opens the display control (SCREEN_RESIZE, ADR-0095): drdynvc is announced, the
 	// display control is the one dynamic channel accepted, and InputResize asks the target for a
 	// desktop of the operator's size. Off, no channel is announced, as before.
-	Resize      bool
+	Resize bool
+	// Clipboard lets a session open the target's clipboard, in the directions its rights allow
+	// (SCREEN_CLIPBOARD, ADR-0096): cliprdr is announced only for a session with a right. Off, it
+	// never is, whatever the rights.
+	Clipboard   bool
 	openSession func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
+	// openSessionWith stands in for the connection in tests that look at the clipboard's rights.
+	openSessionWith func(context.Context, *proxycore.Credential, rdpClipboardRights) (rdpScreenSession, error)
+}
+
+// rdpClipboardRights are the clipboard's directions a session may use (ADR-0096 §1).
+type rdpClipboardRights struct{ toTarget, fromTarget bool }
+
+func (r rdpClipboardRights) any() bool { return r.toTarget || r.fromTarget }
+
+var _ proxycore.ClipboardCodec = (*RDPCodec)(nil)
+
+// OpenWithClipboard opens the screen with the target's clipboard, in the directions allowed. With
+// the clipboard off (SCREEN_CLIPBOARD), or no direction, it is Open: cliprdr is not announced.
+func (c *RDPCodec) OpenWithClipboard(ctx context.Context, cred *proxycore.Credential, toTarget, fromTarget bool) (proxycore.ScreenSession, error) {
+	if c == nil || !c.Clipboard {
+		return c.Open(ctx, cred)
+	}
+	return c.open(ctx, cred, rdpClipboardRights{toTarget: toTarget, fromTarget: fromTarget})
 }
 
 var _ proxycore.ScreenCodec = (*RDPCodec)(nil)
@@ -61,6 +83,10 @@ type rdpScreenSession interface {
 }
 
 func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxycore.ScreenSession, error) {
+	return c.open(ctx, cred, rdpClipboardRights{})
+}
+
+func (c *RDPCodec) open(ctx context.Context, cred *proxycore.Credential, clipboard rdpClipboardRights) (proxycore.ScreenSession, error) {
 	if c == nil || c.TLSRoots == nil || cred == nil || cred.Type != "password" ||
 		cred.TargetHost == "" || cred.TargetUser == "" || cred.TLSCertificateSHA256 == "" || cred.TargetDomain == "" ||
 		c.DialTimeout < 0 || c.InputTimeout < 0 {
@@ -68,10 +94,13 @@ func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 	}
 	var target rdpScreenSession
 	var err error
-	if c.openSession != nil {
+	switch {
+	case c.openSessionWith != nil:
+		target, err = c.openSessionWith(ctx, cred, clipboard)
+	case c.openSession != nil:
 		target, err = c.openSession(ctx, cred)
-	} else {
-		target, err = c.openRDPSession(ctx, cred)
+	default:
+		target, err = c.openRDPSession(ctx, cred, clipboard)
 	}
 	if err != nil {
 		code := "target_unreachable"
@@ -121,7 +150,7 @@ func (c *RDPCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 	return s, nil
 }
 
-func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credential) (rdpScreenSession, error) {
+func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credential, clipboard rdpClipboardRights) (rdpScreenSession, error) {
 	transport, err := rdp.DialHybrid(ctx, rdp.TransportConfig{
 		Address: cred.TargetHost, TLSFingerprint: cred.TLSCertificateSHA256,
 		TLSRoots: c.TLSRoots, TLSServerName: cred.TargetDomain, DialTimeout: c.DialTimeout,
@@ -149,14 +178,22 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		height = rdpDefaultDesktopHeight
 	}
 	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
-		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize, DesktopResize: c.Resize}
+		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize, DesktopResize: c.Resize, ClipboardChannel: clipboard.any()}
 	target := &rdpTargetSession{session: client, resize: c.Resize}
+	if clipboard.fromTarget {
+		target.copied = make(chan string, rdpCopiedTextsWaiting)
+	}
 	var negotiatedWidth, negotiatedHeight uint16
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
 		{"MCS channels", func() error {
 			if c.Resize {
 				if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel}, target.displayControlOpened, target.displayControlMessage); e != nil {
+					return e
+				}
+			}
+			if clipboard.any() {
+				if e := client.EnableClipboard(clipboard.toTarget, clipboard.fromTarget, target.clipboardOffered, target.clipboardCopied); e != nil {
 					return e
 				}
 			}
@@ -228,6 +265,50 @@ type rdpTargetSession struct {
 	// resizesSent counts the layouts sent, resizesDeferred those the closed channel kept back,
 	// for the interoperability tests' word.
 	resizesSent, resizesDeferred int
+	// copied carries the texts copied on the target to the relay, nil when copying is not allowed;
+	// copiedDropped counts those past rdpCopiedTextsWaiting.
+	copied        chan string
+	copiedDropped int
+}
+
+// rdpCopiedTextsWaiting bounds the texts copied on the target that wait for the relay: it reads
+// them as they come, and at most ten a minute pass (ADR-0096 §3). One past the bound is dropped,
+// never delivered nor recorded.
+const rdpCopiedTextsWaiting = 4
+
+// clipboardOffered is told the target has a text to copy: it is asked for at once, and comes to
+// clipboardCopied (ADR-0096: the page shows what the target copied).
+func (s *rdpTargetSession) clipboardOffered() {
+	if s.copied == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), rdpInputTimeout)
+	defer cancel()
+	_ = s.session.RequestClipboardText(ctx) // a request under way already asks for the latest text
+}
+
+// clipboardCopied hands a text copied on the target to the relay, without holding up the reader.
+func (s *rdpTargetSession) clipboardCopied(text string) error {
+	select {
+	case s.copied <- text:
+	default:
+		s.displayMu.Lock()
+		s.copiedDropped++
+		s.displayMu.Unlock()
+	}
+	return nil
+}
+
+func (s *rdpTargetSession) copiedTexts() <-chan string { return s.copied }
+
+func (s *rdpTargetSession) offerClipboardText(ctx context.Context, text string) error {
+	return s.session.OfferClipboardText(ctx, text)
+}
+
+// rdpClipboardTarget is a target session whose clipboard may be open (ADR-0096).
+type rdpClipboardTarget interface {
+	copiedTexts() <-chan string
+	offerClipboardText(ctx context.Context, text string) error
 }
 
 // rdpResizer is a target session that can ask for another desktop size (ADR-0095).
@@ -728,3 +809,26 @@ func (s *rdpScreenSessionAdapter) readLoop(ctx context.Context) {
 		}
 	}
 }
+
+// ClipboardTexts are the texts copied on the target (proxycore.ClipboardSession): nil when copying
+// is not allowed, or the clipboard not open.
+func (s *rdpScreenSessionAdapter) ClipboardTexts() <-chan string {
+	if target, ok := s.target.(rdpClipboardTarget); ok {
+		return target.copiedTexts()
+	}
+	return nil
+}
+
+// OfferClipboardText offers the operator's text to the target's clipboard, which pkg/rdp refuses
+// when pasting is not allowed.
+func (s *rdpScreenSessionAdapter) OfferClipboardText(text string) error {
+	target, ok := s.target.(rdpClipboardTarget)
+	if !ok {
+		return rdp.ErrRDPClipboard
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), s.inputTimeout)
+	defer cancel()
+	return target.offerClipboardText(ctx, text)
+}
+
+var _ proxycore.ClipboardSession = (*rdpScreenSessionAdapter)(nil)
