@@ -1,6 +1,7 @@
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Button } from "./Button";
 import { InlineNotice } from "./InlineNotice";
+import { useAppTranslation } from "../i18n";
 
 // Explicit confirmation for privileged or destructive actions. The caller owns the API request;
 // this component only guards the gesture and keeps focus inside the alert dialog.
@@ -21,6 +22,7 @@ export function ConfirmDialog({
   onConfirm: () => Promise<boolean>;
   onCancel: () => void;
 }) {
+  const { t } = useAppTranslation();
   const cancel = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
   const trigger = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -69,9 +71,9 @@ export function ConfirmDialog({
         <p id="confirm-description">{description}</p>
         {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
         <div className="ob-form-actions">
-          <Button ref={cancel} disabled={working} onClick={onCancel}>Annuler</Button>
+          <Button ref={cancel} disabled={working} onClick={onCancel}>{t("common.actions.cancel")}</Button>
           <Button ref={confirm} variant={danger ? "danger" : "primary"} disabled={working} onClick={() => void submit()}>
-            {working ? "Traitement…" : confirmLabel}
+            {working ? t("common.actions.working") : confirmLabel}
           </Button>
         </div>
       </div>

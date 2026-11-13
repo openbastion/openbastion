@@ -6,12 +6,14 @@ import { FormCard } from "../../shared/ui/FormCard";
 import { Pager } from "../../shared/ui/Pager";
 import { Badge } from "../../shared/ui/Badge";
 import { VideoReplay } from "./VideoReplay";
+import { useAppTranslation } from "../../shared/i18n";
 
 const pageSize = 100;
 
 // Reading back what was typed in a session (GET /sessions/{id}/recording). Each page read is
 // itself an audit event (ADR-0022). Commands are shown as text, never interpreted.
 export function Recording() {
+  const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [sessionId, setSessionId] = useState("");
   const [page, setPage] = useState<RecordingPage>();
@@ -36,10 +38,10 @@ export function Recording() {
   }
 
   return (
-    <AdminPage title="Enregistrements" hints={["Chaque page relue est un événement d'audit à votre nom."]}>
+    <AdminPage title={t("recording.title")} hints={[t("recording.hint")]}>
       <FormCard
-        label="Relire un enregistrement"
-        submitLabel="Relire"
+        label={t("recording.form.label")}
+        submitLabel={t("recording.form.submit")}
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
           void read(1);
@@ -47,15 +49,15 @@ export function Recording() {
         error={error}
       >
         <label>
-          Session
+          {t("recording.form.session")}
           <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
         </label>
       </FormCard>
-      {loading ? <p className="ob-empty-state" role="status">Chargement de l'enregistrement…</p> : null}
-      {!loading && hasRead && page && page.entries.length === 0 ? <p className="ob-empty-state">Aucune commande enregistrée pour cette session.</p> : null}
+      {loading ? <p className="ob-empty-state" role="status">{t("recording.loading")}</p> : null}
+      {!loading && hasRead && page && page.entries.length === 0 ? <p className="ob-empty-state">{t("recording.empty")}</p> : null}
       {!loading && page && page.entries.length > 0 ? (
         <section className="ob-surface commands-card" aria-labelledby="recorded-commands-title">
-          <div className="ob-section-heading"><h3 id="recorded-commands-title">Commandes de la session <code>{page.sessionId}</code></h3><Badge>{page.totalEntries} commande(s)</Badge></div>
+          <div className="ob-section-heading"><h3 id="recorded-commands-title">{t("recording.sessionCommands")} <code>{page.sessionId}</code></h3><Badge>{t("recording.commandCount", { count: page.totalEntries })}</Badge></div>
           <ol className="commands" start={(page.page - 1) * page.pageSize + 1}>
             {page.entries.map((e, i) => (
               <li key={`${e.timestamp}-${i}`}>
@@ -63,7 +65,7 @@ export function Recording() {
               </li>
             ))}
           </ol>
-          <Pager page={page.page} pageSize={page.pageSize} totalItems={page.totalEntries} noun="commande(s)" onPage={(next) => void read(next, page.sessionId)} />
+          <Pager page={page.page} pageSize={page.pageSize} totalItems={page.totalEntries} noun={t("recording.noun")} onPage={(next) => void read(next, page.sessionId)} />
         </section>
       ) : null}
       <VideoReplay />

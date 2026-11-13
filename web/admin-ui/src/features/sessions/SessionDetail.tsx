@@ -1,6 +1,7 @@
 import { Session } from "../../shared/api";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { Button } from "../../shared/ui/Button";
+import { useAppTranslation } from "../../shared/i18n";
 
 // The attached screen of the session being looked at: each connection is another attach, and the
 // key restarts the viewer on the new one.
@@ -21,26 +22,27 @@ export function SessionDetail({
   onOpenScreen: (sessionId: string) => void;
   onTerminate: (session: Session) => void;
 }) {
+  const { t, i18n } = useAppTranslation();
   return (
     <>
-      <dl className="ob-detail-list" aria-label="Détails de la session">
-        <dt>Statut</dt>
+      <dl className="ob-detail-list" aria-label={t("sessions.detail.aria")}>
+        <dt>{t("sessions.columns.status")}</dt>
         <dd>
           <StatusBadge status={session.status} />
         </dd>
-        <dt>Protocole</dt>
+        <dt>{t("sessions.columns.protocol")}</dt>
         <dd>{session.protocol}</dd>
-        <dt>Demandeur</dt>
+        <dt>{t("sessions.columns.requester")}</dt>
         <dd>{session.requestedBy}</dd>
-        <dt>Compte</dt>
+        <dt>{t("sessions.columns.account")}</dt>
         <dd>{session.privilegedAccountId}</dd>
-        <dt>Justification</dt>
+        <dt>{t("sessions.columns.justification")}</dt>
         <dd>{session.justification}</dd>
-        <dt>Fin</dt>
+        <dt>{t("sessions.detail.end")}</dt>
         <dd>{session.expiresAt}</dd>
         {session.ticket ? (
           <>
-            <dt>Ticket</dt>
+            <dt>{t("sessions.columns.ticket")}</dt>
             <dd>
               <code>{session.ticket}</code>
             </dd>
@@ -48,20 +50,20 @@ export function SessionDetail({
         ) : null}
         {session.decidedAt ? (
           <>
-            <dt>Décision le</dt>
-            <dd><time dateTime={session.decidedAt}>{new Date(session.decidedAt).toLocaleString("fr-FR")}</time></dd>
+            <dt>{t("sessions.detail.decidedAt")}</dt>
+            <dd><time dateTime={session.decidedAt}>{new Date(session.decidedAt).toLocaleString(i18n.language)}</time></dd>
           </>
         ) : null}
         {session.approvalRequired ? (
           <>
-            <dt>Approbation</dt>
-            <dd>{session.decidedBy ? `décidée par ${session.decidedBy}` : "en attente"}</dd>
+            <dt>{t("sessions.detail.approval")}</dt>
+            <dd>{session.decidedBy ? t("sessions.detail.decidedBy", { who: session.decidedBy }) : t("sessions.detail.pending")}</dd>
           </>
         ) : null}
         {session.breakGlass ? (
           <>
-            <dt>Urgence</dt>
-            <dd>oui{session.decidedBy ? `, décidée par ${session.decidedBy}` : ""}</dd>
+            <dt>{t("sessions.detail.emergency")}</dt>
+            <dd>{session.decidedBy ? t("sessions.detail.emergencyDecidedBy", { who: session.decidedBy }) : t("sessions.detail.emergencyYes")}</dd>
           </>
         ) : null}
       </dl>
@@ -69,11 +71,11 @@ export function SessionDetail({
         <div className="ob-form-actions">
           {session.protocol === "vnc" || session.protocol === "rdp" ? (
             <Button variant="primary" onClick={() => onOpenScreen(session.id)}>
-              Ouvrir l'écran
+              {t("sessions.detail.openScreen")}
             </Button>
           ) : null}
           <Button variant="danger" onClick={() => onTerminate(session)}>
-            Mettre fin
+            {t("sessions.detail.terminate")}
           </Button>
         </div>
       ) : null}

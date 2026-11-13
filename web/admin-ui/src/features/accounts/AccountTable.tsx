@@ -1,6 +1,7 @@
 import { Account } from "../../shared/api";
 import { Badge } from "../../shared/ui/Badge";
 import { Button } from "../../shared/ui/Button";
+import { useAppTranslation } from "../../shared/i18n";
 
 // What a row can ask of its account. The screen owns the calls and the notices; the table only
 // says which account each button names.
@@ -13,21 +14,22 @@ export interface AccountActions {
 }
 
 export function AccountTable({ accounts, actions }: { accounts: Account[]; actions: AccountActions }) {
+  const { t } = useAppTranslation();
   return (
     <div className="ob-table-wrap">
       <table className="ob-data-table">
-        <caption className="ob-visually-hidden">Comptes privilégiés enregistrés dans le Vault</caption>
+        <caption className="ob-visually-hidden">{t("accounts.table.caption")}</caption>
         <thead>
           <tr>
-            <th scope="col">Identifiant</th>
-            <th scope="col">Nom</th>
-            <th scope="col">Cible</th>
-            <th scope="col">Utilisateur</th>
-            <th scope="col">Identité de la cible</th>
-            <th scope="col">Rotation</th>
-            <th scope="col">Dernière rotation</th>
-            <th scope="col">Approbation</th>
-            <th scope="col">Actions</th>
+            <th scope="col">{t("accounts.table.id")}</th>
+            <th scope="col">{t("accounts.table.name")}</th>
+            <th scope="col">{t("accounts.table.target")}</th>
+            <th scope="col">{t("accounts.table.username")}</th>
+            <th scope="col">{t("accounts.table.identity")}</th>
+            <th scope="col">{t("accounts.table.rotation")}</th>
+            <th scope="col">{t("accounts.table.lastRotation")}</th>
+            <th scope="col">{t("accounts.table.approval")}</th>
+            <th scope="col">{t("accounts.table.actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -46,28 +48,28 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
                 <Rotation account={a} />
               </td>
               <td>{a.lastRotatedAt ?? "—"}</td>
-              <td>{a.approvalRequired ? <Badge>requise</Badge> : "—"}</td>
+              <td>{a.approvalRequired ? <Badge>{t("accounts.table.approvalRequired")}</Badge> : "—"}</td>
               <td className="ob-table-actions">
                 <div>
                   {a.protocol === "ssh" ? (
                     <Button onClick={() => actions.pinKey(a)}>
-                      {a.hostKeyFingerprint ? "Changer la clé d'hôte" : "Épingler la clé d'hôte"}
+                      {a.hostKeyFingerprint ? t("accounts.table.changeHostKey") : t("accounts.table.pinHostKey")}
                     </Button>
                   ) : (
                     <Button onClick={() => actions.pinTls(a)}>
-                      {a.tlsCertificateSha256 ? "Changer le certificat TLS" : "Épingler le certificat TLS"}
+                      {a.tlsCertificateSha256 ? t("accounts.table.changeCertificate") : t("accounts.table.pinCertificate")}
                     </Button>
                   )}
                   <Button onClick={() => actions.toggleApproval(a)}>
-                    {a.approvalRequired ? "Ne plus exiger l'approbation" : "Exiger l'approbation"}
+                    {a.approvalRequired ? t("accounts.table.noApproval") : t("accounts.table.requireApproval")}
                   </Button>
                   {a.protocol === "ssh" ? (
                     <Button onClick={() => actions.rotate(a)}>
-                      Renouveler le secret
+                      {t("accounts.table.rotate")}
                     </Button>
                   ) : null}
                   <Button variant="danger" onClick={() => actions.disable(a)}>
-                    Désactiver
+                    {t("accounts.table.disable")}
                   </Button>
                 </div>
               </td>
@@ -82,37 +84,37 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
 // The pinned identity of the target: a host key for SSH (ADR-0039), a TLS certificate for a
 // graphical target (ADR-0071). An account without one opens no session.
 function TargetIdentity({ account: a }: { account: Account }) {
+  const { t } = useAppTranslation();
   if (a.protocol === "ssh") {
-    return a.hostKeyFingerprint ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code> : <Badge tone="warning">non épinglée</Badge>;
+    return a.hostKeyFingerprint
+      ? <code title={a.hostKey}>{a.hostKeyFingerprint}</code>
+      : <Badge tone="warning">{t("accounts.table.notPinned")}</Badge>;
   }
-  return a.tlsCertificateSha256 ? <code title={a.targetDomain}>{a.tlsCertificateSha256}</code> : <Badge tone="warning">non épinglée</Badge>;
+  return a.tlsCertificateSha256
+    ? <code title={a.targetDomain}>{a.tlsCertificateSha256}</code>
+    : <Badge tone="warning">{t("accounts.table.notPinned")}</Badge>;
 }
 
 // The rotation a secret is under, and what the Vault reports about it: a cadence (ADR-0040), a
 // rotation owed after a session (ADR-0044), and scheduled rotations that keep failing (ADR-0041).
 function Rotation({ account: a }: { account: Account }) {
+  const { t } = useAppTranslation();
   return (
     <>
       <Badge>{a.rotationPolicy}</Badge>
       {a.rotationIntervalDays ? (
         <span className="cell-note">
-          tous les {a.rotationIntervalDays} j — prochaine : {a.nextRotationAt ?? "—"}
+          {t("accounts.table.every", { days: a.rotationIntervalDays, next: a.nextRotationAt ?? "—" })}
         </span>
       ) : null}
       {a.rotationOwedSince ? (
-        <Badge
-          tone="warning"
-          title={`Une session s'est terminée le ${a.rotationOwedSince} : le Vault fait tourner ce secret, et réessaie tant qu'il n'y arrive pas.`}
-        >
-          renouvellement dû
+        <Badge tone="warning" title={t("accounts.table.rotationOwedTitle", { since: a.rotationOwedSince })}>
+          {t("accounts.table.rotationOwed")}
         </Badge>
       ) : null}
       {a.rotationFailures ? (
-        <Badge
-          tone="warning"
-          title="Rotations planifiées échouées d'affilée : le secret n'a pas changé. Voir le journal du Vault."
-        >
-          en échec ({a.rotationFailures})
+        <Badge tone="warning" title={t("accounts.table.rotationFailedTitle")}>
+          {t("accounts.table.rotationFailed", { count: a.rotationFailures })}
         </Badge>
       ) : null}
     </>

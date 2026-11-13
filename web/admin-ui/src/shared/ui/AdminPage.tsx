@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { useAppTranslation } from "../i18n";
 
 // The frame of every signed-in screen (src/app/styles.css: `.page`, `.page-head`, `.hint`). Hints
 // are what an operator must know before acting on the screen, never a tour of it.
@@ -32,6 +33,7 @@ export function PageHead({
   hints?: ReactNode[];
   actions?: ReactNode;
 }) {
+  const { t } = useAppTranslation();
   return (
     <header className="ob-page-header">
       <div className="page-heading">
@@ -40,7 +42,7 @@ export function PageHead({
       </div>
       {hints.length > 1 ? (
         <details className="page-hints">
-          <summary>À savoir avant d’agir ({hints.length})</summary>
+          <summary>{t("common.hints", { count: hints.length })}</summary>
           {hints.map((hint, i) => (
             <p className="ob-hint" key={i}>
               {hint}
