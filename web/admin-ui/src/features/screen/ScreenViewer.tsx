@@ -1,4 +1,4 @@
-import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { MAX_CLIPBOARD_TEXT_LENGTH, SUBPROTOCOL, clampResize, decodeScreenMessage, encodeClipboard, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 import { Button } from "../../shared/ui/Button";
@@ -88,6 +88,7 @@ const UNREADABLE = "Le flux reçu n'est pas valide : la connexion a été fermé
 export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps }: { attach: string; onReconnect: () => void; onClose: () => void; deps?: ScreenDeps }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  const hintId = useId();
   const socket = useRef<ScreenSocket | null>(null);
   const frame = useRef<{ width: number; height: number } | null>(null);
   const pressed = useRef(new Map<string, number>());
@@ -258,6 +259,14 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   // RDP takes the physical key itself, VNC the character it gives here; before the HELLO, nothing.
   function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
+    // The way out of the screen, by the keyboard alone (WCAG 2.1.2): Ctrl+Alt+Shift+Esc gives the
+    // keyboard back to the page. Esc is not sent; the blur releases what the target holds down.
+    if (e.key === "Escape" && e.ctrlKey && e.altKey && e.shiftKey) {
+      const next = area.current?.querySelector<HTMLElement>("button");
+      canvas.current?.blur();
+      next?.focus();
+      return;
+    }
     const rdp = protocol.current === "rdp";
     if (protocol.current === null) return;
     const key = pressed.current.get(e.code) ?? (rdp ? scancodeOf(e.code) : keysymOf(e.key));
@@ -385,8 +394,8 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       {phase.name === "connecting" ? <InlineNotice tone="info">Connexion à la cible…</InlineNotice> : null}
       {phase.name === "live" && !hasFrame ? <InlineNotice tone="success">Connecté. En attente de la première image enregistrée…</InlineNotice> : null}
       {phase.name === "live" && hasFrame ? (
-        <p className="ob-hint" role="status">
-          Session enregistrée{phase.expiresAt ? `, jusqu'à ${phase.expiresAt.toLocaleString("fr-FR")}` : ""}. Cliquez sur l'écran pour saisir. Le navigateur garde pour lui certains raccourcis (Alt+Tab, touche Windows).
+        <p className="ob-hint" role="status" id={hintId}>
+          Session enregistrée{phase.expiresAt ? `, jusqu'à ${phase.expiresAt.toLocaleString("fr-FR")}` : ""}. Cliquez sur l'écran pour saisir : le clavier et la souris vont à la cible. Ctrl+Alt+Maj+Échap rend le clavier à la page. Le navigateur garde pour lui certains raccourcis (Alt+Tab, touche Windows). L'image n'est pas lisible par un lecteur d'écran : pour lire un texte de la cible, copiez-le, il apparaît dans le panneau Presse-papiers.
         </p>
       ) : null}
       {phase.name === "ended" ? <InlineNotice tone="danger">{phase.message}</InlineNotice> : null}
@@ -427,8 +436,10 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         ref={canvas}
         className={pointerDrawn ? "screen-canvas pointer-drawn" : "screen-canvas"}
         tabIndex={0}
-        role="img"
-        aria-label="Écran distant de la session, non lisible par un lecteur d'écran"
+        role="application"
+        aria-roledescription="écran distant"
+        aria-label="Écran distant de la session"
+        aria-describedby={hintId}
         hidden={!hasFrame}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
