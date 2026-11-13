@@ -3114,6 +3114,18 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-13 — CI Windows : Windows refuse tout juste après CredSSP (intermittent, à étudier)
+
+Quatre fois depuis le 12 novembre (#144 fr-FR, dernier passage de #155, deux passages de #157) : `TestRDPWindows_CredSSP` passe, puis la première connexion d'écran se ferme en 0,1 à 0,2 s, et Windows refuse toutes les suivantes (`target_unreachable`). Ce n'est jamais la même cible. Relancé, le job passe.
+
+**Ce que disent les journaux de Windows** (fr-FR, run 43352131409, à l'heure de Windows) :
+- **18:35:11** : la tâche de fin d'installation installe le certificat épinglé et redémarre les services Bureau à distance. C'est avant que le test voie le certificat, donc ce n'est pas elle.
+- **18:36:12-13** : une session est fermée puis déconnectée (événements 59, 23, 39, 40 du LocalSessionManager). C'est le moment de l'échec ; la cause reste à trouver.
+
+**Autre incident, même job relancé (fr-FR, tentative 2)** : la session du navigateur sans interface s'est terminée avant sa première image (fin de session par Windows, `session_ended`). Ce n'était pas la demande de déconnexion déposée par l'épreuve de déconnexion : elle a été retirée, et Windows n'a déconnecté qu'une fois, à 03:11:49 UTC, cinq minutes avant. Cause inconnue.
+
+**Hypothèse retenue, corrigée** : la tâche de fin d'installation (`rdp-setup.ps1`) installe le certificat épinglé puis redémarre les services Bureau à distance. Le certificat prend effet avant le redémarrage, si bien que le test, qui attendait ce seul certificat, commençait trop tôt : CredSSP passait en quelques secondes, puis le redémarrage coupait la première connexion d'écran et refusait les suivantes le temps qu'il dure. Les étapes suivantes du même job fonctionnaient, ce qui va dans ce sens. La tâche écrit maintenant `rdp-ready.txt` une fois le redémarrage fini, que la boucle SYSTEM copie sur le partage ; `windowsTarget` attend ce fichier en plus du certificat. Le journal dira si l'écart existe (« the pinned certificate is presented, but … rdp-ready.txt is not there yet »). Ce défaut est antérieur au redimensionnement (ADR-0095).
+
 ## 2026-11-13 — CI Windows : les clics dans Notepad évitent le menu Démarrer
 
 Sur Windows Server 2022 en 32 bpp, deux passages ont perdu les touches des épreuves de clavier et de mesure. Les captures du dernier passage (`extended-1b-ctrl-esc.png`, `extended-3-typed.png`) montrent pourquoi :
