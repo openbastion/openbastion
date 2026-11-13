@@ -4364,3 +4364,9 @@ Vérifié : `pkg/screenstream` (fuzzing de l'entrée), `pkg/proxycore` sous `-ra
 
 ADR-0096 est mise en œuvre. `SCREEN_CLIPBOARD` reste éteint : l'allumer par défaut est la décision du propriétaire.
 
+## 2026-11-13 — ADR-0095 : une mise en page restée sans effet est redemandée
+
+Sur #170 (2022, 32 bpp) puis #180 (console), `TestRDPWindows_Resize` a échoué une fois. Le diagnostic ajouté sur #170 dit, pour #180 : capacités reçues, 1 mise en page envoyée, 0 retenue par un canal fermé. Windows n'a pas suivi en 60 s, et le moteur ne redemandait jamais une taille déjà demandée. Juste après, la session du navigateur sur la même cible n'a reçu aucune image en 2 min. Cause côté Windows non établie : l'export de ses journaux (400 derniers événements RDP) ne remontait que trois minutes.
+
+Correctif : redemander la même taille après 5 s, et ne rien demander quand le bureau a déjà la taille. Deux tests, trois mutations tuées. Il réduit l'écart sans prouver qu'il l'efface.
+

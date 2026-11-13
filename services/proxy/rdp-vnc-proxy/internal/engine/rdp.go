@@ -259,9 +259,13 @@ type rdpTargetSession struct {
 	displayMu    sync.Mutex
 	displayCaps  rdp.RDPDisplayControlCaps
 	displayReady bool
-	// wantedSize is the size last asked for, askedSize the one last sent to the target: a size
-	// asked before the target is ready is sent when it is.
+	// wantedSize is the size last asked for, askedSize the one last sent to the target, at askedAt:
+	// a size asked before the target is ready is sent when it is, and one the target left without
+	// effect is sent again after rdpResizeReask.
 	wantedSize, askedSize [2]uint16
+	askedAt               time.Time
+	// now is the clock of askedAt; tests set it.
+	now func() time.Time
 	// resizesSent counts the layouts sent, resizesDeferred those the closed channel kept back,
 	// for the interoperability tests' word.
 	resizesSent, resizesDeferred int
@@ -310,6 +314,9 @@ type rdpClipboardTarget interface {
 	copiedTexts() <-chan string
 	offerClipboardText(ctx context.Context, text string) error
 }
+
+// rdpResizeReask is how long a layout the target left without effect waits before it is sent again.
+const rdpResizeReask = 5 * time.Second
 
 // rdpResizer is a target session that can ask for another desktop size (ADR-0095).
 type rdpResizer interface {
@@ -367,9 +374,17 @@ func (s *rdpTargetSession) Resize(ctx context.Context, width, height uint16, tim
 // for it already. displayMu is not held: the send may block.
 func (s *rdpTargetSession) applySize(ctx context.Context, timeout time.Duration) error {
 	s.displayMu.Lock()
-	wanted, caps, ready, asked := s.wantedSize, s.displayCaps, s.displayReady, s.askedSize
+	wanted, caps, ready, asked, askedAt := s.wantedSize, s.displayCaps, s.displayReady, s.askedSize, s.askedAt
 	s.displayMu.Unlock()
-	if !s.resize || !ready || wanted == ([2]uint16{}) || wanted == asked || !caps.Fits(uint32(wanted[0]), uint32(wanted[1])) {
+	now := time.Now
+	if s.now != nil {
+		now = s.now
+	}
+	// The same size again is sent only once rdpResizeReask has passed: Windows once left a layout
+	// without effect, and the session kept its old size (CI of PR #170 and #180). The adapter asks
+	// nothing when the desktop already has the size.
+	again := wanted == asked && now().Sub(askedAt) < rdpResizeReask
+	if !s.resize || !ready || wanted == ([2]uint16{}) || again || !caps.Fits(uint32(wanted[0]), uint32(wanted[1])) {
 		return nil
 	}
 	layout, err := rdp.MarshalDisplayControlLayout(uint32(wanted[0]), uint32(wanted[1]))
@@ -390,7 +405,7 @@ func (s *rdpTargetSession) applySize(ctx context.Context, timeout time.Duration)
 		return err
 	}
 	s.displayMu.Lock()
-	s.askedSize = wanted
+	s.askedSize, s.askedAt = wanted, now()
 	s.resizesSent++
 	s.displayMu.Unlock()
 	return nil
@@ -479,6 +494,10 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 		resizer, ok := s.target.(rdpResizer)
 		if !ok || !s.Resizable() {
 			return nil // a session that cannot resize ignores it
+		}
+		// The desktop has the size already: nothing to ask, nor to ask again.
+		if width, height := screenstream.ClampResize(input.X, input.Y); width == s.width && height == s.height {
+			return nil
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), s.inputTimeout)
 		defer cancel()
