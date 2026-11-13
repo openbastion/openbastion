@@ -46,6 +46,11 @@ ADR-0069 fixe les garanties d'un proxy RDP : NLA obligatoire, empreinte épingl�
 4. **Le clavier de l'Admin UI suit le protocole.** Pour une session RDP, le lecteur envoie le scancode Set 1 de la touche physique (`KeyboardEvent.code`, avec `0xE0` pour les touches étendues), sans keysym. Pour VNC, le keysym, sans scancode. Une touche hors table n'est pas envoyée. La disposition du clavier est celle de la cible (`keyboardLayout` 0) : l'opérateur tape sur les touches physiques, la cible les interprète.
 5. **Ce qui ne s'ouvre pas.** L'interrupteur n'ouvre ni canal secondaire, ni authentification autre que le mot de passe Vault sous NLA, ni repli sans épinglage. Une session RDP break-glass reste soumise à « enregistrer ou refuser », comme VNC : le proxy refuse `break_glass`.
 
+**Allumé par défaut le 13 novembre 2026.** Décision du propriétaire du projet, ce jour-là : « SCREEN_CLIPBOARD par défaut, RDP_ENABLED par défaut ». Elle a été prise une fois RDP prouvé contre cinq cibles Windows en CI (ADR-0071, « État au 13 novembre 2026 »).
+- **Défaut** : `RDP_ENABLED` vaut `true` au Broker et au proxy écran quand il n'est pas fixé (code et compose). `RDP_ENABLED=false` à l'un des deux ferme RDP comme avant, et toute autre valeur arrête le service.
+- **Ce qui ne change pas** : le Broker reste interne en refusant `rdp` quand on le construit sans `WithRDP`, et les garanties d'ADR-0069 tiennent (NLA, empreinte épinglée avant le secret, enregistrement obligatoire, canaux d'une liste fermée).
+- **Pour une installation existante** : RDP s'ouvre à la mise à jour, si un compte `rdp` existe et qu'une politique `vault:account:*` le couvre. L'exploitant qui n'en veut pas met `RDP_ENABLED=false`.
+
 ## Conséquences
 
 - (+) Un opérateur peut demander, faire approuver et ouvrir une session RDP depuis l'Admin UI, enregistrée et rejouable, avec les mêmes contrôles qu'une session VNC. Les preuves sont tirées de processus réels : parcours de bout en bout contre FreeRDP 3, depuis l'API publique.
