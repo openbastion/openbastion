@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,25 @@ type clipboardLog struct {
 	mu     sync.Mutex
 	offers int
 	texts  []string
+	// screen is the target's screen as the updates drew it, for a failure's capture.
+	screen *rdp.RDPFramebuffer
+}
+
+// capture writes the screen as the updates drew it to RDP_WINDOWS_DUMP, when set.
+func (l *clipboardLog) capture(t *testing.T, name string) {
+	t.Helper()
+	dir := os.Getenv("RDP_WINDOWS_DUMP")
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if dir == "" || l.screen == nil {
+		return
+	}
+	frame, err := l.screen.Frame(time.Now())
+	if err != nil {
+		t.Logf("capture: %v", err)
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, name), frame.PNG, 0o644)
 }
 
 func (l *clipboardLog) offer() { l.mu.Lock(); l.offers++; l.mu.Unlock() }
@@ -43,6 +63,7 @@ func openWithClipboard(t *testing.T, client *rdp.CredSSPClientSession, user, pas
 	settings := rdp.MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: rdpClientName,
 		Timeout: 15 * time.Second, ClipboardChannel: true}
 	log := &clipboardLog{}
+	var width, height uint16
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
 		{"MCS channels", func() error {
@@ -56,7 +77,11 @@ func openWithClipboard(t *testing.T, client *rdp.CredSSPClientSession, user, pas
 			return client.SendClientInfo(ctx, rdp.RDPClientInfo{Username: user, Password: []byte(password)}, 15*time.Second)
 		}},
 		{"licensing", func() error { return client.CompleteLicensing(ctx, 15*time.Second) }},
-		{"capabilities", func() error { _, e := client.ExchangeCapabilities(ctx, 15*time.Second); return e }},
+		{"capabilities", func() error {
+			capabilities, e := client.ExchangeCapabilities(ctx, 15*time.Second)
+			width, height = capabilities.DesktopWidth, capabilities.DesktopHeight
+			return e
+		}},
 		{"finalization", func() error { _, e := client.FinalizeConnection(ctx, 15*time.Second); return e }},
 	}
 	if err := runRDPConnectionSteps(ctx, steps); err != nil {
@@ -66,11 +91,22 @@ func openWithClipboard(t *testing.T, client *rdp.CredSSPClientSession, user, pas
 		t.Fatalf("channels joined: %q, want cliprdr", names)
 	}
 	stopped := make(chan error, 1)
+	screen, err := rdp.NewRDPFramebuffer(width, height)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.screen = screen
 	go func() {
 		for {
-			if _, err := client.ReadBitmapUpdate(ctx, 2*time.Minute); err != nil {
+			update, err := client.ReadBitmapUpdate(ctx, 2*time.Minute)
+			if err != nil {
 				stopped <- err
 				return
+			}
+			if len(update.Rectangles) > 0 {
+				log.mu.Lock()
+				_ = log.screen.Draw(update)
+				log.mu.Unlock()
 			}
 		}
 	}()
@@ -142,7 +178,9 @@ func clipboardAgainstWindows(t *testing.T, client *rdp.CredSSPClientSession, use
 			}
 			if time.Now().After(deadline) {
 				offers, texts := log.snapshot()
-				t.Fatalf("waited 30 s for %s: %d offer(s), %d text(s)", what, offers, len(texts))
+				log.capture(t, "clipboard-failed.png")
+				t.Fatalf("waited 30 s for %s: %d offer(s), %d text(s); %s (screen in clipboard-failed.png)",
+					what, offers, len(texts), client.ClipboardDiagnostics())
 			}
 			time.Sleep(250 * time.Millisecond)
 		}
@@ -177,6 +215,7 @@ func clipboardAgainstWindows(t *testing.T, client *rdp.CredSSPClientSession, use
 	}
 	sendKeys(t, client, selectAll)
 	sendKeys(t, client, []uint16{0x1d, 0x2e}) // Ctrl+C
+	log.capture(t, "clipboard-1-copied.png")
 	waitFor("Windows to offer the text it copied", func() bool { offers, _ := log.snapshot(); return offers > 0 })
 	if err := client.RequestClipboardText(ctx); err != nil {
 		t.Fatalf("asking for the text: %v", err)

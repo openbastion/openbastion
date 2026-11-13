@@ -57,6 +57,8 @@ type rdpClipboard struct {
 	// What handle found to tell, told by the reader once s.mu is released and the answers sent.
 	offers int
 	texts  []string
+	// received counts the messages of each type the target sent, for a refusal's or a test's word.
+	received map[uint16]int
 }
 
 func clipboardMessage(msgType, flags uint16, data []byte) []byte {
@@ -97,6 +99,10 @@ func (c *rdpClipboard) handle(message []byte) ([][]byte, error) {
 	}
 	msgType := binary.LittleEndian.Uint16(message[0:2])
 	flags := binary.LittleEndian.Uint16(message[2:4])
+	if c.received == nil {
+		c.received = map[uint16]int{}
+	}
+	c.received[msgType]++
 	data := message[8:]
 	if int(binary.LittleEndian.Uint32(message[4:8])) != len(data) {
 		return nil, fmt.Errorf("%w: dataLen says %d, the message carries %d", ErrRDPClipboard, binary.LittleEndian.Uint32(message[4:8]), len(data))
@@ -321,4 +327,19 @@ func (s *CredSSPClientSession) ClipboardReady() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.clipboard != nil && s.clipboard.ready
+}
+
+// ClipboardDiagnostics says what the target's clipboard did: the messages of each type it sent, and
+// whether it opened, without any text. For the interoperability tests and a refusal's log.
+func (s *CredSSPClientSession) ClipboardDiagnostics() string {
+	if s == nil {
+		return "no session"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.clipboard == nil {
+		return "clipboard not enabled"
+	}
+	c := s.clipboard
+	return fmt.Sprintf("caps %v, ready %v, requested %v, received %v", c.capsSeen, c.ready, c.requested, c.received)
 }
