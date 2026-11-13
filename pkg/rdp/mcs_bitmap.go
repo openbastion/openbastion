@@ -1107,11 +1107,17 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height {
 			return refuse("a bitmap of another size than its destination")
 		}
+		// A tile wholly off the desktop shows nothing: it is passed over, its header checked, its
+		// pixels neither decoded nor drawn (CI of PR #157: Windows Server 2019, shrunk from 1102 to 970
+		// wide, still sent tiles of the old width, at 1024 and beyond).
+		if left >= desktopWidth || top >= desktopHeight {
+			payload = payload[bitmapLength:]
+			continue
+		}
 		// A tile starts on the desktop; it may go past its right or bottom edge by less than a tile,
 		// and only what is on the desktop is kept, as a client clips (CI of PR #157: Windows Server
 		// 2019 sends whole 64 x 64 tiles at the edges of a desktop that is not a multiple of 64).
-		if left >= desktopWidth || top >= desktopHeight ||
-			uint32(left)+uint32(destWidth) >= uint32(desktopWidth)+rdpBitmapEdgeOverhang ||
+		if uint32(left)+uint32(destWidth) >= uint32(desktopWidth)+rdpBitmapEdgeOverhang ||
 			uint32(top)+uint32(destHeight) >= uint32(desktopHeight)+rdpBitmapEdgeOverhang {
 			return refuse(fmt.Sprintf("a destination outside the %dx%d desktop", desktopWidth, desktopHeight))
 		}
@@ -1719,6 +1725,10 @@ readUpdate:
 					return RDPBitmapUpdate{}, described
 				}
 				update, err = parseRDPBitmapUpdateDataAt(data[2:], desktopWidth, desktopHeight, sessionBPP)
+				if err == nil && len(update.Rectangles) == 0 {
+					clear(packet) // nothing of it on the desktop
+					goto readUpdate
+				}
 				if err != nil {
 					// Which rectangle, against which desktop (CI of PR #157, Windows Server 2019: a
 					// bitmap update refused after a resize, and the message did not say why).
@@ -1824,7 +1834,10 @@ readUpdate:
 	var nextOrderState rdpPrimaryOrderState
 	update, nextOrderState, err = parseRDPBitmapShareDataAt(assembled, shareID, desktopWidth, desktopHeight, sessionBPP, orderState)
 	if err != nil {
-		return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: share data of %d bytes, pduType2 0x%02x", ErrMCSConnection, len(assembled), shareDataType(assembled))
+		return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: share data of %d bytes, pduType2 0x%02x: %v", ErrMCSConnection, len(assembled), shareDataType(assembled), err)
+	}
+	if len(update.Rectangles) == 0 && binary.LittleEndian.Uint16(assembled[18:20]) == rdpUpdateBitmap {
+		goto readUpdate // a bitmap update with nothing of it on the desktop
 	}
 	if ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||

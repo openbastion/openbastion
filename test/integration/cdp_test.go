@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -45,16 +46,33 @@ type cdpPage struct {
 // startHeadlessChrome starts chrome with nothing of the user's, and returns its first page.
 func startHeadlessChrome(t *testing.T, chrome string) *cdpPage {
 	t.Helper()
-	profile := t.TempDir()
+	// Not t.TempDir: Chrome's children keep writing to the profile for a moment after it dies, and
+	// t.TempDir's own removal then fails the test (CI of PR #157, fr-FR: "directory not empty").
+	profile, err := os.MkdirTemp("", "ob-chrome-")
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd := exec.Command(chrome, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu",
 		"--disable-extensions", "--remote-debugging-port=0", "--user-data-dir="+profile, "--window-size=1400,1000", "about:blank")
 	if os.Getuid() == 0 {
 		cmd.Args = append(cmd.Args, "--no-sandbox")
 	}
+	// Its own process group, so that its children die with it.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting %s: %v", chrome, err)
 	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	t.Cleanup(func() {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = cmd.Wait()
+		for attempt := 0; attempt < 20; attempt++ {
+			if os.RemoveAll(profile) == nil {
+				return
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		t.Logf("Chrome's profile %s left behind", profile)
+	})
 	// Chrome writes the port it took, then the browser's path, in its profile.
 	var port string
 	for deadline := time.Now().Add(30 * time.Second); port == ""; {

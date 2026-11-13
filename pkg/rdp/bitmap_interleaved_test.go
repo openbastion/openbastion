@@ -215,10 +215,9 @@ func TestBitmapUpdateAtSessionDepth(t *testing.T) {
 		// the client decode far more than it shows.
 		"bitmap wider than padding to four":  rect(0, 0, 0, 0, 8, 1, 16, 0, make([]byte, 16)),
 		"bitmap taller than its destination": rect(0, 0, 1, 0, 2, 2, 16, 0, make([]byte, 8)),
-		// A destination that only goes past the edge is clipped (TestBitmapUpdate_ClipsAnEdgeTile);
-		// one that starts past it is refused.
-		"destination starting past the desktop": rect(10, 0, 11, 0, 2, 1, 16, 0, raw),
-		"right before left":                     rect(1, 0, 0, 0, 2, 1, 16, 0, raw),
+		// A destination past the desktop's edge is clipped, or passed over when wholly off it
+		// (TestBitmapUpdate_ClipsAnEdgeTile).
+		"right before left": rect(1, 0, 0, 0, 2, 1, 16, 0, raw),
 	} {
 		if _, err := parseRDPBitmapUpdateDataAt(payload, 10, 10, 16); err == nil {
 			t.Errorf("%s accepted", name)
