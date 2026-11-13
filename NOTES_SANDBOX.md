@@ -4428,3 +4428,15 @@ Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le
 - **Admin UI** : « La cible a refusé les identifiants du compte : son secret dans le coffre est à vérifier. »
 - **Prouvé** : tests à chaque étage, 6 mutations tuées. Contre Windows, `TestRDPWindows_CredSSP` exige désormais que le mauvais mot de passe soit reconnu comme tel (CI de la PR).
 
+
+## 2026-11-13 — ADR-0101, incrément 1 : le canal graphique, ses capacités et ZGFX
+
+- **Fait** (dans `pkg/rdp`, non branché au service) :
+  - `GraphicsPipeline` annonce le pipeline graphique ;
+  - le canal `Microsoft::Windows::RDS::Graphics` entre dans la liste fermée, avec une borne de 16 Mio par message ;
+  - les capacités annoncées tiennent H.264 dehors et le cache à 16 Mo, et la confirmation est vérifiée ;
+  - la décompression RDP 8.0 (ZGFX) est bornée et fuzzée.
+- **Ajout au plan** : ZGFX n'était pas listé dans l'ADR, mais tout message de la cible en dépend, la confirmation comprise.
+- **Mesuré contre FreeRDP 3** : la version 10.7 est confirmée ; 325 messages, 4,98 Mo, sans faute ; codec RemoteFX progressif (avec perte), qu'aucune capacité n'éteint.
+- **En attente** : la mesure contre les cinq Windows (`TestRDPWindows_GraphicsPipeline`, CI de la PR), qui dira quels codecs Windows choisit.
+- **Mémoire** : 2,5 Mo d'historique par session au pipeline ouvert, plus un message de 16 Mio au plus en cours de réassemblage.

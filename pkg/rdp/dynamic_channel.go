@@ -10,7 +10,7 @@ import (
 
 // The dynamic channels (MS-RDPEDYC), carried by the static channel drdynvc (ADR-0095 §3): the
 // target proposes channels by name, and this client opens only the names of a closed list, which
-// holds one name today, the display control (MS-RDPEDISP). Every other name is refused by the
+// holds two names, the display control (MS-RDPEDISP) and the graphics pipeline (MS-RDPEGFX, ADR-0101). Every other name is refused by the
 // protocol's own answer: the target goes on without it, and so does the session. What the target
 // sends is bounded as the static channels are, and anything outside the protocol ends the session.
 
@@ -44,7 +44,18 @@ const (
 )
 
 // rdpDynamicChannelsAllowed is the closed list of ADR-0095: what EnableDynamicChannels may open.
-var rdpDynamicChannelsAllowed = map[string]bool{RDPDisplayControlChannel: true}
+var rdpDynamicChannelsAllowed = map[string]bool{RDPDisplayControlChannel: true, RDPGraphicsChannel: true}
+
+// rdpDynamicChannelLimits bounds a message reassembled on a channel, MaxRDPChannelMessage otherwise:
+// the graphics pipeline carries whole bitmaps, compressed (ADR-0101).
+var rdpDynamicChannelLimits = map[string]int{RDPGraphicsChannel: maxGraphicsMessage}
+
+func dynvcLimit(name string) int {
+	if limit, ok := rdpDynamicChannelLimits[name]; ok {
+		return limit
+	}
+	return MaxRDPChannelMessage
+}
 
 // ErrRDPDynamicChannel reports a dynamic channel message outside MS-RDPEDYC or its bounds.
 var ErrRDPDynamicChannel = errors.New("rdp: dynamic channel message refused")
@@ -204,7 +215,7 @@ func (d *rdpDynamicChannels) handle(message []byte) ([][]byte, error) {
 				return nil, fmt.Errorf("%w: a message started inside another on %q", ErrRDPDynamicChannel, name)
 			}
 			total, data, ok := readDynvcVar(rest, dynvcIDBytes(sp))
-			if !ok || total == 0 || total > MaxRDPChannelMessage || len(data) > int(total) {
+			if !ok || total == 0 || uint64(total) > uint64(dynvcLimit(name)) || len(data) > int(total) {
 				return nil, fmt.Errorf("%w: a %d-byte message on %q", ErrRDPDynamicChannel, total, name)
 			}
 			if len(data) < int(total) {
@@ -219,7 +230,7 @@ func (d *rdpDynamicChannels) handle(message []byte) ([][]byte, error) {
 		assembly := d.assembling[id]
 		if assembly == nil {
 			// DATA alone is a whole message.
-			if len(rest) == 0 || len(rest) > MaxRDPChannelMessage {
+			if len(rest) == 0 || len(rest) > dynvcLimit(name) {
 				return nil, fmt.Errorf("%w: a %d-byte message on %q", ErrRDPDynamicChannel, len(rest), name)
 			}
 			return nil, d.deliver(name, rest)
@@ -279,7 +290,7 @@ func (d *rdpDynamicChannels) dataPDU(name string, data []byte) ([]byte, error) {
 }
 
 // EnableDynamicChannels opens, among the dynamic channels the target proposes on drdynvc, those of
-// names, which must be in the closed list (ADR-0095): RDPDisplayControlChannel today. onOpen is told
+// names, which must be in the closed list (ADR-0095): RDPDisplayControlChannel and RDPGraphicsChannel. onOpen is told
 // when a channel opens, onMessage gets each message on it, reassembled; both run on the goroutine
 // that reads the screen (ReadBitmapUpdate), and an error from onMessage ends the session. Call it
 // after ConnectMCS with DynamicChannels on, and before the screen is read.
