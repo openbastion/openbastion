@@ -1,6 +1,6 @@
 # ADR-0101 — Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement
 
-**Statut** `Proposé` · 13 novembre 2026 · demandé par le propriétaire du projet le 13 novembre 2026 (« ADR proposés d'abord ») pour l'écart « rendu » d'ADR-0071 (ADR-0090, lot C). `Accepté` seulement avec son go, cité avec sa date.
+**Statut** `Accepté` · 13 novembre 2026 · accepté le même jour par le propriétaire du projet : « ADR-0101 l'interrupteur, éteint par défaut le temps des incréments prouvés contre les cinq cibles Windows, comme pour ADR-0095 et ADR-0096 ». L'option retenue est A, la décision proposée (codecs sans perte seulement), le propriétaire n'en ayant pas nommé d'autre.
 
 ## Contexte
 
