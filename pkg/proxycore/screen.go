@@ -556,6 +556,10 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	if resizer, ok := session.(Resizer); ok {
 		hello.Resizable = resizer.Resizable()
 	}
+	// The clipboard's directions this session allows (ADR-0096 §6): a client offers only these.
+	if clipboard != nil {
+		hello.ClipboardToTarget, hello.ClipboardFromTarget = meta.ClipboardToTarget, meta.ClipboardFromTarget
+	}
 	// The resizes: the last one forwarded, and the latest one waiting for its turn.
 	var lastResize time.Time
 	var pendingResize *screenstream.InputEvent
@@ -573,6 +577,24 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 		case incoming, ok := <-inputResults:
 			if !ok || incoming.err != nil {
 				return fmt.Errorf("proxycore: screen input transport closed")
+			}
+			if screenstream.IsClipboardInput(incoming.data) {
+				// A text pasted by the operator (ADR-0096): out of the input budget, bounded on its own.
+				// One the HELLO did not offer breaks the contract, as any invalid input does.
+				text, err := screenstream.DecodeClipboardInput(incoming.data)
+				if err != nil || !hello.ClipboardToTarget {
+					return fmt.Errorf("%w: a clipboard text the session does not take", ErrScreenInputInvalid)
+				}
+				message, moved, err := clipboard.transfer(ctx, screenstream.ClipboardToTarget, text, sequence+offset)
+				if err != nil {
+					return err
+				}
+				if moved {
+					lastAck = message.Sequence
+					offset++
+					display.offer(message)
+				}
+				continue
 			}
 			event, err := screenstream.DecodeInput(incoming.data, frameWidth, frameHeight)
 			if err != nil {

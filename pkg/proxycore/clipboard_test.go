@@ -351,7 +351,11 @@ func TestRelayScreen_TheClipboardOpensOnlyWhenEverythingSaysSo(t *testing.T) {
 			audit = &fakeClipboardAudit{}
 		}
 		recorder := &fakeFrameRecorder{}
-		_ = relayScreen(context.Background(), context.Background(), clipMeta(c.to, c.from), nil, codec, recorder, &fakeScreenSink{}, ScreenInputLimits{}, time.Second, audit)
+		sink := &fakeScreenSink{}
+		_ = relayScreen(context.Background(), context.Background(), clipMeta(c.to, c.from), nil, codec, recorder, sink, ScreenInputLimits{}, time.Second, audit)
+		if hello := sink.snapshot()[0]; hello.ClipboardToTarget != (c.withClipboard && c.to) || hello.ClipboardFromTarget != (c.withClipboard && c.from) {
+			t.Fatalf("%s: the HELLO offers to %v from %v", name, hello.ClipboardToTarget, hello.ClipboardFromTarget)
+		}
 		if (codec.inner.withClipboard == 1) != c.withClipboard || codec.inner.withClipboard+codec.inner.opened != 1 {
 			t.Fatalf("%s: opened %d, with the clipboard %d", name, codec.inner.opened, codec.inner.withClipboard)
 		}
@@ -431,6 +435,97 @@ func TestRelayScreen_NothingIsCopiedWithoutTheRightToCopy(t *testing.T) {
 		<-done
 		if taken != from {
 			t.Fatalf("right to copy %v: the relay took a text %v", from, taken)
+		}
+	}
+}
+
+// A text pasted by the operator, with the right to paste: audited, recorded in the sequence,
+// offered to the target, and shown back. The HELLO said pasting was allowed, and copying not.
+func TestRelayScreen_APastedTextReachesTheTargetAfterItsRecording(t *testing.T) {
+	frames := make(chan screenstream.Message)
+	session := &clipboardScreenSession{fakeScreenSession: fakeScreenSession{frames: frames}}
+	codec := &clipboardOpenCodec{inner: &clipboardCodec{}, session: session}
+	input, err := screenstream.EncodeClipboardInput("pasted é")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := &fakeInputScreenSink{input: input, read: make(chan struct{}, 4)}
+	recorder := &fakeFrameRecorder{}
+	audit := &fakeClipboardAudit{}
+	done := make(chan error, 1)
+	go func() {
+		done <- relayScreen(context.Background(), context.Background(), clipMeta(true, false), nil, codec, recorder, sink, ScreenInputLimits{}, time.Second, audit)
+	}()
+	frames <- validScreenFrame(1)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		session.mu.Lock()
+		offered := len(session.offered)
+		session.mu.Unlock()
+		if offered == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the pasted text never reached the target")
+		}
+	}
+	close(frames)
+	if err := <-done; err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if session.offered[0] != "pasted é" {
+		t.Fatalf("offered %q", session.offered)
+	}
+	var clip *screenstream.Message
+	recorder.mu.Lock()
+	for i := range recorder.frames {
+		if recorder.frames[i].Type == screenstream.TypeClipboard {
+			clip = &recorder.frames[i]
+		}
+	}
+	recorder.mu.Unlock()
+	if clip == nil || clip.Direction != screenstream.ClipboardToTarget || clip.ClipboardText != "pasted é" {
+		t.Fatalf("recorded %+v", clip)
+	}
+	messages := sink.snapshot()
+	hello := messages[0]
+	if hello.Type != screenstream.TypeHello || !hello.ClipboardToTarget || hello.ClipboardFromTarget {
+		t.Fatalf("HELLO %+v", hello)
+	}
+	shown := false
+	for _, m := range messages {
+		shown = shown || (m.Type == screenstream.TypeClipboard && m.Sequence == clip.Sequence && m.ClipboardText == "pasted é")
+	}
+	if !shown || len(audit.snapshot()) != 1 {
+		t.Fatalf("shown %v, audited %d", shown, len(audit.snapshot()))
+	}
+}
+
+// A text pasted on a session that does not take one ends it, as any invalid input does, and
+// nothing reaches the target: with the right to copy only, with no clipboard at all, or malformed.
+func TestRelayScreen_APastedTextTheSessionDoesNotTakeEndsIt(t *testing.T) {
+	good, _ := screenstream.EncodeClipboardInput("pasted")
+	malformed := append([]byte(nil), good...)
+	malformed[3] = 1
+	for name, c := range map[string]struct {
+		meta  SessionMetadata
+		audit ClipboardAuditor
+		input []byte
+	}{
+		"the right to copy only": {clipMeta(false, true), &fakeClipboardAudit{}, good},
+		"no right":               {clipMeta(false, false), &fakeClipboardAudit{}, good},
+		"no auditor":             {clipMeta(true, true), nil, good},
+		"a malformed text":       {clipMeta(true, false), &fakeClipboardAudit{}, malformed},
+	} {
+		frames := make(chan screenstream.Message)
+		session := &clipboardScreenSession{fakeScreenSession: fakeScreenSession{frames: frames}}
+		codec := &clipboardOpenCodec{inner: &clipboardCodec{}, session: session}
+		sink := &fakeInputScreenSink{input: c.input, read: make(chan struct{}, 4)}
+		err := relayScreen(context.Background(), context.Background(), c.meta, nil, codec, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, c.audit)
+		if !errors.Is(err, ErrScreenInputInvalid) || len(session.offered) != 0 {
+			t.Fatalf("%s: %v, offered %q", name, err, session.offered)
+		}
+		if hello := sink.snapshot()[0]; hello.ClipboardToTarget && c.meta.ClipboardToTarget == false {
+			t.Fatalf("%s: the HELLO offered pasting", name)
 		}
 	}
 }

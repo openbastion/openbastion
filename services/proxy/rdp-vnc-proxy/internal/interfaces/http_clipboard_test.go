@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openbastion/openbastion/pkg/screenstream"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/engine"
+	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/infrastructure"
 )
 
 // Each clipboard direction the Broker granted rides the one-use ticket on its own field and
@@ -59,6 +61,20 @@ func TestEstablishSessionRefusesAClipboardRightOutsideRDP(t *testing.T) {
 		s.establish(w, httptest.NewRequest(http.MethodPost, "/internal/v1/establish-session", strings.NewReader(body)))
 		if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "connection_ticket") {
 			t.Fatalf("VNC with %s: status=%d body=%s", field, w.Code, w.Body.String())
+		}
+	}
+}
+
+// Only a session that may paste reads a message as long as a clipboard text; every other keeps the
+// 64 bytes of before (ADR-0096 §6).
+func TestScreenReadLimitFollowsTheRightToPaste(t *testing.T) {
+	for _, c := range []struct {
+		to, from bool
+		want     int64
+	}{{false, false, screenstream.MaxInputBytes}, {false, true, screenstream.MaxInputBytes}, {true, false, screenstream.MaxClipboardInputBytes}} {
+		meta := screenMetadata(infrastructure.PendingScreenSession{ClipboardToTarget: c.to, ClipboardFromTarget: c.from})
+		if got := screenReadLimit(meta); got != c.want {
+			t.Fatalf("to %v from %v: limit %d, want %d", c.to, c.from, got, c.want)
 		}
 	}
 }

@@ -228,6 +228,18 @@ describe("the replay of clipboard texts (ADR-0096)", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("shows the auditor what crossed, from its position on, as text", async () => {
+    const { api } = fakeApi({ [path(1)]: { body: recording } });
+    const d = partialDeps();
+    await open(api, d);
+    await screen.findByText(/scellé/);
+    expect(screen.queryByRole("region", { name: "Presse-papiers enregistré" })).toBeNull(); // not yet at its time
+    fireEvent.click(screen.getByText("Image suivante"));
+    const region = await screen.findByRole("region", { name: "Presse-papiers enregistré" });
+    expect(region.textContent).toContain("Copié depuis la cible");
+    expect(region.textContent).toContain("copied é");
+  });
+
   it.each([
     ["a clipboard text of another sequence", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "clipboard-text-v1", bytes: clipboardMessage(3, 2, "x") }])],
     ["a key frame under the clipboard codec", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "clipboard-text-v1", bytes: keyPNG(2, 8, 4) }])],
