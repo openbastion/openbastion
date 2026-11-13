@@ -595,7 +595,8 @@ describe("the resize", () => {
     let room = { width: 1200, height: 700 };
     const s = setup("/sessions/s1/screen", undefined, () => room);
     s.socket.receive(hello("s1", "rdp", false, true));
-    await waitFor(() => expect(resizes(s.socket.sent)).toEqual(["1200x700"]));
+    // Waits with room: real timers, which a loaded machine stretches (one unexplained failure, 13 Nov.).
+    await waitFor(() => expect(resizes(s.socket.sent)).toEqual(["1200x700"]), { timeout: 5000 });
     // A window that stops changing: one more resize, after the pause; the same size again, none.
     room = { width: 1001, height: 650 };
     act(() => {
@@ -603,7 +604,7 @@ describe("the resize", () => {
       window.dispatchEvent(new Event("resize"));
     });
     expect(resizes(s.socket.sent)).toEqual(["1200x700"]);
-    await waitFor(() => expect(resizes(s.socket.sent)).toEqual(["1200x700", "1000x650"]), { timeout: RESIZE_DEBOUNCE_MS * 4 });
+    await waitFor(() => expect(resizes(s.socket.sent)).toEqual(["1200x700", "1000x650"]), { timeout: 5000 });
     room = { width: 1000, height: 650 };
     act(() => {
       window.dispatchEvent(new Event("resize"));

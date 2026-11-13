@@ -79,6 +79,9 @@ const (
 	// per rectangle), and the pixels decoded per update stay bounded by maxRDPDesktopArea. Orders
 	// keep maxRDPBitmapRects.
 	maxRDPBitmapUpdateRects = 4096
+	// rdpBitmapEdgeOverhang bounds how far a bitmap's destination may go past the desktop's right or
+	// bottom edge: less than one 64-pixel tile, which is what Windows cuts its screen into.
+	rdpBitmapEdgeOverhang = 64
 	// Keep each fragment below the conservative MCS/TPKT bound. A complete
 	// Share Data PDU has a 16-bit totalLength, so reassembly cannot exceed it.
 	maxRDPBitmapTPKTPacket      = 16_383
@@ -1088,17 +1091,37 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 		flags := binary.LittleEndian.Uint16(payload[14:16])
 		bitmapLength := int(binary.LittleEndian.Uint16(payload[16:18]))
 		payload = payload[18:]
+		// Each refusal names its rectangle and its rule (CI of PR #157, Windows Server 2019: an update
+		// of 428 rectangles refused after a resize, and which one, and why, was not said).
+		refuse := func(rule string) (RDPBitmapUpdate, error) {
+			return RDPBitmapUpdate{}, fmt.Errorf("%w: rectangle %d of %d (dest %d,%d-%d,%d, bitmap %dx%d, %d bpp, flags 0x%04x, %d bytes): %s",
+				ErrMCSConnection, i, count, left, top, right, bottom, width, height, bpp, flags, bitmapLength, rule)
+		}
 		if width == 0 || height == 0 || bpp != sessionBPP || (flags != 0 && flags != rdpBitmapCompressed && flags != rdpBitmapCompressed|rdpBitmapNoCompHdr) || bitmapLength == 0 || bitmapLength > len(payload) ||
 			right < left || bottom < top {
-			return RDPBitmapUpdate{}, ErrMCSConnection
+			return refuse("its header")
 		}
 		destWidth, destHeight := right-left+1, bottom-top+1
 		// The bitmap may be wider than its destination by the padding to four pixels, and no more;
 		// it is exactly as tall. A larger one would make the client decode what it never shows.
-		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height ||
-			uint32(left)+uint32(destWidth) > uint32(desktopWidth) || uint32(top)+uint32(destHeight) > uint32(desktopHeight) {
-			return RDPBitmapUpdate{}, ErrMCSConnection
+		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height {
+			return refuse("a bitmap of another size than its destination")
 		}
+		// A tile wholly off the desktop shows nothing: it is passed over, its header checked, its
+		// pixels neither decoded nor drawn (CI of PR #157: Windows Server 2019, shrunk from 1102 to 970
+		// wide, still sent tiles of the old width, at 1024 and beyond).
+		if left >= desktopWidth || top >= desktopHeight {
+			payload = payload[bitmapLength:]
+			continue
+		}
+		// A tile starts on the desktop; it may go past its right or bottom edge by less than a tile,
+		// and only what is on the desktop is kept, as a client clips (CI of PR #157: Windows Server
+		// 2019 sends whole 64 x 64 tiles at the edges of a desktop that is not a multiple of 64).
+		if uint32(left)+uint32(destWidth) >= uint32(desktopWidth)+rdpBitmapEdgeOverhang ||
+			uint32(top)+uint32(destHeight) >= uint32(desktopHeight)+rdpBitmapEdgeOverhang {
+			return refuse(fmt.Sprintf("a destination outside the %dx%d desktop", desktopWidth, desktopHeight))
+		}
+		visibleWidth, visibleHeight := min(destWidth, desktopWidth-left), min(destHeight, desktopHeight-top)
 		pixels := uint64(width) * uint64(height)
 		if pixels > maxRDPDesktopArea || totalPixels > maxRDPDesktopArea-pixels {
 			return RDPBitmapUpdate{}, ErrMCSConnection
@@ -1132,8 +1155,8 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 				return RDPBitmapUpdate{}, ErrMCSConnection
 			}
 		}
-		decoded = cropRDPBitmap(decoded, int(width), int(destWidth), int(destHeight))
-		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: destWidth, Height: destHeight, Pixels: decoded})
+		decoded = cropRDPBitmap(decoded, int(width), int(visibleWidth), int(visibleHeight))
+		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: visibleWidth, Height: visibleHeight, Pixels: decoded})
 		payload = payload[bitmapLength:]
 	}
 	if len(payload) != 0 {
@@ -1664,7 +1687,7 @@ readUpdate:
 						data, complete, err = assembler.add(code, fragmentation, piece)
 					}
 					if err != nil {
-						described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+						described := fmt.Errorf("%w: update refused: %s: %v", ErrMCSConnection, describeRDPServerPacket(packet), err)
 						clear(packet)
 						return RDPBitmapUpdate{}, described
 					}
@@ -1702,8 +1725,15 @@ readUpdate:
 					return RDPBitmapUpdate{}, described
 				}
 				update, err = parseRDPBitmapUpdateDataAt(data[2:], desktopWidth, desktopHeight, sessionBPP)
+				if err == nil && len(update.Rectangles) == 0 {
+					clear(packet) // nothing of it on the desktop
+					goto readUpdate
+				}
 				if err != nil {
-					described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+					// Which rectangle, against which desktop (CI of PR #157, Windows Server 2019: a
+					// bitmap update refused after a resize, and the message did not say why).
+					described := fmt.Errorf("%w: update refused: %s: %v; on a %dx%d desktop at %d bpp: %s", ErrMCSConnection,
+						describeRDPServerPacket(packet), err, desktopWidth, desktopHeight, sessionBPP, describeRDPBitmapRectangles(data[2:]))
 					clear(packet)
 					return RDPBitmapUpdate{}, described
 				}
@@ -1804,7 +1834,10 @@ readUpdate:
 	var nextOrderState rdpPrimaryOrderState
 	update, nextOrderState, err = parseRDPBitmapShareDataAt(assembled, shareID, desktopWidth, desktopHeight, sessionBPP, orderState)
 	if err != nil {
-		return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: share data of %d bytes, pduType2 0x%02x", ErrMCSConnection, len(assembled), shareDataType(assembled))
+		return RDPBitmapUpdate{}, fmt.Errorf("%w: update refused: share data of %d bytes, pduType2 0x%02x: %v", ErrMCSConnection, len(assembled), shareDataType(assembled), err)
+	}
+	if len(update.Rectangles) == 0 && binary.LittleEndian.Uint16(assembled[18:20]) == rdpUpdateBitmap {
+		goto readUpdate // a bitmap update with nothing of it on the desktop
 	}
 	if ctx.Err() != nil ||
 		nextOrderState.dstBltUsed && !dstBltEnabled ||
@@ -1832,4 +1865,31 @@ readUpdate:
 func rdpIsDisconnectUltimatum(packet []byte) bool {
 	return len(packet) == 9 && packet[0] == 3 && packet[1] == 0 && int(binary.BigEndian.Uint16(packet[2:4])) == len(packet) &&
 		equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) && packet[7]&0xfc == 0x20
+}
+
+// describeRDPBitmapRectangles names the first rectangles of a TS_UPDATE_BITMAP_DATA, without their
+// pixels: where each goes, its size, depth, flags and length. For a refusal's message.
+func describeRDPBitmapRectangles(data []byte) string {
+	if len(data) < 2 {
+		return "no rectangle count"
+	}
+	count := int(binary.LittleEndian.Uint16(data[:2]))
+	out := fmt.Sprintf("%d rectangle(s)", count)
+	rest := data[2:]
+	for i := 0; i < count && i < 3; i++ {
+		if len(rest) < 18 {
+			return out + ", cut short"
+		}
+		left, top := binary.LittleEndian.Uint16(rest[0:2]), binary.LittleEndian.Uint16(rest[2:4])
+		right, bottom := binary.LittleEndian.Uint16(rest[4:6]), binary.LittleEndian.Uint16(rest[6:8])
+		width, height := binary.LittleEndian.Uint16(rest[8:10]), binary.LittleEndian.Uint16(rest[10:12])
+		bpp, flags := binary.LittleEndian.Uint16(rest[12:14]), binary.LittleEndian.Uint16(rest[14:16])
+		length := int(binary.LittleEndian.Uint16(rest[16:18]))
+		out += fmt.Sprintf("; [%d] dest %d,%d-%d,%d size %dx%d %d bpp flags 0x%04x length %d", i, left, top, right, bottom, width, height, bpp, flags, length)
+		if len(rest) < 18+length {
+			return out + ", cut short"
+		}
+		rest = rest[18+length:]
+	}
+	return out
 }

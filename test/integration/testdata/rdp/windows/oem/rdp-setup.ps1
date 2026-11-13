@@ -89,6 +89,12 @@ Start-Sleep -Seconds 10
 Set-CimInstance -InputObject `$ts -Property @{ SSLCertificateSHA1Hash = '$($cert.Thumbprint)' }
 Restart-Service TermService -Force
 "logged off: `$(`$ids -join ', ')" | Out-File 'C:\OEM\rdp-ready.log' -Encoding utf8
+# The restart is over: said in rdp-events, which the SYSTEM loop copies to the share within 30 s.
+# The pinned certificate alone came too early: it takes effect before the restart, and a test that
+# started on it saw its first screen cut, then every connection refused while the service restarted
+# (CI of PRs #144, #155 and #157).
+New-Item -ItemType Directory -Force 'C:\OEM\rdp-events' | Out-Null
+"ready `$(Get-Date -Format o)" | Out-File 'C:\OEM\rdp-events\rdp-ready.txt' -Encoding utf8
 "@
 Set-Content 'C:\OEM\rdp-ready.ps1' $ready
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\rdp-ready.ps1'

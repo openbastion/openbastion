@@ -21,13 +21,18 @@ export interface ScreenDeps {
   measure?: (area: HTMLElement) => { width: number; height: number };
 }
 
-// What is above the canvas in its area (the buttons and a line of status): left out of the height.
+// What stands with the canvas once the page is scrolled to it (the buttons and a line of status):
+// left out of the window's height.
 const SCREEN_CHROME = 112;
 // A resize is sent once the window has stopped moving for this long; the proxy paces them too.
 export const RESIZE_DEBOUNCE_MS = 500;
 
+// The room for the screen: the width of its area, and the window's height less what stands with it.
+// Not the height below the area's place in the page: the screen sits below the session's form, and
+// the operator scrolls to it (CI of pull request 157: 480 pixels high, the bounds' least, for a 1000-pixel
+// window).
 function measureArea(area: HTMLElement): { width: number; height: number } {
-  return { width: area.clientWidth, height: window.innerHeight - area.getBoundingClientRect().top - SCREEN_CHROME };
+  return { width: area.clientWidth, height: window.innerHeight - SCREEN_CHROME };
 }
 
 const browserDeps: ScreenDeps = {

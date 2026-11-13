@@ -3485,9 +3485,44 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-13 — ADR-0095 terminé : `SCREEN_RESIZE` allumé par défaut
+
+Décision du propriétaire (« Oui, tu peux continuer »), une fois les cinq cibles Windows suivies dans un vrai navigateur (#157, #158). Au proxy, `SCREEN_RESIZE` vaut `true` sauf si l'on dit `false` (compose : `${SCREEN_RESIZE:-true}`). En RDP, le `HELLO` porte désormais le bit 1 en plus du bit 0 : l'épreuve RDP de bout en bout attend `3`. VNC n'est pas concerné.
+
+## 2026-11-13 — CI Windows : Windows refuse tout juste après CredSSP (intermittent, à étudier)
+
+Quatre fois depuis le 12 novembre (#144 fr-FR, dernier passage de #155, deux passages de #157) : `TestRDPWindows_CredSSP` passe, puis la première connexion d'écran se ferme en 0,1 à 0,2 s, et Windows refuse toutes les suivantes (`target_unreachable`). Ce n'est jamais la même cible. Relancé, le job passe.
+
+**Ce que disent les journaux de Windows** (fr-FR, run 43352131409, à l'heure de Windows) :
+- **18:35:11** : la tâche de fin d'installation installe le certificat épinglé et redémarre les services Bureau à distance. C'est avant que le test voie le certificat, donc ce n'est pas elle.
+- **18:36:12-13** : une session est fermée puis déconnectée (événements 59, 23, 39, 40 du LocalSessionManager). C'est le moment de l'échec ; la cause reste à trouver.
+
+**Autre incident, même job relancé (fr-FR, tentative 2)** : la session du navigateur sans interface s'est terminée avant sa première image (fin de session par Windows, `session_ended`). Ce n'était pas la demande de déconnexion déposée par l'épreuve de déconnexion : elle a été retirée, et Windows n'a déconnecté qu'une fois, à 03:11:49 UTC, cinq minutes avant. Cause inconnue.
+
+**Hypothèse retenue, corrigée** : la tâche de fin d'installation (`rdp-setup.ps1`) installe le certificat épinglé puis redémarre les services Bureau à distance. Le certificat prend effet avant le redémarrage, si bien que le test, qui attendait ce seul certificat, commençait trop tôt : CredSSP passait en quelques secondes, puis le redémarrage coupait la première connexion d'écran et refusait les suivantes le temps qu'il dure. Les étapes suivantes du même job fonctionnaient, ce qui va dans ce sens. La tâche écrit maintenant `rdp-ready.txt` une fois le redémarrage fini, que la boucle SYSTEM copie sur le partage ; `windowsTarget` attend ce fichier en plus du certificat. Le journal dira si l'écart existe (« the pinned certificate is presented, but … rdp-ready.txt is not there yet »). Ce défaut est antérieur au redimensionnement (ADR-0095).
+
+## 2026-11-13 — CI Windows : les clics dans Notepad évitent le menu Démarrer
+
+Sur Windows Server 2022 en 32 bpp, deux passages ont perdu les touches des épreuves de clavier et de mesure. Les captures du dernier passage (`extended-1b-ctrl-esc.png`, `extended-3-typed.png`) montrent pourquoi :
+- Ctrl+Échap ouvre le menu Démarrer, et l'Échap suivant ne l'a pas toujours refermé ;
+- le clic qui redonne la main à Notepad visait le centre de l'écran (640, 400), et le menu s'étend jusqu'à x = 648 : le clic tombait dans le menu, et les touches allaient à sa recherche.
+
+Les épreuves cliquent désormais dans Notepad aux trois quarts de la largeur (`notepadPoint`), hors du menu, ce qui le referme. La touche Windows seule n'ouvre toujours pas Démarrer (`extended-1-windows-key.png`, la limite de PR #101 reste).
+
+**Windows Server 2019, navigateur sans interface** (même passage) : la session s'est terminée 5 s après son ouverture, sur un fragment Fast-Path `LAST` sans `FIRST` (`update refused: Fast-Path action 0, 1475 bytes [code 1 frag 1 comp 0 size 1469]`). Revenu au passage suivant, au deuxième redimensionnement (`13978 bytes [code 1 frag 1 comp 0 size 13972]`). Le message décrivait le fragment en cours, pas la règle qui le refusait : un `LAST` peut fermer une reconstitution qui dépasse 64 fragments ou les 256 Kio que ce client annonce. L'assembleur dit désormais quelle règle refuse, et un test le vérifie. Ce n'était pas l'assembleur : la mise à jour se reconstituait, et c'est sa lecture qui refusait. Avec le détail de chaque rectangle, la cause est apparue : Windows Server 2019 envoie des tuiles entières de 64 × 64 aux bords d'un bureau dont la taille n'est pas un multiple de 64 (le rectangle 17 de 512, de 1 088 à 1 151 sur un bureau de 1 102 de large), et le lecteur refusait toute destination qui dépasse le bureau. Il garde désormais la partie visible d'une tuile qui commence sur le bureau et le dépasse de moins de 64 pixels ; au-delà, ou une tuile qui commence hors du bureau, toujours refusé. Test rouge d'abord, 3 mutations tuées, fuzzers des bitmaps (20 s chacun). Au passage suivant, Windows Server 2019, réduit de 1 102 à 970 de large, envoyait encore des tuiles de l'ancienne largeur, entièrement hors du nouveau bureau (la tuile 16 de 428, à 1 024). Une tuile entièrement hors du bureau est désormais passée : son en-tête est vérifié, ses pixels ne sont ni décodés ni dessinés ; une mise à jour bitmap dont rien n'est sur le bureau est passée aussi. Une tuile qui dépasse le bord de 64 pixels ou plus reste refusée. 2 mutations tuées.
+
+**Harnais du navigateur** : sur fr-FR, les trois tailles suivies, puis l'échec au nettoyage du profil de Chrome (« directory not empty ») : ses processus enfants écrivaient encore. Chrome tourne désormais dans son propre groupe de processus, tué en entier, et son profil est retiré sans faire échouer l'épreuve.
+
+## 2026-11-12 — ADR-0095, incrément 5 : le redimensionnement dans un navigateur sans interface (en cours)
+
+Premier passage CI (run 43307816046) : l'étape échouait avant le navigateur. Le flux compile chaque service avec `GOPROXY=off`, et les modules des autres services n'étaient pas dans le cache du job. `make build` les télécharge d'abord, comme dans `integration.yml`.
+- Dans le même passage, sur Windows Server 2022 en 16 bpp, Windows a fermé la première connexion d'écran 0,19 s après son ouverture, juste après CredSSP, puis n'en a plus accepté aucune (`target_unreachable`). C'est la deuxième fois en deux passages. Si cela revient, l'étudier à part, en partant des journaux d'événements que la CI exporte.
+
+`TestScreenFlow_RDPResizeInAHeadlessBrowser`, en CI Windows seulement : nouvelle étape « The resize in a headless browser » de `windows-rdp.yml`, qui construit l'Admin UI (Node 24.21.0, comme `frontend.yml`). Chrome est piloté par le protocole DevTools (`test/integration/cdp_test.go`). En local, ni Windows ni Chrome : l'épreuve se saute. Elle n'a pas encore tourné.
+
 ## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre
 
-La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins 112 px. Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
+La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre moins 112 px (d'abord la hauteur sous la zone : 480 px seulement, corrigé à l'incrément 5). Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
 - **CI Windows intermittente** (dernier passage de #155, run 43296146528, code identique au passage précédent tout vert) : sur une cible, Windows ne répondait plus après CredSSP (`target_unreachable`) ; sur une autre, la relecture du clavier, les touches étendues et la vidéo ont échoué, le partage fonctionnant. Relancés tels quels, les deux jobs passent. À surveiller : si les épreuves qui passent par Notepad et le partage échouent de nouveau, chercher ce qui prend le focus.
 - **Bac à sable** : il n'a pas de cible RDP. La vérification dans un vrai navigateur demande une cible Windows, qui n'existe qu'en CI : c'est l'incrément 5.
 - **Choix renversables** : 112 px pour les boutons et la ligne d'état ; 500 ms d'attente ; la taille en pixels CSS, sans le facteur de l'écran (un écran à 200 % aurait un bureau de la moitié de ses pixels physiques, mais un texte à taille de lecture).
@@ -4244,3 +4279,32 @@ Validation après résolution : `make ui-test` passe (22 fichiers, 206 tests),
 réussit (TypeScript et Vite, 244 modules), et `go test` passe pour `pkg/rdp`,
 `pkg/proxycore`, `pkg/screenstream` et tous les packages de
 `services/proxy/rdp-vnc-proxy`.
+
+## 2026-11-13 — Synchronisation de `refactor/refactor-admin-ui` avec `main` (PR #157–#159)
+
+La branche intègre `origin/main` jusqu'à `6465317` (PR #157, #158 et #159).
+L'architecture Option C est conservée : `@openbastion/ui`,
+`@openbastion/design-tokens`, `@openbastion/icons`, le shell Admin UI, les
+préférences opérateur et les vues sauvegardées restent présents. Les suppressions
+et réorganisations frontend de `main` qui auraient remplacé ce socle n'ont pas
+été reprises. L'ADR-0073 et son index portent désormais le statut
+« Accepté, mise en œuvre en cours ».
+
+Les évolutions RDP sont intégrées : demande de taille conservée avant que le
+canal Display Control soit prêt, application à réception des capacités, gestion
+des redémarrages du canal, activation du redimensionnement par défaut, décodage
+borné des fragments Fast-Path et tolérance aux tuiles bitmap Windows qui
+chevauchent légèrement le bord du bureau. La visionneuse mesure la hauteur
+utilisable depuis la fenêtre, après retrait des contrôles persistants.
+
+Validation sur LT209227 : `make ui-test` passe (22 fichiers, 206 tests),
+`npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-main-6465317`
+réussit (TypeScript, 244 modules), `npm audit --audit-level=high` signale
+0 vulnérabilité, et `go test ./pkg/rdp/... ./pkg/proxycore/... ./pkg/screenstream/... ./services/proxy/rdp-vnc-proxy/...`
+réussit. `git diff --check` passe. Le contrôle de couleurs a d'abord signalé
+un faux positif sur le numéro de PR écrit dans un commentaire ; le commentaire
+a été reformulé et le contrôle passe ensuite.
+
+Les scénarios navigateur contre les cinq cibles Windows sont fournis par la CI
+Windows (#157/#158) ; ils ne sont pas relancés localement, conformément à la
+contrainte KVM/ressources de cet environnement.

@@ -1,6 +1,6 @@
 # ADR-0073 — L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive
 
-**Statut** `Accepté` · 12 novembre 2026.
+**Statut** `Accepté, mise en œuvre en cours` · 12 novembre 2026.
 
 ## Contexte
 
