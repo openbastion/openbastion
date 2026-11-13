@@ -657,8 +657,8 @@ func measureWindows(t *testing.T, partial bool) {
 	})
 	m.scene("pointer", func() { m.pointerCircle(width/2, height/2, 200, 50, 20*time.Millisecond) })
 	// A video (ADR-0090, lot A): the whole screen changing 25 times a second, for 10 s, played by
-	// rdp-video.ps1 when asked through the share (the Windows key does not reach the shell, so no
-	// program can be started from the keyboard). Random 8-pixel blocks: the worst case for PNG.
+	// rdp-video.ps1 when asked through the share: started without a window, which a program run from
+	// the keyboard would not be. Random 8-pixel blocks: the worst case for PNG.
 	if shared := os.Getenv("RDP_WINDOWS_SHARED"); shared != "" {
 		video := m.scene("video", func() {
 			if err := os.WriteFile(filepath.Join(shared, "video-request"), []byte("10\n"), 0o644); err != nil {
@@ -812,8 +812,8 @@ func TestRDPWindows_Clipboard(t *testing.T) {
 }
 
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
-// a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
-// do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no
+// a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s): the same for every
+// target, whatever its shell does with keys. The stream ends with no
 // error, which the relay says as session_ended. Last in this file: it closes the user's session,
 // and the next connection opens a new one.
 func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
