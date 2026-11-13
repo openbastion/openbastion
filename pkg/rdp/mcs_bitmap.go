@@ -1088,16 +1088,24 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 		flags := binary.LittleEndian.Uint16(payload[14:16])
 		bitmapLength := int(binary.LittleEndian.Uint16(payload[16:18]))
 		payload = payload[18:]
+		// Each refusal names its rectangle and its rule (CI of PR #157, Windows Server 2019: an update
+		// of 428 rectangles refused after a resize, and which one, and why, was not said).
+		refuse := func(rule string) (RDPBitmapUpdate, error) {
+			return RDPBitmapUpdate{}, fmt.Errorf("%w: rectangle %d of %d (dest %d,%d-%d,%d, bitmap %dx%d, %d bpp, flags 0x%04x, %d bytes): %s",
+				ErrMCSConnection, i, count, left, top, right, bottom, width, height, bpp, flags, bitmapLength, rule)
+		}
 		if width == 0 || height == 0 || bpp != sessionBPP || (flags != 0 && flags != rdpBitmapCompressed && flags != rdpBitmapCompressed|rdpBitmapNoCompHdr) || bitmapLength == 0 || bitmapLength > len(payload) ||
 			right < left || bottom < top {
-			return RDPBitmapUpdate{}, ErrMCSConnection
+			return refuse("its header")
 		}
 		destWidth, destHeight := right-left+1, bottom-top+1
 		// The bitmap may be wider than its destination by the padding to four pixels, and no more;
 		// it is exactly as tall. A larger one would make the client decode what it never shows.
-		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height ||
-			uint32(left)+uint32(destWidth) > uint32(desktopWidth) || uint32(top)+uint32(destHeight) > uint32(desktopHeight) {
-			return RDPBitmapUpdate{}, ErrMCSConnection
+		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height {
+			return refuse("a bitmap of another size than its destination")
+		}
+		if uint32(left)+uint32(destWidth) > uint32(desktopWidth) || uint32(top)+uint32(destHeight) > uint32(desktopHeight) {
+			return refuse(fmt.Sprintf("a destination outside the %dx%d desktop", desktopWidth, desktopHeight))
 		}
 		pixels := uint64(width) * uint64(height)
 		if pixels > maxRDPDesktopArea || totalPixels > maxRDPDesktopArea-pixels {
