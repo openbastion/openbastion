@@ -1,6 +1,6 @@
 # ADR-0096 — Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité
 
-**Statut** `Accepté` · 13 novembre 2026 · deuxième point du lot D d'ADR-0090, après le socle des canaux (ADR-0095). Accepté le 13 novembre 2026 par le propriétaire du projet : « Je valide ta proposition. » L'option A est acceptée, avec ses bornes (64 Kio par transfert, 10 transferts par minute et par session) et `SCREEN_CLIPBOARD` éteint par défaut. La décision lève, pour le texte du presse-papiers seulement, ce qu'ADR-0069 §6 garde fermé, et étend ce qu'ADR-0070 enregistre. Le propriétaire demande en parallèle d'étudier une saisie automatique des mots de passe, pour qu'ils ne passent pas par le presse-papiers ni par l'enregistrement (voir « Suite »).
+**Statut** `Accepté`, **mis en œuvre** (incréments 1 à 5, 13 novembre 2026 ; `SCREEN_CLIPBOARD` éteint par défaut, en attente de la décision du propriétaire) · 13 novembre 2026 · deuxième point du lot D d'ADR-0090, après le socle des canaux (ADR-0095). Accepté le 13 novembre 2026 par le propriétaire du projet : « Je valide ta proposition. » L'option A est acceptée, avec ses bornes (64 Kio par transfert, 10 transferts par minute et par session) et `SCREEN_CLIPBOARD` éteint par défaut. La décision lève, pour le texte du presse-papiers seulement, ce qu'ADR-0069 §6 garde fermé, et étend ce qu'ADR-0070 enregistre. Le propriétaire demande en parallèle d'étudier une saisie automatique des mots de passe, pour qu'ils ne passent pas par le presse-papiers ni par l'enregistrement (voir « Suite »).
 
 ## Contexte
 
@@ -99,6 +99,20 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
   - La relecture montre les trois derniers transferts jusqu'à la position, à leur heure, à côté de l'écran.
 - **Prouvé** : aller-retour et refus de l'entrée et des bits du `HELLO`, `FuzzDecodeClipboardInput` (20 s) ; relais (texte collé enregistré puis offert, entrée non offerte qui termine la session, `HELLO` selon les droits) sous `-race` ; limite de lecture du proxy ; validation et relais de la Gateway ; Vitest du panneau et de la relecture. 17 mutations, 16 tuées ; la survivante est équivalente (la borne de taille en tête de `DecodeClipboardInput` refuse tôt ce que la borne en unités UTF-16 refuse de toute façon).
 - **Reste** : la vérification dans un navigateur sans interface contre les cinq Windows de la CI (incrément 5), puis la décision du propriétaire sur `SCREEN_CLIPBOARD` par défaut.
+
+**Incrément 5, fait (13 novembre 2026) : le presse-papiers dans un navigateur réel, contre Windows.** `TestScreenFlow_RDPClipboardInAHeadlessBrowser`, dans la CI Windows (`windows-rdp.yml`), sur les cinq cibles :
+- **La pile** : les huit services sur processus réels, `SCREEN_CLIPBOARD=true`, et les deux droits donnés au rôle de l'opérateur.
+- **Le parcours, dans Chrome sans interface** : l'écran s'ouvre par les boutons de la page, et le panneau doit offrir les deux sens.
+  1. Un texte (avec « é » et « € ») est saisi dans le champ du panneau et envoyé. La page doit le montrer, revenu du proxy une fois enregistré.
+  2. Dans Notepad, trouvé à l'écran, Ctrl+A puis Ctrl+V le collent ; Ctrl+A puis Ctrl+C le recopient. La page doit montrer le texte copié depuis la cible.
+  3. « Copier le texte de la cible » est cliqué, et son issue est consignée.
+- **Après la session** : l'auditeur relit l'enregistrement par l'API publique et doit y trouver les deux transferts. L'audit, réel derrière l'espion, doit porter les deux `session.clipboard`, sans le texte.
+- **Résultat (PR #176, run 43415425495)** : vert sur les cinq cibles (Windows Server 2019 et 2022, 16 et 32 bpp, session console, clavier fr-FR).
+  - Sur chacune, le texte collé par la page arrive dans Notepad. Le texte recopié revient à la page. L'enregistrement relu par l'API publique contient exactement les deux transferts, et l'audit porte les deux `session.clipboard`, sans le texte.
+  - Le bouton « Copier » a écrit dans le presse-papiers de Chrome sans interface à chaque fois.
+  - Les captures fr-FR, jugées à l'œil, montrent Notepad avec « Pasted through the page: … é € », puis le même texte sélectionné et affiché par le panneau comme copié depuis la cible : AZERTY, accents et euro intacts.
+
+**ADR-0096 est entièrement mise en œuvre** (incréments 1 à 5). Il reste la décision du propriétaire d'allumer `SCREEN_CLIPBOARD` par défaut (§7) ; d'ici là, le presse-papiers ne s'ouvre que si l'exploitant le met à `true`.
 
 ## Conséquences
 

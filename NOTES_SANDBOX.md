@@ -4344,3 +4344,12 @@ Le contrat écran porte le presse-papiers dans les deux sens : bits 2 et 3 du `H
 
 Vérifié : `pkg/screenstream` (fuzzing de l'entrée), `pkg/proxycore` sous `-race`, proxy, Gateway, Vitest. **Non fait** : un navigateur réel contre Windows (incrément 5) ; `SCREEN_CLIPBOARD` reste éteint.
 
+## 2026-11-13 — ADR-0096, incrément 5 : le presse-papiers éprouvé dans un vrai navigateur contre Windows
+
+`TestScreenFlow_RDPClipboardInAHeadlessBrowser` (CI Windows, PR #176, run 43415425495) est vert sur les cinq cibles :
+- Chrome sans interface colle un texte par le panneau. Il arrive dans Notepad, qui le recopie, et la page l'affiche.
+- La relecture par l'API publique contient exactement les deux transferts ; l'audit réel porte les deux `session.clipboard`, sans le texte.
+- Le bouton « Copier » a réussi. Les captures fr-FR montrent AZERTY, « é » et « € » intacts.
+
+ADR-0096 est mise en œuvre. `SCREEN_CLIPBOARD` reste éteint : l'allumer par défaut est la décision du propriétaire.
+
