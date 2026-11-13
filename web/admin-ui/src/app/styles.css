@@ -816,7 +816,7 @@ main.login {
 
 .app-workspace {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 1fr);
+  grid-template-columns: 17.5rem minmax(0, 1fr);
   min-height: calc(100vh - 4rem - 3.25rem);
   transition: grid-template-columns 180ms var(--ease);
 }
@@ -2034,4 +2034,113 @@ main.login {
   .account-filter-operator,
   .account-filter-value { grid-column: 1; }
   .account-filter-remove { grid-column: 2; grid-row: 2 / span 3; }
+}
+
+/* ---------- Ergonomie : en-tête de page, consignes repliées, inventaire des comptes ---------- */
+
+/* Le titre et l'action principale de la page sur une même ligne, action à la portée du regard. */
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  min-width: 0;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Plusieurs consignes ne repoussent plus les données sous la ligne de flottaison : elles se
+   déplient à la demande, sans rien retirer à ce qu'un opérateur doit savoir avant d'agir. */
+.page-hints {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.page-hints > summary {
+  width: fit-content;
+  padding: 0.15rem 0;
+  color: var(--ob-color-accent);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page-hints > summary:hover {
+  text-decoration: underline;
+}
+
+.page-hints > summary:focus-visible {
+  outline: 2px solid var(--ob-color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* La recherche simple reste visible ; seuls les règles et les vues enregistrées se replient. */
+.account-filter-toolbar {
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.account-filter-toolbar .account-filter-search {
+  flex: 1 1 18rem;
+}
+
+.account-filter-toolbar .account-filter-search input {
+  min-height: 2.5rem;
+}
+
+.account-filter-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.account-filter-scope {
+  color: var(--ob-color-text-secondary);
+  font-size: 0.8rem;
+}
+
+.account-filter-scope [aria-live] {
+  color: var(--ob-color-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Une carte d'indicateur qui ouvre son écran garde l'apparence d'une carte, pas d'un bouton. */
+button.ob-stat-card {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ob-stat-card-action:hover {
+  border-color: var(--ob-color-accent);
+  background: var(--ob-color-accent-subtle);
+}
+
+.ob-stat-card-action:focus-visible {
+  outline: 2px solid var(--ob-color-focus);
+  outline-offset: 2px;
+}
+
+.ob-stat-link {
+  color: var(--ob-color-accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

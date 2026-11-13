@@ -190,7 +190,7 @@ export function AppShell({
           className="nav-item"
           aria-label={tabs[key].label}
           aria-current={tab === key ? "page" : undefined}
-          title={collapsed ? tabs[key].description : undefined}
+          title={collapsed ? `${tabs[key].label} — ${tabs[key].description}` : undefined}
           onClick={() => chooseTab(key)}
         >
           <Icon size={18} />
@@ -267,7 +267,9 @@ export function AppShell({
           </button>
           <div className="session-chip">
             <span className="avatar" aria-hidden="true">{initials}</span>
-            <span className="who">{who?.username} {who?.roles.length ? "(" + who.roles.join(", ") + ")" : ""}</span>
+            <span className="who" title={who ? `${who.username}${who.roles.length ? " (" + who.roles.join(", ") + ")" : ""}` : undefined}>
+              {who?.username} {who?.roles.length ? "(" + who.roles.join(", ") + ")" : ""}
+            </span>
             <button type="button" className="ghost" onClick={onSignOut}>Se déconnecter</button>
           </div>
         </div>
