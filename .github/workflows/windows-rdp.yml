@@ -142,6 +142,17 @@ jobs:
           make build ui-build
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           go test ./test/integration/ -run TestScreenFlow_RDPResizeInAHeadlessBrowser -v -count=1 -timeout=20m
+      # ADR-0096, increment 5: the clipboard in a real browser. SCREEN_CLIPBOARD on, both rights for
+      # the operator: a text pasted through the page into Notepad, copied back and shown by the page,
+      # then both transfers found in the replay and in the audit (browser-clipboard-*.png).
+      - name: The clipboard in a headless browser
+        if: ${{ !cancelled() }}
+        env:
+          TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+        run: |
+          make build ui-build
+          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          go test ./test/integration/ -run TestScreenFlow_RDPClipboardInAHeadlessBrowser -v -count=1 -timeout=20m
       # Runs #16 to #32 settled CredSSP, TLS, the Connect-Initial and the Confirm Active (ADR-0071):
       # only the connection sequence runs by default, before the reference clients (run #34: after
       # them, Windows answered no X.224 request); every TestRDPWindowsIsolation test stays in

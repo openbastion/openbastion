@@ -186,14 +186,14 @@ func (p *cdpPage) waitTrue(what, expression string, limit time.Duration) {
 	}
 }
 
-// fill sets a React-controlled input as a person typing does: through the native setter, then an
-// input event, which React listens to.
+// fill sets a React-controlled input or textarea as a person typing does: through the native setter
+// of its own kind, then an input event, which React listens to.
 func (p *cdpPage) fill(selector, value string) {
 	p.t.Helper()
 	sel, _ := json.Marshal(selector)
 	val, _ := json.Marshal(value)
 	p.eval(fmt.Sprintf(`(() => { const el = document.querySelector(%s); if (!el) throw new Error("no " + %s);
-		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, %s);
+		Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value").set.call(el, %s);
 		el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`, sel, sel, val))
 }
 
@@ -231,4 +231,52 @@ func (p *cdpPage) screenshot(dir, name string) {
 	if err := os.WriteFile(filepath.Join(dir, name), png, 0o644); err != nil {
 		p.t.Fatal(err)
 	}
+}
+
+// clickAt presses and releases the left button at (x, y) of the page, as a person's mouse does:
+// the page sees pointer events, not a scripted click.
+func (p *cdpPage) clickAt(x, y float64) {
+	p.t.Helper()
+	p.call("Input.dispatchMouseEvent", map[string]any{"type": "mouseMoved", "x": x, "y": y})
+	p.call("Input.dispatchMouseEvent", map[string]any{"type": "mousePressed", "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": 1})
+	p.call("Input.dispatchMouseEvent", map[string]any{"type": "mouseReleased", "x": x, "y": y, "button": "left", "buttons": 0, "clickCount": 1})
+}
+
+// cdpKey is a physical key: its code (what the page's RDP mapping reads), its key and its Windows
+// virtual key code.
+type cdpKey struct {
+	code, key string
+	vk        int
+}
+
+var (
+	cdpControl = cdpKey{"ControlLeft", "Control", 17}
+	cdpKeyA    = cdpKey{"KeyA", "a", 65}
+	cdpKeyQ    = cdpKey{"KeyQ", "q", 81}
+	cdpKeyC    = cdpKey{"KeyC", "c", 67}
+	cdpKeyV    = cdpKey{"KeyV", "v", 86}
+)
+
+// press presses the keys of chord in order, then releases them in the reverse order, Control
+// held as a modifier while it is down.
+func (p *cdpPage) press(chord ...cdpKey) {
+	p.t.Helper()
+	modifiers := 0
+	send := func(kind string, k cdpKey) {
+		p.call("Input.dispatchKeyEvent", map[string]any{"type": kind, "code": k.code, "key": k.key,
+			"windowsVirtualKeyCode": k.vk, "nativeVirtualKeyCode": k.vk, "modifiers": modifiers})
+	}
+	for _, k := range chord {
+		if k == cdpControl {
+			modifiers |= 2
+		}
+		send("rawKeyDown", k)
+	}
+	for i := len(chord) - 1; i >= 0; i-- {
+		send("keyUp", chord[i])
+		if chord[i] == cdpControl {
+			modifiers &^= 2
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
 }

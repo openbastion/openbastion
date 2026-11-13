@@ -100,6 +100,15 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 - **Prouvé** : aller-retour et refus de l'entrée et des bits du `HELLO`, `FuzzDecodeClipboardInput` (20 s) ; relais (texte collé enregistré puis offert, entrée non offerte qui termine la session, `HELLO` selon les droits) sous `-race` ; limite de lecture du proxy ; validation et relais de la Gateway ; Vitest du panneau et de la relecture. 17 mutations, 16 tuées ; la survivante est équivalente (la borne de taille en tête de `DecodeClipboardInput` refuse tôt ce que la borne en unités UTF-16 refuse de toute façon).
 - **Reste** : la vérification dans un navigateur sans interface contre les cinq Windows de la CI (incrément 5), puis la décision du propriétaire sur `SCREEN_CLIPBOARD` par défaut.
 
+**Incrément 5, en cours (13 novembre 2026) : le presse-papiers dans un navigateur réel, contre Windows.** `TestScreenFlow_RDPClipboardInAHeadlessBrowser`, dans la CI Windows (`windows-rdp.yml`), sur les cinq cibles :
+- **La pile** : les huit services sur processus réels, `SCREEN_CLIPBOARD=true`, et les deux droits donnés au rôle de l'opérateur.
+- **Le parcours, dans Chrome sans interface** : l'écran s'ouvre par les boutons de la page, et le panneau doit offrir les deux sens.
+  1. Un texte (avec « é » et « € ») est saisi dans le champ du panneau et envoyé. La page doit le montrer, revenu du proxy une fois enregistré.
+  2. Dans Notepad, trouvé à l'écran, Ctrl+A puis Ctrl+V le collent ; Ctrl+A puis Ctrl+C le recopient. La page doit montrer le texte copié depuis la cible.
+  3. « Copier le texte de la cible » est cliqué, et son issue est consignée.
+- **Après la session** : l'auditeur relit l'enregistrement par l'API publique et doit y trouver les deux transferts. L'audit, réel derrière l'espion, doit porter les deux `session.clipboard`, sans le texte.
+- Les captures (`browser-clipboard-*.png`) sont jointes au dump. **Résultat** : à lire dans la CI de la PR.
+
 ## Conséquences
 
 - (+) Le besoin le plus demandé des opérateurs, sans trou dans la trace : chaque transfert est enregistré, chiffré, audité et refusable par politique, dans chaque sens séparément.
