@@ -66,7 +66,13 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - FreeRDP confirme la version 10.7 avec les drapeaux annoncés ;
   - en 10 s : 325 messages, 4,98 Mo décompressés sans faute ;
   - une surface de 1280 x 800 (`XRGB_8888`), puis 321 trames, toutes en `WireToSurface2`, codec **RemoteFX progressif (0x0009)**.
-- **Ce que cela annonce** : aucune capacité n'éteint RemoteFX ni RemoteFX progressif (MS-RDPEGFX 2.2.3). L'option A tient seulement si la cible choisit d'elle-même un codec sans perte, et FreeRDP ne le fait pas. Le choix de Windows est mesuré par `TestRDPWindows_GraphicsPipeline` contre les cinq cibles. Si Windows choisit aussi un codec avec perte, la question « ancien chemin ou refus » d'ADR-0101 se posera dès l'incrément 3.
+- **Mesuré contre les cinq Windows** (`TestRDPWindows_GraphicsPipeline`, CI de la PR #194, 20 s au bureau ouvert, sans saisie) :
+  - les cinq confirment la version **10.6** avec les drapeaux annoncés (`AVC_DISABLED | SMALL_CACHE`) ; aucune ne prend 10.7 ;
+  - une surface de 1280 x 800 en `ARGB_8888` (0x21), rattachée par `MapSurfaceToScaledOutput` (0x0017) : la version 10.6 n'a pas `SCALEDMAP_DISABLE`, cette commande y est donc légitime ;
+  - les images : **ClearCodec (0x0008)** pour 21 à 29 `WireToSurface1`, et **RemoteFX progressif (0x0009)** pour 1 ou 2 `WireToSurface2` par session, suivis d'un `DeleteEncodingContext` ;
+  - le cache sert beaucoup : 8 à 16 `SurfaceToCache` et 727 à 1010 `CacheToSurface` par session ; 3 à 5 `SolidFill` ; 5 à 9 trames ;
+  - 17 à 85 Ko reçus, sans faute de décompression.
+- **Ce que cela annonce** : aucune capacité n'éteint RemoteFX ni RemoteFX progressif (MS-RDPEGFX 2.2.3), et Windows envoie bien du RemoteFX progressif, même si c'est rare, à côté de ClearCodec. L'option A ne tient donc pas telle quelle : avant l'incrément 3, il faudra décider ce que devient une session dont la cible envoie une image avec perte (revenir à l'ancien chemin, refuser la session, ou enregistrer l'image décodée telle qu'elle a été montrée). Ce choix revient au propriétaire. L'incrément 2 (surfaces, remplissage, copie et cache) n'en dépend pas.
 
 ## Ce qui demande ton go
 

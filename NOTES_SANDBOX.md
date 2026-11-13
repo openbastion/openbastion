@@ -4437,7 +4437,12 @@ Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le
   - la décompression RDP 8.0 (ZGFX) est bornée et fuzzée.
 - **Ajout au plan** : ZGFX n'était pas listé dans l'ADR, mais tout message de la cible en dépend, la confirmation comprise.
 - **Mesuré contre FreeRDP 3** : la version 10.7 est confirmée ; 325 messages, 4,98 Mo, sans faute ; codec RemoteFX progressif (avec perte), qu'aucune capacité n'éteint.
-- **En attente** : la mesure contre les cinq Windows (`TestRDPWindows_GraphicsPipeline`, CI de la PR), qui dira quels codecs Windows choisit.
+- **Mesuré contre les cinq Windows** (CI de #194) :
+  - les cinq confirment la version 10.6 avec nos drapeaux ;
+  - images en ClearCodec (21 à 29 par session), plus 1 ou 2 en RemoteFX progressif, avec perte ;
+  - cache très sollicité (727 à 1010 `CacheToSurface`), une `MapSurfaceToScaledOutput`.
+- **Écart corrigé** : Windows pose `Sp = 2` sur les PDU DATA du canal graphique ; le champ n'est plus lu (MS-RDPEDYC le dit inutilisé).
+- **Décision à prendre avant l'incrément 3** : que faire d'une image RemoteFX progressif, qu'aucune capacité n'éteint.
 - **Mémoire** : 2,5 Mo d'historique par session au pipeline ouvert, plus un message de 16 Mio au plus en cours de réassemblage.
 
 ## 2026-11-13 — CI Windows : l'écran de la machine, à chaque passage
