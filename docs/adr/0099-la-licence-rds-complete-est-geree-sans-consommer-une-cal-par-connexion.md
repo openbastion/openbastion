@@ -1,6 +1,6 @@
 # ADR-0099 — Le client RDP gère la licence RDS complète, sans consommer une licence d'accès par connexion
 
-**Statut** `Proposé` · 13 novembre 2026 · demandé par le propriétaire du projet le 13 novembre 2026 (« ADR proposés d'abord ») pour l'écart « licence RDS » d'ADR-0071. `Accepté` seulement avec son go, cité avec sa date.
+**Statut** `Accepté` · 13 novembre 2026 · accepté le même jour par le propriétaire du projet : « ADR-0099 l'option B et A ». B d'abord (échange complet, mode par utilisateur, licences en mémoire), puis A (magasin partagé pour le mode par appareil). La sixième cible Windows de la CI et l'emplacement du magasin de A restent à confirmer quand leur incrément viendra.
 
 ## Contexte
 
