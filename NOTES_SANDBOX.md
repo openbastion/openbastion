@@ -4325,3 +4325,9 @@ Le Broker évalue à la création d'une session RDP `clipboard:to-target:<compte
 Choix renversable : les droits voyagent dans `EstablishSession`, pas dans le scope du Vault, que le proxy ne lit pas (l'ADR disait « dans le scope »).
 
 Vérifié : `make build vet test` ; tests Broker avec `TEST_DATABASE_URL` sur un PostgreSQL 16 jetable ; contrat proto↔JSON ; 12 mutations, 12 tuées. Non fait : aucun test sur processus réels de bout en bout (rien ne s'ouvre encore côté cible).
+
+## 2026-11-13 — ADR-0096, incrément 3a : un texte du presse-papiers s'enregistre
+
+Le message `CLIPBOARD` (type 5) du flux écran, enregistré sous le codec `clipboard-text-v1` dans la suite des images, scellé au format 3, servi par la Gateway à la relecture. Rien ne le produit encore : le relais (3b) et `SCREEN_CLIPBOARD` viennent ensuite. La relecture de l'Admin UI refuse ce codec jusqu'à l'incrément 4.
+
+Vérifié : tests de `pkg/screenstream`, du Video Recorder, de la Gateway et du proxy ; `FuzzDecode` 20 s ; 14 mutations, 14 tuées.

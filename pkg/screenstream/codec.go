@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -31,7 +32,25 @@ const (
 	// TypeFrameDelta is a partial frame (ADR-0092): the rectangles that changed since the frame of
 	// the previous sequence, each a PNG. A FRAME is the key frame it builds on.
 	TypeFrameDelta MessageType = 4
+	// TypeClipboard is a text that crossed the clipboard (ADR-0096), in the session's sequence: it
+	// is recorded, and acknowledged, like a frame, before it is delivered.
+	TypeClipboard MessageType = 5
 )
+
+// ClipboardDirection is the way a clipboard text went (ADR-0096 §1).
+type ClipboardDirection byte
+
+const (
+	ClipboardToTarget   ClipboardDirection = 1 // pasted by the operator on the target
+	ClipboardFromTarget ClipboardDirection = 2 // copied from the target by the operator
+)
+
+// MaxClipboardTextUnits bounds a clipboard text in UTF-16 code units, the target's encoding: the
+// 65 526 bytes of pkg/rdp (ADR-0096 §3), so that every text the channel carries can be recorded.
+const MaxClipboardTextUnits = 32763
+
+// clipboardHeader is the direction, then three reserved zero bytes.
+const clipboardHeader = 4
 
 // MaxDeltaRects bounds the rectangles of one partial frame (ADR-0092 §2).
 const MaxDeltaRects = 64
@@ -98,6 +117,10 @@ type Message struct {
 	// END-only fields. Text is a stable public message, never an internal error.
 	EndCode uint16
 	Text    string
+
+	// CLIPBOARD-only fields: the way the text went, and the text, whole.
+	Direction     ClipboardDirection
+	ClipboardText string
 }
 
 // Rect is one changed rectangle of a partial frame: where it goes, and its pixels as a PNG of
@@ -178,9 +201,42 @@ func Encode(m Message) ([]byte, error) {
 		binary.BigEndian.PutUint16(out[HeaderSize+2:], uint16(len(m.Text)))
 		copy(out[HeaderSize+4:], m.Text)
 		return out, nil
+	case TypeClipboard:
+		if err := validateClipboard(m); err != nil {
+			return nil, err
+		}
+		out := make([]byte, HeaderSize+clipboardHeader+len(m.ClipboardText))
+		putHeader(out, m)
+		out[HeaderSize] = byte(m.Direction)
+		copy(out[HeaderSize+clipboardHeader:], m.ClipboardText)
+		return out, nil
 	default:
 		return nil, ErrUnsupported
 	}
+}
+
+// validateClipboard checks a clipboard text against ADR-0096: a sequence and a time as a frame's,
+// no screen size, one of the two directions, and a text of valid UTF-8, without NUL (the target's
+// terminator), within MaxClipboardTextUnits. An empty text is a text: the target may copy nothing.
+func validateClipboard(m Message) error {
+	if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 ||
+		(m.Direction != ClipboardToTarget && m.Direction != ClipboardFromTarget) {
+		return ErrMalformedMessage
+	}
+	if !utf8.ValidString(m.ClipboardText) || strings.IndexByte(m.ClipboardText, 0) >= 0 {
+		return fmt.Errorf("%w: clipboard text not valid UTF-8 without NUL", ErrMalformedMessage)
+	}
+	units := 0
+	for _, r := range m.ClipboardText {
+		units++
+		if r >= 0x10000 {
+			units++ // a surrogate pair
+		}
+		if units > MaxClipboardTextUnits {
+			return fmt.Errorf("%w: clipboard text past %d UTF-16 units", ErrOutOfBounds, MaxClipboardTextUnits)
+		}
+	}
+	return nil
 }
 
 // Decode parses one complete v1 server-to-client message and rejects trailing,
@@ -249,6 +305,16 @@ func Decode(data []byte) (Message, error) {
 		}
 		m.EndCode = binary.BigEndian.Uint16(p[0:2])
 		m.Text = string(p[4:])
+	case TypeClipboard:
+		p := data[HeaderSize:]
+		if len(p) < clipboardHeader || p[1] != 0 || p[2] != 0 || p[3] != 0 {
+			return Message{}, ErrMalformedMessage
+		}
+		m.Direction = ClipboardDirection(p[0])
+		m.ClipboardText = string(p[clipboardHeader:])
+		if err := validateClipboard(m); err != nil {
+			return Message{}, err
+		}
 	default:
 		return Message{}, ErrUnsupported
 	}
@@ -272,6 +338,8 @@ func putHeader(out []byte, m Message) {
 		binary.BigEndian.PutUint32(out[28:32], uint32(14+len(m.SessionID)))
 	case TypeEnd:
 		binary.BigEndian.PutUint32(out[28:32], uint32(4+len(m.Text)))
+	case TypeClipboard:
+		binary.BigEndian.PutUint32(out[28:32], uint32(clipboardHeader+len(m.ClipboardText)))
 	}
 }
 

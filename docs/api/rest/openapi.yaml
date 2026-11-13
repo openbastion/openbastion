@@ -1870,9 +1870,13 @@ components:
           description: >-
             En base64. Codec `png` : une image clé, le PNG entier. Codec `png-delta-v1` : une
             image partielle (ADR-0092), le message `FRAME_DELTA` du flux écran (ADR-0071 §6) tel
-            que l'opérateur l'a reçu ; ses rectangles remplacent les pixels de l'image de la
-            séquence précédente. Taille brute maximale de 4 Mio par segment.
-        codec: { type: string, enum: [png, png-delta-v1] }
+            que l'opérateur l'a reçu ; ses rectangles remplacent les pixels de l'image qui la
+            précède. Codec `clipboard-text-v1` : un texte passé par le presse-papiers (ADR-0096 §4),
+            le message `CLIPBOARD` du flux écran (type 5 : en-tête commun, un octet de sens, 1 vers
+            la cible ou 2 depuis la cible, trois octets réservés à zéro, puis le texte en UTF-8,
+            sans NUL, de 32 763 unités UTF-16 au plus) ; ce n'est pas une image, l'écran reste celui
+            de l'image qui le précède. Taille brute maximale de 4 Mio par segment.
+        codec: { type: string, enum: [png, png-delta-v1, clipboard-text-v1] }
 
     PrivilegedAccountInput:
       type: object
