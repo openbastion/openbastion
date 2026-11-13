@@ -70,7 +70,7 @@ The Session Broker routes a session based on its stored protocol. The Gateway re
 
 `--env-file deploy/docker-compose/.env.recording` is for installations upgraded with `init-recording.sh`: on a new installation that file does not exist and the credentials are in `.env`, so drop the option. The bundle named by `SCREEN_TARGET_CA_FILE` is mounted with the mode of the file and read by an unprivileged user: make it world-readable (`0644`), it holds only public certificates.
 
-`up --wait` does not vouch for the recording: `video-recorder` and `rdp-vnc-proxy` have no healthcheck, and a recorder that refuses its Transit configuration restarts in a loop while `up --wait` succeeds. Sessions then fail closed (`503` on `connect`, nothing sent to the target): check `logs video-recorder`.
+`up --wait` vouches for the recording: `video-recorder` is healthy only when its `/readyz` answers (PostgreSQL, the object store and the key wrapper ready), and `rdp-vnc-proxy` starts after it and is healthy when its `/healthz` answers. The images have no shell: each binary probes itself under its own identity (`video-recorder probe --port 8088 --path /readyz`). A recorder that refuses its Transit configuration now makes `up --wait` fail; `logs video-recorder` says why.
 
 ## What lives where
 

@@ -198,7 +198,13 @@ func splitOrigins(value string) []string {
 
 // main dispatches version before entering the proxy lifecycle.
 func main() {
-	if err := command.NewServiceCommand("rdp-vnc-proxy", runService).Execute(); err != nil {
+	root := command.NewServiceCommand("rdp-vnc-proxy", runService)
+	// The healthcheck of the distroless image (deploy/docker-compose): the running service, asked
+	// under its own identity.
+	root.AddCommand(command.NewProbeCommand(func(ctx context.Context, port int, path string) error {
+		return mtls.ProbeSelf(ctx, mtls.RDPVNCProxy, port, path)
+	}))
+	if err := root.Execute(); err != nil {
 		log.Fatalf("rdp-vnc-proxy: %v", err)
 	}
 }

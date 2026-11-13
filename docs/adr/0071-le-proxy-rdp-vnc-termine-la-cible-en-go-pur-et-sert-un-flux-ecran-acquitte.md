@@ -35,7 +35,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 | Clavier | La touche Windows seule n'ouvre pas le menu Démarrer (Ctrl+Échap l'ouvre) ; cause non établie. |
 | Refus | Un mot de passe refusé par la cible se dit `target_unreachable` : le §12 n'a pas de code pour ce cas. |
 | VNC | RealVNC refusé (RFB 5.0) ; ni redimensionnement, ni presse-papiers. |
-| Exploitation | Budget d'entrée compté par instance du proxy. `up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran. S3 distant ou sous TLS non mesuré. |
+| Exploitation | Budget d'entrée compté par instance du proxy. ~~`up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran~~ : fait le 13 novembre 2026, par leur sous-commande `probe` (ADR-0072). S3 distant ou sous TLS non mesuré. |
 | Accessibilité | L'écran est illisible au lecteur d'écran. |
 
 **Décisions du propriétaire en attente** : `RDP_ENABLED` par défaut (ADR-0088), `SCREEN_CLIPBOARD` par défaut (ADR-0096 §7), le statut d'ADR-0090.
