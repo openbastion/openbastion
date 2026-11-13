@@ -4308,3 +4308,11 @@ a été reformulé et le contrôle passe ensuite.
 Les scénarios navigateur contre les cinq cibles Windows sont fournis par la CI
 Windows (#157/#158) ; ils ne sont pas relancés localement, conformément à la
 contrainte KVM/ressources de cet environnement.
+
+## 2026-11-13 — ADR-0096, incrément 2 : les droits du presse-papiers, du Broker au proxy
+
+Le Broker évalue à la création d'une session RDP `clipboard:to-target:<compte>` et `clipboard:from-target:<compte>` (action `session:clipboard`), les inscrit dans `sessions` (migration `006`, faux par défaut) et les passe au proxy dans `EstablishSession` (champs 9 et 10). Le proxy les porte jusqu'à `proxycore.SessionMetadata`, et refuse (`400`) un droit pour une session VNC. Rien ne les lit encore : le moteur RDP ouvrira `cliprdr` selon eux à l'incrément 3.
+
+Choix renversable : les droits voyagent dans `EstablishSession`, pas dans le scope du Vault, que le proxy ne lit pas (l'ADR disait « dans le scope »).
+
+Vérifié : `make build vet test` ; tests Broker avec `TEST_DATABASE_URL` sur un PostgreSQL 16 jetable ; contrat proto↔JSON ; 12 mutations, 12 tuées. Non fait : aucun test sur processus réels de bout en bout (rien ne s'ouvre encore côté cible).

@@ -66,7 +66,7 @@ func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 
 type failingProxy struct{ err error }
 
-func (p failingProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool) (string, string, error) {
+func (p failingProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool, domain.ClipboardRights) (string, string, error) {
 	return "", "", p.err
 }
 
