@@ -313,6 +313,52 @@ describe("partial frames, live (ADR-0092)", () => {
   });
 });
 
+// A clipboard text (ADR-0096): a direction, three reserved bytes, then UTF-8.
+function clipboard(sequence: bigint, direction: number, text: string, reserved = 0): ArrayBuffer {
+  return header(5, sequence, 0, 0, [direction, reserved, 0, 0, ...new TextEncoder().encode(text)]);
+}
+
+describe("clipboard texts, live (ADR-0096)", () => {
+  it("decodes them as strictly as the proxy encodes them", () => {
+    expect(decodeScreenMessage(clipboard(3n, 2, "copied é €"))).toEqual({ type: "clipboard", sequence: 3n, direction: "from-target", text: "copied é €" });
+    expect(decodeScreenMessage(clipboard(3n, 1, ""))).toEqual({ type: "clipboard", sequence: 3n, direction: "to-target", text: "" });
+    expect(decodeScreenMessage(clipboard(1n, 1, "x".repeat(32763)))).toMatchObject({ type: "clipboard" });
+    for (const bad of [
+      clipboard(0n, 1, "no sequence"),
+      clipboard(1n, 0, "no direction"),
+      clipboard(1n, 3, "an unknown direction"),
+      clipboard(1n, 1, "a reserved byte", 1),
+      clipboard(1n, 1, "a\u0000NUL"),
+      clipboard(1n, 1, "x".repeat(32764)),
+      header(5, 1n, 1, 1, [1, 0, 0, 0]),
+      header(5, 1n, 0, 0, [1, 0, 0]),
+      header(5, 1n, 0, 0, [1, 0, 0, 0, 0xff]),
+    ]) {
+      expect(() => decodeScreenMessage(bad)).toThrow();
+    }
+  });
+
+  it("takes its place in the sequence, and a partial frame after it applies to the screen before it", async () => {
+    const s = setup();
+    s.socket.receive(hello("s1", "rdp"));
+    s.socket.receive(frame(1n, 8, 4));
+    s.socket.receive(clipboard(2n, 2, "copied"));
+    s.socket.receive(delta(3n, 8, 4, [{ x: 0, y: 0, w: 1, h: 1 }]));
+    await waitFor(() => expect(s.painted).toEqual(["frame 8x4", "rect 0,0 1x1"]));
+    expect(s.socket.closed).toBe(false);
+    s.view.unmount();
+  });
+
+  it("closes on a clipboard text out of the sequence", async () => {
+    const s = setup();
+    s.socket.receive(hello("s1", "rdp"));
+    s.socket.receive(frame(2n, 8, 4));
+    s.socket.receive(clipboard(2n, 2, "replayed"));
+    await waitFor(() => expect(s.socket.closed).toBe(true));
+    s.view.unmount();
+  });
+});
+
 describe("the screen", () => {
   it("waits, then shows the frame, sized as the proxy says", async () => {
     const s = setup();

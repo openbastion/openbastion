@@ -302,6 +302,8 @@ services:
       SCREEN_PARTIAL_FRAMES: ${SCREEN_PARTIAL_FRAMES:-true}
       # The target's desktop resized to the operator's window (ADR-0095), RDP: "false" to keep it fixed.
       SCREEN_RESIZE: ${SCREEN_RESIZE:-true}
+      # The clipboard of an RDP session, text only, each direction by its right (ADR-0096): "true" to open it.
+      SCREEN_CLIPBOARD: ${SCREEN_CLIPBOARD:-false}
     secrets: [screen-target-ca]
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}

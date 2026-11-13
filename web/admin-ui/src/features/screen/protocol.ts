@@ -14,6 +14,10 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 // A partial frame (ADR-0092): at most this many rectangles, each with a 20-byte header.
 const MAX_DELTA_RECTS = 64;
 const DELTA_RECT_HEADER = 20;
+// A clipboard text (ADR-0096): a direction, three reserved bytes, then UTF-8, within the target's
+// bound in UTF-16 units.
+const CLIPBOARD_HEADER = 4;
+const MAX_CLIPBOARD_TEXT_UNITS = 32763;
 
 // A changed rectangle of a partial frame: where it goes, and its pixels as a PNG of its size.
 export interface DeltaRect {
@@ -31,7 +35,9 @@ export type ScreenMessage =
   | { type: "frame"; sequence: bigint; width: number; height: number; png: Uint8Array<ArrayBuffer> }
   // A partial frame (ADR-0092): its rectangles replace pixels of the frame of the sequence before.
   | { type: "delta"; sequence: bigint; width: number; height: number; rects: DeltaRect[] }
-  | { type: "end"; sequence: bigint; code: number; text: string };
+  | { type: "end"; sequence: bigint; code: number; text: string }
+  // A text that crossed the clipboard (ADR-0096), in the session's sequence, recorded before it came.
+  | { type: "clipboard"; sequence: bigint; direction: "to-target" | "from-target"; text: string };
 
 export class ScreenProtocolError extends Error {}
 
@@ -82,6 +88,15 @@ export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
       if (sequence === 0n || width === 0 || height === 0 || width * height > MAX_PIXELS) refuse("partial frame out of bounds");
       if (length > MAX_PNG_BYTES) refuse("partial frame too large");
       return { type: "delta", sequence, width, height, rects: decodeRects(data, width, height) };
+    }
+    case 5: {
+      if (sequence === 0n || width !== 0 || height !== 0 || length < CLIPBOARD_HEADER) refuse("malformed clipboard text");
+      if (payload[1] !== 0 || payload[2] !== 0 || payload[3] !== 0) refuse("malformed clipboard text");
+      const direction = payload[0] === 1 ? "to-target" : payload[0] === 2 ? "from-target" : refuse("unknown clipboard direction");
+      const clip = decodeText(text, payload.subarray(CLIPBOARD_HEADER));
+      // UTF-16 units are what JavaScript strings count.
+      if (clip.includes("\u0000") || clip.length > MAX_CLIPBOARD_TEXT_UNITS) refuse("clipboard text out of bounds");
+      return { type: "clipboard", sequence, direction, text: clip };
     }
     default:
       return refuse("unknown message type");

@@ -144,6 +144,12 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
           finish(UNREADABLE);
           return;
         }
+        // A clipboard text (ADR-0096) takes its place in the sequence and leaves the screen as it
+        // was: a partial frame after it still applies to that screen. Shown in increment 4.
+        if (message.type === "clipboard") {
+          lastReceived = message.sequence;
+          return;
+        }
         if (message.type === "delta") {
           if (!screen || message.sequence !== lastReceived + 1n || message.width !== screen.width || message.height !== screen.height) {
             finish(UNREADABLE);

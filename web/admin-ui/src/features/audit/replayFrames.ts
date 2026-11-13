@@ -10,7 +10,9 @@ const MAX_FRAME_BYTES = 4 << 20;
 
 export type Frame =
   | { kind: "key"; sequence: number; at: Date; bytes: number; png: Uint8Array<ArrayBuffer> }
-  | { kind: "delta"; sequence: number; at: Date; bytes: number; width: number; height: number; rects: DeltaRect[] };
+  | { kind: "delta"; sequence: number; at: Date; bytes: number; width: number; height: number; rects: DeltaRect[] }
+  // A text that crossed the clipboard (ADR-0096): not a picture, the screen stays as it was.
+  | { kind: "clipboard"; sequence: number; at: Date; bytes: number; direction: "to-target" | "from-target"; text: string };
 
 // What a frame is put on the canvas with: the same primitives the live screen uses.
 export interface ReplayPainter {
@@ -40,7 +42,8 @@ function pngSizeOf(frame: Frame): Size | null {
 }
 
 // A segment's frames, checked: base64, at most 4 MiB, a date, as many as it says, and each a PNG
-// (codec png) or the partial frame of its own sequence (codec png-delta-v1).
+// (codec png), the partial frame of its own sequence (codec png-delta-v1), or the clipboard text of
+// its own sequence (codec clipboard-text-v1).
 export function framesOf(segment: VideoRecordingSegment): Frame[] {
   if (!Number.isSafeInteger(segment.firstSequence) || !Number.isSafeInteger(segment.lastSequence) ||
       segment.firstSequence < 1 || segment.lastSequence - segment.firstSequence + 1 !== segment.frames.length) {
@@ -59,6 +62,16 @@ export function framesOf(segment: VideoRecordingSegment): Frame[] {
     const at = new Date(frame.timestamp);
     if (Number.isNaN(at.getTime())) throw new UnreadableSegment();
     const sequence = segment.firstSequence + i;
+    if (frame.codec === "clipboard-text-v1") {
+      let message;
+      try {
+        message = decodeScreenMessage(data.buffer);
+      } catch {
+        throw new UnreadableSegment();
+      }
+      if (message.type !== "clipboard" || message.sequence !== BigInt(sequence)) throw new UnreadableSegment();
+      return { kind: "clipboard", sequence, at, bytes: data.length, direction: message.direction, text: message.text };
+    }
     if (frame.codec === "png-delta-v1") {
       let message;
       try {
@@ -108,6 +121,10 @@ export async function paintFrame({
   let last: number | null = null;
   for (let i = start; i <= target; i++) {
     const frame = frames[i];
+    if (frame.kind === "clipboard") {
+      last = i; // the screen as it was
+      continue;
+    }
     if (frame.kind === "key") {
       const image = await painter.decode(frame.png);
       if (stopped()) {
