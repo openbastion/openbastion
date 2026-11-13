@@ -184,6 +184,8 @@ CREATE TABLE sessions (
     break_glass               BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0009 : autorisée à s'exécuter sans recorder
     approval_required         BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0067 : demande ordinaire soumise à approbation
     ticket                    TEXT NOT NULL DEFAULT '',       -- ADR-0067 : référence non secrète, vide si aucune
+    clipboard_to_target       BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0096 : coller vers la cible accordé à la création (RDP seulement)
+    clipboard_from_target     BOOLEAN NOT NULL DEFAULT FALSE,  -- ADR-0096 : copier depuis la cible accordé à la création (RDP seulement)
     connection_ticket_hash    TEXT,              -- hash du ticket émis ; jamais le ticket en clair
     created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at                TIMESTAMPTZ NOT NULL,   -- fin de session ; tant que la demande est pending_approval : échéance de la décision (ADR-0011)

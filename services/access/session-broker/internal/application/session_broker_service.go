@@ -84,7 +84,7 @@ type AccountLookup interface {
 type ProxyClient interface {
 	// breakGlass is the Broker's authorisation for a recording waiver (ADR-0009).
 	// The proxy honours it only if it was itself configured to.
-	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (proxyEndpoint, connectionTicket string, err error)
+	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (proxyEndpoint, connectionTicket string, err error)
 
 	// RevokeSession tells the proxy that a session is ended (ADR-0018): its open
 	// connections are cut, its unused tickets refused and it is never established
@@ -461,6 +461,11 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		_ = s.audit.EmitEvent(ctx, requestedBy, "session.create", "session", sess.ID, false)
 		return nil, fmt.Errorf("%w: requested %s, account is %s", domain.ErrProtocolMismatch, protocol, accountProtocol)
 	}
+	// The clipboard of an RDP session (ADR-0096): each direction its own right, granted now, while
+	// the requester's roles are known, and carried to the proxy at connect.
+	if protocol == "rdp" {
+		sess.ClipboardToTarget, sess.ClipboardFromTarget = s.clipboardRights(ctx, actorRoles, privilegedAccountID)
+	}
 
 	// A screen's recording cannot be waived (ADR-0069 rule 5, ADR-0071 §8): a break-glass request
 	// on an RDP or VNC account could never start, so it is refused now, recorded and audited like
@@ -521,6 +526,30 @@ func (s *SessionBrokerService) createSession(ctx context.Context, requestedBy st
 		return nil, fmt.Errorf("%w: saving session: %w", domain.ErrUnavailable, err)
 	}
 	return sess, nil
+}
+
+// The Authorization Service resources a policy names to let somebody use the clipboard of an RDP
+// session on an account (ADR-0096), one per direction, with the action session:clipboard:
+// clipboard:to-target:{accountId} to paste on the target, clipboard:from-target:{accountId} to copy
+// from it.
+const (
+	ClipboardToTargetResourcePrefix   = "clipboard:to-target:"
+	ClipboardFromTargetResourcePrefix = "clipboard:from-target:"
+)
+
+// clipboardRights asks the Authorization Service for both directions. A direction it does not
+// grant, or that it could not be asked about, is refused: the session opens all the same, without
+// it (ADR-0096 §1, refused by default).
+func (s *SessionBrokerService) clipboardRights(ctx context.Context, actorRoles []string, accountID string) (toTarget, fromTarget bool) {
+	toTarget, _, err := s.authz.CheckAccess(ctx, actorRoles, ClipboardToTargetResourcePrefix+accountID, "session:clipboard")
+	if err != nil {
+		toTarget = false
+	}
+	fromTarget, _, err = s.authz.CheckAccess(ctx, actorRoles, ClipboardFromTargetResourcePrefix+accountID, "session:clipboard")
+	if err != nil {
+		fromTarget = false
+	}
+	return toTarget, fromTarget
 }
 
 // SessionReadResourcePrefix is the Authorization Service resource a policy names to let
@@ -739,7 +768,8 @@ func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, ca
 	// runs under "record or refuse" like any other.
 	approved := !s.approvalRequired() || sess.DecidedBy != ""
 	waiver := sess.BreakGlass && s.breakGlassMaxMinutes > 0 && approved
-	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, sess.Protocol, targetHost, targetUser, scopeToken, ttl, waiver)
+	clipboard := domain.ClipboardRights{ToTarget: sess.ClipboardToTarget, FromTarget: sess.ClipboardFromTarget}
+	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, sess.Protocol, targetHost, targetUser, scopeToken, ttl, waiver, clipboard)
 	if err != nil {
 		return "", "", "", time.Time{}, fmt.Errorf("establishing session on proxy: %w", err)
 	}

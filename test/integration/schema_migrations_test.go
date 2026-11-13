@@ -109,9 +109,9 @@ func TestPostgresFlow_ReplicasStartingTogetherOnAFreshDatabase_AllStart(t *testi
 			t.Fatalf("%d rows for version 1 after the upgrade, want 1", n)
 		}
 		// Every migration the Broker has: 001_init.sql, 002_session_expiry.sql (ADR-0034),
-		// 003_after_use_owed.sql (ADR-0044), 004_approval.sql (ADR-0067), then
-		// 005_search_window.sql (ADR-0080).
-		if !strings.Contains(broker.out.String(), "schema migrations [1 2 3 4 5] applied") {
+		// 003_after_use_owed.sql (ADR-0044), 004_approval.sql (ADR-0067),
+		// 005_search_window.sql (ADR-0080), then 006_clipboard_rights.sql (ADR-0096).
+		if !strings.Contains(broker.out.String(), "schema migrations [1 2 3 4 5 6] applied") {
 			t.Fatalf("the upgrade is not said:\n%s", broker.out.String())
 		}
 		stopService(t, broker)

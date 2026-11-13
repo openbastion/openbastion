@@ -187,6 +187,12 @@ message EstablishSessionRequest {
   // comme d'habitude. La dérogation est auditée (session.breakglass) avant que
   // le credential ne soit récupéré.
   bool break_glass = 7;
+  // Famille du protocole cible (ssh, vnc, rdp). Les proxies refusent les moteurs non implémentés.
+  string protocol = 8;
+  // Sens du presse-papiers accordés par le Broker à la création (ADR-0096 §1), chacun son
+  // droit ; faux = refusé. RDP seulement : rdp-vnc-proxy refuse un droit pour un autre protocole.
+  bool clipboard_to_target = 9;
+  bool clipboard_from_target = 10;
 }
 
 message EstablishSessionResponse {

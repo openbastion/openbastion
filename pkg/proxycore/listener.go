@@ -36,6 +36,11 @@ type SessionMetadata struct {
 	// configured to (RecordingConfig.BreakGlass) and the recorder is not ready.
 	BreakGlass bool
 
+	// ClipboardToTarget and ClipboardFromTarget are the clipboard directions the Session
+	// Broker granted at creation (ADR-0096 §1), each its own right; false is refused. Only
+	// an RDP screen session carries them: the proxy refuses them for any other protocol.
+	ClipboardToTarget, ClipboardFromTarget bool
+
 	// Admission, when it is a granted admission for this very session, spares
 	// Serve from asking again: a caller that had to decide earlier (which tap to
 	// build depends on it) passes its decision along. An absent or foreign
