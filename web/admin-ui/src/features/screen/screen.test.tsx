@@ -626,6 +626,45 @@ describe("what the operator sends", () => {
     s.view.unmount();
   });
 
+  it("gives the keyboard back to the page on Ctrl+Alt+Shift+Esc, with nothing held on the target (WCAG 2.1.2)", async () => {
+    const s = setup();
+    await live(s, "rdp");
+    s.canvas.focus();
+    for (const [key, code] of [["Control", "ControlLeft"], ["Alt", "AltLeft"], ["Shift", "ShiftLeft"]]) {
+      fireEvent.keyDown(s.canvas, { key, code, ctrlKey: true, altKey: key !== "Control", shiftKey: key === "Shift" });
+    }
+    const before = s.socket.sent.length;
+    fireEvent.keyDown(s.canvas, { key: "Escape", code: "Escape", ctrlKey: true, altKey: true, shiftKey: true });
+    // Esc is not sent; the screen lost the focus, which released what it held on the target.
+    const after = s.socket.sent.slice(before).map((m) => [...m]);
+    expect(after).toEqual([[...encodeReleaseAll()]]);
+    expect(document.activeElement).not.toBe(s.canvas);
+    expect(document.activeElement?.tagName).toBe("BUTTON");
+    s.view.unmount();
+  });
+
+  it("sends Esc alone to the target, as any key", async () => {
+    const s = setup();
+    await live(s, "rdp");
+    s.canvas.focus();
+    const before = s.socket.sent.length;
+    fireEvent.keyDown(s.canvas, { key: "Escape", code: "Escape" });
+    expect(s.socket.sent.slice(before).map((m) => [...m])).toEqual([[...encodeScancode(0x01, true)]]);
+    expect(document.activeElement).toBe(s.canvas);
+    s.view.unmount();
+  });
+
+  it("says what the screen is, how to type into it and how to leave it", async () => {
+    const s = setup();
+    await live(s);
+    expect(s.canvas.getAttribute("role")).toBe("application");
+    expect(s.canvas.getAttribute("aria-label")).toBe("Écran distant de la session");
+    const hint = document.getElementById(s.canvas.getAttribute("aria-describedby") as string);
+    expect(hint?.textContent).toContain("Ctrl+Alt+Maj+Échap rend le clavier à la page");
+    expect(hint?.textContent).toContain("Presse-papiers");
+    s.view.unmount();
+  });
+
   it("releases everything when the screen loses the focus (ADR-0071 §6)", async () => {
     const s = setup();
     await live(s);
