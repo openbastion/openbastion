@@ -95,13 +95,14 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_PARTIAL_FRAMES must be true or false, got %q", v)
 	}
-	// The resize of the target's desktop to the operator's window (ADR-0095), RDP only: off unless
-	// said "true"; anything but "true" or "false" stops the service.
-	resize := false
+	// The resize of the target's desktop to the operator's window (ADR-0095), RDP only: on unless
+	// said "false" (the owner's decision, 13 November 2026, once five Windows targets followed it in
+	// a real browser); anything but "true" or "false" stops the service.
+	resize := true
 	switch v := os.Getenv("SCREEN_RESIZE"); v {
-	case "", "false":
-	case "true":
-		resize = true
+	case "", "true":
+	case "false":
+		resize = false
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_RESIZE must be true or false, got %q", v)
 	}

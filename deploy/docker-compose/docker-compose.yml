@@ -300,8 +300,8 @@ services:
       SCREEN_DRAW_POINTER: ${SCREEN_DRAW_POINTER:-true}
       # Partial frames anchored on key frames (ADR-0092), RDP and VNC: "false" to send whole frames.
       SCREEN_PARTIAL_FRAMES: ${SCREEN_PARTIAL_FRAMES:-true}
-      # The target's desktop resized to the operator's window (ADR-0095), RDP: "true" to offer it.
-      SCREEN_RESIZE: ${SCREEN_RESIZE:-false}
+      # The target's desktop resized to the operator's window (ADR-0095), RDP: "false" to keep it fixed.
+      SCREEN_RESIZE: ${SCREEN_RESIZE:-true}
     secrets: [screen-target-ca]
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}
