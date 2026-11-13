@@ -4436,3 +4436,29 @@ réussit (TypeScript, 222 modules), `npm audit --audit-level=high` signale
 0 vulnérabilité, les contrôles de contraste clair/sombre et de couleurs
 codées en dur passent, et `git diff --check` / `git diff --cached --check`
 passent. Les tests Windows ne sont pas relancés localement.
+## 2026-11-13 — CI Windows : le cas B se reproduit
+
+Le cas B (cible perdue en cours de job), dit « non reproduit » le matin même (#178), est revenu à 18:44 UTC sur 2022 en 32 bpp (PR #185, run 43482811541, job 132083637113).
+- `TestRDPWindows_Measure/whole-frames` passe, scène vidéo comprise.
+- Le dernier export de Windows date de 10:43:49, heure de Windows, soit 18:43:49 UTC. 31 s plus tard, `partial-frames` ne reçoit aucune image, pas même au repos, puis « no key made a frame ».
+- Toutes les épreuves suivantes du job : « reading X.224 connection confirm failed ».
+
+**Ce que cela change** : 4 occurrences sur environ 210 jobs depuis le 11 novembre, toutes pendant `TestRDPWindows_Measure` ou juste après. Ce n'est pas un effet de #185 : le cas existait avant elle, et son propre changement s'est vérifié contre Windows dans le même passage. Ma conclusion « non reproduit » était prématurée : 0 sur 165 ne suffisait pas pour un phénomène de l'ordre de 2 %.
+
+**Suite** : capturer l'écran de la machine Windows au moment de la perte (console de QEMU par dockur), et relever l'heure de la dernière image de la mesure.
+
+
+## 2026-11-13 — CI Windows : le cas B se reproduit
+
+Le cas B (cible perdue en cours de job), dit « non reproduit » le matin même (#178), est revenu à 18:44 UTC sur 2022 en 32 bpp (PR #185, run 43482811541, job 132083637113).
+- `TestRDPWindows_Measure/whole-frames` passe, scène vidéo comprise.
+- Le dernier export de Windows date de 10:43:49, heure de Windows, soit 18:43:49 UTC. 31 s plus tard, `partial-frames` ne reçoit aucune image, pas même au repos, puis « no key made a frame ».
+- Toutes les épreuves suivantes du job : « reading X.224 connection confirm failed ».
+
+**Ce que cela change** : 4 occurrences sur environ 210 jobs depuis le 11 novembre, toutes pendant `TestRDPWindows_Measure` ou juste après. Ce n'est pas un effet de #185 : le cas existait avant elle, et son propre changement s'est vérifié contre Windows dans le même passage. La conclusion « non reproduit » était prématurée : 0 sur 165 ne suffisait pas pour un phénomène de l'ordre de 2 %.
+
+**Suite** : capturer l'écran de la machine Windows au moment de la perte (console de QEMU par dockur), et relever l'heure de la dernière image de la mesure.
+
+## 2026-11-13 — Synchronisation avec `main` jusqu'à `eb5389f` (PR #190)
+
+La synchronisation inclut aussi le constat documenté dans PR #190 : le cas B de CI Windows se reproduit ; la note de diagnostic et le tableau d'état d'ADR-0071 sont actualisés. Aucun code RDP ni test Windows n'a été modifié par cette PR documentaire. La prochaine preuve attendue reste la capture de la console QEMU au moment de la perte.
