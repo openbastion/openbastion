@@ -165,6 +165,9 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   }, [playing, index, frames, speed, end, deps]);
 
   const frame = frames[index];
+  // The clipboard texts up to the position (ADR-0096): the auditor reads what crossed, at its time,
+  // beside the screen as it was.
+  const transfers = frames.slice(0, index + 1).filter((f) => f.kind === "clipboard").slice(-3).reverse();
 
   return (
     <>
@@ -185,6 +188,18 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
       {frame ? (
         <section className="ob-surface ob-panel video-replay-card" aria-label="Relecture vidéo de la session">
           <canvas ref={canvas} className="screen-canvas" role="img" aria-label="Image enregistrée de l'écran de la session, non lisible par un lecteur d'écran" />
+          {transfers.length > 0 ? (
+            <section className="screen-clipboard" aria-label="Presse-papiers enregistré">
+              <ul className="screen-clipboard-history">
+                {transfers.map((t) => t.kind === "clipboard" ? (
+                  <li key={t.sequence} aria-current={t === frame ? "true" : undefined}>
+                    <span>{t.direction === "to-target" ? "Collé dans la cible" : "Copié depuis la cible"}, à {t.at.toLocaleTimeString("fr-FR")}</span>
+                    <pre>{t.text}</pre>
+                  </li>
+                ) : null)}
+              </ul>
+            </section>
+          ) : null}
           <ReplayControls
             playing={playing}
             position={index}

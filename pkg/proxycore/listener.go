@@ -75,6 +75,9 @@ type Listener struct {
 	// Zero means the defaults.
 	ScreenInput      ScreenInputLimits
 	ScreenAckTimeout time.Duration
+	// Clipboard audits the clipboard's transfers (ADR-0096). Nil, no screen session opens its
+	// clipboard, whatever its rights.
+	Clipboard ClipboardAuditor
 }
 
 func NewListener(fetcher *CredentialFetcher, terminator *Terminator) *Listener {

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/openbastion/openbastion/pkg/proxycore"
 )
 
 type AuditHTTPClient struct {
@@ -19,10 +21,26 @@ type auditEventRequest struct {
 	ResourceType string `json:"resource_type"`
 	ResourceID   string `json:"resource_id"`
 	Success      bool   `json:"success"`
+	// Details are bounded metadata, covered by the chain's hash (ADR-0068): never a secret, never
+	// a clipboard text.
+	Details map[string]string `json:"details,omitempty"`
 }
 
 func (c *AuditHTTPClient) EmitEvent(ctx context.Context, action, resourceType, resourceID string, success bool) error {
-	body, err := json.Marshal(auditEventRequest{"", action, resourceType, resourceID, success})
+	return c.emit(ctx, auditEventRequest{Action: action, ResourceType: resourceType, ResourceID: resourceID, Success: success})
+}
+
+// EmitClipboard writes session.clipboard (ADR-0096 §5): the direction, the size and the hash of
+// the text, and why a refused transfer was, never the text.
+func (c *AuditHTTPClient) EmitClipboard(ctx context.Context, sessionID string, event proxycore.ClipboardEvent) error {
+	return c.emit(ctx, auditEventRequest{Action: "session.clipboard", ResourceType: "session", ResourceID: sessionID,
+		Success: event.Success, Details: proxycore.ClipboardDetails(event)})
+}
+
+var _ proxycore.ClipboardAuditor = (*AuditHTTPClient)(nil)
+
+func (c *AuditHTTPClient) emit(ctx context.Context, event auditEventRequest) error {
+	body, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}

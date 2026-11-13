@@ -57,3 +57,21 @@ func FuzzDecodeInput(f *testing.F) {
 		}
 	})
 }
+
+// The operator's clipboard text, under hostile bytes (ADR-0096 §6): what decodes encodes back to
+// the same bytes, within the bound, and nothing panics.
+func FuzzDecodeClipboardInput(f *testing.F) {
+	good, _ := EncodeClipboardInput("pasted é €")
+	f.Add(good)
+	f.Add([]byte{Version, byte(InputClipboard), 0, 0, 0, 0, 0, 0})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		text, err := DecodeClipboardInput(data)
+		if err != nil {
+			return
+		}
+		again, err := EncodeClipboardInput(text)
+		if err != nil || string(again) != string(data) || len(data) > MaxClipboardInputBytes {
+			t.Fatalf("decoded %q does not encode back to its bytes: %v", text, err)
+		}
+	})
+}

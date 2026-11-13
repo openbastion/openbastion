@@ -3,6 +3,9 @@ package screenstream
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"strings"
+	"unicode/utf8"
 )
 
 type InputType byte
@@ -15,7 +18,72 @@ const (
 	// width, Y the height. The relay brings it within the bounds below and paces it; a session that
 	// cannot resize ignores it.
 	InputResize InputType = 4
+	// InputClipboard is a text the operator pastes on the target (ADR-0096 §6). Unlike the other
+	// inputs it is not 16 bytes: version, type, two reserved zero bytes, the text's length in
+	// bytes (uint32), then the text in UTF-8, bounded as a CLIPBOARD message's. A client sends it
+	// only when the HELLO says pasting is allowed, and only on the operator's explicit action.
+	InputClipboard InputType = 5
 )
+
+// ClipboardInputHeader is the fixed part of an InputClipboard message.
+const ClipboardInputHeader = 8
+
+// MaxClipboardInputBytes bounds an InputClipboard message: a UTF-16 unit is at most three bytes
+// of UTF-8 (a pair of them, four), so a text within MaxClipboardTextUnits fits.
+const MaxClipboardInputBytes = ClipboardInputHeader + 3*MaxClipboardTextUnits
+
+// IsClipboardInput says data is an InputClipboard message, to be read with DecodeClipboardInput
+// rather than DecodeInput.
+func IsClipboardInput(data []byte) bool {
+	return len(data) >= 2 && InputType(data[1]) == InputClipboard
+}
+
+// EncodeClipboardInput writes the InputClipboard message of text, which DecodeClipboardInput reads
+// back: what the Admin UI and any other client of the screen contract send.
+func EncodeClipboardInput(text string) ([]byte, error) {
+	if err := validClipboardText(text); err != nil {
+		return nil, err
+	}
+	out := make([]byte, ClipboardInputHeader+len(text))
+	out[0], out[1] = Version, byte(InputClipboard)
+	binary.BigEndian.PutUint32(out[4:8], uint32(len(text)))
+	copy(out[ClipboardInputHeader:], text)
+	return out, nil
+}
+
+// DecodeClipboardInput reads an InputClipboard message strictly: its header, a length that is
+// exactly what follows, and a text the contract carries.
+func DecodeClipboardInput(data []byte) (string, error) {
+	if len(data) < ClipboardInputHeader || len(data) > MaxClipboardInputBytes ||
+		data[0] != Version || InputType(data[1]) != InputClipboard || data[2] != 0 || data[3] != 0 ||
+		uint64(binary.BigEndian.Uint32(data[4:8])) != uint64(len(data)-ClipboardInputHeader) {
+		return "", ErrMalformedMessage
+	}
+	text := string(data[ClipboardInputHeader:])
+	if err := validClipboardText(text); err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
+// validClipboardText is the bound of a clipboard text, both ways (ADR-0096 §3): valid UTF-8,
+// without NUL, within MaxClipboardTextUnits UTF-16 units.
+func validClipboardText(text string) error {
+	if !utf8.ValidString(text) || strings.IndexByte(text, 0) >= 0 {
+		return fmt.Errorf("%w: clipboard text not valid UTF-8 without NUL", ErrMalformedMessage)
+	}
+	units := 0
+	for _, r := range text {
+		units++
+		if r >= 0x10000 {
+			units++ // a surrogate pair
+		}
+		if units > MaxClipboardTextUnits {
+			return fmt.Errorf("%w: clipboard text past %d UTF-16 units", ErrOutOfBounds, MaxClipboardTextUnits)
+		}
+	}
+	return nil
+}
 
 // The bounds of a resize (ADR-0095 §4): past 2560 x 1600, a key frame risks the 4 MiB of a
 // segment (ADR-0070). The width is even (MS-RDPEDISP).

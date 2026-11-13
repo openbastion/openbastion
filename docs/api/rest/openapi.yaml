@@ -1091,9 +1091,20 @@ paths:
         SCREEN_RESIZE, RDP) : le client peut alors envoyer une entrée de type 4 (InputResize), sa
         largeur en X et sa hauteur en Y ; le proxy la ramène entre 640 × 480 et 2 560 × 1 600, largeur
         paire, et n'en transmet qu'une par seconde. Une session qui ne redimensionne pas l'ignore.
+        Presse-papiers (ADR-0096, RDP, SCREEN_CLIPBOARD) : les bits 2 et 3 des drapeaux du HELLO
+        disent que la session prend un texte collé et envoie un texte copié. Le proxy envoie chaque
+        texte, dans un sens comme dans l'autre, en message CLIPBOARD (type 5 : un octet de sens, 1
+        vers la cible ou 2 depuis la cible, trois octets réservés, puis le texte en UTF-8 sans NUL,
+        de 32 763 unités UTF-16 au plus), à sa place dans la suite des frames, une fois audité et
+        acquitté par le Video Recorder. Le client colle par une entrée de type 5 (InputClipboard) : la
+        version, le type, deux octets réservés, la longueur du texte en octets sur 4 octets, puis le
+        texte, mêmes bornes ; c'est la seule entrée qui dépasse 16 octets (98 297 au plus). Une
+        entrée de type 5 que le HELLO n'a pas offerte termine la session (input_invalid). Un client
+        ne lit le presse-papiers du poste que sur une action de l'opérateur, lui montre le texte
+        avant l'envoi, et n'écrit dans le presse-papiers du poste que sur sa demande.
       security: []
       responses:
-        "101": { description: Connexion WebSocket établie ; le flux transporte HELLO, FRAME et END binaires }
+        "101": { description: Connexion WebSocket établie ; le flux transporte HELLO, FRAME, FRAME_DELTA, CLIPBOARD et END binaires }
         "401": { description: Cookie d'attachement absent, expiré ou déjà consommé }
         "403": { description: Origine WebSocket refusée }
         "503": { description: Le proxy graphique est indisponible }

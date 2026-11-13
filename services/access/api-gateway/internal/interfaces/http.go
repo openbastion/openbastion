@@ -915,11 +915,27 @@ func (g *GatewayServer) handleScreenAttach(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer upstream.Close(websocket.StatusNormalClosure, "gateway relay ended")
-	client.SetReadLimit(screenstream.MaxInputBytes)
+	// A clipboard text is the longest thing a client sends (ADR-0096 §6); the proxy holds a session
+	// that may not paste to 64 bytes.
+	client.SetReadLimit(screenstream.MaxClipboardInputBytes)
 	upstream.SetReadLimit(screenstream.MaxPNGBytes + screenstream.HeaderSize + screenstream.MaxSessionIDBytes + 1024)
 	if err := relayScreenWebSockets(r.Context(), client, upstream); err != nil {
 		log.Printf("api-gateway: screen relay ended for session %s", sessionID)
 	}
+}
+
+// validScreenInput reads a client's message as strictly as the proxy reads it: an input of 16
+// bytes, or a clipboard text (ADR-0096 §6).
+func validScreenInput(data []byte) error {
+	if screenstream.IsClipboardInput(data) {
+		_, err := screenstream.DecodeClipboardInput(data)
+		return err
+	}
+	if len(data) != screenstream.InputMessageSize {
+		return screenstream.ErrMalformedMessage
+	}
+	_, err := screenstream.DecodeInput(data, screenstream.MaxPixels, screenstream.MaxPixels)
+	return err
 }
 
 func writeScreenEnd(conn *websocket.Conn, code uint16, text string) {
@@ -943,11 +959,13 @@ func relayScreenWebSockets(ctx context.Context, client, upstream *websocket.Conn
 				errs <- err
 				return
 			}
-			if typ != websocket.MessageBinary || len(data) != screenstream.InputMessageSize {
+			if typ != websocket.MessageBinary {
 				errs <- screenstream.ErrMalformedMessage
 				return
 			}
-			if _, err := screenstream.DecodeInput(data, screenstream.MaxPixels, screenstream.MaxPixels); err != nil {
+			// An input of 16 bytes, or a clipboard text (ADR-0096 §6): each read as strictly as the
+			// proxy reads it, before it goes on.
+			if err := validScreenInput(data); err != nil {
 				errs <- err
 				return
 			}

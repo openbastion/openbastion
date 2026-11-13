@@ -182,7 +182,20 @@ function deltaMessage(sequence: number, width: number, height: number, rects: { 
   return [...out];
 }
 const b64 = (bytes: number[]) => btoa(String.fromCharCode(...bytes));
-type Recorded = { codec: "png"; bytes: number[] } | { codec: "png-delta-v1"; bytes: number[] };
+type Recorded = { codec: "png"; bytes: number[] } | { codec: "png-delta-v1"; bytes: number[] } | { codec: "clipboard-text-v1"; bytes: number[] };
+// A clipboard text as the recorder stores it (ADR-0096): the screen-stream CLIPBOARD message.
+function clipboardMessage(sequence: number, direction: number, text: string): number[] {
+  const payload = [direction, 0, 0, 0, ...new TextEncoder().encode(text)];
+  const out = new Uint8Array(32 + payload.length);
+  const view = new DataView(out.buffer);
+  out[0] = 1;
+  out[1] = 5;
+  view.setBigUint64(4, BigInt(sequence));
+  view.setBigInt64(12, 1_000_000_000n);
+  view.setUint32(28, payload.length);
+  out.set(payload, 32);
+  return [...out];
+}
 const mixed = (first: number, frames: Recorded[], complete = true) => ({
   sessionId: "sess_r", firstSequence: first, lastSequence: first + frames.length - 1, complete,
   frames: frames.map((f, i) => ({ timestamp: at(first + i), frameData: b64(f.bytes), codec: f.codec })),
@@ -194,6 +207,51 @@ function partialDeps() {
     (bytes.length >= 25 ? { id: bytes[24], close: vi.fn() } : { width: bytes[8], height: bytes[9], close: vi.fn() }) as unknown as ImageBitmap;
   return d;
 }
+
+describe("the replay of clipboard texts (ADR-0096)", () => {
+  const recording = mixed(1, [
+    { codec: "png", bytes: keyPNG(1, 8, 4) },
+    { codec: "clipboard-text-v1", bytes: clipboardMessage(2, 2, "copied é") },
+    { codec: "png-delta-v1", bytes: deltaMessage(3, 8, 4, [{ x: 1, y: 2, w: 3, h: 2 }]) },
+  ]);
+
+  it("steps over a text, the screen as it was, and the partial frame after it on that screen", async () => {
+    const { api } = fakeApi({ [path(1)]: { body: recording } });
+    const d = partialDeps();
+    await open(api, d);
+    await screen.findByText(/scellé/);
+    await waitFor(() => expect(d.drawn).toEqual([1]));
+    fireEvent.click(screen.getByText("Image suivante"));
+    fireEvent.click(screen.getByText("Image suivante"));
+    await waitFor(() => expect(d.patched).toEqual(["1,2 3x2"]));
+    expect(d.drawn).toEqual([1]);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the auditor what crossed, from its position on, as text", async () => {
+    const { api } = fakeApi({ [path(1)]: { body: recording } });
+    const d = partialDeps();
+    await open(api, d);
+    await screen.findByText(/scellé/);
+    expect(screen.queryByRole("region", { name: "Presse-papiers enregistré" })).toBeNull(); // not yet at its time
+    fireEvent.click(screen.getByText("Image suivante"));
+    const region = await screen.findByRole("region", { name: "Presse-papiers enregistré" });
+    expect(region.textContent).toContain("Copié depuis la cible");
+    expect(region.textContent).toContain("copied é");
+  });
+
+  it.each([
+    ["a clipboard text of another sequence", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "clipboard-text-v1", bytes: clipboardMessage(3, 2, "x") }])],
+    ["a key frame under the clipboard codec", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "clipboard-text-v1", bytes: keyPNG(2, 8, 4) }])],
+    ["a clipboard text under the partial codec", mixed(1, [{ codec: "png", bytes: keyPNG(1, 8, 4) }, { codec: "png-delta-v1", bytes: clipboardMessage(2, 2, "x") }])],
+  ])("shows nothing of a segment with %s", async (_what, body) => {
+    const { api } = fakeApi({ [path(1)]: { body } });
+    const d = partialDeps();
+    await open(api, d);
+    expect((await screen.findByRole("alert")).textContent).toContain("n'est pas valide");
+    expect(d.drawn).toEqual([]);
+  });
+});
 
 describe("the replay of partial frames (ADR-0092)", () => {
   const recording = mixed(1, [

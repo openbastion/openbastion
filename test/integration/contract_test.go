@@ -72,7 +72,7 @@ var contractPairs = []contractPair{
 	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "revokeResponse", "proto/proxy/v1/proxy_control.proto", "TerminateSessionResponse",
 		map[string]string{"tickets_revoked": "the HTTP proxy reports how many pending tickets were revoked", "connections_cut": "the HTTP proxy reports how many active connections were cut"}, map[string]string{"terminated": "the HTTP route returns counts rather than the gRPC boolean"}},
 	{"services/proxy/rdp-vnc-proxy/internal/infrastructure/audit_client.go", "auditEventRequest", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "revokeSessionRequest", "proto/proxy/v1/proxy_control.proto", "TerminateSessionRequest",
 		map[string]string{"ttl_seconds": "how long the proxy must remember the revocation (ADR-0018)"},
 		map[string]string{"context": whyContext}},

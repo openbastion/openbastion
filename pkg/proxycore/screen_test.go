@@ -819,7 +819,7 @@ func TestRelayScreen_ClosedStreamDoesNotHideWhyTheSessionEnded(t *testing.T) {
 			session := &fakeScreenSession{frames: frames}
 			sink := &fakeScreenSink{}
 			ctx, cancel := want.end()
-			err := relayScreen(ctx, context.Background(), screenMeta(), nil, &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second)
+			err := relayScreen(ctx, context.Background(), screenMeta(), nil, &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, nil)
 			cancel()
 			if !errors.Is(err, want.err) {
 				t.Fatalf("%s: error = %v", name, err)

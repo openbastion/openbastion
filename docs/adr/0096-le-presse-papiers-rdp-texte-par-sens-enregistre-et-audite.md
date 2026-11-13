@@ -71,6 +71,35 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 - **Limite** : la relecture de l'Admin UI refuse encore ce codec, comme tout codec inconnu. Elle le montrera à l'incrément 4. D'ici là, `SCREEN_CLIPBOARD` reste éteint et aucun enregistrement n'en contient.
 - **Prouvé** : aller-retour et refus du message, fuzzing de `Decode` ; écriture et relecture à l'identique au Video Recorder, sans texte en clair dans le stockage ; formats ; refus d'une entrée hors de sa place ; Gateway et client du proxy ; 14 mutations, 14 tuées.
 
+**Incrément 3b, fait (13 novembre 2026) : le relais, l'audit et la borne.**
+- **Ouverture** : le proxy n'ouvre le presse-papiers que si les trois conditions sont réunies : un droit pour la session, un codec qui le sait (RDP) et un auditeur. Ce dernier n'est branché que si `SCREEN_CLIPBOARD=true` (éteint par défaut, §7). Le moteur annonce alors `cliprdr` et l'ouvre dans les sens accordés. Le texte qui sort de la cible n'est lu qu'avec le droit de copier.
+- **Un transfert**, dans cet ordre :
+  1. le texte doit tenir dans le contrat ;
+  2. la borne : 10 par minute et par session, les deux sens ensemble ;
+  3. l'audit `session.clipboard` : le sens, la taille et l'empreinte SHA-256 dans les détails d'ADR-0068, jamais le texte ;
+  4. l'enregistrement et son acquittement ;
+  5. la livraison (le texte collé est offert à la cible ; le texte copié, comme le collé, est envoyé à la page).
+  Sans l'événement d'audit, pas de transfert. Un refus (texte hors contrat, borne, audit indisponible) est audité en échec, et la session continue. Un enregistrement non acquitté termine la session (`recording_lost`), comme pour une image.
+- **Une seule suite** : le moteur numérote ses images, le relais les décale du nombre de textes passés avant elles, de sorte que l'enregistrement et la page reçoivent la même suite. La file d'affichage ne jette jamais un texte : ni pour une image clé, ni quand les images partielles débordent, ni en attendant une image clé.
+- **Copier** : quand la cible propose un texte, le moteur le demande aussitôt. Quatre textes au plus attendent le relais ; au-delà, un texte est perdu, jamais livré ni enregistré.
+- **Admin UI** : la page lit le message `CLIPBOARD` et suit sa séquence ; la relecture parcourt ces entrées sans changer l'écran. Les montrer, et coller depuis la page, est l'incrément 4.
+- **Prouvé** : ordre audit → enregistrement → livraison, refus sans audit, borne de 10 par minute, refus hors contrat, transfert non acquitté non livré, place dans la suite (image clé, texte, image partielle), conditions d'ouverture, file d'affichage ; moteur, auditeur, Admin UI ; 21 mutations, 21 tuées (une a d'abord survécu : le relais lisait-il les textes de la cible sans le droit de copier ? un test le dit désormais).
+
+**Incrément 4, fait (13 novembre 2026) : le contrat écran et l'Admin UI.**
+- **Le contrat ne dépend pas du client.** Il sert l'Admin UI et servirait de même le client Desktop que propose ADR-0098 (au statut `Proposé` à cette date), qui réutiliserait `openbastion.screen.v1`. L'encodeur et le décodeur sont en Go dans `pkg/screenstream` (`EncodeClipboardInput`, `DecodeClipboardInput`), utilisés par le proxy et la Gateway ; l'Admin UI a son équivalent TypeScript, testé contre les mêmes octets.
+  - `HELLO` : bit 2, la session prend un texte collé ; bit 3, elle envoie un texte copié. Les bits suivants restent réservés. Un `HELLO` sans eux est celui d'avant.
+  - Entrée `CLIPBOARD` (type 5, client → proxy) : la version, le type, deux octets réservés, la longueur du texte en octets (uint32), puis le texte en UTF-8, avec les bornes du message `CLIPBOARD` (sans NUL, 32 763 unités UTF-16 au plus). C'est la seule entrée qui dépasse 16 octets : 98 297 au plus.
+  - Le proxy lit un message aussi long seulement pour une session qui peut coller ; les autres gardent les 64 octets d'avant. La Gateway valide chaque message d'un client aussi strictement que le proxy.
+  - Une entrée de type 5 que le `HELLO` n'a pas offerte, ou mal formée, termine la session (`input_invalid`), comme toute entrée invalide.
+- **La règle du geste vaut pour tout client** (§6 précisé). Un client ne lit le presse-papiers du poste que sur une action de l'opérateur. Il lui montre le texte, modifiable, avant l'envoi, et ne l'envoie que sur confirmation. Il n'écrit dans le presse-papiers du poste que sur la demande de l'opérateur. Un client Desktop, s'il voit le jour, devra la tenir.
+- **Admin UI** : un panneau « Presse-papiers », visible seulement si le `HELLO` offre un sens.
+  - « Coller vers la cible… » lit le presse-papiers au clic. Si le navigateur refuse, l'opérateur colle dans le champ. Le texte est montré avant « Envoyer », avec le rappel qu'un mot de passe collé sera dans l'enregistrement.
+  - « Copier le texte de la cible » écrit le dernier texte copié.
+  - Les cinq derniers transferts sont listés, en texte, jamais en balisage.
+  - La relecture montre les trois derniers transferts jusqu'à la position, à leur heure, à côté de l'écran.
+- **Prouvé** : aller-retour et refus de l'entrée et des bits du `HELLO`, `FuzzDecodeClipboardInput` (20 s) ; relais (texte collé enregistré puis offert, entrée non offerte qui termine la session, `HELLO` selon les droits) sous `-race` ; limite de lecture du proxy ; validation et relais de la Gateway ; Vitest du panneau et de la relecture. 17 mutations, 16 tuées ; la survivante est équivalente (la borne de taille en tête de `DecodeClipboardInput` refuse tôt ce que la borne en unités UTF-16 refuse de toute façon).
+- **Reste** : la vérification dans un navigateur sans interface contre les cinq Windows de la CI (incrément 5), puis la décision du propriétaire sur `SCREEN_CLIPBOARD` par défaut.
+
 ## Conséquences
 
 - (+) Le besoin le plus demandé des opérateurs, sans trou dans la trace : chaque transfert est enregistré, chiffré, audité et refusable par politique, dans chaque sens séparément.
