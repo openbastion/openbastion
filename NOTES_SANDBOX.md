@@ -4428,3 +4428,7 @@ Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le
 - **Admin UI** : « La cible a refusé les identifiants du compte : son secret dans le coffre est à vérifier. »
 - **Prouvé** : tests à chaque étage, 6 mutations tuées. Contre Windows, `TestRDPWindows_CredSSP` exige désormais que le mauvais mot de passe soit reconnu comme tel (CI de la PR).
 
+## 2026-11-13 — CI Windows : l'écran et l'état de la machine, à chaque passage
+
+Pour trouver les causes de l'instabilité (cas B, machine perdue après la déconnexion, session sans image après un redimensionnement), la CI Windows demande au moniteur QEMU de dockur, à chaque passage, l'état de la machine (`info status`) et une capture de son écran (`screendump`). La capture est convertie en PNG par `ppm2png.py`, en bibliothèque standard seulement, et rangée dans l'artefact sous `guest-screen.png`. L'étape liste aussi les ports d'écoute du conteneur, au cas où le moniteur ne serait pas sur le port 7100 ; le premier passage le dira. Elle ne fait échouer aucun job.
+
