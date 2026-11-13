@@ -1703,7 +1703,10 @@ readUpdate:
 				}
 				update, err = parseRDPBitmapUpdateDataAt(data[2:], desktopWidth, desktopHeight, sessionBPP)
 				if err != nil {
-					described := fmt.Errorf("%w: update refused: %s", ErrMCSConnection, describeRDPServerPacket(packet))
+					// Which rectangle, against which desktop (CI of PR #157, Windows Server 2019: a
+					// bitmap update refused after a resize, and the message did not say why).
+					described := fmt.Errorf("%w: update refused: %s: %v; on a %dx%d desktop at %d bpp: %s", ErrMCSConnection,
+						describeRDPServerPacket(packet), err, desktopWidth, desktopHeight, sessionBPP, describeRDPBitmapRectangles(data[2:]))
 					clear(packet)
 					return RDPBitmapUpdate{}, described
 				}
@@ -1832,4 +1835,31 @@ readUpdate:
 func rdpIsDisconnectUltimatum(packet []byte) bool {
 	return len(packet) == 9 && packet[0] == 3 && packet[1] == 0 && int(binary.BigEndian.Uint16(packet[2:4])) == len(packet) &&
 		equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) && packet[7]&0xfc == 0x20
+}
+
+// describeRDPBitmapRectangles names the first rectangles of a TS_UPDATE_BITMAP_DATA, without their
+// pixels: where each goes, its size, depth, flags and length. For a refusal's message.
+func describeRDPBitmapRectangles(data []byte) string {
+	if len(data) < 2 {
+		return "no rectangle count"
+	}
+	count := int(binary.LittleEndian.Uint16(data[:2]))
+	out := fmt.Sprintf("%d rectangle(s)", count)
+	rest := data[2:]
+	for i := 0; i < count && i < 3; i++ {
+		if len(rest) < 18 {
+			return out + ", cut short"
+		}
+		left, top := binary.LittleEndian.Uint16(rest[0:2]), binary.LittleEndian.Uint16(rest[2:4])
+		right, bottom := binary.LittleEndian.Uint16(rest[4:6]), binary.LittleEndian.Uint16(rest[6:8])
+		width, height := binary.LittleEndian.Uint16(rest[8:10]), binary.LittleEndian.Uint16(rest[10:12])
+		bpp, flags := binary.LittleEndian.Uint16(rest[12:14]), binary.LittleEndian.Uint16(rest[14:16])
+		length := int(binary.LittleEndian.Uint16(rest[16:18]))
+		out += fmt.Sprintf("; [%d] dest %d,%d-%d,%d size %dx%d %d bpp flags 0x%04x length %d", i, left, top, right, bottom, width, height, bpp, flags, length)
+		if len(rest) < 18+length {
+			return out + ", cut short"
+		}
+		rest = rest[18+length:]
+	}
+	return out
 }

@@ -820,3 +820,14 @@ func mutateRDP6Data(data []byte, mutate func([]byte)) []byte {
 	mutate(out)
 	return out
 }
+
+func TestDescribeRDPBitmapRectangles_NamesWhereEachGoes(t *testing.T) {
+	rect := []byte{10, 0, 20, 0, 30, 0, 40, 0, 50, 0, 16, 0, 16, 0, 0, 0, 2, 0, 0xaa, 0xbb}
+	got := describeRDPBitmapRectangles(append([]byte{1, 0}, rect...))
+	if got != "1 rectangle(s); [0] dest 10,20-30,40 size 50x16 16 bpp flags 0x0000 length 2" {
+		t.Fatalf("%q", got)
+	}
+	if got := describeRDPBitmapRectangles([]byte{2, 0, 1}); got != "2 rectangle(s), cut short" {
+		t.Fatalf("%q", got)
+	}
+}
