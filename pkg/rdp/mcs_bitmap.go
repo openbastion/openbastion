@@ -79,6 +79,9 @@ const (
 	// per rectangle), and the pixels decoded per update stay bounded by maxRDPDesktopArea. Orders
 	// keep maxRDPBitmapRects.
 	maxRDPBitmapUpdateRects = 4096
+	// rdpBitmapEdgeOverhang bounds how far a bitmap's destination may go past the desktop's right or
+	// bottom edge: less than one 64-pixel tile, which is what Windows cuts its screen into.
+	rdpBitmapEdgeOverhang = 64
 	// Keep each fragment below the conservative MCS/TPKT bound. A complete
 	// Share Data PDU has a 16-bit totalLength, so reassembly cannot exceed it.
 	maxRDPBitmapTPKTPacket      = 16_383
@@ -1104,9 +1107,15 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 		if destWidth > width || uint32(width) > (uint32(destWidth)+3)&^3 || destHeight != height {
 			return refuse("a bitmap of another size than its destination")
 		}
-		if uint32(left)+uint32(destWidth) > uint32(desktopWidth) || uint32(top)+uint32(destHeight) > uint32(desktopHeight) {
+		// A tile starts on the desktop; it may go past its right or bottom edge by less than a tile,
+		// and only what is on the desktop is kept, as a client clips (CI of PR #157: Windows Server
+		// 2019 sends whole 64 x 64 tiles at the edges of a desktop that is not a multiple of 64).
+		if left >= desktopWidth || top >= desktopHeight ||
+			uint32(left)+uint32(destWidth) >= uint32(desktopWidth)+rdpBitmapEdgeOverhang ||
+			uint32(top)+uint32(destHeight) >= uint32(desktopHeight)+rdpBitmapEdgeOverhang {
 			return refuse(fmt.Sprintf("a destination outside the %dx%d desktop", desktopWidth, desktopHeight))
 		}
+		visibleWidth, visibleHeight := min(destWidth, desktopWidth-left), min(destHeight, desktopHeight-top)
 		pixels := uint64(width) * uint64(height)
 		if pixels > maxRDPDesktopArea || totalPixels > maxRDPDesktopArea-pixels {
 			return RDPBitmapUpdate{}, ErrMCSConnection
@@ -1140,8 +1149,8 @@ func parseRDPBitmapUpdateDataAt(payload []byte, desktopWidth, desktopHeight, ses
 				return RDPBitmapUpdate{}, ErrMCSConnection
 			}
 		}
-		decoded = cropRDPBitmap(decoded, int(width), int(destWidth), int(destHeight))
-		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: destWidth, Height: destHeight, Pixels: decoded})
+		decoded = cropRDPBitmap(decoded, int(width), int(visibleWidth), int(visibleHeight))
+		result.Rectangles = append(result.Rectangles, RDPBitmapRectangle{X: left, Y: top, Width: visibleWidth, Height: visibleHeight, Pixels: decoded})
 		payload = payload[bitmapLength:]
 	}
 	if len(payload) != 0 {

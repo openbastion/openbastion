@@ -831,3 +831,51 @@ func TestDescribeRDPBitmapRectangles_NamesWhereEachGoes(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// edgeTileUpdate is a TS_UPDATE_BITMAP_DATA of one raw 16-bpp 64 x 64 tile at left, top: what
+// Windows Server 2019 sends at the edges of a desktop that is not a multiple of 64 wide or high.
+func edgeTileUpdate(left, top uint16) []byte { return edgeTileUpdateOf(left, top, 64) }
+
+func edgeTileUpdateOf(left, top, side uint16) []byte {
+	out := []byte{1, 0}
+	header := make([]byte, 18)
+	binary.LittleEndian.PutUint16(header[0:2], left)
+	binary.LittleEndian.PutUint16(header[2:4], top)
+	binary.LittleEndian.PutUint16(header[4:6], left+side-1)
+	binary.LittleEndian.PutUint16(header[6:8], top+side-1)
+	binary.LittleEndian.PutUint16(header[8:10], side)
+	binary.LittleEndian.PutUint16(header[10:12], side)
+	binary.LittleEndian.PutUint16(header[12:14], 16)
+	binary.LittleEndian.PutUint16(header[16:18], side*side*2)
+	out = append(out, header...)
+	return append(out, make([]byte, int(side)*int(side)*2)...)
+}
+
+// A tile that starts on the desktop and goes past its right or bottom edge by less than a tile is
+// clipped to the desktop, as a client does (CI of PR #157: Windows Server 2019 sent a 64 x 64 tile
+// at 1088 on a 1102-wide desktop after a resize, and the session ended). Past that, still refused.
+func TestBitmapUpdate_ClipsAnEdgeTileToTheDesktop(t *testing.T) {
+	update, err := parseRDPBitmapUpdateDataAt(edgeTileUpdate(1088, 832), 1102, 888, 16)
+	if err != nil {
+		t.Fatalf("an edge tile refused: %v", err)
+	}
+	r := update.Rectangles[0]
+	if r.X != 1088 || r.Y != 832 || r.Width != 14 || r.Height != 56 || len(r.Pixels) != 14*56*4 {
+		t.Fatalf("clipped to %d,%d %dx%d (%d bytes), want 1088,832 14x56", r.X, r.Y, r.Width, r.Height, len(r.Pixels))
+	}
+	for name, at := range map[string][2]uint16{
+		"starting past the right edge": {1102, 0},
+		"starting past the bottom":     {0, 888},
+	} {
+		if _, err := parseRDPBitmapUpdateDataAt(edgeTileUpdate(at[0], at[1]), 1102, 888, 16); err == nil {
+			t.Errorf("%s: taken", name)
+		}
+	}
+	// 64 pixels past the edge or more: not a tile cut at the edge.
+	if _, err := parseRDPBitmapUpdateDataAt(edgeTileUpdateOf(1000, 0, 128), 1064, 888, 16); err == nil {
+		t.Error("a bitmap 64 pixels past the right edge taken")
+	}
+	if _, err := parseRDPBitmapUpdateDataAt(edgeTileUpdateOf(1000, 0, 128), 1065, 888, 16); err != nil {
+		t.Errorf("a bitmap 63 pixels past the right edge refused: %v", err)
+	}
+}

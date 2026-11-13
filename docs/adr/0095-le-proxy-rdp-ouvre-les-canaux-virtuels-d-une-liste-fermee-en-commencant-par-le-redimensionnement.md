@@ -103,6 +103,7 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Trouvé par le navigateur, corrigé** :
   - la page demande sa taille une fois, à l'ouverture, avant que Windows ait dit sa capacité ; le codec ignorait cette demande, et la page ne redemande qu'au changement de taille, si bien que le bureau restait à 1 280 × 800. Le codec garde désormais la taille demandée et la demande dès que la capacité arrive, une seule fois pour une même taille ; une demande arrivée canal fermé attend la capacité suivante. 4 mutations tuées ;
   - la page mesurait la hauteur sous sa propre place dans la page : 480 pixels, le minimum, pour une fenêtre de 1 000. Elle prend la hauteur de la fenêtre, moins les boutons et la ligne d'état.
+  - Windows Server 2019, après un redimensionnement à une taille qui n'est pas un multiple de 64, envoie des tuiles de 64 × 64 qui dépassent le bord du bureau, et le lecteur de bitmaps refusait la mise à jour, ce qui fermait la session. Il garde désormais la partie visible d'une tuile qui commence sur le bureau et le dépasse de moins de 64 pixels ; au-delà, toujours refusé.
 
 ## Conséquences
 
