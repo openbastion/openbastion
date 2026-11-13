@@ -1,5 +1,376 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0073)
+
+Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
+`web/packages/icons/`, sans changement de son nom npm, de ses exports ni de son
+contenu fonctionnel. La dépendance locale de l’Admin UI et son lockfile pointent
+maintenant vers `../packages/icons`. Les commandes Make, le cache Node de la CI,
+Dependabot, le contrôle de licence, le contrôle des couleurs et les scripts de
+build/audit utilisent le nouvel emplacement.
+
+`deploy/base44/docker-compose.yml` monte les packages communs en lecture seule
+mais donne au seul package d’icônes un montage imbriqué inscriptible : tsup y
+écrit un fichier de configuration temporaire et `dist/`. Son `node_modules`
+reste dans un volume dédié ;
+`deploy/docker-compose/Dockerfile` le construit depuis `web/packages/icons/`.
+L’arborescence, le guide Design System, le skill frontend et l’ADR-0075 (encore
+proposé) sont alignés. L’ADR-0073 porte désormais la décision normative : le package d’icônes est
+centralisé sous `web/packages/icons/` et la documentation active pointe vers
+ce nouvel emplacement. Les relevés historiques conservent le chemin observé
+à leur date de rédaction.
+
+Pour la branche de travail longue, `origin/main` a été récupéré au début de
+l’incrément (`2a7de575`, déjà ancêtre), puis à nouveau avant les validations.
+La seconde vérification a trouvé `7784ba7` (PR #149) ; ce changement a été intégré
+sans conflit dans `806a54f` avant la poursuite. Le contrôle sera répété avant
+chaque incrément significatif et avant chaque push ; toute avance de `main` sera
+intégrée dans cette branche avant de poursuivre.
+
+## 2026-11-12 — La sidebar respecte le thème clair
+
+La navigation latérale utilisait les mêmes tokens sombres dans les deux thèmes.
+Les tokens `chrome` sont maintenant réellement thématiques : en mode clair, la
+sidebar utilise une surface neutre `#F0F3F7`, des textes foncés et un accent bleu
+sobre ; en mode sombre, elle conserve la surface `#17222D`, les textes clairs et
+l’accent lumineux. Les états de survol, sélection, bordure et favoris suivent
+les mêmes tokens, sans surcharge CSS spécifique au composant.
+
+Validation : `make ui-tokens-test` passe avec 18 paires contrôlées par thème ;
+les quatre paires de navigation dépassent 4,5:1 dans les deux thèmes. `npm test`
+passe (14 fichiers, 148 tests). TypeScript et le build Vite passent avec une
+sortie isolée sous `/tmp/openbastion-admin-ui-build-check`. Le build standard
+`make ui-build` n’a pas pu nettoyer `web/admin-ui/dist/assets` : des artefacts
+préexistants appartiennent à `root` (EACCES). Le serveur Vite Base44 transforme
+bien `main.tsx` avec les nouveaux tokens.
+
+## 2026-11-12 — Base44 monte les packages frontend locaux
+
+Le serveur Vite Base44 installait les dépendances de l'Admin UI depuis son
+lockfile, mais le conteneur ne montait ni `web/packages/design-tokens` ni
+`web/packages/ui`. Les liens symboliques créés par npm pointaient donc vers
+`/packages`, absent du conteneur, et Vite ne pouvait pas résoudre
+`@openbastion/design-tokens/tokens.css`. Le service `web` monte maintenant
+`web/packages` en lecture seule à `/packages`, chemin attendu par les dépendances
+`file:../packages/*`.
+
+Validation : `docker compose config` passe ; après recréation, le service `web`
+est healthy, les deux CSS sont résolus depuis `/packages`, la transformation Vite
+de `src/app/main.tsx` réussit et `/` répond HTTP 200. `npm test` passe (14
+fichiers, 148 tests) et `npm run build` passe (TypeScript et Vite).
+
+## 2026-11-12 — Empreinte de provenance du skill design system corrigée
+
+La migration du guide interne `ui-ux-design-system` vers les tokens canoniques
+avait modifié son `SKILL.md` sans mettre à jour son empreinte SHA-256 dans
+`docs/licensing/skills-provenance.json`. Le contrôle `make license-check` échouait
+avant même le scan Trivy des images. Le manifeste porte maintenant l'empreinte
+du fichier réellement versionné ; l'origine historique, les auteurs et la
+licence restent inchangés.
+
+Validation : `make license-check` confirme les 95 skills (85 tiers, 10 internes),
+les 95 empreintes de fichiers, les 85 hashes Skills CLI v1, les révisions, les
+licences et les notices.
+
+## 2026-11-12 — Le build Docker de l'Admin UI embarque les packages partagés
+
+Le premier build d'image après la migration du design system échouait parce que
+le Dockerfile copiait l'Admin UI et les icônes, mais omettait les packages locaux
+`web/packages/design-tokens` et `web/packages/ui` référencés par les dépendances
+`file:` du lockfile. Le stage UI copie désormais ces deux répertoires à leurs
+chemins relatifs attendus avant `npm ci`.
+
+Validation : `docker build --target ui -f deploy/docker-compose/Dockerfile`
+construit l'image UI, résout les trois packages locaux, exécute TypeScript et
+Vite et produit `/ui/dist`.
+
+## 2026-11-12 — Charte graphique formalisée dans ADR-0073 et ADR-0075
+
+La décision de conception OpenBastion Infrastructure est maintenant inscrite
+explicitement dans ADR-0073 §3.1, avec sa direction ergonomique inspirée des
+consoles d'infrastructure, ses limites de propriété intellectuelle, sa palette
+clair/sombre, les thèmes système/explicites, les exigences responsive et la
+cible WCAG 2.2 AA. La section 4 d'ADR-0073 précise la frontière entre wrappers
+React de l'Admin UI et packages frontend partagés.
+
+ADR-0075 §3.1 relie explicitement cette décision à l'identité commune du User
+Portal, sans fusionner les parcours métier. Les packages tokens, primitives
+CSS et icônes restent les sources de vérité partagées. Aucun nouvel ADR ni
+nouvelle dépendance runtime n'a été ajouté ; le statut proposé d'ADR-0075 est
+préservé.
+
+## 2026-11-12 — ADR-0073 Design System : connexion, icônes et garde-fous de tokens (étape 5E)
+
+Les écrans de connexion locale, de second facteur et le retour OIDC utilisent les
+surfaces, champs, détails et boutons partagés. Le secret TOTP d'enrôlement reste
+affiché une seule fois et les parcours MFA/OIDC conservent leurs contrats et
+leur ordre d'exécution ; le test OIDC vérifie aussi l'adoption de la surface
+partagée.
+
+Les icônes React utilisent les propriétés SVG compatibles JSX et héritent de
+`currentColor` pour leur accent au lieu d'une couleur cyan codée en dur. Le
+fichier CSS du package d'icônes ne définit plus une palette concurrente : il
+s'appuie sur le token d'accent partagé. Les styles Admin UI remplacent les
+couleurs et ombres restantes de cette tranche par les tokens sémantiques et
+ajoutent des adaptations `forced-colors` aux primitives et au shell.
+
+Le contrôle `check-app-colors.mjs`, branché à `make ui-tokens-test`, refuse les
+couleurs CSS littérales dans les sources de l'Admin UI, des primitives partagées
+et des icônes React. Il complète, sans les remplacer, les mesures de contraste
+opaques du script de tokens.
+
+Validation : `make ui-test ui-build` réussit (14 fichiers Vitest, 148 tests,
+TypeScript et build Vite) avant le dernier ajustement du retour OIDC ; ce dernier
+est couvert par le même test de flux et sera revalidé après modification.
+Le contrôle de contraste mesure 36 paires conformes dans les deux thèmes ; le
+contrôle de couleurs littérales passe. `npm run audit:icons` ne rapporte aucune
+erreur, mais conserve 125 avertissements de géométrie similaire entre variantes
+claire/sombre. La revue visuelle multi-viewport et l'audit lecteur d'écran restent
+à effectuer.
+
+## 2026-11-12 — ADR-0073 Design System : commandes enregistrées et replay vidéo (étape 5D)
+
+Les commandes enregistrées sont présentées dans une surface partagée avec un
+entête de section accessible, le compteur de commandes, la pagination et les
+états vides. Le terminal de replay utilise désormais les tokens chrome pour
+son fond, son texte, ses marqueurs et ses horodatages ; aucune commande n’est
+interprétée ou exécutée par l’interface.
+
+La relecture vidéo utilise une surface dédiée, des contrôles partagés et des
+états de chargement accessibles. Les commandes de lecture, pause, arrêt, pas à
+pas, vitesse, chargement des segments, limitation mémoire et état de fin sont
+préservés. Le canvas garde son focus visible avec l’accent chrome adapté au fond
+sombre. Les contrats API et les limites de replay ne changent pas.
+
+Validation : make ui-test ui-build réussit (14 fichiers Vitest, 148 tests,
+TypeScript et build Vite) ; les 36 paires de contraste restent conformes. Les
+avertissements React préexistants sur les attributs SVG des icônes subsistent.
+La revue visuelle multi-viewport et l’audit lecteur d’écran restent à effectuer.
+
+## 2026-11-12 — ADR-0073 Design System : sessions et approbations (étape 5C)
+
+Les demandes d’approbation et de break-glass utilisent la table partagée avec
+caption accessible, en-têtes explicites, défilement horizontal local et actions
+à cibles de 40 px. Les états de chargement et d’absence de demande utilisent
+l’état vide partagé ; la pagination, les badges de statut, les confirmations
+et les décisions API restent inchangés. Les avertissements de troncature sont
+annoncés comme notices de statut.
+
+La recherche d’une session et son détail utilisent les surfaces, formulaires,
+détails structurés et actions partagés. L’ouverture d’écran, la reconnexion,
+la révocation et les demandes de décision conservent leurs handlers et leurs
+contrats API. Les tables HTML globales et leurs styles applicatifs ont été
+retirés : les inventaires et les demandes passent tous par les primitives UI.
+
+Validation : make ui-test ui-build réussit (14 fichiers Vitest, 147 tests,
+TypeScript et build Vite) ; 36 paires de contraste vérifiées. La migration du
+replay vidéo et des commandes enregistrées reste à faire. La revue visuelle
+multi-viewport et l’audit lecteur d’écran restent à effectuer.
+
+## 2026-11-12 — ADR-0073 Design System : inventaire des comptes et formulaires (étape 5B)
+
+L’inventaire des comptes utilise maintenant la table partagée avec en-têtes
+sémantiques, caption accessible, densité structurée et défilement horizontal
+local. Les filtres et vues enregistrées utilisent les patterns partagés de
+barre de filtres, grille responsive et formulaire de sauvegarde. Les actions
+de ligne conservent leur confirmation, leurs appels API et leurs états d’erreur.
+Le formulaire d’enregistrement des comptes et celui des politiques utilisent
+les surfaces, champs et actions du package UI.
+
+Les vues enregistrées restent limitées aux filtres catégoriels de la page
+chargée ; la recherche libre n’est pas persistée et aucune donnée de compte
+n’est ajoutée au stockage local. Le contrat des endpoints n’a pas changé.
+
+## 2026-11-12 — ADR-0073 Design System : Overview et Security Center (étape 5A)
+
+Les écrans Overview et Security Center consomment maintenant les patterns
+opérationnels partagés : grille responsive d’indicateurs, cartes de statistiques,
+surfaces de section, notes contextuelles, en-têtes de section et états vides.
+Les groupes d’indicateurs sont nommés avec role=group pour exposer leur contexte
+aux technologies d’assistance. Les métriques restent exclusivement issues des
+réponses des endpoints existants ; aucun chiffre ou état synthétique n’est
+introduit. Les classes locales de présentation des deux écrans sont réduites
+aux détails métier propres aux constats de sécurité.
+
+Validation : make ui-test ui-build réussit (14 fichiers Vitest, 147 tests,
+TypeScript et build Vite). Le contrôle des 36 paires de contraste reste vert.
+La migration des écrans comptes, politiques, sessions et replay est à venir ;
+aucun contrôle visuel multi-viewport n’a été réalisé faute de navigateur
+headless sur LT209227.
+
+## 2026-11-12 — ADR-0073 Design System : primitives UI partagées (étape 4)
+
+Le package privé `web/packages/ui/` fournit les primitives CSS framework-neutral
+(boutons, badges, notices, surfaces, en-têtes, formulaires et pagination). Il
+consomme exclusivement les tokens sémantiques et ne contient ni logique métier,
+ni JavaScript navigateur, ni dépendance tierce. Les wrappers React, libellés et
+états API restent dans `web/admin-ui/src/shared/ui/`, conformément à ADR-0075.
+
+L’Admin UI utilise ces primitives pour les badges de statut, les messages
+d’erreur/succès, les formulaires partagés, les confirmations, la pagination,
+les préférences, les actions de comptes et les contrôles de la console d’écran.
+Les états inconnus du Broker restent visibles avec un badge neutre ; les notices
+d’erreur exposent `role=alert`, les confirmations d’état `role=status`.
+
+Validation : `make ui-test ui-build` réussit (14 fichiers Vitest, 147 tests,
+TypeScript et build Vite). `make ui-tokens-test` vérifie 36 paires de contraste
+(18 par thème), y compris les fonds sémantiques des badges et notices. Les
+avertissements React sur les attributs SVG des icônes restent préexistants.
+La revue visuelle multi-viewport et l’audit lecteur d’écran restent à effectuer.
+
+## 2026-11-12 — ADR-0073 Design System : shell opérateur (étape 3)
+
+Le shell de l'Admin UI adopte désormais un en-tête clair et une barre latérale
+sombre persistante, avec navigation groupée, état actif bleu, favoris, footer
+et états de focus adaptés au chrome sombre. La largeur de navigation est de
+256 px (72 px repliée), l'en-tête de 64 px. La navigation mobile reste un panneau
+avec backdrop, focus initial et fermeture par Échap. Les contrôles de navigation
+et les actions de l'en-tête conservent une hauteur minimale de 40 px, y compris
+en densité compacte et à 320 px.
+
+Les boutons primaires utilisent maintenant le couple accent/texte-sur-accent,
+qui conserve le contraste en thème clair comme sombre. Le nom accessible des
+boutons de navigation est explicite même lorsque leurs libellés sont masqués
+dans la barre latérale repliée. Les favoris restent disponibles dans le panneau
+mobile. Les clés et le format des préférences UX-05 ne changent pas.
+
+Validation : `make ui-test ui-build` réussit (13 fichiers Vitest, 142 tests,
+TypeScript et build Vite). `make ui-tokens-test` vérifie 26 paires de contraste
+(13 par thème). Aucun navigateur headless n'est installé sur LT209227 ; aucun
+contrôle par capture d'écran ou test visuel automatisé n'a donc été revendiqué.
+Les avertissements React des attributs SVG `stroke-width`, `stroke-linecap` et
+`stroke-linejoin` restent préexistants dans les icônes.
+
+## 2026-11-12 — ADR-0073 Design System : fondations de tokens (étape 2)
+
+Le package privé `web/packages/design-tokens/` fournit les tokens CSS canoniques
+OpenBastion Infrastructure : palettes clair/sombre, rôles sémantiques, focus,
+statuts, chrome, espacements, rayons, ombres, typographie et mouvement. Il ne
+contient aucun JavaScript navigateur ni dépendance tierce. L'Admin UI l'importe
+avant ses styles applicatifs ; `styles.css` conserve uniquement des alias de
+compatibilité vers les tokens partagés.
+
+`main.tsx` applique le thème et la densité depuis les préférences de présentation
+non sensibles avant le premier rendu React. Les clés de stockage et leur format
+restent inchangés ; aucun jeton, secret ou identifiant de ressource n'est lu ou
+écrit par ce mécanisme.
+
+`make ui-tokens-test` vérifie avec Node.js les paires de contraste opaques
+déclarées pour les deux thèmes. Les valeurs mesurées et leurs limites restent
+documentées dans `docs/development/admin-ui-design-system.md` : elles ne valent
+pas audit de tous les composants rendus.
+
+Validation sur LT209227 : `make ui-test ui-build` réussit ; 13 fichiers Vitest,
+142 tests réussis, vérification TypeScript et build Vite réussis. Le build du
+package `@openbastion/icons` réussit également. Vitest signale encore des
+avertissements React préexistants sur `stroke-width`, `stroke-linecap` et
+`stroke-linejoin` dans des SVG d'icônes ; ils ne font pas échouer les tests et
+ne sont pas introduits par le package de tokens.
+
+## 2026-11-12 — ADR-0073 UX-05 : personnalisation et productivité
+
+Le stockage UX-05 est **local au navigateur**, versionné et limité aux préférences
+de présentation et de navigation. Il n'est ni lié à une identité OpenBastion, ni
+synchronisé entre appareils. Un navigateur partagé partage donc ces préférences
+entre ses utilisateurs : ne pas y placer d'information personnelle ou sensible.
+
+- `openbastion.admin-ui.preferences.v1` conserve le thème (système/clair/sombre),
+  la densité, l'état réduit de la navigation, la destination initiale et les
+  identifiants de sections favorites. Aucun jeton, cookie, compte, hôte ou
+  identifiant de session n'y est écrit.
+- `openbastion.admin-ui.account-views.v1` conserve au plus 12 vues, nommées
+  (32 caractères maximum), avec quatre filtres catégoriels : protocole,
+  approbation, identité épinglée et rotation due/en échec. Le texte de recherche
+  libre, les identifiants de comptes, noms de ressources, utilisateurs et
+  cibles ne sont jamais sauvegardés. Les vues s'appliquent uniquement à la page
+  de comptes déjà chargée (20 lignes) ; elles ne déclenchent aucune recherche
+  globale et ne prétendent pas couvrir l'inventaire complet.
+- Les deux formats sont versionnés, validés à la lecture, bornés et tolèrent un
+  stockage absent, corrompu ou refusé. Les secrets et jetons restent soumis à
+  la règle frontend : mémoire uniquement.
+- Le thème système suit les changements de préférence OS. Les raccourcis
+  complémentaires sont `Alt+Maj+1..6` pour les sections, ignorés dans les
+  champs éditables ; `Ctrl/⌘+K` ouvre toujours la palette.
+- Les changements de section déplacent le focus vers la zone principale. Le
+  dialogue de préférences gère focus initial, boucle de tabulation, Échap et
+  restauration du focus déclencheur.
+
+Aucune API, table PostgreSQL, règle d'autorisation, dépendance runtime, route
+Gateway ou événement d'audit n'est ajouté. La persistance multi-appareils et
+les vues globales/partagées restent hors de ce lot.
+
+## 2026-11-12 — ADR-0073 UX-04 : tableau de bord et centre de sécurité
+
+La Vue générale affiche les totaux renvoyés par `GET /vault/accounts` et
+`GET /sessions?status=pending_approval`. Les sources gardent leurs états de
+chargement et d'erreur séparés : un refus n'est jamais converti en zéro. Le
+compteur de rotations à examiner porte uniquement sur les comptes effectivement
+chargés et les champs explicites `rotationOwedSince` / `rotationFailures`.
+
+Le Centre de sécurité examine au plus 100 comptes de la première page et
+signale uniquement des faits déduits de leurs métadonnées : clé d'hôte SSH
+absente, identité TLS VNC/RDP incomplète, rotation après usage due, échecs de
+rotation ou rotation planifiée échue. Lorsque le total dépasse la page chargée,
+la couverture partielle est explicitement indiquée. Aucun score de risque,
+état de conformité ou agrégat extrapolé n'est produit.
+
+**Limite d'API constatée** : bien que `/audit/events` figure dans
+`docs/api/rest/openapi.yaml`, la Gateway n'enregistre actuellement aucune
+route publique correspondante. Le Centre de sécurité n'appelle donc ni cette
+route non implémentée, ni directement l'Audit Service ou sa base. Le flux
+d'audit, les alertes comportementales, la santé des proxies et les scores
+explicables nécessiteront des contrats publics et contrôles d'accès dédiés.
+
+Aucune route Gateway, règle d'autorisation, dépendance runtime, donnée
+persistée côté navigateur ou nouveau service n'est ajouté. Le tableau de bord
+et le Centre de sécurité utilisent exclusivement la même API publique et
+l'instance `Api` existante.
+
+Validation : `VITEST_MAX_WORKERS=1 make ui-test` — 9 fichiers, 128 tests
+réussis ; `make ui-build` — TypeScript et build Vite réussis ; `git diff
+--check` propre. Le mode Vitest mono-worker est utilisé pour éviter les
+timeouts de tests existants observés avec la concurrence par défaut sur
+LT209227 ; le code de production et les dépendances ne changent pas.
+
+## 2026-11-12 — ADR-0073 UX-03 : parcours PAM cohérents
+
+Les états connus du Session Broker (`pending_approval`, `active`, `terminated`, `expired`, `denied`)
+sont traduits dans un badge commun ; les valeurs inconnues restent visibles sans leur attribuer une
+sémantique inventée. Les écrans comptes et approbations distinguent désormais chargement, résultat
+vide et données disponibles. La relecture de commandes présente la session et le volume associé,
+avec un état vide explicite ; les commandes restent du texte échappé. Le changement de page d'une
+relecture conserve l'identifiant de session initial, même si le champ de saisie est modifié.
+
+Une confirmation accessible (dialogue d'alerte, focus initial sur Annuler, boucle de tabulation,
+Échap, retour du focus) précède le renouvellement d'un secret, la désactivation d'un compte, l'approbation ou le refus
+d'une session, et la terminaison. Elle décrit la ressource et l'effet attendu, notamment la vérification du secret par le Vault avant adoption. Une terminaison n'est pas
+annoncée comme réussie avant le retour du Broker, qui confirme après révocation par le proxy. Les
+échecs gardent le dialogue ouvert et affichent la notice existante. Aucun appel API n'est émis à
+l'annulation.
+
+Aucun endpoint, rôle, règle d'autorisation, dépendance runtime, stockage de secret, ou nouveau flux
+d'audit n'est ajouté. Le Gateway/Broker/Vault restent les autorités ; les secrets restent
+write-only côté UI.
+
+
+## 2026-11-12 — ADR-0073 UX-02 : productivité opérateur
+
+La palette de commandes est accessible depuis l'en-tête et par `Ctrl+K` / `Cmd+K`. Elle filtre
+uniquement les quatre destinations Admin UI réellement implémentées et permet de rechercher une
+session par identifiant via `GET /sessions/{sessionId}`. L'API Gateway reste l'autorité : les refus
+403/404/503 sont rendus par la notice existante, sans contournement ni recherche directe dans un
+service. Le focus entre et sort de la palette, `Escape` ferme, les flèches changent la commande
+active et `Entrée` l'exécute.
+
+La liste des comptes possède un filtre local qui ne s'applique qu'à la page déjà chargée (20 au
+maximum). L'interface annonce explicitement ce périmètre ; aucun filtrage local n'est présenté
+comme une recherche exhaustive. Aucun endpoint, dépendance npm à l'exécution, stockage navigateur
+ou donnée sensible persistée n'a été ajouté.
+
+Les recherches globales d'audit, les filtres serveur et l'indexation de ressources non exposées
+restent hors de portée tant que les contrats API publics correspondants n'existent pas.
+
+
 Ce fichier documente une contrainte réelle rencontrée en démarrant l'implémentation, et les décisions prises en réponse — à lire avant de juger que le transport HTTP/JSON ci-dessous est un écart d'architecture. Ce n'en est pas un : c'est une substitution de transport documentée, réversible, qui n'a touché aucun contrat.
 
 ## Ce qui a été découvert
@@ -3681,3 +4052,259 @@ PR #81, passages CI #13 à #43 de `.github/workflows/windows-rdp.yml` (Windows S
 **Non vérifié** : rien n'a tourné contre Windows (ni image tirée, ni VM lancée, conformément à la demande). Le premier passage du CI dira si le runner a KVM, si 40 Go et 90 minutes suffisent, et si `rdp-setup.ps1` installe le certificat et le rend lisible par NETWORK SERVICE. ADR-0071 reste « mise en œuvre en cours ».
 
 **Choix renversables** : Windows Server 2022 (pas 2025 ni Windows 11) ; 40 Go, 6 Go de RAM, 2 cœurs ; le nom `rdp-windows.test` ; le lundi à 3 h 23 ; hors des contrôles requis.
+
+
+## 2026-11-12 — Premiers composants React de `@openbastion/ui`
+
+La stratégie choisie pour la bibliothèque partagée est l'option C : React natif
+et HTML pour les primitives simples ; Radix UI sera réservé aux interactions
+complexes, encapsulé derrière les composants OpenBastion. `@openbastion/ui`
+expose maintenant `Alert`, `Badge`, `Button`, `Card`, `Checkbox`, `Input`,
+`Label`, `Separator`, `Skeleton`, `Switch` et `Textarea` avec des props
+TypeScript. React est déclaré comme peer dependency pour éviter une seconde
+instance dans les applications. Les façades `admin-ui/src/shared/ui/` pour
+Button, Badge et InlineNotice réexportent les implémentations partagées.
+
+Le premier lot n'ajoute aucune dépendance d'exécution tierce. Les tests de
+contrat du package sont exécutés depuis Vitest Admin UI : 15 fichiers et 153
+tests ont réussi après configuration de la déduplication React dans Vite. Le
+contrôle TypeScript a réussi ; le build Vite initial a rencontré un `EACCES`
+sur l'ancien répertoire `dist/` appartenant à root, et sera relancé avec un
+dossier de sortie temporaire. L'ADR-0075 reste `Proposé` : seule la stratégie
+technique des composants partagés est inscrite, l'architecture complète du
+User Portal n'est pas déclarée acceptée.
+
+Ce lot ne livre pas encore le catalogue complet (Radix overlays, navigation,
+calendrier, graphiques, notifications et helpers d'image restent à faire). Le
+User Portal n'est pas encore présent dans le dépôt ; sa consommation devra être
+validée lors de sa création.
+
+## 2026-11-12 — Synchronisation de la PR #151 avec main
+
+`origin/main` a avancé jusqu'à `c1c5a2f` (PR #152, ADR-0095 sur les canaux
+virtuels RDP). Le conflit dans `docs/adr/README.md` provenait de deux entrées
+ADR-0095 concurrentes. L'entrée RDP de `main` est conservée. À la demande
+explicite du propriétaire, la décision de déplacement du package d'icônes est
+intégrée à l'ADR-0073 ; aucun ADR autonome n'est maintenu pour cette évolution.
+
+## 2026-11-12 — Formulaires avancés de `@openbastion/ui` (ADR-0073)
+
+Le catalogue partagé ajoute les primitives natives `Form`, `FormField`,
+`FormDescription`, `InputOTP`, `RadioGroup`, `RadioGroupItem`, `Select` et
+`Slider`. `FormField` relie le contrôle à son libellé, à sa description et à
+son erreur via `aria-describedby`/`aria-invalid`. Les groupes radio sont
+composables, supportent les modes contrôlé et non contrôlé, et conservent la
+sémantique native. Select et Slider restent des contrôles HTML ; InputOTP
+utilise le contrat navigateur `autocomplete=one-time-code`, `inputMode=numeric`
+et une longueur bornée. Aucun composant ne valide une règle métier ni ne fait
+d'appel réseau.
+
+Validation mesurée : Vitest Admin UI, 16 fichiers et 159 tests réussis ;
+TypeScript réussi ; build Vite réussi avec une sortie isolée dans
+`/tmp/openbastion-admin-ui-refactor-build-forms` (le répertoire `dist` habituel
+contient des artefacts root non nettoyables par l'utilisateur courant).
+Aucune dépendance externe n'a été ajoutée dans cet incrément.
+
+Limites : les overlays Radix, la navigation, les composants avancés et les
+notifications restent à réaliser dans les incréments suivants. Le catalogue
+complet n'est pas livré.
+
+## 2026-11-12 — Overlays accessibles de `@openbastion/ui` (ADR-0073, en cours)
+
+Le package ajoute `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`,
+`Sheet` et `Drawer`. Les cinq primitives Radix sont des peer dependencies de
+`@openbastion/ui`, fournies par chaque application ; `Sheet` et `Drawer` sont
+composés à partir de Dialog. Les wrappers n'exposent pas les types Radix. Le
+bundler conserve les liens symboliques npm et déduplique React pour que les
+primitives et le renderer utilisent la même instance.
+
+Les tests complets passent : Vitest, 17 fichiers et 166 tests ; TypeScript ;
+build Vite avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-overlays` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-tokens-test`
+(36 paires, deux thèmes). Les tests couvrent ouverture/fermeture et Escape,
+confirmation explicite, sélection de menu, popover, tooltip et composition
+Sheet/Drawer.
+
+Le premier essai a révélé une deuxième instance React provenant du peer installé
+dans le répertoire du package. Les primitives Radix sont désormais des peer
+dependencies exactes, fournies par l'application, et Vite préserve les liens
+symboliques tout en dédupliquant React. Les chemins TypeScript résolvent les
+primitives depuis le `node_modules` de l'application. Après `npm ci` dans
+l'Admin UI et suppression des `node_modules` locaux du package, les tests et le
+build passent sans dépendance cachée dans le répertoire source.
+
+## 2026-11-12 — Synchronisation suivante de la PR #151
+
+`origin/main` a avancé jusqu'à `706dc9c` (PR #153, canal statique RDP). La
+branche `refactor/admin-ui-infrastructure` a intégré cette évolution sans
+conflit. Les tests UI complets (17 fichiers, 166 tests), TypeScript, build Vite
+isolé, audit npm (0 vulnérabilité), contrôle de licence et `go test ./pkg/rdp/...`
+passent après intégration.
+
+## 2026-11-12 — Navigation partagée de `@openbastion/ui` (ADR-0073, en cours)
+
+Le catalogue ajoute `Accordion`, `Collapsible`, `Breadcrumb`, `Command`,
+`ContextMenu`, `HoverCard`, `Menubar`, `NavigationMenu`, `Pagination`,
+`Sidebar` et `Tabs`. Les disclosures et menus complexes sont des wrappers
+Radix ; Breadcrumb, Pagination, Sidebar et Command sont des composants
+OpenBastion natifs. `Command` filtre ses options par valeur et permet le
+parcours clavier avec les flèches ; le menu latéral conserve `aria-current`
+pour la destination active. Les composants de navigation ne déclenchent aucun
+appel API et ne prennent aucune décision métier.
+
+Les tests complets passent : 18 fichiers, 177 tests ; TypeScript ; build Vite
+avec sortie isolée dans `/tmp/openbastion-admin-ui-refactor-build-navigation` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-test` (contrastes
+Light/Dark et absence de couleurs codées en dur). Les 11 tests ciblés couvrent
+disclosure, collapsible, breadcrumb, tabs, recherche et navigation clavier de
+Command, sidebar, pagination, menubar, navigation menu, context menu et hover
+card. Les tests UX-02 de la palette de commandes sont conservés ; leurs événements clavier partent de `document`, cible réelle des écouteurs globaux
+installés par l'application ; les tests vérifient ainsi le même chemin que les
+interactions clavier de l'opérateur.
+
+## 2026-11-12 — Synchronisation de la PR #151 avec main (PR #154)
+
+`origin/main` a avancé jusqu'à `20bcb96` (PR #154, canaux dynamiques RDP,
+ADR-0095 incrément 2). L'intégration dans `refactor/admin-ui-infrastructure`
+a été automatique, sans conflit. Après intégration : `make ui-test` (18 fichiers,
+177 tests, tokens et couleurs), TypeScript, build Vite isolé, `npm audit`
+(0 vulnérabilité), `make license-check` et `go test ./pkg/rdp/...` réussissent.
+
+## 2026-11-12 — Présentation avancée de `@openbastion/ui` (ADR-0073, en cours)
+
+Le package ajoute `AspectRatio`, `Avatar`, `Calendar`, `Carousel`, `Chart`,
+`Image`, `Progress`, `Resizable`, `ScrollArea`, `Toggle`, `ToggleGroup` et les
+utilitaires `isSafeImageSource`/`resolveImageSource` dans
+`web/packages/ui/src/lib/image-helpers.js`. Calendar s'appuie sur le contrôle
+natif date du navigateur ; Chart dessine des graphiques SVG simples ; Carousel
+est contrôlé ou non contrôlé ; Resizable accepte le redimensionnement natif
+par pointeur et les flèches clavier. Les sources Image/Avatar n'acceptent que
+HTTPS ou des chemins relatifs locaux, jamais `data:`, `javascript:` ou les URL
+protocol-relative. Image essaie une seule fois la source de secours et évite
+les boucles de rechargement si elle échoue également.
+
+Les validations complètes passent : 19 fichiers Vitest, 189 tests ; TypeScript ;
+build Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-advanced` ;
+`npm audit` (0 vulnérabilité) ; `make license-check` ; `make ui-test` (tokens,
+contrastes et audit des couleurs). Les tests couvrent aussi les sources HTTPS,
+le rejet des schémas exécutables et protocol-relative, le fallback d'image et
+l'absence de boucle si la source de secours échoue.
+
+## 2026-11-12 — Notifications de `@openbastion/ui` (ADR-0073, en cours)
+
+Le catalogue ajoute `ToastProvider`, `Toast`, `Toaster`, `Sonner` et le hook
+`useToast`. Les applications peuvent soit utiliser `Sonner` (provider +
+Toaster prêt à l'emploi), soit composer explicitement `ToastProvider` et
+`Toaster`. Les notifications supportent les variantes default/success/warning/
+danger, les rôles accessibles `status`/`alert`, la fermeture manuelle,
+l'expiration automatique configurable et une file visible limitée à cinq
+éléments. Aucun service externe ni dépendance supplémentaire n'est requis.
+
+La validation sur `refactor/refactor-admin-ui` passe : `make ui-test` (21 fichiers,
+194 tests), TypeScript et build Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-verify` ;
+`npm audit --audit-level=high` (0 vulnérabilité dans les deux packages) ;
+`make license-check` ; contrôles de contraste et audit des couleurs. Le build
+standard `make ui-build` est bloqué par des fichiers préexistants appartenant à
+root dans `web/admin-ui/dist/assets` (`EACCES` lors du nettoyage Vite) ; aucun
+fichier de ce répertoire n'a été supprimé ni modifié. Le build isolé réussit.
+`git diff --check` passe.
+Les quatre tests ciblés couvrent notification et fermeture manuelle, rôle
+assertif pour danger, expiration automatique, composition Sonner et limite de
+file. Un test Table confirme la sémantique native, les en-têtes et la légende.
+
+
+## 2026-11-12 — Audit accessibilité mobile (ADR-0073, étape 6)
+
+La navigation latérale mobile se comporte désormais comme un dialogue modal :
+`role=dialog`, `aria-modal=true`, nom accessible, arrière-plan (skip link,
+en-tête et contenu principal) rendu `inert`, focus initial dans la navigation,
+piégeage de Tab/Shift+Tab, fermeture avec Échap et restitution du focus au
+déclencheur après fermeture ou sélection d'une rubrique. Le bouton de backdrop
+est retiré de l'ordre de tabulation et de l'arbre d'accessibilité. Les champs
+conservent un indicateur de focus système visible en mode Windows `forced-colors`.
+
+Le test rouge a d'abord échoué car la navigation mobile n'exposait aucun
+dialogue ; après correction, le test couvre le rôle modal, l'inertie du fond,
+les deux sens de bouclage du focus, Échap et la sélection d'une rubrique.
+Validation : Vitest séquentiel, 21 fichiers et 194 tests ; TypeScript ; build
+Vite isolé dans `/tmp/openbastion-admin-ui-refactor-build-a11y` ; contrôles de
+contraste (36 paires, thèmes clair/sombre), audit des couleurs codées en dur.
+La première exécution Vitest parallèle a subi un dépassement de délai sur le
+test de raccourci UX-05 ; ce même fichier passe seul et la suite complète passe
+avec `--maxWorkers=1`.
+
+Limites : aucune installation de navigateur ni d'outil d'audit d'accessibilité
+n'est disponible sur LT209227 dans cet environnement. Les captures et essais
+visuels réels à 320/768/1024/1440 px ainsi que le parcours lecteur d'écran
+(VoiceOver/NVDA) restent à faire ; aucune conformité WCAG globale n'est
+revendiquée. `origin/main` a été récupéré avant l'incrément ; aucun commit
+additionnel n'était à intégrer (branche en avance de 50 commits, sans retard).
+
+
+## 2026-11-12 — Constructeur de filtres de la page Comptes (ADR-0073)
+
+La barre de filtres de l'inventaire est réorganisée selon la référence visuelle fournie : déclencheur repliable « Filtres avancés », compteur de critères actifs, panneau structuré en lignes Champ / Opérateur / Valeur et connecteurs ET. La recherche textuelle locale est présentée comme la première condition « OÙ ». Les quatre filtres catégoriels existants, les vues sauvegardées et leur stockage versionné sont conservés ; la recherche ne quitte pas la page déjà chargée et aucun endpoint supplémentaire n'est appelé. Le panneau et ses contrôles restent utilisables au clavier et se réorganisent sur mobile.
+
+Un test de composant vérifie l'état ARIA du déclencheur, la structure du constructeur, le compteur après activation d'un critère et le repli/dépli du panneau. Une première exécution des tests a révélé que le libellé accessible historique du champ de recherche avait été modifié ; il a été restauré afin de préserver les contrats d'accessibilité existants.
+
+
+## 2026-11-12 — Constructeur dynamique des filtres Comptes (ADR-0073)
+
+Le constructeur de filtres de l'inventaire Comptes passe de quatre champs fixes à des règles configurables : **Protocole**, **Approbation**, **Identité de la cible** et **Rotation**. Chaque règle expose un comparateur « est / n'est pas » et une valeur dont les options dépendent du champ. Les règles après la première sont reliées par **AND** ou **OR** ; l'évaluation est explicitement de gauche à droite. La recherche textuelle reste toujours combinée au groupe de règles par AND. Le nombre de règles est borné à dix.
+
+Les vues sauvegardées stockent désormais les règles (enveloppe version 2), sans texte de recherche ni donnée de compte. Les vues version 1 existantes sont migrées à la lecture en règles équivalentes combinées par AND ; elles restent disponibles après la mise à jour. La portée reste strictement limitée aux comptes déjà chargés sur la page : aucun appel de recherche globale ni nouvel endpoint.
+
+Validation : 'make ui-test' passe (22 fichiers, 200 tests), dont les tests de sélection dynamique, comparateur négatif, AND/OR sur les résultats, migration des vues version 1 et absence de persistance des termes de recherche. 'make ui-tokens-test' (inclus dans 'make ui-test') passe : contrôles de contraste clair/sombre et absence de couleurs codées en dur. 'npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-filter-rules' passe, TypeScript compris. 'make ui-build' atteint la compilation mais reste bloqué au nettoyage du 'dist' préexistant par un EACCES sur un asset appartenant à root ; aucun asset préexistant n'a été supprimé ou modifié.
+
+Limite : le rendu n'a pas été contrôlé dans un navigateur réel ; le conteneur Base44 actif dépend du checkout principal et n'a pas été redémarré ni modifié.
+
+
+## 2026-11-12 — Limiter le constructeur de filtres à quatre champs (ADR-0073)
+
+Le constructeur n'autorise désormais que quatre blocs, un par champ disponible : Protocole, Approbation, Identité de la cible et Rotation. L'ajout choisit automatiquement le premier champ encore inutilisé ; le bouton est désactivé lorsque les quatre blocs sont présents et les champs déjà utilisés dans les autres blocs ne peuvent pas être sélectionnés. Le modèle de vues sauvegardées refuse également plus de quatre règles ou des champs dupliqués.
+
+Validation : make ui-test passe, 22 fichiers et 202 tests. Les tests couvrent quatre blocs distincts, le refus des doublons et le refus d'une cinquième règle dans les vues persistées. Aucun changement d'API ou de portée du filtrage.
+
+## 2026-11-12 — Synchronisation de `refactor/refactor-admin-ui` avec `main`
+
+La branche intègre `origin/main` jusqu'à `a97c2e1` (PR #156). Elle récupère
+notamment le redimensionnement à la demande des sessions RDP (ADR-0095,
+implémentation proxy, flux d'écran et visionneuse). Le seul conflit concernait
+`ScreenViewer.tsx` : la mesure et l'envoi des dimensions issus de `main` sont
+conservés, tout en gardant les composants partagés `Button` et `InlineNotice`
+et les classes de présentation de la refonte Admin UI.
+
+Validation après résolution : `make ui-test` passe (22 fichiers, 206 tests),
+`npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-main-sync`
+réussit (TypeScript et Vite, 244 modules), et `go test` passe pour `pkg/rdp`,
+`pkg/proxycore`, `pkg/screenstream` et tous les packages de
+`services/proxy/rdp-vnc-proxy`.
+
+## 2026-11-13 — Synchronisation de `refactor/refactor-admin-ui` avec `main` (PR #157–#159)
+
+La branche intègre `origin/main` jusqu'à `6465317` (PR #157, #158 et #159).
+L'architecture Option C est conservée : `@openbastion/ui`,
+`@openbastion/design-tokens`, `@openbastion/icons`, le shell Admin UI, les
+préférences opérateur et les vues sauvegardées restent présents. Les suppressions
+et réorganisations frontend de `main` qui auraient remplacé ce socle n'ont pas
+été reprises. L'ADR-0073 et son index portent désormais le statut
+« Accepté, mise en œuvre en cours ».
+
+Les évolutions RDP sont intégrées : demande de taille conservée avant que le
+canal Display Control soit prêt, application à réception des capacités, gestion
+des redémarrages du canal, activation du redimensionnement par défaut, décodage
+borné des fragments Fast-Path et tolérance aux tuiles bitmap Windows qui
+chevauchent légèrement le bord du bureau. La visionneuse mesure la hauteur
+utilisable depuis la fenêtre, après retrait des contrôles persistants.
+
+Validation sur LT209227 : `make ui-test` passe (22 fichiers, 206 tests),
+`npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-main-6465317`
+réussit (TypeScript, 244 modules), `npm audit --audit-level=high` signale
+0 vulnérabilité, et `go test ./pkg/rdp/... ./pkg/proxycore/... ./pkg/screenstream/... ./services/proxy/rdp-vnc-proxy/...`
+réussit. `git diff --check` passe. Le contrôle de couleurs a d'abord signalé
+un faux positif sur le numéro de PR écrit dans un commentaire ; le commentaire
+a été reformulé et le contrôle passe ensuite.
+
+Les scénarios navigateur contre les cinq cibles Windows sont fournis par la CI
+Windows (#157/#158) ; ils ne sont pas relancés localement, conformément à la
+contrainte KVM/ressources de cet environnement.

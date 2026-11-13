@@ -9,10 +9,11 @@ Les compétences génériques de mise en forme (`better-ui`, `better-layout`, `b
 
 ## Système
 
-- Variables CSS dans `web/admin-ui/src/app/styles.css` (`--brand`, `--ink-*`, `--surface*`, `--line*`, `--danger*`, `--radius-*`) ; aucune couleur codée en dur dans un composant.
+- Tokens CSS canoniques dans `web/packages/design-tokens/tokens.css` (`--ob-color-*`, thèmes clair/sombre, typographie, espacements, rayons et mouvement). `@openbastion/ui` (`web/packages/ui/src/`) porte les composants React partagés ; `web/packages/ui/styles.css` porte leurs primitives visuelles ; `web/admin-ui/src/app/styles.css` ne contient que les styles applicatifs et des alias de compatibilité ; aucune couleur codée en dur dans un composant.
+- React natif et éléments HTML d’abord. Radix UI uniquement pour les interactions complexes (dialogues, menus, popovers, widgets composites), encapsulé dans l’API OpenBastion ; aucune API Radix ne devient publique.
 - Composants de base : `.card`, `.page`, `.page-head` + `.hint`, `table` dans `.table-wrap`, `.badge` (et `.badge.warn` pour un état qui bloque l'usage), `.fields` (grille de formulaire, `.wide` pour une ligne entière), `.form-actions`, `button.primary`, `button.danger`.
 - Messages : `Notice` (succès en `role="status"`, erreur en `role="alert"` avec le code et le motif de l'API).
-- Icônes : utiliser les composants React officiels exportés par `@openbastion/icons` (package source : `web/openbastion-icons`) lorsqu'un pictogramme correspondant existe ; ne pas redessiner ces icônes ni introduire un autre jeu d'icônes. Importer uniquement les composants nécessaires par leur nom. Avant de les importer dans l'Admin UI, vérifier que le package est déclaré comme dépendance et que son lockfile est à jour ; importer `@openbastion/icons/styles.css` une seule fois au point d'entrée.
+- Icônes : utiliser les composants React officiels exportés par `@openbastion/icons` (package source : `web/packages/icons`) lorsqu'un pictogramme correspondant existe ; ne pas redessiner ces icônes ni introduire un autre jeu d'icônes. Importer uniquement les composants nécessaires par leur nom. Avant de les importer dans l'Admin UI, vérifier que le package est déclaré comme dépendance et que son lockfile est à jour ; importer `@openbastion/icons/styles.css` une seule fois au point d'entrée.
 - Icônes et accessibilité : utiliser `size` pour les dimensions et laisser la couleur principale hériter de `currentColor` ; réserver `ariaLabel` aux icônes autonomes qui portent une information. Une icône décorative reste sans libellé (elle est masquée aux technologies d'assistance par défaut) ; un bouton icon-only porte son nom accessible sur le bouton.
 
 ## Ergonomie propre à un PAM

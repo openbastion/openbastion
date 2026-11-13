@@ -1,0 +1,4 @@
+:root {
+  /* Accent details follow the shared OpenBastion semantic palette. */
+  --ob-icon-accent: var(--ob-color-accent, currentColor);
+}

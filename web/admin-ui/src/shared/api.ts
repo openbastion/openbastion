@@ -55,6 +55,11 @@ export class Api {
   }
 }
 
+// The path of one account or one session: the identifier is escaped once, as one path segment
+// (it comes from the API or from an operator's input, never from this page's markup).
+export const accountPath = (id: string): string => `/vault/accounts/${encodeURIComponent(id)}`;
+export const sessionPath = (id: string): string => `/sessions/${encodeURIComponent(id)}`;
+
 function parseJSON(text: string): unknown {
   try {
     return JSON.parse(text);

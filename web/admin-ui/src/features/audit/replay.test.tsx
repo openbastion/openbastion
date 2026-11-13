@@ -5,6 +5,7 @@ import { Api } from "../../shared/api";
 import { SignedInContext } from "../../shared/session";
 import { fakeApi } from "../../test-helpers";
 import { ReplayDeps, VideoReplay } from "./VideoReplay";
+import { Recording } from "./Recording";
 
 const signedIn = (api: Api, node: ReactNode) => render(<SignedInContext.Provider value={{ api, who: null, signOut: () => {} }}>{node}</SignedInContext.Provider>);
 
@@ -41,6 +42,27 @@ async function open(api: Api, d: ReturnType<typeof deps>) {
   fireEvent.submit(screen.getByRole("form", { name: "Relire l'écran d'une session" }));
 }
 
+describe("recorded terminal commands", () => {
+  it("renders the command stream in the shared surface without interpreting it", async () => {
+    const { api } = fakeApi({
+      "GET /sessions/sess_r/recording?page=1&pageSize=100": {
+        body: {
+          sessionId: "sess_r",
+          page: 1,
+          pageSize: 100,
+          totalEntries: 1,
+          entries: [{ timestamp: at(0), command: "whoami" }],
+        },
+      },
+    });
+    signedIn(api, <Recording />);
+    fireEvent.change(screen.getByLabelText("Session"), { target: { value: "sess_r" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Relire un enregistrement" }));
+    expect(await screen.findByText("whoami")).toBeTruthy();
+    expect((await screen.findByRole("region", { name: /Commandes de la session/ })).className).toContain("ob-surface");
+  });
+});
+
 describe("the replay of a screen recording", () => {
   it("shows the recorded frames in order, reads ahead, and says the recording was sealed", async () => {
     const { api, calls } = fakeApi({ [path(1)]: { body: segment(1, [11, 12], false) }, [path(3)]: { body: segment(3, [13], true) } });
@@ -48,6 +70,7 @@ describe("the replay of a screen recording", () => {
     await open(api, d);
     await waitFor(() => expect(d.drawn).toEqual([11]));
     // Two frames loaded is within the read-ahead: the next segment comes, then the 404 that ends it.
+    expect((await screen.findByRole("region", { name: "Relecture vidéo de la session" })).className).toContain("ob-surface");
     expect(await screen.findByText(/Fin de l'enregistrement, scellé/)).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("1 sur 3 chargées");
     fireEvent.click(screen.getByText("Image suivante"));

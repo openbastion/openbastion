@@ -15,4 +15,4 @@ runs:
         cache: npm
         cache-dependency-path: |
           web/admin-ui/package-lock.json
-          web/openbastion-icons/package-lock.json
+          web/packages/icons/package-lock.json

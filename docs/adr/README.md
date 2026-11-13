@@ -24,7 +24,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 10 | [Chaîne d'audit](#10-chaîne-daudit) | 9 |
 | 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
 | 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 4 |
-| 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 4 |
+| 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 5 |
 | 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
 
 ### 1. Fondations du code
@@ -201,9 +201,9 @@ Admin UI, portail utilisateur, système de conception, notifications vers les me
 | Ordre | ID | Titre | Statut |
 |---|---|---|---|
 | 1 | [ADR-0036](0036-l-admin-ui-react-vite-et-typescript-servie-par-la-gateway.md) | L'Admin UI : React, Vite et TypeScript, servie par la Gateway sous `/ui/`, de même origine que l'API, sous une CSP stricte | Accepté |
-| 2 | [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Proposé |
+| 2 | [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Accepté, mise en œuvre en cours |
 | 3 | [ADR-0075](0075-architecture-du-user-portal-et-socle-frontend-partage.md) | Architecture du User Portal et socle frontend partagé | Proposé |
-| 4 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté |
+| 5 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté |
 
 ### 14. Déploiement, CI et chaîne d'approvisionnement
 
@@ -298,7 +298,7 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté | Enregistrement et relecture |
 | [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté, mise en œuvre en cours | Proxy écran RDP et VNC |
 | [ADR-0072](0072-la-cli-cobra-et-une-version-homogene-pour-chaque-binaire.md) | Les exécutables OpenBastion adoptent Cobra et exposent une version de build homogène | Accepté | Fondations du code |
-| [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Proposé | Interfaces et notifications |
+| [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Accepté, mise en œuvre en cours | Interfaces et notifications |
 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté | Interfaces et notifications |
 | [ADR-0075](0075-architecture-du-user-portal-et-socle-frontend-partage.md) | Architecture du User Portal et socle frontend partagé | Proposé | Interfaces et notifications |
 | [ADR-0076](0076-plusieurs-fournisseurs-d-identite-chaque-compte-lie-au-sien.md) | Plusieurs fournisseurs d'identité à la fois, chaque compte lié au sien | Accepté | Identité et authentification |

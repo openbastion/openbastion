@@ -173,6 +173,7 @@ describe("OidcCallback", () => {
     api.request = ((...a: Parameters<typeof request>) => (order.push("request"), request(...a))) as typeof api.request;
     const onToken = vi.fn();
     render(<OidcCallback api={api} onToken={onToken} location={at("?code=c-1&state=s-1")} />);
+    expect(document.querySelector(".login-card.ob-surface.ob-panel")).toBeTruthy();
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("tok"));
     expect(order).toEqual(["replaceState", "request"]);
     expect(replace).toHaveBeenCalledWith(null, "", "/ui/");
