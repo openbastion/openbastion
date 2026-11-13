@@ -294,6 +294,9 @@ export default {
     pastedToTarget: "Pasted to the target",
     copiedFromTarget: "Copied from the target",
     canvasAria: "Remote screen of the session, not readable by a screen reader",
+    roleDescription: "remote screen",
+    keyboardEscapeHint: "Ctrl+Alt+Shift+Esc returns the keyboard to the page.",
+    screenReaderHint: "The image is not readable by a screen reader; copy text from the target to read it in the Clipboard panel.",
     clipboard: {
       aria: "Clipboard",
       hint: "Clipboard: every text is recorded with the session and audited before it arrives.",

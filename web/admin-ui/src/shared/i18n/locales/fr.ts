@@ -294,7 +294,10 @@ export default {
     closedWithoutEnd: "La connexion à l'écran a été perdue. Reconnectez-vous si la session est encore active.",
     pastedToTarget: "Collé dans la cible",
     copiedFromTarget: "Copié depuis la cible",
-    canvasAria: "Écran distant de la session, non lisible par un lecteur d'écran",
+    canvasAria: "Écran distant de la session",
+    roleDescription: "écran distant",
+    keyboardEscapeHint: "Ctrl+Alt+Maj+Échap rend le clavier à la page.",
+    screenReaderHint: "L'image n'est pas lisible par un lecteur d'écran ; copiez le texte de la cible pour le lire dans le panneau Presse-papiers.",
     clipboard: {
       aria: "Presse-papiers",
       hint: "Presse-papiers : chaque texte est enregistré avec la session et audité avant d'arriver.",

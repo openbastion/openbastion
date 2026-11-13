@@ -1,4 +1,4 @@
-import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { MAX_CLIPBOARD_TEXT_LENGTH, SUBPROTOCOL, clampResize, decodeScreenMessage, encodeClipboard, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 import { Button } from "../../shared/ui/Button";
@@ -89,6 +89,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const { t, i18n } = useAppTranslation();
   const canvas = useRef<HTMLCanvasElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  const hintId = useId();
   const socket = useRef<ScreenSocket | null>(null);
   const frame = useRef<{ width: number; height: number } | null>(null);
   const pressed = useRef(new Map<string, number>());
@@ -259,6 +260,14 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   // RDP takes the physical key itself, VNC the character it gives here; before the HELLO, nothing.
   function onKeyDown(e: KeyboardEvent) {
     e.preventDefault();
+    // The way out of the screen, by the keyboard alone (WCAG 2.1.2): Ctrl+Alt+Shift+Esc gives the
+    // keyboard back to the page. Esc is not sent; the blur releases what the target holds down.
+    if (e.key === "Escape" && e.ctrlKey && e.altKey && e.shiftKey) {
+      const next = area.current?.querySelector<HTMLElement>("button");
+      canvas.current?.blur();
+      next?.focus();
+      return;
+    }
     const rdp = protocol.current === "rdp";
     if (protocol.current === null) return;
     const key = pressed.current.get(e.code) ?? (rdp ? scancodeOf(e.code) : keysymOf(e.key));
@@ -386,11 +395,13 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       {phase.name === "connecting" ? <InlineNotice tone="info">{t("screen.connecting")}</InlineNotice> : null}
       {phase.name === "live" && !hasFrame ? <InlineNotice tone="success">{t("screen.waitingFirstFrame")}</InlineNotice> : null}
       {phase.name === "live" && hasFrame ? (
-        <p className="ob-hint" role="status">
+        <p className="ob-hint" role="status" id={hintId}>
           {phase.expiresAt
             ? t("screen.liveUntil", { until: phase.expiresAt.toLocaleString(i18n.language) })
             : t("screen.live")}
           {" "}{t("screen.liveHint")}
+          {" "}{t("screen.keyboardEscapeHint")}
+          {" "}{t("screen.screenReaderHint")}
         </p>
       ) : null}
       {phase.name === "ended" ? <InlineNotice tone="danger">{phase.message}</InlineNotice> : null}
@@ -433,8 +444,10 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         ref={canvas}
         className={pointerDrawn ? "screen-canvas pointer-drawn" : "screen-canvas"}
         tabIndex={0}
-        role="img"
+        role="application"
+        aria-roledescription={t("screen.roleDescription")}
         aria-label={t("screen.canvasAria")}
+        aria-describedby={hintId}
         hidden={!hasFrame}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
