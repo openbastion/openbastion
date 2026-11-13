@@ -1,11 +1,12 @@
 import { ApiError } from "./api";
+import { InlineNotice } from "./ui/InlineNotice";
 
-// Notice shows an outcome. Text only: React escapes it, nothing is ever inserted as HTML.
+// API-aware application wrapper; the shared primitive only owns presentation and live-region semantics.
 export function Notice({ error, ok }: { error?: unknown; ok?: string }) {
   if (error) {
     const msg = error instanceof ApiError ? `${error.status} — ${error.message}` : String((error as Error)?.message ?? error);
-    return <p className="notice error" role="alert">{msg}</p>;
+    return <InlineNotice tone="danger">{msg}</InlineNotice>;
   }
-  if (ok) return <p className="notice ok" role="status">{ok}</p>;
+  if (ok) return <InlineNotice tone="success">{ok}</InlineNotice>;
   return null;
 }

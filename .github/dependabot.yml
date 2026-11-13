@@ -47,7 +47,7 @@ updates:
   - package-ecosystem: npm
     directories:
       - /web/admin-ui
-      - /web/openbastion-icons
+      - /web/packages/icons
     schedule: {interval: weekly, day: monday}
     cooldown: {default-days: 7}
     groups:

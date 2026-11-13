@@ -31,7 +31,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean license-check
+.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons ui-tokens-test vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean license-check
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -234,12 +234,15 @@ test-rdp-windows:
 test-integration: build
 	$(GO) test ./test/integration/... -v -count=1 -timeout=300s
 
-## L'Admin UI (web/admin-ui, ADR-0036) : dépendances depuis le lockfile, tests, construction.
+## L'Admin UI (web/admin-ui, ADR-0036) : tokens, dépendances depuis les lockfiles, tests et construction.
+ui-tokens-test:
+	node web/packages/design-tokens/scripts/check-contrast.mjs
+	node web/packages/design-tokens/scripts/check-app-colors.mjs
 ui-icons:
-	cd web/openbastion-icons && npm ci --no-audit --no-fund && npm run build
-ui-test: ui-icons
+	cd web/packages/icons && npm ci --no-audit --no-fund && npm run build
+ui-test: ui-icons ui-tokens-test
 	cd web/admin-ui && npm ci --no-audit --no-fund && npm test
-ui-build: ui-icons
+ui-build: ui-icons ui-tokens-test
 	cd web/admin-ui && OPENBASTION_SOURCE_REVISION=${OPENBASTION_SOURCE_REVISION:-$(GIT_SHA_FULL)} npm ci --no-audit --no-fund && OPENBASTION_SOURCE_REVISION=${OPENBASTION_SOURCE_REVISION:-$(GIT_SHA_FULL)} npm run build
 
 ## Les vulnérabilités connues (ADR-0052) : govulncheck, épinglé, sur chaque module du go.work
@@ -250,7 +253,7 @@ vuln: proto-gen
 		echo "govulncheck $$m"; $(GO) run $(GOVULNCHECK) -C $$m ./...; \
 	done
 	cd web/admin-ui && npm audit
-	cd web/openbastion-icons && npm audit
+	cd web/packages/icons && npm audit
 
 ## Vérifie les déclarations de licence et la conservation des notices tierces.
 license-check:

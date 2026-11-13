@@ -27,6 +27,7 @@ export default defineConfig({
     ),
   },
   plugins: [react()],
+  resolve: { dedupe: ["react", "react-dom"], preserveSymlinks: true },
   server: preview
     ? {
         host: "0.0.0.0",

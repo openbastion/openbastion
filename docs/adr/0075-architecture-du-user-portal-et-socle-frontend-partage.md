@@ -8,7 +8,7 @@ OpenBastion possède une application d'administration `web/admin-ui/`, dont la p
 
 Ces deux interfaces partagent des besoins transverses (tokens visuels, primitives accessibles, icônes, client API et types de contrats), mais ne partagent ni les mêmes parcours, ni les mêmes responsabilités métier. Faire du portail une section de l'Admin UI mélangerait les usages opérateur et self-service et compliquerait leur évolution indépendante.
 
-La structure de référence du dépôt est `docs/development/repository-structure.md`, en particulier sa section 5. La présente ADR formalise l'arborescence frontend détaillée retenue : applications indépendantes sous `web/`, package d'icônes dédié et packages frontend partagés. Elle ne crée pas de nouvelle capacité backend et ne prétend pas que les parcours décrits sont déjà tous exposés par l'API.
+La structure de référence du dépôt est `docs/development/repository-structure.md`, en particulier sa section 5. La présente ADR formalise l'arborescence frontend détaillée retenue : applications indépendantes sous `web/`, package d'icônes au sein des packages frontend partagés. Elle ne crée pas de nouvelle capacité backend et ne prétend pas que les parcours décrits sont déjà tous exposés par l'API.
 
 L'ADR-0036 reste applicable : les interfaces web communiquent exclusivement avec l'API publique de l'API Gateway, sont servies sous la même origine et ne stockent pas de jeton d'accès dans un stockage persistant du navigateur. Les services, bases de données, bus, moteurs de recherche et stockages objets ne sont jamais accessibles directement depuis le navigateur.
 
@@ -63,11 +63,10 @@ web/
 │       ├── types/
 │       └── test/
 │
-├── openbastion-icons/
-│   ├── src/
-│   └── ...
-│
 ├── packages/
+│   ├── icons/
+│   │   ├── src/
+│   │   └── ...
 │   ├── ui/
 │   ├── design-tokens/
 │   ├── api-client/
@@ -83,9 +82,9 @@ Le manifeste racine `web/package.json` coordonne les outils et scripts communs a
 
 | Emplacement | Responsabilité | Interdictions |
 |---|---|---|
-| `web/openbastion-icons/` | Icônes de marque et icônes fonctionnelles OpenBastion, exports React/SVG et ressources associées | Pas de logique métier ni d'accès réseau |
-| `web/packages/design-tokens/` | Tokens de couleurs sémantiques, typographie, espacements, rayons, focus, thèmes clair/sombre | Pas de composants métier ni de décision d'autorisation |
-| `web/packages/ui/` | Primitives visuelles et interactives génériques, accessibles et testées | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège |
+| `web/packages/icons/` | Icônes de marque et icônes fonctionnelles OpenBastion, exports React/SVG et ressources associées | Pas de logique métier ni d'accès réseau |
+| `web/packages/design-tokens/` | Source de vérité de la charte OpenBastion Infrastructure : palettes primitives et sémantiques, typographie, espacements, densité, rayons, bordures, élévation, focus, mouvement, points de rupture et thèmes clair/sombre | Pas de composants, de préférences utilisateur, de données métier ni de décision d'autorisation |
+| `web/packages/ui/` | Bibliothèque React/TypeScript de composants visuels et interactifs partagés (API publiques typées, états, variantes, styles et tests) construits sur les tokens ; consommée par Admin UI et User Portal | Pas de connaissance des endpoints, des ressources PAM ou des règles de privilège ; pas de copie de composants propriétaires tiers |
 | `web/packages/api-client/` | Transport HTTP vers l'API publique Gateway, gestion cohérente des erreurs et des identifiants de corrélation | Aucun appel direct aux microservices ; aucun stockage persistant de jeton ou de secret |
 | `web/packages/contracts/` | Types et schémas frontend dérivés des contrats API publics versionnés | Pas de modèles internes copiés depuis les bases ou les domaines privés des services |
 | `web/packages/utilities/` | Fonctions frontend génériques sans dépendance métier | Pas de logique d'autorisation faisant autorité |
@@ -93,6 +92,30 @@ Le manifeste racine `web/package.json` coordonne les outils et scripts communs a
 Les applications consomment les packages partagés par leurs interfaces publiques. Les packages partagés ne dépendent jamais d'une application. Les dépendances entre packages doivent rester orientées vers les couches les plus génériques ; les cycles sont interdits.
 
 Le package `contracts` ne devient pas une seconde source de vérité : OpenAPI et les contrats publics restent la référence backend. Les types TypeScript sont générés ou synchronisés depuis ces contrats selon un processus vérifiable. Les messages gRPC internes et les modèles de persistance ne sont pas exposés au navigateur.
+
+### 3.1 Charte graphique partagée : OpenBastion Infrastructure
+
+Les deux applications adoptent une même identité visuelle nommée **OpenBastion Infrastructure**. Pour l'Admin UI, cette charte formalise la direction prise à l'ADR-0073 §3.1 ; la présente ADR l'étend au User Portal sans fusionner les parcours métier. La direction recherchée reprend les qualités fonctionnelles d'une console d'infrastructure moderne, notamment celles observées dans UniFi Network : navigation latérale persistante, hiérarchie de page nette, densité d'information maîtrisée, tableaux lisibles, filtres explicites, états opérationnels visibles et interactions prévisibles. Il s'agit d'une inspiration ergonomique, pas d'une reproduction : aucun logo, pictogramme, code, capture, texte propriétaire, illustration ni agencement distinctif de Ubiquiti/UniFi n'est repris.
+
+La charte s'applique aux deux applications sans fusionner leurs responsabilités :
+
+- l'Admin UI reste une console d'exploitation, d'administration, de gouvernance et d'audit ;
+- le User Portal reste un espace de self-service centré sur les ressources, les demandes, les sessions et l'activité personnelle.
+
+Leur navigation métier, leurs autorisations, leurs états et leurs données restent indépendants. Seuls l'identité visuelle, les tokens, les primitives réellement génériques et les règles d'accessibilité sont partagés.
+
+Principes visuels obligatoires :
+
+1. **Structure avant décoration** : barre latérale sombre structurée, en-tête clair compact, titre et contexte de page, contenu principal clairement délimité ; les cartes ne remplacent pas les tableaux lorsque l'utilisateur doit comparer ou parcourir des lignes.
+2. **Densité lisible** : priorité aux informations utiles, colonnes alignées, nombres tabulaires, filtres visibles, pagination conforme aux contrats réels ; la compacité ne réduit ni la lisibilité ni les cibles tactiles.
+3. **Surfaces sobres** : fonds neutres, séparateurs explicites, ombres rares et faibles, rayons cohérents ; pas de dégradés décoratifs, de grandes cartes uniformes ni d'animation permanente.
+4. **Sémantique explicite** : succès, avertissement, danger, sélection, indisponibilité et focus sont identifiables par leur libellé ou pictogramme en plus de leur couleur.
+5. **Thèmes équivalents** : clair et sombre exposent les mêmes actions, informations, niveaux de priorité et états. Le thème système est utilisé par défaut ; le choix explicite reste une préférence locale non sensible.
+6. **Accessibilité et adaptation** : navigation clavier, focus visible, zoom, réduction du mouvement, mode contraste forcé et fonctionnement à partir de 320 px ; les tableaux peuvent défiler dans leur conteneur sans imposer un débordement horizontal à toute la page.
+
+La palette normative, les rôles de tokens, les règles de typographie, d'espacement, de densité, de mouvement et le plan de migration sont définis dans [`../development/admin-ui-design-system.md`](../development/admin-ui-design-system.md). Les composants consomment exclusivement des tokens sémantiques ; les valeurs primitives ne sont jamais utilisées directement dans les composants. Les icônes restent issues de `web/packages/icons/` et héritent de `currentColor`.
+
+La cible d'accessibilité est WCAG 2.2 AA. Les ratios documentés dans la spécification portent uniquement sur les paires de couleurs explicitement mesurées ; ils ne constituent pas une déclaration de conformité de l'application. Les états, contrôles, bordures, focus, icônes, graphiques et composants composés doivent être vérifiés sur leurs surfaces effectivement rendues, dans les deux thèmes.
 
 ### 4. Responsabilités propres au User Portal
 
@@ -107,6 +130,14 @@ Les domaines fonctionnels du portail sont :
 - **profile** : préférences non sensibles et informations d'identité exposées par les API prévues.
 
 Les composants communs propres au portail résident dans `user-portal/src/components/`. Les composants spécifiques à une fonctionnalité restent dans son dossier `features/<domaine>/` tant qu'ils n'ont pas de réutilisation réelle. Un composant ne rejoint `packages/ui/` que s'il est indépendant du métier et utile à plusieurs applications.
+
+### Stratégie des composants React partagés
+
+- `@openbastion/ui` expose des composants React/TypeScript depuis `web/packages/ui/src/`, avec des contrats typés et des tests exécutés par le pipeline frontend. React est une peer dependency fournie par chaque application ; le package ne crée pas une seconde instance de React.
+- **Option C** : éléments HTML natifs et React pour les primitives simples (boutons, champs, cases à cocher, badges, alertes, cartes, séparateurs, skeletons) ; Radix UI est réservé aux interactions complexes qui exigent une gestion éprouvée du focus, du clavier, des portails et de l'état ARIA (dialogues, menus, popovers, accordions complexes). Chaque primitive Radix est enveloppée par une API OpenBastion et stylée avec les tokens ; aucune API Radix ne fuit dans les contrats publics du package.
+- Les composants ne contiennent ni accès réseau, ni client API, ni logique d'autorisation, ni connaissance du domaine PAM. Les applications gardent leurs libellés métier, leurs états de chargement liés aux API et leurs règles de présentation propres.
+- Le CSS commun reste dans `styles.css` et les styles propres à chaque application restent dans l'application. Les thèmes clair et sombre sont pilotés exclusivement par `@openbastion/design-tokens`.
+- L'implémentation est incrémentale : fondations natives, formulaires, overlays/navigation complexes, puis composants avancés et notifications. Les consommateurs valident le package au moyen de tests de contrat partagés.
 
 ### 5. Parcours et séparation des rôles
 
