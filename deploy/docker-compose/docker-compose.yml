@@ -302,16 +302,16 @@ services:
       VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
       RDP_VNC_PROXY_PUBLIC_ENDPOINT: rdp-vnc-proxy:8090
       TARGET_TLS_ROOTS_FILE: /run/secrets/screen-target-ca
-      # RDP is opened by name, here and at the Broker (ADR-0088): off unless both say true.
-      RDP_ENABLED: ${RDP_ENABLED:-false}
+      # RDP, here and at the Broker (ADR-0088): on by default since 13 November 2026; "false" at either shuts it.
+      RDP_ENABLED: ${RDP_ENABLED:-true}
       # The pointer drawn into each frame, shown and recorded alike (ADR-0091); "false" to leave it out.
       SCREEN_DRAW_POINTER: ${SCREEN_DRAW_POINTER:-true}
       # Partial frames anchored on key frames (ADR-0092), RDP and VNC: "false" to send whole frames.
       SCREEN_PARTIAL_FRAMES: ${SCREEN_PARTIAL_FRAMES:-true}
       # The target's desktop resized to the operator's window (ADR-0095), RDP: "false" to keep it fixed.
       SCREEN_RESIZE: ${SCREEN_RESIZE:-true}
-      # The clipboard of an RDP session, text only, each direction by its right (ADR-0096): "true" to open it.
-      SCREEN_CLIPBOARD: ${SCREEN_CLIPBOARD:-false}
+      # The clipboard of an RDP session, text only, each direction by its right (ADR-0096): "false" to keep it shut.
+      SCREEN_CLIPBOARD: ${SCREEN_CLIPBOARD:-true}
     secrets: [screen-target-ca]
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}
@@ -339,7 +339,7 @@ services:
       AUDIT_URL: https://audit-service:8082
       SSH_PROXY_URL: https://ssh-proxy:8085
       RDP_VNC_PROXY_URL: https://rdp-vnc-proxy:8090
-      RDP_ENABLED: ${RDP_ENABLED:-false}
+      RDP_ENABLED: ${RDP_ENABLED:-true}
       DATABASE_URL: postgres://session_broker:${PG_PASSWORD_SESSION_BROKER}@postgres:5432/session_broker?sslmode=disable
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}

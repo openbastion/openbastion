@@ -1,6 +1,6 @@
 # ADR-0071 — Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté
 
-**Statut** `Accepté`, **mis en œuvre** (VNC et RDP, ce dernier derrière `RDP_ENABLED` éteint par défaut, ADR-0088 ; validé contre cinq cibles Windows en CI ; écarts restants listés dans « État au 13 novembre 2026 ») · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
+**Statut** `Accepté`, **mis en œuvre** (VNC et RDP, ce dernier ouvert par défaut depuis le 13 novembre 2026, ADR-0088 ; validé contre cinq cibles Windows en CI ; écarts restants listés dans « État au 13 novembre 2026 ») · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
 
 Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC n'est écrit tant que cet ADR n'est pas accepté.
 
@@ -11,7 +11,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 **Tenu.**
 - **VNC est livré.** Il est éprouvé de bout en bout contre TigerVNC (incrément 67).
 - **RDP ouvre une session complète contre Windows**, sur cinq cibles en CI (`windows-rdp.yml`) : Windows Server 2019 et 2022, 16 et 32 bpp, session console, clavier fr-FR. La validation passe par NLA, les refus du §3, l'ouverture de session par les identifiants délégués, l'écran fidèle, la saisie QWERTY et AZERTY, la reprise de session et les fragments Fast-Path. L'enregistrement est relu à l'octet près.
-- **Exposition.** RDP est ouvert aux opérateurs par la route écran derrière `RDP_ENABLED` (ADR-0088), éteint par défaut. Le texte est lisible par bitmaps, sans cache de glyphes (ADR-0089). Le client décode 15 et 16 bpp (ADR-0086).
+- **Exposition.** RDP est ouvert aux opérateurs par la route écran, par défaut depuis le 13 novembre 2026 (`RDP_ENABLED`, ADR-0088). Le texte est lisible par bitmaps, sans cache de glyphes (ADR-0089). Le client décode 15 et 16 bpp (ADR-0086).
 - **Ajouts éprouvés dans un navigateur sans interface contre les cinq cibles** :
   - le pointeur dessiné dans l'image (ADR-0091) ;
   - les images partielles (ADR-0092) ;
@@ -20,7 +20,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
   - le presse-papiers texte (ADR-0096).
 - **Mesuré** (ADR-0090, lot A) : le débit, l'encodage, l'acquittement jusqu'à 50 sessions, avec et sans S3, et la mémoire.
 
-**Amendé par la suite.** Le §14 refusait par principe le presse-papiers et tout canal virtuel. ADR-0095 ouvre `drdynvc` et le seul contrôle d'affichage, sur une liste fermée. ADR-0096 ouvre `cliprdr` pour le texte seul, chaque sens selon son droit, enregistré et audité, derrière `SCREEN_CLIPBOARD`, éteint par défaut. Le reste du §14 tient.
+**Amendé par la suite.** Le §14 refusait par principe le presse-papiers et tout canal virtuel. ADR-0095 ouvre `drdynvc` et le seul contrôle d'affichage, sur une liste fermée. ADR-0096 ouvre `cliprdr` pour le texte seul, chaque sens selon son droit, enregistré et audité, derrière `SCREEN_CLIPBOARD`, allumé par défaut depuis le 13 novembre 2026, chaque sens refusé tant qu'une politique ne l'accorde pas. Le reste du §14 tient.
 
 **Écarts restants.**
 | Écart | État |
@@ -38,7 +38,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 | Exploitation | Budget d'entrée compté par instance du proxy. ~~`up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran~~ : fait le 13 novembre 2026, par leur sous-commande `probe` (ADR-0072). S3 sous TLS mesuré le 13 novembre 2026 sur le même hôte (ADR-0090, lot A : 0 à 50 ms de plus en médiane pour une image clé, queue jusqu'à 1,5 s à 10 sessions) ; restent le mTLS du compose et un S3 distant, à mesurer sur la cible de déploiement. |
 | Accessibilité | L'écran est illisible au lecteur d'écran. |
 
-**Décisions du propriétaire en attente** : `RDP_ENABLED` par défaut (ADR-0088), `SCREEN_CLIPBOARD` par défaut (ADR-0096 §7), le statut d'ADR-0090.
+**Décisions du propriétaire** : `RDP_ENABLED` et `SCREEN_CLIPBOARD` allumés par défaut le 13 novembre 2026 (ADR-0088, ADR-0096 §7). En attente : le statut d'ADR-0090 et les trois ADR proposés (licence RDS, Kerberos, RDPGFX).
 
 ## Validation contre une cible Windows réelle — historique, 6 au 8 novembre 2026
 
@@ -364,7 +364,7 @@ sequenceDiagram
 | `SCREEN_ALLOWED_ORIGINS` | vide (même origine) | origines WebSocket acceptées |
 | `RDP_CONNECT_TIMEOUT_SECONDS` | `15` | poignée de main cible (CredSSP compris) |
 | `VNC_CONNECT_TIMEOUT_SECONDS` | `10` | poignée de main cible |
-| `RDP_ENABLED` | `false` | Broker et proxy (ADR-0088, qui remplace `RDP_ENGINE_ENABLED`) : ouvre `rdp` aux opérateurs ; seuls `true` et `false` sont lus, toute autre valeur est fatale |
+| `RDP_ENABLED` | `true` depuis le 13 novembre 2026 | Broker et proxy (ADR-0088, qui remplace `RDP_ENGINE_ENABLED`) : ouvre `rdp` aux opérateurs ; seuls `true` et `false` sont lus, toute autre valeur est fatale |
 
 Toute valeur absente, hors bornes ou inconnue est fatale au démarrage (`settings/security.yaml`, règle « défaut strict »).
 

@@ -14,7 +14,7 @@ La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonctio
   - clavier QWERTY et AZERTY vérifiés, reprise de session ;
   - enregistrement rejouable à l'octet, `recording_lost` au-delà de 4 Mio.
 
-  Il est ouvert aux opérateurs **derrière `RDP_ENABLED`, éteint par défaut** ([ADR-0088](adr/0088-rdp-ouvert-aux-operateurs-par-la-route-ecran-derriere-un-interrupteur.md)). Le texte est rendu par bitmaps, sans cache de glyphes ([ADR-0089](adr/0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md)). Ni ordres graphiques annoncés, ni canaux virtuels, ni Kerberos, ni RD Gateway : c'est le plan v0.0.2 ([ADR-0090](adr/0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md), proposé).
+  Il est ouvert aux opérateurs **par défaut depuis le 13 novembre 2026** (`RDP_ENABLED=false` le ferme) ([ADR-0088](adr/0088-rdp-ouvert-aux-operateurs-par-la-route-ecran-derriere-un-interrupteur.md)). Le texte est rendu par bitmaps, sans cache de glyphes ([ADR-0089](adr/0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md)). Ni ordres graphiques annoncés, ni canaux virtuels, ni Kerberos, ni RD Gateway : c'est le plan v0.0.2 ([ADR-0090](adr/0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md), proposé).
 - **Veille externe** : ADR-0081 propose une veille hebdomadaire de gopher-rdp, gordp et Casvisor afin d'identifier les évolutions utiles sans adopter automatiquement leur code ou leurs choix de sécurité.
 
 La source de vérité opérationnelle pour les capacités réellement présentes, leurs tests et leurs limites est [`docs/security/known-limitations.md`](security/known-limitations.md). Toute activation runtime ou preuve d'interopérabilité doit être reflétée ici et dans le README.
@@ -106,7 +106,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 | Authorization Service | ✅ (RBAC) | ABAC | |
 | Session Broker | ✅ | | |
 | SSH/SFTP/SCP Proxy | ✅ | | |
-| RDP/VNC Proxy | | ✅ VNC E2E ; RDP derrière `RDP_ENABLED`, éteint par défaut (ADR-0088) | RDP : glyphes, ordres, canaux virtuels, protocoles (ADR-0090) |
+| RDP/VNC Proxy | | ✅ VNC E2E ; RDP ouvert par défaut depuis le 13 novembre 2026 (`RDP_ENABLED`, ADR-0088) | RDP : glyphes, ordres, canaux virtuels, protocoles (ADR-0090) |
 | Database Proxy | | ✅ | |
 | Kubernetes Proxy | | ✅ | |
 | Docker Proxy | | | ✅ |

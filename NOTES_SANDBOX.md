@@ -4393,3 +4393,10 @@ Correctif : redemander la même taille après 5 s, et ne rien demander quand le 
 
 **Non mesuré** : le mTLS du compose, et un S3 distant.
 
+## 2026-11-13 — `RDP_ENABLED` et `SCREEN_CLIPBOARD` allumés par défaut
+
+Décision du propriétaire, le 13 novembre 2026 : « SCREEN_CLIPBOARD par défaut, RDP_ENABLED par défaut », une fois RDP et le presse-papiers prouvés contre les cinq Windows de la CI.
+- **Code** : le Broker et le proxy écran lisent leurs interrupteurs par `switchFromEnv` (testé : absent vaut le défaut, `false` ferme, toute autre valeur arrête le service), avec le défaut à `true`. Le compose suit.
+- **Ce qui ne change pas** : le presse-papiers ne s'ouvre que dans les sens qu'une politique accorde, refusés par défaut ; `RDP_ENABLED=false` ou `SCREEN_CLIPBOARD=false` ferment comme avant.
+- **Non couvert par un test** : la valeur par défaut passée à `switchFromEnv` dans chaque `main`, vérifiée à la relecture ; les piles de test fixent ces variables explicitement.
+

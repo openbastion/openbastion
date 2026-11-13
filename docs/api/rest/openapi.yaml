@@ -878,7 +878,7 @@ paths:
         Ne retourne jamais de secret cible. SSH renvoie une adresse de proxy et un ticket à usage unique.
         VNC et RDP renvoient un chemin d'attachement WebSocket ; le ticket reste côté Gateway dans un cookie
         HttpOnly, SameSite=Strict et à usage unique, et n'est jamais exposé au navigateur (ADR-0071, ADR-0088).
-        RDP n'est ouvert que si l'installation a mis `RDP_ENABLED=true` au Broker et au proxy écran
+        RDP est ouvert par défaut (depuis le 13 novembre 2026) ; une installation qui met `RDP_ENABLED=false` au Broker ou au proxy écran le ferme
         (ADR-0088) : sinon `409`, avant qu'aucun scope Vault ne soit émis.
 
         Une session dont l'enregistrement n'est pas possible n'est pas
@@ -1742,7 +1742,7 @@ components:
         protocol:
           type: string
           enum: [ssh, vnc, rdp]
-          description: Must match the stored account protocol. An RDP session is connectable only where the installation set RDP_ENABLED=true at the Broker and at the screen proxy (ADR-0088); otherwise connect answers 409.
+          description: Must match the stored account protocol. An RDP session is connectable unless the installation set RDP_ENABLED=false at the Broker or at the screen proxy (ADR-0088; on by default since 13 November 2026); then connect answers 409.
         justification: { type: string, minLength: 10 }
         durationMinutes: { type: integer, default: 60, maximum: 480 }
         breakGlass:
