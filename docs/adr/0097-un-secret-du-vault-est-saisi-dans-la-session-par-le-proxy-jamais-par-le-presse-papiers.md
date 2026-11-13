@@ -1,6 +1,6 @@
-# ADR-0097 — Un secret du Vault est saisi dans la session par le proxy, et le copier-coller d'un mot de passe reste possible sans l'enregistrer
+# ADR-0097 — Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement
 
-**Statut** `Proposé` · 13 novembre 2026 · étude demandée par le propriétaire du projet le 13 novembre 2026, à l'acceptation d'ADR-0096 : « Pour éviter que les mots de passe se retrouvent enregistrés en clair, est-ce que nous ne pourrions pas intégrer un mécanisme de saisie automatique comme op-forward, avec la possibilité de continuer à copier/coller les mots de passe ». `Accepté` seulement avec son go, cité avec sa date.
+**Statut** `Proposé` · 13 novembre 2026 · étude demandée par le propriétaire du projet le 13 novembre 2026, à l'acceptation d'ADR-0096 : « Pour éviter que les mots de passe se retrouvent enregistrés en clair, est-ce que nous ne pourrions pas intégrer un mécanisme de saisie automatique comme op-forward, avec la possibilité de continuer à copier/coller les mots de passe ». `Accepté` seulement avec son go, cité avec sa date. Précisé le même jour : « Ce mécanisme de saisie automatique doit être valable pour tous les protocoles déjà supportés (ssh, vnc, rdp) et supporteraient à l'avenir ».
 
 ## Contexte
 
@@ -24,7 +24,7 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 - **L'enregistrement et l'audit gardent la référence** : « secret `<compte>` saisi à 14 h 32 ». Un auditeur sait donc exactement quoi a été saisi, sans lire la valeur. Lire la valeur passe par le Vault, qui a son propre audit.
 - **« Enregistrer ou refuser » tient**, par référence : rien d'inconnu n'entre dans la session.
 
-**B. Coller un mot de passe sans l'enregistrer.** Un bouton « Coller comme mot de passe », à côté du collage ordinaire d'ADR-0096. Le texte est livré à la cible. L'enregistrement et l'audit gardent sa taille et son empreinte SHA-256, pas son contenu.
+**B. Saisir un mot de passe fourni par l'opérateur, sans l'enregistrer.** Un bouton « Saisir un mot de passe ». Le texte est livré à la cible. L'enregistrement et l'audit gardent sa taille et son empreinte SHA-256, pas son contenu.
 - C'est le copier-coller que le propriétaire veut garder.
 - Le prix : pour ce texte-là, l'auditeur ne sait plus ce qui est entré. Il peut seulement reconnaître une valeur s'il l'a déjà, en comparant l'empreinte.
 - **Bornes**, pour qu'il reste un mot de passe et ne devienne pas un script soustrait à l'enregistrement : 128 caractères au plus, sur une seule ligne, sans tabulation. Un droit propre, refusé par défaut. Un événement d'audit à chaque usage.
@@ -36,41 +36,48 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 
 **D. Masquer après coup un mot de passe dans l'enregistrement**, en reconnaissant son allure. Écartée : une heuristique sur le contenu manque des secrets et en invente. L'heuristique SSH actuelle porte sur l'invite, pas sur le contenu, et elle reste.
 
-## Décision proposée : A, et B en complément borné
+## Décision proposée : A, et B en complément borné, un seul mécanisme pour tous les protocoles
 
-1. **Droits**, refusés par défaut, à l'Authorization Service :
+1. **Un mécanisme, pas un par protocole.** La saisie d'un secret est un service commun du proxy (`pkg/proxycore`) :
+   - les droits, la confirmation par le second facteur, le scope à usage unique, l'audit et la référence dans l'enregistrement sont les mêmes pour tous les protocoles ;
+   - chaque protocole ne fournit qu'une chose : **taper un texte dans sa session** (une interface `SecretTyper`). Le texte ne passe ni par le presse-papiers ni par l'enregistrement ; un secret du Vault (A) ne passe pas non plus par le navigateur, alors qu'un mot de passe fourni par l'opérateur (B) en vient, tapé dans un champ masqué ;
+   - **A et B empruntent le même chemin** : seule la source du texte change, le Vault pour A, l'opérateur pour B. « Coller comme mot de passe » est donc une saisie, pas un collage par le presse-papiers.
+2. **Chaque protocole, aujourd'hui** :
+   - **SSH** : le texte est écrit sur l'entrée de la session. L'enregistreur de commandes note la référence (`[secret <compte> saisi]` ou `[mot de passe collé : N caractères, empreinte …]`) à la place de la ligne.
+   - **VNC** : le texte est tapé par des événements clavier RFB en keysyms. Les keysyms Unicode (`0x01000000 + point de code`) couvrent tout caractère, quelle que soit la disposition de la cible ; le proxy les accepte déjà (`pkg/vnc`). Seul l'écran est enregistré.
+   - **RDP** : le texte est tapé par des événements clavier Unicode (`TS_UNICODE_KEYBOARD_EVENT`, MS-RDPBCGR 2.2.8.1.1.3.1.1.2). C'est le point 1 du lot E d'ADR-0090, à construire ici, et il lève pour la saisie la limite d'ADR-0088 (un caractère absent de la disposition de la cible). Le presse-papiers de la cible n'est pas utilisé : le secret y resterait, même un instant. Seul l'écran est enregistré.
+3. **Les protocoles futurs.** Un protocole ne rejoint le proxy (ADR propre) qu'en disant comment il tape un texte (`SecretTyper`), ou en déclarant explicitement qu'il ne le peut pas. Dans ce cas, le `HELLO` (écran) ou l'équivalent de son flux le dit, et l'Admin UI n'offre pas la saisie : jamais de repli silencieux sur le presse-papiers.
+4. **Droits**, refusés par défaut, à l'Authorization Service, les mêmes pour tous les protocoles :
    - `secret:inject:<compte>` : saisir le secret de ce compte du Vault dans une session ;
-   - `clipboard:secret-paste:<compte-cible>` : coller un mot de passe sans enregistrer son contenu, sur cette cible.
-2. **Saisie d'un secret du Vault (A)** :
-   - **Confirmation** : l'opérateur la donne par son second facteur, à chaque saisie, pas une fois par session. Sans second facteur enrôlé, la saisie est refusée.
-   - **Scope** : le Broker émet un scope à usage unique pour ce compte et cette session. Le proxy l'échange au Vault comme pour l'ouverture de session, et efface le secret de sa mémoire après la saisie.
-   - **En SSH**, le proxy écrit le secret sur l'entrée de la session, et l'enregistreur note la référence à la place de la ligne.
-   - **En RDP**, deux voies, à départager par l'essai contre Windows :
-     - (a) les frappes, comme l'opérateur les taperait (scancodes). Mais un caractère absent de la disposition de la cible ne passe pas (limite d'ADR-0088) ;
-     - (b) le presse-papiers de la cible (ADR-0096) : le proxy y pose le secret, envoie Ctrl+V, puis vide le presse-papiers. Ce transfert-là est enregistré par référence, pas par contenu.
-   - **Audit** : `session.secret_injected`, avec le compte du secret, la session et l'heure, jamais la valeur. Émis avant la saisie ; sans audit, pas de saisie.
-3. **Coller comme mot de passe (B)** :
-   - **Bornes** : 128 caractères, une seule ligne, sans tabulation.
-   - **Ce qui reste** : l'enregistrement garde `[mot de passe collé : N caractères, empreinte …]`, et l'audit `session.clipboard.secret` avec la taille et l'empreinte.
-   - **Sens unique** : de l'opérateur vers la cible seulement. Ce qui sort de la cible reste toujours enregistré en entier (ADR-0096) : c'est la voie d'une exfiltration.
-4. **Admin UI** : un bouton « Saisir un secret » (liste des comptes permis, confirmation par le second facteur), et, à côté du collage d'ADR-0096, « Coller comme mot de passe ».
-5. **Ce que cela ne protège pas, dit clairement** : si l'opérateur saisit un secret dans un champ **non masqué** (un éditeur de texte au lieu d'une invite de mot de passe), l'écran enregistré le montre. Le proxy ne voit pas le champ qui a le focus. L'Admin UI le rappelle à chaque saisie.
+   - `secret:paste:<compte-cible>` : saisir un mot de passe fourni par l'opérateur, sans enregistrer son contenu, dans une session sur cette cible.
+5. **Saisie d'un secret du Vault (A)** :
+   - l'opérateur la confirme par son second facteur, à chaque saisie, pas une fois par session ; sans second facteur enrôlé, la saisie est refusée ;
+   - le Broker émet un scope à usage unique pour ce compte et cette session ; le proxy l'échange au Vault comme à l'ouverture de session, tape le texte, puis l'efface de sa mémoire ;
+   - audit : `session.secret_injected` (le compte du secret, la session, le protocole, l'heure ; jamais la valeur), émis avant la saisie. Sans audit, pas de saisie.
+6. **Mot de passe fourni par l'opérateur (B)** :
+   - 128 caractères au plus, une seule ligne, sans tabulation : un mot de passe, pas un script ;
+   - l'enregistrement et l'audit (`session.secret_pasted`) gardent sa taille et son empreinte SHA-256, pas son contenu ;
+   - de l'opérateur vers la cible seulement. Ce qui sort de la cible reste toujours enregistré en entier (ADR-0096).
+7. **Contrat écran et terminal** : un message client → proxy « saisir », qui porte soit une référence de compte du Vault (A), soit le texte (B, borné). Pour SSH, le même message passe par le canal de l'Admin UI qui pilote la session, pas par le flux du terminal de l'opérateur.
+8. **Admin UI** : un bouton « Saisir un secret » (comptes permis, confirmation par le second facteur) et un bouton « Saisir un mot de passe » (un champ masqué, jamais lu depuis le presse-papiers sans geste), proposés seulement quand la session sait taper.
+9. **Ce que cela ne protège pas, dit clairement** : si l'opérateur saisit un secret dans un champ **non masqué** (un éditeur au lieu d'une invite de mot de passe), l'écran enregistré (RDP, VNC) ou la sortie enregistrée (SSH, si la cible répète ce qu'on tape) le montre. Le proxy ne voit pas où est le focus. L'Admin UI le rappelle à chaque saisie.
 
 ## Mise en œuvre envisagée
 
-1. **SSH d'abord**, où la saisie est la plus simple et l'enregistreur prêt : droit, confirmation par second facteur, scope à usage unique, saisie, référence dans l'enregistrement, audit. Tests, et contre une vraie cible.
-2. **RDP** : les deux voies (frappes, presse-papiers) éprouvées contre les cinq cibles Windows de la CI, puis une seule retenue.
-3. **Coller comme mot de passe** : sur le canal d'ADR-0096 une fois livré, avec ses bornes.
-4. **Admin UI**, et vérification dans le navigateur sans interface.
+1. **Le service commun** dans `pkg/proxycore` : `SecretTyper`, les droits, la confirmation, le scope, l'audit, la référence enregistrée. Tests avec une session factice.
+2. **La confirmation par le second facteur** à l'action (Authentication Service) : un jeton à usage unique, lié à la session et à l'action, de courte durée.
+3. **SSH**, puis **VNC** (keysyms Unicode), puis **RDP** (événements clavier Unicode) : chacun avec ses tests et contre une vraie cible (OpenSSH, TigerVNC, les cinq Windows de la CI).
+4. **Admin UI**, et vérification dans le navigateur sans interface pour chaque protocole.
 
 ## Conséquences
 
 - (+) Le mot de passe d'un compte du Vault n'est plus jamais lisible dans un rejeu : l'auditeur voit quel secret a servi et quand, pas sa valeur.
 - (+) L'approbation forte à chaque usage, comme le Touch ID d'op-forward.
 - (+) Le copier-coller d'un mot de passe reste possible, borné et audité.
-- (−) B affaiblit « enregistrer ou refuser » pour le texte que l'opérateur déclare mot de passe. Les bornes empêchent d'y faire passer un script, mais pas un autre secret court. C'est le droit `clipboard:secret-paste` qui l'ouvre ou le ferme.
+- (−) B affaiblit « enregistrer ou refuser » pour le texte que l'opérateur déclare mot de passe. Les bornes empêchent d'y faire passer un script, mais pas un autre secret court. C'est le droit `secret:paste` qui l'ouvre ou le ferme.
 - (−) Un secret saisi dans un champ non masqué reste visible à l'écran enregistré.
-- (−) En RDP, la saisie par frappes dépend de la disposition du clavier de la cible ; la voie du presse-papiers dépend d'ADR-0096.
+- (+) Un seul mécanisme pour SSH, VNC, RDP et les protocoles futurs : un protocole n'ajoute que sa façon de taper un texte.
+- (−) RDP demande les événements clavier Unicode, encore à construire (ADR-0090, lot E).
 - (−) Chaque saisie demande le second facteur : plus sûr, plus lent. Et c'est à construire : aujourd'hui, le second facteur n'est demandé qu'à la connexion (ADR-0062, ADR-0065), pas pour confirmer une action ; une confirmation par action, liée à la session et à usage unique, est un mécanisme nouveau.
 
 ## Alternatives envisagées
