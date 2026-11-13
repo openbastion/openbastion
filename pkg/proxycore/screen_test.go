@@ -1105,3 +1105,24 @@ func TestServeScreen_ResizesAreOutOfTheInputBudget(t *testing.T) {
 		t.Fatalf("inputs %+v, %v: want the first resize forwarded and the session going on", inputs, err)
 	}
 }
+
+// A target that refuses the account's credentials (ADR-0071 §12): the operator's END says
+// target_auth_failed, the audit names it for whoever keeps the Vault, and the credential is purged.
+func TestServeScreen_ATargetRefusingTheCredentialsIsSaidAndAudited(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	codec := &fakeScreenCodec{openErr: &ScreenFailure{Code: "target_auth_failed", Err: errors.New("NTSTATUS 0xC000006D")}}
+	sink := &fakeScreenSink{}
+	if err := l.ServeScreen(context.Background(), screenMeta(), codec, &fakeFrameRecorder{}, &fakeScreenGate{}, sink); err == nil {
+		t.Fatal("a refusal was hidden")
+	}
+	if !reflect.DeepEqual(audit.events, []string{"session.target_auth_failed", "session.terminate"}) {
+		t.Fatalf("audit events %v", audit.events)
+	}
+	if !codec.cred.Purged() {
+		t.Fatal("credential not purged")
+	}
+	if last := sink.messages[len(sink.messages)-1]; last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeTargetAuthFailed || last.Text != "target_auth_failed" {
+		t.Fatalf("END = %#v", last)
+	}
+}

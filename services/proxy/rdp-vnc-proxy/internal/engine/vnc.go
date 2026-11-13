@@ -54,10 +54,12 @@ func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxyc
 	return nil, &proxycore.ScreenFailure{Code: vncEndCode(err), Err: err}
 }
 
-// vncEndCode is what the operator is told (ADR-0071 §12). A target refusing the password has no
-// code of its own in that list: it stays target_unreachable, like every other cause not named.
+// vncEndCode is what the operator is told (ADR-0071 §12). A target refusing the password says
+// target_auth_failed; every other cause not named stays target_unreachable.
 func vncEndCode(err error) string {
 	switch {
+	case errors.Is(err, vnc.ErrAuthentication):
+		return "target_auth_failed"
 	case errors.Is(err, screenstream.ErrFrameTooLarge):
 		return "recording_lost"
 	case errors.Is(err, vnc.ErrPasswordTruncation):

@@ -265,3 +265,13 @@ func TestClampResize_KeepsWithinTheBoundsAndEven(t *testing.T) {
 		}
 	}
 }
+
+// The END codes are part of the v1 contract: their numbers never move, and the code added on
+// 13 November 2026 comes after the others.
+func TestEndCodesKeepTheirNumbers(t *testing.T) {
+	for code, want := range map[uint16]uint16{EndCodeSessionEnded: 0, EndCodeTargetUnreachable: 5, EndCodeRecordingLost: 12, EndCodeTicketInvalid: 13, EndCodeTargetAuthFailed: 14} {
+		if code != want {
+			t.Errorf("END code %d, want %d", code, want)
+		}
+	}
+}

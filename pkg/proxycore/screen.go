@@ -27,6 +27,13 @@ func (e *ScreenFailure) Error() string         { return "proxycore: screen failu
 func (e *ScreenFailure) Unwrap() error         { return e.Err }
 func (e *ScreenFailure) ScreenEndCode() string { return e.Code }
 
+// isTargetAuthFailed says the target refused the account's credentials: the Vault's secret for it is
+// wrong, expired or locked, which an administrator must know (ADR-0071 §12).
+func isTargetAuthFailed(err error) bool {
+	var coded interface{ ScreenEndCode() string }
+	return errors.As(err, &coded) && coded.ScreenEndCode() == "target_auth_failed"
+}
+
 // isTLSPinMismatch says the target did not present the certificate the Vault pinned for it: what
 // someone taking the target's place looks like. Nothing of the secret was sent (ADR-0071 §3).
 func isTLSPinMismatch(err error) bool {
@@ -385,6 +392,8 @@ func screenEndStatus(err error) (uint16, string) {
 			return screenstream.EndCodeSessionRevoked, "session_revoked"
 		case "target_unreachable":
 			return screenstream.EndCodeTargetUnreachable, "target_unreachable"
+		case "target_auth_failed":
+			return screenstream.EndCodeTargetAuthFailed, "target_auth_failed"
 		}
 	}
 	return screenstream.EndCodeTargetUnreachable, "target_unreachable"

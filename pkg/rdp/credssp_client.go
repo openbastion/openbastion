@@ -13,10 +13,35 @@ import (
 
 var ErrCredSSPClient = errors.New("rdp: CredSSP client negotiation failed")
 
+// ErrTargetCredentialsRefused says the target refused the account's credentials: what the Vault
+// holds for it is wrong, expired or locked (a status of credentialsRefused). Nothing else is.
+var ErrTargetCredentialsRefused = errors.New("rdp: the target refused the account's credentials")
+
+// credentialsRefused names the NTSTATUS codes by which Windows refuses an account's credentials
+// (MS-ERREF 2.3.1): a wrong name or password, an account disabled, locked out or expired, a
+// password expired or to be changed. A code outside them is not taken for one.
+func credentialsRefused(status uint32) bool {
+	switch status {
+	case 0xC000006D, // STATUS_LOGON_FAILURE
+		0xC000006A, // STATUS_WRONG_PASSWORD
+		0xC0000064, // STATUS_NO_SUCH_USER
+		0xC0000071, // STATUS_PASSWORD_EXPIRED
+		0xC0000072, // STATUS_ACCOUNT_DISABLED
+		0xC0000193, // STATUS_ACCOUNT_EXPIRED
+		0xC0000224, // STATUS_PASSWORD_MUST_CHANGE
+		0xC0000234: // STATUS_ACCOUNT_LOCKED_OUT
+		return true
+	}
+	return false
+}
+
 // credsspFailure is ErrCredSSPClient saying where it failed (ADR-0071, the Windows validation): a
 // step, and the server's NTSTATUS when its TSRequest carries one — never a value of the exchange.
 func credsspFailure(step string, serverCode *uint32) error {
 	if serverCode != nil {
+		if credentialsRefused(*serverCode) {
+			return fmt.Errorf("%w: %w (%s: the server answers NTSTATUS 0x%08X)", ErrCredSSPClient, ErrTargetCredentialsRefused, step, *serverCode)
+		}
 		return fmt.Errorf("%w (%s: the server answers NTSTATUS 0x%08X)", ErrCredSSPClient, step, *serverCode)
 	}
 	return fmt.Errorf("%w (%s)", ErrCredSSPClient, step)

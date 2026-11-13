@@ -151,6 +151,10 @@ func TestRDPWindows_CredSSP(t *testing.T) {
 			!strings.Contains(err.Error(), "NTSTATUS 0xC000006A") {
 			t.Fatalf("Windows did not return an authentication refusal status: %v", err)
 		}
+		// Told apart from every other failure: the operator reads target_auth_failed (ADR-0071 §12).
+		if !errors.Is(err, rdp.ErrTargetCredentialsRefused) {
+			t.Fatalf("a refusal of the credentials not taken for one: %v", err)
+		}
 		t.Logf("Windows refused the credentials: %v", err)
 	})
 	t.Run("an impostor's pin stops before any CredSSP byte", func(t *testing.T) {
