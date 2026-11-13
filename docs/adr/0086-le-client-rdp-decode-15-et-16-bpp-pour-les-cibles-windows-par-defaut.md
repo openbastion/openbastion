@@ -1,6 +1,6 @@
 # ADR-0086 — Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut
 
-**Statut** `Accepté, mise en œuvre en cours` · 2026-11-08 · numéroté 0083 sur sa branche, renuméroté 0086 à la fusion de `main`, où ADR-0083 à 0085 venaient d'être pris · go du propriétaire du projet le 2026-11-08 : « Option 1, décode le 15/16 bpp »
+**Statut** `Accepté`, **mis en œuvre** (prouvé contre Windows laissé par défaut au passage #43, puis sur les cinq cibles de la CI) · 2026-11-08 · numéroté 0083 sur sa branche, renuméroté 0086 à la fusion de `main`, où ADR-0083 à 0085 venaient d'être pris · go du propriétaire du projet le 2026-11-08 : « Option 1, décode le 15/16 bpp »
 
 **Contexte** — ADR-0071 valide le client RDP contre un vrai Windows Server 2022 (dockur/windows en CI, `.github/workflows/windows-rdp.yml`). Les passages #29 et #30 l'ont mesuré :
 
@@ -30,7 +30,7 @@ Invariants touchés : aucun. Le décodage est côté proxy, sur des données de 
 
 - (+) Une cible Windows laissée par défaut est servie sans réglage de l'opérateur, dans la limite du 16 bpp. Le chemin 32 bpp ne change pas.
 - (+) Mesuré : `bitmapCompressionFlag` à TRUE fait accepter le Confirm Active par Windows (passage #32 : refusé à FALSE, accepté à TRUE, seul changement). Le décodeur (`pkg/rdp/bitmap_interleaved.go`) a 24 vecteurs construits d'après la spécification, un par ordre RLE et par cas de longueur étendue, de première ligne et de pixel inséré entre deux fonds ; 18 tests d'attaque (course plus longue que le bitmap, entrée tronquée à chaque champ, ordre spécial ou blanc au-delà du bitmap, flux trop court, codes non définis) ; la conversion RGB555/RGB565 ; le non compressé de bas en haut aux lignes complétées ; l'en-tête `TS_CD_HEADER` ; la profondeur discordante, le rognage et le rectangle trop grand ; les ordres refusés hors 32 bpp. 17 mutations du décodeur et de l'analyse sont tuées (pixel inséré, borne avant écriture, ordre des bits, longueurs étendues, ×8 des images FG/BG, remplissage incomplet, paires du tramé, fin de première ligne, blanc à 15 bpp, lignes complétées, réplication du vert, sens des lignes, largeur impaire, profondeur, rectangle, en-tête). Le fuzzer `FuzzDecodeInterleavedRLE16` a tourné 60 s sans échec (1,2 million d'exécutions). Les tests qui supposaient 15 et 16 bpp refusés, et la compression à FALSE, ont été changés avec la décision.
-- (+) Reste à mesurer : la session réelle contre Windows par défaut en CI, l'écran qui change après saisie, et les captures jugées à l'œil.
+- (+) Mesuré depuis : au passage #43, la session réelle contre Windows par défaut, en 16 bpp, avec l'écran qui change après la saisie et des captures jugées fidèles à l'œil ; depuis, les cinq cibles de la CI le confirment à chaque passage.
 - (−) 16 bpp, c'est 65 536 couleurs : l'écran et l'enregistrement d'une telle cible perdent en fidélité, et un dégradé peut se voir en bandes. C'est le choix de la cible, que l'opérateur peut lever en autorisant 32 bpp.
 - (−) Une cible plafonnée à 24 bpp ou 8 bpp reste refusée.
 - (−) Le décodeur RLE est une nouvelle surface d'analyse de données non fiables. Les bornes et le fuzzing la contiennent, ils ne la suppriment pas.

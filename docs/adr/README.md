@@ -143,8 +143,8 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | Ordre | ID | Titre | Statut |
 |---|---|---|---|
 | 1 | [ADR-0069](0069-le-proxy-rdp-verifie-la-cible-et-refuse-les-sessions-non-enregistrees.md) | Le proxy RDP vérifie la cible et refuse les sessions non enregistrées | Accepté |
-| 2 | [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté, mise en œuvre en cours |
-| 3 | [ADR-0086](0086-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mise en œuvre en cours |
+| 2 | [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté, mis en œuvre |
+| 3 | [ADR-0086](0086-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mis en œuvre |
 | 4 | [ADR-0088](0088-rdp-ouvert-aux-operateurs-par-la-route-ecran-derriere-un-interrupteur.md) | RDP est ouvert aux opérateurs par la route écran de VNC, derrière un interrupteur éteint par défaut | Accepté, mise en œuvre en cours |
 | 5 | [ADR-0089](0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md) | Le texte RDP reste rendu par bitmaps : le cache de glyphes n'est pas implémenté tant qu'une mesure ne le demande pas | Accepté |
 | 6 | [ADR-0091](0091-le-pointeur-est-dessine-dans-l-image-enregistree.md) | Le pointeur est dessiné dans l'image, celle que l'opérateur voit et que l'auditeur rejoue | Accepté |
@@ -299,7 +299,7 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0068](0068-les-details-d-un-evenement-d-audit-sont-bornes-et-proteges-par-le-hash.md) | Les détails d'un événement d'audit sont bornés et protégés par le hash | Accepté | Chaîne d'audit |
 | [ADR-0069](0069-le-proxy-rdp-verifie-la-cible-et-refuse-les-sessions-non-enregistrees.md) | Le proxy RDP vérifie la cible et refuse les sessions non enregistrées | Accepté | Proxy écran RDP et VNC |
 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté | Enregistrement et relecture |
-| [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté, mise en œuvre en cours | Proxy écran RDP et VNC |
+| [ADR-0071](0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md) | Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté | Accepté, mis en œuvre | Proxy écran RDP et VNC |
 | [ADR-0072](0072-la-cli-cobra-et-une-version-homogene-pour-chaque-binaire.md) | Les exécutables OpenBastion adoptent Cobra et exposent une version de build homogène | Accepté | Fondations du code |
 | [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Accepté, mise en œuvre en cours | Interfaces et notifications |
 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté | Interfaces et notifications |
@@ -314,7 +314,7 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0083](0083-bibliotheque-ssh-openbastion-avec-politiques-capture-et-audit.md) | La bibliothèque SSH OpenBastion intègre politiques, capture et audit au cycle protocolaire | Proposé | Proxy SSH |
 | [ADR-0084](0084-bibliotheque-rdp-openbastion-moteur-protocolaire-instrumente.md) | La bibliothèque RDP OpenBastion sépare le moteur protocolaire des contrôles PAM | Proposé | Proxy écran RDP et VNC |
 | [ADR-0085](0085-bibliotheque-vnc-openbastion-moteur-rfb-instrumente.md) | La bibliothèque VNC OpenBastion sépare RFB des contrôles PAM et de l'enregistrement | Proposé | Proxy écran RDP et VNC |
-| [ADR-0086](0086-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mise en œuvre en cours | Proxy écran RDP et VNC |
+| [ADR-0086](0086-le-client-rdp-decode-15-et-16-bpp-pour-les-cibles-windows-par-defaut.md) | Le client RDP décode 15 et 16 bpp, pour les cibles Windows laissées par défaut | Accepté, mis en œuvre | Proxy écran RDP et VNC |
 | [ADR-0087](0087-contrats-transverses-des-bibliotheques-protocolaires-ssh-rdp-vnc.md) | Les bibliothèques SSH, RDP et VNC partagent des contrats PAM sans partager leurs moteurs protocolaires | Proposé | Proxy écran RDP et VNC |
 | [ADR-0088](0088-rdp-ouvert-aux-operateurs-par-la-route-ecran-derriere-un-interrupteur.md) | RDP est ouvert aux opérateurs par la route écran de VNC, derrière un interrupteur éteint par défaut | Accepté, mise en œuvre en cours | Proxy écran RDP et VNC |
 | [ADR-0089](0089-le-texte-rdp-reste-rendu-par-bitmaps-sans-cache-de-glyphes.md) | Le texte RDP reste rendu par bitmaps : le cache de glyphes n'est pas implémenté tant qu'une mesure ne le demande pas | Accepté | Proxy écran RDP et VNC |

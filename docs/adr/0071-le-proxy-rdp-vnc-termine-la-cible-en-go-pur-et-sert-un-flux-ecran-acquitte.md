@@ -1,10 +1,46 @@
 # ADR-0071 — Le proxy RDP/VNC termine la cible en Go pur et sert un flux écran acquitté
 
-**Statut** `Accepté`, **mise en œuvre en cours** (validation contre une cible Windows réelle à réaliser) · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
+**Statut** `Accepté`, **mis en œuvre** (VNC et RDP, ce dernier derrière `RDP_ENABLED` éteint par défaut, ADR-0088 ; validé contre cinq cibles Windows en CI ; écarts restants listés dans « État au 13 novembre 2026 ») · 2 novembre 2026 · amende ADR-0069 (règles 1, 2 et 6) ; la contrainte TLS de production est précisée au §3 selon l'autorisation explicite de développement seulement
 
 Le dépôt applique « concevoir avant de coder » : aucun code de proxy RDP/VNC n'est écrit tant que cet ADR n'est pas accepté.
 
-## Reste à valider : une cible Windows réelle — 6 novembre 2026
+## État au 13 novembre 2026
+
+Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, daté, et ne se lisent plus comme un état courant.
+
+**Tenu.**
+- **VNC est livré.** Il est éprouvé de bout en bout contre TigerVNC (incrément 67).
+- **RDP ouvre une session complète contre Windows**, sur cinq cibles en CI (`windows-rdp.yml`) : Windows Server 2019 et 2022, 16 et 32 bpp, session console, clavier fr-FR. La validation passe par NLA, les refus du §3, l'ouverture de session par les identifiants délégués, l'écran fidèle, la saisie QWERTY et AZERTY, la reprise de session et les fragments Fast-Path. L'enregistrement est relu à l'octet près.
+- **Exposition.** RDP est ouvert aux opérateurs par la route écran derrière `RDP_ENABLED` (ADR-0088), éteint par défaut. Le texte est lisible par bitmaps, sans cache de glyphes (ADR-0089). Le client décode 15 et 16 bpp (ADR-0086).
+- **Ajouts éprouvés dans un navigateur sans interface contre les cinq cibles** :
+  - le pointeur dessiné dans l'image (ADR-0091) ;
+  - les images partielles (ADR-0092) ;
+  - la relecture par plages (ADR-0093) ;
+  - les canaux virtuels et le redimensionnement (ADR-0095) ;
+  - le presse-papiers texte (ADR-0096).
+- **Mesuré** (ADR-0090, lot A) : le débit, l'encodage, l'acquittement jusqu'à 50 sessions, avec et sans S3, et la mémoire.
+
+**Amendé par la suite.** Le §14 refusait par principe le presse-papiers et tout canal virtuel. ADR-0095 ouvre `drdynvc` et le seul contrôle d'affichage, sur une liste fermée. ADR-0096 ouvre `cliprdr` pour le texte seul, chaque sens selon son droit, enregistré et audité, derrière `SCREEN_CLIPBOARD`, éteint par défaut. Le reste du §14 tient.
+
+**Écarts restants.**
+| Écart | État |
+|---|---|
+| Refus intermittent de Windows juste après CredSSP | Quatre occurrences depuis le 12 novembre, sur des cibles différentes ; relancé, le job passe. Cause non établie (`NOTES_SANDBOX.md`, 13 novembre). |
+| Réactivation (`Deactivate All`) | Mise en œuvre, éprouvée contre FreeRDP seulement ; jamais envoyée par Windows, aucun déclencheur connu. |
+| Mises à jour non graphiques | En partie : la liste reste fermée, et le reste est refusé. |
+| Licence RDS | Personal Terminal Server seulement. Ni émission, ni mise à niveau, ni Platform Challenge, ni certificats propriétaires anciens. |
+| Authentification | NTLM seulement. Kerberos, `mechListMIC`, carte à puce et Remote Guard sont refusés. |
+| Rendu | Ordres graphiques partiels, sans RDPGFX. Les lots B et C d'ADR-0090 (`Proposé`) ne sont pas justifiés par la mesure du lot A. |
+| Bornes | Fragment TPKT plafonné à 16 383 octets, Share Data à 65 535. Une image de plus de 4 Mio termine la session en `recording_lost`, sans découpage en tuiles. |
+| Clavier | La touche Windows seule n'ouvre pas le menu Démarrer (Ctrl+Échap l'ouvre) ; cause non établie. |
+| Refus | Un mot de passe refusé par la cible se dit `target_unreachable` : le §12 n'a pas de code pour ce cas. |
+| VNC | RealVNC refusé (RFB 5.0) ; ni redimensionnement, ni presse-papiers. |
+| Exploitation | Budget d'entrée compté par instance du proxy. `up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran. S3 distant ou sous TLS non mesuré. |
+| Accessibilité | L'écran est illisible au lecteur d'écran. |
+
+**Décisions du propriétaire en attente** : `RDP_ENABLED` par défaut (ADR-0088), `SCREEN_CLIPBOARD` par défaut (ADR-0096 §7), le statut d'ADR-0090.
+
+## Validation contre une cible Windows réelle — historique, 6 au 8 novembre 2026
 
 **État au 8 novembre 2026** (passages CI #13 à #43, détaillés plus bas ; ADR-0086 pour la profondeur) :
 
@@ -250,7 +286,7 @@ Avant le WebSocket, `connect` répond `409`/`503` selon ADR-0042. Après le WebS
 
 ### 14. Ce qui est refusé par principe
 
-RDP sans NLA, TLS seul ou sécurité standard ; VNC sans VeNCrypt/X.509 ; pin absent ou différent ; recorder indisponible ou en retard d'acquittement ; break-glass pour un écran ; presse-papiers, audio, lecteurs, imprimantes, cartes à puce, caméra, multi-moniteurs ; RemoteFX/EGFX ; client RDP/VNC externe ; image > 4 Mio ou > 16 777 216 px ; tout PDU, encodage ou ordre hors du sous-ensemble annoncé ; toute session non révocable (`proxycore.LiveSessions` absent).
+RDP sans NLA, TLS seul ou sécurité standard ; VNC sans VeNCrypt/X.509 ; pin absent ou différent ; recorder indisponible ou en retard d'acquittement ; break-glass pour un écran ; presse-papiers (amendé par ADR-0096 : le texte RDP, chaque sens selon son droit, enregistré et audité, derrière `SCREEN_CLIPBOARD`), audio, lecteurs, imprimantes, cartes à puce, caméra, multi-moniteurs ; RemoteFX/EGFX ; tout canal virtuel hors de la liste fermée d'ADR-0095 (`drdynvc` et le contrôle d'affichage) et d'ADR-0096 (`cliprdr`) ; client RDP/VNC externe ; image > 4 Mio ou > 16 777 216 px ; tout PDU, encodage ou ordre hors du sous-ensemble annoncé ; toute session non révocable (`proxycore.LiveSessions` absent).
 
 ## Architecture et contrats
 
@@ -404,7 +440,7 @@ Mesurer l'encodage PNG, l'intervalle de capture, la latence d'acquittement et la
 | Cookie d'attache rejoué | second upgrade avec le même cookie | refus, aucun second flux |
 | PDU hostile | fuzz + PDU de taille maximale + 1 | pas de panique, pas d'allocation non bornée, session fermée |
 | Entrée hors bornes / flood | coordonnées, boutons, type inconnu, rafale | session fermée ou événement coalescé, jamais d'effet hors trame |
-| Presse-papiers | tentative `ClientCutText`, canal `cliprdr` | aucun canal ouvert, aucun texte transmis |
+| Presse-papiers | tentative `ClientCutText`, canal `cliprdr` | VNC : aucun texte transmis. RDP (amendé par ADR-0096) : `cliprdr` n'est annoncé qu'avec `SCREEN_CLIPBOARD` et un droit ; chaque transfert est audité, enregistré et acquitté avant livraison, sinon refusé |
 | Divergence affichage/enregistrement | recorder et client factices comparent les octets | l'image affichée est exactement l'image acquittée |
 
 Chaque garantie est mesurée **rouge avant** sa garde (même branche, commit précédent) puis verte, et une mutation qui retire la garde doit tuer le test. Les cibles réelles sont optionnelles (`OPENBASTION_RDP_TARGET`, `OPENBASTION_VNC_TARGET`) et ne remplacent pas les serveurs factices : elles prouvent l'interopérabilité, pas les refus.
