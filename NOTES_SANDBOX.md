@@ -4400,6 +4400,14 @@ Décision du propriétaire, le 13 novembre 2026 : « SCREEN_CLIPBOARD par défau
 - **Ce qui ne change pas** : le presse-papiers ne s'ouvre que dans les sens qu'une politique accorde, refusés par défaut ; `RDP_ENABLED=false` ou `SCREEN_CLIPBOARD=false` ferment comme avant.
 - **Non couvert par un test** : la valeur par défaut passée à `switchFromEnv` dans chaque `main`, vérifiée à la relecture ; les piles de test fixent ces variables explicitement.
 
+## 2026-11-13 — Admin UI : l'écran distant ne piège plus le clavier (WCAG 2.1.2)
+
+L'écran prenait toutes les touches, Tab compris (`preventDefault`) : une personne au clavier seul n'en sortait plus. Désormais :
+- **Sortie** : Ctrl+Alt+Maj+Échap rend le clavier à la page, sur le premier bouton de l'écran. Échap n'est pas envoyé ; la perte du focus relâche tout sur la cible, comme avant. Échap seul part à la cible, comme toute touche. Le choix de la combinaison est renversable.
+- **Présentation** : l'écran est une application (`role="application"`, « écran distant »), décrite par l'aide visible : comment saisir, comment sortir, et que le texte de la cible se lit par le panneau Presse-papiers.
+
+Vérifié : 3 tests Vitest, 2 mutations tuées. **Reste** : l'image elle-même est illisible à un lecteur d'écran ; aucune reconnaissance de texte n'est prévue.
+
 ## 2026-11-13 — ADR-0071 §12 : `target_auth_failed`, la cible a refusé les identifiants
 
 Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le code END 14, `target_auth_failed`, après les autres (leurs numéros sont figés par un test).

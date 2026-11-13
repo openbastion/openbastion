@@ -125,7 +125,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
     });
     await signIn(api);
     fireEvent.keyDown(document, { key: "k", ctrlKey: true });
-    const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
+    const query = await screen.findByRole("combobox", { name: "Rechercher une section ou une session" }); // the palette opens after a render
     expect(document.activeElement).toBe(query);
     fireEvent.change(query, { target: { value: "sess_42" } });
     fireEvent.keyDown(query, { key: "Enter" });
@@ -143,7 +143,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
     });
     await signIn(api);
     fireEvent.keyDown(document, { key: "k", metaKey: true });
-    const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
+    const query = await screen.findByRole("combobox", { name: "Rechercher une section ou une session" }); // the palette opens after a render
     fireEvent.change(query, { target: { value: "private-session" } });
     fireEvent.keyDown(query, { key: "Enter" });
     expect((await screen.findByRole("alert")).textContent).toContain("403 — forbidden");
@@ -159,7 +159,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
     await signIn(api);
     const trigger = screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" });
     fireEvent.click(trigger);
-    const query = screen.getByRole("combobox", { name: "Rechercher une section ou une session" });
+    const query = await screen.findByRole("combobox", { name: "Rechercher une section ou une session" }); // the palette opens after a render
     fireEvent.change(query, { target: { value: "politiques" } });
     expect(screen.getByRole("option", { name: /Politiques/ })).toBeTruthy();
     expect(screen.queryByRole("option", { name: /Comptes privilégiés/ })).toBeNull();
