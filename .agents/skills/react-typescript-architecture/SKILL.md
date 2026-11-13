@@ -11,9 +11,10 @@ Règles : `rules/frontend.md`. Décision : ADR-0036.
 
 ```
 web/admin-ui/src/
-  app/        App.tsx (routes, navigation), main.tsx (UNE instance d'Api), styles.css (variables CSS)
-  features/   un dossier par écran : accounts/, sessions/, policies/, audit/, login/
-  shared/     api.ts (client et types de l'API publique), session.tsx (contexte connecté), Notice.tsx
+  app/        App.tsx (routes, navigation), AppHeader.tsx (en-tête et sections), main.tsx (UNE instance d'Api), styles.css (variables CSS)
+  features/   un dossier par écran : accounts/, sessions/, policies/, audit/, login/ — le conteneur de l'écran et ses composants
+  shared/     api.ts (client, types et chemins de l'API publique), session.tsx (contexte connecté), Notice.tsx,
+              ui/ (AdminPage, Pager, FormCard : la présentation partagée des écrans)
   test-helpers.ts   fakeApi, fakeToken
 ```
 
@@ -29,3 +30,8 @@ web/admin-ui/src/
 - Recréer `Api` dans un rendu (valeur par défaut d'un paramètre de composant) : le jeton se perd — défaut réel déjà corrigé (`main.tsx`).
 - Stocker le jeton ailleurs qu'en mémoire ; ajouter une dépendance d'exécution sans demander.
 - `dangerouslySetInnerHTML`, `eval`, styles en ligne qui exigeraient d'assouplir la CSP.
+
+
+## Composants partagés
+
+Les composants génériques réutilisés par plusieurs applications vivent dans `web/packages/ui/src/` et sont exportés par `@openbastion/ui`. Les applications conservent leurs composants métier et consomment les contrats publics du package ; aucun import direct depuis `packages/ui/src/components/*` n'est autorisé. React est une peer dependency fournie par l'application. Utiliser les éléments natifs pour les primitives simples et encapsuler Radix UI pour les interactions complexes.

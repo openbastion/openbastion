@@ -1,0 +1,27 @@
+import { forwardRef, type HTMLAttributes, type TableHTMLAttributes, type ThHTMLAttributes } from "react";
+import { cn } from "../lib/cn";
+
+export type TableProps = TableHTMLAttributes<HTMLTableElement> & { containerClassName?: string };
+export const Table = forwardRef<HTMLTableElement, TableProps>(function Table({ className, containerClassName, ...props }, ref) { return <div className={cn("ob-table-container", containerClassName)}><table {...props} ref={ref} className={cn("ob-table", className)} /></div>; });
+Table.displayName = "Table";
+export type TableHeaderProps = HTMLAttributes<HTMLTableSectionElement>;
+export const TableHeader = forwardRef<HTMLTableSectionElement, TableHeaderProps>(function TableHeader({ className, ...props }, ref) { return <thead {...props} ref={ref} className={cn("ob-table-header", className)} />; });
+TableHeader.displayName = "TableHeader";
+export type TableBodyProps = HTMLAttributes<HTMLTableSectionElement>;
+export const TableBody = forwardRef<HTMLTableSectionElement, TableBodyProps>(function TableBody({ className, ...props }, ref) { return <tbody {...props} ref={ref} className={cn("ob-table-body", className)} />; });
+TableBody.displayName = "TableBody";
+export type TableFooterProps = HTMLAttributes<HTMLTableSectionElement>;
+export const TableFooter = forwardRef<HTMLTableSectionElement, TableFooterProps>(function TableFooter({ className, ...props }, ref) { return <tfoot {...props} ref={ref} className={cn("ob-table-footer", className)} />; });
+TableFooter.displayName = "TableFooter";
+export type TableRowProps = HTMLAttributes<HTMLTableRowElement>;
+export const TableRow = forwardRef<HTMLTableRowElement, TableRowProps>(function TableRow({ className, ...props }, ref) { return <tr {...props} ref={ref} className={cn("ob-table-row", className)} />; });
+TableRow.displayName = "TableRow";
+export type TableHeadProps = ThHTMLAttributes<HTMLTableCellElement>;
+export const TableHead = forwardRef<HTMLTableCellElement, TableHeadProps>(function TableHead({ className, ...props }, ref) { return <th {...props} ref={ref} scope={props.scope ?? "col"} className={cn("ob-table-head", className)} />; });
+TableHead.displayName = "TableHead";
+export type TableCellProps = HTMLAttributes<HTMLTableCellElement>;
+export const TableCell = forwardRef<HTMLTableCellElement, TableCellProps>(function TableCell({ className, ...props }, ref) { return <td {...props} ref={ref} className={cn("ob-table-cell", className)} />; });
+TableCell.displayName = "TableCell";
+export type TableCaptionProps = HTMLAttributes<HTMLTableCaptionElement>;
+export const TableCaption = forwardRef<HTMLTableCaptionElement, TableCaptionProps>(function TableCaption({ className, ...props }, ref) { return <caption {...props} ref={ref} className={cn("ob-table-caption", className)} />; });
+TableCaption.displayName = "TableCaption";

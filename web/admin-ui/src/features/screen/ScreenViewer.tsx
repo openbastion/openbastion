@@ -1,6 +1,8 @@
 import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useRef, useState } from "react";
 import { SUBPROTOCOL, clampResize, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
+import { Button } from "../../shared/ui/Button";
+import { InlineNotice } from "../../shared/ui/InlineNotice";
 
 export type ScreenSocket = Pick<WebSocket, "send" | "close" | "readyState" | "binaryType" | "onopen" | "onmessage" | "onclose" | "onerror">;
 
@@ -27,7 +29,7 @@ export const RESIZE_DEBOUNCE_MS = 500;
 
 // The room for the screen: the width of its area, and the window's height less what stands with it.
 // Not the height below the area's place in the page: the screen sits below the session's form, and
-// the operator scrolls to it (CI of PR #157: 480 pixels high, the bounds' least, for a 1000-pixel
+// the operator scrolls to it (CI of pull request 157: 480 pixels high, the bounds' least, for a 1000-pixel
 // window).
 function measureArea(area: HTMLElement): { width: number; height: number } {
   return { width: area.clientWidth, height: window.innerHeight - SCREEN_CHROME };
@@ -306,19 +308,19 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
 
   return (
     <div className="screen" ref={area}>
-      <div className="form-actions">
-        <button type="button" onClick={onClose}>Fermer l'écran</button>
-        {phase.name === "live" && isRDP ? <button type="button" onClick={ctrlAltDel}>Ctrl+Alt+Suppr</button> : null}
-        {phase.name === "ended" ? <button type="button" className="primary" onClick={onReconnect}>Se reconnecter</button> : null}
+      <div className="ob-form-actions">
+        <Button onClick={onClose}>Fermer l'écran</Button>
+        {phase.name === "live" && isRDP ? <Button onClick={ctrlAltDel}>Ctrl+Alt+Suppr</Button> : null}
+        {phase.name === "ended" ? <Button variant="primary" onClick={onReconnect}>Se reconnecter</Button> : null}
       </div>
-      {phase.name === "connecting" ? <p className="notice ok" role="status">Connexion à la cible…</p> : null}
-      {phase.name === "live" && !hasFrame ? <p className="notice ok" role="status">Connecté. En attente de la première image enregistrée…</p> : null}
+      {phase.name === "connecting" ? <InlineNotice tone="info">Connexion à la cible…</InlineNotice> : null}
+      {phase.name === "live" && !hasFrame ? <InlineNotice tone="success">Connecté. En attente de la première image enregistrée…</InlineNotice> : null}
       {phase.name === "live" && hasFrame ? (
-        <p className="hint" role="status">
+        <p className="ob-hint" role="status">
           Session enregistrée{phase.expiresAt ? `, jusqu'à ${phase.expiresAt.toLocaleString("fr-FR")}` : ""}. Cliquez sur l'écran pour saisir. Le navigateur garde pour lui certains raccourcis (Alt+Tab, touche Windows).
         </p>
       ) : null}
-      {phase.name === "ended" ? <p className="notice error" role="alert">{phase.message}</p> : null}
+      {phase.name === "ended" ? <InlineNotice tone="danger">{phase.message}</InlineNotice> : null}
       <canvas
         ref={canvas}
         className={pointerDrawn ? "screen-canvas pointer-drawn" : "screen-canvas"}
