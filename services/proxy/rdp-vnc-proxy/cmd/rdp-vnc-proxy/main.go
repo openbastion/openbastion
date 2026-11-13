@@ -1,10 +1,11 @@
-// Command rdp-vnc-proxy runs the Go-native graphical proxy: VNC, and RDP when RDP_ENABLED says so
+// Command rdp-vnc-proxy runs the Go-native graphical proxy: VNC, and RDP unless RDP_ENABLED=false
 // (ADR-0071, ADR-0088).
 package main
 
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -106,18 +107,16 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_RESIZE must be true or false, got %q", v)
 	}
-	// The clipboard of an RDP session (ADR-0096): off unless said "true", the owner's to switch on
-	// by default; on, a session opens it only in the directions its rights allow, and every transfer
-	// is audited (session.clipboard) and recorded before it is delivered. Anything else stops the
-	// service.
-	clipboard := false
-	switch v := os.Getenv("SCREEN_CLIPBOARD"); v {
-	case "", "false":
-	case "true":
-		clipboard = true
+	// The clipboard of an RDP session (ADR-0096): on unless said "false" (the owner's decision,
+	// 13 November 2026, once five Windows targets were proven in a real browser). On, a session opens
+	// it only in the directions its rights allow, refused by default, and every transfer is audited
+	// (session.clipboard) and recorded before it is delivered. Anything else stops the service.
+	clipboard, err := switchFromEnv("SCREEN_CLIPBOARD", os.Getenv("SCREEN_CLIPBOARD"), true)
+	if err != nil {
+		log.Fatalf("rdp-vnc-proxy: %v", err)
+	}
+	if clipboard {
 		listener.Clipboard = audit
-	default:
-		log.Fatalf("rdp-vnc-proxy: SCREEN_CLIPBOARD must be true or false, got %q", v)
 	}
 	vncCodec := &engine.VNCCodec{
 		TLSRoots:      roots,
@@ -128,12 +127,15 @@ func runService() {
 	}
 	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
 	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)
-	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
-	// Off, the RDP codec is not built and establish-session refuses rdp.
+	// RDP (ADR-0088): on unless said "false" (the owner's decision, 13 November 2026); only "true"
+	// and "false", anything else stops the service. Off, the RDP codec is not built and
+	// establish-session refuses rdp.
 	rdpState := "RDP disabled"
-	switch v := os.Getenv("RDP_ENABLED"); v {
-	case "", "false":
-	case "true":
+	rdpEnabled, err := switchFromEnv("RDP_ENABLED", os.Getenv("RDP_ENABLED"), true)
+	if err != nil {
+		log.Fatalf("rdp-vnc-proxy: %v", err)
+	}
+	if rdpEnabled {
 		server.WithRDP(&engine.RDPCodec{
 			TLSRoots:    roots,
 			DialTimeout: time.Duration(boundedIntEnv("RDP_CONNECT_TIMEOUT_SECONDS", 15, 1, 120)) * time.Second,
@@ -145,8 +147,6 @@ func runService() {
 			Clipboard:     clipboard,
 		})
 		rdpState = "RDP enabled"
-	default:
-		log.Fatalf("rdp-vnc-proxy: RDP_ENABLED must be true or false, got %q", v)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -207,4 +207,18 @@ func main() {
 	if err := root.Execute(); err != nil {
 		log.Fatalf("rdp-vnc-proxy: %v", err)
 	}
+}
+
+// switchFromEnv reads an on/off setting: empty is def, "true" and "false" are themselves, and
+// anything else is an error that stops the service rather than guessing.
+func switchFromEnv(name, value string, def bool) (bool, error) {
+	switch value {
+	case "":
+		return def, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("%s must be true or false, got %q", name, value)
 }
