@@ -31,7 +31,8 @@ export interface DeltaRect {
 export type ScreenMessage =
   // pointerDrawn: the frames carry the target's pointer (ADR-0091), the page hides its own.
   // resizable: the session follows the size of the page's screen area (ADR-0095), which then sends it.
-  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; resizable: boolean; expiresAt: Date; sessionId: string }
+  // clipboardToTarget / clipboardFromTarget: the clipboard's directions the session allows (ADR-0096).
+  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; resizable: boolean; clipboardToTarget: boolean; clipboardFromTarget: boolean; expiresAt: Date; sessionId: string }
   | { type: "frame"; sequence: bigint; width: number; height: number; png: Uint8Array<ArrayBuffer> }
   // A partial frame (ADR-0092): its rectangles replace pixels of the frame of the sequence before.
   | { type: "delta"; sequence: bigint; width: number; height: number; rects: DeltaRect[] }
@@ -47,6 +48,9 @@ function refuse(what: string): never {
 
 const HELLO_POINTER_DRAWN = 0x01;
 const HELLO_RESIZABLE = 0x02;
+const HELLO_CLIPBOARD_TO_TARGET = 0x04;
+const HELLO_CLIPBOARD_FROM_TARGET = 0x08;
+const HELLO_FLAGS = HELLO_POINTER_DRAWN | HELLO_RESIZABLE | HELLO_CLIPBOARD_TO_TARGET | HELLO_CLIPBOARD_FROM_TARGET;
 
 export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
   if (data.byteLength < HEADER_SIZE) refuse("short message");
@@ -69,13 +73,13 @@ export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
     case 2: {
       if (sequence !== 0n || width !== 0 || height !== 0 || length < 14) refuse("malformed hello");
       const protocol = payload[0] === 1 ? "rdp" : payload[0] === 2 ? "vnc" : refuse("unknown protocol");
-      // The flags byte: bit 0 says the pointer is drawn, bit 1 that the session resizes; the others
-      // are reserved and zero.
-      if ((payload[1] & ~(HELLO_POINTER_DRAWN | HELLO_RESIZABLE)) !== 0) refuse("malformed hello");
+      // The flags byte: bit 0 says the pointer is drawn, bit 1 that the session resizes, bits 2 and 3
+      // that it takes a pasted text and sends a copied one; the others are reserved and zero.
+      if ((payload[1] & ~HELLO_FLAGS) !== 0) refuse("malformed hello");
       const fields = new DataView(data, HEADER_SIZE);
       const idLength = fields.getUint32(10);
       if (idLength === 0 || idLength > MAX_SESSION_ID_BYTES || idLength !== length - 14) refuse("malformed hello");
-      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, resizable: (payload[1] & HELLO_RESIZABLE) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
+      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, resizable: (payload[1] & HELLO_RESIZABLE) !== 0, clipboardToTarget: (payload[1] & HELLO_CLIPBOARD_TO_TARGET) !== 0, clipboardFromTarget: (payload[1] & HELLO_CLIPBOARD_FROM_TARGET) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
     }
     case 3: {
       if (sequence === 0n || width !== 0 || height !== 0 || length < 4) refuse("malformed end");
@@ -190,6 +194,26 @@ export function encodeResize(width: number, height: number): Uint8Array<ArrayBuf
   view.setUint16(12, size.height);
   return bytes;
 }
+
+// A text the operator pastes on the target (ADR-0096 §6): version, type 5, two reserved bytes, the
+// UTF-8 length, then the text; null when it is not a text the contract carries (a NUL, or past the
+// bound in UTF-16 units, which JavaScript strings count).
+const CLIPBOARD_INPUT_HEADER = 8;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+export function encodeClipboard(text: string): Uint8Array<ArrayBuffer> | null {
+  // A lone surrogate would leave as U+FFFD: not the text the operator saw.
+  if (text.includes("\u0000") || text.length > MAX_CLIPBOARD_TEXT_UNITS || LONE_SURROGATE.test(text)) return null;
+  const utf8 = new TextEncoder().encode(text);
+  const bytes = new Uint8Array(CLIPBOARD_INPUT_HEADER + utf8.length);
+  bytes[0] = VERSION;
+  bytes[1] = 5;
+  new DataView(bytes.buffer).setUint32(4, utf8.length);
+  bytes.set(utf8, CLIPBOARD_INPUT_HEADER);
+  return bytes;
+}
+
+// The bound of a clipboard text, in the units the operator's string counts.
+export const MAX_CLIPBOARD_TEXT_LENGTH = MAX_CLIPBOARD_TEXT_UNITS;
 
 // What an END means for the operator. The codes are the stable ones of ADR-0071 §12; the proxy's
 // text is the same code, never a cause.

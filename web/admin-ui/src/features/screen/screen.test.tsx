@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RESIZE_DEBOUNCE_MS, ScreenDeps, ScreenSocket, ScreenViewer, attachUrl } from "./ScreenViewer";
-import { SUBPROTOCOL, clampResize, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
+import { SUBPROTOCOL, clampResize, decodeScreenMessage, encodeClipboard, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
@@ -25,12 +25,12 @@ function oversizedFrame(): ArrayBuffer {
   return header(1, 1n, 1, 1, payload);
 }
 const frame = (sequence: bigint, width = 100, height = 50) => header(1, sequence, width, height, PNG);
-function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc", pointerDrawn = false, resizable = false): ArrayBuffer {
+function hello(id = "s1", protocol: "rdp" | "vnc" = "vnc", pointerDrawn = false, resizable = false, clipTo = false, clipFrom = false): ArrayBuffer {
   const bytes = [...new TextEncoder().encode(id)];
   const p = new Uint8Array(14 + bytes.length);
   const v = new DataView(p.buffer);
   p[0] = protocol === "rdp" ? 1 : 2;
-  p[1] = (pointerDrawn ? 1 : 0) | (resizable ? 2 : 0);
+  p[1] = (pointerDrawn ? 1 : 0) | (resizable ? 2 : 0) | (clipTo ? 4 : 0) | (clipFrom ? 8 : 0);
   v.setBigUint64(2, 1893456000n);
   v.setUint32(10, bytes.length);
   p.set(bytes, 14);
@@ -65,7 +65,7 @@ class FakeSocket implements ScreenSocket {
   }
 }
 
-function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<ImageBitmap>, measure?: ScreenDeps["measure"]) {
+function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<ImageBitmap>, measure?: ScreenDeps["measure"], clipboard?: Pick<ScreenDeps, "readClipboard" | "writeClipboard">) {
   const socket = new FakeSocket();
   const urls: [string, string][] = [];
   const shown: { width: number; height: number }[] = [];
@@ -85,6 +85,7 @@ function setup(attach = "/sessions/s1/screen", decodeResult?: () => Promise<Imag
     },
     patch: (_canvas, image, x, y) => painted.push(`rect ${x},${y} ${image.width}x${image.height}`),
     measure,
+    ...clipboard,
   };
   const onReconnect = vi.fn();
   const onClose = vi.fn();
@@ -146,7 +147,7 @@ describe("the screen contract (ADR-0071 §6)", () => {
       "PNG over 4 MiB": oversizedFrame(),
       "hello with a frame size": tampered((b) => (b[23] = 1), hello()),
       "hello unknown protocol": tampered((b) => (b[32] = 3), hello()),
-      "hello reserved flag": tampered((b) => (b[33] = 4), hello()),
+      "hello reserved flag": tampered((b) => (b[33] = 0x10), hello()),
       "hello reserved flag beside the pointer": tampered((b) => (b[33] = 0x81), hello()),
       "end sequence zero": end("x", 0n),
       "end text not UTF-8": header(3, 1n, 0, 0, [0, 0, 0, 2, 0xc3, 0x28]),
@@ -355,6 +356,96 @@ describe("clipboard texts, live (ADR-0096)", () => {
     s.socket.receive(frame(2n, 8, 4));
     s.socket.receive(clipboard(2n, 2, "replayed"));
     await waitFor(() => expect(s.socket.closed).toBe(true));
+    s.view.unmount();
+  });
+});
+
+describe("the clipboard panel (ADR-0096 §6)", () => {
+  it("writes the message pkg/screenstream decodes, and nothing the contract does not carry", () => {
+    const bytes = encodeClipboard("pasted é €") as Uint8Array;
+    const utf8 = new TextEncoder().encode("pasted é €");
+    expect([...bytes.subarray(0, 8)]).toEqual([1, 5, 0, 0, 0, 0, 0, utf8.length]);
+    expect([...bytes.subarray(8)]).toEqual([...utf8]);
+    expect(encodeClipboard("a\u0000b")).toBeNull();
+    expect(encodeClipboard("x".repeat(32764))).toBeNull();
+    expect(encodeClipboard("\uD800 alone")).toBeNull();
+    expect(encodeClipboard("\u{1F600}")).not.toBeNull();
+  });
+
+  it("offers nothing the HELLO does not allow", async () => {
+    const s = setup();
+    s.socket.receive(hello("s1", "rdp"));
+    s.socket.receive(frame(1n));
+    await waitFor(() => expect(s.shown.length).toBe(1));
+    expect(screen.queryByRole("region", { name: "Presse-papiers" })).toBeNull();
+    s.view.unmount();
+  });
+
+  it("reads the operator's clipboard only on their click, shows it, and sends it only when they confirm", async () => {
+    const read = vi.fn(async () => "pasted é");
+    const s = setup("/sessions/s1/screen", undefined, undefined, { readClipboard: read });
+    s.socket.receive(hello("s1", "rdp", false, false, true, false));
+    s.socket.receive(frame(1n));
+    await waitFor(() => expect(s.shown.length).toBe(1));
+    expect(read).not.toHaveBeenCalled();
+    expect(screen.queryByText("Copier le texte de la cible")).toBeNull();
+    const before = s.socket.sent.length;
+    fireEvent.click(screen.getByText("Coller vers la cible…"));
+    const field = (await screen.findByLabelText("Texte à coller dans la cible")) as HTMLTextAreaElement;
+    expect(field.value).toBe("pasted é");
+    expect(s.socket.sent.length).toBe(before); // shown, not sent
+    fireEvent.change(field, { target: { value: "pasted, edited" } });
+    fireEvent.click(screen.getByText("Envoyer"));
+    const sent = s.socket.sent[s.socket.sent.length - 1];
+    expect([...sent]).toEqual([...(encodeClipboard("pasted, edited") as Uint8Array)]);
+    // The proxy shows it back once recorded: it takes its place in the sequence.
+    s.socket.receive(clipboard(2n, 1, "pasted, edited"));
+    expect(await screen.findByText("Collé dans la cible")).toBeTruthy();
+    s.view.unmount();
+  });
+
+  it("leaves a field to paste into when the browser will not give its clipboard, and sends nothing on cancel", async () => {
+    const s = setup("/sessions/s1/screen", undefined, undefined, { readClipboard: async () => { throw new Error("denied"); } });
+    s.socket.receive(hello("s1", "rdp", false, false, true, false));
+    s.socket.receive(frame(1n));
+    await waitFor(() => expect(s.shown.length).toBe(1));
+    const before = s.socket.sent.length;
+    fireEvent.click(screen.getByText("Coller vers la cible…"));
+    expect(((await screen.findByLabelText("Texte à coller dans la cible")) as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByText(/n'a pas donné le presse-papiers/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Annuler"));
+    expect(screen.queryByLabelText("Texte à coller dans la cible")).toBeNull();
+    expect(s.socket.sent.length).toBe(before);
+    s.view.unmount();
+  });
+
+  it("refuses to send a text past the bound, and says why", async () => {
+    const s = setup("/sessions/s1/screen", undefined, undefined, { readClipboard: async () => "x".repeat(32764) });
+    s.socket.receive(hello("s1", "rdp", false, false, true, false));
+    s.socket.receive(frame(1n));
+    await waitFor(() => expect(s.shown.length).toBe(1));
+    const before = s.socket.sent.length;
+    fireEvent.click(screen.getByText("Coller vers la cible…"));
+    await screen.findByLabelText("Texte à coller dans la cible");
+    fireEvent.click(screen.getByText("Envoyer"));
+    expect(await screen.findByText(/ne peut pas être envoyé/)).toBeTruthy();
+    expect(s.socket.sent.length).toBe(before);
+    s.view.unmount();
+  });
+
+  it("writes what the target copied to the operator's clipboard on their click, and only then", async () => {
+    const write = vi.fn(async () => {});
+    const s = setup("/sessions/s1/screen", undefined, undefined, { writeClipboard: write });
+    s.socket.receive(hello("s1", "rdp", false, false, false, true));
+    s.socket.receive(frame(1n));
+    await waitFor(() => expect(s.shown.length).toBe(1));
+    expect(screen.queryByText("Coller vers la cible…")).toBeNull();
+    s.socket.receive(clipboard(2n, 2, "copied <b>on</b> the target"));
+    expect(await screen.findByText("copied <b>on</b> the target")).toBeTruthy(); // as text, never markup
+    expect(write).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Copier le texte de la cible"));
+    await waitFor(() => expect(write).toHaveBeenCalledWith("copied <b>on</b> the target"));
+    expect(await screen.findByText("Texte copié dans votre presse-papiers.")).toBeTruthy();
     s.view.unmount();
   });
 });

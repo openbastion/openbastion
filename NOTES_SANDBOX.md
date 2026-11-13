@@ -4338,3 +4338,9 @@ Vérifié : tests de `pkg/screenstream`, du Video Recorder, de la Gateway et du 
 
 Vérifié : `pkg/proxycore` sous `-race`, moteur, auditeur, contrat, Vitest ; 21 mutations, 21 tuées. **Non fait** : aucun transfert à travers le relais complet contre Windows ni dans un navigateur (incréments 4 et 5) ; coller depuis la page n'existe pas encore.
 
+## 2026-11-13 — ADR-0096, incrément 4 : coller et copier depuis la page
+
+Le contrat écran porte le presse-papiers dans les deux sens : bits 2 et 3 du `HELLO`, entrée `CLIPBOARD` (type 5, longueur variable, 98 297 octets au plus) encodée et décodée par `pkg/screenstream`. Le contrat est indépendant du client, en vue du client Desktop d'ADR-0098 (proposé, PR #174). Le proxy n'élargit sa limite de lecture que pour une session qui peut coller ; la Gateway valide les deux formats. L'Admin UI a un panneau « Presse-papiers » (coller sur geste, texte montré avant l'envoi ; copier sur geste), et la relecture montre les transferts.
+
+Vérifié : `pkg/screenstream` (fuzzing de l'entrée), `pkg/proxycore` sous `-race`, proxy, Gateway, Vitest. **Non fait** : un navigateur réel contre Windows (incrément 5) ; `SCREEN_CLIPBOARD` reste éteint.
+

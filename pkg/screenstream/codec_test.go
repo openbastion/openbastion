@@ -191,7 +191,7 @@ func TestHelloSaysWhetherThePointerIsDrawn(t *testing.T) {
 		if err != nil || got.PointerDrawn != drawn {
 			t.Fatalf("drawn %v: decoded %v, %v", drawn, got.PointerDrawn, err)
 		}
-		for _, reserved := range []byte{0x04, 0x80, 0x05} {
+		for _, reserved := range []byte{0x10, 0x80, 0x15} {
 			bad := append([]byte(nil), wire...)
 			bad[HeaderSize+1] = reserved
 			if _, err := Decode(bad); err == nil {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -113,6 +112,9 @@ type Message struct {
 	PointerDrawn bool
 	// Resizable says the session follows InputResize (ADR-0095 §6): bit 1 of the flags byte.
 	Resizable bool
+	// ClipboardToTarget says the session takes InputClipboard, ClipboardFromTarget that it sends
+	// the texts copied on the target (ADR-0096 §6): bits 2 and 3. A client offers only what they say.
+	ClipboardToTarget, ClipboardFromTarget bool
 
 	// END-only fields. Text is a stable public message, never an internal error.
 	EndCode uint16
@@ -137,6 +139,16 @@ const HelloPointerDrawn = byte(0x01)
 // HelloResizable is the HELLO flag saying the session follows InputResize (ADR-0095 §6): the client
 // may send the size of its window. A HELLO without it is what it always was.
 const HelloResizable = byte(0x02)
+
+// HelloClipboardToTarget and HelloClipboardFromTarget are the HELLO flags of the clipboard's two
+// directions (ADR-0096 §6). A HELLO without them is what it always was.
+const (
+	HelloClipboardToTarget   = byte(0x04)
+	HelloClipboardFromTarget = byte(0x08)
+)
+
+// helloFlags are the HELLO flags this version knows; the others are reserved and zero.
+const helloFlags = HelloPointerDrawn | HelloResizable | HelloClipboardToTarget | HelloClipboardFromTarget
 
 // Encode serializes one v1 server-to-client message. It copies the payload into
 // the returned buffer; callers may safely reuse their input slices afterwards.
@@ -187,6 +199,12 @@ func Encode(m Message) ([]byte, error) {
 		if m.Resizable {
 			out[HeaderSize+1] |= HelloResizable
 		}
+		if m.ClipboardToTarget {
+			out[HeaderSize+1] |= HelloClipboardToTarget
+		}
+		if m.ClipboardFromTarget {
+			out[HeaderSize+1] |= HelloClipboardFromTarget
+		}
 		binary.BigEndian.PutUint64(out[HeaderSize+2:], uint64(m.ExpiresAt.Unix()))
 		binary.BigEndian.PutUint32(out[HeaderSize+10:], uint32(len(m.SessionID)))
 		copy(out[HeaderSize+14:], m.SessionID)
@@ -223,20 +241,7 @@ func validateClipboard(m Message) error {
 		(m.Direction != ClipboardToTarget && m.Direction != ClipboardFromTarget) {
 		return ErrMalformedMessage
 	}
-	if !utf8.ValidString(m.ClipboardText) || strings.IndexByte(m.ClipboardText, 0) >= 0 {
-		return fmt.Errorf("%w: clipboard text not valid UTF-8 without NUL", ErrMalformedMessage)
-	}
-	units := 0
-	for _, r := range m.ClipboardText {
-		units++
-		if r >= 0x10000 {
-			units++ // a surrogate pair
-		}
-		if units > MaxClipboardTextUnits {
-			return fmt.Errorf("%w: clipboard text past %d UTF-16 units", ErrOutOfBounds, MaxClipboardTextUnits)
-		}
-	}
-	return nil
+	return validClipboardText(m.ClipboardText)
 }
 
 // Decode parses one complete v1 server-to-client message and rejects trailing,
@@ -276,11 +281,13 @@ func Decode(data []byte) (Message, error) {
 		}
 		p := data[HeaderSize:]
 		m.Protocol = Protocol(p[0])
-		if p[1]&^(HelloPointerDrawn|HelloResizable) != 0 {
+		if p[1]&^helloFlags != 0 {
 			return Message{}, ErrMalformedMessage
 		}
 		m.PointerDrawn = p[1]&HelloPointerDrawn != 0
 		m.Resizable = p[1]&HelloResizable != 0
+		m.ClipboardToTarget = p[1]&HelloClipboardToTarget != 0
+		m.ClipboardFromTarget = p[1]&HelloClipboardFromTarget != 0
 		expires := binary.BigEndian.Uint64(p[2:10])
 		if expires > math.MaxInt64 {
 			return Message{}, ErrOutOfBounds

@@ -283,3 +283,51 @@ func waitForDial(t *testing.T, d *countingScreenDialer, want int) {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+// What a client sends goes on only if the proxy would read it (ADR-0096 §6): a 16-byte input or a
+// clipboard text, each decoded; nothing else.
+func TestValidScreenInput(t *testing.T) {
+	key, _ := screenstream.EncodeInput(screenstream.InputEvent{Type: screenstream.InputKey, Flags: screenstream.KeyPressed, Keysym: 0x61})
+	clip, _ := screenstream.EncodeClipboardInput("pasted é €")
+	malformed := append([]byte(nil), clip...)
+	malformed[2] = 1
+	short := append([]byte(nil), clip[:len(clip)-1]...)
+	for name, c := range map[string]struct {
+		data []byte
+		ok   bool
+	}{
+		"a key":                       {key, true},
+		"a clipboard text":            {clip, true},
+		"a clipboard text, malformed": {malformed, false},
+		"a clipboard text, truncated": {short, false},
+		"17 bytes":                    {append(append([]byte(nil), key...), 0), false},
+		"an unknown 16-byte input":    {append([]byte{1, 9}, key[2:]...), false},
+	} {
+		if err := validScreenInput(c.data); (err == nil) != c.ok {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// A clipboard text crosses the relay as it was sent.
+func TestRelayScreenWebSocketsRelaysAClipboardText(t *testing.T) {
+	browserClient, gatewayClient, cleanupBrowser := newWebSocketPair(t)
+	defer cleanupBrowser()
+	proxyClient, proxyServer, cleanupProxy := newWebSocketPair(t)
+	defer cleanupProxy()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = relayScreenWebSockets(ctx, gatewayClient, proxyClient) }()
+	clip, err := screenstream.EncodeClipboardInput("pasted é €")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := browserClient.Write(ctx, websocket.MessageBinary, clip); err != nil {
+		t.Fatal(err)
+	}
+	readCtx, readCancel := context.WithTimeout(ctx, time.Second)
+	defer readCancel()
+	if _, got, err := proxyServer.Read(readCtx); err != nil || string(got) != string(clip) {
+		t.Fatalf("relayed %x, %v", got, err)
+	}
+}

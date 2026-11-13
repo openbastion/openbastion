@@ -204,6 +204,7 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 	// the audit of the expiry and the purge of the credential run on.
 	ctx := r.Context()
 	meta := screenMetadata(pending)
+	conn.SetReadLimit(screenReadLimit(meta))
 	// The codec is the ticket's protocol's, which the Broker took from the session: never the
 	// browser's choice.
 	codec := s.codec
@@ -237,7 +238,7 @@ func (s *websocketScreenSink) ReceiveInput(context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if typ != websocket.MessageBinary || len(data) != screenstream.InputMessageSize {
+	if typ != websocket.MessageBinary || (len(data) != screenstream.InputMessageSize && !screenstream.IsClipboardInput(data)) {
 		return nil, fmt.Errorf("invalid screen input message")
 	}
 	return data, nil
@@ -251,4 +252,13 @@ func screenMetadata(p infrastructure.PendingScreenSession) proxycore.SessionMeta
 		SessionID: p.SessionID, ScopeToken: p.ScopeToken, ScreenProtocol: p.Protocol, ExpiresAt: p.ExpiresAt,
 		ClipboardToTarget: p.ClipboardToTarget, ClipboardFromTarget: p.ClipboardFromTarget,
 	}
+}
+
+// screenReadLimit is the longest message a session's client may send: a clipboard text when the
+// session may paste (ADR-0096 §6), 64 bytes otherwise, as before.
+func screenReadLimit(meta proxycore.SessionMetadata) int64 {
+	if meta.ClipboardToTarget {
+		return screenstream.MaxClipboardInputBytes
+	}
+	return screenstream.MaxInputBytes
 }
