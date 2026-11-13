@@ -15,6 +15,10 @@ const (
 	rdpInfoAutoLogon           = uint32(0x00000008)
 	rdpInfoUnicode             = uint32(0x00000010)
 	rdpInfoForceEncryptedCSPDU = uint32(0x00004000)
+	// rdpInfoEnableWindowsKey says the client uses the Windows key (MS-RDPBCGR 2.2.1.11.1.1). Without
+	// it Windows does not take the key as one: the Start menu stayed shut and Win+R typed "r" (PR #101,
+	// #119). FreeRDP and mstsc set it.
+	rdpInfoEnableWindowsKey = uint32(0x00000100)
 
 	maxRDPInfoStringBytes = 510 // 512 bytes including the mandatory UTF-16 NUL.
 )
@@ -116,7 +120,7 @@ func marshalRDPClientInfo(userID, ioChannelID uint16, info RDPClientInfo) ([]byt
 	// includes a mandatory NUL terminator not counted by its cb* field.
 	infoPacket := make([]byte, 18, 18+len(domain)+len(username)+len(password)+10)
 	binary.LittleEndian.PutUint32(infoPacket[0:4], 0) // keyboardLayout=0: language ID ignored.
-	flags := rdpInfoUnicode | rdpInfoAutoLogon | rdpInfoForceEncryptedCSPDU
+	flags := rdpInfoUnicode | rdpInfoAutoLogon | rdpInfoForceEncryptedCSPDU | rdpInfoEnableWindowsKey
 	if info.flags != 0 {
 		flags = info.flags
 	}

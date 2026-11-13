@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -422,7 +423,8 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 // The extended keys (E0-prefixed scancodes, KBDFLAGS_EXTENDED), against Windows (ADR-0071, ADR-0088).
 // PR #101 saw the Windows key not reach Windows' shell: Win+R typed "r" into Notepad. Measured here,
 // key by key, by what the operator's path sends (the codec's Input):
-//   - the Windows key alone, which should open the Start menu: a PNG to judge by eye;
+//   - the Windows key alone opens the Start menu, as Ctrl+Esc does: measured by the share of the
+//     screen it changes;
 //   - Ctrl+Alt+Del, as the Admin UI's button sends it, which should show the security screen: a PNG;
 //   - keys whose character proves the flag, read back from Notepad's file: the keypad's "/" (E0 35;
 //     without the flag, the key right of the full stop, "!" in AZERTY), and in AZERTY AltGr (E0 38)
@@ -487,18 +489,29 @@ func TestRDPWindows_ExtendedKeys(t *testing.T) {
 	settle(10*time.Second, 90*time.Second)
 	dump("extended-0-desktop.png")
 
-	key(0xe05b) // the Windows key, alone: the Start menu
-	settle(2*time.Second, 6*time.Second)
-	dump("extended-1-windows-key.png")
-	key(0x01) // Esc
-	settle(2*time.Second, 6*time.Second)
-	// Ctrl+Esc opens the same Start menu with no extended key: it tells the Windows key's loss
-	// (PR #101, #119) from a Start menu that does not open on this machine.
-	chord(0x1d, 0x01)
-	settle(2*time.Second, 6*time.Second)
-	dump("extended-1b-ctrl-esc.png")
-	key(0x01)
-	settle(2*time.Second, 6*time.Second)
+	// The Start menu covers a good part of the screen: a key that opens it changes at least 2 % of
+	// the pixels, which the cursor's blink never does.
+	opens := func(what string, keys func(), name string) float64 {
+		t.Helper()
+		before := last
+		keys()
+		settle(2*time.Second, 6*time.Second)
+		dump(name)
+		changed := changedFraction(t, before, last)
+		key(0x01) // Esc
+		settle(2*time.Second, 6*time.Second)
+		t.Logf("%s: %.1f %% of the screen changed (%s)", what, 100*changed, name)
+		return changed
+	}
+	// Ctrl+Esc opens the Start menu with no extended key: the check that the menu opens on this
+	// machine, and that the measure sees it.
+	if changed := opens("Ctrl+Esc", func() { chord(0x1d, 0x01) }, "extended-1b-ctrl-esc.png"); changed < 0.02 {
+		t.Fatalf("Ctrl+Esc changed %.1f %% of the screen: the Start menu does not open here, the Windows key cannot be judged", 100*changed)
+	}
+	// The Windows key alone opens it too (PR #101, #119: it did not; INFO_ENABLEWINDOWSKEY).
+	if changed := opens("the Windows key", func() { key(0xe05b) }, "extended-1-windows-key.png"); changed < 0.02 {
+		t.Fatalf("the Windows key changed %.1f %% of the screen: it did not open the Start menu (extended-1-windows-key.png)", 100*changed)
+	}
 
 	for _, code := range []uint16{0x1d, 0x38, 0xe053} { // Ctrl+Alt+Del, as the Admin UI's button
 		press(code, true)
@@ -644,8 +657,8 @@ func measureWindows(t *testing.T, partial bool) {
 	})
 	m.scene("pointer", func() { m.pointerCircle(width/2, height/2, 200, 50, 20*time.Millisecond) })
 	// A video (ADR-0090, lot A): the whole screen changing 25 times a second, for 10 s, played by
-	// rdp-video.ps1 when asked through the share (the Windows key does not reach the shell, so no
-	// program can be started from the keyboard). Random 8-pixel blocks: the worst case for PNG.
+	// rdp-video.ps1 when asked through the share: started without a window, which a program run from
+	// the keyboard would not be. Random 8-pixel blocks: the worst case for PNG.
 	if shared := os.Getenv("RDP_WINDOWS_SHARED"); shared != "" {
 		video := m.scene("video", func() {
 			if err := os.WriteFile(filepath.Join(shared, "video-request"), []byte("10\n"), 0o644); err != nil {
@@ -799,8 +812,8 @@ func TestRDPWindows_Clipboard(t *testing.T) {
 }
 
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
-// a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
-// do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no
+// a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s): the same for every
+// target, whatever its shell does with keys. The stream ends with no
 // error, which the relay says as session_ended. Last in this file: it closes the user's session,
 // and the next connection opens a new one.
 func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
@@ -874,4 +887,33 @@ func TestRDPWindows_LogoffEndsTheSession(t *testing.T) {
 			t.Fatal("the stream did not end within 3 minutes of the logoff request")
 		}
 	}
+}
+
+// changedFraction is the share of the pixels that differ between two whole frames of one size.
+func changedFraction(t *testing.T, a, b screenstream.Message) float64 {
+	t.Helper()
+	if a.Type != screenstream.TypeFrame || b.Type != screenstream.TypeFrame {
+		t.Fatalf("frames of type %d and %d: whole frames needed", a.Type, b.Type)
+	}
+	ia, err := png.Decode(bytes.NewReader(a.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ib, err := png.Decode(bytes.NewReader(b.PNG))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := ia.Bounds()
+	if r != ib.Bounds() || r.Empty() {
+		return 1 // another size: the screen changed whole
+	}
+	changed := 0
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			if ia.At(x, y) != ib.At(x, y) {
+				changed++
+			}
+		}
+	}
+	return float64(changed) / float64(r.Dx()*r.Dy())
 }
