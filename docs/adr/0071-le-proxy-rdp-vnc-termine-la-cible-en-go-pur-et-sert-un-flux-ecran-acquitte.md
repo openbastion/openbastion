@@ -32,7 +32,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 | Authentification | NTLM seulement. Kerberos, `mechListMIC`, carte à puce et Remote Guard sont refusés. |
 | Rendu | Ordres graphiques partiels, sans RDPGFX. Les lots B et C d'ADR-0090 (`Proposé`) ne sont pas justifiés par la mesure du lot A. |
 | Bornes | Fragment TPKT plafonné à 16 383 octets, Share Data à 65 535. Une image de plus de 4 Mio termine la session en `recording_lost`, sans découpage en tuiles. |
-| Clavier | La touche Windows seule n'ouvre pas le menu Démarrer (Ctrl+Échap l'ouvre) ; cause non établie. |
+| Clavier | ~~La touche Windows seule n'ouvre pas le menu Démarrer~~ : corrigé le 13 novembre 2026 (PR #180). Le Client Info ne posait pas `INFO_ENABLEWINDOWSKEY`. Rouge d'abord sur les cinq cibles (la touche Windows changeait 0,0 % de l'écran, Ctrl+Échap 41 à 42 %), puis 41 à 52 % une fois le drapeau posé ; menu ouvert sur la capture fr-FR. |
 | Refus | Un mot de passe refusé par la cible se dit `target_unreachable` : le §12 n'a pas de code pour ce cas. |
 | VNC | RealVNC refusé (RFB 5.0) ; ni redimensionnement, ni presse-papiers. |
 | Exploitation | Budget d'entrée compté par instance du proxy. ~~`up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran~~ : fait le 13 novembre 2026, par leur sous-commande `probe` (ADR-0072). S3 distant ou sous TLS non mesuré. |
