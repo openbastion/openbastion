@@ -105,6 +105,8 @@ func (c *RDPCodec) open(ctx context.Context, cred *proxycore.Credential, clipboa
 	if err != nil {
 		code := "target_unreachable"
 		switch {
+		case errors.Is(err, rdp.ErrTargetCredentialsRefused):
+			code = "target_auth_failed" // the account's secret in the Vault is to be checked
 		case errors.Is(err, rdp.ErrInvalidTarget):
 			code = "pin_missing"
 		case errors.Is(err, rdp.ErrTLSVerification):

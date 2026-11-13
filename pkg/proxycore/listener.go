@@ -222,6 +222,9 @@ func (l *Listener) serveWithRelay(ctx context.Context, meta SessionMetadata, adm
 	if isTLSPinMismatch(relayErr) {
 		_ = l.Terminator.EmitTLSCertificateMismatch(ctx, meta.SessionID)
 	}
+	if isTargetAuthFailed(relayErr) {
+		_ = l.Terminator.EmitTargetAuthFailed(ctx, meta.SessionID)
+	}
 	termErr := l.Terminator.Terminate(ctx, meta.SessionID, cred, relayErr == nil || expired || cut)
 	if relayErr != nil {
 		return relayErr

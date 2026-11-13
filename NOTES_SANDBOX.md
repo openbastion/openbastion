@@ -4419,3 +4419,12 @@ Le cas B (cible perdue en cours de job), dit « non reproduit » le matin même 
 
 **Suite** : capturer l'écran de la machine Windows au moment de la perte (console de QEMU par dockur), et relever l'heure de la dernière image de la mesure.
 
+## 2026-11-13 — ADR-0071 §12 : `target_auth_failed`, la cible a refusé les identifiants
+
+Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le code END 14, `target_auth_failed`, après les autres (leurs numéros sont figés par un test).
+- **RDP** : `pkg/rdp` distingue `ErrTargetCredentialsRefused` quand la cible répond, dans le `errorCode` CredSSP, un NTSTATUS de refus des identifiants : 0xC000006D, 0xC000006A, 0xC0000064, 0xC0000071, 0xC0000072, 0xC0000193, 0xC0000224 ou 0xC0000234. Tout autre statut reste un échec CredSSP ordinaire.
+- **VNC** : `vnc.ErrAuthentication`.
+- **Relais** : il audite `session.target_auth_failed`, sans rien du secret, et purge le credential.
+- **Admin UI** : « La cible a refusé les identifiants du compte : son secret dans le coffre est à vérifier. »
+- **Prouvé** : tests à chaque étage, 6 mutations tuées. Contre Windows, `TestRDPWindows_CredSSP` exige désormais que le mauvais mot de passe soit reconnu comme tel (CI de la PR).
+

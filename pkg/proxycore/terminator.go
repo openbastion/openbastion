@@ -62,6 +62,12 @@ func (t *Terminator) EmitTLSCertificateMismatch(ctx context.Context, sessionID s
 	return t.audit.EmitEvent(ctx, "session.tls_certificate_mismatch", "session", sessionID, false)
 }
 
+// EmitTargetAuthFailed records that the target refused the account's credentials (ADR-0071 §12):
+// the secret the Vault holds is to be checked, or rotated. Nothing of it is in the event.
+func (t *Terminator) EmitTargetAuthFailed(ctx context.Context, sessionID string) error {
+	return t.audit.EmitEvent(ctx, "session.target_auth_failed", "session", sessionID, false)
+}
+
 // EmitBreakGlass records that a session was admitted WITHOUT a recorder, by a
 // break-glass waiver (ADR-0009). It is emitted before the credential is fetched
 // and its failure refuses the session, so a waiver is never exercised unseen.

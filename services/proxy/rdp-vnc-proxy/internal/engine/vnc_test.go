@@ -77,7 +77,7 @@ func TestVNCRefusalsSayWhatADR0071Promises(t *testing.T) {
 		{fmt.Errorf("%w: %w", vnc.ErrInvalidFramebuffer, screenstream.ErrFrameTooLarge), "recording_lost"},
 		{vnc.ErrInvalidTarget, "pin_missing"},
 		{vnc.ErrTLSVerification, "pin_mismatch"},
-		{vnc.ErrAuthentication, "target_unreachable"},
+		{vnc.ErrAuthentication, "target_auth_failed"}, // a code of its own since 13 November 2026
 		{vnc.ErrTargetRefused, "target_unreachable"},
 		{errors.New("connection reset"), "target_unreachable"},
 	} {

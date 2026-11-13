@@ -165,7 +165,7 @@ describe("the screen contract (ADR-0071 §6)", () => {
   });
 
   it("says every code of ADR-0071 §12 in words, and nothing it does not know", () => {
-    for (const code of ["session_ended", "pin_missing", "pin_mismatch", "tls_required", "nla_required", "protocol_version_unsupported", "codec_unsupported", "recording_unavailable", "recording_lost", "ticket_invalid", "input_invalid", "session_expired", "session_revoked", "target_unreachable"]) {
+    for (const code of ["session_ended", "pin_missing", "pin_mismatch", "tls_required", "nla_required", "protocol_version_unsupported", "codec_unsupported", "recording_unavailable", "recording_lost", "ticket_invalid", "input_invalid", "session_expired", "session_revoked", "target_unreachable", "target_auth_failed"]) {
       expect(endMessage(code), code).not.toContain(code);
       expect(endMessage(code), code).not.toBe(endMessage("<script>"));
     }
