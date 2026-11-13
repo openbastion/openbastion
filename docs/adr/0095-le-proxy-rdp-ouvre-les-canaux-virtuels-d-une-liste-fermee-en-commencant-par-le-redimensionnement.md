@@ -1,6 +1,6 @@
 # ADR-0095 — Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement
 
-**Statut** `Accepté` · 12 novembre 2026 · demandé par le propriétaire du projet le 12 novembre 2026 : « go pour le lot D » (ADR-0090) ; accepté le même jour : « Go pour le B ». L'option B est acceptée, avec ses bornes (64 Kio par message de canal, 640 × 480 à 2 560 × 1 600, un redimensionnement par seconde) et `SCREEN_RESIZE` éteint par défaut. La décision lève en partie ADR-0069 §6 : elle ouvre le socle des canaux, et un seul canal, qui ne transporte aucune donnée de l'opérateur vers la cible en dehors de la taille de son écran.
+**Statut** `Accepté` · 12 novembre 2026 · demandé par le propriétaire du projet le 12 novembre 2026 : « go pour le lot D » (ADR-0090) ; accepté le même jour : « Go pour le B ». L'option B est acceptée, avec ses bornes (64 Kio par message de canal, 640 × 480 à 2 560 × 1 600, un redimensionnement par seconde) et `SCREEN_RESIZE` éteint par défaut. La décision lève en partie ADR-0069 §6 : elle ouvre le socle des canaux, et un seul canal, qui ne transporte aucune donnée de l'opérateur vers la cible en dehors de la taille de son écran. **Allumé par défaut le 13 novembre 2026**, décision du propriétaire (« Oui, tu peux continuer »), une fois les cinq cibles Windows de la CI suivies dans un vrai navigateur : `SCREEN_RESIZE=false` rend la négociation d'avant.
 
 ## Contexte
 
@@ -46,7 +46,7 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
    - **bornes** : largeur et hauteur de 640 × 480 à 2 560 × 1 600, largeur paire (MS-RDPEDISP), et au plus un redimensionnement par seconde. Au-delà de 2 560 × 1 600, une image clé PNG risque de dépasser les 4 Mio d'un segment (ADR-0070) et de couper la session (`recording_lost`) ;
    - une demande hors bornes est ramenée dans les bornes, pas refusée : l'opérateur voit alors un bureau plus petit que sa fenêtre.
 5. **Contrat écran** (`openbastion.screen.v1`) : un nouveau type d'entrée, `InputResize` (largeur, hauteur), dans la borne de 64 octets de `MaxInputBytes`. Le relais le borne avant de le passer au codec. Un codec qui ne sait pas redimensionner, comme VNC aujourd'hui, l'ignore.
-6. **Interrupteur** `SCREEN_RESIZE`, **éteint par défaut**, au proxy. Éteint, aucun canal n'est annoncé, et la négociation est celle d'aujourd'hui, à l'octet près. L'Admin UI n'envoie `InputResize` que si le `HELLO` dit que la session sait redimensionner : un drapeau de plus dans l'octet de drapeaux du `HELLO` (ADR-0091).
+6. **Interrupteur** `SCREEN_RESIZE`, **éteint par défaut** (allumé le 13 novembre 2026, voir le statut), au proxy. Éteint, aucun canal n'est annoncé, et la négociation est celle d'aujourd'hui, à l'octet près. L'Admin UI n'envoie `InputResize` que si le `HELLO` dit que la session sait redimensionner : un drapeau de plus dans l'octet de drapeaux du `HELLO` (ADR-0091).
 7. **Enregistrement et audit** : le redimensionnement est déjà dans l'enregistrement, par l'image clé de la nouvelle taille. Le proxy n'écrit pas d'événement d'audit par redimensionnement : ce n'est ni un accès ni une donnée. Le refus d'un canal dynamique par son nom est journalisé (nom borné, compteur), sans audit, puisque la cible le propose et que l'opérateur n'y peut rien.
 8. **Toujours fermés**, sans exception : presse-papiers, lecteurs, imprimantes, son, cartes à puce, ports, USB, caméra, saisie audio, et tout canal hors de la liste. Chacun demandera son ADR (ADR-0090, lot D).
 
@@ -96,7 +96,7 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Prouvé** : 4 tests (le drapeau, l'encodage, l'envoi et son rythme, rien pour une session qui ne redimensionne pas) ; 7 mutations tuées ; les 117 tests de l'Admin UI passent, et sa construction aussi.
 - **Reste** (incrément 5) : la vérification dans un vrai navigateur, contre une cible Windows. Le bac à sable n'en a pas : il n'a qu'une cible VNC, qui ne redimensionne pas. Puis la décision d'allumer `SCREEN_RESIZE` par défaut, qui revient au propriétaire.
 
-**Incrément 5, en cours (12 novembre 2026) : la vérification dans un vrai navigateur, en CI.** Le propriétaire a choisi un navigateur sans interface dans la CI Windows, puisque le bac à sable n'a pas de cible Windows.
+**Incrément 5, fait (13 novembre 2026) : la vérification dans un vrai navigateur, en CI.** Le propriétaire a choisi un navigateur sans interface dans la CI Windows, puisque le bac à sable n'a pas de cible Windows.
 - `TestScreenFlow_RDPResizeInAHeadlessBrowser` (`test/integration`) démarre les huit services sur de vrais processus, avec `SCREEN_RESIZE` allumé et l'Admin UI servie par la Gateway, contre la cible Windows de la CI.
 - Le Chrome du runner, sans interface, est piloté par le protocole DevTools (`cdp_test.go`, sur le client WebSocket que le module a déjà : aucune dépendance nouvelle). Il se connecte, ouvre l'écran par les boutons de la page, puis la fenêtre est redimensionnée deux fois. Le bureau distant doit suivre, à chaque fois, la taille que la page demande, et la session doit continuer. Les captures vont dans les artefacts (`browser-resize-*.png`).
 - L'épreuve RDP de bout en bout prête sa mise en place (`startRDPScreenStack`) ; contre FreeRDP, elle passe toujours.
@@ -104,6 +104,9 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
   - la page demande sa taille une fois, à l'ouverture, avant que Windows ait dit sa capacité ; le codec ignorait cette demande, et la page ne redemande qu'au changement de taille, si bien que le bureau restait à 1 280 × 800. Le codec garde désormais la taille demandée et la demande dès que la capacité arrive, une seule fois pour une même taille ; une demande arrivée canal fermé attend la capacité suivante. 4 mutations tuées ;
   - la page mesurait la hauteur sous sa propre place dans la page : 480 pixels, le minimum, pour une fenêtre de 1 000. Elle prend la hauteur de la fenêtre, moins les boutons et la ligne d'état.
   - Windows Server 2019, après un redimensionnement à une taille qui n'est pas un multiple de 64, envoie des tuiles de 64 × 64 qui dépassent le bord du bureau, et le lecteur de bitmaps refusait la mise à jour, ce qui fermait la session. Il garde désormais la partie visible d'une tuile qui commence sur le bureau et le dépasse de moins de 64 pixels ; au-delà, toujours refusé.
+
+- **Prouvé** (CI de #157 et #158) : sur les cinq cibles Windows (Server 2019 et 2022, 16 et 32 bpp, fr-FR, session console), le bureau suit les trois tailles que la page demande (1 102 × 888, 970 × 688, 1 102 × 988), et la session continue. La capture montre le bureau à la largeur de la zone de l'écran, le texte à l'échelle 1:1.
+- **Allumé par défaut** le 13 novembre 2026, décision du propriétaire.
 
 ## Conséquences
 
