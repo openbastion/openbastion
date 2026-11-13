@@ -23,7 +23,7 @@ func TestMarshalRDPClientInfoUsesUnicodeAndKeepsSecretInPasswordField(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.CodePage != 0 || info.Flags != rdpInfoUnicode|rdpInfoAutoLogon|rdpInfoForceEncryptedCSPDU ||
+	if info.CodePage != 0 || info.Flags != rdpInfoUnicode|rdpInfoAutoLogon|rdpInfoForceEncryptedCSPDU|rdpInfoEnableWindowsKey ||
 		info.Domain != "SAINT-GOBAIN" || info.Username != "élodie" || info.Password != "p@ssword" {
 		t.Fatalf("Client Info identity/flags/password mismatch: codePage=%d flags=%#x domain=%q username=%q",
 			info.CodePage, info.Flags, info.Domain, info.Username)
