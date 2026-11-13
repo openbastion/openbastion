@@ -4408,6 +4408,17 @@ L'écran prenait toutes les touches, Tab compris (`preventDefault`) : une person
 
 Vérifié : 3 tests Vitest, 2 mutations tuées. **Reste** : l'image elle-même est illisible à un lecteur d'écran ; aucune reconnaissance de texte n'est prévue.
 
+## 2026-11-13 — CI Windows : le cas B se reproduit
+
+Le cas B (cible perdue en cours de job), dit « non reproduit » le matin même (#178), est revenu à 18:44 UTC sur 2022 en 32 bpp (PR #185, run 43482811541, job 132083637113).
+- `TestRDPWindows_Measure/whole-frames` passe, scène vidéo comprise.
+- Le dernier export de Windows date de 10:43:49, heure de Windows, soit 18:43:49 UTC. 31 s plus tard, `partial-frames` ne reçoit aucune image, pas même au repos, puis « no key made a frame ».
+- Toutes les épreuves suivantes du job : « reading X.224 connection confirm failed ».
+
+**Ce que cela change** : 4 occurrences sur environ 210 jobs depuis le 11 novembre, toutes pendant `TestRDPWindows_Measure` ou juste après. Ce n'est pas un effet de #185 : le cas existait avant elle, et son propre changement s'est vérifié contre Windows dans le même passage. Ma conclusion « non reproduit » était prématurée : 0 sur 165 ne suffisait pas pour un phénomène de l'ordre de 2 %.
+
+**Suite** : capturer l'écran de la machine Windows au moment de la perte (console de QEMU par dockur), et relever l'heure de la dernière image de la mesure.
+
 ## 2026-11-13 — ADR-0071 §12 : `target_auth_failed`, la cible a refusé les identifiants
 
 Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le code END 14, `target_auth_failed`, après les autres (leurs numéros sont figés par un test).
