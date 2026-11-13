@@ -50,10 +50,16 @@ const (
 	// frames only keeps the format 1, byte for byte; a segment opened as format 1 may hold no
 	// partial frame, so a format 2 segment cannot pass for an older one.
 	recordingFormatV2 = "openbastion/video-segment/v2"
+	// recordingFormatV3 seals a segment that holds a clipboard text (ADR-0096 §4), whatever else it
+	// holds: no older segment can pass for one, nor one for an older segment.
+	recordingFormatV3 = "openbastion/video-segment/v3"
 	// CodecPNG is a key frame: a whole PNG. CodecPNGDelta is a partial frame: the screen-stream
 	// FRAME_DELTA message, as the operator received it (ADR-0092).
-	CodecPNG           = "png"
-	CodecPNGDelta      = "png-delta-v1"
+	CodecPNG      = "png"
+	CodecPNGDelta = "png-delta-v1"
+	// CodecClipboardText is a text that crossed the clipboard (ADR-0096 §4): the screen-stream
+	// CLIPBOARD message, its direction and its text, in the sequence of the frames.
+	CodecClipboardText = "clipboard-text-v1"
 	MaxCiphertextBytes = 8 << 20
 	maxActorRoles      = 100
 	maxActorRoleBytes  = 128
@@ -138,8 +144,8 @@ func ValidateSegment(segment domain.VideoSegment) error {
 	var total int64
 	var firstTime, lastTime time.Time
 	for i, frame := range segment.Frames {
-		if frame.Codec != CodecPNG && frame.Codec != CodecPNGDelta {
-			return fmt.Errorf("%w: only PNG key frames and partial frames are accepted", domain.ErrInvalidSegment)
+		if frame.Codec != CodecPNG && frame.Codec != CodecPNGDelta && frame.Codec != CodecClipboardText {
+			return fmt.Errorf("%w: only PNG key frames, partial frames and clipboard texts are accepted", domain.ErrInvalidSegment)
 		}
 		if frame.Timestamp.IsZero() {
 			return fmt.Errorf("%w: frame %d has no timestamp", domain.ErrInvalidSegment, i)
@@ -151,12 +157,19 @@ func ValidateSegment(segment domain.VideoSegment) error {
 		if total > MaxSegmentBytes {
 			return fmt.Errorf("%w: segment exceeds the size limit", domain.ErrInvalidSegment)
 		}
-		if frame.Codec == CodecPNGDelta {
+		switch frame.Codec {
+		case CodecPNGDelta:
 			if _, _, err := validateDeltaFrame(frame, segment.FirstSequence+int64(i)); err != nil {
 				return fmt.Errorf("%w: frame %d: %v", domain.ErrInvalidSegment, i, err)
 			}
-		} else if _, _, err := pngSize(frame.Data); err != nil {
-			return fmt.Errorf("%w: frame %d is not an allowed PNG image", domain.ErrInvalidSegment, i)
+		case CodecClipboardText:
+			if err := validateClipboardEntry(frame, segment.FirstSequence+int64(i)); err != nil {
+				return fmt.Errorf("%w: frame %d: %v", domain.ErrInvalidSegment, i, err)
+			}
+		default:
+			if _, _, err := pngSize(frame.Data); err != nil {
+				return fmt.Errorf("%w: frame %d is not an allowed PNG image", domain.ErrInvalidSegment, i)
+			}
 		}
 		ts := frame.Timestamp.UTC()
 		if i == 0 {
@@ -203,14 +216,33 @@ func validateDeltaFrame(frame domain.VideoFrame, sequence int64) (int, int, erro
 	return int(message.Width), int(message.Height), nil
 }
 
-// segmentFormat is the format a segment is sealed in: 2 when it holds a partial frame.
+// validateClipboardEntry checks a clipboard text (ADR-0096): a CLIPBOARD message within its bounds,
+// of the sequence and the time the segment gives it.
+func validateClipboardEntry(frame domain.VideoFrame, sequence int64) error {
+	message, err := screenstream.Decode(frame.Data)
+	if err != nil {
+		return err
+	}
+	if message.Type != screenstream.TypeClipboard || int64(message.Sequence) != sequence ||
+		!message.Timestamp.Equal(frame.Timestamp) {
+		return errors.New("not the clipboard text of this sequence and time")
+	}
+	return nil
+}
+
+// segmentFormat is the format a segment is sealed in: 3 when it holds a clipboard text, otherwise
+// 2 when it holds a partial frame.
 func segmentFormat(segment domain.VideoSegment) string {
+	format := recordingFormat
 	for _, frame := range segment.Frames {
-		if frame.Codec == CodecPNGDelta {
-			return recordingFormatV2
+		switch frame.Codec {
+		case CodecClipboardText:
+			return recordingFormatV3
+		case CodecPNGDelta:
+			format = recordingFormatV2
 		}
 	}
-	return recordingFormat
+	return format
 }
 
 // followScreen checks that each partial frame of the segment applies to the screen of the key
@@ -218,6 +250,9 @@ func segmentFormat(segment domain.VideoSegment) string {
 func (w *RecordingWriter) followScreen(segment domain.VideoSegment) error {
 	width, height := w.screenWidth, w.screenHeight
 	for i, frame := range segment.Frames {
+		if frame.Codec == CodecClipboardText {
+			continue // not a picture: the screen is what it was
+		}
 		if frame.Codec == CodecPNG {
 			var err error
 			if width, height, err = pngSize(frame.Data); err != nil {
@@ -514,15 +549,18 @@ func zero(b []byte) {
 	}
 }
 
-// openSegment decrypts a stored segment under format 1, then format 2, and keeps it only if the
-// format it opened under is the one its frames call for (ADR-0092 §5): a format 2 segment cannot
-// pass for a format 1 one, nor the reverse.
+// openSegment decrypts a stored segment under format 1, then 2, then 3, and keeps it only if the
+// format it opened under is the one its frames call for (ADR-0092 §5, ADR-0096 §4): no format can
+// pass for another.
 func openSegment(dek, ciphertext []byte, sessionID string, first, last int64) (domain.VideoSegment, error) {
-	format := recordingFormat
-	plain, err := open(dek, ciphertext, segmentAAD(format, sessionID, first, last))
-	if err != nil {
-		format = recordingFormatV2
-		plain, err = open(dek, ciphertext, segmentAAD(format, sessionID, first, last))
+	var plain []byte
+	var format string
+	err := domain.ErrIntegrity
+	for _, candidate := range []string{recordingFormat, recordingFormatV2, recordingFormatV3} {
+		if plain, err = open(dek, ciphertext, segmentAAD(candidate, sessionID, first, last)); err == nil {
+			format = candidate
+			break
+		}
 	}
 	if err != nil {
 		return domain.VideoSegment{}, domain.ErrIntegrity

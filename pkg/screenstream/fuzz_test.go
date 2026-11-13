@@ -16,6 +16,8 @@ func FuzzDecode(f *testing.F) {
 	partial, _ := Encode(Message{Type: TypeFrameDelta, Sequence: 2, Timestamp: time.Unix(1, 0), Width: 8, Height: 4,
 		Rects: []Rect{{X: 1, Y: 1, Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nIHDR")}}})
 	f.Add(partial)
+	clipboard, _ := Encode(Message{Type: TypeClipboard, Sequence: 3, Timestamp: time.Unix(1, 0), Direction: ClipboardFromTarget, ClipboardText: "é €\r\n"})
+	f.Add(clipboard)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		m, err := Decode(data)
 		if err != nil {

@@ -727,7 +727,7 @@ func toVideoSegmentResponse(response *recordingv1.GetVideoSegmentResponse, sessi
 	var lastTimestamp time.Time
 	for index, frame := range response.GetFrames() {
 		if frame == nil || frame.GetTs() == nil || frame.GetTs().CheckValid() != nil ||
-			(frame.GetCodec() != "png" && frame.GetCodec() != "png-delta-v1") ||
+			(frame.GetCodec() != "png" && frame.GetCodec() != "png-delta-v1" && frame.GetCodec() != "clipboard-text-v1") ||
 			len(frame.GetFrameData()) == 0 || len(frame.GetFrameData()) > 4<<20 {
 			return videoSegmentResponse{}, fmt.Errorf("frame %d is invalid", index)
 		}
@@ -737,6 +737,13 @@ func toVideoSegmentResponse(response *recordingv1.GetVideoSegmentResponse, sessi
 			message, err := screenstream.Decode(frame.GetFrameData())
 			if err != nil || message.Type != screenstream.TypeFrameDelta || int64(message.Sequence) != firstSequence+int64(index) {
 				return videoSegmentResponse{}, fmt.Errorf("frame %d is not the partial frame of its sequence", index)
+			}
+		}
+		// A clipboard text (ADR-0096 §4) is the CLIPBOARD message of its own sequence, likewise.
+		if frame.GetCodec() == "clipboard-text-v1" {
+			message, err := screenstream.Decode(frame.GetFrameData())
+			if err != nil || message.Type != screenstream.TypeClipboard || int64(message.Sequence) != firstSequence+int64(index) {
+				return videoSegmentResponse{}, fmt.Errorf("frame %d is not the clipboard text of its sequence", index)
 			}
 		}
 		totalBytes += int64(len(frame.GetFrameData()))

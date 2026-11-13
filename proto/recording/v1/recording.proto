@@ -44,6 +44,9 @@ message StreamAck {
 message VideoFrameData {
   google.protobuf.Timestamp ts = 1;
   bytes frame_data = 2;
+  // png (une image clé, le PNG), png-delta-v1 (une image partielle, ADR-0092 : le message
+  // FRAME_DELTA) ou clipboard-text-v1 (un texte du presse-papiers, ADR-0096 : le message
+  // CLIPBOARD). Voir docs/api/grpc/README.md.
   string codec = 3;
 }
 
