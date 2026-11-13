@@ -246,12 +246,12 @@ func TestEnableDynamicChannels_CallbacksMaySendWithoutHanging(t *testing.T) {
 	}
 	s.mu.Lock()
 	s.dynamicChannels.capsSeen = true
-	handler := s.channelHandler
+	handler := s.channelReaders[RDPChannelDynamic]
 	s.mu.Unlock()
 	done := make(chan error, 1)
 	go func() {
 		// No transport: the answer to the create cannot be sent, which ends here, after the lock.
-		done <- handler(RDPChannelDynamic, createRequest(0, 3, RDPDisplayControlChannel))
+		done <- handler(createRequest(0, 3, RDPDisplayControlChannel))
 	}()
 	select {
 	case err := <-done:
@@ -266,7 +266,7 @@ func TestEnableDynamicChannels_CallbacksMaySendWithoutHanging(t *testing.T) {
 	s.dynamicChannels.opened = []string{RDPDisplayControlChannel}
 	s.dynamicChannels.delivered = []dynvcDelivery{{RDPDisplayControlChannel, []byte("caps")}}
 	s.mu.Unlock()
-	go func() { done <- handler(RDPChannelDynamic, []byte{dynvcData << 4, 3, 'z'}) }()
+	go func() { done <- handler([]byte{dynvcData << 4, 3, 'z'}) }()
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):

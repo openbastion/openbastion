@@ -785,6 +785,19 @@ func TestRDPWindows_Resize(t *testing.T) {
 	}
 }
 
+// The clipboard of ADR-0096 (increment 1) against Windows: Notepad's text copied, then a text
+// pasted in it and copied back (rdp_clipboard_interop_test.go).
+func TestRDPWindows_Clipboard(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clipboardAgainstWindows(t, client, target.user, target.password)
+}
+
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
 // a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s). The keys did not
 // do it: the Windows key never reached the shell (PR #101, captures). The stream ends with no

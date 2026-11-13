@@ -54,7 +54,7 @@ func TestConnectInitial_AnnouncesDrdynvcOnlyWhenDynamicChannelsAreOn(t *testing.
 }
 
 func TestMarshalClientNetworkData_KeepsToTheClosedList(t *testing.T) {
-	for _, names := range [][]string{nil, {""}, {"toolongname"}, {"drdynvc", "cliprdr"}} {
+	for _, names := range [][]string{nil, {""}, {"toolongname"}, {"drdynvc", "cliprdr", "rdpsnd"}} {
 		if _, err := marshalClientNetworkData(names); err == nil {
 			t.Errorf("%q announced", names)
 		}

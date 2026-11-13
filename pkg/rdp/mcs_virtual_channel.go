@@ -46,16 +46,20 @@ var ErrRDPChannel = errors.New("rdp: virtual channel data refused")
 
 // rdpStaticChannelNames is the closed list of the channels this client announces, in order.
 func rdpStaticChannelNames(settings MCSClientSettings) []string {
+	var names []string
 	if settings.DynamicChannels {
-		return []string{RDPChannelDynamic}
+		names = append(names, RDPChannelDynamic)
 	}
-	return nil
+	if settings.ClipboardChannel {
+		names = append(names, RDPChannelClipboard) // ADR-0096
+	}
+	return names
 }
 
 // marshalClientNetworkData is TS_UD_CS_NET's payload: channelCount, then each CHANNEL_DEF (an
 // 8-byte name, NUL-terminated, and its options).
 func marshalClientNetworkData(names []string) ([]byte, error) {
-	if len(names) == 0 || len(names) > 1 {
+	if len(names) == 0 || len(names) > 2 {
 		return nil, ErrMCSConnection
 	}
 	out := make([]byte, 4+12*len(names))
@@ -263,12 +267,15 @@ func (s *CredSSPClientSession) deliverChannelChunk(index int, chunk []byte) erro
 		return fmt.Errorf("%w: a chunk for no channel", ErrRDPChannel)
 	}
 	message, complete, err := s.channelAssemblers[index].add(chunk)
-	handler := s.channelHandler
+	reader, handler := s.channelReaders[names[index]], s.channelHandler
 	s.mu.Unlock()
 	if err != nil || !complete {
 		return err
 	}
 	defer clear(message)
+	if reader != nil {
+		return reader(message)
+	}
 	if handler == nil {
 		return nil
 	}

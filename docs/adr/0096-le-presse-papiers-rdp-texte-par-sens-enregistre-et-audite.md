@@ -48,6 +48,15 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 4. Contrat écran et Admin UI : les deux messages, les boutons et le panneau. Tests Vitest.
 5. Vérification dans le navigateur sans interface de la CI Windows (comme ADR-0095) : coller vers Notepad, copier depuis Notepad, relire la session et y trouver les deux transferts.
 
+## Mise en œuvre
+
+**Incrément 1, fait (13 novembre 2026) : le canal `cliprdr`.** `pkg/rdp`, derrière `MCSClientSettings.ClipboardChannel` et `EnableClipboard`, que rien n'allume encore hors des tests :
+- **Liste fermée** : `cliprdr` rejoint `drdynvc`, chacun derrière son propre réglage ; la liste passe d'un nom à deux. Chaque canal statique a désormais son lecteur (`channelReaders`), au lieu du lecteur unique d'ADR-0095.
+- **Protocole** (`clipboard.go`, MS-RDPECLIP) : capacités en version 2 sans aucun drapeau (noms de format courts, pas de fichiers, pas de verrouillage) ; l'ordre est tenu (capacités, Monitor Ready, puis le reste) ; seul `CF_UNICODETEXT` est demandé ou donné, toute demande d'un autre format reçoit un échec ; fichiers, verrouillage, répertoire temporaire et types inconnus ferment la session.
+- **Chaque sens selon son droit** : sans le droit de copier, une liste de formats de la cible est acquittée et rien n'est demandé ; sans le droit de coller, aucun texte n'est annoncé et une demande reçoit un échec.
+- **Borne** : un texte fait au plus 65 526 octets en UTF-16, sans son zéro final, pour que la réponse, son en-tête et ce zéro tiennent dans un message de canal (64 Kio, ADR-0095). C'est la borne de 64 Kio du §3, en-tête compris.
+- **Prouvé** : 8 tests ; 13 mutations tuées (deux ont d'abord survécu, deux trous de test comblés) ; `FuzzClipboard` (30 s). FreeRDP n'ouvre pas son presse-papiers : la session continue, un texte offert attend. **À prouver en CI** : `TestRDPWindows_Clipboard`, le texte de Notepad copié, puis un texte collé dans Notepad (avec « é » et « € ») et relu.
+
 ## Conséquences
 
 - (+) Le besoin le plus demandé des opérateurs, sans trou dans la trace : chaque transfert est enregistré, chiffré, audité et refusable par politique, dans chaque sens séparément.
