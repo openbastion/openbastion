@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/pkg/rdp"
+	"github.com/openbastion/openbastion/pkg/vnc"
 )
 
 // The clipboard of an RDP session, in the engine (ADR-0096, increment 3b): opened only with
@@ -103,5 +105,26 @@ func TestRDPTarget_ACopiedTextPastTheBoundIsDropped(t *testing.T) {
 	}
 	if len(target.copied) != rdpCopiedTextsWaiting || target.copiedDropped != 2 {
 		t.Fatalf("%d waiting, %d dropped", len(target.copied), target.copiedDropped)
+	}
+}
+
+// A target refusing the account's credentials ends the opening as target_auth_failed, RDP as VNC
+// (ADR-0071 §12); other failures keep their codes.
+func TestScreenCodecs_ACredentialRefusalHasItsOwnCode(t *testing.T) {
+	refused := fmt.Errorf("%w: %w (NTSTATUS 0xC000006D)", rdp.ErrCredSSPClient, rdp.ErrTargetCredentialsRefused)
+	codec := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) { return nil, refused }}
+	_, err := codec.Open(context.Background(), rdpTestCredential(t))
+	var failure *proxycore.ScreenFailure
+	if !errors.As(err, &failure) || failure.Code != "target_auth_failed" {
+		t.Fatalf("RDP: %v", err)
+	}
+	other := &RDPCodec{TLSRoots: x509.NewCertPool(), openSession: func(context.Context, *proxycore.Credential) (rdpScreenSession, error) {
+		return nil, fmt.Errorf("%w (NTSTATUS 0xC0000022)", rdp.ErrCredSSPClient)
+	}}
+	if _, err := other.Open(context.Background(), rdpTestCredential(t)); !errors.As(err, &failure) || failure.Code != "target_unreachable" {
+		t.Fatalf("RDP, another status: %v", err)
+	}
+	if got := vncEndCode(fmt.Errorf("handshake: %w", vnc.ErrAuthentication)); got != "target_auth_failed" {
+		t.Fatalf("VNC: %s", got)
 	}
 }

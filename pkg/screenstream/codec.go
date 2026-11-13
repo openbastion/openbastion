@@ -73,6 +73,9 @@ const (
 	EndCodeCodecUnsupported
 	EndCodeRecordingLost
 	EndCodeTicketInvalid
+	// EndCodeTargetAuthFailed: the target refused the account's credentials (ADR-0071 §12, amended
+	// on 13 November 2026): the secret the Vault holds for it is to be checked.
+	EndCodeTargetAuthFailed
 )
 
 type Protocol byte

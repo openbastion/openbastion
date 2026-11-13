@@ -96,7 +96,7 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			target: newFakeRFBTarget(t, "vnc-target.test", vaultSecret, fakeRFBBehavior{subtype: 261}),
 		},
 		{
-			name: "a target refusing the password shows no frame", account: "refused_password", want: "target_unreachable",
+			name: "a target refusing the password shows no frame", account: "refused_password", want: "target_auth_failed", // §12, since 13 November 2026
 			target: newFakeRFBTarget(t, "vnc-target.test", vaultSecret), secret: "not-what-the-target-expects", secretReachesTarget: true,
 		},
 		{
@@ -371,8 +371,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		t.Run("the journey, against a real target", func(t *testing.T) { journey(t, "screen_real", nil, relay.openConnections) })
 		t.Run("a real target refuses a wrong password, and the operator is told so without detail", func(t *testing.T) {
 			onboard(t, "screen_real_wrong", relay.address, real.user, wrongPasswordFor(real), real.pin())
-			if end := refused(t, "screen_real_wrong"); end != "target_unreachable" {
-				t.Fatalf("END = %q, want target_unreachable", end)
+			if end := refused(t, "screen_real_wrong"); end != "target_auth_failed" {
+				t.Fatalf("END = %q, want target_auth_failed", end)
 			}
 			waitUntil(t, 5*time.Second, "the target connection to be cut", func() bool { return relay.openConnections() == 0 })
 		})
