@@ -38,7 +38,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 | Exploitation | Budget d'entrée compté par instance du proxy. ~~`up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran~~ : fait le 13 novembre 2026, par leur sous-commande `probe` (ADR-0072). S3 sous TLS mesuré le 13 novembre 2026 sur le même hôte (ADR-0090, lot A : 0 à 50 ms de plus en médiane pour une image clé, queue jusqu'à 1,5 s à 10 sessions) ; restent le mTLS du compose et un S3 distant, à mesurer sur la cible de déploiement. |
 | Accessibilité | L'image reste illisible à un lecteur d'écran : c'est une image. **Corrigé le 13 novembre 2026** : le piège clavier (WCAG 2.1.2), puisque l'écran captait toutes les touches, Tab compris, sans sortie. Ctrl+Alt+Maj+Échap rend désormais le clavier à la page, sans envoyer Échap et en relâchant tout sur la cible. L'écran se présente comme une application (« écran distant »), avec une description qui dit comment saisir, comment sortir, et que le texte de la cible se lit par le panneau Presse-papiers. |
 
-**Décisions du propriétaire** : `RDP_ENABLED` et `SCREEN_CLIPBOARD` allumés par défaut le 13 novembre 2026 (ADR-0088, ADR-0096 §7). En attente : le statut d'ADR-0090 et les trois ADR proposés (licence RDS, Kerberos, RDPGFX).
+**Décisions du propriétaire** : `RDP_ENABLED` et `SCREEN_CLIPBOARD` allumés par défaut le 13 novembre 2026 (ADR-0088, ADR-0096 §7). ADR-0099 (licence RDS, B puis A), ADR-0100 (Kerberos par une bibliothèque éprouvée, sous la policy des dépendances) et ADR-0101 (RDPGFX sans perte, derrière un interrupteur éteint) acceptés le même jour. En attente : le statut d'ADR-0090.
 
 ## Validation contre une cible Windows réelle — historique, 6 au 8 novembre 2026
 

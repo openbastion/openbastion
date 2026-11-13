@@ -1,6 +1,6 @@
 # ADR-0100 — CredSSP accepte Kerberos à côté de NTLMv2, pour les domaines qui ferment NTLM
 
-**Statut** `Proposé` · 13 novembre 2026 · demandé par le propriétaire du projet le 13 novembre 2026 (« ADR proposés d'abord ») pour l'écart « authentification » d'ADR-0071 (ADR-0090, lot E, point 5). `Accepté` seulement avec son go, cité avec sa date.
+**Statut** `Accepté` · 13 novembre 2026 · accepté le même jour par le propriétaire du projet : « ADR-0100 l'option A Une bibliothèque Go éprouvée, soumise à la policy des dépendances ». La revue de gokrb5 selon `.agents/policies/dependencies-and-supply-chain.md` (besoin, licence, maintenance, alternative écartée, empreinte) lui sera soumise avant toute ligne de code. Le domaine de test en CI et les champs de compte du Vault restent à confirmer à leur incrément.
 
 ## Contexte
 
