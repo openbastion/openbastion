@@ -94,6 +94,22 @@ Mesurer, contre Windows, le débit cible → proxy, le coût d'encodage PNG, la 
 - **Très bruité** : d'un passage S3 à l'autre, le même cas varie d'un facteur 2 à 20 sur le maximum. Le premier passage, sur un SeaweedFS tout juste démarré, est le plus lent. Deux passages ne suffisent pas à classer les cas entre eux.
 - **Ce n'est pas un plafond** : SeaweedFS sur le même hôte n'a ni réseau ni TLS. Un S3 distant ajoute au moins son aller-retour à chaque image. Il faudra le mesurer sur la cible de déploiement.
 - **Pas de décision à prendre ici** : rien ne justifie encore de regrouper les images à l'enregistrement (ADR-0093, option B écartée). La queue au-delà d'une seconde est à surveiller sur un vrai déploiement.
+
+**Mesuré ensuite (13 novembre 2026) : le même acquittement, avec un S3 sous TLS.**
+
+**Banc** : deux SeaweedFS 4.52 jetables sur le même hôte. L'un sert S3 en HTTPS, avec une autorité de test et un certificat pour `127.0.0.1`, que le Recorder reçoit en `S3_CA_FILE` (`RECORDER_MEASURE_S3_CA_FILE`, TLS 1.3 imposé par le client). L'autre le sert en HTTP clair, comme témoin. Quatre passages alternés : TLS, HTTP, TLS, HTTP. Les fourchettes ci-dessous sont celles des deux passages.
+
+| Image | Sessions | TLS : médiane / p95 / max | HTTP : médiane / p95 / max |
+|---|---|---|---|
+| Partielle, 1,5 Ko | 1 / 5 / 10 | 19 à 30 / 36 à 68 / 50 à 472 ms | 17 à 45 / 37 à 200 / 98 à 817 ms |
+| Clé, 33 Ko | 1 / 5 / 10 | 19 à 78 / 49 à 474 / 72 à 966 ms | 27 à 55 / 41 à 323 / 43 à 709 ms |
+| Clé, 184 Ko | 1 / 5 / 10 | 29 à 110 / 58 à 398 / 77 à 1 479 ms | 31 à 85 / 66 à 271 / 110 à 508 ms |
+
+- **Partielles** : aucun coût mesurable du TLS.
+- **Clés** : la médiane prend de 0 à 50 ms. La queue s'allonge : 95ᵉ centile jusqu'à 0,47 s (0,32 s en clair), maximum jusqu'à 1,5 s (0,7 s).
+- **Bruité** : le second passage TLS est nettement plus lent que le premier.
+- **Hypothèse non vérifiée** : le client S3 du Recorder garde 4 connexions inactives par hôte (`MaxIdleConnsPerHost`). À 5 et 10 sessions, il refait donc des poignées de main TLS. À mesurer avant tout réglage.
+- **Ce banc ne mesure pas** le mTLS du compose (le certificat client du Recorder vérifié par SeaweedFS), ni un S3 distant. Un S3 distant ajoute son aller-retour, et son coût est à mesurer sur la cible de déploiement.
 - Ces deux passages précèdent le correctif du pool ci-dessous : une partie de leur queue venait sans doute de lui.
 
 **Mesuré ensuite (12 novembre 2026) : 20 et 50 sessions, et une perte d'images trouvée.** `RECORDER_MEASURE_SESSIONS` fixe le nombre de sessions simultanées. À 50 sessions, en mémoire, le Recorder perdait des images : avec les grosses images clés, 48 sessions sur 50 ont eu une image non acquittée (l'épreuve arrête une session à sa première perte), toutes en `cannot assign requested address`. Une image perdue coupe sa session : le proxy ne montre pas ce qui n'est pas enregistré.

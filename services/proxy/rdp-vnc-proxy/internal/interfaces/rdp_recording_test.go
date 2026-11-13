@@ -533,8 +533,15 @@ func startVideoRecorder(t *testing.T, root, pkiDir, httpPort, grpcPort, dsn, s3U
 		"TLS_CERT_FILE=" + pki.CertFile(pkiDir, mtls.VideoRecorder), "TLS_KEY_FILE=" + pki.KeyFile(pkiDir, mtls.VideoRecorder),
 		"TLS_CA_FILE=" + pki.CAFile(pkiDir),
 		"VIDEO_RECORDER_KMS_KEY_HEX=" + strings.Repeat("ab", 32),
-		"S3_ENDPOINT=" + s3URL, "S3_BUCKET=screens", "S3_ACCESS_KEY=test", "S3_SECRET_KEY=test-secret", "S3_ALLOW_HTTP=true", "S3_CREATE_BUCKET=true",
+		"S3_ENDPOINT=" + s3URL, "S3_BUCKET=screens", "S3_ACCESS_KEY=test", "S3_SECRET_KEY=test-secret", "S3_CREATE_BUCKET=true",
 		"AUTHORIZATION_URL=" + authzURL, "AUDIT_URL=" + auditURL,
+	}
+	// An S3 over TLS (ADR-0090, lot A: the cost of TLS to the object store) is trusted through
+	// RECORDER_MEASURE_S3_CA_FILE; plain HTTP, the test's own store, has to be allowed by name.
+	if strings.HasPrefix(s3URL, "https://") {
+		cmd.Env = append(cmd.Env, "S3_CA_FILE="+os.Getenv("RECORDER_MEASURE_S3_CA_FILE"))
+	} else {
+		cmd.Env = append(cmd.Env, "S3_ALLOW_HTTP=true")
 	}
 	p := &recorderProcess{out: &lockedBuffer{}}
 	cmd.Stdout, cmd.Stderr = p.out, p.out
