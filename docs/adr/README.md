@@ -155,7 +155,7 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 11 | [ADR-0090](0090-rdp-v002-glyphes-ordres-canaux-et-protocoles.md) | RDP en v0.0.2 : glyphes, ordres graphiques, canaux virtuels et protocoles, par incréments prouvés | Proposé |
 | 12 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté |
 | 13 | [ADR-0096](0096-le-presse-papiers-rdp-texte-par-sens-enregistre-et-audite.md) | Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité | Accepté |
-| 14 | [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Proposé |
+| 14 | [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Accepté |
 
 ### 10. Chaîne d'audit
 
@@ -324,4 +324,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0094](0094-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté | Déploiement, CI et chaîne d’approvisionnement |
 | [ADR-0095](0095-le-proxy-rdp-ouvre-les-canaux-virtuels-d-une-liste-fermee-en-commencant-par-le-redimensionnement.md) | Le proxy RDP ouvre les canaux virtuels d'une liste fermée, en commençant par le redimensionnement | Accepté | Proxy écran RDP et VNC |
 | [ADR-0096](0096-le-presse-papiers-rdp-texte-par-sens-enregistre-et-audite.md) | Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité | Accepté | Proxy écran RDP et VNC |
-| [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Proposé | Proxy écran RDP et VNC |
+| [ADR-0097](0097-un-secret-du-vault-est-saisi-dans-la-session-par-le-proxy-jamais-par-le-presse-papiers.md) | Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement | Accepté | Proxy écran RDP et VNC |

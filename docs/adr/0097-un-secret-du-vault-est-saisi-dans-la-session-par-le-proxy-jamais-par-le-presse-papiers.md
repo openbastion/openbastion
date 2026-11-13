@@ -1,6 +1,6 @@
 # ADR-0097 — Un secret est saisi dans la session par le proxy, pour tous les protocoles, sans passer par le presse-papiers ni par l'enregistrement
 
-**Statut** `Proposé` · 13 novembre 2026 · étude demandée par le propriétaire du projet le 13 novembre 2026, à l'acceptation d'ADR-0096 : « Pour éviter que les mots de passe se retrouvent enregistrés en clair, est-ce que nous ne pourrions pas intégrer un mécanisme de saisie automatique comme op-forward, avec la possibilité de continuer à copier/coller les mots de passe ». `Accepté` seulement avec son go, cité avec sa date. Précisé le même jour : « Ce mécanisme de saisie automatique doit être valable pour tous les protocoles déjà supportés (ssh, vnc, rdp) et supporteraient à l'avenir ».
+**Statut** `Accepté` · 13 novembre 2026 · accepté le même jour par le propriétaire du projet : « Go pour A et B, continue ». A (un secret du Vault saisi par le proxy) et B (un mot de passe fourni par l'opérateur, saisi sans enregistrer son contenu) sont acceptés, avec un seul mécanisme pour tous les protocoles, la confirmation par le second facteur à chaque saisie et les bornes de B (128 caractères, une ligne). Étude étude demandée par le propriétaire du projet le 13 novembre 2026, à l'acceptation d'ADR-0096 : « Pour éviter que les mots de passe se retrouvent enregistrés en clair, est-ce que nous ne pourrions pas intégrer un mécanisme de saisie automatique comme op-forward, avec la possibilité de continuer à copier/coller les mots de passe ». `Accepté` seulement avec son go, cité avec sa date. Précisé le même jour : « Ce mécanisme de saisie automatique doit être valable pour tous les protocoles déjà supportés (ssh, vnc, rdp) et supporteraient à l'avenir ».
 
 ## Contexte
 
@@ -36,7 +36,7 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 
 **D. Masquer après coup un mot de passe dans l'enregistrement**, en reconnaissant son allure. Écartée : une heuristique sur le contenu manque des secrets et en invente. L'heuristique SSH actuelle porte sur l'invite, pas sur le contenu, et elle reste.
 
-## Décision proposée : A, et B en complément borné, un seul mécanisme pour tous les protocoles
+## Décision : A, et B en complément borné, un seul mécanisme pour tous les protocoles
 
 1. **Un mécanisme, pas un par protocole.** La saisie d'un secret est un service commun du proxy (`pkg/proxycore`) :
    - les droits, la confirmation par le second facteur, le scope à usage unique, l'audit et la référence dans l'enregistrement sont les mêmes pour tous les protocoles ;
