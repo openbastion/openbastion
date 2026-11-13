@@ -4428,7 +4428,8 @@ Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le
 - **Admin UI** : « La cible a refusé les identifiants du compte : son secret dans le coffre est à vérifier. »
 - **Prouvé** : tests à chaque étage, 6 mutations tuées. Contre Windows, `TestRDPWindows_CredSSP` exige désormais que le mauvais mot de passe soit reconnu comme tel (CI de la PR).
 
-## 2026-11-13 — CI Windows : l'écran et l'état de la machine, à chaque passage
+## 2026-11-13 — CI Windows : l'écran de la machine, à chaque passage
 
-Pour trouver les causes de l'instabilité (cas B, machine perdue après la déconnexion, session sans image après un redimensionnement), la CI Windows demande au moniteur QEMU de dockur, à chaque passage, l'état de la machine (`info status`) et une capture de son écran (`screendump`). La capture est convertie en PNG par `ppm2png.py`, en bibliothèque standard seulement, et rangée dans l'artefact sous `guest-screen.png`. L'étape liste aussi les ports d'écoute du conteneur, au cas où le moniteur ne serait pas sur le port 7100 ; le premier passage le dira. Elle ne fait échouer aucun job.
+Pour trouver les causes de l'instabilité (cas B, machine perdue après la déconnexion, session sans image après un redimensionnement), la CI Windows prend à chaque passage une image de l'écran de la machine telle que QEMU la montre. Elle la prend sur la console VNC de QEMU, dans le conteneur dockur (port 5900, sans authentification, jamais publié). `vnc_snapshot.py`, en bibliothèque standard seulement, demande une image entière en Raw et l'écrit dans l'artefact sous `guest-screen.png`. Ce n'est pas `pkg/vnc`, qui refuse par principe tout VNC sans VeNCrypt. L'étape relève aussi, dans la ligne de commande de QEMU, où est son moniteur, et ne fait échouer aucun job.
 
+**Premier essai** (run 43506332714) : le moniteur QEMU n'écoute pas sur TCP 7100 (« Connection refused »), et la liste des ports montre la console VNC sur 5900. D'où ce second essai. Le client est éprouvé contre un serveur RFB factice : pixels relus exacts.

@@ -206,27 +206,15 @@ jobs:
             if [ -f "$f" ]; then echo "== $f"; head -c 6000 "$f"; fi
           done
       # The virtual machine itself, whatever RDP says (ADR-0071, CI instability: Windows lost during
-      # the measure or after the logoff, a session without a frame): its state and its screen, from
-      # QEMU's monitor inside the container, on every run (a green one says the capture works). The
-      # listening ports are listed too, should the monitor be elsewhere than port 7100.
+      # the measure or after the logoff, a session without a frame): its screen as QEMU's own VNC
+      # console shows it (port 5900 inside the container, no authentication, never published), and
+      # where QEMU's monitor is, from its command line. On every run: a green one says it works.
       - name: The virtual machine's screen and state
         if: ${{ !cancelled() }}
         run: |
-          docker exec openbastion-rdp-windows bash -c '
-            (ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null) | head -20
-            if exec 3<>/dev/tcp/127.0.0.1/7100; then
-              printf "info status\nscreendump /shared/guest-screen.ppm\n" >&3
-              sleep 5
-              timeout 2 cat <&3 | tr -d "\r" | grep -av "^$" | tail -8
-              exec 3>&-
-            else
-              echo "no QEMU monitor on port 7100"
-            fi' || true
-          if [ -f "$RUNNER_TEMP/windows/shared/guest-screen.ppm" ]; then
-            sudo chmod a+r "$RUNNER_TEMP/windows/shared/guest-screen.ppm"
-            python3 test/integration/testdata/rdp/windows/ppm2png.py "$RUNNER_TEMP/windows/shared/guest-screen.ppm" "$RUNNER_TEMP/windows/dump/guest-screen.png"
-            sudo rm -f "$RUNNER_TEMP/windows/shared/guest-screen.ppm"
-          fi
+          docker exec openbastion-rdp-windows bash -c 'tr "\0" " " < /proc/$(pgrep -f qemu-system | head -1)/cmdline | grep -oE -- "-(monitor|qmp|chardev|vnc) [^ ]+"' || true
+          ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' openbastion-rdp-windows)
+          python3 test/integration/testdata/rdp/windows/vnc_snapshot.py "$ip" 5900 "$RUNNER_TEMP/windows/dump/guest-screen.png" || true
       - name: What Windows showed
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
