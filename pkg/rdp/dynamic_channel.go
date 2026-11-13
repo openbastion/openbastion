@@ -224,9 +224,8 @@ func (d *rdpDynamicChannels) handle(message []byte) ([][]byte, error) {
 			}
 			return nil, d.deliver(name, data)
 		}
-		if sp != 0 {
-			return nil, fmt.Errorf("%w: a data PDU with Sp %d", ErrRDPDynamicChannel, sp)
-		}
+		// Sp is unused in a DATA PDU (MS-RDPEDYC 2.2.3.2), and is not read: the five Windows of the
+		// CI set it to 2 on the graphics channel (PR #194). The message's length is the PDU's.
 		assembly := d.assembling[id]
 		if assembly == nil {
 			// DATA alone is a whole message.

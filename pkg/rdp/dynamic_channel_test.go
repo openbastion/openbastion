@@ -144,8 +144,10 @@ func TestDynamicChannels_ReassembleTheDataWithinTheBounds(t *testing.T) {
 	mustHandle(t, d, dataFirst(3, 6, []byte("hel")))
 	mustHandle(t, d, append([]byte{dynvcData << 4, 3}, "lo!"...))
 	mustHandle(t, d, dataFirst(3, 2, []byte("ok")))
+	// Sp set on a DATA PDU, as Windows does on the graphics channel: unused, not read.
+	mustHandle(t, d, append([]byte{dynvcData<<4 | 2<<2, 3}, "sp"...))
 	_, delivered := d.take()
-	if len(delivered) != 3 || string(delivered[0].data) != "whole" || string(delivered[1].data) != "hello!" ||
+	if len(delivered) != 4 || string(delivered[3].data) != "sp" || string(delivered[0].data) != "whole" || string(delivered[1].data) != "hello!" ||
 		string(delivered[2].data) != "ok" || delivered[1].name != RDPDisplayControlChannel {
 		t.Fatalf("delivered %+v", delivered)
 	}
@@ -155,7 +157,6 @@ func TestDynamicChannels_ReassembleTheDataWithinTheBounds(t *testing.T) {
 		"more than announced":           {dataFirst(3, 3, []byte("ab")), append([]byte{dynvcData << 4, 3}, "cd"...)},
 		"first longer than its total":   {dataFirst(3, 1, []byte("ab"))},
 		"a first of 0 bytes":            {dataFirst(3, 0, nil)},
-		"a data with Sp":                {append([]byte{dynvcData<<4 | 1<<2, 3}, "x"...)},
 		"an empty data":                 {{dynvcData << 4, 3}},
 		"a first past 64 KiB":           {append([]byte{dynvcDataFirst<<4 | 2<<2, 3}, binary.LittleEndian.AppendUint32(nil, MaxRDPChannelMessage+1)...)},
 		"a close of a channel not open": {{dynvcClose << 4, 4}},
