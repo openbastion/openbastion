@@ -35,7 +35,7 @@ Ce qui suit résume l'état réel. Les sections suivantes gardent l'historique, 
 | Clavier | ~~La touche Windows seule n'ouvre pas le menu Démarrer~~ : corrigé le 13 novembre 2026 (PR #180). Le Client Info ne posait pas `INFO_ENABLEWINDOWSKEY`. Rouge d'abord sur les cinq cibles (la touche Windows changeait 0,0 % de l'écran, Ctrl+Échap 41 à 42 %), puis 41 à 52 % une fois le drapeau posé ; menu ouvert sur la capture fr-FR. |
 | Refus | Un mot de passe refusé par la cible se dit `target_unreachable` : le §12 n'a pas de code pour ce cas. |
 | VNC | RealVNC refusé (RFB 5.0) ; ni redimensionnement, ni presse-papiers. |
-| Exploitation | Budget d'entrée compté par instance du proxy. ~~`up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran~~ : fait le 13 novembre 2026, par leur sous-commande `probe` (ADR-0072). S3 distant ou sous TLS non mesuré. |
+| Exploitation | Budget d'entrée compté par instance du proxy. ~~`up --wait` ne vérifie ni le Video Recorder ni le proxy d'écran~~ : fait le 13 novembre 2026, par leur sous-commande `probe` (ADR-0072). S3 sous TLS mesuré le 13 novembre 2026 sur le même hôte (ADR-0090, lot A : 0 à 50 ms de plus en médiane pour une image clé, queue jusqu'à 1,5 s à 10 sessions) ; restent le mTLS du compose et un S3 distant, à mesurer sur la cible de déploiement. |
 | Accessibilité | L'écran est illisible au lecteur d'écran. |
 
 **Décisions du propriétaire en attente** : `RDP_ENABLED` par défaut (ADR-0088), `SCREEN_CLIPBOARD` par défaut (ADR-0096 §7), le statut d'ADR-0090.

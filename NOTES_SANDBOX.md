@@ -4378,3 +4378,18 @@ Sur #170 (2022, 32 bpp) puis #180 (console), `TestRDPWindows_Resize` a échoué 
 
 Correctif : redemander la même taille après 5 s, et ne rien demander quand le bureau a déjà la taille. Deux tests, trois mutations tuées. Il réduit l'écart sans prouver qu'il l'efface.
 
+## 2026-11-13 — ADR-0090 : l'acquittement du Video Recorder avec un S3 sous TLS
+
+`TestVideoRecorderAckLatency` accepte un S3 en HTTPS. L'autorité de confiance passe par `RECORDER_MEASURE_S3_CA_FILE` ; le HTTP clair n'est plus autorisé que pour le stockage de l'épreuve elle-même.
+
+**Banc** : deux SeaweedFS 4.52 jetables sur le même hôte, l'un en HTTPS (autorité de test, certificat pour `127.0.0.1`), l'autre en HTTP clair ; un PostgreSQL 16 jetable. Quatre passages alternés à 1, 5 et 10 sessions.
+
+**Résultat** (tableau dans ADR-0090) :
+- partielles : aucun coût mesurable ;
+- images clés : médiane de 0 à 50 ms de plus, 95ᵉ centile jusqu'à 0,47 s (0,32 s en clair), maximum jusqu'à 1,5 s (0,7 s) ;
+- bruité d'un passage à l'autre.
+
+**Hypothèse non vérifiée** : 4 connexions inactives par hôte côté client S3, donc de nouvelles poignées de main TLS à 5 et 10 sessions.
+
+**Non mesuré** : le mTLS du compose, et un S3 distant.
+
