@@ -18,8 +18,9 @@ const (
 	// RDPChannelDynamic is the static channel of the dynamic channels.
 	RDPChannelDynamic = "drdynvc"
 
-	rdpChannelOptionInitialized = uint32(0x80000000)
-	rdpChannelOptionEncryptRDP  = uint32(0x40000000)
+	rdpChannelOptionInitialized  = uint32(0x80000000)
+	rdpChannelOptionEncryptRDP   = uint32(0x40000000)
+	rdpChannelOptionShowProtocol = uint32(0x00200000)
 
 	rdpChannelFlagFirst        = uint32(0x00000001)
 	rdpChannelFlagLast         = uint32(0x00000002)
@@ -70,9 +71,22 @@ func marshalClientNetworkData(names []string) ([]byte, error) {
 		}
 		def := out[4+12*i : 4+12*(i+1)]
 		copy(def[:8], name)
-		binary.LittleEndian.PutUint32(def[8:12], rdpChannelOptionInitialized|rdpChannelOptionEncryptRDP)
+		options := rdpChannelOptionInitialized | rdpChannelOptionEncryptRDP
+		if rdpChannelShowsProtocol(name) {
+			options |= rdpChannelOptionShowProtocol
+		}
+		binary.LittleEndian.PutUint32(def[8:12], options)
 	}
 	return out, nil
+}
+
+// rdpChannelShowsProtocol says whether the application at the server's end of a channel reads its
+// CHANNEL_PDU_HEADER. The clipboard's does: Windows's rdpclip answers nothing (not even the format
+// list response) to chunks without CHANNEL_FLAG_SHOW_PROTOCOL, and mstsc and FreeRDP announce
+// cliprdr with CHANNEL_OPTION_SHOW_PROTOCOL and set the flag on its every chunk. The server ignores
+// the option (MS-RDPBCGR 2.2.1.3.4.1): the flag on each chunk is what counts.
+func rdpChannelShowsProtocol(name string) bool {
+	return name == RDPChannelClipboard
 }
 
 // parseServerNetworkData reads TS_UD_SC_NET's payload: the I/O channel, then exactly one channel ID
@@ -157,8 +171,8 @@ func (a *rdpChannelAssembler) reset() {
 }
 
 // marshalRDPChannelChunks cuts a message into chunks of rdpChannelChunkLength at most, each with
-// its CHANNEL_PDU_HEADER.
-func marshalRDPChannelChunks(message []byte) ([][]byte, error) {
+// its CHANNEL_PDU_HEADER; showProtocol sets CHANNEL_FLAG_SHOW_PROTOCOL on every one.
+func marshalRDPChannelChunks(message []byte, showProtocol bool) ([][]byte, error) {
 	if len(message) == 0 || len(message) > MaxRDPChannelMessage {
 		return nil, fmt.Errorf("%w: a %d-byte message to send", ErrRDPChannel, len(message))
 	}
@@ -166,6 +180,9 @@ func marshalRDPChannelChunks(message []byte) ([][]byte, error) {
 	for offset := 0; offset < len(message); offset += rdpChannelChunkLength {
 		end := min(offset+rdpChannelChunkLength, len(message))
 		flags := uint32(0)
+		if showProtocol {
+			flags |= rdpChannelFlagShowProtocol
+		}
 		if offset == 0 {
 			flags |= rdpChannelFlagFirst
 		}
@@ -300,7 +317,7 @@ func (s *CredSSPClientSession) SendChannelMessage(ctx context.Context, channel s
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
 		return ErrMCSConnection
 	}
-	chunks, err := marshalRDPChannelChunks(message)
+	chunks, err := marshalRDPChannelChunks(message, rdpChannelShowsProtocol(channel))
 	if err != nil {
 		return err
 	}

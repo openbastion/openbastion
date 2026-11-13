@@ -159,7 +159,7 @@ func TestChannelAssembler_RefusesWhatTheFramingForbids(t *testing.T) {
 
 func TestMarshalRDPChannelChunks_CutsAt1600AndRoundTrips(t *testing.T) {
 	message := bytes.Repeat([]byte{0x5a}, 2*rdpChannelChunkLength+7)
-	chunks, err := marshalRDPChannelChunks(message)
+	chunks, err := marshalRDPChannelChunks(message, false)
 	if err != nil || len(chunks) != 3 {
 		t.Fatalf("%d chunks, %v; want 3", len(chunks), err)
 	}
@@ -176,7 +176,7 @@ func TestMarshalRDPChannelChunks_CutsAt1600AndRoundTrips(t *testing.T) {
 		}
 	}
 	for _, bad := range [][]byte{nil, make([]byte, MaxRDPChannelMessage+1)} {
-		if _, err := marshalRDPChannelChunks(bad); !errors.Is(err, ErrRDPChannel) {
+		if _, err := marshalRDPChannelChunks(bad, false); !errors.Is(err, ErrRDPChannel) {
 			t.Errorf("a %d-byte message cut: %v", len(bad), err)
 		}
 	}
@@ -389,5 +389,103 @@ func TestSendChannelMessage_DuringAReactivation(t *testing.T) {
 	s.channelsConnected = false
 	if err := s.SendChannelMessage(context.Background(), RDPChannelDynamic, []byte("layout"), time.Second); !errors.Is(err, ErrRDPChannel) {
 		t.Fatalf("a message before the channels are joined: %v", err)
+	}
+}
+
+// The clipboard's channel shows its protocol, as mstsc and FreeRDP announce it: the option in its
+// CHANNEL_DEF and CHANNEL_FLAG_SHOW_PROTOCOL on each of its chunks, without which Windows's rdpclip
+// answers nothing. drdynvc keeps the options it has always had.
+func TestClipboardChannelShowsItsProtocol(t *testing.T) {
+	network, err := marshalClientNetworkData([]string{RDPChannelDynamic, RDPChannelClipboard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := binary.LittleEndian.Uint32(network[12:16]); got != 0xc0000000 {
+		t.Fatalf("drdynvc options %08x, want c0000000", got)
+	}
+	if got := binary.LittleEndian.Uint32(network[24:28]); got != 0xc0200000 {
+		t.Fatalf("cliprdr options %08x, want c0200000 (initialized, encrypt, show protocol)", got)
+	}
+	message := bytes.Repeat([]byte{0x5a}, rdpChannelChunkLength+1)
+	for _, c := range []struct {
+		channel string
+		flags   []uint32
+	}{
+		{RDPChannelClipboard, []uint32{0x11, 0x12}},
+		{RDPChannelDynamic, []uint32{0x01, 0x02}},
+	} {
+		chunks, err := marshalRDPChannelChunks(message, rdpChannelShowsProtocol(c.channel))
+		if err != nil || len(chunks) != 2 {
+			t.Fatalf("%s: %d chunks, %v", c.channel, len(chunks), err)
+		}
+		var a rdpChannelAssembler
+		for i, chunk := range chunks {
+			if got := binary.LittleEndian.Uint32(chunk[4:8]); got != c.flags[i] {
+				t.Fatalf("%s chunk %d: flags %02x, want %02x", c.channel, i, got, c.flags[i])
+			}
+			if got, complete, err := a.add(chunk); err != nil || complete != (i == 1) || (complete && !bytes.Equal(got, message)) {
+				t.Fatalf("%s chunk %d does not read back: %v %v", c.channel, i, complete, err)
+			}
+		}
+	}
+}
+
+// What SendChannelMessage writes on the wire: CHANNEL_FLAG_SHOW_PROTOCOL on the clipboard's chunk,
+// on the clipboard's channel ID, and not on drdynvc's.
+func TestSendChannelMessage_ShowsTheProtocolOnTheClipboardOnly(t *testing.T) {
+	certificate, roots, _ := rdpTestCertificate(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	received := make(chan []byte, 2)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		server := tls.Server(conn, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS12})
+		if server.Handshake() != nil {
+			return
+		}
+		for i := 0; i < 2; i++ {
+			packet, err := readTestTPKT(server)
+			if err != nil {
+				return
+			}
+			received <- packet
+		}
+	}()
+	client, err := tls.Dial("tcp", listener.Addr().String(), &tls.Config{RootCAs: roots, ServerName: "rdp.test", MinVersion: tls.VersionTLS12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	s := &CredSSPClientSession{transport: &Transport{Conn: client}, mcsSettings: MCSClientSettings{DynamicChannels: true, ClipboardChannel: true},
+		mcsResponse: MCSConnectResponse{IOChannelID: 1003, StaticChannelIDs: []uint16{1004, 1005}}, userChannelID: 1007,
+		channelsConnected: true, connectionFinalized: true}
+	data := []byte("message")
+	for _, c := range []struct {
+		channel string
+		id      uint16
+		flags   uint32
+	}{{RDPChannelClipboard, 1005, 0x13}, {RDPChannelDynamic, 1004, 0x03}} {
+		if err := s.SendChannelMessage(context.Background(), c.channel, data, time.Second); err != nil {
+			t.Fatalf("%s: %v", c.channel, err)
+		}
+		select {
+		case packet := <-received:
+			header := len(packet) - len(data) - 8
+			if header < 14 || binary.BigEndian.Uint16(packet[10:12]) != c.id || !bytes.Equal(packet[header+8:], data) {
+				t.Fatalf("%s: sent % x", c.channel, packet)
+			}
+			if got := binary.LittleEndian.Uint32(packet[header+4 : header+8]); got != c.flags {
+				t.Fatalf("%s: chunk flags %02x, want %02x", c.channel, got, c.flags)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: nothing sent", c.channel)
+		}
 	}
 }

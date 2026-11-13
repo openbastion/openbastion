@@ -3490,6 +3490,7 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 `pkg/rdp/clipboard.go` : MS-RDPECLIP, texte seul (`CF_UNICODETEXT`), chaque sens selon son droit, borné à 65 526 octets UTF-16. Chaque canal statique a son lecteur. Rien ne l'allume hors des tests.
 - **FreeRDP** (`TestRDPInterop_Clipboard`) : son serveur n'ouvre pas son presse-papiers (pas de Monitor Ready) ; la session continue.
 - **Windows** (`TestRDPWindows_Clipboard`, en CI) : copie du texte de Notepad (un marqueur tapé avec des lettres placées de même en QWERTY et en AZERTY), puis collage d'un texte et relecture.
+- **Premier passage en CI, les cinq Windows, même échec** : Windows envoie ses capacités et Monitor Ready (`received map[1:1 7:1]`), puis plus rien. Même pas la réponse à notre liste de formats, alors que le texte est copié dans Notepad. Cause supposée : nos fragments `cliprdr` partaient sans `CHANNEL_FLAG_SHOW_PROTOCOL`, que mstsc et FreeRDP posent sur ce canal (avec `CHANNEL_OPTION_SHOW_PROTOCOL` dans sa définition). Le serveur ignore l'option : c'est le drapeau de chaque fragment qui décide si `rdpclip` reçoit l'en-tête (MS-RDPBCGR 2.2.1.3.4.1). Les deux sont posés désormais, pour `cliprdr` seulement. Hypothèse **à confirmer par la CI**.
 
 ## 2026-11-13 — ADR-0095 terminé : `SCREEN_RESIZE` allumé par défaut
 
