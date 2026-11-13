@@ -205,6 +205,16 @@ jobs:
           for f in "$RUNNER_TEMP"/windows/dump/events/*RdpCoreTS_Operational.txt "$RUNNER_TEMP"/windows/dump/events/System-rdp.txt; do
             if [ -f "$f" ]; then echo "== $f"; head -c 6000 "$f"; fi
           done
+      # The virtual machine itself, whatever RDP says (ADR-0071, CI instability: Windows lost during
+      # the measure or after the logoff, a session without a frame): its screen as QEMU's own VNC
+      # console shows it (port 5900 inside the container, no authentication, never published), and
+      # where QEMU's monitor is, from its command line. On every run: a green one says it works.
+      - name: The virtual machine's screen and state
+        if: ${{ !cancelled() }}
+        run: |
+          docker exec openbastion-rdp-windows bash -c 'tr "\0" " " < /proc/$(pgrep -f qemu-system | head -1)/cmdline | grep -oE -- "-(monitor|qmp|chardev|vnc) [^ ]+"' || true
+          ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' openbastion-rdp-windows)
+          python3 test/integration/testdata/rdp/windows/vnc_snapshot.py "$ip" 5900 "$RUNNER_TEMP/windows/dump/guest-screen.png" || true
       - name: What Windows showed
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
