@@ -38,7 +38,15 @@ Rules it keeps (tested): the token lives in memory only — reloading signs out;
 state are wiped from the address bar before they are sent; everything shown is text, never
 markup; nothing is inlined into the page, which runs under `script-src 'self'`.
 
-Dependencies: `react`, `react-dom`, and the local `@openbastion/icons` package at run time;
+The interface is multilingual (French and English) with `react-i18next`: every visible string
+lives in `src/shared/i18n/locales/` (`fr.ts`, `en.ts`), French is the default and the fallback, and
+a test checks that both files carry the same keys. The language selector in the header — and on the
+login page, before any session — applies a language at once, without a reload, sets `<html lang>`
+and remembers the choice per browser under `openbastion.admin-ui.language.v1` (a presentation
+preference only, like the theme; it holds nothing about the account).
+
+Dependencies: `react`, `react-dom`, `i18next`, `react-i18next`, and the local `@openbastion/icons`
+package at run time;
 the icon package must be built before testing or building the UI. `npm audit`: 0 known
 vulnerabilities on 30 October 2026.
 

@@ -1,23 +1,26 @@
 import { Account } from "../../shared/api";
+import { translate } from "../../shared/i18n";
 
 // Whoever changes a pin decides which server receives the secret: the Vault audits it. Both
 // questions cancel the whole gesture (null), and nothing is sent.
 
 export function askHostKey(a: Account): string | null {
   return window.prompt(
-    `Clé d'hôte publique de ${a.targetHost} (une ligne « ssh-ed25519 AAAA… », relevée sur la cible : /etc/ssh/ssh_host_*_key.pub).` +
-      (a.hostKeyFingerprint ? ` Elle remplace ${a.hostKeyFingerprint} : ne le faites que si la cible a réellement changé de clé.` : ""),
+    translate("accounts.prompts.hostKey", { host: a.targetHost }) +
+      (a.hostKeyFingerprint ? translate("accounts.prompts.hostKeyReplace", { fingerprint: a.hostKeyFingerprint }) : ""),
   );
 }
 
 // The same decision for a graphical target: this certificate, for this name, gets the secret.
 export function askTlsPin(a: Account): { fingerprint: string; domain: string } | null {
   const fingerprint = window.prompt(
-    `Empreinte SHA-256 du certificat TLS de ${a.targetHost}, relevée sur la cible (openssl x509 -in cert.pem -outform der | sha256sum).` +
-      (a.tlsCertificateSha256 ? ` Elle remplace ${a.tlsCertificateSha256} : ne le faites que si la cible a réellement changé de certificat.` : ""),
+    translate("accounts.prompts.tlsFingerprint", { host: a.targetHost }) +
+      (a.tlsCertificateSha256
+        ? translate("accounts.prompts.tlsFingerprintReplace", { fingerprint: a.tlsCertificateSha256 })
+        : ""),
   );
   if (!fingerprint) return null;
-  const domain = window.prompt(`Nom pour lequel ce certificat est valide (DNS ou IP).`, a.targetDomain ?? "");
+  const domain = window.prompt(translate("accounts.prompts.tlsDomain"), a.targetDomain ?? "");
   if (!domain) return null;
   return { fingerprint: fingerprint.trim(), domain: domain.trim() };
 }

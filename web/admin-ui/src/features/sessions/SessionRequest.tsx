@@ -2,10 +2,12 @@ import { FormEvent, useState } from "react";
 import { Session } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { FormCard } from "../../shared/ui/FormCard";
+import { useAppTranslation } from "../../shared/i18n";
 
 // A session request (POST /sessions). The ticket is what an account that requires approval asks
 // for (ADR-0067), in the format the platform declared; the Broker ignores it on any other account.
 export function SessionRequest({ onDone }: { onDone: (s: Session) => void }) {
+  const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [f, setF] = useState({ targetAccountId: "", protocol: "ssh", justification: "", durationMinutes: "30", ticket: "" });
   const [error, setError] = useState<unknown>();
@@ -30,13 +32,19 @@ export function SessionRequest({ onDone }: { onDone: (s: Session) => void }) {
   }
 
   return (
-    <FormCard label="Demander une session" title="Demander une session" submitLabel="Demander" onSubmit={submit} error={error}>
+    <FormCard
+      label={t("sessions.request.label")}
+      title={t("sessions.request.title")}
+      submitLabel={t("sessions.request.submit")}
+      onSubmit={submit}
+      error={error}
+    >
       <label>
-        Compte
+        {t("sessions.request.account")}
         <input value={f.targetAccountId} onChange={set("targetAccountId")} required />
       </label>
       <label>
-        Protocole du compte
+        {t("sessions.request.protocol")}
         <select value={f.protocol} onChange={set("protocol")}>
           <option value="ssh">SSH</option>
           <option value="vnc">VNC</option>
@@ -44,15 +52,15 @@ export function SessionRequest({ onDone }: { onDone: (s: Session) => void }) {
         </select>
       </label>
       <label>
-        Durée (minutes)
+        {t("sessions.request.duration")}
         <input type="number" min={1} value={f.durationMinutes} onChange={set("durationMinutes")} required />
       </label>
       <label className="wide">
-        Justification
+        {t("sessions.columns.justification")}
         <input value={f.justification} onChange={set("justification")} required />
       </label>
       <label>
-        Ticket (si le compte exige une approbation)
+        {t("sessions.request.ticket")}
         <input value={f.ticket} onChange={set("ticket")} maxLength={128} autoComplete="off" />
       </label>
     </FormCard>
