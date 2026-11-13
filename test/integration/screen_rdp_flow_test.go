@@ -42,89 +42,13 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		t.Skip("TEST_DATABASE_URL not set: the Video Recorder needs PostgreSQL")
 	}
 	root := repoRoot(t)
-	p := newTestPKI(t)
 	target := startFreeRDPTarget(t, root)
-
-	const (
-		vaultURL       = "https://127.0.0.1:18881"
-		auditURL       = "https://127.0.0.1:18882"
-		authzURL       = "https://127.0.0.1:18883"
-		brokerURL      = "https://127.0.0.1:18884"
-		screenProxyURL = "https://127.0.0.1:18885"
-		authnURL       = "https://127.0.0.1:18887"
-		commandURL     = "https://127.0.0.1:18889"
-		videoGRPCURL   = "https://127.0.0.1:18891"
-		gatewayURL     = "http://127.0.0.1:18888"
-	)
-	rootsFile := filepath.Join(t.TempDir(), "roots.pem")
-	if err := os.WriteFile(rootsFile, target.certPEM, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	store := newFakeObjectStore(t)
-	audit := startScreenAuditSpy(t, p, auditURL)
-	bin := func(path, name string) string { return buildBinary(t, root, path, name+"-rdp-screen") }
-	start := func(path, name, port, identity string, env ...string) *mtlsProc {
-		t.Helper()
-		return startMTLSService(t, root, bin(path, name), port, p, identity, env...)
-	}
-	start("./services/vault/password-vault/cmd/password-vault", "vault", "18881", mtls.PasswordVault, "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
-	start("./services/recording-audit/audit-service/cmd/audit-service", "audit", "18882", mtls.AuditService)
-	start("./services/access/authorization/cmd/authorization", "authz", "18883", mtls.Authorization)
-	start("./services/access/authentication/cmd/authentication", "authn", "18887", mtls.Authentication, "SKIP_DEMO_SEED=1", "AUDIT_URL="+auditURL)
-	start("./services/recording-audit/command-recorder/cmd/command-recorder", "command", "18889", mtls.CommandRecorder, "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
-	video := start("./services/recording-audit/video-recorder/cmd/video-recorder", "video", "18890", mtls.VideoRecorder,
-		"GRPC_PORT=18891", "DATABASE_URL="+dsn, "VIDEO_RECORDER_KMS_KEY_HEX="+strings.Repeat("ab", 32),
-		"S3_ENDPOINT="+store.URL, "S3_BUCKET=screens", "S3_ACCESS_KEY=test", "S3_SECRET_KEY=test-secret", "S3_ALLOW_HTTP=true", "S3_CREATE_BUCKET=true",
-		"AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
-	proxy := start("./services/proxy/rdp-vnc-proxy/cmd/rdp-vnc-proxy", "screen-proxy", "18885", mtls.RDPVNCProxy,
-		"VAULT_URL="+vaultURL, "AUDIT_URL="+audit.URL, "VIDEO_RECORDER_GRPC_URL="+videoGRPCURL,
-		"TARGET_TLS_ROOTS_FILE="+rootsFile, "RDP_VNC_PROXY_PUBLIC_ENDPOINT=127.0.0.1:18885", "RDP_ENABLED=true")
-	start("./services/proxy/ssh-proxy/cmd/ssh-proxy", "ssh-proxy", "18886", mtls.SSHProxy, "SSH_PORT=18892", "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "RECORDER_URL="+commandURL, "RECORDING_POLICY=required")
-	start("./services/access/session-broker/cmd/session-broker", "broker", "18884", mtls.SessionBroker,
-		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL=https://127.0.0.1:18886", "RDP_VNC_PROXY_URLS="+screenProxyURL, "RDP_ENABLED=true")
-	gateway := startService(t, root, bin("./services/access/api-gateway/cmd/api-gateway", "gateway"), "18888", p.env(mtls.APIGateway,
-		"AUTHENTICATION_URL="+authnURL, "SESSION_BROKER_URL="+brokerURL, "VAULT_URL="+vaultURL,
-		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+commandURL, "VIDEO_RECORDER_GRPC_URL="+videoGRPCURL,
-		"SESSION_REQUEST_BURST=100", "SESSION_ACTION_BURST=100", "VAULT_ACCOUNT_ACTION_BURST=100", "CLIENT_REQUEST_BURST=1000")...)
-	t.Cleanup(func() {
-		if t.Failed() {
-			t.Logf("video-recorder:\n%s\nrdp-vnc-proxy:\n%s\ngateway:\n%s", video.out.String(), proxy.out.String(), gateway.out.String())
-		}
-	})
-
-	admin := p.clientAs(t, mtls.AdminCLI)
-	mtlsCreateUser(t, admin, authnURL, "rdp-admin", "root-pw-123456", []string{"platform-admin", "vault-admin"})
-	mtlsCreateUser(t, admin, authnURL, "rdp-operator", "op-password-123", []string{"rdp-ops"})
-	mtlsCreateUser(t, admin, authnURL, "rdp-auditor", "aud-password-123", []string{"session-auditor"})
-	login := func(user, password string) string {
-		token, status := gatewayLogin(t, gatewayURL, user, password)
-		if status != http.StatusOK {
-			t.Fatalf("login %s: %d", user, status)
-		}
-		return token
-	}
-	adminToken, operatorToken, auditorToken := login("rdp-admin", "root-pw-123456"), login("rdp-operator", "op-password-123"), login("rdp-auditor", "aud-password-123")
-	for _, pol := range []struct{ name, role, resource string }{
-		{"rdp-vault-admins", "vault-admin", "vault:account-admin:*"},
-		{"rdp-operators", "rdp-ops", "vault:account:*"},
-		{"rdp-auditors", "session-auditor", "recording:session:*"},
-	} {
-		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
-			t.Fatalf("policy %s: %d", pol.name, status)
-		}
-	}
-
-	api := screenAPI{t: t, url: gatewayURL}
-	status, raw := api.call(adminToken, http.MethodPost, "/vault/accounts", map[string]any{
-		"id": "acc_rdp", "name": "acc_rdp", "username": freeRDPUser, "targetHost": target.address, "protocol": "rdp", "rotationPolicy": "manual", "initialSecret": []byte(freeRDPPassword),
-	})
-	if status != http.StatusCreated {
-		t.Fatalf("onboarding the RDP account: %d %s", status, raw)
-	}
-	status, raw = api.call(adminToken, http.MethodPut, "/vault/accounts/acc_rdp/tls-pin", map[string]any{"tlsCertificateSha256": target.pin, "targetDomain": freeRDPName})
-	if status != http.StatusOK {
-		t.Fatalf("pinning the RDP account: %d %s", status, raw)
-	}
+	stack := startRDPScreenStack(t, root, dsn, rdpStackTarget{address: target.address, pin: target.pin, certPEM: target.certPEM,
+		user: freeRDPUser, password: freeRDPPassword, serverName: freeRDPName}, nil, nil)
+	gatewayURL, api, audit := stack.gatewayURL, stack.api, stack.audit
+	operatorToken, auditorToken := stack.operatorToken, stack.auditorToken
+	var status int
+	var raw string
 	status, raw = api.call(operatorToken, http.MethodPost, "/sessions", map[string]any{"targetAccountId": "acc_rdp", "protocol": "rdp", "justification": "ADR-0088", "durationMinutes": 10})
 	if status != http.StatusCreated {
 		t.Fatalf("RDP session: %d %s", status, raw)
@@ -333,4 +257,109 @@ func startFreeRDPTarget(t *testing.T, root string) freeRDPTarget {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// rdpStackTarget is the RDP target a stack is started for: where, its pinned certificate, the
+// account's user and password, and the name its certificate carries.
+type rdpStackTarget struct {
+	address, pin, user, password, serverName string
+	certPEM                                  []byte
+}
+
+// rdpScreenStack is the eight services of an RDP flow, started, with an RDP account acc_rdp
+// onboarded and pinned, and its users logged in.
+type rdpScreenStack struct {
+	gatewayURL                              string
+	api                                     screenAPI
+	audit                                   *screenAuditSpy
+	adminToken, operatorToken, auditorToken string
+}
+
+// startRDPScreenStack starts the services of the RDP flow for target, proxyEnv and gatewayEnv added
+// to the screen proxy's and the Gateway's settings, and onboards acc_rdp.
+func startRDPScreenStack(t *testing.T, root, dsn string, target rdpStackTarget, proxyEnv, gatewayEnv []string) *rdpScreenStack {
+	t.Helper()
+	p := newTestPKI(t)
+
+	const (
+		vaultURL       = "https://127.0.0.1:18881"
+		auditURL       = "https://127.0.0.1:18882"
+		authzURL       = "https://127.0.0.1:18883"
+		brokerURL      = "https://127.0.0.1:18884"
+		screenProxyURL = "https://127.0.0.1:18885"
+		authnURL       = "https://127.0.0.1:18887"
+		commandURL     = "https://127.0.0.1:18889"
+		videoGRPCURL   = "https://127.0.0.1:18891"
+		gatewayURL     = "http://127.0.0.1:18888"
+	)
+	rootsFile := filepath.Join(t.TempDir(), "roots.pem")
+	if err := os.WriteFile(rootsFile, target.certPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeObjectStore(t)
+	audit := startScreenAuditSpy(t, p, auditURL)
+	bin := func(path, name string) string { return buildBinary(t, root, path, name+"-rdp-screen") }
+	start := func(path, name, port, identity string, env ...string) *mtlsProc {
+		t.Helper()
+		return startMTLSService(t, root, bin(path, name), port, p, identity, env...)
+	}
+	start("./services/vault/password-vault/cmd/password-vault", "vault", "18881", mtls.PasswordVault, "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
+	start("./services/recording-audit/audit-service/cmd/audit-service", "audit", "18882", mtls.AuditService)
+	start("./services/access/authorization/cmd/authorization", "authz", "18883", mtls.Authorization)
+	start("./services/access/authentication/cmd/authentication", "authn", "18887", mtls.Authentication, "SKIP_DEMO_SEED=1", "AUDIT_URL="+auditURL)
+	start("./services/recording-audit/command-recorder/cmd/command-recorder", "command", "18889", mtls.CommandRecorder, "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
+	video := start("./services/recording-audit/video-recorder/cmd/video-recorder", "video", "18890", mtls.VideoRecorder,
+		"GRPC_PORT=18891", "DATABASE_URL="+dsn, "VIDEO_RECORDER_KMS_KEY_HEX="+strings.Repeat("ab", 32),
+		"S3_ENDPOINT="+store.URL, "S3_BUCKET=screens", "S3_ACCESS_KEY=test", "S3_SECRET_KEY=test-secret", "S3_ALLOW_HTTP=true", "S3_CREATE_BUCKET=true",
+		"AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
+	proxy := start("./services/proxy/rdp-vnc-proxy/cmd/rdp-vnc-proxy", "screen-proxy", "18885", mtls.RDPVNCProxy,
+		append([]string{"VAULT_URL=" + vaultURL, "AUDIT_URL=" + audit.URL, "VIDEO_RECORDER_GRPC_URL=" + videoGRPCURL,
+			"TARGET_TLS_ROOTS_FILE=" + rootsFile, "RDP_VNC_PROXY_PUBLIC_ENDPOINT=127.0.0.1:18885", "RDP_ENABLED=true"}, proxyEnv...)...)
+	start("./services/proxy/ssh-proxy/cmd/ssh-proxy", "ssh-proxy", "18886", mtls.SSHProxy, "SSH_PORT=18892", "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "RECORDER_URL="+commandURL, "RECORDING_POLICY=required")
+	start("./services/access/session-broker/cmd/session-broker", "broker", "18884", mtls.SessionBroker,
+		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL=https://127.0.0.1:18886", "RDP_VNC_PROXY_URLS="+screenProxyURL, "RDP_ENABLED=true")
+	gateway := startService(t, root, bin("./services/access/api-gateway/cmd/api-gateway", "gateway"), "18888", append(append([]string(nil), p.env(mtls.APIGateway,
+		"AUTHENTICATION_URL="+authnURL, "SESSION_BROKER_URL="+brokerURL, "VAULT_URL="+vaultURL,
+		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+commandURL, "VIDEO_RECORDER_GRPC_URL="+videoGRPCURL,
+		"SESSION_REQUEST_BURST=100", "SESSION_ACTION_BURST=100", "VAULT_ACCOUNT_ACTION_BURST=100", "CLIENT_REQUEST_BURST=1000")...), gatewayEnv...)...)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("video-recorder:\n%s\nrdp-vnc-proxy:\n%s\ngateway:\n%s", video.out.String(), proxy.out.String(), gateway.out.String())
+		}
+	})
+
+	admin := p.clientAs(t, mtls.AdminCLI)
+	mtlsCreateUser(t, admin, authnURL, "rdp-admin", "root-pw-123456", []string{"platform-admin", "vault-admin"})
+	mtlsCreateUser(t, admin, authnURL, "rdp-operator", "op-password-123", []string{"rdp-ops"})
+	mtlsCreateUser(t, admin, authnURL, "rdp-auditor", "aud-password-123", []string{"session-auditor"})
+	login := func(user, password string) string {
+		token, status := gatewayLogin(t, gatewayURL, user, password)
+		if status != http.StatusOK {
+			t.Fatalf("login %s: %d", user, status)
+		}
+		return token
+	}
+	adminToken, operatorToken, auditorToken := login("rdp-admin", "root-pw-123456"), login("rdp-operator", "op-password-123"), login("rdp-auditor", "aud-password-123")
+	for _, pol := range []struct{ name, role, resource string }{
+		{"rdp-vault-admins", "vault-admin", "vault:account-admin:*"},
+		{"rdp-operators", "rdp-ops", "vault:account:*"},
+		{"rdp-auditors", "session-auditor", "recording:session:*"},
+	} {
+		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
+			t.Fatalf("policy %s: %d", pol.name, status)
+		}
+	}
+
+	api := screenAPI{t: t, url: gatewayURL}
+	status, raw := api.call(adminToken, http.MethodPost, "/vault/accounts", map[string]any{
+		"id": "acc_rdp", "name": "acc_rdp", "username": target.user, "targetHost": target.address, "protocol": "rdp", "rotationPolicy": "manual", "initialSecret": []byte(target.password),
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("onboarding the RDP account: %d %s", status, raw)
+	}
+	status, raw = api.call(adminToken, http.MethodPut, "/vault/accounts/acc_rdp/tls-pin", map[string]any{"tlsCertificateSha256": target.pin, "targetDomain": target.serverName})
+	if status != http.StatusOK {
+		t.Fatalf("pinning the RDP account: %d %s", status, raw)
+	}
+	return &rdpScreenStack{gatewayURL: gatewayURL, api: api, audit: audit, adminToken: adminToken, operatorToken: operatorToken, auditorToken: auditorToken}
 }

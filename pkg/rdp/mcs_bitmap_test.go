@@ -60,9 +60,10 @@ func TestParseRDPBitmapUpdateRejectsMalformedInput(t *testing.T) {
 		"rectangle count over limit":       mcsTestBitmapUpdateCount(shareID, maxRDPBitmapRects+1),
 		"empty rectangle":                  mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1, 2, 0, 1, 32, 0, validBitmap)),
 		"bounds mismatch":                  mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangleBounds(1, 2, 2, 2, 1, 1, 32, 0, validBitmap)),
-		"rectangle outside desktop":        mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1280, 719, 1, 1, 32, 0, validBitmap)),
-		"bitmap length mismatch":           mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1, 2, 1, 1, 32, 0, []byte{0, 0, 0})),
-		"trailing bitmap data":             trailingBitmapData,
+		// Wholly off the desktop is passed over; past its edge by a tile or more is refused.
+		"rectangle a tile past the desktop": mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1279, 0, 65, 1, 32, 0, make([]byte, 65*4))),
+		"bitmap length mismatch":            mcsTestBitmapUpdatePacket(shareID, mcsTestBitmapRectangle(1, 2, 1, 1, 32, 0, []byte{0, 0, 0})),
+		"trailing bitmap data":              trailingBitmapData,
 	}
 	for name, packet := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -819,4 +820,72 @@ func mutateRDP6Data(data []byte, mutate func([]byte)) []byte {
 	out := append([]byte(nil), data...)
 	mutate(out)
 	return out
+}
+
+func TestDescribeRDPBitmapRectangles_NamesWhereEachGoes(t *testing.T) {
+	rect := []byte{10, 0, 20, 0, 30, 0, 40, 0, 50, 0, 16, 0, 16, 0, 0, 0, 2, 0, 0xaa, 0xbb}
+	got := describeRDPBitmapRectangles(append([]byte{1, 0}, rect...))
+	if got != "1 rectangle(s); [0] dest 10,20-30,40 size 50x16 16 bpp flags 0x0000 length 2" {
+		t.Fatalf("%q", got)
+	}
+	if got := describeRDPBitmapRectangles([]byte{2, 0, 1}); got != "2 rectangle(s), cut short" {
+		t.Fatalf("%q", got)
+	}
+}
+
+// edgeTileUpdate is a TS_UPDATE_BITMAP_DATA of one raw 16-bpp 64 x 64 tile at left, top: what
+// Windows Server 2019 sends at the edges of a desktop that is not a multiple of 64 wide or high.
+func edgeTileUpdate(left, top uint16) []byte { return edgeTileUpdateOf(left, top, 64) }
+
+func edgeTileUpdateOf(left, top, side uint16) []byte {
+	out := []byte{1, 0}
+	header := make([]byte, 18)
+	binary.LittleEndian.PutUint16(header[0:2], left)
+	binary.LittleEndian.PutUint16(header[2:4], top)
+	binary.LittleEndian.PutUint16(header[4:6], left+side-1)
+	binary.LittleEndian.PutUint16(header[6:8], top+side-1)
+	binary.LittleEndian.PutUint16(header[8:10], side)
+	binary.LittleEndian.PutUint16(header[10:12], side)
+	binary.LittleEndian.PutUint16(header[12:14], 16)
+	binary.LittleEndian.PutUint16(header[16:18], side*side*2)
+	out = append(out, header...)
+	return append(out, make([]byte, int(side)*int(side)*2)...)
+}
+
+// A tile that starts on the desktop and goes past its right or bottom edge by less than a tile is
+// clipped to the desktop, as a client does (CI of PR #157: Windows Server 2019 sent a 64 x 64 tile
+// at 1088 on a 1102-wide desktop after a resize, and the session ended). Past that, still refused.
+func TestBitmapUpdate_ClipsAnEdgeTileToTheDesktop(t *testing.T) {
+	update, err := parseRDPBitmapUpdateDataAt(edgeTileUpdate(1088, 832), 1102, 888, 16)
+	if err != nil {
+		t.Fatalf("an edge tile refused: %v", err)
+	}
+	r := update.Rectangles[0]
+	if r.X != 1088 || r.Y != 832 || r.Width != 14 || r.Height != 56 || len(r.Pixels) != 14*56*4 {
+		t.Fatalf("clipped to %d,%d %dx%d (%d bytes), want 1088,832 14x56", r.X, r.Y, r.Width, r.Height, len(r.Pixels))
+	}
+	// Wholly off the desktop: nothing to draw, so nothing kept; its pixels are not even decoded
+	// (Windows Server 2019, shrunk from 1102 to 970 wide, still sent tiles of the old width).
+	for name, at := range map[string][2]uint16{
+		"starting past the right edge": {1102, 0},
+		"starting past the bottom":     {0, 888},
+	} {
+		update, err := parseRDPBitmapUpdateDataAt(edgeTileUpdate(at[0], at[1]), 1102, 888, 16)
+		if err != nil || len(update.Rectangles) != 0 {
+			t.Errorf("%s: %d rectangle(s), %v; want none kept, no error", name, len(update.Rectangles), err)
+		}
+	}
+	// Its header is still checked: a malformed one off the desktop is refused all the same.
+	bad := edgeTileUpdate(1102, 0)
+	binary.LittleEndian.PutUint16(bad[2+12:2+14], 32) // 32 bpp in a 16-bpp session
+	if _, err := parseRDPBitmapUpdateDataAt(bad, 1102, 888, 16); err == nil {
+		t.Error("a malformed header off the desktop taken")
+	}
+	// 64 pixels past the edge or more: not a tile cut at the edge.
+	if _, err := parseRDPBitmapUpdateDataAt(edgeTileUpdateOf(1000, 0, 128), 1064, 888, 16); err == nil {
+		t.Error("a bitmap 64 pixels past the right edge taken")
+	}
+	if _, err := parseRDPBitmapUpdateDataAt(edgeTileUpdateOf(1000, 0, 128), 1065, 888, 16); err != nil {
+		t.Errorf("a bitmap 63 pixels past the right edge refused: %v", err)
+	}
 }

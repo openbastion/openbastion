@@ -38,6 +38,16 @@ var (
 	rdpWindowsReady error
 )
 
+// notepadPoint is where a click gives Notepad the keyboard: in its window, right of the Start
+// menu. At the screen's centre, a Start menu left open (Ctrl+Esc opens it, Esc did not always close
+// it) took the click, and the keys after it went to its search (CI of PR #157, 32 bpp, captures
+// extended-1b and extended-3). A click outside the menu closes it.
+func notepadPoint(width, height uint32) (uint16, uint16) {
+	return notepadX(int(width)), uint16(height / 2)
+}
+
+func notepadX(width int) uint16 { return uint16(width * 3 / 4) }
+
 func windowsTarget(t *testing.T) rdpWindowsTarget {
 	t.Helper()
 	if os.Getenv("RDP_WINDOWS") == "" {
@@ -345,7 +355,7 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 	key := func(code uint16) { press(code, true); press(code, false) }
 	chord := func(modifier, code uint16) { press(modifier, true); key(code); press(modifier, false) }
 	// Into Notepad, at the end of what the other tests typed, on a line of its own.
-	x, y := uint16(last.Width/2), uint16(last.Height/2)
+	x, y := notepadPoint(last.Width, last.Height)
 	for _, buttons := range []byte{1, 0} {
 		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: x, Y: y, Buttons: buttons}); err != nil {
 			t.Fatal(err)
@@ -489,7 +499,7 @@ func TestRDPWindows_ExtendedKeys(t *testing.T) {
 	settle(2*time.Second, 8*time.Second)
 
 	// Into Notepad, a line of its own, then the keys the flag decides; Ctrl+S saves kbd.txt again.
-	x, y := uint16(last.Width/2), uint16(last.Height/2)
+	x, y := notepadPoint(last.Width, last.Height)
 	for _, buttons := range []byte{1, 0} {
 		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: x, Y: y, Buttons: buttons}); err != nil {
 			t.Fatal(err)
@@ -590,7 +600,7 @@ func measureWindows(t *testing.T, partial bool) {
 	}
 	// Into Notepad, at the end of its text, on a line of its own.
 	for _, buttons := range []byte{1, 0} {
-		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: uint16(width / 2), Y: uint16(height / 2), Buttons: buttons}); err != nil {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: notepadX(width), Y: uint16(height / 2), Buttons: buttons}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -635,7 +645,7 @@ func measureWindows(t *testing.T, partial bool) {
 		}
 		// Notepad again, the window closed: the clean-up below types into it.
 		for _, buttons := range []byte{1, 0} {
-			if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: uint16(width / 2), Y: uint16(height / 2), Buttons: buttons}); err != nil {
+			if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: notepadX(width), Y: uint16(height / 2), Buttons: buttons}); err != nil {
 				t.Fatal(err)
 			}
 		}

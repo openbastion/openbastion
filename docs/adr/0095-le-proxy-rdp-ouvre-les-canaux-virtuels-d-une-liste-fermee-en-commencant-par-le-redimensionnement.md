@@ -92,9 +92,18 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 
 **Incrément 4, fait (12 novembre 2026) : l'Admin UI.**
 - **Protocole** (`web/admin-ui/src/features/screen/protocol.ts`) : le bit 1 du `HELLO` (`resizable`), et `encodeResize`, une entrée de type 4 ramenée dans les mêmes bornes que le proxy (`clampResize`).
-- **Visionneuse** : quand la session dit qu'elle redimensionne, la page lui demande la place qu'elle a pour l'écran : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins les boutons et la ligne d'état (112 px). Elle le demande une première fois au `HELLO`, puis chaque fois que la fenêtre a cessé de changer de taille depuis 500 ms, et seulement si la taille change. Le proxy rythme aussi, à un par seconde.
+- **Visionneuse** : quand la session dit qu'elle redimensionne, la page lui demande la place qu'elle a pour l'écran : la largeur de sa zone, et la hauteur de la fenêtre, moins les boutons et la ligne d'état (112 px). Elle le demande une première fois au `HELLO`, puis chaque fois que la fenêtre a cessé de changer de taille depuis 500 ms, et seulement si la taille change. Le proxy rythme aussi, à un par seconde.
 - **Prouvé** : 4 tests (le drapeau, l'encodage, l'envoi et son rythme, rien pour une session qui ne redimensionne pas) ; 7 mutations tuées ; les 117 tests de l'Admin UI passent, et sa construction aussi.
 - **Reste** (incrément 5) : la vérification dans un vrai navigateur, contre une cible Windows. Le bac à sable n'en a pas : il n'a qu'une cible VNC, qui ne redimensionne pas. Puis la décision d'allumer `SCREEN_RESIZE` par défaut, qui revient au propriétaire.
+
+**Incrément 5, en cours (12 novembre 2026) : la vérification dans un vrai navigateur, en CI.** Le propriétaire a choisi un navigateur sans interface dans la CI Windows, puisque le bac à sable n'a pas de cible Windows.
+- `TestScreenFlow_RDPResizeInAHeadlessBrowser` (`test/integration`) démarre les huit services sur de vrais processus, avec `SCREEN_RESIZE` allumé et l'Admin UI servie par la Gateway, contre la cible Windows de la CI.
+- Le Chrome du runner, sans interface, est piloté par le protocole DevTools (`cdp_test.go`, sur le client WebSocket que le module a déjà : aucune dépendance nouvelle). Il se connecte, ouvre l'écran par les boutons de la page, puis la fenêtre est redimensionnée deux fois. Le bureau distant doit suivre, à chaque fois, la taille que la page demande, et la session doit continuer. Les captures vont dans les artefacts (`browser-resize-*.png`).
+- L'épreuve RDP de bout en bout prête sa mise en place (`startRDPScreenStack`) ; contre FreeRDP, elle passe toujours.
+- **Trouvé par le navigateur, corrigé** :
+  - la page demande sa taille une fois, à l'ouverture, avant que Windows ait dit sa capacité ; le codec ignorait cette demande, et la page ne redemande qu'au changement de taille, si bien que le bureau restait à 1 280 × 800. Le codec garde désormais la taille demandée et la demande dès que la capacité arrive, une seule fois pour une même taille ; une demande arrivée canal fermé attend la capacité suivante. 4 mutations tuées ;
+  - la page mesurait la hauteur sous sa propre place dans la page : 480 pixels, le minimum, pour une fenêtre de 1 000. Elle prend la hauteur de la fenêtre, moins les boutons et la ligne d'état.
+  - Windows Server 2019, après un redimensionnement à une taille qui n'est pas un multiple de 64, envoie des tuiles de 64 × 64 qui dépassent le bord du bureau, et le lecteur de bitmaps refusait la mise à jour, ce qui fermait la session. Il garde désormais la partie visible d'une tuile qui commence sur le bureau et le dépasse de moins de 64 pixels ; au-delà, toujours refusé.
 
 ## Conséquences
 

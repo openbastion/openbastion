@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -217,5 +218,31 @@ func TestReassembleFastPathForIsolations(t *testing.T) {
 	u, err := reassembleFastPath(&a, fastPathPDU(1, rdpFastPathFragmentLast, bitmap[6:]), caps)
 	if err != nil || u == nil || len(u.Rectangles) != 1 {
 		t.Fatalf("last: %v %v", u, err)
+	}
+}
+
+// A refused fragmented update says which rule refused it: a LAST refused on Windows Server 2019
+// after a reactivation did not say whether it had no FIRST or crossed a bound (CI of PR #157).
+func TestFastPathAssembler_SaysWhichRuleRefused(t *testing.T) {
+	for want, steps := range map[string][][2]byte{
+		"no first fragment before it": {{rdpFastPathUpdateBitmap, rdpFastPathFragmentLast}},
+		"inside a fragmented one":     {{rdpFastPathUpdateBitmap, rdpFastPathFragmentFirst}, {rdpFastPathUpdateBitmap, rdpFastPathFragmentSingle}},
+		"inside code":                 {{rdpFastPathUpdateBitmap, rdpFastPathFragmentFirst}, {rdpFastPathPointerPosition, rdpFastPathFragmentLast}},
+	} {
+		var a rdpFastPathAssembler
+		var err error
+		for _, step := range steps {
+			if _, _, err = a.add(step[0], step[1], []byte{1}); err != nil {
+				break
+			}
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v", want, err)
+		}
+	}
+	var a rdpFastPathAssembler
+	a.add(rdpFastPathUpdateBitmap, rdpFastPathFragmentFirst, make([]byte, maxRDPFastPathReassembly-1))
+	if _, _, err := a.add(rdpFastPathUpdateBitmap, rdpFastPathFragmentLast, []byte{1, 2}); err == nil || !strings.Contains(err.Error(), "reassembly bound") {
+		t.Errorf("past the bound: %v", err)
 	}
 }

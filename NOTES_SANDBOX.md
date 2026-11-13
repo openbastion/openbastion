@@ -3114,9 +3114,28 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-13 — CI Windows : les clics dans Notepad évitent le menu Démarrer
+
+Sur Windows Server 2022 en 32 bpp, deux passages ont perdu les touches des épreuves de clavier et de mesure. Les captures du dernier passage (`extended-1b-ctrl-esc.png`, `extended-3-typed.png`) montrent pourquoi :
+- Ctrl+Échap ouvre le menu Démarrer, et l'Échap suivant ne l'a pas toujours refermé ;
+- le clic qui redonne la main à Notepad visait le centre de l'écran (640, 400), et le menu s'étend jusqu'à x = 648 : le clic tombait dans le menu, et les touches allaient à sa recherche.
+
+Les épreuves cliquent désormais dans Notepad aux trois quarts de la largeur (`notepadPoint`), hors du menu, ce qui le referme. La touche Windows seule n'ouvre toujours pas Démarrer (`extended-1-windows-key.png`, la limite de PR #101 reste).
+
+**Windows Server 2019, navigateur sans interface** (même passage) : la session s'est terminée 5 s après son ouverture, sur un fragment Fast-Path `LAST` sans `FIRST` (`update refused: Fast-Path action 0, 1475 bytes [code 1 frag 1 comp 0 size 1469]`). Revenu au passage suivant, au deuxième redimensionnement (`13978 bytes [code 1 frag 1 comp 0 size 13972]`). Le message décrivait le fragment en cours, pas la règle qui le refusait : un `LAST` peut fermer une reconstitution qui dépasse 64 fragments ou les 256 Kio que ce client annonce. L'assembleur dit désormais quelle règle refuse, et un test le vérifie. Ce n'était pas l'assembleur : la mise à jour se reconstituait, et c'est sa lecture qui refusait. Avec le détail de chaque rectangle, la cause est apparue : Windows Server 2019 envoie des tuiles entières de 64 × 64 aux bords d'un bureau dont la taille n'est pas un multiple de 64 (le rectangle 17 de 512, de 1 088 à 1 151 sur un bureau de 1 102 de large), et le lecteur refusait toute destination qui dépasse le bureau. Il garde désormais la partie visible d'une tuile qui commence sur le bureau et le dépasse de moins de 64 pixels ; au-delà, ou une tuile qui commence hors du bureau, toujours refusé. Test rouge d'abord, 3 mutations tuées, fuzzers des bitmaps (20 s chacun). Au passage suivant, Windows Server 2019, réduit de 1 102 à 970 de large, envoyait encore des tuiles de l'ancienne largeur, entièrement hors du nouveau bureau (la tuile 16 de 428, à 1 024). Une tuile entièrement hors du bureau est désormais passée : son en-tête est vérifié, ses pixels ne sont ni décodés ni dessinés ; une mise à jour bitmap dont rien n'est sur le bureau est passée aussi. Une tuile qui dépasse le bord de 64 pixels ou plus reste refusée. 2 mutations tuées.
+
+**Harnais du navigateur** : sur fr-FR, les trois tailles suivies, puis l'échec au nettoyage du profil de Chrome (« directory not empty ») : ses processus enfants écrivaient encore. Chrome tourne désormais dans son propre groupe de processus, tué en entier, et son profil est retiré sans faire échouer l'épreuve.
+
+## 2026-11-12 — ADR-0095, incrément 5 : le redimensionnement dans un navigateur sans interface (en cours)
+
+Premier passage CI (run 43307816046) : l'étape échouait avant le navigateur. Le flux compile chaque service avec `GOPROXY=off`, et les modules des autres services n'étaient pas dans le cache du job. `make build` les télécharge d'abord, comme dans `integration.yml`.
+- Dans le même passage, sur Windows Server 2022 en 16 bpp, Windows a fermé la première connexion d'écran 0,19 s après son ouverture, juste après CredSSP, puis n'en a plus accepté aucune (`target_unreachable`). C'est la deuxième fois en deux passages. Si cela revient, l'étudier à part, en partant des journaux d'événements que la CI exporte.
+
+`TestScreenFlow_RDPResizeInAHeadlessBrowser`, en CI Windows seulement : nouvelle étape « The resize in a headless browser » de `windows-rdp.yml`, qui construit l'Admin UI (Node 24.21.0, comme `frontend.yml`). Chrome est piloté par le protocole DevTools (`test/integration/cdp_test.go`). En local, ni Windows ni Chrome : l'épreuve se saute. Elle n'a pas encore tourné.
+
 ## 2026-11-12 — ADR-0095, incrément 4 : l'Admin UI demande la taille de sa fenêtre
 
-La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre sous elle, moins 112 px. Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
+La visionneuse lit le bit 1 du `HELLO` et, s'il est posé, envoie `InputResize` : la largeur de sa zone, et la hauteur de la fenêtre moins 112 px (d'abord la hauteur sous la zone : 480 px seulement, corrigé à l'incrément 5). Elle l'envoie une fois au `HELLO`, puis 500 ms après que la fenêtre a cessé de changer de taille, et seulement si la taille change.
 - **CI Windows intermittente** (dernier passage de #155, run 43296146528, code identique au passage précédent tout vert) : sur une cible, Windows ne répondait plus après CredSSP (`target_unreachable`) ; sur une autre, la relecture du clavier, les touches étendues et la vidéo ont échoué, le partage fonctionnant. Relancés tels quels, les deux jobs passent. À surveiller : si les épreuves qui passent par Notepad et le partage échouent de nouveau, chercher ce qui prend le focus.
 - **Bac à sable** : il n'a pas de cible RDP. La vérification dans un vrai navigateur demande une cible Windows, qui n'existe qu'en CI : c'est l'incrément 5.
 - **Choix renversables** : 112 px pour les boutons et la ligne d'état ; 500 ms d'attente ; la taille en pixels CSS, sans le facteur de l'écran (un écran à 200 % aurait un bureau de la moitié de ses pixels physiques, mais un texte à taille de lecture).

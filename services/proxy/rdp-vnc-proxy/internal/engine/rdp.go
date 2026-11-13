@@ -222,6 +222,9 @@ type rdpTargetSession struct {
 	displayMu    sync.Mutex
 	displayCaps  rdp.RDPDisplayControlCaps
 	displayReady bool
+	// wantedSize is the size last asked for, askedSize the one last sent to the target: a size
+	// asked before the target is ready is sent when it is.
+	wantedSize, askedSize [2]uint16
 	// resizesSent counts the layouts sent, for the interoperability tests.
 	resizesSent int
 }
@@ -233,7 +236,7 @@ type rdpResizer interface {
 
 // displayControlOpened is told when the display control opens, and opens again: Windows closes it
 // while it reactivates, then opens it and states its capabilities anew (CI of PR #155). Until it
-// does, a resize is ignored.
+// does, a resize waits.
 func (s *rdpTargetSession) displayControlOpened(name string) {
 	s.displayMu.Lock()
 	defer s.displayMu.Unlock()
@@ -241,7 +244,9 @@ func (s *rdpTargetSession) displayControlOpened(name string) {
 }
 
 // displayControlMessage reads what the target sends on the display control: its capabilities,
-// once each time it opens. Anything else ends the session (ADR-0095 §4).
+// once each time it opens. Anything else ends the session (ADR-0095 §4). The size asked before
+// them is asked now: the page asks once, as the session opens, which is before the target is ready
+// (CI of PR #157: the first request was dropped, and the page asks again only when its size changes).
 func (s *rdpTargetSession) displayControlMessage(name string, message []byte) error {
 	if name != rdp.RDPDisplayControlChannel {
 		return fmt.Errorf("%w: a message on %q", rdp.ErrRDPDisplayControl, name)
@@ -251,25 +256,41 @@ func (s *rdpTargetSession) displayControlMessage(name string, message []byte) er
 		return err
 	}
 	s.displayMu.Lock()
-	defer s.displayMu.Unlock()
 	if s.displayReady {
+		s.displayMu.Unlock()
 		return fmt.Errorf("%w: capabilities twice", rdp.ErrRDPDisplayControl)
 	}
 	s.displayCaps, s.displayReady = caps, true
-	return nil
+	s.displayMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), rdpInputTimeout)
+	defer cancel()
+	return s.applySize(ctx, rdpInputTimeout)
 }
 
 // Resize asks the target for one monitor of width x height, brought within the bounds of
-// ADR-0095 §4; it is ignored before the target's capabilities, or past them.
+// ADR-0095 §4. The size is kept: asked at once when the target can take it, otherwise when its
+// capabilities come; past them, it is not asked.
 func (s *rdpTargetSession) Resize(ctx context.Context, width, height uint16, timeout time.Duration) error {
-	s.displayMu.Lock()
-	caps, ready := s.displayCaps, s.displayReady
-	s.displayMu.Unlock()
-	width, height = screenstream.ClampResize(width, height)
-	if !s.resize || !ready || !caps.Fits(uint32(width), uint32(height)) {
+	if !s.resize {
 		return nil
 	}
-	layout, err := rdp.MarshalDisplayControlLayout(uint32(width), uint32(height))
+	width, height = screenstream.ClampResize(width, height)
+	s.displayMu.Lock()
+	s.wantedSize = [2]uint16{width, height}
+	s.displayMu.Unlock()
+	return s.applySize(ctx, timeout)
+}
+
+// applySize asks for the size wanted, if the target is ready, can take it, and has not been asked
+// for it already. displayMu is not held: the send may block.
+func (s *rdpTargetSession) applySize(ctx context.Context, timeout time.Duration) error {
+	s.displayMu.Lock()
+	wanted, caps, ready, asked := s.wantedSize, s.displayCaps, s.displayReady, s.askedSize
+	s.displayMu.Unlock()
+	if !s.resize || !ready || wanted == ([2]uint16{}) || wanted == asked || !caps.Fits(uint32(wanted[0]), uint32(wanted[1])) {
+		return nil
+	}
+	layout, err := rdp.MarshalDisplayControlLayout(uint32(wanted[0]), uint32(wanted[1]))
 	if err != nil {
 		return err
 	}
@@ -279,11 +300,12 @@ func (s *rdpTargetSession) Resize(ctx context.Context, width, height uint16, tim
 	}
 	if err := send(ctx, rdp.RDPDisplayControlChannel, layout, timeout); err != nil {
 		if errors.Is(err, rdp.ErrRDPDynamicChannelClosed) {
-			return nil // closed while the target reactivates: the operator's next resize will do
+			return nil // closed while the target reactivates: asked again with its next capabilities
 		}
 		return err
 	}
 	s.displayMu.Lock()
+	s.askedSize = wanted
 	s.resizesSent++
 	s.displayMu.Unlock()
 	return nil
