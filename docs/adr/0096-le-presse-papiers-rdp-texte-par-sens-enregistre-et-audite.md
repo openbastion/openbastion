@@ -1,6 +1,6 @@
 # ADR-0096 — Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité
 
-**Statut** `Accepté`, **mis en œuvre** (incréments 1 à 5, 13 novembre 2026 ; `SCREEN_CLIPBOARD` éteint par défaut, en attente de la décision du propriétaire) · 13 novembre 2026 · deuxième point du lot D d'ADR-0090, après le socle des canaux (ADR-0095). Accepté le 13 novembre 2026 par le propriétaire du projet : « Je valide ta proposition. » L'option A est acceptée, avec ses bornes (64 Kio par transfert, 10 transferts par minute et par session) et `SCREEN_CLIPBOARD` éteint par défaut. La décision lève, pour le texte du presse-papiers seulement, ce qu'ADR-0069 §6 garde fermé, et étend ce qu'ADR-0070 enregistre. Le propriétaire demande en parallèle d'étudier une saisie automatique des mots de passe, pour qu'ils ne passent pas par le presse-papiers ni par l'enregistrement (voir « Suite »).
+**Statut** `Accepté`, **mis en œuvre** (incréments 1 à 5, 13 novembre 2026 ; `SCREEN_CLIPBOARD` allumé par défaut le 13 novembre 2026, décision du propriétaire : « SCREEN_CLIPBOARD par défaut, RDP_ENABLED par défaut ») · 13 novembre 2026 · deuxième point du lot D d'ADR-0090, après le socle des canaux (ADR-0095). Accepté le 13 novembre 2026 par le propriétaire du projet : « Je valide ta proposition. » L'option A est acceptée, avec ses bornes (64 Kio par transfert, 10 transferts par minute et par session) et `SCREEN_CLIPBOARD` éteint par défaut. La décision lève, pour le texte du presse-papiers seulement, ce qu'ADR-0069 §6 garde fermé, et étend ce qu'ADR-0070 enregistre. Le propriétaire demande en parallèle d'étudier une saisie automatique des mots de passe, pour qu'ils ne passent pas par le presse-papiers ni par l'enregistrement (voir « Suite »).
 
 ## Contexte
 
@@ -37,7 +37,7 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
    - **coller** : un bouton « Envoyer le presse-papiers » lit le texte (API Clipboard, avec la permission du navigateur), l'affiche avant l'envoi, et l'envoie sur confirmation ;
    - **copier** : quand la cible propose du texte, la page l'affiche dans un panneau, avec un bouton « Copier » qui l'écrit dans le presse-papiers de l'opérateur.
    Le contrat écran (`openbastion.screen.v1`) reçoit deux messages : un transfert vers la cible (client → proxy) et un transfert depuis la cible (proxy → client), bornés comme le reste.
-7. **Interrupteur** `SCREEN_CLIPBOARD`, **éteint par défaut**, au proxy, au-dessus de la politique : éteint, `cliprdr` n'est jamais annoncé, quelle que soit la politique. L'allumer par défaut demandera le go du propriétaire, comme pour ADR-0095.
+7. **Interrupteur** `SCREEN_CLIPBOARD`, **éteint par défaut**, au proxy, au-dessus de la politique : éteint, `cliprdr` n'est jamais annoncé, quelle que soit la politique. L'allumer par défaut demandera le go du propriétaire, comme pour ADR-0095. **Allumé par défaut le 13 novembre 2026**, sur la décision du propriétaire (« SCREEN_CLIPBOARD par défaut, RDP_ENABLED par défaut »), une fois les cinq cibles Windows éprouvées dans un vrai navigateur (incrément 5) : le presse-papiers ne s'ouvre toujours que dans les sens qu'une politique accorde, refusés par défaut ; `SCREEN_CLIPBOARD=false` le ferme quelle que soit la politique.
 8. **Toujours fermés** : les fichiers par le presse-papiers (`FileGroupDescriptorW`, `CB_FILECLIP_NO_FILE_PATHS`), les images, le HTML, le RTF, et tout format privé. Les fichiers auront leur propre décision (ADR-0090, lot D, point 3).
 
 ## Mise en œuvre envisagée
@@ -112,7 +112,7 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
   - Le bouton « Copier » a écrit dans le presse-papiers de Chrome sans interface à chaque fois.
   - Les captures fr-FR, jugées à l'œil, montrent Notepad avec « Pasted through the page: … é € », puis le même texte sélectionné et affiché par le panneau comme copié depuis la cible : AZERTY, accents et euro intacts.
 
-**ADR-0096 est entièrement mise en œuvre** (incréments 1 à 5). Il reste la décision du propriétaire d'allumer `SCREEN_CLIPBOARD` par défaut (§7) ; d'ici là, le presse-papiers ne s'ouvre que si l'exploitant le met à `true`.
+**ADR-0096 est entièrement mise en œuvre** (incréments 1 à 5). `SCREEN_CLIPBOARD` est allumé par défaut depuis le 13 novembre 2026 (§7) ; le presse-papiers ne s'ouvre que si l'exploitant le met à `true`.
 
 ## Conséquences
 

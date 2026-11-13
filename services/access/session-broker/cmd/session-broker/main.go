@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -172,14 +173,11 @@ func runService() {
 		maxPending = n
 	}
 	svc.WithMaxPendingPerRequester(maxPending)
-	// RDP is opened by name (ADR-0088): only "true" and "false"; anything else stops the service.
-	rdpEnabled := false
-	switch v := os.Getenv("RDP_ENABLED"); v {
-	case "", "false":
-	case "true":
-		rdpEnabled = true
-	default:
-		log.Fatalf("session-broker: RDP_ENABLED must be true or false, got %q", v)
+	// RDP (ADR-0088): on unless said "false" (the owner's decision, 13 November 2026, once five
+	// Windows targets were proven); only "true" and "false", anything else stops the service.
+	rdpEnabled, err := switchFromEnv("RDP_ENABLED", os.Getenv("RDP_ENABLED"), true)
+	if err != nil {
+		log.Fatalf("session-broker: %v", err)
 	}
 	svc.WithRDP(rdpEnabled)
 	log.Printf("session-broker: RDP sessions %s (RDP_ENABLED, ADR-0088)", map[bool]string{true: "can be connected", false: "are refused at connect"}[rdpEnabled])
@@ -346,4 +344,18 @@ func main() {
 	if err := command.NewServiceCommand("session-broker", runService).Execute(); err != nil {
 		log.Fatalf("session-broker: %v", err)
 	}
+}
+
+// switchFromEnv reads an on/off setting: empty is def, "true" and "false" are themselves, and
+// anything else is an error that stops the service rather than guessing.
+func switchFromEnv(name, value string, def bool) (bool, error) {
+	switch value {
+	case "":
+		return def, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	}
+	return false, fmt.Errorf("%s must be true or false, got %q", name, value)
 }
