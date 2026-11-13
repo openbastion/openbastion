@@ -3485,6 +3485,15 @@ Dernier point du lot A : une scène vidéo. La touche Windows n'atteint pas le s
 
 **Renversable** : 10 connexions par instance, en dur. Un réglage par variable d'environnement viendra si un déploiement en a besoin. Le guide de haute disponibilité dit comment dimensionner `max_connections`.
 
+## 2026-11-13 — ADR-0096, incrément 1 : le canal cliprdr
+
+`pkg/rdp/clipboard.go` : MS-RDPECLIP, texte seul (`CF_UNICODETEXT`), chaque sens selon son droit, borné à 65 526 octets UTF-16. Chaque canal statique a son lecteur. Rien ne l'allume hors des tests.
+- **FreeRDP** (`TestRDPInterop_Clipboard`) : son serveur n'ouvre pas son presse-papiers (pas de Monitor Ready) ; la session continue.
+- **Windows** (`TestRDPWindows_Clipboard`, en CI) : copie du texte de Notepad (un marqueur tapé avec des lettres placées de même en QWERTY et en AZERTY), puis collage d'un texte et relecture.
+- **Premier passage en CI, les cinq Windows, même échec** : Windows envoie ses capacités et Monitor Ready (`received map[1:1 7:1]`), puis plus rien. Même pas la réponse à notre liste de formats, alors que le texte est copié dans Notepad. Cause supposée : nos fragments `cliprdr` partaient sans `CHANNEL_FLAG_SHOW_PROTOCOL`, que mstsc et FreeRDP posent sur ce canal (avec `CHANNEL_OPTION_SHOW_PROTOCOL` dans sa définition). Le serveur ignore l'option : c'est le drapeau de chaque fragment qui décide si `rdpclip` reçoit l'en-tête (MS-RDPBCGR 2.2.1.3.4.1). Les deux sont posés désormais, pour `cliprdr` seulement. **Confirmé par la CI** : les cinq Windows répondent désormais à la liste de formats (`received map[1:1 3:1 7:1]`). Windows Server 2019 et 2022 en 32 bpp copient et collent, « é » et « € » compris.
+- **Les trois 2022 en 16 bpp** : Notepad est resté vide, parce que le clic, aux 3/4 de la largeur, tombait sur le bureau. Leur fenêtre de Notepad fait 800 pixels de large en haut à gauche, sans doute laissée ainsi par les tests précédents. Le test trouve désormais la zone de texte à l'écran (le premier carré blanc de 120 pixels) avant de cliquer.
+- **`TestRDPWindows_Resize` sur 2022 en 32 bpp** a échoué une fois sur ce passage, après avoir réussi au précédent : capacités reçues, aucune mise en page envoyée. L'hypothèse est un canal Display Control fermé par Windows et jamais rouvert, puisque l'envoi refusé pour canal fermé est silencieux. Cause non établie. Le diagnostic compte désormais ces envois retenus.
+
 ## 2026-11-13 — ADR-0095 terminé : `SCREEN_RESIZE` allumé par défaut
 
 Décision du propriétaire (« Oui, tu peux continuer »), une fois les cinq cibles Windows suivies dans un vrai navigateur (#157, #158). Au proxy, `SCREEN_RESIZE` vaut `true` sauf si l'on dit `false` (compose : `${SCREEN_RESIZE:-true}`). En RDP, le `HELLO` porte désormais le bit 1 en plus du bit 0 : l'épreuve RDP de bout en bout attend `3`. VNC n'est pas concerné.
@@ -3500,6 +3509,17 @@ Quatre fois depuis le 12 novembre (#144 fr-FR, dernier passage de #155, deux pas
 **Autre incident, même job relancé (fr-FR, tentative 2)** : la session du navigateur sans interface s'est terminée avant sa première image (fin de session par Windows, `session_ended`). Ce n'était pas la demande de déconnexion déposée par l'épreuve de déconnexion : elle a été retirée, et Windows n'a déconnecté qu'une fois, à 03:11:49 UTC, cinq minutes avant. Cause inconnue.
 
 **Hypothèse retenue, corrigée** : la tâche de fin d'installation (`rdp-setup.ps1`) installe le certificat épinglé puis redémarre les services Bureau à distance. Le certificat prend effet avant le redémarrage, si bien que le test, qui attendait ce seul certificat, commençait trop tôt : CredSSP passait en quelques secondes, puis le redémarrage coupait la première connexion d'écran et refusait les suivantes le temps qu'il dure. Les étapes suivantes du même job fonctionnaient, ce qui va dans ce sens. La tâche écrit maintenant `rdp-ready.txt` une fois le redémarrage fini, que la boucle SYSTEM copie sur le partage ; `windowsTarget` attend ce fichier en plus du certificat. Le journal dira si l'écart existe (« the pinned certificate is presented, but … rdp-ready.txt is not there yet »). Ce défaut est antérieur au redimensionnement (ADR-0095).
+
+**Bilan mesuré le 13 novembre 2026** sur tous les jobs Windows non annulés depuis le 11 novembre (255 jobs, journaux lus par l'API) : deux cas distincts, que `target_unreachable` confondait.
+- **A, refus à l'ouverture.** `TestRDPWindows_CredSSP` passe, puis la première connexion d'écran se ferme en 0,1 à 3 s, et les suivantes du même test échouent.
+  - 4 jobs sur 205 avant #158, 0 sur 50 après.
+  - Le mécanisme est observé directement : sur 2 des 50 jobs suivants, le certificat épinglé était présenté alors que `rdp-ready.txt` manquait encore, et le test a attendu (« the pinned certificate is presented, but … rdp-ready.txt is not there yet »).
+  - Cause établie, correctif en place. **Clos.**
+- **B, cible perdue en cours de job.** Tout se passe bien jusqu'à `TestRDPWindows_Measure`, puis une session ne s'ouvre plus. À partir de là, plus rien jusqu'à la fin du job, cinq minutes et plus : les épreuves suivantes reçoivent `target_unreachable`, les isolements « reading X.224 connection confirm failed ».
+  - Les journaux exportés de Windows s'arrêtent au même moment (fr-FR, run 43191279407 : dernier export à 01:37:13, heure de Windows, soit 09:37:13 UTC ; échec à 09:38:07). La console de QEMU ne montre aucun redémarrage : autant de démarrages que dans les jobs verts.
+  - Une fois, la session d'avant n'avait déjà plus reçu d'image pendant 50 s : la machine se figeait.
+  - 3 jobs sur 40 entre l'arrivée de la mesure en deux sessions (11 novembre, 20:15 UTC) et le 12 novembre, 09:30 UTC ; 0 sur 165 depuis, la mesure ayant tourné dans chacun.
+  - Aucun changement du test, de la cible ou de l'image dockur ne l'explique. **Cause non établie ; non reproduit depuis.** S'il revient, il faudra capturer l'écran de la machine (console de QEMU) au moment de la perte.
 
 ## 2026-11-13 — CI Windows : les clics dans Notepad évitent le menu Démarrer
 
@@ -4308,3 +4328,68 @@ a été reformulé et le contrôle passe ensuite.
 Les scénarios navigateur contre les cinq cibles Windows sont fournis par la CI
 Windows (#157/#158) ; ils ne sont pas relancés localement, conformément à la
 contrainte KVM/ressources de cet environnement.
+
+## 2026-11-13 — ADR-0096, incrément 2 : les droits du presse-papiers, du Broker au proxy
+
+Le Broker évalue à la création d'une session RDP `clipboard:to-target:<compte>` et `clipboard:from-target:<compte>` (action `session:clipboard`), les inscrit dans `sessions` (migration `006`, faux par défaut) et les passe au proxy dans `EstablishSession` (champs 9 et 10). Le proxy les porte jusqu'à `proxycore.SessionMetadata`, et refuse (`400`) un droit pour une session VNC. Rien ne les lit encore : le moteur RDP ouvrira `cliprdr` selon eux à l'incrément 3.
+
+Choix renversable : les droits voyagent dans `EstablishSession`, pas dans le scope du Vault, que le proxy ne lit pas (l'ADR disait « dans le scope »).
+
+Vérifié : `make build vet test` ; tests Broker avec `TEST_DATABASE_URL` sur un PostgreSQL 16 jetable ; contrat proto↔JSON ; 12 mutations, 12 tuées. Non fait : aucun test sur processus réels de bout en bout (rien ne s'ouvre encore côté cible).
+
+## 2026-11-13 — ADR-0096, incrément 3a : un texte du presse-papiers s'enregistre
+
+Le message `CLIPBOARD` (type 5) du flux écran, enregistré sous le codec `clipboard-text-v1` dans la suite des images, scellé au format 3, servi par la Gateway à la relecture. Rien ne le produit encore : le relais (3b) et `SCREEN_CLIPBOARD` viennent ensuite. La relecture de l'Admin UI refuse ce codec jusqu'à l'incrément 4.
+
+Vérifié : tests de `pkg/screenstream`, du Video Recorder, de la Gateway et du proxy ; `FuzzDecode` 20 s ; 14 mutations, 14 tuées.
+
+## 2026-11-13 — ADR-0096, incrément 3b : le relais du presse-papiers, derrière `SCREEN_CLIPBOARD`
+
+`pkg/proxycore/clipboard.go` : un transfert est contrôlé (contrat), borné (10 par minute et par session), audité (`session.clipboard`, sens, taille et empreinte, jamais le texte), enregistré et acquitté, puis livré. Un refus est audité en échec et la session continue ; un enregistrement perdu la termine. Le relais décale les images du nombre de textes passés pour garder une seule suite, et la file d'affichage ne jette jamais un texte. Le moteur RDP annonce `cliprdr` selon les droits, demande le texte dès que la cible en propose un, et en garde quatre au plus en attente. `SCREEN_CLIPBOARD` est éteint par défaut ; le compose l'expose.
+
+Vérifié : `pkg/proxycore` sous `-race`, moteur, auditeur, contrat, Vitest ; 21 mutations, 21 tuées. **Non fait** : aucun transfert à travers le relais complet contre Windows ni dans un navigateur (incréments 4 et 5) ; coller depuis la page n'existe pas encore.
+
+## 2026-11-13 — ADR-0096, incrément 4 : coller et copier depuis la page
+
+Le contrat écran porte le presse-papiers dans les deux sens : bits 2 et 3 du `HELLO`, entrée `CLIPBOARD` (type 5, longueur variable, 98 297 octets au plus) encodée et décodée par `pkg/screenstream`. Le contrat est indépendant du client, en vue du client Desktop d'ADR-0098 (proposé, PR #174). Le proxy n'élargit sa limite de lecture que pour une session qui peut coller ; la Gateway valide les deux formats. L'Admin UI a un panneau « Presse-papiers » (coller sur geste, texte montré avant l'envoi ; copier sur geste), et la relecture montre les transferts.
+
+Vérifié : `pkg/screenstream` (fuzzing de l'entrée), `pkg/proxycore` sous `-race`, proxy, Gateway, Vitest. **Non fait** : un navigateur réel contre Windows (incrément 5) ; `SCREEN_CLIPBOARD` reste éteint.
+
+## 2026-11-13 — ADR-0096, incrément 5 : le presse-papiers éprouvé dans un vrai navigateur contre Windows
+
+`TestScreenFlow_RDPClipboardInAHeadlessBrowser` (CI Windows, PR #176, run 43415425495) est vert sur les cinq cibles :
+- Chrome sans interface colle un texte par le panneau. Il arrive dans Notepad, qui le recopie, et la page l'affiche.
+- La relecture par l'API publique contient exactement les deux transferts ; l'audit réel porte les deux `session.clipboard`, sans le texte.
+- Le bouton « Copier » a réussi. Les captures fr-FR montrent AZERTY, « é » et « € » intacts.
+
+ADR-0096 est mise en œuvre. `SCREEN_CLIPBOARD` reste éteint : l'allumer par défaut est la décision du propriétaire.
+
+## 2026-11-13 — ADR-0071 : la touche Windows atteint le shell de la cible
+
+Cause de l'écart « la touche Windows seule n'ouvre pas le menu Démarrer » (PR #101, #119) : le Client Info ne posait pas `INFO_ENABLEWINDOWSKEY` (0x00000100, MS-RDPBCGR 2.2.1.11.1.1), que FreeRDP et mstsc posent. Sans lui, Windows ne prend pas la touche pour la touche Windows, et Win+R tapait « r ».
+
+`TestRDPWindows_ExtendedKeys` mesure désormais la part de l'écran que change chaque touche, au lieu d'une capture à juger.
+- **Rouge d'abord** (PR #180, run 43439650707) : sur les cinq cibles, Ctrl+Échap change 41 à 42 % de l'écran (le menu s'ouvre, la mesure le voit) ; la touche Windows, 0,0 %.
+- **Vert ensuite** (run 43444272056) : avec le drapeau, la touche Windows change 41 à 52 % de l'écran. La capture fr-FR montre le menu Démarrer ouvert.
+
+## 2026-11-13 — ADR-0095 : une mise en page restée sans effet est redemandée
+
+Sur #170 (2022, 32 bpp) puis #180 (console), `TestRDPWindows_Resize` a échoué une fois. Le diagnostic ajouté sur #170 dit, pour #180 : capacités reçues, 1 mise en page envoyée, 0 retenue par un canal fermé. Windows n'a pas suivi en 60 s, et le moteur ne redemandait jamais une taille déjà demandée. Juste après, la session du navigateur sur la même cible n'a reçu aucune image en 2 min. Cause côté Windows non établie : l'export de ses journaux (400 derniers événements RDP) ne remontait que trois minutes.
+
+Correctif : redemander la même taille après 5 s, et ne rien demander quand le bureau a déjà la taille. Deux tests, trois mutations tuées. Il réduit l'écart sans prouver qu'il l'efface.
+
+## 2026-11-13 — ADR-0090 : l'acquittement du Video Recorder avec un S3 sous TLS
+
+`TestVideoRecorderAckLatency` accepte un S3 en HTTPS. L'autorité de confiance passe par `RECORDER_MEASURE_S3_CA_FILE` ; le HTTP clair n'est plus autorisé que pour le stockage de l'épreuve elle-même.
+
+**Banc** : deux SeaweedFS 4.52 jetables sur le même hôte, l'un en HTTPS (autorité de test, certificat pour `127.0.0.1`), l'autre en HTTP clair ; un PostgreSQL 16 jetable. Quatre passages alternés à 1, 5 et 10 sessions.
+
+**Résultat** (tableau dans ADR-0090) :
+- partielles : aucun coût mesurable ;
+- images clés : médiane de 0 à 50 ms de plus, 95ᵉ centile jusqu'à 0,47 s (0,32 s en clair), maximum jusqu'à 1,5 s (0,7 s) ;
+- bruité d'un passage à l'autre.
+
+**Hypothèse non vérifiée** : 4 connexions inactives par hôte côté client S3, donc de nouvelles poignées de main TLS à 5 et 10 sessions.
+
+**Non mesuré** : le mTLS du compose, et un S3 distant.
+

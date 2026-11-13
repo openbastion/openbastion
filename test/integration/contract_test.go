@@ -33,13 +33,14 @@ type contractPair struct {
 
 // Reasons used more than once.
 const (
-	whyContext   = "RequestContext is not carried: the caller is the certificate's (ADR-0010), the actor is a flat field"
-	whyActor     = "context.actor_user_id, flattened"
-	whyTTL       = "a duration rather than an absolute expires_at: the callee's clock decides the end"
-	whyExpiresAt = "carried as ttl_seconds"
-	whySignature = "the chain signs every event itself (HMAC, ADR-0027); an emitter's signature is not carried"
-	whyDetails   = "details carries optional metadata (ADR-0068); this emitter has none to add"
-	whyEventTime = "the event's time stays in the chain; the emitter needs only the id"
+	whyContext     = "RequestContext is not carried: the caller is the certificate's (ADR-0010), the actor is a flat field"
+	whyActor       = "context.actor_user_id, flattened"
+	whyTTL         = "a duration rather than an absolute expires_at: the callee's clock decides the end"
+	whyExpiresAt   = "carried as ttl_seconds"
+	whyNoClipboard = "SSH has no clipboard channel (ADR-0096): the Broker sends false, the SSH proxy has nothing to read"
+	whySignature   = "the chain signs every event itself (HMAC, ADR-0027); an emitter's signature is not carried"
+	whyDetails     = "details carries optional metadata (ADR-0068); this emitter has none to add"
+	whyEventTime   = "the event's time stays in the chain; the emitter needs only the id"
 )
 
 var contractPairs = []contractPair{
@@ -61,7 +62,7 @@ var contractPairs = []contractPair{
 	{"services/vault/password-vault/internal/interfaces/http.go", "fetchCredentialResponse", "proto/vault/v1/vault.proto", "FetchCredentialResponse",
 		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed"}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "establishSessionRequest", "proto/proxy/v1/proxy_control.proto", "EstablishSessionRequest",
-		map[string]string{"ttl_seconds": whyTTL}, map[string]string{"context": whyContext, "expires_at": whyExpiresAt}},
+		map[string]string{"ttl_seconds": whyTTL}, map[string]string{"context": whyContext, "expires_at": whyExpiresAt, "clipboard_to_target": whyNoClipboard, "clipboard_from_target": whyNoClipboard}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "establishSessionResponse", "proto/proxy/v1/proxy_control.proto", "EstablishSessionResponse", nil, nil},
 	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "establishRequest", "proto/proxy/v1/proxy_control.proto", "EstablishSessionRequest",
 		map[string]string{"ttl_seconds": whyTTL}, map[string]string{"context": whyContext, "target_host": "the proxy resolves the target from the one-use Vault scope", "target_user": "the proxy resolves the username from the one-use Vault scope", "expires_at": "the HTTP request supplies ttl_seconds; the proxy computes the absolute expiry"}},
@@ -71,7 +72,7 @@ var contractPairs = []contractPair{
 	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "revokeResponse", "proto/proxy/v1/proxy_control.proto", "TerminateSessionResponse",
 		map[string]string{"tickets_revoked": "the HTTP proxy reports how many pending tickets were revoked", "connections_cut": "the HTTP proxy reports how many active connections were cut"}, map[string]string{"terminated": "the HTTP route returns counts rather than the gRPC boolean"}},
 	{"services/proxy/rdp-vnc-proxy/internal/infrastructure/audit_client.go", "auditEventRequest", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "revokeSessionRequest", "proto/proxy/v1/proxy_control.proto", "TerminateSessionRequest",
 		map[string]string{"ttl_seconds": "how long the proxy must remember the revocation (ADR-0018)"},
 		map[string]string{"context": whyContext}},

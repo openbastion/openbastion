@@ -39,6 +39,12 @@ type Session struct {
 	// rows that predate it.
 	DurationMinutes int
 
+	// ClipboardToTarget and ClipboardFromTarget are the clipboard's rights of an RDP session
+	// (ADR-0096): pasting on the target, copying from it. The Authorization Service grants them at
+	// the session's creation, from the requester's roles; false, refused, by default and for any
+	// other protocol.
+	ClipboardToTarget, ClipboardFromTarget bool
+
 	// DecidedBy is the user who approved or rejected a break-glass request, and
 	// DecidedAt when. Empty for every session that did not go through a decision —
 	// which is how the Broker tells an approved break-glass from one granted under
@@ -74,4 +80,10 @@ func (s Session) EffectiveStatus(now time.Time) SessionStatus {
 		return StatusExpired
 	}
 	return s.Status
+}
+
+// ClipboardRights are what a session may do with the clipboard of an RDP target (ADR-0096),
+// carried to the proxy at connect.
+type ClipboardRights struct {
+	ToTarget, FromTarget bool
 }

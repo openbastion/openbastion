@@ -26,7 +26,7 @@ type fakeInstance struct {
 	revokeDelay time.Duration
 }
 
-func (f *fakeInstance) EstablishSession(_ context.Context, sessionID, _, _, _, _ string, _ time.Duration, _ bool) (string, string, error) {
+func (f *fakeInstance) EstablishSession(_ context.Context, sessionID, _, _, _, _ string, _ time.Duration, _ bool, _ domain.ClipboardRights) (string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.establishes++
@@ -107,7 +107,7 @@ func TestProxyPool_TicketsAreIssuedInTurn_AndTheEndpointIsTheIssuers(t *testing.
 	p := pool(t, a, b, c)
 	var got []string
 	for i := 0; i < 6; i++ {
-		endpoint, ticket, err := p.EstablishSession(context.Background(), fmt.Sprint("s", i), "ssh", "h", "u", "scope", time.Minute, false)
+		endpoint, ticket, err := p.EstablishSession(context.Background(), fmt.Sprint("s", i), "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,12 +123,12 @@ func TestProxyPool_TicketsAreIssuedInTurn_AndTheEndpointIsTheIssuers(t *testing.
 
 func TestProxyPool_AnInstanceThatFailsIsPassed_EachAskedAtMostOnce(t *testing.T) {
 	a, b, c := &fakeInstance{name: "a", establishEr: errors.New("dial tcp: refused")}, &fakeInstance{name: "b"}, &fakeInstance{name: "c"}
-	endpoint, _, err := pool(t, a, b, c).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false)
+	endpoint, _, err := pool(t, a, b, c).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
 	if err != nil || endpoint != "b:2222" {
 		t.Fatalf("endpoint %q, err %v: the next instance should have issued it", endpoint, err)
 	}
 	all := []*fakeInstance{{name: "a", establishEr: errors.New("x")}, {name: "b", establishEr: errors.New("y")}, {name: "c", establishEr: errors.New("z")}}
-	if _, _, err := pool(t, all...).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false); err == nil {
+	if _, _, err := pool(t, all...).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}); err == nil {
 		t.Fatal("no instance issued a ticket, and no error")
 	}
 	for _, f := range all {
@@ -141,7 +141,7 @@ func TestProxyPool_AnInstanceThatFailsIsPassed_EachAskedAtMostOnce(t *testing.T)
 func TestProxyPool_ARefusalToRecordIsWhatTheCallerIsTold(t *testing.T) {
 	rec := fmt.Errorf("%w: establish-session refused by the proxy", domain.ErrRecordingUnavailable)
 	fs := []*fakeInstance{{name: "a", establishEr: rec}, {name: "b", establishEr: errors.New("dial tcp: refused")}}
-	_, _, err := pool(t, fs...).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false)
+	_, _, err := pool(t, fs...).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
 	if !errors.Is(err, domain.ErrRecordingUnavailable) {
 		t.Fatalf("err = %v, want the refusal to record (ADR-0008)", err)
 	}

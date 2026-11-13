@@ -346,3 +346,52 @@ func TestVideoRecordingRoute_ServesARangeOfSegments(t *testing.T) {
 		t.Fatalf("partial frames out of their place in a range: %d, want 502", response.Code)
 	}
 }
+
+// A clipboard text (ADR-0096 §4) is served as the Recorder gave it: the CLIPBOARD message of its own
+// sequence, under codec clipboard-text-v1, to whoever may read the recording. Anything else under
+// that codec is refused, as a bad PNG is.
+func TestVideoRecordingRoute_ServesClipboardTexts(t *testing.T) {
+	at := time.Date(2026, 11, 13, 0, 0, 0, 0, time.UTC)
+	clip := func(sequence uint64) []byte {
+		data, err := screenstream.Encode(screenstream.Message{Type: screenstream.TypeClipboard, Sequence: sequence, Timestamp: at,
+			Direction: screenstream.ClipboardFromTarget, ClipboardText: "copied é"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	serve := func(response *recordingv1.GetVideoSegmentResponse) *httptest.ResponseRecorder {
+		authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-verified", "alice", []string{"auditor"})
+		t.Cleanup(authSrv.Close)
+		gateway := newTestGateway(t, authSrv.URL, "").WithVideoRecorderClient(&fakeVideoRecorder{response: response}).Routes()
+		request := httptest.NewRequest(http.MethodGet, "/sessions/s-1/recording/video/segments/5", nil)
+		request.Header.Set("Authorization", "Bearer tok-alice")
+		recorder := httptest.NewRecorder()
+		gateway.ServeHTTP(recorder, request)
+		return recorder
+	}
+	good := serve(segmentResponseWithFrame("s-1", 5, &recordingv1.VideoFrameData{Ts: timestamppb.New(at), FrameData: clip(5), Codec: "clipboard-text-v1"}))
+	if good.Code != http.StatusOK {
+		t.Fatalf("a segment with a clipboard text returned %d: %s", good.Code, good.Body.String())
+	}
+	var body struct {
+		Frames []struct {
+			FrameData []byte `json:"frameData"`
+			Codec     string `json:"codec"`
+		} `json:"frames"`
+	}
+	if err := json.NewDecoder(good.Body).Decode(&body); err != nil || len(body.Frames) != 1 ||
+		body.Frames[0].Codec != "clipboard-text-v1" || string(body.Frames[0].FrameData) != string(clip(5)) {
+		t.Fatalf("the clipboard text was not served as the Recorder gave it: %+v %v", body, err)
+	}
+	for name, frame := range map[string]*recordingv1.VideoFrameData{
+		"a clipboard text of another sequence":  {Ts: timestamppb.New(at), FrameData: clip(6), Codec: "clipboard-text-v1"},
+		"not a clipboard text":                  {Ts: timestamppb.New(at), FrameData: []byte("text"), Codec: "clipboard-text-v1"},
+		"a key frame under the clipboard codec": {Ts: timestamppb.New(at), FrameData: keyFrameMessage(t, 5, at), Codec: "clipboard-text-v1"},
+		"a clipboard text under the key codec":  {Ts: timestamppb.New(at), FrameData: clip(5), Codec: "png-delta-v1"},
+	} {
+		if got := serve(segmentResponseWithFrame("s-1", 5, frame)); got.Code != http.StatusBadGateway {
+			t.Errorf("%s: %d, want 502", name, got.Code)
+		}
+	}
+}

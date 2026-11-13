@@ -254,6 +254,14 @@ services:
       - video-recorder-transit-ca
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: video-recorder}}
+    # Ready only when it can record: PostgreSQL, the object store and the key wrapper answer
+    # (/readyz). The image has no shell: the binary asks itself, under its own identity (ADR-0072).
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/video-recorder", "probe", "--port", "8088", "--path", "/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
     depends_on:
       video-recorder-db-init:
         condition: service_completed_successfully
@@ -302,15 +310,23 @@ services:
       SCREEN_PARTIAL_FRAMES: ${SCREEN_PARTIAL_FRAMES:-true}
       # The target's desktop resized to the operator's window (ADR-0095), RDP: "false" to keep it fixed.
       SCREEN_RESIZE: ${SCREEN_RESIZE:-true}
+      # The clipboard of an RDP session, text only, each direction by its right (ADR-0096): "true" to open it.
+      SCREEN_CLIPBOARD: ${SCREEN_CLIPBOARD:-false}
     secrets: [screen-target-ca]
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: rdp-vnc-proxy}}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/rdp-vnc-proxy", "probe", "--port", "8090", "--path", "/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
     depends_on:
       pki: {condition: service_completed_successfully}
       postgres: {condition: service_healthy}
       password-vault: {condition: service_started}
       audit-service: {condition: service_started}
-      video-recorder: {condition: service_started}
+      video-recorder: {condition: service_healthy}
 
   session-broker:
     <<: *service

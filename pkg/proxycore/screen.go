@@ -141,6 +141,18 @@ func frameSize(frame screenstream.Message) int {
 	return n
 }
 
+// clipboardOnly keeps, of what waits, the clipboard texts, in their order: what a key frame or a
+// slow browser makes the display drop is pictures, never a text.
+func clipboardOnly(pending []screenstream.Message) []screenstream.Message {
+	var kept []screenstream.Message
+	for _, m := range pending {
+		if m.Type == screenstream.TypeClipboard {
+			kept = append(kept, m)
+		}
+	}
+	return kept
+}
+
 // The display does not end with the relay's context: an interrupted write closes a WebSocket, and
 // the END that says why the session ended must still get through. close is what bounds it.
 func newScreenDisplay(ctx context.Context, sink ScreenSink) *screenDisplay {
@@ -151,17 +163,22 @@ func newScreenDisplay(ctx context.Context, sink ScreenSink) *screenDisplay {
 func (d *screenDisplay) offer(frame screenstream.Message) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	clip := frame.Type == screenstream.TypeClipboard
 	if frame.Type == screenstream.TypeFrame {
 		d.needKey = false
-	} else if d.needKey {
+	} else if d.needKey && !clip {
 		return // until the key frame asked for: what came between is in the recording
 	}
 	if d.sending {
 		switch {
+		case clip:
+			// A clipboard text is never dropped (ADR-0096): it is not a picture a later frame redraws.
+			d.pending = append(d.pending, frame)
 		case frame.Type == screenstream.TypeFrame:
-			d.pending, d.pendingBytes = []screenstream.Message{frame}, 0
-		case len(d.pending) >= maxPendingDeltas || d.pendingBytes+frameSize(frame) > maxPendingDeltaBytes:
-			d.pending, d.pendingBytes, d.needKey = nil, 0, true
+			d.pending, d.pendingBytes = append(clipboardOnly(d.pending), frame), 0
+		case len(d.pending)-len(clipboardOnly(d.pending)) >= maxPendingDeltas ||
+			d.pendingBytes+frameSize(frame) > maxPendingDeltaBytes:
+			d.pending, d.pendingBytes, d.needKey = clipboardOnly(d.pending), 0, true
 			if d.requestKey != nil {
 				d.requestKey()
 			}
@@ -316,7 +333,7 @@ func (l *Listener) ServeScreen(ctx context.Context, meta SessionMetadata, codec 
 	// readiness proof, even if the caller reused metadata from another path.
 	meta.Admission = Admission{}
 	return l.serveWithRelay(ctx, meta, admit, func(relayCtx, cleanupCtx context.Context, cred *Credential) error {
-		return relayScreen(relayCtx, cleanupCtx, meta, cred, codec, recorder, sink, l.ScreenInput, l.ScreenAckTimeout)
+		return relayScreen(relayCtx, cleanupCtx, meta, cred, codec, recorder, sink, l.ScreenInput, l.ScreenAckTimeout, l.Clipboard)
 	})
 }
 
@@ -439,11 +456,20 @@ func screenContextEnd(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration) (relayErr error) {
+func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration, clipboardAudit ClipboardAuditor) (relayErr error) {
 	if ackTimeout <= 0 {
 		ackTimeout = DefaultScreenAckTimeout
 	}
-	session, err := codec.Open(ctx, cred)
+	// The clipboard opens only with a right for it, a codec that can, and an audit to write its
+	// transfers to (ADR-0096): otherwise the session is the one it always was.
+	var session ScreenSession
+	var err error
+	clipboardCodec, canClip := codec.(ClipboardCodec)
+	if (meta.ClipboardToTarget || meta.ClipboardFromTarget) && canClip && clipboardAudit != nil {
+		session, err = clipboardCodec.OpenWithClipboard(ctx, cred, meta.ClipboardToTarget, meta.ClipboardFromTarget)
+	} else {
+		session, err = codec.Open(ctx, cred)
+	}
 	if err != nil {
 		return err
 	}
@@ -481,6 +507,21 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	}()
 
 	frames := session.Frames()
+	// The texts copied on the target, when copying is allowed and the session's clipboard is open.
+	var clipboard *clipboardRelay
+	var clipboardTexts <-chan string
+	if clipSession, ok := session.(ClipboardSession); ok && clipboardAudit != nil && (meta.ClipboardToTarget || meta.ClipboardFromTarget) {
+		clipboard = &clipboardRelay{sessionID: meta.SessionID, audit: clipboardAudit, recorder: recorder, session: clipSession,
+			ackTimeout: ackTimeout, now: time.Now}
+		if meta.ClipboardFromTarget {
+			clipboardTexts = clipSession.ClipboardTexts()
+		}
+	}
+	// The recording numbers frames and clipboard texts in one sequence; the codec numbers its frames
+	// alone. offset is how many texts came before: a frame is recorded and shown at its codec's
+	// sequence plus offset. sawKey says a key frame came, which a partial frame needs.
+	var offset uint64
+	sawKey := false
 	var inputResults <-chan screenInputResult
 	if source, ok := sink.(ScreenInputSource); ok {
 		ch := make(chan screenInputResult, 1)
@@ -515,6 +556,10 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	if resizer, ok := session.(Resizer); ok {
 		hello.Resizable = resizer.Resizable()
 	}
+	// The clipboard's directions this session allows (ADR-0096 §6): a client offers only these.
+	if clipboard != nil {
+		hello.ClipboardToTarget, hello.ClipboardFromTarget = meta.ClipboardToTarget, meta.ClipboardFromTarget
+	}
 	// The resizes: the last one forwarded, and the latest one waiting for its turn.
 	var lastResize time.Time
 	var pendingResize *screenstream.InputEvent
@@ -532,6 +577,24 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 		case incoming, ok := <-inputResults:
 			if !ok || incoming.err != nil {
 				return fmt.Errorf("proxycore: screen input transport closed")
+			}
+			if screenstream.IsClipboardInput(incoming.data) {
+				// A text pasted by the operator (ADR-0096): out of the input budget, bounded on its own.
+				// One the HELLO did not offer breaks the contract, as any invalid input does.
+				text, err := screenstream.DecodeClipboardInput(incoming.data)
+				if err != nil || !hello.ClipboardToTarget {
+					return fmt.Errorf("%w: a clipboard text the session does not take", ErrScreenInputInvalid)
+				}
+				message, moved, err := clipboard.transfer(ctx, screenstream.ClipboardToTarget, text, sequence+offset)
+				if err != nil {
+					return err
+				}
+				if moved {
+					lastAck = message.Sequence
+					offset++
+					display.offer(message)
+				}
+				continue
 			}
 			event, err := screenstream.DecodeInput(incoming.data, frameWidth, frameHeight)
 			if err != nil {
@@ -576,6 +639,20 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			}
 		case err := <-display.failed:
 			return err
+		case text, ok := <-clipboardTexts:
+			if !ok {
+				clipboardTexts = nil // the target's side of the clipboard is gone; the screen goes on
+				continue
+			}
+			message, moved, err := clipboard.transfer(ctx, screenstream.ClipboardFromTarget, text, sequence+offset)
+			if err != nil {
+				return err
+			}
+			if moved {
+				lastAck = message.Sequence
+				offset++
+				display.offer(message)
+			}
 		case frame, ok := <-frames:
 			if !ok {
 				// Ending the session closes the target, which closes this stream: that is the
@@ -594,9 +671,10 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 			// partial frame first, nor one of another size than the screen it changes.
 			partial := frame.Type == screenstream.TypeFrameDelta
 			if (frame.Type != screenstream.TypeFrame && !partial) || frame.Sequence != sequence || frame.Timestamp.IsZero() ||
-				partial && (lastAck == 0 || frame.Width != frameWidth || frame.Height != frameHeight) {
+				partial && (!sawKey || frame.Width != frameWidth || frame.Height != frameHeight) {
 				return ErrScreenSequence
 			}
+			frame.Sequence += offset
 			if _, err := screenstream.Encode(frame); err != nil {
 				return fmt.Errorf("%w: invalid frame", ErrScreenCodecUnavailable)
 			}
@@ -616,6 +694,7 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 				return fmt.Errorf("%w: frame acknowledgement missing or ambiguous", ErrRecordingLost)
 			}
 			lastAck = ack
+			sawKey = true
 			frameWidth, frameHeight = frame.Width, frame.Height
 			// The frame is durable from here on, whatever becomes of the operator.
 			display.offer(frame)

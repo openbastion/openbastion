@@ -2,7 +2,9 @@
 package command
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/spf13/cobra"
@@ -51,4 +53,35 @@ func NewServiceCommand(name string, run func()) *cobra.Command {
 	}
 	root.AddCommand(NewVersionCommand())
 	return root
+}
+
+// Probe asks a running service whether it is up, on port and path: nil for yes.
+type Probe func(ctx context.Context, port int, path string) error
+
+// NewProbeCommand is the healthcheck of an image with no shell (ADR-0072): `<service> probe --port
+// N --path /readyz` exits 0 when the service answers 200, 1 otherwise, within --timeout. It starts
+// nothing of the service.
+func NewProbeCommand(probe Probe) *cobra.Command {
+	var port int
+	var path string
+	var timeout time.Duration
+	cmd := &cobra.Command{
+		Use:           "probe",
+		Short:         "Vérifie que le service en cours d'exécution répond (healthcheck)",
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: false,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if port == 0 {
+				return fmt.Errorf("probe: --port is required")
+			}
+			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+			defer cancel()
+			return probe(ctx, port, path)
+		},
+	}
+	cmd.Flags().IntVar(&port, "port", 0, "Port HTTP du service, sur 127.0.0.1")
+	cmd.Flags().StringVar(&path, "path", "/healthz", "Chemin interrogé")
+	cmd.Flags().DurationVar(&timeout, "timeout", 3*time.Second, "Délai de la réponse")
+	return cmd
 }

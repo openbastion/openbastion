@@ -33,8 +33,7 @@ const (
 	rdpInfoDisableCtrlAltDel  = uint32(0x00000002)
 	rdpInfoMaximizeShell      = uint32(0x00000020)
 	rdpInfoLogonNotify        = uint32(0x00000040)
-	rdpInfoEnableWindowsKey   = uint32(0x00000100)
-	rdpInfoClientDefaultFlags = rdpInfoUnicode | rdpInfoAutoLogon | rdpInfoForceEncryptedCSPDU
+	rdpInfoClientDefaultFlags = rdpInfoUnicode | rdpInfoAutoLogon | rdpInfoForceEncryptedCSPDU | rdpInfoEnableWindowsKey
 	freeRDPInfoFlags          = rdpInfoMouse | rdpInfoDisableCtrlAltDel | rdpInfoUnicode | rdpInfoMaximizeShell |
 		rdpInfoLogonNotify | rdpInfoEnableWindowsKey | rdpInfoForceEncryptedCSPDU
 )

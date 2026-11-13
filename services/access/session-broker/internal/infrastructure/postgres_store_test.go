@@ -520,3 +520,46 @@ func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
 		t.Fatalf("after the decision: %+v", got)
 	}
 }
+
+// The clipboard rights granted at creation (ADR-0096 §1) are what connect carries to the proxy:
+// each direction survives a round trip on its own column, and a later save (a termination) keeps it.
+func TestPostgresStore_ClipboardRightsRoundTrip(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	for _, want := range []domain.ClipboardRights{{}, {ToTarget: true}, {FromTarget: true}, {ToTarget: true, FromTarget: true}} {
+		sess := &domain.Session{
+			ID: uniqueID("sess-clip"), Status: domain.StatusActive, Protocol: "rdp", RequestedBy: "operator",
+			PrivilegedAccountID: uniqueID("acc"), Justification: "clipboard",
+			ClipboardToTarget: want.ToTarget, ClipboardFromTarget: want.FromTarget,
+			CreatedAt: now, ExpiresAt: now.Add(10 * time.Minute),
+		}
+		if err := store.Save(ctx, sess); err != nil {
+			t.Fatal(err)
+		}
+		// A later save (a termination) from a copy whose rights differ changes neither: they are
+		// fixed at creation, like who asked and for which account.
+		stale := *sess
+		stale.Status = domain.StatusTerminated
+		stale.ClipboardToTarget, stale.ClipboardFromTarget = !want.ToTarget, !want.FromTarget
+		if err := store.Save(ctx, &stale); err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.Get(ctx, sess.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if g := (domain.ClipboardRights{ToTarget: got.ClipboardToTarget, FromTarget: got.ClipboardFromTarget}); g != want {
+			t.Fatalf("rights %+v after a round trip, want %+v", g, want)
+		}
+		found, err := store.SearchSessions(ctx, domain.SessionSearch{PrivilegedAccountID: sess.PrivilegedAccountID, From: now.Add(-time.Minute), To: now.Add(time.Minute)}, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(found) != 1 || found[0].ClipboardToTarget != want.ToTarget || found[0].ClipboardFromTarget != want.FromTarget {
+			t.Fatalf("searched %d session(s); rights there must be %+v: %+v", len(found), want, found)
+		}
+	}
+}

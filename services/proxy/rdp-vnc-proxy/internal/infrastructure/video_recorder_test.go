@@ -250,3 +250,30 @@ func TestVideoRecorderClientSendsPartialFramesAsTheyAreShown(t *testing.T) {
 		t.Fatal("the Recorder did not get the key frame's PNG and the partial frame's message")
 	}
 }
+
+// A clipboard text goes to the Recorder as its CLIPBOARD message, under codec clipboard-text-v1, in
+// the sequence of the frames (ADR-0096 §4).
+func TestVideoRecorderClientSendsClipboardTextsInTheSequence(t *testing.T) {
+	server := &videoRecorderTestServer{ready: true}
+	client := newVideoRecorderTestClient(t, server)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	key := testScreenFrame(t, 1)
+	if _, err := client.Record(ctx, "session-rdp-1", key); err != nil {
+		t.Fatal(err)
+	}
+	clip := screenstream.Message{Type: screenstream.TypeClipboard, Sequence: 2, Timestamp: key.Timestamp.Add(time.Millisecond),
+		Direction: screenstream.ClipboardToTarget, ClipboardText: "pasted é"}
+	if ack, err := client.Record(ctx, "session-rdp-1", clip); err != nil || ack != 2 {
+		t.Fatalf("Record of a clipboard text = %d, %v", ack, err)
+	}
+	wire, err := screenstream.Encode(clip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if len(server.codecs) != 2 || server.codecs[1] != "clipboard-text-v1" || !bytes.Equal(server.data[1], wire) {
+		t.Fatalf("codecs %v: the Recorder did not get the clipboard text's message", server.codecs)
+	}
+}

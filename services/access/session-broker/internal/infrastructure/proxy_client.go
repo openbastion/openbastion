@@ -26,10 +26,11 @@ type ProxyClientHTTPClient struct {
 	Client *http.Client
 }
 
-func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
+func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
 	body, _ := json.Marshal(establishSessionRequestBody{
 		SessionID: sessionID, Protocol: protocol, TargetHost: targetHost, TargetUser: targetUser,
 		VaultScopeToken: scopeToken, TTLSeconds: int(ttl.Seconds()), BreakGlass: breakGlass,
+		ClipboardToTarget: clipboard.ToTarget, ClipboardFromTarget: clipboard.FromTarget,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/establish-session", bytes.NewReader(body))
 	if err != nil {
@@ -96,6 +97,9 @@ type establishSessionRequestBody struct {
 	VaultScopeToken string `json:"vault_scope_token"`
 	TTLSeconds      int    `json:"ttl_seconds"`
 	BreakGlass      bool   `json:"break_glass"`
+	// The clipboard's rights of an RDP session (ADR-0096), as the Broker granted them.
+	ClipboardToTarget   bool `json:"clipboard_to_target"`
+	ClipboardFromTarget bool `json:"clipboard_from_target"`
 }
 
 type establishSessionResponseBody struct {

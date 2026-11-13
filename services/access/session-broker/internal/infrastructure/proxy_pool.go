@@ -17,7 +17,7 @@ const MaxProxyInstances = 16
 // InstanceClient is what the pool needs of one instance: the shape of application.ProxyClient,
 // which ProxyClientHTTPClient implements.
 type InstanceClient interface {
-	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error)
+	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error)
 	RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error
 }
 
@@ -53,7 +53,7 @@ func (p *ProxyPool) Size() int { return len(p.instances) }
 // EstablishSession asks the instances in turn, each at most once, until one issues a ticket. The
 // endpoint returned is that instance's own: the ticket is good there and nowhere else. If none
 // does, a refusal to record (ADR-0008) is what the caller is told, if any instance said so.
-func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool) (string, string, error) {
+func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
 	p.mu.Lock()
 	start := p.next
 	p.next = (p.next + 1) % len(p.instances)
@@ -62,7 +62,7 @@ func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, t
 	var last, recording error
 	for i := range p.instances {
 		in := p.instances[(start+i)%len(p.instances)]
-		endpoint, ticket, err := in.Client.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass)
+		endpoint, ticket, err := in.Client.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard)
 		if err == nil {
 			return endpoint, ticket, nil
 		}

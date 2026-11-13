@@ -16,6 +16,8 @@ func FuzzDecode(f *testing.F) {
 	partial, _ := Encode(Message{Type: TypeFrameDelta, Sequence: 2, Timestamp: time.Unix(1, 0), Width: 8, Height: 4,
 		Rects: []Rect{{X: 1, Y: 1, Width: 1, Height: 1, PNG: []byte("\x89PNG\r\n\x1a\nIHDR")}}})
 	f.Add(partial)
+	clipboard, _ := Encode(Message{Type: TypeClipboard, Sequence: 3, Timestamp: time.Unix(1, 0), Direction: ClipboardFromTarget, ClipboardText: "é €\r\n"})
+	f.Add(clipboard)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		m, err := Decode(data)
 		if err != nil {
@@ -52,6 +54,24 @@ func FuzzDecodeInput(f *testing.F) {
 		back, err := DecodeInput(again, width, height)
 		if err != nil || back != e {
 			t.Fatalf("round trip: %+v, then %+v (%v)", e, back, err)
+		}
+	})
+}
+
+// The operator's clipboard text, under hostile bytes (ADR-0096 §6): what decodes encodes back to
+// the same bytes, within the bound, and nothing panics.
+func FuzzDecodeClipboardInput(f *testing.F) {
+	good, _ := EncodeClipboardInput("pasted é €")
+	f.Add(good)
+	f.Add([]byte{Version, byte(InputClipboard), 0, 0, 0, 0, 0, 0})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		text, err := DecodeClipboardInput(data)
+		if err != nil {
+			return
+		}
+		again, err := EncodeClipboardInput(text)
+		if err != nil || string(again) != string(data) || len(data) > MaxClipboardInputBytes {
+			t.Fatalf("decoded %q does not encode back to its bytes: %v", text, err)
 		}
 	})
 }

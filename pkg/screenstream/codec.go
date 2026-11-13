@@ -31,7 +31,25 @@ const (
 	// TypeFrameDelta is a partial frame (ADR-0092): the rectangles that changed since the frame of
 	// the previous sequence, each a PNG. A FRAME is the key frame it builds on.
 	TypeFrameDelta MessageType = 4
+	// TypeClipboard is a text that crossed the clipboard (ADR-0096), in the session's sequence: it
+	// is recorded, and acknowledged, like a frame, before it is delivered.
+	TypeClipboard MessageType = 5
 )
+
+// ClipboardDirection is the way a clipboard text went (ADR-0096 §1).
+type ClipboardDirection byte
+
+const (
+	ClipboardToTarget   ClipboardDirection = 1 // pasted by the operator on the target
+	ClipboardFromTarget ClipboardDirection = 2 // copied from the target by the operator
+)
+
+// MaxClipboardTextUnits bounds a clipboard text in UTF-16 code units, the target's encoding: the
+// 65 526 bytes of pkg/rdp (ADR-0096 §3), so that every text the channel carries can be recorded.
+const MaxClipboardTextUnits = 32763
+
+// clipboardHeader is the direction, then three reserved zero bytes.
+const clipboardHeader = 4
 
 // MaxDeltaRects bounds the rectangles of one partial frame (ADR-0092 §2).
 const MaxDeltaRects = 64
@@ -94,10 +112,17 @@ type Message struct {
 	PointerDrawn bool
 	// Resizable says the session follows InputResize (ADR-0095 §6): bit 1 of the flags byte.
 	Resizable bool
+	// ClipboardToTarget says the session takes InputClipboard, ClipboardFromTarget that it sends
+	// the texts copied on the target (ADR-0096 §6): bits 2 and 3. A client offers only what they say.
+	ClipboardToTarget, ClipboardFromTarget bool
 
 	// END-only fields. Text is a stable public message, never an internal error.
 	EndCode uint16
 	Text    string
+
+	// CLIPBOARD-only fields: the way the text went, and the text, whole.
+	Direction     ClipboardDirection
+	ClipboardText string
 }
 
 // Rect is one changed rectangle of a partial frame: where it goes, and its pixels as a PNG of
@@ -114,6 +139,16 @@ const HelloPointerDrawn = byte(0x01)
 // HelloResizable is the HELLO flag saying the session follows InputResize (ADR-0095 §6): the client
 // may send the size of its window. A HELLO without it is what it always was.
 const HelloResizable = byte(0x02)
+
+// HelloClipboardToTarget and HelloClipboardFromTarget are the HELLO flags of the clipboard's two
+// directions (ADR-0096 §6). A HELLO without them is what it always was.
+const (
+	HelloClipboardToTarget   = byte(0x04)
+	HelloClipboardFromTarget = byte(0x08)
+)
+
+// helloFlags are the HELLO flags this version knows; the others are reserved and zero.
+const helloFlags = HelloPointerDrawn | HelloResizable | HelloClipboardToTarget | HelloClipboardFromTarget
 
 // Encode serializes one v1 server-to-client message. It copies the payload into
 // the returned buffer; callers may safely reuse their input slices afterwards.
@@ -164,6 +199,12 @@ func Encode(m Message) ([]byte, error) {
 		if m.Resizable {
 			out[HeaderSize+1] |= HelloResizable
 		}
+		if m.ClipboardToTarget {
+			out[HeaderSize+1] |= HelloClipboardToTarget
+		}
+		if m.ClipboardFromTarget {
+			out[HeaderSize+1] |= HelloClipboardFromTarget
+		}
 		binary.BigEndian.PutUint64(out[HeaderSize+2:], uint64(m.ExpiresAt.Unix()))
 		binary.BigEndian.PutUint32(out[HeaderSize+10:], uint32(len(m.SessionID)))
 		copy(out[HeaderSize+14:], m.SessionID)
@@ -178,9 +219,29 @@ func Encode(m Message) ([]byte, error) {
 		binary.BigEndian.PutUint16(out[HeaderSize+2:], uint16(len(m.Text)))
 		copy(out[HeaderSize+4:], m.Text)
 		return out, nil
+	case TypeClipboard:
+		if err := validateClipboard(m); err != nil {
+			return nil, err
+		}
+		out := make([]byte, HeaderSize+clipboardHeader+len(m.ClipboardText))
+		putHeader(out, m)
+		out[HeaderSize] = byte(m.Direction)
+		copy(out[HeaderSize+clipboardHeader:], m.ClipboardText)
+		return out, nil
 	default:
 		return nil, ErrUnsupported
 	}
+}
+
+// validateClipboard checks a clipboard text against ADR-0096: a sequence and a time as a frame's,
+// no screen size, one of the two directions, and a text of valid UTF-8, without NUL (the target's
+// terminator), within MaxClipboardTextUnits. An empty text is a text: the target may copy nothing.
+func validateClipboard(m Message) error {
+	if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 ||
+		(m.Direction != ClipboardToTarget && m.Direction != ClipboardFromTarget) {
+		return ErrMalformedMessage
+	}
+	return validClipboardText(m.ClipboardText)
 }
 
 // Decode parses one complete v1 server-to-client message and rejects trailing,
@@ -220,11 +281,13 @@ func Decode(data []byte) (Message, error) {
 		}
 		p := data[HeaderSize:]
 		m.Protocol = Protocol(p[0])
-		if p[1]&^(HelloPointerDrawn|HelloResizable) != 0 {
+		if p[1]&^helloFlags != 0 {
 			return Message{}, ErrMalformedMessage
 		}
 		m.PointerDrawn = p[1]&HelloPointerDrawn != 0
 		m.Resizable = p[1]&HelloResizable != 0
+		m.ClipboardToTarget = p[1]&HelloClipboardToTarget != 0
+		m.ClipboardFromTarget = p[1]&HelloClipboardFromTarget != 0
 		expires := binary.BigEndian.Uint64(p[2:10])
 		if expires > math.MaxInt64 {
 			return Message{}, ErrOutOfBounds
@@ -249,6 +312,16 @@ func Decode(data []byte) (Message, error) {
 		}
 		m.EndCode = binary.BigEndian.Uint16(p[0:2])
 		m.Text = string(p[4:])
+	case TypeClipboard:
+		p := data[HeaderSize:]
+		if len(p) < clipboardHeader || p[1] != 0 || p[2] != 0 || p[3] != 0 {
+			return Message{}, ErrMalformedMessage
+		}
+		m.Direction = ClipboardDirection(p[0])
+		m.ClipboardText = string(p[clipboardHeader:])
+		if err := validateClipboard(m); err != nil {
+			return Message{}, err
+		}
 	default:
 		return Message{}, ErrUnsupported
 	}
@@ -272,6 +345,8 @@ func putHeader(out []byte, m Message) {
 		binary.BigEndian.PutUint32(out[28:32], uint32(14+len(m.SessionID)))
 	case TypeEnd:
 		binary.BigEndian.PutUint32(out[28:32], uint32(4+len(m.Text)))
+	case TypeClipboard:
+		binary.BigEndian.PutUint32(out[28:32], uint32(clipboardHeader+len(m.ClipboardText)))
 	}
 }
 

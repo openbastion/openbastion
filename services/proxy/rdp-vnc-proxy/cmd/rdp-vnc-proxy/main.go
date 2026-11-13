@@ -106,6 +106,19 @@ func runService() {
 	default:
 		log.Fatalf("rdp-vnc-proxy: SCREEN_RESIZE must be true or false, got %q", v)
 	}
+	// The clipboard of an RDP session (ADR-0096): off unless said "true", the owner's to switch on
+	// by default; on, a session opens it only in the directions its rights allow, and every transfer
+	// is audited (session.clipboard) and recorded before it is delivered. Anything else stops the
+	// service.
+	clipboard := false
+	switch v := os.Getenv("SCREEN_CLIPBOARD"); v {
+	case "", "false":
+	case "true":
+		clipboard = true
+		listener.Clipboard = audit
+	default:
+		log.Fatalf("rdp-vnc-proxy: SCREEN_CLIPBOARD must be true or false, got %q", v)
+	}
 	vncCodec := &engine.VNCCodec{
 		TLSRoots:      roots,
 		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
@@ -129,6 +142,7 @@ func runService() {
 			DrawPointer:   drawPointer,
 			PartialFrames: partialFrames,
 			Resize:        resize,
+			Clipboard:     clipboard,
 		})
 		rdpState = "RDP enabled"
 	default:
@@ -138,7 +152,7 @@ func runService() {
 	defer stop()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- rt.ListenAndServe(":"+port, server.Routes(), interfaces.CallerRules()) }()
-	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092); resize %t (SCREEN_RESIZE, ADR-0095)", port, rdpState, drawPointer, partialFrames, resize)
+	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092); resize %t (SCREEN_RESIZE, ADR-0095); clipboard %t (SCREEN_CLIPBOARD, ADR-0096)", port, rdpState, drawPointer, partialFrames, resize, clipboard)
 	log.Printf("rdp-vnc-proxy: Video Recorder %s; target roots loaded from configured PEM file", recorderURL)
 	select {
 	case <-ctx.Done():
@@ -184,7 +198,13 @@ func splitOrigins(value string) []string {
 
 // main dispatches version before entering the proxy lifecycle.
 func main() {
-	if err := command.NewServiceCommand("rdp-vnc-proxy", runService).Execute(); err != nil {
+	root := command.NewServiceCommand("rdp-vnc-proxy", runService)
+	// The healthcheck of the distroless image (deploy/docker-compose): the running service, asked
+	// under its own identity.
+	root.AddCommand(command.NewProbeCommand(func(ctx context.Context, port int, path string) error {
+		return mtls.ProbeSelf(ctx, mtls.RDPVNCProxy, port, path)
+	}))
+	if err := root.Execute(); err != nil {
 		log.Fatalf("rdp-vnc-proxy: %v", err)
 	}
 }

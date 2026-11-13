@@ -182,6 +182,15 @@ Cette arborescence est une cible de séparation des responsabilités, pas une ob
 8. Gates du dépôt : make build vet test proto-lint, tests ciblés -race des modules touchés, gofmt et git diff --check.
 9. Vérifier les binaires construits depuis le Makefile et les Dockerfiles, pas seulement les tests go run, afin de prouver que l'estampillage et les métadonnées VCS arrivent jusqu'aux exécutables.
 
+## Suite : la sous-commande `probe` (13 novembre 2026)
+
+Une image distroless n'a ni shell ni `curl`, donc un healthcheck de `docker compose` ne peut y lancer que le binaire du service lui-même. `pkg/command` fournit `NewProbeCommand`, et `pkg/mtls` la sonde `ProbeSelf`.
+- **Usage** : `<service> probe --port N [--path /healthz] [--timeout 3s]` interroge le service en cours d'exécution sur `127.0.0.1`, sous sa propre identité mTLS. Il attend la même identité en face : un autre service à sa place est refusé.
+- **Résultat** : code de sortie 0 sur un 200, 1 sinon. La sous-commande ne démarre rien du service.
+- **Branchée** sur `video-recorder` (`/readyz` : PostgreSQL, le stockage objet et l'enveloppement des clés) et `rdp-vnc-proxy` (`/healthz`), dans `deploy/docker-compose`. Le proxy attend un Recorder sain.
+- **Prouvé** : contre de vrais serveurs mTLS (`pkg/mtls/probe_test.go`), et par `TestCompose_AVNCSessionOnTheRealStackWithItsProfiles` sur la vraie pile, dont `up --wait` a réussi avec ces healthchecks.
+- **Reste** : les huit autres services n'en ont pas encore ; c'est un choix renversable, l'écart nommé ne visant que ces deux-là.
+
 ## Alternatives envisagées
 
 - **Garder flag de la bibliothèque standard** : dépendance évitée, mais chaque binaire continuerait à réinventer son aide, ses sous-commandes et son formatage. Écarté pour les outils opérateur et PKI ; les services auraient malgré tout besoin d'un dispatch uniforme.

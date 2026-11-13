@@ -140,3 +140,49 @@ func TestRDPTargetSession_FollowsTheDisplayControlClosingAndOpening(t *testing.T
 		t.Fatal("a broken transport taken for a closed channel")
 	}
 }
+
+// A layout the target leaves without effect is asked again, once rdpResizeReask has passed, never
+// sooner (CI of PR #170 and #180: Windows once kept its old size, and the size was never asked again).
+func TestRDPTargetSession_AsksAgainALayoutLeftWithoutEffect(t *testing.T) {
+	at := time.Date(2026, 11, 13, 16, 0, 0, 0, time.UTC)
+	sent := 0
+	s := &rdpTargetSession{resize: true, now: func() time.Time { return at },
+		send: func(context.Context, string, []byte, time.Duration) error { sent++; return nil }}
+	if err := s.displayControlMessage(rdp.RDPDisplayControlChannel, displayCapsPDU(1, 4096, 4096)); err != nil {
+		t.Fatal(err)
+	}
+	ask := func() {
+		t.Helper()
+		if err := s.Resize(context.Background(), 1022, 768, time.Second); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ask()
+	at = at.Add(rdpResizeReask - time.Millisecond)
+	ask()
+	if sent != 1 {
+		t.Fatalf("asked again before %s: %d layouts", rdpResizeReask, sent)
+	}
+	at = at.Add(time.Millisecond)
+	ask()
+	if sent != 2 {
+		t.Fatalf("not asked again after %s: %d layouts", rdpResizeReask, sent)
+	}
+}
+
+// The adapter asks nothing of the target for the size its desktop has already: a layout the target
+// has followed is never sent again, however long ago it was asked.
+func TestRDPAdapter_AsksNothingForTheSizeItHas(t *testing.T) {
+	sent := 0
+	target := &rdpTargetSession{resize: true, displayReady: true, displayCaps: rdp.RDPDisplayControlCaps{MaxNumMonitors: 1, MaxMonitorAreaFactorA: 4096, MaxMonitorAreaFactorB: 4096},
+		send: func(context.Context, string, []byte, time.Duration) error { sent++; return nil }}
+	adapter := &rdpScreenSessionAdapter{target: target, inputTimeout: time.Second, width: 1022, height: 768}
+	for _, size := range [][2]uint16{{1022, 768}, {1023, 768}} { // 1023 is brought to the even 1022
+		if err := adapter.Input(screenstream.InputEvent{Type: screenstream.InputResize, X: size[0], Y: size[1]}); err != nil || sent != 0 {
+			t.Fatalf("%v, the size of the desktop: %v, %d layouts", size, err, sent)
+		}
+	}
+	if err := adapter.Input(screenstream.InputEvent{Type: screenstream.InputResize, X: 1280, Y: 720}); err != nil || sent != 1 {
+		t.Fatalf("another size: %v, %d layouts", err, sent)
+	}
+}

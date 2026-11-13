@@ -1,5 +1,5 @@
 import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useRef, useState } from "react";
-import { SUBPROTOCOL, clampResize, decodeScreenMessage, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
+import { MAX_CLIPBOARD_TEXT_LENGTH, SUBPROTOCOL, clampResize, decodeScreenMessage, encodeClipboard, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
@@ -19,7 +19,21 @@ export interface ScreenDeps {
   // The room the page has for the screen, in CSS pixels (ADR-0095): what a resizable session is
   // asked to be. Without it, the browser's own measure.
   measure?: (area: HTMLElement) => { width: number; height: number };
+  // The operator's clipboard (ADR-0096 §6): read only when they ask to paste, written only when they
+  // ask to copy. Without them, the browser's.
+  readClipboard?: () => Promise<string>;
+  writeClipboard?: (text: string) => Promise<void>;
 }
+
+// A text that crossed the clipboard, as the proxy showed it once recorded.
+interface ClipboardEntry {
+  sequence: bigint;
+  direction: "to-target" | "from-target";
+  text: string;
+}
+
+// The transfers the panel lists, the latest first.
+const CLIPBOARD_HISTORY = 5;
 
 // What stands with the canvas once the page is scrolled to it (the buttons and a line of status):
 // left out of the window's height.
@@ -88,6 +102,13 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const [pointerDrawn, setPointerDrawn] = useState(false);
   const [resizable, setResizable] = useState(false);
   const [hasFrame, setHasFrame] = useState(false);
+  // The clipboard's directions the HELLO allows, the transfers shown, and a text being pasted: shown
+  // to the operator, and sent only when they confirm.
+  const [clipboardTo, setClipboardTo] = useState(false);
+  const [clipboardFrom, setClipboardFrom] = useState(false);
+  const [clipboardEntries, setClipboardEntries] = useState<ClipboardEntry[]>([]);
+  const [pasteDraft, setPasteDraft] = useState<string | null>(null);
+  const [clipboardNotice, setClipboardNotice] = useState<{ tone: "info" | "danger" | "success"; text: string } | null>(null);
 
   const send = useCallback((message: Uint8Array<ArrayBuffer>) => {
     const ws = socket.current;
@@ -134,6 +155,8 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         setIsRDP(message.protocol === "rdp");
         setPointerDrawn(message.pointerDrawn);
         setResizable(message.resizable);
+        setClipboardTo(message.clipboardToTarget);
+        setClipboardFrom(message.clipboardFromTarget);
         setPhase({ name: "live", expiresAt: message.expiresAt });
       } else if (message.type === "end") {
         finish(endMessage(message.text));
@@ -142,6 +165,14 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         // has not taken yet); a partial frame never: it follows the frame before it, on its screen.
         if (message.sequence <= lastReceived) {
           finish(UNREADABLE);
+          return;
+        }
+        // A clipboard text (ADR-0096) takes its place in the sequence and leaves the screen as it
+        // was: a partial frame after it still applies to that screen. Shown in increment 4.
+        if (message.type === "clipboard") {
+          lastReceived = message.sequence;
+          const entry = { sequence: message.sequence, direction: message.direction, text: message.text };
+          setClipboardEntries((entries) => [entry, ...entries].slice(0, CLIPBOARD_HISTORY));
           return;
         }
         if (message.type === "delta") {
@@ -243,6 +274,44 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
     send(protocol.current === "rdp" ? encodeScancode(key, false) : encodeKey(key, false));
   }
 
+  // Paste (ADR-0096 §6): the operator's clipboard is read on their click, shown, and sent only when
+  // they confirm. A browser that will not give it leaves an empty field to paste into by hand.
+  async function startPaste() {
+    setClipboardNotice(null);
+    try {
+      const read = deps.readClipboard ?? (() => navigator.clipboard.readText());
+      setPasteDraft(await read());
+    } catch {
+      setPasteDraft("");
+      setClipboardNotice({ tone: "info", text: "Le navigateur n'a pas donné le presse-papiers : collez le texte dans le champ." });
+    }
+  }
+
+  function sendPaste() {
+    if (pasteDraft === null) return;
+    const message = encodeClipboard(pasteDraft);
+    if (!message) {
+      setClipboardNotice({ tone: "danger", text: `Ce texte ne peut pas être envoyé : ${MAX_CLIPBOARD_TEXT_LENGTH} caractères au plus, sans caractère nul.` });
+      return;
+    }
+    send(message);
+    setPasteDraft(null);
+    setClipboardNotice({ tone: "info", text: "Texte envoyé : il est collé dans la cible une fois enregistré." });
+    canvas.current?.focus();
+  }
+
+  // Copy: the text the target copied, written to the operator's clipboard on their click.
+  async function copyFromTarget(text: string) {
+    try {
+      await (deps.writeClipboard ?? ((t: string) => navigator.clipboard.writeText(t)))(text);
+      setClipboardNotice({ tone: "success", text: "Texte copié dans votre presse-papiers." });
+    } catch {
+      setClipboardNotice({ tone: "danger", text: "Le navigateur a refusé l'écriture dans le presse-papiers." });
+    }
+  }
+
+  const lastCopied = clipboardEntries.find((entry) => entry.direction === "from-target");
+
   // Ctrl+Alt+Del, which the browser keeps for itself (ADR-0071, consequences): pressed and released
   // in order, as scancodes, for an RDP session only.
   function ctrlAltDel() {
@@ -321,6 +390,39 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         </p>
       ) : null}
       {phase.name === "ended" ? <InlineNotice tone="danger">{phase.message}</InlineNotice> : null}
+      {phase.name === "live" && (clipboardTo || clipboardFrom) ? (
+        <section className="screen-clipboard" aria-label="Presse-papiers">
+          <p className="ob-hint">Presse-papiers : chaque texte est enregistré avec la session et audité avant d'arriver.</p>
+          <div className="ob-form-actions">
+            {clipboardTo && pasteDraft === null ? <Button onClick={startPaste}>Coller vers la cible…</Button> : null}
+            {clipboardFrom && lastCopied ? <Button onClick={() => copyFromTarget(lastCopied.text)}>Copier le texte de la cible</Button> : null}
+          </div>
+          {pasteDraft !== null ? (
+            <div className="screen-clipboard-draft">
+              <label>
+                Texte à coller dans la cible
+                <textarea value={pasteDraft} onChange={(e) => setPasteDraft(e.target.value)} rows={4} />
+              </label>
+              <p className="ob-hint">{pasteDraft.length} / {MAX_CLIPBOARD_TEXT_LENGTH} caractères. Un mot de passe collé ici sera dans l'enregistrement.</p>
+              <div className="ob-form-actions">
+                <Button variant="primary" onClick={sendPaste}>Envoyer</Button>
+                <Button onClick={() => setPasteDraft(null)}>Annuler</Button>
+              </div>
+            </div>
+          ) : null}
+          {clipboardNotice ? <InlineNotice tone={clipboardNotice.tone}>{clipboardNotice.text}</InlineNotice> : null}
+          {clipboardEntries.length > 0 ? (
+            <ul className="screen-clipboard-history" aria-label="Derniers transferts">
+              {clipboardEntries.map((entry) => (
+                <li key={entry.sequence.toString()}>
+                  <span>{entry.direction === "to-target" ? "Collé dans la cible" : "Copié depuis la cible"}</span>
+                  <pre>{entry.text}</pre>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
       <canvas
         ref={canvas}
         className={pointerDrawn ? "screen-canvas pointer-drawn" : "screen-canvas"}
