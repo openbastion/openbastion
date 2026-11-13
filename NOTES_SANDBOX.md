@@ -4372,3 +4372,9 @@ Cause de l'écart « la touche Windows seule n'ouvre pas le menu Démarrer » (P
 - **Rouge d'abord** (PR #180, run 43439650707) : sur les cinq cibles, Ctrl+Échap change 41 à 42 % de l'écran (le menu s'ouvre, la mesure le voit) ; la touche Windows, 0,0 %.
 - **Vert ensuite** (run 43444272056) : avec le drapeau, la touche Windows change 41 à 52 % de l'écran. La capture fr-FR montre le menu Démarrer ouvert.
 
+## 2026-11-13 — ADR-0095 : une mise en page restée sans effet est redemandée
+
+Sur #170 (2022, 32 bpp) puis #180 (console), `TestRDPWindows_Resize` a échoué une fois. Le diagnostic ajouté sur #170 dit, pour #180 : capacités reçues, 1 mise en page envoyée, 0 retenue par un canal fermé. Windows n'a pas suivi en 60 s, et le moteur ne redemandait jamais une taille déjà demandée. Juste après, la session du navigateur sur la même cible n'a reçu aucune image en 2 min. Cause côté Windows non établie : l'export de ses journaux (400 derniers événements RDP) ne remontait que trois minutes.
+
+Correctif : redemander la même taille après 5 s, et ne rien demander quand le bureau a déjà la taille. Deux tests, trois mutations tuées. Il réduit l'écart sans prouver qu'il l'efface.
+

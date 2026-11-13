@@ -108,6 +108,11 @@ ADR-0069 §6 l'a voulu ainsi : presse-papiers, lecteurs, imprimantes et son rest
 - **Prouvé** (CI de #157 et #158) : sur les cinq cibles Windows (Server 2019 et 2022, 16 et 32 bpp, fr-FR, session console), le bureau suit les trois tailles que la page demande (1 102 × 888, 970 × 688, 1 102 × 988), et la session continue. La capture montre le bureau à la largeur de la zone de l'écran, le texte à l'échelle 1:1.
 - **Allumé par défaut** le 13 novembre 2026, décision du propriétaire.
 
+**Suite (13 novembre 2026) : une mise en page restée sans effet est redemandée.**
+- **Constat** : deux fois en CI (2022 en 32 bpp sur #170 ; la cible console sur #180), Windows a reçu ses capacités et une mise en page, sans en garder aucune, puis n'a pas suivi en 60 s. Le moteur ne redemandait jamais la même taille, et la session gardait l'ancienne. Sur #180, la session suivante de cette cible n'a pas non plus envoyé d'image. La cause côté Windows n'est pas établie : l'export de ses journaux ne garde que les derniers événements RDP, trois minutes dans ce passage, alors que l'échec datait de quinze.
+- **Correctif** : la même taille est redemandée une fois `rdpResizeReask` passé (5 s), jamais plus tôt. L'adaptateur ne demande rien quand le bureau a déjà la taille voulue, si bien qu'une mise en page suivie n'est jamais renvoyée.
+- **Prouvé** : deux tests et trois mutations tuées. Contre Windows, ce correctif réduit l'écart sans prouver qu'il l'efface : un Windows qui ne suit aucune mise en page n'en suivra pas une de plus.
+
 ## Conséquences
 
 - (+) Le socle des canaux existe, borné, et il est prouvé par un canal réel contre Windows avant qu'un canal à contenu ne s'y appuie.
