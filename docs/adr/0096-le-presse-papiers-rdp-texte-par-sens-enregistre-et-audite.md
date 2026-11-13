@@ -1,6 +1,6 @@
 # ADR-0096 — Le presse-papiers RDP passe du texte, dans chaque sens selon une politique, enregistré et audité
 
-**Statut** `Proposé` · 13 novembre 2026 · deuxième point du lot D d'ADR-0090, après le socle des canaux (ADR-0095). `Accepté` seulement avec le go du propriétaire, cité avec sa date. La décision lève, pour le texte du presse-papiers seulement, ce qu'ADR-0069 §6 garde fermé, et étend ce qu'ADR-0070 enregistre.
+**Statut** `Accepté` · 13 novembre 2026 · deuxième point du lot D d'ADR-0090, après le socle des canaux (ADR-0095). Accepté le 13 novembre 2026 par le propriétaire du projet : « Je valide ta proposition. » L'option A est acceptée, avec ses bornes (64 Kio par transfert, 10 transferts par minute et par session) et `SCREEN_CLIPBOARD` éteint par défaut. La décision lève, pour le texte du presse-papiers seulement, ce qu'ADR-0069 §6 garde fermé, et étend ce qu'ADR-0070 enregistre. Le propriétaire demande en parallèle d'étudier une saisie automatique des mots de passe, pour qu'ils ne passent pas par le presse-papiers ni par l'enregistrement (voir « Suite »).
 
 ## Contexte
 
@@ -23,7 +23,7 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 
 **C. Auditer sans enregistrer le contenu** (seulement la taille et l'empreinte). L'auditeur saurait qu'un transfert a eu lieu, pas ce qu'il contenait : c'est la garantie « enregistrer ou refuser » affaiblie, et un auditeur ne pourrait pas dire si un secret est sorti.
 
-## Décision proposée : A
+## Décision : A
 
 1. **Politique, refusée par défaut.** Deux droits, distincts, accordés par l'Authorization Service comme les autres (rôle, ressource, effet) :
    - `clipboard:to-target:<compte>` : coller vers la cible ;
@@ -58,6 +58,10 @@ Le protocole est MS-RDPECLIP, sur le canal statique `cliprdr` : capacités, list
 - (−) Une surface d'entrée de plus, venue de la cible : les PDU de MS-RDPECLIP. Bornée, fuzzée, mais nouvelle.
 - (−) VNC a son propre presse-papiers (ClientCutText, ServerCutText), en Latin-1 : hors de cette décision.
 - (−) Coller demande un geste et une permission du navigateur : pas de Ctrl+V direct vers la cible.
+
+## Suite
+
+Le propriétaire a demandé, à l'acceptation, d'étudier une **saisie automatique** des mots de passe, sur le modèle d'op-forward, pour qu'un secret saisi dans la session ne finisse ni dans le presse-papiers ni dans l'enregistrement, tout en gardant le copier-coller. Cette étude fera l'objet de sa propre décision ; elle ne change pas celle-ci.
 
 ## Alternatives envisagées
 
