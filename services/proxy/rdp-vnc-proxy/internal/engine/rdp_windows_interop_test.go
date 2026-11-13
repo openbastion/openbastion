@@ -74,10 +74,23 @@ func windowsTarget(t *testing.T) rdpWindowsTarget {
 		for {
 			transport, err := rdp.DialHybrid(context.Background(), rdp.TransportConfig{Address: target.address, TLSFingerprint: target.pin,
 				TLSRoots: target.roots, TLSServerName: target.name, DialTimeout: 10 * time.Second})
+			// Ready once it presents the pinned certificate and, where the share is known, once
+			// rdp-setup.ps1 has said its restart of Remote Desktop Services is over: the certificate
+			// takes effect before that restart, which then cut the first tests (CI of #144, #155, #157).
+			readyFile := ""
+			if shared := os.Getenv("RDP_WINDOWS_SHARED"); shared != "" {
+				readyFile = filepath.Join(shared, "rdp-ready.txt")
+			}
+			_, readyErr := os.Stat(readyFile)
 			if err == nil {
 				_ = transport.Close()
-				t.Logf("the target presents the pinned certificate")
+			}
+			if err == nil && (readyFile == "" || readyErr == nil) {
+				t.Logf("the target presents the pinned certificate, its restart over")
 				return
+			}
+			if err == nil {
+				err = fmt.Errorf("the pinned certificate is presented, but %s is not there yet", readyFile)
 			}
 			if time.Now().After(deadline) {
 				rdpWindowsReady = err

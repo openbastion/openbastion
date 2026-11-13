@@ -81,6 +81,8 @@ func TestScreenFlow_RDPResizeInAHeadlessBrowser(t *testing.T) {
 			_ = json.Unmarshal(page.eval(shown), &got)
 			if want == got {
 				t.Logf("%s: the page asked for %dx%d, and shows Windows' desktop at that size", step, want[0], want[1])
+				// The screen sits below the session's form: brought into view, so the capture shows it.
+				page.eval(`document.querySelector("canvas.screen-canvas").scrollIntoView({ block: "start" }), true`)
 				page.screenshot(dump, fmt.Sprintf("browser-resize-%s.png", step))
 				return got
 			}
