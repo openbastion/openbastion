@@ -67,7 +67,7 @@ export function App({
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
       <AppShell who={who} tab={tab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
-        {tab === "overview" && <Overview />}
+        {tab === "overview" && <Overview onNavigate={setTab} />}
         {tab === "accounts" && <Accounts />}
         {tab === "policies" && <Policies />}
         {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}

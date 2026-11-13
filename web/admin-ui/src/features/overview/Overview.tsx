@@ -5,21 +5,48 @@ import { AdminPage } from "../../shared/ui/AdminPage";
 
 type Widget<T> = { data?: Page<T>; error?: unknown; loading: boolean };
 
-function Metric({ label, value, detail, loading, error }: { label: string; value?: number; detail: string; loading: boolean; error?: unknown }) {
-  return (
-    <article className="ob-stat-card">
+// A count with a way to reach what it counts: a dashboard number an operator cannot act on is a
+// dead end. The card stays an article when there is nothing to open (loading, refusal, no route).
+function Metric({
+  label,
+  value,
+  detail,
+  loading,
+  error,
+  action,
+}: {
+  label: string;
+  value?: number;
+  detail: string;
+  loading: boolean;
+  error?: unknown;
+  action?: { label: string; onClick: () => void };
+}) {
+  const body = (
+    <>
       <p className="ob-stat-label">{label}</p>
       {loading ? <p className="ob-stat-value" role="status">…</p>
         : error ? <p className="ob-stat-unavailable">Indisponible</p>
         : <p className="ob-stat-value">{value ?? "—"}</p>}
       <p className="ob-stat-detail">{error ? "L’API n’a pas fourni cette donnée." : detail}</p>
-    </article>
+      {action && !loading && !error ? (
+        <span className="ob-stat-link">
+          {action.label} <span aria-hidden="true">→</span>
+        </span>
+      ) : null}
+    </>
+  );
+  if (!action || loading || error) return <article className="ob-stat-card">{body}</article>;
+  return (
+    <button type="button" className="ob-stat-card ob-stat-card-action" onClick={action.onClick}>
+      {body}
+    </button>
   );
 }
 
 // A small operational overview, composed only from public Gateway responses. Each source keeps
 // its own loading/error state: a permission refusal on one domain must not hide another domain.
-export function Overview() {
+export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sessions") => void } = {}) {
   const { api } = useSignedIn();
   const [accounts, setAccounts] = useState<Widget<Account>>({ loading: true });
   const [approvals, setApprovals] = useState<Widget<Session>>({ loading: true });
@@ -42,9 +69,30 @@ export function Overview() {
   return (
     <AdminPage title="Vue générale" hints={["Synthèse des données que votre identité est autorisée à consulter. Chaque indicateur est fourni par l’API publique ; aucune estimation ni score de risque n’est calculé ici."]}>
       <div className="ob-stat-grid" role="group" aria-label="Indicateurs opérationnels">
-        <Metric label="Comptes privilégiés" value={accounts.data?.totalItems} detail="Comptes actifs visibles dans le coffre-fort." loading={accounts.loading} error={accounts.error} />
-        <Metric label="Approbations en attente" value={approvals.data?.totalItems} detail="Demandes que votre identité peut décider maintenant." loading={approvals.loading} error={approvals.error} />
-        <Metric label="Rotations à examiner" value={rotationAttention} detail="Comptes chargés avec rotation due ou échecs signalés." loading={accounts.loading} error={accounts.error} />
+        <Metric
+          label="Comptes privilégiés"
+          value={accounts.data?.totalItems}
+          detail="Comptes actifs visibles dans le coffre-fort."
+          loading={accounts.loading}
+          error={accounts.error}
+          action={onNavigate ? { label: "Voir les comptes", onClick: () => onNavigate("accounts") } : undefined}
+        />
+        <Metric
+          label="Approbations en attente"
+          value={approvals.data?.totalItems}
+          detail="Demandes que votre identité peut décider maintenant."
+          loading={approvals.loading}
+          error={approvals.error}
+          action={onNavigate ? { label: "Voir les sessions", onClick: () => onNavigate("sessions") } : undefined}
+        />
+        <Metric
+          label="Rotations à examiner"
+          value={rotationAttention}
+          detail="Comptes chargés avec rotation due ou échecs signalés."
+          loading={accounts.loading}
+          error={accounts.error}
+          action={onNavigate ? { label: "Voir les comptes", onClick: () => onNavigate("accounts") } : undefined}
+        />
       </div>
       <section className="ob-surface ob-panel overview-guidance" aria-labelledby="overview-scope-title">
         <h3 id="overview-scope-title">Périmètre des données</h3>

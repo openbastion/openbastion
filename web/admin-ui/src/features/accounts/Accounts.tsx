@@ -38,7 +38,10 @@ export function Accounts() {
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const [filter, setFilter] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  // The inventory is the reason the screen exists: the rule builder stays closed until asked for,
+  // so the table is not pushed below the fold by six paragraphs of filter help.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [onboardOpen, setOnboardOpen] = useState(false);
   const [filterRules, setFilterRules] = useState<AccountFilterRule[]>([]);
   const [savedViews, setSavedViews] = useState<SavedAccountView[]>(readSavedAccountViews);
   const [selectedSavedView, setSelectedSavedView] = useState("");
@@ -181,6 +184,17 @@ export function Accounts() {
   return (
     <AdminPage
       title="Comptes privilégiés"
+      actions={
+        <Button
+          type="button"
+          variant="primary"
+          aria-expanded={onboardOpen}
+          aria-controls="onboard-account"
+          onClick={() => setOnboardOpen((open) => !open)}
+        >
+          {onboardOpen ? "Fermer le formulaire" : "Enregistrer un compte"}
+        </Button>
+      }
       hints={[
         "Renouveler un secret le change sur la cible, par le compte de réconciliation du compte, et le vérifie avant de l'adopter : un compte sans compte de réconciliation ne peut pas être renouvelé.",
         "Le secret n'est envoyé qu'au serveur qui présente la clé d'hôte épinglée : un compte sans clé n'ouvre aucune session et n'est pas renouvelé. Relevez la clé sur la cible elle-même, pas par le réseau que vous voulez protéger.",
@@ -188,41 +202,53 @@ export function Accounts() {
       ]}
     >
       <Notice error={accountAction ? undefined : error} ok={accountAction ? undefined : ok} />
+      {onboardOpen ? (
+        <div id="onboard-account">
+          <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />
+        </div>
+      ) : null}
       <section className="ob-surface account-inventory" aria-label="Inventaire des comptes privilégiés">
         {loading ? <p className="ob-empty-state" role="status">Chargement des comptes privilégiés…</p> : null}
-        {!loading && data && data.items.length === 0 ? <p className="ob-empty-state">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
+        {!loading && data && data.items.length === 0 ? <p className="ob-empty-state">Aucun compte privilégié pour l'instant — utilisez « Enregistrer un compte » ci-dessus.</p> : null}
         {!loading && data && data.items.length > 0 ? (
           <div className="ob-filter-bar account-filter-bar">
             <div className="account-filter-toolbar">
-              <button
-                className="account-filter-trigger"
-                type="button"
-                aria-expanded={filtersOpen}
-                aria-controls="account-filter-builder"
-                onClick={() => setFiltersOpen((open) => !open)}
-              >
-                <span className="account-filter-trigger-icon" aria-hidden="true">☷</span>
-                <span>Filtres avancés</span>
-                <span className="account-filter-count" aria-label={`${activeFilterCount} filtre(s) actif(s)`}>{activeFilterCount}</span>
-                <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
-              </button>
-              {activeFilterCount > 0 ? <Button type="button" onClick={() => { setFilter(""); setFilterRules([]); setSelectedSavedView(""); }}>Réinitialiser</Button> : null}
+              <label className="account-filter-search">
+                <span className="ob-visually-hidden">Filtrer les comptes de cette page</span>
+                <input
+                  id="account-page-filter"
+                  type="search"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder="Filtrer cette page : identifiant, nom, cible…"
+                />
+              </label>
+              <div className="account-filter-toolbar-actions">
+                <button
+                  className="account-filter-trigger"
+                  type="button"
+                  aria-expanded={filtersOpen}
+                  aria-controls="account-filter-builder"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                >
+                  <span className="account-filter-trigger-icon" aria-hidden="true">☷</span>
+                  <span>Filtres avancés</span>
+                  <span className="account-filter-count" aria-label={`${activeFilterCount} filtre(s) actif(s)`}>{activeFilterCount}</span>
+                  <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
+                </button>
+                {activeFilterCount > 0 ? (
+                  <Button type="button" onClick={() => { setFilter(""); setFilterRules([]); setSelectedSavedView(""); }}>
+                    Réinitialiser
+                  </Button>
+                ) : null}
+              </div>
             </div>
+            <p className="account-filter-scope">
+              <span aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s)</span>
+              {" — recherche et critères limités aux comptes de cette page."}
+            </p>
             {filtersOpen ? (
               <div id="account-filter-builder" className="account-filter-builder" aria-label="Constructeur de filtres">
-                <div className="account-filter-context">
-                  <span className="account-filter-where">OÙ</span>
-                  <label className="account-filter-search">
-                    <span>Filtrer les comptes de cette page</span>
-                    <input
-                      id="account-page-filter"
-                      type="search"
-                      value={filter}
-                      onChange={(event) => setFilter(event.target.value)}
-                      placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
-                    />
-                  </label>
-                </div>
                 <p className="ob-filter-help">La recherche et les critères ci-dessous s'appliquent uniquement aux {data.items.length} comptes chargés sur cette page ; aucune recherche globale n'est lancée. Le texte saisi n'est jamais enregistré dans une vue.</p>
                 <div className="account-filter-rules" aria-label="Règles de filtrage">
                   {filterRules.map((rule, index) => (
@@ -298,7 +324,6 @@ export function Accounts() {
                 </div>
                 <div className="account-filter-builder-footer">
                   <span className="ob-filter-help">La recherche textuelle est toujours combinée aux règles avec ET.</span>
-                  <span className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</span>
                 </div>
                 <div className="ob-saved-views">
                   <label>
@@ -327,7 +352,6 @@ export function Accounts() {
         {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="ob-empty-state">Aucun compte de cette page ne correspond aux filtres actuels.</p> : null}
         {!loading && data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
       </section>
-      <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />
       {accountAction ? (
         <ConfirmDialog
           title={accountAction.kind === "disable" ? "Désactiver ce compte privilégié ?" : "Renouveler le secret de ce compte ?"}
