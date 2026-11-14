@@ -19,7 +19,7 @@ import (
 // runs from its start index to its stop index included; a palette of one colour has one-bit
 // indexes; the short V-bar cursor wraps at 16,384 as the V-bar cursor does at 32,768. A wrong
 // reading shows on the screen of the CI's Windows, or breaks the exact count of pixels each layer
-// must fill. The NSCodec subcodec (0x01) is not decoded: it is refused by name (ErrRDPGraphicsCodec).
+// must fill. The NSCodec subcodec (0x01) is decoded by graphics_nscodec.go.
 
 const (
 	clearFlagGlyphIndex = byte(0x01)
@@ -317,7 +317,9 @@ func clearSubcodecs(data []byte, t clearTarget) error {
 				return err
 			}
 		case clearSubcodecNSC:
-			return fmt.Errorf("%w: ClearCodec's NSCodec subcodec", ErrRDPGraphicsCodec)
+			if err := decodeNSCodec(body, sub); err != nil {
+				return err
+			}
 		default:
 			return clearRefused("subcodec 0x%02x", id)
 		}

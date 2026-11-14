@@ -288,10 +288,6 @@ func TestClearCodec_RefusesWhatATargetMayNotSend(t *testing.T) {
 	if _, _, err := c.Apply(wireToSurface1(1, 0x0008, [4]int{0, 0, 1, 1}, clearStream(0, 2, composite(run(0, 0, 0, 1), nil, nil)))); !errors.Is(err, ErrRDPGraphics) {
 		t.Errorf("a sequence that skips one: %v", err)
 	}
-	c = clearSurface(t, 4, 4)
-	if _, _, err := c.Apply(wireToSurface1(1, 0x0008, [4]int{0, 0, 1, 1}, clearStream(0, 0, composite(nil, nil, subcodec(0, 0, 1, 1, clearSubcodecNSC, []byte{0}))))); !errors.Is(err, ErrRDPGraphicsCodec) {
-		t.Errorf("NSCodec: %v", err)
-	}
 	// The WireToSurface1 around it: a rectangle past its surface, a length that is not the data's.
 	c = clearSurface(t, 4, 4)
 	if _, _, err := c.Apply(wireToSurface1(1, 0x0008, [4]int{0, 0, 5, 1}, clearStream(0, 0))); !errors.Is(err, ErrRDPGraphics) {
