@@ -70,7 +70,7 @@ Chaque dimension Damage (D), Reproducibility (R), Exploitability (E), Affected u
 
 ### Priorités
 
-**P0 avant tout pilote réseau réel** : AG-S01, S02, S03, T01, T02, I01, I02, E01, E02 et E03.
+**P0 avant tout pilote réseau réel** : AG-S01, S02, S03, T01, T02, I01, I02, E01, E02, E03 et E05.
 
 **P1 avant déploiement multi-site** : AG-T03, AG-R01, AG-R02, AG-I03, AG-D01, AG-D02 et AG-E04.
 
