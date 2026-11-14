@@ -46,7 +46,7 @@ func TestNSCodec_ThroughClearCodec(t *testing.T) {
 	c := clearSurface(t, 8, 8)
 	drawClear(t, c, 8, 8, clearStream(0, 0, composite(nil, nil, subcodec(0, 0, 8, 8, clearSubcodecNSC,
 		nscStream(1, 1, repeatByte(100, 64), co, make([]byte, 16))))))
-	if rgb(c, 1, 1) != [3]byte{84, 100, 116} || rgb(c, 2, 2) != [3]byte{100, 100, 100} {
+	if rgb(c, 1, 1) != [3]byte{116, 100, 84} || rgb(c, 2, 2) != [3]byte{100, 100, 100} {
 		t.Fatalf("NSCodec in ClearCodec: %v %v", rgb(c, 1, 1), rgb(c, 2, 2))
 	}
 }
@@ -60,9 +60,8 @@ func repeatByte(b byte, n int) []byte {
 }
 
 func TestNSCodec_RawPlanesAndTheColours(t *testing.T) {
-	// 2 x 2 at ColorLossLevel 1: luma 100 everywhere; chroma per pixel. Co and Cg are the bytes
-	// shifted back by one bit, then halved (decodeRDP6AYCoCg): co 0x10 is +32, so +16 on red, -16 on
-	// blue, then red and blue swapped (MS-RDPEGDI 3.1.9.1.2): blue +16, red -16.
+	// 2 x 2 at ColorLossLevel 1: luma 100 everywhere; chroma per pixel, shifted by 0 bits: co 0x10 is
+	// +16 on red and -16 on blue (R = Y + Co - Cg, B = Y - Co - Cg).
 	luma := repeatByte(100, 4)
 	co := []byte{0x10, 0, 0xf0, 0}
 	cg := []byte{0, 0x10, 0, 0}
@@ -71,9 +70,9 @@ func TestNSCodec_RawPlanesAndTheColours(t *testing.T) {
 		x, y int
 		want [3]byte
 	}{
-		{0, 0, [3]byte{84, 100, 116}}, // co +32: blue +16, red -16 once swapped
-		{1, 0, [3]byte{84, 116, 84}},  // cg +32: green +16, red and blue -16
-		{0, 1, [3]byte{116, 100, 84}}, // co -32
+		{0, 0, [3]byte{116, 100, 84}}, // co +16: red +16, blue -16
+		{1, 0, [3]byte{84, 116, 84}},  // cg +16: green +16, red and blue -16
+		{0, 1, [3]byte{84, 100, 116}}, // co -16
 		{1, 1, [3]byte{100, 100, 100}},
 	} {
 		if got := rgb(c, check.x, check.y); got != check.want {
@@ -84,6 +83,15 @@ func TestNSCodec_RawPlanesAndTheColours(t *testing.T) {
 	c = nscDraw(t, 2, 2, nscStream(1, 0, luma, co, cg, repeatByte(0x20, 4)))
 	if c.surfaces[1].pix[3] != 0xff {
 		t.Fatalf("the alpha drawn: %d", c.surfaces[1].pix[3])
+	}
+}
+
+// A pixel of the CI's Windows Server 2022 wallpaper (PR #199, message 8 of the session): Y 107,
+// Co 37, Cg 63 at ColorLossLevel 3. Shifted by two bits, then signed: Co -108, Cg -4: blue.
+func TestNSCodec_AWindowsWallpaperPixel(t *testing.T) {
+	c := nscDraw(t, 1, 1, nscStream(3, 0, []byte{107}, []byte{37}, []byte{63}))
+	if got := rgb(c, 0, 0); got != [3]byte{3, 103, 219} {
+		t.Fatalf("Windows' wallpaper: %v, want 3, 103, 219", got)
 	}
 }
 
@@ -98,9 +106,9 @@ func TestNSCodec_SubsampledChromaOnPaddedPlanes(t *testing.T) {
 		x, y int
 		want [3]byte
 	}{
-		{0, 0, [3]byte{84, 100, 116}}, {1, 1, [3]byte{84, 100, 116}},
-		{2, 0, [3]byte{116, 100, 84}}, {2, 1, [3]byte{116, 100, 84}},
-		{0, 2, [3]byte{92, 100, 108}}, {2, 2, [3]byte{100, 100, 100}},
+		{0, 0, [3]byte{116, 100, 84}}, {1, 1, [3]byte{116, 100, 84}},
+		{2, 0, [3]byte{84, 100, 116}}, {2, 1, [3]byte{84, 100, 116}},
+		{0, 2, [3]byte{108, 100, 92}}, {2, 2, [3]byte{100, 100, 100}},
 	} {
 		if got := rgb(c, check.x, check.y); got != check.want {
 			t.Errorf("(%d, %d) = %v, want %v", check.x, check.y, got, check.want)

@@ -153,7 +153,10 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
 - **Fait** : `pkg/rdp/graphics_nscodec.go` décode le sous-codec 0x01 (MS-RDPNSC), c'est-à-dire :
   - les plans de luminance, de chrominance orange et verte, et d'alpha, bruts ou en séries (fin des quatre derniers octets en clair) ;
   - la chrominance réduite de `ColorLossLevel` bits, et sous-échantillonnée sur des plans élargis à 8 colonnes et 2 lignes.
-- **Couleur** : la conversion YCoCg de RDP 6.0 (MS-RDPEGDI 3.1.9.1.2), **puis le rouge et le bleu inversés**, comme la spécification l'exige. Le premier passage de la CI (PR #198) suivait FreeRDP, sans inversion : le fond d'écran bleu de Windows Server 2022 et l'icône de Notepad sont sortis orange. La spécification avait raison, et le correctif a été vérifié sur l'écran du passage suivant.
+- **Couleur, corrigée deux fois** : la conversion est celle de FreeRDP (`nsc_decode`). Chaque octet de chrominance est décalé de `ColorLossLevel - 1` bits, et alors seulement lu comme signé, puis R = Y + Co - Cg, G = Y + Cg, B = Y - Co - Cg, sans inversion.
+  - **Premier passage** (PR #198) : l'octet était lu comme signé avant le décalage, ce qui perdait le signe d'une moitié des valeurs. Le fond bleu de Windows 2022 est sorti orange.
+  - **Ma deuxième lecture** : j'avais conclu à tort que la spécification avait raison d'exiger une inversion rouge-bleu. Elle a masqué l'erreur sur les pixels où l'écran a été regardé, mais le fond est sorti vert au passage de la PR #199.
+  - **La cause** a été trouvée en rejouant en local les messages bruts de cette session. Au message 8, le pixel Y 107, Co 37, Cg 63 (`ColorLossLevel` 3) est le bleu (3, 103, 219). Un test le garde, et l'ancien calcul y redonne exactement le vert de la CI.
 - **Lecture de FreeRDP** : l'octet qui précède les quatre derniers d'un plan est un littéral, même s'il est égal au suivant.
 - **Constat** : la borne de ClearCodec (3 octets par pixel au plus pour un sous-codec) exclut tout NSCodec à plans bruts, dont l'en-tête seul ajoute 20 octets. Windows n'envoie donc dans ClearCodec que des plans en séries ou sous-échantillonnés.
 - **L'alpha** est lu et borné, mais pas dessiné : ClearCodec dessine le rouge, le vert et le bleu.
