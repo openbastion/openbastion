@@ -4450,3 +4450,17 @@ Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le
 Pour trouver les causes de l'instabilité (cas B, machine perdue après la déconnexion, session sans image après un redimensionnement), la CI Windows prend à chaque passage une image de l'écran de la machine telle que QEMU la montre. Elle la prend sur la console VNC de QEMU, dans le conteneur dockur (port 5900, sans authentification, jamais publié). `vnc_snapshot.py`, en bibliothèque standard seulement, demande une image entière en Raw et l'écrit dans l'artefact sous `guest-screen.png`. Ce n'est pas `pkg/vnc`, qui refuse par principe tout VNC sans VeNCrypt. L'étape relève aussi, dans la ligne de commande de QEMU, où est son moniteur, et ne fait échouer aucun job.
 
 **Premier essai** (run 43506332714) : le moniteur QEMU n'écoute pas sur TCP 7100 (« Connection refused »), et la liste des ports montre la console VNC sur 5900. D'où ce second essai. Le client est éprouvé contre un serveur RFB factice : pixels relus exacts.
+
+## 2026-11-14 — ADR-0101, incrément 2 : surfaces, cache et trames ; RemoteFX progressif décidé
+
+- **Décision, par délégation du propriétaire** (« choisis les options qui te semble les plus recommandées ») : une image en RemoteFX progressif sera décodée, et enregistrée telle qu'elle a été montrée. ADR-0070 tient entre ce que voit l'opérateur et ce que relit l'auditeur, mais plus à l'octet de la cible, comme à 16 bpp aujourd'hui. Elle est renversable ; ses alternatives sont dans ADR-0101.
+- **Fait** : le compositeur (`pkg/rdp/graphics_surface.go`) dessine :
+  - les surfaces, le remplissage, les copies et le cache ;
+  - les fins de trame, avec leur acquittement.
+- **Bornes** : 64 surfaces, 64 Mio de pixels, 4096 emplacements de cache et 16 Mio de cache.
+- **Prouvé** :
+  - 40 refus et un fuzzer ;
+  - 20 mutations tuées ;
+  - contre FreeRDP, 322 trames acquittées.
+- **En attente** : contre les cinq Windows, dans la CI de la PR.
+- **Pas encore fait** : les codecs (non compressé et Planar à l'incrément 3, ClearCodec au 4, RemoteFX progressif au 4 bis). Rien n'est branché au service.

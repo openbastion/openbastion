@@ -1,10 +1,15 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -14,12 +19,28 @@ import (
 	"github.com/openbastion/openbastion/pkg/rdp"
 )
 
+// dumpGraphicsOutput writes the compositor's output to RDP_WINDOWS_DUMP, when set.
+func dumpGraphicsOutput(t *testing.T, log *graphicsLog, name string) {
+	t.Helper()
+	dir := os.Getenv("RDP_WINDOWS_DUMP")
+	if dir == "" || log.output == nil {
+		return
+	}
+	var out bytes.Buffer
+	if err := png.Encode(&out, log.output); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), out.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // The graphics pipeline of ADR-0101 (increment 1) against real servers: the early capability set,
 // the channel opened from the closed list, the capabilities advertised and one set confirmed, then
-// what the target sends read, decompressed and bounded. Nothing is drawn yet: the PDUs are counted,
-// and the codecs the target chooses are named, for the increments that follow. Without an
-// acknowledgement a target holds its frames back: this test tells it, at the first end of frame,
-// that none will come (SUSPEND_FRAME_ACKNOWLEDGEMENT, MS-RDPEGFX 2.2.2.13).
+// what the target sends read, decompressed and bounded. Increment 2: every command without a codec is
+// drawn by the compositor, and every end of frame acknowledged (MS-RDPEGFX 2.2.2.13); the codecs the
+// target chooses are named and not drawn yet, for the increments that follow. The output, as far as
+// the commands drawn make it, goes to RDP_WINDOWS_DUMP.
 
 type graphicsLog struct {
 	mu        sync.Mutex
@@ -32,7 +53,9 @@ type graphicsLog struct {
 	bytesIn   int
 	resets    []string
 	surfaces  []string
-	suspended bool
+	frames    int
+	changed   int // pixels of the output changed, frames summed
+	output    *image.RGBA
 	err       error
 }
 
@@ -47,18 +70,8 @@ func (g *graphicsLog) String() string {
 		sort.Strings(out)
 		return strings.Join(out, ", ")
 	}
-	return fmt.Sprintf("opened %v, confirmed version 0x%08x flags 0x%08x, %d message(s) of %d bytes; commands [%s]; codecs [%s]; pixel formats %v; resets %q; surfaces %q; error %v",
-		g.opened, g.confirmed.Version, g.confirmed.Flags, g.messages, g.bytesIn, names(g.commands), names(g.codecs), g.formats, g.resets, g.surfaces, g.err)
-}
-
-// suspendAcknowledgements is an RDPGFX_FRAME_ACKNOWLEDGE_PDU whose queueDepth says no other will come.
-func suspendAcknowledgements(frameID uint32) []byte {
-	out := binary.LittleEndian.AppendUint16(nil, 0x000d)
-	out = binary.LittleEndian.AppendUint16(out, 0)
-	out = binary.LittleEndian.AppendUint32(out, 20)
-	out = binary.LittleEndian.AppendUint32(out, 0xffffffff)
-	out = binary.LittleEndian.AppendUint32(out, frameID)
-	return binary.LittleEndian.AppendUint32(out, 1)
+	return fmt.Sprintf("opened %v, confirmed version 0x%08x flags 0x%08x, %d message(s) of %d bytes; commands [%s]; codecs [%s]; pixel formats %v; resets %q; surfaces %q; %d frame(s) drawn and acknowledged, %d pixel(s) changed; error %v",
+		g.opened, g.confirmed.Version, g.confirmed.Flags, g.messages, g.bytesIn, names(g.commands), names(g.codecs), g.formats, g.resets, g.surfaces, g.frames, g.changed, g.err)
 }
 
 // readGraphicsPipeline runs the connection sequence with the pipeline announced, then reads the
@@ -72,6 +85,7 @@ func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, 
 		Timeout: 15 * time.Second, DynamicChannels: true, GraphicsPipeline: true}
 	log := &graphicsLog{commands: map[uint16]int{}, codecs: map[uint16]int{}, formats: map[byte]int{}}
 	var pipeline *rdp.RDPGraphicsPipeline
+	var compositor *rdp.RDPGraphicsCompositor
 	onOpen := func(name string) {
 		if name != rdp.RDPGraphicsChannel {
 			return
@@ -79,7 +93,7 @@ func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, 
 		log.mu.Lock()
 		log.opened = true
 		log.mu.Unlock()
-		pipeline = rdp.NewRDPGraphicsPipeline()
+		pipeline, compositor = rdp.NewRDPGraphicsPipeline(), rdp.NewRDPGraphicsCompositor()
 		if err := client.SendDynamicChannelMessage(ctx, rdp.RDPGraphicsChannel, pipeline.CapsAdvertise(), 15*time.Second); err != nil {
 			log.mu.Lock()
 			log.err = err
@@ -120,19 +134,28 @@ func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, 
 					log.surfaces = append(log.surfaces, fmt.Sprintf("%d: %dx%d format 0x%02x", binary.LittleEndian.Uint16(pdu.Body[0:2]),
 						binary.LittleEndian.Uint16(pdu.Body[2:4]), binary.LittleEndian.Uint16(pdu.Body[4:6]), pdu.Body[6]))
 				}
-			case rdp.RDPGraphicsEndFrame:
-				if !log.suspended && len(pdu.Body) >= 4 {
-					log.suspended = true
-					frameID := binary.LittleEndian.Uint32(pdu.Body[0:4])
-					// Sent from the reader: unlocked, as the channel's own answers are.
-					log.mu.Unlock()
-					err := client.SendDynamicChannelMessage(ctx, rdp.RDPGraphicsChannel, suspendAcknowledgements(frameID), 15*time.Second)
-					log.mu.Lock()
-					if err != nil {
-						log.err = err
-						return err
-					}
-				}
+			}
+			if pdu.Command == rdp.RDPGraphicsWireToSurface1 || pdu.Command == rdp.RDPGraphicsWireToSurface2 {
+				continue // a codec: the increments that follow
+			}
+			frame, ended, err := compositor.Apply(pdu)
+			if err != nil {
+				log.err = err
+				return err
+			}
+			if !ended {
+				continue
+			}
+			log.frames++
+			log.changed += frame.Changed.Dx() * frame.Changed.Dy()
+			log.output = compositor.Output()
+			// Sent from the reader: unlocked, as the channel's own answers are.
+			log.mu.Unlock()
+			err = client.SendDynamicChannelMessage(ctx, rdp.RDPGraphicsChannel, rdp.MarshalGraphicsFrameAcknowledge(frame.ID, compositor.FramesDecoded()), 15*time.Second)
+			log.mu.Lock()
+			if err != nil {
+				log.err = err
+				return err
 			}
 		}
 		return nil

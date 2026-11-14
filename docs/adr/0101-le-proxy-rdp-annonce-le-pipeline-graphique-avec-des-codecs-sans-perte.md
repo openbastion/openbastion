@@ -72,7 +72,41 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - les images : **ClearCodec (0x0008)** pour 21 à 29 `WireToSurface1`, et **RemoteFX progressif (0x0009)** pour 1 ou 2 `WireToSurface2` par session, suivis d'un `DeleteEncodingContext` ;
   - le cache sert beaucoup : 8 à 16 `SurfaceToCache` et 727 à 1010 `CacheToSurface` par session ; 3 à 5 `SolidFill` ; 5 à 9 trames ;
   - 17 à 85 Ko reçus, sans faute de décompression.
-- **Ce que cela annonce** : aucune capacité n'éteint RemoteFX ni RemoteFX progressif (MS-RDPEGFX 2.2.3), et Windows envoie bien du RemoteFX progressif, même si c'est rare, à côté de ClearCodec. L'option A ne tient donc pas telle quelle : avant l'incrément 3, il faudra décider ce que devient une session dont la cible envoie une image avec perte (revenir à l'ancien chemin, refuser la session, ou enregistrer l'image décodée telle qu'elle a été montrée). Ce choix revient au propriétaire. L'incrément 2 (surfaces, remplissage, copie et cache) n'en dépend pas.
+- **Ce que cela annonce** : aucune capacité n'éteint RemoteFX ni RemoteFX progressif (MS-RDPEGFX 2.2.3), et Windows envoie bien du RemoteFX progressif, même si c'est rare, à côté de ClearCodec. L'option A ne tient donc pas telle quelle (voir « RemoteFX progressif » ci-dessous).
+
+### RemoteFX progressif : décodé, et enregistré tel qu'il a été montré (14 novembre 2026)
+
+**Décision** : je l'ai prise par délégation du propriétaire, qui a écrit le 14 novembre 2026 : « pour les approbations qui demanderaient mon accord, choisis les options qui te semble les plus recommandées ». Elle est renversable.
+
+- **Ce qui est décidé** : une image en RemoteFX progressif (0x0009) est décodée par le proxy. L'opérateur voit l'image décodée, et l'enregistrement garde la même image, à l'octet.
+- **Pourquoi** : la garantie d'ADR-0070, « enregistrer ce qui a été montré », porte sur le lien entre ce que l'opérateur voit et ce que l'auditeur relit, et ce lien reste exact. Ce qui n'est plus exact, ce sont les pixels de la cible avant compression. C'est déjà le cas aujourd'hui de l'ancien chemin à 16 bpp, que Windows impose par défaut (ADR-0086).
+- **Ce qui reste refusé** : H.264 (AVC), écarté par les capacités, et RemoteFX non progressif (0x0003), que Windows n'a pas envoyé. Une session qui en reçoit est fermée, comme pour tout codec hors liste.
+- **Un incrément de plus** : RemoteFX progressif est décodé après ClearCodec (incrément 4 bis), avec ses bornes, ses fuzzers et ses mutations, comme chaque codec.
+- **Alternatives écartées** :
+  - refuser la session : les cinq Windows de la CI envoient une ou deux de ces images à chaque session, et le pipeline graphique deviendrait inutilisable ;
+  - revenir à l'ancien chemin : le pipeline se négocie à la connexion, donc il faudrait se reconnecter en cours de session, et l'opérateur verrait l'écran se couper.
+
+### Incrément 2 — surfaces, remplissage, copies, cache et trames (14 novembre 2026)
+
+- **Fait** : `RDPGraphicsCompositor` (`pkg/rdp/graphics_surface.go`) dessine ce que la cible envoie sans codec :
+  - la remise à zéro de la sortie (`ResetGraphics`) ;
+  - la création et la suppression des surfaces, et leur rattachement à la sortie. Le rattachement « mis à l'échelle » n'est admis qu'à l'échelle 1, la seule que Windows a envoyée ;
+  - le remplissage uni, la copie de surface à surface (chevauchement compris), et le cache : mise en cache, copie depuis le cache, éviction ;
+  - les débuts et fins de trame. À chaque fin, les surfaces rattachées qui ont changé sont copiées dans la sortie, opaque (3.3.5.12), et la trame est acquittée.
+- **Bornes** :
+  - 64 surfaces et 64 Mio de pixels au plus ;
+  - le cache de `SMALL_CACHE` : emplacements 1 à 4096, 16 Mio de données ;
+  - une sortie d'au plus 16 777 216 pixels et 16 moniteurs.
+- **Lecture stricte** : là où la spécification ne dit rien (surface inconnue, rectangle hors de sa surface, emplacement vide, surface créée deux fois, fin d'une trame non commencée), la session est fermée. Les réponses à une offre de cache, que ce client ne fait jamais, et le rattachement à une fenêtre (RAIL) sont refusés aussi.
+- **Lecture littérale de `ResetGraphics`** : la sortie est redimensionnée, et les surfaces et le cache restent ; c'est tout ce que dit la spécification.
+- **Les codecs** ne sont pas dessinés à cet incrément : ils sont nommés (`ErrRDPGraphicsCodec`).
+- **Prouvé** :
+  - chaque commande au pixel près ;
+  - 40 refus ;
+  - un fuzzer (`FuzzRDPGraphicsCompositor`) ;
+  - 20 mutations tuées.
+- **Contre FreeRDP 3** : 322 trames dessinées et acquittées en 10 s, sans faute. FreeRDP n'envoie que du RemoteFX progressif : ici, seules ses commandes sans codec sont dessinées.
+- **Contre les cinq Windows** : `TestRDPWindows_GraphicsPipeline` dessine et acquitte les trames, et dépose l'image composée dans l'artefact (`graphics-pipeline.png`). Cette image n'est pas encore lisible : ses fragments en ClearCodec ne sont pas dessinés avant l'incrément 4.
 
 ## Ce qui demande ton go
 
