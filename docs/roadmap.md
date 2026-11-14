@@ -117,7 +117,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 
 **Critères de sortie**
 
-- Les neuf ADR-0102 à ADR-0110 sont relus et acceptés par le propriétaire du projet, ou explicitement maintenus proposés avec les points encore ouverts identifiés.
+- Les neuf ADR-0102 à ADR-0110 sont relus individuellement par le propriétaire du projet ; aucun statut Accepté n'est attribué sans son accord explicite. Tout ADR encore Proposé conserve ses points ouverts et bloque le gel de conception concerné.
 - Les contrats Protobuf sont validés par Buf (lint et breaking check) et leur génération est reproductible avant toute implémentation runtime.
 - Chaque RPC, champ et flux agent est couvert par une règle d'identité, d'autorisation, de taille, de délai et de comportement en erreur.
 - Les menaces P0 du modèle STRIDE disposent de contrôles spécifiés et de tests de sécurité planifiés ; aucune menace P0 non traitée ne permet un pilote sur réseau réel.
