@@ -10,7 +10,7 @@ Une clé partagée permettrait à la compromission d'un site d'usurper toutes le
 
 1. Chaque agent génère localement sa paire de clés ; la clé privée ne quitte jamais l'hôte et est protégée par les permissions du compte de service ou le magasin de clés OS/TPM lorsqu'il existe. Le CSR prouve la possession de la clé.
 2. L'enrôlement utilise un jeton aléatoire d'au moins 256 bits, à usage unique, lié à un agent déclaré, valable au plus 10 minutes et consommé atomiquement. Il n'est jamais journalisé ni conservé en clair après émission.
-3. L'identifiant agent est borné à 1–64 caractères dans [a-z0-9-], non réutilisable et sans alias. Le certificat porte un SAN URI unique spiffe://<trust-domain>/agent-<agent-id>. Ce profil est distinct de l'identité de service ADR-0010 ; un certificat agent ne peut pas appeler une route de microservice.
+3. L'identifiant agent est borné à 1–64 caractères dans [a-z0-9-], non réutilisable et sans alias. Le certificat porte un SAN URI unique `spiffe://<trust-domain>/agent-<agent-id>`. Ce profil est distinct de l'identité de service ADR-0010 ; un certificat agent ne peut pas appeler une route de microservice.
 4. Le serveur valide chaîne, usage de clé, SAN exact, statut d'enrôlement et preuve de possession. TLS 1.3 et vérification de l'identité serveur sont obligatoires ; aucun mode InsecureSkipVerify en production.
 5. La durée maximale du certificat est de 24 heures. Le renouvellement exige un certificat encore valide et un nouveau CSR signé par la clé courante.
 6. La révocation est consultée à chaque ouverture de flux et commande de contrôle. Elle ferme les flux actifs, interdit le renouvellement et incrémente la génération d'identité.
