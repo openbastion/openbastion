@@ -96,7 +96,8 @@ Chaque dimension Damage (D), Reproducibility (R), Exploitability (E), Affected u
 | Identité | SAN mismatch, agent inconnu, certificat expiré/révoqué |
 | Enrôlement | Rejeu jeton, double consommation concurrente, CSR invalide |
 | Capacités | Signature, audience, TTL, jti rejoué, IP/port/session erronés |
-| SSRF | Loopback, link-local, IPv4/IPv6, métadonnées, CIDR/ports interdits |\n| Accès direct | Test depuis une zone opérateur vers les ports cibles refusé ; seules les IP agents autorisées atteignent les ports privilégiés |
+| SSRF | Loopback, link-local, IPv4/IPv6, métadonnées, CIDR/ports interdits |
+| Accès direct | Test depuis une zone opérateur vers les ports cibles refusé ; seules les IP agents autorisées atteignent les ports privilégiés |
 | Flux | Fuzzing Protobuf, séquences, trame > 64 Kio, backpressure |
 | Isolation | Linux utilisateur dédié/seccomp/AppArmor ; Windows ACL/Service SID |
 | Télémétrie | Perte, doublon, trou, horloge fausse, payload secret |
