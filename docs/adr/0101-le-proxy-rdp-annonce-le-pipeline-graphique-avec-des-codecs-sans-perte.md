@@ -143,6 +143,26 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - 22 mutations tuées.
 - **Non éprouvé contre une vraie cible** : le non compressé, que ni Windows ni FreeRDP n'envoient. L'ordre des octets d'un pixel (bleu, vert, rouge, alpha, comme `RDPGFX_COLOR32`) n'est pas écrit dans la spécification.
 
+- **Contre les cinq Windows** (CI de la PR #197) :
+  - 17 à 33 bitmaps ClearCodec par session, décodés sans faute ;
+  - l'image composée (`graphics-pipeline.png`) montre l'écran juste : Notepad et le texte collé (« é € » compris), la barre des tâches, les icônes et l'horloge ;
+  - il manquait sous 2022 un rectangle de la barre des tâches et des icônes du bureau. Ce sont les parties en NSCodec, qu'emploient 4 cibles sur 5, une à quatre fois par session, et en RemoteFX progressif.
+
+### Incrément 3 bis — NSCodec dans ClearCodec (14 novembre 2026)
+
+- **Fait** : `pkg/rdp/graphics_nscodec.go` décode le sous-codec 0x01 (MS-RDPNSC), c'est-à-dire :
+  - les plans de luminance, de chrominance orange et verte, et d'alpha, bruts ou en séries (fin des quatre derniers octets en clair) ;
+  - la chrominance réduite de `ColorLossLevel` bits, et sous-échantillonnée sur des plans élargis à 8 colonnes et 2 lignes.
+- **Couleur** : la conversion YCoCg est celle de RDP 6.0 (MS-RDPEGDI 3.1.9.1.2), déjà éprouvée contre Windows pour les bitmaps planar. Elle n'inverse ni le rouge ni le bleu, pas plus que FreeRDP, malgré la note de la spécification sur les serveurs à 24 bpp. L'écran de la CI tranche.
+- **Lecture de FreeRDP** : l'octet qui précède les quatre derniers d'un plan est un littéral, même s'il est égal au suivant.
+- **Constat** : la borne de ClearCodec (3 octets par pixel au plus pour un sous-codec) exclut tout NSCodec à plans bruts, dont l'en-tête seul ajoute 20 octets. Windows n'envoie donc dans ClearCodec que des plans en séries ou sous-échantillonnés.
+- **L'alpha** est lu et borné, mais pas dessiné : ClearCodec dessine le rouge, le vert et le bleu.
+- **Prouvé** :
+  - les couleurs, le sous-échantillonnage et les séries, au pixel près ;
+  - 18 refus ;
+  - un fuzzer (`FuzzNSCodec`) ;
+  - 15 mutations tuées.
+
 ## Ce qui demande ton go
 
 - l'option A et son ordre ;

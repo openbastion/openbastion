@@ -4516,4 +4516,14 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - le non compressé.
 - **Lectures de FreeRDP** là où la spécification se tait : la suite RLEX inclusive, une palette d'une couleur à un bit, le curseur des petites V-bars qui revient à zéro.
 - **Prouvé** : 40 refus, un fuzzer, 22 mutations tuées.
-- **En attente** : l'image ClearCodec des cinq Windows (`graphics-pipeline.png` dans l'artefact de la CI de la PR), et l'usage éventuel du sous-codec NSCodec, compté et non décodé.
+- **Contre les cinq Windows** (CI de #197) :
+  - l'écran est juste, au rectangle NSCodec et au RemoteFX progressif près ;
+  - un écart corrigé : une petite V-bar sans pixel, gardée comme un emplacement vide ;
+  - NSCodec est employé par 4 cibles sur 5.
+
+## 2026-11-14 — ADR-0101, incrément 3 bis : NSCodec dans ClearCodec
+
+- **Fait** : le sous-codec 0x01 de ClearCodec (`pkg/rdp/graphics_nscodec.go`), avec ses plans bruts ou en séries et sa chrominance réduite ou sous-échantillonnée.
+- **Couleur** : la conversion YCoCg de RDP 6.0, déjà éprouvée contre Windows, sans inversion rouge-bleu (comme FreeRDP).
+- **Prouvé** : 18 refus, un fuzzer, 15 mutations tuées.
+- **En attente** : l'écran des cinq Windows dans la CI de la PR (le rectangle bleu nuit de la barre des tâches de 2022 doit devenir l'icône qu'il est sous 2019).
