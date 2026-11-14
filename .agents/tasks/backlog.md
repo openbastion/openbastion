@@ -4,6 +4,7 @@ Ce qui reste à faire, du plus prioritaire au moins prioritaire. La source déta
 
 | # | Sujet | Pourquoi | Où c'est écrit |
 |---|---|---|---|
+| 0 | **P0 sécurité — ADR-0003/0006/0008/0009/0010** — **en cours, lot 1 local non fusionné** | Purge des credentials raccourcie ; refus agent et couverture mTLS renforcés. Restent : secrets arbitraires dans les enregistrements, revue post-incident, matrice complète et validation CI. | `OpenBastion_Ecarts_ADR_0001_0010_Plan_Actions.md`, NOTES_SANDBOX.md |
 | 1 | ~~**Exécuter les rotations `scheduled`**~~ — **fait** (ADR-0040) | ~~acceptées à l'enregistrement, lancées par rien~~ | ADR-0040 |
 | 1 bis | ~~Fenêtres horaires et alerte après plusieurs échecs d'une rotation planifiée~~ — **fait** (ADR-0041) | ~~un compte peut tourner en pleine journée ; un échec est retenté chaque heure sans alerte~~ | ADR-0041 |
 | 1 ter | ~~Notification poussée des alertes (`vault.rotation_overdue`, …)~~ — **fait** (ADR-0045 ; ~~file durable~~ ADR-0057) | ~~l'alerte n'est visible que dans l'audit~~ | ADR-0045, ADR-0057 |

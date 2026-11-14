@@ -19,8 +19,8 @@ import (
 // the pipeline is protocol-agnostic and lives in this package.
 type Codec interface {
 	// Relay copies protocol traffic between client and target, injecting
-	// the credential as required by the protocol. It must not retain the
-	// credential beyond the call, and must return promptly once ctx is
-	// cancelled (session termination or timeout).
+	// the credential as required by the protocol. It must purge secret material
+	// immediately after target authentication and must not retain a copy for the
+	// lifetime of the session. It must return promptly once ctx is cancelled.
 	Relay(ctx context.Context, client, target io.ReadWriter, credential *Credential) error
 }

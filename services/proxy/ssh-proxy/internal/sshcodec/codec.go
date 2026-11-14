@@ -85,6 +85,10 @@ const (
 
 // Relay implements proxycore.Codec.
 func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credential *proxycore.Credential) error {
+	if credential == nil {
+		return fmt.Errorf("sshcodec: missing credential")
+	}
+	defer credential.Purge()
 	targetConn, ok := target.(net.Conn)
 	if !ok {
 		return fmt.Errorf("sshcodec: target must be a net.Conn, got %T", target)
@@ -105,9 +109,15 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 	if credential.TargetHost != "" && c.TargetHost != "" && credential.TargetHost != c.TargetHost {
 		return fmt.Errorf("%w: the session names %s, the Vault gave the secret for %s", ErrHostKeyMismatch, c.TargetHost, credential.TargetHost)
 	}
+	// x/crypto/ssh accepts passwords as strings. Build that immutable copy only
+	// when the authentication callback runs, then drop the callback and purge the
+	// byte buffer immediately after the target handshake (ADR-0003).
+	passwordMaterial := credential.Material()
 	clientConfig := &ssh.ClientConfig{
-		User:    c.TargetUser,
-		Auth:    []ssh.AuthMethod{ssh.Password(string(credential.Material()))},
+		User: c.TargetUser,
+		Auth: []ssh.AuthMethod{ssh.PasswordCallback(func() (string, error) {
+			return string(passwordMaterial), nil
+		})},
 		Timeout: c.DialTimeout,
 	}
 	// The pinned key, or a certificate of the pinned authority for its name (ADR-0048); every
@@ -122,6 +132,9 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 	}
 
 	targetSSHConn, chans, reqs, err := ssh.NewClientConn(targetConn, targetConn.RemoteAddr().String(), clientConfig)
+	credential.Purge()
+	passwordMaterial = nil
+	clientConfig.Auth = nil
 	if err != nil {
 		return fmt.Errorf("target ssh handshake as %q: %w", c.TargetUser, err)
 	}

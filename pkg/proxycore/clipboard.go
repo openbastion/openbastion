@@ -16,7 +16,8 @@ import (
 // acknowledged before it is delivered. A transfer that cannot be all of that does not happen.
 
 // ClipboardCodec is a ScreenCodec that can open the target's clipboard, in the directions the
-// session's rights allow. A codec that is not one opens none.
+// session's rights allow. A codec that is not one opens none. OpenWithClipboard must not retain
+// credential material after target authentication; relayScreen purges it when the call returns.
 type ClipboardCodec interface {
 	OpenWithClipboard(ctx context.Context, cred *Credential, toTarget, fromTarget bool) (ScreenSession, error)
 }

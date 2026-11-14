@@ -248,7 +248,8 @@ func (d *screenDisplay) close(grace time.Duration) {
 	}
 }
 
-// ScreenCodec opens the protocol engine using a one-use Vault credential.
+// ScreenCodec opens the protocol engine using a one-use Vault credential. Open must not retain
+// its material after target authentication; relayScreen purges it as soon as Open returns.
 type ScreenCodec interface {
 	Open(context.Context, *Credential) (ScreenSession, error)
 }
@@ -466,6 +467,10 @@ func screenContextEnd(ctx context.Context) error {
 }
 
 func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration, clipboardAudit ClipboardAuditor) (relayErr error) {
+	if cred == nil {
+		return errors.New("proxycore: missing screen credential")
+	}
+	defer cred.Purge()
 	if ackTimeout <= 0 {
 		ackTimeout = DefaultScreenAckTimeout
 	}
@@ -482,6 +487,8 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	if err != nil {
 		return err
 	}
+	// The target has authenticated; the screen session must not retain its Vault credential.
+	cred.Purge()
 	lastAck := uint64(0)
 	display := newScreenDisplay(ctx, sink)
 	if requester, ok := session.(KeyFrameRequester); ok {

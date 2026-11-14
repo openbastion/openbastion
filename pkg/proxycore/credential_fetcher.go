@@ -5,14 +5,12 @@ import (
 	"errors"
 )
 
-// Credential holds secret material in memory for the lifetime of a single
-// session. It is the ONLY structure in the entire system allowed to hold
-// a target credential — see ADR-0003 (docs/adr/).
+// Credential is the proxy's session-scoped handle to secret material from the Vault (ADR-0003).
+// Its backing byte slice is owned by the proxy and must be purged as soon as protocol
+// authentication no longer needs it; control-plane services never receive this value.
 //
-// Callers MUST call Purge as soon as the credential is no longer needed
-// (session end, error, or termination). Purge overwrites the backing byte
-// slice before the Credential becomes unusable, so the secret does not
-// linger in memory or in a later heap dump.
+// Purge overwrites the backing byte slice before the Credential becomes unusable. Protocol
+// adapters must not retain copies of the material beyond the authentication operation.
 type Credential struct {
 	Type     string // e.g. "ssh_private_key", "password"
 	material []byte

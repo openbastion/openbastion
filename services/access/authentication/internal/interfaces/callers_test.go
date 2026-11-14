@@ -47,3 +47,27 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("api-gateway", "GET", "/auth/v1/mfa/enrollment-codes"),
 	})
 }
+
+func TestEveryRegisteredRouteHasACaller(t *testing.T) {
+	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), CallerRules(), []mtlstest.Route{
+		{Method: "POST", Path: "/auth/v1/users"},
+		{Method: "POST", Path: "/auth/v1/login"},
+		{Method: "POST", Path: "/auth/v1/verify"},
+		{Method: "GET", Path: "/auth/v1/oidc"},
+		{Method: "POST", Path: "/auth/v1/oidc/start"},
+		{Method: "POST", Path: "/auth/v1/oidc/callback"},
+		{Method: "GET", Path: "/auth/v1/ldap"},
+		{Method: "POST", Path: "/auth/v1/ldap/login"},
+		{Method: "POST", Path: "/auth/v1/mfa/verify"},
+		{Method: "POST", Path: "/auth/v1/mfa/enroll"},
+		{Method: "POST", Path: "/auth/v1/mfa/enroll/confirm"},
+		{Method: "POST", Path: "/auth/v1/mfa/webauthn/verify"},
+		{Method: "POST", Path: "/auth/v1/mfa/webauthn/enroll/confirm"},
+		{Method: "POST", Path: "/auth/v1/mfa/webauthn/keys/add"},
+		{Method: "POST", Path: "/auth/v1/mfa/keys"},
+		{Method: "POST", Path: "/auth/v1/mfa/revoke-key"},
+		{Method: "POST", Path: "/auth/v1/mfa/enrollment-codes"},
+		{Method: "POST", Path: "/auth/v1/mfa/reset"},
+		{Method: "GET", Path: "/healthz"},
+	})
+}

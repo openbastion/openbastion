@@ -69,10 +69,8 @@ func Allow(caller, method, path string) Case { return Case{caller, method, path,
 func Deny(caller, method, path string) Case  { return Case{caller, method, path, false} }
 
 // Standard is every identity of a deployment, for "nobody else" assertions.
-var Standard = []string{
-	"api-gateway", "authentication", "authorization", "session-broker",
-	"ssh-proxy", "password-vault", "audit-service", "command-recorder", "admin-cli",
-}
+// Derive it from the PKI manifest so new service identities cannot silently escape route tests.
+var Standard = append([]string(nil), pki.StandardServices...)
 
 // Check runs the cases through mtls.Guard and fails on any disagreement. It also
 // asserts the property that makes a table safe to extend: a route no rule
