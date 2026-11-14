@@ -36,13 +36,7 @@ type MFAActionClient struct {
 
 func (c *MFAActionClient) Start(ctx context.Context, b application.MFAActionBinding) (application.MFAActionStart, error) {
 	var out application.MFAActionStart
-	payload := struct {
-		Context   mfaActionRequestContext `json:"context"`
-		SessionID string                  `json:"session_id"`
-		AccountID string                  `json:"account_id"`
-		Protocol  string                  `json:"protocol"`
-		Action    string                  `json:"action"`
-	}{mfaActionRequestContext{b.ActorUserID}, b.SessionID, b.AccountID, b.Protocol, b.Action}
+	payload := mfaActionStartRequestBody{Context: mfaActionRequestContext{b.ActorUserID}, SessionID: b.SessionID, AccountID: b.AccountID, Protocol: b.Protocol, Action: b.Action}
 	if err := c.post(ctx, mfaActionStartPath, payload, &out); err != nil {
 		return application.MFAActionStart{}, err
 	}
@@ -54,14 +48,7 @@ func (c *MFAActionClient) Start(ctx context.Context, b application.MFAActionBind
 
 func (c *MFAActionClient) Verify(ctx context.Context, b application.MFAActionBinding, p application.MFAActionProof) (application.MFAActionGrant, error) {
 	var out application.MFAActionGrant
-	payload := struct {
-		Context   mfaActionRequestContext `json:"context"`
-		SessionID string                  `json:"session_id"`
-		AccountID string                  `json:"account_id"`
-		Protocol  string                  `json:"protocol"`
-		Action    string                  `json:"action"`
-		MFAActionProof
-	}{mfaActionRequestContext{b.ActorUserID}, b.SessionID, b.AccountID, b.Protocol, b.Action, p}
+	payload := mfaActionVerifyRequestBody{Context: mfaActionRequestContext{b.ActorUserID}, SessionID: b.SessionID, AccountID: b.AccountID, Protocol: b.Protocol, Action: b.Action, Challenge: p.Challenge, Factor: p.Factor, TOTPCode: p.TOTPCode, WebAuthnResponse: p.WebAuthnResponse}
 	if err := c.post(ctx, mfaActionVerifyPath, payload, &out); err != nil {
 		return application.MFAActionGrant{}, err
 	}
@@ -75,17 +62,8 @@ func (c *MFAActionClient) Consume(ctx context.Context, b application.MFAActionBi
 	if strings.TrimSpace(grant) == "" {
 		return fmt.Errorf("authentication action-step-up consume: empty grant")
 	}
-	var out struct {
-		Consumed bool `json:"consumed"`
-	}
-	payload := struct {
-		Context   mfaActionRequestContext `json:"context"`
-		SessionID string                  `json:"session_id"`
-		AccountID string                  `json:"account_id"`
-		Protocol  string                  `json:"protocol"`
-		Action    string                  `json:"action"`
-		Grant     string                  `json:"grant"`
-	}{mfaActionRequestContext{b.ActorUserID}, b.SessionID, b.AccountID, b.Protocol, b.Action, grant}
+	var out mfaActionConsumeResponseBody
+	payload := mfaActionConsumeRequestBody{Context: mfaActionRequestContext{b.ActorUserID}, SessionID: b.SessionID, AccountID: b.AccountID, Protocol: b.Protocol, Action: b.Action, Grant: grant}
 	if err := c.post(ctx, mfaActionConsumePath, payload, &out); err != nil {
 		return err
 	}
@@ -126,4 +104,39 @@ func (c *MFAActionClient) post(ctx context.Context, path string, payload, result
 		return fmt.Errorf("authentication action-step-up: invalid trailing response data")
 	}
 	return nil
+}
+
+// These DTOs mirror action_step_up.proto. Keeping them named lets the contract test
+// detect field drift between HTTP/JSON and the protobuf source contract.
+type mfaActionStartRequestBody struct {
+	Context   mfaActionRequestContext `json:"context"`
+	SessionID string                  `json:"session_id"`
+	AccountID string                  `json:"account_id"`
+	Protocol  string                  `json:"protocol"`
+	Action    string                  `json:"action"`
+}
+
+type mfaActionVerifyRequestBody struct {
+	Context          mfaActionRequestContext `json:"context"`
+	SessionID        string                  `json:"session_id"`
+	AccountID        string                  `json:"account_id"`
+	Protocol         string                  `json:"protocol"`
+	Action           string                  `json:"action"`
+	Challenge        string                  `json:"challenge"`
+	Factor           string                  `json:"factor"`
+	TOTPCode         string                  `json:"totp_code,omitempty"`
+	WebAuthnResponse json.RawMessage         `json:"webauthn_response,omitempty"`
+}
+
+type mfaActionConsumeRequestBody struct {
+	Context   mfaActionRequestContext `json:"context"`
+	SessionID string                  `json:"session_id"`
+	AccountID string                  `json:"account_id"`
+	Protocol  string                  `json:"protocol"`
+	Action    string                  `json:"action"`
+	Grant     string                  `json:"grant"`
+}
+
+type mfaActionConsumeResponseBody struct {
+	Consumed bool `json:"consumed"`
 }

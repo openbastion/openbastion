@@ -48,5 +48,6 @@ La règle 3 est donc amendée pour les nouvelles sessions : **rendezvous hashing
 - La révocation reste demandée à **toutes** les instances, en parallèle, conformément aux règles 4 et 5 inchangées.
 - La modification de la composition du pool peut remapper certaines sessions existantes. Pendant un changement de pool, l'injection de ces sessions peut échouer ; elle ne doit jamais être redirigée vers un proxy qui ne détient pas le shell. Reconnexion sur la nouvelle composition requise.
 - Les noms `ProxyInstance.Name` doivent être stables et uniques ; `NewProxyPool` refuse les noms vides, clients nuls ou doublons.
+- Le test d'intégration `test/integration/proxy_instances_flow_test.go` est aligné sur cette règle : il vérifie l'affinité stable pour une session et le refus de connect/terminate lorsque son propriétaire est arrêté, puis la reprise après son retour. Il ne suppose plus un round-robin ni un failover qui romprait l'affinité.
 
 Cette décision privilégie l'intégrité du routage des opérations sensibles et la cohérence multi-réplicas au-dessus de la disponibilité lors d'une panne d'instance. Le refus d'une connexion sur l'instance propriétaire est préférable à l'émission d'un ticket qui ne pourrait ensuite pas être contrôlé de manière sûre.

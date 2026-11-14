@@ -1,10 +1,9 @@
 package integration_test
 
-// ADR-0046 on real processes: two instances of the SSH proxy behind one Broker. A ticket is
-// issued by one instance, in turn, and the operator is sent to that instance; a ticket is good
-// nowhere else; ending a session cuts it on every instance; with one instance unreachable, nothing
-// is ended — and the same call works once it is back; a connect still finds the instance that is
-// up. Before ADR-0046 the Broker knew one instance, and every instance said the same address.
+// ADR-0046 on real processes: two instances of the SSH proxy behind one Broker. Rendezvous
+// hashing sends every operation for one session to the same instance; a ticket is good nowhere
+// else; ending a session cuts it on every instance. If the selected instance is unreachable,
+// connect and termination fail closed rather than silently moving the session to another proxy.
 
 import (
 	"fmt"
@@ -67,7 +66,7 @@ func TestProxyInstances_ATicketIsIssuedByOne_AndEndingASessionCutsItOnAll(t *tes
 	}
 	// Not the default (127.0.0.1:SSH_PORT): an instance that ignored SSH_PUBLIC_ENDPOINT would show.
 	const ssh1, ssh2 = "localhost:18937", "localhost:18939"
-	_ = startServiceWithExtraPort(t, root, proxyBin, "18936", "18937", proxyEnv(ssh1)...)
+	proxy1 := startServiceWithExtraPort(t, root, proxyBin, "18936", "18937", proxyEnv(ssh1)...)
 	proxy2 := startServiceWithExtraPort(t, root, proxyBin, "18938", "18939", proxyEnv(ssh2)...)
 	broker := startService(t, root, brokerBin, "18940",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL="+vault.baseURL, "AUDIT_URL="+spy.baseURL,
@@ -118,9 +117,9 @@ func TestProxyInstances_ATicketIsIssuedByOne_AndEndingASessionCutsItOnAll(t *tes
 	e1, t1 := connect(t, sessA)
 	e2, t2 := connect(t, sessA)
 
-	t.Run("tickets are issued by each instance in turn, and the operator is sent to the one that holds it", func(t *testing.T) {
-		if e1 == e2 || (e1 != ssh1 && e1 != ssh2) || (e2 != ssh1 && e2 != ssh2) {
-			t.Fatalf("endpoints %q and %q, want %s and %s, one each", e1, e2, ssh1, ssh2)
+	t.Run("one session is pinned deterministically to one proxy instance", func(t *testing.T) {
+		if e1 != e2 || (e1 != ssh1 && e1 != ssh2) {
+			t.Fatalf("endpoints %q and %q, want the same deterministic owner (%s or %s)", e1, e2, ssh1, ssh2)
 		}
 	})
 
@@ -162,29 +161,39 @@ func TestProxyInstances_ATicketIsIssuedByOne_AndEndingASessionCutsItOnAll(t *tes
 		alive(t, shB, "b-untouched")
 	})
 
-	t.Run("with one instance unreachable nothing is ended, a connect finds the other, and the same call works once it is back", func(t *testing.T) {
+	t.Run("an unavailable selected instance fails closed; the same session works after it returns", func(t *testing.T) {
 		sessD := open(t)
-		stopService(t, proxy2)
-		for i := 0; i < 2; i++ {
-			if e, _ := connect(t, sessD); e != ssh1 {
-				t.Fatalf("connect %d with the second instance down was sent to %s, want %s", i+1, e, ssh1)
-			}
+		ownerEndpoint, _ := connect(t, sessD)
+		owner := proxy1
+		if ownerEndpoint == ssh2 {
+			owner = proxy2
+		} else if ownerEndpoint != ssh1 {
+			t.Fatalf("unexpected owner endpoint %q", ownerEndpoint)
+		}
+		stopService(t, owner)
+
+		if _, _, code := gatewayConnect(t, gw.baseURL, operator, sessD); code != http.StatusServiceUnavailable {
+			t.Fatalf("connect while selected instance is down: %d, want 503", code)
 		}
 		code, text := end(sessD)
 		if code != http.StatusServiceUnavailable {
-			t.Fatalf("with an instance down: %d %s, want 503", code, text)
+			t.Fatalf("with selected instance down: %d %s, want 503", code, text)
 		}
-		if strings.Contains(text, "127.0.0.1") || strings.Contains(text, "18938") {
+		if strings.Contains(text, "127.0.0.1") || strings.Contains(text, "1893") {
 			t.Fatalf("an instance's address reached the client: %q", text)
 		}
 		if got := statusOf(t, sessD); got != "active" {
-			t.Fatalf("the session is %q after a termination one instance did not confirm, want active", got)
+			t.Fatalf("the session is %q after a termination the proxy pool could not confirm, want active", got)
 		}
 		spy.waitFor(t, "session.terminate", sessD, false)
 
-		proxy2 = startServiceWithExtraPort(parent, root, proxyBin, "18938", "18939", proxyEnv(ssh2)...)
+		if ownerEndpoint == ssh1 {
+			proxy1 = startServiceWithExtraPort(parent, root, proxyBin, "18936", "18937", proxyEnv(ssh1)...)
+		} else {
+			proxy2 = startServiceWithExtraPort(parent, root, proxyBin, "18938", "18939", proxyEnv(ssh2)...)
+		}
 		if code, text := end(sessD); code != http.StatusOK || !strings.Contains(text, `"terminated"`) {
-			t.Fatalf("with the instance back: %d %s, want 200", code, text)
+			t.Fatalf("with the selected instance back: %d %s, want 200", code, text)
 		}
 		spy.waitFor(t, "session.terminate", sessD, true)
 	})

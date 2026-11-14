@@ -11,6 +11,13 @@ import (
 	"github.com/openbastion/openbastion/pkg/proxycore"
 )
 
+const (
+	auditDetailProtocol  = "protocol"
+	auditDetailAccountID = "account_id"
+	auditDetailBytes     = "bytes"
+	auditDetailSHA256    = "sha256"
+)
+
 type AuditHTTPClient struct {
 	BaseURL string
 
@@ -52,11 +59,11 @@ type emitEventRequestBody struct {
 // secret bytes are not accepted by this method or serialized into the event.
 func (c *AuditHTTPClient) AuditSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
 	action := "session.secret_injection_started"
-	details := map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID}
+	details := map[string]string{auditDetailProtocol: evidence.Protocol, auditDetailAccountID: evidence.AccountID}
 	if evidence.Source == proxycore.SecretInputOperator {
 		action = "session.secret_paste_started"
-		details["bytes"] = strconv.Itoa(evidence.Length)
-		details["sha256"] = evidence.SHA256
+		details[auditDetailBytes] = strconv.Itoa(evidence.Length)
+		details[auditDetailSHA256] = evidence.SHA256
 	} else if evidence.Source != proxycore.SecretInputVault {
 		return proxycore.ErrSecretInjectionInvalid
 	}
@@ -88,14 +95,14 @@ func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence p
 	if !success {
 		action = "session.secret_injection_failed"
 	}
-	details := map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID}
+	details := map[string]string{auditDetailProtocol: evidence.Protocol, auditDetailAccountID: evidence.AccountID}
 	if evidence.Source == proxycore.SecretInputOperator {
 		action = "session.secret_pasted"
 		if !success {
 			action = "session.secret_paste_failed"
 		}
-		details["bytes"] = strconv.Itoa(evidence.Length)
-		details["sha256"] = evidence.SHA256
+		details[auditDetailBytes] = strconv.Itoa(evidence.Length)
+		details[auditDetailSHA256] = evidence.SHA256
 	} else if evidence.Source != proxycore.SecretInputVault {
 		return proxycore.ErrSecretInjectionInvalid
 	}
