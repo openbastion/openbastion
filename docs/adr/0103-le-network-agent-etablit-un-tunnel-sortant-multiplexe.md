@@ -24,6 +24,7 @@ Les sites derrière NAT ou pare-feu ne doivent pas exposer leurs cibles au basti
 - (−) gRPC constitue une exception explicite à ADR-0050 et ajoute un outillage Protobuf.
 - (−) Une perte du flux de contrôle interrompt les tunnels selon ADR-0110.
 - (−) Un agent compromis reste un point de rebond limité par capacités et politique locale.
+- (−) L'invariant No Direct Access dépend aussi des ACL/firewalls du site ; le déploiement et les changements réseau doivent être contrôlés et testés.
 
 **Alternatives envisagées**
 
