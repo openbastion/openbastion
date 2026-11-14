@@ -7,6 +7,9 @@ checker="$script_dir/check-cyclonedx-sbom.sh"
 schema="$repo_root/third_party/cyclonedx/1.7/bom-1.7.schema.json"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+# No network for the checker: a proxy that answers nothing. A reference fetched instead of resolved
+# from third_party/cyclonedx fails here as it did in CI (connection reset by cyclonedx.org).
+export http_proxy=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9
 
 command -v jq >/dev/null 2>&1 || { echo 'jq is required' >&2; exit 2; }
 python_bin=${PYTHON:-python3}
@@ -64,6 +67,15 @@ fi
 jq '.metadata.timestamp = "not-a-date"' "$tmp/valid.json" > "$tmp/invalid-date-time.json"
 if "$checker" "$tmp/invalid-date-time.json"; then
   echo 'test-check-cyclonedx-sbom: accepted invalid date-time format' >&2
+  exit 1
+fi
+
+# The SPDX subschema, resolved from the vendored copy: a known identifier passes, another fails.
+jq '.components = [{"type":"library","name":"x","licenses":[{"license":{"id":"Apache-2.0"}}]}]' "$tmp/valid.json" > "$tmp/spdx-license.json"
+"$checker" "$tmp/spdx-license.json"
+jq '.components = [{"type":"library","name":"x","licenses":[{"license":{"id":"Not-A-License"}}]}]' "$tmp/valid.json" > "$tmp/unknown-license.json"
+if "$checker" "$tmp/unknown-license.json"; then
+  echo 'test-check-cyclonedx-sbom: accepted a license id outside the SPDX list' >&2
   exit 1
 fi
 
