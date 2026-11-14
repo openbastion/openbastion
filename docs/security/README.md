@@ -5,7 +5,8 @@ Pour le responsable sécurité, l'auditeur et le contributeur qui touche à une 
 | Page | Contenu |
 |---|---|
 | [`security-overview.md`](security-overview.md) | Les trois invariants, la sécurité transverse |
-| [`threat-model.md`](threat-model.md) | Modèle de menace global |\n| [`threat-model-agents.md`](threat-model-agents.md) | Analyse STRIDE/DREAD des Network Agent et Security Agent, frontières de confiance et plan de vérification v0.0.3 |
+| [`threat-model.md`](threat-model.md) | Modèle de menace global |
+| [`threat-model-agents.md`](threat-model-agents.md) | Analyse STRIDE/DREAD des Network Agent et Security Agent, frontières de confiance et plan de vérification v0.0.3 |
 | [`network-security.md`](network-security.md) | Sécurité du transport (mTLS interne, TLS en bordure) |
 | [`authentication.md`](authentication.md) | Authentification |
 | [`authorization-rbac-abac.md`](authorization-rbac-abac.md) | Autorisation (RBAC dans le MVP) |
