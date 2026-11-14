@@ -37,9 +37,10 @@ func dumpGraphicsOutput(t *testing.T, log *graphicsLog, name string) {
 
 // The graphics pipeline of ADR-0101 (increment 1) against real servers: the early capability set,
 // the channel opened from the closed list, the capabilities advertised and one set confirmed, then
-// what the target sends read, decompressed and bounded. Increment 2: every command without a codec is
-// drawn by the compositor, and every end of frame acknowledged (MS-RDPEGFX 2.2.2.13); the codecs the
-// target chooses are named and not drawn yet, for the increments that follow. The output, as far as
+// what the target sends read, decompressed and bounded. Increments 2 and 3: every command without a
+// codec, and the bitmaps in ClearCodec or uncompressed, drawn by the compositor, and every end of
+// frame acknowledged (MS-RDPEGFX 2.2.2.13); a codec not drawn yet is counted by name, and the
+// measure goes on. The output, as far as
 // the commands drawn make it, goes to RDP_WINDOWS_DUMP.
 
 type graphicsLog struct {
@@ -54,6 +55,7 @@ type graphicsLog struct {
 	resets    []string
 	surfaces  []string
 	frames    int
+	notDrawn  map[string]int
 	changed   int // pixels of the output changed, frames summed
 	output    *image.RGBA
 	err       error
@@ -70,8 +72,8 @@ func (g *graphicsLog) String() string {
 		sort.Strings(out)
 		return strings.Join(out, ", ")
 	}
-	return fmt.Sprintf("opened %v, confirmed version 0x%08x flags 0x%08x, %d message(s) of %d bytes; commands [%s]; codecs [%s]; pixel formats %v; resets %q; surfaces %q; %d frame(s) drawn and acknowledged, %d pixel(s) changed; error %v",
-		g.opened, g.confirmed.Version, g.confirmed.Flags, g.messages, g.bytesIn, names(g.commands), names(g.codecs), g.formats, g.resets, g.surfaces, g.frames, g.changed, g.err)
+	return fmt.Sprintf("opened %v, confirmed version 0x%08x flags 0x%08x, %d message(s) of %d bytes; commands [%s]; codecs [%s]; pixel formats %v; resets %q; surfaces %q; %d frame(s) drawn and acknowledged, %d pixel(s) changed; not drawn %v; error %v",
+		g.opened, g.confirmed.Version, g.confirmed.Flags, g.messages, g.bytesIn, names(g.commands), names(g.codecs), g.formats, g.resets, g.surfaces, g.frames, g.changed, g.notDrawn, g.err)
 }
 
 // readGraphicsPipeline runs the connection sequence with the pipeline announced, then reads the
@@ -83,7 +85,7 @@ func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, 
 	defer client.Close()
 	settings := rdp.MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: rdpClientName,
 		Timeout: 15 * time.Second, DynamicChannels: true, GraphicsPipeline: true}
-	log := &graphicsLog{commands: map[uint16]int{}, codecs: map[uint16]int{}, formats: map[byte]int{}}
+	log := &graphicsLog{commands: map[uint16]int{}, codecs: map[uint16]int{}, formats: map[byte]int{}, notDrawn: map[string]int{}}
 	var pipeline *rdp.RDPGraphicsPipeline
 	var compositor *rdp.RDPGraphicsCompositor
 	onOpen := func(name string) {
@@ -135,10 +137,12 @@ func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, 
 						binary.LittleEndian.Uint16(pdu.Body[2:4]), binary.LittleEndian.Uint16(pdu.Body[4:6]), pdu.Body[6]))
 				}
 			}
-			if pdu.Command == rdp.RDPGraphicsWireToSurface1 || pdu.Command == rdp.RDPGraphicsWireToSurface2 {
-				continue // a codec: the increments that follow
-			}
 			frame, ended, err := compositor.Apply(pdu)
+			if errors.Is(err, rdp.ErrRDPGraphicsCodec) {
+				// A codec not drawn yet: counted, not drawn, and the measure goes on.
+				log.notDrawn[err.Error()]++
+				continue
+			}
 			if err != nil {
 				log.err = err
 				return err

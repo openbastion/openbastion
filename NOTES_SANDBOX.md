@@ -4506,5 +4506,14 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - 40 refus et un fuzzer ;
   - 20 mutations tuées ;
   - contre FreeRDP, 322 trames acquittées.
-- **En attente** : contre les cinq Windows, dans la CI de la PR.
-- **Pas encore fait** : les codecs (non compressé et Planar à l'incrément 3, ClearCodec au 4, RemoteFX progressif au 4 bis). Rien n'est branché au service.
+- **Contre les cinq Windows** (CI de #196) : aucune faute ; 6 à 9 trames dessinées et acquittées par session.
+
+## 2026-11-14 — ADR-0101, incrément 3 : ClearCodec
+
+- **Ordre revu, par délégation** : ClearCodec avant Planar. Windows n'envoie que ClearCodec et RemoteFX progressif ; Planar reste refusé tant qu'aucune cible ne l'envoie.
+- **Fait** :
+  - ClearCodec (`pkg/rdp/graphics_clearcodec.go`) : les calques résiduel, bandes et sous-codecs (brut et RLEX), les caches de V-bars, les glyphes et la séquence ;
+  - le non compressé.
+- **Lectures de FreeRDP** là où la spécification se tait : la suite RLEX inclusive, une palette d'une couleur à un bit, le curseur des petites V-bars qui revient à zéro.
+- **Prouvé** : 40 refus, un fuzzer, 22 mutations tuées.
+- **En attente** : l'image ClearCodec des cinq Windows (`graphics-pipeline.png` dans l'artefact de la CI de la PR), et l'usage éventuel du sous-codec NSCodec, compté et non décodé.
