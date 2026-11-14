@@ -45,26 +45,26 @@ Chaque dimension Damage, Reproducibility, Exploitability, Affected users et Disc
 
 ## 4. Menaces STRIDE
 
-| ID | STRIDE | Scénario / actif | DREAD | Niveau | Contrôles exigés |
+| ID | STRIDE | Scénario / actif | D/R/E/A/Di | DREAD | Niveau | Contrôles exigés |
 |---|---|---|---:|---|---|
-| AG-S01 | Spoofing | Usurpation agent_id dans Hello | 8,2 | Critical | Identité tirée du SAN mTLS ; assertion du message comparée au registre ; test mismatch |
-| AG-S02 | Spoofing | Vol du jeton d'enrôlement | 7,8 | High | Jeton aléatoire, usage unique, TTL ≤ 10 min, lié à agent, CSR signé, audit |
-| AG-S03 | Spoofing | Certificat révoqué utilisé sur flux existant | 8,0 | Critical | Vérification révocation, fermeture des flux, génération identité, tests multi-replicas |
-| AG-T01 | Tampering | Modification de capacité (session, IP, port, audience, durée) | 8,4 | Critical | JWS EdDSA, claims strictes, TTL ≤ 60 s, jti anti-rejeu, algorithme en allowlist |
-| AG-T02 | Tampering | Politique locale modifiée ou rollback | 8,0 | Critical | Signature détachée, canonicalisation, agent binding, génération monotone, expiration |
-| AG-T03 | Tampering | Injection/troncature/réordonnancement de trames | 6,8 | High | TLS, séquence par tunnel, limites, validation d'état, fermeture, fuzzing |
-| AG-R01 | Repudiation | Agent nie un tunnel ou un événement | 6,4 | High | Journal serveur ouverture/fermeture, identité mTLS, séquence et heure de réception |
-| AG-R02 | Repudiation | Agent compromis falsifie ou supprime ses observations | 8,2 | Critical | Provenance host-agent, trous de séquence, santé, corrélation Broker/proxy ; pas de preuve indépendante |
-| AG-I01 | Information Disclosure | Secret cible reçu ou journalisé par agent | 8,6 | Critical | Aucun secret dans les contrats agent ; Vault accessible au proxy seulement ; tests canaris |
-| AG-I02 | Information Disclosure | Tunnel vers loopback, link-local, métadonnées ou IP interdite | 8,4 | Critical | IP littérale, filtrage IPv4/IPv6, CIDR/ports, contrôle IP réelle, tests SSRF |
-| AG-I03 | Information Disclosure | Payload contient tokens, PII ou contenu de session | 6,6 | High | Schémas bornés, minimisation, redaction, ACL, chiffrement, rétention |
-| AG-D01 | Denial of Service | Tunnels ou trames volumineuses épuisent agent/serveur | 7,0 | High | Quotas, 64 Kio, backpressure, timeouts, budgets mémoire et débit |
-| AG-D02 | Denial of Service | Tempête de reconnexion ou ingestion | 6,4 | High | Backoff jitter, rate limits, quotas, files bornées, alertes |
-| AG-D03 | Denial of Service | Perte du flux de contrôle pendant une session | 5,8 | Medium | Fermeture fail-closed, état Broker/proxy, nouvelle autorisation ; impact documenté |
-| AG-E01 | Elevation of Privilege | Processus local non privilégié utilise IPC agent | 8,0 | Critical | IPC authentifié OS, ACL, protocole typé, aucune commande générique, tests |
-| AG-E02 | Elevation of Privilege | Compromission Security Agent atteint Network Agent/root | 8,2 | Critical | Processus, comptes, clés, sockets et politiques séparés ; helpers bornés |
-| AG-E03 | Elevation of Privilege | Agent Control compromis émet une capacité arbitraire | 8,8 | Critical | Allowlist locale indépendante, capacité liée session/ressource/IP/port, révocation |
-| AG-E04 | Elevation of Privilege | Update/rollback installe un binaire non autorisé | 7,8 | High | Signature, provenance, SBOM, dépôt/canal épinglé, anti-rollback, activation atomique |
+| AG-S01 | Spoofing | Usurpation agent_id dans Hello | 9/9/8/8/7 | 8,2 | Critical | Identité tirée du SAN mTLS ; assertion du message comparée au registre ; test mismatch |
+| AG-S02 | Spoofing | Vol du jeton d'enrôlement | 8/8/7/8/8 | 7,8 | High | Jeton aléatoire, usage unique, TTL ≤ 10 min, lié à agent, CSR signé, audit |
+| AG-S03 | Spoofing | Certificat révoqué utilisé sur flux existant | 9/8/8/8/7 | 8,0 | Critical | Vérification révocation, fermeture des flux, génération identité, tests multi-replicas |
+| AG-T01 | Tampering | Modification de capacité (session, IP, port, audience, durée) | 9/9/8/9/7 | 8,4 | Critical | JWS EdDSA, claims strictes, TTL ≤ 60 s, jti anti-rejeu, algorithme en allowlist |
+| AG-T02 | Tampering | Politique locale modifiée ou rollback | 9/8/8/8/7 | 8,0 | Critical | Signature détachée, canonicalisation, agent binding, génération monotone, expiration |
+| AG-T03 | Tampering | Injection/troncature/réordonnancement de trames | 7/7/7/7/6 | 6,8 | High | TLS, séquence par tunnel, limites, validation d'état, fermeture, fuzzing |
+| AG-R01 | Repudiation | Agent nie un tunnel ou un événement | 7/7/6/6/6 | 6,4 | High | Journal serveur ouverture/fermeture, identité mTLS, séquence et heure de réception |
+| AG-R02 | Repudiation | Agent compromis falsifie ou supprime ses observations | 9/8/8/9/7 | 8,2 | Critical | Provenance host-agent, trous de séquence, santé, corrélation Broker/proxy ; pas de preuve indépendante |
+| AG-I01 | Information Disclosure | Secret cible reçu ou journalisé par agent | 10/9/8/9/7 | 8,6 | Critical | Aucun secret dans les contrats agent ; Vault accessible au proxy seulement ; tests canaris |
+| AG-I02 | Information Disclosure | Tunnel vers loopback, link-local, métadonnées ou IP interdite | 10/9/8/9/6 | 8,4 | Critical | IP littérale, filtrage IPv4/IPv6, CIDR/ports, contrôle IP réelle, tests SSRF |
+| AG-I03 | Information Disclosure | Payload contient tokens, PII ou contenu de session | 7/7/6/7/6 | 6,6 | High | Schémas bornés, minimisation, redaction, ACL, chiffrement, rétention |
+| AG-D01 | Denial of Service | Tunnels ou trames volumineuses épuisent agent/serveur | 8/8/7/7/5 | 7,0 | High | Quotas, 64 Kio, backpressure, timeouts, budgets mémoire et débit |
+| AG-D02 | Denial of Service | Tempête de reconnexion ou ingestion | 7/7/6/6/6 | 6,4 | High | Backoff jitter, rate limits, quotas, files bornées, alertes |
+| AG-D03 | Denial of Service | Perte du flux de contrôle pendant une session | 7/8/5/6/3 | 5,8 | Medium | Fermeture fail-closed, état Broker/proxy, nouvelle autorisation ; impact documenté |
+| AG-E01 | Elevation of Privilege | Processus local non privilégié utilise IPC agent | 9/8/8/8/7 | 8,0 | Critical | IPC authentifié OS, ACL, protocole typé, aucune commande générique, tests |
+| AG-E02 | Elevation of Privilege | Compromission Security Agent atteint Network Agent/root | 9/8/8/9/7 | 8,2 | Critical | Processus, comptes, clés, sockets et politiques séparés ; helpers bornés |
+| AG-E03 | Elevation of Privilege | Agent Control compromis émet une capacité arbitraire | 10/9/9/9/7 | 8,8 | Critical | Allowlist locale indépendante, capacité liée session/ressource/IP/port, révocation |
+| AG-E04 | Elevation of Privilege | Update/rollback installe un binaire non autorisé | 9/8/7/8/7 | 7,8 | High | Signature, provenance, SBOM, dépôt/canal épinglé, anti-rollback, activation atomique |
 
 ### Priorités
 
