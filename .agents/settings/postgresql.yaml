@@ -5,7 +5,7 @@ postgresql:
   test_database_url: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
   truncate_before_full_suite: >-
     TRUNCATE policies, privileged_accounts, vault_secrets, vault_scope_grants, users, oidc_login_attempts,
-    sessions, audit_events, alert_outbox, mfa_challenges, mfa_enrollment_codes, mfa_webauthn_credentials,
+    sessions, audit_events, alert_outbox, mfa_challenges, mfa_action_challenges, mfa_action_grants, mfa_enrollment_codes, mfa_webauthn_credentials,
     video_recording_segments, video_recordings RESTART IDENTITY CASCADE;
   truncate_note: une table ajoutée s'ajoute ici ET au TRUNCATE du Makefile (make test-postgres)
   order_pitfall: >-

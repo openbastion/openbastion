@@ -15,6 +15,9 @@ service ProxyControl {
   // consommé — l'appel peut être renouvelé tel quel.
   rpc EstablishSession(EstablishSessionRequest) returns (EstablishSessionResponse);
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse);
+  // Injecte un credential du Vault dans un shell interactif actif. Le Broker ne transmet
+  // que le scope à usage unique ; le proxy récupère lui-même le credential (ADR-0097).
+  rpc InjectVaultSecret(InjectVaultSecretRequest) returns (InjectVaultSecretResponse);
   rpc StreamHealth(HealthRequest) returns (stream HealthStatus);
 }
 
@@ -52,6 +55,15 @@ message TerminateSessionRequest {
 message TerminateSessionResponse {
   bool terminated = 1;
 }
+
+message InjectVaultSecretRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string account_id = 3;
+  string vault_scope_token = 4; // capacité à usage unique, pas le credential
+}
+
+message InjectVaultSecretResponse {}
 
 message HealthRequest {
   string proxy_instance_id = 1;

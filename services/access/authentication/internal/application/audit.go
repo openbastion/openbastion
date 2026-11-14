@@ -32,16 +32,20 @@ var ErrAuditUnavailable = errors.New("the audit cannot be written now")
 
 // The actions, as they appear in the chain.
 const (
-	ActionLogin                 = "auth.login"         // a token without a second factor
-	ActionLoginMFA              = "auth.login_mfa"     // a token after the second factor
-	ActionLoginRefused          = "auth.login_refused" // a password, a directory, a code or an enrollment code refused
-	ActionMFACodeIssued         = "auth.mfa_enrollment_code_issued"
-	ActionMFAEnrolled           = "auth.mfa_enrolled"
-	ActionMFAReset              = "auth.mfa_reset"
-	ActionLoginWebAuthn         = "auth.login_webauthn"          // a token after a security key (ADR-0065)
-	ActionMFAWebAuthnRegistered = "auth.mfa_webauthn_registered" // a security key enrolled
-	ActionMFAWebAuthnRevoked    = "auth.mfa_webauthn_revoked"    // one security key revoked (ADR-0066)
-	maxAuditedLoginLength       = 256
+	ActionLogin                    = "auth.login"         // a token without a second factor
+	ActionLoginMFA                 = "auth.login_mfa"     // a token after the second factor
+	ActionLoginRefused             = "auth.login_refused" // a password, a directory, a code or an enrollment code refused
+	ActionMFACodeIssued            = "auth.mfa_enrollment_code_issued"
+	ActionMFAEnrolled              = "auth.mfa_enrolled"
+	ActionMFAReset                 = "auth.mfa_reset"
+	ActionLoginWebAuthn            = "auth.login_webauthn"              // a token after a security key (ADR-0065)
+	ActionMFAWebAuthnRegistered    = "auth.mfa_webauthn_registered"     // a security key enrolled
+	ActionMFAWebAuthnRevoked       = "auth.mfa_webauthn_revoked"        // one security key revoked (ADR-0066)
+	ActionMFAActionChallengeIssued = "auth.mfa_action_challenge_issued" // a fresh action-bound MFA challenge
+	ActionMFAActionVerified        = "auth.mfa_action_verified"         // a one-time action grant was issued
+	ActionMFAActionGrantConsumed   = "auth.mfa_action_grant_consumed"   // the Session Broker consumed the grant
+	ActionMFAActionRefused         = "auth.mfa_action_refused"          // an action-bound MFA proof was refused
+	maxAuditedLoginLength          = 256
 )
 
 // WithAudit writes to audit; refusals within budget. A service built without it writes nothing:

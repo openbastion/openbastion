@@ -45,6 +45,7 @@ func (c *VaultAuthorizationHTTPClient) AuthorizeScope(ctx context.Context, sessi
 		return "", time.Time{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cache-Control", "no-store")
 	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return "", time.Time{}, err

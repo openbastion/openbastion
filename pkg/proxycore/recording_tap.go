@@ -2,6 +2,7 @@ package proxycore
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"regexp"
@@ -332,3 +333,47 @@ func (t *RecordingTap) RecordEvent(ctx context.Context, event string) error {
 	_ = t.recorder.Record(ctx, entry)
 	return nil
 }
+
+// RecordSecretInput stores the safe evidence for ADR-0097 in the command
+// recording. It never receives or serializes the secret bytes.
+func (t *RecordingTap) RecordSecretInput(ctx context.Context, evidence SecretInputEvidence) error {
+	if t == nil || ctx == nil || evidence.SessionID != t.sessionID ||
+		!safeSecretIdentifier(evidence.AccountID, 128) ||
+		!safeSecretIdentifier(evidence.Protocol, 32) {
+		return ErrSecretInjectionInvalid
+	}
+	// Secret injection is never allowed under break-glass: the reference must
+	// be durably acknowledged, not merely sent to a best-effort sink.
+	if t.strict == nil {
+		return ErrSecretInjectionUnavailable
+	}
+	var marker string
+	switch evidence.Source {
+	case SecretInputVault:
+		if evidence.Length != 0 || evidence.SHA256 != "" {
+			return ErrSecretInjectionInvalid
+		}
+		marker = "[vault secret " + evidence.AccountID + " injection requested via " + evidence.Protocol + "]"
+	case SecretInputOperator:
+		if evidence.Length < 1 || len(evidence.SHA256) != 64 {
+			return ErrSecretInjectionInvalid
+		}
+		if _, err := hex.DecodeString(evidence.SHA256); err != nil {
+			return ErrSecretInjectionInvalid
+		}
+		marker = fmt.Sprintf("[operator password input requested: %d bytes, sha256 %s]", evidence.Length, evidence.SHA256)
+	default:
+		return ErrSecretInjectionInvalid
+	}
+	if err := t.RecordEvent(ctx, marker); err != nil {
+		return err
+	}
+	// The injected bytes deliberately bypass Write, so consume the prompt state
+	// here; otherwise the next ordinary command would be falsely redacted.
+	t.mu.Lock()
+	t.secretNext = false
+	t.mu.Unlock()
+	return nil
+}
+
+var _ SecretInputRecorder = (*RecordingTap)(nil)

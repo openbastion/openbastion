@@ -26,10 +26,12 @@ type enrollmentCode struct {
 }
 
 type memoryMFA struct {
-	challenges map[string]domain.MFAChallenge         // by hex hash
-	totp       map[string]totpState                   // by user id
-	codes      map[string]enrollmentCode              // by source + "\x00" + name
-	keys       map[string][]domain.WebAuthnCredential // by user id (ADR-0065)
+	challenges       map[string]domain.MFAChallenge         // by hex hash
+	totp             map[string]totpState                   // by user id
+	codes            map[string]enrollmentCode              // by source + "\x00" + name
+	keys             map[string][]domain.WebAuthnCredential // by user id (ADR-0065)
+	actionGrants     map[string]memoryActionGrant           // by hex hash (ADR-0097)
+	actionChallenges map[string]memoryActionChallenge       // by hex hash (ADR-0097)
 }
 
 func codeKey(source, name string) string { return source + "\x00" + name }

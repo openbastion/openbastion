@@ -120,11 +120,13 @@ func runService() {
 		log.Fatalf("ssh listen: %v", err)
 	}
 
+	secretInputs := infrastructure.NewSecretInputRegistry()
 	server := &interfaces.SSHServer{
-		HostSigner:  hostSigner,
-		Pending:     pending,
-		Listener:    listener,
-		DialTimeout: 10 * time.Second,
+		HostSigner:       hostSigner,
+		Pending:          pending,
+		Listener:         listener,
+		DialTimeout:      10 * time.Second,
+		SecretTyperReady: secretInputs.Register,
 	}
 
 	var asyncRecorder *infrastructure.AsyncRecorder
@@ -177,6 +179,9 @@ func runService() {
 
 	log.Printf("ssh-proxy: tickets issued here send the operator to %s (SSH_PUBLIC_ENDPOINT)", endpoint)
 	httpServer := interfaces.NewHTTPServer(pending, endpoint)
+	httpServer.SecretInputs = secretInputs
+	httpServer.Fetcher = fetcher
+	httpServer.SecretAuditor = auditClient
 	httpServer.Admit = listener.Probe // refuse before issuing a ticket, not after
 	// The same registry as the listener's: the route that revokes a session and the
 	// pipeline that serves it must talk about the same connections (ADR-0018).

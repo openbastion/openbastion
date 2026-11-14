@@ -85,3 +85,29 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 - **C, une commande sur la cible** : écartée (voir Options).
 - **D, masquer après coup** : écartée (voir Options).
 - **Ne rien faire et compter sur le chiffrement de l'enregistrement** : écartée. Le chiffrement protège le stockage, pas la relecture ; or le besoin est qu'un auditeur qui relit ne lise pas le secret.
+
+## État d'implémentation — 14 novembre 2026, incrément 3
+
+- Le Session Broker possède désormais un port applicatif `MFAActionClient` et un adaptateur HTTP qui implémente les trois opérations Authentication `start`, `verify` et `consume`.
+- Le client est construit au démarrage avec `rt.Client(mtls.Peer{URL: AUTHENTICATION_URL, Service: mtls.Authentication})` : il utilise donc l'identité mTLS `session-broker` et épingle le pair `authentication`. `AUTHENTICATION_URL` reprend le port interne 8086 par défaut.
+- Les DTO du port sont indépendants de l'infrastructure. Le client borne les réponses à 1 Mio, refuse les statuts non 200, les corps JSON incomplets et les données JSON finales supplémentaires ; il ne répercute jamais le corps d'erreur Authentication.
+- Tests du client : binding acteur/session/compte/protocole/action sur les trois opérations, ordre start → verify → consume et refus sans fuite du corps d'erreur. Tests ciblés et suite du module Session Broker : PASS après correction des tags JSON.
+- **Non livré** : aucune route publique ou Gateway n'expose encore le parcours ; à cet incrément, la validation applicative de session active/propriétaire/Authorization n'est pas encore exécutée ; le grant n'est pas consommé dans une opération proxy réelle ; aucune portée Vault d'injection ni commande de frappe proxy n'est appelée. Le client câblé ne signifie donc pas que l'injection est utilisable.
+- Le parcours B demeure bloqué tant que le canal navigateur → proxy chiffré de bout en bout n'est pas conçu et éprouvé. Aucun secret cible ou texte opérateur ne doit être introduit dans le Gateway ou le Broker.
+
+### Incrément 4 — première orchestration applicative du step-up (historique, consolidé à l'incrément 5)
+
+- À cet incrément, le Broker exposait trois méthodes applicatives séparées (start/verify/consume). À l'incrément 5, verify et consume ont été consolidées dans `InjectVaultSecretWithStepUp` et les méthodes qui retournaient le grant ont été supprimées : le grant reste désormais dans une seule portée locale.
+- Le binding est construit depuis le jeton vérifié par la Gateway (`actorID`) et la session persistée : compte et protocole ne sont jamais repris du corps opérateur. Seul le demandeur de la session peut déclencher le step-up ; la session doit être `active` et non expirée.
+- Chaque étape refait `Authorization.CheckAccess` pour l'action exacte et le compte exact : ressource `secret:inject:account:{id}` / action `secret:inject`, ou `secret:paste:account:{id}` / action `secret:paste`. Refus d'autorisation audité sous `session.secret_step_up`, fail-closed si l'audit échoue. Une panne Authorization est un refus de service (`503`), jamais une permission.
+- Le grant opaque reste dans le chemin applicatif Broker et n'est jamais renvoyé à une API publique. La version finale le consomme après une seconde validation de session et d'Authorization, avant l'émission du scope Vault.
+- Tests : binding reconstruit, autorisation sur la ressource/action exacte, refus du non-demandeur, refus de politique avec audit, session expirée, propagation de la preuve et consommation du grant. Tests ciblés : PASS.
+- **À la fin de l'incrément 4** : routes Gateway/Broker, scope Vault dédié et commande proxy restaient non livrés. Ces éléments internes sont désormais câblés à l'incrément 5 ; les routes Gateway/Broker et l'interface opérateur restent à faire.
+
+- Validation du contenu avant toute dépendance : chaque secret est UTF-8 valide, mono-ligne et sans caractère de contrôle ; un secret Vault est limité à 4 Kio, tandis que le texte opérateur reste limité à 128 caractères. Cela évite qu'un retour chariot provenant du coffre exécute une seconde commande dans le shell.
+
+- Audit à deux phases : `session.secret_injection_started` est acquitté avant le marqueur Command Recorder et la frappe ; après la tentative, `session.secret_injected` ou `session.secret_injection_failed` enregistre le résultat. Le marqueur vidéo/terminal indique explicitement « injection requested » et ne prétend pas que la frappe a réussi. L'événement de résultat utilise un contexte détaché mais borné à 3 s afin de survivre à la déconnexion du client après la frappe.
+
+- Clarification de la frontière de confiance : le scope Vault est une capacité bearer à durée courte, pas le credential cible. Le Broker le reçoit transitoirement de Vault et le relaie uniquement au proxy mTLS sélectionné ; il ne le persiste, ne le journalise et ne le retourne jamais à la Gateway/UI. La Gateway ne voit jamais le scope. L'invariant absolu porte sur le credential/secret cible : il n'est reçu que par le proxy. Le scope doit être traité comme sensible et ne jamais apparaître dans les logs ou traces.
+
+- Résiduel distribué : si le proxy a déjà écrit dans le shell mais que l'événement d'audit final ne peut pas être acquitté, l'API répond en échec alors que la cible peut avoir reçu tout ou partie de la valeur. L'événement préalable et le marqueur « injection requested » restent présents ; aucune répétition du grant n'est possible. L'opérateur devra vérifier l'état de la cible avant une nouvelle cérémonie MFA. Aucun système ne peut annuler une frappe déjà reçue par une cible distante.

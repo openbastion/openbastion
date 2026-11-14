@@ -33,6 +33,10 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/revoke-key", Callers: []string{mtls.AdminCLI}},
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/enrollment-codes", Callers: []string{mtls.AdminCLI}},
 		{Method: http.MethodPost, Path: "/auth/v1/mfa/reset", Callers: []string{mtls.AdminCLI}},
+		// ADR-0097: action-bound step-up is internal to the Session Broker; never public.
+		{Method: http.MethodPost, Path: "/auth/v1/internal/action-step-up/start", Callers: []string{mtls.SessionBroker}},
+		{Method: http.MethodPost, Path: "/auth/v1/internal/action-step-up/verify", Callers: []string{mtls.SessionBroker}},
+		{Method: http.MethodPost, Path: "/auth/v1/internal/action-step-up/consume", Callers: []string{mtls.SessionBroker}},
 		// Creating a local user has no public surface yet: it is operator tooling.
 		{Method: http.MethodPost, Path: "/auth/v1/users", Callers: []string{mtls.AdminCLI}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},

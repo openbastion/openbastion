@@ -4566,3 +4566,101 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - `make test-integration` complet : **échec par timeout global de 300 s** sur `TestLDAPFlow_AnActiveDirectoryUserLogsIn_NestedGroupsCount_ADisabledAccountIsRefused`, pendant `docker build -q -t openbastion-test-samba ...` ; aucune assertion de remédiation P0 n'a échoué. Les parcours `ApprovalFlow`, `BreakGlassApproval`, `BreakGlassDiscovery`, `BreakGlass`, `BreakGlassQuota`, `AuditBounds`, `AuditLogin`, `FullFlow`, `GatewayFlow`, `HostCertFlow` et `HostKeyFlow` exécutés avant ce blocage ont réussi.
 - Parcours d'intégration P0 ciblés : `go test ./test/integration -run '^(TestRecordOrRefuse|TestRecordingFlow|TestMTLS_TheWholeProduct|TestSSHFlow)' -v -count=1 -timeout=240s` : **PASS, 57,7 s**. Cela couvre le refus fail-closed à la panne du recorder, l'enregistrement/relecture (le mot de passe sudo est absent), les attaques mTLS et le flux SSH réel.
 - Aucun test Windows (`RDP_WINDOWS`, `RDP_INTEROP`) ni pile Docker Compose (`COMPOSE_TEST`) n'a été activé. Les tests PostgreSQL ont été ignorés faute de `TEST_DATABASE_URL` ; le build d'image Samba de test a été tenté par la suite d'intégration complète et a provoqué le timeout. Aucun ADR accepté modifié ; aucun push, PR ou merge effectué ; aucune branche supprimée.
+
+
+## 2026-11-14 — Lot 2 ADR-0097 : saisie de secret SSH et contrat MFA step-up (en cours, non livré)
+
+- Worktree isolé : `/tmp/openbastion-lot2`, branche `fix/recording-secret-redaction`, base `cc7c22f` (merge PR #203). Les worktrees RDP et Admin UI ne sont pas touchés.
+- Le codec SSH et `pkg/proxycore` disposent maintenant d'une injection locale qui contourne le flux opérateur enregistré, sérialise la saisie avec l'entrée ordinaire, écrit un marqueur non secret, exige l'acquittement de l'audit et du recorder avant frappe et purge le buffer. Tests ciblés et tests `-race` SSH/proxycore réussis avant la présente étape ; `make build vet` a réussi avec les outils Protobuf déjà présents dans `/tmp/openbastion-p0-tools/bin`.
+- Ce branchement n'est pas exposé comme fonctionnalité utilisateur : le callback de session n'est pas encore relié à un parcours d'autorisation/step-up complet. Aucune route publique n'a été ajoutée.
+- Contrat préparatoire ajouté : `docs/security/secret-injection-step-up-contract.md`. Il définit le challenge MFA lié à l'acteur/session/compte/protocole/action, un grant opaque stocké sous empreinte SHA-256, sa consommation atomique à usage unique, les règles de mTLS, les vérifications Broker/Authorization, l'ordre Audit → Recorder → frappe et les tests négatifs/concurrents attendus.
+- Décision de conception importante : le parcours B (secret fourni par l'opérateur) ne doit pas être relayé en clair par la Gateway ou le Broker, car cela violerait l'invariant ADR-0003. Il reste bloqué jusqu'à un canal navigateur → proxy chiffré de bout en bout, avec décision cryptographique dédiée. Aucun fallback presse-papiers.
+- Non fait à ce stade : migration PostgreSQL des grants, challenge/verify/consume Authentication, client mTLS Broker → Authentication, vérification de session et Authorization au Broker, émission de scope Vault, routage de commande vers l'instance proxy active, intégration UI, VNC/RDP. Aucune API d'injection n'est utilisable.
+- Pas de commit, push ou PR ; aucun test Windows local.
+
+
+### 2026-11-14 — ADR-0097, incrément 1 : stockage des grants MFA d'action
+
+- Migration additive Authentication `008_mfa_action_grants.sql` : empreinte SHA-256 comme clé primaire, acteur/session/compte/protocole/action, expiration et date de consommation ; aucune valeur brute du grant n'est stockée.
+- Contrat de domaine `MFAActionGrant` et `MFAActionGrantRepository` ; validation stricte du hash (32 octets), des champs obligatoires, des protocoles SSH/VNC/RDP et des actions `secret:inject` / `secret:paste`.
+- Magasin mémoire : consommation compare-and-swap sous mutex. PostgreSQL : `UPDATE ... WHERE consumed_at IS NULL AND expires_at > ... AND contexte exact RETURNING`, atomique entre réplicas.
+- Tests ajoutés : expiration, rejeu, substitutions d'utilisateur/session/compte/protocole/action, et 32 consommateurs concurrents (un seul gagnant). `go test -race -count=1 ./services/access/authentication/internal/domain ./services/access/authentication/internal/infrastructure` et `go vet` : PASS.
+- Limite de validation : `TEST_DATABASE_URL` n'est pas défini ; les sous-tests PostgreSQL ont été explicitement ignorés. La sémantique PostgreSQL est donc implémentée mais pas encore éprouvée sur une base réelle dans cette session.
+- Toujours non implémentés : émission aléatoire du grant après preuve MFA, challenges d'action, vérification TOTP/WebAuthn step-up, consommation via mTLS Broker, et orchestration Vault/proxy.
+
+- Vérification globale après l'incrément 1 : `make test` PASS (tous les packages unitaires du monorepo, 56,65 s). `go test -race` Authentication Infrastructure et `go vet` ciblé PASS ; `make build vet` avait également passé avant le dernier raffinement du type de binding, puis les tests monorepo ont recompilé le code final. `git diff --check` PASS.
+- Aucun test Windows exécuté localement. Aucun test PostgreSQL réel : `TEST_DATABASE_URL` absent. Aucun commit, push ou PR.
+
+
+## 2026-11-14 — ADR-0097, incrément 2 : défis MFA d'action Authentication (en cours, non livré)
+
+- Authentication : modèle `MFAActionChallenge` distinct des défis de login ; défi lié à `user_id`, `session_id`, `account_id`, `protocol`, `action`, facteurs autorisés, session WebAuthn, compteur d'essais et échéance. Seule l'empreinte SHA-256 du défi est stockée.
+- Migration additive `009_mfa_action_challenges.sql`. Magasins mémoire et PostgreSQL : lecture, incrément d'essais, suppression après 5 échecs, consommation atomique d'un défi. `008_mfa_action_grants.sql` garde l'empreinte du grant ; consommation `UPDATE ... WHERE ... consumed_at IS NULL AND expires_at > ... RETURNING`.
+- Application : `StartMFAActionStepUp` ne propose que les facteurs enrôlés ; les rôles stricts ne peuvent pas utiliser TOTP. `VerifyMFAActionStepUp` vérifie TOTP (étape consommée par CAS) ou WebAuthn (vérificateur RP/origin existant), consomme le défi, écrit l'audit avant de rendre un grant opaque de 32 octets, valable 30 secondes. Aucun JWT de connexion n'est émis.
+- `ConsumeMFAActionGrant` vérifie le même contexte, consomme atomiquement le grant et écrit l'événement d'audit avant de retourner le succès. Un grant rejeté pour mauvais contexte n'est pas brûlé ; rejeu, expiration, challenge rejoué et changement de session sont refusés.
+- Trois routes HTTP/JSON internes : `/auth/v1/internal/action-step-up/start`, `/verify`, `/consume`. `CallerRules()` réserve toutes les routes à `session-broker`; tests refusent explicitement Gateway et SSH Proxy. Les réponses challenge/grant sont `Cache-Control: no-store`.
+- Contrat Protobuf ajouté : `proto/authentication/v1/action_step_up.proto`, messages et RPC Start/Verify/Consume ; `make proto-gen proto-lint` PASS. Contrat documenté dans `docs/api/grpc/README.md`, modèle SQL dans `docs/architecture/data-architecture.md`, identités et limites actualisées.
+- Tests Authentication : `go test -count=1 ./services/access/authentication/internal/domain ./services/access/authentication/internal/application ./services/access/authentication/internal/infrastructure ./services/access/authentication/internal/interfaces ./services/access/authentication/cmd/authentication` PASS. Ils couvrent TOTP, WebAuthn strict, non-enrôlé, mauvais facteur, expiration, binding session, grant non-JWT, consumption/rejeu, 32 consommateurs concurrents, 5 essais et audit fail-closed.
+- PostgreSQL : tests d'infrastructure se skippent sans `TEST_DATABASE_URL` ; aucune base réelle n'a encore validé les migrations 008/009 et les CAS SQL. `Makefile` et `.agents/settings/postgresql.yaml` incluent les deux tables dans les TRUNCATE dédiés.
+- Non implémenté : client mTLS du Session Broker, route opérateur Gateway/Broker, validation de session/compte et Authorization au Broker, intégration Vault/proxy, UI. Les routes Authentication sont présentes mais aucune injection utilisateur ne fonctionne de bout en bout.
+- Le parcours B reste bloqué : aucun secret opérateur ne traverse la Gateway/Broker en clair ; canal E2E navigateur → proxy à concevoir dans un ADR dédié.
+- `git diff --check` PASS au dernier contrôle ; pas de commit, push ou PR ; aucun test Windows local.
+
+
+### Validation complémentaire PostgreSQL 16 — incrément 2
+
+- Le conteneur de mesure `ob-measure-pg` n'exposait pas de port hôte. Une base isolée `openbastion_stepup_test` a été créée dans ce conteneur, sans toucher à la base `measure` ni exécuter `make test-postgres` (qui effectue des TRUNCATE).
+- `TEST_DATABASE_URL` pointait uniquement vers cette base dédiée ; les migrations Authentication 1 à 9 se sont appliquées.
+- `go test -v -count=1 ./services/access/authentication/internal/infrastructure -run '^TestMFAAction(Grant|Challenge)_'` : PASS, y compris les sous-tests PostgreSQL.
+- Même sélection sous `-race` : PASS ; PostgreSQL confirme un seul gagnant sur 32 consommateurs concurrents, pour le grant comme pour le challenge.
+- Suite complète `go test -race -count=1 ./services/access/authentication/...` avec la base dédiée : PASS.
+- La base dédiée est conservée dans le conteneur `ob-measure-pg` pour les prochaines validations ; aucun secret de connexion n'a été écrit dans le dépôt.
+
+### Vérification finale du lot 2 / incrément 2
+
+- `PATH=/tmp/openbastion-p0-tools/bin:$PATH make build vet` : PASS.
+- `PATH=/tmp/openbastion-p0-tools/bin:$PATH make test` : PASS sur tous les packages du monorepo ; ce passage n'avait pas `TEST_DATABASE_URL`, donc les tests PostgreSQL ont été validés séparément ci-dessus sur la base dédiée.
+- `TEST_DATABASE_URL=<base dédiée> go test -race -count=1 ./services/access/authentication/...` : PASS, tests PostgreSQL compris.
+- `buf lint`, `gofmt` sur tous les fichiers Go modifiés et `git diff --check` : PASS.
+- Aucun test Windows local. Aucun test d'intégration multi-services pour le parcours step-up ; le client mTLS Broker et l'orchestration restent non branchés. Aucun commit, push ou PR.
+
+### 2026-11-14 — ADR-0097, incrément 3 : client mTLS Session Broker → Authentication
+
+- Ajout du port applicatif `MFAActionClient` et de ses DTO dans Session Broker ; l'adaptateur HTTP `MFAActionClient` implémente `start`, `verify`, `consume` sans dépendance de l'application vers l'infrastructure.
+- `cmd/session-broker` lit `AUTHENTICATION_URL` (défaut interne `127.0.0.1:8086`) et construit le client via `rt.Client(mtls.Peer{..., Service: mtls.Authentication})` : l'identité appelante est donc le certificat `session-broker`, et le pair est épinglé comme `authentication`.
+- Le client borne les réponses à 1 Mio, refuse les statuts non 200, les réponses incomplètes et les données JSON supplémentaires ; les corps d'erreur du service distant ne sont jamais reflétés dans les erreurs locales.
+- Tests ciblés du client couvrent les trois chemins, la liaison acteur/session/compte/protocole/action, le transfert du facteur et du grant, l'ordre des opérations et le refus fail-closed sans fuite du diagnostic upstream.
+- Validation : `go test ./services/access/session-broker/internal/infrastructure -run MFAAction -count=1` PASS ; `go test ./services/access/session-broker/... -count=1` PASS après correction des tags JSON du contrat de réponse.
+- **Limite** : seul le client mTLS est câblé. Les use cases Broker qui vérifient session active + propriétaire + Authorization, l'exposition Gateway, la consommation du grant au moment d'une action proxy, le scope Vault et la frappe effective ne sont pas implémentés. Aucune injection utilisateur n'est disponible. Le parcours B reste interdit jusqu'au canal E2E navigateur → proxy.
+
+### 2026-11-14 — ADR-0097, incrément 4 : use cases step-up côté Session Broker
+
+- À la fin de l'incrément 4, start/verify/consume étaient des méthodes applicatives distinctes. À l'incrément 5, verify et consume ont été consolidées dans `InjectVaultSecretWithStepUp` et les méthodes retournant le grant ont été supprimées afin qu'il ne quitte jamais la portée locale du flux d'injection.
+- Le Broker reconstruit le binding à partir de l'identité Gateway vérifiée et de la session persistée : seul le demandeur, sur une session active et non expirée, peut agir ; compte et protocole proviennent exclusivement du stockage.
+- Chaque appel vérifie Authorization sur une ressource séparée et exacte : `secret:inject:account:{id}` / `secret:inject` ou `secret:paste:account:{id}` / `secret:paste`. Le refus est audité et fail-closed ; une panne Authorization est indisponible, jamais autorisée.
+- Le grant reste un DTO interne au Broker. Sa consommation revalide session et politique. Le futur orchestrateur devra enchaîner consommation et commande proxy sans exposer le grant à Gateway/UI.
+- Tests applicatifs couvrent la reconstruction du binding, l'autorisation compte/action, non-demandeur, politique refusée avec audit, session expirée et transmission/consommation du grant.
+- **Toujours non livré** : aucun endpoint Gateway/Broker, aucun scope Vault d'injection, aucune route de commande proxy ni enchaînement transactionnel consume-grant → proxy. Pas d'injection utilisateur. Le parcours B reste interdit jusqu'au canal chiffré E2E navigateur → proxy.
+
+- Validation globale après les incréments 3 et 4 : `PATH=/tmp/openbastion-p0-tools/bin:$PATH make build vet test` PASS sur l'ensemble du monorepo (69 s au second passage) ; `go test -race ./services/access/session-broker/... -count=1` PASS ; `go vet ./services/access/session-broker/...` PASS ; `git diff --check` PASS. Aucun test Windows local. Aucun parcours multi-services réel du step-up ni injection cible de bout en bout.
+
+### 2026-11-14 — ADR-0097, incrément 5 : parcours A Vault → proxy SSH → session enregistrée
+
+- Session Broker : nouveau use case `InjectVaultSecretWithStepUp` qui n'expose jamais le grant. Ordre : vérifier MFA → recharger session et Authorization → consommer le grant → créer un scope Vault 15 s lié à session/compte/proxy → envoyer uniquement le scope au proxy. Si la consommation MFA échoue, ni Vault ni proxy ne sont appelés. Le protocole est limité à SSH tant que VNC/RDP n'ont pas leur `SecretTyper` intégré.
+- Routage HA : amendement ADR-0046. `ProxyPool` utilise le rendezvous hashing SHA-256 sur session ID + nom stable d'instance. Toutes les répliques Broker, même avec ordre de configuration différent, choisissent la même instance. Aucun failover d'établissement/injection vers un autre proxy ; une instance propriétaire indisponible signifie refus. La révocation continue d'interroger toutes les instances en parallèle.
+- SSH Proxy : `POST /internal/v1/inject-vault-secret` est réservé au mTLS `session-broker`. Le corps transporte seulement session ID, account ID et scope à usage unique. Le proxy vérifie un shell interactif actif et non ambigu, lie l'opération au contexte d'annulation du relay, récupère le credential directement auprès du Vault via mTLS `ssh-proxy`, compare cible et compte utilisateur, puis exige audit préalable `session.secret_injection_started` + marqueur Command Recorder strict « injection requested » avant la frappe SSH directe, suivi d'un événement résultat `session.secret_injected`/`session.secret_injection_failed`. Le presse-papiers et le flux enregistré ordinaire ne reçoivent pas le secret. Si l'audit final échoue après la frappe, l'issue cible peut être ambiguë ; l'événement préalable reste durable et une vérification manuelle est nécessaire avant nouvelle tentative.
+- Le registre refuse les sessions à plusieurs shells actifs pour éviter une destination ambiguë ; une fois qu'il ne reste qu'un shell, l'injection redevient possible. La session annulée ne consomme pas le scope. Les buffers de credential et le corps JSON Vault sont bornés et purgés.
+- Contrat Protobuf `ProxyControl.InjectVaultSecret` ajouté et code généré (`buf generate`), routes/identités documentées dans `docs/api/grpc/README.md`, `docs/security/secret-injection-step-up-contract.md`, `known-limitations.md`, ADR-0046 et ADR-0097.
+- Tests ciblés : Session Broker, proxy pool (routage déterministe multi-réplicas, ordre d'instances différent, pas de failover), SSH Proxy (route mTLS, session inactive/ambiguë/annulée, cible Vault, audit/recording/typing, purge), et client Vault borné.
+- Limites restantes : pas de routes Gateway/Broker publiques ou UI ; pas de `SecretTyper` VNC/RDP ; pas de canal E2E navigateur → proxy pour le parcours B ; intégration réelle multi-services/CI à valider. Aucun commit/push/PR.
+
+- Validation finale de l'incrément 5 : `PATH=/tmp/openbastion-p0-tools/bin:$PATH buf lint` PASS ; `go test -race ./pkg/proxycore/... ./services/access/session-broker/... ./services/proxy/ssh-proxy/... -count=1` PASS ; `go vet` sur ces trois périmètres PASS ; `PATH=/tmp/openbastion-p0-tools/bin:$PATH make build vet test` PASS sur tout le monorepo (117 s) ; `git diff --check` PASS. Aucun test Windows local. Les tests sont unitaires/HTTP in-process ; aucun test multi-services sur processus réels n'a encore été exécuté.
+
+### 2026-11-14 — CI #204 : correction des contrats internes et de l'intégration multi-proxy
+
+- Le premier run GitHub Actions `43635411671` (commit `e18704d`) a révélé trois écarts dans le job d'intégration, alors que Go/build/vet/unit, `-race`, frontend, sécurité, Trivy, version et DCO étaient verts.
+- `TestContract_EveryInternalRouteCarriesTheFieldsOfItsProtoMessage_OrSaysWhyNot` : le client d'audit SSH émet désormais `details` pour l'injection de secret ; l'ancienne déclaration `protoOnly` était obsolète. Correction de la divergence et ajout des paires contractuelles pour les DTO MFA start/verify/consume et l'injection proxy, avec explication des champs `RequestContext` omis car l'identité mTLS fait autorité.
+- `TestContract_NoInternalJSONStructEscapesTheTable` : les DTO du nouveau parcours step-up n'étaient pas inscrits au tableau de contrats ; les payloads anonymes du client MFA sont devenus des types nommés et sont liés aux messages Protobuf correspondants. Les clés des détails d'audit sont des constantes afin que le contrôle des map literals ne soit pas contourné.
+- `TestProxyInstances_ATicketIsIssuedByOne_AndEndingASessionCutsItOnAll` : l'ancien test supposait le round-robin et le failover vers une autre instance, alors que l'addendum ADR-0046 impose désormais une affinité rendezvous stable et un refus fail-closed si le propriétaire est indisponible. Le test réel ouvre deux tickets sur la même instance, vérifie qu'un ticket est refusé sur l'autre, et arrête/reprend l'instance propriétaire avant de retenter la terminaison.
+- Contre-vérifications locales : les deux tests de contrat passent ; `TestProxyInstances_ATicketIsIssuedByOne_AndEndingASessionCutsItOnAll` passe sur processus réels (25,8 s). La suite d'intégration complète sans base est en cours ; le job PostgreSQL 16 du run #204 est encore en cours. Le run initial conserve son échec historique ; un nouveau run sera nécessaire après le commit correctif.
+- Suite d'intégration complète locale, sans `TEST_DATABASE_URL` : `GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s` : **PASS, 610,94 s**. Les tests PostgreSQL explicitement conditionnés par `TEST_DATABASE_URL` ont été ignorés ; le job PostgreSQL GitHub Actions du premier run a lui aussi échoué sur les mêmes tests de contrat et d'affinité, et non sur une assertion SQL distincte.

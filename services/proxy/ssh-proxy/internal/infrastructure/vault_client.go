@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/openbastion/openbastion/pkg/proxycore"
+	"io"
 	"net/http"
+
+	"github.com/openbastion/openbastion/pkg/proxycore"
 )
 
 // VaultCredentialHTTPClient implements proxycore.VaultClient by calling
@@ -25,12 +27,13 @@ type VaultCredentialHTTPClient struct {
 }
 
 func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
-	body, _ := json.Marshal(fetchCredentialRequestBody{ScopeToken: scopeToken, CallingProxyID: callingProxyID})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/fetch-credential", bytes.NewReader(body))
+	requestBody, _ := json.Marshal(fetchCredentialRequestBody{ScopeToken: scopeToken, CallingProxyID: callingProxyID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/fetch-credential", bytes.NewReader(requestBody))
 	if err != nil {
 		return proxycore.Fetched{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cache-Control", "no-store")
 	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return proxycore.Fetched{}, err
@@ -39,9 +42,22 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	if resp.StatusCode != http.StatusOK {
 		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: status %d", resp.StatusCode)
 	}
-	var out fetchCredentialResponseBody
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	const maxCredentialResponse = 1 << 20
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxCredentialResponse+1))
+	defer zeroCredentialBytes(responseBody)
+	if err != nil {
 		return proxycore.Fetched{}, err
+	}
+	if len(responseBody) > maxCredentialResponse {
+		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: response exceeds limit")
+	}
+	var out fetchCredentialResponseBody
+	if err := json.Unmarshal(responseBody, &out); err != nil {
+		zeroCredentialBytes(out.CredentialMaterial)
+		return proxycore.Fetched{}, err
+	}
+	if len(out.CredentialMaterial) == 0 {
+		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: empty credential material")
 	}
 	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey, TargetUser: out.TargetUser, TLSCertificateSHA256: out.TLSCertificateSHA256, TargetDomain: out.TargetDomain}, nil
 }
@@ -61,4 +77,10 @@ type fetchCredentialResponseBody struct {
 	TargetUser           string `json:"target_user"`
 	TLSCertificateSHA256 string `json:"tls_certificate_sha256"`
 	TargetDomain         string `json:"target_domain"`
+}
+
+func zeroCredentialBytes(value []byte) {
+	for i := range value {
+		value[i] = 0
+	}
 }

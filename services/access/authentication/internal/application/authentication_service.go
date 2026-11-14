@@ -44,9 +44,10 @@ type AuthenticationService struct {
 	directories []directoryEntry
 
 	// The second factor (ADR-0062); nil mfa = off.
-	mfaRoles map[string]bool
-	mfa      domain.MFARepository
-	sealer   SecretSealer
+	mfaRoles   map[string]bool
+	mfa        domain.MFARepository
+	sealer     SecretSealer
+	mfaActions domain.MFAActionRepository
 
 	// WebAuthn (ADR-0065); nil = TOTP only.
 	webauthn    WebAuthn

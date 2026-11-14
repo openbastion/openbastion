@@ -606,3 +606,26 @@ Les contrats d'agent sont définis séparément sous proto/agent/v1 :
 **Sécurité du contrat.** Les capacités sont des JWS EdDSA éphémères ; les destinations sont des IP littérales ; la taille applicative maximale d'une trame tunnel est 64 Kio ; la télémétrie utilise un oneof Protobuf de types d'observation fermés, bornés et versionnés, sans payload libre, secret ni contenu de session. Le serveur doit appliquer quotas, séquences, délais, backpressure et révocation.
 
 **État.** Les fichiers Protobuf sont des contrats proposés, pas du code généré ni un service déployable. Avant implémentation : ajouter la configuration Buf au dépôt, exécuter lint/breaking/generate en CI, vérifier les imports et figer les règles de compatibilité. Aucun changement du transport interservices existant n'est autorisé par cette exception.
+
+
+## 14. Authentication ↔ Session Broker — `MFAActionStepUp` (ADR-0097)
+
+Contrat Protobuf source : `proto/authentication/v1/action_step_up.proto`. Transport : HTTP/JSON sous mTLS (ADR-0050), avec les champs JSON `snake_case` de ces messages. Ces routes sont internes : aucune route Gateway/public ne les relaie.
+
+| Route interne | Appelant mTLS | Corps | Réponse |
+|---|---|---|---|
+| `POST /auth/v1/internal/action-step-up/start` | `session-broker` seulement | `context.actor_user_id` (identité humaine vérifiée par Gateway et transmise par Broker), `session_id`, `account_id`, `protocol`, `action` | `challenge`, `expires_in` (120 s), `factors`, options WebAuthn si disponible |
+| `POST /auth/v1/internal/action-step-up/verify` | `session-broker` seulement | même contexte complet + `challenge`, `factor`, puis `totp_code` ou `webauthn_response` | `grant`, `expires_in` (30 s) |
+| `POST /auth/v1/internal/action-step-up/consume` | `session-broker` seulement | même contexte complet + `grant` | `{"consumed": true}` si la consommation atomique réussit ; sinon refus |
+
+Les trois appels vérifient le même tuple utilisateur/session/compte/protocole/action. Le défi est aléatoire, conservé par SHA-256, valable 2 minutes et détruit après 5 échecs ou sa consommation. Le facteur autorisé dépend des facteurs enrôlés et des rôles stricts : TOTP est refusé pour un rôle strict, WebAuthn reste obligatoire. La réponse de vérification est un grant opaque à usage unique, non un JWT de connexion ; seule son empreinte est stockée et son usage doit être consommé atomiquement par le Broker. Les réponses portent `Cache-Control: no-store`.
+
+**Frontière de confiance :** l'identité humaine du contexte provient du jeton vérifié par la Gateway ; le certificat mTLS prouve que l'appelant est le Session Broker. Le Gateway, le proxy et le navigateur ne peuvent pas appeler ces routes. Le Broker doit vérifier l'existence et l'appartenance de la session et du compte avant de démarrer le défi, puis consommer le grant avec le contexte exact. Le client mTLS Broker → Authentication et le parcours opérateur ne sont pas encore branchés ; les routes côté Authentication et leurs règles de certificat sont en place.
+
+## 15. Session Broker → SSH Proxy — injection d'un secret Vault (ADR-0097)
+
+Contrat Protobuf : `proto/proxy/v1/proxy_control.proto`, RPC `ProxyControl.InjectVaultSecret`. Implémentation actuelle : HTTP/JSON `POST /internal/v1/inject-vault-secret`, sous mTLS ; seul le certificat `session-broker` est autorisé. Le corps contient `session_id`, `account_id` et `vault_scope_token` (capacité à usage unique), jamais le credential ni le texte du secret. Le proxy échange ce scope directement avec Vault sous son identité mTLS `ssh-proxy`.
+
+Le proxy refuse si aucun shell SSH interactif n'est enregistré pour la session, si plusieurs shells actifs rendent la destination ambiguë, si le contexte de relay est annulé, si le credential n'est pas un mot de passe ou si le `TargetHost`/`TargetUser` du Vault ne correspond pas au shell. Il exécute ensuite audit préalable → marqueur Command Recorder acquitté → frappe directe dans le flux SSH → purge mémoire. Le presse-papiers et le flux de commande ordinaire sont contournés.
+
+Le pool utilise l'affinité déterministe amendée dans ADR-0046 : le même session ID et le même nom d'instance désignent le même proxy depuis toutes les répliques Broker. Pas de fallback si ce proxy est indisponible. Cette route n'est pas exposée par la Gateway ; l'interface opérateur reste à construire. VNC/RDP ne sont pas encore raccordés.

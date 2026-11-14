@@ -64,7 +64,8 @@ func mfaService(t *testing.T) *mfaWorld {
 	w.svc = application.NewAuthenticationService(w.store, infrastructure.Argon2Hasher{}, w.tokens, time.Hour).
 		WithClock(func() time.Time { return *w.now }).
 		WithDirectory(w.dir, application.RoleMap{adminsDN: {"platform-admin"}}).
-		WithMFA([]string{"platform-admin", "vault-admin"}, w.store, sealer)
+		WithMFA([]string{"platform-admin", "vault-admin"}, w.store, sealer).
+		WithMFAAction(w.store)
 	ctx := context.Background()
 	if _, err := w.svc.CreateUser(ctx, "root", "Root", "root-pass", []string{"platform-admin"}); err != nil {
 		t.Fatal(err)

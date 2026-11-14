@@ -105,15 +105,20 @@ func (f *fakeAccountLookup) GetAccount(ctx context.Context, accountID string) (s
 }
 
 type fakeProxyClient struct {
-	calls            int
-	lastScopeToken   string
-	lastTargetHost   string
-	lastTargetUser   string
-	lastBreakGlass   bool
-	lastClipboard    domain.ClipboardRights
-	connectionTicket string
-	proxyEndpoint    string
-	establishErr     error
+	calls             int
+	lastScopeToken    string
+	lastTargetHost    string
+	lastTargetUser    string
+	lastBreakGlass    bool
+	lastClipboard     domain.ClipboardRights
+	connectionTicket  string
+	proxyEndpoint     string
+	establishErr      error
+	injectCalls       int
+	injectErr         error
+	lastInjectSession string
+	lastInjectAccount string
+	lastInjectScope   string
 
 	// revoke records what the Broker told the proxy about ended sessions (ADR-0018).
 	revokeCalls     int
@@ -131,6 +136,12 @@ func (f *fakeProxyClient) RevokeSession(ctx context.Context, protocol, sessionID
 	f.revokedSessions = append(f.revokedSessions, sessionID)
 	f.revokedFor = append(f.revokedFor, remaining)
 	return f.revokeErr
+}
+
+func (f *fakeProxyClient) InjectVaultSecret(_ context.Context, protocol, sessionID, accountID, scopeToken string) error {
+	f.injectCalls++
+	f.lastInjectSession, f.lastInjectAccount, f.lastInjectScope = sessionID, accountID, scopeToken
+	return f.injectErr
 }
 
 func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {

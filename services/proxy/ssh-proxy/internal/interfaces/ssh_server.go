@@ -30,6 +30,11 @@ type SSHServer struct {
 	Pending     *infrastructure.PendingSessions
 	Listener    *proxycore.Listener // owns credential fetch + purge + audit (docs/architecture/components.md)
 	DialTimeout time.Duration
+
+	// SecretTyperReady registers the active SSH target input stream for the
+	// authenticated session-control path (ADR-0097). It is deliberately a
+	// callback: this listener does not expose an unauthenticated injection API.
+	SecretTyperReady func(ctx context.Context, sessionID, protocol, targetHost, targetUser string, typer proxycore.SecretTyper, recorder proxycore.SecretInputRecorder) func()
 }
 
 // recordingRefusedMessage is what the operator reads when the recording policy
@@ -151,8 +156,11 @@ func (s *SSHServer) handleConnection(ctx context.Context, conn net.Conn) {
 		Admission:  admission,
 	}
 	codec := &sshcodec.Codec{
-		TargetUser: resolved.TargetUser,
-		Recorder:   recordingTap,
+		TargetUser:          resolved.TargetUser,
+		SessionID:           resolved.SessionID,
+		SecretInputRecorder: recordingTap,
+		SecretTyperReady:    s.SecretTyperReady,
+		Recorder:            recordingTap,
 		// The target's output feeds the tap's secret-prompt detection, so a
 		// sudo password typed next is recorded as redacted, not in the clear.
 		OutputObserver: recordingTap.Output(),

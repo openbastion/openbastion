@@ -22,7 +22,7 @@ type InMemoryStore struct {
 
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{byID: map[string]*domain.User{}, byUsername: map[string]*domain.User{}, attempts: map[string]domain.LoginAttempt{},
-		mfa: memoryMFA{challenges: map[string]domain.MFAChallenge{}, totp: map[string]totpState{}, codes: map[string]enrollmentCode{}, keys: map[string][]domain.WebAuthnCredential{}}}
+		mfa: memoryMFA{challenges: map[string]domain.MFAChallenge{}, totp: map[string]totpState{}, codes: map[string]enrollmentCode{}, keys: map[string][]domain.WebAuthnCredential{}, actionGrants: map[string]memoryActionGrant{}, actionChallenges: map[string]memoryActionChallenge{}}}
 }
 
 func (s *InMemoryStore) Create(ctx context.Context, u *domain.User) error {

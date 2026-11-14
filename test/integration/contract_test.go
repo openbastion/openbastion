@@ -95,7 +95,7 @@ var contractPairs = []contractPair{
 	{"services/proxy/rdp-vnc-proxy/internal/infrastructure/vault_client.go", "fetchCredentialResponseBody", "proto/vault/v1/vault.proto", "FetchCredentialResponse",
 		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed"}},
 	{"services/proxy/ssh-proxy/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
-		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
+		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/vault/password-vault/internal/infrastructure/audit_client.go", "emitEventRequestBody", "proto/audit/v1/audit.proto", "EmitEventRequest",
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature, "details": whyDetails}},
 	// ADR-0064: the Authentication Service writes logins and the second factor's gestures.
@@ -107,6 +107,25 @@ var contractPairs = []contractPair{
 		map[string]string{"actor_id": whyActor}, map[string]string{"context": whyContext, "signature": whySignature}},
 	{"services/recording-audit/video-recorder/internal/infrastructure/http_clients.go", "emitEventResponseBody", "proto/audit/v1/audit.proto", "EmitEventResponse",
 		nil, map[string]string{"ts": whyEventTime}},
+	// ADR-0097: action-bound MFA step-up uses the Authentication contract over mTLS.
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "actionRequestContext", "proto/common/v1/common.proto", "RequestContext",
+		nil, map[string]string{"trace_id": "no trace context is propagated by this HTTP adapter", "actor_roles": "the Broker's roles are independently checked by Authorization", "calling_service_id": "the caller is authenticated by its mTLS certificate, not a body field"}},
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "mfaActionStartRequest", "proto/authentication/v1/action_step_up.proto", "StartMFAActionStepUpRequest", nil, nil},
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "mfaActionStartResponse", "proto/authentication/v1/action_step_up.proto", "StartMFAActionStepUpResponse", nil, nil},
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "mfaActionVerifyRequest", "proto/authentication/v1/action_step_up.proto", "VerifyMFAActionStepUpRequest", nil, nil},
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "mfaActionVerifyResponse", "proto/authentication/v1/action_step_up.proto", "VerifyMFAActionStepUpResponse", nil, nil},
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "mfaActionConsumeRequest", "proto/authentication/v1/action_step_up.proto", "ConsumeMFAActionGrantRequest", nil, nil},
+	{"services/access/authentication/internal/interfaces/mfa_action_http.go", "mfaActionConsumeResponse", "proto/authentication/v1/action_step_up.proto", "ConsumeMFAActionGrantResponse", nil, nil},
+	{"services/access/session-broker/internal/infrastructure/mfa_action_client.go", "mfaActionRequestContext", "proto/common/v1/common.proto", "RequestContext",
+		nil, map[string]string{"trace_id": "no trace context is propagated by this HTTP adapter", "actor_roles": "the Broker checks the roles with Authorization before calling Authentication", "calling_service_id": "the caller is authenticated by its mTLS certificate, not a body field"}},
+	{"services/access/session-broker/internal/infrastructure/mfa_action_client.go", "mfaActionStartRequestBody", "proto/authentication/v1/action_step_up.proto", "StartMFAActionStepUpRequest", nil, nil},
+	{"services/access/session-broker/internal/infrastructure/mfa_action_client.go", "mfaActionVerifyRequestBody", "proto/authentication/v1/action_step_up.proto", "VerifyMFAActionStepUpRequest", nil, nil},
+	{"services/access/session-broker/internal/infrastructure/mfa_action_client.go", "mfaActionConsumeRequestBody", "proto/authentication/v1/action_step_up.proto", "ConsumeMFAActionGrantRequest", nil, nil},
+	{"services/access/session-broker/internal/infrastructure/mfa_action_client.go", "mfaActionConsumeResponseBody", "proto/authentication/v1/action_step_up.proto", "ConsumeMFAActionGrantResponse", nil, nil},
+	{"services/access/session-broker/internal/infrastructure/proxy_client.go", "injectVaultSecretRequestBody", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
+		map[string]string{"context": whyContext}},
+	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
+		map[string]string{"context": whyContext}},
 }
 
 // notMirrored are internal JSON structs with no message in proto/, each with its reason.
