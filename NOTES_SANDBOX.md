@@ -4536,5 +4536,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** :
   - une trame réelle de FreeRDP, rejouée et épinglée par son empreinte, l'image vérifiée à l'œil ;
   - 23 refus, un fuzzer, 24 mutations tuées.
-- **À éprouver** : l'ondelette « Reduce-Extrapolate », sur l'écran des cinq Windows de la CI de la PR. Les messages bruts vont dans l'artefact (`graphics-messages/`).
+- **Éprouvé contre les cinq Windows**, et figé par une session Windows Server 2022 rejouée (`testdata/graphics/windows-2022`), qui pine aussi l'ondelette « Reduce-Extrapolate » et les raffinements.
+- **Instabilités vues dans la CI de #199, sans lien avec son code** :
+  - le test de la palette de commandes de l'Admin UI (« opens with Ctrl+K… », combobox introuvable) ;
+  - le presse-papiers du moteur, qui n'a pas trouvé Notepad à l'écran ;
+  - le presse-papiers en navigateur, dont le texte copié n'est pas revenu en 60 s.
 - **CI de #199, premier passage** : le fond d'écran de Windows 2022 est enfin dessiné, en RemoteFX progressif. Une bande et le bloc du filigrane, tous deux en NSCodec, sont sortis verts ; c'est corrigé ci-dessus, dans la même PR.

@@ -185,9 +185,10 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - un premier passage puis une passe de raffinement ;
   - 23 refus et un fuzzer (`FuzzRDPGraphicsProgressive`) ;
   - **une trame réelle de FreeRDP rejouée** (`testdata/graphics/freerdp-progressive`, 88 Kio) : la fenêtre xterm de l'écran de test, vérifiée à l'œil, puis épinglée par son empreinte SHA-256 ;
-  - 24 mutations tuées. Trois survivent, sans effet sur les données de référence : la dernière colonne de l'ondelette d'origine (nulle sur les bords unis de cette trame) et deux constantes de couleur décalées d'une unité (l'arrondi ne change pas).
+  - **une session réelle de Windows Server 2022 rejouée** (`testdata/graphics/windows-2022`, 17 messages, 144 Kio, tirés de l'artefact de la CI de la PR #199). On y trouve ClearCodec avec NSCodec, et RemoteFX progressif en « Reduce-Extrapolate », avec ses raffinements. Le bureau entier (fond, filigrane, barre des tâches, Notepad), vérifié à l'œil, est épinglé par son empreinte ;
+  - 30 mutations tuées. Trois survivent, sans effet sur les données de référence : la dernière colonne de l'ondelette d'origine (nulle sur les bords unis de la trame FreeRDP) et deux constantes de couleur décalées d'une unité (l'arrondi ne change pas).
 - **Contre FreeRDP 3** : 183 trames en 10 s décodées sans faute. FreeRDP emploie l'ondelette d'origine ; on voit aux coins des tuiles les artefacts que la spécification lui attribue (3.2.8.1.2.2).
-- **Non éprouvé sans Windows** : l'ondelette « Reduce-Extrapolate », que FreeRDP n'emploie pas. La CI Windows dépose désormais les messages bruts du canal graphique dans l'artefact (`graphics-messages/`), pour épingler une trame Windows de la même façon.
+- **Contre les cinq Windows** (CI de la PR #199) : plus aucune image non dessinée, et aucune faute. La CI dépose désormais les messages bruts du canal graphique dans l'artefact (`graphics-messages/`). C'est en les rejouant en local que l'erreur de couleur de NSCodec a été trouvée.
 
 ## Ce qui demande ton go
 
