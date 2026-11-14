@@ -815,9 +815,9 @@ func TestRDPWindows_Clipboard(t *testing.T) {
 	clipboardAgainstWindows(t, client, target.user, target.password)
 }
 
-// The graphics pipeline of ADR-0101 (increment 1) against Windows (rdp_graphics_interop_test.go):
+// The graphics pipeline of ADR-0101 (increments 1 and 2) against Windows (rdp_graphics_interop_test.go):
 // the channel opened, one of the sets advertised confirmed, and what Windows then sends read,
-// decompressed and bounded for 20 s. The log names the version, the commands and the codecs Windows
+// decompressed and bounded for 20 s, its commands without a codec drawn and its frames acknowledged. The log names the version, the commands and the codecs Windows
 // chose with H.264 turned off: what increments 2 to 4 must draw.
 func TestRDPWindows_GraphicsPipeline(t *testing.T) {
 	target := windowsTarget(t)
@@ -835,6 +835,12 @@ func TestRDPWindows_GraphicsPipeline(t *testing.T) {
 	}
 	if log.confirmed.Version == 0 {
 		t.Fatal("Windows confirmed none of the capability sets in 20 s")
+	}
+	// Increment 2: the frames drawn and acknowledged; what the commands without a codec made of the
+	// screen is in the artifact.
+	dumpGraphicsOutput(t, log, "graphics-pipeline.png")
+	if log.frames == 0 {
+		t.Fatal("no frame drawn and acknowledged in 20 s")
 	}
 }
 

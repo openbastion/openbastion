@@ -4494,3 +4494,17 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - le test du script tourne derrière un proxy qui ne répond pas ;
   - un identifiant SPDX connu passe, un inconnu est refusé ;
   - contre-épreuve : derrière un proxy qui coupe les connexions, l'ancien script échoue exactement comme en CI.
+
+## 2026-11-14 — ADR-0101, incrément 2 : surfaces, cache et trames ; RemoteFX progressif décidé
+
+- **Décision, par délégation du propriétaire** (« choisis les options qui te semble les plus recommandées ») : une image en RemoteFX progressif sera décodée, et enregistrée telle qu'elle a été montrée. ADR-0070 tient entre ce que voit l'opérateur et ce que relit l'auditeur, mais plus à l'octet de la cible, comme à 16 bpp aujourd'hui. Elle est renversable ; ses alternatives sont dans ADR-0101.
+- **Fait** : le compositeur (`pkg/rdp/graphics_surface.go`) dessine :
+  - les surfaces, le remplissage, les copies et le cache ;
+  - les fins de trame, avec leur acquittement.
+- **Bornes** : 64 surfaces, 64 Mio de pixels, 4096 emplacements de cache et 16 Mio de cache.
+- **Prouvé** :
+  - 40 refus et un fuzzer ;
+  - 20 mutations tuées ;
+  - contre FreeRDP, 322 trames acquittées.
+- **En attente** : contre les cinq Windows, dans la CI de la PR.
+- **Pas encore fait** : les codecs (non compressé et Planar à l'incrément 3, ClearCodec au 4, RemoteFX progressif au 4 bis). Rien n'est branché au service.
