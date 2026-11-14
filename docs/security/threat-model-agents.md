@@ -41,7 +41,7 @@ flowchart TB
 
 ## 3. Cotation DREAD
 
-Chaque dimension Damage, Reproducibility, Exploitability, Affected users et Discoverability est notée de 1 à 10 ; le score est leur moyenne. C'est une estimation de conception, pas une mesure empirique. Seuils du guide sécurité : Critical 8–10, High 6–7,9, Medium 4–5,9, Low 1–3,9. Réévaluer après tests et mesures.
+Chaque dimension Damage (D), Reproducibility (R), Exploitability (E), Affected users (A) et Discoverability (Di) est notée de 1 à 10 ; le vecteur D/R/E/A/Di apparaît dans le tableau et le score est sa moyenne. C'est une estimation de conception, pas une mesure empirique. Seuils du guide sécurité : Critical 8–10, High 6–7,9, Medium 4–5,9, Low 1–3,9. Réévaluer après tests et mesures.
 
 ## 4. Menaces STRIDE
 
