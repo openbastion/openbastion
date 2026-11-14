@@ -23,7 +23,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 9 | [Proxy écran RDP et VNC](#9-proxy-écran-rdp-et-vnc) | 14 |
 | 10 | [Chaîne d'audit](#10-chaîne-daudit) | 9 |
 | 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
-| 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 4 |
+| 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 5 |
 | 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 6 |
 | 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
 | 15 | [Agents distribués](#15-agents-distribués) | 9 |
@@ -198,7 +198,8 @@ Le stockage des sessions enregistrées, leur relecture et leur recherche.
 | 1 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté |
 | 2 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté |
 | 3 | [ADR-0093](0093-une-relecture-lit-plusieurs-segments-par-requete.md) | Une relecture lit plusieurs segments par requête | Accepté |
-| 4 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
+| 4 | [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Proposé |
+| 5 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 
 ### 13. Interfaces et notifications
 
@@ -359,3 +360,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0108](0108-les-binaires-et-politiques-agent-sont-signes-et-anti-retour.md) | Les binaires et politiques agent sont signés et protégés contre le retour arrière | Proposé | Agents distribués |
 | [ADR-0109](0109-la-haute-disponibilite-des-agents-ne-reprend-pas-une-session-a-l-aveugle.md) | La haute disponibilité des agents ne reprend pas une session à l'aveugle | Proposé | Agents distribués |
 | [ADR-0110](0110-les-evenements-agent-sont-attribues-et-separes-de-la-preuve-daudit-pam.md) | Les événements agent sont attribués et séparés de la preuve d'audit PAM | Proposé | Agents distribués |
+| [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Proposé | Enregistrement et relecture |
