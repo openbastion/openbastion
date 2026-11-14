@@ -1,0 +1,72 @@
+syntax = "proto3";
+package openbastion.agent.v1;
+import "agent/v1/agent_common.proto";
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/openbastion/openbastion/proto/agent/v1;agentv1";
+
+service AgentControl {
+  // One agent-initiated bidirectional stream per certificate generation.
+  rpc Connect(stream AgentToServer) returns (stream ServerToAgent);
+}
+message AgentHello {
+  AgentRef agent = 1;                 // must match authenticated mTLS SAN
+  string agent_version = 2;
+  uint64 identity_generation = 3;
+  uint64 policy_generation = 4;
+}
+message AgentHeartbeat {
+  google.protobuf.Timestamp observed_at = 1;
+  uint64 last_telemetry_sequence = 2;
+  uint32 active_tunnels = 3;
+  string health = 4;                  // bounded stable code, never free-form logs
+}
+message TunnelOpened { string tunnel_id = 1; string session_id = 2; }
+message TunnelData {
+  string tunnel_id = 1;
+  uint64 sequence = 2;
+  bytes payload = 3;                  // application limit: 64 KiB
+}
+message TunnelClosed { string tunnel_id = 1; string reason_code = 2; }
+message AgentToServer {
+  oneof body {
+    AgentHello hello = 1;
+    AgentHeartbeat heartbeat = 2;
+    TunnelOpened tunnel_opened = 3;
+    TunnelData tunnel_data = 4;
+    TunnelClosed tunnel_closed = 5;
+  }
+}
+message ServerWelcome {
+  string connection_id = 1;
+  uint64 accepted_identity_generation = 2;
+  uint64 required_policy_generation = 3;
+  google.protobuf.Timestamp server_time = 4;
+}
+message OpenTunnel {
+  string tunnel_id = 1;
+  string session_id = 2;
+  string resource_id = 3;
+  string destination_ip = 4;           // literal IP only; no DNS lookup
+  uint32 destination_port = 5;
+  TunnelProtocol protocol = 6;
+  string capability_jws = 7;           // EdDSA, one-use, agent-bound, <= 60 s
+  google.protobuf.Timestamp tunnel_expires_at = 8;
+}
+message CloseTunnel { string tunnel_id = 1; string reason_code = 2; }
+message PolicyUpdate {
+  uint64 generation = 1;
+  bytes canonical_policy = 2;
+  string detached_jws = 3;             // signature over canonical JSON
+  google.protobuf.Timestamp expires_at = 4;
+}
+message ControlPing { string nonce = 1; google.protobuf.Timestamp sent_at = 2; }
+message ServerToAgent {
+  oneof body {
+    ServerWelcome welcome = 1;
+    OpenTunnel open_tunnel = 2;
+    TunnelData tunnel_data = 3;
+    CloseTunnel close_tunnel = 4;
+    PolicyUpdate policy_update = 5;
+    ControlPing ping = 6;
+  }
+}
