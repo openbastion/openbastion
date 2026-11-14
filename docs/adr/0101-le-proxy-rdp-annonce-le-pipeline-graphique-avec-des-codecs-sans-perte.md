@@ -163,6 +163,29 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - un fuzzer (`FuzzNSCodec`) ;
   - 15 mutations tuées.
 
+### Incrément 4 — RemoteFX progressif (14 novembre 2026)
+
+- **Fait** : `pkg/rdp/graphics_progressive.go` décode `WireToSurface2` en RemoteFX progressif (MS-RDPEGFX 2.2.4.2) :
+  - les blocs SYNC, CONTEXT, FRAME_BEGIN, REGION et FRAME_END ;
+  - les tuiles de 64 x 64, simples, en premier passage ou en passe de raffinement ;
+  - par composante (Y, Cb, Cr) : RLGR1, le cumul des écarts LL3, la déquantification par sous-bande ;
+  - pour les raffinements : les bits bruts là où le signe d'un coefficient est connu, Simplified-RL là où il est nul ;
+  - les deux ondelettes inverses : « Reduce-Extrapolate » et celle d'origine de RemoteFX ;
+  - la conversion YCbCr vers RGB en virgule fixe.
+
+  Chaque tuile est dessinée dans les rectangles de sa région, bornée à sa surface. L'état progressif est gardé par surface, et oublié avec elle.
+- **Référence** : la spécification ne donne ses algorithmes qu'en figures (adaptation de RLGR, équations des ondelettes, matrice de couleur). Le code suit l'arithmétique entière de FreeRDP 3.15 (`progressive.c`, `rfx_rlgr.c`, `rfx_dwt.c`, `prim_colors.c`), lu comme référence et écrit à neuf. L'image produite est donc celle que FreeRDP montre.
+- **Bornes** : 1 024 tuiles gardées par canal (48 Kio chacune), 7 tables de quantification au plus, des quantifications progressives de 0 à 8. Les deux flux d'une passe de raffinement doivent être lus jusqu'au bout.
+- **Prouvé** :
+  - RLGR1 et Simplified-RL sur des flux calculés à la main depuis leurs règles ;
+  - les deux ondelettes sur une image unie, et la couleur sur une valeur connue ;
+  - un premier passage puis une passe de raffinement ;
+  - 23 refus et un fuzzer (`FuzzRDPGraphicsProgressive`) ;
+  - **une trame réelle de FreeRDP rejouée** (`testdata/graphics/freerdp-progressive`, 88 Kio) : la fenêtre xterm de l'écran de test, vérifiée à l'œil, puis épinglée par son empreinte SHA-256 ;
+  - 24 mutations tuées. Trois survivent, sans effet sur les données de référence : la dernière colonne de l'ondelette d'origine (nulle sur les bords unis de cette trame) et deux constantes de couleur décalées d'une unité (l'arrondi ne change pas).
+- **Contre FreeRDP 3** : 183 trames en 10 s décodées sans faute. FreeRDP emploie l'ondelette d'origine ; on voit aux coins des tuiles les artefacts que la spécification lui attribue (3.2.8.1.2.2).
+- **Non éprouvé sans Windows** : l'ondelette « Reduce-Extrapolate », que FreeRDP n'emploie pas. La CI Windows dépose désormais les messages bruts du canal graphique dans l'artefact (`graphics-messages/`), pour épingler une trame Windows de la même façon.
+
 ## Ce qui demande ton go
 
 - l'option A et son ordre ;

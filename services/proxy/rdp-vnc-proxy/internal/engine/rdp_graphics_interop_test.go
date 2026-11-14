@@ -19,6 +19,19 @@ import (
 	"github.com/openbastion/openbastion/pkg/rdp"
 )
 
+// graphicsCaptureDir is where the graphics messages go, created: RDP_GRAPHICS_CAPTURE, else
+// RDP_WINDOWS_DUMP/graphics-messages, else nowhere.
+func graphicsCaptureDir() string {
+	dir := os.Getenv("RDP_GRAPHICS_CAPTURE")
+	if dir == "" && os.Getenv("RDP_WINDOWS_DUMP") != "" {
+		dir = filepath.Join(os.Getenv("RDP_WINDOWS_DUMP"), "graphics-messages")
+	}
+	if dir != "" && os.MkdirAll(dir, 0o700) != nil {
+		return ""
+	}
+	return dir
+}
+
 // dumpGraphicsOutput writes the compositor's output to RDP_WINDOWS_DUMP, when set.
 func dumpGraphicsOutput(t *testing.T, log *graphicsLog, name string) {
 	t.Helper()
@@ -105,6 +118,12 @@ func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, 
 	onMessage := func(name string, data []byte) error {
 		if name != rdp.RDPGraphicsChannel {
 			return nil
+		}
+		// RDP_GRAPHICS_CAPTURE, or RDP_WINDOWS_DUMP's graphics-messages: the channel's messages as
+		// they came, up to 256 and 4 MiB, for a test of pkg/rdp (testdata/graphics). A test target's
+		// screen: no secret of the session is ever typed on it.
+		if dir := graphicsCaptureDir(); dir != "" && log.messages < 256 && log.bytesIn+len(data) <= 4<<20 {
+			_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("message-%03d.bin", log.messages)), data, 0o600)
 		}
 		pdus, err := pipeline.Read(data)
 		log.mu.Lock()
@@ -212,6 +231,7 @@ func TestRDPInterop_GraphicsPipeline(t *testing.T) {
 	log := readGraphicsPipeline(t, client, rdpInteropUser, rdpInteropPassword, 10*time.Second)
 	log.mu.Lock()
 	defer log.mu.Unlock()
+	dumpGraphicsOutput(t, log, "graphics-pipeline-freerdp.png")
 	if log.err != nil {
 		t.Fatalf("the pipeline: %v", log.err)
 	}

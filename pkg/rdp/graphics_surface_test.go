@@ -265,13 +265,13 @@ func TestGraphicsSurfaces_RefusesWhatATargetMayNotSend(t *testing.T) {
 	if _, _, err := c.Apply(endFrame(2)); !errors.Is(err, ErrRDPGraphics) {
 		t.Errorf("the end of another frame: %v", err)
 	}
-	// A codec not drawn says which: Planar in a WireToSurface1, RemoteFX progressive in a 2.
+	// A codec not drawn says which: Planar in a WireToSurface1, AVC420 in a 2.
 	mustApply(t, c, createSurface(1, 8, 8, rdpGraphicsPixelXRGB))
 	if _, _, err := c.Apply(wireToSurface1(1, 0x000a, [4]int{0, 0, 1, 1}, []byte{0})); !errors.Is(err, ErrRDPGraphicsCodec) {
 		t.Errorf("WireToSurface1 in Planar: %v", err)
 	}
-	if _, _, err := c.Apply(pdu(RDPGraphicsWireToSurface2, (&gfx{}).u16(1, 9))); !errors.Is(err, ErrRDPGraphicsCodec) {
-		t.Errorf("WireToSurface2: %v", err)
+	if _, _, err := c.Apply(pdu(RDPGraphicsWireToSurface2, (&gfx{}).u16(1, 0x000b).u32(1).raw(rdpGraphicsPixelXRGB).u32(0))); !errors.Is(err, ErrRDPGraphicsCodec) {
+		t.Errorf("WireToSurface2 in AVC420: %v", err)
 	}
 }
 

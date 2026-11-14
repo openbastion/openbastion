@@ -4527,4 +4527,13 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Couleur** : la conversion YCoCg de RDP 6.0, puis le rouge et le bleu inversés, comme l'exige la spécification. Sans l'inversion (lecture de FreeRDP, premier passage de #198), le fond bleu de Windows 2022 est sorti orange.
 - **À vérifier** : le chemin planar de l'ancien protocole, en AYCoCg avec perte de couleur, n'inverse pas non plus. Il a été éprouvé contre Windows, mais peut-être seulement en ARGB.
 - **Prouvé** : 18 refus, un fuzzer, 15 mutations tuées.
-- **En attente** : l'écran des cinq Windows dans la CI de la PR, aux couleurs justes.
+- **Contre les cinq Windows** (CI de #198) : les couleurs sont justes après l'inversion rouge-bleu.
+
+## 2026-11-14 — ADR-0101, incrément 4 : RemoteFX progressif
+
+- **Fait** : le décodeur (`pkg/rdp/graphics_progressive.go`), pour les premiers passages et les raffinements, avec les deux ondelettes inverses.
+- **Référence** : FreeRDP 3.15, lu et non copié. La spécification ne donne ses algorithmes qu'en figures.
+- **Prouvé** :
+  - une trame réelle de FreeRDP, rejouée et épinglée par son empreinte, l'image vérifiée à l'œil ;
+  - 23 refus, un fuzzer, 24 mutations tuées.
+- **À éprouver** : l'ondelette « Reduce-Extrapolate », sur l'écran des cinq Windows de la CI de la PR. Les messages bruts vont dans l'artefact (`graphics-messages/`).
