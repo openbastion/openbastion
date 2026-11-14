@@ -15,8 +15,16 @@ Le monorepo est organisé en **modules Go indépendants** (`go.work`), pas en un
 
 ```
 openbastion/
-├── agents/                       # binaires distribués proposés en v0.0.3\n│   ├── network-agent/             # passerelle TCP sortante, sans privilège root permanent\n│   └── security-agent/            # collecte hôte en lecture seule, identité séparée\n│\n├── services/                     # microservices backend, un dossier par domaine (§4 docs/architecture/system-overview.md)
-│   ├── agents/                    # services centraux du framework d'agents (v0.0.3)\n│   │   ├── agent-registry/        # enrôlement, identité, certificats et révocation\n│   │   ├── agent-control/         # présence, capacités et multiplexage des tunnels\n│   │   └── agent-telemetry/       # ingestion, validation et acquittement de télémétrie\n│   ├── access/
+├── agents/                       # binaires distribués proposés en v0.0.3
+│   ├── network-agent/             # passerelle TCP sortante, sans privilège root permanent
+│   └── security-agent/            # collecte hôte en lecture seule, identité séparée
+│
+├── services/                     # microservices backend, un dossier par domaine (§4 docs/architecture/system-overview.md)
+│   ├── agents/                    # services centraux du framework d'agents (v0.0.3)
+│   │   ├── agent-registry/        # enrôlement, identité, certificats et révocation
+│   │   ├── agent-control/         # présence, capacités et multiplexage des tunnels
+│   │   └── agent-telemetry/       # ingestion, validation et acquittement de télémétrie
+│   ├── access/
 │   │   ├── api-gateway/
 │   │   ├── authentication/
 │   │   ├── authorization/
@@ -58,7 +66,8 @@ openbastion/
 │   └── platform/
 │       └── scheduler/
 │
-├── proto/                        # contrats Protobuf (source de vérité des messages)\n│   ├── agent/v1/                  # contrats agent (gRPC streaming, ADR-0103)
+├── proto/                        # contrats Protobuf (source de vérité des messages)
+│   ├── agent/v1/                  # contrats agent (gRPC streaming, ADR-0103)
 │   ├── access/v1/
 │   ├── proxy/v1/
 │   ├── vault/v1/
