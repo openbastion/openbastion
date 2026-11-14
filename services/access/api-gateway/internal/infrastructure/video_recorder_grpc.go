@@ -63,5 +63,12 @@ func (c *VideoRecorderGRPCClient) GetVideoSegment(ctx context.Context, sessionID
 	})
 }
 
+// GetVideoEvents forwards only the verified identity and bounded page request.
+func (c *VideoRecorderGRPCClient) GetVideoEvents(ctx context.Context, sessionID, cursor string, limit int32, actorID string, roles []string) (*recordingv1.GetVideoEventsResponse, error) {
+	return c.client.GetVideoEvents(ctx, &recordingv1.GetVideoEventsRequest{
+		SessionId: sessionID, Cursor: cursor, Limit: limit, ActorUserId: actorID, ActorRoles: roles,
+	})
+}
+
 // Close releases the gRPC connection.
 func (c *VideoRecorderGRPCClient) Close() error { return c.conn.Close() }

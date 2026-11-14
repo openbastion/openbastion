@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/pkg/screenstream"
 	recordingv1 "github.com/openbastion/openbastion/proto/recording/v1"
 	"google.golang.org/grpc"
@@ -21,6 +22,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type videoRecorderTestServer struct {
@@ -32,12 +35,20 @@ type videoRecorderTestServer struct {
 	codecs    []string
 	data      [][]byte
 	complete  bool
+	events    []*recordingv1.RecordVideoEventRequest
 }
 
 func (s *videoRecorderTestServer) CheckReadiness(context.Context, *recordingv1.CheckVideoRecorderReadinessRequest) (*recordingv1.CheckVideoRecorderReadinessResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return &recordingv1.CheckVideoRecorderReadinessResponse{Ready: s.ready}, nil
+}
+
+func (s *videoRecorderTestServer) RecordVideoEvent(_ context.Context, request *recordingv1.RecordVideoEventRequest) (*recordingv1.RecordVideoEventResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, proto.Clone(request).(*recordingv1.RecordVideoEventRequest))
+	return &recordingv1.RecordVideoEventResponse{EventId: request.GetEventId(), OccurredAt: timestamppb.New(time.Now().UTC())}, nil
 }
 
 func (s *videoRecorderTestServer) StreamVideoSegments(stream grpc.BidiStreamingServer[recordingv1.VideoSegment, recordingv1.VideoSegmentAck]) error {
@@ -275,5 +286,40 @@ func TestVideoRecorderClientSendsClipboardTextsInTheSequence(t *testing.T) {
 	defer server.mu.Unlock()
 	if len(server.codecs) != 2 || server.codecs[1] != "clipboard-text-v1" || !bytes.Equal(server.data[1], wire) {
 		t.Fatalf("codecs %v: the Recorder did not get the clipboard text's message", server.codecs)
+	}
+}
+
+func TestVideoRecorderRecordsVaultOnlySecretInjectionMarkerAndWaitsForAck(t *testing.T) {
+	server := &videoRecorderTestServer{ready: true}
+	client := newVideoRecorderTestClient(t, server)
+	if err := client.RecordSecretInput(context.Background(), proxycore.SecretInputEvidence{
+		SessionID: "session-1", Protocol: "vnc", Source: proxycore.SecretInputVault, AccountID: "account-1",
+	}); err != nil {
+		t.Fatalf("RecordSecretInput: %v", err)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if len(server.events) != 1 {
+		t.Fatalf("recorded events = %d, want 1", len(server.events))
+	}
+	event := server.events[0]
+	if event.GetEventId() == "" || event.GetSessionId() != "session-1" || event.GetEventType() != "secret_injection_started" || event.GetProtocol() != "vnc" || event.GetSource() != "vault" || event.GetAccountId() != "account-1" {
+		t.Fatalf("unexpected marker: %+v", event)
+	}
+}
+
+func TestVideoRecorderRejectsNonVaultSecretMarker(t *testing.T) {
+	server := &videoRecorderTestServer{ready: true}
+	client := newVideoRecorderTestClient(t, server)
+	err := client.RecordSecretInput(context.Background(), proxycore.SecretInputEvidence{
+		SessionID: "session-1", Protocol: "rdp", Source: proxycore.SecretInputOperator, AccountID: "account-1",
+	})
+	if !errors.Is(err, ErrVideoRecorderProtocol) {
+		t.Fatalf("operator marker error = %v, want protocol refusal", err)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if len(server.events) != 0 {
+		t.Fatalf("non-Vault source produced %d events", len(server.events))
 	}
 }

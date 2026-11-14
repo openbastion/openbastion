@@ -1334,6 +1334,79 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /sessions/{sessionId}/recording/video/events:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [sessions]
+      summary: Liste les marqueurs de la timeline vidéo d'une session
+      description: >
+        Renvoie les événements latéraux du Video Recorder, sans image ni
+        contenu de secret. Le premier événement pris en charge est
+        `secret_injection_started` provenant du Vault. Les événements sont
+        ordonnés par `occurred_at`, puis `event_id` ; `cursor` est opaque et
+        lié à la session. Chaque page, y compris une page vide, exige
+        `recording:session:read` sur `recording:session:{sessionId}` et un
+        événement `recording.read` écrit avant la lecture. La Gateway injecte
+        exclusivement l'utilisateur et les rôles du jeton vérifié. Limite
+        par défaut 50, maximum 100. Réponse `Cache-Control: no-store`.
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 1024 }
+          description: Curseur opaque renvoyé par la page précédente.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Page d'événements latéraux triée de manière stable.
+          headers:
+            Cache-Control: { schema: { type: string, enum: [no-store] } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      required: [eventId, sessionId, eventType, protocol, source, accountId, occurredAt]
+                      properties:
+                        eventId: { type: string, maxLength: 128 }
+                        sessionId: { type: string }
+                        eventType: { type: string, enum: [secret_injection_started] }
+                        protocol: { type: string, enum: [vnc, rdp] }
+                        source: { type: string, enum: [vault] }
+                        accountId: { type: string, maxLength: 256 }
+                        occurredAt: { type: string, format: date-time }
+                  nextCursor: { type: string, maxLength: 1024 }
+        "400":
+          description: Session, curseur ou limite invalide.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Refus RBAC du Video Recorder.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Enregistrement vidéo inconnu pour cette session.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Authorization, audit ou Video Recorder indisponible ; aucune page n'est servie.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /recordings/search:
     get:
       tags: [sessions]

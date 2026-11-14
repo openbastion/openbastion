@@ -2,6 +2,8 @@ package infrastructure
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -60,6 +62,7 @@ type videoRecorderAck struct {
 }
 
 var _ proxycore.FrameRecorder = (*VideoRecorderClient)(nil)
+var _ proxycore.SecretInputRecorder = (*VideoRecorderClient)(nil)
 var _ proxycore.ScreenRecorderGate = (*VideoRecorderClient)(nil)
 
 // NewVideoRecorderClient creates a service-identity-pinned gRPC client. Plaintext
@@ -103,6 +106,32 @@ func NewVideoRecorderClient(runtime *mtls.Runtime, endpoint string) (*VideoRecor
 		conn:    conn,
 		streams: make(map[string]*videoRecordingStream),
 	}, nil
+}
+
+// RecordSecretInput writes the vault-only timeline marker and waits for the
+// Video Recorder's durable acknowledgement before the caller may type the secret.
+func (c *VideoRecorderClient) RecordSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
+	if c == nil || c.client == nil || ctx == nil || !usableVideoSessionID(evidence.SessionID) ||
+		evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" ||
+		(evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+		return ErrVideoRecorderProtocol
+	}
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Errorf("%w: generating video event id", ErrVideoRecorderUnavailable)
+	}
+	eventID := hex.EncodeToString(raw[:])
+	response, err := c.client.RecordVideoEvent(ctx, &recordingv1.RecordVideoEventRequest{
+		EventId: eventID, SessionId: evidence.SessionID, EventType: "secret_injection_started",
+		Protocol: evidence.Protocol, Source: "vault", AccountId: evidence.AccountID,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: recording secret injection marker", ErrVideoRecorderUnavailable)
+	}
+	if response == nil || response.GetEventId() != eventID || response.GetOccurredAt() == nil || response.GetOccurredAt().CheckValid() != nil {
+		return ErrVideoRecorderProtocol
+	}
+	return nil
 }
 
 // Ready proves the Video Recorder can accept a session before the proxy spends
