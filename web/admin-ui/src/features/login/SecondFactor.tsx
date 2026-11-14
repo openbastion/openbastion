@@ -4,6 +4,7 @@ import { Notice } from "../../shared/Notice";
 import { Credentials, register, sign } from "../../shared/webauthn";
 import { Challenge } from "./sources";
 import { Button } from "../../shared/ui/Button";
+import { useAppTranslation } from "../../shared/i18n";
 
 // The second step of a login whose password was right, when its roles require a second factor
 // (ADR-0062, ADR-0065): a security key or the code of the authenticator application — whichever
@@ -23,6 +24,7 @@ export function SecondFactor({
   onCancel: () => void;
   credentials?: Credentials;
 }) {
+  const { t } = useAppTranslation();
   const [code, setCode] = useState("");
   const [enrollmentCode, setEnrollmentCode] = useState("");
   const [enrollment, setEnrollment] = useState<{ secret: string; otpauthUri: string } | null>(null);
@@ -92,9 +94,9 @@ export function SecondFactor({
   }
 
   const codeForm = (
-    <form className="ob-form-fields" onSubmit={verify} aria-label="Code du second facteur">
+    <form className="ob-form-fields" onSubmit={verify} aria-label={t("secondFactor.codeFormAria")}>
       <label>
-        Code de l'application d'authentification
+        {t("secondFactor.codeLabel")}
         <input
           name="code"
           inputMode="numeric"
@@ -107,35 +109,35 @@ export function SecondFactor({
         />
       </label>
       <Button type="submit" variant="primary" disabled={busy || code.length !== 6}>
-        Valider
+        {t("secondFactor.validate")}
       </Button>
     </form>
   );
 
   return (
-    <section className="second-factor" aria-label="Second facteur">
+    <section className="second-factor" aria-label={t("secondFactor.aria")}>
       {challenge.kind === "required" && (
         <>
-          <p className="ob-hint login-sub">{key && !totp ? "Votre rôle demande votre clé de sécurité." : "Votre rôle demande un second facteur."}</p>
+          <p className="ob-hint login-sub">{key && !totp ? t("secondFactor.keyOnly") : t("secondFactor.factorRequired")}</p>
           {key && !adding && (
             <>
               <Button variant="primary" onClick={useKey} disabled={busy}>
-                Utiliser ma clé de sécurité
+                {t("secondFactor.useKey")}
               </Button>
               <Button onClick={() => setAdding(true)} disabled={busy}>
-                Ajouter une clé de secours
+                {t("secondFactor.addKey")}
               </Button>
             </>
           )}
           {key && adding && (
-            <form className="ob-form-fields" onSubmit={addKey} aria-label="Ajout d'une clé de secours">
-              <p className="ob-hint login-sub">Votre clé actuelle signera d'abord ; puis le navigateur enregistrera la nouvelle. Il faut un code d'enrôlement d'un administrateur.</p>
+            <form className="ob-form-fields" onSubmit={addKey} aria-label={t("secondFactor.addKeyAria")}>
+              <p className="ob-hint login-sub">{t("secondFactor.addKeyHint")}</p>
               <label>
-                Code d'enrôlement
+                {t("secondFactor.enrollmentCode")}
                 <input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
               </label>
               <Button type="submit" variant="primary" disabled={busy || !enrollmentCode}>
-                Signer avec ma clé, puis ajouter la nouvelle
+                {t("secondFactor.signThenAdd")}
               </Button>
             </form>
           )}
@@ -143,37 +145,35 @@ export function SecondFactor({
         </>
       )}
       {challenge.kind === "enrollment_required" && !enrollment && (
-        <form className="ob-form-fields" onSubmit={(e) => (e.preventDefault(), enroll(totp ? "totp" : "webauthn"))} aria-label="Enrôlement du second facteur">
+        <form className="ob-form-fields" onSubmit={(e) => (e.preventDefault(), enroll(totp ? "totp" : "webauthn"))} aria-label={t("secondFactor.enrollAria")}>
           <p className="ob-hint login-sub">
-            {key && !totp
-              ? "Votre rôle demande une clé de sécurité, que ce compte n'a pas encore. Un administrateur vous a remis un code d'enrôlement."
-              : "Votre rôle demande un second facteur, que ce compte n'a pas encore. Un administrateur vous a remis un code d'enrôlement."}
+            {key && !totp ? t("secondFactor.enrollKeyOnly") : t("secondFactor.enrollFactor")}
           </p>
           <label>
-            Code d'enrôlement
+            {t("secondFactor.enrollmentCode")}
             <input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
           </label>
           {key && (
             <Button variant="primary" onClick={() => enroll("webauthn")} disabled={busy || !enrollmentCode}>
-              Enrôler une clé de sécurité
+              {t("secondFactor.enrollKey")}
             </Button>
           )}
           {totp && (
             <Button type="submit" variant={key ? "secondary" : "primary"} disabled={busy}>
-              Recevoir le secret
+              {t("secondFactor.receiveSecret")}
             </Button>
           )}
         </form>
       )}
       {challenge.kind === "enrollment_required" && enrollment && (
         <>
-          <p className="ob-hint login-sub">Ajoutez ce secret à votre application d'authentification, puis saisissez le code qu'elle affiche. Il n'est montré qu'une fois.</p>
+          <p className="ob-hint login-sub">{t("secondFactor.secretHint")}</p>
           <dl className="ob-detail-list enrollment">
-            <dt>Secret</dt>
+            <dt>{t("secondFactor.secret")}</dt>
             <dd>
               <code>{enrollment.secret}</code>
             </dd>
-            <dt>URI</dt>
+            <dt>{t("secondFactor.uri")}</dt>
             <dd>
               <code>{enrollment.otpauthUri}</code>
             </dd>
@@ -182,7 +182,7 @@ export function SecondFactor({
         </>
       )}
       <Button onClick={onCancel} disabled={busy}>
-        Recommencer
+        {t("secondFactor.restart")}
       </Button>
       <Notice error={error} />
     </section>

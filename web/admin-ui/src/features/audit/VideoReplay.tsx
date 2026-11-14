@@ -4,6 +4,7 @@ import { useSignedIn } from "../../shared/session";
 import { FormCard } from "../../shared/ui/FormCard";
 import { Frame, framesOf, paintFrame, ReplayPainter, UnreadableSegment } from "./replayFrames";
 import { ReplayControls } from "./ReplayControls";
+import { useAppTranslation } from "../../shared/i18n";
 
 // The replay of a graphical session (ADR-0071, ADR-0088, ADR-0092): the very frames the Video
 // Recorder acknowledged, in order, at the pace they were recorded. Segments are read as the replay
@@ -42,14 +43,12 @@ const browserDeps: ReplayDeps = {
 
 type End = "more" | "sealed" | "interrupted" | "memory";
 
-const endText: Record<End, string> = {
-  more: "",
-  sealed: "Fin de l'enregistrement, scellé à la fin de la session.",
-  interrupted: "Enregistrement interrompu : la session s'est arrêtée sans marqueur de fin.",
-  memory: "Limite de mémoire de la relecture atteinte : la suite n'est pas chargée.",
-};
+function endTextFor(end: End, translate: (key: string) => string): string {
+  return end === "more" ? "" : translate(`replay.end.${end}`);
+}
 
 export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
+  const { t, i18n } = useAppTranslation();
   const { api } = useSignedIn();
   const [sessionId, setSessionId] = useState("");
   const [opened, setOpened] = useState<string>();
@@ -93,12 +92,12 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
       } else {
         setPlaying(false);
         setEnd("interrupted");
-        setError(err instanceof UnreadableSegment ? new Error("Le segment reçu n'est pas valide : la relecture s'arrête là.") : err);
+        setError(err instanceof UnreadableSegment ? new Error(t("replay.errors.segment")) : err);
       }
     } finally {
       if (gen === generation.current) setLoading(false);
     }
-  }, [api]);
+  }, [api, t]);
 
   async function open(e: FormEvent) {
     e.preventDefault();
@@ -137,13 +136,13 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
       () => {
         if (!current) return;
         setPlaying(false);
-        setError(new Error("Une image enregistrée ne se décode pas : la relecture s'arrête là."));
+        setError(new Error(t("replay.errors.frame")));
       },
     );
     return () => {
       current = false;
     };
-  }, [shown, deps]);
+  }, [shown, deps, t]);
 
   // Reading ahead, a few frames before the end of what is loaded.
   useEffect(() => {
@@ -172,29 +171,33 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   return (
     <>
       <FormCard
-        label="Relire l'écran d'une session"
-        title="Écran d'une session RDP ou VNC"
-        hint="Chaque segment relu est un événement d'audit à votre nom ; la suite n'est lue qu'au fil de la relecture."
-        submitLabel="Relire l'écran"
+        label={t("replay.form.label")}
+        title={t("replay.form.title")}
+        hint={t("replay.form.hint")}
+        submitLabel={t("replay.form.submit")}
         onSubmit={open}
         error={error}
       >
         <label>
-          Session de l'écran
+          {t("replay.form.session")}
           <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
         </label>
       </FormCard>
-      {loading && !frame ? <p className="ob-empty-state" role="status">Chargement des images enregistrées…</p> : null}
+      {loading && !frame ? <p className="ob-empty-state" role="status">{t("replay.loading")}</p> : null}
       {frame ? (
-        <section className="ob-surface ob-panel video-replay-card" aria-label="Relecture vidéo de la session">
-          <canvas ref={canvas} className="screen-canvas" role="img" aria-label="Image enregistrée de l'écran de la session, non lisible par un lecteur d'écran" />
+        <section className="ob-surface ob-panel video-replay-card" aria-label={t("replay.cardAria")}>
+          <canvas ref={canvas} className="screen-canvas" role="img" aria-label={t("replay.canvasAria")} />
           {transfers.length > 0 ? (
-            <section className="screen-clipboard" aria-label="Presse-papiers enregistré">
+            <section className="screen-clipboard" aria-label={t("replay.clipboardAria")}>
               <ul className="screen-clipboard-history">
-                {transfers.map((t) => t.kind === "clipboard" ? (
-                  <li key={t.sequence} aria-current={t === frame ? "true" : undefined}>
-                    <span>{t.direction === "to-target" ? "Collé dans la cible" : "Copié depuis la cible"}, à {t.at.toLocaleTimeString("fr-FR")}</span>
-                    <pre>{t.text}</pre>
+                {transfers.map((transfer) => transfer.kind === "clipboard" ? (
+                  <li key={transfer.sequence} aria-current={transfer === frame ? "true" : undefined}>
+                    <span>
+                      {transfer.direction === "to-target" ? t("screen.pastedToTarget") : t("screen.copiedFromTarget")}
+                      {", "}
+                      {t("replay.at", { time: transfer.at.toLocaleTimeString(i18n.language) })}
+                    </span>
+                    <pre>{transfer.text}</pre>
                   </li>
                 ) : null)}
               </ul>
@@ -207,7 +210,7 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
             loaded={frames.length}
             sequence={frame.sequence}
             at={frame.at}
-            endText={end === "more" && loading ? "Lecture du segment suivant…" : endText[end]}
+            endText={end === "more" && loading ? t("replay.readingNext") : endTextFor(end, t)}
             onPlay={() => setPlaying((p) => !p)}
             onStep={(delta) => {
               setPlaying(false);
