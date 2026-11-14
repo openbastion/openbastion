@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package openbastion.agent.v1;
+option go_package = "github.com/openbastion/openbastion/proto/agent/v1;agentv1";
+
+// The mTLS certificate is authoritative; agent_id is only a consistency assertion.
+message AgentRef {
+  string agent_id = 1;
+  string site_id = 2;
+}
+enum TunnelProtocol {
+  TUNNEL_PROTOCOL_UNSPECIFIED = 0;
+  TUNNEL_PROTOCOL_TCP = 1;
+}
