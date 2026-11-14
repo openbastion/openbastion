@@ -4451,6 +4451,18 @@ Pour trouver les causes de l'instabilité (cas B, machine perdue après la déco
 
 **Premier essai** (run 43506332714) : le moniteur QEMU n'écoute pas sur TCP 7100 (« Connection refused »), et la liste des ports montre la console VNC sur 5900. D'où ce second essai. Le client est éprouvé contre un serveur RFB factice : pixels relus exacts.
 
+## 2026-11-14 — CI : le schéma SBOM ne se télécharge plus
+
+Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un réseau coupé, pas sur une vulnérabilité :
+- **Cause** : le schéma CycloneDX 1.7 copié dans `third_party/` renvoie à `spdx.schema.json`, que `jsonschema` téléchargeait depuis `cyclonedx.org` pendant le job (« Connection reset by peer »).
+- **Correctif** :
+  - les trois schémas auxquels il renvoie (`spdx`, `cryptography-defs`, `jsf-0.82`) sont copiés depuis la même révision amont (`6470e34`), à laquelle le schéma principal a bien l'empreinte déjà enregistrée ;
+  - le script vérifie les quatre empreintes et résout toute référence depuis ces fichiers, par un registre sans téléchargement : une référence inconnue fait échouer le contrôle.
+- **Prouvé** :
+  - le test du script tourne derrière un proxy qui ne répond pas ;
+  - un identifiant SPDX connu passe, un inconnu est refusé ;
+  - contre-épreuve : derrière un proxy qui coupe les connexions, l'ancien script échoue exactement comme en CI.
+
 ## 2026-11-14 — ADR-0101, incrément 2 : surfaces, cache et trames ; RemoteFX progressif décidé
 
 - **Décision, par délégation du propriétaire** (« choisis les options qui te semble les plus recommandées ») : une image en RemoteFX progressif sera décodée, et enregistrée telle qu'elle a été montrée. ADR-0070 tient entre ce que voit l'opérateur et ce que relit l'auditeur, mais plus à l'octet de la cible, comme à 16 bpp aujourd'hui. Elle est renversable ; ses alternatives sont dans ADR-0101.
