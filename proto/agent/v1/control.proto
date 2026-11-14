@@ -18,7 +18,7 @@ message AgentHeartbeat {
   google.protobuf.Timestamp observed_at = 1;
   uint64 last_telemetry_sequence = 2;
   uint32 active_tunnels = 3;
-  string health = 4;                  // bounded stable code, never free-form logs
+  AgentHealth health = 4;              // bounded enum, never free-form logs
 }
 message TunnelOpened { string tunnel_id = 1; string session_id = 2; }
 message TunnelData {
