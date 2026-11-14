@@ -4450,3 +4450,15 @@ Décision du propriétaire : « Oui, code dédié ». Le contrat écran gagne le
 Pour trouver les causes de l'instabilité (cas B, machine perdue après la déconnexion, session sans image après un redimensionnement), la CI Windows prend à chaque passage une image de l'écran de la machine telle que QEMU la montre. Elle la prend sur la console VNC de QEMU, dans le conteneur dockur (port 5900, sans authentification, jamais publié). `vnc_snapshot.py`, en bibliothèque standard seulement, demande une image entière en Raw et l'écrit dans l'artefact sous `guest-screen.png`. Ce n'est pas `pkg/vnc`, qui refuse par principe tout VNC sans VeNCrypt. L'étape relève aussi, dans la ligne de commande de QEMU, où est son moniteur, et ne fait échouer aucun job.
 
 **Premier essai** (run 43506332714) : le moniteur QEMU n'écoute pas sur TCP 7100 (« Connection refused »), et la liste des ports montre la console VNC sur 5900. D'où ce second essai. Le client est éprouvé contre un serveur RFB factice : pixels relus exacts.
+
+## 2026-11-14 — CI : le schéma SBOM ne se télécharge plus
+
+Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un réseau coupé, pas sur une vulnérabilité :
+- **Cause** : le schéma CycloneDX 1.7 copié dans `third_party/` renvoie à `spdx.schema.json`, que `jsonschema` téléchargeait depuis `cyclonedx.org` pendant le job (« Connection reset by peer »).
+- **Correctif** :
+  - les trois schémas auxquels il renvoie (`spdx`, `cryptography-defs`, `jsf-0.82`) sont copiés depuis la même révision amont (`6470e34`), à laquelle le schéma principal a bien l'empreinte déjà enregistrée ;
+  - le script vérifie les quatre empreintes et résout toute référence depuis ces fichiers, par un registre sans téléchargement : une référence inconnue fait échouer le contrôle.
+- **Prouvé** :
+  - le test du script tourne derrière un proxy qui ne répond pas ;
+  - un identifiant SPDX connu passe, un inconnu est refusé ;
+  - contre-épreuve : derrière un proxy qui coupe les connexions, l'ancien script échoue exactement comme en CI.
