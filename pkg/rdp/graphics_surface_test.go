@@ -306,3 +306,38 @@ func FuzzRDPGraphicsCompositor(f *testing.F) {
 		}
 	})
 }
+
+// A frame's change, as the framebuffer draws it: the rectangle's RGBA pixels, on the output's size.
+func TestGraphicsSurfaces_TheFrameAsAnUpdate(t *testing.T) {
+	c := NewRDPGraphicsCompositor()
+	if _, ok := c.FrameUpdate(RDPGraphicsFrame{ID: 1}); ok {
+		t.Fatal("an update before the output exists")
+	}
+	mustApply(t, c, resetGraphics(8, 6), createSurface(1, 8, 6, rdpGraphicsPixelXRGB), mapSurface(1, 0, 0), startFrame(1),
+		solidFill(1, [4]byte{0x10, 0x20, 0x30, 0}, [4]int{2, 1, 5, 3}))
+	frame := mustApply(t, c, endFrame(1))[0]
+	update, ok := c.FrameUpdate(frame)
+	if !ok || update.DesktopWidth != 8 || update.DesktopHeight != 6 || len(update.Rectangles) != 1 {
+		t.Fatalf("update %+v, %v", update, ok)
+	}
+	r := update.Rectangles[0]
+	if r.X != 0 || r.Y != 0 || r.Width != 8 || r.Height != 6 || len(r.Pixels) != 8*6*4 {
+		t.Fatalf("the first frame covers the surface mapped: %+v", r)
+	}
+	if got := [4]byte(r.Pixels[(1*8+2)*4:]); got != [4]byte{0x30, 0x20, 0x10, 0xff} {
+		t.Fatalf("pixel (2, 1) %v", got)
+	}
+	// Drawn by the framebuffer: the same pixel.
+	fb, err := NewRDPFramebuffer(8, 6)
+	if err != nil || fb.Draw(update) != nil {
+		t.Fatalf("drawn: %v", err)
+	}
+	mustApply(t, c, startFrame(2), solidFill(1, [4]byte{}, [4]int{4, 4, 6, 5}))
+	frame = mustApply(t, c, endFrame(2))[0]
+	if update, _ = c.FrameUpdate(frame); update.Rectangles[0].X != 4 || update.Rectangles[0].Width != 2 || update.Rectangles[0].Height != 1 {
+		t.Fatalf("the second frame's change: %+v", update.Rectangles[0])
+	}
+	if _, ok := c.FrameUpdate(RDPGraphicsFrame{ID: 3}); ok {
+		t.Fatal("an update of a frame that changed nothing")
+	}
+}

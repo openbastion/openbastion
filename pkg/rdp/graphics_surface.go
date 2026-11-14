@@ -507,3 +507,26 @@ func MarshalGraphicsFrameAcknowledge(frameID, totalFramesDecoded uint32) []byte 
 	body = binary.LittleEndian.AppendUint32(body, totalFramesDecoded)
 	return marshalGraphicsPDU(rdpGraphicsFrameAcknowledge, body)
 }
+
+// FrameUpdate is the part of the output a frame changed, as a bitmap update the framebuffer draws
+// (ADR-0101 increment 5): one rectangle of RGBA pixels, on a desktop of the output's size, which a
+// ResetGraphics may have changed. ok is false when the frame changed nothing, or before the output
+// exists.
+func (c *RDPGraphicsCompositor) FrameUpdate(frame RDPGraphicsFrame) (update RDPBitmapUpdate, ok bool) {
+	if c.output == nil {
+		return update, false
+	}
+	r := frame.Changed.Intersect(c.output.Rect)
+	if r.Empty() {
+		return update, false
+	}
+	pixels := make([]byte, 0, r.Dx()*r.Dy()*4)
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		pixels = append(pixels, c.output.Pix[c.output.PixOffset(r.Min.X, y):c.output.PixOffset(r.Max.X, y)]...)
+	}
+	w, h := c.output.Rect.Dx(), c.output.Rect.Dy()
+	return RDPBitmapUpdate{
+		Rectangles:   []RDPBitmapRectangle{{X: uint16(r.Min.X), Y: uint16(r.Min.Y), Width: uint16(r.Dx()), Height: uint16(r.Dy()), Pixels: pixels}},
+		DesktopWidth: uint16(w), DesktopHeight: uint16(h),
+	}, true
+}

@@ -190,6 +190,15 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
 - **Contre FreeRDP 3** : 183 trames en 10 s décodées sans faute. FreeRDP emploie l'ondelette d'origine ; on voit aux coins des tuiles les artefacts que la spécification lui attribue (3.2.8.1.2.2).
 - **Contre les cinq Windows** (CI de la PR #199) : plus aucune image non dessinée, et aucune faute. La CI dépose désormais les messages bruts du canal graphique dans l'artefact (`graphics-messages/`). C'est en les rejouant en local que l'erreur de couleur de NSCodec a été trouvée.
 
+### Incrément 5 — le pipeline au proxy écran, derrière `SCREEN_RDPGFX` (14 novembre 2026)
+
+- **Interrupteur** : `SCREEN_RDPGFX`, **éteint par défaut**, lu par `switchFromEnv` comme les autres. Allumé, le codec RDP annonce `drdynvc` et le pipeline graphique, et ouvre son canal à côté du contrôle d'affichage.
+- **Raccord** : les messages du canal sont lus par le goroutine qui lit l'écran. Ce lecteur tourne désormais à part (`rdpGraphics`), et les mises à jour bitmap comme les trames du pipeline arrivent au lecteur du proxy dans l'ordre où elles sont faites. Une trame terminée devient une mise à jour bitmap ordinaire : un rectangle RGBA de la zone changée, sur un bureau de la taille de la sortie (`FrameUpdate`). Elle est acquittée dès qu'elle est remise. Le relais, les images partielles, le redimensionnement et l'enregistrement ne voient pas de différence. Une cible qui n'ouvre pas le canal continue en mises à jour bitmap.
+- **Prouvé sans réseau** : la session Windows Server 2022 de la référence (17 messages) passe par les fonctions de rappel du moteur, puis par le framebuffer du proxy. L'écran qu'il encode est celui du compositeur, au pixel près. Chacune des 9 trames terminées est acquittée, et les capacités sont annoncées à l'ouverture.
+- **Contre FreeRDP 3** (`TestRDPInterop_ScreenThroughTheGraphicsPipeline`) : le codec complet, tel que le proxy le lance. Les 240 trames du pipeline donnent 4 images montrées, et les touches tapées dans xterm changent l'écran.
+- **Contre les cinq Windows** : `TestRDPWindows_ScreenThroughTheGraphicsPipeline` fait la même chose dans Notepad, pipeline allumé puis éteint, et compare les octets reçus de la cible. Les écrans vont dans l'artefact (`graphics-on-*.png`, `graphics-off-*.png`). Le chiffre est dans la CI de la PR.
+- **Reste avant d'allumer `SCREEN_RDPGFX` par défaut** : la vérification dans un vrai navigateur contre les cinq Windows, l'enregistrement relu, et la décision du propriétaire, comme pour ADR-0095 et ADR-0096.
+
 ## Ce qui demande ton go
 
 - l'option A et son ordre ;

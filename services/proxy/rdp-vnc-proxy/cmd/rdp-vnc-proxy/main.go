@@ -118,6 +118,12 @@ func runService() {
 	if clipboard {
 		listener.Clipboard = audit
 	}
+	// The graphics pipeline of RDP (ADR-0101): off unless said "true", until it is proven in a real
+	// browser against the five Windows targets; anything but "true" or "false" stops the service.
+	graphicsPipeline, err := switchFromEnv("SCREEN_RDPGFX", os.Getenv("SCREEN_RDPGFX"), false)
+	if err != nil {
+		log.Fatalf("rdp-vnc-proxy: %v", err)
+	}
 	vncCodec := &engine.VNCCodec{
 		TLSRoots:      roots,
 		DialTimeout:   time.Duration(boundedIntEnv("VNC_CONNECT_TIMEOUT_SECONDS", 10, 1, 120)) * time.Second,
@@ -140,11 +146,12 @@ func runService() {
 			TLSRoots:    roots,
 			DialTimeout: time.Duration(boundedIntEnv("RDP_CONNECT_TIMEOUT_SECONDS", 15, 1, 120)) * time.Second,
 			// The cadence VNC has (ADR-0071 §8): at most one frame encoded and recorded a interval.
-			FrameInterval: vncCodec.FrameInterval,
-			DrawPointer:   drawPointer,
-			PartialFrames: partialFrames,
-			Resize:        resize,
-			Clipboard:     clipboard,
+			FrameInterval:    vncCodec.FrameInterval,
+			DrawPointer:      drawPointer,
+			PartialFrames:    partialFrames,
+			Resize:           resize,
+			Clipboard:        clipboard,
+			GraphicsPipeline: graphicsPipeline,
 		})
 		rdpState = "RDP enabled"
 	}
@@ -152,7 +159,7 @@ func runService() {
 	defer stop()
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- rt.ListenAndServe(":"+port, server.Routes(), interfaces.CallerRules()) }()
-	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092); resize %t (SCREEN_RESIZE, ADR-0095); clipboard %t (SCREEN_CLIPBOARD, ADR-0096)", port, rdpState, drawPointer, partialFrames, resize, clipboard)
+	log.Printf("rdp-vnc-proxy: control and screen WebSocket on :%s; VNC enabled; %s (RDP_ENABLED, ADR-0088); pointer drawn %t (SCREEN_DRAW_POINTER, ADR-0091); partial frames %t (SCREEN_PARTIAL_FRAMES, ADR-0092); resize %t (SCREEN_RESIZE, ADR-0095); clipboard %t (SCREEN_CLIPBOARD, ADR-0096); graphics pipeline %t (SCREEN_RDPGFX, ADR-0101)", port, rdpState, drawPointer, partialFrames, resize, clipboard, graphicsPipeline)
 	log.Printf("rdp-vnc-proxy: Video Recorder %s; target roots loaded from configured PEM file", recorderURL)
 	select {
 	case <-ctx.Done():
