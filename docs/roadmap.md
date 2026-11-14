@@ -169,7 +169,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 | Desktop Client (Tauri) | | ✅ | |
 | CLI | ✅ | | |
 | SDK Go | | ✅ | |
-| SDK Python / Java / JavaScript | | | ✅ |\n| Agent Registry / Enrollment | | | Conception v0.0.3 |\n| Agent Control / Network Agent | | | Contrats et architecture v0.0.3 |\n| Agent Telemetry / Security Agent | | | Contrats et architecture v0.0.3 |
+| SDK Python / Java / JavaScript | | | ✅ |
 
 ## 7. Risques de séquencement
 
