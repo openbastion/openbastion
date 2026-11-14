@@ -48,6 +48,9 @@ const (
 	rdpKeyboardEnhanced         = uint32(4)
 	rdpKeyboardFunctionKeys     = uint32(12)
 	mcsGlobalChannelID          = uint16(1003)
+
+	// rdpClientSupportGraphics is RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL (MS-RDPBCGR 2.2.1.3.2).
+	rdpClientSupportGraphics = uint16(0x0100)
 )
 
 // ErrMCSConnection reports a malformed or unsupported MCS/GCC connection exchange.
@@ -82,6 +85,10 @@ type MCSClientSettings struct {
 	// ClipboardChannel announces the static channel of the clipboard, cliprdr, and joins it
 	// (ADR-0096): text only, in each direction its session allows. Off, it is not announced.
 	ClipboardChannel bool
+	// GraphicsPipeline sets RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL in the early capabilities: the
+	// target may then open the graphics pipeline (MS-RDPEGFX) on drdynvc, and stops sending bitmap
+	// updates once it does (ADR-0101). It needs DynamicChannels. Off, the flag stays 0, as before.
+	GraphicsPipeline bool
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches
@@ -103,7 +110,7 @@ type MCSConnectResponse struct {
 func MarshalMCSConnectInitial(settings MCSClientSettings) ([]byte, error) {
 	if settings.Timeout < 0 || settings.DesktopWidth == 0 || settings.DesktopHeight == 0 ||
 		uint64(settings.DesktopWidth)*uint64(settings.DesktopHeight) > maxRDPDesktopArea ||
-		!validRDPClientName(settings.ClientName) {
+		!validRDPClientName(settings.ClientName) || (settings.GraphicsPipeline && !settings.DynamicChannels) {
 		return nil, ErrMCSConnection
 	}
 
@@ -229,7 +236,11 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	put32(0) // serialNumber
 	put16(rdpHighColor24BPP)
 	put16(rdpSupportedColorDepths)
-	put16(rdpClientErrInfo | rdpClientWant32BPP)
+	early := rdpClientErrInfo | rdpClientWant32BPP
+	if settings.GraphicsPipeline {
+		early |= rdpClientSupportGraphics
+	}
+	put16(early)
 	productID := utf16.Encode([]rune("OpenBastion"))
 	for _, unit := range productID {
 		put16(unit)
