@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -16,14 +17,15 @@ import (
 // (proto/proxy/v1/proxy_control.proto, docs/api/grpc/README.md §4) over JSON/HTTP — see
 // /NOTES_SANDBOX.md for why HTTP stands in for gRPC here.
 //
-// This is the endpoint the Session Broker calls once it has already
-// authorized a Vault scope (VaultAuthorization.AuthorizeScope). Note the
-// Session Broker built earlier in this project does not call this
-// endpoint yet — it still exposes its own internal/v1/authorize-connection
-// as a stand-in — wiring the two together is the next increment.
+// The Session Broker calls this endpoint only after the action-bound MFA grant
+// is consumed and a one-use Vault scope has been authorized. The proxy fetches
+// the credential directly from Vault; the Broker never receives secret bytes.
 type HTTPServer struct {
 	pending       *infrastructure.PendingSessions
 	proxyEndpoint string
+	SecretInputs  *infrastructure.SecretInputRegistry
+	Fetcher       *proxycore.CredentialFetcher
+	SecretAuditor proxycore.SecretInputAuditor
 
 	// Admit, when set, is asked before a ticket is issued: a session the
 	// recording policy would refuse is refused here, with a 503, rather than
@@ -63,6 +65,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/v1/establish-session", s.handleEstablishSession)
 	mux.HandleFunc("/internal/v1/revoke-session", s.handleRevokeSession)
+	mux.HandleFunc("/internal/v1/inject-vault-secret", s.handleInjectVaultSecret)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -151,6 +154,54 @@ func (s *HTTPServer) handleEstablishSession(w http.ResponseWriter, r *http.Reque
 		ProxyEndpoint:    s.proxyEndpoint,
 		ConnectionTicket: ticket,
 	})
+}
+
+type injectVaultSecretRequest struct {
+	SessionID  string `json:"session_id"`
+	AccountID  string `json:"account_id"`
+	ScopeToken string `json:"vault_scope_token"`
+}
+
+// handleInjectVaultSecret is available only to the Session Broker over mTLS.
+// Secret material is fetched directly from Vault by this proxy and never
+// traverses the Broker or Gateway.
+func (s *HTTPServer) handleInjectVaultSecret(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req injectVaultSecretRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || req.SessionID == "" || req.AccountID == "" || req.ScopeToken == "" {
+		http.Error(w, "invalid secret injection request", http.StatusBadRequest)
+		return
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "invalid secret injection request", http.StatusBadRequest)
+		return
+	}
+	if s.SecretInputs == nil || s.Fetcher == nil || s.SecretAuditor == nil {
+		http.Error(w, "secret injection unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	err := s.SecretInputs.InjectVaultScope(r.Context(), req.SessionID, req.AccountID, req.ScopeToken, s.Fetcher, s.SecretAuditor)
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, infrastructure.ErrSecretSessionInactive):
+		http.Error(w, "session input is not active", http.StatusNotFound)
+	case errors.Is(err, infrastructure.ErrSecretSessionAmbiguous):
+		http.Error(w, "session has multiple active input streams", http.StatusConflict)
+	case errors.Is(err, proxycore.ErrSecretInjectionInvalid):
+		http.Error(w, "secret injection refused", http.StatusConflict)
+	default:
+		// Do not reflect upstream Vault, audit or recorder diagnostics to the caller.
+		log.Printf("ssh-proxy: secret injection refused for session %s: %v", req.SessionID, err)
+		http.Error(w, "secret injection unavailable", http.StatusServiceUnavailable)
+	}
 }
 
 type revokeSessionRequest struct {

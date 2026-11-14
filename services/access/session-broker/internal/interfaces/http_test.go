@@ -66,6 +66,10 @@ func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 
 type failingProxy struct{ err error }
 
+func (f failingProxy) InjectVaultSecret(context.Context, string, string, string, string) error {
+	return f.err
+}
+
 func (p failingProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool, domain.ClipboardRights) (string, string, error) {
 	return "", "", p.err
 }

@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package openbastion.authentication.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/openbastion/openbastion/proto/authentication/v1;authenticationv1";
+
+// Internal HTTP/JSON contract carried over mutual TLS (ADR-0050).
+// Only the Session Broker certificate may call these operations (ADR-0010).
+service MFAActionStepUp {
+  // Starts a fresh second-factor ceremony bound to one privileged session action.
+  rpc StartMFAActionStepUp(StartMFAActionStepUpRequest) returns (StartMFAActionStepUpResponse);
+  // Consumes the ceremony and returns a short-lived, single-use action grant, never a login token.
+  rpc VerifyMFAActionStepUp(VerifyMFAActionStepUpRequest) returns (VerifyMFAActionStepUpResponse);
+  // Atomically consumes the grant for the same context; a replay is refused.
+  rpc ConsumeMFAActionGrant(ConsumeMFAActionGrantRequest) returns (ConsumeMFAActionGrantResponse);
+}
+
+message StartMFAActionStepUpRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string account_id = 3;
+  string protocol = 4; // ssh, vnc, rdp
+  string action = 5;   // secret:inject or secret:paste
+}
+
+message StartMFAActionStepUpResponse {
+  string challenge = 1;
+  int32 expires_in = 2;
+  repeated string factors = 3; // totp, webauthn
+  google.protobuf.Struct webauthn = 4; // omitted when TOTP is the only available factor
+}
+
+message VerifyMFAActionStepUpRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string account_id = 3;
+  string protocol = 4;
+  string action = 5;
+  string challenge = 6;
+  string factor = 7; // totp or webauthn
+  string totp_code = 8;
+  google.protobuf.Struct webauthn_response = 9;
+}
+
+message VerifyMFAActionStepUpResponse {
+  string grant = 1; // opaque; shown only once to the Session Broker over mTLS
+  int32 expires_in = 2;
+}
+
+
+message ConsumeMFAActionGrantRequest {
+  openbastion.common.v1.RequestContext context = 1;
+  string session_id = 2;
+  string account_id = 3;
+  string protocol = 4;
+  string action = 5;
+  string grant = 6;
+}
+
+message ConsumeMFAActionGrantResponse {
+  bool consumed = 1;
+}

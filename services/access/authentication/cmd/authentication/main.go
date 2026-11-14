@@ -56,6 +56,7 @@ func runService() {
 		domain.UserRepository
 		domain.LoginAttemptRepository
 		domain.MFARepository
+		domain.MFAActionRepository
 		domain.IssuerBindingRepository
 	}
 	if dsn != "" {
@@ -372,7 +373,10 @@ func configureDirectory(svc *application.AuthenticationService) {
 // configureMFA turns the second factor on (ADR-0062) for the accounts that hold one of
 // MFA_REQUIRED_ROLES; MFA_SECRET_KEY_HEX, which seals the TOTP secrets, goes with it — one without
 // the other stops the service, and neither the key nor a secret is ever written.
-func configureMFA(svc *application.AuthenticationService, repo domain.MFARepository) {
+func configureMFA(svc *application.AuthenticationService, repo interface {
+	domain.MFARepository
+	domain.MFAActionRepository
+}) {
 	rolesVar, strictVar, keyHex := os.Getenv("MFA_REQUIRED_ROLES"), os.Getenv("MFA_PHISHING_RESISTANT_ROLES"), os.Getenv("MFA_SECRET_KEY_HEX")
 	rpID, originsVar := os.Getenv("WEBAUTHN_RP_ID"), os.Getenv("WEBAUTHN_ORIGINS")
 	switch {
@@ -404,7 +408,7 @@ func configureMFA(svc *application.AuthenticationService, repo domain.MFAReposit
 	if err != nil {
 		log.Fatalf("authentication: %v — refusing to start", err)
 	}
-	svc.WithMFA(roles, repo, sealer)
+	svc.WithMFA(roles, repo, sealer).WithMFAAction(repo)
 	if rpID != "" {
 		var origins []string
 		for _, o := range strings.Split(originsVar, ",") {

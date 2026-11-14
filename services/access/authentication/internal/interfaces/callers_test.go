@@ -14,6 +14,12 @@ func TestCallerRules(t *testing.T) {
 		// the Gateway cannot mint users, and nobody but the Gateway can verify tokens
 		mtlstest.Deny("api-gateway", "POST", "/auth/v1/users"),
 		mtlstest.Deny("session-broker", "POST", "/auth/v1/verify"),
+		mtlstest.Allow("session-broker", "POST", "/auth/v1/internal/action-step-up/start"),
+		mtlstest.Allow("session-broker", "POST", "/auth/v1/internal/action-step-up/verify"),
+		mtlstest.Allow("session-broker", "POST", "/auth/v1/internal/action-step-up/consume"),
+		mtlstest.Deny("api-gateway", "POST", "/auth/v1/internal/action-step-up/consume"),
+		mtlstest.Deny("api-gateway", "POST", "/auth/v1/internal/action-step-up/start"),
+		mtlstest.Deny("ssh-proxy", "POST", "/auth/v1/internal/action-step-up/verify"),
 		mtlstest.Deny("ssh-proxy", "POST", "/auth/v1/login"),
 		mtlstest.Deny("admin-cli", "POST", "/auth/v1/login"),
 		mtlstest.Deny("admin-cli", "POST", "/auth/v1/verify"),
@@ -68,6 +74,9 @@ func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 		{Method: "POST", Path: "/auth/v1/mfa/revoke-key"},
 		{Method: "POST", Path: "/auth/v1/mfa/enrollment-codes"},
 		{Method: "POST", Path: "/auth/v1/mfa/reset"},
+		{Method: "POST", Path: "/auth/v1/internal/action-step-up/start"},
+		{Method: "POST", Path: "/auth/v1/internal/action-step-up/verify"},
+		{Method: "POST", Path: "/auth/v1/internal/action-step-up/consume"},
 		{Method: "GET", Path: "/healthz"},
 	})
 }

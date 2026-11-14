@@ -37,3 +37,16 @@ Les deux viennent de la même absence : le Broker ne sait pas qu'il y a plusieur
 - **Diffusion par un bus** (NATS, ADR-0001) : le bus n'existe pas dans le MVP ; une diffusion sans accusé de réception ne permettrait pas de dire « coupé ».
 - **Les proxys interrogent le Broker** (révocations récentes) : la coupure attendrait l'intervalle d'interrogation, et le Broker ne saurait pas quand dire « terminé ».
 - **Un mode « au mieux »** qui termine malgré une instance injoignable : rejeté par ADR-0018 pour la même raison, il rouvre le mensonge qu'il ferme.
+
+## Addendum — 14 novembre 2026 : affinité déterministe pour les actions privilégiées (ADR-0097)
+
+L'injection d'un secret doit atteindre **la même instance** que celle qui détient le shell actif. Une table d'affinité en mémoire dans le Broker ne convient pas : une autre réplique du Broker ne la posséderait pas et une reprise après redémarrage rendrait les actions impossibles. Une table PostgreSQL ajouterait un état de routage et une migration pour un lien que toutes les répliques peuvent calculer.
+
+La règle 3 est donc amendée pour les nouvelles sessions : **rendezvous hashing** (SHA-256 de `session_id || 0x00 || instance_name`, score 64 bits le plus élevé) sur le nom stable de chaque instance (`https://host:port` configuré). Toutes les répliques du Broker ayant la même liste d'instances choisissent le même proxy, indépendamment de l'ordre de la liste. `EstablishSession` et les commandes privilégiées (`InjectVaultSecret`) utilisent ce même choix.
+
+- **Pas de fallback vers une autre instance** si l'instance propriétaire est indisponible. Le Broker échoue fermé : une autre instance ne détient pas le shell, et ne doit jamais recevoir le scope d'injection.
+- La révocation reste demandée à **toutes** les instances, en parallèle, conformément aux règles 4 et 5 inchangées.
+- La modification de la composition du pool peut remapper certaines sessions existantes. Pendant un changement de pool, l'injection de ces sessions peut échouer ; elle ne doit jamais être redirigée vers un proxy qui ne détient pas le shell. Reconnexion sur la nouvelle composition requise.
+- Les noms `ProxyInstance.Name` doivent être stables et uniques ; `NewProxyPool` refuse les noms vides, clients nuls ou doublons.
+
+Cette décision privilégie l'intégrité du routage des opérations sensibles et la cohérence multi-réplicas au-dessus de la disponibilité lors d'une panne d'instance. Le refus d'une connexion sur l'instance propriétaire est préférable à l'émission d'un ticket qui ne pourrait ensuite pas être contrôlé de manière sûre.

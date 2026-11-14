@@ -93,6 +93,9 @@ type ProxyClient interface {
 	// answer means it may still be open, and the Broker must not say it was ended.
 	// It is idempotent: asking again for a session already cut is not an error.
 	RevokeSession(ctx context.Context, protocol, sessionID string, remaining time.Duration) error
+
+	// InjectVaultSecret sends only a one-use scope to the proxy; credential material is fetched there.
+	InjectVaultSecret(ctx context.Context, protocol, sessionID, accountID, scopeToken string) error
 }
 
 // RevocationMargin is added to the time a session has left when the Broker tells the
@@ -134,8 +137,9 @@ type SessionBrokerService struct {
 	accounts AccountLookup
 	// proxy routes each admitted protocol to its own pool; protocol is resolved from
 	// the stored session, never supplied by the operator at attach time.
-	proxy   ProxyClient
-	proxies ProxySelector
+	proxy     ProxyClient
+	proxies   ProxySelector
+	mfaAction MFAActionClient
 
 	// breakGlassMaxMinutes is both the switch and the limit of break-glass
 	// (ADR-0009): zero — the default — means the platform does not grant it at all.

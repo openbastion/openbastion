@@ -2,6 +2,8 @@ package infrastructure
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,65 +21,82 @@ const MaxProxyInstances = 16
 type InstanceClient interface {
 	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error)
 	RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error
+	InjectVaultSecret(ctx context.Context, sessionID, accountID, scopeToken string) error
 }
 
-// ProxyInstance is one proxy, addressed directly: Name is what the log may say of it (scheme and
-// host), Client what the Broker calls it with.
+// ProxyInstance is one proxy, addressed directly. Name is its stable identity within the pool
+// (normally https://host:port), Client is the pinned-mTLS client.
 type ProxyInstance struct {
 	Name   string
 	Client InstanceClient
 }
 
-// ProxyPool implements application.ProxyClient over several instances of one proxy family
-// (ADR-0046). A ticket is issued by one instance, in turn; a revocation is asked of every
-// instance, and is one only if every instance confirms it. The pool does not remember which
-// instance holds what: a connect in flight during a termination meets the revocation memory of
-// the instance it lands on (ADR-0018, rule 5), whichever that is.
+// ProxyPool uses rendezvous hashing on (session ID, instance name). Every Broker replica with
+// the same configured pool therefore selects the same proxy for a session, without a mutable
+// affinity table. The selected instance is the only one used for establish/inject; no fallback
+// is safe because it would make subsequent control operations target a different proxy.
 type ProxyPool struct {
 	instances []ProxyInstance
-	mu        sync.Mutex
-	next      int
 }
 
-// NewProxyPool returns a pool of 1 to MaxProxyInstances instances.
+// NewProxyPool returns a pool of 1 to MaxProxyInstances instances with unique stable names.
 func NewProxyPool(instances []ProxyInstance) (*ProxyPool, error) {
 	if len(instances) == 0 || len(instances) > MaxProxyInstances {
 		return nil, fmt.Errorf("a pool holds 1 to %d proxy instances, got %d", MaxProxyInstances, len(instances))
 	}
-	return &ProxyPool{instances: instances}, nil
+	seen := make(map[string]struct{}, len(instances))
+	for _, in := range instances {
+		if in.Name == "" || in.Client == nil {
+			return nil, fmt.Errorf("proxy instances require a stable name and client")
+		}
+		if _, ok := seen[in.Name]; ok {
+			return nil, fmt.Errorf("duplicate proxy instance name %q", in.Name)
+		}
+		seen[in.Name] = struct{}{}
+	}
+	copyInstances := append([]ProxyInstance(nil), instances...)
+	return &ProxyPool{instances: copyInstances}, nil
 }
 
 // Size is the number of instances.
 func (p *ProxyPool) Size() int { return len(p.instances) }
 
-// EstablishSession asks the instances in turn, each at most once, until one issues a ticket. The
-// endpoint returned is that instance's own: the ticket is good there and nowhere else. If none
-// does, a refusal to record (ADR-0008) is what the caller is told, if any instance said so.
-func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
-	p.mu.Lock()
-	start := p.next
-	p.next = (p.next + 1) % len(p.instances)
-	p.mu.Unlock()
+func (p *ProxyPool) selected(sessionID string) ProxyInstance {
+	var chosen ProxyInstance
+	var highest uint64
+	for i, in := range p.instances {
+		sum := sha256.Sum256([]byte(sessionID + "\x00" + in.Name))
+		score := binary.BigEndian.Uint64(sum[:8])
+		if i == 0 || score > highest {
+			chosen, highest = in, score
+		}
+	}
+	return chosen
+}
 
-	var last, recording error
-	for i := range p.instances {
-		in := p.instances[(start+i)%len(p.instances)]
-		endpoint, ticket, err := in.Client.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard)
-		if err == nil {
-			return endpoint, ticket, nil
-		}
+// EstablishSession asks only the deterministic owner of this session. If it is
+// unavailable the operation fails closed; another instance cannot own the ticket
+// and later receive the session's privileged control commands.
+func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
+	in := p.selected(sessionID)
+	endpoint, ticket, err := in.Client.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard)
+	if err != nil {
 		if errors.Is(err, domain.ErrRecordingUnavailable) {
-			recording = err
+			return "", "", err
 		}
-		last = fmt.Errorf("%s: %w", in.Name, err)
-		if ctx.Err() != nil {
-			break
-		}
+		return "", "", fmt.Errorf("%s: %w", in.Name, err)
 	}
-	if recording != nil {
-		return "", "", recording
+	return endpoint, ticket, nil
+}
+
+// InjectVaultSecret sends the scope to the same deterministic instance that owns
+// the session's ticket, including when another Broker replica handles the request.
+func (p *ProxyPool) InjectVaultSecret(ctx context.Context, sessionID, accountID, scopeToken string) error {
+	in := p.selected(sessionID)
+	if err := in.Client.InjectVaultSecret(ctx, sessionID, accountID, scopeToken); err != nil {
+		return fmt.Errorf("%s: inject vault secret: %w", in.Name, err)
 	}
-	return "", "", last
+	return nil
 }
 
 // RevokeSession asks every instance at once and succeeds only if every one confirms: one that

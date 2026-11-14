@@ -58,6 +58,7 @@ func runService() {
 
 	port := mustEnv("PORT", "8084")
 	authzURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
+	authenticationURL := mustEnv("AUTHENTICATION_URL", rt.DefaultURL("127.0.0.1:8086"))
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
 	sshProxyURLs := proxyURLsFor("SSH_PROXY_URLS", "SSH_PROXY_URL", rt.DefaultURL("127.0.0.1:8085"))
@@ -89,6 +90,7 @@ func runService() {
 	}
 	vaultClient := peer(vaultURL, mtls.PasswordVault)
 	authz := &infrastructure.AuthorizationHTTPClient{BaseURL: authzURL, Client: peer(authzURL, mtls.Authorization)}
+	mfaAction := &infrastructure.MFAActionClient{BaseURL: authenticationURL, Client: peer(authenticationURL, mtls.Authentication)}
 	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
 	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL, Client: vaultClient}
@@ -118,7 +120,8 @@ func runService() {
 
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy).
 		// A granted session ended: the Vault rotates the account if it is post_use (ADR-0037).
-		WithAfterUseRotation(vault)
+		WithAfterUseRotation(vault).
+		WithMFAActionClient(mfaAction)
 
 	// Sessions and requests past their end are expired, once, and each expiry is written to
 	// the audit (ADR-0034). Always on: an end is a fact, not an option.
@@ -254,6 +257,7 @@ func runService() {
 
 	log.Printf("session-broker listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authzURL)
+	log.Printf("  -> authentication: %s (mTLS action step-up)", authenticationURL)
 	log.Printf("  -> vault:         %s", vaultURL)
 	log.Printf("  -> audit:         %s", auditURL)
 	log.Printf("  -> ssh-proxy:     %s", strings.Join(sshProxyURLs, ", "))

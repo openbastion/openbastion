@@ -11,7 +11,7 @@ utilisateur ──HTTP──► api-gateway ──► authentication   (login, v
                           │──────► authorization       (création de politiques)
                           ├──────► command-recorder    (lecture d'un replay SSH)
                           └──────► video-recorder      (lecture d'un replay vidéo)
-session-broker ──► authorization (check-access) · password-vault (authorize-scope, métadonnées de compte)
+session-broker ──mTLS──► authentication (client MFA action-step-up épinglé sur le SAN `authentication`, ADR-0097) · authorization (check-access) · password-vault (authorize-scope, métadonnées de compte)
                ──► audit-service (emit-event)   · ssh-proxy (establish-session)
                ──► webhook de notification (BREAKGLASS_NOTIFY_URL, HORS maillage mTLS, au mieux, jamais un contrôle — ADR-0012 ; signé si BREAKGLASS_NOTIFY_SECRET — ADR-0013)
 ssh-proxy ──► password-vault (fetch-credential : le secret, l'adresse et la clé d'hôte épinglée — ADR-0039) · audit-service · command-recorder (écriture des commandes)
@@ -24,3 +24,5 @@ admin-cli ──► authentication (POST /auth/v1/users) · audit-service (GET /
 ```
 
 Ports par défaut : gateway 8080, vault 8081, audit 8082, authorization 8083, broker 8084, ssh-proxy 8085 (API) + 2222 (SSH), authentication 8086, Command Recorder 8087, Video Recorder HTTP 8088/gRPC 8089, SeaweedFS S3/TLS 8333. La source de vérité des appelants autorisés est le `callers.go` de chaque service, pas ce schéma.
+
+- `session-broker` → `ssh-proxy`: `POST /internal/v1/inject-vault-secret` via mTLS, action limitée à l'injection d'un scope Vault à usage unique sur une session existante. `ssh-proxy` seul appelle ensuite `password-vault` pour obtenir le credential. Aucun secret ne transite par Broker/Gateway (ADR-0097).

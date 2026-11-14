@@ -18,6 +18,9 @@ import (
 func TestVaultClient_ReadsTheRefusalCode_NotTheText(t *testing.T) {
 	answer := func(status int, body string) error {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Cache-Control") != "no-store" {
+				t.Errorf("Cache-Control=%q", r.Header.Get("Cache-Control"))
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
 			_, _ = w.Write([]byte(body))

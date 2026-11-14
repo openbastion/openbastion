@@ -415,6 +415,32 @@ CREATE TABLE IF NOT EXISTS identity_provider_bindings (
     bound_at  TIMESTAMPTZ NOT NULL DEFAULT now());
 ```
 
+### Step-up MFA des actions de session (ADR-0097)
+
+`008_mfa_action_grants.sql` et `009_mfa_action_challenges.sql` : les défis et preuves MFA des actions privilégiées sont séparés des défis de connexion. Les valeurs aléatoires ne sont jamais stockées, seules leurs empreintes SHA-256 ; le contexte immuable lie utilisateur, session, compte, protocole et action. Un défi expire après 2 minutes et 5 échecs le détruisent ; un grant expire après 30 secondes et sa consommation est atomique entre réplicas.
+
+```sql
+CREATE TABLE mfa_action_grants (
+    grant_hash BYTEA PRIMARY KEY CHECK (octet_length(grant_hash) = 32),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    session_id TEXT NOT NULL, account_id TEXT NOT NULL,
+    protocol TEXT NOT NULL CHECK (protocol IN ('ssh', 'vnc', 'rdp')),
+    action TEXT NOT NULL CHECK (action IN ('secret:inject', 'secret:paste')),
+    expires_at TIMESTAMPTZ NOT NULL, consumed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE mfa_action_challenges (
+    challenge_hash BYTEA PRIMARY KEY CHECK (octet_length(challenge_hash) = 32),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    session_id TEXT NOT NULL, account_id TEXT NOT NULL,
+    protocol TEXT NOT NULL CHECK (protocol IN ('ssh', 'vnc', 'rdp')),
+    action TEXT NOT NULL CHECK (action IN ('secret:inject', 'secret:paste')),
+    factors TEXT[] NOT NULL, webauthn_session BYTEA,
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+```
+
+La vérification TOTP avance `totp_last_step` par compare-échange ; WebAuthn réutilise le vérificateur RP/origin existant. Aucun jeton de connexion n'est émis par ce parcours.
+
 ### File des alertes à pousser (ADR-0057)
 
 `services/recording-audit/audit-service/migrations/002_alert_outbox.sql` : les alertes qui attendent d'être poussées (ADR-0045), pour qu'un redémarrage de l'Audit Service ne les perde pas. Une ligne par événement ; 256 au plus (borne tenue par le service) ; la ligne disparaît une fois l'alerte livrée ou abandonnée. Le corps est ce que la chaîne contient déjà, sans secret ; la signature est faite à chaque tentative, sa clé n'est pas en base.

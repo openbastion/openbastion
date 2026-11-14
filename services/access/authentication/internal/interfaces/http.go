@@ -45,6 +45,9 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/mfa/revoke-key", s.handleWebAuthnRevoke)
 	mux.HandleFunc("/auth/v1/mfa/enrollment-codes", s.handleMFAEnrollmentCode)
 	mux.HandleFunc("/auth/v1/mfa/reset", s.handleMFAReset)
+	mux.HandleFunc("/auth/v1/internal/action-step-up/start", s.handleMFAActionStart)
+	mux.HandleFunc("/auth/v1/internal/action-step-up/verify", s.handleMFAActionVerify)
+	mux.HandleFunc("/auth/v1/internal/action-step-up/consume", s.handleMFAActionConsume)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
