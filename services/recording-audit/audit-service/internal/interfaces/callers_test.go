@@ -25,11 +25,20 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("command-recorder", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("api-gateway", "POST", "/audit/v1/emit-event"),
 		mtlstest.Deny("admin-cli", "POST", "/audit/v1/emit-event"),
+		mtlstest.Deny("agent", "POST", "/audit/v1/emit-event"),
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/emit-event"),
 
 		mtlstest.Allow("admin-cli", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("ssh-proxy", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Allow("command-recorder", "GET", "/healthz"),
+	})
+}
+
+func TestEveryRegisteredRouteHasACaller(t *testing.T) {
+	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), CallerRules(), []mtlstest.Route{
+		{Method: "POST", Path: "/audit/v1/emit-event"},
+		{Method: "GET", Path: "/audit/v1/verify-chain"},
+		{Method: "GET", Path: "/healthz"},
 	})
 }

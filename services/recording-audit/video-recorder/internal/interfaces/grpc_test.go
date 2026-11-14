@@ -201,6 +201,9 @@ func TestGRPCCallerRulesAuthorizeOnlyExpectedServiceIdentities(t *testing.T) {
 		{"Gateway cannot ingest", mtls.APIGateway, "/openbastion.recording.v1.VideoRecording/StreamVideoSegments", codes.PermissionDenied, ""},
 		{"Gateway can read", mtls.APIGateway, "/openbastion.recording.v1.VideoRecording/GetVideoSegment", codes.OK, mtls.APIGateway},
 		{"RDP/VNC proxy cannot read", mtls.RDPVNCProxy, "/openbastion.recording.v1.VideoRecording/GetVideoSegment", codes.PermissionDenied, ""},
+		{"Agent cannot ingest", "agent", "/openbastion.recording.v1.VideoRecording/StreamVideoSegments", codes.PermissionDenied, ""},
+		{"Agent cannot read", "agent", "/openbastion.recording.v1.VideoRecording/GetVideoSegment", codes.PermissionDenied, ""},
+		{"Agent cannot probe recorder", "agent", "/openbastion.recording.v1.VideoRecording/CheckReadiness", codes.PermissionDenied, ""},
 		{"unknown method denied", mtls.RDPVNCProxy, "/openbastion.recording.v1.VideoRecording/Unknown", codes.PermissionDenied, ""},
 	}
 	for _, test := range tests {
@@ -251,7 +254,7 @@ func testRuntimeAndCertificates(t *testing.T) (*mtls.Runtime, map[string]*pki.Le
 		t.Fatal(err)
 	}
 	leaves := make(map[string]*pki.Leaf)
-	for _, identity := range []string{mtls.RDPVNCProxy, mtls.APIGateway} {
+	for _, identity := range []string{mtls.RDPVNCProxy, mtls.APIGateway, "agent"} {
 		leaf, err := ca.Issue(identity, pki.IssueOptions{})
 		if err != nil {
 			t.Fatal(err)

@@ -162,6 +162,10 @@ func screenMeta() SessionMetadata {
 	return SessionMetadata{SessionID: "screen-1", TargetHost: "target:5900", ScopeToken: "one-use", ScreenProtocol: screenstream.ProtocolVNC, ExpiresAt: time.Now().Add(time.Minute)}
 }
 
+func newScreenTestCredential() *Credential {
+	return newCredential("password", []byte("screen-test-secret"))
+}
+
 func TestServeScreen_DecodesAndRelaysBoundedOperatorInput(t *testing.T) {
 	vault := &fakeVault{material: []byte("ephemeral-secret")}
 	l, _ := screenListener(vault)
@@ -182,6 +186,9 @@ func TestServeScreen_DecodesAndRelaysBoundedOperatorInput(t *testing.T) {
 	case <-sink.read:
 	case <-time.After(time.Second):
 		t.Fatal("input source was not read")
+	}
+	if codec.cred == nil || !codec.cred.Purged() {
+		t.Fatal("screen credential remained in memory after target authentication")
 	}
 	deadline := time.Now().Add(time.Second)
 	for {
@@ -819,7 +826,7 @@ func TestRelayScreen_ClosedStreamDoesNotHideWhyTheSessionEnded(t *testing.T) {
 			session := &fakeScreenSession{frames: frames}
 			sink := &fakeScreenSink{}
 			ctx, cancel := want.end()
-			err := relayScreen(ctx, context.Background(), screenMeta(), nil, &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, nil)
+			err := relayScreen(ctx, context.Background(), screenMeta(), newScreenTestCredential(), &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, nil)
 			cancel()
 			if !errors.Is(err, want.err) {
 				t.Fatalf("%s: error = %v", name, err)

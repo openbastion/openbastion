@@ -272,7 +272,7 @@ func TestRelayScreen_ACopiedTextTakesItsPlaceInTheSequence(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- relayScreen(context.Background(), context.Background(), clipMeta(false, true), nil, opened, recorder, sink, ScreenInputLimits{}, time.Second, audit)
+		done <- relayScreen(context.Background(), context.Background(), clipMeta(false, true), newScreenTestCredential(), opened, recorder, sink, ScreenInputLimits{}, time.Second, audit)
 	}()
 	frames <- validScreenFrame(1)
 	recorded(1)
@@ -352,7 +352,7 @@ func TestRelayScreen_TheClipboardOpensOnlyWhenEverythingSaysSo(t *testing.T) {
 		}
 		recorder := &fakeFrameRecorder{}
 		sink := &fakeScreenSink{}
-		_ = relayScreen(context.Background(), context.Background(), clipMeta(c.to, c.from), nil, codec, recorder, sink, ScreenInputLimits{}, time.Second, audit)
+		_ = relayScreen(context.Background(), context.Background(), clipMeta(c.to, c.from), newScreenTestCredential(), codec, recorder, sink, ScreenInputLimits{}, time.Second, audit)
 		if hello := sink.snapshot()[0]; hello.ClipboardToTarget != (c.withClipboard && c.to) || hello.ClipboardFromTarget != (c.withClipboard && c.from) {
 			t.Fatalf("%s: the HELLO offers to %v from %v", name, hello.ClipboardToTarget, hello.ClipboardFromTarget)
 		}
@@ -421,7 +421,7 @@ func TestRelayScreen_NothingIsCopiedWithoutTheRightToCopy(t *testing.T) {
 		codec := &clipboardOpenCodec{inner: &clipboardCodec{}, session: session}
 		done := make(chan error, 1)
 		go func() {
-			done <- relayScreen(context.Background(), context.Background(), clipMeta(true, from), nil, codec, &fakeFrameRecorder{},
+			done <- relayScreen(context.Background(), context.Background(), clipMeta(true, from), newScreenTestCredential(), codec, &fakeFrameRecorder{},
 				&fakeScreenSink{}, ScreenInputLimits{}, time.Second, &fakeClipboardAudit{})
 		}()
 		frames <- validScreenFrame(1)
@@ -454,7 +454,7 @@ func TestRelayScreen_APastedTextReachesTheTargetAfterItsRecording(t *testing.T) 
 	audit := &fakeClipboardAudit{}
 	done := make(chan error, 1)
 	go func() {
-		done <- relayScreen(context.Background(), context.Background(), clipMeta(true, false), nil, codec, recorder, sink, ScreenInputLimits{}, time.Second, audit)
+		done <- relayScreen(context.Background(), context.Background(), clipMeta(true, false), newScreenTestCredential(), codec, recorder, sink, ScreenInputLimits{}, time.Second, audit)
 	}()
 	frames <- validScreenFrame(1)
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
@@ -520,7 +520,7 @@ func TestRelayScreen_APastedTextTheSessionDoesNotTakeEndsIt(t *testing.T) {
 		session := &clipboardScreenSession{fakeScreenSession: fakeScreenSession{frames: frames}}
 		codec := &clipboardOpenCodec{inner: &clipboardCodec{}, session: session}
 		sink := &fakeInputScreenSink{input: c.input, read: make(chan struct{}, 4)}
-		err := relayScreen(context.Background(), context.Background(), c.meta, nil, codec, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, c.audit)
+		err := relayScreen(context.Background(), context.Background(), c.meta, newScreenTestCredential(), codec, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, c.audit)
 		if !errors.Is(err, ErrScreenInputInvalid) || len(session.offered) != 0 {
 			t.Fatalf("%s: %v, offered %q", name, err, session.offered)
 		}

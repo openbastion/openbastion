@@ -12,6 +12,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/interfaces"
+	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/sshcodec"
 )
 
 // -- fake target SSH server ---------------------------------------------
@@ -465,5 +467,66 @@ func TestSSHProxy_RejectsClientWithInvalidTicket(t *testing.T) {
 	}
 	if _, err := ssh.Dial("tcp", proxyLn.Addr().String(), clientConfig); err == nil {
 		t.Fatal("expected the SSH handshake to fail for an unregistered connection ticket")
+	}
+}
+
+// The target credential is needed only for the outbound SSH handshake. Keeping it
+// through the interactive session needlessly increases the lifetime of privileged material.
+func TestSSHCodec_PurgesCredentialAfterTargetAuthenticationWhileSessionRemainsActive(t *testing.T) {
+	const secretPassword = "target-short-lived-secret"
+	const scopeToken = "scope-short-lived-secret"
+	targetSawInput := make(chan struct{}, 1)
+	targetAddr := startObservedFakeTargetSSHServer(t, secretPassword, func(line string) {
+		if line == "whoami" {
+			targetSawInput <- struct{}{}
+		}
+	})
+
+	credential, err := proxycore.NewCredentialFetcher(&fakeVault{expectedScopeToken: scopeToken, secret: secretPassword}, "ssh-proxy").Fetch(context.Background(), scopeToken)
+	if err != nil {
+		t.Fatalf("fetch credential: %v", err)
+	}
+	t.Cleanup(credential.Purge)
+	target, err := net.DialTimeout("tcp", targetAddr, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial target: %v", err)
+	}
+	defer target.Close()
+
+	proxySide, operatorSide := net.Pipe()
+	defer proxySide.Close()
+	defer operatorSide.Close()
+	go func() { _, _ = io.Copy(io.Discard, operatorSide) }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	relayDone := make(chan error, 1)
+	go func() {
+		relayDone <- (&sshcodec.Codec{TargetUser: "root", DialTimeout: 5 * time.Second}).Relay(ctx, proxySide, target, credential)
+	}()
+
+	if _, err := operatorSide.Write([]byte("whoami\r\n")); err != nil {
+		t.Fatalf("write through relay: %v", err)
+	}
+	select {
+	case <-targetSawInput:
+	case err := <-relayDone:
+		t.Fatalf("relay ended before the target received input: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("target did not receive input")
+	}
+	if !credential.Purged() {
+		t.Fatal("credential remained in memory after target authentication")
+	}
+	select {
+	case err := <-relayDone:
+		t.Fatalf("relay ended before the session was cancelled: %v", err)
+	default:
+	}
+	cancel()
+	select {
+	case <-relayDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("relay did not stop after cancellation")
 	}
 }

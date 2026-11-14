@@ -21,6 +21,9 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("api-gateway", "POST", "/vault/v1/authorize-scope"),
 		mtlstest.Deny("admin-cli", "POST", "/vault/v1/fetch-credential"),
 		mtlstest.Deny("command-recorder", "POST", "/vault/v1/fetch-credential"),
+		// Future or compromised agents are not credential consumers (ADR-0003).
+		mtlstest.Deny("agent", "POST", "/vault/v1/fetch-credential"),
+		mtlstest.Deny("agent", "POST", "/vault/v1/authorize-scope"),
 		mtlstest.Deny("rdp-vnc-proxy", "POST", "/vault/v1/authorize-scope"),
 
 		mtlstest.Allow("api-gateway", "POST", "/vault/v1/onboard-account"),
