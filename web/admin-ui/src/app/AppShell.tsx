@@ -9,15 +9,21 @@ import {
 import { BrandMark } from "../shared/BrandMark";
 import { CommandPalette } from "../shared/ui/CommandPalette";
 import { OperatorPreferencesDialog } from "../shared/ui/OperatorPreferencesDialog";
+import { LanguageSwitcher } from "../shared/ui/LanguageSwitcher";
+import { useAppTranslation } from "../shared/i18n";
 
+// Labels and descriptions live in the translation files (locales/*.ts), one key per tab: the
+// navigation is translated like the screens it opens, and the groups keep the same order.
 const tabs = {
-  overview: { label: "Vue générale", description: "Synthèse opérationnelle", icon: Dashboard, group: "Pilotage" },
-  accounts: { label: "Comptes", description: "Comptes privilégiés", icon: Users, group: "Accès privilégiés" },
-  policies: { label: "Politiques", description: "Politiques d'accès", icon: PoliciesIcon, group: "Accès privilégiés" },
-  sessions: { label: "Sessions", description: "Sessions privilégiées", icon: Session, group: "Opérations" },
-  audit: { label: "Enregistrements", description: "Enregistrements de sessions", icon: Audit, group: "Opérations" },
-  security: { label: "Centre de sécurité", description: "Posture des comptes", icon: Shield, group: "Sécurité" },
+  overview: { icon: Dashboard, group: "overview" },
+  accounts: { icon: Users, group: "access" },
+  policies: { icon: PoliciesIcon, group: "access" },
+  sessions: { icon: Session, group: "operations" },
+  audit: { icon: Audit, group: "operations" },
+  security: { icon: Shield, group: "security" },
 } as const;
+
+const groups = ["overview", "access", "operations", "security"] as const;
 
 export type Tab = keyof typeof tabs;
 const tabOrder: Tab[] = ["overview", "accounts", "policies", "sessions", "audit", "security"];
@@ -45,6 +51,7 @@ export function AppShell({
   onFindSession: (id: string) => void;
   children: ReactNode;
 }) {
+  const { t } = useAppTranslation();
   const [preferences, setPreferences] = useState<OperatorPreferences>(readOperatorPreferences);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -183,25 +190,26 @@ export function AppShell({
   function renderNavItem(key: Tab) {
     const Icon = tabs[key].icon;
     const favorite = preferences.favorites.includes(key);
+    const label = t(`shell.nav.${key}.label`);
     return (
       <div className="nav-entry" key={key}>
         <button
           type="button"
           className="nav-item"
-          aria-label={tabs[key].label}
+          aria-label={label}
           aria-current={tab === key ? "page" : undefined}
-          title={collapsed ? tabs[key].description : undefined}
+          title={collapsed ? `${label} — ${t(`shell.nav.${key}.description`)}` : undefined}
           onClick={() => chooseTab(key)}
         >
           <Icon size={18} />
-          <span className="nav-item-label">{tabs[key].label}</span>
+          <span className="nav-item-label">{label}</span>
         </button>
         <button
           type="button"
           className="nav-favorite-toggle"
-          aria-label={(favorite ? "Retirer " : "Ajouter ") + tabs[key].label + (favorite ? " des favoris" : " aux favoris")}
+          aria-label={t(favorite ? "shell.removeFavorite" : "shell.addFavorite", { label })}
           aria-pressed={favorite}
-          title={favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+          title={t(favorite ? "shell.favoriteTitle.remove" : "shell.favoriteTitle.add")}
           onClick={() => toggleFavorite(key)}
         >
           <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
@@ -212,7 +220,7 @@ export function AppShell({
 
   return (
     <>
-      <a className="skip-link" href="#main-content" inert={mobileOpen}>Aller au contenu principal</a>
+      <a className="skip-link" href="#main-content" inert={mobileOpen}>{t("shell.skipToContent")}</a>
       <header className="app-header" inert={mobileOpen}>
         <div className="brand">
           <BrandMark />
@@ -227,28 +235,29 @@ export function AppShell({
             onClick={() => setPaletteOpen(true)}
             aria-haspopup="dialog"
             aria-keyshortcuts="Control+K Meta+K"
-            aria-label="Ouvrir la recherche et les commandes"
+            aria-label={t("shell.search.open")}
           >
             <span aria-hidden="true">⌕</span>
-            <span>Rechercher</span>
+            <span>{t("shell.search.label")}</span>
             <kbd>Ctrl K</kbd>
           </button>
+          <LanguageSwitcher />
           <button
             ref={preferencesButton}
             type="button"
             className="preferences-trigger"
             onClick={() => setPreferencesOpen(true)}
             aria-haspopup="dialog"
-            aria-label="Ouvrir les préférences"
+            aria-label={t("shell.preferences.open")}
           >
             <Settings size={17} />
-            <span>Préférences</span>
+            <span>{t("shell.preferences.label")}</span>
           </button>
           <button
             ref={menuButton}
             type="button"
             className="icon-button mobile-menu-toggle"
-            aria-label={mobileOpen ? "Fermer la navigation" : "Ouvrir la navigation"}
+            aria-label={mobileOpen ? t("shell.menu.close") : t("shell.menu.open")}
             aria-expanded={mobileOpen}
             aria-controls="admin-navigation"
             onClick={() => setMobileOpen((open) => !open)}
@@ -259,16 +268,18 @@ export function AppShell({
             type="button"
             className="theme-toggle"
             onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}
-            aria-label={effectiveTheme() === "light" ? "Activer le thème sombre" : "Activer le thème clair"}
+            aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")}
             aria-pressed={effectiveTheme() === "dark"}
           >
             <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
-            <span className="theme-toggle-label">{effectiveTheme() === "light" ? "Thème sombre" : "Thème clair"}</span>
+            <span className="theme-toggle-label">{effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}</span>
           </button>
           <div className="session-chip">
             <span className="avatar" aria-hidden="true">{initials}</span>
-            <span className="who">{who?.username} {who?.roles.length ? "(" + who.roles.join(", ") + ")" : ""}</span>
-            <button type="button" className="ghost" onClick={onSignOut}>Se déconnecter</button>
+            <span className="who" title={who ? `${who.username}${who.roles.length ? " (" + who.roles.join(", ") + ")" : ""}` : undefined}>
+              {who?.username} {who?.roles.length ? "(" + who.roles.join(", ") + ")" : ""}
+            </span>
+            <button type="button" className="ghost" onClick={onSignOut}>{t("shell.signOut")}</button>
           </div>
         </div>
       </header>
@@ -304,16 +315,16 @@ export function AppShell({
           ref={sidebarRef}
           id="admin-navigation"
           className="app-sidebar"
-          aria-label="Navigation principale"
+          aria-label={t("shell.navigation.main")}
           role={mobileOpen ? "dialog" : undefined}
           aria-modal={mobileOpen ? "true" : undefined}
         >
           <div className="sidebar-heading">
-            <span className="sidebar-heading-label">ESPACE DE TRAVAIL</span>
+            <span className="sidebar-heading-label">{t("shell.sidebar.workspace")}</span>
             <button
               type="button"
               className="sidebar-collapse-toggle"
-              aria-label={collapsed ? "Développer la navigation" : "Réduire la navigation"}
+              aria-label={collapsed ? t("shell.sidebar.expand") : t("shell.sidebar.collapse")}
               aria-controls="admin-navigation"
               aria-expanded={!collapsed}
               onClick={() => updatePreferences({ ...preferences, sidebarCollapsed: !collapsed })}
@@ -321,23 +332,23 @@ export function AppShell({
               <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
             </button>
           </div>
-          <nav aria-label="Sections">
+          <nav aria-label={t("shell.navigation.sections")}>
             {favoriteTabs.length > 0 ? (
               <div className="nav-group">
-                <h2 className="nav-group-title">Favoris</h2>
+                <h2 className="nav-group-title">{t("shell.favorites")}</h2>
                 {favoriteTabs.map(renderNavItem)}
               </div>
             ) : null}
-            {(["Pilotage", "Accès privilégiés", "Opérations", "Sécurité"] as const).map((group) => (
+            {groups.map((group) => (
               <div className="nav-group" key={group}>
-                <h2 className="nav-group-title">{group}</h2>
+                <h2 className="nav-group-title">{t(`shell.groups.${group}`)}</h2>
                 {tabOrder.filter((key) => tabs[key].group === group).map(renderNavItem)}
               </div>
             ))}
           </nav>
           <div className="sidebar-footer">
             <span className="sidebar-status-dot" aria-hidden="true" />
-            <span className="sidebar-status-label">Console d'administration</span>
+            <span className="sidebar-status-label">{t("shell.sidebar.console")}</span>
           </div>
         </aside>
         <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>

@@ -4408,6 +4408,34 @@ L'écran prenait toutes les touches, Tab compris (`preventDefault`) : une person
 
 Vérifié : 3 tests Vitest, 2 mutations tuées. **Reste** : l'image elle-même est illisible à un lecteur d'écran ; aucune reconnaissance de texte n'est prévue.
 
+
+## 2026-11-13 — Synchronisation avec `main` (PR #186 et #189)
+
+La branche `refactor/refactor-admin-ui` intègre `origin/main` jusqu'au commit
+`8d8c486` (PR #186 et #189). Les trois ADR RDP ajoutés par #186 sont conservés
+au statut **Proposé** : ADR-0099 (licence RDS), ADR-0100 (Kerberos/CredSSP) et
+ADR-0101 (RDPGFX). Aucun de ces choix n'est adopté implicitement.
+
+La correction d'accessibilité de #189 est intégrée dans `ScreenViewer` :
+`Ctrl+Alt+Maj+Échap` restitue le clavier à la page sans transmettre Échap à la
+cible, la perte du focus relâche les touches côté cible, et Échap seul reste
+transmis comme une touche ordinaire. Le canvas expose `role="application"`,
+une description accessible et une aide visible qui explique la saisie, la
+combinaison de sortie et la lecture du texte par le panneau Presse-papiers.
+Les indications sont traduites en français et en anglais. L'image reste
+illisible par un lecteur d'écran ; aucune reconnaissance de texte n'est
+prétendue.
+
+Option C et les fonctionnalités UX livrées sont conservées, notamment les
+packages partagés et les ressources i18n FR/EN. ADR-0073 reste
+« Accepté, mise en œuvre en cours ».
+
+Validation sur LT209227 : `make ui-test` passe (23 fichiers, 228 tests),
+`npm run build -- --outDir /tmp/openbastion-admin-ui-refactor-build-main-6110754`
+réussit (TypeScript, 222 modules), `npm audit --audit-level=high` signale
+0 vulnérabilité, les contrôles de contraste clair/sombre et de couleurs
+codées en dur passent, et `git diff --check` / `git diff --cached --check`
+passent. Les tests Windows ne sont pas relancés localement.
 ## 2026-11-13 — CI Windows : le cas B se reproduit
 
 Le cas B (cible perdue en cours de job), dit « non reproduit » le matin même (#178), est revenu à 18:44 UTC sur 2022 en 32 bpp (PR #185, run 43482811541, job 132083637113).
@@ -4418,6 +4446,10 @@ Le cas B (cible perdue en cours de job), dit « non reproduit » le matin même 
 **Ce que cela change** : 4 occurrences sur environ 210 jobs depuis le 11 novembre, toutes pendant `TestRDPWindows_Measure` ou juste après. Ce n'est pas un effet de #185 : le cas existait avant elle, et son propre changement s'est vérifié contre Windows dans le même passage. Ma conclusion « non reproduit » était prématurée : 0 sur 165 ne suffisait pas pour un phénomène de l'ordre de 2 %.
 
 **Suite** : capturer l'écran de la machine Windows au moment de la perte (console de QEMU par dockur), et relever l'heure de la dernière image de la mesure.
+
+## 2026-11-13 — Synchronisation avec `main` jusqu'à `d03756c` (PR #185)
+
+La synchronisation intègre la décision et l'implémentation de `target_auth_failed` décrites ci-dessous, ainsi que les corrections du proxy écran et les tests associés. Le diagnostic du cas B de CI Windows conservé juste au-dessus reste inchangé ; la prochaine preuve attendue est toujours la capture de la console QEMU au moment de la perte.
 
 ## 2026-11-13 — ADR-0071 §12 : `target_auth_failed`, la cible a refusé les identifiants
 

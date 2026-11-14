@@ -10,6 +10,7 @@ import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
+import { useAppTranslation } from "../../shared/i18n";
 import {
   AccountFilterRule,
   accountFilterFields,
@@ -31,6 +32,7 @@ const pageSize = 20;
 // may require another person's approval, with a ticket, for every session on it (ADR-0067). A VNC
 // account pins its target's TLS certificate instead of a host key (ADR-0071), and is not rotated.
 export function Accounts() {
+  const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Account>>();
@@ -38,7 +40,10 @@ export function Accounts() {
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const [filter, setFilter] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  // The inventory is the reason the screen exists: the rule builder stays closed until asked for,
+  // so the table is not pushed below the fold by six paragraphs of filter help.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [onboardOpen, setOnboardOpen] = useState(false);
   const [filterRules, setFilterRules] = useState<AccountFilterRule[]>([]);
   const [savedViews, setSavedViews] = useState<SavedAccountView[]>(readSavedAccountViews);
   const [selectedSavedView, setSelectedSavedView] = useState("");
@@ -104,7 +109,7 @@ export function Accounts() {
     const name = newViewName.trim().slice(0, 32);
     if (name.length < 2) {
       setViewNotice(undefined);
-      setError("Donnez un nom de deux caractères au minimum.");
+      setError(t("accounts.views.nameTooShort"));
       return;
     }
     const next = [
@@ -113,14 +118,14 @@ export function Accounts() {
     ].slice(-12);
     setViewNotice(undefined);
     if (!writeSavedAccountViews(next)) {
-      setError("Impossible d'enregistrer cette vue dans le stockage local du navigateur.");
+      setError(t("accounts.views.saveFailed"));
       return;
     }
     setError(undefined);
     setSavedViews(next);
     setSelectedSavedView(name);
     setNewViewName("");
-    setViewNotice("Vue enregistrée dans ce navigateur.");
+    setViewNotice(t("accounts.views.saved"));
   }
 
   function applySavedView(name: string) {
@@ -136,13 +141,13 @@ export function Accounts() {
     const next = savedViews.filter((view) => view.name !== selectedSavedView);
     setViewNotice(undefined);
     if (!writeSavedAccountViews(next)) {
-      setError("Impossible de supprimer cette vue du stockage local du navigateur.");
+      setError(t("accounts.views.deleteFailed"));
       return;
     }
     setError(undefined);
     setSavedViews(next);
     setSelectedSavedView("");
-    setViewNotice("Vue supprimée de ce navigateur.");
+    setViewNotice(t("accounts.views.deleted"));
   }
 
   const actions: AccountActions = {
@@ -150,19 +155,22 @@ export function Accounts() {
       const key = askHostKey(a);
       if (!key) return;
       act(
-        (r) => `Clé d'hôte de ${a.id} épinglée : ${(r as { hostKeyFingerprint?: string } | undefined)?.hostKeyFingerprint ?? ""}`,
+        (r) => t("accounts.notices.hostKeyPinned", {
+          id: a.id,
+          fingerprint: (r as { hostKeyFingerprint?: string } | undefined)?.hostKeyFingerprint ?? "",
+        }),
         () => api.request("PUT", `${accountPath(a.id)}/host-key`, { hostKey: key }),
       );
     },
     pinTls(a) {
       const pin = askTlsPin(a);
       if (!pin) return;
-      act(`Certificat TLS de ${a.id} épinglé`, () =>
+      act(t("accounts.notices.tlsPinned", { id: a.id }), () =>
         api.request("PUT", `${accountPath(a.id)}/tls-pin`, { tlsCertificateSha256: pin.fingerprint, targetDomain: pin.domain }),
       );
     },
     toggleApproval(a) {
-      act(a.approvalRequired ? `${a.id} : sessions sans approbation` : `${a.id} : approbation requise`, () =>
+      act(a.approvalRequired ? t("accounts.notices.approvalOff", { id: a.id }) : t("accounts.notices.approvalOn", { id: a.id }), () =>
         api.request("PUT", `${accountPath(a.id)}/approval`, { approvalRequired: !a.approvalRequired }),
       );
     },
@@ -180,97 +188,118 @@ export function Accounts() {
 
   return (
     <AdminPage
-      title="Comptes privilégiés"
-      hints={[
-        "Renouveler un secret le change sur la cible, par le compte de réconciliation du compte, et le vérifie avant de l'adopter : un compte sans compte de réconciliation ne peut pas être renouvelé.",
-        "Le secret n'est envoyé qu'au serveur qui présente la clé d'hôte épinglée : un compte sans clé n'ouvre aucune session et n'est pas renouvelé. Relevez la clé sur la cible elle-même, pas par le réseau que vous voulez protéger.",
-        "Un compte VNC ou RDP épingle de même le certificat TLS de sa cible : sans empreinte, il n'ouvre aucune session.",
-      ]}
+      title={t("accounts.title")}
+      actions={
+        <Button
+          type="button"
+          variant="primary"
+          aria-expanded={onboardOpen}
+          aria-controls="onboard-account"
+          onClick={() => setOnboardOpen((open) => !open)}
+        >
+          {onboardOpen ? t("accounts.closeForm") : t("accounts.openForm")}
+        </Button>
+      }
+      hints={[t("accounts.hints.rotation"), t("accounts.hints.hostKey"), t("accounts.hints.tls")]}
     >
       <Notice error={accountAction ? undefined : error} ok={accountAction ? undefined : ok} />
-      <section className="ob-surface account-inventory" aria-label="Inventaire des comptes privilégiés">
-        {loading ? <p className="ob-empty-state" role="status">Chargement des comptes privilégiés…</p> : null}
-        {!loading && data && data.items.length === 0 ? <p className="ob-empty-state">Aucun compte privilégié pour l'instant — enregistrez-en un ci-dessous.</p> : null}
+      {onboardOpen ? (
+        <div id="onboard-account">
+          <OnboardAccount onDone={(id) => act(t("accounts.notices.onboarded", { id }), async () => undefined)} />
+        </div>
+      ) : null}
+      <section className="ob-surface account-inventory" aria-label={t("accounts.inventoryAria")}>
+        {loading ? <p className="ob-empty-state" role="status">{t("accounts.loading")}</p> : null}
+        {!loading && data && data.items.length === 0 ? <p className="ob-empty-state">{t("accounts.empty")}</p> : null}
         {!loading && data && data.items.length > 0 ? (
           <div className="ob-filter-bar account-filter-bar">
             <div className="account-filter-toolbar">
-              <button
-                className="account-filter-trigger"
-                type="button"
-                aria-expanded={filtersOpen}
-                aria-controls="account-filter-builder"
-                onClick={() => setFiltersOpen((open) => !open)}
-              >
-                <span className="account-filter-trigger-icon" aria-hidden="true">☷</span>
-                <span>Filtres avancés</span>
-                <span className="account-filter-count" aria-label={`${activeFilterCount} filtre(s) actif(s)`}>{activeFilterCount}</span>
-                <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
-              </button>
-              {activeFilterCount > 0 ? <Button type="button" onClick={() => { setFilter(""); setFilterRules([]); setSelectedSavedView(""); }}>Réinitialiser</Button> : null}
+              <label className="account-filter-search">
+                <span className="ob-visually-hidden">{t("accounts.filter.searchAria")}</span>
+                <input
+                  id="account-page-filter"
+                  type="search"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder={t("accounts.filter.searchPlaceholder")}
+                />
+              </label>
+              <div className="account-filter-toolbar-actions">
+                <button
+                  className="account-filter-trigger"
+                  type="button"
+                  aria-expanded={filtersOpen}
+                  aria-controls="account-filter-builder"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                >
+                  <span className="account-filter-trigger-icon" aria-hidden="true">☷</span>
+                  <span>{t("accounts.filter.advanced")}</span>
+                  <span className="account-filter-count" aria-label={t("accounts.filter.activeCount", { count: activeFilterCount })}>{activeFilterCount}</span>
+                  <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
+                </button>
+                {activeFilterCount > 0 ? (
+                  <Button type="button" onClick={() => { setFilter(""); setFilterRules([]); setSelectedSavedView(""); }}>
+                    {t("accounts.filter.reset")}
+                  </Button>
+                ) : null}
+              </div>
             </div>
+            <p className="account-filter-scope">
+              <span aria-live="polite" aria-atomic="true">
+                {t("accounts.filter.scopeCount", { shown: filteredAccounts.length, total: data.items.length })}
+              </span>
+              {" — "}{t("accounts.filter.scopeNote")}
+            </p>
             {filtersOpen ? (
-              <div id="account-filter-builder" className="account-filter-builder" aria-label="Constructeur de filtres">
-                <div className="account-filter-context">
-                  <span className="account-filter-where">OÙ</span>
-                  <label className="account-filter-search">
-                    <span>Filtrer les comptes de cette page</span>
-                    <input
-                      id="account-page-filter"
-                      type="search"
-                      value={filter}
-                      onChange={(event) => setFilter(event.target.value)}
-                      placeholder="Identifiant, nom, utilisateur, cible ou protocole…"
-                    />
-                  </label>
-                </div>
-                <p className="ob-filter-help">La recherche et les critères ci-dessous s'appliquent uniquement aux {data.items.length} comptes chargés sur cette page ; aucune recherche globale n'est lancée. Le texte saisi n'est jamais enregistré dans une vue.</p>
-                <div className="account-filter-rules" aria-label="Règles de filtrage">
+              <div id="account-filter-builder" className="account-filter-builder" aria-label={t("accounts.filter.builderAria")}>
+                <p className="ob-filter-help">{t("accounts.filter.help", { count: data.items.length })}</p>
+                <div className="account-filter-rules" aria-label={t("accounts.filter.rulesAria")}>
                   {filterRules.map((rule, index) => (
                     <div className="account-filter-rule" key={index}>
                       {index > 0 ? (
                         <label className="account-filter-join-control">
-                          <span>Combinaison</span>
+                          <span>{t("accounts.filter.combination")}</span>
                           <select
-                            aria-label={`Combinaison avant la règle ${index + 1}`}
+                            aria-label={t("accounts.filter.combinationAria", { position: index + 1 })}
                             value={rule.join}
                             onChange={(event) => updateFilterRule(index, { join: event.target.value as AccountFilterRule["join"] })}
                           >
-                            <option value="AND">ET</option>
-                            <option value="OR">OU</option>
+                            <option value="AND">{t("accounts.filter.and")}</option>
+                            <option value="OR">{t("accounts.filter.or")}</option>
                           </select>
                         </label>
-                      ) : <span className="account-filter-join-placeholder" aria-hidden="true">OÙ</span>}
+                      ) : <span className="account-filter-join-placeholder" aria-hidden="true">{t("accounts.filter.where")}</span>}
                       <label className="account-filter-field">
-                        <span>Champ</span>
+                        <span>{t("accounts.filter.field")}</span>
                         <select
-                          aria-label={`Champ de la règle ${index + 1}`}
+                          aria-label={t("accounts.filter.fieldAria", { position: index + 1 })}
                           value={rule.field}
                           onChange={(event) => {
                             if (!isAccountFilterField(event.target.value)) return;
                             updateFilterRule(index, { field: event.target.value, value: defaultAccountFilterValue(event.target.value) });
                           }}
                         >
-                          <option value="protocol" disabled={filterRules.some((other, position) => position !== index && other.field === "protocol")}>Protocole</option>
-                          <option value="approval" disabled={filterRules.some((other, position) => position !== index && other.field === "approval")}>Approbation</option>
-                          <option value="identity" disabled={filterRules.some((other, position) => position !== index && other.field === "identity")}>Identité de la cible</option>
-                          <option value="rotation" disabled={filterRules.some((other, position) => position !== index && other.field === "rotation")}>Rotation</option>
+                          <option value="protocol" disabled={filterRules.some((other, position) => position !== index && other.field === "protocol")}>{t("accounts.filter.fields.protocol")}</option>
+                          <option value="approval" disabled={filterRules.some((other, position) => position !== index && other.field === "approval")}>{t("accounts.filter.fields.approval")}</option>
+                          <option value="identity" disabled={filterRules.some((other, position) => position !== index && other.field === "identity")}>{t("accounts.filter.fields.identity")}</option>
+                          <option value="rotation" disabled={filterRules.some((other, position) => position !== index && other.field === "rotation")}>{t("accounts.filter.fields.rotation")}</option>
                         </select>
                       </label>
                       <label className="account-filter-operator">
-                        <span>Opérateur</span>
+                        <span>{t("accounts.filter.operator")}</span>
                         <select
-                          aria-label={`Opérateur de la règle ${index + 1}`}
+                          aria-label={t("accounts.filter.operatorAria", { position: index + 1 })}
                           value={rule.comparison}
                           onChange={(event) => updateFilterRule(index, { comparison: event.target.value as AccountFilterRule["comparison"] })}
                         >
-                          <option value="is">est</option>
-                          <option value="is-not">n'est pas</option>
+                          <option value="is">{t("accounts.filter.is")}</option>
+                          <option value="is-not">{t("accounts.filter.isNot")}</option>
                         </select>
                       </label>
                       <label className="account-filter-value">
-                        <span>Valeur</span>
+                        <span>{t("accounts.filter.value")}</span>
                         <select
-                          aria-label={`Valeur de la règle ${index + 1}`}
+                          aria-label={t("accounts.filter.valueAria", { position: index + 1 })}
                           value={rule.value}
                           onChange={(event) => updateFilterRule(index, { value: event.target.value })}
                         >
@@ -278,63 +307,63 @@ export function Accounts() {
                             <option value="ssh">SSH</option><option value="rdp">RDP</option><option value="vnc">VNC</option>
                           </> : null}
                           {rule.field === "approval" ? <>
-                            <option value="required">Requise</option><option value="not-required">Non requise</option>
+                            <option value="required">{t("accounts.filter.values.required")}</option><option value="not-required">{t("accounts.filter.values.notRequired")}</option>
                           </> : null}
                           {rule.field === "identity" ? <>
-                            <option value="pinned">Épinglée</option><option value="missing">Non épinglée</option>
+                            <option value="pinned">{t("accounts.filter.values.pinned")}</option><option value="missing">{t("accounts.filter.values.missing")}</option>
                           </> : null}
                           {rule.field === "rotation" ? <>
-                            <option value="due">À renouveler</option><option value="failed">En échec</option><option value="none">Aucune rotation en attente</option>
+                            <option value="due">{t("accounts.filter.values.due")}</option><option value="failed">{t("accounts.filter.values.failed")}</option><option value="none">{t("accounts.filter.values.none")}</option>
                           </> : null}
                         </select>
                       </label>
-                      <button className="account-filter-remove" type="button" aria-label={`Supprimer la règle ${index + 1}`} onClick={() => removeFilterRule(index)}>×</button>
+                      <button className="account-filter-remove" type="button" aria-label={t("accounts.filter.removeAria", { position: index + 1 })} onClick={() => removeFilterRule(index)}>×</button>
                     </div>
                   ))}
                 </div>
                 <div className="account-filter-actions">
-                  <Button type="button" disabled={filterRules.length >= maxAccountFilterRules} onClick={addFilterRule}>+ Ajouter un filtre</Button>
-                  {filterRules.length > 0 ? <span className="ob-filter-help">4 blocs maximum, un par champ. Les combinaisons sont évaluées de gauche à droite.</span> : <span className="ob-filter-help">Ajoutez une règle pour affiner les comptes affichés.</span>}
+                  <Button type="button" disabled={filterRules.length >= maxAccountFilterRules} onClick={addFilterRule}>{t("accounts.filter.add")}</Button>
+                  {filterRules.length > 0
+                    ? <span className="ob-filter-help">{t("accounts.filter.maxNote")}</span>
+                    : <span className="ob-filter-help">{t("accounts.filter.addHint")}</span>}
                 </div>
                 <div className="account-filter-builder-footer">
-                  <span className="ob-filter-help">La recherche textuelle est toujours combinée aux règles avec ET.</span>
-                  <span className="ob-filter-count" aria-live="polite" aria-atomic="true">{filteredAccounts.length} sur {data.items.length} compte(s) affiché(s) sur cette page</span>
+                  <span className="ob-filter-help">{t("accounts.filter.textAlwaysAnd")}</span>
                 </div>
                 <div className="ob-saved-views">
                   <label>
-                    Vues enregistrées
+                    {t("accounts.views.label")}
                     <select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
-                      <option value="">Choisir une vue…</option>
+                      <option value="">{t("accounts.views.choose")}</option>
                       {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
                     </select>
                   </label>
                   <form className="ob-saved-view-form" onSubmit={saveCurrentView}>
                     <label>
-                      Nom de la vue
-                      <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder="Ex. SSH à renouveler" />
+                      {t("accounts.views.name")}
+                      <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder={t("accounts.views.namePlaceholder")} />
                     </label>
-                    <Button type="submit">Enregistrer la vue</Button>
+                    <Button type="submit">{t("accounts.views.save")}</Button>
                   </form>
-                  <Button disabled={!selectedSavedView} onClick={deleteSavedView}>Supprimer la vue</Button>
+                  <Button disabled={!selectedSavedView} onClick={deleteSavedView}>{t("accounts.views.delete")}</Button>
                 </div>
                 {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
-                <p className="ob-filter-help">Les vues conservent uniquement les règles de filtrage et leur nom sur ce navigateur. N'y inscrivez aucune information sensible.</p>
+                <p className="ob-filter-help">{t("accounts.views.help")}</p>
               </div>
             ) : null}
           </div>
         ) : null}
         {!loading && data && filteredAccounts.length > 0 ? <AccountTable accounts={filteredAccounts} actions={actions} /> : null}
-        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="ob-empty-state">Aucun compte de cette page ne correspond aux filtres actuels.</p> : null}
-        {!loading && data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun="compte(s)" onPage={setPage} /> : null}
+        {!loading && data && data.items.length > 0 && filteredAccounts.length === 0 ? <p className="ob-empty-state">{t("accounts.noMatch")}</p> : null}
+        {!loading && data ? <Pager page={data.page} pageSize={pageSize} totalItems={data.totalItems} noun={t("accounts.noun")} onPage={setPage} /> : null}
       </section>
-      <OnboardAccount onDone={(id) => act(`${id} enregistré`, async () => undefined)} />
       {accountAction ? (
         <ConfirmDialog
-          title={accountAction.kind === "disable" ? "Désactiver ce compte privilégié ?" : "Renouveler le secret de ce compte ?"}
+          title={accountAction.kind === "disable" ? t("accounts.confirm.disableTitle") : t("accounts.confirm.rotateTitle")}
           description={accountAction.kind === "disable"
-            ? `Le compte ${accountAction.account.id} ne pourra plus être utilisé pour ouvrir de nouvelles sessions. Cette action sera auditée par la plateforme.`
-            : `Le Vault va renouveler le secret de ${accountAction.account.id} sur la cible via son compte de réconciliation, vérifier le nouveau secret puis l'adopter. Le secret ne sera jamais affiché. Cette opération peut être refusée si la cible ou l'identité épinglée n'est pas vérifiable.`}
-          confirmLabel={accountAction.kind === "disable" ? "Désactiver le compte" : "Renouveler le secret"}
+            ? t("accounts.confirm.disableBody", { id: accountAction.account.id })
+            : t("accounts.confirm.rotateBody", { id: accountAction.account.id })}
+          confirmLabel={accountAction.kind === "disable" ? t("accounts.confirm.disable") : t("accounts.confirm.rotate")}
           danger={accountAction.kind === "disable"}
           error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
           onCancel={() => setAccountAction(undefined)}
@@ -342,7 +371,11 @@ export function Accounts() {
             const { kind, account } = accountAction;
             try {
               await api.request(kind === "disable" ? "DELETE" : "POST", kind === "disable" ? accountPath(account.id) : `${accountPath(account.id)}/rotate`);
-              setOk(kind === "disable" ? `${account.id} désactivé` : `Secret de ${account.id} renouvelé sur la cible`);
+              setOk(
+                kind === "disable"
+                  ? t("accounts.notices.disabled", { id: account.id })
+                  : t("accounts.notices.rotated", { id: account.id }),
+              );
               setError(undefined);
               setAccountAction(undefined);
               load();

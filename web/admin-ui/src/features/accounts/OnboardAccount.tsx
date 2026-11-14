@@ -1,12 +1,14 @@
 import { FormEvent, useState } from "react";
 import { useSignedIn } from "../../shared/session";
 import { FormCard } from "../../shared/ui/FormCard";
+import { useAppTranslation } from "../../shared/i18n";
 
 // Onboarding one privileged account: the target, how its secret rotates, the identity its target
 // must present, and the secret — typed once, sent once, never shown again (the API never returns
 // it). A VNC or RDP account has no host key and no rotation; its TLS pin comes next, by its own
 // route (ADR-0071).
 export function OnboardAccount({ onDone }: { onDone: (id: string) => void }) {
+  const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [f, setF] = useState({
     id: "",
@@ -47,25 +49,31 @@ export function OnboardAccount({ onDone }: { onDone: (id: string) => void }) {
   }
 
   return (
-    <FormCard label="Enregistrer un compte" title="Enregistrer un compte" submitLabel="Enregistrer" onSubmit={submit} error={error}>
+    <FormCard
+      label={t("accounts.onboard.label")}
+      title={t("accounts.onboard.label")}
+      submitLabel={t("accounts.onboard.submit")}
+      onSubmit={submit}
+      error={error}
+    >
       <label>
-        Identifiant
+        {t("accounts.onboard.id")}
         <input value={f.id} onChange={set("id")} required pattern="[A-Za-z0-9_.\-]+" />
       </label>
       <label>
-        Nom
+        {t("accounts.onboard.name")}
         <input value={f.name} onChange={set("name")} required />
       </label>
       <label>
-        Cible (hôte:port)
+        {t("accounts.onboard.target")}
         <input value={f.targetHost} onChange={set("targetHost")} required />
       </label>
       <label>
-        Utilisateur sur la cible
+        {t("accounts.onboard.username")}
         <input value={f.username} onChange={set("username")} required />
       </label>
       <label>
-        Protocole
+        {t("accounts.onboard.protocol")}
         <select value={f.protocol} onChange={set("protocol")}>
           <option value="ssh">SSH</option>
           <option value="vnc">VNC</option>
@@ -74,40 +82,40 @@ export function OnboardAccount({ onDone }: { onDone: (id: string) => void }) {
       </label>
       {ssh ? (
         <label>
-          Rotation
+          {t("accounts.onboard.rotation")}
           <select value={f.rotationPolicy} onChange={set("rotationPolicy")}>
-            <option value="manual">manuelle</option>
-            <option value="post_use">après usage</option>
-            <option value="scheduled">planifiée</option>
+            <option value="manual">{t("accounts.onboard.rotationManual")}</option>
+            <option value="post_use">{t("accounts.onboard.rotationPostUse")}</option>
+            <option value="scheduled">{t("accounts.onboard.rotationScheduled")}</option>
           </select>
         </label>
       ) : null}
       {ssh && f.rotationPolicy === "scheduled" ? (
         <label>
-          Intervalle de rotation (jours, 1 à 365)
+          {t("accounts.onboard.interval")}
           <input type="number" min={1} max={365} value={f.rotationIntervalDays} onChange={set("rotationIntervalDays")} required />
         </label>
       ) : null}
       {ssh ? (
         <label>
-          Compte de réconciliation (même cible ; vide : pas de rotation — obligatoire pour une rotation planifiée)
+          {t("accounts.onboard.reconciliation")}
           <input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} />
         </label>
       ) : null}
       {ssh ? (
         <label className="wide">
-          Clé d'hôte de la cible (relevée sur la cible : /etc/ssh/ssh_host_ed25519_key.pub), ou autorité : @cert-authority &lt;nom&gt; &lt;clé de l'autorité&gt;
+          {t("accounts.onboard.hostKey")}
           <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
         </label>
       ) : (
-        <p className="ob-hint wide">Une fois le compte enregistré, épinglez le certificat TLS de sa cible : sans lui, le compte n'ouvre aucune session.</p>
+        <p className="ob-hint wide">{t("accounts.onboard.tlsHint")}</p>
       )}
       <label className="check">
         <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
-        Approbation requise : chaque session attend l'accord d'une autre personne, avec un ticket
+        {t("accounts.onboard.approval")}
       </label>
       <label>
-        Secret initial
+        {t("accounts.onboard.initialSecret")}
         <input type="password" autoComplete="new-password" value={f.initialSecret} onChange={set("initialSecret")} required />
       </label>
     </FormCard>

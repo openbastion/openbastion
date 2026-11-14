@@ -2,24 +2,54 @@ import { useEffect, useState } from "react";
 import { Account, Page, Session } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
+import { useAppTranslation } from "../../shared/i18n";
 
 type Widget<T> = { data?: Page<T>; error?: unknown; loading: boolean };
 
-function Metric({ label, value, detail, loading, error }: { label: string; value?: number; detail: string; loading: boolean; error?: unknown }) {
-  return (
-    <article className="ob-stat-card">
+// A count with a way to reach what it counts: a dashboard number an operator cannot act on is a
+// dead end. The card stays an article when there is nothing to open (loading, refusal, no route).
+function Metric({
+  label,
+  value,
+  detail,
+  loading,
+  error,
+  action,
+}: {
+  label: string;
+  value?: number;
+  detail: string;
+  loading: boolean;
+  error?: unknown;
+  action?: { label: string; onClick: () => void };
+}) {
+  const { t } = useAppTranslation();
+  const body = (
+    <>
       <p className="ob-stat-label">{label}</p>
       {loading ? <p className="ob-stat-value" role="status">…</p>
-        : error ? <p className="ob-stat-unavailable">Indisponible</p>
+        : error ? <p className="ob-stat-unavailable">{t("common.unavailable")}</p>
         : <p className="ob-stat-value">{value ?? "—"}</p>}
-      <p className="ob-stat-detail">{error ? "L’API n’a pas fourni cette donnée." : detail}</p>
-    </article>
+      <p className="ob-stat-detail">{error ? t("overview.apiUnavailable") : detail}</p>
+      {action && !loading && !error ? (
+        <span className="ob-stat-link">
+          {action.label} <span aria-hidden="true">→</span>
+        </span>
+      ) : null}
+    </>
+  );
+  if (!action || loading || error) return <article className="ob-stat-card">{body}</article>;
+  return (
+    <button type="button" className="ob-stat-card ob-stat-card-action" onClick={action.onClick}>
+      {body}
+    </button>
   );
 }
 
 // A small operational overview, composed only from public Gateway responses. Each source keeps
 // its own loading/error state: a permission refusal on one domain must not hide another domain.
-export function Overview() {
+export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sessions") => void } = {}) {
+  const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [accounts, setAccounts] = useState<Widget<Account>>({ loading: true });
   const [approvals, setApprovals] = useState<Widget<Session>>({ loading: true });
@@ -40,19 +70,40 @@ export function Overview() {
   ).length;
 
   return (
-    <AdminPage title="Vue générale" hints={["Synthèse des données que votre identité est autorisée à consulter. Chaque indicateur est fourni par l’API publique ; aucune estimation ni score de risque n’est calculé ici."]}>
-      <div className="ob-stat-grid" role="group" aria-label="Indicateurs opérationnels">
-        <Metric label="Comptes privilégiés" value={accounts.data?.totalItems} detail="Comptes actifs visibles dans le coffre-fort." loading={accounts.loading} error={accounts.error} />
-        <Metric label="Approbations en attente" value={approvals.data?.totalItems} detail="Demandes que votre identité peut décider maintenant." loading={approvals.loading} error={approvals.error} />
-        <Metric label="Rotations à examiner" value={rotationAttention} detail="Comptes chargés avec rotation due ou échecs signalés." loading={accounts.loading} error={accounts.error} />
+    <AdminPage title={t("overview.title")} hints={[t("overview.hint")]}>
+      <div className="ob-stat-grid" role="group" aria-label={t("overview.metricsAria")}>
+        <Metric
+          label={t("overview.accounts.label")}
+          value={accounts.data?.totalItems}
+          detail={t("overview.accounts.detail")}
+          loading={accounts.loading}
+          error={accounts.error}
+          action={onNavigate ? { label: t("overview.accounts.action"), onClick: () => onNavigate("accounts") } : undefined}
+        />
+        <Metric
+          label={t("overview.approvals.label")}
+          value={approvals.data?.totalItems}
+          detail={t("overview.approvals.detail")}
+          loading={approvals.loading}
+          error={approvals.error}
+          action={onNavigate ? { label: t("overview.approvals.action"), onClick: () => onNavigate("sessions") } : undefined}
+        />
+        <Metric
+          label={t("overview.rotations.label")}
+          value={rotationAttention}
+          detail={t("overview.rotations.detail")}
+          loading={accounts.loading}
+          error={accounts.error}
+          action={onNavigate ? { label: t("overview.accounts.action"), onClick: () => onNavigate("accounts") } : undefined}
+        />
       </div>
       <section className="ob-surface ob-panel overview-guidance" aria-labelledby="overview-scope-title">
-        <h3 id="overview-scope-title">Périmètre des données</h3>
-        <p>Les comptes et les demandes d’approbation sont lus séparément via la Gateway. Un refus ou une indisponibilité est indiqué sur le widget concerné, sans être transformé en valeur nulle.</p>
+        <h3 id="overview-scope-title">{t("overview.scope.title")}</h3>
+        <p>{t("overview.scope.body")}</p>
         {accounts.data && accounts.data.totalItems > accounts.data.items.length ? (
-          <p className="ob-note">L’indicateur de rotation porte sur {accounts.data.items.length} comptes chargés sur {accounts.data.totalItems} ; ouvrez le coffre-fort pour parcourir les pages restantes.</p>
+          <p className="ob-note">{t("overview.scope.rotationNote", { loaded: accounts.data.items.length, total: accounts.data.totalItems })}</p>
         ) : null}
-        {approvals.data?.truncated ? <p className="ob-note">La liste des demandes est tronquée par le service ; elle ne représente pas nécessairement toutes les demandes éligibles.</p> : null}
+        {approvals.data?.truncated ? <p className="ob-note">{t("overview.scope.truncated")}</p> : null}
       </section>
     </AdminPage>
   );

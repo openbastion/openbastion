@@ -9,6 +9,11 @@ const rows = [
   { id: "acc_vnc", name: "VNC account", username: "svc-vnc", targetHost: "vnc.internal:5900", protocol: "vnc", rotationPolicy: "manual", createdAt: "2026-11-01T00:00:00Z", tlsCertificateSha256: "AA:BB", approvalRequired: false },
 ];
 
+// The rule builder starts collapsed behind "Filtres avancés": open it before driving a rule.
+function openFilterBuilder() {
+  fireEvent.click(screen.getByRole("button", { name: /Filtres avancés/ }));
+}
+
 function renderAccounts(routes: Record<string, { status?: number; body?: unknown }>) {
   const { api, calls } = fakeApi(routes);
   api.setToken("test-token");
@@ -23,6 +28,7 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
       "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
     });
     expect(await screen.findByText("SSH account")).toBeTruthy();
+    openFilterBuilder();
 
     fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
     fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
@@ -62,6 +68,7 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
       "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
     });
     await screen.findByText("SSH account");
+    openFilterBuilder();
     const add = screen.getByRole("button", { name: "+ Ajouter un filtre" });
     for (let index = 0; index < 4; index += 1) fireEvent.click(add);
     expect(screen.getByLabelText("Champ de la règle 1")).toBeTruthy();
@@ -78,6 +85,7 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
       "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
     });
     expect(await screen.findByText("SSH account")).toBeTruthy();
+    openFilterBuilder();
 
     fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
     fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
@@ -109,6 +117,7 @@ describe("Accounts — ADR-0073 UX-05 saved views", () => {
       "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 2 } },
     });
     await screen.findByText("SSH account");
+    openFilterBuilder();
     fireEvent.click(screen.getByRole("button", { name: "+ Ajouter un filtre" }));
     fireEvent.change(screen.getByLabelText("Nom de la vue"), { target: { value: "Vue SSH" } });
     const original = Storage.prototype.setItem;

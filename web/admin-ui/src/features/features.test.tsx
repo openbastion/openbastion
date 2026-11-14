@@ -44,6 +44,11 @@ describe("Accounts", () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } } });
     signedIn(api, <Accounts />);
     const trigger = await screen.findByRole("button", { name: /Filtres avancés/ });
+    // The rule builder starts closed: the inventory is what the screen exists to show.
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("Constructeur de filtres")).toBeNull();
+    expect(screen.getByLabelText("Filtrer les comptes de cette page")).toBeTruthy();
+    fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByLabelText("Constructeur de filtres")).toBeTruthy();
     expect(screen.getByLabelText("Règles de filtrage")).toBeTruthy();
@@ -68,7 +73,7 @@ describe("Accounts", () => {
     expect(screen.queryByText("prod db")).toBeNull();
     expect(screen.queryByText("cache")).toBeNull();
     expect(screen.getByText(/1 sur 3 compte\(s\)/).textContent).toContain("1 sur 3 compte(s)");
-    expect(screen.getByText(/La recherche et les critères ci-dessous s.appliquent uniquement aux 3 comptes chargés/)).toBeTruthy();
+    expect(screen.getByText(/recherche et critères limités aux comptes de cette page/)).toBeTruthy();
     expect(calls.filter((call) => call.method === "GET" && call.path.startsWith("/vault/accounts")).length).toBe(1);
   });
 
@@ -84,6 +89,7 @@ describe("Accounts", () => {
   it("onboards an account with its secret as bytes, and never shows it again", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Identifiant", "acc_2");
@@ -145,6 +151,7 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
   it("asks for an interval only for a scheduled account, and sends it as a number", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     const label = "Intervalle de rotation (jours, 1 à 365)";
     expect(screen.queryByLabelText(label)).toBeNull();
@@ -291,6 +298,7 @@ describe("Approval with a ticket (ADR-0067)", () => {
   it("onboards an account that requires approval", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     fireEvent.click(screen.getByLabelText("Approbation requise : chaque session attend l'accord d'une autre personne, avec un ticket"));
     fireEvent.submit(form);
@@ -351,6 +359,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
   it("onboards a VNC account with neither host key nor rotation, and sends its secret once", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": page([]), "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Protocole", "vnc");

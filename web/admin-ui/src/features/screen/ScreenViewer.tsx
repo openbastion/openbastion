@@ -3,6 +3,7 @@ import { MAX_CLIPBOARD_TEXT_LENGTH, SUBPROTOCOL, clampResize, decodeScreenMessag
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
+import { translate, useAppTranslation } from "../../shared/i18n";
 
 export type ScreenSocket = Pick<WebSocket, "send" | "close" | "readyState" | "binaryType" | "onopen" | "onmessage" | "onclose" | "onerror">;
 
@@ -78,14 +79,14 @@ export function attachUrl(attach: string, location: { protocol: string; host: st
 
 type Phase = { name: "connecting" } | { name: "live"; expiresAt?: Date } | { name: "ended"; message: string };
 
-const CLOSED_WITHOUT_END = "La connexion à l'écran a été perdue. Reconnectez-vous si la session est encore active.";
-const UNREADABLE = "Le flux reçu n'est pas valide : la connexion a été fermée.";
+
 
 // The screen of a graphical session: a canvas that shows exactly the PNG frames the Video Recorder
 // has acknowledged, and the keyboard and the pointer sent back as bounded events (ADR-0071 §4, §6).
 // Nothing typed is kept, logged or shown. The attach is single use: a lost connection does not come
 // back on its own, the operator asks for a new one (onReconnect, another POST /connect).
 export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps }: { attach: string; onReconnect: () => void; onClose: () => void; deps?: ScreenDeps }) {
+  const { t, i18n } = useAppTranslation();
   const canvas = useRef<HTMLCanvasElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const hintId = useId();
@@ -119,7 +120,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   useEffect(() => {
     const url = attachUrl(attach, window.location);
     if (!url) {
-      setPhase({ name: "ended", message: UNREADABLE });
+      setPhase({ name: "ended", message: translate("screen.unreadable") });
       return;
     }
     const ws = deps.open(url, SUBPROTOCOL);
@@ -148,7 +149,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       try {
         message = decodeScreenMessage(event.data as ArrayBuffer);
       } catch {
-        finish(UNREADABLE);
+        finish(translate("screen.unreadable"));
         return;
       }
       if (message.type === "hello") {
@@ -165,7 +166,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         // Strictly increasing. Key frames may come with gaps (the proxy replaces what a slow page
         // has not taken yet); a partial frame never: it follows the frame before it, on its screen.
         if (message.sequence <= lastReceived) {
-          finish(UNREADABLE);
+          finish(translate("screen.unreadable"));
           return;
         }
         // A clipboard text (ADR-0096) takes its place in the sequence and leaves the screen as it
@@ -178,7 +179,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         }
         if (message.type === "delta") {
           if (!screen || message.sequence !== lastReceived + 1n || message.width !== screen.width || message.height !== screen.height) {
-            finish(UNREADABLE);
+            finish(translate("screen.unreadable"));
             return;
           }
         } else {
@@ -211,11 +212,11 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
           }
           frame.current = { width: received.width, height: received.height };
           setHasFrame(true);
-        }).catch(() => finish(UNREADABLE));
+        }).catch(() => finish(translate("screen.unreadable")));
       }
     };
-    ws.onclose = () => finish(CLOSED_WITHOUT_END);
-    ws.onerror = () => finish(CLOSED_WITHOUT_END);
+    ws.onclose = () => finish(translate("screen.closedWithoutEnd"));
+    ws.onerror = () => finish(translate("screen.closedWithoutEnd"));
     return () => {
       ended = true;
       if (ws.readyState === 1) ws.send(encodeReleaseAll());
@@ -292,7 +293,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
       setPasteDraft(await read());
     } catch {
       setPasteDraft("");
-      setClipboardNotice({ tone: "info", text: "Le navigateur n'a pas donné le presse-papiers : collez le texte dans le champ." });
+      setClipboardNotice({ tone: "info", text: t("screen.clipboard.noRead") });
     }
   }
 
@@ -300,12 +301,12 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
     if (pasteDraft === null) return;
     const message = encodeClipboard(pasteDraft);
     if (!message) {
-      setClipboardNotice({ tone: "danger", text: `Ce texte ne peut pas être envoyé : ${MAX_CLIPBOARD_TEXT_LENGTH} caractères au plus, sans caractère nul.` });
+      setClipboardNotice({ tone: "danger", text: t("screen.clipboard.invalid", { max: MAX_CLIPBOARD_TEXT_LENGTH }) });
       return;
     }
     send(message);
     setPasteDraft(null);
-    setClipboardNotice({ tone: "info", text: "Texte envoyé : il est collé dans la cible une fois enregistré." });
+    setClipboardNotice({ tone: "info", text: t("screen.clipboard.sent") });
     canvas.current?.focus();
   }
 
@@ -313,9 +314,9 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   async function copyFromTarget(text: string) {
     try {
       await (deps.writeClipboard ?? ((t: string) => navigator.clipboard.writeText(t)))(text);
-      setClipboardNotice({ tone: "success", text: "Texte copié dans votre presse-papiers." });
+      setClipboardNotice({ tone: "success", text: t("screen.clipboard.copied") });
     } catch {
-      setClipboardNotice({ tone: "danger", text: "Le navigateur a refusé l'écriture dans le presse-papiers." });
+      setClipboardNotice({ tone: "danger", text: t("screen.clipboard.writeRefused") });
     }
   }
 
@@ -387,44 +388,51 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   return (
     <div className="screen" ref={area}>
       <div className="ob-form-actions">
-        <Button onClick={onClose}>Fermer l'écran</Button>
-        {phase.name === "live" && isRDP ? <Button onClick={ctrlAltDel}>Ctrl+Alt+Suppr</Button> : null}
-        {phase.name === "ended" ? <Button variant="primary" onClick={onReconnect}>Se reconnecter</Button> : null}
+        <Button onClick={onClose}>{t("screen.close")}</Button>
+        {phase.name === "live" && isRDP ? <Button onClick={ctrlAltDel}>{t("screen.ctrlAltDel")}</Button> : null}
+        {phase.name === "ended" ? <Button variant="primary" onClick={onReconnect}>{t("screen.reconnect")}</Button> : null}
       </div>
-      {phase.name === "connecting" ? <InlineNotice tone="info">Connexion à la cible…</InlineNotice> : null}
-      {phase.name === "live" && !hasFrame ? <InlineNotice tone="success">Connecté. En attente de la première image enregistrée…</InlineNotice> : null}
+      {phase.name === "connecting" ? <InlineNotice tone="info">{t("screen.connecting")}</InlineNotice> : null}
+      {phase.name === "live" && !hasFrame ? <InlineNotice tone="success">{t("screen.waitingFirstFrame")}</InlineNotice> : null}
       {phase.name === "live" && hasFrame ? (
         <p className="ob-hint" role="status" id={hintId}>
-          Session enregistrée{phase.expiresAt ? `, jusqu'à ${phase.expiresAt.toLocaleString("fr-FR")}` : ""}. Cliquez sur l'écran pour saisir : le clavier et la souris vont à la cible. Ctrl+Alt+Maj+Échap rend le clavier à la page. Le navigateur garde pour lui certains raccourcis (Alt+Tab, touche Windows). L'image n'est pas lisible par un lecteur d'écran : pour lire un texte de la cible, copiez-le, il apparaît dans le panneau Presse-papiers.
+          {phase.expiresAt
+            ? t("screen.liveUntil", { until: phase.expiresAt.toLocaleString(i18n.language) })
+            : t("screen.live")}
+          {" "}{t("screen.liveHint")}
+          {" "}{t("screen.keyboardEscapeHint")}
+          {" "}{t("screen.screenReaderHint")}
         </p>
       ) : null}
       {phase.name === "ended" ? <InlineNotice tone="danger">{phase.message}</InlineNotice> : null}
       {phase.name === "live" && (clipboardTo || clipboardFrom) ? (
-        <section className="screen-clipboard" aria-label="Presse-papiers">
-          <p className="ob-hint">Presse-papiers : chaque texte est enregistré avec la session et audité avant d'arriver.</p>
+        <section className="screen-clipboard" aria-label={t("screen.clipboard.aria")}>
+          <p className="ob-hint">{t("screen.clipboard.hint")}</p>
           <div className="ob-form-actions">
-            {clipboardTo && pasteDraft === null ? <Button onClick={startPaste}>Coller vers la cible…</Button> : null}
-            {clipboardFrom && lastCopied ? <Button onClick={() => copyFromTarget(lastCopied.text)}>Copier le texte de la cible</Button> : null}
+            {clipboardTo && pasteDraft === null ? <Button onClick={startPaste}>{t("screen.clipboard.pasteToTarget")}</Button> : null}
+            {clipboardFrom && lastCopied ? <Button onClick={() => copyFromTarget(lastCopied.text)}>{t("screen.clipboard.copyFromTarget")}</Button> : null}
           </div>
           {pasteDraft !== null ? (
             <div className="screen-clipboard-draft">
               <label>
-                Texte à coller dans la cible
+                {t("screen.clipboard.pasteLabel")}
                 <textarea value={pasteDraft} onChange={(e) => setPasteDraft(e.target.value)} rows={4} />
               </label>
-              <p className="ob-hint">{pasteDraft.length} / {MAX_CLIPBOARD_TEXT_LENGTH} caractères. Un mot de passe collé ici sera dans l'enregistrement.</p>
+              <p className="ob-hint">
+                {t("screen.clipboard.counter", { count: pasteDraft.length, max: MAX_CLIPBOARD_TEXT_LENGTH })}
+              </p>
               <div className="ob-form-actions">
-                <Button variant="primary" onClick={sendPaste}>Envoyer</Button>
-                <Button onClick={() => setPasteDraft(null)}>Annuler</Button>
+                <Button variant="primary" onClick={sendPaste}>{t("screen.clipboard.send")}</Button>
+                <Button onClick={() => setPasteDraft(null)}>{t("common.actions.cancel")}</Button>
               </div>
             </div>
           ) : null}
           {clipboardNotice ? <InlineNotice tone={clipboardNotice.tone}>{clipboardNotice.text}</InlineNotice> : null}
           {clipboardEntries.length > 0 ? (
-            <ul className="screen-clipboard-history" aria-label="Derniers transferts">
+            <ul className="screen-clipboard-history" aria-label={t("screen.clipboard.historyAria")}>
               {clipboardEntries.map((entry) => (
                 <li key={entry.sequence.toString()}>
-                  <span>{entry.direction === "to-target" ? "Collé dans la cible" : "Copié depuis la cible"}</span>
+                  <span>{entry.direction === "to-target" ? t("screen.pastedToTarget") : t("screen.copiedFromTarget")}</span>
                   <pre>{entry.text}</pre>
                 </li>
               ))}
@@ -437,8 +445,8 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         className={pointerDrawn ? "screen-canvas pointer-drawn" : "screen-canvas"}
         tabIndex={0}
         role="application"
-        aria-roledescription="écran distant"
-        aria-label="Écran distant de la session"
+        aria-roledescription={t("screen.roleDescription")}
+        aria-label={t("screen.canvasAria")}
         aria-describedby={hintId}
         hidden={!hasFrame}
         onKeyDown={onKeyDown}

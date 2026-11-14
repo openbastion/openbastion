@@ -9,6 +9,7 @@ import { PendingRequests } from "./PendingRequests";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
 import { Button } from "../../shared/ui/Button";
+import { useAppTranslation } from "../../shared/i18n";
 
 // A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
 // the requests waiting for this user's decision (break-glass, ADR-0012, and approval, ADR-0067),
@@ -20,6 +21,7 @@ export function Sessions({
   requestedSessionId?: string | null;
   onSessionLookupComplete?: () => void;
 } = {}) {
+  const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
   const [pendingLoading, setPendingLoading] = useState(true);
@@ -104,7 +106,11 @@ export function Sessions({
     try {
       await api.request(method, endpoint);
       setError(undefined);
-      setOk(kind === "approve" ? `${session.id} approuvée` : kind === "reject" ? `${session.id} refusée` : `${session.id} terminée`);
+      setOk(
+        kind === "approve" ? t("sessions.decisions.approved", { id: session.id })
+          : kind === "reject" ? t("sessions.decisions.rejected", { id: session.id })
+            : t("sessions.decisions.terminated", { id: session.id }),
+      );
       setDecision(undefined);
       load();
       return true;
@@ -115,7 +121,7 @@ export function Sessions({
   }
 
   return (
-    <AdminPage title="Sessions">
+    <AdminPage title={t("sessions.title")}>
       <Notice error={decision ? undefined : error} ok={decision ? undefined : ok} />
       <SessionRequest
         onDone={(s) => {
@@ -123,7 +129,9 @@ export function Sessions({
           setFound(s);
           setScreen(undefined);
           act(
-            s.status === "pending_approval" ? `${s.id} en attente de l'approbation d'une autre personne, jusqu'à ${s.expiresAt}` : `${s.id} ${s.status}`,
+            s.status === "pending_approval"
+              ? t("sessions.request.pendingApproval", { id: s.id, expiresAt: s.expiresAt })
+              : t("sessions.request.status", { id: s.id, status: s.status }),
             async () => undefined,
           );
         }}
@@ -135,16 +143,16 @@ export function Sessions({
         onReject={(s) => askDecision("reject", s)}
       />
       <section className="ob-surface ob-panel session-lookup" aria-labelledby="session-lookup-title">
-        <h3 id="session-lookup-title">Une session</h3>
-        <form onSubmit={find} aria-label="Chercher une session">
+        <h3 id="session-lookup-title">{t("sessions.lookup.title")}</h3>
+        <form onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
           <div className="ob-form-fields">
             <label>
-              Identifiant
+              {t("sessions.lookup.identifier")}
               <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required />
             </label>
           </div>
           <div className="ob-form-actions">
-            <Button type="submit" variant="primary">Afficher</Button>
+            <Button type="submit" variant="primary">{t("sessions.lookup.show")}</Button>
           </div>
         </form>
         {found ? <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={terminate} /> : null}
@@ -159,11 +167,27 @@ export function Sessions({
       </section>
       {decision ? (
         <ConfirmDialog
-          title={decision.kind === "approve" ? "Approuver cette demande ?" : decision.kind === "reject" ? "Refuser cette demande ?" : "Mettre fin à cette session ?"}
+          title={
+            decision.kind === "approve" ? t("sessions.confirm.approveTitle")
+              : decision.kind === "reject" ? t("sessions.confirm.rejectTitle")
+                : t("sessions.confirm.terminateTitle")
+          }
           description={decision.kind === "terminate"
-            ? `La session ${decision.session.id} sera révoquée sur le proxy. Les connexions actives seront coupées ; l'opération n'est confirmée qu'après la réponse du proxy.`
-            : `${decision.session.breakGlass ? "Demande d'urgence" : "Demande d'accès"} ${decision.session.id}, formulée par ${decision.session.requestedBy} pour ${decision.session.privilegedAccountId}. Justification : ${decision.session.justification}. Ticket : ${decision.session.ticket ?? "aucun"}. Échéance : ${decision.session.expiresAt}.`}
-          confirmLabel={decision.kind === "approve" ? "Confirmer l'approbation" : decision.kind === "reject" ? "Confirmer le refus" : "Mettre fin à la session"}
+            ? t("sessions.confirm.terminateBody", { id: decision.session.id })
+            : t("sessions.confirm.decideBody", {
+              kind: decision.session.breakGlass ? t("sessions.confirm.emergency") : t("sessions.confirm.access"),
+              id: decision.session.id,
+              requester: decision.session.requestedBy,
+              account: decision.session.privilegedAccountId,
+              justification: decision.session.justification,
+              ticket: decision.session.ticket ?? t("sessions.confirm.none"),
+              expiresAt: decision.session.expiresAt,
+            })}
+          confirmLabel={
+            decision.kind === "approve" ? t("sessions.confirm.approve")
+              : decision.kind === "reject" ? t("sessions.confirm.reject")
+                : t("sessions.confirm.terminate")
+          }
           danger={decision.kind !== "approve"}
           error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
           onCancel={() => setDecision(undefined)}
