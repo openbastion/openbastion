@@ -603,6 +603,6 @@ Les contrats d'agent sont définis séparément sous proto/agent/v1 :
 
 **Portée de l'exception.** ADR-0103 propose gRPC/HTTP2 sous TLS 1.3/mTLS uniquement entre les agents externes et Agent Control/Agent Telemetry. Les RPC entre microservices OpenBastion restent HTTP/JSON sous mTLS (ADR-0050). Les contrats Protobuf ne font pas autorité sur l'identité : le SAN du certificat mTLS reste la seule identité agent. Les champs agent_id sont des assertions de cohérence.
 
-**Sécurité du contrat.** Les capacités sont des JWS EdDSA éphémères ; les destinations sont des IP littérales ; la taille applicative maximale d'une trame tunnel est 64 Kio ; les messages de télémétrie sont bornés et ne doivent contenir aucun secret ni contenu de session. Le serveur doit appliquer quotas, séquences, délais, backpressure et révocation.
+**Sécurité du contrat.** Les capacités sont des JWS EdDSA éphémères ; les destinations sont des IP littérales ; la taille applicative maximale d'une trame tunnel est 64 Kio ; la télémétrie utilise un oneof Protobuf de types d'observation fermés, bornés et versionnés, sans payload libre, secret ni contenu de session. Le serveur doit appliquer quotas, séquences, délais, backpressure et révocation.
 
 **État.** Les fichiers Protobuf sont des contrats proposés, pas du code généré ni un service déployable. Avant implémentation : ajouter la configuration Buf au dépôt, exécuter lint/breaking/generate en CI, vérifier les imports et figer les règles de compatibilité. Aucun changement du transport interservices existant n'est autorisé par cette exception.
