@@ -153,7 +153,7 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
 - **Fait** : `pkg/rdp/graphics_nscodec.go` décode le sous-codec 0x01 (MS-RDPNSC), c'est-à-dire :
   - les plans de luminance, de chrominance orange et verte, et d'alpha, bruts ou en séries (fin des quatre derniers octets en clair) ;
   - la chrominance réduite de `ColorLossLevel` bits, et sous-échantillonnée sur des plans élargis à 8 colonnes et 2 lignes.
-- **Couleur** : la conversion YCoCg est celle de RDP 6.0 (MS-RDPEGDI 3.1.9.1.2), déjà éprouvée contre Windows pour les bitmaps planar. Elle n'inverse ni le rouge ni le bleu, pas plus que FreeRDP, malgré la note de la spécification sur les serveurs à 24 bpp. L'écran de la CI tranche.
+- **Couleur** : la conversion YCoCg de RDP 6.0 (MS-RDPEGDI 3.1.9.1.2), **puis le rouge et le bleu inversés**, comme la spécification l'exige. Le premier passage de la CI (PR #198) suivait FreeRDP, sans inversion : le fond d'écran bleu de Windows Server 2022 et l'icône de Notepad sont sortis orange. La spécification avait raison, et le correctif a été vérifié sur l'écran du passage suivant.
 - **Lecture de FreeRDP** : l'octet qui précède les quatre derniers d'un plan est un littéral, même s'il est égal au suivant.
 - **Constat** : la borne de ClearCodec (3 octets par pixel au plus pour un sous-codec) exclut tout NSCodec à plans bruts, dont l'en-tête seul ajoute 20 octets. Windows n'envoie donc dans ClearCodec que des plans en séries ou sous-échantillonnés.
 - **L'alpha** est lu et borné, mais pas dessiné : ClearCodec dessine le rouge, le vert et le bleu.

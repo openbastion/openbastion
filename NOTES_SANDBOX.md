@@ -4524,6 +4524,7 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 ## 2026-11-14 — ADR-0101, incrément 3 bis : NSCodec dans ClearCodec
 
 - **Fait** : le sous-codec 0x01 de ClearCodec (`pkg/rdp/graphics_nscodec.go`), avec ses plans bruts ou en séries et sa chrominance réduite ou sous-échantillonnée.
-- **Couleur** : la conversion YCoCg de RDP 6.0, déjà éprouvée contre Windows, sans inversion rouge-bleu (comme FreeRDP).
+- **Couleur** : la conversion YCoCg de RDP 6.0, puis le rouge et le bleu inversés, comme l'exige la spécification. Sans l'inversion (lecture de FreeRDP, premier passage de #198), le fond bleu de Windows 2022 est sorti orange.
+- **À vérifier** : le chemin planar de l'ancien protocole, en AYCoCg avec perte de couleur, n'inverse pas non plus. Il a été éprouvé contre Windows, mais peut-être seulement en ARGB.
 - **Prouvé** : 18 refus, un fuzzer, 15 mutations tuées.
-- **En attente** : l'écran des cinq Windows dans la CI de la PR (le rectangle bleu nuit de la barre des tâches de 2022 doit devenir l'icône qu'il est sous 2019).
+- **En attente** : l'écran des cinq Windows dans la CI de la PR, aux couleurs justes.

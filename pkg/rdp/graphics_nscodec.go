@@ -9,10 +9,10 @@ import (
 // one to four times a session (CI of PR #197). Four planes, luma, orange chroma, green chroma and
 // alpha, each raw or run-length encoded; the chroma reduced by ColorLossLevel bits and, with
 // subsampling, kept at half resolution on padded planes. The colour transform is the one of RDP 6.0
-// (MS-RDPEGDI 3.1.9.1.2), already proven against Windows for planar bitmaps (decodeRDP6AYCoCg): it
-// swaps neither red nor blue, as FreeRDP does not, whatever the spec's note on 24-bpp servers says;
-// the CI's screens tell which is right. The alpha plane is read and bounded, not drawn: ClearCodec
-// draws red, green and blue.
+// (MS-RDPEGDI 3.1.9.1.2, decodeRDP6AYCoCg), then red and blue swapped, as the spec says a decoder
+// MUST ("Microsoft RDP servers incorrectly convert 24 bpp RGB bitmaps to the YCoCg color space"):
+// without the swap, the blue wallpaper of the CI's Windows Server 2022 came out orange (CI of PR
+// #198). The alpha plane is read and bounded, not drawn: ClearCodec draws red, green and blue.
 
 const nscHeaderSize = 20
 
@@ -114,7 +114,7 @@ func decodeNSCodec(data []byte, t clearTarget) error {
 		for x := range w {
 			chroma := (y>>shift)*chromaWidth + x>>shift
 			r, g, b := decodeRDP6AYCoCg(planes[0][y*lumaWidth+x], planes[1][chroma], planes[2][chroma], loss)
-			t.set(x, y, b, g, r)
+			t.set(x, y, r, g, b) // red and blue swapped: t.set takes blue first
 		}
 	}
 	return nil
