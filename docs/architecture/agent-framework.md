@@ -29,7 +29,8 @@ flowchart TB
   NA --> TARGET[Hôtes et services privés]
   SA[Security Agent] -->|gRPC telemetry · mTLS| ATEL[Agent Telemetry]
   ATEL --> INGEST[Normalisation / stockage télémétrie]
-  INGEST --> AUDIT[Audit Service · événements de provenance]
+  INGEST --> TS[Stockage télémétrie / détection]
+  INGEST --> AUDIT[Audit Service · métadonnées de réception et qualité seulement]
   BROKER --> AUDIT
   PROXY --> AUDIT
   RELEASE[Chaîne de livraison signée] --> NA
@@ -82,7 +83,7 @@ Le diagramme est conceptuel : le proxy échange les données avec la cible à tr
 
 Security Agent collecte des événements structurés en lecture seule. Il les envoie par un flux mTLS distinct. Agent Telemetry vérifie l'identité issue du certificat, les limites, le schéma et la séquence ; il acquitte uniquement les événements acceptés.
 
-Les observations sont stockées avec une provenance explicite `host-agent`. Elles ne peuvent pas appeler directement les RPC d'écriture d'Audit Service comme un émetteur PAM faisant autorité. L'Audit Service conserve les décisions du Broker et les événements des proxies selon ADR-0025 à ADR-0028.
+Les observations sont stockées dans un stockage de télémétrie dédié avec une provenance explicite `host-agent`. Audit Service ne reçoit que les événements de réception, de révocation, de perte ou de qualité de collecte ; le contenu brut des observations n'est pas injecté dans la chaîne d'audit faisant autorité. L'Audit Service conserve les décisions du Broker et les événements des proxies selon ADR-0025 à ADR-0028.
 
 ## 5. Frontières de confiance
 
