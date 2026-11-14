@@ -153,7 +153,10 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
 - **Fait** : `pkg/rdp/graphics_nscodec.go` décode le sous-codec 0x01 (MS-RDPNSC), c'est-à-dire :
   - les plans de luminance, de chrominance orange et verte, et d'alpha, bruts ou en séries (fin des quatre derniers octets en clair) ;
   - la chrominance réduite de `ColorLossLevel` bits, et sous-échantillonnée sur des plans élargis à 8 colonnes et 2 lignes.
-- **Couleur** : la conversion YCoCg de RDP 6.0 (MS-RDPEGDI 3.1.9.1.2), **puis le rouge et le bleu inversés**, comme la spécification l'exige. Le premier passage de la CI (PR #198) suivait FreeRDP, sans inversion : le fond d'écran bleu de Windows Server 2022 et l'icône de Notepad sont sortis orange. La spécification avait raison, et le correctif a été vérifié sur l'écran du passage suivant.
+- **Couleur, corrigée deux fois** : la conversion est celle de FreeRDP (`nsc_decode`). Chaque octet de chrominance est décalé de `ColorLossLevel - 1` bits, et alors seulement lu comme signé, puis R = Y + Co - Cg, G = Y + Cg, B = Y - Co - Cg, sans inversion.
+  - **Premier passage** (PR #198) : l'octet était lu comme signé avant le décalage, ce qui perdait le signe d'une moitié des valeurs. Le fond bleu de Windows 2022 est sorti orange.
+  - **Ma deuxième lecture** : j'avais conclu à tort que la spécification avait raison d'exiger une inversion rouge-bleu. Elle a masqué l'erreur sur les pixels où l'écran a été regardé, mais le fond est sorti vert au passage de la PR #199.
+  - **La cause** a été trouvée en rejouant en local les messages bruts de cette session. Au message 8, le pixel Y 107, Co 37, Cg 63 (`ColorLossLevel` 3) est le bleu (3, 103, 219). Un test le garde, et l'ancien calcul y redonne exactement le vert de la CI.
 - **Lecture de FreeRDP** : l'octet qui précède les quatre derniers d'un plan est un littéral, même s'il est égal au suivant.
 - **Constat** : la borne de ClearCodec (3 octets par pixel au plus pour un sous-codec) exclut tout NSCodec à plans bruts, dont l'en-tête seul ajoute 20 octets. Windows n'envoie donc dans ClearCodec que des plans en séries ou sous-échantillonnés.
 - **L'alpha** est lu et borné, mais pas dessiné : ClearCodec dessine le rouge, le vert et le bleu.
@@ -162,6 +165,30 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - 18 refus ;
   - un fuzzer (`FuzzNSCodec`) ;
   - 15 mutations tuées.
+
+### Incrément 4 — RemoteFX progressif (14 novembre 2026)
+
+- **Fait** : `pkg/rdp/graphics_progressive.go` décode `WireToSurface2` en RemoteFX progressif (MS-RDPEGFX 2.2.4.2) :
+  - les blocs SYNC, CONTEXT, FRAME_BEGIN, REGION et FRAME_END ;
+  - les tuiles de 64 x 64, simples, en premier passage ou en passe de raffinement ;
+  - par composante (Y, Cb, Cr) : RLGR1, le cumul des écarts LL3, la déquantification par sous-bande ;
+  - pour les raffinements : les bits bruts là où le signe d'un coefficient est connu, Simplified-RL là où il est nul ;
+  - les deux ondelettes inverses : « Reduce-Extrapolate » et celle d'origine de RemoteFX ;
+  - la conversion YCbCr vers RGB en virgule fixe.
+
+  Chaque tuile est dessinée dans les rectangles de sa région, bornée à sa surface. L'état progressif est gardé par surface, et oublié avec elle.
+- **Référence** : la spécification ne donne ses algorithmes qu'en figures (adaptation de RLGR, équations des ondelettes, matrice de couleur). Le code suit l'arithmétique entière de FreeRDP 3.15 (`progressive.c`, `rfx_rlgr.c`, `rfx_dwt.c`, `prim_colors.c`), lu comme référence et écrit à neuf. L'image produite est donc celle que FreeRDP montre.
+- **Bornes** : 1 024 tuiles gardées par canal (48 Kio chacune), 7 tables de quantification au plus, des quantifications progressives de 0 à 8. Les deux flux d'une passe de raffinement doivent être lus jusqu'au bout.
+- **Prouvé** :
+  - RLGR1 et Simplified-RL sur des flux calculés à la main depuis leurs règles ;
+  - les deux ondelettes sur une image unie, et la couleur sur une valeur connue ;
+  - un premier passage puis une passe de raffinement ;
+  - 23 refus et un fuzzer (`FuzzRDPGraphicsProgressive`) ;
+  - **une trame réelle de FreeRDP rejouée** (`testdata/graphics/freerdp-progressive`, 88 Kio) : la fenêtre xterm de l'écran de test, vérifiée à l'œil, puis épinglée par son empreinte SHA-256 ;
+  - **une session réelle de Windows Server 2022 rejouée** (`testdata/graphics/windows-2022`, 17 messages, 144 Kio, tirés de l'artefact de la CI de la PR #199). On y trouve ClearCodec avec NSCodec, et RemoteFX progressif en « Reduce-Extrapolate », avec ses raffinements. Le bureau entier (fond, filigrane, barre des tâches, Notepad), vérifié à l'œil, est épinglé par son empreinte ;
+  - 30 mutations tuées. Trois survivent, sans effet sur les données de référence : la dernière colonne de l'ondelette d'origine (nulle sur les bords unis de la trame FreeRDP) et deux constantes de couleur décalées d'une unité (l'arrondi ne change pas).
+- **Contre FreeRDP 3** : 183 trames en 10 s décodées sans faute. FreeRDP emploie l'ondelette d'origine ; on voit aux coins des tuiles les artefacts que la spécification lui attribue (3.2.8.1.2.2).
+- **Contre les cinq Windows** (CI de la PR #199) : plus aucune image non dessinée, et aucune faute. La CI dépose désormais les messages bruts du canal graphique dans l'artefact (`graphics-messages/`). C'est en les rejouant en local que l'erreur de couleur de NSCodec a été trouvée.
 
 ## Ce qui demande ton go
 

@@ -8,11 +8,14 @@ import (
 // NSCodec (MS-RDPNSC), the subcodec 0x01 of ClearCodec, ADR-0101 increment 3b: the CI's Windows use it
 // one to four times a session (CI of PR #197). Four planes, luma, orange chroma, green chroma and
 // alpha, each raw or run-length encoded; the chroma reduced by ColorLossLevel bits and, with
-// subsampling, kept at half resolution on padded planes. The colour transform is the one of RDP 6.0
-// (MS-RDPEGDI 3.1.9.1.2, decodeRDP6AYCoCg), then red and blue swapped, as the spec says a decoder
-// MUST ("Microsoft RDP servers incorrectly convert 24 bpp RGB bitmaps to the YCoCg color space"):
-// without the swap, the blue wallpaper of the CI's Windows Server 2022 came out orange (CI of PR
-// #198). The alpha plane is read and bounded, not drawn: ClearCodec draws red, green and blue.
+// subsampling, kept at half resolution on padded planes. The colour transform is FreeRDP's
+// (nsc_decode): each chroma byte shifted left by ColorLossLevel - 1 and only then read as a signed
+// byte (it holds a signed value of 8 - ColorLossLevel + 1 bits), then R = Y + Co - Cg, G = Y + Cg,
+// B = Y - Co - Cg, no swap. Read as a signed byte first (decodeRDP6AYCoCg), the sign of half the
+// values was lost: the blue wallpaper of the CI's Windows Server 2022 came out orange, then, red and
+// blue swapped to make up for it, green (CI of PRs #198 and #199; message 8 of the session: Y 107,
+// Co 37, Cg 63 at ColorLossLevel 3 is blue, 3, 103, 219). The alpha plane is read and bounded, not
+// drawn: ClearCodec draws red, green and blue.
 
 const nscHeaderSize = 20
 
@@ -113,8 +116,11 @@ func decodeNSCodec(data []byte, t clearTarget) error {
 	for y := range h {
 		for x := range w {
 			chroma := (y>>shift)*chromaWidth + x>>shift
-			r, g, b := decodeRDP6AYCoCg(planes[0][y*lumaWidth+x], planes[1][chroma], planes[2][chroma], loss)
-			t.set(x, y, r, g, b) // red and blue swapped: t.set takes blue first
+			luma := int(planes[0][y*lumaWidth+x])
+			co := int(int8(planes[1][chroma] << (loss - 1)))
+			cg := int(int8(planes[2][chroma] << (loss - 1)))
+			clip := func(v int) byte { return byte(max(0, min(255, v))) }
+			t.set(x, y, clip(luma-co-cg), clip(luma+cg), clip(luma+co-cg))
 		}
 	}
 	return nil

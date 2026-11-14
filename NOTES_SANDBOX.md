@@ -4524,7 +4524,21 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 ## 2026-11-14 — ADR-0101, incrément 3 bis : NSCodec dans ClearCodec
 
 - **Fait** : le sous-codec 0x01 de ClearCodec (`pkg/rdp/graphics_nscodec.go`), avec ses plans bruts ou en séries et sa chrominance réduite ou sous-échantillonnée.
-- **Couleur** : la conversion YCoCg de RDP 6.0, puis le rouge et le bleu inversés, comme l'exige la spécification. Sans l'inversion (lecture de FreeRDP, premier passage de #198), le fond bleu de Windows 2022 est sorti orange.
-- **À vérifier** : le chemin planar de l'ancien protocole, en AYCoCg avec perte de couleur, n'inverse pas non plus. Il a été éprouvé contre Windows, mais peut-être seulement en ARGB.
+- **Couleur** : la conversion de FreeRDP (`nsc_decode`). Elle décale la chrominance avant de la lire comme signée, et n'inverse pas le rouge et le bleu. Deux lectures fausses l'ont précédée (orange en #198, vert en #199) ; la cause a été trouvée en rejouant les messages bruts de la CI (voir ADR-0101).
+- **À corriger à part** : le planar AYCoCg de l'ancien chemin (`decodeRDP6AYCoCg`) lit aussi l'octet comme signé avant le décalage, et n'inverse pas le rouge et le bleu, alors que FreeRDP (`prim_YCoCg.c`) et la spécification inversent. Il a été éprouvé contre Windows, peut-être seulement en ARGB (`ColorLossLevel` 0, où rien de cela ne joue). Aucune cible ne l'exerce encore.
 - **Prouvé** : 18 refus, un fuzzer, 15 mutations tuées.
-- **En attente** : l'écran des cinq Windows dans la CI de la PR, aux couleurs justes.
+- **Contre les cinq Windows** (CI de #198) : les couleurs sont justes après l'inversion rouge-bleu.
+
+## 2026-11-14 — ADR-0101, incrément 4 : RemoteFX progressif
+
+- **Fait** : le décodeur (`pkg/rdp/graphics_progressive.go`), pour les premiers passages et les raffinements, avec les deux ondelettes inverses.
+- **Référence** : FreeRDP 3.15, lu et non copié. La spécification ne donne ses algorithmes qu'en figures.
+- **Prouvé** :
+  - une trame réelle de FreeRDP, rejouée et épinglée par son empreinte, l'image vérifiée à l'œil ;
+  - 23 refus, un fuzzer, 24 mutations tuées.
+- **Éprouvé contre les cinq Windows**, et figé par une session Windows Server 2022 rejouée (`testdata/graphics/windows-2022`), qui pine aussi l'ondelette « Reduce-Extrapolate » et les raffinements.
+- **Instabilités vues dans la CI de #199, sans lien avec son code** :
+  - le test de la palette de commandes de l'Admin UI (« opens with Ctrl+K… », combobox introuvable) ;
+  - le presse-papiers du moteur, qui n'a pas trouvé Notepad à l'écran ;
+  - le presse-papiers en navigateur, dont le texte copié n'est pas revenu en 60 s.
+- **CI de #199, premier passage** : le fond d'écran de Windows 2022 est enfin dessiné, en RemoteFX progressif. Une bande et le bloc du filigrane, tous deux en NSCodec, sont sortis verts ; c'est corrigé ci-dessus, dans la même PR.

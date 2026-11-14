@@ -70,6 +70,7 @@ type RDPGraphicsCompositor struct {
 	cache        map[uint16]*graphicsCacheEntry
 	cacheBytes   int
 	clear        *clearCodec
+	progressive  *progressiveCodec
 	frameOpen    bool
 	frameID      uint32
 	decoded      uint32
@@ -208,6 +209,10 @@ func (c *RDPGraphicsCompositor) Apply(pdu RDPGraphicsPDU) (frame RDPGraphicsFram
 		c.surfaceBytes -= len(s.pix)
 		delete(c.surfaces, id)
 		delete(c.mappings, id)
+		if c.progressive != nil && c.progressive.surfaces[id] != nil {
+			c.progressive.tiles -= len(c.progressive.surfaces[id].tiles)
+			delete(c.progressive.surfaces, id)
+		}
 		return frame, false, nil
 	case RDPGraphicsMapSurfaceToOutput, RDPGraphicsMapSurfaceToScaledOut:
 		// 2.2.2.15: surfaceId, reserved, outputOriginX, outputOriginY; 2.2.2.22 adds targetWidth and
@@ -388,11 +393,7 @@ func (c *RDPGraphicsCompositor) Apply(pdu RDPGraphicsPDU) (frame RDPGraphicsFram
 	case RDPGraphicsWireToSurface1:
 		return frame, false, c.wireToSurface1(body)
 	case RDPGraphicsWireToSurface2:
-		codec := uint16(0)
-		if len(body) >= 4 {
-			codec = binary.LittleEndian.Uint16(body[2:4])
-		}
-		return frame, false, fmt.Errorf("%w: 0x%04x", ErrRDPGraphicsCodec, codec)
+		return frame, false, c.wireToSurface2(body)
 	}
 	// The cache import reply answers an offer this client never makes; a window mapping is RAIL.
 	return frame, false, graphicsRefused("command 0x%04x not drawn", pdu.Command)
@@ -444,6 +445,31 @@ func (c *RDPGraphicsCompositor) wireToSurface1(body []byte) error {
 	}
 	s.dirty = s.dirty.Union(r)
 	return nil
+}
+
+// wireToSurface2 draws an RDPGFX_WIRE_TO_SURFACE_PDU_2 (2.2.2.2): surfaceId, codecId,
+// codecContextId, pixelFormat, bitmapDataLength, the data; RemoteFX Progressive only. The
+// progressive state is kept by surface, as FreeRDP keeps it; the context ID is not needed to decode.
+func (c *RDPGraphicsCompositor) wireToSurface2(body []byte) error {
+	if len(body) < 13 || uint64(binary.LittleEndian.Uint32(body[9:13])) != uint64(len(body)-13) {
+		return graphicsRefused("a WireToSurface2 of %d bytes", len(body))
+	}
+	codec, format := binary.LittleEndian.Uint16(body[2:4]), body[8]
+	if codec != rdpGraphicsCodecProgressive {
+		return fmt.Errorf("%w: 0x%04x", ErrRDPGraphicsCodec, codec)
+	}
+	id := binary.LittleEndian.Uint16(body[0:2])
+	s, err := c.surface(id)
+	if err != nil {
+		return err
+	}
+	if format != rdpGraphicsPixelXRGB && format != rdpGraphicsPixelARGB {
+		return graphicsRefused("a progressive bitmap of format 0x%02x", format)
+	}
+	if c.progressive == nil {
+		c.progressive = &progressiveCodec{surfaces: map[uint16]*progSurface{}}
+	}
+	return c.progressive.decode(body[13:], id, s, c.frameID)
 }
 
 // present copies what changed of every mapped surface onto the output (3.3.5.12), opaque.
