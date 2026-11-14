@@ -1,8 +1,8 @@
-# Feuille de route MVP → v0.0.1 → v0.0.2
+# Feuille de route MVP → v0.0.1 → v0.0.2 → v0.0.3
 
 Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
-## 0. État d'avancement — 9 novembre 2026
+## 0. État d'avancement — 14 novembre 2026
 
 La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
 
@@ -97,7 +97,36 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 - Un score de risque est calculé pour chaque session active et influence les politiques d'approbation (ex. déclenchement automatique d'une validation N+1 si score élevé).
 - `docs/deployment/disaster-recovery.md` validé par un exercice de bascule réel.
 
-## 5. Matrice de couverture par microservice
+## 5. v0.0.3 — Fondations du framework d'agents distribués
+
+**Objectif** : concevoir et valider les contrats et les garanties de sécurité des agents avant toute implémentation connectée à un réseau réel. La v0.0.3 est un jalon d'architecture et de sécurité ; elle ne prétend pas livrer des agents de production.
+
+| Domaine | Livrables v0.0.3 |
+|---|---|
+| Architecture | Framework à deux plans : Network Agent et Security Agent ; séparation des processus, identités et privilèges (ADR-0102) |
+| Connectivité | Tunnel sortant multiplexé, gRPC bidirectionnel sur TLS 1.3/mTLS, exception limitée à Agent Control (ADR-0103) |
+| Identité | Enrôlement à usage unique, PKI individuelle, certificats courts et révocation (ADR-0104) |
+| Autorisation réseau | Capacités JWS EdDSA à usage unique, liées à l'agent, à la session, à la ressource, à l'IP et au port ; politique locale restrictive (ADR-0105) |
+| Durcissement | Processus isolés, comptes dédiés, permissions minimales, confinement Linux/Windows (ADR-0106) |
+| Télémétrie | Contrat Security Agent en lecture seule, séquencement, acquittement et signalement des pertes (ADR-0107) |
+| Chaîne de livraison | Signature, provenance, SBOM, politique signée et anti-rollback (ADR-0108, ADR-0094) |
+| Résilience | Registre HA, bascule contrôlée, fermeture des tunnels à la perte du flux et nouvelle autorisation à la reprise (ADR-0109) |
+| Audit | Provenance distincte de la télémétrie hôte, corrélation et séparation de la preuve d'audit PAM (ADR-0110) |
+| Contrats | Protobuf sous proto/agent/v1 : enrôlement, contrôle bidirectionnel, tunnels et télémétrie |
+| Sécurité | Modèle STRIDE/DREAD dédié aux agents, frontières de confiance, risques résiduels et plan de vérification |
+
+**Critères de sortie**
+
+- Les neuf ADR-0102 à ADR-0110 sont relus et acceptés par le propriétaire du projet, ou explicitement maintenus proposés avec les points encore ouverts identifiés.
+- Les contrats Protobuf sont validés par Buf (lint et breaking check) et leur génération est reproductible avant toute implémentation runtime.
+- Chaque RPC, champ et flux agent est couvert par une règle d'identité, d'autorisation, de taille, de délai et de comportement en erreur.
+- Les menaces P0 du modèle STRIDE disposent de contrôles spécifiés et de tests de sécurité planifiés ; aucune menace P0 non traitée ne permet un pilote sur réseau réel.
+- La séparation Network/Security Agent, l'absence de secrets cibles dans les messages et le refus des commandes arbitraires sont vérifiés par revue de contrat.
+- Les risques résiduels root/SYSTEM, hôte compromis, PKI et chaîne de livraison sont documentés.
+
+**Explicitement hors périmètre v0.0.3** : binaire agent de production, tunnel réseau opérationnel, enrôlement runtime, collecte effective Linux/Windows, mise à jour automatique, réponse EDR, exécution distante, accès SOCKS/UDP et déploiement multi-site. Ces travaux ne commencent qu'après acceptation des ADR et clôture des portes de sécurité.
+
+## 6. Matrice de couverture par microservice
 
 | Composant | MVP | v0.0.1 | v0.0.2 |
 |---|:---:|:---:|:---:|
@@ -141,9 +170,20 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 | SDK Go | | ✅ | |
 | SDK Python / Java / JavaScript | | | ✅ |
 
-## 6. Risques de séquencement
+## 7. Risques de séquencement
 
 | Risque | Mitigation |
 |---|---|
 | Le MVP mono-protocole (SSH) ne convainc pas des utilisateurs déjà équipés d'un PAM commercial couvrant RDP/DB dès le premier jour | Communiquer le MVP comme une preuve d'architecture, pas comme un produit de remplacement immédiat |
 | `pkg/proxycore` (ADR-0006) conçu pour SSH seul en MVP pourrait nécessiter un refactoring lors de l'ajout de RDP en v0.0.1 | Concevoir l'interface `Codec` dès le MVP en anticipant au moins un second protocole (RDP), sans l'implémenter |
+
+
+### Suivi spécifique des agents — v0.0.3
+
+| Élément | Statut documentaire | Porte de sécurité |
+|---|---|---|
+| ADR-0102 à ADR-0110 | Proposés dans cette branche | Acceptation propriétaire |
+| Contrats Protobuf agent | Définis dans proto/agent/v1 | Buf lint, breaking et génération |
+| STRIDE/DREAD | Analyse initiale publiée dans docs/security/threat-model-agents.md | Revue des menaces P0 et validation des contrôles |
+| Implémentation Network Agent | Non commencée | Après ADR-0102 à ADR-0105 et revue STRIDE |
+| Implémentation Security Agent | Non commencée | Après ADR-0106 à ADR-0110 et revue STRIDE |
