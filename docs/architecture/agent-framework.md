@@ -102,6 +102,7 @@ Les observations sont stockées dans un stockage de télémétrie dédié avec u
 - Un ou plusieurs Network Agents peuvent être déployés par site ; chaque agent a une identité distincte.
 - Les agents initient les connexions sortantes vers les endpoints Agent Control déclarés.
 - Les endpoints serveur sont épinglés ; aucune validation TLS n'est désactivée en production.
+- Les pare-feu des cibles refusent les connexions privilégiées directes depuis les zones opérateurs et n'autorisent que les sources Network Agent déclarées. L'agent ne peut pas empêcher seul un chemin réseau alternatif.
 - Le registre partage l'état d'identité, de révocation et de génération de politique entre replicas.
 - Un agent ne maintient qu'un flux de contrôle actif par génération d'identité.
 - La perte du flux ferme les tunnels ; la reprise exige une nouvelle session, une nouvelle autorisation et une nouvelle capacité.
