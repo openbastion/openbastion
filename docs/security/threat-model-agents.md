@@ -66,6 +66,7 @@ Chaque dimension Damage (D), Reproducibility (R), Exploitability (E), Affected u
 | AG-E02 | Elevation of Privilege | Compromission Security Agent atteint Network Agent/root | 9/8/8/9/7 | 8,2 | Critical | Processus, comptes, clés, sockets et politiques séparés ; helpers bornés |
 | AG-E03 | Elevation of Privilege | Agent Control compromis émet une capacité arbitraire | 10/9/9/9/7 | 8,8 | Critical | Allowlist locale indépendante, capacité liée session/ressource/IP/port, révocation |
 | AG-E04 | Elevation of Privilege | Update/rollback installe un binaire non autorisé | 9/8/7/8/7 | 7,8 | High | Signature, provenance, SBOM, dépôt/canal épinglé, anti-rollback, activation atomique |
+| AG-E05 | Elevation of Privilege | L'opérateur contourne le bastion par un chemin réseau direct vers la cible | 9/8/7/8/8 | 8,0 | Critical | ACL/firewalls sur les zones cibles, allowlist des IP agents, segmentation, test de non-accès direct depuis les zones opérateurs |
 
 ### Priorités
 
@@ -73,7 +74,7 @@ Chaque dimension Damage (D), Reproducibility (R), Exploitability (E), Affected u
 
 **P1 avant déploiement multi-site** : AG-T03, AG-R01, AG-R02, AG-I03, AG-D01, AG-D02 et AG-E04.
 
-**Compromis accepté** : AG-D03. La perte de contrôle ferme les tunnels ; une session légitime peut être interrompue, mais aucun accès hors ligne impossible à révoquer n'est maintenu.
+**Compromis accepté** : AG-D03. La perte de contrôle ferme les tunnels ; une session légitime peut être interrompue, mais aucun accès hors ligne impossible à révoquer n'est maintenu. Le contrôle des chemins réseau alternatifs (AG-E05) dépend aussi des firewalls et ACL du site, hors du contrôle direct du processus agent.
 
 ## 5. Invariants de sécurité
 
