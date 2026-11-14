@@ -25,7 +25,8 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
 | 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 4 |
 | 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 6 |
-| 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |\n| 15 | [Agents distribués](#15-agents-distribués) | 9 |
+| 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
+| 15 | [Agents distribués](#15-agents-distribués) | 9 |
 
 ### 1. Fondations du code
 
