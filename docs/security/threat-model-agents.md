@@ -26,7 +26,8 @@ flowchart TB
   NA -->|TCP autorise uniquement| TARGET[Machine cible]
   SA[Security Agent] -->|gRPC streaming · mTLS| AT[Agent Telemetry]
   AT --> ING[Ingestion / normalisation]
-  ING --> AUD[Audit / stockage télémétrie]
+  ING --> TS[Stockage télémétrie / détection]
+  ING --> AUD[Audit Service · métadonnées de réception seulement]
   UP[Livraison signee] --> NA
   UP --> SA
 ~~~
