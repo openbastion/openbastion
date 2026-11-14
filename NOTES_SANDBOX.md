@@ -4542,3 +4542,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - le presse-papiers du moteur, qui n'a pas trouvé Notepad à l'écran ;
   - le presse-papiers en navigateur, dont le texte copié n'est pas revenu en 60 s.
 - **CI de #199, premier passage** : le fond d'écran de Windows 2022 est enfin dessiné, en RemoteFX progressif. Une bande et le bloc du filigrane, tous deux en NSCodec, sont sortis verts ; c'est corrigé ci-dessus, dans la même PR.
+
+## 2026-11-14 — ADR-0101, incrément 5 : le pipeline graphique au proxy, derrière `SCREEN_RDPGFX`
+
+- **Fait** : `SCREEN_RDPGFX` (éteint par défaut). Les trames du pipeline arrivent au framebuffer du proxy comme des mises à jour bitmap, ce qui ne change rien pour le relais, l'enregistrement et les images partielles.
+- **Prouvé** :
+  - la session Windows rejouée à travers le moteur donne l'écran du compositeur au pixel près, chaque trame acquittée ;
+  - contre FreeRDP, le codec complet suit les touches.
+- **En attente** : la CI Windows de la PR (pipeline allumé puis éteint, octets comparés).
+- **Reste** : la vérification en navigateur et l'enregistrement relu avec `SCREEN_RDPGFX`, puis la décision de l'allumer par défaut.

@@ -51,8 +51,15 @@ type RDPCodec struct {
 	// Clipboard lets a session open the target's clipboard, in the directions its rights allow
 	// (SCREEN_CLIPBOARD, ADR-0096): cliprdr is announced only for a session with a right. Off, it
 	// never is, whatever the rights.
-	Clipboard   bool
-	openSession func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
+	Clipboard bool
+	// GraphicsPipeline offers the target the graphics pipeline (SCREEN_RDPGFX, ADR-0101): drdynvc
+	// is announced with RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL, and a target that opens the graphics
+	// channel draws the screen through it, in ClearCodec, NSCodec and RemoteFX Progressive, at 32
+	// bpp whatever its policy. Its frames reach the framebuffer as the bitmap updates do, so the
+	// relay, the partial frames and the recording see no difference. A target that does not open it
+	// goes on with bitmap updates. Off, nothing is announced, as before.
+	GraphicsPipeline bool
+	openSession      func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 	// openSessionWith stands in for the connection in tests that look at the clipboard's rights.
 	openSessionWith func(context.Context, *proxycore.Credential, rdpClipboardRights) (rdpScreenSession, error)
 }
@@ -180,8 +187,12 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		height = rdpDefaultDesktopHeight
 	}
 	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
-		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize, DesktopResize: c.Resize, ClipboardChannel: clipboard.any()}
+		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize || c.GraphicsPipeline, DesktopResize: c.Resize,
+		ClipboardChannel: clipboard.any(), GraphicsPipeline: c.GraphicsPipeline}
 	target := &rdpTargetSession{session: client, resize: c.Resize}
+	if c.GraphicsPipeline {
+		target.enableGraphics()
+	}
 	if clipboard.fromTarget {
 		target.copied = make(chan string, rdpCopiedTextsWaiting)
 	}
@@ -189,8 +200,15 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
 		{"MCS channels", func() error {
+			var names []string
 			if c.Resize {
-				if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel}, target.displayControlOpened, target.displayControlMessage); e != nil {
+				names = append(names, rdp.RDPDisplayControlChannel)
+			}
+			if c.GraphicsPipeline {
+				names = append(names, rdp.RDPGraphicsChannel)
+			}
+			if len(names) > 0 {
+				if e := client.EnableDynamicChannels(names, target.channelOpened, target.channelMessage); e != nil {
 					return e
 				}
 			}
@@ -275,6 +293,8 @@ type rdpTargetSession struct {
 	// copiedDropped counts those past rdpCopiedTextsWaiting.
 	copied        chan string
 	copiedDropped int
+	// graphics is the graphics pipeline, nil unless RDPCodec.GraphicsPipeline (ADR-0101).
+	graphics *rdpGraphics
 }
 
 // rdpCopiedTextsWaiting bounds the texts copied on the target that wait for the relay: it reads
@@ -414,13 +434,21 @@ func (s *rdpTargetSession) applySize(ctx context.Context, timeout time.Duration)
 }
 
 func (s *rdpTargetSession) ReadBitmapUpdate(ctx context.Context, timeout time.Duration) (rdp.RDPBitmapUpdate, error) {
-	return s.session.ReadBitmapUpdate(ctx, timeout)
+	if s.graphics == nil {
+		return s.session.ReadBitmapUpdate(ctx, timeout)
+	}
+	return s.graphics.next(ctx, func() (rdp.RDPBitmapUpdate, error) { return s.session.ReadBitmapUpdate(ctx, timeout) })
 }
 func (s *rdpTargetSession) SendInput(ctx context.Context, events []rdp.RDPInputEvent, timeout time.Duration) error {
 	return s.session.SendInput(ctx, events, timeout)
 }
 func (s *rdpTargetSession) Dimensions() (uint16, uint16) { return s.width, s.height }
-func (s *rdpTargetSession) Close()                       { s.session.Close() }
+func (s *rdpTargetSession) Close() {
+	if s.graphics != nil {
+		s.graphics.close()
+	}
+	s.session.Close()
+}
 
 type rdpScreenSessionAdapter struct {
 	target       rdpScreenSession

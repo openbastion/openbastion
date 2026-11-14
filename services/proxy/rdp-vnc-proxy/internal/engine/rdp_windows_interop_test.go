@@ -844,6 +844,32 @@ func TestRDPWindows_GraphicsPipeline(t *testing.T) {
 	}
 }
 
+// The graphics pipeline in the proxy (ADR-0101, increment 5) against Windows: the codec as the proxy
+// runs it with SCREEN_RDPGFX on, the screen through the pipeline, the keys into Notepad; then the
+// same without it, for the bytes each way takes from the target. The frames are in the dump
+// (graphics-on-*.png, graphics-off-*.png).
+func TestRDPWindows_ScreenThroughTheGraphicsPipeline(t *testing.T) {
+	target := windowsTarget(t)
+	credential := func() *proxycore.Credential {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+			Type: "password", Material: []byte(target.password), TargetHost: target.address,
+			TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+		}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cred
+	}
+	handed, withPipeline := screenThroughGraphics(t, &RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}, credential(), true, "graphics-on")
+	if handed == 0 {
+		t.Fatal("no frame came through the graphics pipeline")
+	}
+	_, without := screenThroughGraphics(t, &RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}, credential(), false, "graphics-off")
+	t.Logf("bytes from Windows for the same steps: %d with the pipeline, %d without", withPipeline, without)
+}
+
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
 // a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s): the same for every
 // target, whatever its shell does with keys. The stream ends with no
