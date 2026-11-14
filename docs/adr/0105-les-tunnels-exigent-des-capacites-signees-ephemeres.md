@@ -15,6 +15,7 @@ Une passerelle réseau devient un point de rebond potentiel. Une simple allowlis
 5. La destination est une IP littérale. L'agent valide IPv4/IPv6, plages réservées, CIDR, port et adresse réellement utilisée. Aucune résolution DNS n'est faite par l'agent.
 6. Aucune capacité ne permet shell, exécution distante, accès fichiers, UDP, SOCKS ou réseau entier.
 7. Toute validation impossible, expiration, répétition ou discordance entraîne un refus par défaut.
+8. Les clés publiques de vérification JWS sont épinglées dans la configuration de confiance de l'agent ; leur rotation se fait par un jeu de clés signé par une racine distincte déjà approuvée. Une clé inconnue ou une rotation non vérifiable est refusée.
 
 **Conséquences**
 
