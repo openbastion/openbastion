@@ -12,7 +12,7 @@ Un agent de site peut être remplacé par un binaire malveillant ou ramené à u
 2. L'agent vérifie signature, dépôt, provenance, canal, version et chaîne de confiance avant exécution. Une signature d'un autre dépôt/canal ne suffit pas.
 3. La mise à jour est téléchargée dans une zone non exécutable, vérifiée puis activée atomiquement.
 4. Un compteur monotone protégé contre l'écriture par le compte de service empêche le rollback sous le plancher de sécurité. Si l'hôte ne protège pas ce compteur contre l'administrateur local, cette limite est signalée.
-5. Les politiques sont versionnées, signées et liées à l'agent. Une politique invalide, expirée, plus ancienne ou destinée à un autre agent est refusée ; à échéance, aucun nouveau tunnel n'est ouvert.
+5. Les politiques sont versionnées, signées par une clé de politique distincte des clés de signature des binaires, et liées à l'agent. La clé de politique est épinglée à l'enrôlement et renouvelée uniquement par une chaîne de confiance déjà approuvée. Une politique invalide, expirée, plus ancienne ou destinée à un autre agent est refusée ; à échéance, aucun nouveau tunnel n'est ouvert.
 6. Une mise à jour ne peut élargir les capacités sans politique signée distincte.
 7. Stable, préversion et développement ont des racines de confiance distinctes ; un binaire de développement n'est jamais accepté en production.
 
