@@ -26,6 +26,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 4 |
 | 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 6 |
 | 14 | [Déploiement, CI et chaîne d'approvisionnement](#14-déploiement-ci-et-chaîne-dapprovisionnement) | 8 |
+| 15 | [Agents distribués](#15-agents-distribués) | 9 |
 
 ### 1. Fondations du code
 
@@ -226,6 +227,22 @@ Installer, vérifier à chaque commit, épingler, analyser et mettre à jour les
 | 7 | [ADR-0060](0060-les-images-sont-analysees-par-trivy-verifie-contre-son-empreinte.md) | Les images sont analysées par Trivy, un binaire vérifié contre son empreinte, jamais par ses actions ; ce qui est accepté l'est par écrit, par chemin et jusqu'à une date | Accepté |
 | 8 | [ADR-0094](0094-provenance-sbom-signature-et-verification-des-artefacts.md) | La chaîne de livraison atteste la provenance et le SBOM, signe les artefacts publiés et impose leur vérification au déploiement | Accepté |
 
+### 15. Agents distribués
+
+Identité, transport, autorisations locales, durcissement, télémétrie, mise à jour, haute disponibilité et audit des agents.
+
+| Ordre | ID | Titre | Statut |
+|---|---|---|---|
+| 1 | [ADR-0102](0102-framework-d-agents-distribues-a-deux-plans-de-capacites.md) | Le framework d'agents sépare le transport réseau de la télémétrie de sécurité | Proposé |
+| 2 | [ADR-0104](0104-chaque-agent-possede-une-identite-pki-individuelle.md) | Chaque agent possède une identité PKI individuelle et enrôlée une seule fois | Proposé |
+| 3 | [ADR-0103](0103-le-network-agent-etablit-un-tunnel-sortant-multiplexe.md) | Le Network Agent établit un tunnel sortant multiplexé sans terminer le protocole PAM | Proposé |
+| 4 | [ADR-0105](0105-les-tunnels-exigent-des-capacites-signees-ephemeres.md) | Chaque tunnel exige une capacité signée, éphémère et bornée | Proposé |
+| 5 | [ADR-0106](0106-les-agents-sont-isoles-et-fonctionnent-avec-des-privileges-minimaux.md) | Les agents sont isolés et fonctionnent avec des privilèges minimaux | Proposé |
+| 6 | [ADR-0107](0107-le-security-agent-collecte-une-telemetrie-structuree.md) | Le Security Agent collecte une télémétrie structurée en lecture seule | Proposé |
+| 7 | [ADR-0110](0110-les-evenements-agent-sont-attribues-et-separes-de-la-preuve-daudit-pam.md) | Les événements agent sont attribués et séparés de la preuve d'audit PAM | Proposé |
+| 8 | [ADR-0108](0108-les-binaires-et-politiques-agent-sont-signes-et-anti-retour.md) | Les binaires et politiques agent sont signés et protégés contre le retour arrière | Proposé |
+| 9 | [ADR-0109](0109-la-haute-disponibilite-des-agents-ne-reprend-pas-une-session-a-l-aveugle.md) | La haute disponibilité des agents ne reprend pas une session à l'aveugle | Proposé |
+
 ## Index numérique
 
 Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été prises.
@@ -333,3 +350,12 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0099](0099-la-licence-rds-complete-est-geree-sans-consommer-une-cal-par-connexion.md) | Le client RDP gère la licence RDS complète, sans consommer une licence d'accès par connexion | Accepté | Proxy écran RDP et VNC |
 | [ADR-0100](0100-credssp-accepte-kerberos-a-cote-de-ntlmv2-pour-les-domaines-sans-ntlm.md) | CredSSP accepte Kerberos à côté de NTLMv2, pour les domaines qui ferment NTLM | Accepté | Proxy écran RDP et VNC |
 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté | Proxy écran RDP et VNC |
+| [ADR-0102](0102-framework-d-agents-distribues-a-deux-plans-de-capacites.md) | Le framework d'agents sépare le transport réseau de la télémétrie de sécurité | Proposé | Agents distribués |
+| [ADR-0103](0103-le-network-agent-etablit-un-tunnel-sortant-multiplexe.md) | Le Network Agent établit un tunnel sortant multiplexé sans terminer le protocole PAM | Proposé | Agents distribués |
+| [ADR-0104](0104-chaque-agent-possede-une-identite-pki-individuelle.md) | Chaque agent possède une identité PKI individuelle et enrôlée une seule fois | Proposé | Agents distribués |
+| [ADR-0105](0105-les-tunnels-exigent-des-capacites-signees-ephemeres.md) | Chaque tunnel exige une capacité signée, éphémère et bornée | Proposé | Agents distribués |
+| [ADR-0106](0106-les-agents-sont-isoles-et-fonctionnent-avec-des-privileges-minimaux.md) | Les agents sont isolés et fonctionnent avec des privilèges minimaux | Proposé | Agents distribués |
+| [ADR-0107](0107-le-security-agent-collecte-une-telemetrie-structuree.md) | Le Security Agent collecte une télémétrie structurée en lecture seule | Proposé | Agents distribués |
+| [ADR-0108](0108-les-binaires-et-politiques-agent-sont-signes-et-anti-retour.md) | Les binaires et politiques agent sont signés et protégés contre le retour arrière | Proposé | Agents distribués |
+| [ADR-0109](0109-la-haute-disponibilite-des-agents-ne-reprend-pas-une-session-a-l-aveugle.md) | La haute disponibilité des agents ne reprend pas une session à l'aveugle | Proposé | Agents distribués |
+| [ADR-0110](0110-les-evenements-agent-sont-attribues-et-separes-de-la-preuve-daudit-pam.md) | Les événements agent sont attribués et séparés de la preuve d'audit PAM | Proposé | Agents distribués |

@@ -588,3 +588,21 @@ sequenceDiagram
 Le service gRPC est défini dans `proto/recording/v1/recording.proto`. `StreamVideoSegments` accepte un flux bidirectionnel de segments ordonnés ; chaque acquittement est émis après chiffrement de l'objet, écriture S3-compatible et commit des métadonnées PostgreSQL. Une entrée a l'un de trois codecs. `png` est une image clé : `frame_data` est le PNG entier. `png-delta-v1` est une image partielle (ADR-0092) : `frame_data` est le message `FRAME_DELTA` du flux écran, tel que l'opérateur l'a reçu, de la séquence et de l'horodatage de cette image. `clipboard-text-v1` est un texte passé par le presse-papiers (ADR-0096 §4) : `frame_data` est le message `CLIPBOARD` du flux écran (type 5 : le sens, puis le texte en UTF-8, sans NUL, de 32 763 unités UTF-16 au plus), de la séquence et de l'horodatage de cette entrée ; il n'est pas une image, et une image partielle qui le suit s'applique à l'écran de l'image clé d'avant. Une image partielle sans image clé de même taille avant elle est refusée. Un segment qui contient un texte du presse-papiers est scellé au format 3 ; sinon, un segment qui contient une image partielle est scellé au format 2, et un segment d'images clés reste au format 1. Un segment ne s'ouvre que sous le format que ses entrées demandent. Seule l'identité mTLS `rdp-vnc-proxy` peut ingérer ou sonder `CheckReadiness` ; elle enregistre les sessions VNC, et RDP sauf si `RDP_ENABLED=false` (allumé par défaut depuis le 13 novembre 2026).
 
 `GetVideoSegment` est réservé à l'identité mTLS `api-gateway`. La Gateway ne transmet au Recorder que l'utilisateur et les rôles tirés du jeton vérifié. Le Recorder consulte Authorization (`recording:session:read`) et écrit `recording.read` à l'Audit Service avant de déchiffrer ou de servir ; toute panne ou tout refus ferme la lecture. Une lecture sert, à partir de `first_sequence`, la suite de segments stockés sans trou, jusqu'à 600 images ou 4 Mio de données d'images, en une réponse de `first_sequence` à `last_sequence` (ADR-0093) : un seul événement d'audit, avec la plage dans ses détails, et chaque segment vérifié (un défaut refuse toute la réponse). La route publique est `GET /sessions/{sessionId}/recording/video/segments/{firstSequence}` (voir `docs/api/rest/openapi.yaml`) ; le stockage objet et ses identifiants ne sont jamais exposés au navigateur.
+
+
+## 13. Contrats gRPC des agents — exception limitée à ADR-0050
+
+Les contrats d'agent sont définis séparément sous proto/agent/v1 :
+
+| Fichier | Contrat |
+|---|---|
+| agent_common.proto | Références et types communs |
+| enrollment.proto | Enrôlement initial et renouvellement du certificat |
+| control.proto | Flux bidirectionnel agent-initié, heartbeat et multiplexage TCP |
+| telemetry.proto | Ingestion séquencée et acquittée de télémétrie |
+
+**Portée de l'exception.** ADR-0103 propose gRPC/HTTP2 sous TLS 1.3/mTLS uniquement entre les agents externes et Agent Control/Agent Telemetry. Les RPC entre microservices OpenBastion restent HTTP/JSON sous mTLS (ADR-0050). Les contrats Protobuf ne font pas autorité sur l'identité : le SAN du certificat mTLS reste la seule identité agent. Les champs agent_id sont des assertions de cohérence.
+
+**Sécurité du contrat.** Les capacités sont des JWS EdDSA éphémères ; les destinations sont des IP littérales ; la taille applicative maximale d'une trame tunnel est 64 Kio ; la télémétrie utilise un oneof Protobuf de types d'observation fermés, bornés et versionnés, sans payload libre, secret ni contenu de session. Le serveur doit appliquer quotas, séquences, délais, backpressure et révocation.
+
+**État.** Les fichiers Protobuf sont des contrats proposés, pas du code généré ni un service déployable. Avant implémentation : ajouter la configuration Buf au dépôt, exécuter lint/breaking/generate en CI, vérifier les imports et figer les règles de compatibilité. Aucun changement du transport interservices existant n'est autorisé par cette exception.
