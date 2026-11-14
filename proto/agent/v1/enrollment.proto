@@ -1,5 +1,6 @@
 syntax = "proto3";
 package openbastion.agent.v1;
+import "google/protobuf/timestamp.proto";
 option go_package = "github.com/openbastion/openbastion/proto/agent/v1;agentv1";
 
 service AgentEnrollment {
