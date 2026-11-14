@@ -47,6 +47,33 @@ Les codecs que Windows peut choisir :
 
 Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le chemin bitmap actuel reste celui d'une cible qui refuse RDPGFX.
 
+## Mise en œuvre
+
+### Incrément 1 — canal, capacités et décompression (13 novembre 2026)
+
+- **Réglage** : `MCSClientSettings.GraphicsPipeline` pose `RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL` (0x0100) dans les capacités précoces ; il exige `DynamicChannels`. Éteint, le Connect-Initial est inchangé à l'octet. Rien ne l'allume dans le service : l'interrupteur de service viendra avec l'incrément qui dessine une image.
+- **Canal** : `Microsoft::Windows::RDS::Graphics` entre dans la liste fermée d'ADR-0095. Un message réassemblé y est borné à 16 Mio, contre 64 Kio sur les autres canaux : le pipeline porte des bitmaps entiers.
+- **Capacités annoncées**, de la plus récente à la plus ancienne : 10.7, 10.6, 10.5, 10.4, 10.2 et 10, toutes avec `AVC_DISABLED` et `SMALL_CACHE` (10.7 avec aussi `SCALEDMAP_DISABLE`) ; puis 8.1 et 8, avec `SMALL_CACHE` seul. 10.1 et 10.3 ne sont pas annoncées : la première n'a pas `AVC_DISABLED`, la seconde n'a pas `SMALL_CACHE`, donc un cache de 100 Mo.
+- **Confirmation** : la cible doit confirmer une version annoncée, avec exactement les drapeaux annoncés pour elle. Tout PDU avant la confirmation, une seconde confirmation, ou une commande que la cible n'envoie pas (acquittements, offre de cache, annonce de capacités, commande non définie) ferme la session.
+- **`Sp` d'un PDU DATA** : MS-RDPEDYC 2.2.3.2 le dit inutilisé, mais les cinq Windows de la CI le posent à 2 sur le canal graphique (CI de la PR #194). Il n'est plus lu ; la longueur du message reste celle du PDU.
+- **Décompression (ajoutée à l'incrément 1)** : tout message de la cible arrive dans un `RDP_SEGMENTED_DATA`, compressé en RDP 8.0 (ZGFX, MS-RDPEGFX 3.1.9.1). Sans elle, aucune confirmation ne se lit. L'historique fait 2 500 000 octets par canal. Bornes : 65 535 octets par segment, 16 Mio par message, aucune correspondance avant le début de l'historique. Les bits réservés de l'en-tête sont ignorés : ils ne changent rien au décodage.
+- **Prouvé** :
+  - les exemples de la spécification, chaque ligne de la table des jetons, chaque classe de distance à ses deux bornes et chaque classe de longueur, après le tour de l'historique ;
+  - 23 refus du décompresseur et 20 du pipeline ;
+  - deux fuzzers (`FuzzZGFXSegmentedData`, `FuzzRDPGraphicsPipelineRead`) ;
+  - 24 mutations tuées.
+- **Mesuré contre FreeRDP 3** (`TestRDPInterop_GraphicsPipeline`) :
+  - FreeRDP confirme la version 10.7 avec les drapeaux annoncés ;
+  - en 10 s : 325 messages, 4,98 Mo décompressés sans faute ;
+  - une surface de 1280 x 800 (`XRGB_8888`), puis 321 trames, toutes en `WireToSurface2`, codec **RemoteFX progressif (0x0009)**.
+- **Mesuré contre les cinq Windows** (`TestRDPWindows_GraphicsPipeline`, CI de la PR #194, 20 s au bureau ouvert, sans saisie) :
+  - les cinq confirment la version **10.6** avec les drapeaux annoncés (`AVC_DISABLED | SMALL_CACHE`) ; aucune ne prend 10.7 ;
+  - une surface de 1280 x 800 en `ARGB_8888` (0x21), rattachée par `MapSurfaceToScaledOutput` (0x0017) : la version 10.6 n'a pas `SCALEDMAP_DISABLE`, cette commande y est donc légitime ;
+  - les images : **ClearCodec (0x0008)** pour 21 à 29 `WireToSurface1`, et **RemoteFX progressif (0x0009)** pour 1 ou 2 `WireToSurface2` par session, suivis d'un `DeleteEncodingContext` ;
+  - le cache sert beaucoup : 8 à 16 `SurfaceToCache` et 727 à 1010 `CacheToSurface` par session ; 3 à 5 `SolidFill` ; 5 à 9 trames ;
+  - 17 à 85 Ko reçus, sans faute de décompression.
+- **Ce que cela annonce** : aucune capacité n'éteint RemoteFX ni RemoteFX progressif (MS-RDPEGFX 2.2.3), et Windows envoie bien du RemoteFX progressif, même si c'est rare, à côté de ClearCodec. L'option A ne tient donc pas telle quelle : avant l'incrément 3, il faudra décider ce que devient une session dont la cible envoie une image avec perte (revenir à l'ancien chemin, refuser la session, ou enregistrer l'image décodée telle qu'elle a été montrée). Ce choix revient au propriétaire. L'incrément 2 (surfaces, remplissage, copie et cache) n'en dépend pas.
+
 ## Ce qui demande ton go
 
 - l'option A et son ordre ;
