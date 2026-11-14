@@ -815,6 +815,29 @@ func TestRDPWindows_Clipboard(t *testing.T) {
 	clipboardAgainstWindows(t, client, target.user, target.password)
 }
 
+// The graphics pipeline of ADR-0101 (increment 1) against Windows (rdp_graphics_interop_test.go):
+// the channel opened, one of the sets advertised confirmed, and what Windows then sends read,
+// decompressed and bounded for 20 s. The log names the version, the commands and the codecs Windows
+// chose with H.264 turned off: what increments 2 to 4 must draw.
+func TestRDPWindows_GraphicsPipeline(t *testing.T) {
+	target := windowsTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, target.pin, target.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := readGraphicsPipeline(t, client, target.user, target.password, 20*time.Second)
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	if !log.opened || log.err != nil {
+		t.Fatalf("the graphics channel: opened %v, error %v", log.opened, log.err)
+	}
+	if log.confirmed.Version == 0 {
+		t.Fatal("Windows confirmed none of the capability sets in 20 s")
+	}
+}
+
 // The target ending the session (ADR-0071 §3, "Fin"): Windows logs the user's session off, asked by
 // a file the runner puts on the share (rdp-setup.ps1's SYSTEM loop, every 30 s): the same for every
 // target, whatever its shell does with keys. The stream ends with no

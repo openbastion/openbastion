@@ -1,0 +1,191 @@
+package engine
+
+import (
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/openbastion/openbastion/pkg/rdp"
+)
+
+// The graphics pipeline of ADR-0101 (increment 1) against real servers: the early capability set,
+// the channel opened from the closed list, the capabilities advertised and one set confirmed, then
+// what the target sends read, decompressed and bounded. Nothing is drawn yet: the PDUs are counted,
+// and the codecs the target chooses are named, for the increments that follow. Without an
+// acknowledgement a target holds its frames back: this test tells it, at the first end of frame,
+// that none will come (SUSPEND_FRAME_ACKNOWLEDGEMENT, MS-RDPEGFX 2.2.2.13).
+
+type graphicsLog struct {
+	mu        sync.Mutex
+	opened    bool
+	confirmed rdp.RDPGraphicsCapabilitySet
+	commands  map[uint16]int
+	codecs    map[uint16]int
+	formats   map[byte]int
+	messages  int
+	bytesIn   int
+	resets    []string
+	surfaces  []string
+	suspended bool
+	err       error
+}
+
+func (g *graphicsLog) String() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	names := func(m map[uint16]int) string {
+		var out []string
+		for k, v := range m {
+			out = append(out, fmt.Sprintf("0x%04x x%d", k, v))
+		}
+		sort.Strings(out)
+		return strings.Join(out, ", ")
+	}
+	return fmt.Sprintf("opened %v, confirmed version 0x%08x flags 0x%08x, %d message(s) of %d bytes; commands [%s]; codecs [%s]; pixel formats %v; resets %q; surfaces %q; error %v",
+		g.opened, g.confirmed.Version, g.confirmed.Flags, g.messages, g.bytesIn, names(g.commands), names(g.codecs), g.formats, g.resets, g.surfaces, g.err)
+}
+
+// suspendAcknowledgements is an RDPGFX_FRAME_ACKNOWLEDGE_PDU whose queueDepth says no other will come.
+func suspendAcknowledgements(frameID uint32) []byte {
+	out := binary.LittleEndian.AppendUint16(nil, 0x000d)
+	out = binary.LittleEndian.AppendUint16(out, 0)
+	out = binary.LittleEndian.AppendUint32(out, 20)
+	out = binary.LittleEndian.AppendUint32(out, 0xffffffff)
+	out = binary.LittleEndian.AppendUint32(out, frameID)
+	return binary.LittleEndian.AppendUint32(out, 1)
+}
+
+// readGraphicsPipeline runs the connection sequence with the pipeline announced, then reads the
+// screen for read.
+func readGraphicsPipeline(t *testing.T, client *rdp.CredSSPClientSession, user, password string, read time.Duration) *graphicsLog {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	defer client.Close()
+	settings := rdp.MCSClientSettings{DesktopWidth: 1280, DesktopHeight: 800, ClientName: rdpClientName,
+		Timeout: 15 * time.Second, DynamicChannels: true, GraphicsPipeline: true}
+	log := &graphicsLog{commands: map[uint16]int{}, codecs: map[uint16]int{}, formats: map[byte]int{}}
+	var pipeline *rdp.RDPGraphicsPipeline
+	onOpen := func(name string) {
+		if name != rdp.RDPGraphicsChannel {
+			return
+		}
+		log.mu.Lock()
+		log.opened = true
+		log.mu.Unlock()
+		pipeline = rdp.NewRDPGraphicsPipeline()
+		if err := client.SendDynamicChannelMessage(ctx, rdp.RDPGraphicsChannel, pipeline.CapsAdvertise(), 15*time.Second); err != nil {
+			log.mu.Lock()
+			log.err = err
+			log.mu.Unlock()
+		}
+	}
+	onMessage := func(name string, data []byte) error {
+		if name != rdp.RDPGraphicsChannel {
+			return nil
+		}
+		pdus, err := pipeline.Read(data)
+		log.mu.Lock()
+		defer log.mu.Unlock()
+		log.messages++
+		log.bytesIn += len(data)
+		if err != nil {
+			log.err = err
+			return err
+		}
+		log.confirmed, _ = pipeline.Confirmed()
+		for _, pdu := range pdus {
+			log.commands[pdu.Command]++
+			switch pdu.Command {
+			case rdp.RDPGraphicsWireToSurface1, rdp.RDPGraphicsWireToSurface2:
+				if len(pdu.Body) >= 4 {
+					log.codecs[binary.LittleEndian.Uint16(pdu.Body[2:4])]++
+				}
+				if pdu.Command == rdp.RDPGraphicsWireToSurface1 && len(pdu.Body) >= 5 {
+					log.formats[pdu.Body[4]]++
+				}
+			case rdp.RDPGraphicsResetGraphics:
+				if len(pdu.Body) >= 12 {
+					log.resets = append(log.resets, fmt.Sprintf("%dx%d, %d monitor(s)", binary.LittleEndian.Uint32(pdu.Body[0:4]),
+						binary.LittleEndian.Uint32(pdu.Body[4:8]), binary.LittleEndian.Uint32(pdu.Body[8:12])))
+				}
+			case rdp.RDPGraphicsCreateSurface:
+				if len(pdu.Body) >= 7 && len(log.surfaces) < 16 {
+					log.surfaces = append(log.surfaces, fmt.Sprintf("%d: %dx%d format 0x%02x", binary.LittleEndian.Uint16(pdu.Body[0:2]),
+						binary.LittleEndian.Uint16(pdu.Body[2:4]), binary.LittleEndian.Uint16(pdu.Body[4:6]), pdu.Body[6]))
+				}
+			case rdp.RDPGraphicsEndFrame:
+				if !log.suspended && len(pdu.Body) >= 4 {
+					log.suspended = true
+					frameID := binary.LittleEndian.Uint32(pdu.Body[0:4])
+					// Sent from the reader: unlocked, as the channel's own answers are.
+					log.mu.Unlock()
+					err := client.SendDynamicChannelMessage(ctx, rdp.RDPGraphicsChannel, suspendAcknowledgements(frameID), 15*time.Second)
+					log.mu.Lock()
+					if err != nil {
+						log.err = err
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	}
+	steps := []rdpConnectionStep{
+		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
+		{"MCS channels", func() error {
+			if e := client.EnableDynamicChannels([]string{rdp.RDPDisplayControlChannel, rdp.RDPGraphicsChannel}, onOpen, onMessage); e != nil {
+				return e
+			}
+			_, e := client.ConnectMCSChannels(ctx, 15*time.Second)
+			return e
+		}},
+		{"client info", func() error {
+			return client.SendClientInfo(ctx, rdp.RDPClientInfo{Username: user, Password: []byte(password)}, 15*time.Second)
+		}},
+		{"licensing", func() error { return client.CompleteLicensing(ctx, 15*time.Second) }},
+		{"capabilities", func() error { _, e := client.ExchangeCapabilities(ctx, 15*time.Second); return e }},
+		{"finalization", func() error { _, e := client.FinalizeConnection(ctx, 15*time.Second); return e }},
+	}
+	if err := runRDPConnectionSteps(ctx, steps); err != nil {
+		t.Fatalf("the connection with the graphics pipeline announced: %v", err)
+	}
+	updates := 0
+	var readErr error
+	for deadline := time.Now().Add(read); time.Now().Before(deadline); {
+		if _, readErr = client.ReadBitmapUpdate(ctx, time.Until(deadline)); readErr != nil {
+			break
+		}
+		updates++
+	}
+	refused, refusals := client.DynamicChannelRefusals()
+	t.Logf("%d bitmap update(s) outside the pipeline, the read ended by %v; %d channel(s) refused: %q", updates, readErr, refusals, refused)
+	t.Logf("graphics pipeline: %s", log)
+	if errors.Is(readErr, rdp.ErrRDPGraphics) || errors.Is(readErr, rdp.ErrRDPDynamicChannel) {
+		t.Fatalf("the pipeline ended the session: %v", readErr)
+	}
+	return log
+}
+
+// FreeRDP's shadow server: what it does with the pipeline offered, read without a fault.
+func TestRDPInterop_GraphicsPipeline(t *testing.T) {
+	target := startRDPInteropTarget(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	client, err := target.authenticate(ctx, rdpInteropPassword)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, target.logs(t))
+	}
+	log := readGraphicsPipeline(t, client, rdpInteropUser, rdpInteropPassword, 10*time.Second)
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	if log.err != nil {
+		t.Fatalf("the pipeline: %v", log.err)
+	}
+}
