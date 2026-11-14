@@ -1,0 +1,113 @@
+syntax = "proto3";
+package openbastion.agent.v1;
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/openbastion/openbastion/proto/agent/v1;agentv1";
+
+service AgentTelemetry {
+  // Ack reports the highest contiguous sequence accepted by the server.
+  rpc Ingest(stream TelemetryBatch) returns (stream TelemetryAck);
+}
+enum TelemetryFamily {
+  TELEMETRY_FAMILY_UNSPECIFIED = 0;
+  TELEMETRY_FAMILY_AUTHENTICATION = 1;
+  TELEMETRY_FAMILY_PRIVILEGE_ESCALATION = 2;
+  TELEMETRY_FAMILY_PROCESS = 3;
+  TELEMETRY_FAMILY_ACCOUNT_CHANGE = 4;
+  TELEMETRY_FAMILY_SERVICE_CHANGE = 5;
+  TELEMETRY_FAMILY_CONFIGURATION_CHANGE = 6;
+  TELEMETRY_FAMILY_FILE_INTEGRITY = 7;
+  TELEMETRY_FAMILY_NETWORK_CHANGE = 8;
+  TELEMETRY_FAMILY_COLLECTOR_HEALTH = 9;
+}
+enum TelemetrySeverity {
+  TELEMETRY_SEVERITY_UNSPECIFIED = 0;
+  TELEMETRY_SEVERITY_INFO = 1;
+  TELEMETRY_SEVERITY_LOW = 2;
+  TELEMETRY_SEVERITY_MEDIUM = 3;
+  TELEMETRY_SEVERITY_HIGH = 4;
+  TELEMETRY_SEVERITY_CRITICAL = 5;
+}
+
+// Typed observations intentionally exclude command lines, credentials, tokens,
+// session content and arbitrary free-form log bodies.
+message AuthenticationObservation {
+  string principal_id = 1;
+  string source = 2;
+  string outcome_code = 3;
+}
+message PrivilegeEscalationObservation {
+  string principal_id = 1;
+  string mechanism = 2;
+  string outcome_code = 3;
+}
+message ProcessObservation {
+  uint64 process_id = 1;
+  uint64 parent_process_id = 2;
+  string executable_id = 3;
+  string image_digest = 4;
+  string principal_id = 5;
+}
+message AccountChangeObservation {
+  string account_id = 1;
+  string action_code = 2;
+  string actor_id = 3;
+}
+message ServiceChangeObservation {
+  string service_id = 1;
+  string action_code = 2;
+  string actor_id = 3;
+}
+message ConfigurationChangeObservation {
+  string component_id = 1;
+  string change_code = 2;
+  string configuration_digest = 3;
+  string actor_id = 4;
+}
+message FileIntegrityObservation {
+  string file_id = 1;
+  string change_code = 2;
+  string digest_before = 3;
+  string digest_after = 4;
+}
+message NetworkChangeObservation {
+  string protocol = 1;
+  string local_endpoint_id = 2;
+  string remote_endpoint_id = 3;
+  uint32 remote_port = 4;
+  string action_code = 5;
+}
+message CollectorHealthObservation {
+  string collector_id = 1;
+  string status_code = 2;
+  uint64 dropped_events = 3;
+}
+message TelemetryEvent {
+  string event_id = 1;
+  uint64 sequence = 2;
+  google.protobuf.Timestamp observed_at = 3;
+  string schema_version = 4;
+  TelemetryFamily family = 5;
+  TelemetrySeverity severity = 6;
+  string resource_id = 7;
+  oneof observation {
+    AuthenticationObservation authentication = 10;
+    PrivilegeEscalationObservation privilege_escalation = 11;
+    ProcessObservation process = 12;
+    AccountChangeObservation account_change = 13;
+    ServiceChangeObservation service_change = 14;
+    ConfigurationChangeObservation configuration_change = 15;
+    FileIntegrityObservation file_integrity = 16;
+    NetworkChangeObservation network_change = 17;
+    CollectorHealthObservation collector_health = 18;
+  }
+}
+message TelemetryBatch {
+  uint64 first_sequence = 1;
+  repeated TelemetryEvent events = 2;  // server enforces count and total-byte limits
+}
+message TelemetryAck {
+  uint64 highest_contiguous_sequence = 1;
+  repeated uint64 rejected_sequences = 2;
+  string status_code = 3;              // stable code; no payload or internal error
+  google.protobuf.Timestamp received_at = 4;
+}

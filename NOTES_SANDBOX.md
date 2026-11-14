@@ -4494,3 +4494,60 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - le test du script tourne derrière un proxy qui ne répond pas ;
   - un identifiant SPDX connu passe, un inconnu est refusé ;
   - contre-épreuve : derrière un proxy qui coupe les connexions, l'ancien script échoue exactement comme en CI.
+
+## 2026-11-14 — ADR-0101, incrément 2 : surfaces, cache et trames ; RemoteFX progressif décidé
+
+- **Décision, par délégation du propriétaire** (« choisis les options qui te semble les plus recommandées ») : une image en RemoteFX progressif sera décodée, et enregistrée telle qu'elle a été montrée. ADR-0070 tient entre ce que voit l'opérateur et ce que relit l'auditeur, mais plus à l'octet de la cible, comme à 16 bpp aujourd'hui. Elle est renversable ; ses alternatives sont dans ADR-0101.
+- **Fait** : le compositeur (`pkg/rdp/graphics_surface.go`) dessine :
+  - les surfaces, le remplissage, les copies et le cache ;
+  - les fins de trame, avec leur acquittement.
+- **Bornes** : 64 surfaces, 64 Mio de pixels, 4096 emplacements de cache et 16 Mio de cache.
+- **Prouvé** :
+  - 40 refus et un fuzzer ;
+  - 20 mutations tuées ;
+  - contre FreeRDP, 322 trames acquittées.
+- **Contre les cinq Windows** (CI de #196) : aucune faute ; 6 à 9 trames dessinées et acquittées par session.
+
+## 2026-11-14 — ADR-0101, incrément 3 : ClearCodec
+
+- **Ordre revu, par délégation** : ClearCodec avant Planar. Windows n'envoie que ClearCodec et RemoteFX progressif ; Planar reste refusé tant qu'aucune cible ne l'envoie.
+- **Fait** :
+  - ClearCodec (`pkg/rdp/graphics_clearcodec.go`) : les calques résiduel, bandes et sous-codecs (brut et RLEX), les caches de V-bars, les glyphes et la séquence ;
+  - le non compressé.
+- **Lectures de FreeRDP** là où la spécification se tait : la suite RLEX inclusive, une palette d'une couleur à un bit, le curseur des petites V-bars qui revient à zéro.
+- **Prouvé** : 40 refus, un fuzzer, 22 mutations tuées.
+- **Contre les cinq Windows** (CI de #197) :
+  - l'écran est juste, au rectangle NSCodec et au RemoteFX progressif près ;
+  - un écart corrigé : une petite V-bar sans pixel, gardée comme un emplacement vide ;
+  - NSCodec est employé par 4 cibles sur 5.
+
+## 2026-11-14 — ADR-0101, incrément 3 bis : NSCodec dans ClearCodec
+
+- **Fait** : le sous-codec 0x01 de ClearCodec (`pkg/rdp/graphics_nscodec.go`), avec ses plans bruts ou en séries et sa chrominance réduite ou sous-échantillonnée.
+- **Couleur** : la conversion de FreeRDP (`nsc_decode`). Elle décale la chrominance avant de la lire comme signée, et n'inverse pas le rouge et le bleu. Deux lectures fausses l'ont précédée (orange en #198, vert en #199) ; la cause a été trouvée en rejouant les messages bruts de la CI (voir ADR-0101).
+- **À corriger à part** : le planar AYCoCg de l'ancien chemin (`decodeRDP6AYCoCg`) lit aussi l'octet comme signé avant le décalage, et n'inverse pas le rouge et le bleu, alors que FreeRDP (`prim_YCoCg.c`) et la spécification inversent. Il a été éprouvé contre Windows, peut-être seulement en ARGB (`ColorLossLevel` 0, où rien de cela ne joue). Aucune cible ne l'exerce encore.
+- **Prouvé** : 18 refus, un fuzzer, 15 mutations tuées.
+- **Contre les cinq Windows** (CI de #198) : les couleurs sont justes après l'inversion rouge-bleu.
+
+## 2026-11-14 — ADR-0101, incrément 4 : RemoteFX progressif
+
+- **Fait** : le décodeur (`pkg/rdp/graphics_progressive.go`), pour les premiers passages et les raffinements, avec les deux ondelettes inverses.
+- **Référence** : FreeRDP 3.15, lu et non copié. La spécification ne donne ses algorithmes qu'en figures.
+- **Prouvé** :
+  - une trame réelle de FreeRDP, rejouée et épinglée par son empreinte, l'image vérifiée à l'œil ;
+  - 23 refus, un fuzzer, 24 mutations tuées.
+- **Éprouvé contre les cinq Windows**, et figé par une session Windows Server 2022 rejouée (`testdata/graphics/windows-2022`), qui pine aussi l'ondelette « Reduce-Extrapolate » et les raffinements.
+- **Instabilités vues dans la CI de #199, sans lien avec son code** :
+  - le test de la palette de commandes de l'Admin UI (« opens with Ctrl+K… », combobox introuvable) ;
+  - le presse-papiers du moteur, qui n'a pas trouvé Notepad à l'écran ;
+  - le presse-papiers en navigateur, dont le texte copié n'est pas revenu en 60 s.
+- **CI de #199, premier passage** : le fond d'écran de Windows 2022 est enfin dessiné, en RemoteFX progressif. Une bande et le bloc du filigrane, tous deux en NSCodec, sont sortis verts ; c'est corrigé ci-dessus, dans la même PR.
+
+## 2026-11-14 — ADR-0101, incrément 5 : le pipeline graphique au proxy, derrière `SCREEN_RDPGFX`
+
+- **Fait** : `SCREEN_RDPGFX` (éteint par défaut). Les trames du pipeline arrivent au framebuffer du proxy comme des mises à jour bitmap, ce qui ne change rien pour le relais, l'enregistrement et les images partielles.
+- **Prouvé** :
+  - la session Windows rejouée à travers le moteur donne l'écran du compositeur au pixel près, chaque trame acquittée ;
+  - contre FreeRDP, le codec complet suit les touches.
+- **En attente** : la CI Windows de la PR (pipeline allumé puis éteint, octets comparés).
+- **Reste** : la vérification en navigateur et l'enregistrement relu avec `SCREEN_RDPGFX`, puis la décision de l'allumer par défaut.

@@ -26,7 +26,7 @@ services:                    # identité mTLS = nom ; ports par défaut (archite
   password-vault:   {path: services/vault/password-vault,            port: 8081}
   audit-service:    {path: services/recording-audit/audit-service,   port: 8082}
   authorization:    {path: services/access/authorization,            port: 8083}
-  session-broker:   {path: services/access/session-broker,           port: 8084, rdp_enabled: "RDP_ENABLED, true par défaut depuis le 13 novembre 2026 (ADR-0088)"}
+  session-broker:   {path: services/access/session-broker,           port: 8084, rdp_enabled: "RDP_ENABLED, true par défaut depuis le 13 novembre 2026 (ADR-0088)", graphics_pipeline: "SCREEN_RDPGFX, false par défaut ; RDP seulement, le pipeline graphique (ClearCodec, NSCodec, RemoteFX progressif), 32 bpp sans stratégie côté cible (ADR-0101)"}
   ssh-proxy:        {path: services/proxy/ssh-proxy,                 port: 8085, ssh_port: 2222, single_instance: true}
   rdp-vnc-proxy:    {path: services/proxy/rdp-vnc-proxy,             port: 8090, screen_protocols: [vnc, rdp], draw_pointer: "SCREEN_DRAW_POINTER, true par défaut ; RDP et VNC (ADR-0091)", partial_frames: "SCREEN_PARTIAL_FRAMES, true par défaut ; RDP et VNC (ADR-0092)", resize: "SCREEN_RESIZE, true par défaut ; RDP seulement, le contrôle d'affichage (ADR-0095)", clipboard: "SCREEN_CLIPBOARD, true par défaut depuis le 13 novembre 2026 ; RDP seulement, texte, chaque sens selon son droit, audité et enregistré (ADR-0096)", rdp_enabled: "RDP_ENABLED, true par défaut depuis le 13 novembre 2026 (ADR-0088)"}
   authentication:   {path: services/access/authentication,           port: 8086}

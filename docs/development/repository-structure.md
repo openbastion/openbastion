@@ -15,7 +15,15 @@ Le monorepo est organisé en **modules Go indépendants** (`go.work`), pas en un
 
 ```
 openbastion/
+├── agents/                       # binaires distribués proposés en v0.0.3
+│   ├── network-agent/             # passerelle TCP sortante, sans privilège root permanent
+│   └── security-agent/            # collecte hôte en lecture seule, identité séparée
+│
 ├── services/                     # microservices backend, un dossier par domaine (§4 docs/architecture/system-overview.md)
+│   ├── agents/                    # services centraux du framework d'agents (v0.0.3)
+│   │   ├── agent-registry/        # enrôlement, identité, certificats et révocation
+│   │   ├── agent-control/         # présence, capacités et multiplexage des tunnels
+│   │   └── agent-telemetry/       # ingestion, validation et acquittement de télémétrie
 │   ├── access/
 │   │   ├── api-gateway/
 │   │   ├── authentication/
@@ -58,7 +66,8 @@ openbastion/
 │   └── platform/
 │       └── scheduler/
 │
-├── proto/                        # contrats gRPC/Protobuf partagés (source de vérité inter-services)
+├── proto/                        # contrats Protobuf (source de vérité des messages)
+│   ├── agent/v1/                  # contrats agent (gRPC streaming, ADR-0103)
 │   ├── access/v1/
 │   ├── proxy/v1/
 │   ├── vault/v1/
@@ -295,3 +304,25 @@ Une page n'existe que si son contenu décrit ce que fait le code ; ce qui est pr
 - Les tests d'intégration/e2e/performance/sécurité (`test/`) tournent sur un sous-ensemble de la matrice CI, pas sur chaque commit de service isolé.
 
 - `pkg/tlspin` : épinglage TLS des cibles, avec validation PKI conservée en production et chemin pin-only compilé uniquement avec `-tags development`.
+
+
+## 10. Agents distribués — structure cible v0.0.3
+
+L'organisation suivante est **proposée** par ADR-0102 à ADR-0110 ; elle ne décrit pas des binaires ou services déjà présents.
+
+```text
+agents/
+├── network-agent/
+│   ├── cmd/openbastion-network-agent/
+│   └── internal/{identity,enrollment,control,tunnel,policy,telemetry}
+└── security-agent/
+    ├── cmd/openbastion-security-agent/
+    └── internal/{collectors/linux,collectors/windows,queue,telemetry,health}
+
+services/agents/
+├── agent-registry/       # enrôlement PKI, inventaire, révocation
+├── agent-control/        # flux gRPC, capacités, tunnels, présence
+└── agent-telemetry/      # validation, acquittement et provenance
+```
+
+Les agents ne partagent pas de processus, de compte système, de clé privée ni de socket IPC privilégié. Les packages communs éventuels doivent rester sans état et ne pas introduire de privilèges partagés. Les contrats de référence sont sous `proto/agent/v1/`; l'architecture est décrite dans `docs/architecture/agent-framework.md`.
