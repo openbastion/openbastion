@@ -32,7 +32,14 @@ func actionGateway(t *testing.T, burst, perMinute, sessionBurst int) (http.Handl
 }
 
 func doAs(gw http.Handler, token, method, path, remoteAddr string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, strings.NewReader("{}"))
+	body := "{}"
+	switch {
+	case strings.HasSuffix(path, "/secret-injection-step-up"):
+		body = ""
+	case strings.HasSuffix(path, "/secret-injection"):
+		body = `{"challenge":"opaque","factor":"totp","totp_code":"123456"}`
+	}
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	if remoteAddr != "" {
 		req.RemoteAddr = remoteAddr
@@ -57,9 +64,11 @@ var actionRoutes = []struct{ name, path string }{
 	{"approve", "/sessions/s-1/approve"},
 	{"reject", "/sessions/s-1/reject"},
 	{"connect", "/sessions/s-1/connect"},
+	{"secret-injection-step-up", "/sessions/s-1/secret-injection-step-up"},
+	{"secret-injection", "/sessions/s-1/secret-injection"},
 }
 
-func TestSessionAction_ABurstThenRefused_ForEachOfTheThree_AndTheBrokerNeverSeesTheRefused(t *testing.T) {
+func TestSessionAction_ABurstThenRefused_ForEachOfTheFive_AndTheBrokerNeverSeesTheRefused(t *testing.T) {
 	for _, route := range actionRoutes {
 		t.Run(route.name, func(t *testing.T) {
 			gw, broker, _ := actionGateway(t, 3, 6, 100)
@@ -88,19 +97,19 @@ func TestSessionAction_ABurstThenRefused_ForEachOfTheThree_AndTheBrokerNeverSees
 	}
 }
 
-// One bucket for the four: changing route is not a way to a fresh budget.
-func TestSessionAction_IsOneBucketForTheThreeRoutes(t *testing.T) {
+// One bucket for all five POST actions: changing route is not a way to a fresh budget.
+func TestSessionAction_IsOneBucketForAllFiveRoutes(t *testing.T) {
 	gw, broker, _ := actionGateway(t, 3, 6, 100)
 	var recs []*httptest.ResponseRecorder
-	for _, route := range actionRoutes { // approve, reject, connect
+	for _, route := range actionRoutes { // all five session POST actions
 		recs = append(recs, doAs(gw, "tok-alice", http.MethodPost, route.path, ""))
 	}
 	recs = append(recs,
 		doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-1/approve", ""),
 		doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-2/reject", ""),
 		doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-3/connect", ""))
-	if got := codes(recs...); got != "[200 200 200 429 429 429]" {
-		t.Fatalf("%s, want the three routes to share a burst of 3", got)
+	if got := codes(recs...); got != "[200 200 200 429 429 429 429 429]" {
+		t.Fatalf("%s, want all five routes to share a burst of 3", got)
 	}
 	if n := len(broker.requests()); n != 3 {
 		t.Fatalf("%d requests reached the Broker, want 3", n)

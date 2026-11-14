@@ -868,6 +868,109 @@ paths:
             terminé, la session reste active et l'appel peut être renouvelé.
             La cause reste dans le journal du Broker.
 
+  /sessions/{sessionId}/secret-injection-step-up:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [sessions]
+      summary: Démarre une confirmation MFA pour injecter le secret Vault de la session
+      description: >
+        Le corps doit être vide. La Gateway dérive l'acteur et ses rôles du bearer token vérifié ;
+        le Broker dérive le compte et le protocole de la session persistée. Le challenge est lié
+        à l'acteur, à la session, au compte, au protocole SSH et à l'action `secret:inject`.
+        Il expire après 120 secondes, accepte au plus cinq essais et ne peut être consommé qu'une fois.
+        Les facteurs proposés sont ceux réellement enrôlés ; les rôles stricts exigent WebAuthn.
+        Cette route n'accepte ni compte arbitraire, ni action arbitraire, ni credential cible.
+        Elle partage le seau de débit des actions de session (ADR-0016). Toutes les réponses
+        portent `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Challenge MFA et facteurs disponibles ; aucun grant ni scope Vault n'est exposé.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretActionStepUpChallenge" }
+        "400":
+          description: Le corps doit être vide.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Bearer token absent ou invalide.
+        "403":
+          description: L'appelant n'est pas le demandeur, ou aucun facteur MFA admissible n'est enrôlé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Session inconnue.
+        "409":
+          description: Session inactive, expirée ou protocole non pris en charge.
+        "429":
+          description: Seau des actions de session épuisé ; le Broker n'a pas été appelé.
+          headers:
+            Retry-After:
+              schema: { type: integer, minimum: 1 }
+        "503":
+          description: MFA, Authorization, audit ou stockage indisponible ; aucun challenge utilisable n'est rendu.
+
+  /sessions/{sessionId}/secret-injection:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [sessions]
+      summary: Confirme le MFA et injecte le secret Vault dans la session SSH active
+      description: >
+        La requête transporte exclusivement une preuve MFA (TOTP ou assertion WebAuthn), jamais
+        un secret cible, un identifiant de compte, un grant MFA ou un scope Vault. La Gateway
+        rejette les champs inconnus et reconstruit l'identité depuis le bearer token vérifié.
+        Le Broker revalide le propriétaire, l'état de la session et Authorization, consomme le
+        grant en interne, puis transmet au proxy uniquement un scope Vault à usage unique.
+        Le proxy récupère le credential directement auprès du Vault. L'injection échoue fermée
+        si la session ou son instance proxy est indisponible. Le parcours est actuellement limité
+        à SSH interactif ; VNC/RDP ne sont pas encore pris en charge. Toutes les réponses portent
+        `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretInjectionProof" }
+      responses:
+        "204":
+          description: Le proxy a confirmé l'injection ; aucune donnée sensible n'est retournée.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        "400":
+          description: Preuve MFA invalide ou champ non autorisé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401":
+          description: Bearer token absent ou invalide.
+        "403":
+          description: Propriétaire, MFA (preuve invalide, challenge expiré/rejoué) ou autorisation refusé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: Session inconnue.
+        "409":
+          description: Session inactive ou protocole non pris en charge.
+        "429":
+          description: Seau des actions de session épuisé ; le Broker n'a pas été appelé.
+          headers:
+            Retry-After:
+              schema: { type: integer, minimum: 1 }
+        "503":
+          description: Dépendance MFA, Vault, Audit, Recorder ou proxy indisponible ; l'injection n'est pas confirmée.
+
   /sessions/{sessionId}/connect:
     parameters:
       - $ref: "#/components/parameters/SessionId"
@@ -1698,6 +1801,30 @@ components:
       properties:
         challenge: { type: string }
         code: { type: string, pattern: "^[0-9]{6}$" }
+    SecretActionStepUpChallenge:
+      type: object
+      required: [challenge, expires_in, factors]
+      properties:
+        challenge: { type: string, description: "Challenge opaque, lié à la session et à l'action, valable 120 secondes" }
+        expires_in: { type: integer, const: 120 }
+        factors:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [totp, webauthn] }
+        webauthn:
+          type: object
+          description: Options WebAuthn pour navigator.credentials.get, si le facteur est proposé.
+    SecretInjectionProof:
+      type: object
+      additionalProperties: false
+      required: [challenge, factor]
+      properties:
+        challenge: { type: string, minLength: 1 }
+        factor: { type: string, enum: [totp, webauthn] }
+        totp_code: { type: string, pattern: "^[0-9]{6,8}$", description: "Code TOTP ; obligatoire si factor=totp" }
+        webauthn_response:
+          type: object
+          description: Assertion renvoyée par navigator.credentials.get ; obligatoire si factor=webauthn.
     IdentityProviderInfo:
       description: Ce que la page de connexion sait d'un fournisseur ou d'un annuaire (ADR-0076)
       type: object

@@ -603,6 +603,52 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 		// body is not read, so it cannot name another caller.
 		g.handleConnectAction(w, r, brokerPath+"/connect", sessionID, id.UserID)
 
+	case "secret-injection-step-up":
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !g.admitSessionAction(w, id) {
+			return
+		}
+		// The challenge request has no client-controlled fields. The verified identity
+		// and roles are injected here; the Broker derives account/protocol from storage.
+		data, readErr := io.ReadAll(io.LimitReader(r.Body, 1))
+		if readErr != nil || len(data) != 0 {
+			http.Error(w, "step-up request body must be empty", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/secret-injection-step-up",
+			map[string]any{"callerId": id.UserID, "actorRoles": id.Roles})
+
+	case "secret-injection":
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !g.admitSessionAction(w, id) {
+			return
+		}
+		var proof secretInjectionProofRequest
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&proof); err != nil || proof.Challenge == "" || proof.Factor == "" {
+			http.Error(w, "invalid secret injection proof", http.StatusBadRequest)
+			return
+		}
+		var extra any
+		if err := dec.Decode(&extra); err != io.EOF {
+			http.Error(w, "invalid secret injection proof", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/secret-injection", secretInjectionBrokerRequest{
+			CallerID: id.UserID, ActorRoles: id.Roles,
+			Challenge: proof.Challenge, Factor: proof.Factor,
+			TOTPCode: proof.TOTPCode, WebAuthnResponse: proof.WebAuthnResponse,
+		})
+
 	case "approve", "reject":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -803,6 +849,22 @@ type brokerConnectionTicket struct {
 	Ticket        string    `json:"ticket"`
 	Protocol      string    `json:"protocol"`
 	ExpiresAt     time.Time `json:"expiresAt"`
+}
+
+type secretInjectionProofRequest struct {
+	Challenge        string          `json:"challenge"`
+	Factor           string          `json:"factor"`
+	TOTPCode         string          `json:"totp_code,omitempty"`
+	WebAuthnResponse json.RawMessage `json:"webauthn_response,omitempty"`
+}
+
+type secretInjectionBrokerRequest struct {
+	CallerID         string          `json:"callerId"`
+	ActorRoles       []string        `json:"actorRoles"`
+	Challenge        string          `json:"challenge"`
+	Factor           string          `json:"factor"`
+	TOTPCode         string          `json:"totp_code,omitempty"`
+	WebAuthnResponse json.RawMessage `json:"webauthn_response,omitempty"`
 }
 type screenAttachResponse struct {
 	Protocol  string    `json:"protocol"`

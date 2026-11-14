@@ -14,6 +14,8 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("api-gateway", "POST", "/sessions/s1/connect"),
 		mtlstest.Allow("api-gateway", "POST", "/sessions/s1/approve"),
 		mtlstest.Allow("api-gateway", "POST", "/sessions/s1/reject"),
+		mtlstest.Allow("api-gateway", "POST", "/sessions/s1/secret-injection-step-up"),
+		mtlstest.Allow("api-gateway", "POST", "/sessions/s1/secret-injection"),
 		// the listing of the requests that wait (ADR-0012): the Gateway states who is
 		// asking and with which roles, so nobody else may ask
 		mtlstest.Allow("api-gateway", "GET", "/sessions"),
@@ -27,6 +29,9 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("session-broker", "GET", "/sessions"),
 		// a decision on a break-glass request (ADR-0011): the Gateway states who decides,
 		// so nobody else may — whatever identity they hold
+		mtlstest.Deny("password-vault", "POST", "/sessions/s1/secret-injection-step-up"),
+		mtlstest.Deny("ssh-proxy", "POST", "/sessions/s1/secret-injection"),
+		mtlstest.Deny("authentication", "POST", "/sessions/s1/secret-injection"),
 		mtlstest.Deny("password-vault", "POST", "/sessions/s1/approve"),
 		mtlstest.Deny("ssh-proxy", "POST", "/sessions/s1/approve"),
 		mtlstest.Deny("authentication", "POST", "/sessions/s1/approve"),
@@ -48,6 +53,9 @@ func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), CallerRules(), []mtlstest.Route{
 		{Method: "POST", Path: "/sessions"}, {Method: "GET", Path: "/sessions"}, {Method: "GET", Path: "/sessions/s1"},
 		{Method: "POST", Path: "/sessions/s1/connect"}, {Method: "POST", Path: "/sessions/s1/approve"},
-		{Method: "POST", Path: "/sessions/s1/reject"}, {Method: "GET", Path: "/healthz"},
+		{Method: "POST", Path: "/sessions/s1/reject"},
+		{Method: "POST", Path: "/sessions/s1/secret-injection-step-up"},
+		{Method: "POST", Path: "/sessions/s1/secret-injection"},
+		{Method: "GET", Path: "/healthz"},
 	})
 }

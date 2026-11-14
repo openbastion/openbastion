@@ -5,6 +5,8 @@ package infrastructure_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -23,6 +25,8 @@ type fakeInstance struct {
 	revokes     []string
 	establishEr error
 	revokeErr   error
+	injections  int
+	injectErr   error
 	revokeDelay time.Duration
 }
 
@@ -34,6 +38,13 @@ func (f *fakeInstance) EstablishSession(_ context.Context, sessionID, _, _, _, _
 		return "", "", f.establishEr
 	}
 	return f.name + ":2222", "ticket-from-" + f.name, nil
+}
+
+func (f *fakeInstance) InjectVaultSecret(_ context.Context, sessionID, accountID, scopeToken string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.injections++
+	return f.injectErr
 }
 
 func (f *fakeInstance) RevokeSession(_ context.Context, sessionID string, _ time.Duration) error {
@@ -102,46 +113,90 @@ func TestProxyPool_TheInstancesAreAskedAtOnce(t *testing.T) {
 	}
 }
 
-func TestProxyPool_TicketsAreIssuedInTurn_AndTheEndpointIsTheIssuers(t *testing.T) {
-	a, b, c := &fakeInstance{name: "a"}, &fakeInstance{name: "b"}, &fakeInstance{name: "c"}
-	p := pool(t, a, b, c)
-	var got []string
-	for i := 0; i < 6; i++ {
-		endpoint, ticket, err := p.EstablishSession(context.Background(), fmt.Sprint("s", i), "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
-		if err != nil {
-			t.Fatal(err)
+func ownerIndex(sessionID string, names []string) int {
+	chosen, highest := 0, uint64(0)
+	for i, name := range names {
+		sum := sha256.Sum256([]byte(sessionID + "\x00" + name))
+		score := binary.BigEndian.Uint64(sum[:8])
+		if i == 0 || score > highest {
+			chosen, highest = i, score
 		}
-		if strings.TrimSuffix(endpoint, ":2222") != strings.TrimPrefix(ticket, "ticket-from-") {
-			t.Fatalf("endpoint %s for a ticket of %s: the operator would be sent where the ticket is unknown", endpoint, ticket)
-		}
-		got = append(got, endpoint)
 	}
-	if strings.Join(got, ",") != "a:2222,b:2222,c:2222,a:2222,b:2222,c:2222" {
-		t.Fatalf("issued by %v, want each instance in turn", got)
+	return chosen
+}
+
+func sessionForOwner(names []string, owner int) string {
+	for i := 0; ; i++ {
+		sessionID := fmt.Sprintf("session-%d", i)
+		if ownerIndex(sessionID, names) == owner {
+			return sessionID
+		}
 	}
 }
 
-func TestProxyPool_AnInstanceThatFailsIsPassed_EachAskedAtMostOnce(t *testing.T) {
-	a, b, c := &fakeInstance{name: "a", establishEr: errors.New("dial tcp: refused")}, &fakeInstance{name: "b"}, &fakeInstance{name: "c"}
-	endpoint, _, err := pool(t, a, b, c).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
-	if err != nil || endpoint != "b:2222" {
-		t.Fatalf("endpoint %q, err %v: the next instance should have issued it", endpoint, err)
-	}
-	all := []*fakeInstance{{name: "a", establishEr: errors.New("x")}, {name: "b", establishEr: errors.New("y")}, {name: "c", establishEr: errors.New("z")}}
-	if _, _, err := pool(t, all...).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}); err == nil {
-		t.Fatal("no instance issued a ticket, and no error")
-	}
-	for _, f := range all {
-		if f.establishes != 1 {
-			t.Fatalf("instance %s was asked %d times, want 1", f.name, f.establishes)
+func TestProxyPool_AssignsSessionsDeterministicallyAcrossBrokerReplicas(t *testing.T) {
+	names := []string{"https://a", "https://b", "https://c"}
+	instancesA := []*fakeInstance{{name: "a"}, {name: "b"}, {name: "c"}}
+	instancesB := []*fakeInstance{{name: "c"}, {name: "b"}, {name: "a"}}
+	p1, p2 := pool(t, instancesA...), pool(t, instancesB...)
+	counts := make([]int, len(names))
+	for i := 0; i < 90; i++ {
+		sessionID := fmt.Sprintf("session-%d", i)
+		endpoint, _, err := p1.EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
+		if err != nil {
+			t.Fatal(err)
 		}
+		owner := ownerIndex(sessionID, names)
+		want := strings.TrimPrefix(names[owner], "https://") + ":2222"
+		if endpoint != want {
+			t.Fatalf("session %s endpoint=%s want deterministic owner %s", sessionID, endpoint, want)
+		}
+		counts[owner]++
+		before := make([]int, len(instancesB))
+		for j, in := range instancesB {
+			before[j] = in.injections
+		}
+		if err := p2.InjectVaultSecret(context.Background(), sessionID, "account", "scope-inject"); err != nil {
+			t.Fatal(err)
+		}
+		for j, in := range instancesB {
+			wantCalls := before[j]
+			if in.name == strings.TrimPrefix(names[owner], "https://") {
+				wantCalls++
+			}
+			if in.injections != wantCalls {
+				t.Fatalf("replica B routed session %s to %s (%d calls), owner %s; want %d", sessionID, in.name, in.injections, strings.TrimPrefix(names[owner], "https://"), wantCalls)
+			}
+		}
+	}
+	for i, count := range counts {
+		if count == 0 {
+			t.Fatalf("rendezvous hashing never selected %s", names[i])
+		}
+	}
+}
+
+func TestProxyPool_DoesNotFailOverToAnotherInstanceForAControlBoundSession(t *testing.T) {
+	names := []string{"https://a", "https://b", "https://c"}
+	owner := ownerIndex(sessionForOwner(names, 0), names)
+	if owner != 0 {
+		t.Fatal("test helper failed to select instance a")
+	}
+	a, b, c := &fakeInstance{name: "a", establishEr: errors.New("dial tcp: refused")}, &fakeInstance{name: "b"}, &fakeInstance{name: "c"}
+	sessionID := sessionForOwner(names, 0)
+	if _, _, err := pool(t, a, b, c).EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}); err == nil {
+		t.Fatal("unavailable deterministic owner unexpectedly fell back")
+	}
+	if a.establishes != 1 || b.establishes != 0 || c.establishes != 0 {
+		t.Fatalf("establish attempts a=%d b=%d c=%d", a.establishes, b.establishes, c.establishes)
 	}
 }
 
 func TestProxyPool_ARefusalToRecordIsWhatTheCallerIsTold(t *testing.T) {
 	rec := fmt.Errorf("%w: establish-session refused by the proxy", domain.ErrRecordingUnavailable)
 	fs := []*fakeInstance{{name: "a", establishEr: rec}, {name: "b", establishEr: errors.New("dial tcp: refused")}}
-	_, _, err := pool(t, fs...).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
+	sessionID := sessionForOwner([]string{"https://a", "https://b"}, 0)
+	_, _, err := pool(t, fs...).EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
 	if !errors.Is(err, domain.ErrRecordingUnavailable) {
 		t.Fatalf("err = %v, want the refusal to record (ADR-0008)", err)
 	}
@@ -160,5 +215,24 @@ func TestProxyPool_HoldsOneToSixteenInstances(t *testing.T) {
 	}
 	if _, err := infrastructure.NewProxyPool(in[:infrastructure.MaxProxyInstances]); err != nil {
 		t.Fatalf("%d instances: %v", infrastructure.MaxProxyInstances, err)
+	}
+}
+
+func TestProxyPool_SecretInjectionUsesTheDeterministicSessionOwner(t *testing.T) {
+	names := []string{"https://a", "https://b"}
+	a, b := &fakeInstance{name: "a"}, &fakeInstance{name: "b"}
+	sessionID := sessionForOwner(names, 1)
+	p1 := pool(t, a, b)
+	endpoint, _, err := p1.EstablishSession(context.Background(), sessionID, "ssh", "host:22", "root", "scope", time.Minute, false, domain.ClipboardRights{})
+	if err != nil || endpoint != "b:2222" {
+		t.Fatalf("establish endpoint=%q err=%v", endpoint, err)
+	}
+	// A second Broker replica with the same pool configuration resolves the same owner.
+	c, d := &fakeInstance{name: "b"}, &fakeInstance{name: "a"}
+	if err := pool(t, c, d).InjectVaultSecret(context.Background(), sessionID, "account-1", "scope-inject"); err != nil {
+		t.Fatal(err)
+	}
+	if c.injections != 1 || d.injections != 0 {
+		t.Fatalf("injection routed to b=%d a=%d", c.injections, d.injections)
 	}
 }

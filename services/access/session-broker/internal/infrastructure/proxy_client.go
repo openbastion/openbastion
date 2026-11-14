@@ -37,6 +37,7 @@ func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID,
 		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cache-Control", "no-store")
 	resp, err := orDefault(c.Client).Do(req)
 	if err != nil {
 		return "", "", err
@@ -57,6 +58,31 @@ func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID,
 		return "", "", err
 	}
 	return out.ProxyEndpoint, out.ConnectionTicket, nil
+}
+
+// InjectVaultSecret sends a one-use Vault scope to the proxy over its pinned mTLS
+// connection. The credential itself is fetched directly by the proxy from Vault.
+func (c *ProxyClientHTTPClient) InjectVaultSecret(ctx context.Context, sessionID, accountID, scopeToken string) error {
+	body, err := json.Marshal(injectVaultSecretRequestBody{SessionID: sessionID, AccountID: accountID, VaultScopeToken: scopeToken})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/inject-vault-secret", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cache-Control", "no-store")
+	resp, err := orDefault(c.Client).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("inject-vault-secret: status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // RevokeSession implements application.ProxyClient by calling the proxy's
@@ -110,4 +136,10 @@ type establishSessionResponseBody struct {
 type revokeSessionRequestBody struct {
 	SessionID  string `json:"session_id"`
 	TTLSeconds int    `json:"ttl_seconds"`
+}
+
+type injectVaultSecretRequestBody struct {
+	SessionID       string `json:"session_id"`
+	AccountID       string `json:"account_id"`
+	VaultScopeToken string `json:"vault_scope_token"`
 }

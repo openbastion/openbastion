@@ -496,3 +496,63 @@ func TestRecordingTap_RecordEvent(t *testing.T) {
 		t.Fatalf("best effort never fails: %v", err)
 	}
 }
+
+type strictCaptureRecorder struct{ entries []CommandEntry }
+
+func (r *strictCaptureRecorder) RecordBatch(_ context.Context, entries []CommandEntry) error {
+	r.entries = append(r.entries, entries...)
+	return nil
+}
+
+func TestRecordingTap_RecordSecretInputStoresOnlySafeEvidence(t *testing.T) {
+	recorder := &strictCaptureRecorder{}
+	tap := NewRequiredRecordingTap(recorder, "session-secret")
+	vault := SecretInputEvidence{SessionID: "session-secret", Protocol: "ssh", Source: SecretInputVault,
+		AccountID: "db-prod", Timestamp: time.Now().UTC()}
+	if err := tap.RecordSecretInput(context.Background(), vault); err != nil {
+		t.Fatal(err)
+	}
+	operator := SecretInputEvidence{SessionID: "session-secret", Protocol: "rdp", Source: SecretInputOperator,
+		AccountID: "target-prod", Length: 12, SHA256: strings.Repeat("a", 64), Timestamp: time.Now().UTC()}
+	if err := tap.RecordSecretInput(context.Background(), operator); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"[vault secret db-prod injection requested via ssh]",
+		"[operator password input requested: 12 bytes, sha256 " + strings.Repeat("a", 64) + "]",
+	}
+	if len(recorder.entries) != len(want) {
+		t.Fatalf("recorded %d entries, want %d", len(recorder.entries), len(want))
+	}
+	for i, entry := range recorder.entries {
+		if entry.Command != want[i] {
+			t.Errorf("entry %d = %q, want %q", i, entry.Command, want[i])
+		}
+	}
+}
+
+func TestRecordingTap_RecordSecretInputRefusesBestEffortAdmission(t *testing.T) {
+	tap := NewRecordingTap(&captureRecorder{}, "session-secret")
+	evidence := SecretInputEvidence{SessionID: "session-secret", Protocol: "ssh", Source: SecretInputVault,
+		AccountID: "db-prod", Timestamp: time.Now().UTC()}
+	if err := tap.RecordSecretInput(context.Background(), evidence); !errors.Is(err, ErrSecretInjectionUnavailable) {
+		t.Fatalf("RecordSecretInput error = %v, want fail-closed refusal", err)
+	}
+}
+
+func TestRecordingTap_RecordSecretInputRejectsUntrustedMarkerFields(t *testing.T) {
+	recorder := &strictCaptureRecorder{}
+	tap := NewRequiredRecordingTap(recorder, "session-secret")
+	for _, evidence := range []SecretInputEvidence{
+		{SessionID: "session-secret", Protocol: "ssh", Source: SecretInputVault, AccountID: "db\nsecret"},
+		{SessionID: "other-session", Protocol: "ssh", Source: SecretInputVault, AccountID: "db-prod"},
+		{SessionID: "session-secret", Protocol: "ssh", Source: SecretInputOperator, AccountID: "target-prod", Length: 12, SHA256: "short"},
+	} {
+		if err := tap.RecordSecretInput(context.Background(), evidence); !errors.Is(err, ErrSecretInjectionInvalid) {
+			t.Errorf("RecordSecretInput(%+v) = %v, want invalid", evidence, err)
+		}
+	}
+	if len(recorder.entries) != 0 {
+		t.Fatalf("invalid evidence was recorded: %+v", recorder.entries)
+	}
+}

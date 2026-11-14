@@ -22,7 +22,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/ssh"
 
@@ -72,6 +74,14 @@ type Codec struct {
 	// Events records the transfers of an SFTP or SCP session before they are relayed;
 	// required for those modes.
 	Events EventRecorder
+
+	// SessionID and SecretTyperReady expose the active target input stream to the
+	// proxy's authenticated session-control path (ADR-0097). The callback is
+	// invoked only after the target shell is ready and must return a cleanup
+	// function that removes the live session registration.
+	SessionID           string
+	SecretInputRecorder proxycore.SecretInputRecorder
+	SecretTyperReady    func(ctx context.Context, sessionID, protocol, targetHost, targetUser string, typer proxycore.SecretTyper, recorder proxycore.SecretInputRecorder) func()
 }
 
 // Mode is the kind of session relayed.
@@ -166,9 +176,15 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 		return fmt.Errorf("target shell: %w", err)
 	}
 
-	var clientReader io.Reader = client
-	if c.Recorder != nil {
-		clientReader = io.TeeReader(client, c.Recorder)
+	// Both ordinary operator input and privileged secret injection share one
+	// serialized writer. The secret path writes directly to target stdin and
+	// bypasses Recorder; it is never copied into the client-to-target tee.
+	input := &serializedSSHInput{writer: stdin}
+	if c.SecretTyperReady != nil {
+		cleanup := c.SecretTyperReady(ctx, c.SessionID, "ssh", c.TargetHost, c.TargetUser, input, c.SecretInputRecorder)
+		if cleanup != nil {
+			defer cleanup()
+		}
 	}
 
 	var targetReader io.Reader = stdout
@@ -183,7 +199,7 @@ func (c *Codec) Relay(ctx context.Context, client, target io.ReadWriter, credent
 	fromClient := make(chan error, 1)
 	toClient := make(chan error, 1)
 	go func() {
-		_, err := io.Copy(stdin, clientReader)
+		_, err := relayOperatorInput(input, client, c.Recorder)
 		fromClient <- err
 	}()
 	go func() {
@@ -300,3 +316,79 @@ func pinnedTrust(credential *proxycore.Credential) (hostkey.Trust, error) {
 	}
 	return t, nil
 }
+
+// serializedSSHInput ensures secret injection cannot interleave bytes with
+// ordinary operator input. Ordinary input still arrives through the recorder
+// tee; TypeSecret writes directly to the target and therefore bypasses capture.
+type serializedSSHInput struct {
+	mu     sync.Mutex
+	writer io.Writer
+}
+
+func (w *serializedSSHInput) writeOperatorInput(p []byte, recorder io.Writer) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if recorder != nil {
+		n, err := recorder.Write(p)
+		if err != nil {
+			return 0, err
+		}
+		if n != len(p) {
+			return 0, io.ErrShortWrite
+		}
+	}
+	return w.writer.Write(p)
+}
+
+func relayOperatorInput(input *serializedSSHInput, source io.Reader, recorder io.Writer) (int64, error) {
+	buffer := make([]byte, 32*1024)
+	var total int64
+	for {
+		n, readErr := source.Read(buffer)
+		if n > 0 {
+			written, writeErr := input.writeOperatorInput(buffer[:n], recorder)
+			total += int64(written)
+			if writeErr != nil {
+				return total, writeErr
+			}
+		}
+		if readErr != nil {
+			return total, readErr
+		}
+	}
+}
+
+// TypeSecret types one line into the active SSH PTY. The caller owns and purges
+// the supplied buffer; this method neither copies nor retains it.
+func (w *serializedSSHInput) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	if w == nil || operation == nil {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return operation()
+}
+
+func (w *serializedSSHInput) TypeSecret(ctx context.Context, secret []byte) error {
+	if w == nil || w.writer == nil || ctx == nil || ctx.Err() != nil || len(secret) == 0 || !utf8.Valid(secret) {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	for _, r := range string(secret) {
+		if r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
+			return proxycore.ErrSecretInjectionInvalid
+		}
+	}
+	if _, err := w.writer.Write(secret); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w.writer, "\r")
+	return err
+}
+
+var (
+	_ proxycore.SecretTyper            = (*serializedSSHInput)(nil)
+	_ proxycore.SecretInputTransaction = (*serializedSSHInput)(nil)
+)

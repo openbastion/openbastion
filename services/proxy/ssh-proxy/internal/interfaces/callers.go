@@ -19,6 +19,7 @@ func CallerRules() []mtls.Rule {
 		// could revoke could end anybody's session, and one that could not be refused
 		// by the route could keep a revoked one alive by never being told.
 		{Method: http.MethodPost, Path: "/internal/v1/revoke-session", Callers: []string{mtls.SessionBroker}},
+		{Method: http.MethodPost, Path: "/internal/v1/inject-vault-secret", Callers: []string{mtls.SessionBroker}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

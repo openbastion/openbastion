@@ -11,6 +11,7 @@ Pour le responsable sécurité, l'auditeur et le contributeur qui touche à une 
 | [`authentication.md`](authentication.md) | Authentification |
 | [`authorization-rbac-abac.md`](authorization-rbac-abac.md) | Autorisation (RBAC dans le MVP) |
 | [`secrets-management.md`](secrets-management.md) | Secrets : chiffrement, scopes, purge |
+| [`secret-injection-step-up-contract.md`](secret-injection-step-up-contract.md) | MFA step-up ADR-0097 : défis TOTP/WebAuthn liés à l'action et routes mTLS internes Authentication implémentés ; orchestration Broker non livrée |
 | [`key-management.md`](key-management.md) | Clés de chiffrement : clé locale ou Transit d'OpenBao, mise en place, migration, pannes (ADR-0049) |
 | [`secure-development.md`](secure-development.md) | Sécurité applicative |
 | [`session-security.md`](session-security.md) | Couche proxy : clé d'hôte, enregistrement, révocation |

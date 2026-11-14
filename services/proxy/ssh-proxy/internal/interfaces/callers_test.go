@@ -20,6 +20,11 @@ func TestCallerRules(t *testing.T) {
 		// Cutting a session is the Broker's decision alone (ADR-0018): none of these may
 		// end somebody's session, and the Broker's own route does not answer a GET.
 		mtlstest.Allow("session-broker", "POST", "/internal/v1/revoke-session"),
+		mtlstest.Allow("session-broker", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("api-gateway", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("command-recorder", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("password-vault", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("ssh-proxy", "POST", "/internal/v1/inject-vault-secret"),
 		mtlstest.Deny("api-gateway", "POST", "/internal/v1/revoke-session"),
 		mtlstest.Deny("command-recorder", "POST", "/internal/v1/revoke-session"),
 		mtlstest.Deny("password-vault", "POST", "/internal/v1/revoke-session"),
@@ -34,6 +39,7 @@ func TestCallerRules(t *testing.T) {
 func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil, "").Routes(), CallerRules(), []mtlstest.Route{
 		{Method: "POST", Path: "/internal/v1/establish-session"}, {Method: "POST", Path: "/internal/v1/revoke-session"},
+		{Method: "POST", Path: "/internal/v1/inject-vault-secret"},
 		{Method: "GET", Path: "/healthz"},
 	})
 }

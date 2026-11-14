@@ -45,3 +45,16 @@ func (r *ProtocolProxyRouter) RevokeSession(ctx context.Context, protocol, sessi
 	}
 	return pool.RevokeSession(ctx, sessionID, remaining)
 }
+
+// InjectVaultSecret routes the one-use scope to the proxy pool selected from
+// the persisted protocol and the instance affinity established at connect time.
+func (r *ProtocolProxyRouter) InjectVaultSecret(ctx context.Context, protocol, sessionID, accountID, scopeToken string) error {
+	if protocol == "rdp" {
+		protocol = "vnc"
+	}
+	pool := r.pools[protocol]
+	if pool == nil {
+		return fmt.Errorf("no proxy pool for protocol %q", protocol)
+	}
+	return pool.InjectVaultSecret(ctx, sessionID, accountID, scopeToken)
+}

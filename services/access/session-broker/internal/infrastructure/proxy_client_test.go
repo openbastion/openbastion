@@ -95,3 +95,30 @@ func TestProxyClient_SendsEachClipboardDirection(t *testing.T) {
 		}
 	}
 }
+
+func TestProxyClient_InjectVaultSecretSendsOnlyTheOneUseScope(t *testing.T) {
+	var got map[string]any
+	var path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		if r.Header.Get("Cache-Control") != "no-store" {
+			t.Errorf("Cache-Control=%q", r.Header.Get("Cache-Control"))
+		}
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	client := &infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}
+	if err := client.InjectVaultSecret(context.Background(), "session-1", "account-1", "opaque-scope"); err != nil {
+		t.Fatal(err)
+	}
+	if path != "/internal/v1/inject-vault-secret" {
+		t.Fatalf("path=%q", path)
+	}
+	if got["session_id"] != "session-1" || got["account_id"] != "account-1" || got["vault_scope_token"] != "opaque-scope" {
+		t.Fatalf("request=%v", got)
+	}
+	if _, exists := got["secret"]; exists {
+		t.Fatal("proxy request contains secret material")
+	}
+}

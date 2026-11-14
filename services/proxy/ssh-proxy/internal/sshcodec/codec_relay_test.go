@@ -49,6 +49,24 @@ func startObservedFakeTargetSSHServer(t *testing.T, expectedPassword string, onL
 	return startKeyedFakeTargetSSHServer(t, targetHostSigner, expectedPassword, onLine)
 }
 
+// scanCRLF models a PTY line discipline: carriage return is an Enter key
+// even when no following line-feed byte is sent by the proxy.
+func scanCRLF(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for i, b := range data {
+		if b == '\r' || b == '\n' {
+			advance = i + 1
+			if b == '\r' && advance < len(data) && data[advance] == '\n' {
+				advance++
+			}
+			return advance, data[:i], nil
+		}
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
 // targetHostSigner is the host key of every fake target, the one fakeVault pins (ADR-0039).
 var targetHostSigner = func() ssh.Signer {
 	s, err := ssh.NewSignerFromKey(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)))
@@ -116,6 +134,7 @@ func startKeyedFakeTargetSSHServer(t *testing.T, signer ssh.Signer, expectedPass
 					go func(ch ssh.Channel) {
 						defer ch.Close()
 						scanner := bufio.NewScanner(ch)
+						scanner.Split(scanCRLF)
 						for scanner.Scan() {
 							text := scanner.Text()
 							if onLine != nil {
@@ -128,6 +147,9 @@ func startKeyedFakeTargetSSHServer(t *testing.T, signer ssh.Signer, expectedPass
 								fmt.Fprint(ch, "[sudo] password for root: ")
 								if !scanner.Scan() {
 									return
+								}
+								if onLine != nil {
+									onLine(scanner.Text())
 								}
 								fmt.Fprint(ch, "\r\nroot-shell-ready\r\n")
 								continue
