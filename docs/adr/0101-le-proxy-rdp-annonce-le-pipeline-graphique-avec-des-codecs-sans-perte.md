@@ -106,7 +106,42 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - un fuzzer (`FuzzRDPGraphicsCompositor`) ;
   - 20 mutations tuées.
 - **Contre FreeRDP 3** : 322 trames dessinées et acquittées en 10 s, sans faute. FreeRDP n'envoie que du RemoteFX progressif : ici, seules ses commandes sans codec sont dessinées.
-- **Contre les cinq Windows** : `TestRDPWindows_GraphicsPipeline` dessine et acquitte les trames, et dépose l'image composée dans l'artefact (`graphics-pipeline.png`). Cette image n'est pas encore lisible : ses fragments en ClearCodec ne sont pas dessinés avant l'incrément 4.
+- **Contre les cinq Windows** (CI de la PR #196) : la lecture stricte tient, sans aucune faute. Chaque session dessine et acquitte 6 à 9 trames en 20 s, avec jusqu'à 196 mises en cache et 1 101 copies depuis le cache.
+
+### Ordre des incréments revu (14 novembre 2026)
+
+**Décision** : prise par délégation du propriétaire, renversable.
+
+- **Le constat** : les cinq Windows de la CI n'envoient ni image non compressée, ni Planar. Ils envoient ClearCodec et RemoteFX progressif, et FreeRDP n'envoie que du RemoteFX progressif. L'incrément 3 prévu, « non compressé et Planar », ne pourrait donc être éprouvé contre aucune vraie cible.
+- **Le nouvel ordre** :
+  - incrément 3 : ClearCodec, avec le non compressé, dont la spécification est claire ;
+  - incrément 4 : RemoteFX progressif ;
+  - incrément 5 : la sortie, inchangée.
+- **Planar** reste refusé, par son nom (`ErrRDPGraphicsCodec`), tant qu'aucune cible ne l'envoie. Sa spécification ne dit pas dans quel sens se lisent ses lignes dans le pipeline graphique, et seule une vraie cible pourra trancher.
+
+### Incrément 3 — ClearCodec et le non compressé (14 novembre 2026)
+
+- **Fait** : `pkg/rdp/graphics_clearcodec.go` décode ClearCodec (MS-RDPEGFX 2.2.4.1). Les trois calques sont dessinés dans l'ordre sur le rectangle de la surface :
+  - résiduel : des séries d'une couleur ;
+  - bandes : des colonnes de pixels (« V-bars »), tirées de deux caches de 32 768 et 16 384 entrées, ou construites ;
+  - sous-codecs : pixels bruts, ou RLEX, c'est-à-dire des séries et des suites dans une petite palette.
+
+  S'y ajoutent les glyphes (4 000 emplacements de 1 024 pixels au plus) et le numéro de séquence, qui doit suivre. Les pixels sont lus en bleu, vert, rouge ; l'alpha de la surface reste tel quel (3.3.5.1). `WireToSurface1` est lu et borné, avec un rectangle obligatoirement dans sa surface. Le non compressé (0x0000) est décodé aussi.
+- **Où la spécification se tait**, la lecture de FreeRDP, notée comme telle dans le code :
+  - une suite RLEX va de son indice de départ à son indice d'arrêt inclus ;
+  - une palette d'une couleur a des indices d'un bit ;
+  - le curseur des petites V-bars revient à zéro après 16 384.
+
+  Une mauvaise lecture se verrait sur l'écran de la CI, ou casserait le compte exact de pixels que chaque calque doit remplir.
+- **Corrigé contre Windows** (premier passage de la CI de la PR #197) : les cinq Windows envoient des petites V-bars sans pixel (`yOn == yOff`), puis les reprennent du cache. Le décodeur les gardait comme un emplacement vide, et refusait la reprise. Elles sont désormais gardées comme les autres, et un test les couvre.
+- **Non décodé** : le sous-codec NSCodec (0x01), refusé par son nom. Le test de bout en bout compte les codecs non dessinés au lieu de s'arrêter : la CI dira si Windows l'emploie.
+- **Mémoire** : au plus 16 Mio de glyphes, 7,7 Mio de V-bars et 1,3 Mio d'index par canal ouvert.
+- **Prouvé** :
+  - chaque calque et chaque cache, au pixel près ;
+  - 40 refus ;
+  - un fuzzer (`FuzzClearCodec`) ;
+  - 22 mutations tuées.
+- **Non éprouvé contre une vraie cible** : le non compressé, que ni Windows ni FreeRDP n'envoient. L'ordre des octets d'un pixel (bleu, vert, rouge, alpha, comme `RDPGFX_COLOR32`) n'est pas écrit dans la spécification.
 
 ## Ce qui demande ton go
 

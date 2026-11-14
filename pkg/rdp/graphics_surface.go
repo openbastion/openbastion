@@ -69,6 +69,7 @@ type RDPGraphicsCompositor struct {
 	mappings     map[uint16]graphicsMapping
 	cache        map[uint16]*graphicsCacheEntry
 	cacheBytes   int
+	clear        *clearCodec
 	frameOpen    bool
 	frameID      uint32
 	decoded      uint32
@@ -384,7 +385,9 @@ func (c *RDPGraphicsCompositor) Apply(pdu RDPGraphicsPDU) (frame RDPGraphicsFram
 		c.frameOpen = false
 		c.decoded++
 		return RDPGraphicsFrame{ID: c.frameID, Changed: c.present()}, true, nil
-	case RDPGraphicsWireToSurface1, RDPGraphicsWireToSurface2:
+	case RDPGraphicsWireToSurface1:
+		return frame, false, c.wireToSurface1(body)
+	case RDPGraphicsWireToSurface2:
 		codec := uint16(0)
 		if len(body) >= 4 {
 			codec = binary.LittleEndian.Uint16(body[2:4])
@@ -393,6 +396,54 @@ func (c *RDPGraphicsCompositor) Apply(pdu RDPGraphicsPDU) (frame RDPGraphicsFram
 	}
 	// The cache import reply answers an offer this client never makes; a window mapping is RAIL.
 	return frame, false, graphicsRefused("command 0x%04x not drawn", pdu.Command)
+}
+
+// The codecs drawn (2.2.2.1): uncompressed and ClearCodec. The others are named and refused.
+const (
+	rdpGraphicsCodecUncompressed = uint16(0x0000)
+	rdpGraphicsCodecClear        = uint16(0x0008)
+)
+
+// wireToSurface1 draws an RDPGFX_WIRE_TO_SURFACE_PDU_1 (2.2.2.1): surfaceId, codecId, pixelFormat,
+// destRect, bitmapDataLength, the data. The rectangle must be inside its surface (strict reading).
+func (c *RDPGraphicsCompositor) wireToSurface1(body []byte) error {
+	if len(body) < 17 || uint64(binary.LittleEndian.Uint32(body[13:17])) != uint64(len(body)-17) {
+		return graphicsRefused("a WireToSurface1 of %d bytes", len(body))
+	}
+	codec, format := binary.LittleEndian.Uint16(body[2:4]), body[4]
+	if codec != rdpGraphicsCodecUncompressed && codec != rdpGraphicsCodecClear {
+		return fmt.Errorf("%w: 0x%04x", ErrRDPGraphicsCodec, codec)
+	}
+	s, err := c.surface(binary.LittleEndian.Uint16(body[0:2]))
+	if err != nil {
+		return err
+	}
+	r, ok := rectWithin(body[5:13], s.width, s.height)
+	if !ok || r.Empty() || (format != rdpGraphicsPixelXRGB && format != rdpGraphicsPixelARGB) {
+		return graphicsRefused("a bitmap of %v, format 0x%02x, on a %d x %d surface", graphicsRect(body[5:13]), format, s.width, s.height)
+	}
+	data := body[17:]
+	t := clearTarget{s: s, x: r.Min.X, y: r.Min.Y, w: r.Dx(), h: r.Dy()}
+	switch codec {
+	case rdpGraphicsCodecUncompressed:
+		// "Pixels ... are ordered from left to right and then top to bottom"; four bytes each,
+		// blue, green, red, then alpha or nothing, as RDPGFX_COLOR32. Not sent by the CI's targets.
+		if len(data) != 4*t.w*t.h {
+			return graphicsRefused("%d uncompressed bytes for %d x %d", len(data), t.w, t.h)
+		}
+		for i := range t.w * t.h {
+			t.set(i%t.w, i/t.w, data[4*i], data[4*i+1], data[4*i+2])
+		}
+	case rdpGraphicsCodecClear:
+		if c.clear == nil {
+			c.clear = &clearCodec{}
+		}
+		if err := c.clear.decode(data, t); err != nil {
+			return err
+		}
+	}
+	s.dirty = s.dirty.Union(r)
+	return nil
 }
 
 // present copies what changed of every mapped surface onto the output (3.3.5.12), opaque.
