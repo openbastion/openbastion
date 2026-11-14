@@ -126,6 +126,18 @@ var contractPairs = []contractPair{
 		map[string]string{"context": whyContext}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
 		map[string]string{"context": whyContext}},
+	// ADR-0097: the Gateway/Broker proof DTOs are intentionally narrower than the full Authentication RPC.
+	{"services/access/session-broker/internal/interfaces/http.go", "secretStepUpRequest", "proto/authentication/v1/action_step_up.proto", "StartMFAActionStepUpRequest",
+		map[string]string{"callerId": "verified actor identity, flattened by the Gateway", "actorRoles": "verified roles are flattened for Broker authorization"},
+		map[string]string{"context": "the Broker reconstructs RequestContext from the verified caller and mTLS identity", "session_id": "derived from the route and stored session", "account_id": "derived from the stored session", "protocol": "derived from the stored session", "action": "fixed to secret:inject by the Broker"}},
+	{"services/access/session-broker/internal/interfaces/http.go", "secretInjectionRequest", "proto/authentication/v1/action_step_up.proto", "VerifyMFAActionStepUpRequest",
+		map[string]string{"callerId": "verified actor identity, flattened by the Gateway", "actorRoles": "verified roles are flattened for Broker authorization"},
+		map[string]string{"context": "the Broker reconstructs RequestContext from the verified caller and mTLS identity", "session_id": "derived from the route and stored session", "account_id": "derived from the stored session", "protocol": "derived from the stored session", "action": "fixed to secret:inject by the Broker"}},
+	{"services/access/api-gateway/internal/interfaces/http.go", "secretInjectionProofRequest", "proto/authentication/v1/action_step_up.proto", "VerifyMFAActionStepUpRequest", nil,
+		map[string]string{"context": "the Gateway derives actor context from the verified bearer token", "session_id": "derived from the route", "account_id": "derived from the stored session in Broker", "protocol": "derived from the stored session in Broker", "action": "fixed to secret:inject by the Broker"}},
+	{"services/access/api-gateway/internal/interfaces/http.go", "secretInjectionBrokerRequest", "proto/authentication/v1/action_step_up.proto", "VerifyMFAActionStepUpRequest",
+		map[string]string{"callerId": "verified actor identity, flattened by the Gateway", "actorRoles": "verified roles are flattened for Broker authorization"},
+		map[string]string{"context": "the Broker reconstructs RequestContext from the verified caller and mTLS identity", "session_id": "derived from the route and stored session", "account_id": "derived from the stored session", "protocol": "derived from the stored session", "action": "fixed to secret:inject by the Broker"}},
 }
 
 // notMirrored are internal JSON structs with no message in proto/, each with its reason.

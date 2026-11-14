@@ -157,17 +157,15 @@ func TestSSHCodec_InjectsSecretOutsideOperatorRecording(t *testing.T) {
 		}
 	}
 
+	// Wait for the complete ordered input transaction, not merely the secret:
+	// observing the secret does not mean the relay has flushed the queued operator
+	// command that must follow it.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		targetMu.Lock()
-		found := false
-		for _, line := range targetLines {
-			if line == "hunter2" {
-				found = true
-			}
-		}
+		complete := len(targetLines) >= 3
 		targetMu.Unlock()
-		if found {
+		if complete {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)

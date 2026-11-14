@@ -6,7 +6,7 @@ Les noms de service sont ceux des SAN URI `spiffe://<domaine>/<service>` : `api-
 
 ```
 utilisateur ──HTTP──► api-gateway ──► authentication   (login, verify)
-                          │──────► session-broker      (/sessions… : création, `GET /sessions?status=pending_approval` (seul statut servi), connect, approve, reject — liste blanche ; l'identité de l'appelant est celle du jeton, la requête de liste est reconstruite)
+                          │──────► session-broker      (/sessions… : création, `GET /sessions?status=pending_approval` (seul statut servi), connect, approve, reject, `secret-injection-step-up`, `secret-injection` — liste blanche ; l'identité de l'appelant est celle du jeton, la requête de liste et les corps d'action sont reconstruits)
                           │──────► password-vault      (administration des comptes, rotation, épinglage de la clé d'hôte)
                           │──────► authorization       (création de politiques)
                           ├──────► command-recorder    (lecture d'un replay SSH)

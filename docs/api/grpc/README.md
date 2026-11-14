@@ -620,7 +620,7 @@ Contrat Protobuf source : `proto/authentication/v1/action_step_up.proto`. Transp
 
 Les trois appels vérifient le même tuple utilisateur/session/compte/protocole/action. Le défi est aléatoire, conservé par SHA-256, valable 2 minutes et détruit après 5 échecs ou sa consommation. Le facteur autorisé dépend des facteurs enrôlés et des rôles stricts : TOTP est refusé pour un rôle strict, WebAuthn reste obligatoire. La réponse de vérification est un grant opaque à usage unique, non un JWT de connexion ; seule son empreinte est stockée et son usage doit être consommé atomiquement par le Broker. Les réponses portent `Cache-Control: no-store`.
 
-**Frontière de confiance :** l'identité humaine du contexte provient du jeton vérifié par la Gateway ; le certificat mTLS prouve que l'appelant est le Session Broker. Le Gateway, le proxy et le navigateur ne peuvent pas appeler ces routes. Le Broker doit vérifier l'existence et l'appartenance de la session et du compte avant de démarrer le défi, puis consommer le grant avec le contexte exact. Le client mTLS Broker → Authentication et le parcours opérateur ne sont pas encore branchés ; les routes côté Authentication et leurs règles de certificat sont en place.
+**Frontière de confiance :** l'identité humaine du contexte provient du jeton vérifié par la Gateway ; le certificat mTLS prouve que l'appelant est le Session Broker. Le Gateway, le proxy et le navigateur ne peuvent pas appeler directement ces routes. Le client mTLS Broker → Authentication et l'orchestration Broker sont branchés. Les routes publiques passent exclusivement par les deux endpoints Gateway décrits au §16 ; le Broker dérive compte/protocole/action de la session persistée et ne retourne jamais le grant.
 
 ## 15. Session Broker → SSH Proxy — injection d'un secret Vault (ADR-0097)
 
@@ -628,4 +628,18 @@ Contrat Protobuf : `proto/proxy/v1/proxy_control.proto`, RPC `ProxyControl.Injec
 
 Le proxy refuse si aucun shell SSH interactif n'est enregistré pour la session, si plusieurs shells actifs rendent la destination ambiguë, si le contexte de relay est annulé, si le credential n'est pas un mot de passe ou si le `TargetHost`/`TargetUser` du Vault ne correspond pas au shell. Il exécute ensuite audit préalable → marqueur Command Recorder acquitté → frappe directe dans le flux SSH → purge mémoire. Le presse-papiers et le flux de commande ordinaire sont contournés.
 
-Le pool utilise l'affinité déterministe amendée dans ADR-0046 : le même session ID et le même nom d'instance désignent le même proxy depuis toutes les répliques Broker. Pas de fallback si ce proxy est indisponible. Cette route n'est pas exposée par la Gateway ; l'interface opérateur reste à construire. VNC/RDP ne sont pas encore raccordés.
+Le pool utilise l'affinité déterministe amendée dans ADR-0046 : le même session ID et le même nom d'instance désignent le même proxy depuis toutes les répliques Broker. Pas de fallback si ce proxy est indisponible. Cette route interne est appelée par le Broker après le parcours step-up ; elle n'est jamais exposée directement par la Gateway. Les deux routes publiques de déclenchement et de preuve MFA sont décrites au §16. L'interface opérateur reste à construire. VNC/RDP ne sont pas encore raccordés.
+
+
+## 16. API Gateway → Session Broker — parcours public d'injection Vault (ADR-0097)
+
+La Gateway expose deux routes bearer-authentifiées, avec réponses `Cache-Control: no-store` et le même seau de débit que les autres actions de session (ADR-0016). Elles ne relaient jamais les routes Authentication internes et ne transportent aucun secret cible.
+
+| Route publique | Requête | Réponse |
+|---|---|---|
+| `POST /sessions/{sessionId}/secret-injection-step-up` | Corps vide ; acteur et rôles dérivés du bearer token | Challenge opaque, expiration 120 s, facteurs admissibles et options WebAuthn ; aucun grant ni scope |
+| `POST /sessions/{sessionId}/secret-injection` | `challenge`, `factor` et preuve `totp_code` ou `webauthn_response` ; champs inconnus refusés | `204 No Content` après confirmation du proxy ; aucun identifiant de compte, credential, grant ou scope |
+
+La Gateway reconstruit `callerId` et `actorRoles` à partir du jeton vérifié ; les champs fournis par le navigateur ne sont jamais utilisés comme identité. Le Broker vérifie le propriétaire, l'état actif, l'expiration, l'autorisation exacte et le protocole de la session ; il récupère compte/protocole depuis son stockage et fixe l'action à `secret:inject`. Le challenge MFA et le grant sont liés à ce tuple complet.
+
+**Limites de disponibilité fonctionnelle :** le flux est implémenté pour SSH interactif seulement. Aucun écran Admin UI ne consomme encore ces endpoints ; l'utilisateur peut seulement les appeler par un client API. VNC/RDP et le canal E2E du parcours B restent hors périmètre. Voir `docs/api/rest/openapi.yaml` et `docs/security/secret-injection-step-up-contract.md`.

@@ -1,6 +1,6 @@
 # Contrat de confirmation MFA pour l'injection d'un secret
 
-**Statut :** implémentation partielle en cours — parcours A câblé pour SSH en interne, sans route Gateway ni UI  
+**Statut :** parcours A câblé de Gateway à SSH Proxy pour SSH interactif ; routes API disponibles, UI non intégrée
 **Décision de référence :** ADR-0097 (accepté)  
 **Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) reste bloqué tant que le transport navigateur → proxy ne garantit pas que la Gateway ne voit jamais le clair.
 
@@ -81,11 +81,11 @@ Une seule ligne retournée signifie succès. Zéro ligne signifie refus. Les dé
 
 ## 4. Contrats Gateway et Session Broker
 
-Routes publiques proposées :
-- POST /sessions/{sessionId}/secrets/{accountId}/challenge : crée le challenge et renvoie uniquement les informations MFA.
-- POST /sessions/{sessionId}/secrets/{accountId}/inject : reçoit la preuve MFA, puis orchestre la consommation du grant et l'injection.
+Routes publiques implémentées :
+- `POST /sessions/{sessionId}/secret-injection-step-up` : corps vide ; crée le challenge et renvoie uniquement les informations MFA.
+- `POST /sessions/{sessionId}/secret-injection` : reçoit la preuve MFA, puis orchestre la consommation du grant et l'injection.
 
-La Gateway authentifie le bearer token et reconstruit les champs d'acteur à partir du contexte vérifié. Elle ne relaie jamais un champ client actorUserId, actorRoles ou requestedBy comme autorité.
+La Gateway authentifie le bearer token, applique le seau de débit des actions de session, impose `Cache-Control: no-store`, rejette les champs inconnus et reconstruit les champs d'acteur à partir du contexte vérifié. Le premier endpoint refuse tout corps non vide. Elle ne relaie jamais un champ client `callerId`, `actorRoles`, `requestedBy`, `accountId`, `grant` ou `vault_scope_token` comme autorité.
 
 Le Broker :
 - ne possède aucune méthode de lecture de credential ;
@@ -95,8 +95,9 @@ Le Broker :
 - n'écrit jamais le grant, le scope ni la preuve MFA dans l'audit ;
 - lie le scope Vault au proxy exact qui détient la session ;
 - refuse si le proxy n'est pas joignable ou si le type de session n'implémente pas SecretTyper.
+- expose les handlers de step-up et d'injection seulement sur les routes Session Broker autorisées au certificat mTLS `api-gateway` ; les routes Authentication restent exclusivement appelables par `session-broker`.
 
-Les chemins et noms définitifs des routes restent à synchroniser avec le routeur Gateway existant et le schéma OpenAPI avant leur implémentation.
+Les routes sont inscrites dans `docs/api/rest/openapi.yaml`. Le schéma OpenAPI décrit les preuves MFA autorisées et interdit les propriétés supplémentaires. L'interface Admin UI n'est pas encore raccordée.
 
 ## 5. Persistance et concurrence
 
@@ -155,10 +156,10 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 4. ~~Broker : vérifier session + Authorization ; appeler start/verify/consume ; ensuite seulement obtenir le scope Vault et commander le proxy~~ (incréments 4–5).
 5. ~~Canal de commande proxy ciblé vers l'instance qui détient la session ; jamais de scope dans le client~~ (incrément 5, SSH seulement ; affinité déterministe ADR-0046).
 6. ~~Tests PostgreSQL réels des migrations, bindings et consommations atomiques~~ (incrément 2, base dédiée PostgreSQL 16) ; restent les tests d'intégration multi-services.
-7. Contrat OpenAPI public, documentation opérateur et UI ; seulement après les tests des étapes précédentes.
+7. ~~Contrat OpenAPI public et routes Gateway/Broker, avec tests HTTP et contrat Protobuf~~ (incrément 6 ; interface Admin UI encore à faire).
 8. VNC et RDP : implémenter SecretTyper avec événements clavier Unicode, sans presse-papiers ; tests contre les vraies cibles prévues par ADR-0097.
 
-**État actuel :** les étapes 1 à 6 sont réalisées pour le parcours A SSH interne ; voir §9 pour les détails et les limites. Les routes Gateway/Broker et l'UI, les tests multi-services, VNC/RDP et le parcours B restent à faire.
+**État actuel :** les étapes 1 à 7 sont réalisées pour le parcours A SSH (routes Gateway/Broker, contrat OpenAPI et test multi-services réel inclus). Restent l'interface Admin UI, VNC/RDP et le parcours B.
 
 
 ## 9. État d'implémentation — 14 novembre 2026, incrément 5 (SSH A)
@@ -170,3 +171,13 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 - Le proxy compare le `TargetHost` et `TargetUser` reçus du Vault à ceux du shell actif. Il exige un credential de type `password`, UTF-8 valide, mono-ligne, sans contrôle et limité à 4 Kio, puis appelle `proxycore.InjectSecret` : audit préalable `session.secret_injection_started`, marqueur Command Recorder « injection requested » strictement acquitté, frappe SSH hors du flux enregistré, événement de résultat `session.secret_injected`/`session.secret_injection_failed`, purge des buffers. Aucun presse-papiers n'est utilisé.
 - Tests ciblés couvrent le routage identique entre deux répliques Broker, l'absence de failover, le recontrôle Authorization après MFA, l'absence d'appel Vault/proxy si la consommation MFA échoue, le refus d'un protocole sans typer, l'absence de fetch pour une session inactive/annulée/ambiguë, la correspondance de cible, l'ordre audit → recording → typing et la purge.
 - **Limites** : ce parcours est actuellement implémenté uniquement pour SSH interactif. Aucun endpoint Session Broker/Gateway ni UI n'est exposé ; VNC/RDP ne disposent pas encore de `SecretTyper` intégré ; le parcours B reste interdit jusqu'au canal E2E navigateur → proxy. Le flux A n'est donc pas encore activable par un utilisateur.
+
+
+## 10. État d'implémentation — 14 novembre 2026, incrément 6 (routes HTTP)
+
+- `POST /sessions/{sessionId}/secret-injection-step-up` est exposé par la Gateway et le Session Broker. La requête est sans corps ; le Gateway construit l'acteur/rôles à partir du bearer token. Le Broker dérive le compte et le protocole du stockage et fixe l'action à `secret:inject`.
+- `POST /sessions/{sessionId}/secret-injection` n'accepte que `challenge`, `factor`, `totp_code` ou `webauthn_response`. La Gateway refuse les champs inconnus, y compris toute tentative de forger l'identité, les rôles, le compte, le credential, le grant ou le scope. Elle reconstruit le corps interne à partir de la preuve et de l'identité vérifiée.
+- Les deux endpoints sont soumis au seau `SESSION_ACTION_*` ; toutes les réponses (y compris les erreurs) sont `Cache-Control: no-store`. Le Broker limite les corps à 64 Kio, refuse les JSON supplémentaires et retourne `204` sans donnée sensible après confirmation proxy.
+- Les tests couvrent l'identité vérifiée, les rôles, l'absence de corps pour le challenge, l'allowlist de preuve, TOTP/WebAuthn, l'absence de grant/scope dans les réponses, MFA refusé, demandeur non propriétaire, authentification manquante, routes inconnues et débit partagé. Le test de contrat relie les DTO HTTP aux messages Protobuf et documente les champs volontairement dérivés ou aplatis.
+- Le test multi-processus `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses` enrôle TOTP, crée et connecte une session SSH, effectue le step-up via Gateway, injecte le credential du Vault et vérifie le marqueur Command Recorder, l'absence de credential dans les journaux et la chaîne d'audit.
+- **Limites** : aucun écran UI ; seul SSH interactif ; pas de VNC/RDP ; parcours B toujours bloqué jusqu'au canal E2E.

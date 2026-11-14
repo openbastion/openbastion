@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -236,9 +237,11 @@ func (s *HTTPServer) handleSessionItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for suffix, handle := range map[string]func(http.ResponseWriter, *http.Request, string){
-		"/connect": s.handleConnect,
-		"/approve": s.handleApprove,
-		"/reject":  s.handleReject,
+		"/connect":                  s.handleConnect,
+		"/approve":                  s.handleApprove,
+		"/reject":                   s.handleReject,
+		"/secret-injection-step-up": s.handleSecretInjectionStepUp,
+		"/secret-injection":         s.handleSecretInjection,
 	} {
 		if id, ok := strings.CutSuffix(rest, suffix); ok {
 			if r.Method != http.MethodPost {
@@ -379,6 +382,88 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(connectionTicketResponse{ProxyEndpoint: proxyEndpoint, Ticket: ticket, Protocol: protocol, ExpiresAt: expiresAt})
+}
+
+// -- POST /sessions/{id}/secret-injection-step-up and /secret-injection (ADR-0097) --
+
+type secretStepUpRequest struct {
+	CallerID   string   `json:"callerId"`
+	ActorRoles []string `json:"actorRoles"`
+}
+
+type secretInjectionRequest struct {
+	CallerID         string          `json:"callerId"`
+	ActorRoles       []string        `json:"actorRoles"`
+	Challenge        string          `json:"challenge"`
+	Factor           string          `json:"factor"`
+	TOTPCode         string          `json:"totp_code,omitempty"`
+	WebAuthnResponse json.RawMessage `json:"webauthn_response,omitempty"`
+}
+
+func decodeStrictBoundedJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("multiple JSON values")
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *HTTPServer) handleSecretInjectionStepUp(w http.ResponseWriter, r *http.Request, sessionID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	var req secretStepUpRequest
+	if err := decodeStrictBoundedJSON(w, r, &req); err != nil || req.CallerID == "" {
+		http.Error(w, "invalid secret step-up request", http.StatusBadRequest)
+		return
+	}
+	result, err := s.svc.StartSecretActionStepUp(r.Context(), req.CallerID, req.ActorRoles, sessionID, "secret:inject")
+	if err != nil {
+		writeSecretActionError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+func (s *HTTPServer) handleSecretInjection(w http.ResponseWriter, r *http.Request, sessionID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	var req secretInjectionRequest
+	if err := decodeStrictBoundedJSON(w, r, &req); err != nil || req.CallerID == "" {
+		http.Error(w, "invalid secret injection request", http.StatusBadRequest)
+		return
+	}
+	proof := application.MFAActionProof{
+		Challenge: req.Challenge, Factor: req.Factor,
+		TOTPCode: req.TOTPCode, WebAuthnResponse: req.WebAuthnResponse,
+	}
+	if err := s.svc.InjectVaultSecretWithStepUp(r.Context(), req.CallerID, req.ActorRoles, sessionID, proof); err != nil {
+		writeSecretActionError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeSecretActionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		http.Error(w, "secret injection is not authorized or MFA verification failed", http.StatusForbidden)
+	case errors.Is(err, domain.ErrNotFound):
+		http.Error(w, "session not found", http.StatusNotFound)
+	case errors.Is(err, domain.ErrConflict):
+		http.Error(w, "secret injection requires an active session", http.StatusConflict)
+	case errors.Is(err, domain.ErrUnsupportedProtocol):
+		http.Error(w, "secret injection is not supported for this protocol", http.StatusConflict)
+	default:
+		log.Printf("session-broker: secret injection action failed: %v", err)
+		http.Error(w, "secret injection is unavailable; try again shortly", http.StatusServiceUnavailable)
+	}
 }
 
 // -- POST /sessions/{id}/approve, POST /sessions/{id}/reject (ADR-0011) -------

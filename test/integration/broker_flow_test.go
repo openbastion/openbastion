@@ -124,6 +124,27 @@ func brokerTerminateSession(t *testing.T, baseURL, sessionID string) int {
 // EXACTLY matches expectedPassword — proof that whatever credential
 // reaches it is the genuine one fetched from the real Vault, not a stand-
 // in — and echoes back whatever line it receives on a shell session.
+// scanSSHLine models a PTY line discipline: carriage return and newline both
+// submit a line. A real terminal does this for the proxy's CR-terminated secret
+// injection; bufio.ScanLines alone would wait forever for a LF that is not sent.
+func scanSSHLine(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for len(data) > 0 && data[0] == '\n' {
+		advance++
+		data = data[1:]
+	}
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		consume := 1
+		if data[i] == '\r' && i+1 < len(data) && data[i+1] == '\n' {
+			consume = 2
+		}
+		return advance + i + consume, data[:i], nil
+	}
+	if atEOF && len(data) > 0 {
+		return advance + len(data), data, nil
+	}
+	return advance, nil, nil
+}
+
 func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr string) {
 	t.Helper()
 	signer := targetHostSigner // the key every account is pinned to (ADR-0039)
@@ -179,6 +200,7 @@ func startFakeTargetSSHServer(t *testing.T, expectedPassword string) (addr strin
 					go func(ch ssh.Channel) {
 						defer ch.Close()
 						scanner := bufio.NewScanner(ch)
+						scanner.Split(scanSSHLine)
 						for scanner.Scan() {
 							fmt.Fprintf(ch, "echo:%s\r\n", scanner.Text())
 						}
