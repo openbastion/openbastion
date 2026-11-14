@@ -122,6 +122,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 - Chaque RPC, champ et flux agent est couvert par une règle d'identité, d'autorisation, de taille, de délai et de comportement en erreur.
 - Les menaces P0 du modèle STRIDE disposent de contrôles spécifiés et de tests de sécurité planifiés ; aucune menace P0 non traitée ne permet un pilote sur réseau réel.
 - La séparation Network/Security Agent, l'absence de secrets cibles dans les messages et le refus des commandes arbitraires sont vérifiés par revue de contrat.
+- Le chemin direct depuis une zone opérateur vers les ports privilégiés des cibles est refusé par les ACL/firewalls du site ; les tests démontrent que seule la passerelle autorisée peut atteindre ces ports.
 - Les risques résiduels root/SYSTEM, hôte compromis, PKI et chaîne de livraison sont documentés.
 
 **Explicitement hors périmètre v0.0.3** : binaire agent de production, tunnel réseau opérationnel, enrôlement runtime, collecte effective Linux/Windows, mise à jour automatique, réponse EDR, exécution distante, accès SOCKS/UDP et déploiement multi-site. Ces travaux ne commencent qu'après acceptation des ADR et clôture des portes de sécurité.
