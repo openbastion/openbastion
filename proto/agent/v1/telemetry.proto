@@ -1,0 +1,49 @@
+syntax = "proto3";
+package openbastion.agent.v1;
+import "google/protobuf/timestamp.proto";
+option go_package = "github.com/openbastion/openbastion/proto/agent/v1;agentv1";
+
+service AgentTelemetry {
+  // Ack reports the highest contiguous sequence accepted by the server.
+  rpc Ingest(stream TelemetryBatch) returns (stream TelemetryAck);
+}
+enum TelemetryFamily {
+  TELEMETRY_FAMILY_UNSPECIFIED = 0;
+  TELEMETRY_FAMILY_AUTHENTICATION = 1;
+  TELEMETRY_FAMILY_PRIVILEGE_ESCALATION = 2;
+  TELEMETRY_FAMILY_PROCESS = 3;
+  TELEMETRY_FAMILY_ACCOUNT_CHANGE = 4;
+  TELEMETRY_FAMILY_SERVICE_CHANGE = 5;
+  TELEMETRY_FAMILY_CONFIGURATION_CHANGE = 6;
+  TELEMETRY_FAMILY_FILE_INTEGRITY = 7;
+  TELEMETRY_FAMILY_NETWORK_CHANGE = 8;
+  TELEMETRY_FAMILY_COLLECTOR_HEALTH = 9;
+}
+enum TelemetrySeverity {
+  TELEMETRY_SEVERITY_UNSPECIFIED = 0;
+  TELEMETRY_SEVERITY_INFO = 1;
+  TELEMETRY_SEVERITY_LOW = 2;
+  TELEMETRY_SEVERITY_MEDIUM = 3;
+  TELEMETRY_SEVERITY_HIGH = 4;
+  TELEMETRY_SEVERITY_CRITICAL = 5;
+}
+message TelemetryEvent {
+  string event_id = 1;
+  uint64 sequence = 2;
+  google.protobuf.Timestamp observed_at = 3;
+  string schema_version = 4;
+  TelemetryFamily family = 5;
+  TelemetrySeverity severity = 6;
+  string resource_id = 7;
+  bytes structured_payload = 8;        // bounded, versioned; secrets/session content forbidden
+}
+message TelemetryBatch {
+  uint64 first_sequence = 1;
+  repeated TelemetryEvent events = 2;  // server enforces count and total-byte limits
+}
+message TelemetryAck {
+  uint64 highest_contiguous_sequence = 1;
+  repeated uint64 rejected_sequences = 2;
+  string status_code = 3;              // stable code; no payload or internal error
+  google.protobuf.Timestamp received_at = 4;
+}
