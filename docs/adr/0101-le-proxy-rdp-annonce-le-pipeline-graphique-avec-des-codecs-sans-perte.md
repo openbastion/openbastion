@@ -133,6 +133,7 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
   - le curseur des petites V-bars revient à zéro après 16 384.
 
   Une mauvaise lecture se verrait sur l'écran de la CI, ou casserait le compte exact de pixels que chaque calque doit remplir.
+- **Corrigé contre Windows** (premier passage de la CI de la PR #197) : les cinq Windows envoient des petites V-bars sans pixel (`yOn == yOff`), puis les reprennent du cache. Le décodeur les gardait comme un emplacement vide, et refusait la reprise. Elles sont désormais gardées comme les autres, et un test les couvre.
 - **Non décodé** : le sous-codec NSCodec (0x01), refusé par son nom. Le test de bout en bout compte les codecs non dessinés au lieu de s'arrêter : la CI dira si Windows l'emploie.
 - **Mémoire** : au plus 16 Mio de glyphes, 7,7 Mio de V-bars et 1,3 Mio d'index par canal ouvert.
 - **Prouvé** :

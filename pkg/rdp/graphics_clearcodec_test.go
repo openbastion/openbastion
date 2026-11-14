@@ -128,9 +128,14 @@ func TestClearCodec_TheBandsAndTheirCaches(t *testing.T) {
 	if c.clear.vCursor != 0 || c.clear.shortCursor != 0 {
 		t.Fatalf("cursors %d, %d after the reset", c.clear.vCursor, c.clear.shortCursor)
 	}
+	// A short V-bar of no pixel (yOn == yOff) is cached, and hit again: background all down.
+	drawClear(t, c, 4, 4, clearStream(0, 2, composite(nil, band(0, 1, 0, 1, bkg, shortMiss(1, 1), shortHit(c.clear.shortCursor, 0)), nil)))
+	if rgb(c, 0, 0) != bg || rgb(c, 1, 1) != bg {
+		t.Fatalf("an empty short V-bar: % x % x", rgb(c, 0, 0), rgb(c, 1, 1))
+	}
 	// The V-bar cursor wraps after 32,767.
 	c.clear.vCursor = clearVBarSlots - 1
-	drawClear(t, c, 4, 4, clearStream(0, 2, composite(nil, band(0, 0, 0, 0, bkg, shortHit(0, 0)), nil)))
+	drawClear(t, c, 4, 4, clearStream(0, 3, composite(nil, band(0, 0, 0, 0, bkg, shortHit(0, 0)), nil)))
 	if c.clear.vCursor != 0 || len(c.clear.vBars[clearVBarSlots-1]) != 3 {
 		t.Fatalf("the V-bar cursor after 32,767: %d", c.clear.vCursor)
 	}

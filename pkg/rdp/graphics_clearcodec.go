@@ -247,7 +247,10 @@ func (c *clearCodec) bands(data []byte, t clearTarget) error {
 				if yOff < yOn || len(data) < 3*(yOff-yOn) {
 					return clearRefused("a short V-bar of %d to %d, %d byte(s) left", yOn, yOff, len(data))
 				}
-				short := append([]byte(nil), data[:3*(yOff-yOn)]...)
+				// A short V-bar of no pixel is one (yOn == yOff), cached as any other: never nil,
+				// which says an empty slot (CI of PR #197: Windows sends them, then hits them).
+				short := make([]byte, 3*(yOff-yOn))
+				copy(short, data)
 				data = data[3*(yOff-yOn):]
 				c.shortVBars[c.shortCursor] = short
 				c.shortCursor = (c.shortCursor + 1) % clearShortVBarSlots // FreeRDP's reading
