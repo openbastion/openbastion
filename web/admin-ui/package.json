@@ -6,6 +6,7 @@
   "description": "OpenBastion Admin UI (ADR-0036): React, served by the Gateway under /ui/, talking to the public API only.",
   "license": "AGPL-3.0-only",
   "scripts": {
+    "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p ."

@@ -27,7 +27,7 @@ func findChrome() string {
 	if path := os.Getenv("CHROME"); path != "" {
 		return path
 	}
-	for _, name := range []string{"google-chrome", "chromium", "chromium-browser"} {
+	for _, name := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"} {
 		if path, err := exec.LookPath(name); err == nil {
 			return path
 		}
