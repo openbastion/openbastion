@@ -17,6 +17,8 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/audit/v1/emit-event", Callers: []string{mtls.SessionBroker, mtls.SSHProxy, mtls.RDPVNCProxy, mtls.CommandRecorder, mtls.PasswordVault, mtls.Authentication, mtls.VideoRecorder}},
 		// Verifying the chain is an operator's act.
 		{Path: "/audit/v1/verify-chain", Callers: []string{mtls.AdminCLI}},
+		// Reconciliation is an operator-only read of retained, signed audit evidence.
+		{Method: http.MethodGet, Path: "/audit/v1/secret-injections", Callers: []string{mtls.AdminCLI}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

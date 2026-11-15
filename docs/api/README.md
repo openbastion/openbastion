@@ -1,6 +1,6 @@
 # API
 
-L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification est [`rest/openapi.yaml`](rest/openapi.yaml) (OpenAPI 3.1) ; ses conventions (version, authentification, pagination, erreurs, limitation de débit) sont dans [`conventions.md`](conventions.md). Les contrats entre services sont dans [`grpc/README.md`](grpc/README.md) et `proto/`.
+L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification est [`rest/openapi.yaml`](rest/openapi.yaml) (OpenAPI 3.1) ; ses conventions (version, authentification, pagination, erreurs, limitation de débit) sont dans [`conventions.md`](conventions.md). Les contrats entre services sont dans [`grpc/README.md`](grpc/README.md) et `proto/`. Les contrats HTTP internes sous mTLS (non exposés par la Gateway) sont documentés dans [`internal/audit-service.md`](internal/audit-service.md).
 
 ## Table récapitulative des endpoints
 

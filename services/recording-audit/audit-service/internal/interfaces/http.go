@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
@@ -30,6 +31,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/audit/v1/emit-event", s.handleEmitEvent)
 	mux.HandleFunc("/audit/v1/verify-chain", s.handleVerifyChain)
+	mux.HandleFunc("/audit/v1/secret-injections", s.handleSecretInjectionReconciliation)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -83,6 +85,44 @@ func (s *HTTPServer) handleEmitEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(emitEventResponse{EventID: event.ID})
+}
+
+func (s *HTTPServer) handleSecretInjectionReconciliation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > application.MaxSecretInjectionReconciliationLimit {
+			http.Error(w, "limit must be between 1 and 500", http.StatusBadRequest)
+			return
+		}
+		limit = parsed
+	}
+	before := r.URL.Query().Get("before")
+	if before != "" && len(before) != 32 {
+		http.Error(w, "invalid reconciliation cursor", http.StatusBadRequest)
+		return
+	}
+	result, err := s.svc.ReconcileSecretInjections(r.Context(), limit, before)
+	if errors.Is(err, application.ErrInvalidReconciliationCursor) {
+		http.Error(w, "invalid reconciliation cursor", http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, application.ErrReconciliationCursorNotFound) {
+		http.Error(w, "reconciliation cursor is no longer available; restart pagination", http.StatusConflict)
+		return
+	}
+	if err != nil {
+		log.Printf("audit-service: secret-injection reconciliation unavailable: %v", err)
+		http.Error(w, "secret-injection reconciliation is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (s *HTTPServer) handleVerifyChain(w http.ResponseWriter, r *http.Request) {
