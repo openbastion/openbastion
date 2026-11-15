@@ -20,16 +20,16 @@ Il faut donner à l'opérateur une lecture corrélée des preuves disponibles, y
    - `outcome_unknown` : résultat terminal absent, début absent, doublon ou incohérence des preuves.
 3. La cohérence exige notamment le même `session_id`, `account_id`, `protocol` et `emitter`, ainsi qu'un ordre temporel début/résultat.
 4. La projection ne retourne jamais de credential, de scope Vault, de preuve MFA ni de contenu de frappe. Elle retourne uniquement les identifiants d'événements et les métadonnées nécessaires à l'investigation.
-5. La réponse indique `coverage=retained_audit_chain`, `archived_history_excluded`, `has_more` et un curseur `next_before` pour la pagination stable. Si des points de contrôle d'archives existent, la vue signale explicitement que ces archives ne sont pas incluses. Elle ne présente donc jamais cette vue partielle comme un inventaire historique exhaustif.
+5. La réponse indique `coverage`, `archived_history_excluded`, `archived_events`, `has_more` et un curseur `next_before` pour la pagination stable. Si des points de contrôle d'archives existent, chaque archive référencée doit être lue et vérifiée avant de répondre ; aucune couverture partielle n'est annoncée.
 6. `completed` décrit la preuve d’audit (résultat terminal positif), pas une attestation indépendante que la cible a reçu l’intégralité du secret. `failed` ne garantit pas que la cible est inchangée, car une frappe partielle est possible. Tout résultat exige de ne pas relancer automatiquement l’injection ; `outcome_unknown` et `failed` imposent une vérification manuelle de la cible avant toute nouvelle action. Aucun retry automatique n'est autorisé.
-7. L'endpoint ne crée aucun événement et ne modifie ni événements, ni marqueurs, ni checkpoints. La chaîne et ses ancres/checkpoints sont vérifiés avant la projection. Une panne de lecture ou une chaîne non vérifiable rend la vue indisponible (`503`), jamais partielle silencieusement.
+7. L'endpoint ne crée aucun événement et ne modifie ni événements, ni marqueurs, ni checkpoints. La chaîne, ses ancres/checkpoints et toutes les archives référencées sont vérifiés avant la projection. Une panne de lecture ou une chaîne non vérifiable rend la vue indisponible (`503`), jamais partielle silencieusement.
 8. La réponse est `Cache-Control: no-store`, bornée à 500 résultats par appel.
 
 ## Conséquences
 
 - L'opérateur peut corréler les tentatives récentes après redémarrage d'un proxy.
 - L'accès reste hors de l'API publique Gateway : seul le certificat d'administration `admin-cli` peut appeler cette route interne.
-- Les événements archivés ne sont pas encore relus par cette première version. Une évolution devra ajouter une lecture des archives avec vérification du SHA-256 référencé par les checkpoints avant de pouvoir annoncer une couverture historique complète.
+- Les archives historiques sont incluses seulement si chaque checkpoint et chaque archive peuvent être vérifiés avec les clés disponibles. Une clé historique retirée sans mécanisme de vérification déléguée rend la projection indisponible plutôt que de dégrader silencieusement la couverture.
 - Les marqueurs de Command Recorder et Video Recorder restent des preuves latérales ; cette projection ne les confond pas avec le résultat terminal d'audit.
 - L'interface opérateur et la pagination par curseur restent des incréments ultérieurs.
 

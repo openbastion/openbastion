@@ -22,6 +22,8 @@ type Archiver interface {
 	Write(ctx context.Context, name string, events []*domain.Event) ([]byte, error)
 	// Sum returns the SHA-256 of the archive `name` as it is now.
 	Sum(ctx context.Context, name string) ([]byte, error)
+	// Read returns the immutable events encoded in the archive, in order.
+	Read(ctx context.Context, name string) ([]*domain.Event, []byte, error)
 }
 
 // archiving holds what WithArchive set.
@@ -248,4 +250,100 @@ func (s *AuditService) checkpointsAgree(events []*domain.Event, checkpoints []do
 		}
 	}
 	return nil
+}
+
+// readVerifiedArchives loads every checkpointed archive and verifies its exact bytes, event
+// count, boundary metadata, hash chain, key ownership, month, and covered external anchors.
+// It is read-only: neither archives nor checkpoints are repaired or rewritten.
+func (s *AuditService) readVerifiedArchives(ctx context.Context, checkpoints []domain.Checkpoint, anchors []domain.Anchor) ([]*domain.Event, int, error) {
+	if len(checkpoints) == 0 {
+		return nil, 0, nil
+	}
+	if s.archive == nil || s.archive.to == nil {
+		return nil, 0, refused("%d archived checkpoint(s) exist but no archive reader is configured", len(checkpoints))
+	}
+	if _, err := s.startOfChain(nil, checkpoints); err != nil {
+		return nil, 0, refused("archive checkpoints cannot be verified: %v", err)
+	}
+	var injectionEvents []*domain.Event
+	var archivedEventCount int
+	seen := make(map[string]struct{})
+	positions := make(map[string]int)
+	previousHash := []byte(nil)
+	previousVersion := domain.HashV1
+	previousAnchorsCovered := 0
+	var previousMonth time.Time
+	for i, checkpoint := range checkpoints {
+		if checkpoint.Count <= 0 || len(checkpoint.SHA256) != sha256.Size || checkpoint.FirstID == "" || checkpoint.LastID == "" ||
+			checkpoint.LastVersion < domain.HashV1 || checkpoint.LastVersion > domain.HashV4 || checkpoint.At.IsZero() {
+			return nil, 0, refused("checkpoint %d (%s) has invalid boundary metadata", i, checkpoint.Archive)
+		}
+		if checkpoint.AnchorsCovered < previousAnchorsCovered || checkpoint.AnchorsCovered > len(anchors) {
+			return nil, 0, refused("checkpoint %d (%s) has an invalid anchor coverage count", i, checkpoint.Archive)
+		}
+		events, sum, err := s.archive.to.Read(ctx, checkpoint.Archive)
+		if err != nil {
+			return nil, 0, refused("archive %s cannot be read: %v", checkpoint.Archive, err)
+		}
+		if !hmac.Equal(sum, checkpoint.SHA256) {
+			return nil, 0, refused("archive %s does not match its checkpoint SHA-256", checkpoint.Archive)
+		}
+		if len(events) != checkpoint.Count {
+			return nil, 0, refused("archive %s contains %d events, checkpoint declares %d", checkpoint.Archive, len(events), checkpoint.Count)
+		}
+		if events[0].ID != checkpoint.FirstID || events[len(events)-1].ID != checkpoint.LastID ||
+			!hmac.Equal(events[0].PrevHash, checkpoint.PrevHash) ||
+			!hmac.Equal(events[len(events)-1].Hash, checkpoint.LastHash) ||
+			events[len(events)-1].HashVersion != checkpoint.LastVersion {
+			return nil, 0, refused("archive %s does not match its checkpoint boundary", checkpoint.Archive)
+		}
+		month := monthOf(events[0].Timestamp)
+		if !previousMonth.IsZero() && !month.After(previousMonth) {
+			return nil, 0, refused("archive %s is not after the preceding archive month", checkpoint.Archive)
+		}
+		if checkpoint.At.Before(events[len(events)-1].Timestamp) {
+			return nil, 0, refused("checkpoint %s predates its last archived event", checkpoint.Archive)
+		}
+		if checkpoint.Archive != fmt.Sprintf("audit-%04d-%02d.jsonl", month.Year(), int(month.Month())) {
+			return nil, 0, refused("archive %s does not match its events' calendar month", checkpoint.Archive)
+		}
+		for j, event := range events {
+			if monthOf(event.Timestamp) != month {
+				return nil, 0, refused("archive %s contains an event from another month", checkpoint.Archive)
+			}
+			if _, duplicate := seen[event.ID]; duplicate {
+				return nil, 0, refused("archive %s repeats event %s", checkpoint.Archive, event.ID)
+			}
+			seen[event.ID] = struct{}{}
+			positions[event.ID] = archivedEventCount + j
+			if event.ResourceType == "session" && (event.Action == secretInjectionStarted || event.Action == secretInjectionDone || event.Action == secretInjectionFailed) {
+				injectionEvents = append(injectionEvents, event)
+			}
+		}
+		if !hmac.Equal(checkpoint.PrevHash, previousHash) {
+			return nil, 0, refused("archive %s does not follow the preceding checkpoint", checkpoint.Archive)
+		}
+		if err := s.verifyEvents(events, previousHash, previousVersion); err != nil {
+			return nil, 0, refused("archive %s has an invalid event chain: %v", checkpoint.Archive, err)
+		}
+		last := events[len(events)-1]
+		previousHash = last.Hash
+		previousVersion = last.HashVersion
+		archivedEventCount += len(events)
+		expectedAnchorsCovered := previousAnchorsCovered
+		lastArchivePosition := archivedEventCount - 1
+		for expectedAnchorsCovered < len(anchors) {
+			position, ok := positions[anchors[expectedAnchorsCovered].EventID]
+			if !ok || position > lastArchivePosition {
+				break
+			}
+			expectedAnchorsCovered++
+		}
+		if checkpoint.AnchorsCovered != expectedAnchorsCovered {
+			return nil, 0, refused("checkpoint %d (%s) anchor coverage is inconsistent with archived events", i, checkpoint.Archive)
+		}
+		previousAnchorsCovered = expectedAnchorsCovered
+		previousMonth = month
+	}
+	return injectionEvents, archivedEventCount, nil
 }

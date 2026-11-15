@@ -57,6 +57,13 @@ func TestFileArchiver_WritesEveryFieldAndReadsBack(t *testing.T) {
 	if again, err := a.Sum(ctx, "audit-2025-01.jsonl"); err != nil || string(again) != string(sum) {
 		t.Fatalf("Sum: %v", err)
 	}
+	readBack, readSum, err := a.Read(ctx, "audit-2025-01.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(readBack) != 2 || readBack[0].ID != "evt_1" || readBack[0].Details["ticket"] != "CHG0001234" || string(readSum) != string(sum) {
+		t.Fatalf("Read: events=%+v sum=%x", readBack, readSum)
+	}
 }
 
 func TestFileArchiver_AnArchiveIsNeverOverwritten(t *testing.T) {
@@ -96,5 +103,22 @@ func TestFileArchiver_RefusesWhatCannotBeRight(t *testing.T) {
 	}
 	if _, err := a.Sum(context.Background(), "audit-2025-02.jsonl"); err == nil {
 		t.Fatal("the sum of an archive that does not exist")
+	}
+}
+
+func TestFileArchiver_ReadRejectsMalformedOrTruncatedJSONL(t *testing.T) {
+	dir := t.TempDir()
+	a, err := infrastructure.NewFileArchiver(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "audit-2025-01.jsonl")
+	for _, raw := range [][]byte{[]byte("{\"id\":\"x\"}"), []byte("{bad}\n"), []byte("{}\n{}\n")} {
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := a.Read(context.Background(), "audit-2025-01.jsonl"); err == nil {
+			t.Fatalf("malformed archive accepted: %q", raw)
+		}
 	}
 }
