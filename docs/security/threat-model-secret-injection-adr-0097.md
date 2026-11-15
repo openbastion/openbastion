@@ -230,7 +230,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | ID | STRIDE | Risque | Sévérité | État |
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
-| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Test adversarial à ajouter |
+| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
 | SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | État outcome_unknown à concevoir |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
@@ -247,7 +247,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | Substitution de cible | Comparaison Vault ↔ relay vivant | Refus, aucun événement de frappe |
 | Altération d’une session en base | Liaison des métadonnées persistées et contrôle d’accès DB | Refus ou détection avant scope Vault ; aucune frappe |
 | Grant rejoué ou consommé concurremment | Consommation atomique | Une seule opération au plus |
-| Terminaison pendant injection | Verrou/context d’annulation | Pas de frappe après fermeture logique |
+| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre | L’injection en cours échoue, le buffer Vault est purgé et la révocation attend la fin du relais ; un E2E avec cible réelle doit encore prouver l’absence d’entrée après accusé de révocation |
 | Audit préalable indisponible | Fail-closed | Aucun marqueur ni frappe |
 | Recorder indisponible | Acquittement préalable | Aucune frappe |
 | Audit final perdu après frappe | Gestion de résultat ambigu | Pas de retry automatique ; statut incertain |
@@ -273,7 +273,7 @@ Les contre-épreuves doivent être réalisées sur des branches de test isolées
 La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation générale de l’injection. Les P1 SI-02, SI-03, SI-05 et SI-08 sont à traiter ou à accepter explicitement avant production. SI-04 est une limite technique connue, non réputée acceptée : elle doit rester visible à l’opérateur et dans la documentation. SI-01 et SI-07 sont des risques résiduels de compromission de composants de confiance ; SI-06 est une amélioration de résilience P2.
 
 Critères minimaux de clôture :
-1. test de course fin de session/injection sur SSH et proxy écran ;
+1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
 2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
 3. résultat durable et testable pour l’issue ambiguë après frappe ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
