@@ -4768,4 +4768,4 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - La chaîne d’audit est vérifiée après la perte de réponse. Le test démontre le comportement de non-rejeu ; il ne prouve toujours pas que la cible a traité le secret, donc la vérification manuelle reste obligatoire.
 - Validation locale : `make proto-gen` (artefacts générés ignorés par Git) ; `go test ./test/integration -run '^TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses$' -count=1 -v` : **PASS (108,03 s)**. Le premier essai a seulement été bloqué par les fichiers Protobuf générés absents du worktree ; aucun défaut produit n’a été identifié par cet essai.
 - Aucune validation Windows lancée localement. L’E2E PostgreSQL 16 archive/restart demeure le prochain incrément SI-03. Le parcours B reste interdit.
-- Commit local DCO signé ; publication de la branche et ouverture d’une Draft PR prévues après cette validation locale.
+- Commit DCO signé `5aa522b524c8b4b5f4e07cd32acd612cb67a9f53` ; branche publiée et Draft PR #218 ouverte : https://github.com/openbastion/openbastion/pull/218. PR non fusionnée.
