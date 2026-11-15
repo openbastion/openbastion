@@ -949,6 +949,20 @@ paths:
           headers:
             Cache-Control:
               schema: { type: string, const: no-store }
+        "200":
+          description: L'injection a pu être exécutée, mais l'audit terminal n'a pas été acquitté. Ne pas rejouer le secret ; vérifier la cible et rapprocher l'identifiant d'opération dans les enregistrements/audits.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, injection_id, message]
+                properties:
+                  status: { type: string, const: outcome_unknown }
+                  injection_id: { type: string, pattern: '^[0-9a-f]{32}$' }
+                  message: { type: string }
         "400":
           description: Preuve MFA invalide ou champ non autorisé.
           content:

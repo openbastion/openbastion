@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	auditDetailProtocol  = "protocol"
-	auditDetailAccountID = "account_id"
-	auditDetailBytes     = "bytes"
-	auditDetailSHA256    = "sha256"
+	auditDetailProtocol    = "protocol"
+	auditDetailAccountID   = "account_id"
+	auditDetailBytes       = "bytes"
+	auditDetailSHA256      = "sha256"
+	auditDetailInjectionID = "injection_id"
 )
 
 type AuditHTTPClient struct {
@@ -59,7 +60,10 @@ type emitEventRequestBody struct {
 // secret bytes are not accepted by this method or serialized into the event.
 func (c *AuditHTTPClient) AuditSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
 	action := "session.secret_injection_started"
-	details := map[string]string{auditDetailProtocol: evidence.Protocol, auditDetailAccountID: evidence.AccountID}
+	if len(evidence.InjectionID) != 32 {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	details := map[string]string{auditDetailProtocol: evidence.Protocol, auditDetailAccountID: evidence.AccountID, auditDetailInjectionID: evidence.InjectionID}
 	if evidence.Source == proxycore.SecretInputOperator {
 		action = "session.secret_paste_started"
 		details[auditDetailBytes] = strconv.Itoa(evidence.Length)
@@ -95,7 +99,10 @@ func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence p
 	if !success {
 		action = "session.secret_injection_failed"
 	}
-	details := map[string]string{auditDetailProtocol: evidence.Protocol, auditDetailAccountID: evidence.AccountID}
+	if len(evidence.InjectionID) != 32 {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	details := map[string]string{auditDetailProtocol: evidence.Protocol, auditDetailAccountID: evidence.AccountID, auditDetailInjectionID: evidence.InjectionID}
 	if evidence.Source == proxycore.SecretInputOperator {
 		action = "session.secret_pasted"
 		if !success {

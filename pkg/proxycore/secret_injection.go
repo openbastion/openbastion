@@ -2,6 +2,7 @@ package proxycore
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,9 +12,20 @@ import (
 )
 
 var (
-	ErrSecretInjectionUnavailable = errors.New("proxycore: secret injection unavailable")
-	ErrSecretInjectionInvalid     = errors.New("proxycore: invalid secret injection")
+	ErrSecretInjectionUnavailable    = errors.New("proxycore: secret injection unavailable")
+	ErrSecretInjectionInvalid        = errors.New("proxycore: invalid secret injection")
+	ErrSecretInjectionOutcomeUnknown = errors.New("proxycore: secret injection outcome unknown")
 )
+
+// SecretInjectionOutcomeUnknownError means the target write may have completed
+// but its terminal audit acknowledgement did not. The operation id identifies
+// the durable start/recording evidence; callers MUST NOT replay the secret.
+type SecretInjectionOutcomeUnknownError struct{ InjectionID string }
+
+func (e *SecretInjectionOutcomeUnknownError) Error() string {
+	return "proxycore: secret injection outcome unknown; do not retry"
+}
+func (e *SecretInjectionOutcomeUnknownError) Unwrap() error { return ErrSecretInjectionOutcomeUnknown }
 
 // SecretInputSource identifies where the bytes being typed came from. The source,
 // never the bytes, is part of the evidence kept by the audit and recorder.
@@ -28,13 +40,14 @@ const (
 // only the account reference; operator-provided inputs retain length and SHA-256,
 // as required by ADR-0097. It never contains the secret itself.
 type SecretInputEvidence struct {
-	SessionID string
-	Protocol  string
-	Source    SecretInputSource
-	AccountID string
-	Length    int
-	SHA256    string
-	Timestamp time.Time
+	SessionID   string
+	InjectionID string // random per-attempt correlation id; never a credential or Vault scope
+	Protocol    string
+	Source      SecretInputSource
+	AccountID   string
+	Length      int
+	SHA256      string
+	Timestamp   time.Time
 }
 
 // SecretTyper is the only protocol-specific part of secret injection. Implementations
@@ -107,11 +120,13 @@ func InjectSecret(
 		return ErrSecretInjectionInvalid
 	}
 
+	injectionID, err := newSecretInjectionID()
+	if err != nil {
+		return fmt.Errorf("%w: could not create injection correlation id", ErrSecretInjectionUnavailable)
+	}
 	evidence := SecretInputEvidence{
-		SessionID: sessionID,
-		Protocol:  protocol,
-		Source:    source,
-		AccountID: accountID,
+		SessionID: sessionID, InjectionID: injectionID,
+		Protocol: protocol, Source: source, AccountID: accountID,
 		Timestamp: time.Now().UTC(),
 	}
 	if source == SecretInputOperator {
@@ -124,7 +139,7 @@ func InjectSecret(
 	if !ok {
 		return ErrSecretInjectionInvalid
 	}
-	err := transaction.WithExclusiveInput(ctx, func() error {
+	err = transaction.WithExclusiveInput(ctx, func() error {
 		if err := auditor.AuditSecretInput(ctx, evidence); err != nil {
 			return fmt.Errorf("%w: audit refused", ErrSecretInjectionUnavailable)
 		}
@@ -136,12 +151,14 @@ func InjectSecret(
 		}
 		if err := typer.TypeSecret(ctx, secret); err != nil {
 			if auditErr := auditSecretInputResult(auditor, ctx, evidence, false); auditErr != nil {
-				return fmt.Errorf("%w: target input and result audit failed", ErrSecretInjectionUnavailable)
+				// A protocol typer can fail after writing a prefix. Without the
+				// terminal audit acknowledgement the target state is also unknown.
+				return &SecretInjectionOutcomeUnknownError{InjectionID: evidence.InjectionID}
 			}
 			return fmt.Errorf("%w: target input failed", ErrSecretInjectionUnavailable)
 		}
 		if err := auditSecretInputResult(auditor, ctx, evidence, true); err != nil {
-			return fmt.Errorf("%w: result audit failed after target input", ErrSecretInjectionUnavailable)
+			return &SecretInjectionOutcomeUnknownError{InjectionID: evidence.InjectionID}
 		}
 		return nil
 	})
@@ -161,6 +178,17 @@ func safeSecretIdentifier(value string, max int) bool {
 		}
 	}
 	return true
+}
+
+// newSecretInjectionID creates a 128-bit random correlation id shared by the
+// durable pre-audit event, recorder marker and terminal audit event. It lets
+// auditors distinguish an unresolved attempt from a completed or failed one.
+func newSecretInjectionID() (string, error) {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw[:]), nil
 }
 
 func zeroSecret(secret []byte) {

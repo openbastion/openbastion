@@ -28,6 +28,12 @@ import (
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
 
+type secretInjectionOutcomeUnknownResponse struct {
+	Status      string `json:"status"`
+	InjectionID string `json:"injection_id"`
+	Message     string `json:"message"`
+}
+
 type HTTPServer struct {
 	svc *application.SessionBrokerService
 }
@@ -444,6 +450,16 @@ func (s *HTTPServer) handleSecretInjection(w http.ResponseWriter, r *http.Reques
 		TOTPCode: req.TOTPCode, WebAuthnResponse: req.WebAuthnResponse,
 	}
 	if err := s.svc.InjectVaultSecretWithStepUp(r.Context(), req.CallerID, req.ActorRoles, sessionID, proof); err != nil {
+		var outcome *domain.SecretInjectionOutcomeUnknownError
+		if errors.As(err, &outcome) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_ = json.NewEncoder(w).Encode(secretInjectionOutcomeUnknownResponse{
+				Status: "outcome_unknown", InjectionID: outcome.InjectionID,
+				Message: "The target may have received the secret. Do not retry; verify the target manually.",
+			})
+			return
+		}
 		writeSecretActionError(w, err)
 		return
 	}

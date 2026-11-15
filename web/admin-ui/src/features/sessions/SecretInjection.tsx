@@ -80,10 +80,15 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
     }
     setError(undefined);
     setOk(undefined);
-    await api.request<void>("POST", `${sessionPath(session.id)}/secret-injection`, {
+    const result = await api.request<{ status?: string; injection_id?: string; message?: string }>("POST", `${sessionPath(session.id)}/secret-injection`, {
       challenge: challenge.challenge,
       ...proof,
     });
+    if (result?.status === "outcome_unknown") {
+      setChallenge(undefined);
+      setCode("");
+      throw new Error(t("sessions.secretInjection.outcomeUnknown", { id: result.injection_id ?? "unknown" }));
+    }
     setChallenge(undefined);
     setCode("");
     setOk(t("sessions.secretInjection.success"));

@@ -155,11 +155,15 @@ var notMirrored = map[string]string{
 	"video-recorder/checkAccessRequestBody":    "idem — the Video Recorder's client of it",
 	"video-recorder/checkAccessResponseBody":   "idem",
 	// Not routes between services: formats of a third party, or of a file.
-	"authentication/idClaims":             "the claims of an OIDC identity token: the provider's format (ADR-0035)",
-	"audit-service/anchorLine":            "a line of the anchor file (ADR-0028), not a message",
-	"audit-service/archiveLine":           "a line of an archive file (ADR-0032), not a message",
-	"authentication/OIDCEntryConfig":      "an entry of IDENTITY_PROVIDERS_FILE (ADR-0076): a configuration file, not a message",
-	"authentication/DirectoryEntryConfig": "idem",
+	"authentication/idClaims":                              "the claims of an OIDC identity token: the provider's format (ADR-0035)",
+	"audit-service/anchorLine":                             "a line of the anchor file (ADR-0028), not a message",
+	"audit-service/archiveLine":                            "a line of an archive file (ADR-0032), not a message",
+	"authentication/OIDCEntryConfig":                       "an entry of IDENTITY_PROVIDERS_FILE (ADR-0076): a configuration file, not a message",
+	"authentication/DirectoryEntryConfig":                  "idem",
+	"session-broker/secretInjectionOutcomeUnknownBody":     "HTTP error response DTO for the proxy client; carries the explicit outcome_unknown status and operation ID",
+	"session-broker/secretInjectionOutcomeUnknownResponse": "Broker REST response DTO; an HTTP-facing status not represented by the empty gRPC success response",
+	"rdp-vnc-proxy/secretInjectionOutcomeUnknownResponse":  "proxy HTTP error response DTO; an HTTP-facing status not represented by the empty gRPC success response",
+	"ssh-proxy/secretInjectionOutcomeUnknownResponse":      "proxy HTTP error response DTO; an HTTP-facing status not represented by the empty gRPC success response",
 }
 
 var protoMessage = regexp.MustCompile(`(?ms)^message (\w+) \{(.*?)^\}`)

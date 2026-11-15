@@ -39,16 +39,16 @@ func (c *AuditHTTPClient) EmitClipboard(ctx context.Context, sessionID string, e
 
 // AuditSecretInput stores only the protocol and Vault account reference; secret bytes never enter the audit request.
 func (c *AuditHTTPClient) AuditSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
-	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || len(evidence.InjectionID) != 32 || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
 		return proxycore.ErrSecretInjectionInvalid
 	}
 	return c.emit(ctx, auditEventRequest{Action: "session.secret_injection_started", ResourceType: "session", ResourceID: evidence.SessionID,
-		Success: true, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID}})
+		Success: true, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID, "injection_id": evidence.InjectionID}})
 }
 
 // AuditSecretInputResult records whether the proxy's target-input attempt completed.
 func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence proxycore.SecretInputEvidence, success bool) error {
-	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || len(evidence.InjectionID) != 32 || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
 		return proxycore.ErrSecretInjectionInvalid
 	}
 	action := "session.secret_injected"
@@ -56,7 +56,7 @@ func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence p
 		action = "session.secret_injection_failed"
 	}
 	return c.emit(ctx, auditEventRequest{Action: action, ResourceType: "session", ResourceID: evidence.SessionID,
-		Success: success, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID}})
+		Success: success, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID, "injection_id": evidence.InjectionID}})
 }
 
 var _ proxycore.ClipboardAuditor = (*AuditHTTPClient)(nil)

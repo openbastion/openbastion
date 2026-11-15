@@ -338,6 +338,7 @@ func (t *RecordingTap) RecordEvent(ctx context.Context, event string) error {
 // recording. It never receives or serializes the secret bytes.
 func (t *RecordingTap) RecordSecretInput(ctx context.Context, evidence SecretInputEvidence) error {
 	if t == nil || ctx == nil || evidence.SessionID != t.sessionID ||
+		!safeSecretIdentifier(evidence.InjectionID, 64) ||
 		!safeSecretIdentifier(evidence.AccountID, 128) ||
 		!safeSecretIdentifier(evidence.Protocol, 32) {
 		return ErrSecretInjectionInvalid
@@ -353,7 +354,7 @@ func (t *RecordingTap) RecordSecretInput(ctx context.Context, evidence SecretInp
 		if evidence.Length != 0 || evidence.SHA256 != "" {
 			return ErrSecretInjectionInvalid
 		}
-		marker = "[vault secret " + evidence.AccountID + " injection requested via " + evidence.Protocol + "]"
+		marker = "[vault secret " + evidence.AccountID + " injection requested via " + evidence.Protocol + " operation " + evidence.InjectionID + "]"
 	case SecretInputOperator:
 		if evidence.Length < 1 || len(evidence.SHA256) != 64 {
 			return ErrSecretInjectionInvalid
@@ -361,7 +362,7 @@ func (t *RecordingTap) RecordSecretInput(ctx context.Context, evidence SecretInp
 		if _, err := hex.DecodeString(evidence.SHA256); err != nil {
 			return ErrSecretInjectionInvalid
 		}
-		marker = fmt.Sprintf("[operator password input requested: %d bytes, sha256 %s]", evidence.Length, evidence.SHA256)
+		marker = fmt.Sprintf("[operator password input requested: %d bytes, sha256 %s, operation %s]", evidence.Length, evidence.SHA256, evidence.InjectionID)
 	default:
 		return ErrSecretInjectionInvalid
 	}

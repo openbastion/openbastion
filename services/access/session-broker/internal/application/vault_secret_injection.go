@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -62,6 +63,9 @@ func (s *SessionBrokerService) InjectVaultSecretWithStepUp(ctx context.Context, 
 	}
 
 	if err := s.proxy.InjectVaultSecret(ctx, binding.Protocol, binding.SessionID, binding.AccountID, scopeToken); err != nil {
+		if errors.Is(err, domain.ErrSecretInjectionOutcomeUnknown) {
+			return err
+		}
 		return fmt.Errorf("%w: proxy rejected vault secret injection", domain.ErrUnavailable)
 	}
 	scopeToken = ""

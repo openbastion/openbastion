@@ -18,10 +18,10 @@ func TestAuditSecretInputSendsOnlySafeEvidence(t *testing.T) {
 		details map[string]string
 	}{
 		{name: "Vault", source: proxycore.SecretInputVault, action: "session.secret_injection_started", details: map[string]string{
-			"protocol": "ssh", "account_id": "db-prod",
+			"protocol": "ssh", "account_id": "db-prod", "injection_id": "0123456789abcdef0123456789abcdef",
 		}},
 		{name: "operator", source: proxycore.SecretInputOperator, action: "session.secret_paste_started", details: map[string]string{
-			"protocol": "ssh", "account_id": "target-prod", "bytes": "8", "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"protocol": "ssh", "account_id": "target-prod", "bytes": "8", "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "injection_id": "0123456789abcdef0123456789abcdef",
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestAuditSecretInputSendsOnlySafeEvidence(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer server.Close()
-			evidence := proxycore.SecretInputEvidence{SessionID: "session-1", Protocol: "ssh", Source: tc.source, AccountID: "db-prod", Length: 8, SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+			evidence := proxycore.SecretInputEvidence{SessionID: "session-1", InjectionID: "0123456789abcdef0123456789abcdef", Protocol: "ssh", Source: tc.source, AccountID: "db-prod", Length: 8, SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 			if tc.source == proxycore.SecretInputOperator {
 				evidence.AccountID = "target-prod"
 			}
@@ -79,7 +79,7 @@ func TestAuditSecretInputResultRecordsCompletionOutcome(t *testing.T) {
 			}))
 			defer server.Close()
 			client := &AuditHTTPClient{BaseURL: server.URL}
-			evidence := proxycore.SecretInputEvidence{SessionID: "s1", Protocol: "ssh", Source: proxycore.SecretInputVault, AccountID: "db-prod"}
+			evidence := proxycore.SecretInputEvidence{SessionID: "s1", InjectionID: "0123456789abcdef0123456789abcdef", Protocol: "ssh", Source: proxycore.SecretInputVault, AccountID: "db-prod"}
 			if err := client.AuditSecretInputResult(context.Background(), evidence, tc.success); err != nil {
 				t.Fatal(err)
 			}

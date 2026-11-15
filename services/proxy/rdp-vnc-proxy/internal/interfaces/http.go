@@ -19,6 +19,11 @@ import (
 
 const screenSubprotocol = "openbastion.screen.v1"
 
+type secretInjectionOutcomeUnknownResponse struct {
+	Status      string `json:"status"`
+	InjectionID string `json:"injection_id"`
+}
+
 type HTTPServer struct {
 	pending  *infrastructure.PendingScreenSessions
 	listener *proxycore.Listener
@@ -208,6 +213,15 @@ func (s *HTTPServer) injectVaultSecret(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, proxycore.ErrSecretInjectionOutcomeUnknown):
+		var outcome *proxycore.SecretInjectionOutcomeUnknownError
+		if !errors.As(err, &outcome) || outcome.InjectionID == "" {
+			http.Error(w, "secret injection outcome unknown", http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(secretInjectionOutcomeUnknownResponse{Status: "outcome_unknown", InjectionID: outcome.InjectionID})
 	case errors.Is(err, infrastructure.ErrSecretSessionInactive):
 		http.Error(w, "session input is not active", http.StatusNotFound)
 	case errors.Is(err, infrastructure.ErrSecretSessionAmbiguous):

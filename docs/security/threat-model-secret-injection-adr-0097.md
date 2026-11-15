@@ -128,8 +128,9 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 
 **Contrôles observés**
 - L’audit préalable session.secret_injection_started est acquitté avant la frappe.
-- Un marqueur vidéo/terminal append-only secret_injection_started distingue une demande d’une réussite.
-- Le résultat est enregistré par session.secret_injected ou session.secret_injection_failed.
+- Un identifiant aléatoire 128 bits `injection_id` est créé par tentative et inscrit dans l’audit préalable ainsi que dans le marqueur terminal/vidéo append-only.
+- Le résultat est enregistré par session.secret_injected ou session.secret_injection_failed avec le même `injection_id`.
+- Si la frappe réussit, ou échoue après une écriture partielle possible, et que l’audit terminal ne peut être acquitté, le proxy renvoie `outcome_unknown` avec l’identifiant ; le Broker et l’UI ne présentent jamais ce cas comme un succès et demandent de ne pas rejouer le secret.
 - L’émetteur d’audit est dérivé du certificat mTLS ; les événements sont signés/chaînés selon les invariants d’audit.
 
 **Preuves disponibles**
@@ -137,12 +138,12 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 - Vérification de la chaîne d’audit dans le parcours SSH multi-processus ; les parcours screen vérifient l’événement émis.
 
 **Risque résiduel — P1**
-- En cas de perte de l’accusé final après la frappe, l’état de la cible est ambigu. L’événement préalable prouve une tentative, pas la réception complète du secret. L’état outcome_unknown n’est pas un résultat durable normalisé à ce stade.
+- En cas de perte de l’accusé final après la frappe, l’état de la cible reste ambigu. L’événement préalable et le marqueur prouvent une tentative, pas la réception complète du secret. Le `injection_id` permet de rapprocher les preuves après rétablissement, mais aucune réconciliation automatisée ne conclut encore le dossier.
 - L’attribution de l’acteur humain dépend du service émetteur autorisé ; un service compromis pourrait attribuer faussement un événement.
 
 **Actions**
-- Introduire un état durable outcome_unknown ou un équivalent de réconciliation, sans jamais déclarer la frappe réussie sur la seule base du marqueur préalable.
-- Ajouter un test de panne du canal Audit après la frappe et vérifier qu’aucune nouvelle tentative automatique ne rejoue le secret ; l’opérateur doit être invité à vérifier la cible.
+- Exposer une vue de rapprochement qui classe chaque `injection_id` en `completed`, `failed` ou `outcome_unknown` à partir de la chaîne append-only ; ne jamais muter rétroactivement l’événement préalable.
+- Ajouter un test multi-processus de panne du canal Audit après la frappe et vérifier qu’aucune nouvelle tentative automatique ne rejoue le secret ; l’opérateur doit être invité à vérifier la cible.
 
 ### I — Information Disclosure (divulgation)
 
@@ -231,7 +232,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
 | SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
-| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | État outcome_unknown à concevoir |
+| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : corrélation durable start/marker/result et réponse explicite outcome_unknown ; rapprochement automatisé reste à réaliser |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
@@ -250,7 +251,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre | L’injection en cours échoue, le buffer Vault est purgé et la révocation attend la fin du relais ; un E2E avec cible réelle doit encore prouver l’absence d’entrée après accusé de révocation |
 | Audit préalable indisponible | Fail-closed | Aucun marqueur ni frappe |
 | Recorder indisponible | Acquittement préalable | Aucune frappe |
-| Audit final perdu après frappe | Gestion de résultat ambigu | Pas de retry automatique ; statut incertain |
+| Audit final perdu après frappe | `injection_id` commun audit/recording et réponse `outcome_unknown` | Aucun retry ; rapprochement par identifiant ; vérification manuelle de la cible |
 | Sentinelle secrète dans traces/logs | Filtrage et absence de champs sensibles | Aucun résultat contenant la sentinelle |
 | Rafale de demandes MFA | Limiteur de débit | Refus avant dépendances aval |
 
@@ -275,7 +276,7 @@ La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation
 Critères minimaux de clôture :
 1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
 2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
-3. résultat durable et testable pour l’issue ambiguë après frappe ;
+3. rapprochement automatisé des `injection_id` sans événement terminal, avec état durable/testable `outcome_unknown` et absence de retry ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;
 6. revue des logs, traces, crash dumps et captures pour la non-divulgation.

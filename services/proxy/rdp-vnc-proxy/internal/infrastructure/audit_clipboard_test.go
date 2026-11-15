@@ -28,7 +28,7 @@ func TestAuditHTTPClient_SecretInputEventsContainOnlyVaultReference(t *testing.T
 	}))
 	defer server.Close()
 	client := &infrastructure.AuditHTTPClient{BaseURL: server.URL}
-	evidence := proxycore.SecretInputEvidence{SessionID: "s-vnc", Protocol: "vnc", Source: proxycore.SecretInputVault, AccountID: "account-prod"}
+	evidence := proxycore.SecretInputEvidence{SessionID: "s-vnc", InjectionID: "0123456789abcdef0123456789abcdef", Protocol: "vnc", Source: proxycore.SecretInputVault, AccountID: "account-prod"}
 	if err := client.AuditSecretInput(context.Background(), evidence); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestAuditHTTPClient_SecretInputEventsContainOnlyVaultReference(t *testing.T
 	for i, body := range got {
 		details, _ := body["details"].(map[string]any)
 		if body["action"] != wantActions[i] || body["resource_type"] != "session" || body["resource_id"] != "s-vnc" ||
-			details["protocol"] != "vnc" || details["account_id"] != "account-prod" || len(details) != 2 {
+			details["protocol"] != "vnc" || details["account_id"] != "account-prod" || details["injection_id"] != "0123456789abcdef0123456789abcdef" || len(details) != 3 {
 			t.Fatalf("event %d = %#v", i, body)
 		}
 		for _, forbidden := range []string{"secret", "password", "length", "sha256", "value"} {
