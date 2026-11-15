@@ -12,6 +12,7 @@ import (
 const usage = `usage:
   openbastion-cli user create -authn URL -username NAME -roles ROLE[,ROLE…] [-display NAME] < password
   openbastion-cli audit verify-chain -audit URL
+  openbastion-cli audit secret-injections -audit URL [-limit 100] [-before ID] [-output table|json]
   openbastion-cli mfa enrollment-code -authn URL (-local NAME | -directory NAME [-directory-id ID])
   openbastion-cli mfa reset -authn URL -username NAME
   openbastion-cli mfa keys -authn URL -username NAME
@@ -55,7 +56,21 @@ func newRootCommand(stdin io.Reader) *cobra.Command {
 		},
 	}
 	verify.Flags().String("audit", "", "URL of the Audit Service, e.g. https://audit-service:8082")
-	audit.AddCommand(verify)
+	injections := &cobra.Command{
+		Use: "secret-injections", Short: "Rapprocher les preuves immuables des injections Vault", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			auditURL, _ := cmd.Flags().GetString("audit")
+			limit, _ := cmd.Flags().GetInt("limit")
+			before, _ := cmd.Flags().GetString("before")
+			output, _ := cmd.Flags().GetString("output")
+			return secretInjections(cmd.Context(), auditURL, limit, before, output, cmd.OutOrStdout())
+		},
+	}
+	injections.Flags().String("audit", "", "URL of the Audit Service, e.g. https://audit-service:8082")
+	injections.Flags().Int("limit", 100, "number of outcomes to return (1-500)")
+	injections.Flags().String("before", "", "pagination cursor: injection ID from the previous page")
+	injections.Flags().String("output", "table", "output format: table or json")
+	audit.AddCommand(verify, injections)
 
 	mfa := &cobra.Command{Use: "mfa", Short: "Gestion des facteurs d'authentification", Args: cobra.NoArgs, RunE: func(*cobra.Command, []string) error { return errors.New(usage) }}
 	enrollment := &cobra.Command{

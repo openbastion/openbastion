@@ -138,11 +138,11 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 - Vérification de la chaîne d’audit dans le parcours SSH multi-processus ; les parcours screen vérifient l’événement émis.
 
 **Risque résiduel — P1**
-- En cas de perte de l’accusé final après la frappe, l’état de la cible reste ambigu. L’événement préalable et le marqueur prouvent une tentative, pas la réception complète du secret. Le `injection_id` permet de rapprocher les preuves après rétablissement, mais aucune réconciliation automatisée ne conclut encore le dossier.
+- En cas de perte de l’accusé final après la frappe, l’état de la cible reste ambigu. L’événement préalable et le marqueur prouvent une tentative, pas la réception complète du secret. Le `injection_id` permet maintenant de rapprocher les preuves de la chaîne retenue et des archives historiques après vérification cryptographique complète (ADR-0112). La projection classe les preuves mais ne prouve toujours pas la réception complète du secret par la cible ; la vérification manuelle reste obligatoire lorsque le résultat est `failed` ou `outcome_unknown`.
 - L’attribution de l’acteur humain dépend du service émetteur autorisé ; un service compromis pourrait attribuer faussement un événement.
 
 **Actions**
-- Exposer une vue opérateur en lecture seule qui classe chaque `injection_id` en `completed`, `failed` ou `outcome_unknown` à partir de la chaîne append-only retenue et des archives vérifiées par leurs checkpoints ; échouer fermé si une archive ne peut être vérifiée et ne jamais muter rétroactivement l’événement préalable. La valeur `completed` signifie uniquement qu’un résultat terminal positif a été journalisé, pas une attestation de réception complète par la cible.
+- Fait (ADR-0112) : la route interne en lecture seule classe chaque `injection_id` à partir de la chaîne retenue et des archives vérifiées par leurs checkpoints ; elle échoue fermé si une archive ne peut être vérifiée et ne mute jamais l’événement préalable. Le CLI `admin-cli` consomme cette projection. L’exposition à l’Admin UI reste soumise à ADR-0113 ; `completed` n’atteste pas la réception complète par la cible.
 - Ajouter un test multi-processus de panne du canal Audit après la frappe et vérifier qu’aucune nouvelle tentative automatique ne rejoue le secret ; l’opérateur doit être invité à vérifier la cible.
 
 ### I — Information Disclosure (divulgation)
@@ -232,7 +232,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
 | SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
-| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection opérateur sur chaîne retenue et archives vérifiées ; vérification cible toujours nécessaire, test multi-processus de panne à compléter |
+| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; UI soumise à ADR-0113, test multi-processus de panne à compléter, cible à vérifier manuellement |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
@@ -276,7 +276,7 @@ La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation
 Critères minimaux de clôture :
 1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
 2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
-3. rapprochement automatisé des `injection_id` sans événement terminal, avec état durable/testable `outcome_unknown` et absence de retry ;
+3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; compléter par le test multi-processus de perte d’acquittement et l’exposition UI après décision ADR-0113 ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;
 6. revue des logs, traces, crash dumps et captures pour la non-divulgation.
