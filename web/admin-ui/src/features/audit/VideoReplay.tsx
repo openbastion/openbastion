@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, VideoRecordingSegment } from "../../shared/api";
+import { ApiError, VideoRecordingEvent, VideoRecordingEventPage, VideoRecordingSegment } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { FormCard } from "../../shared/ui/FormCard";
 import { Frame, framesOf, paintFrame, ReplayPainter, UnreadableSegment } from "./replayFrames";
@@ -18,6 +18,8 @@ const MAX_LOADED_BYTES = 256 << 20;
 const MIN_DELAY_MS = 40;
 const MAX_DELAY_MS = 2000;
 const PREFETCH = 5;
+const EVENT_PAGE_SIZE = 100;
+const MAX_EVENT_PAGES = 10;
 
 export type ReplayDeps = ReplayPainter & {
   schedule: (run: () => void, delayMs: number) => () => void;
@@ -59,6 +61,8 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   const [end, setEnd] = useState<End>("more");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>();
+  const [events, setEvents] = useState<VideoRecordingEvent[]>([]);
+  const [eventsState, setEventsState] = useState<"idle" | "loading" | "ready" | "unavailable" | "truncated">("idle");
   const canvas = useRef<HTMLCanvasElement>(null);
   const next = useRef(1);
   const loadedBytes = useRef(0);
@@ -99,6 +103,50 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
     }
   }, [api, t]);
 
+  // Events are a separate, metadata-only timeline (ADR-0111), not frame sequence
+  // entries. Read bounded pages and stop after a fixed ceiling for very long sessions.
+  const loadEvents = useCallback(async (id: string, gen: number) => {
+    setEventsState("loading");
+    const collected: VideoRecordingEvent[] = [];
+    const seenCursors = new Set<string>();
+    let cursor = "";
+    try {
+      for (let page = 0; page < MAX_EVENT_PAGES; page++) {
+        const query = new URLSearchParams({ limit: String(EVENT_PAGE_SIZE) });
+        if (cursor) query.set("cursor", cursor);
+        const result = await api.request<VideoRecordingEventPage>("GET", `/sessions/${encodeURIComponent(id)}/recording/video/events?${query.toString()}`);
+        if (gen !== generation.current) return;
+        if (!result || !Array.isArray(result.events) || result.events.length > EVENT_PAGE_SIZE ||
+            (result.nextCursor !== undefined && (typeof result.nextCursor !== "string" || result.nextCursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(result.nextCursor)))) {
+          throw new Error("invalid video event page");
+        }
+        for (const event of result.events) {
+          const at = typeof event?.occurredAt === "string" ? Date.parse(event.occurredAt) : NaN;
+          if (!event || event.sessionId !== id || typeof event.eventId !== "string" || !event.eventId ||
+              event.eventType !== "secret_injection_started" || (event.protocol !== "vnc" && event.protocol !== "rdp") ||
+              event.source !== "vault" || typeof event.accountId !== "string" || !event.accountId || !Number.isFinite(at)) {
+            throw new Error("invalid video event");
+          }
+          collected.push(event);
+        }
+        if (!result.nextCursor) {
+          setEvents(collected);
+          setEventsState("ready");
+          return;
+        }
+        if (seenCursors.has(result.nextCursor)) throw new Error("repeated video event cursor");
+        seenCursors.add(result.nextCursor);
+        cursor = result.nextCursor;
+      }
+      setEvents(collected);
+      setEventsState("truncated");
+    } catch {
+      if (gen !== generation.current) return;
+      setEvents([]);
+      setEventsState("unavailable");
+    }
+  }, [api]);
+
   async function open(e: FormEvent) {
     e.preventDefault();
     generation.current += 1;
@@ -111,8 +159,12 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
     setPlaying(false);
     setEnd("more");
     setError(undefined);
+    setEvents([]);
+    setEventsState("idle");
     setOpened(sessionId);
-    await loadMore(sessionId, generation.current);
+    const gen = generation.current;
+    void loadEvents(sessionId, gen);
+    await loadMore(sessionId, gen);
   }
 
   // The frame under the cursor, drawn once (a segment read ahead does not redraw it).
@@ -164,6 +216,13 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
   }, [playing, index, frames, speed, end, deps]);
 
   const frame = frames[index];
+  let currentEventId: string | undefined;
+  if (frame) {
+    for (const event of events) {
+      if (Date.parse(event.occurredAt) <= frame.at.getTime()) currentEventId = event.eventId;
+      else break;
+    }
+  }
   // The clipboard texts up to the position (ADR-0096): the auditor reads what crossed, at its time,
   // beside the screen as it was.
   const transfers = frames.slice(0, index + 1).filter((f) => f.kind === "clipboard").slice(-3).reverse();
@@ -201,6 +260,26 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
                   </li>
                 ) : null)}
               </ul>
+            </section>
+          ) : null}
+          {opened ? (
+            <section className="screen-events" aria-label={t("replay.events.aria")}>
+              <h3>{t("replay.events.title")}</h3>
+              {eventsState === "loading" ? <p>{t("replay.events.loading")}</p> : null}
+              {eventsState === "unavailable" ? <p role="note">{t("replay.events.unavailable")}</p> : null}
+              {eventsState === "ready" && events.length === 0 ? <p>{t("replay.events.empty")}</p> : null}
+              {eventsState === "truncated" ? <p role="note">{t("replay.events.truncated")}</p> : null}
+              {events.length > 0 ? (
+                <ol className="screen-events-list">
+                  {events.map((event) => (
+                    <li key={event.eventId} aria-current={event.eventId === currentEventId ? "time" : undefined}>
+                      <span>{t("replay.events.secretInjectionRequested")}</span>
+                      <span>{event.accountId} · {event.protocol.toUpperCase()} · {t("replay.at", { time: new Date(event.occurredAt).toLocaleTimeString(i18n.language) })}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+              {events.length > 0 ? <p className="screen-events-note">{t("replay.events.note")}</p> : null}
             </section>
           ) : null}
           <ReplayControls

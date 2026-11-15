@@ -18,6 +18,17 @@ const segment = (first: number, ids: number[], complete: boolean, times = ids.ma
 });
 const path = (first: number) => `GET /sessions/sess_r/recording/video/segments/${first}`;
 
+const eventsPath = "GET /sessions/sess_r/recording/video/events?limit=100";
+const secretEvent = (eventId: string, second: number, accountId = "account-prod") => ({
+  eventId,
+  sessionId: "sess_r",
+  eventType: "secret_injection_started" as const,
+  protocol: "vnc" as const,
+  source: "vault" as const,
+  accountId,
+  occurredAt: at(second),
+});
+
 function deps() {
   const drawn: number[] = [];
   const patched: string[] = [];
@@ -63,6 +74,65 @@ describe("recorded terminal commands", () => {
   });
 });
 
+describe("the replay of screen recording events (ADR-0111)", () => {
+  it("shows Vault injection attempts on a separate timeline and tracks the current frame", async () => {
+    const { api, calls } = fakeApi({
+      [path(1)]: { body: segment(1, [11, 12], true, [0, 2]) },
+      [eventsPath]: { body: { events: [secretEvent("event-1", 0), secretEvent("event-2", 1, "account-admin")] } },
+    });
+    const d = deps();
+    await open(api, d);
+    const region = await screen.findByRole("region", { name: "Événements de la session" });
+    expect(region.textContent).toContain("Injection du secret Vault demandée");
+    expect(region.textContent).toContain("account-prod");
+    expect(region.textContent).toContain("account-admin");
+    expect(region.querySelector('[aria-current="time"]')?.textContent).toContain("account-prod");
+    expect(region.textContent).toContain("indique une tentative, pas une réussite");
+    expect(calls.map((call) => call.path)).toContain("/sessions/sess_r/recording/video/events?limit=100");
+
+    fireEvent.click(screen.getByText("Image suivante"));
+    await waitFor(() => expect(region.querySelector('[aria-current="time"]')?.textContent).toContain("account-admin"));
+  });
+
+  it("paginates event metadata with a bounded page size", async () => {
+    const secondPage = "GET /sessions/sess_r/recording/video/events?limit=100&cursor=next-page";
+    const { api } = fakeApi({
+      [path(1)]: { body: segment(1, [11], true) },
+      [eventsPath]: { body: { events: [secretEvent("event-1", 0)], nextCursor: "next-page" } },
+      [secondPage]: { body: { events: [secretEvent("event-2", 1, "account-admin")] } },
+    });
+    await open(api, deps());
+    const region = await screen.findByRole("region", { name: "Événements de la session" });
+    await waitFor(() => expect(region.textContent).toContain("account-admin"));
+    expect(region.textContent).toContain("account-prod");
+  });
+
+  it("keeps video replay available and reports when event markers cannot be read", async () => {
+    const { api } = fakeApi({
+      [path(1)]: { body: segment(1, [11], true) },
+      [eventsPath]: { status: 403, body: { message: "forbidden" } },
+    });
+    const d = deps();
+    await open(api, d);
+    expect(await screen.findByText(/marqueurs de cette session ne sont pas disponibles/)).toBeTruthy();
+    await waitFor(() => expect(d.drawn).toEqual([11]));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("rejects malformed marker metadata without displaying it or stopping the replay", async () => {
+    const malformed = { ...secretEvent("event-invalid", 0, "account-should-not-render"), eventType: "secret_injected" };
+    const { api } = fakeApi({
+      [path(1)]: { body: segment(1, [11], true) },
+      [eventsPath]: { body: { events: [malformed] } },
+    });
+    const d = deps();
+    await open(api, d);
+    expect(await screen.findByText(/marqueurs de cette session ne sont pas disponibles/)).toBeTruthy();
+    await waitFor(() => expect(d.drawn).toEqual([11]));
+    expect(screen.queryByText("account-should-not-render")).toBeNull();
+  });
+});
+
 describe("the replay of a screen recording", () => {
   it("shows the recorded frames in order, reads ahead, and says the recording was sealed", async () => {
     const { api, calls } = fakeApi({ [path(1)]: { body: segment(1, [11, 12], false) }, [path(3)]: { body: segment(3, [13], true) } });
@@ -77,7 +147,7 @@ describe("the replay of a screen recording", () => {
     await waitFor(() => expect(d.drawn).toEqual([11, 12]));
     fireEvent.click(screen.getByText("Image suivante"));
     await waitFor(() => expect(d.drawn).toEqual([11, 12, 13]));
-    expect(calls.map((c) => c.path)).toEqual(["/sessions/sess_r/recording/video/segments/1", "/sessions/sess_r/recording/video/segments/3", "/sessions/sess_r/recording/video/segments/4"]);
+    expect(calls.map((c) => c.path)).toEqual(["/sessions/sess_r/recording/video/events?limit=100", "/sessions/sess_r/recording/video/segments/1", "/sessions/sess_r/recording/video/segments/3", "/sessions/sess_r/recording/video/segments/4"]);
   });
 
   it("plays at the recorded pace, bounded, and faster when asked", async () => {

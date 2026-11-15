@@ -4676,3 +4676,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Tests `-race` des interfaces Session Broker, Gateway et SSH codec : **PASS**. Après le dernier durcissement de lecture du corps vide, `make build vet test` : **PASS, 118,96 s** ; `buf lint` : **PASS** ; `git diff --check` : PASS. Aucun test Windows local.
 - CI PR #204 run `43637732122` : tous les jobs sont verts sauf PostgreSQL 16 / unit avec DB. Le log établit la cause : le même test d'ordre SSH ci-dessus, pas une erreur PostgreSQL ni une migration. Le correctif du test n'est pas encore poussé ; relancer la CI après le commit.
 - Limites : UI non raccordée ; injection toujours SSH interactif seulement ; aucun `SecretTyper` VNC/RDP ; parcours B interdit jusqu'à l'ADR et au canal chiffré E2E navigateur → proxy.
+
+## 2026-11-15 — ADR-0111, incrément 2 : timeline des événements dans l'Admin UI
+
+- La page de relecture charge `GET /sessions/{id}/recording/video/events` indépendamment des segments d'images. Les marqueurs restent des métadonnées latérales et ne consomment aucun numéro de séquence vidéo.
+- La timeline présente uniquement le type d'événement autorisé `secret_injection_started`, la référence du compte, le protocole et l'heure. Le libellé dit explicitement « demandée » : le marqueur prouve une tentative, pas une réussite ; le résultat reste dans l'audit de session.
+- Pagination de 100 événements, curseur opaque contrôlé, plafond navigateur de 1 000 événements et détection des curseurs répétés. En cas d'échec de lecture des événements, la relecture des images reste disponible et l'interface signale séparément l'indisponibilité des marqueurs.
+- Tests ajoutés : affichage et synchronisation avec l'image courante, pagination, refus API sans bloquer la vidéo. `npm --prefix web/admin-ui test` : **PASS, 232 tests / 23 fichiers** ; `npm --prefix web/admin-ui run typecheck` : **PASS** ; `npm --prefix web/admin-ui run build` : **PASS** ; `git diff --check` : **PASS**.
+- Limite : aucun événement ne sera visible tant que l'injection Vault VNC/RDP n'émettra pas son marqueur depuis le proxy ; cette intégration reste le prochain incrément technique d'ADR-0097.
+- Branche isolée : `feat/video-replay-timeline-events`, worktree `/tmp/openbastion-video-timeline-events`. Aucun commit, push, PR ou merge effectué à ce stade.

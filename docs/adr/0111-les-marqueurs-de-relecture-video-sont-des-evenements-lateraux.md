@@ -35,3 +35,9 @@ Insérer un marqueur d'injection comme une image ou un faux événement presse-p
 - **Encoder le marqueur comme une image ou un événement presse-papiers** : rejeté, cela falsifie la sémantique des codecs et/ou des transferts et perturbe la séquence vidéo.
 - **Ajouter un nouveau message au protocole écran v1** : rejeté, cela couple le marqueur d'audit à tous les clients WebSocket et aux versions de protocole.
 - **Ne conserver le marqueur que dans Audit Service** : rejeté pour la timeline vidéo, car chaque lecteur devrait faire une jointure distincte et les événements ne seraient pas servis par le contrat de relecture vidéo.
+
+## État d'implémentation — 15 novembre 2026
+
+- **Backend livré (PR #206)** : migration append-only, RPC mTLS `RecordVideoEvent` / `GetVideoEvents`, contrôle `recording:session:read` et audit préalable de chaque page, route Gateway paginée et `no-store`.
+- **Admin UI — incrément 2 en cours** : la relecture demande les événements séparément des segments d'images, affiche les tentatives d'injection Vault dans une timeline dédiée et synchronise le marqueur courant avec l'image relue. La lecture des événements est paginée (100 par page), plafonnée à 1 000 marqueurs côté navigateur et échoue indépendamment de la relecture vidéo.
+- **Non livré** : les marqueurs ne seront produits par VNC/RDP qu'une fois le `SecretInputRecorder` branché au chemin d'injection de ces protocoles. L'intégration du `SecretTyper` VNC/RDP reste donc un incrément distinct d'ADR-0097 ; aucun marqueur ne doit être simulé côté UI.
