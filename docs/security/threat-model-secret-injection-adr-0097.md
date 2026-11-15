@@ -233,7 +233,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
 | SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
-| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; façade UI dans Draft PR #217 (ADR-0113) ; E2E PostgreSQL 16 archive/restart à compléter ; cible à vérifier manuellement |
+| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans Draft PR #219 (CI à confirmer) ; façade UI dans Draft PR #217 (ADR-0113) ; cible à vérifier manuellement |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
@@ -277,7 +277,7 @@ La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation
 Critères minimaux de clôture :
 1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
 2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
-3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; compléter l’E2E PostgreSQL 16 archive/restart et valider la façade UI de la Draft PR #217 (ADR-0113) ;
+3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;
 6. revue des logs, traces, crash dumps et captures pour la non-divulgation.
