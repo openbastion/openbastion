@@ -168,6 +168,23 @@ export interface VideoRecordingSegment {
   frames: { timestamp: string; frameData: string; codec: string }[];
 }
 
+// A metadata-only event alongside a screen recording (ADR-0111). It never contains
+// secret material; secret_injection_started records an attempt, not its outcome.
+export interface VideoRecordingEvent {
+  eventId: string;
+  sessionId: string;
+  eventType: "secret_injection_started";
+  protocol: "vnc" | "rdp";
+  source: "vault";
+  accountId: string;
+  occurredAt: string;
+}
+
+export interface VideoRecordingEventPage {
+  events: VideoRecordingEvent[];
+  nextCursor?: string;
+}
+
 export interface RecordingPage {
   sessionId: string;
   entries: { timestamp: string; command: string }[];
