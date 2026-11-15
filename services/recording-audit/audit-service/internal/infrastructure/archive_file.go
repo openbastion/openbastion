@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -8,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -40,6 +42,8 @@ type archiveLine struct {
 	Emitter      string            `json:"emitter"`
 	KeyID        string            `json:"chain_key_id"`
 }
+
+const maxArchiveReadBytes = 256 << 20
 
 var archiveName = regexp.MustCompile(`^audit-[0-9]{4}-[0-9]{2}\.jsonl$`)
 
@@ -134,6 +138,65 @@ func (a *FileArchiver) Write(ctx context.Context, name string, events []*domain.
 		return nil, fmt.Errorf("archive %s does not read back as written", name)
 	}
 	return got, nil
+}
+
+// Read parses an archive without modifying it. Every line must be one complete, strict
+// archiveLine; malformed, unknown, truncated, or oversized records fail closed.
+func (a *FileArchiver) Read(ctx context.Context, name string) ([]*domain.Event, []byte, error) {
+	path, err := a.path(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, maxArchiveReadBytes+1))
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(raw) > maxArchiveReadBytes {
+		return nil, nil, fmt.Errorf("archive %s exceeds the maximum read size", name)
+	}
+	if len(raw) == 0 || raw[len(raw)-1] != '\n' {
+		return nil, nil, fmt.Errorf("archive %s is empty or lacks its final JSONL newline", name)
+	}
+	sum := sha256.Sum256(raw)
+	sc := bufio.NewScanner(bytes.NewReader(raw))
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	var events []*domain.Event
+	for line := 1; sc.Scan(); line++ {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+		var record archiveLine
+		dec := json.NewDecoder(bytes.NewReader(sc.Bytes()))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&record); err != nil {
+			return nil, nil, fmt.Errorf("archive %s line %d: invalid JSON record: %w", name, line, err)
+		}
+		var trailing any
+		if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+			return nil, nil, fmt.Errorf("archive %s line %d: trailing JSON data", name, line)
+		}
+		prev, errPrev := hex.DecodeString(record.PrevHash)
+		hash, errHash := hex.DecodeString(record.Hash)
+		if record.ID == "" || record.Timestamp.IsZero() || errPrev != nil || errHash != nil || len(hash) == 0 {
+			return nil, nil, fmt.Errorf("archive %s line %d: missing or malformed event fields", name, line)
+		}
+		events = append(events, &domain.Event{ID: record.ID, Timestamp: record.Timestamp, ActorID: record.ActorID,
+			Action: record.Action, ResourceType: record.ResourceType, ResourceID: record.ResourceID,
+			Details: record.Details, Success: record.Success, PrevHash: prev, Hash: hash,
+			HashVersion: record.HashVersion, Emitter: record.Emitter, KeyID: record.KeyID})
+	}
+	if err := sc.Err(); err != nil {
+		return nil, nil, fmt.Errorf("reading archive %s: %w", name, err)
+	}
+	if len(events) == 0 {
+		return nil, nil, fmt.Errorf("archive %s is empty", name)
+	}
+	return events, sum[:], nil
 }
 
 // Sum returns the SHA-256 of the archive as it is on disk.

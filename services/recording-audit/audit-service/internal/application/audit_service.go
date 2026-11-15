@@ -261,14 +261,24 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	prevHash := start.LastHash
+	if err := s.verifyEvents(events, start.LastHash, start.LastVersion); err != nil {
+		return err
+	}
+	if err := s.checkpointsAgree(events, checkpoints); err != nil {
+		return err
+	}
+	return s.verifyAnchors(ctx, events, anchors, start.AnchorsCovered)
+}
+
+// verifyEvents checks event hashes, key ownership, version monotonicity and prev_hash linkage
+// starting from a previously verified checkpoint.
+func (s *AuditService) verifyEvents(events []*domain.Event, previousHash []byte, previousVersion int) error {
+	prevHash := previousHash
 	version := domain.HashV1
-	if start.LastVersion > version {
-		version = start.LastVersion
+	if previousVersion > version {
+		version = previousVersion
 	}
 	for i, e := range events {
-		// Versions only move forward (ADR-0026): once an event is v2, every later one is, so
-		// that a later event cannot be passed off in the weaker format.
 		if e.HashVersion < domain.HashV1 || e.HashVersion > domain.HashV4 {
 			return fmt.Errorf("event %d (%s): unknown hash version %d — tampered", i, e.ID, e.HashVersion)
 		}
@@ -294,25 +304,20 @@ func (s *AuditService) VerifyChain(ctx context.Context) error {
 				want = computeHashV3(key, e)
 			}
 		} else {
-			// The unkeyed formats cover neither field: one that carries them was not written so.
 			if e.Emitter != "" || e.KeyID != "" || len(e.Details) != 0 {
 				return fmt.Errorf("event %d (%s): an emitter or a key in a version %d event, which covers neither — tampered", i, e.ID, e.HashVersion)
 			}
-
 			want = computeHash(e)
 		}
 		if !hmac.Equal(want, e.Hash) || len(want) == 0 {
 			return fmt.Errorf("event %d (%s): hash does not match its own fields — tampered", i, e.ID)
 		}
-		if string(e.PrevHash) != string(prevHash) {
+		if !hmac.Equal(e.PrevHash, prevHash) {
 			return fmt.Errorf("event %d (%s): prev_hash does not match the preceding event — chain broken", i, e.ID)
 		}
 		prevHash = e.Hash
 	}
-	if err := s.checkpointsAgree(events, checkpoints); err != nil {
-		return err
-	}
-	return s.verifyAnchors(ctx, events, anchors, start.AnchorsCovered)
+	return nil
 }
 
 func cloneDetails(details map[string]string) map[string]string {

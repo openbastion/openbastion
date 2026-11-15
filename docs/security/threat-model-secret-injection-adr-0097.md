@@ -142,7 +142,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 - L’attribution de l’acteur humain dépend du service émetteur autorisé ; un service compromis pourrait attribuer faussement un événement.
 
 **Actions**
-- Exposer une vue opérateur en lecture seule qui classe chaque `injection_id` en `completed`, `failed` ou `outcome_unknown` à partir de la chaîne append-only retenue ; signaler explicitement les archives exclues et ne jamais muter rétroactivement l’événement préalable. La valeur `completed` signifie uniquement qu’un résultat terminal positif a été journalisé, pas une attestation de réception complète par la cible.
+- Exposer une vue opérateur en lecture seule qui classe chaque `injection_id` en `completed`, `failed` ou `outcome_unknown` à partir de la chaîne append-only retenue et des archives vérifiées par leurs checkpoints ; échouer fermé si une archive ne peut être vérifiée et ne jamais muter rétroactivement l’événement préalable. La valeur `completed` signifie uniquement qu’un résultat terminal positif a été journalisé, pas une attestation de réception complète par la cible.
 - Ajouter un test multi-processus de panne du canal Audit après la frappe et vérifier qu’aucune nouvelle tentative automatique ne rejoue le secret ; l’opérateur doit être invité à vérifier la cible.
 
 ### I — Information Disclosure (divulgation)
@@ -232,7 +232,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
 | SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
-| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : corrélation durable et projection opérateur sur la chaîne retenue ; archives historiques exclues de cette première vue, vérification cible toujours nécessaire |
+| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection opérateur sur chaîne retenue et archives vérifiées ; vérification cible toujours nécessaire, test multi-processus de panne à compléter |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |

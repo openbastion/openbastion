@@ -18,8 +18,9 @@ import (
 
 // memoryArchiver keeps archives as bytes, as the file archiver would.
 type memoryArchiver struct {
-	files map[string][]byte
-	err   error
+	files  map[string][]byte
+	events map[string][]*domain.Event
+	err    error
 }
 
 func (m *memoryArchiver) Write(_ context.Context, name string, events []*domain.Event) ([]byte, error) {
@@ -34,8 +35,36 @@ func (m *memoryArchiver) Write(_ context.Context, name string, events []*domain.
 		return nil, errors.New("exists and differs")
 	}
 	m.files[name] = b.Bytes()
+	if m.events == nil {
+		m.events = make(map[string][]*domain.Event)
+	}
+	m.events[name] = cloneArchiveEvents(events)
 	sum := sha256.Sum256(b.Bytes())
 	return sum[:], nil
+}
+
+func (m *memoryArchiver) Read(_ context.Context, name string) ([]*domain.Event, []byte, error) {
+	if m.err != nil {
+		return nil, nil, m.err
+	}
+	events, ok := m.events[name]
+	if !ok {
+		return nil, nil, errors.New("no such archive")
+	}
+	sum := sha256.Sum256(m.files[name])
+	return cloneArchiveEvents(events), sum[:], nil
+}
+
+func cloneArchiveEvents(events []*domain.Event) []*domain.Event {
+	cloned := make([]*domain.Event, len(events))
+	for i, event := range events {
+		copy := *event
+		copy.PrevHash = append([]byte(nil), event.PrevHash...)
+		copy.Hash = append([]byte(nil), event.Hash...)
+		copy.Details = cloneDetails(event.Details)
+		cloned[i] = &copy
+	}
+	return cloned
 }
 
 func (m *memoryArchiver) Sum(_ context.Context, name string) ([]byte, error) {
@@ -79,7 +108,7 @@ func archivingServiceAnchored(t *testing.T, anchored bool) (*AuditService, *flak
 	t.Helper()
 	store := &flakyStore{InMemoryStore: infrastructure.NewInMemoryStore()}
 	sink := &memoryAnchors{}
-	arch := &memoryArchiver{files: map[string][]byte{}}
+	arch := &memoryArchiver{files: map[string][]byte{}, events: map[string][]*domain.Event{}}
 	c := &clock{}
 	svc := NewAuditService(store).WithChainKeys(mustKeys(t, keyA, "")).WithAnchors(sink).WithArchive(arch, 1)
 	svc.now = c.now
@@ -398,5 +427,114 @@ func TestVerifyChain_ACheckpointUnderAKeyNoLongerHeldSaysSo(t *testing.T) {
 	err := svc.VerifyChain(ctx)
 	if err == nil || !strings.Contains(err.Error(), "checkpoint 0") || !strings.Contains(err.Error(), "does not hold") {
 		t.Fatalf("got %v, want the checkpoint named as signed with a key not held", err)
+	}
+}
+
+func archivedInjectionService(t *testing.T) (*AuditService, *memoryArchiver, *memoryAnchors, *clock) {
+	t.Helper()
+	store := infrastructure.NewInMemoryStore()
+	sink := &memoryAnchors{}
+	archiver := &memoryArchiver{files: map[string][]byte{}, events: map[string][]*domain.Event{}}
+	c := &clock{t: day(2025, time.January, 3)}
+	svc := NewAuditService(store).WithChainKeys(mustKeys(t, keyA, "")).WithAnchors(sink).WithArchive(archiver, 1)
+	svc.now = c.now
+	if _, err := svc.EmitEventAsWithDetails(context.Background(), "ssh-proxy", "operator-1", "session.secret_injection_started", "session", "session-archived", map[string]string{"injection_id": "0123456789abcdef0123456789abcdef", "protocol": "ssh", "account_id": "account-prod"}, true); err != nil {
+		t.Fatal(err)
+	}
+	c.t = day(2025, time.January, 3).Add(time.Minute)
+	if _, err := svc.EmitEventAsWithDetails(context.Background(), "ssh-proxy", "operator-1", "session.secret_injected", "session", "session-archived", map[string]string{"injection_id": "0123456789abcdef0123456789abcdef", "protocol": "ssh", "account_id": "account-prod"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.EmitEventAs(context.Background(), "ssh-proxy", "operator-1", "session.started", "session", "session-archived", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Anchor(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c.t = day(2025, time.April, 20)
+	if names, err := svc.ArchiveDue(context.Background()); err != nil || len(names) != 1 || names[0] != "audit-2025-01.jsonl" {
+		t.Fatalf("ArchiveDue = %v, %v", names, err)
+	}
+	return svc, archiver, sink, c
+}
+
+func TestReconcileSecretInjections_IncludesCryptographicallyVerifiedArchivedHistory(t *testing.T) {
+	svc, _, _, _ := archivedInjectionService(t)
+	got, err := svc.ReconcileSecretInjections(context.Background(), 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Coverage != "verified_archives_and_retained_chain" || got.ArchivedHistoryExcluded || got.ArchivedEvents != 3 || got.ScannedEvents != 4 {
+		t.Fatalf("archive coverage was not complete: %+v", got)
+	}
+	if len(got.Outcomes) != 1 || got.Outcomes[0].InjectionID != "0123456789abcdef0123456789abcdef" || got.Outcomes[0].Status != "completed" {
+		t.Fatalf("archived injection was not reconciled: %+v", got.Outcomes)
+	}
+}
+
+func TestReconcileSecretInjections_RefusesArchiveBytesThatDifferFromCheckpoint(t *testing.T) {
+	svc, archiver, _, _ := archivedInjectionService(t)
+	archiver.files["audit-2025-01.jsonl"] = append(archiver.files["audit-2025-01.jsonl"], 'x')
+	if _, err := svc.ReconcileSecretInjections(context.Background(), 100, ""); err == nil {
+		t.Fatal("tampered archive bytes were accepted")
+	}
+}
+
+func TestReconcileSecretInjections_RefusesArchivedEventWithInvalidHash(t *testing.T) {
+	svc, archiver, _, _ := archivedInjectionService(t)
+	archiver.events["audit-2025-01.jsonl"][0].ResourceID = "session-tampered"
+	if _, err := svc.ReconcileSecretInjections(context.Background(), 100, ""); err == nil {
+		t.Fatal("an archived event with a broken event hash was accepted")
+	}
+}
+
+func TestReconcileSecretInjections_FailsClosedWithoutArchiveReader(t *testing.T) {
+	svc, _, _, _ := archivedInjectionService(t)
+	svc.archive = nil
+	if _, err := svc.ReconcileSecretInjections(context.Background(), 100, ""); err == nil {
+		t.Fatal("checkpointed history was silently omitted without an archive reader")
+	}
+}
+
+func TestReconcileSecretInjections_RejectsCheckpointClaimForMissingAnchor(t *testing.T) {
+	svc, _, sink, _ := archivedInjectionService(t)
+	sink.list = nil
+	if _, err := svc.ReconcileSecretInjections(context.Background(), 100, ""); err == nil {
+		t.Fatal("checkpoint claimed an archived anchor that was not available")
+	}
+}
+
+func TestReconcileSecretInjections_RejectsTamperedCheckpointMAC(t *testing.T) {
+	svc, _, sink, _ := archivedInjectionService(t)
+	sink.checkpoints[0].MAC[0] ^= 0xff
+	if _, err := svc.ReconcileSecretInjections(context.Background(), 100, ""); err == nil {
+		t.Fatal("tampered checkpoint MAC was accepted")
+	}
+}
+
+func TestReconcileSecretInjections_LeavesAuditAndArchivesUnchanged(t *testing.T) {
+	svc, archiver, sink, _ := archivedInjectionService(t)
+	beforeArchive := append([]byte(nil), archiver.files["audit-2025-01.jsonl"]...)
+	beforeCheckpoint := append([]byte(nil), sink.checkpoints[0].MAC...)
+	beforeAnchors := len(sink.list)
+	beforeEvents, err := svc.store.All(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ReconcileSecretInjections(context.Background(), 100, ""); err != nil {
+		t.Fatal(err)
+	}
+	afterEvents, err := svc.store.All(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(beforeEvents) != len(afterEvents) || !bytes.Equal(beforeArchive, archiver.files["audit-2025-01.jsonl"]) ||
+		!bytes.Equal(beforeCheckpoint, sink.checkpoints[0].MAC) || beforeAnchors != len(sink.list) {
+		t.Fatal("read-only reconciliation changed the audit chain, archive or checkpoint")
+	}
+	for i := range beforeEvents {
+		if beforeEvents[i].ID != afterEvents[i].ID || !bytes.Equal(beforeEvents[i].Hash, afterEvents[i].Hash) {
+			t.Fatalf("audit event %d changed during read-only reconciliation", i)
+		}
 	}
 }

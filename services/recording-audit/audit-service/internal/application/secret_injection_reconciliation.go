@@ -36,14 +36,14 @@ type SecretInjectionOutcome struct {
 	ResultEvent string     `json:"result_event_id,omitempty"`
 }
 
-// SecretInjectionReconciliation is deliberately explicit about its coverage. Archived months
-// are not loaded into this online projection; operators must consult the verified archive when
-// archived_history_excluded is true. This prevents a partial view being mistaken for a full one.
+// SecretInjectionReconciliation is explicit about its coverage. Archived months are included
+// only after every referenced archive, checkpoint, event hash and covered anchor is verified.
 type SecretInjectionReconciliation struct {
 	Outcomes                []SecretInjectionOutcome `json:"outcomes"`
 	Coverage                string                   `json:"coverage"`
 	ArchivedHistoryExcluded bool                     `json:"archived_history_excluded"`
 	ScannedEvents           int                      `json:"scanned_events"`
+	ArchivedEvents          int                      `json:"archived_events"`
 	HasMore                 bool                     `json:"has_more"`
 	NextBefore              string                   `json:"next_before,omitempty"`
 }
@@ -59,8 +59,8 @@ type injectionEvidence struct {
 	results []*domain.Event
 }
 
-// ReconcileSecretInjections derives outcomes from the retained append-only audit chain. It
-// performs no writes, never repairs history and never retries an injection.
+// ReconcileSecretInjections derives outcomes from the retained chain and every verified archive.
+// It performs no writes, never repairs history and never retries an injection.
 func (s *AuditService) ReconcileSecretInjections(ctx context.Context, limit int, before string) (*SecretInjectionReconciliation, error) {
 	if limit <= 0 {
 		limit = defaultInjectionLimit
@@ -75,17 +75,30 @@ func (s *AuditService) ReconcileSecretInjections(ctx context.Context, limit int,
 	if err != nil {
 		return nil, err
 	}
-	archived := false
+	var archivedEvents []*domain.Event
+	var archivedEventCount int
 	if s.anchors != nil {
 		checkpoints, err := s.anchors.Checkpoints(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("read audit archive checkpoints: %w", err)
 		}
-		archived = len(checkpoints) != 0
+		anchors, err := s.anchors.All(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read audit anchors: %w", err)
+		}
+		archivedEvents, archivedEventCount, err = s.readVerifiedArchives(ctx, checkpoints, anchors)
+		if err != nil {
+			return nil, err
+		}
+	} else if s.archive != nil {
+		return nil, fmt.Errorf("archive reader is configured without an anchor/checkpoint source")
 	}
+	allEvents := make([]*domain.Event, 0, len(archivedEvents)+len(events))
+	allEvents = append(allEvents, archivedEvents...)
+	allEvents = append(allEvents, events...)
 
 	byID := make(map[string]*injectionEvidence)
-	for _, event := range events {
+	for _, event := range allEvents {
 		if event.ResourceType != "session" || (event.Action != secretInjectionStarted && event.Action != secretInjectionDone && event.Action != secretInjectionFailed) {
 			continue
 		}
@@ -186,9 +199,13 @@ func (s *AuditService) ReconcileSecretInjections(ctx context.Context, limit int,
 	if hasMore {
 		outcomes = outcomes[:limit]
 	}
+	coverage := "retained_audit_chain"
+	if len(archivedEvents) > 0 {
+		coverage = "verified_archives_and_retained_chain"
+	}
 	result := &SecretInjectionReconciliation{
-		Outcomes: outcomes, Coverage: "retained_audit_chain",
-		ArchivedHistoryExcluded: archived, ScannedEvents: len(events), HasMore: hasMore,
+		Outcomes: outcomes, Coverage: coverage,
+		ArchivedHistoryExcluded: false, ScannedEvents: len(events) + archivedEventCount, ArchivedEvents: archivedEventCount, HasMore: hasMore,
 	}
 	if hasMore && len(outcomes) > 0 {
 		result.NextBefore = outcomes[len(outcomes)-1].InjectionID
