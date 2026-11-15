@@ -18,7 +18,8 @@ export function fakeApi(routes: Record<string, { status?: number; body?: unknown
     const r = routes[`${method} ${input}`] ?? routes[`${method} ${input.split("?")[0]}`];
     if (!r) return new Response("not found", { status: 404 });
     const body = r.body === undefined ? "" : typeof r.body === "string" ? r.body : JSON.stringify(r.body);
-    return new Response(body, { status: r.status ?? 200 });
+    const status = r.status ?? 200;
+    return new Response(status === 204 || status === 205 || status === 304 ? null : body, { status });
   });
   return { api, calls };
 }

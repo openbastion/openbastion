@@ -877,7 +877,8 @@ paths:
       description: >
         Le corps doit être vide. La Gateway dérive l'acteur et ses rôles du bearer token vérifié ;
         le Broker dérive le compte et le protocole de la session persistée. Le challenge est lié
-        à l'acteur, à la session, au compte, au protocole SSH et à l'action `secret:inject`.
+        à l'acteur, à la session, au compte, au protocole SSH, VNC ou RDP enregistré et à
+        l'action `secret:inject`.
         Il expire après 120 secondes, accepte au plus cinq essais et ne peut être consommé qu'une fois.
         Les facteurs proposés sont ceux réellement enrôlés ; les rôles stricts exigent WebAuthn.
         Cette route n'accepte ni compte arbitraire, ni action arbitraire, ni credential cible.
@@ -923,7 +924,7 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [sessions]
-      summary: Confirme le MFA et injecte le secret Vault dans la session SSH active
+      summary: Confirme le MFA et injecte le secret Vault dans la session privilégiée active
       description: >
         La requête transporte exclusivement une preuve MFA (TOTP ou assertion WebAuthn), jamais
         un secret cible, un identifiant de compte, un grant MFA ou un scope Vault. La Gateway
@@ -931,9 +932,10 @@ paths:
         Le Broker revalide le propriétaire, l'état de la session et Authorization, consomme le
         grant en interne, puis transmet au proxy uniquement un scope Vault à usage unique.
         Le proxy récupère le credential directement auprès du Vault. L'injection échoue fermée
-        si la session ou son instance proxy est indisponible. Le parcours est actuellement limité
-        à SSH interactif ; VNC/RDP ne sont pas encore pris en charge. Toutes les réponses portent
-        `Cache-Control: no-store`.
+        si la session ou son instance proxy est indisponible. Le parcours prend en charge SSH, VNC et
+        RDP dès lors que le relay de la session est actif. Toutes les réponses portent
+        `Cache-Control: no-store`. Le proxy saisit le texte directement dans la session ; le navigateur
+        ne reçoit jamais le credential et aucun presse-papiers n'est utilisé.
       security:
         - bearerAuth: []
       requestBody:

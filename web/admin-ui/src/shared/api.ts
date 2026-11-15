@@ -136,6 +136,14 @@ export interface Page<T> {
   truncated?: boolean;
 }
 
+export interface SecretActionStepUpChallenge {
+  challenge: string;
+  expires_in: number;
+  factors: ("totp" | "webauthn")[];
+  // navigator.credentials.get options, present only when WebAuthn is an admissible factor.
+  webauthn?: unknown;
+}
+
 export interface Session {
   id: string;
   status: string;

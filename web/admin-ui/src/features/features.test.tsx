@@ -419,6 +419,8 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
     field("Protocole du compte", "vnc");
     field("Justification", "patch");
     fireEvent.submit(form);
+    expect(await screen.findByRole("button", { name: "Saisir le secret Vault" })).toBeTruthy();
+    expect(calls.some((call) => call.path.endsWith("/secret-injection-step-up"))).toBe(false);
     fireEvent.click(await screen.findByText("Ouvrir l'écran"));
     await waitFor(() => expect(socketOpen).toHaveBeenCalledOnce());
     expect(calls.find((c) => c.path === "/sessions")?.body).toMatchObject({ protocol: "vnc" });

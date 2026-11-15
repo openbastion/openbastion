@@ -1,6 +1,6 @@
 # Contrat de confirmation MFA pour l'injection d'un secret
 
-**Statut au 15 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles, UI non intégrée ; essais d’interopérabilité VNC/RDP sur cibles réelles encore requis
+**Statut au 15 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles ; Admin UI raccordée à l'incrément UI ADR-0097 ; validation multi-processus VNC/RDP sur cibles réelles encore requise
 **Décision de référence :** ADR-0097 (accepté)  
 **Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) reste bloqué tant que le transport navigateur → proxy ne garantit pas que la Gateway ne voit jamais le clair.
 
@@ -19,7 +19,7 @@
 
 | Étape | Composant | Responsabilité |
 |---|---|---|
-| 1 | Admin UI → Gateway | Demande une injection sur la session courante, avec l'identifiant du compte Vault (pas de valeur secrète). |
+| 1 | Admin UI → Gateway | Demande un challenge pour l'identifiant de session uniquement ; le compte Vault n'est jamais choisi ni transmis par l'UI, il est dérivé du stockage côté Broker. |
 | 2 | Gateway → Session Broker | Transmet l'identité vérifiée issue du bearer token ; le corps client ne peut pas choisir l'acteur ou ses rôles. |
 | 3 | Session Broker | Charge la session, vérifie qu'elle est active, non expirée, non révoquée, que l'appelant en est le demandeur et que le protocole correspond. Vérifie « secret:inject:<account_id> » / « secret:inject ». |
 | 4 | Session Broker → Authentication | Demande un challenge MFA lié à l'acteur, la session, le compte, le protocole et l'action. Appel mTLS authentifié comme « session-broker ». |
@@ -97,7 +97,7 @@ Le Broker :
 - refuse si le proxy n'est pas joignable ou si le type de session n'implémente pas SecretTyper.
 - expose les handlers de step-up et d'injection seulement sur les routes Session Broker autorisées au certificat mTLS `api-gateway` ; les routes Authentication restent exclusivement appelables par `session-broker`.
 
-Les routes sont inscrites dans `docs/api/rest/openapi.yaml`. Le schéma OpenAPI décrit les preuves MFA autorisées et interdit les propriétés supplémentaires. L'interface Admin UI n'est pas encore raccordée.
+Les routes sont inscrites dans `docs/api/rest/openapi.yaml`. Le schéma OpenAPI décrit les preuves MFA autorisées et interdit les propriétés supplémentaires. L'Admin UI déclenche le challenge depuis le détail d'une session active SSH/VNC/RDP et ne transmet que la preuve TOTP ou l'assertion WebAuthn ; le compte est toujours celui de la session persistée.
 
 ## 5. Persistance et concurrence
 
@@ -156,10 +156,10 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 4. ~~Broker : vérifier session + Authorization ; appeler start/verify/consume ; ensuite seulement obtenir le scope Vault et commander le proxy~~ (incréments 4–5).
 5. ~~Canal de commande proxy ciblé vers l'instance qui détient la session ; jamais de scope dans le client~~ (incrément 5, SSH seulement ; affinité déterministe ADR-0046).
 6. ~~Tests PostgreSQL réels des migrations, bindings et consommations atomiques~~ (incrément 2, base dédiée PostgreSQL 16) ; restent les tests d'intégration multi-services.
-7. ~~Contrat OpenAPI public et routes Gateway/Broker, avec tests HTTP et contrat Protobuf~~ (incrément 6 ; interface Admin UI encore à faire).
+7. ~~Contrat OpenAPI public et routes Gateway/Broker, avec tests HTTP et contrat Protobuf~~ (incrément 6) ; ~~interface Admin UI TOTP/WebAuthn du parcours A~~ (incrément UI, §12).
 8. ~~VNC et RDP : implémenter SecretTyper avec événements clavier Unicode, sans presse-papiers~~ (incrément 7 : implémentation et tests unitaires/protocole) ; restent les essais d'interopérabilité contre TigerVNC et les cinq cibles Windows prévues par ADR-0097.
 
-**État actuel :** les étapes 1 à 7 sont réalisées pour le parcours A (routes Gateway/Broker, contrat OpenAPI et orchestration MFA) ; SSH est testé de bout en bout sur de vrais processus. VNC/RDP disposent maintenant du typer Unicode, du registre de session, de la route mTLS et du marqueur vidéo durable. Le smoke test TigerVNC et le test Unicode Windows sont ajoutés ; leurs résultats terrain/CI restent à confirmer. Restent l'interface Admin UI et le parcours B.
+**État au 15 novembre 2026 :** les routes Gateway/Broker, le contrat OpenAPI, l'orchestration MFA et l'interface Admin UI du parcours A sont réalisés. SSH est testé de bout en bout sur de vrais processus. VNC/RDP disposent du typer Unicode, du registre de session, de la route mTLS et du marqueur vidéo durable ; leur parcours multi-processus réel et la vérification navigateur sur cibles restent à confirmer. Le parcours B reste interdit jusqu'à l'ADR et au canal E2E dédié.
 
 
 ## 9. État d'implémentation — 14 novembre 2026, incrément 5 (SSH A)
@@ -190,3 +190,14 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 - VNC utilise des keysyms Unicode RFB ; RDP utilise `TS_UNICODE_KEYBOARD_EVENT` UTF-16 avec paires press/release. L'entrée opérateur est sérialisée par le même verrou ; le presse-papiers n'est pas touché.
 - L'ordre commun est audit préalable → marqueur vidéo Vault durable → frappe → audit du résultat. Les tests couvrent les métadonnées d'audit, la purge, l'allowlist mTLS, le registre et les formats clavier. Tests ciblés, `-race`, `go vet`, `buf lint` et `make build` : PASS.
 - **Avant production** : essais réels TigerVNC et cinq cibles Windows de CI, puis test multi-processus MFA → Broker → VNC/RDP Proxy → Vault → Video Recorder → cible → Audit. L'interface Admin UI n'est pas raccordée ; B reste bloqué en attente du canal E2E dédié.
+
+
+## 12. État d'implémentation — 15 novembre 2026, incrément UI ADR-0097
+
+- L'Admin UI affiche l'action uniquement pour une session active SSH, VNC ou RDP. Le compte est affiché comme information et ne peut pas être changé côté navigateur : le Broker continue de le dériver depuis la session persistée.
+- Une confirmation préalable rappelle que le relay doit être ouvert, que le focus doit être sur un champ masqué et que la saisie dans un champ non masqué peut apparaître dans l'enregistrement. Aucun mécanisme ne prétend détecter le focus de la cible.
+- L'UI appelle le challenge sans corps, puis accepte uniquement un code TOTP ou une assertion WebAuthn via `navigator.credentials.get`. Les rôles stricts n'affichent pas de TOTP si le serveur ne le propose pas.
+- Le code TOTP est effacé du champ avant l'envoi ; l'assertion WebAuthn et le challenge restent en mémoire seulement. L'UI ne reçoit ni credential Vault, ni grant MFA, ni scope Vault. Les réponses API sont `no-store`.
+- Une annulation avant le challenge n'émet aucune requête ; une expiration, un facteur inutilisable ou un refus API n'entraîne aucun fallback vers clipboard ou saisie libre.
+- Le contrat OpenAPI a été corrigé : les routes prennent en charge SSH, VNC et RDP, sous réserve d'un relay actif implémentant `SecretTyper`.
+- **Non validé dans cet incrément** : parcours complet MFA → Broker → proxy écran → Vault → frappe → Video Recorder → Audit sur processus réels VNC/RDP, vérification UI dans un navigateur contre TigerVNC et les cinq cibles Windows. Les tests Windows restent exécutés uniquement en CI. Le parcours B reste interdit jusqu'à la conception et à l'épreuve d'un canal navigateur → proxy chiffré de bout en bout.
