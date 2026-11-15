@@ -19,6 +19,11 @@ import (
 // ProxyControl.EstablishSession (proto/proxy/v1/proxy_control.proto,
 // docs/api/grpc/README.md §4). MVP has exactly one proxy family (SSH), so one BaseURL is
 // enough; a registry keyed by proxyServiceID is a v0.0.1 concern.
+type secretInjectionOutcomeUnknownBody struct {
+	Status      string `json:"status"`
+	InjectionID string `json:"injection_id"`
+}
+
 type ProxyClientHTTPClient struct {
 	BaseURL string
 
@@ -80,10 +85,7 @@ func (c *ProxyClientHTTPClient) InjectVaultSecret(ctx context.Context, sessionID
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusConflict {
-		var outcome struct {
-			Status      string `json:"status"`
-			InjectionID string `json:"injection_id"`
-		}
+		var outcome secretInjectionOutcomeUnknownBody
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1024)).Decode(&outcome); err == nil &&
 			outcome.Status == "outcome_unknown" && len(outcome.InjectionID) == 32 {
 			if _, err := hex.DecodeString(outcome.InjectionID); err == nil {
