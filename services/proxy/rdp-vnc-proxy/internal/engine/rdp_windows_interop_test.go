@@ -424,6 +424,107 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 	}
 }
 
+// SecretTyper's Unicode path is exercised against the real Windows desktop in CI. The test
+// reads Notepad's saved file back through the test share; it never uses the RDP clipboard.
+func TestRDPWindows_SecretTyperUnicode(t *testing.T) {
+	target := windowsTarget(t)
+	shared := os.Getenv("RDP_WINDOWS_SHARED")
+	if shared == "" {
+		t.Skip("RDP_WINDOWS_SHARED not set: Notepad's file must be readable through the CI share")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+		Type: "password", Material: []byte(target.password), TargetHost: target.address,
+		TargetUser: target.user, TLSCertificateSHA256: target.pin, TargetDomain: target.name,
+	}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}).Open(ctx, cred)
+	if err != nil {
+		t.Fatalf("opening the screen of Windows: %v", err)
+	}
+	defer session.Close()
+	var last screenstream.Message
+	settle := func(quiet, limit time.Duration) {
+		end := time.After(limit)
+		for {
+			select {
+			case frame, ok := <-session.Frames():
+				if !ok {
+					t.Fatalf("the stream ended: %v", session.Err())
+				}
+				last = frame
+			case <-time.After(quiet):
+				return
+			case <-end:
+				return
+			}
+		}
+	}
+	settle(10*time.Second, 90*time.Second)
+	if last.Width == 0 || last.Height == 0 {
+		t.Fatal("no frame from Windows")
+	}
+	press := func(code uint16, down bool) {
+		flags := screenstream.KeyReleased
+		if down {
+			flags = screenstream.KeyPressed
+		}
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputKey, Scancode: code, Flags: flags}); err != nil {
+			t.Fatalf("key 0x%x: %v", code, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	key := func(code uint16) { press(code, true); press(code, false) }
+	chord := func(modifier, code uint16) { press(modifier, true); key(code); press(modifier, false) }
+	x, y := notepadPoint(last.Width, last.Height)
+	for _, buttons := range []byte{1, 0} {
+		if err := session.Input(screenstream.InputEvent{Type: screenstream.InputPointer, X: x, Y: y, Buttons: buttons}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+	chord(0x1d, 0xe04f) // Ctrl+End, then a fresh line in Notepad.
+	key(0x1c)
+	secret := []byte("OpenBastion café")
+	typer, ok := session.(proxycore.SecretTyper)
+	if !ok {
+		t.Fatal("RDP screen session does not implement SecretTyper")
+	}
+	transaction, ok := session.(proxycore.SecretInputTransaction)
+	if !ok {
+		t.Fatal("RDP screen session does not serialize secret input")
+	}
+	if err := transaction.WithExclusiveInput(ctx, func() error { return typer.TypeSecret(ctx, secret) }); err != nil {
+		t.Fatalf("Unicode SecretTyper: %v", err)
+	}
+	clear(secret)
+	chord(0x1d, 0x1f) // Ctrl+S; the keyboard-layout test created kbd.txt already.
+	settle(2*time.Second, 10*time.Second)
+	path := filepath.Join(shared, "kbd.txt")
+	for deadline := time.Now().Add(2 * time.Minute); ; {
+		raw, readErr := os.ReadFile(path)
+		if readErr == nil {
+			text := strings.TrimPrefix(string(raw), "\xef\xbb\xbf")
+			lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+			for i := len(lines) - 1; i >= 0; i-- {
+				line := strings.TrimSpace(lines[i])
+				// Notepad versions may save the existing file as UTF-8 or the active Windows
+				// ANSI code page. Accept the UTF-8 spelling or CP-1252's single 0xe9 byte.
+				if line == "OpenBastion café" || bytes.Contains(raw, []byte{'O', 'p', 'e', 'n', 'B', 'a', 's', 't', 'i', 'o', 'n', ' ', 'c', 'a', 'f', 0xe9}) {
+					return
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Notepad did not save the Unicode SecretTyper text to %s", path)
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
 // The extended keys (E0-prefixed scancodes, KBDFLAGS_EXTENDED), against Windows (ADR-0071, ADR-0088).
 // PR #101 saw the Windows key not reach Windows' shell: Win+R typed "r" into Notepad. Measured here,
 // key by key, by what the operator's path sends (the codec's Input):

@@ -12,6 +12,11 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("password-vault", "POST", "/internal/v1/establish-session"),
 		mtlstest.Allow("session-broker", "POST", "/internal/v1/revoke-session"),
 		mtlstest.Deny("api-gateway", "POST", "/internal/v1/revoke-session"),
+		mtlstest.Allow("session-broker", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("api-gateway", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("password-vault", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("ssh-proxy", "POST", "/internal/v1/inject-vault-secret"),
+		mtlstest.Deny("command-recorder", "POST", "/internal/v1/inject-vault-secret"),
 		mtlstest.Allow("api-gateway", "GET", "/internal/v1/screen"),
 		mtlstest.Deny("session-broker", "GET", "/internal/v1/screen"),
 		mtlstest.Deny("admin-cli", "GET", "/internal/v1/screen"),
@@ -22,6 +27,7 @@ func TestEveryRegisteredRouteHasCallerRule(t *testing.T) {
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil, nil, nil, nil, "", nil).Routes(), CallerRules(), []mtlstest.Route{
 		{Method: "POST", Path: "/internal/v1/establish-session"},
 		{Method: "POST", Path: "/internal/v1/revoke-session"},
+		{Method: "POST", Path: "/internal/v1/inject-vault-secret"},
 		{Method: "GET", Path: "/internal/v1/screen"},
 		{Method: "GET", Path: "/healthz"},
 	})

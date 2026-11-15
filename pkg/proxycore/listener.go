@@ -78,6 +78,9 @@ type Listener struct {
 	// Clipboard audits the clipboard's transfers (ADR-0096). Nil, no screen session opens its
 	// clipboard, whatever its rights.
 	Clipboard ClipboardAuditor
+	// ScreenSecretInputs registers live VNC/RDP typers for Vault-only secret injection (ADR-0097).
+	// Nil disables injection; the screen session itself remains available.
+	ScreenSecretInputs SecretInputRegistrar
 }
 
 func NewListener(fetcher *CredentialFetcher, terminator *Terminator) *Listener {

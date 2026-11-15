@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/pkg/rdp"
@@ -628,13 +630,67 @@ func (s *rdpScreenSessionAdapter) Input(input screenstream.InputEvent) error {
 	return nil
 }
 
+// WithExclusiveInput serializes a complete secret-injection transaction against browser input.
+// TypeSecret must run inside operation while inputMu is held.
+func (s *rdpScreenSessionAdapter) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	if s == nil || ctx == nil || operation == nil || s.target == nil {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.inputMu.Lock()
+	defer s.inputMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return operation()
+}
+
+// TypeSecret sends TS_UNICODE_KEYBOARD_EVENT press/release pairs. It is called only while
+// WithExclusiveInput holds inputMu; the UTF-16 stream handles non-BMP characters as surrogate pairs.
+func (s *rdpScreenSessionAdapter) TypeSecret(ctx context.Context, secret []byte) error {
+	if s == nil || s.target == nil || ctx == nil || len(secret) == 0 || !utf8.Valid(secret) {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	runes := make([]rune, 0, len(secret))
+	for len(secret) > 0 {
+		r, size := utf8.DecodeRune(secret)
+		if size == 0 || r == utf8.RuneError && size == 1 || r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
+			clear(runes)
+			return proxycore.ErrSecretInjectionInvalid
+		}
+		runes = append(runes, r)
+		secret = secret[size:]
+	}
+	units := utf16.Encode(runes)
+	clear(runes)
+	defer clear(units)
+	events := make([]rdp.RDPInputEvent, 0, len(units)*2)
+	defer clear(events)
+	for _, unit := range units {
+		if unit == 0 {
+			return proxycore.ErrSecretInjectionInvalid
+		}
+		events = append(events,
+			rdp.RDPInputEvent{Type: rdp.RDPInputUnicode, Unicode: unit},
+			rdp.RDPInputEvent{Type: rdp.RDPInputUnicode, Unicode: unit, Released: true},
+		)
+	}
+	return s.sendInputEventsContext(ctx, events)
+}
+
 func (s *rdpScreenSessionAdapter) sendInputEvents(events []rdp.RDPInputEvent) error {
+	return s.sendInputEventsContext(context.Background(), events)
+}
+
+func (s *rdpScreenSessionAdapter) sendInputEventsContext(parent context.Context, events []rdp.RDPInputEvent) error {
 	for len(events) > 0 {
 		count := len(events)
 		if count > 128 {
 			count = 128
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), s.inputTimeout)
+		ctx, cancel := context.WithTimeout(parent, s.inputTimeout)
 		err := s.target.SendInput(ctx, events[:count], s.inputTimeout)
 		cancel()
 		if err != nil {

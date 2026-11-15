@@ -72,6 +72,8 @@ func runService() {
 	}
 	fetcher := proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy)
 	listener := proxycore.NewListener(fetcher, proxycore.NewTerminator(audit))
+	secretInputs := infrastructure.NewSecretInputRegistry()
+	listener.ScreenSecretInputs = secretInputs
 	listener.ScreenInput = proxycore.ScreenInputLimits{
 		RatePerSecond: boundedIntEnv("SCREEN_INPUT_RATE_PER_SECOND", proxycore.DefaultScreenInputRate, 1, 10000),
 		Burst:         boundedIntEnv("SCREEN_INPUT_BURST", proxycore.DefaultScreenInputBurst, 1, 100000),
@@ -132,7 +134,8 @@ func runService() {
 		PartialFrames: partialFrames,
 	}
 	origins := splitOrigins(os.Getenv("SCREEN_ALLOWED_ORIGINS"))
-	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins)
+	server := interfaces.NewHTTPServer(infrastructure.NewPendingScreenSessions(), listener, vncCodec, recorder, endpoint, origins).
+		WithSecretInputs(secretInputs, fetcher, audit)
 	// RDP (ADR-0088): on unless said "false" (the owner's decision, 13 November 2026); only "true"
 	// and "false", anything else stops the service. Off, the RDP codec is not built and
 	// establish-session refuses rdp.

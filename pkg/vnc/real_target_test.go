@@ -63,6 +63,14 @@ func TestRealTarget(t *testing.T) {
 				t.Fatalf("input %+v: %v", e, err)
 			}
 		}
+		// Exercise the exact Unicode path used by the proxy. It sends key events, never a clipboard
+		// message; the real target must keep the authenticated session alive afterwards.
+		secret := []byte("OpenBastion — 密碼 🙂")
+		if err := session.WithExclusiveInput(ctx, func() error { return session.TypeSecret(ctx, secret) }); err != nil {
+			clear(secret)
+			t.Fatalf("Unicode secret input: %v", err)
+		}
+		clear(secret)
 		// The server still serves the session after all of it.
 		select {
 		case <-time.After(time.Second):

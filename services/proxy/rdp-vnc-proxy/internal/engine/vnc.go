@@ -29,6 +29,8 @@ type VNCCodec struct {
 }
 
 var _ proxycore.ScreenCodec = (*VNCCodec)(nil)
+var _ proxycore.SecretTyper = vncScreenSession{}
+var _ proxycore.SecretInputTransaction = vncScreenSession{}
 
 func (c *VNCCodec) Open(ctx context.Context, cred *proxycore.Credential) (proxycore.ScreenSession, error) {
 	if c == nil || c.TLSRoots == nil || cred == nil || cred.Type != "password" ||
@@ -93,6 +95,26 @@ func (s vncScreenSession) RequestKeyFrame() {
 	if requester, ok := s.ScreenSession.(proxycore.KeyFrameRequester); ok {
 		requester.RequestKeyFrame()
 	}
+}
+
+func (s vncScreenSession) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	typer, ok := s.ScreenSession.(interface {
+		WithExclusiveInput(context.Context, func() error) error
+	})
+	if !ok {
+		return proxycore.ErrSecretInjectionUnavailable
+	}
+	return typer.WithExclusiveInput(ctx, operation)
+}
+
+func (s vncScreenSession) TypeSecret(ctx context.Context, secret []byte) error {
+	typer, ok := s.ScreenSession.(interface {
+		TypeSecret(context.Context, []byte) error
+	})
+	if !ok {
+		return proxycore.ErrSecretInjectionUnavailable
+	}
+	return typer.TypeSecret(ctx, secret)
 }
 
 func (s vncScreenSession) Err() error {

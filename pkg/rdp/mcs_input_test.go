@@ -52,6 +52,52 @@ func TestMarshalRDPInputBuildsBoundedSlowPathInputPDU(t *testing.T) {
 	}
 }
 
+func TestMarshalRDPInputBuildsUnicodeKeyboardEvents(t *testing.T) {
+	units := []uint16{0x0041, 0x6c34, 0xd83d, 0xde42}
+	events := make([]RDPInputEvent, 0, len(units)*2)
+	for _, unit := range units {
+		events = append(events, RDPInputEvent{Type: RDPInputUnicode, Unicode: unit}, RDPInputEvent{Type: RDPInputUnicode, Unicode: unit, Released: true})
+	}
+	packet, err := marshalRDPInput(1007, 0x000103ea, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(packet)
+	_, share, err := readPERLength(packet[7+6:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if share[14] != rdpPDU2Input || binary.LittleEndian.Uint16(share[18:20]) != uint16(len(events)) {
+		t.Fatalf("Unicode Input PDU header = %x", share[:22])
+	}
+	for i, event := range events {
+		entry := share[22+i*12 : 34+i*12]
+		wantFlags := uint16(0)
+		if event.Released {
+			wantFlags = rdpKBDFlagsRelease
+		}
+		if binary.LittleEndian.Uint16(entry[4:6]) != rdpInputEventUnicode ||
+			binary.LittleEndian.Uint16(entry[6:8]) != wantFlags ||
+			binary.LittleEndian.Uint16(entry[8:10]) != event.Unicode || binary.LittleEndian.Uint16(entry[10:12]) != 0 {
+			t.Fatalf("Unicode event %d = %x", i, entry)
+		}
+	}
+	for name, bad := range map[string]RDPInputEvent{
+		"zero code unit":              {Type: RDPInputUnicode},
+		"scancode mixed":              {Type: RDPInputUnicode, Unicode: 'a', Scancode: 0x1e},
+		"pointer mixed":               {Type: RDPInputUnicode, Unicode: 'a', PointerFlags: rdpPtrFlagsMove},
+		"Unicode mixed into sync":     {Type: RDPInputSync, Unicode: 'a'},
+		"Unicode mixed into scancode": {Type: RDPInputScancode, Scancode: 0x1e, Unicode: 'a'},
+		"Unicode mixed into mouse":    {Type: RDPInputMouse, Unicode: 'a', PointerFlags: rdpPtrFlagsMove},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got, err := marshalRDPInput(1007, 0x000103ea, []RDPInputEvent{bad}); !errors.Is(err, ErrMCSConnection) || len(got) != 0 {
+				t.Fatalf("packet len=%d err=%v", len(got), err)
+			}
+		})
+	}
+}
+
 func TestMarshalRDPInputRejectsMalformedEventsAndBounds(t *testing.T) {
 	cases := map[string][]RDPInputEvent{
 		"empty":                     nil,

@@ -9,6 +9,7 @@ import (
 const (
 	rdpPDU2Input          = byte(28)
 	rdpInputEventScancode = uint16(0x0004)
+	rdpInputEventUnicode  = uint16(0x0005)
 	rdpInputEventMouse    = uint16(0x8001)
 	rdpKBDFlagsRelease    = uint16(0x8000)
 	rdpKBDFlagsExtended   = uint16(0x0100)
@@ -28,6 +29,7 @@ type RDPInputEventType byte
 const (
 	RDPInputScancode RDPInputEventType = 1
 	RDPInputMouse    RDPInputEventType = 2
+	RDPInputUnicode  RDPInputEventType = 4
 	// RDPInputSync is TS_SYNC_EVENT: the state of the toggle keys (ToggleFlags), which a client
 	// sends when it gains the focus (MS-RDPBCGR 2.2.8.1.1.3.1.1.5).
 	RDPInputSync RDPInputEventType = 3
@@ -44,6 +46,7 @@ const (
 type RDPInputEvent struct {
 	Type         RDPInputEventType
 	Scancode     byte
+	Unicode      uint16 // UTF-16 code unit for RDPInputUnicode only.
 	Extended     bool
 	Released     bool
 	PointerFlags uint16
@@ -123,7 +126,7 @@ func marshalRDPInput(userID uint16, shareID uint32, events []RDPInputEvent) ([]b
 		binary.LittleEndian.PutUint32(entry[0:4], 0) // eventTime is ignored by the server.
 		switch event.Type {
 		case RDPInputSync:
-			if event.Scancode != 0 || event.Extended || event.Released || event.PointerFlags != 0 ||
+			if event.Scancode != 0 || event.Unicode != 0 || event.Extended || event.Released || event.PointerFlags != 0 ||
 				event.X != 0 || event.Y != 0 || event.ToggleFlags&^rdpSyncToggleFlagsAll != 0 {
 				clear(payload)
 				return nil, ErrMCSConnection
@@ -131,7 +134,7 @@ func marshalRDPInput(userID uint16, shareID uint32, events []RDPInputEvent) ([]b
 			binary.LittleEndian.PutUint16(entry[4:6], rdpInputEventSync)
 			binary.LittleEndian.PutUint32(entry[8:12], event.ToggleFlags) // after two pad bytes
 		case RDPInputScancode:
-			if event.PointerFlags != 0 || event.X != 0 || event.Y != 0 || event.ToggleFlags != 0 || event.Scancode == 0 || event.Scancode > 0x7f {
+			if event.Unicode != 0 || event.PointerFlags != 0 || event.X != 0 || event.Y != 0 || event.ToggleFlags != 0 || event.Scancode == 0 || event.Scancode > 0x7f {
 				clear(payload)
 				return nil, ErrMCSConnection
 			}
@@ -148,12 +151,24 @@ func marshalRDPInput(userID uint16, shareID uint32, events []RDPInputEvent) ([]b
 			}
 			binary.LittleEndian.PutUint16(entry[6:8], flags)
 			binary.LittleEndian.PutUint16(entry[8:10], uint16(event.Scancode))
+		case RDPInputUnicode:
+			if event.Scancode != 0 || event.Extended || event.PointerFlags != 0 || event.X != 0 || event.Y != 0 || event.ToggleFlags != 0 || event.Unicode == 0 {
+				clear(payload)
+				return nil, ErrMCSConnection
+			}
+			binary.LittleEndian.PutUint16(entry[4:6], rdpInputEventUnicode)
+			flags := uint16(0)
+			if event.Released {
+				flags = rdpKBDFlagsRelease
+			}
+			binary.LittleEndian.PutUint16(entry[6:8], flags)
+			binary.LittleEndian.PutUint16(entry[8:10], event.Unicode)
 		case RDPInputMouse:
 			flags := event.PointerFlags
 			buttonFlags := flags & (rdpPtrFlagsButton1 | rdpPtrFlagsButton2 | rdpPtrFlagsButton3)
 			wheelBits := flags & rdpPtrFlagsWheelMask
 			wheelValid := flags&rdpPtrFlagsWheel != 0 && wheelBits&0x00ff != 0
-			if event.Scancode != 0 || event.Extended || event.Released || event.ToggleFlags != 0 || flags == 0 ||
+			if event.Scancode != 0 || event.Unicode != 0 || event.Extended || event.Released || event.ToggleFlags != 0 || flags == 0 ||
 				flags&^(rdpPtrFlagsMove|rdpPtrFlagsButton1|rdpPtrFlagsButton2|rdpPtrFlagsButton3|rdpPtrFlagsDown|rdpPtrFlagsWheel|rdpPtrFlagsWheelNeg|rdpPtrFlagsWheelMask) != 0 ||
 				flags&rdpPtrFlagsDown != 0 && buttonFlags == 0 ||
 				flags&rdpPtrFlagsWheel != 0 && !wheelValid ||

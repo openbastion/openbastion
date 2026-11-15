@@ -21,6 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/openbastion/openbastion/pkg/screenstream"
 	"github.com/openbastion/openbastion/pkg/tlspin"
@@ -270,6 +271,65 @@ func (s *Session) Close() error {
 		err = s.conn.Close()
 	})
 	return err
+}
+
+// WithExclusiveInput serializes a compound secret-input operation against ordinary RFB input.
+// TypeSecret must be called only from operation while this lock is held.
+func (s *Session) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	if s == nil || ctx == nil || operation == nil {
+		return errors.New("vnc: invalid exclusive input operation")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return operation()
+}
+
+// TypeSecret writes Unicode RFB key events while WithExclusiveInput holds writeMu.
+// It never uses the target clipboard and retains no reference to secret.
+func (s *Session) TypeSecret(ctx context.Context, secret []byte) error {
+	if s == nil || ctx == nil || len(secret) == 0 || !utf8.Valid(secret) {
+		return errors.New("vnc: invalid secret input")
+	}
+	stop := context.AfterFunc(ctx, func() { _ = s.Close() })
+	defer stop()
+	// Build one bounded write to avoid per-key network round trips. The encoded keysyms are
+	// secret-derived too, so the temporary buffer is explicitly cleared after the write.
+	encoded := make([]byte, 0, len(secret)*16)
+	defer clear(encoded)
+	for len(secret) > 0 {
+		r, size := utf8.DecodeRune(secret)
+		if size == 0 || r == utf8.RuneError && size == 1 || r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
+			return screenstream.ErrUnsupported
+		}
+		keysym := uint32(r)
+		if r > 0xff {
+			keysym = 0x01000000 | uint32(r)
+		}
+		if !validKeysym(keysym) {
+			return screenstream.ErrUnsupported
+		}
+		for _, down := range []byte{1, 0} {
+			var event [8]byte
+			event[0], event[1] = 4, down
+			binary.BigEndian.PutUint32(event[4:], keysym)
+			encoded = append(encoded, event[:]...)
+		}
+		secret = secret[size:]
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := writeFull(s.conn, encoded); err != nil {
+		_ = s.Close()
+		return err
+	}
+	return nil
 }
 
 func (s *Session) Input(e screenstream.InputEvent) error {

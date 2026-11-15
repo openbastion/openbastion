@@ -83,6 +83,37 @@ func TestOpenVeNCryptX509PlainFrameAndInput(t *testing.T) {
 	}
 }
 
+func TestSessionTypeSecretUsesUnicodeKeyEventsWithoutClipboard(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+	session := &Session{conn: client, pressed: make(map[uint32]struct{}), done: make(chan struct{})}
+	secret := []byte("Aé水🙂")
+	want := []uint32{0x41, 0xe9, 0x01006c34, 0x0101f642}
+	result := make(chan error, 1)
+	go func() {
+		result <- session.WithExclusiveInput(context.Background(), func() error {
+			return session.TypeSecret(context.Background(), secret)
+		})
+	}()
+	for _, keysym := range want {
+		for _, down := range []byte{1, 0} {
+			var message [8]byte
+			if _, err := io.ReadFull(server, message[:]); err != nil {
+				t.Fatalf("read RFB key event: %v", err)
+			}
+			if message[0] != 4 || message[1] != down || binary.BigEndian.Uint32(message[4:]) != keysym {
+				t.Fatalf("RFB key event = %x, want type 4 down=%d keysym=%08x", message, down, keysym)
+			}
+		}
+	}
+	if err := <-result; err != nil {
+		t.Fatalf("TypeSecret: %v", err)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
 func TestOpenRejectsWrongCertificatePinBeforeAuthentication(t *testing.T) {
 	serverCert, leaf := vncTestCertificate(t)
 	roots := x509.NewCertPool()

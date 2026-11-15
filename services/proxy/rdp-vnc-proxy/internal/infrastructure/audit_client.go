@@ -37,7 +37,30 @@ func (c *AuditHTTPClient) EmitClipboard(ctx context.Context, sessionID string, e
 		Success: event.Success, Details: proxycore.ClipboardDetails(event)})
 }
 
+// AuditSecretInput stores only the protocol and Vault account reference; secret bytes never enter the audit request.
+func (c *AuditHTTPClient) AuditSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
+	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	return c.emit(ctx, auditEventRequest{Action: "session.secret_injection_started", ResourceType: "session", ResourceID: evidence.SessionID,
+		Success: true, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID}})
+}
+
+// AuditSecretInputResult records whether the proxy's target-input attempt completed.
+func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence proxycore.SecretInputEvidence, success bool) error {
+	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	action := "session.secret_injected"
+	if !success {
+		action = "session.secret_injection_failed"
+	}
+	return c.emit(ctx, auditEventRequest{Action: action, ResourceType: "session", ResourceID: evidence.SessionID,
+		Success: success, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID}})
+}
+
 var _ proxycore.ClipboardAuditor = (*AuditHTTPClient)(nil)
+var _ proxycore.SecretInputAuditor = (*AuditHTTPClient)(nil)
 
 func (c *AuditHTTPClient) emit(ctx context.Context, event auditEventRequest) error {
 	body, err := json.Marshal(event)

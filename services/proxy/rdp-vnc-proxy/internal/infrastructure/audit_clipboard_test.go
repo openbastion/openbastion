@@ -14,6 +14,48 @@ import (
 
 // session.clipboard carries the direction, the size and the hash in its details (ADR-0068,
 // ADR-0096 §5); the other events carry none, as before.
+
+func TestAuditHTTPClient_SecretInputEventsContainOnlyVaultReference(t *testing.T) {
+	var got []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			return
+		}
+		got = append(got, body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := &infrastructure.AuditHTTPClient{BaseURL: server.URL}
+	evidence := proxycore.SecretInputEvidence{SessionID: "s-vnc", Protocol: "vnc", Source: proxycore.SecretInputVault, AccountID: "account-prod"}
+	if err := client.AuditSecretInput(context.Background(), evidence); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AuditSecretInputResult(context.Background(), evidence, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AuditSecretInputResult(context.Background(), evidence, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d events", len(got))
+	}
+	wantActions := []string{"session.secret_injection_started", "session.secret_injected", "session.secret_injection_failed"}
+	for i, body := range got {
+		details, _ := body["details"].(map[string]any)
+		if body["action"] != wantActions[i] || body["resource_type"] != "session" || body["resource_id"] != "s-vnc" ||
+			details["protocol"] != "vnc" || details["account_id"] != "account-prod" || len(details) != 2 {
+			t.Fatalf("event %d = %#v", i, body)
+		}
+		for _, forbidden := range []string{"secret", "password", "length", "sha256", "value"} {
+			if _, exists := body[forbidden]; exists {
+				t.Fatalf("event leaked %q: %#v", forbidden, body)
+			}
+		}
+	}
+}
+
 func TestAuditHTTPClient_ClipboardDetails(t *testing.T) {
 	var got []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -126,6 +126,8 @@ var contractPairs = []contractPair{
 		map[string]string{"context": whyContext}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
 		map[string]string{"context": whyContext}},
+	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
+		map[string]string{"context": whyContext}},
 	// ADR-0097: the Gateway/Broker proof DTOs are intentionally narrower than the full Authentication RPC.
 	{"services/access/session-broker/internal/interfaces/http.go", "secretStepUpRequest", "proto/authentication/v1/action_step_up.proto", "StartMFAActionStepUpRequest",
 		map[string]string{"callerId": "verified actor identity, flattened by the Gateway", "actorRoles": "verified roles are flattened for Broker authorization"},
@@ -254,6 +256,7 @@ func TestContract_EveryInternalRouteCarriesTheFieldsOfItsProtoMessage_OrSaysWhyN
 var anonymousAllowed = map[string]string{
 	"services/access/authentication/internal/infrastructure/oidc_provider.go":  "the OIDC provider's discovery document and token response (ADR-0035)",
 	"services/access/authentication/internal/infrastructure/providers_file.go": "the required fields of IDENTITY_PROVIDERS_FILE, named in its errors (ADR-0076): no body is built there",
+	"services/proxy/rdp-vnc-proxy/internal/infrastructure/audit_client.go":     "protocol and account_id are keys in the nested audit details map, not standalone JSON request bodies; auditEventRequest is covered above",
 }
 
 // anonymousJSON lists, in a Go file, the anonymous structs with snake_case json tags and the map

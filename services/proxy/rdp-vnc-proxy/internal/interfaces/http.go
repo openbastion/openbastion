@@ -3,7 +3,9 @@ package interfaces
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -25,6 +27,9 @@ type HTTPServer struct {
 	rdpCodec       proxycore.ScreenCodec
 	recorder       *infrastructure.VideoRecorderClient
 	gate           proxycore.ScreenRecorderGate
+	secretInputs   *infrastructure.SecretInputRegistry
+	secretFetcher  *proxycore.CredentialFetcher
+	secretAuditor  proxycore.SecretInputAuditor
 	endpoint       string
 	allowedOrigins []string
 }
@@ -39,11 +44,18 @@ func (s *HTTPServer) WithRDP(codec proxycore.ScreenCodec) *HTTPServer {
 	return s
 }
 
+// WithSecretInputs enables the Session Broker's mTLS-only Vault injection path.
+func (s *HTTPServer) WithSecretInputs(registry *infrastructure.SecretInputRegistry, fetcher *proxycore.CredentialFetcher, auditor proxycore.SecretInputAuditor) *HTTPServer {
+	s.secretInputs, s.secretFetcher, s.secretAuditor = registry, fetcher, auditor
+	return s
+}
+
 func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/internal/v1/establish-session", s.establish)
 	mux.HandleFunc("/internal/v1/revoke-session", s.revoke)
+	mux.HandleFunc("/internal/v1/inject-vault-secret", s.injectVaultSecret)
 	mux.HandleFunc("/internal/v1/screen", s.screen)
 	return mux
 }
@@ -160,6 +172,52 @@ func (s *HTTPServer) revoke(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(revokeResponse{TicketsRevoked: tickets, ConnectionsCut: cut})
+}
+
+type injectVaultSecretRequest struct {
+	SessionID  string `json:"session_id"`
+	AccountID  string `json:"account_id"`
+	ScopeToken string `json:"vault_scope_token"`
+}
+
+// injectVaultSecret is called only by Session Broker over mTLS. The scope is
+// exchanged by this proxy directly with Vault; neither Gateway nor Broker sees bytes.
+func (s *HTTPServer) injectVaultSecret(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req injectVaultSecretRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || req.SessionID == "" || len(req.SessionID) > 256 || req.AccountID == "" || len(req.AccountID) > 128 || req.ScopeToken == "" || len(req.ScopeToken) > 8192 {
+		http.Error(w, "invalid secret injection request", http.StatusBadRequest)
+		return
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "invalid secret injection request", http.StatusBadRequest)
+		return
+	}
+	if s.secretInputs == nil || s.secretFetcher == nil || s.secretAuditor == nil {
+		http.Error(w, "secret injection unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	err := s.secretInputs.InjectVaultScope(r.Context(), req.SessionID, req.AccountID, req.ScopeToken, s.secretFetcher, s.secretAuditor)
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, infrastructure.ErrSecretSessionInactive):
+		http.Error(w, "session input is not active", http.StatusNotFound)
+	case errors.Is(err, infrastructure.ErrSecretSessionAmbiguous):
+		http.Error(w, "session has multiple active input streams", http.StatusConflict)
+	case errors.Is(err, proxycore.ErrSecretInjectionInvalid):
+		http.Error(w, "secret injection refused", http.StatusConflict)
+	default:
+		log.Printf("rdp-vnc-proxy: Vault injection refused for session %s: %v", req.SessionID, err)
+		http.Error(w, "secret injection unavailable", http.StatusServiceUnavailable)
+	}
 }
 
 func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
