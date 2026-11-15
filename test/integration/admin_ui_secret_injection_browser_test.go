@@ -20,9 +20,12 @@ import (
 )
 
 func TestAdminUI_SecretInjectionStepUpInAHeadlessBrowser(t *testing.T) {
-	chrome := findChrome()
+	// This test owns a Vite/npm preview and is prepared by the dedicated browser CI job.
+	// Do not auto-discover a runner-wide Chrome in other integration jobs (notably PostgreSQL),
+	// where the UI dependencies are intentionally not installed.
+	chrome := os.Getenv("CHROME")
 	if chrome == "" {
-		t.Skip("no Chrome: set CHROME, or put google-chrome or chromium on PATH")
+		t.Skip("CHROME is not set; run from the dedicated Admin UI browser CI job")
 	}
 	root := repoRoot(t)
 	token := browserTestToken(t)
