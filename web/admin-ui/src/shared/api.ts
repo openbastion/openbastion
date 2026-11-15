@@ -200,3 +200,29 @@ export interface RecordingPage {
   pageSize: number;
   totalEntries: number;
 }
+
+
+// Read-only projection of immutable Vault secret-injection audit evidence (ADR-0112/0113).
+export interface SecretInjectionOutcome {
+  injection_id: string;
+  session_id: string;
+  account_id: string;
+  protocol: "ssh" | "rdp" | "vnc";
+  emitter?: string;
+  status: "completed" | "failed" | "outcome_unknown";
+  reason?: string;
+  started_at?: string;
+  finished_at?: string;
+  start_event_id?: string;
+  result_event_id?: string;
+}
+
+export interface SecretInjectionReconciliation {
+  outcomes: SecretInjectionOutcome[];
+  coverage: "retained_audit_chain" | "verified_archives_and_retained_chain";
+  archived_history_excluded: boolean;
+  scanned_events: number;
+  archived_events: number;
+  has_more: boolean;
+  next_before?: string;
+}

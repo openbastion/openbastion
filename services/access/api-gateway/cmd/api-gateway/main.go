@@ -59,6 +59,7 @@ func runService() {
 	vaultURL := mustEnv("VAULT_URL", rt.DefaultURL("127.0.0.1:8081"))
 	authorizationURL := mustEnv("AUTHORIZATION_URL", rt.DefaultURL("127.0.0.1:8083"))
 	commandRecorderURL := mustEnv("COMMAND_RECORDER_URL", rt.DefaultURL("127.0.0.1:8087"))
+	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
 	videoRecorderGRPCURL := mustEnv("VIDEO_RECORDER_GRPC_URL", rt.DefaultURL("127.0.0.1:8089"))
 	videoRecorderClient, err := infrastructure.NewVideoRecorderGRPCClient(rt, videoRecorderGRPCURL)
 	if err != nil {
@@ -74,6 +75,7 @@ func runService() {
 		mtls.Peer{URL: vaultURL, Service: mtls.PasswordVault},
 		mtls.Peer{URL: authorizationURL, Service: mtls.Authorization},
 		mtls.Peer{URL: commandRecorderURL, Service: mtls.CommandRecorder},
+		mtls.Peer{URL: auditURL, Service: mtls.AuditService},
 	)
 	if err != nil {
 		log.Fatalf("api-gateway: %v", err)
@@ -132,7 +134,8 @@ func runService() {
 		WithSessionActionLimiter(application.NewSessionActionLimiter(actionBurst, actionRate)).
 		WithVaultAccountActionLimiter(application.NewVaultAccountActionLimiter(vaultActionBurst, vaultActionRate)).
 		WithProxyTrust(trust).
-		WithVideoRecorderClient(videoRecorderClient)
+		WithVideoRecorderClient(videoRecorderClient).
+		WithAuditServiceURL(auditURL)
 
 	// The Admin UI (ADR-0036), same origin as the API: served only when given.
 	if dir := os.Getenv("ADMIN_UI_DIR"); dir != "" {
@@ -152,6 +155,7 @@ func runService() {
 	log.Printf("  -> vault:           %s", vaultURL)
 	log.Printf("  -> authorization:   %s", authorizationURL)
 	log.Printf("  -> command-recorder: %s", commandRecorderURL)
+	log.Printf("  -> audit-service:    %s", auditURL)
 	log.Printf("  -> video-recorder (gRPC): %s", videoRecorderGRPCURL)
 	log.Printf("  POST /sessions: at most %d at once per user, then %d per minute (this process only; a request refused for it never reaches the Broker)", sessionBurst, sessionRate)
 	log.Printf("  approve, reject, connect, terminate: at most %d at once per user, then %d per minute, one budget for the four, not that of POST /sessions (this process only; an action refused for it never reaches the Broker)", actionBurst, actionRate)

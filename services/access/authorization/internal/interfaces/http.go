@@ -37,12 +37,13 @@ func (s *HTTPServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 // -- policies (mirrors POST /policies, docs/api/rest/openapi.yaml) ---------------------
 
 type createPolicyRequest struct {
-	Name            string   `json:"name"`
-	Role            string   `json:"role"`
-	ResourcePattern string   `json:"resourcePattern"`
-	Effect          string   `json:"effect"`
-	CreatedBy       string   `json:"createdBy"`
-	ActorRoles      []string `json:"actorRoles"`
+	Name            string          `json:"name"`
+	Role            string          `json:"role"`
+	ResourcePattern string          `json:"resourcePattern"`
+	ActionPattern   json.RawMessage `json:"actionPattern"`
+	Effect          string          `json:"effect"`
+	CreatedBy       string          `json:"createdBy"`
+	ActorRoles      []string        `json:"actorRoles"`
 }
 
 type createPolicyResponse struct {
@@ -55,7 +56,18 @@ func (s *HTTPServer) handleCreatePolicy(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	p, err := s.svc.CreatePolicy(r.Context(), req.ActorRoles, req.Name, req.Role, req.ResourcePattern, domain.Effect(req.Effect), req.CreatedBy)
+	// Omission preserves the pre-ADR-0114 policy semantics for existing API clients.
+	// An explicitly empty or null actionPattern is not omission and must fail validation.
+	// New narrowly-scoped policies should always supply an explicit actionPattern.
+	actionPattern := "*"
+	if len(req.ActionPattern) > 0 {
+		actionPattern = ""
+		if err := json.Unmarshal(req.ActionPattern, &actionPattern); err != nil || actionPattern == "" {
+			http.Error(w, domain.ErrInvalidPolicyPattern.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	p, err := s.svc.CreatePolicy(r.Context(), req.ActorRoles, req.Name, req.Role, req.ResourcePattern, actionPattern, domain.Effect(req.Effect), req.CreatedBy)
 	if err != nil {
 		// A refusal says why; a duplicate is a conflict; anything else is the store failing —
 		// a 503 whose cause stays in this log (ADR-0043): the Gateway relays this body.
@@ -64,6 +76,8 @@ func (s *HTTPServer) handleCreatePolicy(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusForbidden)
 		case errors.Is(err, domain.ErrAlreadyExists):
 			http.Error(w, domain.ErrAlreadyExists.Error(), http.StatusConflict)
+		case errors.Is(err, domain.ErrInvalidPolicyPattern):
+			http.Error(w, domain.ErrInvalidPolicyPattern.Error(), http.StatusBadRequest)
 		default:
 			log.Printf("authorization: creating a policy failed: %v", err)
 			http.Error(w, "the policy was not created: a dependency is unavailable, try again shortly", http.StatusServiceUnavailable)
