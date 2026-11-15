@@ -23,20 +23,35 @@ type Policy struct {
 	Name            string
 	Role            string
 	ResourcePattern string
+	ActionPattern   string
 	Effect          Effect
 	CreatedBy       string
 	CreatedAt       time.Time
 }
 
-// Matches reports whether resource satisfies p's ResourcePattern. Patterns
-// support a single trailing "*" wildcard (e.g. "vault:account:prod-*"); any
-// other pattern is matched exactly. This is deliberately the simplest rule
-// that covers docs/architecture/system-overview.md's example patterns — a richer glob/ABAC matcher is a
-// v0.0.1 concern (docs/security/security-overview.md), not an MVP one.
-func (p Policy) Matches(resource string) bool {
-	if strings.HasSuffix(p.ResourcePattern, "*") {
-		prefix := strings.TrimSuffix(p.ResourcePattern, "*")
-		return strings.HasPrefix(resource, prefix)
+// Matches reports whether both resource and action satisfy the policy patterns.
+// Patterns support a single trailing "*" wildcard; any other pattern is exact.
+// A policy is applicable only when BOTH dimensions match (ADR-0114).
+func (p Policy) Matches(resource, action string) bool {
+	return matchesPattern(p.ResourcePattern, resource) && matchesPattern(p.ActionPattern, action)
+}
+
+// ValidPattern accepts a non-empty exact value or a value with one trailing wildcard.
+func ValidPattern(pattern string) bool {
+	if pattern == "" {
+		return false
 	}
-	return p.ResourcePattern == resource
+	index := strings.IndexByte(pattern, '*')
+	return index == -1 || (index == len(pattern)-1 && strings.LastIndexByte(pattern, '*') == index)
+}
+
+func matchesPattern(pattern, value string) bool {
+	if pattern == "" || value == "" {
+		return false
+	}
+	if strings.HasSuffix(pattern, "*") {
+		prefix := strings.TrimSuffix(pattern, "*")
+		return strings.HasPrefix(value, prefix)
+	}
+	return pattern == value
 }

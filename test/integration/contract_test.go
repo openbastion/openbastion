@@ -146,6 +146,7 @@ var contractPairs = []contractPair{
 var notMirrored = map[string]string{
 	"authorization/checkAccessRequest":         "the Authorization contract is described in docs/api/grpc/README.md §8, not yet in proto/",
 	"authorization/checkAccessResponse":        "idem",
+	"api-gateway/accessDecisionRequest":        "Gateway-to-Authorization CheckAccess HTTP/JSON adapter; same action/resource semantics are documented in docs/api/grpc/README.md §8 (ADR-0114)",
 	"session-broker/checkAccessRequestBody":    "idem — the Broker's client of it",
 	"session-broker/checkAccessResponseBody":   "idem",
 	"password-vault/checkAccessRequestBody":    "idem — the Vault's client of it",

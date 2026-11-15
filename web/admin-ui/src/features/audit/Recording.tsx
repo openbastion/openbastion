@@ -7,6 +7,7 @@ import { Pager } from "../../shared/ui/Pager";
 import { Badge } from "../../shared/ui/Badge";
 import { VideoReplay } from "./VideoReplay";
 import { useAppTranslation } from "../../shared/i18n";
+import { SecretInjectionReconciliation } from "./SecretInjectionReconciliation";
 
 const pageSize = 100;
 
@@ -69,6 +70,7 @@ export function Recording() {
         </section>
       ) : null}
       <VideoReplay />
+      <SecretInjectionReconciliation />
     </AdminPage>
   );
 }

@@ -510,7 +510,7 @@ service Authorization {
 message CheckAccessRequest {
   openbastion.common.v1.RequestContext context = 1;
   string resource = 2;            // ex. "vault:account:prod-db-01"
-  string action = 3;              // ex. "session:create"
+  string action = 3;              // ex. "session:create" ; obligatoire, évaluée avec resource (ADR-0114)
 }
 
 message CheckAccessResponse {
