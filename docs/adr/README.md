@@ -14,7 +14,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 |---|---|---|
 | 1 | [Fondations du code](#1-fondations-du-code) | 6 |
 | 2 | [Communication entre services](#2-communication-entre-services) | 3 |
-| 3 | [Invariants de sécurité transverses](#3-invariants-de-sécurité-transverses) | 4 |
+| 3 | [Invariants de sécurité transverses](#3-invariants-de-sécurité-transverses) | 5 |
 | 4 | [Identité et authentification](#4-identité-et-authentification) | 10 |
 | 5 | [Coffre, secrets et confiance dans les cibles](#5-coffre-secrets-et-confiance-dans-les-cibles) | 13 |
 | 6 | [Sessions : cycle de vie et contrôle](#6-sessions--cycle-de-vie-et-contrôle) | 8 |
@@ -61,6 +61,7 @@ Les règles que tout le reste respecte : secrets, enregistrement, refus.
 | 2 | [ADR-0008](0008-enregistrer-ou-refuser-une-session-qui-ne-peut-pas-etre.md) | Enregistrer ou refuser : une session qui ne peut pas être enregistrée n'a pas lieu | Accepté |
 | 3 | [ADR-0042](0042-un-refus-dit-son-motif-a-l-operateur-par-un-code-stable-et.md) | Un refus dit son motif à l'opérateur par un code stable, et une panne ne dit jamais sa cause | Accepté |
 | 4 | [ADR-0043](0043-aucune-route-publique-ne-rend-le-texte-d-une-erreur-interne.md) | Aucune route publique ne rend le texte d'une erreur interne ; une session ne se crée que sur un compte qui existe et dont la clé est épinglée | Accepté |
+| 5 | [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté |
 
 ### 4. Identité et authentification
 
@@ -177,7 +178,7 @@ La trace : ce qu'elle accepte, comment elle est chaînée, ancrée, archivée, e
 | 8 | [ADR-0045](0045-une-alerte-ecrite-a-l-audit-est-poussee-par-un-webhook-signe.md) | Une alerte écrite à l'audit est poussée par un webhook signé, et seulement si celui qui l'écrit a le droit de la dire | Accepté |
 | 9 | [ADR-0057](0057-les-alertes-en-attente-survivent-a-un-redemarrage.md) | Avec une base, les alertes en attente d'un renvoi survivent à un redémarrage de l'Audit Service | Accepté |
 | 10 | [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté |
-| 11 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Proposé |
+| 11 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Accepté |
 
 ### 11. Lectures auditées
 
@@ -364,4 +365,5 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0110](0110-les-evenements-agent-sont-attribues-et-separes-de-la-preuve-daudit-pam.md) | Les événements agent sont attribués et séparés de la preuve d'audit PAM | Proposé | Agents distribués |
 | [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Proposé | Enregistrement et relecture |
 | [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté | Chaîne d’audit |
-| [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Proposé | Chaîne d'audit |
+| [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Accepté | Chaîne d'audit |
+| [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté | Invariants de sécurité transverses |

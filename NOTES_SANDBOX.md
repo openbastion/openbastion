@@ -4760,6 +4760,33 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Restent SI-03 : test multi-processus simulant la perte de l'acquittement Audit après frappe et prouvant l'absence de retry ; E2E PostgreSQL 16 avec écriture d'archive puis lecture après redémarrage ; intégration Admin UI après acceptation d'ADR-0113. Aucun test Windows local.
 
 
+## 2026-11-15 — ADR-0113 accepté : façade Gateway et rapprochement Admin UI
+
+- Le propriétaire accepte la façade Gateway en lecture seule, la permission transverse explicite `audit:secret-injections:read` sur `audit:secret-injections:all`, et l’absence d’événement de consultation dans la chaîne audit consultée. Aucun certificat `admin-cli` n’est remis au navigateur.
+- PR #216 (`security/adr-0097-si03-operator-reconciliation`) était verte sur le commit CLI `a13028c2c16b81fce2f68a34362f6cbdaf8330e7` (workflow #43743600914, succès). La PR reste ouverte et non fusionnée ; l’incrément UI/Gateway est ajouté à cette branche, sans fusion ni suppression de branche.
+- Gateway (prototype local non poussé) : route `GET /audit/secret-injections`, authentification bearer, appel Authorization avec la ressource et l’action dédiées, appel Audit Service sous mTLS `api-gateway`, query allowlist `limit`/`before`, réponse JSON bornée à 2 Mio et `Cache-Control: no-store`. Le service Audit n’autorise cette lecture qu’à `admin-cli` et `api-gateway`.
+- **Blocage de sécurité avant publication :** le contrat Authorization reçoit `action`, mais `AuthorizationService.CheckAccess` n’en tient actuellement pas compte ; les politiques ne sont évaluées que sur `resourcePattern`. Il faut définir et implémenter un `ActionPattern` (avec migration rétrocompatible et tests) ou réviser explicitement ADR-0113. Ne pas pousser/merger la façade comme si l’action était appliquée tant que ce point n’est pas résolu.
+- Admin UI : panneau de rapprochement dans Enregistrements, couverture d’archives affichée, pagination par curseur, validation de la réponse, états chargement/vide/erreur/403/503, avertissement manuel pour `failed` et `outcome_unknown`, aucun geste de réinjection.
+- Contrats et déploiement : OpenAPI public, contrat interne Audit, docs d’administration, AUDIT_URL et pair mTLS Gateway mis à jour.
+- Validation partielle : `npm ci` Admin UI et build du package d’icônes réussis ; `make ui-test` : PASS, 243 tests / 25 fichiers ; `make ui-build` (typecheck + Vite production) : PASS. Le premier essai a échoué sur une course `npm ci` simultanée (ENOTEMPTY dans `.vitest-cache`), relancé séquentiellement. Les tests Go Gateway sont bloqués localement car `buf`/artefacts `proto/recording/v1` sont absents ; aucun outil installé.
+- Aucune modification du checkout principal, aucun test Windows local, aucune fusion de PR.
+
+
+## 2026-11-15 — ADR-0113/0114 Draft : exposition UI et politiques ressource/action
+
+- PR #216 est fusionnée dans `main` (squash `536201571fc5c66772ee1e7437c94b8e99882515`). L'ancien worktree de la PR #216 a été conservé, mais la nouvelle branche a été créée depuis `origin/main` actualisé dans `/tmp/openbastion-adr0097-si03-operator-reconciliation`. Checkout principal inchangé.
+- Branche de travail : `security/adr-0113-0114-authorization-actions`.
+- ADR-0113 passé à Accepté et son panneau Admin UI / façade Gateway ajoutés aux changements locaux de la future Draft PR. La Gateway exige action `audit:secret-injections:read` ET ressource `audit:secret-injections:all`, appelle Audit Service avec son identité mTLS, et ne relaie que `limit`/`before`.
+- ADR-0114 accepté : `Policy.ActionPattern`, correspondance conjointe ressource/action, deny-overrides parmi les politiques qui correspondent aux deux dimensions, refus si l'une est vide, validation stricte de motif exact ou joker terminal unique. Bootstrap `authz:policy-admin` limité à `authz:policy:create`.
+- Migration Authorization `002_action_pattern.sql` additive : `action_pattern TEXT NOT NULL DEFAULT '*'`, remplacement de l'unicité par `(role, resource_pattern, action_pattern, effect)`. Les politiques historiques gardent leur sémantique précédente sur les actions ; elles devront être réduites progressivement. L'omission HTTP de `actionPattern` est compatible et devient `*`.
+- Tests Authorization : `go test ./services/access/authorization/... -count=1`, `go test -race ./services/access/authorization/... -count=1`, `go vet ./services/access/authorization/...` PASS. PostgreSQL 16 éphémère dédié : migrations versions 1 et 2 appliquées ; tests du store PASS, y compris roundtrip action, deux actions distinctes pour même rôle/ressource et migration 002 appliquée à une table préexistante avec conservation `action_pattern=*`. Conteneur supprimé à la fin du test.
+- Gateway : `go test ./services/access/api-gateway/... -count=1` PASS après génération Protobuf ; Audit callers tests PASS ; contrat `TestContract_NoInternalJSONStructEscapesTheTable` PASS. `make build` PASS sur tous les modules ; `go vet` Gateway, Authorization et Audit Service PASS ; `make proto-lint` PASS.
+- Admin UI : `make ui-test` PASS, 243 tests / 25 fichiers ; `make ui-build` PASS (TypeScript + Vite production).
+- OpenAPI YAML parsé et contrôlé ; les deux fichiers Docker Compose passent `docker compose config --quiet`.
+- Les outils Protobuf ont été installés isolément sous `/tmp/openbastion-proto-tools` (pas dans le PATH global ni dans le dépôt) afin de générer les fichiers ignorés et débloquer les tests Gateway.
+- Aucune fusion, aucune suppression de worktree/branche locale, aucun test Windows local.
+
+
 ## 2026-11-15 — ADR-0097 SI-03 : perte d’acquittement Audit après commit
 
 - Branche isolée : `test/adr-0097-audit-ack-loss-multiprocess`, worktree `/tmp/openbastion-adr0097-audit-ack-loss-multiprocess`, créé depuis `origin/main` (`536201571fc5c66772ee1e7437c94b8e99882515`). Le checkout principal et les worktrees des PR en cours n’ont pas été modifiés.

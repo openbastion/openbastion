@@ -357,8 +357,11 @@ services:
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
       VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
+      AUDIT_URL: https://audit-service:8082
       # The Admin UI under /ui/, same origin as the API (ADR-0036).
       ADMIN_UI_DIR: /usr/local/share/openbastion/admin-ui
+    depends_on:
+      audit-service: {condition: service_healthy}
     ports:
       - "${OB_BIND:-127.0.0.1}:${OB_GATEWAY_PORT:-8080}:8080"
     volumes:

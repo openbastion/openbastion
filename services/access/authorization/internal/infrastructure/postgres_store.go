@@ -46,9 +46,9 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Create(ctx context.Context, p *domain.Policy) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO policies (id, name, role, resource_pattern, effect, created_by, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, now())`,
-		p.ID, p.Name, p.Role, p.ResourcePattern, string(p.Effect), p.CreatedBy)
+		INSERT INTO policies (id, name, role, resource_pattern, action_pattern, effect, created_by, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+		p.ID, p.Name, p.Role, p.ResourcePattern, p.ActionPattern, string(p.Effect), p.CreatedBy)
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) && pqErr.Code == "23505" { // unique_violation
 		return domain.ErrAlreadyExists
@@ -65,7 +65,7 @@ func (s *PostgresStore) ForRoles(ctx context.Context, roles []string) ([]*domain
 		return nil, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, role, resource_pattern, effect, created_by, created_at
+		SELECT id, name, role, resource_pattern, action_pattern, effect, created_by, created_at
 		FROM policies WHERE role = ANY($1)`, pq.Array(roles))
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (s *PostgresStore) ForRoles(ctx context.Context, roles []string) ([]*domain
 		var p domain.Policy
 		var effect string
 		var createdBy sql.NullString
-		if err := rows.Scan(&p.ID, &p.Name, &p.Role, &p.ResourcePattern, &effect, &createdBy, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Role, &p.ResourcePattern, &p.ActionPattern, &effect, &createdBy, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		p.Effect = domain.Effect(effect)

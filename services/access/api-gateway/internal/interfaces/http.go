@@ -67,6 +67,7 @@ type GatewayServer struct {
 	authorizationURL  string
 	// commandRecorderURL is where GET /sessions/{id}/recording is routed.
 	commandRecorderURL string
+	auditURL           string
 	videoRecorder      VideoRecorderClient
 	httpClient         *http.Client
 	screenAttaches     *gatewayinfra.ScreenAttachRegistry
@@ -143,6 +144,12 @@ func (g *GatewayServer) WithHTTPClient(c *http.Client) *GatewayServer {
 	return g
 }
 
+// WithAuditServiceURL configures the mTLS-protected Audit Service used by the read-only operator projection.
+func (g *GatewayServer) WithAuditServiceURL(url string) *GatewayServer {
+	g.auditURL = strings.TrimRight(url, "/")
+	return g
+}
+
 // WithVideoRecorderClient installs the internal reader; a nil client keeps replay fail-closed.
 func (g *GatewayServer) WithVideoRecorderClient(client VideoRecorderClient) *GatewayServer {
 	g.videoRecorder = client
@@ -198,6 +205,8 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	// The search of recorded commands (ADR-0080), served by the Command Recorder.
 	mux.HandleFunc("/recordings/search", g.requireAuth(g.handleRecordingSearch))
+	// Cross-session injection audit is a separate permission, never implied by session or platform roles (ADR-0113).
+	mux.HandleFunc("/audit/secret-injections", g.requireAuth(g.handleSecretInjectionReconciliation))
 	// The search of sessions (ADR-0080), more specific than /sessions/{id}.
 	mux.HandleFunc("/sessions/search", g.requireAuth(g.handleSessionSearch))
 	mux.HandleFunc("/sessions/", g.handleSessionRoute)

@@ -1423,6 +1423,64 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /audit/secret-injections:
+    get:
+      summary: Rapprocher les injections de secrets depuis l’audit vérifié
+      description: >-
+        Lecture transverse protégée par Authorization. Requiert la permission explicite
+        audit:secret-injections:read sur audit:secret-injections:all. Les résultats ne
+        contiennent aucun secret. outcome_unknown et failed imposent une vérification
+        manuelle ; cette route ne permet jamais de relancer une injection.
+      operationId: listSecretInjectionReconciliation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - in: query
+          name: before
+          schema: { type: string, pattern: '^[0-9a-f]{32}$' }
+      responses:
+        '200':
+          description: Projection read-only de la chaîne et des archives vérifiées
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcomes, coverage, archived_history_excluded, scanned_events, archived_events, has_more]
+                properties:
+                  outcomes:
+                    type: array
+                    items:
+                      type: object
+                      required: [injection_id, session_id, account_id, protocol, status]
+                      properties:
+                        injection_id: { type: string, pattern: '^[0-9a-f]{32}$' }
+                        session_id: { type: string }
+                        account_id: { type: string }
+                        protocol: { type: string, enum: [ssh, rdp, vnc] }
+                        emitter: { type: string }
+                        status: { type: string, enum: [completed, failed, outcome_unknown] }
+                        reason: { type: string }
+                        started_at: { type: string, format: date-time }
+                        finished_at: { type: string, format: date-time }
+                        start_event_id: { type: string }
+                        result_event_id: { type: string }
+                  coverage: { type: string, enum: [retained_audit_chain, verified_archives_and_retained_chain] }
+                  archived_history_excluded: { type: boolean, enum: [false] }
+                  scanned_events: { type: integer, minimum: 0 }
+                  archived_events: { type: integer, minimum: 0 }
+                  has_more: { type: boolean }
+                  next_before: { type: string, pattern: '^[0-9a-f]{32}$' }
+        '400': { description: Paramètre de pagination invalide }
+        '401': { description: Jeton absent ou invalide }
+        '403': { description: Permission d’audit transverse absente }
+        '409': { description: Curseur historique expiré }
+        '503': { description: Authorization ou audit historique indisponible }
   /recordings/search:
     get:
       tags: [sessions]
@@ -1777,7 +1835,7 @@ paths:
         "403":
           description: L'appelant ne peut pas créer de politique ; le corps dit pourquoi.
         "409":
-          description: Une politique pour ce rôle, ce motif de ressource et cet effet existe déjà (ADR-0043).
+          description: Une politique pour ce rôle, ces motifs de ressource et d’action et cet effet existe déjà (ADR-0043, ADR-0114).
         "503":
           description: Le magasin des politiques ne répond pas ; rien n'est créé. Le corps ne dit pas la cause (ADR-0043).
 
@@ -2144,6 +2202,7 @@ components:
         name: { type: string }
         role: { type: string }
         resourcePattern: { type: string, example: "vault:account:prod-*" }
+        actionPattern: { type: string, default: "*", example: "session:create", description: "ADR-0114 : valeur exacte ou joker final. Seule l'omission vaut temporairement * pour compatibilité ; une valeur vide ou null est rejetée. Déclarer explicitement les actions pour les nouvelles politiques." }
         effect: { type: string, enum: [allow, deny] }
 
     Policy:

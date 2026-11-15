@@ -136,3 +136,8 @@ openbastion-cli audit secret-injections \
 ```
 
 `completed` signifie uniquement qu'un événement terminal positif cohérent a été journalisé ; cela ne prouve pas la réception intégrale du secret par la cible. `failed` peut correspondre à une frappe partielle et `outcome_unknown` signifie que les preuves ne permettent pas de conclure. **Ne jamais relancer automatiquement une injection** : vérifier manuellement l'état de la cible avant toute nouvelle action. Le CLI refuse les réponses sans `Cache-Control: no-store`, les couvertures d'archives incomplètes, les identifiants invalides et les réponses supérieures à 1 Mio.
+
+
+### Rapprochement des injections Vault
+
+Dans **Enregistrements**, le panneau « Rapprochement des injections Vault » présente les résultats corrélés de l’Audit Service, y compris les archives vérifiées. L’accès est réservé aux rôles auxquels une politique explicite attribue `audit:secret-injections:read` sur `audit:secret-injections:all`. Cette permission est transverse à tous les comptes et toutes les sessions ; elle n’est pas implicite pour `platform-admin` ni `session-auditor`. La consultation est en lecture seule et ne modifie pas la chaîne d’audit. `outcome_unknown` et `failed` exigent une vérification manuelle de la cible ; aucune réinjection automatique n’est proposée.
