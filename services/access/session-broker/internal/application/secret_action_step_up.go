@@ -57,7 +57,11 @@ func (s *SessionBrokerService) authorizedSecretAction(ctx context.Context, actor
 	if sess.EffectiveStatus(s.clock()) != domain.StatusActive {
 		return MFAActionBinding{}, fmt.Errorf("%w: secret action requires an active session", domain.ErrConflict)
 	}
-	if sess.Protocol != "ssh" {
+	switch sess.Protocol {
+	case "ssh", "vnc", "rdp":
+		// Each protocol family implements SecretTyper; the live proxy remains the
+		// authority on whether this session currently has an unambiguous typer.
+	default:
 		return MFAActionBinding{}, domain.ErrUnsupportedProtocol
 	}
 	allowed, _, err := s.authz.CheckAccess(ctx, actorRoles, resource+sess.PrivilegedAccountID, action)
