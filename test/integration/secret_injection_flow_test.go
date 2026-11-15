@@ -169,7 +169,7 @@ func TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProc
 		t.Fatalf("recording: %d %#v", readResponse.StatusCode, recording)
 	}
 	entries, _ := recording["entries"].([]any)
-	marker := "[vault secret " + accountID + " injection requested via ssh]"
+	marker := "[vault secret " + accountID + " injection requested via ssh operation "
 	foundMarker := false
 	for _, raw := range entries {
 		entry, _ := raw.(map[string]any)
@@ -177,7 +177,7 @@ func TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProc
 		if strings.Contains(command, credential) {
 			t.Fatalf("credential recorded: %q", command)
 		}
-		if strings.Contains(command, marker) {
+		if strings.Contains(command, marker) && len(command) >= len(marker)+32 && strings.Contains(command, "]") {
 			foundMarker = true
 		}
 	}

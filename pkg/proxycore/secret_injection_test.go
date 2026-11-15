@@ -69,6 +69,9 @@ func TestInjectSecret_AuditsAndRecordsOnlyEvidenceBeforeTyping(t *testing.T) {
 			if !bytes.Equal(secret, make([]byte, len(secret))) {
 				t.Fatal("caller secret was not zeroed")
 			}
+			if len(audit.evidence.InjectionID) != 32 || audit.evidence.InjectionID != record.evidence.InjectionID {
+				t.Fatalf("audit/record correlation mismatch: audit=%q record=%q", audit.evidence.InjectionID, record.evidence.InjectionID)
+			}
 			for _, evidence := range []SecretInputEvidence{audit.evidence, record.evidence} {
 				if evidence.SessionID != "session-1" || evidence.Protocol != "rdp" || evidence.Source != source {
 					t.Fatalf("wrong evidence identity: %+v", evidence)
@@ -179,8 +182,12 @@ func TestInjectSecret_ResultAuditFailureIsReportedAfterTyping(t *testing.T) {
 	record := &secretInjectionStep{name: "record", steps: &steps}
 	typer := &secretInjectionStep{name: "type", steps: &steps}
 	err := InjectSecret(context.Background(), "session-1", "ssh", SecretInputVault, "account-1", secret, audit, record, typer)
-	if !errors.Is(err, ErrSecretInjectionUnavailable) {
-		t.Fatalf("err=%v", err)
+	if !errors.Is(err, ErrSecretInjectionOutcomeUnknown) {
+		t.Fatalf("err=%v, want outcome unknown", err)
+	}
+	var unknown *SecretInjectionOutcomeUnknownError
+	if !errors.As(err, &unknown) || len(unknown.InjectionID) != 32 || audit.evidence.InjectionID != record.evidence.InjectionID {
+		t.Fatalf("missing durable operation correlation: error=%+v audit=%+v record=%+v", unknown, audit.evidence, record.evidence)
 	}
 	if !reflect.DeepEqual(steps, []string{"audit", "record", "type", "audit-result"}) {
 		t.Fatalf("steps=%v", steps)

@@ -191,6 +191,15 @@ func (s *HTTPServer) handleInjectVaultSecret(w http.ResponseWriter, r *http.Requ
 	switch {
 	case err == nil:
 		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, proxycore.ErrSecretInjectionOutcomeUnknown):
+		var outcome *proxycore.SecretInjectionOutcomeUnknownError
+		if !errors.As(err, &outcome) || outcome.InjectionID == "" {
+			http.Error(w, "secret injection outcome unknown", http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "outcome_unknown", "injection_id": outcome.InjectionID})
 	case errors.Is(err, infrastructure.ErrSecretSessionInactive):
 		http.Error(w, "session input is not active", http.StatusNotFound)
 	case errors.Is(err, infrastructure.ErrSecretSessionAmbiguous):

@@ -444,6 +444,16 @@ func (s *HTTPServer) handleSecretInjection(w http.ResponseWriter, r *http.Reques
 		TOTPCode: req.TOTPCode, WebAuthnResponse: req.WebAuthnResponse,
 	}
 	if err := s.svc.InjectVaultSecretWithStepUp(r.Context(), req.CallerID, req.ActorRoles, sessionID, proof); err != nil {
+		var outcome *domain.SecretInjectionOutcomeUnknownError
+		if errors.As(err, &outcome) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status": "outcome_unknown", "injection_id": outcome.InjectionID,
+				"message": "The target may have received the secret. Do not retry; verify the target manually.",
+			})
+			return
+		}
 		writeSecretActionError(w, err)
 		return
 	}

@@ -294,6 +294,7 @@ func TestVideoRecorderRecordsVaultOnlySecretInjectionMarkerAndWaitsForAck(t *tes
 	client := newVideoRecorderTestClient(t, server)
 	if err := client.RecordSecretInput(context.Background(), proxycore.SecretInputEvidence{
 		SessionID: "session-1", Protocol: "vnc", Source: proxycore.SecretInputVault, AccountID: "account-1",
+		InjectionID: "0123456789abcdef0123456789abcdef",
 	}); err != nil {
 		t.Fatalf("RecordSecretInput: %v", err)
 	}
@@ -303,7 +304,7 @@ func TestVideoRecorderRecordsVaultOnlySecretInjectionMarkerAndWaitsForAck(t *tes
 		t.Fatalf("recorded events = %d, want 1", len(server.events))
 	}
 	event := server.events[0]
-	if event.GetEventId() == "" || event.GetSessionId() != "session-1" || event.GetEventType() != "secret_injection_started" || event.GetProtocol() != "vnc" || event.GetSource() != "vault" || event.GetAccountId() != "account-1" {
+	if event.GetEventId() != "0123456789abcdef0123456789abcdef" || event.GetSessionId() != "session-1" || event.GetEventType() != "secret_injection_started" || event.GetProtocol() != "vnc" || event.GetSource() != "vault" || event.GetAccountId() != "account-1" {
 		t.Fatalf("unexpected marker: %+v", event)
 	}
 }
@@ -313,6 +314,7 @@ func TestVideoRecorderRejectsNonVaultSecretMarker(t *testing.T) {
 	client := newVideoRecorderTestClient(t, server)
 	err := client.RecordSecretInput(context.Background(), proxycore.SecretInputEvidence{
 		SessionID: "session-1", Protocol: "rdp", Source: proxycore.SecretInputOperator, AccountID: "account-1",
+		InjectionID: "0123456789abcdef0123456789abcdef",
 	})
 	if !errors.Is(err, ErrVideoRecorderProtocol) {
 		t.Fatalf("operator marker error = %v, want protocol refusal", err)

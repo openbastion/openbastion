@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -78,6 +79,19 @@ func (c *ProxyClientHTTPClient) InjectVaultSecret(ctx context.Context, sessionID
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusConflict {
+		var outcome struct {
+			Status      string `json:"status"`
+			InjectionID string `json:"injection_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 1024)).Decode(&outcome); err == nil &&
+			outcome.Status == "outcome_unknown" && len(outcome.InjectionID) == 32 {
+			if _, err := hex.DecodeString(outcome.InjectionID); err == nil {
+				return &domain.SecretInjectionOutcomeUnknownError{InjectionID: outcome.InjectionID}
+			}
+		}
+		return fmt.Errorf("inject-vault-secret: status %d", resp.StatusCode)
+	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("inject-vault-secret: status %d", resp.StatusCode)

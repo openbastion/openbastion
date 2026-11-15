@@ -2,8 +2,6 @@ package infrastructure
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -112,15 +110,13 @@ func NewVideoRecorderClient(runtime *mtls.Runtime, endpoint string) (*VideoRecor
 // Video Recorder's durable acknowledgement before the caller may type the secret.
 func (c *VideoRecorderClient) RecordSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
 	if c == nil || c.client == nil || ctx == nil || !usableVideoSessionID(evidence.SessionID) ||
-		evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" ||
+		evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || !usableVideoSessionID(evidence.InjectionID) ||
 		(evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
 		return ErrVideoRecorderProtocol
 	}
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return fmt.Errorf("%w: generating video event id", ErrVideoRecorderUnavailable)
-	}
-	eventID := hex.EncodeToString(raw[:])
+	// The recorder marker and audit intent share one attempt id so a missing
+	// terminal audit event remains reconcilable after process restarts.
+	eventID := evidence.InjectionID
 	response, err := c.client.RecordVideoEvent(ctx, &recordingv1.RecordVideoEventRequest{
 		EventId: eventID, SessionId: evidence.SessionID, EventType: "secret_injection_started",
 		Protocol: evidence.Protocol, Source: "vault", AccountId: evidence.AccountID,

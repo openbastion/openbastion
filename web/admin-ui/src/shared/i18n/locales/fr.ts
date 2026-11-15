@@ -387,6 +387,7 @@ export default {
       challengeExpires: "Le challenge MFA est valable au maximum {{seconds}} secondes à compter de sa création.",
       totpForm: "Confirmation par code TOTP",
       confirm: "Confirmer et saisir",
+      outcomeUnknown: "La cible a peut-être reçu le secret. Ne recommencez pas. Vérifiez manuellement la cible (opération {{id}}).",
       success: "Le proxy a confirmé la saisie du secret Vault dans la session.",
       invalidChallenge: "Le service a renvoyé un challenge MFA invalide.",
       noUsableFactor: "Aucun facteur MFA utilisable n'a été fourni. La saisie est refusée.",

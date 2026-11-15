@@ -193,11 +193,17 @@ func TestSSHCodec_InjectsSecretOutsideOperatorRecording(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	commands := recorder.commands()
-	want := []string{"sudo -s", "[vault secret root-prod injection requested via ssh]", "id"}
+	want := []string{"sudo -s", "[vault secret root-prod injection requested via ssh operation ", "id"}
 	if len(commands) != len(want) {
 		t.Fatalf("recorded commands = %q", commands)
 	}
 	for i := range want {
+		if i == 1 {
+			if !strings.HasPrefix(commands[i], want[i]) || len(commands[i]) != len(want[i])+32+1 || !strings.HasSuffix(commands[i], "]") {
+				t.Fatalf("recorded injection marker lacks a 128-bit operation id: %q", commands[i])
+			}
+			continue
+		}
 		if commands[i] != want[i] {
 			t.Fatalf("recorded commands = %q", commands)
 		}

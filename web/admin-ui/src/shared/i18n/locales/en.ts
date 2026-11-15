@@ -386,6 +386,7 @@ export default {
       challengeExpires: "The MFA challenge is valid for at most {{seconds}} seconds from creation.",
       totpForm: "Confirm with a TOTP code",
       confirm: "Confirm and type",
+      outcomeUnknown: "The target may have received the secret. Do not retry. Verify the target manually (operation {{id}}).",
       success: "The proxy confirmed that the Vault secret was typed into the session.",
       invalidChallenge: "The service returned an invalid MFA challenge.",
       noUsableFactor: "No usable MFA factor was provided. Secret entry is refused.",
