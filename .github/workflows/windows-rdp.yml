@@ -17,6 +17,9 @@ on:
       - test/integration/testdata/rdp/windows/**
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp_windows_interop_test.go
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp.go
+      - services/access/session-broker/internal/application/secret_action_step_up.go
+      - test/integration/screen_rdp_flow_test.go
+      - test/integration/secret_injection_rdp_flow_test.go
       - pkg/rdp/**
       - services/proxy/rdp-vnc-proxy/internal/interfaces/rdp_recording_test.go
       - .github/workflows/windows-rdp.yml

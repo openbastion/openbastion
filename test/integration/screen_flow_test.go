@@ -68,7 +68,7 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		gatewayURL     = "http://127.0.0.1:18848"
 	)
 
-	const vaultSecret = "the-vault-secret-of-the-target"
+	const vaultSecret = "VNC-秘密-42"
 	good := newFakeRFBTarget(t, "vnc-target.test", vaultSecret)
 	imposter := newFakeRFBTarget(t, "vnc-target.test", vaultSecret)
 	lasting := newFakeRFBTarget(t, "vnc-target.test", vaultSecret) // for the session that expires
@@ -138,7 +138,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	start("./services/vault/password-vault/cmd/password-vault", "vault", "18841", mtls.PasswordVault, "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
 	start("./services/recording-audit/audit-service/cmd/audit-service", "audit", "18842", mtls.AuditService)
 	start("./services/access/authorization/cmd/authorization", "authz", "18843", mtls.Authorization)
-	start("./services/access/authentication/cmd/authentication", "authn", "18847", mtls.Authentication, "SKIP_DEMO_SEED=1", "AUDIT_URL="+auditURL)
+	mfaKey := testKMSKeyHex(t)
+	start("./services/access/authentication/cmd/authentication", "authn", "18847", mtls.Authentication, "SKIP_DEMO_SEED=1", "AUDIT_URL="+auditURL, "MFA_REQUIRED_ROLES=screen-stepup", "MFA_SECRET_KEY_HEX="+mfaKey)
 	start("./services/recording-audit/command-recorder/cmd/command-recorder", "command", "18849", mtls.CommandRecorder, "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
 	video := start("./services/recording-audit/video-recorder/cmd/video-recorder", "video", "18850", mtls.VideoRecorder,
 		"GRPC_PORT=18851", "DATABASE_URL="+dsn, "VIDEO_RECORDER_KMS_KEY_HEX="+strings.Repeat("ab", 32),
@@ -149,15 +150,18 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		"TARGET_TLS_ROOTS_FILE="+rootsFile, "RDP_VNC_PROXY_PUBLIC_ENDPOINT=127.0.0.1:18845")
 	start("./services/proxy/ssh-proxy/cmd/ssh-proxy", "ssh-proxy", "18846", mtls.SSHProxy, "SSH_PORT=18852", "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "RECORDER_URL="+commandURL, "RECORDING_POLICY=required")
 	start("./services/access/session-broker/cmd/session-broker", "broker", "18844", mtls.SessionBroker,
-		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL=https://127.0.0.1:18846", "RDP_VNC_PROXY_URLS="+screenProxyURL)
+		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "AUTHENTICATION_URL="+authnURL, "SSH_PROXY_URL=https://127.0.0.1:18846", "RDP_VNC_PROXY_URLS="+screenProxyURL)
 	gateway := startService(t, root, bin("./services/access/api-gateway/cmd/api-gateway", "gateway"), "18848", p.env(mtls.APIGateway,
 		"AUTHENTICATION_URL="+authnURL, "SESSION_BROKER_URL="+brokerURL, "VAULT_URL="+vaultURL,
 		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+commandURL, "VIDEO_RECORDER_GRPC_URL="+videoGRPCURL,
-		"SESSION_REQUEST_BURST=100", "SESSION_ACTION_BURST=100", "VAULT_ACCOUNT_ACTION_BURST=100", "CLIENT_REQUEST_BURST=1000")...)
+		"SESSION_REQUEST_BURST=100", "SESSION_ACTION_BURST=100", "VAULT_ACCOUNT_ACTION_BURST=100", "CLIENT_REQUEST_BURST=1000", "CLIENT_LOGIN_BURST=100")...)
 	outputs["gateway"] = gateway.out
 	t.Cleanup(func() {
 		if t.Failed() {
 			t.Logf("video-recorder:\n%s\nrdp-vnc-proxy:\n%s", video.out.String(), proxy.out.String())
+			for _, name := range []string{"broker", "authn", "gateway"} {
+				t.Logf("%s (credential values redacted):\n%s", name, strings.ReplaceAll(outputs[name].String(), vaultSecret, "[REDACTED]"))
+			}
 		}
 	})
 
@@ -166,6 +170,7 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	mtlsCreateUser(t, admin, authnURL, "screen-operator", "op-password-123", []string{"screen-ops"})
 	mtlsCreateUser(t, admin, authnURL, "screen-refused", "ref-password-123", []string{"screen-ops"})
 	mtlsCreateUser(t, admin, authnURL, "screen-auditor", "aud-password-123", []string{"session-auditor"})
+	mtlsCreateUser(t, admin, authnURL, "screen-stepup", "stepup-password-123", []string{"screen-stepup"})
 	adminToken, status := gatewayLogin(t, gatewayURL, "screen-admin", "root-pw-123456")
 	if status != http.StatusOK {
 		t.Fatalf("admin login: %d", status)
@@ -188,6 +193,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		{"screen-vault-admins", "vault-admin", "vault:account-admin:*"},
 		{"screen-operators", "screen-ops", "vault:account:*"},
 		{"screen-auditors", "session-auditor", "recording:session:*"},
+		{"screen-stepup-account", "screen-stepup", "vault:account:screen_good"},
+		{"screen-stepup-inject", "screen-stepup", "secret:inject:account:screen_good"},
 	} {
 		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
 			t.Fatalf("policy %s: %d", pol.name, status)
@@ -339,6 +346,9 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	}
 
 	onboard(t, "screen_good", good.address, "operator", vaultSecret, good.pin())
+	t.Run("Vault secret injection across real VNC processes", func(t *testing.T) {
+		testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, good, audit, store, outputs)
+	})
 
 	// Asked for now, since a session lasts a minute at least; looked at last.
 	onboard(t, "screen_lasting", lasting.address, "operator", vaultSecret, lasting.pin())
@@ -827,14 +837,15 @@ type fakeRFBTarget struct {
 	password string
 	behavior fakeRFBBehavior
 
-	mu       sync.Mutex
-	conns    int
-	open     int
-	tlsDone  int
-	auths    int
-	lastPass string
-	keys     map[uint32]bool
-	updates  chan struct{}
+	mu        sync.Mutex
+	conns     int
+	open      int
+	tlsDone   int
+	auths     int
+	lastPass  string
+	keys      map[uint32]bool
+	keyEvents []uint32
+	updates   chan struct{}
 }
 
 func newFakeRFBTarget(t *testing.T, domain, password string, behavior ...fakeRFBBehavior) *fakeRFBTarget {
@@ -934,6 +945,12 @@ func (f *fakeRFBTarget) sawKey(keysym uint32) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.keys[keysym]
+}
+
+func (f *fakeRFBTarget) keySequence() []uint32 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]uint32(nil), f.keyEvents...)
 }
 
 // change makes the desktop change, as a real one does: the next incremental request is answered.
@@ -1142,7 +1159,9 @@ func (f *fakeRFBTarget) readClient(conn io.Reader, requests chan<- bool) error {
 			}
 			if rest[0] == 1 {
 				f.mu.Lock()
-				f.keys[binary.BigEndian.Uint32(rest[3:])] = true
+				keysym := binary.BigEndian.Uint32(rest[3:])
+				f.keys[keysym] = true
+				f.keyEvents = append(f.keyEvents, keysym)
 				f.mu.Unlock()
 			}
 		case 5:

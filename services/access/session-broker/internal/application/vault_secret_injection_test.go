@@ -64,23 +64,42 @@ func (f *failingConsumeMFA) Consume(context.Context, application.MFAActionBindin
 	return context.DeadlineExceeded
 }
 
-func TestInjectVaultSecretWithStepUp_RefusesProtocolWithoutRegisteredTyper(t *testing.T) {
-	authz := &fakeAuthz{allowed: true}
-	vault := &fakeVaultAuthorizer{scopeToken: "scope"}
-	proxy := &fakeProxyClient{}
-	broker := newTestBroker(authz, vault, &fakeAudit{}, &fakeAccountLookup{protocol: "vnc"}, proxy)
-	sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "account-1", "vnc", "incident", "", 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mfa := &fakeMFAActionClient{grant: application.MFAActionGrant{Grant: "grant", ExpiresIn: 30}}
-	broker.WithMFAActionClient(mfa)
-	err = broker.InjectVaultSecretWithStepUp(context.Background(), "user1", []string{"dba"}, sess.ID, application.MFAActionProof{Challenge: "challenge", Factor: "totp", TOTPCode: "123456"})
-	if !errors.Is(err, domain.ErrUnsupportedProtocol) {
-		t.Fatalf("err=%v", err)
-	}
-	if mfa.verifyBinding.ActorUserID != "" || vault.calls != 0 || proxy.injectCalls != 0 {
-		t.Fatal("unsupported protocol reached MFA, Vault or proxy")
+func TestInjectVaultSecretWithStepUp_RoutesEverySupportedProtocolToItsProxyFamily(t *testing.T) {
+	for _, tc := range []struct {
+		protocol string
+		proxyID  string
+	}{
+		{protocol: "ssh", proxyID: "ssh-proxy"},
+		{protocol: "vnc", proxyID: "rdp-vnc-proxy"},
+		{protocol: "rdp", proxyID: "rdp-vnc-proxy"},
+	} {
+		t.Run(tc.protocol, func(t *testing.T) {
+			authz := &fakeAuthz{allowed: true}
+			vault := &fakeVaultAuthorizer{scopeToken: "scope"}
+			proxy := &fakeProxyClient{}
+			accounts := &fakeAccountLookup{protocol: tc.protocol}
+			broker := newTestBroker(authz, vault, &fakeAudit{}, accounts, proxy)
+			sess, err := broker.CreateSession(context.Background(), "user1", []string{"dba"}, "account-1", tc.protocol, "incident", "", 30)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mfa := &fakeMFAActionClient{grant: application.MFAActionGrant{Grant: "grant", ExpiresIn: 30}}
+			broker.WithMFAActionClient(mfa)
+			proof := application.MFAActionProof{Challenge: "challenge", Factor: "totp", TOTPCode: "123456"}
+			if err := broker.InjectVaultSecretWithStepUp(context.Background(), "user1", []string{"dba"}, sess.ID, proof); err != nil {
+				t.Fatal(err)
+			}
+			want := application.MFAActionBinding{ActorUserID: "user1", SessionID: sess.ID, AccountID: "account-1", Protocol: tc.protocol, Action: "secret:inject"}
+			if mfa.verifyBinding != want || mfa.consumeBinding != want || mfa.consumedGrant != "grant" {
+				t.Fatalf("MFA binding mismatch: verify=%+v consume=%+v", mfa.verifyBinding, mfa.consumeBinding)
+			}
+			if vault.calls != 1 || vault.lastProxyID != tc.proxyID {
+				t.Fatalf("Vault scope routed to the wrong proxy family: %+v", vault)
+			}
+			if proxy.injectCalls != 1 || proxy.lastInjectSession != sess.ID || proxy.lastInjectAccount != "account-1" || proxy.lastInjectScope != "scope" {
+				t.Fatalf("proxy injection mismatch: %+v", proxy)
+			}
+		})
 	}
 }
 
