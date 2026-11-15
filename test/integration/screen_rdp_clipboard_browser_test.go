@@ -89,7 +89,9 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 	page.eval(`document.querySelector("canvas.screen-canvas").scrollIntoView({ block: "start" }), true`)
 	const notepad = `(() => { const c = document.querySelector("canvas.screen-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
 		const white = (x, y) => { const i = (y * c.width + x) * 4; return d[i] >= 248 && d[i+1] >= 248 && d[i+2] >= 248; };
-		for (let y = 0; y + 120 <= c.height; y += 8) { next: for (let x = 0; x + 120 <= c.width; x += 8) {
+		// The desktop can contain transient bright regions while the RDP window is opening. Notepad's
+		// text area is below its title bar; search only the lower 70% so a desktop patch cannot steal focus.
+		for (let y = Math.floor(c.height * 0.30); y + 120 <= c.height; y += 8) { next: for (let x = 0; x + 120 <= c.width; x += 8) {
 			for (let dy = 0; dy < 120; dy += 4) for (let dx = 0; dx < 120; dx += 4) if (!white(x + dx, y + dy)) continue next;
 			const r = c.getBoundingClientRect(); return [r.left + (x + 60) * r.width / c.width, r.top + (y + 60) * r.height / c.height]; } }
 		return null; })()`
@@ -105,6 +107,7 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 		}
 		time.Sleep(time.Second)
 	}
+	t.Logf("Notepad text-area click at page coordinates %.0f, %.0f", at[0], at[1])
 	selectAll := cdpKeyA
 	if os.Getenv("RDP_WINDOWS_KEYBOARD") == "fr-FR" {
 		selectAll = cdpKeyQ // A sits where Q does in AZERTY: the page sends the physical key
