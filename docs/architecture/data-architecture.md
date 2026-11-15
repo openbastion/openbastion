@@ -45,6 +45,7 @@ erDiagram
         uuid id PK
         uuid role_id FK
         text resource_pattern
+        text action_pattern
         text effect
     }
     PRIVILEGED_ACCOUNTS {
@@ -130,10 +131,11 @@ CREATE TABLE policies (
     name              TEXT NOT NULL,
     role_id           UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     resource_pattern  TEXT NOT NULL,             -- ex. 'vault:account:prod-*'
+    action_pattern    TEXT NOT NULL DEFAULT '*', -- ADR-0114 ; ex. 'session:create'
     effect            TEXT NOT NULL CHECK (effect IN ('allow','deny')),
     created_by        UUID REFERENCES users(id),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (role_id, resource_pattern, effect)
+    UNIQUE (role_id, resource_pattern, action_pattern, effect)
 );
 
 -- Coffre-fort (Password Vault) -----------------------------------------------

@@ -30,7 +30,8 @@ func NewAuthorizationService(policies domain.PolicyRepository) *AuthorizationSer
 // nothing to parametrize by target: policy creation is a single
 // platform-wide capability, not one per resource. See
 // BootstrapAdminPolicy for how the very first grant of this resource is
-// made, and NOTES_SANDBOX.md for the full rationale.
+// made, and NOTES_SANDBOX.md for the full rationale. ADR-0114 scopes the
+// bootstrap grant to action authz:policy:create as well as this resource.
 const PolicyAdminResource = "authz:policy-admin"
 
 // requirePolicyAdmin is CreatePolicy's gate. It calls CheckAccess
@@ -60,13 +61,16 @@ var ErrAccessDenied = errors.New("access denied")
 // write in the system (docs/security/authorization-rbac-abac.md: "aucun service ne réimplémente
 // sa propre logique d'autorisation" — this service is no exception to
 // its own rule, even for its own writes).
-func (s *AuthorizationService) CreatePolicy(ctx context.Context, actorRoles []string, name, role, resourcePattern string, effect domain.Effect, createdBy string) (*domain.Policy, error) {
+func (s *AuthorizationService) CreatePolicy(ctx context.Context, actorRoles []string, name, role, resourcePattern, actionPattern string, effect domain.Effect, createdBy string) (*domain.Policy, error) {
+	if !domain.ValidPattern(resourcePattern) || !domain.ValidPattern(actionPattern) {
+		return nil, domain.ErrInvalidPolicyPattern
+	}
 	if err := s.requirePolicyAdmin(ctx, actorRoles); err != nil {
 		return nil, err
 	}
 	p := &domain.Policy{
 		ID: randomID("policy"), Name: name, Role: role,
-		ResourcePattern: resourcePattern, Effect: effect, CreatedBy: createdBy,
+		ResourcePattern: resourcePattern, ActionPattern: actionPattern, Effect: effect, CreatedBy: createdBy,
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.policies.Create(ctx, p); err != nil {
@@ -101,7 +105,7 @@ func (s *AuthorizationService) BootstrapAdminPolicy(ctx context.Context, role, c
 	}
 	p := &domain.Policy{
 		ID: randomID("policy"), Name: "bootstrap-admin", Role: role,
-		ResourcePattern: PolicyAdminResource, Effect: domain.EffectAllow, CreatedBy: createdBy,
+		ResourcePattern: PolicyAdminResource, ActionPattern: "authz:policy:create", Effect: domain.EffectAllow, CreatedBy: createdBy,
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.policies.Create(ctx, p); err != nil {
@@ -118,7 +122,7 @@ type Decision struct {
 }
 
 // CheckAccess evaluates every policy attached to any of the caller's roles
-// against resource. The rule, in order:
+// against BOTH resource and action. A match on only one dimension grants nothing. The rule, in order:
 //
 //  1. No matching policy at all -> deny (deny-by-default, docs/security/authorization-rbac-abac.md:
 //     "un rôle sans politique associée n'ouvre l'accès à rien").
@@ -126,6 +130,9 @@ type Decision struct {
 //     matching policy allows it. An explicit deny always wins.
 //  3. Otherwise, any matching policy with Effect == allow -> allow.
 func (s *AuthorizationService) CheckAccess(ctx context.Context, actorRoles []string, resource, action string) (Decision, error) {
+	if resource == "" || action == "" {
+		return Decision{Allowed: false, Reason: "resource and action are required"}, nil
+	}
 	policies, err := s.policies.ForRoles(ctx, actorRoles)
 	if err != nil {
 		return Decision{}, err
@@ -134,7 +141,7 @@ func (s *AuthorizationService) CheckAccess(ctx context.Context, actorRoles []str
 	matched := false
 	allowed := false
 	for _, p := range policies {
-		if !p.Matches(resource) {
+		if !p.Matches(resource, action) {
 			continue
 		}
 		matched = true

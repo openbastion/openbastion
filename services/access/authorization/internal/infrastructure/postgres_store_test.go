@@ -14,6 +14,7 @@ import (
 
 	"github.com/openbastion/openbastion/services/access/authorization/internal/domain"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/infrastructure"
+	"github.com/openbastion/openbastion/services/access/authorization/migrations"
 )
 
 func testDB(t *testing.T) *sql.DB {
@@ -32,7 +33,7 @@ func testDB(t *testing.T) *sql.DB {
 
 // uniqueID avoids colliding with rows left behind by earlier runs against
 // the same persistent database — the policies table's UNIQUE (role,
-// resource_pattern, effect) constraint would otherwise reject a second
+// resource_pattern, action_pattern, effect) constraint would otherwise reject a second
 // run's literal fixture values, exactly like vault's (target_host, name)
 // constraint.
 func uniqueID(prefix string) string {
@@ -46,7 +47,7 @@ func TestPostgresStore_CreateThenForRoles_RoundTrips(t *testing.T) {
 
 	role := uniqueID("role")
 	pattern := "vault:account:" + uniqueID("prod") + "-*"
-	p := &domain.Policy{ID: uniqueID("policy"), Name: "pg-roundtrip", Role: role, ResourcePattern: pattern, Effect: domain.EffectAllow, CreatedBy: "it-admin"}
+	p := &domain.Policy{ID: uniqueID("policy"), Name: "pg-roundtrip", Role: role, ResourcePattern: pattern, ActionPattern: "session:create", Effect: domain.EffectAllow, CreatedBy: "it-admin"}
 	if err := store.Create(ctx, p); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestPostgresStore_CreateThenForRoles_RoundTrips(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected exactly one policy for role %q, got %d", role, len(got))
 	}
-	if got[0].ResourcePattern != pattern || got[0].Effect != domain.EffectAllow || got[0].CreatedBy != "it-admin" {
+	if got[0].ResourcePattern != pattern || got[0].ActionPattern != "session:create" || got[0].Effect != domain.EffectAllow || got[0].CreatedBy != "it-admin" {
 		t.Fatalf("unexpected round-tripped policy: %+v", got[0])
 	}
 	if got[0].CreatedAt.IsZero() {
@@ -72,10 +73,10 @@ func TestPostgresStore_ForRoles_CoversMultipleRolesInOneQuery(t *testing.T) {
 	ctx := context.Background()
 
 	roleA, roleB, roleC := uniqueID("role-a"), uniqueID("role-b"), uniqueID("role-c")
-	if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: "p-a", Role: roleA, ResourcePattern: "vault:account:*", Effect: domain.EffectAllow}); err != nil {
+	if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: "p-a", Role: roleA, ResourcePattern: "vault:account:*", ActionPattern: "*", Effect: domain.EffectAllow}); err != nil {
 		t.Fatalf("Create (roleA): %v", err)
 	}
-	if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: "p-b", Role: roleB, ResourcePattern: "vault:account:*", Effect: domain.EffectAllow}); err != nil {
+	if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: "p-b", Role: roleB, ResourcePattern: "vault:account:*", ActionPattern: "*", Effect: domain.EffectAllow}); err != nil {
 		t.Fatalf("Create (roleB): %v", err)
 	}
 
@@ -111,7 +112,7 @@ func TestPostgresStore_Count_ReflectsRowsAcrossConnections(t *testing.T) {
 	}
 
 	role := uniqueID("role")
-	if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: "count-check", Role: role, ResourcePattern: "authz:policy-admin", Effect: domain.EffectAllow}); err != nil {
+	if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: "count-check", Role: role, ResourcePattern: "authz:policy-admin", ActionPattern: "authz:policy:create", Effect: domain.EffectAllow}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -134,7 +135,7 @@ func TestPostgresStore_Create_ADuplicateIsErrAlreadyExists(t *testing.T) {
 	store := infrastructure.NewPostgresStore(testDB(t))
 	ctx := context.Background()
 	role := uniqueID("dup-role")
-	p := &domain.Policy{ID: uniqueID("p"), Name: "n", Role: role, ResourcePattern: "vault:account:x", Effect: domain.EffectAllow, CreatedBy: "u"}
+	p := &domain.Policy{ID: uniqueID("p"), Name: "n", Role: role, ResourcePattern: "vault:account:x", ActionPattern: "*", Effect: domain.EffectAllow, CreatedBy: "u"}
 	if err := store.Create(ctx, p); err != nil {
 		t.Fatal(err)
 	}
@@ -142,5 +143,59 @@ func TestPostgresStore_Create_ADuplicateIsErrAlreadyExists(t *testing.T) {
 	q.ID = uniqueID("p")
 	if err := store.Create(ctx, &q); !errors.Is(err, domain.ErrAlreadyExists) {
 		t.Fatalf("a duplicate: %v", err)
+	}
+}
+
+func TestPostgresStore_Create_AllowsDistinctActionPatternsForSameRoleAndResource(t *testing.T) {
+	store := infrastructure.NewPostgresStore(testDB(t))
+	ctx := context.Background()
+	role := uniqueID("action-role")
+	resource := "audit:secret-injections:all"
+	for _, action := range []string{"audit:secret-injections:read", "audit:secret-injections:export"} {
+		if err := store.Create(ctx, &domain.Policy{ID: uniqueID("policy"), Name: action, Role: role, ResourcePattern: resource, ActionPattern: action, Effect: domain.EffectAllow}); err != nil {
+			t.Fatalf("Create(%s): %v", action, err)
+		}
+	}
+	got, err := store.ForRoles(ctx, []string{role})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d policies, want 2", len(got))
+	}
+}
+
+func TestMigration002_PreservesExistingPoliciesWithWildcardAction(t *testing.T) {
+	db := testDB(t)
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx := context.Background()
+	_, err = conn.ExecContext(ctx, `CREATE TEMP TABLE policies (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, resource_pattern TEXT NOT NULL, effect TEXT NOT NULL, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), CONSTRAINT policies_role_resource_pattern_effect_key UNIQUE (role, resource_pattern, effect))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.ExecContext(ctx, `INSERT INTO policies (id, name, role, resource_pattern, effect) VALUES ('legacy-1', 'legacy', 'legacy-role', 'audit:secret-injections:all', 'allow')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql, err := migrations.Files.ReadFile("002_action_pattern.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, string(sql)); err != nil {
+		t.Fatalf("apply ADR-0114 migration to legacy policy: %v", err)
+	}
+	var actionPattern string
+	if err := conn.QueryRowContext(ctx, `SELECT action_pattern FROM policies WHERE id='legacy-1'`).Scan(&actionPattern); err != nil {
+		t.Fatal(err)
+	}
+	if actionPattern != "*" {
+		t.Fatalf("legacy action_pattern=%q, want wildcard compatibility", actionPattern)
+	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO policies (id, name, role, resource_pattern, action_pattern, effect) VALUES ('legacy-2', 'new-action', 'legacy-role', 'audit:secret-injections:all', 'audit:secret-injections:read', 'allow')`); err != nil {
+		t.Fatalf("new action-specific policy conflicts with preserved legacy policy: %v", err)
 	}
 }

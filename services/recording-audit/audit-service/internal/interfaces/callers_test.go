@@ -30,7 +30,7 @@ func TestCallerRules(t *testing.T) {
 
 		mtlstest.Allow("admin-cli", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Allow("admin-cli", "GET", "/audit/v1/secret-injections"),
-		mtlstest.Deny("api-gateway", "GET", "/audit/v1/secret-injections"),
+		mtlstest.Allow("api-gateway", "GET", "/audit/v1/secret-injections"),
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/secret-injections"),
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("ssh-proxy", "GET", "/audit/v1/verify-chain"),

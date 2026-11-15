@@ -1,10 +1,10 @@
 # Contrats HTTP internes — Audit Service
 
-Toutes les routes de ce document sont internes, sous mTLS, et ne font pas partie de l'API publique Gateway.
+Toutes les routes de ce document sont internes, sous mTLS, et ne font pas partie de l'API publique Gateway. La façade publique définie par ADR-0113 est décrite plus bas.
 
 ## `GET /audit/v1/secret-injections` (ADR-0112)
 
-- **Appelant mTLS autorisé :** `admin-cli` uniquement.
+- **Appelants mTLS autorisés :** `admin-cli` (CLI) et `api-gateway` (façade publique ADR-0113). Aucun autre service n’est autorisé.
 - **Query :** `limit` facultatif, entier de 1 à 500 (défaut : 100) ; `before` facultatif, identifiant `injection_id` de la dernière entrée de la page précédente.
 - **Réponse :** `200 application/json`, `Cache-Control: no-store`.
 - **Erreur :** `400` pour une limite ou un curseur mal formé ; `409` si le curseur a disparu (par exemple après archivage), auquel cas il faut recommencer la pagination ; `405` pour une autre méthode ; `503` si la chaîne ou les checkpoints ne peuvent pas être lus.
@@ -53,3 +53,10 @@ curl --fail --silent --show-error \
   --key .pki/admin-cli/key.pem \
   'https://127.0.0.1:8082/audit/v1/secret-injections?limit=100'
 ```
+
+
+## Façade publique opérateur (ADR-0113)
+
+L’Admin UI n’appelle jamais ce service directement et ne reçoit jamais le certificat `admin-cli`. Elle utilise `GET /audit/secret-injections` sur la Gateway. La Gateway vérifie le bearer token, puis appelle Authorization avec les rôles vérifiés, `action=audit:secret-injections:read` et `resource=audit:secret-injections:all`. Depuis ADR-0114, Authorization doit faire correspondre simultanément `action_pattern` et `resource_pattern` ; une politique qui ne couvre que la ressource est refusée. Le refus par défaut est `403` ; une panne d’Authorization est `503`. Après autorisation, la Gateway appelle cette route interne sous son identité mTLS `api-gateway`. Seuls `limit` et `before` sont relayés. La réponse publique est bornée à 2 Mio et porte `Cache-Control: no-store`.
+
+Cette permission est transverse : elle donne accès à toutes les injections et tous les comptes. Elle n’est accordée implicitement à aucun rôle. La consultation n’écrit pas dans la chaîne d’audit consultée ; ce choix a été accepté dans ADR-0113.

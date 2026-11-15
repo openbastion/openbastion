@@ -5,9 +5,12 @@ import (
 	"errors"
 )
 
-// ErrAlreadyExists: a policy for this role, resource pattern and effect exists already
+// ErrAlreadyExists: a policy for this role, resource pattern, action pattern and effect exists already
 // (ADR-0043); the database's own message, which names its constraint, never reaches a client.
-var ErrAlreadyExists = errors.New("a policy for this role, resource pattern and effect already exists")
+var ErrAlreadyExists = errors.New("a policy for this role, resource pattern, action pattern and effect already exists")
+
+// ErrInvalidPolicyPattern rejects empty or unsupported wildcard patterns.
+var ErrInvalidPolicyPattern = errors.New("resource and action patterns must be exact values or use one trailing wildcard")
 
 type PolicyRepository interface {
 	Create(ctx context.Context, p *Policy) error
