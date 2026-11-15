@@ -72,6 +72,9 @@ type auditSpy struct {
 	// down makes the spy answer 503 to every emit-event, without forwarding it and without
 	// remembering it: the Audit Service, for whoever asks, is not there.
 	down bool
+	// dropAckAction drops one response only after the real Audit Service has accepted the event.
+	dropAckAction string
+	droppedAcks   int
 }
 
 func (s *auditSpy) setDown(down bool) {
@@ -84,6 +87,28 @@ func (s *auditSpy) isDown() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.down
+}
+
+func (s *auditSpy) dropNextAck(action string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dropAckAction = action
+}
+
+func (s *auditSpy) takeDropAck(action string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dropAckAction != action {
+		return false
+	}
+	s.dropAckAction = ""
+	return true
+}
+
+func (s *auditSpy) ackDrops() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.droppedAcks
 }
 
 type spiedEvent struct {
@@ -116,6 +141,32 @@ func startAuditSpy(t *testing.T, upstream string) *auditSpy {
 				spy.mu.Lock()
 				spy.events = append(spy.events, ev)
 				spy.mu.Unlock()
+				if spy.takeDropAck(ev.Action) {
+					// Forward to the real Audit Service first. A 200 proves its transaction
+					// committed; only the response path back to the proxy is then severed.
+					upstreamResponse := httptest.NewRecorder()
+					proxy.ServeHTTP(upstreamResponse, r)
+					if upstreamResponse.Code != http.StatusOK {
+						for key, values := range upstreamResponse.Header() {
+							w.Header()[key] = values
+						}
+						w.WriteHeader(upstreamResponse.Code)
+						_, _ = w.Write(upstreamResponse.Body.Bytes())
+						return
+					}
+					spy.mu.Lock()
+					spy.droppedAcks++
+					spy.mu.Unlock()
+					if hijacker, ok := w.(http.Hijacker); ok {
+						conn, _, err := hijacker.Hijack()
+						if err == nil {
+							_ = conn.Close()
+						}
+						return
+					}
+					http.Error(w, "acknowledgement lost after audit commit", http.StatusBadGateway)
+					return
+				}
 			}
 		}
 		proxy.ServeHTTP(w, r)

@@ -135,6 +135,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 
 **Preuves disponibles**
 - Tests d’ordre et de non-divulgation des événements ; parcours multi-processus qui vérifient la présence de l’événement de succès et du marqueur.
+- Test SSH multi-processus avec un intermédiaire qui transmet l’événement terminal à l’Audit Service réel, attend son HTTP 200 puis ferme la connexion avant le proxy : le Broker renvoie `outcome_unknown`, la cible reçoit une seule frappe, aucun retry n’est observé et la chaîne reste vérifiable.
 - Vérification de la chaîne d’audit dans le parcours SSH multi-processus ; les parcours screen vérifient l’événement émis.
 
 **Risque résiduel — P1**
@@ -142,8 +143,8 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 - L’attribution de l’acteur humain dépend du service émetteur autorisé ; un service compromis pourrait attribuer faussement un événement.
 
 **Actions**
-- Fait (ADR-0112) : la route interne en lecture seule classe chaque `injection_id` à partir de la chaîne retenue et des archives vérifiées par leurs checkpoints ; elle échoue fermé si une archive ne peut être vérifiée et ne mute jamais l’événement préalable. Le CLI `admin-cli` consomme cette projection. L’exposition à l’Admin UI reste soumise à ADR-0113 ; `completed` n’atteste pas la réception complète par la cible.
-- Ajouter un test multi-processus de panne du canal Audit après la frappe et vérifier qu’aucune nouvelle tentative automatique ne rejoue le secret ; l’opérateur doit être invité à vérifier la cible.
+- Fait (ADR-0112) : la route interne en lecture seule classe chaque `injection_id` à partir de la chaîne retenue et des archives vérifiées par leurs checkpoints ; elle échoue fermé si une archive ne peut être vérifiée et ne mute jamais l’événement préalable. Le CLI `admin-cli` consomme cette projection. La façade Gateway/Admin UI est implémentée dans la Draft PR #217 (ADR-0113), en attente de la validation finale CI/revue ; `completed` n’atteste pas la réception complète par la cible.
+- Fait localement : test multi-processus de perte de l’acquittement terminal après commit Audit ; vérifie `outcome_unknown`, l’absence de nouvelle frappe et l’intégrité de la chaîne. Ajouter la preuve PostgreSQL 16 archive/restart ; l’opérateur doit toujours vérifier manuellement la cible.
 
 ### I — Information Disclosure (divulgation)
 
@@ -232,7 +233,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
 | SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
-| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; UI soumise à ADR-0113, test multi-processus de panne à compléter, cible à vérifier manuellement |
+| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans Draft PR #219 (CI à confirmer) ; façade UI dans Draft PR #217 (ADR-0113) ; cible à vérifier manuellement |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
@@ -261,7 +262,7 @@ Les contre-épreuves doivent être réalisées sur des branches de test isolées
 
 ## 7. État des preuves au 15 novembre 2026
 
-- **SSH :** parcours multi-processus MFA → Broker → Vault → proxy → cible → Recorder/Audit validé ; la valeur est absente de l’enregistrement et remplacée par un marqueur.
+- **SSH :** parcours multi-processus MFA → Broker → Vault → proxy → cible → Recorder/Audit validé ; la valeur est absente de l’enregistrement et remplacée par un marqueur. Le test de perte d’acquittement terminal transmet l’événement au véritable Audit Service, perd la réponse après commit, vérifie `outcome_unknown`, une seule frappe côté cible, aucun retry et une chaîne valide.
 - **VNC :** parcours multi-processus avec TOTP, refus d’un autre acteur et d’une preuve invalide, frappe Unicode vérifiée à la cible RFB, marqueur et audit, absence du secret dans les logs et l’objet enregistré. Un test complet contre TigerVNC réel a également passé dans l’environnement local.
 - **RDP :** parcours multi-processus avec FreeRDP 3, scope Vault, audit, marqueur durable et rejeu validés. FreeRDP Shadow ne constitue pas un oracle fiable de réception Unicode ; le test Windows TestRDPWindows_SecretTyperUnicode reste à valider dans la CI Windows.
 - **Admin UI :** tests Vitest du composant et du parcours TOTP/WebAuthn présents. Un test Chromium réel de l’UI avec API simulée est ajouté à la CI ; il n’a pas pu être exécuté sur LT209227 faute de binaire Chrome. Son succès CI est donc encore requis. Ce test ne remplace pas un parcours navigateur contre une cible TigerVNC/Windows réelle.
@@ -276,7 +277,7 @@ La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation
 Critères minimaux de clôture :
 1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
 2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
-3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; compléter par le test multi-processus de perte d’acquittement et l’exposition UI après décision ADR-0113 ;
+3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;
 6. revue des logs, traces, crash dumps et captures pour la non-divulgation.

@@ -4785,3 +4785,14 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - OpenAPI YAML parsé et contrôlé ; les deux fichiers Docker Compose passent `docker compose config --quiet`.
 - Les outils Protobuf ont été installés isolément sous `/tmp/openbastion-proto-tools` (pas dans le PATH global ni dans le dépôt) afin de générer les fichiers ignorés et débloquer les tests Gateway.
 - Aucune fusion, aucune suppression de worktree/branche locale, aucun test Windows local.
+
+
+## 2026-11-15 — ADR-0097 SI-03 : perte d’acquittement Audit après commit
+
+- Branche isolée : `test/adr-0097-audit-ack-loss-multiprocess`, worktree `/tmp/openbastion-adr0097-audit-ack-loss-multiprocess`, créé depuis `origin/main` (`536201571fc5c66772ee1e7437c94b8e99882515`). Le checkout principal et les worktrees des PR en cours n’ont pas été modifiés.
+- Le banc `auditSpy` peut désormais perdre une réponse d’événement ciblé après avoir transmis la requête à l’Audit Service réel et reçu son HTTP 200. Il ferme alors la connexion TCP côté proxy, ce qui reproduit une perte d’acquittement après commit et non une panne avant écriture.
+- Le test multi-processus SSH conserve le parcours MFA → Gateway → Broker → Vault → proxy → cible → Recorder/Audit. Il exécute une injection normale puis une injection dont l’acquittement terminal est perdu : le Broker répond `outcome_unknown` avec `injection_id` et `Cache-Control: no-store`, la cible reçoit une seule frappe pour cette tentative, aucun retry automatique n’est observé, et le nombre d’événements d’audit reste exactement celui attendu.
+- La chaîne d’audit est vérifiée après la perte de réponse. Le test démontre le comportement de non-rejeu ; il ne prouve toujours pas que la cible a traité le secret, donc la vérification manuelle reste obligatoire.
+- Validation locale : `make proto-gen` (artefacts générés ignorés par Git) ; `go test ./test/integration -run '^TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses$' -count=1 -v` : **PASS (108,03 s)**. Le premier essai a seulement été bloqué par les fichiers Protobuf générés absents du worktree ; aucun défaut produit n’a été identifié par cet essai.
+- Aucune validation Windows lancée localement. L’E2E PostgreSQL 16 archive/restart/reconciliation passe localement dans la Draft PR #219 ; sa CI reste à confirmer. Le parcours B reste interdit.
+- Commit DCO signé `5aa522b524c8b4b5f4e07cd32acd612cb67a9f53` ; branche publiée et Draft PR #218 ouverte : https://github.com/openbastion/openbastion/pull/218. PR non fusionnée.
