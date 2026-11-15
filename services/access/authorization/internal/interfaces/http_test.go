@@ -74,6 +74,22 @@ func TestCreatePolicy_ActionPatternIsPersistedAndLegacyOmissionDefaultsWildcard(
 	if rec.Code != http.StatusCreated || captured.ActionPattern != "*" {
 		t.Fatalf("legacy default: status=%d policy=%+v", rec.Code, captured)
 	}
+
+	captured = nil
+	b, _ = json.Marshal(map[string]any{"name": "empty", "role": "dba", "resourcePattern": "vault:account:a", "actionPattern": "", "effect": "allow", "actorRoles": []string{"platform-admin"}})
+	rec = httptest.NewRecorder()
+	interfaces.NewHTTPServer(application.NewAuthorizationService(captureStore{store: store{}, captured: &captured})).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/authz/v1/policies", bytes.NewReader(b)))
+	if rec.Code != http.StatusBadRequest || captured != nil {
+		t.Fatalf("explicit empty action pattern must be rejected without creating a policy: status=%d policy=%+v", rec.Code, captured)
+	}
+
+	captured = nil
+	b = []byte(`{"name":"null","role":"dba","resourcePattern":"vault:account:a","actionPattern":null,"effect":"allow","actorRoles":["platform-admin"]}`)
+	rec = httptest.NewRecorder()
+	interfaces.NewHTTPServer(application.NewAuthorizationService(captureStore{store: store{}, captured: &captured})).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/authz/v1/policies", bytes.NewReader(b)))
+	if rec.Code != http.StatusBadRequest || captured != nil {
+		t.Fatalf("explicit null action pattern must be rejected without creating a policy: status=%d policy=%+v", rec.Code, captured)
+	}
 }
 
 type captureStore struct {

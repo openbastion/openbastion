@@ -26,7 +26,7 @@ Chaque politique porte désormais deux motifs indépendants : `resource_pattern`
 
 Une migration additive `002_action_pattern.sql` ajoute `action_pattern TEXT NOT NULL DEFAULT '*'`. Les politiques déjà stockées conservent ainsi exactement leur portée historique sur les actions ; aucune ligne n'est supprimée ou réinterprétée silencieusement. La contrainte d'unicité devient `(role, resource_pattern, action_pattern, effect)`.
 
-Pour les clients HTTP existants, l'omission de `actionPattern` est temporairement équivalente à `*`, afin de préserver les contrats et les déploiements déjà automatisés. Les nouveaux clients et les permissions sensibles doivent fournir une action explicite. L'API expose `actionPattern` et documente le défaut de compatibilité.
+Pour les clients HTTP existants, l'omission de `actionPattern` est temporairement équivalente à `*`, afin de préserver les contrats et les déploiements déjà automatisés. Une valeur explicitement vide ou `null` est invalide et renvoie `400` : elle ne doit jamais être confondue avec une omission. Les nouveaux clients et les permissions sensibles doivent fournir une action explicite. L'API expose `actionPattern` et documente le défaut de compatibilité.
 
 ## Conséquences
 
