@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/infrastructure"
@@ -101,6 +102,67 @@ func TestSecretInputRegistryInjectsOnlyIntoLiveMatchingScreenSession(t *testing.
 	vault.mu.Unlock()
 	if calls != 1 {
 		t.Fatalf("Vault fetch calls = %d", calls)
+	}
+}
+
+type revocationBlockingScreenTyper struct {
+	started chan struct{}
+}
+
+func (t *revocationBlockingScreenTyper) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return operation()
+}
+
+func (t *revocationBlockingScreenTyper) TypeSecret(ctx context.Context, _ []byte) error {
+	close(t.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestSecretInputRegistry_CancelsInFlightInjectionWhenScreenSessionIsRevoked(t *testing.T) {
+	material := []byte("must-not-be-typed-after-revocation")
+	vault := &injectionVault{fetched: proxycore.Fetched{Type: "password", Material: material, TargetHost: "rdp.example:3389", TargetUser: "operator"}}
+	registry := infrastructure.NewSecretInputRegistry()
+	live := proxycore.NewLiveSessions()
+	sessionCtx, revokeSession := context.WithCancelCause(context.Background())
+	liveConn, err := live.Begin("session-1", revokeSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	typer := &revocationBlockingScreenTyper{started: make(chan struct{})}
+	registry.Register(sessionCtx, "session-1", "rdp", "rdp.example:3389", "operator", typer, &injectionEvidence{})
+	result := make(chan error, 1)
+	go func() {
+		result <- registry.InjectVaultScope(context.Background(), "session-1", "account", "scope",
+			proxycore.NewCredentialFetcher(vault, "rdp-vnc-proxy"), &injectionEvidence{})
+	}()
+	select {
+	case <-typer.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("injection did not reach the screen input operation")
+	}
+	// Use the same LiveSessions.Revoke operation as the proxy's internal route.
+	revocation := live.Revoke("session-1", time.Now().Add(time.Minute))
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("in-flight screen injection succeeded after session revocation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight screen injection did not stop after session revocation")
+	}
+	liveConn.RelayEnded()
+	if stillOpen := revocation.Wait(time.Second); stillOpen != 0 {
+		t.Fatalf("revocation still sees %d open relay(s) after injection stopped", stillOpen)
+	}
+	liveConn.End()
+	for i, b := range material {
+		if b != 0 {
+			t.Fatalf("Vault material byte %d was not purged after revocation", i)
+		}
 	}
 }
 

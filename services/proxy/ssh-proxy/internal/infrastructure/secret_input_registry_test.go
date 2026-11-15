@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
@@ -156,6 +157,68 @@ func TestSecretInputRegistry_RefusesAmbiguousSessionWithMultipleShells(t *testin
 	}
 	if string(secondTyper.input) != "secret" {
 		t.Fatalf("remaining shell received %q", secondTyper.input)
+	}
+}
+
+type revocationBlockingTyper struct {
+	started chan struct{}
+}
+
+func (t *revocationBlockingTyper) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return operation()
+}
+
+func (t *revocationBlockingTyper) TypeSecret(ctx context.Context, secret []byte) error {
+	close(t.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestSecretInputRegistry_CancelsInFlightInjectionWhenSessionIsRevoked(t *testing.T) {
+	material := []byte("must-not-be-typed-after-revocation")
+	vault := &secretVault{fetched: proxycore.Fetched{Type: "password", Material: material, TargetHost: "host:22", TargetUser: "root"}}
+	registry := infrastructure.NewSecretInputRegistry()
+	live := proxycore.NewLiveSessions()
+	sessionCtx, revokeSession := context.WithCancelCause(context.Background())
+	liveConn, err := live.Begin("session-1", revokeSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	typer := &revocationBlockingTyper{started: make(chan struct{})}
+	registry.Register(sessionCtx, "session-1", "ssh", "host:22", "root", typer, &secretRecorder{})
+	result := make(chan error, 1)
+	go func() {
+		result <- registry.InjectVaultScope(context.Background(), "session-1", "account", "scope",
+			proxycore.NewCredentialFetcher(vault, "ssh-proxy"), &secretAuditor{})
+	}()
+	select {
+	case <-typer.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("injection did not reach the target input operation")
+	}
+	// Exercise the same cancellation path used by the proxy's revoke-session
+	// handler, rather than cancelling an unrelated context directly.
+	revocation := live.Revoke("session-1", time.Now().Add(time.Minute))
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("in-flight injection succeeded after session revocation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight injection did not stop after session revocation")
+	}
+	liveConn.RelayEnded()
+	if stillOpen := revocation.Wait(time.Second); stillOpen != 0 {
+		t.Fatalf("revocation still sees %d open relay(s) after injection stopped", stillOpen)
+	}
+	liveConn.End()
+	for i, b := range material {
+		if b != 0 {
+			t.Fatalf("Vault material byte %d was not purged after revocation", i)
+		}
 	}
 }
 

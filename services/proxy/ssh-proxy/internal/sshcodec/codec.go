@@ -361,7 +361,7 @@ func relayOperatorInput(input *serializedSSHInput, source io.Reader, recorder io
 // TypeSecret types one line into the active SSH PTY. The caller owns and purges
 // the supplied buffer; this method neither copies nor retains it.
 func (w *serializedSSHInput) WithExclusiveInput(ctx context.Context, operation func() error) error {
-	if w == nil || operation == nil {
+	if w == nil || ctx == nil || operation == nil {
 		return proxycore.ErrSecretInjectionInvalid
 	}
 	if err := ctx.Err(); err != nil {
@@ -369,6 +369,12 @@ func (w *serializedSSHInput) WithExclusiveInput(ctx context.Context, operation f
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	// Revocation can cancel the relay while this operation waits behind ordinary
+	// operator input. Recheck after acquiring the mutex so a queued secret is
+	// never written into a session that has already been cut.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return operation()
 }
 
