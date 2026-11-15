@@ -143,3 +143,52 @@ func TestHTTP_VerifyChainWithUnreadableAnchorsIs503(t *testing.T) {
 		t.Fatalf("the cause is not in the log: %q", logs.String())
 	}
 }
+
+func TestHTTP_SecretInjectionReconciliationIsReadOnlyAndNoStore(t *testing.T) {
+	store := infrastructure.NewInMemoryStore()
+	svc := application.NewAuditService(store)
+	for _, event := range []struct {
+		action, id string
+		success    bool
+	}{
+		{"session.secret_injection_started", "0123456789abcdef0123456789abcdef", true},
+		{"session.secret_injected", "0123456789abcdef0123456789abcdef", true},
+	} {
+		if _, err := svc.EmitEventAsWithDetails(context.Background(), "ssh-proxy", "operator-1", event.action, "session", "session-1",
+			map[string]string{"injection_id": event.id, "protocol": "ssh", "account_id": "account-1"}, event.success); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, _ := store.All(context.Background())
+	h := interfaces.NewHTTPServer(svc).Routes()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/audit/v1/secret-injections?limit=10", nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" || !strings.Contains(rec.Body.String(), `"status":"completed"`) || strings.Contains(rec.Body.String(), "secret-value") {
+		t.Fatalf("%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	after, _ := store.All(context.Background())
+	if len(after) != len(before) {
+		t.Fatalf("GET mutated audit chain: %d -> %d", len(before), len(after))
+	}
+}
+
+func TestHTTP_SecretInjectionReconciliationBoundsAndMethods(t *testing.T) {
+	h := interfaces.NewHTTPServer(application.NewAuditService(infrastructure.NewInMemoryStore())).Routes()
+	for _, path := range []string{"/audit/v1/secret-injections?limit=0", "/audit/v1/secret-injections?limit=501", "/audit/v1/secret-injections?limit=invalid", "/audit/v1/secret-injections?before=short", "/audit/v1/secret-injections?before=ABCDEF0123456789ABCDEF0123456789"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d %q", path, rec.Code, rec.Body.String())
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/audit/v1/secret-injections", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST: %d, want 405", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/audit/v1/secret-injections?before=ffffffffffffffffffffffffffffffff", nil))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("unknown cursor: %d %q, want 409", rec.Code, rec.Body.String())
+	}
+}
