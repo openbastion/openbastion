@@ -14,6 +14,7 @@ var (
 	ErrForbidden      = errors.New("video recording access denied")
 	ErrUnavailable    = errors.New("video recording dependency unavailable")
 	ErrIntegrity      = errors.New("video recording integrity check failed")
+	ErrEventConflict  = errors.New("video recording event idempotency conflict")
 )
 
 type VideoFrame struct {
@@ -29,6 +30,21 @@ type VideoSegment struct {
 	Frames                  []VideoFrame `json:"frames"`
 	Terminal                bool         `json:"terminal"`
 	TerminalThroughSequence int64        `json:"terminal_through_sequence"`
+}
+
+type VideoRecordingEvent struct {
+	EventID    string    `json:"event_id"`
+	SessionID  string    `json:"session_id"`
+	EventType  string    `json:"event_type"`
+	Protocol   string    `json:"protocol"`
+	Source     string    `json:"source"`
+	AccountID  string    `json:"account_id"`
+	OccurredAt time.Time `json:"occurred_at"`
+}
+
+type EventCursor struct {
+	OccurredAt time.Time
+	EventID    string
 }
 
 type SegmentMetadata struct {
@@ -54,6 +70,8 @@ type Repository interface {
 	// GetSegmentsFrom returns, in order, at most limit segments of the session whose first
 	// sequence is firstSequence or later (ADR-0093): the caller keeps the run without a gap.
 	GetSegmentsFrom(ctx context.Context, sessionID string, firstSequence int64, limit int) ([]StoredSegment, error)
+	RecordVideoEvent(ctx context.Context, event VideoRecordingEvent) (VideoRecordingEvent, error)
+	GetVideoEvents(ctx context.Context, sessionID string, after EventCursor, limit int) ([]VideoRecordingEvent, error)
 	Ready(ctx context.Context) error
 }
 

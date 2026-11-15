@@ -40,6 +40,24 @@ func runRepositoryContract(t *testing.T, repository domain.Repository) {
 	if err := repository.BeginRecording(ctx, sessionID, "kek-v1", wrapped); err != nil {
 		t.Fatalf("BeginRecording: %v", err)
 	}
+	event := domain.VideoRecordingEvent{EventID: "event-" + sessionID, SessionID: sessionID, EventType: "secret_injection_started", Protocol: "vnc", Source: "vault", AccountID: "account-1"}
+	storedEvent, err := repository.RecordVideoEvent(ctx, event)
+	if err != nil || storedEvent.OccurredAt.IsZero() {
+		t.Fatalf("RecordVideoEvent before frames: %+v err=%v", storedEvent, err)
+	}
+	retryEvent, err := repository.RecordVideoEvent(ctx, event)
+	if err != nil || !retryEvent.OccurredAt.Equal(storedEvent.OccurredAt) {
+		t.Fatalf("idempotent event retry: %+v err=%v", retryEvent, err)
+	}
+	conflictingEvent := event
+	conflictingEvent.AccountID = "different-account"
+	if _, err := repository.RecordVideoEvent(ctx, conflictingEvent); !errors.Is(err, domain.ErrEventConflict) {
+		t.Fatalf("conflicting event id = %v, want ErrEventConflict", err)
+	}
+	events, err := repository.GetVideoEvents(ctx, sessionID, domain.EventCursor{}, 10)
+	if err != nil || len(events) != 1 || events[0].EventID != event.EventID {
+		t.Fatalf("GetVideoEvents = %+v err=%v", events, err)
+	}
 	if err := repository.BeginRecording(ctx, sessionID, "kek-v1", wrapped); !errors.Is(err, domain.ErrAlreadyExists) {
 		t.Fatalf("duplicate BeginRecording = %v, want ErrAlreadyExists", err)
 	}
@@ -185,4 +203,28 @@ func TestMemoryStore_SegmentRangeContract(t *testing.T) {
 
 func TestPostgresStore_SegmentRangeContract(t *testing.T) {
 	runSegmentRangeContract(t, infrastructure.NewPostgresStore(testDB(t)))
+}
+
+func TestPostgresStore_VideoRecordingEventsAreAppendOnly(t *testing.T) {
+	db := testDB(t)
+	repository := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	sessionID := uniqueSessionID("append-only")
+	event, err := repository.RecordVideoEvent(ctx, domain.VideoRecordingEvent{EventID: "event-" + sessionID, SessionID: sessionID, EventType: "secret_injection_started", Protocol: "rdp", Source: "vault", AccountID: "account-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeFrame, err := repository.GetVideoEvents(ctx, sessionID, domain.EventCursor{}, 10)
+	if err != nil || len(beforeFrame) != 1 || beforeFrame[0].EventID != event.EventID {
+		t.Fatalf("event before video recording row: %+v err=%v", beforeFrame, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE video_recording_events SET account_id = 'tampered' WHERE event_id = $1`, event.EventID); err == nil {
+		t.Fatal("UPDATE unexpectedly succeeded on append-only video event")
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM video_recording_events WHERE event_id = $1`, event.EventID); err == nil {
+		t.Fatal("DELETE unexpectedly succeeded on append-only video event")
+	}
+	if _, err := db.ExecContext(ctx, `TRUNCATE video_recording_events`); err == nil {
+		t.Fatal("TRUNCATE unexpectedly succeeded on append-only video events")
+	}
 }

@@ -20,6 +20,10 @@ service VideoRecording {
   rpc StreamVideoSegments(stream VideoSegment) returns (stream VideoSegmentAck);
   // Appelé uniquement par la Gateway après vérification du jeton utilisateur.
   rpc GetVideoSegment(GetVideoSegmentRequest) returns (GetVideoSegmentResponse);
+  // Marqueur latéral idempotent, écrit avant l’injection de secret par le proxy.
+  rpc RecordVideoEvent(RecordVideoEventRequest) returns (RecordVideoEventResponse);
+  // Lecture paginée des marqueurs, uniquement via l’API Gateway.
+  rpc GetVideoEvents(GetVideoEventsRequest) returns (GetVideoEventsResponse);
   // Vérifie les dépendances avant l'admission d'une session enregistrée.
   rpc CheckReadiness(CheckVideoRecorderReadinessRequest) returns (CheckVideoRecorderReadinessResponse);
 }
@@ -113,4 +117,42 @@ message GetCommandRecordingResponse {
   int32 page = 3;                     // la page réellement servie, pas la demandée
   int32 page_size = 4;
   int64 total_entries = 5;
+}
+
+
+message RecordVideoEventRequest {
+  string event_id = 1;
+  string session_id = 2;
+  string event_type = 3;
+  string protocol = 4;
+  string source = 5;
+  string account_id = 6;
+}
+
+message RecordVideoEventResponse {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+}
+
+message GetVideoEventsRequest {
+  string session_id = 1;
+  string actor_user_id = 2;
+  repeated string actor_roles = 3;
+  string cursor = 4;
+  int32 limit = 5;
+}
+
+message VideoRecordingEvent {
+  string event_id = 1;
+  string session_id = 2;
+  string event_type = 3;
+  string protocol = 4;
+  string source = 5;
+  string account_id = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+}
+
+message GetVideoEventsResponse {
+  repeated VideoRecordingEvent events = 1;
+  string next_cursor = 2;
 }

@@ -1,6 +1,6 @@
 # ADR-0111 — Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images
 
-**Statut** Proposé · 15 novembre 2026
+**Statut** Accepté · 15 novembre 2026
 
 **Contexte**
 
@@ -10,7 +10,7 @@ Insérer un marqueur d'injection comme une image ou un faux événement presse-p
 
 **Décision proposée**
 
-1. Ajouter une table append-only `video_recording_events`, séparée de `video_recording_segments`. Elle conserve uniquement : identifiant d'événement idempotent, session, type d'événement, protocole, source, identifiant de compte et horodatage attribué par le Video Recorder.
+1. Ajouter une table append-only `video_recording_events`, séparée de `video_recording_segments` et sans clé étrangère vers `video_recordings`, afin qu’un marqueur puisse précéder la première image persistée. Elle conserve uniquement : identifiant d'événement idempotent, session, type d'événement, protocole, source, identifiant de compte et horodatage attribué par le Video Recorder.
 2. Le premier type autorisé est `secret_injection_started`. La seule source admise dans cet incrément est `vault`. Aucun contenu, longueur, empreinte, extrait, ni donnée dérivée du secret n'est conservé.
 3. L'événement n'a pas de numéro de séquence d'image. Il est ordonné par `occurred_at`, puis `event_id`. Il ne modifie ni `last_sequence`, ni les segments chiffrés, ni le protocole `openbastion.screen.v1`.
 4. Ajouter `VideoRecording.RecordVideoEvent`, RPC unaire accessible exclusivement à l'identité mTLS `rdp-vnc-proxy`. Le proxy écrit le marqueur avant la frappe ; toute erreur ou absence d'accusé refuse l'injection.

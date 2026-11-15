@@ -129,6 +129,46 @@ func (s *GRPCServer) GetVideoSegment(ctx context.Context, request *recordingv1.G
 	return response, nil
 }
 
+func (s *GRPCServer) RecordVideoEvent(ctx context.Context, request *recordingv1.RecordVideoEventRequest) (*recordingv1.RecordVideoEventResponse, error) {
+	if request == nil {
+		return nil, status.Error(codes.InvalidArgument, "video event request is required")
+	}
+	caller, ok := mtls.CallerFrom(ctx)
+	if !ok || caller != mtls.RDPVNCProxy {
+		return nil, status.Error(codes.PermissionDenied, "RDP/VNC proxy service identity is required")
+	}
+	event, err := s.svc.RecordVideoEvent(ctx, domain.VideoRecordingEvent{
+		EventID: request.GetEventId(), SessionID: request.GetSessionId(), EventType: request.GetEventType(),
+		Protocol: request.GetProtocol(), Source: request.GetSource(), AccountID: request.GetAccountId(),
+	})
+	if err != nil {
+		return nil, grpcError(err)
+	}
+	return &recordingv1.RecordVideoEventResponse{EventId: event.EventID, OccurredAt: timestamppb.New(event.OccurredAt)}, nil
+}
+
+func (s *GRPCServer) GetVideoEvents(ctx context.Context, request *recordingv1.GetVideoEventsRequest) (*recordingv1.GetVideoEventsResponse, error) {
+	if request == nil {
+		return nil, status.Error(codes.InvalidArgument, "video events request is required")
+	}
+	caller, ok := mtls.CallerFrom(ctx)
+	if !ok || caller != mtls.APIGateway {
+		return nil, status.Error(codes.PermissionDenied, "API Gateway service identity is required")
+	}
+	page, err := s.svc.ReadVideoEvents(ctx, request.GetActorUserId(), request.GetActorRoles(), request.GetSessionId(), request.GetCursor(), int(request.GetLimit()))
+	if err != nil {
+		return nil, grpcError(err)
+	}
+	response := &recordingv1.GetVideoEventsResponse{Events: make([]*recordingv1.VideoRecordingEvent, 0, len(page.Events)), NextCursor: page.NextCursor}
+	for _, event := range page.Events {
+		response.Events = append(response.Events, &recordingv1.VideoRecordingEvent{
+			EventId: event.EventID, SessionId: event.SessionID, EventType: event.EventType,
+			Protocol: event.Protocol, Source: event.Source, AccountId: event.AccountID, OccurredAt: timestamppb.New(event.OccurredAt),
+		})
+	}
+	return response, nil
+}
+
 func (s *GRPCServer) CheckReadiness(ctx context.Context, _ *recordingv1.CheckVideoRecorderReadinessRequest) (*recordingv1.CheckVideoRecorderReadinessResponse, error) {
 	if err := s.svc.Ready(ctx); err != nil {
 		log.Printf("video-recorder: readiness check failed: %v", err)
@@ -167,6 +207,8 @@ func grpcError(err error) error {
 		return status.Error(codes.InvalidArgument, "video segment is invalid")
 	case errors.Is(err, domain.ErrAlreadyExists):
 		return status.Error(codes.AlreadyExists, "video recording already exists")
+	case errors.Is(err, domain.ErrEventConflict):
+		return status.Error(codes.AlreadyExists, "video event idempotency conflict")
 	case errors.Is(err, domain.ErrConflict):
 		return status.Error(codes.FailedPrecondition, "video recording sequence conflicts")
 	case errors.Is(err, domain.ErrNotFound):

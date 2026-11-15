@@ -18,14 +18,19 @@ import (
 )
 
 type fakeVideoRecorder struct {
-	calls         int
-	sessionID     string
-	firstSequence int64
-	actorID       string
-	roles         []string
-	hasDeadline   bool
-	response      *recordingv1.GetVideoSegmentResponse
-	err           error
+	calls          int
+	sessionID      string
+	firstSequence  int64
+	actorID        string
+	roles          []string
+	hasDeadline    bool
+	response       *recordingv1.GetVideoSegmentResponse
+	err            error
+	eventCalls     int
+	eventSessionID string
+	eventCursor    string
+	eventLimit     int32
+	eventResponse  *recordingv1.GetVideoEventsResponse
 }
 
 func (f *fakeVideoRecorder) GetVideoSegment(ctx context.Context, sessionID string, firstSequence int64, actorID string, roles []string) (*recordingv1.GetVideoSegmentResponse, error) {
@@ -34,6 +39,14 @@ func (f *fakeVideoRecorder) GetVideoSegment(ctx context.Context, sessionID strin
 	f.roles = append([]string(nil), roles...)
 	_, f.hasDeadline = ctx.Deadline()
 	return f.response, f.err
+}
+
+func (f *fakeVideoRecorder) GetVideoEvents(ctx context.Context, sessionID, cursor string, limit int32, actorID string, roles []string) (*recordingv1.GetVideoEventsResponse, error) {
+	f.eventCalls++
+	f.eventSessionID, f.eventCursor, f.eventLimit = sessionID, cursor, limit
+	f.actorID, f.roles = actorID, append([]string(nil), roles...)
+	_, f.hasDeadline = ctx.Deadline()
+	return f.eventResponse, f.err
 }
 
 func TestVideoRecordingRoute_FailsClosedWhenRecorderIsNotConfigured(t *testing.T) {
@@ -392,6 +405,54 @@ func TestVideoRecordingRoute_ServesClipboardTexts(t *testing.T) {
 	} {
 		if got := serve(segmentResponseWithFrame("s-1", 5, frame)); got.Code != http.StatusBadGateway {
 			t.Errorf("%s: %d, want 502", name, got.Code)
+		}
+	}
+}
+
+func TestVideoRecordingEventsRouteForwardsVerifiedIdentityAndReturnsNoStorePage(t *testing.T) {
+	authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-verified", "alice", []string{"auditor", "session-reader"})
+	t.Cleanup(authSrv.Close)
+	recorder := &fakeVideoRecorder{eventResponse: &recordingv1.GetVideoEventsResponse{Events: []*recordingv1.VideoRecordingEvent{{
+		EventId: "evt-1", SessionId: "s-1", EventType: "secret_injection_started", Protocol: "vnc", Source: "vault", AccountId: "acct-1", OccurredAt: timestamppb.New(time.Date(2026, 11, 15, 1, 2, 3, 0, time.UTC)),
+	}}}}
+	gateway := newTestGateway(t, authSrv.URL, "").WithVideoRecorderClient(recorder)
+	request := httptest.NewRequest(http.MethodGet, "/sessions/s-1/recording/video/events?cursor=opaque&limit=17", nil)
+	request.Header.Set("Authorization", "Bearer tok-alice")
+	response := httptest.NewRecorder()
+	gateway.Routes().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("events route returned %d: %s", response.Code, response.Body.String())
+	}
+	if recorder.eventCalls != 1 || recorder.eventSessionID != "s-1" || recorder.eventCursor != "opaque" || recorder.eventLimit != 17 || recorder.actorID != "u-verified" || len(recorder.roles) != 2 || !recorder.hasDeadline {
+		t.Fatalf("unexpected Video Recorder request: %+v", recorder)
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("Cache-Control = %q", response.Header().Get("Cache-Control"))
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body["events"].([]any)) != 1 {
+		t.Fatalf("unexpected response body: %s", response.Body.String())
+	}
+}
+
+func TestVideoRecordingEventsRouteRejectsInvalidQueryAndClientIdentity(t *testing.T) {
+	authSrv := newFakeTokenVerifierServer(t, "tok-alice", "u-verified", "alice", []string{"auditor"})
+	t.Cleanup(authSrv.Close)
+	for _, path := range []string{
+		"/sessions/s-1/recording/video/events?limit=101",
+		"/sessions/s-1/recording/video/events?actorUserId=u-victim",
+		"/sessions/s-1/recording/video/events?cursor=a&cursor=b",
+	} {
+		gateway := newTestGateway(t, authSrv.URL, "").WithVideoRecorderClient(&fakeVideoRecorder{})
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("Authorization", "Bearer tok-alice")
+		response := httptest.NewRecorder()
+		gateway.Routes().ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("GET %s = %d, want 400", path, response.Code)
 		}
 	}
 }

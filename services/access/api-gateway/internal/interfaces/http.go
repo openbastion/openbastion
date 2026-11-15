@@ -39,9 +39,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// VideoRecorderClient fetches one segment after the Gateway has verified the user's token.
+// VideoRecorderClient reads video segments and timeline events after the Gateway verifies the user's token.
 type VideoRecorderClient interface {
 	GetVideoSegment(ctx context.Context, sessionID string, firstSequence int64, actorID string, roles []string) (*recordingv1.GetVideoSegmentResponse, error)
+	GetVideoEvents(ctx context.Context, sessionID, cursor string, limit int32, actorID string, roles []string) (*recordingv1.GetVideoEventsResponse, error)
 }
 
 type GatewayServer struct {
@@ -546,8 +547,17 @@ func (g *GatewayServer) handleListPending(w http.ResponseWriter, r *http.Request
 //	POST       …/approve|reject    the Gateway states who decides, and with which roles
 //	GET        …/recording         served by the Command Recorder
 //	GET        …/recording/video/segments/{sequence} served by the Video Recorder
+//	GET        …/recording/video/events served by the Video Recorder
 
 func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request, id identity) {
+	if sessionID, matched := splitVideoRecordingEventsPath(r.URL.EscapedPath()); matched {
+		if !usableVideoSessionID(sessionID) {
+			writeVideoRecordingAPIError(w, http.StatusBadRequest, "VIDEO_RECORDING_INVALID_REQUEST", "invalid video recording path")
+			return
+		}
+		g.handleSessionVideoEvents(w, r, id, sessionID)
+		return
+	}
 	if sessionID, firstSequence, matched := splitVideoRecordingPath(r.URL.EscapedPath()); matched {
 		if !usableVideoSessionID(sessionID) || firstSequence < 1 {
 			writeVideoRecordingAPIError(w, http.StatusBadRequest, "VIDEO_RECORDING_INVALID_REQUEST", "invalid video recording path")
@@ -668,6 +678,121 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func splitVideoRecordingEventsPath(escapedPath string) (string, bool) {
+	if !strings.HasPrefix(escapedPath, "/sessions/") {
+		return "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(escapedPath, "/sessions/"), "/")
+	if len(parts) != 4 || parts[1] != "recording" || parts[2] != "video" || parts[3] != "events" {
+		return "", false
+	}
+	sessionID, err := neturl.PathUnescape(parts[0])
+	return sessionID, err == nil
+}
+
+func (g *GatewayServer) handleSessionVideoEvents(w http.ResponseWriter, r *http.Request, id identity, sessionID string) {
+	if r.Method != http.MethodGet {
+		writeVideoRecordingAPIError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
+		return
+	}
+	if r.Body != nil && r.Body != http.NoBody {
+		writeVideoRecordingAPIError(w, http.StatusBadRequest, "VIDEO_RECORDING_INVALID_REQUEST", "video event requests do not accept a body")
+		return
+	}
+	query := r.URL.Query()
+	for key, values := range query {
+		if (key != "cursor" && key != "limit") || len(values) != 1 {
+			writeVideoRecordingAPIError(w, http.StatusBadRequest, "VIDEO_RECORDING_INVALID_REQUEST", "invalid video event query")
+			return
+		}
+	}
+	cursor := query.Get("cursor")
+	if len(cursor) > 1024 {
+		writeVideoRecordingAPIError(w, http.StatusBadRequest, "VIDEO_RECORDING_INVALID_REQUEST", "invalid video event cursor")
+		return
+	}
+	limit := int64(50)
+	if raw := query.Get("limit"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || parsed < 1 || parsed > 100 {
+			writeVideoRecordingAPIError(w, http.StatusBadRequest, "VIDEO_RECORDING_INVALID_REQUEST", "invalid video event limit")
+			return
+		}
+		limit = parsed
+	}
+	if g.videoRecorder == nil {
+		writeVideoRecordingAPIError(w, http.StatusServiceUnavailable, "VIDEO_RECORDER_UNAVAILABLE", "video recording unavailable")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	response, err := g.videoRecorder.GetVideoEvents(ctx, sessionID, cursor, int32(limit), id.UserID, id.Roles)
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
+		writeVideoEventsError(w, err)
+		return
+	}
+	result, err := toVideoEventsResponse(response, sessionID)
+	if err != nil {
+		log.Printf("api-gateway: Video Recorder returned invalid video event page: %v", err)
+		writeVideoRecordingAPIError(w, http.StatusBadGateway, "VIDEO_RECORDER_INVALID_RESPONSE", "video recording unavailable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		log.Printf("api-gateway: writing video event response failed: %v", err)
+	}
+}
+
+type videoRecordingEventResponse struct {
+	EventID    string    `json:"eventId"`
+	SessionID  string    `json:"sessionId"`
+	EventType  string    `json:"eventType"`
+	Protocol   string    `json:"protocol"`
+	Source     string    `json:"source"`
+	AccountID  string    `json:"accountId"`
+	OccurredAt time.Time `json:"occurredAt"`
+}
+
+type videoEventsResponse struct {
+	Events     []videoRecordingEventResponse `json:"events"`
+	NextCursor string                        `json:"nextCursor,omitempty"`
+}
+
+func toVideoEventsResponse(response *recordingv1.GetVideoEventsResponse, sessionID string) (videoEventsResponse, error) {
+	if response == nil || len(response.GetEvents()) > 100 || len(response.GetNextCursor()) > 1024 {
+		return videoEventsResponse{}, fmt.Errorf("invalid video event page bounds")
+	}
+	for _, character := range response.GetNextCursor() {
+		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || character == '_' || character == '-') {
+			return videoEventsResponse{}, fmt.Errorf("invalid video event cursor")
+		}
+	}
+	result := videoEventsResponse{Events: make([]videoRecordingEventResponse, 0, len(response.GetEvents())), NextCursor: response.GetNextCursor()}
+	var previous time.Time
+	var previousID string
+	for i, event := range response.GetEvents() {
+		if event == nil || event.GetSessionId() != sessionID || len(event.GetEventId()) > 128 || !usableVideoSessionID(event.GetEventId()) ||
+			event.GetEventType() != "secret_injection_started" || (event.GetProtocol() != "vnc" && event.GetProtocol() != "rdp") ||
+			event.GetSource() != "vault" || len(event.GetAccountId()) > 256 || !usableVideoSessionID(event.GetAccountId()) ||
+			event.GetOccurredAt() == nil || event.GetOccurredAt().CheckValid() != nil {
+			return videoEventsResponse{}, fmt.Errorf("event %d is invalid", i)
+		}
+		occurred := event.GetOccurredAt().AsTime()
+		if i > 0 && (occurred.Before(previous) || (occurred.Equal(previous) && event.GetEventId() <= previousID)) {
+			return videoEventsResponse{}, fmt.Errorf("event order is invalid")
+		}
+		previous, previousID = occurred, event.GetEventId()
+		result.Events = append(result.Events, videoRecordingEventResponse{EventID: event.GetEventId(), SessionID: sessionID, EventType: event.GetEventType(), Protocol: event.GetProtocol(), Source: event.GetSource(), AccountID: event.GetAccountId(), OccurredAt: occurred})
+	}
+	return result, nil
 }
 
 func splitVideoRecordingPath(escapedPath string) (string, int64, bool) {
@@ -806,6 +931,14 @@ func toVideoSegmentResponse(response *recordingv1.GetVideoSegmentResponse, sessi
 		})
 	}
 	return result, nil
+}
+
+func writeVideoEventsError(w http.ResponseWriter, err error) {
+	if status.Code(err) == codes.NotFound {
+		writeVideoRecordingAPIError(w, http.StatusNotFound, "VIDEO_RECORDING_NOT_FOUND", "video recording not found")
+		return
+	}
+	writeVideoRecordingError(w, err)
 }
 
 func writeVideoRecordingError(w http.ResponseWriter, err error) {

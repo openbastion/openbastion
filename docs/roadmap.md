@@ -2,12 +2,13 @@
 
 Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
-## 0. État d'avancement — 14 novembre 2026
+## 0. État d'avancement — 15 novembre 2026
 
 La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
 
 - **MVP SSH/SFTP/SCP** : parcours fonctionnel de référence, avec Gateway, Broker, Vault, proxy SSH, audit et replay texte.
 - **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API et dans l'Admin UI (lecteur d'écran enregistré, page « Enregistrements ») ; plusieurs fonctions de redirection restent à faire.
+- **Marqueurs de relecture vidéo (ADR-0111)** : contrat Protobuf, stockage append-only, RPC mTLS proxy/Gateway et route REST paginée implémentés dans la branche de réalisation ; le raccordement à la transaction d’injection Vault VNC/RDP et l’affichage dans la timeline Admin UI restent à intégrer.
 - **RDP** : moteur Go pur ([ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md)), éprouvé contre FreeRDP 3 et Windows Server 2022 en CI :
   - CredSSP/NTLMv2 avec certificat épinglé avant tout secret ;
   - image en 15, 16 et 32 bpp, fragments Fast-Path, réactivation ;
@@ -148,7 +149,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 | Secrets Manager | | ✅ | |
 | Session Recorder | ✅ | | |
 | Command Recorder | ✅ | | |
-| Video Recorder | | ⚠️ (pipeline VNC E2E ; lecteur UI restant) | |
+| Video Recorder | | ⚠️ (pipeline VNC E2E ; API des marqueurs latéraux ADR-0111 ; raccordement injection et timeline UI restants) | |
 | Audit Service | ✅ | | |
 | Recherche plein texte (ADR-0080, sans OpenSearch) | | ✅ | |
 | Reporting Service | | | ✅ |

@@ -304,8 +304,8 @@ func TestHTTPHealthRoutesRequireGET(t *testing.T) {
 
 func TestGRPCCallerRulesIncludeRDPAndGatewayOnlyMethods(t *testing.T) {
 	rules := GRPCCallerRules()
-	if len(rules) != 3 {
-		t.Fatalf("got %d RPC rules, want 3", len(rules))
+	if len(rules) != 5 {
+		t.Fatalf("got %d RPC rules, want 5", len(rules))
 	}
 	for _, rule := range rules {
 		if len(rule.Callers) == 0 {
@@ -316,5 +316,38 @@ func TestGRPCCallerRulesIncludeRDPAndGatewayOnlyMethods(t *testing.T) {
 				t.Fatalf("RPC %s has invalid caller %q", rule.Method, caller)
 			}
 		}
+	}
+}
+
+func TestVideoEventRPCsRequireTheirDedicatedServiceIdentities(t *testing.T) {
+	objects := &grpcObjects{values: make(map[string][]byte)}
+	svc, _ := newGRPCTestService(t, objects)
+	writer, err := svc.BeginRecording(context.Background(), "session-event-rpc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	server := &GRPCServer{svc: svc}
+	request := &recordingv1.RecordVideoEventRequest{
+		EventId: "event-rpc-1", SessionId: "session-event-rpc", EventType: "secret_injection_started",
+		Protocol: "rdp", Source: "vault", AccountId: "account-rpc",
+	}
+	if _, err := server.RecordVideoEvent(context.Background(), request); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("event write without service identity returned %v", err)
+	}
+	written, err := server.RecordVideoEvent(mtls.WithCaller(context.Background(), mtls.RDPVNCProxy), request)
+	if err != nil || written.GetEventId() != request.GetEventId() || written.GetOccurredAt() == nil {
+		t.Fatalf("event write: response=%+v err=%v", written, err)
+	}
+	if _, err := server.RecordVideoEvent(mtls.WithCaller(context.Background(), mtls.APIGateway), request); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("event write from Gateway returned %v", err)
+	}
+	readRequest := &recordingv1.GetVideoEventsRequest{SessionId: "session-event-rpc", ActorUserId: "user-1", ActorRoles: []string{"auditor"}, Limit: 10}
+	if _, err := server.GetVideoEvents(mtls.WithCaller(context.Background(), mtls.RDPVNCProxy), readRequest); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("event read from proxy returned %v", err)
+	}
+	page, err := server.GetVideoEvents(mtls.WithCaller(context.Background(), mtls.APIGateway), readRequest)
+	if err != nil || len(page.GetEvents()) != 1 || page.GetEvents()[0].GetEventId() != request.GetEventId() {
+		t.Fatalf("event read: response=%+v err=%v", page, err)
 	}
 }

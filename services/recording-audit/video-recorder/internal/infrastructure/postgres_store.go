@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	_ "github.com/lib/pq"
 
@@ -184,6 +185,70 @@ func (s *PostgresStore) GetSegmentsFrom(ctx context.Context, sessionID string, f
 		return nil, fmt.Errorf("reading video segment metadata: %w", err)
 	}
 	return out, nil
+}
+
+func (s *PostgresStore) RecordVideoEvent(ctx context.Context, event domain.VideoRecordingEvent) (domain.VideoRecordingEvent, error) {
+	if event.EventID == "" || event.SessionID == "" || event.EventType != "secret_injection_started" ||
+		(event.Protocol != "vnc" && event.Protocol != "rdp") || event.Source != "vault" || event.AccountID == "" {
+		return domain.VideoRecordingEvent{}, domain.ErrInvalidSegment
+	}
+	var stored domain.VideoRecordingEvent
+	err := s.db.QueryRowContext(ctx, `INSERT INTO video_recording_events
+		(event_id, session_id, event_type, protocol, source, account_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (event_id) DO NOTHING
+		RETURNING event_id, session_id, event_type, protocol, source, account_id, occurred_at`,
+		event.EventID, event.SessionID, event.EventType, event.Protocol, event.Source, event.AccountID).Scan(
+		&stored.EventID, &stored.SessionID, &stored.EventType, &stored.Protocol, &stored.Source, &stored.AccountID, &stored.OccurredAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = s.db.QueryRowContext(ctx, `SELECT event_id, session_id, event_type, protocol, source, account_id, occurred_at
+			FROM video_recording_events WHERE event_id = $1`, event.EventID).Scan(
+			&stored.EventID, &stored.SessionID, &stored.EventType, &stored.Protocol, &stored.Source, &stored.AccountID, &stored.OccurredAt)
+		if err == nil && (stored.SessionID != event.SessionID || stored.EventType != event.EventType || stored.Protocol != event.Protocol || stored.Source != event.Source || stored.AccountID != event.AccountID) {
+			return domain.VideoRecordingEvent{}, domain.ErrEventConflict
+		}
+	}
+	if err != nil {
+		var pqErr interface{ SQLState() string }
+		if errors.As(err, &pqErr) && pqErr.SQLState() == "23503" {
+			return domain.VideoRecordingEvent{}, domain.ErrNotFound
+		}
+		return domain.VideoRecordingEvent{}, fmt.Errorf("recording video event: %w", err)
+	}
+	return stored, nil
+}
+
+func (s *PostgresStore) GetVideoEvents(ctx context.Context, sessionID string, after domain.EventCursor, limit int) ([]domain.VideoRecordingEvent, error) {
+	if sessionID == "" || limit < 1 {
+		return nil, domain.ErrInvalidSegment
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT event_id, session_id, event_type, protocol, source, account_id, occurred_at
+		FROM video_recording_events
+		WHERE session_id = $1 AND ($2::timestamptz IS NULL OR (occurred_at, event_id) > ($2, $3))
+		ORDER BY occurred_at ASC, event_id ASC LIMIT $4`, sessionID, nullableTime(after.OccurredAt), after.EventID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("querying video recording events: %w", err)
+	}
+	defer rows.Close()
+	out := make([]domain.VideoRecordingEvent, 0, limit)
+	for rows.Next() {
+		var event domain.VideoRecordingEvent
+		if err := rows.Scan(&event.EventID, &event.SessionID, &event.EventType, &event.Protocol, &event.Source, &event.AccountID, &event.OccurredAt); err != nil {
+			return nil, fmt.Errorf("scanning video recording event: %w", err)
+		}
+		out = append(out, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating video recording events: %w", err)
+	}
+	return out, nil
+}
+
+func nullableTime(value time.Time) any {
+	if value.IsZero() {
+		return nil
+	}
+	return value.UTC()
 }
 
 func (s *PostgresStore) Ready(ctx context.Context) error {
