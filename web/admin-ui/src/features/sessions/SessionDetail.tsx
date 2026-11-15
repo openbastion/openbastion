@@ -2,6 +2,7 @@ import { Session } from "../../shared/api";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
+import { SecretInjection } from "./SecretInjection";
 
 // The attached screen of the session being looked at: each connection is another attach, and the
 // key restarts the viewer on the new one.
@@ -12,7 +13,8 @@ export interface AttachedScreen {
 }
 
 // One session, as its identifier returns it: what it is, what it carries, and what its status
-// allows — opening the screen of a graphical session (ADR-0071), or terminating it.
+// allows — opening a graphical screen (ADR-0071), typing the session-bound Vault secret (ADR-0097),
+// or terminating the session.
 export function SessionDetail({
   session,
   onOpenScreen,
@@ -68,16 +70,19 @@ export function SessionDetail({
         ) : null}
       </dl>
       {session.status === "active" ? (
-        <div className="ob-form-actions">
-          {session.protocol === "vnc" || session.protocol === "rdp" ? (
-            <Button variant="primary" onClick={() => onOpenScreen(session.id)}>
-              {t("sessions.detail.openScreen")}
+        <>
+          <SecretInjection session={session} />
+          <div className="ob-form-actions">
+            {session.protocol === "vnc" || session.protocol === "rdp" ? (
+              <Button variant="primary" onClick={() => onOpenScreen(session.id)}>
+                {t("sessions.detail.openScreen")}
+              </Button>
+            ) : null}
+            <Button variant="danger" onClick={() => onTerminate(session)}>
+              {t("sessions.detail.terminate")}
             </Button>
-          ) : null}
-          <Button variant="danger" onClick={() => onTerminate(session)}>
-            {t("sessions.detail.terminate")}
-          </Button>
-        </div>
+          </div>
+        </>
       ) : null}
     </>
   );
