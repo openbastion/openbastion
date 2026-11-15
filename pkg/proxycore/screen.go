@@ -341,7 +341,7 @@ func (l *Listener) ServeScreen(ctx context.Context, meta SessionMetadata, codec 
 	// readiness proof, even if the caller reused metadata from another path.
 	meta.Admission = Admission{}
 	return l.serveWithRelay(ctx, meta, admit, func(relayCtx, cleanupCtx context.Context, cred *Credential) error {
-		return relayScreen(relayCtx, cleanupCtx, meta, cred, codec, recorder, sink, l.ScreenInput, l.ScreenAckTimeout, l.Clipboard)
+		return relayScreen(relayCtx, cleanupCtx, meta, cred, codec, recorder, sink, l.ScreenInput, l.ScreenAckTimeout, l.Clipboard, l.ScreenSecretInputs)
 	})
 }
 
@@ -455,6 +455,17 @@ func recordScreenFrame(ctx context.Context, recorder FrameRecorder, sessionID st
 	return recorder.Record(recordCtx, sessionID, frame)
 }
 
+func screenProtocolName(protocol screenstream.Protocol) string {
+	switch protocol {
+	case screenstream.ProtocolVNC:
+		return "vnc"
+	case screenstream.ProtocolRDP:
+		return "rdp"
+	default:
+		return ""
+	}
+}
+
 // screenContextEnd says why the session's context ended, in the terms END and the audit use.
 func screenContextEnd(ctx context.Context) error {
 	switch {
@@ -466,7 +477,7 @@ func screenContextEnd(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration, clipboardAudit ClipboardAuditor) (relayErr error) {
+func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Credential, codec ScreenCodec, recorder FrameRecorder, sink ScreenSink, limits ScreenInputLimits, ackTimeout time.Duration, clipboardAudit ClipboardAuditor, secretInputs SecretInputRegistrar) (relayErr error) {
 	if cred == nil {
 		return errors.New("proxycore: missing screen credential")
 	}
@@ -474,6 +485,9 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	if ackTimeout <= 0 {
 		ackTimeout = DefaultScreenAckTimeout
 	}
+	// Capture target identity before Open/Purge: registration binds a later one-use Vault scope
+	// to the exact target authenticated by this screen session.
+	targetHost, targetUser := cred.TargetHost, cred.TargetUser
 	// The clipboard opens only with a right for it, a codec that can, and an audit to write its
 	// transfers to (ADR-0096): otherwise the session is the one it always was.
 	var session ScreenSession
@@ -489,6 +503,16 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	}
 	// The target has authenticated; the screen session must not retain its Vault credential.
 	cred.Purge()
+	// A graphical protocol opts in only by implementing both halves of the shared secret-input
+	// contract. A missing typer/recorder never falls back to the clipboard.
+	if secretInputs != nil {
+		if typer, ok := session.(SecretTyper); ok {
+			if secretRecorder, ok := recorder.(SecretInputRecorder); ok {
+				unregister := secretInputs.Register(ctx, meta.SessionID, screenProtocolName(meta.ScreenProtocol), targetHost, targetUser, typer, secretRecorder)
+				defer unregister()
+			}
+		}
+	}
 	lastAck := uint64(0)
 	display := newScreenDisplay(ctx, sink)
 	if requester, ok := session.(KeyFrameRequester); ok {

@@ -1,6 +1,6 @@
 # Contrat de confirmation MFA pour l'injection d'un secret
 
-**Statut :** parcours A câblé de Gateway à SSH Proxy pour SSH interactif ; routes API disponibles, UI non intégrée
+**Statut au 15 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles, UI non intégrée ; essais d’interopérabilité VNC/RDP sur cibles réelles encore requis
 **Décision de référence :** ADR-0097 (accepté)  
 **Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) reste bloqué tant que le transport navigateur → proxy ne garantit pas que la Gateway ne voit jamais le clair.
 
@@ -157,9 +157,9 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 5. ~~Canal de commande proxy ciblé vers l'instance qui détient la session ; jamais de scope dans le client~~ (incrément 5, SSH seulement ; affinité déterministe ADR-0046).
 6. ~~Tests PostgreSQL réels des migrations, bindings et consommations atomiques~~ (incrément 2, base dédiée PostgreSQL 16) ; restent les tests d'intégration multi-services.
 7. ~~Contrat OpenAPI public et routes Gateway/Broker, avec tests HTTP et contrat Protobuf~~ (incrément 6 ; interface Admin UI encore à faire).
-8. VNC et RDP : implémenter SecretTyper avec événements clavier Unicode, sans presse-papiers ; tests contre les vraies cibles prévues par ADR-0097.
+8. ~~VNC et RDP : implémenter SecretTyper avec événements clavier Unicode, sans presse-papiers~~ (incrément 7 : implémentation et tests unitaires/protocole) ; restent les essais d'interopérabilité contre TigerVNC et les cinq cibles Windows prévues par ADR-0097.
 
-**État actuel :** les étapes 1 à 7 sont réalisées pour le parcours A SSH (routes Gateway/Broker, contrat OpenAPI et test multi-services réel inclus). Restent l'interface Admin UI, VNC/RDP et le parcours B.
+**État actuel :** les étapes 1 à 7 sont réalisées pour le parcours A (routes Gateway/Broker, contrat OpenAPI et orchestration MFA) ; SSH est testé de bout en bout sur de vrais processus. VNC/RDP disposent maintenant du typer Unicode, du registre de session, de la route mTLS et du marqueur vidéo durable. Le smoke test TigerVNC et le test Unicode Windows sont ajoutés ; leurs résultats terrain/CI restent à confirmer. Restent l'interface Admin UI et le parcours B.
 
 
 ## 9. État d'implémentation — 14 novembre 2026, incrément 5 (SSH A)
@@ -170,7 +170,7 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 - SSH Proxy expose `POST /internal/v1/inject-vault-secret`, autorisé au seul certificat mTLS `session-broker`. Il exige un shell interactif enregistré, refuse une session inactive ou ambiguë (plusieurs shells), lie le contexte de l'injection au contexte d'annulation du relay, puis échange le scope auprès du Vault avec sa propre identité mTLS.
 - Le proxy compare le `TargetHost` et `TargetUser` reçus du Vault à ceux du shell actif. Il exige un credential de type `password`, UTF-8 valide, mono-ligne, sans contrôle et limité à 4 Kio, puis appelle `proxycore.InjectSecret` : audit préalable `session.secret_injection_started`, marqueur Command Recorder « injection requested » strictement acquitté, frappe SSH hors du flux enregistré, événement de résultat `session.secret_injected`/`session.secret_injection_failed`, purge des buffers. Aucun presse-papiers n'est utilisé.
 - Tests ciblés couvrent le routage identique entre deux répliques Broker, l'absence de failover, le recontrôle Authorization après MFA, l'absence d'appel Vault/proxy si la consommation MFA échoue, le refus d'un protocole sans typer, l'absence de fetch pour une session inactive/annulée/ambiguë, la correspondance de cible, l'ordre audit → recording → typing et la purge.
-- **Limites** : ce parcours est actuellement implémenté uniquement pour SSH interactif. Aucun endpoint Session Broker/Gateway ni UI n'est exposé ; VNC/RDP ne disposent pas encore de `SecretTyper` intégré ; le parcours B reste interdit jusqu'au canal E2E navigateur → proxy. Le flux A n'est donc pas encore activable par un utilisateur.
+- **Limites à la date de cet incrément (14 novembre 2026)** : le parcours était implémenté uniquement pour SSH interactif ; VNC/RDP et l'interface opérateur restaient à construire. Cet état historique est supersédé par l'incrément 7 (§11), qui câble le `SecretTyper` VNC/RDP et la route mTLS. Restent l'UI, les essais d'interopérabilité sur vraies cibles et le parcours B.
 
 
 ## 10. État d'implémentation — 14 novembre 2026, incrément 6 (routes HTTP)
@@ -181,3 +181,12 @@ Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphe
 - Les tests couvrent l'identité vérifiée, les rôles, l'absence de corps pour le challenge, l'allowlist de preuve, TOTP/WebAuthn, l'absence de grant/scope dans les réponses, MFA refusé, demandeur non propriétaire, authentification manquante, routes inconnues et débit partagé. Le test de contrat relie les DTO HTTP aux messages Protobuf et documente les champs volontairement dérivés ou aplatis.
 - Le test multi-processus `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses` enrôle TOTP, crée et connecte une session SSH, effectue le step-up via Gateway, injecte le credential du Vault et vérifie le marqueur Command Recorder, l'absence de credential dans les journaux et la chaîne d'audit.
 - **Limites** : aucun écran UI ; seul SSH interactif ; pas de VNC/RDP ; parcours B toujours bloqué jusqu'au canal E2E.
+
+
+## 11. État d'implémentation — 15 novembre 2026, incrément 7 (VNC/RDP)
+
+- Le RDP/VNC Proxy implémente désormais la même route interne `InjectVaultSecret` que le SSH Proxy, autorisée exclusivement à `session-broker` par mTLS. Le routeur du Broker conserve son affinité déterministe et envoie VNC/RDP au pool screen existant.
+- Le relay écran expose un `SecretTyper` uniquement tant que la session est vivante. L'enregistrement est lié au protocole et à l'hôte/utilisateur de la cible authentifiée ; une session inactive, ambiguë, annulée ou un credential Vault destiné à une autre cible est refusé.
+- VNC utilise des keysyms Unicode RFB ; RDP utilise `TS_UNICODE_KEYBOARD_EVENT` UTF-16 avec paires press/release. L'entrée opérateur est sérialisée par le même verrou ; le presse-papiers n'est pas touché.
+- L'ordre commun est audit préalable → marqueur vidéo Vault durable → frappe → audit du résultat. Les tests couvrent les métadonnées d'audit, la purge, l'allowlist mTLS, le registre et les formats clavier. Tests ciblés, `-race`, `go vet`, `buf lint` et `make build` : PASS.
+- **Avant production** : essais réels TigerVNC et cinq cibles Windows de CI, puis test multi-processus MFA → Broker → VNC/RDP Proxy → Vault → Video Recorder → cible → Audit. L'interface Admin UI n'est pas raccordée ; B reste bloqué en attente du canal E2E dédié.

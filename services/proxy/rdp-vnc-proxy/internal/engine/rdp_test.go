@@ -76,6 +76,34 @@ func (v testMetadataVault) FetchCredential(context.Context, string, string) (pro
 	return v.fetched, nil
 }
 
+func TestRDPScreenSessionAdapterTypesSecretAsUnicodeInput(t *testing.T) {
+	target := &fakeRDPDesktop{width: 1024, height: 768}
+	adapter := &rdpScreenSessionAdapter{target: target, inputTimeout: time.Second, pressedKeys: make(map[uint16]bool)}
+	secret := []byte("A水🙂")
+	if err := adapter.WithExclusiveInput(context.Background(), func() error {
+		return adapter.TypeSecret(context.Background(), secret)
+	}); err != nil {
+		t.Fatalf("TypeSecret: %v", err)
+	}
+	target.mu.Lock()
+	defer target.mu.Unlock()
+	var got []rdp.RDPInputEvent
+	for _, batch := range target.inputs {
+		got = append(got, batch...)
+	}
+	want := []uint16{'A', 0x6c34, 0xd83d, 0xde42}
+	if len(got) != len(want)*2 {
+		t.Fatalf("sent %d input events: %#v", len(got), got)
+	}
+	for i, unit := range want {
+		press, release := got[i*2], got[i*2+1]
+		if press.Type != rdp.RDPInputUnicode || press.Unicode != unit || press.Released ||
+			release.Type != rdp.RDPInputUnicode || release.Unicode != unit || !release.Released {
+			t.Fatalf("UTF-16 unit %d events = %#v / %#v", i, press, release)
+		}
+	}
+}
+
 func TestRDPCodecRejectsMissingTrustMetadataBeforeOpeningTarget(t *testing.T) {
 	cred := rdpTestCredential(t)
 	cred.TLSCertificateSHA256 = ""

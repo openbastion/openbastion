@@ -62,6 +62,12 @@ type SecretInputRecorder interface {
 	RecordSecretInput(ctx context.Context, evidence SecretInputEvidence) error
 }
 
+// SecretInputRegistrar exposes a live protocol input handle to the proxy's internal
+// Session Broker route. Registrations are scoped to the relay lifetime and hold no secret bytes.
+type SecretInputRegistrar interface {
+	Register(ctx context.Context, sessionID, protocol, targetHost, targetUser string, typer SecretTyper, recorder SecretInputRecorder) func()
+}
+
 // InjectSecret enforces the shared ADR-0097 ordering for every protocol:
 // audit, durable evidence, then typing. A missing or failed dependency refuses
 // the operation. The caller's byte slice is zeroed on every return path.
@@ -90,10 +96,12 @@ func InjectSecret(
 	if len(secret) > 4096 {
 		return ErrSecretInjectionInvalid
 	}
-	for _, r := range string(secret) {
-		if r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
+	for remaining := secret; len(remaining) > 0; {
+		r, size := utf8.DecodeRune(remaining)
+		if size == 0 || r == utf8.RuneError && size == 1 || r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
 			return ErrSecretInjectionInvalid
 		}
+		remaining = remaining[size:]
 	}
 	if source == SecretInputOperator && utf8.RuneCount(secret) > 128 {
 		return ErrSecretInjectionInvalid

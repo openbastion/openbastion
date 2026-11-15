@@ -14,11 +14,12 @@ import (
 )
 
 type fakeScreenCodec struct {
-	session  *fakeScreenSession
-	opened   int
-	cred     *Credential
-	openedCh chan struct{}
-	openErr  error
+	session       *fakeScreenSession
+	secretSession ScreenSession
+	opened        int
+	cred          *Credential
+	openedCh      chan struct{}
+	openErr       error
 }
 
 func (c *fakeScreenCodec) Open(_ context.Context, cred *Credential) (ScreenSession, error) {
@@ -29,6 +30,9 @@ func (c *fakeScreenCodec) Open(_ context.Context, cred *Credential) (ScreenSessi
 	}
 	if c.openErr != nil {
 		return nil, c.openErr
+	}
+	if c.secretSession != nil {
+		return c.secretSession, nil
 	}
 	return c.session, nil
 }
@@ -164,6 +168,58 @@ func screenMeta() SessionMetadata {
 
 func newScreenTestCredential() *Credential {
 	return newCredential("password", []byte("screen-test-secret"))
+}
+
+type fakeSecretScreenSession struct {
+	*fakeScreenSession
+}
+
+func (s *fakeSecretScreenSession) WithExclusiveInput(ctx context.Context, operation func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return operation()
+}
+func (s *fakeSecretScreenSession) TypeSecret(ctx context.Context, _ []byte) error { return ctx.Err() }
+
+type fakeSecretFrameRecorder struct{ *fakeFrameRecorder }
+
+func (*fakeSecretFrameRecorder) RecordSecretInput(context.Context, SecretInputEvidence) error {
+	return nil
+}
+
+type fakeSecretInputRegistrar struct {
+	sessionID, protocol, targetHost, targetUser string
+	typer                                       SecretTyper
+	recorder                                    SecretInputRecorder
+	registered, unregistered                    bool
+}
+
+func (r *fakeSecretInputRegistrar) Register(_ context.Context, sessionID, protocol, targetHost, targetUser string, typer SecretTyper, recorder SecretInputRecorder) func() {
+	r.sessionID, r.protocol, r.targetHost, r.targetUser = sessionID, protocol, targetHost, targetUser
+	r.typer, r.recorder, r.registered = typer, recorder, true
+	return func() { r.unregistered = true }
+}
+
+func TestRelayScreenRegistersSecretTyperOnlyForLiveRecordedSession(t *testing.T) {
+	session := &fakeSecretScreenSession{fakeScreenSession: newFakeScreenSession(validScreenFrame(1))}
+	codec := &fakeScreenCodec{secretSession: session}
+	frameRecorder := &fakeSecretFrameRecorder{fakeFrameRecorder: &fakeFrameRecorder{}}
+	registrar := &fakeSecretInputRegistrar{}
+	cred := newScreenTestCredential()
+	cred.TargetHost, cred.TargetUser = "vnc.example:5900", "operator"
+	err := relayScreen(context.Background(), context.Background(), screenMeta(), cred, codec, frameRecorder, &fakeScreenSink{},
+		ScreenInputLimits{}, time.Second, nil, registrar)
+	if err != nil {
+		t.Fatalf("relayScreen: %v", err)
+	}
+	if !registrar.registered || !registrar.unregistered || registrar.sessionID != "screen-1" || registrar.protocol != "vnc" ||
+		registrar.targetHost != "vnc.example:5900" || registrar.targetUser != "operator" || registrar.typer != session || registrar.recorder != frameRecorder {
+		t.Fatalf("registration lifecycle = %#v", registrar)
+	}
+	if !cred.Purged() {
+		t.Fatal("screen credential was not purged")
+	}
 }
 
 func TestServeScreen_DecodesAndRelaysBoundedOperatorInput(t *testing.T) {
@@ -826,7 +882,7 @@ func TestRelayScreen_ClosedStreamDoesNotHideWhyTheSessionEnded(t *testing.T) {
 			session := &fakeScreenSession{frames: frames}
 			sink := &fakeScreenSink{}
 			ctx, cancel := want.end()
-			err := relayScreen(ctx, context.Background(), screenMeta(), newScreenTestCredential(), &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, nil)
+			err := relayScreen(ctx, context.Background(), screenMeta(), newScreenTestCredential(), &fakeScreenCodec{session: session}, &fakeFrameRecorder{}, sink, ScreenInputLimits{}, time.Second, nil, nil)
 			cancel()
 			if !errors.Is(err, want.err) {
 				t.Fatalf("%s: error = %v", name, err)
