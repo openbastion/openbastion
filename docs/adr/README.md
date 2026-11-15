@@ -21,7 +21,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 7 | [Break-glass](#7-break-glass) | 4 |
 | 8 | [Proxy SSH](#8-proxy-ssh) | 5 |
 | 9 | [Proxy écran RDP et VNC](#9-proxy-écran-rdp-et-vnc) | 14 |
-| 10 | [Chaîne d'audit](#10-chaîne-daudit) | 9 |
+| 10 | [Chaîne d'audit](#10-chaîne-daudit) | 11 |
 | 11 | [Lectures auditées](#11-lectures-auditées) | 5 |
 | 12 | [Enregistrement et relecture](#12-enregistrement-et-relecture) | 5 |
 | 13 | [Interfaces et notifications](#13-interfaces-et-notifications) | 6 |
@@ -176,6 +176,8 @@ La trace : ce qu'elle accepte, comment elle est chaînée, ancrée, archivée, e
 | 7 | [ADR-0032](0032-archiver-la-chaine-d-audit-hors-de-la-base-sans-la-rendre.md) | Archiver la chaîne d'audit hors de la base sans la rendre invérifiable : un point de contrôle ancré | Accepté |
 | 8 | [ADR-0045](0045-une-alerte-ecrite-a-l-audit-est-poussee-par-un-webhook-signe.md) | Une alerte écrite à l'audit est poussée par un webhook signé, et seulement si celui qui l'écrit a le droit de la dire | Accepté |
 | 9 | [ADR-0057](0057-les-alertes-en-attente-survivent-a-un-redemarrage.md) | Avec une base, les alertes en attente d'un renvoi survivent à un redémarrage de l'Audit Service | Accepté |
+| 10 | [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté |
+| 11 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Proposé |
 
 ### 11. Lectures auditées
 
@@ -282,7 +284,6 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0030](0030-des-migrations-de-schema-versionnees-appliquees-une-fois.md) | Des migrations de schéma versionnées, appliquées une fois, sous verrou, et dont le texte appliqué ne change plus | Accepté | Fondations du code |
 | [ADR-0031](0031-audit-events-n-est-pas-partitionne-tant-qu-une-retention-ne.md) | `audit_events` n'est pas partitionné tant qu'une rétention ne garde pas la chaîne vérifiable | Accepté | Chaîne d'audit |
 | [ADR-0032](0032-archiver-la-chaine-d-audit-hors-de-la-base-sans-la-rendre.md) | Archiver la chaîne d'audit hors de la base sans la rendre invérifiable : un point de contrôle ancré | Accepté | Chaîne d'audit |
-| [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté | Chaîne d’audit |
 | [ADR-0033](0033-un-deploiement-docker-compose-reproductible-sous-mtls-une.md) | Un déploiement `docker-compose` reproductible, sous mTLS, une base par service, et le premier outil du CLI | Accepté | Déploiement, CI et chaîne d'approvisionnement |
 | [ADR-0034](0034-une-session-ou-une-demande-arrivee-a-echeance-est-marquee.md) | Une session ou une demande arrivée à échéance est marquée expirée, une fois, et l'expiration est écrite dans la trace | Accepté | Sessions : cycle de vie et contrôle |
 | [ADR-0035](0035-le-connecteur-oidc-un-code-d-autorisation-avec-pkce-un-jeton.md) | Le connecteur OIDC : un code d'autorisation avec PKCE, un jeton d'identité vérifié champ par champ, des rôles tirés d'une table de groupes déclarée | Accepté | Identité et authentification |
@@ -362,3 +363,5 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0109](0109-la-haute-disponibilite-des-agents-ne-reprend-pas-une-session-a-l-aveugle.md) | La haute disponibilité des agents ne reprend pas une session à l'aveugle | Proposé | Agents distribués |
 | [ADR-0110](0110-les-evenements-agent-sont-attribues-et-separes-de-la-preuve-daudit-pam.md) | Les événements agent sont attribués et séparés de la preuve d'audit PAM | Proposé | Agents distribués |
 | [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Proposé | Enregistrement et relecture |
+| [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté | Chaîne d’audit |
+| [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Proposé | Chaîne d'audit |

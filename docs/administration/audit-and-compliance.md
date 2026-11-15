@@ -112,3 +112,27 @@ Chaque jeton émis est un événement `auth.login` ou `auth.login_mfa` de la cha
 - **Dans la chaîne** : chaque session servie au titre d'une politique est un `session.read` écrit **avant** la réponse ; une seule manque, rien n'est servi (`503`). Vos propres sessions et celles que vous avez décidées n'écrivent rien : vous n'y apprenez rien de nouveau.
 
 *À venir* — les deux recherches dans l'Admin UI.
+
+
+## Rapprocher les injections de secrets Vault (ADR-0112)
+
+Le CLI d'administration peut rapprocher les événements `session.secret_injection_started`, `session.secret_injected` et `session.secret_injection_failed`, y compris ceux des archives historiques après vérification de chaque archive et de ses checkpoints. Cette lecture est strictement en lecture seule et reste réservée au certificat mTLS `admin-cli` ; elle n'est pas exposée à l'Admin UI tant que l'ADR-0113 proposé n'a pas été accepté.
+
+```sh
+openbastion-cli audit secret-injections \
+  -audit https://audit-service:8082 \
+  -limit 100 \
+  -output table
+```
+
+Le CLI utilise `INTERNAL_TLS=required` (défaut), `TLS_CERT_FILE`, `TLS_KEY_FILE` et `TLS_CA_FILE` avec le certificat `admin-cli`. La sortie JSON est disponible avec `-output json`. Pour la page suivante, reprendre la valeur `next_before` avec `-before` :
+
+```sh
+openbastion-cli audit secret-injections \
+  -audit https://audit-service:8082 \
+  -limit 100 \
+  -before 0123456789abcdef0123456789abcdef \
+  -output json
+```
+
+`completed` signifie uniquement qu'un événement terminal positif cohérent a été journalisé ; cela ne prouve pas la réception intégrale du secret par la cible. `failed` peut correspondre à une frappe partielle et `outcome_unknown` signifie que les preuves ne permettent pas de conclure. **Ne jamais relancer automatiquement une injection** : vérifier manuellement l'état de la cible avant toute nouvelle action. Le CLI refuse les réponses sans `Cache-Control: no-store`, les couvertures d'archives incomplètes, les identifiants invalides et les réponses supérieures à 1 Mio.
