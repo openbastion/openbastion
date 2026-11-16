@@ -62,3 +62,11 @@ Sur le worktree isolé, avant toute modification :
 - Tests ciblés après correction : `src/features/login/login.test.tsx` et `src/app/app.test.tsx` — 23 tests passés.
 - Suite complète : 25 fichiers, 245 tests passés ; TypeScript et Vite build passés. Contraste des tokens et contrôle d'absence de couleurs littérales passés.
 - Limite : aucune capture navigateur de comparaison pixel-à-pixel n'a encore été réalisée ; la validation visuelle reste à confirmer dans le navigateur à 1440 × 1040 et sur mobile.
+
+## Corrections issues de `Correction.png` — 2026-11-16
+
+- Le libellé `OpenBastion` du verrouillage de marque est forcé sur le token de texte clair du panneau gauche, indépendant du thème global ; le nom ne disparaît donc plus en thème sombre.
+- Le panneau droit de connexion, ses champs et son encart d'assurance restent blancs / clairs même si le thème applicatif est sombre, comme demandé dans la capture de correction. Le panneau gauche conserve sa palette sombre.
+- Le bandeau global `LegalNotice` est supprimé de la page de connexion. La colonne gauche porte la mention complète `© 2026 OpenBastion — GNU Affero General Public License v3.0 (AGPL-3.0-only)` ; les liens source et licence sont alignés avec Confidentialité / Conditions d'utilisation sous le message d'aide.
+- Le bandeau légal global reste présent sur l'espace authentifié et le retour OIDC ; cette correction ne réduit pas la visibilité des informations de licence dans ces parcours.
+- Les six SVG de référence transmis (1440 × 1040) sont conservés comme références des pages Accès privilégiés, Audit, Infrastructure, Paramètres, Sessions et Vue d'ensemble. Leur alignement sera traité page par page ; cette correction n'introduit aucune donnée de démonstration.

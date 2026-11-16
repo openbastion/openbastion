@@ -89,10 +89,14 @@ describe("App", () => {
     expect(api.hasToken()).toBe(false);
   });
 
-  it("shows the AGPL source and licence notice before authentication", () => {
+  it("shows the AGPL source and licence links alongside the login legal links", () => {
     render(<App location={{ pathname: "/ui/", search: "" } as Location} navigate={vi.fn()} />);
-    expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Code source/ })).toBeTruthy();
+    expect(screen.queryByRole("contentinfo", { name: "Informations légales" })).toBeNull();
+    const source = screen.getByRole("link", { name: /Code source/ });
+    const license = screen.getByRole("link", { name: "Texte de la licence" });
+    expect(source.parentElement?.classList.contains("login-license-links")).toBe(true);
+    expect(license.parentElement).toBe(source.parentElement);
+    expect(screen.getByText(/GNU Affero General Public License v3.0/)).toBeTruthy();
   });
 
   it("is the OIDC return page at /ui/oidc/callback", async () => {

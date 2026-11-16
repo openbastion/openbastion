@@ -57,12 +57,7 @@ export function App({
           <LegalNotice />
         </>
       );
-    return (
-      <>
-        <Login api={api} onToken={onToken} navigate={navigate} />
-        <LegalNotice />
-      </>
-    );
+    return <Login api={api} onToken={onToken} navigate={navigate} />;
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>

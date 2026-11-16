@@ -2275,7 +2275,7 @@ main.login {
 
 .login-brand-lockup > div { display: grid; gap: 0.18rem; }
 .login-brand-lockup strong {
-  color: var(--ob-color-text-on-accent);
+  color: var(--ob-color-login-panel-text);
   font-size: 1.55rem;
   font-weight: 650;
   letter-spacing: -0.035em;
@@ -2292,7 +2292,7 @@ main.login {
   width: 2.5rem;
   height: 2.5rem;
   color: var(--ob-color-login-panel);
-  background: var(--ob-color-text-on-accent);
+  background: var(--ob-color-login-panel-text);
   clip-path: polygon(50% 0, 100% 15%, 100% 60%, 50% 100%, 0 60%, 0 15%);
 }
 .login-brand-mark svg { width: 1.45rem; height: 1.45rem; }
@@ -2334,7 +2334,7 @@ main.login {
   align-items: center;
   gap: 0.7rem;
   margin: 0 0 1.25rem;
-  color: var(--ob-color-text-on-accent);
+  color: var(--ob-color-login-panel-text);
   font-size: 0.95rem;
   font-weight: 600;
 }
@@ -2434,7 +2434,7 @@ main.login {
   min-height: 3rem;
   padding: 0.7rem 3rem;
   color: var(--ob-color-login-text);
-  background: var(--ob-color-text-on-accent);
+  background: var(--ob-color-login-surface);
   border: 1px solid var(--ob-color-login-border);
   border-radius: 0.55rem;
   font-size: 0.88rem;
@@ -2468,7 +2468,7 @@ main.login {
   min-height: 3rem;
   padding: 0.75rem 0.95rem;
   color: var(--ob-color-login-text);
-  background: var(--ob-color-text-on-accent);
+  background: var(--ob-color-login-surface);
   border: 1px solid var(--ob-color-login-border);
   border-radius: 0.55rem;
   font-size: 0.88rem;
@@ -2532,8 +2532,27 @@ main.login {
   font-size: 0.75rem;
   text-align: center;
 }
-.login-content-footer p { margin: 0 0 1.2rem; }
-.login-content-footer p:last-child { margin-bottom: 0; }
+.login-content-footer p { margin: 0 0 0.9rem; }
+.login-footer-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  font-size: 0.7rem;
+}
+.login-license-links {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+}
+.login-license-links a {
+  color: var(--ob-color-login-accent);
+  font-weight: 550;
+  text-decoration: none;
+}
+.login-license-links a:hover { text-decoration: underline; }
 .login-content-footer p + p { font-size: 0.7rem; }
 .login-card .or { display: none; }
 

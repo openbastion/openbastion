@@ -7,6 +7,7 @@ import { BrandMark } from "../../shared/BrandMark";
 import { Button } from "../../shared/ui/Button";
 import { LanguageSwitcher } from "../../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../../shared/i18n";
+import { LegalLinks } from "../../shared/LegalNotice";
 
 // "local", or "ldap:<id>" ("ldap:" for the directory of the LDAP_* variables, whose id is empty).
 type Source = string;
@@ -165,7 +166,10 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
           </div>
           <footer className="login-content-footer">
             <p>{t("login.help")}</p>
-            <p>{t("login.legal")}</p>
+            <div className="login-footer-links">
+              <span>{t("login.legal")}</span>
+              <LegalLinks className="login-license-links" />
+            </div>
           </footer>
         </div>
       </div>

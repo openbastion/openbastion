@@ -136,7 +136,7 @@ export default {
         recording: "Sessions enregistrées ; accès refusé si l'enregistrement requis est indisponible",
         secrets: "Les secrets restent dans le coffre-fort, jamais révélés à l'opérateur",
       },
-      footer: "© 2026 OpenBastion",
+      footer: "© 2026 OpenBastion — GNU Affero General Public License v3.0 (AGPL-3.0-only)",
     },
     secureAccess: "ACCÈS SÉCURISÉ",
     title: "Connexion à OpenBastion",

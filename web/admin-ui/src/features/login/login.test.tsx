@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Login } from "./Login";
 import { OidcCallback } from "./OidcCallback";
 import { fakeApi } from "../../test-helpers";
@@ -9,6 +9,12 @@ describe("Login", () => {
     const { api } = fakeApi({});
     render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
     expect(screen.getByRole("complementary", { name: "Présentation d'OpenBastion" })).toBeTruthy();
+    expect(screen.getByText("OpenBastion", { selector: ".login-brand-lockup strong" })).toBeTruthy();
+    expect(screen.getByText(/© 2026 OpenBastion — GNU Affero General Public License v3.0 \(AGPL-3.0-only\)/)).toBeTruthy();
+    const legalLinks = screen.getByRole("navigation", { name: "Licence et code source" });
+    expect(within(legalLinks).getByRole("link", { name: /Code source/ })).toBeTruthy();
+    expect(within(legalLinks).getByRole("link", { name: "Texte de la licence" })).toBeTruthy();
+    expect(legalLinks.parentElement?.classList.contains("login-footer-links")).toBe(true);
     expect(screen.getByRole("heading", { name: "Vos accès privilégiés. La confiance en plus." })).toBeTruthy();
     expect(screen.getByText("Les secrets restent dans le coffre-fort, jamais révélés à l'opérateur")).toBeTruthy();
     expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();

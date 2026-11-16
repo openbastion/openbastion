@@ -89,7 +89,8 @@
   --ob-motion-duration-fast: 120ms;
   --ob-motion-duration-standard: 180ms;
   --ob-icon-accent: var(--ob-color-accent);
-  --ob-color-login-canvas: #F3F6FB;
+  --ob-color-login-canvas: #FFFFFF;
+  --ob-color-login-surface: #FFFFFF;
   --ob-color-login-panel: #0D213D;
   --ob-color-login-panel-raised: #173252;
   --ob-color-login-panel-text: #F7FAFF;
@@ -147,17 +148,18 @@
   --ob-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.24), 0 1px 3px rgb(0 0 0 / 0.2);
   --ob-shadow-overlay: 0 18px 40px -24px rgb(0 0 0 / 0.72);
   --ob-icon-accent: var(--ob-color-accent);
-  --ob-color-login-canvas: #0F1720;
+  --ob-color-login-canvas: #FFFFFF;
+  --ob-color-login-surface: #FFFFFF;
   --ob-color-login-panel: #0A1729;
   --ob-color-login-panel-raised: #172A43;
   --ob-color-login-panel-text: #F3F6F9;
   --ob-color-login-panel-muted: #B4C0CB;
   --ob-color-login-panel-accent: #66B8FF;
-  --ob-color-login-text: #F3F6F9;
-  --ob-color-login-muted: #B4C0CB;
-  --ob-color-login-border: #334353;
-  --ob-color-login-accent: #66B8FF;
-  --ob-color-login-primary: #1769AA;
-  --ob-color-login-assurance: #18364E;
-  --ob-color-login-assurance-text: #B9DFFF;
+  --ob-color-login-text: #102544;
+  --ob-color-login-muted: #71829D;
+  --ob-color-login-border: #D5DFED;
+  --ob-color-login-accent: #075BDC;
+  --ob-color-login-primary: #1260DC;
+  --ob-color-login-assurance: #E7F0FF;
+  --ob-color-login-assurance-text: #3E5D85;
 }

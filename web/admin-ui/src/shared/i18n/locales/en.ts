@@ -135,7 +135,7 @@ export default {
         recording: "Sessions are recorded; access is denied when required recording is unavailable",
         secrets: "Secrets stay in the vault and are never revealed to the operator",
       },
-      footer: "© 2026 OpenBastion",
+      footer: "© 2026 OpenBastion — GNU Affero General Public License v3.0 (AGPL-3.0-only)",
     },
     secureAccess: "SECURE ACCESS",
     title: "Sign in to OpenBastion",
