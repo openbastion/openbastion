@@ -62,6 +62,7 @@ Les règles que tout le reste respecte : secrets, enregistrement, refus.
 | 3 | [ADR-0042](0042-un-refus-dit-son-motif-a-l-operateur-par-un-code-stable-et.md) | Un refus dit son motif à l'opérateur par un code stable, et une panne ne dit jamais sa cause | Accepté |
 | 4 | [ADR-0043](0043-aucune-route-publique-ne-rend-le-texte-d-une-erreur-interne.md) | Aucune route publique ne rend le texte d'une erreur interne ; une session ne se crée que sur un compte qui existe et dont la clé est épinglée | Accepté |
 | 5 | [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté |
+| 5 | [ADR-0115](0115-reduire-la-vie-des-secrets-en-memoire-et-interdire-les-core-dumps.md) | Réduire la durée de vie des secrets en mémoire et interdire les core dumps | Accepté |
 
 ### 4. Identité et authentification
 
@@ -367,3 +368,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté | Chaîne d’audit |
 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Accepté | Chaîne d'audit |
 | [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté | Invariants de sécurité transverses |
+| [ADR-0115](0115-reduire-la-vie-des-secrets-en-memoire-et-interdire-les-core-dumps.md) | Réduire la durée de vie des secrets en mémoire et interdire les core dumps | Accepté | Invariants de sécurité transverses |

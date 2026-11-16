@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +13,9 @@ func TestVaultCredentialHTTPClientCarriesTargetTrustMetadata(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/vault/v1/fetch-credential" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Cache-Control") != "no-store" {
+			t.Errorf("Cache-Control=%q", r.Header.Get("Cache-Control"))
 		}
 		var req map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -30,5 +34,15 @@ func TestVaultCredentialHTTPClientCarriesTargetTrustMetadata(t *testing.T) {
 	}
 	if string(got.Material) != "credential-data" || got.TargetHost != "desktop:5900" || got.TargetUser != "operator" || got.TLSCertificateSHA256 == "" || got.TargetDomain != "desktop.example" {
 		t.Fatalf("fetched credential mismatch: type=%q host=%q user=%q pin=%q domain=%q", got.Type, got.TargetHost, got.TargetUser, got.TLSCertificateSHA256, got.TargetDomain)
+	}
+}
+
+func TestVaultCredentialHTTPClientRejectsOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", (1<<20)+1)))
+	}))
+	defer server.Close()
+	if _, err := (&VaultCredentialHTTPClient{BaseURL: server.URL}).FetchCredential(context.Background(), "single-use", "rdp-vnc-proxy"); err == nil {
+		t.Fatal("oversized response accepted")
 	}
 }

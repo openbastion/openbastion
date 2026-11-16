@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/openbastion/openbastion/pkg/hostkey"
+	"github.com/openbastion/openbastion/pkg/securemem"
 )
 
 // SSHTargetChanger is application.TargetChanger over SSH, with password authentication.
@@ -36,15 +38,20 @@ func (c SSHTargetChanger) dial(ctx context.Context, host, hostKey, user string, 
 		return nil, err
 	}
 	_ = conn.SetDeadline(time.Now().Add(timeout))
-	cfg := &ssh.ClientConfig{
-		User:    user,
-		Auth:    []ssh.AuthMethod{ssh.Password(string(secret))},
-		Timeout: timeout,
-	}
+	// x/crypto/ssh's password AuthMethod requires an immutable string. Keep this
+	// unavoidable transient copy scoped to the handshake and drop every reference
+	// immediately afterwards; the original byte slice remains owned by the caller.
+	password := string(secret)
+	authMethods := []ssh.AuthMethod{ssh.Password(password)}
+	cfg := &ssh.ClientConfig{User: user, Auth: authMethods, Timeout: timeout}
 	// The pinned key, or a certificate of the pinned authority for its name (ADR-0039, ADR-0048):
 	// what the proxy checks too, by the same code.
 	trust.Configure(cfg, nil)
 	sc, chans, reqs, err := ssh.NewClientConn(conn, host, cfg)
+	cfg.Auth = nil
+	authMethods = nil
+	password = ""
+	runtime.KeepAlive(secret)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -67,25 +74,27 @@ func (c SSHTargetChanger) SetPassword(ctx context.Context, host, hostKey, admin 
 		return err
 	}
 	defer session.Close()
-	var in bytes.Buffer
+	capacity := len(adminSecret) + len(user) + len(newSecret) + 3
+	payload := make([]byte, 0, capacity)
+	defer securemem.Zero(payload)
 	cmd := "chpasswd"
 	if admin != "root" {
 		cmd = "sudo -S -p '' chpasswd"
-		in.Write(adminSecret)
-		in.WriteByte('\n')
+		payload = append(payload, adminSecret...)
+		payload = append(payload, '\n')
 	}
-	in.WriteString(user + ":")
-	in.Write(newSecret)
-	in.WriteByte('\n')
-	session.Stdin = &in
+	payload = append(payload, user...)
+	payload = append(payload, ':')
+	payload = append(payload, newSecret...)
+	payload = append(payload, '\n')
+	session.Stdin = bytes.NewReader(payload)
 	var stderr bytes.Buffer
+	defer func() { securemem.Zero(stderr.Bytes()) }()
 	session.Stderr = &stderr
 	if err := session.Run(cmd); err != nil {
-		msg := stderr.String()
-		if len(msg) > 200 {
-			msg = msg[:200]
-		}
-		return fmt.Errorf("chpasswd on %s failed: %v %s", host, err, msg)
+		// The remote diagnostic is not needed to identify the failed operation and
+		// could echo input on a misconfigured target. Keep it out of the error path.
+		return fmt.Errorf("chpasswd on %s failed: %w", host, err)
 	}
 	return nil
 }

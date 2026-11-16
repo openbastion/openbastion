@@ -382,10 +382,12 @@ func (w *serializedSSHInput) TypeSecret(ctx context.Context, secret []byte) erro
 	if w == nil || w.writer == nil || ctx == nil || ctx.Err() != nil || len(secret) == 0 || !utf8.Valid(secret) {
 		return proxycore.ErrSecretInjectionInvalid
 	}
-	for _, r := range string(secret) {
-		if r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
+	for remaining := secret; len(remaining) > 0; {
+		r, size := utf8.DecodeRune(remaining)
+		if size == 0 || (r == utf8.RuneError && size == 1) || r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
 			return proxycore.ErrSecretInjectionInvalid
 		}
+		remaining = remaining[size:]
 	}
 	if _, err := w.writer.Write(secret); err != nil {
 		return err

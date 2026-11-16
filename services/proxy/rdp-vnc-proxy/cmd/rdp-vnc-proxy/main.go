@@ -18,6 +18,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/processsecurity"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/engine"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/infrastructure"
@@ -32,6 +33,9 @@ func env(key, fallback string) string {
 }
 
 func runService() {
+	if err := processsecurity.HardenSecretProcess(); err != nil {
+		log.Fatalf("rdp-vnc-proxy: secret-process hardening: %v", err)
+	}
 	log.Printf("rdp-vnc-proxy %s", buildinfo.String())
 	rt, err := mtls.Setup(mtls.RDPVNCProxy)
 	if err != nil {
