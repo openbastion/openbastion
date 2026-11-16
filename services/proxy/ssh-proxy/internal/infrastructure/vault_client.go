@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
+	"github.com/openbastion/openbastion/pkg/securemem"
 )
 
 // VaultCredentialHTTPClient implements proxycore.VaultClient by calling
@@ -28,6 +29,7 @@ type VaultCredentialHTTPClient struct {
 
 func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
 	requestBody, _ := json.Marshal(fetchCredentialRequestBody{ScopeToken: scopeToken, CallingProxyID: callingProxyID})
+	defer securemem.Zero(requestBody)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/fetch-credential", bytes.NewReader(requestBody))
 	if err != nil {
 		return proxycore.Fetched{}, err
@@ -44,7 +46,7 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	}
 	const maxCredentialResponse = 1 << 20
 	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxCredentialResponse+1))
-	defer zeroCredentialBytes(responseBody)
+	defer securemem.Zero(responseBody)
 	if err != nil {
 		return proxycore.Fetched{}, err
 	}
@@ -53,7 +55,7 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	}
 	var out fetchCredentialResponseBody
 	if err := json.Unmarshal(responseBody, &out); err != nil {
-		zeroCredentialBytes(out.CredentialMaterial)
+		securemem.Zero(out.CredentialMaterial)
 		return proxycore.Fetched{}, err
 	}
 	if len(out.CredentialMaterial) == 0 {
@@ -77,10 +79,4 @@ type fetchCredentialResponseBody struct {
 	TargetUser           string `json:"target_user"`
 	TLSCertificateSHA256 string `json:"tls_certificate_sha256"`
 	TargetDomain         string `json:"target_domain"`
-}
-
-func zeroCredentialBytes(value []byte) {
-	for i := range value {
-		value[i] = 0
-	}
 }

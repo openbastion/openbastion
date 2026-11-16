@@ -3,6 +3,8 @@ package proxycore
 import (
 	"context"
 	"errors"
+
+	"github.com/openbastion/openbastion/pkg/securemem"
 )
 
 // Credential is the proxy's session-scoped handle to secret material from the Vault (ADR-0003).
@@ -58,9 +60,8 @@ func (c *Credential) Purge() {
 	if c.purged {
 		return
 	}
-	for i := range c.material {
-		c.material[i] = 0
-	}
+	securemem.Zero(c.material)
+	c.material = nil
 	c.TargetUser = ""
 	c.TLSCertificateSHA256 = ""
 	c.TargetDomain = ""
