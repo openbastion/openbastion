@@ -239,7 +239,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 proposé) |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
 | SI-07 | E | Confused deputy si identité interne compromise | P1 | Allowlist mTLS et autorisation exacte ; risque résiduel |
-| SI-08 | T | Altération des métadonnées de session par un rôle PostgreSQL compromis | P1 | Identifiants DB distincts ; pas d’attestation indépendante de la ligne de session |
+| SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | ADR-0116 accepté : HMAC Broker + révision monotone ancrée dans Audit Service ; implémentation et contre-épreuves PostgreSQL encore à réaliser |
 
 ## 6. Tests et contre-épreuves à maintenir
 
@@ -277,7 +277,7 @@ La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation
 
 Critères minimaux de clôture :
 1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
-2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
+2. implémenter ADR-0116 puis contre-éprouver l’altération de chaque champ, le rejeu d’une ancienne ligne, le crash entre commit SQL et attestation, la restauration et les rôles PostgreSQL distincts ;
 3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;

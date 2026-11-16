@@ -17,7 +17,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 | 3 | [Invariants de sécurité transverses](#3-invariants-de-sécurité-transverses) | 5 |
 | 4 | [Identité et authentification](#4-identité-et-authentification) | 10 |
 | 5 | [Coffre, secrets et confiance dans les cibles](#5-coffre-secrets-et-confiance-dans-les-cibles) | 13 |
-| 6 | [Sessions : cycle de vie et contrôle](#6-sessions--cycle-de-vie-et-contrôle) | 8 |
+| 6 | [Sessions : cycle de vie et contrôle](#6-sessions--cycle-de-vie-et-contrôle) | 9 |
 | 7 | [Break-glass](#7-break-glass) | 4 |
 | 8 | [Proxy SSH](#8-proxy-ssh) | 5 |
 | 9 | [Proxy écran RDP et VNC](#9-proxy-écran-rdp-et-vnc) | 14 |
@@ -114,6 +114,7 @@ Créer, approuver, borner, lire, terminer une session ; limiter les demandes.
 | 5 | [ADR-0017](0017-mettre-fin-a-une-session-son-demandeur-ou-une-autorite.md) | Mettre fin à une session : son demandeur ou une autorité déclarée, et au nom de celui qui le demande | Accepté |
 | 6 | [ADR-0018](0018-rendre-la-terminaison-reelle-cote-proxy-le-broker-fait.md) | Rendre la terminaison réelle côté proxy : le Broker fait couper les connexions et jeter les tickets avant de marquer la session terminée | Accepté |
 | 7 | [ADR-0034](0034-une-session-ou-une-demande-arrivee-a-echeance-est-marquee.md) | Une session ou une demande arrivée à échéance est marquée expirée, une fois, et l'expiration est écrite dans la trace | Accepté |
+| 8 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté |
 | 8 | [ADR-0019](0019-qui-peut-lire-une-session-son-demandeur-celui-qui-l-a.md) | Qui peut lire une session : son demandeur, celui qui l'a décidée, ou le titulaire d'une politique `session-read` — et une lecture n'écrit rien | Accepté (règle 6 amendée par ADR-0020) |
 
 ### 7. Break-glass
@@ -369,3 +370,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Accepté | Chaîne d'audit |
 | [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté | Invariants de sécurité transverses |
 | [ADR-0115](0115-reduire-la-vie-des-secrets-en-memoire-et-interdire-les-core-dumps.md) | Réduire la durée de vie des secrets en mémoire et interdire les core dumps | Accepté | Invariants de sécurité transverses |
+| [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté | Sessions : cycle de vie et contrôle |
