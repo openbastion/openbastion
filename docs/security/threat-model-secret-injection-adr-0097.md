@@ -239,7 +239,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 accepté) |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
 | SI-07 | E | Confused deputy si identité interne compromise | P1 | Allowlist mTLS et autorisation exacte ; risque résiduel |
-| SI-08 | T | Altération des métadonnées de session par un rôle PostgreSQL compromis | P1 | Identifiants DB distincts ; pas d’attestation indépendante de la ligne de session |
+| SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | ADR-0116 accepté : HMAC Broker + révision monotone ancrée dans Audit Service ; implémentation et contre-épreuves PostgreSQL encore à réaliser |
 
 ## 6. Tests et contre-épreuves à maintenir
 
@@ -261,12 +261,12 @@ Ajouter aussi un scénario avec un rôle PostgreSQL de test qui modifie les colo
 
 Les contre-épreuves doivent être réalisées sur des branches de test isolées ; ne jamais affaiblir un contrôle dans le code livré.
 
-## 7. État des preuves au 15 novembre 2026
+## 7. État des preuves au 16 novembre 2026
 
 - **SSH :** parcours multi-processus MFA → Broker → Vault → proxy → cible → Recorder/Audit validé ; la valeur est absente de l’enregistrement et remplacée par un marqueur. Le test de perte d’acquittement terminal transmet l’événement au véritable Audit Service, perd la réponse après commit, vérifie `outcome_unknown`, une seule frappe côté cible, aucun retry et une chaîne valide.
 - **VNC :** parcours multi-processus avec TOTP, refus d’un autre acteur et d’une preuve invalide, frappe Unicode vérifiée à la cible RFB, marqueur et audit, absence du secret dans les logs et l’objet enregistré. Un test complet contre TigerVNC réel a également passé dans l’environnement local.
 - **RDP :** parcours multi-processus avec FreeRDP 3, scope Vault, audit, marqueur durable et rejeu validés. FreeRDP Shadow ne constitue pas un oracle fiable de réception Unicode ; le test Windows TestRDPWindows_SecretTyperUnicode reste à valider dans la CI Windows.
-- **Admin UI :** tests Vitest du composant et du parcours TOTP/WebAuthn présents. Un test Chromium réel de l’UI avec API simulée est ajouté à la CI ; il n’a pas pu être exécuté sur LT209227 faute de binaire Chrome. Son succès CI est donc encore requis. Ce test ne remplace pas un parcours navigateur contre une cible TigerVNC/Windows réelle.
+- **Admin UI :** tests Vitest du composant et du parcours TOTP/WebAuthn présents. Le test Chromium réel de l’UI avec API simulée a passé dans la CI de la PR #220 ; il vérifie l’effacement du TOTP avant réponse, le payload limité et l’absence de credential/scope et de stockage persistant. Il ne remplace pas un parcours navigateur contre une cible TigerVNC/Windows réelle. Il n’a pas été exécuté localement sur LT209227 faute de binaire Chrome.
 - **Parcours B (mot de passe fourni par l’opérateur) :** non couvert et interdit jusqu’à un canal navigateur → proxy chiffré de bout en bout, défini par un ADR distinct.
 
 ## 8. Décision et critères de clôture
@@ -277,7 +277,7 @@ La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation
 
 Critères minimaux de clôture :
 1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; E2E TigerVNC réel + oracle X11 ajouté pour vérifier qu’aucune entrée ne survient après l’acquittement ; ajouter ensuite une course déterministe qui révoque pendant la frappe ;
-2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
+2. implémenter ADR-0116 et contre-éprouver l’altération de chaque champ protégé, le rejeu/rollback, le crash entre commit SQL et attestation, la restauration, l’indisponibilité Audit et les rôles PostgreSQL distincts ;
 3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;
