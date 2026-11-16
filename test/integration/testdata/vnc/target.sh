@@ -14,7 +14,7 @@ mode=${2:-X509Plain}
 display=${VNC_DISPLAY:-77}
 port=${VNC_PORT:-15977}
 user=operator
-plain_password=long-vault-password-42
+plain_password=${VNC_PLAIN_PASSWORD:-long-vault-password-42}
 vnc_password=secret78
 
 if [ "$mode" = --env ]; then
@@ -27,6 +27,7 @@ export OPENBASTION_VNC_PIN=$(openssl x509 -in "$work/cert.pem" -outform der | sh
 export OPENBASTION_VNC_SERVER_NAME=vnc-target.test
 export OPENBASTION_VNC_USER=$user
 export OPENBASTION_VNC_PASSWORD=$password
+export OPENBASTION_VNC_INPUT_LOG=$work/input.log
 ENV
   exit 0
 fi
@@ -37,7 +38,7 @@ root=$work/root
 if [ ! -x "$root/usr/bin/Xtigervnc" ]; then
   mkdir -p "$work/debs" "$root"
   (cd "$work/debs" && apt-get download tigervnc-standalone-server tigervnc-common tigervnc-tools \
-    libtasn1-6 libxfont2 libfontenc1 xkb-data x11-xkb-utils libxkbfile1)
+    libtasn1-6 libxfont2 libfontenc1 xkb-data x11-xkb-utils libxkbfile1 x11-utils)
   for deb in "$work"/debs/*.deb; do dpkg-deb -x "$deb" "$root"; done
 fi
 export LD_LIBRARY_PATH=$root/usr/lib/x86_64-linux-gnu
@@ -65,8 +66,22 @@ PAM
 exec unshare -Urm --kill-child bash -c "
   mount -t overlay overlay -o lowerdir=$root/usr/bin:/usr/bin /usr/bin
   mount -t overlay overlay -o lowerdir=$work/pam.d:/etc/pam.d /etc/pam.d
-  exec /usr/bin/Xtigervnc :$display -rfbport $port -geometry 800x600 -depth 24 -localhost=1 \
+  mkdir -p /tmp/.X11-unix
+  mount -t tmpfs tmpfs /tmp/.X11-unix
+  chmod 1777 /tmp/.X11-unix
+  rm -f /tmp/.X$display-lock /tmp/.X11-unix/X$display
+  /usr/bin/Xtigervnc :$display -rfbport $port -geometry 800x600 -depth 24 -localhost=1 \
     -xkbdir $root/usr/share/X11/xkb -SecurityTypes $mode \
     -X509Cert $work/cert.pem -X509Key $work/key.pem -PasswordFile $work/passwd \
-    -PlainUsers=$user -pam_service=openbastion-vnc
+    -PlainUsers=$user -pam_service=openbastion-vnc &
+  server_pid=\$!
+  xev_pid=
+  trap 'kill \$server_pid 2>/dev/null || true; if [ -n "\$xev_pid" ]; then kill \$xev_pid 2>/dev/null || true; fi' EXIT
+  i=0
+  while [ \$i -lt 100 ] && [ ! -S /tmp/.X11-unix/X$display ]; do sleep 0.05; i=\$((i+1)); done
+  DISPLAY=:$display stdbuf -oL /usr/bin/xev -root -event keyboard >$work/input.log 2>&1 &
+  xev_pid=\$!
+  sleep 0.25
+  kill -0 \$xev_pid 2>/dev/null || { echo 'xev did not attach to the TigerVNC root window' >&2; cat $work/input.log >&2; exit 1; }
+  wait \$server_pid
 "

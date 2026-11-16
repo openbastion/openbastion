@@ -45,10 +45,31 @@ jobs:
         run: make test
       - name: dedicated PostgreSQL tests (they purge first)
         run: make test-postgres
+      - name: Start real TigerVNC target with an independent X11 input oracle
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/openbastion-vnc-target"
+          mkdir -p "$work"
+          test/integration/testdata/vnc/target.sh "$work" X509Plain >"$work/server.log" 2>&1 &
+          echo "$!" > "$work/pid"
+          ready=0
+          for attempt in $(seq 1 120); do
+            if timeout 1 bash -c '</dev/tcp/127.0.0.1/15977' 2>/dev/null; then ready=1; break; fi
+            if ! kill -0 "$(cat "$work/pid")" 2>/dev/null; then cat "$work/server.log"; exit 1; fi
+            sleep 0.25
+          done
+          if [[ "$ready" != 1 ]]; then cat "$work/server.log"; exit 1; fi
+          test/integration/testdata/vnc/target.sh "$work" --env >> "$GITHUB_ENV"
       - name: integration with the database (purged first)
         run: |
           psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$PURGE"
           GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
+      - name: Stop real TigerVNC target
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/openbastion-vnc-target"
+          if [[ -f "$work/pid" ]]; then kill "$(cat "$work/pid")" 2>/dev/null || true; fi
       # ADR-0071: what an operator saw of an RDP session is, to the byte, what an auditor replays,
       # sealed, across a size change; FreeRDP 3 in Docker, the real Video Recorder on this database.
       - name: RDP recording, end to end

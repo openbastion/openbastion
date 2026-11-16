@@ -4796,3 +4796,11 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Validation locale : `make proto-gen` (artefacts générés ignorés par Git) ; `go test ./test/integration -run '^TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses$' -count=1 -v` : **PASS (108,03 s)**. Le premier essai a seulement été bloqué par les fichiers Protobuf générés absents du worktree ; aucun défaut produit n’a été identifié par cet essai.
 - Aucune validation Windows lancée localement. L’E2E PostgreSQL 16 archive/restart/reconciliation passe localement dans la Draft PR #219 ; sa CI reste à confirmer. Le parcours B reste interdit.
 - Commit DCO signé `5aa522b524c8b4b5f4e07cd32acd612cb67a9f53` ; branche publiée et Draft PR #218 ouverte : https://github.com/openbastion/openbastion/pull/218. PR non fusionnée.
+
+
+## 2026-11-16 — SI-02 : preuve VNC sur cible réelle
+
+- Ajout d'un oracle d'entrée indépendant sur une cible TigerVNC réelle : `xev` observe les keysyms reçus par le serveur X11, sans lire l'état interne du proxy. L'E2E multi-processus injecte le secret Unicode via Vault/MFA, vérifie la séquence complète réellement reçue, puis révoque la session et vérifie qu'aucun nouvel événement clavier n'arrive après l'acquittement.
+- Le workflow PostgreSQL 16 démarre et arrête la cible une seule fois ; deux blocs setup/cleanup dupliqués ont été supprimés. Le YAML est parsé avec succès.
+- Validation locale : `go test ./test/integration -run '^TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses$'` compile et passe mais le test est **SKIP** car `TEST_DATABASE_URL` n'est pas configuré sur LT209227. L'exécution réelle est donc à confirmer par la CI PostgreSQL 16 ; aucun test Windows local.
+- Limite explicite : cette preuve vérifie l'absence de frappes après l'acquittement de révocation, mais ne force pas encore une révocation concurrente au milieu de la frappe. SI-02 reste P1 jusqu'à un test déterministe de cette course et au passage CI.
