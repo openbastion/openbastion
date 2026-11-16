@@ -67,6 +67,8 @@ build: proto-gen
 	$(GO) build -ldflags "$(LDFLAGS)" \
 		./pkg/buildinfo/... \
 		./pkg/command/... \
+		./pkg/processsecurity/... \
+		./pkg/securemem/... \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
 		./pkg/vnc/... \
@@ -94,6 +96,8 @@ build: proto-gen
 
 ## go vet sur tous les modules.
 vet: proto-gen
+	$(GO) vet ./pkg/processsecurity/...
+	$(GO) vet ./pkg/securemem/...
 	$(GO) vet ./pkg/proxycore/...
 	$(GO) vet ./pkg/rdp/...
 	$(GO) vet ./pkg/vnc/...
@@ -127,6 +131,8 @@ vet: proto-gen
 ## sans TEST_DATABASE_URL.
 test: proto-gen
 	$(GO) test \
+		./pkg/processsecurity/... \
+		./pkg/securemem/... \
 		./pkg/proxycore/... \
 		./pkg/rdp/... \
 		./pkg/vnc/... \

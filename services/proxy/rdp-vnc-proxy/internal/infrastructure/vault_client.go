@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
+	"github.com/openbastion/openbastion/pkg/securemem"
 )
 
 // VaultCredentialHTTPClient implements only the credential-issuance port. It
@@ -20,11 +22,14 @@ type VaultCredentialHTTPClient struct {
 
 func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeToken, callingProxyID string) (proxycore.Fetched, error) {
 	body, _ := json.Marshal(fetchCredentialRequestBody{ScopeToken: scopeToken, CallingProxyID: callingProxyID})
+	defer securemem.Zero(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/vault/v1/fetch-credential", bytes.NewReader(body))
 	if err != nil {
 		return proxycore.Fetched{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cache-Control", "no-store")
+	req.Header.Set("Pragma", "no-cache")
 	client := c.Client
 	if client == nil {
 		client = http.DefaultClient
@@ -37,9 +42,22 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	if resp.StatusCode != http.StatusOK {
 		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: status %d", resp.StatusCode)
 	}
-	var out fetchCredentialResponseBody
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	const maxCredentialResponse = 1 << 20
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, maxCredentialResponse+1))
+	defer securemem.Zero(responseBody)
+	if err != nil {
 		return proxycore.Fetched{}, err
+	}
+	if len(responseBody) > maxCredentialResponse {
+		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: response exceeds limit")
+	}
+	var out fetchCredentialResponseBody
+	if err := json.Unmarshal(responseBody, &out); err != nil {
+		securemem.Zero(out.CredentialMaterial)
+		return proxycore.Fetched{}, err
+	}
+	if len(out.CredentialMaterial) == 0 {
+		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: empty credential material")
 	}
 	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey, TargetUser: out.TargetUser, TLSCertificateSHA256: out.TLSCertificateSHA256, TargetDomain: out.TargetDomain}, nil
 }

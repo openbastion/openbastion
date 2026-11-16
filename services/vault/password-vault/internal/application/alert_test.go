@@ -52,7 +52,9 @@ func TestParseRotationWindow(t *testing.T) {
 }
 
 func TestRotateDue_OutsideTheWindow_NothingIsTaken(t *testing.T) {
-	clock := time.Date(2026, 12, 15, 14, 0, 0, 0, time.UTC) // well past due, at 14:00 UTC
+	now := time.Now().UTC()
+	outside := time.Date(now.Year(), now.Month(), now.Day()+31, 14, 0, 0, 0, time.UTC) // due, but outside the UTC window
+	clock := outside
 	svc, store, target, audit := scheduledVault(t, &clock)
 	w, _ := application.ParseRotationWindow("02:00-05:00")
 	if _, err := svc.WithRotationSchedule(w, 3); err != nil {
@@ -65,8 +67,8 @@ func TestRotateDue_OutsideTheWindow_NothingIsTaken(t *testing.T) {
 	if a, _ := store.Get(context.Background(), "acc"); a.RotationAttemptedAt != nil {
 		t.Fatal("an account was taken outside the window")
 	}
-	// Counter-proof: at 03:00 UTC the same account rotates.
-	clock = time.Date(2026, 12, 16, 3, 0, 0, 0, time.UTC)
+	// Counter-proof: 13 hours later, at 03:00 UTC, the same account rotates.
+	clock = outside.Add(13 * time.Hour)
 	if res, _ := svc.RotateDue(context.Background()); res.Rotated != 1 {
 		t.Fatalf("inside the window: %+v", res)
 	}

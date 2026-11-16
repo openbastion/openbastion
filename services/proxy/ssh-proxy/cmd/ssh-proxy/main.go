@@ -21,6 +21,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/processsecurity"
 	"github.com/openbastion/openbastion/pkg/proxycore"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/proxy/ssh-proxy/internal/interfaces"
@@ -34,6 +35,9 @@ func mustEnv(key, def string) string {
 }
 
 func runService() {
+	if err := processsecurity.HardenSecretProcess(); err != nil {
+		log.Fatalf("ssh-proxy: secret-process hardening: %v", err)
+	}
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("ssh-proxy %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).

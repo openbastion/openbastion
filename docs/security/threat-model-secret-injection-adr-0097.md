@@ -174,7 +174,8 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 **Actions**
 - Conserver l’avertissement explicite sur le focus et les champs masqués ; ne pas présenter l’injection comme masquée à l’écran dans tous les cas.
 - Ajouter une vérification de non-divulgation dans les logs structurés et traces distribuées avec des sentinelles uniques ; auditer les chemins d’erreur et les diagnostics.
-- Documenter la politique de dumps mémoire et de collecte de crash pour les proxys ; interdire leur exposition non chiffrée et leur accès non autorisé.
+- Fait (ADR-0115) : politique de dumps/crash documentée ; `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` appliqués au Vault et aux proxies Linux ; buffers contrôlés purgés au plus tôt.
+- Restent : copies immuables Go, buffers internes TLS/bibliothèques, swap et mémoire noyau ; ne pas promettre leur effacement.
 
 ### D — Denial of Service (déni de service)
 
@@ -235,7 +236,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
 | SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans Draft PR #219 (CI à confirmer) ; façade UI dans Draft PR #217 (ADR-0113) ; cible à vérifier manuellement |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
-| SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
+| SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 proposé) |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
 | SI-07 | E | Confused deputy si identité interne compromise | P1 | Allowlist mTLS et autorisation exacte ; risque résiduel |
 | SI-08 | T | Altération des métadonnées de session par un rôle PostgreSQL compromis | P1 | Identifiants DB distincts ; pas d’attestation indépendante de la ligne de session |
@@ -249,7 +250,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | Substitution de cible | Comparaison Vault ↔ relay vivant | Refus, aucun événement de frappe |
 | Altération d’une session en base | Liaison des métadonnées persistées et contrôle d’accès DB | Refus ou détection avant scope Vault ; aucune frappe |
 | Grant rejoué ou consommé concurremment | Consommation atomique | Une seule opération au plus |
-| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre | L’injection en cours échoue, le buffer Vault est purgé et la révocation attend la fin du relais ; un E2E avec cible réelle doit encore prouver l’absence d’entrée après accusé de révocation |
+| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre | L’injection en cours échoue, le buffer Vault est purgé et la révocation attend la fin du relais ; E2E TigerVNC avec oracle X11 indépendant : aucune nouvelle frappe après l’acquittement de révocation |
 | Audit préalable indisponible | Fail-closed | Aucun marqueur ni frappe |
 | Recorder indisponible | Acquittement préalable | Aucune frappe |
 | Audit final perdu après frappe | `injection_id` commun audit/recording et réponse `outcome_unknown` | Aucun retry ; rapprochement par identifiant ; vérification manuelle de la cible |

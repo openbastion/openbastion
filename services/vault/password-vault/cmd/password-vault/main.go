@@ -15,6 +15,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
 	"github.com/openbastion/openbastion/pkg/mtls"
+	"github.com/openbastion/openbastion/pkg/processsecurity"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/application"
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
@@ -30,6 +31,9 @@ func mustEnv(key, def string) string {
 }
 
 func runService() {
+	if err := processsecurity.HardenSecretProcess(); err != nil {
+		log.Fatalf("password-vault: secret-process hardening: %v", err)
+	}
 	// The version it was built as (ADR-0063): the first line of its log.
 	log.Printf("password-vault %s", buildinfo.String())
 	// Mutual TLS is required unless INTERNAL_TLS=disabled (ADR-0010).
