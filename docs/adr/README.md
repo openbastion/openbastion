@@ -114,8 +114,8 @@ Créer, approuver, borner, lire, terminer une session ; limiter les demandes.
 | 5 | [ADR-0017](0017-mettre-fin-a-une-session-son-demandeur-ou-une-autorite.md) | Mettre fin à une session : son demandeur ou une autorité déclarée, et au nom de celui qui le demande | Accepté |
 | 6 | [ADR-0018](0018-rendre-la-terminaison-reelle-cote-proxy-le-broker-fait.md) | Rendre la terminaison réelle côté proxy : le Broker fait couper les connexions et jeter les tickets avant de marquer la session terminée | Accepté |
 | 7 | [ADR-0034](0034-une-session-ou-une-demande-arrivee-a-echeance-est-marquee.md) | Une session ou une demande arrivée à échéance est marquée expirée, une fois, et l'expiration est écrite dans la trace | Accepté |
-| 8 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté |
 | 8 | [ADR-0019](0019-qui-peut-lire-une-session-son-demandeur-celui-qui-l-a.md) | Qui peut lire une session : son demandeur, celui qui l'a décidée, ou le titulaire d'une politique `session-read` — et une lecture n'écrit rien | Accepté (règle 6 amendée par ADR-0020) |
+| 9 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté |
 
 ### 7. Break-glass
 

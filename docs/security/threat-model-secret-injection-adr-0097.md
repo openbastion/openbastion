@@ -92,7 +92,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 1. Substitution de cible, de compte ou de protocole entre l’autorisation et l’injection.
 2. Modification ou rejeu du scope Vault, du grant MFA ou du challenge.
 3. Intercalation d’entrées opérateur au milieu du secret.
-4. Course entre fin/révocation de session et frappe du secret.
+4. Course entre fin/révocation de session et frappe du secret : une preuve cible réelle vérifie désormais l’entrée effective et l’absence d’événement après l’acquittement ; la course concurrente reste ouverte.
 5. Modification, réordonnancement ou suppression du marqueur/audit.
 6. Un acteur qui a compromis un rôle PostgreSQL modifie l’enregistrement de session (propriétaire, compte, protocole ou état) avant que le Broker ne le relise.
 
@@ -110,7 +110,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 - Tests VNC/RDP multi-processus et tests de rejeu ; le replay et les métadonnées n’incluent pas la valeur du secret.
 
 **Risque résiduel — P1**
-- Le verrou d’entrée prouve l’absence d’intercalation entre frappes, mais la revue n’a pas encore de test adversarial démontrant l’atomicité entre validation de session active, début de frappe et révocation/arrêt concurrent.
+- Le verrou d’entrée prouve l’absence d’intercalation entre frappes. Un E2E VNC contre TigerVNC réel utilise `xev` comme oracle indépendant : il vérifie les keysyms Unicode réellement reçus et qu’aucun événement ne suit l’acquittement de révocation. Il ne force pas encore une terminaison concurrente au milieu de la frappe ; cette atomicité reste à démontrer.
 - Un arrêt après une frappe partielle peut laisser la cible dans un état intermédiaire ; une frappe déjà reçue ne peut pas être annulée.
 - Un rôle PostgreSQL compromis avec droit d’écriture peut altérer les métadonnées de session que le Broker relit. La vérification de la cible par le proxy réduit le risque de substitution d’hôte/utilisateur, mais ne constitue pas une attestation cryptographique indépendante de l’enregistrement de session.
 
@@ -233,10 +233,10 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | ID | STRIDE | Risque | Sévérité | État |
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
-| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
+| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : E2E VNC contre TigerVNC réel avec oracle X11 indépendant ; séquence Unicode reçue et aucune nouvelle entrée après l’acquittement de révocation, CI PostgreSQL 16 passée dans la PR #220 ; la course concurrente pendant la frappe reste à prouver |
 | SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans Draft PR #219 (CI à confirmer) ; façade UI dans Draft PR #217 (ADR-0113) ; cible à vérifier manuellement |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
-| SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 proposé) |
+| SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 accepté) |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
 | SI-07 | E | Confused deputy si identité interne compromise | P1 | Allowlist mTLS et autorisation exacte ; risque résiduel |
 | SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | ADR-0116 accepté : HMAC Broker + révision monotone ancrée dans Audit Service ; implémentation et contre-épreuves PostgreSQL encore à réaliser |
@@ -250,7 +250,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | Substitution de cible | Comparaison Vault ↔ relay vivant | Refus, aucun événement de frappe |
 | Altération d’une session en base | Liaison des métadonnées persistées et contrôle d’accès DB | Refus ou détection avant scope Vault ; aucune frappe |
 | Grant rejoué ou consommé concurremment | Consommation atomique | Une seule opération au plus |
-| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre | L’injection en cours échoue, le buffer Vault est purgé et la révocation attend la fin du relais ; E2E TigerVNC avec oracle X11 indépendant : aucune nouvelle frappe après l’acquittement de révocation |
+| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre ; E2E TigerVNC + oracle `xev` indépendant | L’E2E vérifie l’entrée réelle puis l’absence de nouvelle frappe après l’acquittement de révocation ; la course déclenchée pendant la frappe reste à tester |
 | Audit préalable indisponible | Fail-closed | Aucun marqueur ni frappe |
 | Recorder indisponible | Acquittement préalable | Aucune frappe |
 | Audit final perdu après frappe | `injection_id` commun audit/recording et réponse `outcome_unknown` | Aucun retry ; rapprochement par identifiant ; vérification manuelle de la cible |
@@ -261,12 +261,12 @@ Ajouter aussi un scénario avec un rôle PostgreSQL de test qui modifie les colo
 
 Les contre-épreuves doivent être réalisées sur des branches de test isolées ; ne jamais affaiblir un contrôle dans le code livré.
 
-## 7. État des preuves au 15 novembre 2026
+## 7. État des preuves au 16 novembre 2026
 
 - **SSH :** parcours multi-processus MFA → Broker → Vault → proxy → cible → Recorder/Audit validé ; la valeur est absente de l’enregistrement et remplacée par un marqueur. Le test de perte d’acquittement terminal transmet l’événement au véritable Audit Service, perd la réponse après commit, vérifie `outcome_unknown`, une seule frappe côté cible, aucun retry et une chaîne valide.
 - **VNC :** parcours multi-processus avec TOTP, refus d’un autre acteur et d’une preuve invalide, frappe Unicode vérifiée à la cible RFB, marqueur et audit, absence du secret dans les logs et l’objet enregistré. Un test complet contre TigerVNC réel a également passé dans l’environnement local.
 - **RDP :** parcours multi-processus avec FreeRDP 3, scope Vault, audit, marqueur durable et rejeu validés. FreeRDP Shadow ne constitue pas un oracle fiable de réception Unicode ; le test Windows TestRDPWindows_SecretTyperUnicode reste à valider dans la CI Windows.
-- **Admin UI :** tests Vitest du composant et du parcours TOTP/WebAuthn présents. Un test Chromium réel de l’UI avec API simulée est ajouté à la CI ; il n’a pas pu être exécuté sur LT209227 faute de binaire Chrome. Son succès CI est donc encore requis. Ce test ne remplace pas un parcours navigateur contre une cible TigerVNC/Windows réelle.
+- **Admin UI :** tests Vitest du composant et du parcours TOTP/WebAuthn présents. Le test Chromium réel de l’UI avec API simulée a passé dans la CI de la PR #220 ; il vérifie l’effacement du TOTP avant réponse, le payload limité et l’absence de credential/scope et de stockage persistant. Il ne remplace pas un parcours navigateur contre une cible TigerVNC/Windows réelle. Il n’a pas été exécuté localement sur LT209227 faute de binaire Chrome.
 - **Parcours B (mot de passe fourni par l’opérateur) :** non couvert et interdit jusqu’à un canal navigateur → proxy chiffré de bout en bout, défini par un ADR distinct.
 
 ## 8. Décision et critères de clôture
@@ -276,8 +276,8 @@ Les contre-épreuves doivent être réalisées sur des branches de test isolées
 La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation générale de l’injection. Les P1 SI-02, SI-03, SI-05 et SI-08 sont à traiter ou à accepter explicitement avant production. SI-04 est une limite technique connue, non réputée acceptée : elle doit rester visible à l’opérateur et dans la documentation. SI-01 et SI-07 sont des risques résiduels de compromission de composants de confiance ; SI-06 est une amélioration de résilience P2.
 
 Critères minimaux de clôture :
-1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
-2. implémenter ADR-0116 puis contre-éprouver l’altération de chaque champ, le rejeu d’une ancienne ligne, le crash entre commit SQL et attestation, la restauration et les rôles PostgreSQL distincts ;
+1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; E2E TigerVNC réel + oracle X11 ajouté pour vérifier qu’aucune entrée ne survient après l’acquittement ; ajouter ensuite une course déterministe qui révoque pendant la frappe ;
+2. implémenter ADR-0116 et contre-éprouver l’altération de chaque champ protégé, le rejeu/rollback, le crash entre commit SQL et attestation, la restauration, l’indisponibilité Audit et les rôles PostgreSQL distincts ;
 3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
 5. validation CI Windows de la réception Unicode RDP ;
