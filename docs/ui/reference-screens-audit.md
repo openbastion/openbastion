@@ -56,17 +56,18 @@ Sur le worktree isolé, avant toute modification :
 ## Incrément connexion — 2026-11-16
 
 - La branche `feat/ui-reference-alignment` a été rebasée sur `origin/main` (`0925dfc`, PR #220 intégrée) ; les modifications locales ont été restaurées sans conflit.
-- L'écran de connexion suit désormais les proportions, l'ordre des éléments et les couleurs de la capture 1440 × 1040 ; les couleurs spécifiques sont définies dans les tokens sémantiques `--ob-color-login-*`, avec une palette sombre indépendante du thème applicatif.
+- La première implémentation suivait une capture 1440 × 1040 ; la référence de calques reçue ensuite (1440 × 1024) prévaut désormais : panneau gauche sombre et panneau droit clair, indépendamment du thème applicatif.
 - Les flux locaux, LDAP, OIDC et MFA restent ceux de l'API publique. Le champ identifiant reste de type texte : certains annuaires acceptent un nom d'utilisateur qui n'est pas une adresse e-mail.
 - Le lien « Mot de passe oublié ? » et les mentions Confidentialité/Conditions sont uniquement des éléments visuels de référence tant qu'aucune route/documentation publique n'existe ; aucune action factice n'est ajoutée.
 - Tests ciblés après correction : `src/features/login/login.test.tsx` et `src/app/app.test.tsx` — 23 tests passés.
 - Suite complète : 25 fichiers, 245 tests passés ; TypeScript et Vite build passés. Contraste des tokens et contrôle d'absence de couleurs littérales passés.
 - Limite : aucune capture navigateur de comparaison pixel-à-pixel n'a encore été réalisée ; la validation visuelle reste à confirmer dans le navigateur à 1440 × 1040 et sur mobile.
 
-## Corrections issues de `Correction.png` — 2026-11-16
+## Référence finale de connexion — SVG en calques — 2026-11-16
 
 - Le libellé `OpenBastion` du verrouillage de marque est forcé sur le token de texte clair du panneau gauche, indépendant du thème global ; le nom ne disparaît donc plus en thème sombre.
-- La capture de correction confirme que les deux panneaux de connexion restent sur une palette sombre : le panneau droit ne doit pas basculer en blanc en thème clair ou sombre. Le formulaire, les champs, l'encart d'assurance et les liens utilisent des couleurs claires et contrastées sur le fond sombre ; les tokens `--ob-color-login-*` sont donc identiques dans les deux thèmes applicatifs.
+- Le SVG en calques `openbastion-auth-connexion.svg` remplace les captures précédentes comme référence de vérité : panneau gauche bleu nuit (`#0B192C`), panneau droit clair (`#F8FAFC`), formulaire de 440 px, champs et bouton SSO blancs (`#FFFFFF`), texte principal `#0F172A`, accent `#0F62FE`, séparateurs `#E2E8F0` et encart MFA `#EBF2FE`. Les tokens `--ob-color-login-*` appliquent cette composition indépendamment du thème global.
 - Le bandeau global `LegalNotice` est supprimé de la page de connexion. La colonne gauche porte la mention complète `© 2026 OpenBastion — GNU Affero General Public License v3.0 (AGPL-3.0-only)` ; les liens source et licence sont alignés avec Confidentialité / Conditions d'utilisation sous le message d'aide.
+- La case « Se souvenir de mon adresse e-mail » mémorise uniquement l'identifiant, uniquement après une connexion réussie et un consentement explicite ; le mot de passe et le jeton restent exclus du stockage navigateur.
 - Le bandeau légal global reste présent sur l'espace authentifié et le retour OIDC ; cette correction ne réduit pas la visibilité des informations de licence dans ces parcours.
-- Les six SVG de référence transmis (1440 × 1040) sont conservés comme références des pages Accès privilégiés, Audit, Infrastructure, Paramètres, Sessions et Vue d'ensemble. Leur alignement sera traité page par page ; cette correction n'introduit aucune donnée de démonstration.
+- Les huit SVG en calques transmis constituent les références de travail : connexion et validation MFA (1440 × 1024), puis Dashboard, Accès privilégiés, Sessions, Infrastructure, Audit et Paramètres (1440 × 1080). Seuls les calques de connexion sont traités dans cet incrément.

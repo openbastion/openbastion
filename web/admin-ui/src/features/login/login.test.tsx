@@ -20,6 +20,32 @@ describe("Login", () => {
     expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();
   });
 
+  it("remembers only the email address after an explicit opt-in and successful sign-in", async () => {
+    const key = "openbastion.login.remembered-username";
+    window.localStorage.removeItem(key);
+    const { api } = fakeApi({ "POST /auth/login": { body: { accessToken: "remembered-token", expiresIn: 3600 } } });
+    const onToken = vi.fn();
+    const first = render(<Login api={api} onToken={onToken} navigate={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice@example.test" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "never-store-this" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Se souvenir de mon adresse e-mail" }));
+    fireEvent.click(screen.getByText("Se connecter"));
+    await waitFor(() => expect(onToken).toHaveBeenCalledWith("remembered-token"));
+
+    expect(window.localStorage.getItem(key)).toBe("alice@example.test");
+    expect(window.localStorage.getItem(key)).not.toContain("never-store-this");
+    first.unmount();
+
+    const { api: nextApi } = fakeApi({});
+    render(<Login api={nextApi} onToken={vi.fn()} navigate={vi.fn()} />);
+    expect((screen.getByLabelText("Utilisateur") as HTMLInputElement).value).toBe("alice@example.test");
+    const remember = screen.getByRole("checkbox", { name: "Se souvenir de mon adresse e-mail" });
+    expect((remember as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(remember);
+    expect(window.localStorage.getItem(key)).toBeNull();
+  });
+
   it("places enterprise SSO before local credentials and toggles password visibility", () => {
     const { api } = fakeApi({});
     render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);

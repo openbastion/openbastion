@@ -142,6 +142,7 @@ export default {
     emailPlaceholder: "camille.martin@acme.com",
     orWithAccount: "or use your account",
     forgotPassword: "Forgot password?",
+    rememberEmail: "Remember my email address",
     showPassword: "Show",
     hidePassword: "Hide",
     additionalVerification: "Additional verification may be required to protect your account.",

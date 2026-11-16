@@ -12,6 +12,25 @@ import { LegalLinks } from "../../shared/LegalNotice";
 // "local", or "ldap:<id>" ("ldap:" for the directory of the LDAP_* variables, whose id is empty).
 type Source = string;
 
+const rememberedUsernameKey = "openbastion.login.remembered-username";
+
+function readRememberedUsername(): string {
+  try {
+    return window.localStorage.getItem(rememberedUsernameKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberUsername(username: string | null): void {
+  try {
+    if (username === null) window.localStorage.removeItem(rememberedUsernameKey);
+    else window.localStorage.setItem(rememberedUsernameKey, username);
+  } catch {
+    // Remembering an identifier is optional; storage denial must never block authentication.
+  }
+}
+
 // Login: a local account (POST /auth/login), one of the organisation's directories when the Gateway
 // lists them (POST /auth/ldap/login, ADR-0061), or one of its providers (ADR-0035). With several,
 // each is named by its id (ADR-0076): the page never picks one for the user.
@@ -21,7 +40,8 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
   const [choice, setChoice] = useState<Source | null>(null);
   // Derived, not set by an effect: the choice shown is the one a submit uses, at every render.
   const source: Source = choice ?? (directories.length > 0 ? "ldap:" + directories[0].id : "local");
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(readRememberedUsername);
+  const [rememberEmail, setRememberEmail] = useState(() => readRememberedUsername() !== "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -37,6 +57,7 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
       const directory = source.startsWith("ldap:") ? source.slice("ldap:".length) : null;
       const body = directory ? { directory, username, password } : { username, password };
       const r = await api.request<{ accessToken: string }>("POST", directory === null ? "/auth/login" : "/auth/ldap/login", body);
+      rememberUsername(rememberEmail ? username : null);
       setPassword("");
       onToken(r.accessToken);
     } catch (err) {
@@ -151,6 +172,17 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
                         {showPassword ? t("login.hidePassword") : t("login.showPassword")}
                       </button>
                     </span>
+                  </label>
+                  <label className="login-remember">
+                    <input
+                      type="checkbox"
+                      checked={rememberEmail}
+                      onChange={(event) => {
+                        setRememberEmail(event.target.checked);
+                        if (!event.target.checked) rememberUsername(null);
+                      }}
+                    />
+                    {t("login.rememberEmail")}
                   </label>
                   <Button type="submit" variant="primary" disabled={busy}>
                     {t("login.submit")}

@@ -2323,6 +2323,7 @@ main.login {
 .login-security-note {
   width: 100%;
   max-width: 28rem;
+  min-height: 12.5rem;
   padding: 1.5rem;
   color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-panel-raised);
@@ -2370,7 +2371,7 @@ main.login {
   position: fixed;
   z-index: 5;
   top: 2.4rem;
-  right: 4.2rem;
+  right: 6.75rem;
   color: var(--ob-color-login-muted);
 }
 .login-language .language-switcher { display: flex; align-items: center; gap: 0.3rem; }
@@ -2431,7 +2432,7 @@ main.login {
   display: flex;
   justify-content: center;
   width: 100%;
-  min-height: 3rem;
+  min-height: 2.875rem;
   padding: 0.7rem 3rem;
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-surface);
@@ -2449,10 +2450,21 @@ main.login {
   transform: rotate(180deg);
 }
 .login-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   margin: 0 0 1.7rem;
   color: var(--ob-color-login-muted);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   text-align: center;
+  white-space: nowrap;
+}
+.login-divider::before,
+.login-divider::after {
+  height: 1px;
+  flex: 1 1 auto;
+  content: "";
+  background: var(--ob-color-login-border);
 }
 .login-form { display: grid; gap: 1.45rem; }
 .login-form .login-field {
@@ -2465,7 +2477,7 @@ main.login {
 .login-form .login-field input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 3rem;
+  min-height: 2.875rem;
   padding: 0.75rem 0.95rem;
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-surface);
@@ -2478,6 +2490,23 @@ main.login {
 .login-form .login-field input::placeholder { color: var(--ob-color-login-muted); opacity: 1; }
 .login-field-label { display: flex; justify-content: space-between; align-items: center; }
 .login-field-action { color: var(--ob-color-login-accent); font-size: 0.75rem; font-weight: 500; }
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: -0.1rem;
+  color: var(--ob-color-login-muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+.login-remember input {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  margin: 0;
+  accent-color: var(--ob-color-login-accent);
+}
 .login-password-wrap { position: relative; display: block; }
 .login-password-wrap input { padding-right: 5rem !important; }
 .login-password-toggle {
@@ -2526,13 +2555,15 @@ main.login {
 .login-assurance-icon svg { width: 1.8rem; height: 1.8rem; }
 .login-assurance p { margin: 0; font-size: 0.76rem; line-height: 1.45; }
 .login-content-footer {
+  width: min(100%, 27.5rem);
   margin-top: auto;
-  padding-top: 5rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--ob-color-login-border);
   color: var(--ob-color-login-muted);
   font-size: 0.75rem;
   text-align: center;
 }
-.login-content-footer p { margin: 0 0 0.9rem; }
+.login-content-footer p { margin: 0 0 1.75rem; }
 .login-footer-links {
   display: flex;
   align-items: center;
