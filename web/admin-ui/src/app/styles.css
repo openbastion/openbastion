@@ -2496,7 +2496,7 @@ main.login {
   width: 100%;
   min-height: 3rem;
   margin-top: 0.2rem;
-  color: var(--ob-color-text-on-accent);
+  color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-primary);
   border: 1px solid var(--ob-color-login-primary);
   border-radius: 0.55rem;
