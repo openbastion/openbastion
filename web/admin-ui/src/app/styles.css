@@ -2259,10 +2259,10 @@ main.login {
 .login-brand-panel {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-width: 0;
   min-height: 100vh;
-  padding: 3.65rem 3.5rem 2.4rem;
+  padding: 3.625rem 3.5rem 2.625rem;
   color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-panel);
 }
@@ -2270,102 +2270,115 @@ main.login {
 .login-brand-lockup {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.875rem;
+  min-height: 2.625rem;
 }
 
 .login-brand-lockup > div { display: grid; gap: 0.18rem; }
 .login-brand-lockup strong {
   color: var(--ob-color-login-panel-text);
-  font-size: 1.55rem;
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
 }
-.login-brand-lockup span:not(.brand-mark) {
+.login-brand-lockup span:not(.login-brand-mark) {
   color: var(--ob-color-login-panel-muted);
-  font-size: 0.62rem;
-  letter-spacing: 0.025em;
+  font-size: 0.594rem;
+  letter-spacing: 0.06em;
 }
 .login-brand-mark {
   display: grid;
+  flex: 0 0 2.5rem;
   place-items: center;
   width: 2.5rem;
-  height: 2.5rem;
-  color: var(--ob-color-login-panel);
-  background: var(--ob-color-login-panel-text);
-  clip-path: polygon(50% 0, 100% 15%, 100% 60%, 50% 100%, 0 60%, 0 15%);
+  height: 2.625rem;
 }
-.login-brand-mark svg { width: 1.45rem; height: 1.45rem; }
-.login-brand-message { width: 100%; max-width: 31rem; margin: auto 0; }
+.login-brand-mark svg { display: block; width: 1.625rem; height: 2.125rem; }
+.login-brand-message {
+  width: 100%;
+  max-width: none;
+  margin: 9.65rem 0 0;
+}
 .login-eyebrow {
-  margin: 0 0 1.85rem;
+  margin: 0 0 2rem;
   color: var(--ob-color-login-panel-accent);
-  font-size: 0.68rem;
+  font-size: 0.65625rem;
   font-weight: 700;
-  letter-spacing: 0.015em;
+  letter-spacing: 0.06em;
 }
 .login-brand-message h2 {
-  max-width: 13ch;
-  margin: 0 0 1.65rem;
+  width: 100%;
+  max-width: none;
+  margin: 0 0 1.125rem;
   color: var(--ob-color-login-panel-text);
-  font-size: clamp(2.15rem, 2.9vw, 2.65rem);
-  font-weight: 650;
-  line-height: 1.36;
-  letter-spacing: -0.025em;
+  font-size: 2.375rem;
+  font-weight: 700;
+  line-height: 1.47;
+  letter-spacing: -0.02em;
 }
 .login-brand-message > p:last-child {
   max-width: 28rem;
   margin: 0;
   color: var(--ob-color-login-panel-muted);
-  font-size: 0.96rem;
-  line-height: 1.5;
+  font-size: 0.9375rem;
+  line-height: 1.47;
 }
 .login-security-note {
   width: 100%;
   max-width: 28rem;
   min-height: 12.5rem;
+  margin-top: 5.3rem;
   padding: 1.5rem;
   color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-panel-raised);
   border: 0;
-  border-radius: 0.8rem;
+  border-radius: 0.625rem;
 }
 .login-security-note h3 {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  margin: 0 0 1.25rem;
+  gap: 0.9rem;
+  margin: 0 0 2rem;
   color: var(--ob-color-login-panel-text);
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 .login-security-note h3::before {
-  width: 1.65rem;
-  height: 1.65rem;
-  flex: 0 0 1.65rem;
+  width: 1.375rem;
+  height: 1.75rem;
+  flex: 0 0 1.375rem;
   content: "";
   background: currentColor;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8'%3E%3Cpath d='M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z'/%3E%3C/svg%3E") center/contain no-repeat;
 }
 .login-security-note ul {
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
   margin: 0;
   padding: 0;
-  color: var(--ob-color-login-panel-muted);
-  font-size: 0.82rem;
-  line-height: 1.45;
+  color: var(--ob-color-login-panel-body);
+  font-size: 0.84375rem;
+  line-height: 1.4;
   list-style: none;
 }
 .login-security-note li { padding: 0; }
 .login-security-note li::before { content: none; }
 .login-brand-footer {
-  margin: 0;
-  color: var(--ob-color-login-panel-muted);
-  font-size: 0.72rem;
-  line-height: 2.2;
-  white-space: pre-line;
+  display: grid;
+  gap: 1.1rem;
+  margin: auto 0 0;
+  color: var(--ob-color-login-panel-footer);
+  font-size: 0.71875rem;
+  line-height: 1.2;
 }
+.login-brand-footer span:first-child {
+  color: var(--ob-color-login-panel-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.login-brand-footer span:last-child { margin-top: 1.4rem; }
 
 .login-language {
   position: fixed;
@@ -2588,8 +2601,11 @@ main.login {
 .login-card .or { display: none; }
 
 @media (max-width: 900px) {
-  .login-layout { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); }
-  .login-brand-panel { padding: 2.5rem 2rem 1.8rem; }
+  .login-layout { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); overflow-y: auto; }
+  .login-brand-panel { padding: 2.5rem 2rem 1.8rem; overflow-y: auto; }
+  .login-brand-message { margin-top: clamp(4rem, 12vh, 9.65rem); }
+  .login-security-note { margin-top: clamp(2rem, 5vh, 5rem); }
+  .login-brand-footer { margin-top: 2rem; }
   .login-content { padding: 8rem 2rem 1.5rem; }
   .login-language { right: 2rem; }
 }

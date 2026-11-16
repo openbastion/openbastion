@@ -4824,3 +4824,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - La lecture vérifie MAC + tête Audit ; rollback, altération ou Audit indisponible = refus fail-closed. Une ligne exactement une révision en avance peut être réconciliée idempotemment si son HMAC est valide ; les écarts supérieurs sont refusés.
 - Migration retenue : fenêtre de maintenance, zéro session active/en attente ; l'historique antérieur reste `legacy_unverified`, visible en lecture seule et jamais signé automatiquement. C'est une contrainte opérationnelle explicite de sécurité.
 - La PR de cet incrément porte la décision et les contrats d'intégrité ; le code, les migrations, la tête Audit, l'API mTLS et les contre-épreuves anti-rejeu restent à réaliser avant de considérer SI-08 fermé.
+
+## 2026-11-16 — Alignement du panneau gauche de connexion sur le SVG
+
+- La référence `openbastion-auth-connexion.svg` (1440 × 1024) sert de grille : panneau gauche de 560 px, marge de 56 px, verrouillage de marque à 58 px du haut, accroche à y≈264, carte sécurité à (56, 558) en 448 × 200 et pied de panneau en bas.
+- Le logo de connexion utilise maintenant le bouclier à trou de serrure du SVG (et non le pictogramme générique à coche utilisé dans les vues applicatives). La taille du mot-symbole, l'interlettrage, le corps du titre, les lignes descriptives et les espacements de la carte ont été rapprochés de la référence.
+- Les trois bénéfices de sécurité sont raccourcis pour retrouver les lignes de la maquette sans annoncer une MFA obligatoire pour tous les rôles : la MFA reste appliquée selon la politique d'accès ; les sessions sont chiffrées et tracées ; les secrets restent dans le coffre-fort.
+- Le pied de panneau reprend trois niveaux visuels, mais ne reprend pas les valeurs fictives de la maquette (« ACME CORPORATION », « v2.8.0 », hébergement UE). Elles sont remplacées par des informations génériques exactes sur le produit et ses modes de déploiement.
+- Les couleurs du pictogramme, du texte de la carte et du pied sont des tokens dédiés ; le contrôle `check-app-colors` ne doit trouver aucune couleur littérale dans le JSX/CSS applicatif.
+- Validation finale : `make ui-test ui-build` PASS — 25 fichiers, 246 tests ; TypeScript et build Vite PASS ; contrôles de contraste des tokens clair/sombre PASS ; `check-app-colors` PASS sans couleur littérale dans le code applicatif ; `git diff --check` PASS. Le rendu navigateur à 1440 × 1024 reste à confirmer : la tentative de capture headless Edge n'a pas produit de fichier exploitable.

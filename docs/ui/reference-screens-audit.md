@@ -71,3 +71,12 @@ Sur le worktree isolé, avant toute modification :
 - La case « Se souvenir de mon adresse e-mail » mémorise uniquement l'identifiant, uniquement après une connexion réussie et un consentement explicite ; le mot de passe et le jeton restent exclus du stockage navigateur.
 - Le bandeau légal global reste présent sur l'espace authentifié et le retour OIDC ; cette correction ne réduit pas la visibilité des informations de licence dans ces parcours.
 - Les huit SVG en calques transmis constituent les références de travail : connexion et validation MFA (1440 × 1024), puis Dashboard, Accès privilégiés, Sessions, Infrastructure, Audit et Paramètres (1440 × 1080). Seuls les calques de connexion sont traités dans cet incrément.
+
+## Alignement du panneau gauche — 2026-11-16
+
+- La géométrie reprend les repères du SVG : colonne gauche 560 px à 1440 px de large, retrait horizontal 56 px, marque en haut à 58 px, accroche à y≈264, carte sécurité à (56, 558) avec 448 × 200 px, pied ancré en bas.
+- Le pictogramme de marque est spécifique à la connexion et reproduit le bouclier avec serrure du SVG ; le pictogramme générique à coche reste inchangé dans les autres vues.
+- La typographie de l'accroche, du titre et du descriptif, ainsi que les espacements de la carte et les trois lignes de bénéfices, sont rapprochés de la référence. Le texte MFA reste exact : application selon la politique d'accès, pas une obligation universelle.
+- Le pied reprend trois niveaux visuels sans importer les données fictives « ACME CORPORATION », « v2.8.0 » ou « hébergé en Union européenne ». Il affiche une mention produit, la possibilité de déploiement sur site ou cloud et la licence réelle.
+- Les couleurs du panneau sont des tokens de design system, indépendants du thème global. La variante responsive tablette conserve un défilement vertical plutôt que de couper le panneau si la hauteur disponible est insuffisante.
+- Tests ajoutés/ajustés pour le pictogramme de marque et le contenu réel du panneau. La comparaison navigateur pixel-à-pixel à 1440 × 1024 reste à confirmer.

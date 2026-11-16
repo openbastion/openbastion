@@ -93,7 +93,14 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
       <div className="login-layout">
         <aside className="login-brand-panel" aria-label={t("login.brand.aria")}>
           <div className="login-brand-lockup">
-            <BrandMark className="login-brand-mark" />
+            <span className="login-brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 26 34" fill="none">
+                <path d="M13 0L0 5.5V15.5C0 23.8 5.5 31.2 13 33C20.5 31.2 26 23.8 26 15.5V5.5L13 0Z" fill="var(--ob-color-login-panel-text)" />
+                <path d="M13 4L6 7V13C6 17.5 9 21.5 13 22.5C17 21.5 20 17.5 20 13V7L13 4Z" fill="var(--ob-color-login-panel-mark-accent)" />
+                <circle cx="13" cy="12.5" r="2" fill="var(--ob-color-login-panel)" />
+                <path d="M13 14.5V17.5" stroke="var(--ob-color-login-panel)" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
             <div>
               <strong>OpenBastion</strong>
               <span>{t("login.brand.product")}</span>
@@ -112,7 +119,11 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
               <li>{t("login.brand.security.secrets")}</li>
             </ul>
           </section>
-          <p className="login-brand-footer">{t("login.brand.footer")}</p>
+          <footer className="login-brand-footer">
+            <span>{t("login.brand.footerContext")}</span>
+            <span>{t("login.brand.footerDeployment")}</span>
+            <span>{t("login.brand.footer")}</span>
+          </footer>
         </aside>
         <div className="login-content">
           <div className="login-card">

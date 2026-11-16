@@ -16,7 +16,13 @@ describe("Login", () => {
     expect(within(legalLinks).getByRole("link", { name: "Texte de la licence" })).toBeTruthy();
     expect(legalLinks.parentElement?.classList.contains("login-footer-links")).toBe(true);
     expect(screen.getByRole("heading", { name: "Vos accès privilégiés. La confiance en plus." })).toBeTruthy();
-    expect(screen.getByText("Les secrets restent dans le coffre-fort, jamais révélés à l'opérateur")).toBeTruthy();
+    expect(screen.getByText("MFA appliquée selon la politique d'accès")).toBeTruthy();
+    expect(screen.getByText("Sessions chiffrées et intégralement tracées")).toBeTruthy();
+    expect(screen.getByText("Secrets conservés dans le coffre-fort")).toBeTruthy();
+    expect(screen.getByText("OPENBASTION / ACCÈS PRIVILÉGIÉS")).toBeTruthy();
+    expect(screen.getByText("Déploiement sur site ou dans le cloud")).toBeTruthy();
+    expect(document.querySelector(".login-brand-mark")?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector(".login-brand-mark svg path")?.getAttribute("d")).toContain("M13 0L0 5.5");
     expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();
   });
 

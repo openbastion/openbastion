@@ -96,6 +96,9 @@
   --ob-color-login-panel-raised: #13263E;
   --ob-color-login-panel-text: #FFFFFF;
   --ob-color-login-panel-muted: #94A3B8;
+  --ob-color-login-panel-body: #CBD5E1;
+  --ob-color-login-panel-footer: #64748B;
+  --ob-color-login-panel-mark-accent: #38BDF8;
   --ob-color-login-panel-accent: #0EA5E9;
   --ob-color-login-text: #0F172A;
   --ob-color-login-muted: #64748B;
@@ -156,6 +159,9 @@
   --ob-color-login-panel-raised: #13263E;
   --ob-color-login-panel-text: #FFFFFF;
   --ob-color-login-panel-muted: #94A3B8;
+  --ob-color-login-panel-body: #CBD5E1;
+  --ob-color-login-panel-footer: #64748B;
+  --ob-color-login-panel-mark-accent: #38BDF8;
   --ob-color-login-panel-accent: #0EA5E9;
   --ob-color-login-text: #0F172A;
   --ob-color-login-muted: #64748B;
