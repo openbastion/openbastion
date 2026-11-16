@@ -5,6 +5,30 @@ import { OidcCallback } from "./OidcCallback";
 import { fakeApi } from "../../test-helpers";
 
 describe("Login", () => {
+  it("uses the split-screen reference composition and states only implemented security guarantees", () => {
+    const { api } = fakeApi({});
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    expect(screen.getByRole("complementary", { name: "Présentation d'OpenBastion" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Vos accès privilégiés. La confiance en plus." })).toBeTruthy();
+    expect(screen.getByText("Les secrets restent dans le coffre-fort, jamais révélés à l'opérateur")).toBeTruthy();
+    expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();
+  });
+
+  it("places enterprise SSO before local credentials and toggles password visibility", () => {
+    const { api } = fakeApi({});
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    const sso = screen.getByRole("button", { name: "Se connecter avec le fournisseur d'identité" });
+    const form = screen.getByRole("form", { name: "Connexion locale" });
+    expect(Boolean(sso.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+
+    const password = screen.getByLabelText("Mot de passe");
+    expect(password.getAttribute("type")).toBe("password");
+    fireEvent.click(screen.getByRole("button", { name: "Afficher" }));
+    expect(password.getAttribute("type")).toBe("text");
+    fireEvent.click(screen.getByRole("button", { name: "Masquer" }));
+    expect(password.getAttribute("type")).toBe("password");
+  });
+
   it("logs in with a local account and hands the token on", async () => {
     const { api, calls } = fakeApi({ "POST /auth/login": { body: { accessToken: "tok", expiresIn: 3600 } } });
     const onToken = vi.fn();
