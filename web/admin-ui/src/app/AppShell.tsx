@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Audit, Dashboard, Policies as PoliciesIcon, Session, Settings, Shield, Users } from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import {
@@ -118,7 +118,9 @@ export function AppShell({
     return () => { delete document.documentElement.dataset.density; };
   }, [preferences.density]);
 
-  useEffect(() => {
+  // Global shortcuts must be active as soon as the authenticated shell is committed.
+  // A passive effect leaves a brief post-login window where Ctrl/Meta+K can be missed.
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();

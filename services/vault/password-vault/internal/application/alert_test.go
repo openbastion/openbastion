@@ -52,8 +52,16 @@ func TestParseRotationWindow(t *testing.T) {
 }
 
 func TestRotateDue_OutsideTheWindow_NothingIsTaken(t *testing.T) {
-	clock := time.Date(2026, 12, 15, 14, 0, 0, 0, time.UTC) // well past due, at 14:00 UTC
+	clock := time.Now().UTC()
 	svc, store, target, audit := scheduledVault(t, &clock)
+	account, err := store.Get(context.Background(), "acc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The in-memory store stamps CreatedAt with wall-clock time, independently of WithClock.
+	// Anchor the service clock to that timestamp, then place it safely past the 30-day due date.
+	clock = account.CreatedAt.Add(32 * 24 * time.Hour)
+	clock = time.Date(clock.Year(), clock.Month(), clock.Day(), 14, 0, 0, 0, time.UTC)
 	w, _ := application.ParseRotationWindow("02:00-05:00")
 	if _, err := svc.WithRotationSchedule(w, 3); err != nil {
 		t.Fatal(err)
@@ -66,7 +74,7 @@ func TestRotateDue_OutsideTheWindow_NothingIsTaken(t *testing.T) {
 		t.Fatal("an account was taken outside the window")
 	}
 	// Counter-proof: at 03:00 UTC the same account rotates.
-	clock = time.Date(2026, 12, 16, 3, 0, 0, 0, time.UTC)
+	clock = clock.Add(13 * time.Hour)
 	if res, _ := svc.RotateDue(context.Background()); res.Rotated != 1 {
 		t.Fatalf("inside the window: %+v", res)
 	}

@@ -92,7 +92,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 1. Substitution de cible, de compte ou de protocole entre l’autorisation et l’injection.
 2. Modification ou rejeu du scope Vault, du grant MFA ou du challenge.
 3. Intercalation d’entrées opérateur au milieu du secret.
-4. Course entre fin/révocation de session et frappe du secret.
+4. Course entre fin/révocation de session et frappe du secret : une preuve cible réelle vérifie désormais l’entrée effective et l’absence d’événement après l’acquittement ; la course concurrente reste ouverte.
 5. Modification, réordonnancement ou suppression du marqueur/audit.
 6. Un acteur qui a compromis un rôle PostgreSQL modifie l’enregistrement de session (propriétaire, compte, protocole ou état) avant que le Broker ne le relise.
 
@@ -110,7 +110,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 - Tests VNC/RDP multi-processus et tests de rejeu ; le replay et les métadonnées n’incluent pas la valeur du secret.
 
 **Risque résiduel — P1**
-- Le verrou d’entrée prouve l’absence d’intercalation entre frappes, mais la revue n’a pas encore de test adversarial démontrant l’atomicité entre validation de session active, début de frappe et révocation/arrêt concurrent.
+- Le verrou d’entrée prouve l’absence d’intercalation entre frappes. Un E2E VNC contre TigerVNC réel utilise `xev` comme oracle indépendant : il vérifie les keysyms Unicode réellement reçus et qu’aucun événement ne suit l’acquittement de révocation. Il ne force pas encore une terminaison concurrente au milieu de la frappe ; cette atomicité reste à démontrer.
 - Un arrêt après une frappe partielle peut laisser la cible dans un état intermédiaire ; une frappe déjà reçue ne peut pas être annulée.
 - Un rôle PostgreSQL compromis avec droit d’écriture peut altérer les métadonnées de session que le Broker relit. La vérification de la cible par le proxy réduit le risque de substitution d’hôte/utilisateur, mais ne constitue pas une attestation cryptographique indépendante de l’enregistrement de session.
 
@@ -232,7 +232,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | ID | STRIDE | Risque | Sévérité | État |
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
-| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : annulation en vol testée à la frontière des registres SSH/RDP/VNC ; E2E cible réelle restant |
+| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : E2E VNC ajouté contre TigerVNC réel avec oracle X11 indépendant ; prouve la séquence Unicode reçue et l’absence de nouvelle entrée après l’acquittement de révocation ; CI PostgreSQL 16 à exécuter ; la course concurrente pendant la frappe reste à prouver |
 | SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans Draft PR #219 (CI à confirmer) ; façade UI dans Draft PR #217 (ADR-0113) ; cible à vérifier manuellement |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Politique et vérification à ajouter |
@@ -249,7 +249,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | Substitution de cible | Comparaison Vault ↔ relay vivant | Refus, aucun événement de frappe |
 | Altération d’une session en base | Liaison des métadonnées persistées et contrôle d’accès DB | Refus ou détection avant scope Vault ; aucune frappe |
 | Grant rejoué ou consommé concurremment | Consommation atomique | Une seule opération au plus |
-| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre | L’injection en cours échoue, le buffer Vault est purgé et la révocation attend la fin du relais ; un E2E avec cible réelle doit encore prouver l’absence d’entrée après accusé de révocation |
+| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre ; E2E TigerVNC + oracle `xev` ajouté | L’E2E vérifie l’entrée réelle puis l’absence de nouvelle frappe après l’acquittement de révocation ; la course déclenchée pendant la frappe reste à tester |
 | Audit préalable indisponible | Fail-closed | Aucun marqueur ni frappe |
 | Recorder indisponible | Acquittement préalable | Aucune frappe |
 | Audit final perdu après frappe | `injection_id` commun audit/recording et réponse `outcome_unknown` | Aucun retry ; rapprochement par identifiant ; vérification manuelle de la cible |
@@ -275,7 +275,7 @@ Les contre-épreuves doivent être réalisées sur des branches de test isolées
 La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation générale de l’injection. Les P1 SI-02, SI-03, SI-05 et SI-08 sont à traiter ou à accepter explicitement avant production. SI-04 est une limite technique connue, non réputée acceptée : elle doit rester visible à l’opérateur et dans la documentation. SI-01 et SI-07 sont des risques résiduels de compromission de composants de confiance ; SI-06 est une amélioration de résilience P2.
 
 Critères minimaux de clôture :
-1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; compléter par un E2E avec cible réelle vérifiant qu’aucune entrée ne survient après l’acquittement de révocation ;
+1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; E2E TigerVNC réel + oracle X11 ajouté pour vérifier qu’aucune entrée ne survient après l’acquittement ; ajouter ensuite une course déterministe qui révoque pendant la frappe ;
 2. contre-épreuve d’altération de la ligne de session par un rôle PostgreSQL de test, et vérification de la protection/attestation retenue ;
 3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
 4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
