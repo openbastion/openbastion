@@ -12,11 +12,25 @@ import (
 	"github.com/coder/websocket"
 )
 
-func testScreenVaultSecretInjection(t *testing.T, gatewayURL, authnURL string, admin *http.Client, api screenAPI, operatorToken, auditorToken string, target *fakeRFBTarget, audit *screenAuditSpy, store *fakeObjectStore, outputs map[string]*syncBuffer) {
+type secretInputObserver interface {
+	keySequence() []uint32
+}
+
+type mfaStepUpCredentials struct {
+	token      string
+	totpSecret string
+	step       int64
+}
+
+func testScreenVaultSecretInjection(t *testing.T, gatewayURL, authnURL string, admin *http.Client, api screenAPI, operatorToken, auditorToken string, mfa *mfaStepUpCredentials, target secretInputObserver, accountID, vaultSecret string, audit *screenAuditSpy, store *fakeObjectStore, outputs map[string]*syncBuffer) *mfaStepUpCredentials {
 	t.Helper()
 	const username, password = "screen-stepup", "stepup-password-123"
-	token, totpSecret, loginStep := mfaStepUpToken(t, gatewayURL, authnURL, admin, username, password)
-	status, raw := api.in(t).call(token, http.MethodPost, "/sessions", map[string]any{"targetAccountId": "screen_good", "protocol": "vnc", "justification": "ADR-0097 integration", "durationMinutes": 10})
+	if mfa == nil {
+		token, totpSecret, step := mfaStepUpToken(t, gatewayURL, authnURL, admin, username, password)
+		mfa = &mfaStepUpCredentials{token: token, totpSecret: totpSecret, step: step}
+	}
+	token, totpSecret, loginStep := mfa.token, mfa.totpSecret, mfa.step
+	status, raw := api.in(t).call(token, http.MethodPost, "/sessions", map[string]any{"targetAccountId": accountID, "protocol": "vnc", "justification": "ADR-0097 integration", "durationMinutes": 10})
 	if status != http.StatusCreated {
 		t.Fatalf("create VNC session: %d %s", status, raw)
 	}
@@ -28,7 +42,12 @@ func testScreenVaultSecretInjection(t *testing.T, gatewayURL, authnURL string, a
 		t.Fatalf("screen did not become active: %+v", hello)
 	}
 	_ = readFrame(t, conn)
-	defer func() { _, _ = api.in(t).call(token, http.MethodDelete, "/sessions/"+sessionID, nil) }()
+	revoked := false
+	defer func() {
+		if !revoked {
+			_, _ = api.in(t).call(token, http.MethodDelete, "/sessions/"+sessionID, nil)
+		}
+	}()
 	if status, _ := api.in(t).call(operatorToken, http.MethodPost, "/sessions/"+sessionID+"/secret-injection-step-up", nil); status != http.StatusForbidden {
 		t.Fatalf("non-owner step-up returned %d, want 403", status)
 	}
@@ -59,7 +78,6 @@ func testScreenVaultSecretInjection(t *testing.T, gatewayURL, authnURL string, a
 	if status, body := prove(challenge, totpCode(t, totpSecret, time.Unix((loginStep+1)*30+1, 0))); status != http.StatusNoContent || body != "" {
 		t.Fatalf("Vault injection: %d %s", status, body)
 	}
-	const vaultSecret = "VNC-秘密-42"
 	want := make([]uint32, 0, len([]rune(vaultSecret)))
 	for _, r := range vaultSecret {
 		keysym := uint32(r)
@@ -88,6 +106,20 @@ func testScreenVaultSecretInjection(t *testing.T, gatewayURL, authnURL string, a
 			t.Fatalf("Vault secret leaked to %s logs", name)
 		}
 	}
+	status, body = api.in(t).call(token, http.MethodDelete, "/sessions/"+sessionID, nil)
+	if status/100 != 2 {
+		t.Fatalf("revoke after target input: %d %s", status, body)
+	}
+	revoked = true
+	// The target, not the proxy, is the oracle. Once the Broker acknowledges revocation, its
+	// actual input surface must not observe another key event.
+	before := target.keySequence()
+	time.Sleep(250 * time.Millisecond)
+	if after := target.keySequence(); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Fatalf("target received key events after revocation acknowledgement: before=%v after=%v", before, after)
+	}
+	mfa.step = loginStep + 1
+	return mfa
 }
 
 func mfaStepUpToken(t *testing.T, gatewayURL, authnURL string, admin *http.Client, username, password string) (string, string, int64) {

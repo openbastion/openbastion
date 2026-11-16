@@ -195,6 +195,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		{"screen-auditors", "session-auditor", "recording:session:*"},
 		{"screen-stepup-account", "screen-stepup", "vault:account:screen_good"},
 		{"screen-stepup-inject", "screen-stepup", "secret:inject:account:screen_good"},
+		{"screen-stepup-real-account", "screen-stepup", "vault:account:screen_real"},
+		{"screen-stepup-real-inject", "screen-stepup", "secret:inject:account:screen_real"},
 	} {
 		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
 			t.Fatalf("policy %s: %d", pol.name, status)
@@ -346,8 +348,9 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	}
 
 	onboard(t, "screen_good", good.address, "operator", vaultSecret, good.pin())
+	var mfa *mfaStepUpCredentials
 	t.Run("Vault secret injection across real VNC processes", func(t *testing.T) {
-		testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, good, audit, store, outputs)
+		mfa = testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, nil, good, "screen_good", "VNC-秘密-42", audit, store, outputs)
 	})
 
 	// Asked for now, since a session lasts a minute at least; looked at last.
@@ -374,10 +377,13 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	})
 
 	if real != nil {
-		// The real server cannot say what reached it; the relay in front of it can say when the
-		// connection ends. What it received is proved on the fake target and by pkg/vnc.TestRealTarget.
+		// TigerVNC's X server exposes the received keysyms through the target-side xev observer;
+		// the relay separately proves that session revocation closes the real target connection.
 		relay := newTCPRelay(t, real.address)
 		onboard(t, "screen_real", relay.address, real.user, real.password, real.pin())
+		t.Run("Vault secret injection reaches the real TigerVNC input surface", func(t *testing.T) {
+			_ = testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, mfa, real, "screen_real", real.password, audit, store, outputs)
+		})
 		t.Run("the journey, against a real target", func(t *testing.T) { journey(t, "screen_real", nil, relay.openConnections) })
 		t.Run("a real target refuses a wrong password, and the operator is told so without detail", func(t *testing.T) {
 			onboard(t, "screen_real_wrong", relay.address, real.user, wrongPasswordFor(real), real.pin())
@@ -722,10 +728,40 @@ type realVNCTarget struct {
 	address, user, password string
 	certPEM                 []byte
 	fingerprint, domain     string
+	inputLogPath            string
 }
 
 func (r *realVNCTarget) pin() *pinnedTarget {
 	return &pinnedTarget{fingerprint: r.fingerprint, domain: r.domain}
+}
+
+// keySequence reads KeyPress keysyms observed by xev on the real TigerVNC server's X root window.
+// It is deliberately an independent target-side oracle, not proxy or recorder telemetry.
+func (r *realVNCTarget) keySequence() []uint32 {
+	if r == nil || r.inputLogPath == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(r.inputLogPath)
+	if err != nil {
+		return nil
+	}
+	var keys []uint32
+	for _, event := range strings.Split(string(raw), "KeyPress event,")[1:] {
+		const marker = "keysym 0x"
+		i := strings.Index(event, marker)
+		if i < 0 {
+			continue
+		}
+		value := event[i+len(marker):]
+		if end := strings.IndexFunc(value, func(ch rune) bool { return !strings.ContainsRune("0123456789abcdefABCDEF", ch) }); end >= 0 {
+			value = value[:end]
+		}
+		parsed, err := strconv.ParseUint(value, 16, 32)
+		if err == nil {
+			keys = append(keys, uint32(parsed))
+		}
+	}
+	return keys
 }
 
 func realVNCTargetFromEnv(t *testing.T) *realVNCTarget {
@@ -738,9 +774,13 @@ func realVNCTargetFromEnv(t *testing.T) *realVNCTarget {
 	if err != nil {
 		t.Fatalf("OPENBASTION_VNC_CA_FILE: %v", err)
 	}
+	inputLogPath := os.Getenv("OPENBASTION_VNC_INPUT_LOG")
+	if inputLogPath == "" {
+		t.Fatal("OPENBASTION_VNC_INPUT_LOG is required for the real-target input oracle")
+	}
 	return &realVNCTarget{
 		address: address, user: os.Getenv("OPENBASTION_VNC_USER"), password: os.Getenv("OPENBASTION_VNC_PASSWORD"),
-		certPEM: certPEM, fingerprint: os.Getenv("OPENBASTION_VNC_PIN"), domain: os.Getenv("OPENBASTION_VNC_SERVER_NAME"),
+		certPEM: certPEM, fingerprint: os.Getenv("OPENBASTION_VNC_PIN"), domain: os.Getenv("OPENBASTION_VNC_SERVER_NAME"), inputLogPath: inputLogPath,
 	}
 }
 

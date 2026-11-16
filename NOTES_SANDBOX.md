@@ -4798,6 +4798,15 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Commit DCO signé `5aa522b524c8b4b5f4e07cd32acd612cb67a9f53` ; branche publiée et Draft PR #218 ouverte : https://github.com/openbastion/openbastion/pull/218. PR non fusionnée.
 
 
+## 2026-11-16 — SI-02 : preuve VNC sur cible réelle
+
+- Ajout d'un oracle d'entrée indépendant sur une cible TigerVNC réelle : `xev` observe les keysyms reçus par le serveur X11, sans lire l'état interne du proxy. L'E2E multi-processus injecte le secret Unicode via Vault/MFA, vérifie la séquence complète réellement reçue, puis révoque la session et vérifie qu'aucun nouvel événement clavier n'arrive après l'acquittement.
+- Le workflow PostgreSQL 16 démarre et arrête la cible une seule fois ; deux blocs setup/cleanup dupliqués ont été supprimés. Le YAML est parsé avec succès.
+- Validation locale : `go test ./test/integration -run '^TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses$'` compile et passe mais le test est **SKIP** car `TEST_DATABASE_URL` n'est pas configuré sur LT209227. L'exécution réelle a passé dans la CI PostgreSQL 16 de la PR #220 ; aucun test Windows local.
+- Limite explicite : cette preuve vérifie l'absence de frappes après l'acquittement de révocation, mais ne force pas encore une révocation concurrente au milieu de la frappe. SI-02 reste P1 jusqu'à un test déterministe de cette course et au passage CI.
+- Correction CI PR #220 : `TestRotateDue_OutsideTheWindow_NothingIsTaken` utilisait des dates fixes incompatibles avec `CreatedAt`, horodaté par `InMemoryStore` via `time.Now()` indépendamment de `WithClock`. Le test ancre désormais son horloge injectable sur le `CreatedAt` réellement stocké, puis avance de 32 jours ; il vérifie le refus à 14:00 UTC et la rotation à 03:00 UTC le lendemain. Le test échoue quand cette correction est retirée.
+
+
 ## 2026-11-16 — ADR-0115 / SI-05 : durée de vie mémoire et core dumps
 
 - ADR-0115 accepté pour cet incrément. `password-vault`, `ssh-proxy` et `rdp-vnc-proxy` appliquent le durcissement Linux avant l'ouverture des listeners : `RLIMIT_CORE=0`, `PR_SET_DUMPABLE=0`, puis vérification par lecture (`Getrlimit` / `PR_GET_DUMPABLE`). Toute erreur empêche le démarrage.
