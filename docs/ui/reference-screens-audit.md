@@ -156,3 +156,8 @@ La capture `User-menu-and-Footer.png` montre deux défauts : le footer de la gri
 ## Alignement du footer légal sur la seule colonne de contenu — 2026-11-17
 
 La capture `Footer.png` montre une sidebar autonome à gauche, avec son propre bloc « Console OpenBastion », et le footer légal aligné sous la zone de contenu à droite. Le footer ne doit donc ni traverser la colonne sidebar, ni se superposer à elle. Sa grille est fixée à `grid-column: 2 / -1` et `grid-row: 2`. La sidebar reste en colonne 1, ligne 1, sur la hauteur disponible du viewport ; elle conserve ses éléments bas de navigation. En mobile, où le shell repasse en flux bloc, le footer retrouve naturellement la largeur totale.
+
+
+## Sidebar fixe indépendante du défilement du contenu — 2026-11-17
+
+La sidebar desktop est fixée au viewport (`position: fixed`, `top: 4rem`, `bottom: 0`) sous la topbar, avec une largeur synchronisée sur les colonnes développée/réduite du workspace. Elle ne dépend plus de la hauteur de la ligne de grille et ne défile donc plus avec le contenu ni le footer. Son propre `overflow-y: auto` ne s'active que si la navigation dépasse la hauteur disponible. Le tiroir mobile conserve ses règles `position: fixed` dédiées.

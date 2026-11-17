@@ -4936,3 +4936,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 
 - La capture montre explicitement le footer légal sous la zone de contenu uniquement, à partir de la limite droite de la sidebar. La sidebar reste indépendante sur toute la hauteur et conserve son propre bloc « Console OpenBastion ».
 - `grid-column: 1 / -1` était incorrect : il faisait traverser le footer sous la sidebar. Le footer utilise maintenant `grid-column: 2 / -1`, ligne 2, sans z-index artificiel. Sur mobile, le shell en flux bloc conserve un footer pleine largeur.
+
+
+## 2026-11-17 — Sidebar fixe au viewport
+
+- La sidebar desktop ne doit pas suivre le scroll du document. `position: sticky` dans la grille ne garantissait pas son indépendance sur les pages longues.
+- Elle est désormais fixée sous la topbar (`top: 4rem; bottom: 0; position: fixed`) et occupe la hauteur disponible du viewport. Sa largeur suit l'état expanded/collapsed (14,5 rem / 4,5 rem). Le scroll éventuel reste interne à la navigation uniquement. Le comportement mobile en tiroir reste distinct.

@@ -916,6 +916,10 @@ main.login {
   grid-template-columns: 4.5rem minmax(0, 1fr);
 }
 
+.app-workspace.sidebar-collapsed > .app-sidebar {
+  width: 4.5rem;
+}
+
 .app-sidebar {
   position: sticky;
   top: 4rem;
@@ -3208,18 +3212,24 @@ main.login {
 .app-sidebar {
   grid-column: 1;
   grid-row: 1;
-  position: sticky;
-  top: 0;
-  align-self: stretch;
-  width: 100%;
+  position: fixed;
+  top: 4rem;
+  bottom: 0;
+  left: 0;
+  align-self: initial;
+  width: 14.5rem;
   height: auto;
-  min-height: calc(100vh - 3.5rem);
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   color: var(--ob-color-chrome-muted);
   background: var(--ob-color-chrome-background);
   border-right: 1px solid var(--ob-color-chrome-border);
   z-index: 2;
+}
+
+.app-workspace.sidebar-collapsed > .app-sidebar {
+  width: 4.5rem;
 }
 
 .app-content {
@@ -3405,7 +3415,17 @@ main.login {
 @media (max-width: 760px) {
   .app-workspace,
   .app-workspace.sidebar-collapsed { display: block; min-height: 100vh; }
-  .app-sidebar { top: 4rem; height: calc(100vh - 4rem); min-height: 0; overflow-y: auto; }
+  .app-sidebar {
+    top: 4rem;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    width: min(19rem, calc(100vw - 3rem));
+    height: auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .sidebar-collapsed .app-sidebar { width: min(19rem, calc(100vw - 3rem)); }
   .app-header { grid-template-columns: minmax(0, 1fr) auto; gap: 0.65rem; }
   .topbar-breadcrumb { display: none; }
   .command-trigger { grid-column: 1; grid-row: 1; min-width: 0; }
