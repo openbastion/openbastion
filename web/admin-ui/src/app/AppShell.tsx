@@ -11,6 +11,7 @@ import { CommandPalette } from "../shared/ui/CommandPalette";
 import { OperatorPreferencesDialog } from "../shared/ui/OperatorPreferencesDialog";
 import { LanguageSwitcher } from "../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../shared/i18n";
+import { LegalNotice } from "../shared/LegalNotice";
 
 // Labels and descriptions live in the translation files (locales/*.ts), one key per tab: the
 // navigation is translated like the screens it opens, and the groups keep the same order.
@@ -467,6 +468,7 @@ export function AppShell({
             {children}
           </main>
         </div>
+        <LegalNotice />
       </div>
     </>
   );

@@ -127,3 +127,12 @@ Sur le worktree isolé, avant toute modification :
 ## Reprise shell — 2026-11-17
 
 La référence Dashboard définit une composition latérale pleine hauteur : sidebar de 232 unités de dessin sur 1440, topbar démarrant à droite de la sidebar, champ de recherche au centre, actions globales et profil opérateur en bas de la sidebar. Le shell Admin UI reprend maintenant cette hiérarchie dans une grille viewport-height. Les liens Documentation et Centre d'aide pointent vers les guides versionnés du dépôt. Le menu Notifications est présent mais annonce l'absence d'API globale ; il ne simule aucun événement. Le thème clair est le défaut pour correspondre à la référence claire ; le thème sombre reste disponible explicitement.
+
+
+## Footer global et palette canonique — 2026-11-17
+
+La capture `Footer.png` met en évidence que l'avis légal était rendu après la grille et limité à la colonne principale. Il est désormais un enfant direct de `.app-workspace`, sur la deuxième ligne de la grille et avec `grid-column: 1 / -1` : le pied de page s'étend sous la sidebar et le contenu.
+
+La palette de l'Admin UI reprend les valeurs exactes relevées dans `openbastion-dashboard.svg` : canvas `#F8FAFC`, surfaces `#FFFFFF`, texte principal `#0F172A`, texte secondaire `#64748B`, bordures `#E2E8F0`, accent `#2563EB`, sidebar `#0D2137`, sidebar élevée `#152E4D`, bordure sidebar `#1E3A5F`, texte secondaire sidebar `#94A3B8`, accent sidebar `#38BDF8`, état actif `#133356`. Les rôles du shell et de la topbar sont sémantiques et centralisés dans `@openbastion/design-tokens`; le shell de référence conserve son contraste fixe même lorsque le thème de la zone de travail est sombre.
+
+Les vérifications de contraste incluent désormais la topbar claire et la navigation marine dans les deux thèmes. Une préférence sombre déjà enregistrée dans le navigateur reste un choix explicite de l'opérateur ; le thème clair reste le défaut pour les nouveaux profils et correspond à la référence Dashboard.

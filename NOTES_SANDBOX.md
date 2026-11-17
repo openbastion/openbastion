@@ -4902,3 +4902,11 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - La capture précédente était en thème sombre : le thème initial `system` suivait la préférence sombre du système d'exploitation et appliquait les tokens sombres à toute la zone de contenu. Le thème initial devient `light`, conforme à la maquette ; le thème sombre reste activable explicitement dans le menu opérateur.
 - Tests shell étendus : structure pleine hauteur, champ de recherche, liens Ressources, panneau notifications vide et fermeture clavier. Validation : `make ui-test ui-build` PASS — 26 fichiers Vitest, 259 tests ; TypeScript/Vite PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
 - Limite : aucune capture navigateur n'a été produite sur LT209227 ; le rendu responsive et la comparaison visuelle pixel-à-pixel restent à confirmer dans un navigateur.
+
+
+## 2026-11-17 — Footer global et fidélité de la palette (Footer.png)
+
+- `Footer.png` lu via le compte bonikiss : le pied de page légal était limité à la colonne de contenu, laissant un vide sous la sidebar. `LegalNotice` est maintenant intégré comme ligne finale de `.app-workspace`, en `grid-column: 1 / -1`.
+- Palette Admin UI alignée sur les couleurs du SVG Dashboard : canvas `#F8FAFC`, surface/topbar `#FFFFFF`, texte `#0F172A`, secondaire `#64748B`, bordure `#E2E8F0`, accent `#2563EB`, sidebar `#0D2137`, surface sidebar `#152E4D`, bordure `#1E3A5F`, muted `#94A3B8`, cyan `#38BDF8`, actif `#133356`. Les couleurs sont exposées par des tokens sémantiques, pas par des déclarations locales.
+- La palette de la sidebar et de la topbar est fixe, fidèle à la maquette, y compris en thème sombre ; la zone de contenu continue de suivre le thème opérateur. Le thème clair reste le défaut. Une préférence sombre explicitement persistée dans le navigateur n'est pas écrasée automatiquement.
+- `make ui-test ui-build` PASS : 26 fichiers, 260 tests, TypeScript/Vite PASS. `npm --prefix web/packages/design-tokens run check:contrast` PASS en clair et sombre, dont les nouveaux contrôles topbar/footer. `check-app-colors` PASS ; `git diff --check` PASS.

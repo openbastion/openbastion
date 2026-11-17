@@ -72,7 +72,6 @@ export function App({
         {tab === "audit" && <Recording requestedSessionId={recordingLookup} onSessionLookupComplete={clearRecordingLookup} />}
         {tab === "security" && <SecurityCenter />}
       </AppShell>
-      <LegalNotice />
     </SignedInContext.Provider>
   );
 }

@@ -4,26 +4,26 @@
 
   /* Primitive palette: each value is assigned to a semantic role below. */
   --ob-palette-neutral-0: #FFFFFF;
-  --ob-palette-neutral-25: #F5F7FA;
+  --ob-palette-neutral-25: #F8FAFC;
   --ob-palette-neutral-50: #F8FAFC;
-  --ob-palette-neutral-100: #F0F3F7;
-  --ob-palette-neutral-200: #D8E0E8;
+  --ob-palette-neutral-100: #F8FAFC;
+  --ob-palette-neutral-200: #E2E8F0;
   --ob-palette-neutral-500: #64748B;
-  --ob-palette-neutral-600: #526171;
-  --ob-palette-neutral-700: #667789;
-  --ob-palette-neutral-900: #17212B;
+  --ob-palette-neutral-600: #64748B;
+  --ob-palette-neutral-700: #94A3B8;
+  --ob-palette-neutral-900: #0F172A;
   --ob-palette-neutral-950: #0F1720;
   --ob-palette-neutral-1000: #F3F6F9;
 
   --ob-palette-surface: #FFFFFF;
   --ob-palette-surface-muted: #F8FAFC;
-  --ob-palette-surface-subtle: #F0F3F7;
+  --ob-palette-surface-subtle: #F8FAFC;
   --ob-palette-surface-raised: #FFFFFF;
 
-  --ob-palette-blue-100: #E8F2FA;
-  --ob-palette-blue-700: #1769AA;
-  --ob-palette-blue-800: #145A92;
-  --ob-palette-blue-900: #124F80;
+  --ob-palette-blue-100: #EFF6FF;
+  --ob-palette-blue-700: #2563EB;
+  --ob-palette-blue-800: #1D4ED8;
+  --ob-palette-blue-900: #1E40AF;
   --ob-palette-green-100: #EAF5EF;
   --ob-palette-green-800: #126B4F;
   --ob-palette-amber-100: #FFF5E4;
@@ -32,10 +32,10 @@
   --ob-palette-red-700: #B42318;
   --ob-palette-red-800: #912018;
 
-  --ob-palette-chrome-background: #F0F3F7;
-  --ob-palette-chrome-background-raised: #E8EDF3;
-  --ob-palette-chrome-text: #17212B;
-  --ob-palette-chrome-muted: #526171;
+  --ob-palette-chrome-background: #0D2137;
+  --ob-palette-chrome-background-raised: #152E4D;
+  --ob-palette-chrome-text: #FFFFFF;
+  --ob-palette-chrome-muted: #94A3B8;
   --ob-palette-overlay: rgb(15 23 32 / 0.58);
   --ob-palette-focus-ring: rgb(23 105 170 / 0.24);
 
@@ -64,13 +64,19 @@
   --ob-color-status-danger: var(--ob-palette-red-700);
   --ob-color-status-danger-strong: var(--ob-palette-red-800);
   --ob-color-status-danger-subtle: var(--ob-palette-red-100);
-  --ob-color-chrome-background: var(--ob-palette-chrome-background);
-  --ob-color-chrome-background-raised: var(--ob-palette-chrome-background-raised);
-  --ob-color-chrome-text: var(--ob-palette-chrome-text);
-  --ob-color-chrome-muted: var(--ob-palette-chrome-muted);
-  --ob-color-chrome-border: #D8E0E8;
-  --ob-color-chrome-accent: #1769AA;
-  --ob-color-chrome-accent-subtle: #E8F2FA;
+  --ob-color-chrome-background: #0D2137;
+  --ob-color-chrome-background-raised: #152E4D;
+  --ob-color-chrome-text: #FFFFFF;
+  --ob-color-chrome-muted: #94A3B8;
+  --ob-color-chrome-border: #1E3A5F;
+  --ob-color-chrome-accent: #38BDF8;
+  --ob-color-chrome-accent-subtle: #133356;
+  --ob-color-shell-topbar-background: #FFFFFF;
+  --ob-color-shell-topbar-border: #E2E8F0;
+  --ob-color-shell-topbar-text: #0F172A;
+  --ob-color-shell-topbar-muted: #64748B;
+  --ob-color-shell-topbar-link: #2563EB;
+  --ob-color-shell-topbar-field: #F8FAFC;
   --ob-color-overlay: var(--ob-palette-overlay);
 
   --ob-shadow-sm: 0 1px 2px rgb(15 23 32 / 0.06), 0 1px 3px rgb(15 23 32 / 0.08);
@@ -143,9 +149,15 @@
   --ob-palette-chrome-text: #F3F6F9;
   --ob-palette-chrome-muted: #B4C0CB;
 
-  --ob-color-chrome-border: rgb(180 192 203 / 0.2);
-  --ob-color-chrome-accent: #66B8FF;
-  --ob-color-chrome-accent-subtle: #18364E;
+  --ob-color-chrome-border: #1E3A5F;
+  --ob-color-chrome-accent: #38BDF8;
+  --ob-color-chrome-accent-subtle: #133356;
+  --ob-color-shell-topbar-background: #FFFFFF;
+  --ob-color-shell-topbar-border: #E2E8F0;
+  --ob-color-shell-topbar-text: #0F172A;
+  --ob-color-shell-topbar-muted: #64748B;
+  --ob-color-shell-topbar-link: #2563EB;
+  --ob-color-shell-topbar-field: #F8FAFC;
 
   --ob-color-text-on-accent: var(--ob-palette-neutral-950);
   --ob-color-focus: var(--ob-palette-blue-700);

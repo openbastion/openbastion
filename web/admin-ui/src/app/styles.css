@@ -3197,6 +3197,7 @@ main.login {
 .app-workspace,
 .app-workspace.sidebar-collapsed {
   grid-template-columns: 14.5rem minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 100vh;
 }
 
@@ -3231,12 +3232,28 @@ main.login {
   gap: clamp(0.75rem, 2vw, 1.75rem);
   min-height: 4rem;
   padding: 0.65rem clamp(1.25rem, 2.25vw, 2rem);
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--ob-color-shell-topbar-background);
+  border-bottom: 1px solid var(--ob-color-shell-topbar-border);
 }
 
-.topbar-breadcrumb { min-width: 0; }
-.command-trigger { width: 100%; min-width: 0; }
+.topbar-breadcrumb {
+  min-width: 0;
+  color: var(--ob-color-shell-topbar-muted);
+}
+.topbar-breadcrumb strong { color: var(--ob-color-shell-topbar-text); }
+.command-trigger {
+  width: 100%;
+  min-width: 0;
+  color: var(--ob-color-shell-topbar-muted);
+  background: var(--ob-color-shell-topbar-field);
+  border-color: var(--ob-color-shell-topbar-border);
+}
+.command-trigger kbd {
+  color: var(--ob-color-shell-topbar-muted);
+  background: var(--ob-color-shell-topbar-background);
+  border-color: var(--ob-color-shell-topbar-border);
+}
+.app-header .icon-button { color: var(--ob-color-shell-topbar-muted); }
 .header-actions { justify-self: end; gap: 0.55rem; }
 
 .app-main {
@@ -3373,4 +3390,25 @@ main.login {
   .command-trigger { grid-column: 1; grid-row: 1; min-width: 0; }
   .header-actions { grid-column: 2; grid-row: 1; }
   .app-main { padding: 1.25rem 1rem 3rem; }
+}
+
+
+/* The legal footer is a first-class full-width shell row, not part of the content column. */
+.app-workspace > .legal-notice {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  padding: 0.75rem clamp(1rem, 2.25vw, 2rem);
+  color: var(--ob-color-shell-topbar-muted);
+  background: var(--ob-color-shell-topbar-background);
+  border-top: 1px solid var(--ob-color-shell-topbar-border);
+}
+.app-workspace > .legal-notice a { color: var(--ob-color-shell-topbar-link); }
+
+@media (max-width: 760px) {
+  .app-workspace > .legal-notice {
+    position: relative;
+    z-index: 1;
+  }
 }
