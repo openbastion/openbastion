@@ -146,3 +146,8 @@ La capture montrait le footer limité à la colonne de contenu et une sidebar qu
 ## Ajustement final du placement footer / sidebar — 2026-11-17
 
 Le placement précédent faisait se chevaucher deux éléments de grille : la sidebar occupait les lignes 1 et 2 tandis que le footer occupait la ligne 2 sur toutes les colonnes. La correction supprime ce chevauchement : sidebar et contenu occupent uniquement la ligne 1 ; le footer occupe la ligne 2 sur toute la largeur. La hauteur minimale de la ligne 1 réserve l'espace du viewport au shell, tandis que la hauteur du footer reste intrinsèque. La sidebar conserve un fond marine opaque et une hauteur minimale calculée. La topbar utilise les surfaces du contenu (`--surface`, `--line`) au lieu de tokens chrome, qui restent réservés à la sidebar.
+
+
+## Correction de superposition du footer et de débordement du menu utilisateur — 2026-11-17
+
+La capture `User-menu-and-Footer.png` montre deux défauts : le footer de la grille est peint sous la sidebar sticky (z-index 2), et le panneau utilisateur de 18 rem est rogné par `overflow-x: hidden` de la sidebar de 14,5 rem. Le footer est maintenant un élément positionné avec z-index 3, au-dessus de la sidebar pour la ligne globale dédiée. En navigation développée, le panneau utilisateur est contraint à la largeur disponible de la sidebar (`left: 0; right: 0; width: auto`) pour éviter tout rognage. En navigation réduite, le panneau devient un popover fixe qui s'ouvre à droite de la sidebar, sans être découpé par son overflow. Sur mobile, le panneau reste contenu dans la largeur du tiroir de navigation.

@@ -4924,3 +4924,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Le fond de `.app-header` ne doit pas utiliser les tokens chrome/topbar globaux : il est limité à la zone de contenu et utilise `--surface` / `--line`. La sidebar a son propre fond opaque `--ob-color-chrome-background`.
 - Cause du footer tronqué/chevauchement : sidebar placée sur les lignes 1 et 2, footer sur ligne 2 et toutes les colonnes. Le footer recouvrait donc la partie basse de la sidebar.
 - Correction : sidebar et `.app-content` en ligne 1 seulement ; footer global en ligne 2 sur toutes les colonnes. La ligne 1 réserve `100vh - hauteur footer` au shell, et le footer conserve sa hauteur intrinsèque.
+
+
+## 2026-11-17 — User-menu-and-Footer.png
+
+- Footer derrière la sidebar : cause confirmée, `.app-sidebar` sticky avec `z-index: 2` au-dessus du footer grid. Le footer global passe en `position: relative; z-index: 3` sur sa propre ligne.
+- Menu utilisateur tronqué : le panneau de 18 rem dépassait de la sidebar (14,5 rem) et était coupé par `overflow-x: hidden`. En sidebar développée, le panneau utilise toute la largeur intérieure disponible. En sidebar réduite, il devient un popover fixe ouvert à droite de la sidebar. En mobile, il reste borné à la largeur du tiroir.

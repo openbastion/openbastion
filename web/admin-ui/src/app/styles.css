@@ -3340,9 +3340,12 @@ main.login {
 .sidebar-user-menu-trigger .user-menu-identity small { color: var(--ob-color-chrome-muted); }
 .sidebar-user-menu-panel {
   top: auto;
-  right: auto;
+  right: 0;
   bottom: calc(100% + 0.6rem);
   left: 0;
+  box-sizing: border-box;
+  width: auto;
+  max-width: none;
 }
 
 .notifications-menu { position: relative; }
@@ -3389,7 +3392,15 @@ main.login {
 .sidebar-collapsed .sidebar-footer-heading strong,
 .sidebar-collapsed .sidebar-resource-link { display: none; }
 .sidebar-collapsed .sidebar-user-menu-trigger { justify-content: center; }
-.sidebar-collapsed .sidebar-user-menu-panel { left: 0.25rem; width: min(18rem, calc(100vw - 6rem)); }
+.sidebar-collapsed .sidebar-user-menu-panel {
+  position: fixed;
+  top: auto;
+  right: auto;
+  bottom: 0.75rem;
+  left: calc(4.5rem + 0.5rem);
+  width: min(18rem, calc(100vw - 6rem));
+  max-width: calc(100vw - 6rem);
+}
 
 @media (max-width: 760px) {
   .app-workspace,
@@ -3405,6 +3416,8 @@ main.login {
 
 /* The legal footer is a first-class full-width shell row, not part of the content column. */
 .app-workspace > .legal-notice {
+  position: relative;
+  z-index: 3;
   grid-column: 1 / -1;
   grid-row: 2;
   justify-self: stretch;
@@ -3422,8 +3435,18 @@ main.login {
 .app-workspace > .legal-notice nav { min-width: 0; }
 
 @media (max-width: 760px) {
-  .app-workspace > .legal-notice {
-    position: relative;
-    z-index: 1;
+  .sidebar-user-menu-panel {
+    right: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+  }
+  .sidebar-collapsed .sidebar-user-menu-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.6rem);
+    left: 0;
+    width: auto;
+    max-width: none;
   }
 }
