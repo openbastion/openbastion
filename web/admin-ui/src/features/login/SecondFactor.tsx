@@ -5,6 +5,7 @@ import { Credentials, register, sign } from "../../shared/webauthn";
 import { Challenge } from "./sources";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
+import { Form, Input, Label } from "@openbastion/ui";
 
 // The second step of a login whose password was right, when its roles require a second factor
 // (ADR-0062, ADR-0065): a security key or the code of the authenticator application — whichever
@@ -94,10 +95,10 @@ export function SecondFactor({
   }
 
   const codeForm = (
-    <form className="ob-form-fields" onSubmit={verify} aria-label={t("secondFactor.codeFormAria")}>
-      <label>
+    <Form className="ob-form-fields" onSubmit={verify} aria-label={t("secondFactor.codeFormAria")}>
+      <Label>
         {t("secondFactor.codeLabel")}
-        <input
+        <Input
           name="code"
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -107,11 +108,11 @@ export function SecondFactor({
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
           required
         />
-      </label>
+      </Label>
       <Button type="submit" variant="primary" disabled={busy || code.length !== 6}>
         {t("secondFactor.validate")}
       </Button>
-    </form>
+    </Form>
   );
 
   return (
@@ -130,29 +131,29 @@ export function SecondFactor({
             </>
           )}
           {key && adding && (
-            <form className="ob-form-fields" onSubmit={addKey} aria-label={t("secondFactor.addKeyAria")}>
+            <Form className="ob-form-fields" onSubmit={addKey} aria-label={t("secondFactor.addKeyAria")}>
               <p className="ob-hint login-sub">{t("secondFactor.addKeyHint")}</p>
-              <label>
+              <Label>
                 {t("secondFactor.enrollmentCode")}
-                <input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
-              </label>
+                <Input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
+              </Label>
               <Button type="submit" variant="primary" disabled={busy || !enrollmentCode}>
                 {t("secondFactor.signThenAdd")}
               </Button>
-            </form>
+            </Form>
           )}
           {totp && !adding && codeForm}
         </>
       )}
       {challenge.kind === "enrollment_required" && !enrollment && (
-        <form className="ob-form-fields" onSubmit={(e) => (e.preventDefault(), enroll(totp ? "totp" : "webauthn"))} aria-label={t("secondFactor.enrollAria")}>
+        <Form className="ob-form-fields" onSubmit={(e) => (e.preventDefault(), enroll(totp ? "totp" : "webauthn"))} aria-label={t("secondFactor.enrollAria")}>
           <p className="ob-hint login-sub">
             {key && !totp ? t("secondFactor.enrollKeyOnly") : t("secondFactor.enrollFactor")}
           </p>
-          <label>
+          <Label>
             {t("secondFactor.enrollmentCode")}
-            <input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
-          </label>
+            <Input name="enrollmentCode" autoComplete="off" value={enrollmentCode} onChange={(e) => setEnrollmentCode(e.target.value)} required />
+          </Label>
           {key && (
             <Button variant="primary" onClick={() => enroll("webauthn")} disabled={busy || !enrollmentCode}>
               {t("secondFactor.enrollKey")}
@@ -163,7 +164,7 @@ export function SecondFactor({
               {t("secondFactor.receiveSecret")}
             </Button>
           )}
-        </form>
+        </Form>
       )}
       {challenge.kind === "enrollment_required" && enrollment && (
         <>

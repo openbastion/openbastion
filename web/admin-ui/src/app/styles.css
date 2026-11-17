@@ -538,6 +538,7 @@ main.login {
 /* Directory or local account (ADR-0061): a segmented choice above the fields. */
 .login-source {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
   margin: 0;
   padding: 0;
@@ -545,6 +546,7 @@ main.login {
 }
 
 .login-source legend {
+  flex: 0 0 100%;
   margin-bottom: 0.3rem;
   font-size: 0.84rem;
   font-weight: 550;

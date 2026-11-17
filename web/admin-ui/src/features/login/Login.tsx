@@ -8,6 +8,7 @@ import { Button } from "../../shared/ui/Button";
 import { LanguageSwitcher } from "../../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../../shared/i18n";
 import { LegalLinks } from "../../shared/LegalNotice";
+import { Checkbox, Form, Input, Label, RadioGroup, RadioGroupItem } from "@openbastion/ui";
 
 // "local", or "ldap:<id>" ("ldap:" for the directory of the LDAP_* variables, whose id is empty).
 type Source = string;
@@ -157,39 +158,39 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
                   </div>
                 )}
                 <p className="login-divider">{t("login.orWithAccount")}</p>
-                <form className="ob-form-fields login-form" onSubmit={local} aria-label={source === "local" ? t("login.formAria.local") : t("login.formAria.directory")}>
+                <Form className="ob-form-fields login-form" onSubmit={local} aria-label={source === "local" ? t("login.formAria.local") : t("login.formAria.directory")}>
                   {directories.length > 0 && (
-                    <fieldset className="login-source">
-                      <legend>{t("login.source.legend")}</legend>
+                    <RadioGroup
+                      className="login-source"
+                      name="source"
+                      label={t("login.source.legend")}
+                      value={source}
+                      onValueChange={setChoice}
+                      orientation="horizontal"
+                    >
                       {[...directories.map((d) => ({ s: "ldap:" + d.id, label: d.label || t("login.source.directory") })), { s: "local", label: t("login.source.local") }].map(
-                        ({ s, label }) => (
-                          <label key={s} className="inline">
-                            <input type="radio" name="source" value={s} checked={source === s} onChange={() => setChoice(s)} />
-                            {label}
-                          </label>
-                        ),
+                        ({ s, label }) => <RadioGroupItem key={s} value={s} label={label} className="inline" />,
                       )}
-                    </fieldset>
+                    </RadioGroup>
                   )}
-                  <label className="login-field">
+                  <Label className="login-field">
                     {t("login.username")}
-                    <input name="username" type="text" autoComplete="username" placeholder={t("login.emailPlaceholder")} value={username} onChange={(e) => setUsername(e.target.value)} required />
-                  </label>
-                  <label className="login-field">
+                    <Input name="username" type="text" autoComplete="username" placeholder={t("login.emailPlaceholder")} value={username} onChange={(e) => setUsername(e.target.value)} required />
+                  </Label>
+                  <div className="login-field">
                     <span className="login-field-label">
-                      {t("login.password")}
+                      <Label htmlFor="login-password">{t("login.password")}</Label>
                       <span className="login-field-action" aria-hidden="true">{t("login.forgotPassword")}</span>
                     </span>
                     <span className="login-password-wrap">
-                      <input name="password" aria-label={t("login.password")} type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                      <button className="login-password-toggle" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}>
+                      <Input id="login-password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                      <Button className="login-password-toggle" type="button" variant="ghost" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}>
                         {showPassword ? t("login.hidePassword") : t("login.showPassword")}
-                      </button>
+                      </Button>
                     </span>
-                  </label>
-                  <label className="login-remember">
-                    <input
-                      type="checkbox"
+                  </div>
+                  <Label className="login-remember">
+                    <Checkbox
                       checked={rememberEmail}
                       onChange={(event) => {
                         setRememberEmail(event.target.checked);
@@ -197,11 +198,11 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
                       }}
                     />
                     {t("login.rememberEmail")}
-                  </label>
+                  </Label>
                   <Button type="submit" variant="primary" disabled={busy}>
                     {t("login.submit")}
                   </Button>
-                </form>
+                </Form>
                 <div className="login-assurance">
                   <BrandMark className="login-assurance-icon" />
                   <p>{t("login.additionalVerification")}</p>
