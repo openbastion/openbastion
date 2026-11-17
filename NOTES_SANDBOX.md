@@ -4917,3 +4917,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Cause : la grille plaçait le footer sur une seconde ligne mais la sidebar restait limitée à la première ; `.app-content` imposait également `min-height: 100vh`, repoussant la ligne footer sous le viewport.
 - Correction : sidebar en première colonne sur les deux lignes, fond chrome opaque explicite, contenu limité à la première ligne et hauteur minimale de grille répartie entre contenu/footer. Footer étiré sur les deux colonnes sans max-width ni clipping horizontal.
 - Import `LegalNotice` redondant retiré de `App.tsx` ; le shell authentifié reste son seul propriétaire.
+
+
+## 2026-11-17 — Séparation topbar, sidebar et footer
+
+- Le fond de `.app-header` ne doit pas utiliser les tokens chrome/topbar globaux : il est limité à la zone de contenu et utilise `--surface` / `--line`. La sidebar a son propre fond opaque `--ob-color-chrome-background`.
+- Cause du footer tronqué/chevauchement : sidebar placée sur les lignes 1 et 2, footer sur ligne 2 et toutes les colonnes. Le footer recouvrait donc la partie basse de la sidebar.
+- Correction : sidebar et `.app-content` en ligne 1 seulement ; footer global en ligne 2 sur toutes les colonnes. La ligne 1 réserve `100vh - hauteur footer` au shell, et le footer conserve sa hauteur intrinsèque.

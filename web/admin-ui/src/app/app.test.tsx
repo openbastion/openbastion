@@ -99,6 +99,7 @@ describe("App", () => {
     const sidebar = screen.getByRole("complementary", { name: "Navigation principale" });
     expect(sidebar.parentElement).toBe(shellGrid);
     expect(screen.getByRole("main").parentElement?.classList.contains("app-content")).toBe(true);
+    expect(legalFooter.parentElement?.classList.contains("app-workspace")).toBe(true);
     expect(screen.getByRole("link", { name: /Code source/ }).getAttribute("href")).toContain("github.com/openbastion/openbastion");
     expect(screen.getByRole("link", { name: "Texte de la licence" }).getAttribute("href")).toContain("/LICENSE");
     fireEvent.click(screen.getByRole("button", { name: /alice.*platform-admin/ }));

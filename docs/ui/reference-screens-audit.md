@@ -141,3 +141,8 @@ Les vérifications de contraste incluent désormais la topbar claire et la navig
 ## Correction de la grille du shell après WorkEspace-Footer.png — 2026-11-17
 
 La capture montrait le footer limité à la colonne de contenu et une sidebar qui ne couvrait pas la ligne du footer. La grille utilise maintenant une première ligne dimensionnée pour remplir le viewport moins la hauteur minimale du footer, puis une ligne footer intrinsèque. La sidebar occupe explicitement la première colonne et s'étend sur les deux lignes (`grid-row: 1 / span 2`), avec un fond opaque issu du token chrome. Le contenu est limité à la première ligne ; le footer est un enfant direct en dernière ligne, étiré sur les deux colonnes et sans largeur maximale. La hauteur minimale de la ligne contenu permet au footer de rester dans le viewport sur les pages courtes ; il suit le contenu et reste entièrement accessible sur les pages longues.
+
+
+## Ajustement final du placement footer / sidebar — 2026-11-17
+
+Le placement précédent faisait se chevaucher deux éléments de grille : la sidebar occupait les lignes 1 et 2 tandis que le footer occupait la ligne 2 sur toutes les colonnes. La correction supprime ce chevauchement : sidebar et contenu occupent uniquement la ligne 1 ; le footer occupe la ligne 2 sur toute la largeur. La hauteur minimale de la ligne 1 réserve l'espace du viewport au shell, tandis que la hauteur du footer reste intrinsèque. La sidebar conserve un fond marine opaque et une hauteur minimale calculée. La topbar utilise les surfaces du contenu (`--surface`, `--line`) au lieu de tokens chrome, qui restent réservés à la sidebar.
