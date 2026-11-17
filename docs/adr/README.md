@@ -117,6 +117,7 @@ Créer, approuver, borner, lire, terminer une session ; limiter les demandes.
 | 8 | [ADR-0019](0019-qui-peut-lire-une-session-son-demandeur-celui-qui-l-a.md) | Qui peut lire une session : son demandeur, celui qui l'a décidée, ou le titulaire d'une politique `session-read` — et une lecture n'écrit rien | Accepté (règle 6 amendée par ADR-0020) |
 | 9 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté |
 
+| 10 | [ADR-0117](0117-les-alertes-de-session-sont-durables-autorisees-et-acquittees-dans-la-chaine.md) | Les alertes de session sont durables, autorisées et acquittées dans la chaîne d’audit | Proposé |
 ### 7. Break-glass
 
 La dérogation d'urgence à « enregistrer ou refuser », bornée et validée.
@@ -371,3 +372,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté | Invariants de sécurité transverses |
 | [ADR-0115](0115-reduire-la-vie-des-secrets-en-memoire-et-interdire-les-core-dumps.md) | Réduire la durée de vie des secrets en mémoire et interdire les core dumps | Accepté | Invariants de sécurité transverses |
 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté | Sessions : cycle de vie et contrôle |
+| [ADR-0117](0117-les-alertes-de-session-sont-durables-autorisees-et-acquittees-dans-la-chaine.md) | Les alertes de session sont durables, autorisées et acquittées dans la chaîne d’audit | Proposé | Sessions : cycle de vie et contrôle |
