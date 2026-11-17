@@ -5,19 +5,23 @@ import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { ScreenViewer } from "../screen/ScreenViewer";
 import { AttachedScreen, SessionDetail } from "./SessionDetail";
-import { PendingRequests } from "./PendingRequests";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
 import { Button } from "../../shared/ui/Button";
+import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { useAppTranslation } from "../../shared/i18n";
 import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { SessionHistory } from "./SessionHistory";
 import { SessionRecordings } from "./SessionRecordings";
 import { SessionAlerts } from "./SessionAlerts";
 
-// A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
-// the requests waiting for this user's decision (break-glass, ADR-0012, and approval, ADR-0067),
-// and a session by its identifier.
+function formatExpiry(value: string, locale: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+}
+
+// The page deliberately lists only requests returned by the caller-scoped approval endpoint.
+// There is no global active-session feed or SSH terminal stream in the public API/UI contract.
 export function Sessions({
   requestedSessionId,
   onSessionLookupComplete,
@@ -27,7 +31,7 @@ export function Sessions({
   onSessionLookupComplete?: () => void;
   onOpenRecording?: (sessionId: string) => void;
 } = {}) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
   const { api } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
   const [pendingLoading, setPendingLoading] = useState(true);
@@ -38,12 +42,19 @@ export function Sessions({
   const [found, setFound] = useState<Session>();
   const [screen, setScreen] = useState<AttachedScreen>();
   const [view, setView] = useState("live");
+  const [requestFormOpen, setRequestFormOpen] = useState(false);
 
   const load = useCallback(() => {
     setPendingLoading(true);
+    setPending(undefined);
     api.request<Page<Session>>("GET", "/sessions?status=pending_approval")
-      .then((result) => { setPending(result); setError(undefined); })
-      .catch(setError)
+      .then((result) => {
+        setPending(result);
+        setFound((current) => current ?? result.items[0]);
+        setLookup((current) => current || result.items[0]?.id || "");
+        setError(undefined);
+      })
+      .catch((err: unknown) => { setPending(undefined); setError(err); })
       .finally(() => setPendingLoading(false));
   }, [api]);
   useEffect(load, [load]);
@@ -51,6 +62,7 @@ export function Sessions({
   const findById = useCallback(async (id: string) => {
     setLookup(id);
     setFound(undefined);
+    setScreen(undefined);
     setError(undefined);
     try {
       setFound(await api.request<Session>("GET", sessionPath(id)));
@@ -66,16 +78,14 @@ export function Sessions({
     onSessionLookupComplete?.();
   }, [findById, onSessionLookupComplete, requestedSessionId]);
 
-  async function act(what: string, run: () => Promise<unknown>) {
+  function selectPending(session: Session) {
+    // The approval list is already scoped to this caller. Do not make an additional GET that
+    // would cross the distinct session-read policy boundary for a pending approval.
+    setFound(session);
+    setLookup(session.id);
+    setScreen(undefined);
     setError(undefined);
     setOk(undefined);
-    try {
-      await run();
-      setOk(what);
-      load();
-    } catch (err) {
-      setError(err);
-    }
   }
 
   function find(e: FormEvent) {
@@ -101,10 +111,6 @@ export function Sessions({
     setDecision({ kind, session });
   }
 
-  function terminate(s: Session) {
-    askDecision("terminate", s);
-  }
-
   async function confirmDecision(): Promise<boolean> {
     if (!decision) return false;
     const { kind, session } = decision;
@@ -120,6 +126,8 @@ export function Sessions({
             : t("sessions.decisions.terminated", { id: session.id }),
       );
       setDecision(undefined);
+      setFound(undefined);
+      setScreen(undefined);
       load();
       return true;
     } catch (err) {
@@ -128,9 +136,39 @@ export function Sessions({
     }
   }
 
+  const pendingCount = pending?.totalItems;
+
   return (
-    <AdminPage title={t("sessions.title")}>
+    <AdminPage
+      title={t("sessions.title")}
+      hints={[t("sessions.live.description")]}
+      actions={<Button variant="primary" onClick={() => { setView("live"); setRequestFormOpen(true); }}>{t("sessions.live.newRequest")}</Button>}
+    >
       <Notice error={decision ? undefined : error} ok={decision ? undefined : ok} />
+
+      <div className="sessions-overview-metrics" role="group" aria-label={t("sessions.live.metricsAria")}>
+        <article className="sessions-overview-metric sessions-metric-primary">
+          <span>{t("sessions.live.pendingMetric")}</span>
+          <strong>{pendingLoading ? "…" : error && !pending ? "—" : pendingCount ?? 0}</strong>
+          <small>{t("sessions.live.pendingDetail")}</small>
+        </article>
+        <article className="sessions-overview-metric">
+          <span>{t("sessions.live.activeMetric")}</span>
+          <strong className="sessions-metric-text">{t("sessions.live.required")}</strong>
+          <small>{t("sessions.live.activeDetail")}</small>
+        </article>
+        <article className="sessions-overview-metric">
+          <span>{t("sessions.live.recordingMetric")}</span>
+          <strong className="sessions-metric-text">{t("sessions.live.searchAvailable")}</strong>
+          <small>{t("sessions.live.recordingDetail")}</small>
+        </article>
+        <article className="sessions-overview-metric">
+          <span>{t("sessions.live.alertMetric")}</span>
+          <strong className="sessions-metric-text">{t("sessions.live.required")}</strong>
+          <small>{t("sessions.live.alertDetail")}</small>
+        </article>
+      </div>
+
       <Tabs value={view} onValueChange={setView} className="session-tabs">
         <TabsList aria-label={t("sessions.tabs.aria")}>
           <TabsTrigger value="live">{t("sessions.tabs.live")}</TabsTrigger>
@@ -142,48 +180,97 @@ export function Sessions({
           </TabsTrigger>
         </TabsList>
         <TabsContent value="live">
-          <SessionRequest
-            onDone={(s) => {
-              setLookup(s.id);
-              setFound(s);
+          <div className="sessions-live-workspace">
+            <section className="sessions-live-queue" aria-labelledby="sessions-live-queue-title">
+              <div className="sessions-live-panel-heading">
+                <div>
+                  <h3 id="sessions-live-queue-title">{t("sessions.live.queueTitle")}</h3>
+                  <p>{pendingLoading ? t("sessions.pending.loading") : t("sessions.live.queueCount", { count: pendingCount ?? 0 })}</p>
+                </div>
+                <Badge>{pendingLoading ? "…" : pendingCount ?? 0}</Badge>
+              </div>
+              <form className="sessions-live-search" onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
+                <label htmlFor="session-lookup">{t("sessions.lookup.identifier")}</label>
+                <div>
+                  <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required placeholder={t("sessions.live.searchPlaceholder")} />
+                  <Button type="submit" variant="secondary">{t("sessions.lookup.show")}</Button>
+                </div>
+              </form>
+              <div className="sessions-live-list" aria-label={t("sessions.live.queueAria")}>
+                {pendingLoading ? <p className="sessions-live-state" role="status">{t("sessions.pending.loading")}</p> : null}
+                {!pendingLoading && !error && pending?.items.length === 0 ? <p className="sessions-live-state">{t("sessions.pending.empty")}</p> : null}
+                {!pendingLoading && pending?.items.map((session) => (
+                  <button
+                    type="button"
+                    key={session.id}
+                    className="sessions-live-item"
+                    aria-current={found?.id === session.id ? "true" : undefined}
+                    aria-label={t("sessions.live.selectRequestAria", { requester: session.requestedBy, account: session.privilegedAccountId })}
+                    onClick={() => selectPending(session)}
+                  >
+                    <span className="sessions-live-item-top">
+                      <strong>{session.requestedBy}</strong>
+                      <Badge tone={session.breakGlass ? "warning" : "neutral"}>{session.protocol.toUpperCase()}</Badge>
+                    </span>
+                    <span className="sessions-live-item-account">{session.privilegedAccountId}</span>
+                    <span className="sessions-live-item-meta">
+                      <code>{session.id}</code>
+                      <time dateTime={session.expiresAt}>{formatExpiry(session.expiresAt, i18n.language)}</time>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {pending?.truncated ? <p className="sessions-live-truncated">{t("sessions.pending.truncated")}</p> : null}
+            </section>
+
+            <section className="sessions-live-detail" aria-labelledby="sessions-live-detail-title">
+              {found ? (
+                <>
+                  <header className="sessions-live-detail-heading">
+                    <div>
+                      <h3 id="sessions-live-detail-title">{found.privilegedAccountId}</h3>
+                      <p>{found.requestedBy} <span aria-hidden="true">/</span> {found.protocol.toUpperCase()} <span aria-hidden="true">/</span> <code>{found.id}</code></p>
+                    </div>
+                    <StatusBadge status={found.status} />
+                  </header>
+                  <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={askDecision.bind(null, "terminate")} />
+                  {found.status === "pending_approval" ? (
+                    <div className="sessions-live-decision-actions">
+                      <Button variant="primary" aria-label={t("sessions.pending.approveAria", { id: found.id })} onClick={() => askDecision("approve", found)}>{t("sessions.pending.approve")}</Button>
+                      <Button variant="danger" aria-label={t("sessions.pending.rejectAria", { id: found.id })} onClick={() => askDecision("reject", found)}>{t("sessions.pending.reject")}</Button>
+                    </div>
+                  ) : null}
+                  {screen ? (
+                    <ScreenViewer
+                      key={screen.key}
+                      attach={screen.attach}
+                      onReconnect={() => openScreen(screen.sessionId)}
+                      onClose={() => setScreen(undefined)}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <div className="sessions-live-empty">
+                  <span aria-hidden="true">⌕</span>
+                  <h3 id="sessions-live-detail-title">{t("sessions.live.selectTitle")}</h3>
+                  <p>{t("sessions.live.selectDescription")}</p>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <details className="session-request-disclosure" open={requestFormOpen} onToggle={(event) => setRequestFormOpen(event.currentTarget.open)}>
+            <summary>{t("sessions.live.requestDisclosure")}</summary>
+            <SessionRequest onDone={(session) => {
+              setLookup(session.id);
+              setFound(session);
               setScreen(undefined);
-              act(
-                s.status === "pending_approval"
-                  ? t("sessions.request.pendingApproval", { id: s.id, expiresAt: s.expiresAt })
-                  : t("sessions.request.status", { id: s.id, status: s.status }),
-                async () => undefined,
-              );
-            }}
-          />
-          <PendingRequests
-            pending={pending}
-            loading={pendingLoading}
-            onApprove={(s) => askDecision("approve", s)}
-            onReject={(s) => askDecision("reject", s)}
-          />
-          <section className="ob-surface ob-panel session-lookup" aria-labelledby="session-lookup-title">
-            <h3 id="session-lookup-title">{t("sessions.lookup.title")}</h3>
-            <form onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
-              <div className="ob-form-fields">
-                <label>
-                  {t("sessions.lookup.identifier")}
-                  <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required />
-                </label>
-              </div>
-              <div className="ob-form-actions">
-                <Button type="submit" variant="primary">{t("sessions.lookup.show")}</Button>
-              </div>
-            </form>
-            {found ? <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={terminate} /> : null}
-            {screen ? (
-              <ScreenViewer
-                key={screen.key}
-                attach={screen.attach}
-                onReconnect={() => openScreen(screen.sessionId)}
-                onClose={() => setScreen(undefined)}
-              />
-            ) : null}
-          </section>
+              setOk(session.status === "pending_approval"
+                ? t("sessions.request.pendingApproval", { id: session.id, expiresAt: session.expiresAt })
+                : t("sessions.request.status", { id: session.id, status: session.status }));
+              load();
+            }} />
+          </details>
         </TabsContent>
         <TabsContent value="history"><SessionHistory /></TabsContent>
         <TabsContent value="recordings"><SessionRecordings onOpenRecording={onOpenRecording} /></TabsContent>

@@ -4876,3 +4876,19 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Ne transforme pas les préférences locales en paramètres de tenant ou de sécurité serveur.
 - Ne crée pas de destinations de navigation factices pour Infrastructure, Paramètres tenant, Documentation ou Centre d'aide.
 - Ne garantit pas encore une fidélité pixel-à-pixel : aucune capture navigateur n'a pu être produite sur cette machine.
+
+
+## 2026-11-17 — Sessions : workspace à deux panneaux
+
+- La page reprend la structure de la maquette : quatre cartes d'état, onglets, colonne de gauche (318 px à 1440 px) et panneau de détail à droite. Le formulaire de nouvelle demande est conservé dans une disclosure et reste accessible depuis l'action de l'en-tête.
+- La liste latérale est volontairement nommée « Demandes à décider » : elle utilise uniquement `GET /sessions?status=pending_approval`. Elle ne prétend pas être une liste des sessions actives. Une demande sélectionnée est détaillée depuis l'objet déjà retourné par l'API ; aucun `GET /sessions/{id}` additionnel n'est fait pour franchir la frontière de lecture. La recherche par ID conserve le GET et son contrôle d'autorisation.
+- Le panneau droit garde les détails, approbation/refus avec confirmation, injection du secret, ouverture d'écran RDP/VNC et terminaison. Le terminal SSH de démonstration du SVG n'est pas reproduit, car l'Admin UI ne possède pas de flux terminal SSH.
+- Les cartes indiquent explicitement les limites de listing actif et d'alertes ; elles ne reprennent aucun faux compteur. Les onglets Historique, Enregistrements et Alertes conservent leurs composants et contrats précédents.
+- Validation complète après cette évolution : `make ui-test ui-build` PASS — 26 fichiers, 259 tests ; TypeScript/Vite production PASS ; `check-app-colors` PASS ; contraste clair/sombre PASS ; `git diff --check` PASS.
+
+### Ce que cela ne fait PAS
+
+- Ne crée pas un endpoint de listing global des sessions actives et n'affiche pas de sessions fictives.
+- Ne crée pas de terminal SSH dans le navigateur ni de flux temps réel qui n'existe pas dans l'API.
+- Ne modifie pas les politiques d'autorisation : les objets issus de la file d'approbation ne déclenchent pas une lecture par identifiant ; la recherche manuelle reste soumise à l'autorisation `GET /sessions/{id}`.
+- Ne met pas en œuvre le contrat d'alertes de sessions ; l'onglet indique toujours que l'API est requise.

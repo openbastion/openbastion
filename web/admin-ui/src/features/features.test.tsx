@@ -320,6 +320,7 @@ describe("Approval with a ticket (ADR-0067)", () => {
     const waiting = { id: "sess_9", status: "pending_approval", protocol: "ssh", requestedBy: "alice", privilegedAccountId: "acc_1", justification: "patch", breakGlass: false, approvalRequired: true, ticket: "CHG0001234", expiresAt: "2026-10-30T11:15:00Z" };
     const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /sessions": { status: 201, body: waiting } });
     signedIn(api, <Sessions />);
+    fireEvent.click(screen.getByRole("button", { name: "Nouvelle demande" }));
     const form = await screen.findByRole("form", { name: "Demander une session" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Compte", "acc_1");
@@ -335,7 +336,7 @@ describe("Approval with a ticket (ADR-0067)", () => {
     const req = { id: "sess_9", status: "pending_approval", protocol: "ssh", requestedBy: "alice", privilegedAccountId: "acc_1", justification: "patch", breakGlass: false, approvalRequired: true, ticket: "CHG0001234", expiresAt: "2026-10-30T11:15:00Z" };
     const { api, calls } = fakeApi({ "GET /sessions": { body: { items: [req], page: 1, pageSize: 20, totalItems: 1 } }, "POST /sessions/sess_9/reject": { body: req } });
     signedIn(api, <Sessions />);
-    expect((await screen.findByRole("table")).className).toContain("ob-data-table");
+    expect((await screen.findByRole("region", { name: "Demandes à décider" })).className).toContain("sessions-live-queue");
     expect(await screen.findByText("CHG0001234")).toBeTruthy();
     expect(screen.getByText("Approbation")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Refuser la session sess_9" }));
@@ -423,6 +424,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
     vi.stubGlobal("WebSocket", socketOpen);
     const { api, calls } = fakeApi({ "GET /sessions": page([]), "POST /sessions": { status: 201, body: session }, "POST /sessions/sess_v/connect": { body: { protocol: "vnc", attach: "/sessions/sess_v/screen", expiresAt: "2030-01-01T00:00:00Z" } } });
     signedIn(api, <Sessions />);
+    fireEvent.click(screen.getByRole("button", { name: "Nouvelle demande" }));
     const form = await screen.findByRole("form", { name: "Demander une session" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Compte", "acc_v");
@@ -475,6 +477,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
     vi.stubGlobal("WebSocket", socketOpen);
     const { api, calls } = fakeApi({ "GET /sessions": page([]), "POST /sessions": { status: 201, body: { ...session, protocol: "rdp" } }, "POST /sessions/sess_v/connect": { body: { protocol: "rdp", attach: "/sessions/sess_v/screen", expiresAt: "2030-01-01T00:00:00Z" } } });
     signedIn(api, <Sessions />);
+    fireEvent.click(screen.getByRole("button", { name: "Nouvelle demande" }));
     const form = await screen.findByRole("form", { name: "Demander une session" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Compte", "acc_r");

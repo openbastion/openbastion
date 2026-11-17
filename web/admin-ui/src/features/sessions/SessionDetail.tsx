@@ -1,5 +1,4 @@
 import { Session } from "../../shared/api";
-import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 import { SecretInjection } from "./SecretInjection";
@@ -28,10 +27,6 @@ export function SessionDetail({
   return (
     <>
       <dl className="ob-detail-list" aria-label={t("sessions.detail.aria")}>
-        <dt>{t("sessions.columns.status")}</dt>
-        <dd>
-          <StatusBadge status={session.status} />
-        </dd>
         <dt>{t("sessions.columns.protocol")}</dt>
         <dd>{session.protocol}</dd>
         <dt>{t("sessions.columns.requester")}</dt>
