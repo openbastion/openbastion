@@ -2814,8 +2814,39 @@ main.login {
 .session-filter-bar .session-filter-query { flex: 1 1 17rem; min-width: min(100%, 15rem); }
 .session-filter-bar > button { min-height: 2.45rem; }
 .session-history, .session-recordings { min-width: 0; }
+.session-history {
+  margin-top: 1.25rem;
+  padding: 1.35rem 1.25rem 0.9rem;
+  background: var(--ob-color-bg-surface, var(--surface));
+  border: 1px solid var(--ob-color-border-control, var(--line));
+  border-radius: 0.55rem;
+}
 .session-history .ob-section-heading, .session-recordings .ob-section-heading { align-items: flex-start; }
+.session-history .ob-section-heading { margin: 0 0 1rem; }
 .session-history .ob-section-heading h3, .session-recordings .ob-section-heading h3 { margin: 0; }
+.session-history .ob-section-heading h3 { color: var(--ob-color-text-primary, var(--ink)); font-size: 0.94rem; font-weight: 700; letter-spacing: -0.015em; }
+.session-history .ob-section-heading .ob-hint { margin-top: 0.28rem; font-size: 0.72rem; }
+.session-history .session-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1.8fr) repeat(2, minmax(7.5rem, 0.9fr)) minmax(7rem, auto) auto;
+  align-items: end;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+}
+.session-history .session-filter-bar label { min-width: 0; gap: 0.3rem; font-size: 0.7rem; }
+.session-history .session-filter-bar input,
+.session-history .session-filter-bar select { min-width: 0; min-height: 2.25rem; font-size: 0.75rem; }
+.session-history .session-filter-bar > button { min-height: 2.25rem; white-space: nowrap; }
+.session-history .ob-table-wrap { overflow-x: auto; border: 1px solid var(--ob-color-border-control, var(--line)); border-radius: 0.5rem; }
+.session-history .ob-data-table { width: 100%; min-width: 47rem; border-collapse: separate; border-spacing: 0; }
+.session-history .ob-data-table thead { background: var(--ob-color-bg-surface-subtle, var(--surface)); }
+.session-history .ob-data-table th { height: 2.6rem; padding: 0.65rem 0.9rem; color: var(--ob-color-text-secondary, var(--ink-3)); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.025em; text-align: start; white-space: nowrap; }
+.session-history .ob-data-table td { height: 3.85rem; padding: 0.65rem 0.9rem; border-top: 1px solid var(--ob-color-border-subtle, var(--line)); color: var(--ob-color-text-secondary, var(--ink-2)); font-size: 0.68rem; white-space: nowrap; }
+.session-history .ob-data-table td:first-child { color: var(--ob-color-text-primary, var(--ink)); font-weight: 600; }
+.session-history .ob-data-table td:first-child code { display: block; margin-top: 0.2rem; color: var(--ob-color-text-tertiary, var(--ink-3)); font-size: 0.59rem; font-weight: 400; }
+.session-history .ob-data-table .badge { font-size: 0.62rem; }
+.session-history .session-pagination { justify-content: space-between; margin: 0; padding: 0.75rem 0.25rem 0; font-size: 0.68rem; }
+.session-history .session-pagination > span { margin-inline: auto; }
 .session-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; color: var(--ob-color-text-secondary); font-size: 0.82rem; }
 .session-recording-results { display: grid; gap: 0.75rem; margin-top: 1rem; }
 .session-recording-result { padding: 1rem; }
@@ -2826,7 +2857,15 @@ main.login {
 .session-alerts-unavailable .ob-section-heading { align-items: center; }
 .session-alerts-unavailable h3 { margin: 0; }
 .session-alerts-unavailable p { margin: 0; max-width: 72ch; }
+@media (max-width: 900px) {
+  .session-history .session-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .session-history .session-filter-query { grid-column: 1 / -1; }
+  .session-history .session-filter-bar > button { justify-self: start; }
+}
 @media (max-width: 720px) {
+  .session-history { padding: 1rem 0.75rem 0.7rem; }
+  .session-history .session-filter-bar { grid-template-columns: minmax(0, 1fr); }
+  .session-history .session-filter-query { grid-column: auto; }
   .session-filter-bar { align-items: stretch; }
   .session-filter-bar label { flex: 1 1 calc(50% - 0.75rem); min-width: 0; }
   .session-filter-bar .session-filter-query { flex-basis: 100%; }
