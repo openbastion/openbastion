@@ -144,7 +144,7 @@ export default {
     },
     secureAccess: "ACCÈS SÉCURISÉ",
     title: "Connexion à OpenBastion",
-    emailPlaceholder: "camille.martin@acme.com",
+    userPlaceholder: "camille.martin",
     orWithAccount: "ou avec votre compte",
     forgotPassword: "Mot de passe oublié ?",
     rememberEmail: "Se souvenir de mon adresse e-mail",

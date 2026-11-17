@@ -174,7 +174,7 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
                   )}
                   <Label className="login-field">
                     {t("login.username")}
-                    <Input name="username" type="text" autoComplete="username" placeholder={t("login.emailPlaceholder")} value={username} onChange={(e) => setUsername(e.target.value)} required />
+                    <Input name="username" type="text" autoComplete="username" placeholder={t("login.userPlaceholder")} value={username} onChange={(e) => setUsername(e.target.value)} required />
                   </Label>
                   <div className="login-field">
                     <span className="login-field-label">
