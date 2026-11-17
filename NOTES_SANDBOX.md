@@ -4857,3 +4857,22 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Aucun endpoint ni schéma backend n'a été modifié. Les onze références sont indexées dans `docs/ui/reference-screens/README.md`.
 - Validation finale : `make ui-test ui-build` PASS — 26 fichiers Vitest, 258 tests ; TypeScript et build Vite production PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
 - Rendu navigateur et comparaison pixel-à-pixel non encore vérifiés.
+
+
+## 2026-11-17 — Shell partagé et Dashboard alignés sur la référence
+
+- L'incrément reste dans le worktree `/tmp/openbastion-ui-reference`, branche `feat/ui-reference-alignment`, destiné à la PR #223. Le checkout principal et les worktrees de sécurité n'ont pas été touchés.
+- Le shell place désormais la marque et le contexte de l'espace de travail dans la sidebar, avec une section « Espace de travail » pour les destinations existantes et une section « Ressources » distincte. Les contrôles non implémentés (Infrastructure, paramètres tenant, documentation/help) ne sont pas exposés comme de faux liens. Le fil d'Ariane reste dans la topbar.
+- Le menu utilisateur regroupe palette de commandes, langue, thème, préférences et déconnexion. `Ctrl+K` reste actif globalement ; l'ouverture/fermeture du menu gère Échap, clic extérieur et retour du focus. La topbar ne contient plus le déclencheur de la palette.
+- Dashboard : composition de référence reprise (titre/actions, bandeau, quatre indicateurs, panneaux de pilotage et liste opérationnelle). Les indicateurs proviennent des réponses Vault et Broker ; les signaux de rotation et d'épinglage sont calculés uniquement sur les comptes chargés et la note précise le périmètre. Le tableau montre les demandes `pending_approval` visibles par l'appelant, pas un flux global de sessions.
+- Le graphique temporel de connexion est remplacé par un état explicite « historique agrégé indisponible » : aucune route publique ne fournit cette série. Aucun faux chiffre de sessions actives, ressource protégée, identité ou score de risque n'est affiché. Un bouton Actualiser relance les deux appels publics.
+- Les textes FR/EN sont synchronisés. Tests ajoutés/ajustés pour la composition du Dashboard, les données réelles, les limites API, le menu utilisateur, la palette et le retour de focus des préférences.
+- Validation : `make ui-test ui-build` PASS — 26 fichiers, 259 tests ; TypeScript et build Vite production PASS ; `check-app-colors` PASS sans couleur littérale ; contrôles de contraste clair/sombre PASS ; `git diff --check` PASS.
+- Pas de navigateur ni de binaire Chromium/Firefox installé sur LT209227 dans cet environnement : capture navigateur, vérification responsive réelle et comparaison pixel-à-pixel restent **non vérifiées**. Aucun résultat visuel navigateur n'est revendiqué.
+
+### Ce que cela ne fait PAS
+
+- Ne fournit pas un listing global des sessions actives, un flux de sessions récentes, un agrégat temporel, un score Zero Trust ni un état de santé global des services.
+- Ne transforme pas les préférences locales en paramètres de tenant ou de sécurité serveur.
+- Ne crée pas de destinations de navigation factices pour Infrastructure, Paramètres tenant, Documentation ou Centre d'aide.
+- Ne garantit pas encore une fidélité pixel-à-pixel : aucune capture navigateur n'a pu être produite sur cette machine.

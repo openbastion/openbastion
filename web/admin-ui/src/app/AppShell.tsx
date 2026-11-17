@@ -15,15 +15,15 @@ import { useAppTranslation } from "../shared/i18n";
 // Labels and descriptions live in the translation files (locales/*.ts), one key per tab: the
 // navigation is translated like the screens it opens, and the groups keep the same order.
 const tabs = {
-  overview: { icon: Dashboard, group: "overview" },
-  accounts: { icon: Users, group: "access" },
-  policies: { icon: PoliciesIcon, group: "access" },
-  sessions: { icon: Session, group: "operations" },
-  audit: { icon: Audit, group: "operations" },
-  security: { icon: Shield, group: "security" },
+  overview: { icon: Dashboard, group: "workspace" },
+  accounts: { icon: Users, group: "workspace" },
+  policies: { icon: PoliciesIcon, group: "workspace" },
+  sessions: { icon: Session, group: "workspace" },
+  audit: { icon: Audit, group: "workspace" },
+  security: { icon: Shield, group: "workspace" },
 } as const;
 
-const groups = ["overview", "access", "operations", "security"] as const;
+const groups = ["workspace"] as const;
 
 export type Tab = keyof typeof tabs;
 const tabOrder: Tab[] = ["overview", "accounts", "policies", "sessions", "audit", "security"];
@@ -56,15 +56,18 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const paletteButton = useRef<HTMLButtonElement>(null);
-  const preferencesButton = useRef<HTMLButtonElement>(null);
+  const userMenuButton = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileWasOpen = useRef(false);
   const paletteWasOpen = useRef(false);
   const preferencesWereOpen = useRef(false);
+  const userMenuWasOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
   const collapsed = preferences.sidebarCollapsed;
   const favoriteTabs = tabOrder.filter((key) => preferences.favorites.includes(key));
@@ -147,9 +150,30 @@ export function AppShell({
   }, [paletteOpen]);
 
   useEffect(() => {
-    if (preferencesWereOpen.current && !preferencesOpen) preferencesButton.current?.focus();
+    if (preferencesWereOpen.current && !preferencesOpen) userMenuButton.current?.focus();
     preferencesWereOpen.current = preferencesOpen;
   }, [preferencesOpen]);
+
+  useEffect(() => {
+    if (userMenuWasOpen.current && !userMenuOpen && !paletteOpen && !preferencesOpen) userMenuButton.current?.focus();
+    userMenuWasOpen.current = userMenuOpen;
+  }, [userMenuOpen, paletteOpen, preferencesOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !userMenuRef.current?.contains(event.target)) setUserMenuOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [userMenuOpen]);
 
   useEffect(() => {
     if (mobileWasOpen.current && !mobileOpen) menuButton.current?.focus();
@@ -224,37 +248,58 @@ export function AppShell({
     <>
       <a className="skip-link" href="#main-content" inert={mobileOpen}>{t("shell.skipToContent")}</a>
       <header className="app-header" inert={mobileOpen}>
-        <div className="brand">
-          <BrandMark />
-          <span className="brand-name">OpenBastion</span>
-          <span className="brand-tag">Admin</span>
+        <div className="topbar-breadcrumb" aria-label={t("shell.breadcrumb.aria")}>
+          <span>{t("shell.breadcrumb.workspace")}</span>
+          <span aria-hidden="true">/</span>
+          <strong>{t(`shell.nav.${tab}.label`)}</strong>
         </div>
         <div className="header-actions">
-          <button
-            ref={paletteButton}
-            type="button"
-            className="command-trigger"
-            onClick={() => setPaletteOpen(true)}
-            aria-haspopup="dialog"
-            aria-keyshortcuts="Control+K Meta+K"
-            aria-label={t("shell.search.open")}
-          >
-            <span aria-hidden="true">⌕</span>
-            <span>{t("shell.search.label")}</span>
-            <kbd>Ctrl K</kbd>
-          </button>
-          <LanguageSwitcher />
-          <button
-            ref={preferencesButton}
-            type="button"
-            className="preferences-trigger"
-            onClick={() => setPreferencesOpen(true)}
-            aria-haspopup="dialog"
-            aria-label={t("shell.preferences.open")}
-          >
-            <Settings size={17} />
-            <span>{t("shell.preferences.label")}</span>
-          </button>
+          <div className="user-menu" ref={userMenuRef}>
+            <button
+              ref={(node) => { userMenuButton.current = node; paletteButton.current = node; }}
+              type="button"
+              className="user-menu-trigger"
+              aria-haspopup="true"
+              aria-expanded={userMenuOpen}
+              aria-controls="operator-menu"
+              onClick={() => setUserMenuOpen((open) => !open)}
+            >
+              <span className="avatar" aria-hidden="true">{initials}</span>
+              <span className="user-menu-identity">
+                <strong>{who?.username}</strong>
+                <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
+              </span>
+              <span className="user-menu-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {userMenuOpen ? (
+              <div className="user-menu-panel" id="operator-menu" aria-label={t("shell.user.menuLabel")}>
+                <div className="user-menu-summary">
+                  <strong>{who?.username}</strong>
+                  <span>{who?.roles.join(", ") || t("shell.user.defaultRole")}</span>
+                </div>
+                <button type="button" className="user-menu-item" onClick={() => { setPaletteOpen(true); setUserMenuOpen(false); }}>
+                  <span aria-hidden="true">⌕</span>{t("shell.search.label")} <kbd>Ctrl K</kbd>
+                </button>
+                <div className="user-menu-section">
+                  <span>{t("common.language.label")}</span>
+                  <LanguageSwitcher />
+                </div>
+                <div className="user-menu-section">
+                  <span>{t("shell.theme.label")}</span>
+                  <button type="button" className="user-menu-item" aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}>
+                    <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
+                    {effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
+                  </button>
+                </div>
+                <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>
+                  <Settings size={17} />{t("shell.preferences.label")}
+                </button>
+                <button type="button" className="user-menu-item user-menu-signout" onClick={() => { setUserMenuOpen(false); onSignOut(); }}>
+                  {t("shell.signOut")}
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             ref={menuButton}
             type="button"
@@ -266,23 +311,6 @@ export function AppShell({
           >
             <span aria-hidden="true">☰</span>
           </button>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}
-            aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")}
-            aria-pressed={effectiveTheme() === "dark"}
-          >
-            <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
-            <span className="theme-toggle-label">{effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}</span>
-          </button>
-          <div className="session-chip">
-            <span className="avatar" aria-hidden="true">{initials}</span>
-            <span className="who" title={who ? `${who.username}${who.roles.length ? " (" + who.roles.join(", ") + ")" : ""}` : undefined}>
-              {who?.username} {who?.roles.length ? "(" + who.roles.join(", ") + ")" : ""}
-            </span>
-            <button type="button" className="ghost" onClick={onSignOut}>{t("shell.signOut")}</button>
-          </div>
         </div>
       </header>
       {paletteOpen ? (
@@ -321,8 +349,12 @@ export function AppShell({
           role={mobileOpen ? "dialog" : undefined}
           aria-modal={mobileOpen ? "true" : undefined}
         >
-          <div className="sidebar-heading">
-            <span className="sidebar-heading-label">{t("shell.sidebar.workspace")}</span>
+          <div className="sidebar-brand">
+            <BrandMark />
+            <span className="sidebar-brand-copy">
+              <strong>OpenBastion</strong>
+              <small>{t("shell.sidebar.brandTag")}</small>
+            </span>
             <button
               type="button"
               className="sidebar-collapse-toggle"
@@ -333,6 +365,11 @@ export function AppShell({
             >
               <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
             </button>
+          </div>
+          <div className="sidebar-workspace-card">
+            <span className="sidebar-workspace-label">{t("shell.sidebar.workspace")}</span>
+            <strong>{t("shell.sidebar.workspaceName")}</strong>
+            <small>{t("shell.sidebar.workspaceContext")}</small>
           </div>
           <nav aria-label={t("shell.navigation.sections")}>
             {favoriteTabs.length > 0 ? (
@@ -347,10 +384,17 @@ export function AppShell({
                 {tabOrder.filter((key) => tabs[key].group === group).map(renderNavItem)}
               </div>
             ))}
+            <div className="nav-group nav-resources">
+              <h2 className="nav-group-title">{t("shell.sidebar.resources")}</h2>
+              <p className="sidebar-resource-note">{t("shell.sidebar.resourcesNote")}</p>
+            </div>
           </nav>
           <div className="sidebar-footer">
-            <span className="sidebar-status-dot" aria-hidden="true" />
-            <span className="sidebar-status-label">{t("shell.sidebar.console")}</span>
+            <div className="sidebar-footer-heading">
+              <span className="sidebar-status-dot" aria-hidden="true" />
+              <strong>{t("shell.sidebar.console")}</strong>
+            </div>
+            <p>{t("shell.sidebar.statusDetail")}</p>
           </div>
         </aside>
         <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>

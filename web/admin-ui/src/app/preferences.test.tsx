@@ -28,8 +28,15 @@ async function signIn(api = createApi()) {
   fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
   fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
   fireEvent.click(screen.getByText("Se connecter"));
-  expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
+  expect(await screen.findByRole("button", { name: /alice.*platform-admin/ })).toBeTruthy();
   return { api, ...view };
+}
+
+async function openPreferences() {
+  const userMenu = screen.getByRole("button", { name: /alice.*platform-admin/ });
+  fireEvent.click(userMenu);
+  fireEvent.click(screen.getByRole("button", { name: "Préférences" }));
+  return userMenu;
 }
 
 describe("ADR-0073 UX-05 — préférences opérateur", () => {
@@ -38,7 +45,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     window.sessionStorage.clear();
     await signIn();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ouvrir les préférences" }));
+    await openPreferences();
     const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
     fireEvent.change(within(dialog).getByLabelText("Thème"), { target: { value: "dark" } });
     fireEvent.change(within(dialog).getByLabelText("Densité de l'interface"), { target: { value: "compact" } });
@@ -68,8 +75,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
   it("does not persist a cancelled draft and restores the dialog trigger focus", async () => {
     window.localStorage.clear();
     await signIn();
-    const trigger = screen.getByRole("button", { name: "Ouvrir les préférences" });
-    fireEvent.click(trigger);
+    const trigger = await openPreferences();
     const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
     fireEvent.change(within(dialog).getByLabelText("Thème"), { target: { value: "dark" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Annuler" }));
@@ -81,7 +87,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
   it("uses the saved default destination on the next application load", async () => {
     window.localStorage.clear();
     const first = await signIn();
-    fireEvent.click(screen.getByRole("button", { name: "Ouvrir les préférences" }));
+    await openPreferences();
     const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
     fireEvent.change(within(dialog).getByLabelText("Vue affichée à la connexion"), { target: { value: "security" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Enregistrer les préférences" }));
@@ -108,7 +114,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function () { throw new Error("blocked"); };
     try {
-      fireEvent.click(screen.getByRole("button", { name: "Ouvrir les préférences" }));
+      await openPreferences();
       const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
       fireEvent.change(within(dialog).getByLabelText("Thème"), { target: { value: "dark" } });
       fireEvent.click(within(dialog).getByRole("button", { name: "Enregistrer les préférences" }));
