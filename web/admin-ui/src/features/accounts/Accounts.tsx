@@ -7,6 +7,7 @@ import { Pager } from "../../shared/ui/Pager";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
+import { ChevronDown, ChevronUp, Filter } from "@openbastion/icons";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
@@ -232,10 +233,10 @@ export function Accounts() {
                   aria-controls="account-filter-builder"
                   onClick={() => setFiltersOpen((open) => !open)}
                 >
-                  <span className="account-filter-trigger-icon" aria-hidden="true">☷</span>
+                  <Filter className="account-filter-trigger-icon" size={16} />
                   <span>{t("accounts.filter.advanced")}</span>
                   <span className="account-filter-count" aria-label={t("accounts.filter.activeCount", { count: activeFilterCount })}>{activeFilterCount}</span>
-                  <span className="account-filter-chevron" aria-hidden="true">{filtersOpen ? "⌃" : "⌄"}</span>
+                  <span className="account-filter-chevron">{filtersOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
                 </button>
                 {activeFilterCount > 0 ? (
                   <Button type="button" onClick={() => { setFilter(""); setFilterRules([]); setSelectedSavedView(""); }}>

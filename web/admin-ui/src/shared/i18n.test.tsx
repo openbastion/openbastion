@@ -71,7 +71,7 @@ describe("LanguageSwitcher", () => {
       );
     }
     render(<Screen />);
-    expect(screen.getByText("Vue générale")).toBeTruthy();
+    expect(screen.getByText("Vue d’ensemble")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Langue"), { target: { value: "en" } });
     expect(screen.getByText("Overview")).toBeTruthy();
@@ -80,7 +80,7 @@ describe("LanguageSwitcher", () => {
     expect(window.localStorage.getItem(languageStorageKey)).toBe("en");
 
     fireEvent.change(screen.getByLabelText("Language"), { target: { value: "fr" } });
-    expect(screen.getByText("Vue générale")).toBeTruthy();
+    expect(screen.getByText("Vue d’ensemble")).toBeTruthy();
     expect(document.documentElement.lang).toBe("fr");
     expect(window.localStorage.getItem(languageStorageKey)).toBe("fr");
   });

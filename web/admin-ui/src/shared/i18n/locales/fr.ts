@@ -33,12 +33,12 @@ export default {
       singleWorkspace: "Un seul espace est configuré sur cette instance.",
     },
     nav: {
-      overview: { label: "Vue générale", description: "Synthèse opérationnelle" },
+      overview: { label: "Vue d’ensemble", description: "Synthèse opérationnelle" },
       accounts: { label: "Comptes", description: "Comptes privilégiés" },
       policies: { label: "Politiques", description: "Politiques d'accès" },
       sessions: { label: "Sessions", description: "Sessions privilégiées" },
       audit: { label: "Enregistrements", description: "Enregistrements de sessions" },
-      security: { label: "Centre de sécurité", description: "Posture des comptes" },
+      security: { label: "Sécurité", description: "Posture des comptes" },
     },
     groups: {
       workspace: "Espace de travail",
@@ -98,12 +98,12 @@ export default {
       closeButton: "Fermer",
     },
     destinations: {
-      overview: { label: "Vue générale", detail: "Pilotage", keywords: "dashboard synthèse accueil" },
+      overview: { label: "Vue d’ensemble", detail: "Pilotage", keywords: "dashboard synthèse accueil" },
       accounts: { label: "Comptes privilégiés", detail: "Accès privilégiés", keywords: "comptes vault secrets" },
       policies: { label: "Politiques", detail: "Accès privilégiés", keywords: "policies autorisations règles" },
       sessions: { label: "Sessions", detail: "Opérations", keywords: "sessions demandes approbations" },
       audit: { label: "Enregistrements", detail: "Opérations", keywords: "replay relecture vidéo commandes" },
-      security: { label: "Centre de sécurité", detail: "Sécurité", keywords: "posture rotation épinglage configuration" },
+      security: { label: "Sécurité", detail: "Posture", keywords: "posture rotation épinglage configuration" },
     },
     findSession: {
       label: "Rechercher la session « {{query}} »",
@@ -137,7 +137,7 @@ export default {
       "Impossible d'enregistrer les préférences dans le stockage local de ce navigateur. Vérifiez ses paramètres de confidentialité et réessayez.",
     save: "Enregistrer les préférences",
     destinations: {
-      overview: "Vue générale",
+      overview: "Vue d’ensemble",
       accounts: "Comptes privilégiés",
       policies: "Politiques",
       sessions: "Sessions",

@@ -11,6 +11,7 @@ import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { useAppTranslation } from "../../shared/i18n";
 import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { Search } from "@openbastion/icons";
 import { SessionHistory } from "./SessionHistory";
 import { SessionRecordings } from "./SessionRecordings";
 import { SessionAlerts } from "./SessionAlerts";
@@ -251,7 +252,7 @@ export function Sessions({
                 </>
               ) : (
                 <div className="sessions-live-empty">
-                  <span aria-hidden="true">⌕</span>
+                  <span className="sessions-live-empty-icon"><Search size={20} /></span>
                   <h3 id="sessions-live-detail-title">{t("sessions.live.selectTitle")}</h3>
                   <p>{t("sessions.live.selectDescription")}</p>
                 </div>

@@ -1,5 +1,26 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ApiDocumentation, Audit, Dashboard, Notifications, Policies as PoliciesIcon, Search, Session, Settings, Shield, Users } from "@openbastion/icons";
+import {
+  ApiDocumentation,
+  Audit,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Dashboard,
+  HelpCircle,
+  Menu,
+  Moon,
+  Notifications,
+  Policies as PoliciesIcon,
+  Search,
+  Session,
+  Settings,
+  Shield,
+  Star,
+  StarFilled,
+  Sun,
+  Users,
+} from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import {
   OperatorPreferences,
@@ -278,7 +299,7 @@ export function AppShell({
           title={t(favorite ? "shell.favoriteTitle.remove" : "shell.favoriteTitle.add")}
           onClick={() => toggleFavorite(key)}
         >
-          <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+          {favorite ? <StarFilled size={15} /> : <Star size={15} />}
         </button>
       </div>
     );
@@ -337,7 +358,7 @@ export function AppShell({
               aria-expanded={!collapsed}
               onClick={() => updatePreferences({ ...preferences, sidebarCollapsed: !collapsed })}
             >
-              <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
           </div>
           <div className="sidebar-workspace-selector">
@@ -354,12 +375,12 @@ export function AppShell({
                 <strong>{t("shell.environment.production")}</strong>
                 <small>{t("shell.sidebar.workspaceContext")}</small>
               </span>
-              <span className="workspace-selector-chevron" aria-hidden="true">⌄</span>
+              <ChevronDown className="workspace-selector-chevron" size={16} />
             </button>
             {workspaceMenuOpen ? (
               <div className="workspace-menu" id="workspace-menu" role="region" aria-label={t("shell.environment.menuLabel")}>
                 <span className="workspace-menu-caption">{t("shell.environment.configured")}</span>
-                <span className="workspace-menu-current"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}<span aria-hidden="true">✓</span></span>
+                <span className="workspace-menu-current"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}<Check size={15} /></span>
                 <p>{t("shell.environment.singleWorkspace")}</p>
               </div>
             ) : null}
@@ -383,7 +404,7 @@ export function AppShell({
                 <ApiDocumentation size={16} />{t("shell.sidebar.documentation")}
               </a>
               <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs/user-guide" target="_blank" rel="noreferrer">
-                <span className="sidebar-help-glyph" aria-hidden="true">?</span>{t("shell.sidebar.helpCentre")}
+                <HelpCircle size={16} />{t("shell.sidebar.helpCentre")}
               </a>
             </div>
           </nav>
@@ -409,7 +430,7 @@ export function AppShell({
                 <strong>{who?.username}</strong>
                 <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
               </span>
-              <span className="user-menu-chevron" aria-hidden="true">⌄</span>
+              <ChevronDown className="user-menu-chevron" size={16} />
             </button>
             {userMenuOpen ? (
               <div className="user-menu-panel sidebar-user-menu-panel" id="operator-menu" aria-label={t("shell.user.menuLabel")}>
@@ -424,7 +445,7 @@ export function AppShell({
                 <div className="user-menu-section">
                   <span>{t("shell.theme.label")}</span>
                   <button type="button" className="user-menu-item" aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}>
-                    <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
+                    {effectiveTheme() === "light" ? <Moon size={17} /> : <Sun size={17} />}
                     {effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
                   </button>
                 </div>
@@ -497,7 +518,7 @@ export function AppShell({
                 aria-controls="admin-navigation"
                 onClick={() => setMobileOpen((open) => !open)}
               >
-                <span aria-hidden="true">☰</span>
+                <Menu size={18} />
               </button>
             </div>
           </header>

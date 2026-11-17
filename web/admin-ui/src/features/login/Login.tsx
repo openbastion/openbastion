@@ -9,6 +9,7 @@ import { LanguageSwitcher } from "../../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../../shared/i18n";
 import { LegalLinks } from "../../shared/LegalNotice";
 import { Checkbox, Form, Input, Label, RadioGroup, RadioGroupItem } from "@openbastion/ui";
+import { ArrowRight } from "@openbastion/icons";
 
 // "local", or "ldap:<id>" ("ldap:" for the directory of the LDAP_* variables, whose id is empty).
 type Source = string;
@@ -150,7 +151,7 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
                   <div className="login-sso">
                     {(oidc ?? [{ id: "", label: "" }]).map((p) => (
                       <Button key={p.id} onClick={() => federated(p.id)} disabled={busy}>
-                        <span className="login-sso-icon" aria-hidden="true">↳</span>
+                        <ArrowRight className="login-sso-icon" size={16} />
                         {p.label ? t("login.withProvider", { provider: p.label }) : t("login.withIdentityProvider")}
                       </Button>
                     ))}

@@ -1,5 +1,6 @@
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Tab } from "../../app/AppShell";
+import { ArrowRight } from "@openbastion/icons";
 import { useAppTranslation } from "../i18n";
 
 type Command = {
@@ -140,7 +141,7 @@ export function CommandPalette({
                 <strong>{command.label}</strong>
                 <small>{command.detail}</small>
               </span>
-              <span className="command-enter" aria-hidden="true">↵</span>
+              <ArrowRight className="command-enter" size={15} />
             </button>
           )) : <p className="command-empty">{t("palette.empty")}</p>}
         </div>

@@ -2682,7 +2682,10 @@ main.login {
   border-color: var(--line-strong);
 }
 
+/* The favorite toggle floats over the row: reserving a fixed column for it clipped the
+   longest navigation labels to an ellipsis. */
 .nav-entry {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.2rem;
@@ -2695,17 +2698,20 @@ main.login {
 }
 
 .nav-favorite-toggle {
+  position: absolute;
+  inset-inline-end: -0.05rem;
+  top: 50%;
+  z-index: 1;
   display: grid;
   place-items: center;
-  flex: 0 0 2.5rem;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
+  width: 1.5rem;
+  height: 1.9rem;
   padding: 0;
+  transform: translateY(-50%);
   color: var(--ob-color-chrome-muted);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  font-size: 1.05rem;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease-out;
@@ -3069,7 +3075,7 @@ main.login {
   outline-offset: 2px;
 }
 
-.account-filter-trigger-icon { font-size: 1rem; }
+.account-filter-trigger-icon { flex: 0 0 auto; }
 .account-filter-chevron { color: var(--ink-3); }
 .account-filter-count {
   min-width: 1.45rem;
@@ -3628,9 +3634,7 @@ main.login {
 .login-sso-icon {
   position: absolute;
   left: 1.25rem;
-  font-size: 1.65rem;
-  line-height: 1;
-  transform: rotate(180deg);
+  flex: 0 0 auto;
 }
 .login-divider {
   display: flex;
@@ -4119,7 +4123,7 @@ main.login {
 .user-menu-identity { display: grid; gap: 0.12rem; min-width: 0; }
 .user-menu-identity strong { max-width: 11rem; overflow: hidden; font-size: 0.8rem; text-overflow: ellipsis; white-space: nowrap; }
 .user-menu-identity small { color: var(--ink-3); font-size: 0.7rem; }
-.user-menu-chevron { color: var(--ink-3); font-size: 1.05rem; }
+.user-menu-chevron { flex: 0 0 auto; color: var(--ink-3); }
 
 .user-menu-panel {
   position: absolute;
@@ -4187,7 +4191,7 @@ main.login {
 .nav-group-title { margin: 0 0 0.4rem 0.65rem; font-size: 0.6rem; letter-spacing: 0.11em; }
 .nav-item { min-height: 2.55rem; font-size: 0.79rem; }
 .nav-item[aria-current="page"] { border-inline-start-width: 3px; }
-.nav-favorite-toggle { min-width: 1.8rem; }
+.nav-favorite-toggle { min-width: 1.5rem; }
 .nav-resources { padding-top: 1.05rem; border-top: 1px solid var(--ob-color-chrome-border); }
 .sidebar-resource-note { margin: 0 0.65rem; color: var(--ob-color-chrome-muted); font-size: 0.7rem; line-height: 1.5; }
 .sidebar-footer { margin-top: auto; padding: 0.85rem 0.55rem 0.25rem; }
@@ -4206,7 +4210,8 @@ main.login {
    ========================================================================== */
 .ob-page:has(.dashboard-welcome) { display: grid; gap: 1.25rem; }
 .ob-page:has(.dashboard-welcome) .ob-page-header { margin-bottom: 0; }
-.ob-page:has(.dashboard-welcome) .ob-page-header h2 { font-size: 1.625rem; letter-spacing: -0.025em; }
+/* Reference page title: 26px, 700, -0.5px tracking (SVG Layer_Page_Header). */
+.ob-page:has(.dashboard-welcome) .ob-page-header h2 { font-size: 1.625rem; font-weight: var(--ob-font-weight-bold); }
 .ob-page:has(.dashboard-welcome) .ob-hint { max-width: 62rem; font-size: 0.78rem; }
 .dashboard-welcome {
   display: flex;
@@ -4244,7 +4249,7 @@ main.login {
 .dashboard-activity, .dashboard-posture { min-height: 19.375rem; }
 .dashboard-activity { padding: 1.4rem 1.5rem; }
 .dashboard-unavailable-state { display: grid; justify-items: center; align-content: center; gap: 0.55rem; min-height: 14rem; padding: 1.25rem; text-align: center; }
-.dashboard-empty-icon { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; color: var(--ink-3); background: var(--surface-2); border-radius: 0.65rem; font-size: 1.4rem; }
+.dashboard-empty-icon { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; color: var(--ink-3); background: var(--surface-2); border-radius: 0.65rem; }
 .dashboard-unavailable-state strong { color: var(--ink-2); font-size: 0.8rem; }
 .dashboard-unavailable-state p { max-width: 27rem; margin: 0; color: var(--ink-3); font-size: 0.72rem; line-height: 1.5; }
 .dashboard-posture { display: flex; flex-direction: column; padding: 1.4rem 1.5rem; color: var(--ob-color-chrome-text); background: var(--ob-color-chrome-background); border-color: var(--ob-color-chrome-background); }
@@ -4337,7 +4342,7 @@ main.login {
 .sessions-live-detail .ob-detail-list { max-width: 42rem; }
 .sessions-live-decision-actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .sessions-live-empty { display: grid; justify-items: center; align-content: center; min-height: 34rem; padding: 2rem; text-align: center; }
-.sessions-live-empty > span { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; margin-bottom: 0.85rem; color: var(--ob-color-accent); background: var(--ob-color-accent-subtle); border-radius: 0.7rem; font-size: 1.5rem; }
+.sessions-live-empty-icon { display: grid; place-items: center; width: 2.8rem; height: 2.8rem; margin-bottom: 0.85rem; color: var(--ob-color-accent); background: var(--ob-color-accent-subtle); border-radius: 0.7rem; }
 .sessions-live-empty h3 { margin: 0; color: var(--ink-1); font-size: 0.95rem; }
 .sessions-live-empty p { max-width: 27rem; margin: 0.5rem 0 0; color: var(--ink-3); font-size: 0.75rem; line-height: 1.55; }
 .session-request-disclosure { margin-top: 1rem; padding: 0.9rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.65rem; }
@@ -4473,18 +4478,6 @@ main.login {
   background: var(--ob-color-chrome-background-raised);
 }
 .sidebar-resource-link svg { flex: 0 0 auto; }
-.sidebar-help-glyph {
-  display: grid;
-  place-items: center;
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 auto;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
 .sidebar-footer {
   display: grid;
   gap: 0.35rem;
@@ -4671,7 +4664,7 @@ main.login {
 .sidebar-workspace-copy strong { color: var(--ob-color-chrome-text); font-size: 0.82rem; }
 .sidebar-workspace-copy small { color: var(--ob-color-chrome-muted); font-size: 0.66rem; }
 .workspace-environment-mark { width: 0.5rem; height: 0.5rem; flex: 0 0 auto; border-radius: 50%; background: var(--ob-color-status-success); box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--ob-color-status-success) 18%, transparent); }
-.workspace-selector-chevron { color: var(--ob-color-chrome-muted); font-size: 0.95rem; }
+.workspace-selector-chevron { flex: 0 0 auto; color: var(--ob-color-chrome-muted); }
 .workspace-menu {
   position: absolute;
   z-index: 30;
@@ -4688,7 +4681,7 @@ main.login {
 }
 .workspace-menu-caption { color: var(--ob-color-chrome-muted); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; }
 .workspace-menu-current { display: flex; align-items: center; gap: 0.55rem; font-size: 0.76rem; font-weight: 650; }
-.workspace-menu-current > span:last-child { margin-inline-start: auto; color: var(--ob-color-chrome-accent); }
+.workspace-menu-current > svg { margin-inline-start: auto; color: var(--ob-color-chrome-accent); }
 .workspace-menu p { margin: 0; color: var(--ob-color-chrome-muted); font-size: 0.66rem; line-height: 1.45; }
 .environment-badge {
   display: inline-flex;

@@ -124,6 +124,21 @@ export { Ansible } from "./icons/Ansible";
 export { KubernetesDeployment } from "./icons/KubernetesDeployment";
 export { ApiDocumentation } from "./icons/ApiDocumentation";
 
+export { ChevronDown } from "./icons/ChevronDown";
+export { ChevronUp } from "./icons/ChevronUp";
+export { ChevronLeft } from "./icons/ChevronLeft";
+export { ChevronRight } from "./icons/ChevronRight";
+export { ArrowRight } from "./icons/ArrowRight";
+export { Check } from "./icons/Check";
+export { Close } from "./icons/Close";
+export { Menu } from "./icons/Menu";
+export { HelpCircle } from "./icons/HelpCircle";
+export { Star } from "./icons/Star";
+export { StarFilled } from "./icons/StarFilled";
+export { Filter } from "./icons/Filter";
+export { Sun } from "./icons/Sun";
+export { Moon } from "./icons/Moon";
+
 export const iconNames = [
   "security",
   "shield",
@@ -249,4 +264,18 @@ export const iconNames = [
   "ansible",
   "kubernetes-deployment",
   "api-documentation",
+  "chevron-down",
+  "chevron-up",
+  "chevron-left",
+  "chevron-right",
+  "arrow-right",
+  "check",
+  "close",
+  "menu",
+  "help-circle",
+  "star",
+  "star-filled",
+  "filter",
+  "sun",
+  "moon",
 ] as const;
