@@ -5,7 +5,7 @@ import { Credentials, register, sign } from "../../shared/webauthn";
 import { Challenge } from "./sources";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
-import { Form, Input, Label } from "@openbastion/ui";
+import { Form, Input, InputOTP, Label } from "@openbastion/ui";
 
 // The second step of a login whose password was right, when its roles require a second factor
 // (ADR-0062, ADR-0065): a security key or the code of the authenticator application — whichever
@@ -109,16 +109,13 @@ export function SecondFactor({
             {code[index] ?? ""}
           </span>
         ))}
-        <Input
+        <InputOTP
           id="second-factor-code"
           className="second-factor-code-input"
           autoFocus
           name="code"
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
+          length={6}
           pattern="[0-9]{6}"
-          maxLength={6}
           value={code}
           aria-describedby="second-factor-code-hint"
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}

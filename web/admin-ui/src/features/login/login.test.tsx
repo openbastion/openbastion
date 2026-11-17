@@ -131,7 +131,11 @@ describe("Login", () => {
     expect(screen.getByText("Le code se renouvelle toutes les 30 secondes.")).toBeTruthy();
     expect(document.querySelectorAll(".second-factor-code-cell")).toHaveLength(6);
     expect(screen.getByText("Besoin d'aide ?")).toBeTruthy();
-    const input = await screen.findByLabelText("Code de l'application d'authentification");
+    const input = await screen.findByLabelText("Code de l'application d'authentification") as HTMLInputElement;
+    expect(input.classList.contains("ob-input-otp")).toBe(true);
+    expect(input.maxLength).toBe(6);
+    expect(input.autocomplete).toBe("one-time-code");
+    expect(input.inputMode).toBe("numeric");
     expect(screen.queryByRole("alert")).toBeNull(); // a step, not an error
     const verify = screen.getByRole("button", { name: "Vérifier et continuer" });
     expect((verify as HTMLButtonElement).disabled).toBe(true);
