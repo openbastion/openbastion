@@ -4910,3 +4910,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Palette Admin UI alignée sur les couleurs du SVG Dashboard : canvas `#F8FAFC`, surface/topbar `#FFFFFF`, texte `#0F172A`, secondaire `#64748B`, bordure `#E2E8F0`, accent `#2563EB`, sidebar `#0D2137`, surface sidebar `#152E4D`, bordure `#1E3A5F`, muted `#94A3B8`, cyan `#38BDF8`, actif `#133356`. Les couleurs sont exposées par des tokens sémantiques, pas par des déclarations locales.
 - La palette de la sidebar et de la topbar est fixe, fidèle à la maquette, y compris en thème sombre ; la zone de contenu continue de suivre le thème opérateur. Le thème clair reste le défaut. Une préférence sombre explicitement persistée dans le navigateur n'est pas écrasée automatiquement.
 - `make ui-test ui-build` PASS : 26 fichiers, 260 tests, TypeScript/Vite PASS. `npm --prefix web/packages/design-tokens run check:contrast` PASS en clair et sombre, dont les nouveaux contrôles topbar/footer. `check-app-colors` PASS ; `git diff --check` PASS.
+
+
+## 2026-11-17 — Correctif shell après WorkEspace-Footer.png
+
+- Cause : la grille plaçait le footer sur une seconde ligne mais la sidebar restait limitée à la première ; `.app-content` imposait également `min-height: 100vh`, repoussant la ligne footer sous le viewport.
+- Correction : sidebar en première colonne sur les deux lignes, fond chrome opaque explicite, contenu limité à la première ligne et hauteur minimale de grille répartie entre contenu/footer. Footer étiré sur les deux colonnes sans max-width ni clipping horizontal.
+- Import `LegalNotice` redondant retiré de `App.tsx` ; le shell authentifié reste son seul propriétaire.

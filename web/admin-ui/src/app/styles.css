@@ -3193,11 +3193,11 @@ main.login {
   .sessions-live-search .ob-button { width: 100%; }
 }
 
-/* ---------- Full-height reference shell: sidebar owns the viewport, workspace owns the topbar ---------- */
+/* ---------- Full-height reference shell: sidebar spans the content and global-footer rows ---------- */
 .app-workspace,
 .app-workspace.sidebar-collapsed {
   grid-template-columns: 14.5rem minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(calc(100vh - 3.5rem), auto) auto;
   min-height: 100vh;
 }
 
@@ -3206,19 +3206,28 @@ main.login {
 }
 
 .app-sidebar {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   position: sticky;
   top: 0;
-  align-self: stretch;
+  align-self: start;
   height: 100vh;
   min-height: 100vh;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--ob-color-chrome-muted);
+  background-color: var(--ob-color-chrome-background);
+  border-right: 1px solid var(--ob-color-chrome-border);
+  z-index: 2;
 }
 
 .app-content {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100vh;
+  min-height: 0;
   background: var(--canvas);
 }
 
@@ -3397,14 +3406,19 @@ main.login {
 .app-workspace > .legal-notice {
   grid-column: 1 / -1;
   grid-row: 2;
+  justify-self: stretch;
+  box-sizing: border-box;
   width: 100%;
+  max-width: none;
   min-width: 0;
+  min-height: 3.5rem;
   padding: 0.75rem clamp(1rem, 2.25vw, 2rem);
   color: var(--ob-color-shell-topbar-muted);
   background: var(--ob-color-shell-topbar-background);
   border-top: 1px solid var(--ob-color-shell-topbar-border);
 }
 .app-workspace > .legal-notice a { color: var(--ob-color-shell-topbar-link); }
+.app-workspace > .legal-notice nav { min-width: 0; }
 
 @media (max-width: 760px) {
   .app-workspace > .legal-notice {
