@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useAppTranslation } from "../i18n";
 
-// The frame of every signed-in screen (src/app/styles.css: `.page`, `.page-head`, `.hint`). Hints
+// The frame of every signed-in screen (@openbastion/design-tokens/styles.css: `.page`, `.page-head`, `.hint`). Hints
 // are what an operator must know before acting on the screen, never a tour of it.
 export function AdminPage({
   title,

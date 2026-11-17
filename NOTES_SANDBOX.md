@@ -4953,3 +4953,15 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Capture navigateur réelle produite : `/tmp/openbastion-shell-actual.png`. Mesure DOM Chromium : sidebar `width=240px`, `x=0`, `y=64`, hauteur `1016px` à 1440 × 1080. Contrôle responsive Chromium : 320 / 768 / 1024 / 1440 px, sans débordement horizontal du document ni de la topbar ; sidebar 240 px à partir de 761 px.
 - Validation : `make ui-test ui-build` PASS — 26 fichiers Vitest, 260 tests ; TypeScript et build Vite production PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS. Après l'ajustement sémantique final du panneau, le test shell ciblé (7 tests) et `tsc --noEmit` PASS.
 - Limite : la sélection d'un autre workspace/tenant n'est pas implémentée car aucun contrat public de découverte et de changement d'espace n'existe. Le sélecteur n'affiche donc qu'un espace unique configuré.
+
+## 2026-11-17 — Correction Sidebar.png et centralisation CSS
+
+- La largeur desktop de la sidebar suit la capture de référence : 14,5 rem, soit 232 px (et non 240 px). La variante réduite reste à 72 px.
+- La sidebar desktop n'est plus fixée entre le haut et le bas du viewport. Elle est sticky, de hauteur intrinsèque (`fit-content`) et limitée à `calc(100vh - 6rem)` pour les navigations longues. Son footer suit le contenu au lieu d'être ancré au bas de l'écran. Le tiroir mobile reste volontairement pleine hauteur et scrollable.
+- Capture Chromium `/tmp/openbastion-shell-shared.png` à 1440 × 1080 : sidebar 232 × 800,6 px, position sticky, top 80 px, bas 880,6 px ; le panneau ne remplit plus la hauteur du viewport.
+- Consolidation physique des CSS : tokens primitifs/sémantiques + styles des icônes + primitives UI (`packages/ui/styles.css`) + styles applicatifs (`admin-ui/src/app/styles.css`) sont maintenant réunis dans `web/packages/design-tokens/styles.css`.
+- Suppression des anciennes feuilles `web/packages/design-tokens/tokens.css`, `web/packages/ui/styles.css` et `web/admin-ui/src/app/styles.css`. Le package design-tokens n'expose plus qu'un point d'entrée CSS : `@openbastion/design-tokens/styles.css`.
+- `admin-ui/src/app/main.tsx` importe cette feuille unique. Le script de contraste et les README ont été adaptés. L'API JS de `@openbastion/ui` et le package d'icônes restent distincts ; leurs styles CSS globaux sont centralisés.
+- Le dépôt courant ne contient pas encore d'application `user-portal` ; le point d'entrée partagé est prêt pour son intégration lorsqu'elle sera ajoutée.
+- Validation : `make ui-tokens-test ui-test ui-build` PASS ; 26 fichiers Vitest / 260 tests ; build TypeScript + Vite PASS ; contrastes clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
+- Le build signale toujours le chunk JavaScript principal > 500 kB (616,30 kB minifié) ; avertissement préexistant hors du périmètre CSS.

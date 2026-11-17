@@ -4,12 +4,8 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
-  "sideEffects": [
-    "styles.css"
-  ],
   "exports": {
     ".": "./src/index.ts",
-    "./styles.css": "./styles.css",
     "./package.json": "./package.json"
   },
   "types": "./src/index.ts",

@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
-  "sideEffects": ["*.css"],
+  "sideEffects": [
+    "*.css"
+  ],
   "exports": {
-    "./tokens.css": "./tokens.css",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./styles.css": "./styles.css"
   },
   "scripts": {
     "check:contrast": "node scripts/check-contrast.mjs"

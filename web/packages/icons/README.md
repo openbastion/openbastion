@@ -23,7 +23,7 @@ import {
   Database
 } from "@openbastion/icons";
 
-import "@openbastion/icons/styles.css";
+import "@openbastion/design-tokens/styles.css";
 
 export function SecurityDashboard() {
   return (
