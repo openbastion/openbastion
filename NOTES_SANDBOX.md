@@ -4892,3 +4892,13 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Ne crée pas de terminal SSH dans le navigateur ni de flux temps réel qui n'existe pas dans l'API.
 - Ne modifie pas les politiques d'autorisation : les objets issus de la file d'approbation ne déclenchent pas une lecture par identifiant ; la recherche manuelle reste soumise à l'autorisation `GET /sessions/{id}`.
 - Ne met pas en œuvre le contrat d'alertes de sessions ; l'onglet indique toujours que l'API est requise.
+
+## 2026-11-17 — Reprise du shell selon la maquette Dashboard
+
+- Le shell authentifié est maintenant une grille plein écran : sidebar sur toute la hauteur à gauche, colonne de contenu à droite, topbar dans cette colonne. La topbar et le contenu ne sont plus empilés au-dessus de la sidebar ; la page n'est plus limitée par la largeur maximale générique de `main`.
+- La palette de commandes revient dans la topbar sous forme de champ de recherche visible, avec le raccourci `Ctrl K`. Le menu utilisateur est déplacé en bas de la sidebar, sous la carte d'état.
+- La zone RESSOURCES expose deux destinations documentaires réelles : l'index de documentation technique et le guide utilisateur. Le lien « Centre d'aide » pointe vers le guide existant en attendant un centre d'aide dédié.
+- Le header expose le menu des notifications globales et le lien d'aide. Le panneau notifications présente explicitement l'indisponibilité de l'API globale ; aucun compteur ni événement fictif n'est affiché. Le contrat d'alertes de session reste une proposition ADR-0117, non implémentée.
+- La capture précédente était en thème sombre : le thème initial `system` suivait la préférence sombre du système d'exploitation et appliquait les tokens sombres à toute la zone de contenu. Le thème initial devient `light`, conforme à la maquette ; le thème sombre reste activable explicitement dans le menu opérateur.
+- Tests shell étendus : structure pleine hauteur, champ de recherche, liens Ressources, panneau notifications vide et fermeture clavier. Validation : `make ui-test ui-build` PASS — 26 fichiers Vitest, 259 tests ; TypeScript/Vite PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
+- Limite : aucune capture navigateur n'a été produite sur LT209227 ; le rendu responsive et la comparaison visuelle pixel-à-pixel restent à confirmer dans un navigateur.

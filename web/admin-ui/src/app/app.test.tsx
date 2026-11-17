@@ -35,12 +35,22 @@ describe("App", () => {
     const navigation = screen.getByRole("navigation", { name: "Sections" });
     expect(within(navigation).getByRole("button", { name: "Vue générale" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
-    expect(screen.getByRole("main").parentElement?.classList.contains("app-workspace")).toBe(true);
+    expect(screen.getByRole("main").parentElement?.classList.contains("app-content")).toBe(true);
     for (const label of ["Vue générale", "Comptes", "Politiques", "Sessions", "Enregistrements", "Centre de sécurité"]) {
       const button = within(navigation).getByRole("button", { name: label });
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+    expect(screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Documentation" }).getAttribute("href")).toContain("/tree/main/docs");
+    expect(screen.getByRole("link", { name: "Centre d'aide" }).getAttribute("href")).toContain("/tree/main/docs/user-guide");
+    const notifications = screen.getByRole("button", { name: "Ouvrir les notifications" });
+    fireEvent.click(notifications);
+    expect(screen.getByRole("region", { name: "Notifications" })).toBeTruthy();
+    expect(screen.getByText("Aucune notification à afficher")).toBeTruthy();
+    expect(screen.getByText(/Aucune alerte n'est simulée/)).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
 
     // The shell exposes accessible collapse, mobile and theme controls without persisting state.
     const collapse = screen.getByRole("button", { name: "Réduire la navigation" });
@@ -64,11 +74,10 @@ describe("App", () => {
     const mobileNavigation = within(mobileDialog).getByRole("navigation", { name: "Sections" });
     const firstNavigationItem = within(mobileNavigation).getByRole("button", { name: "Vue générale" });
     expect(document.activeElement).toBe(firstNavigationItem);
-    const navigationItems = within(mobileNavigation).getAllByRole("button");
-    const lastNavigationItem = navigationItems[navigationItems.length - 1];
+    const sidebarUserMenu = within(mobileDialog).getByRole("button", { name: /alice.*platform-admin/ });
     fireEvent.keyDown(firstNavigationItem, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(lastNavigationItem);
-    fireEvent.keyDown(lastNavigationItem, { key: "Tab" });
+    expect(document.activeElement).toBe(sidebarUserMenu);
+    fireEvent.keyDown(sidebarUserMenu, { key: "Tab" });
     expect(document.activeElement).toBe(firstNavigationItem);
     fireEvent.keyDown(document, { key: "Escape" });
     const restoredMenuButton = screen.getByRole("button", { name: "Ouvrir la navigation" });
@@ -164,9 +173,8 @@ describe("Command palette — ADR-0073 UX-02", () => {
       "GET /sessions?status=pending_approval": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
     });
     await signIn(api);
-    const trigger = screen.getByRole("button", { name: /alice.*platform-admin/ });
+    const trigger = screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" });
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole("button", { name: /Rechercher Ctrl K/ }));
     const query = await screen.findByRole("combobox", { name: "Rechercher une section ou une session" }); // the palette opens after a render
     fireEvent.change(query, { target: { value: "politiques" } });
     expect(screen.getByRole("option", { name: /Politiques/ })).toBeTruthy();

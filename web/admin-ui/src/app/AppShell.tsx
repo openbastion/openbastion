@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Audit, Dashboard, Policies as PoliciesIcon, Session, Settings, Shield, Users } from "@openbastion/icons";
+import { ApiDocumentation, Audit, Dashboard, Notifications, Policies as PoliciesIcon, Search, Session, Settings, Shield, Users } from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import {
   OperatorPreferences,
@@ -57,11 +57,14 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const paletteButton = useRef<HTMLButtonElement>(null);
   const userMenuButton = useRef<HTMLButtonElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const notificationsButton = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileWasOpen = useRef(false);
@@ -176,6 +179,25 @@ export function AppShell({
   }, [userMenuOpen]);
 
   useEffect(() => {
+    if (!notificationsOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNotificationsOpen(false);
+        notificationsButton.current?.focus();
+      }
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !notificationsRef.current?.contains(event.target)) setNotificationsOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [notificationsOpen]);
+
+  useEffect(() => {
     if (mobileWasOpen.current && !mobileOpen) menuButton.current?.focus();
     mobileWasOpen.current = mobileOpen;
   }, [mobileOpen]);
@@ -247,72 +269,6 @@ export function AppShell({
   return (
     <>
       <a className="skip-link" href="#main-content" inert={mobileOpen}>{t("shell.skipToContent")}</a>
-      <header className="app-header" inert={mobileOpen}>
-        <div className="topbar-breadcrumb" aria-label={t("shell.breadcrumb.aria")}>
-          <span>{t("shell.breadcrumb.workspace")}</span>
-          <span aria-hidden="true">/</span>
-          <strong>{t(`shell.nav.${tab}.label`)}</strong>
-        </div>
-        <div className="header-actions">
-          <div className="user-menu" ref={userMenuRef}>
-            <button
-              ref={(node) => { userMenuButton.current = node; paletteButton.current = node; }}
-              type="button"
-              className="user-menu-trigger"
-              aria-haspopup="true"
-              aria-expanded={userMenuOpen}
-              aria-controls="operator-menu"
-              onClick={() => setUserMenuOpen((open) => !open)}
-            >
-              <span className="avatar" aria-hidden="true">{initials}</span>
-              <span className="user-menu-identity">
-                <strong>{who?.username}</strong>
-                <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
-              </span>
-              <span className="user-menu-chevron" aria-hidden="true">⌄</span>
-            </button>
-            {userMenuOpen ? (
-              <div className="user-menu-panel" id="operator-menu" aria-label={t("shell.user.menuLabel")}>
-                <div className="user-menu-summary">
-                  <strong>{who?.username}</strong>
-                  <span>{who?.roles.join(", ") || t("shell.user.defaultRole")}</span>
-                </div>
-                <button type="button" className="user-menu-item" onClick={() => { setPaletteOpen(true); setUserMenuOpen(false); }}>
-                  <span aria-hidden="true">⌕</span>{t("shell.search.label")} <kbd>Ctrl K</kbd>
-                </button>
-                <div className="user-menu-section">
-                  <span>{t("common.language.label")}</span>
-                  <LanguageSwitcher />
-                </div>
-                <div className="user-menu-section">
-                  <span>{t("shell.theme.label")}</span>
-                  <button type="button" className="user-menu-item" aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}>
-                    <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
-                    {effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
-                  </button>
-                </div>
-                <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>
-                  <Settings size={17} />{t("shell.preferences.label")}
-                </button>
-                <button type="button" className="user-menu-item user-menu-signout" onClick={() => { setUserMenuOpen(false); onSignOut(); }}>
-                  {t("shell.signOut")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <button
-            ref={menuButton}
-            type="button"
-            className="icon-button mobile-menu-toggle"
-            aria-label={mobileOpen ? t("shell.menu.close") : t("shell.menu.open")}
-            aria-expanded={mobileOpen}
-            aria-controls="admin-navigation"
-            onClick={() => setMobileOpen((open) => !open)}
-          >
-            <span aria-hidden="true">☰</span>
-          </button>
-        </div>
-      </header>
       {paletteOpen ? (
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -386,7 +342,12 @@ export function AppShell({
             ))}
             <div className="nav-group nav-resources">
               <h2 className="nav-group-title">{t("shell.sidebar.resources")}</h2>
-              <p className="sidebar-resource-note">{t("shell.sidebar.resourcesNote")}</p>
+              <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs" target="_blank" rel="noreferrer">
+                <ApiDocumentation size={16} />{t("shell.sidebar.documentation")}
+              </a>
+              <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs/user-guide" target="_blank" rel="noreferrer">
+                <span className="sidebar-help-glyph" aria-hidden="true">?</span>{t("shell.sidebar.helpCentre")}
+              </a>
             </div>
           </nav>
           <div className="sidebar-footer">
@@ -396,10 +357,116 @@ export function AppShell({
             </div>
             <p>{t("shell.sidebar.statusDetail")}</p>
           </div>
+          <div className="sidebar-user-menu" ref={userMenuRef}>
+            <button
+              ref={userMenuButton}
+              type="button"
+              className="user-menu-trigger sidebar-user-menu-trigger"
+              aria-haspopup="true"
+              aria-expanded={userMenuOpen}
+              aria-controls="operator-menu"
+              onClick={() => setUserMenuOpen((open) => !open)}
+            >
+              <span className="avatar" aria-hidden="true">{initials}</span>
+              <span className="user-menu-identity">
+                <strong>{who?.username}</strong>
+                <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
+              </span>
+              <span className="user-menu-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {userMenuOpen ? (
+              <div className="user-menu-panel sidebar-user-menu-panel" id="operator-menu" aria-label={t("shell.user.menuLabel")}>
+                <div className="user-menu-summary">
+                  <strong>{who?.username}</strong>
+                  <span>{who?.roles.join(", ") || t("shell.user.defaultRole")}</span>
+                </div>
+                <div className="user-menu-section">
+                  <span>{t("common.language.label")}</span>
+                  <LanguageSwitcher />
+                </div>
+                <div className="user-menu-section">
+                  <span>{t("shell.theme.label")}</span>
+                  <button type="button" className="user-menu-item" aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}>
+                    <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
+                    {effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
+                  </button>
+                </div>
+                <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>
+                  <Settings size={17} />{t("shell.preferences.label")}
+                </button>
+                <button type="button" className="user-menu-item user-menu-signout" onClick={() => { setUserMenuOpen(false); onSignOut(); }}>
+                  {t("shell.signOut")}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </aside>
-        <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
-          {children}
-        </main>
+        <div className="app-content">
+          <header className="app-header" inert={mobileOpen}>
+            <div className="topbar-breadcrumb" aria-label={t("shell.breadcrumb.aria")}>
+              <span>{t("shell.breadcrumb.workspace")}</span>
+              <span aria-hidden="true">/</span>
+              <strong>{t(`shell.nav.${tab}.label`)}</strong>
+            </div>
+            <button
+              ref={paletteButton}
+              type="button"
+              className="command-trigger"
+              aria-label={t("shell.search.open")}
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Search size={16} />
+              <span>{t("shell.search.placeholder")}</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+            <div className="header-actions">
+              <div className="notifications-menu" ref={notificationsRef}>
+                <button
+                  ref={notificationsButton}
+                  type="button"
+                  className="icon-button"
+                  aria-label={t("shell.notifications.open")}
+                  aria-haspopup="true"
+                  aria-expanded={notificationsOpen}
+                  aria-controls="global-notifications"
+                  onClick={() => setNotificationsOpen((open) => !open)}
+                >
+                  <Notifications size={18} />
+                </button>
+                {notificationsOpen ? (
+                  <section className="notifications-panel" id="global-notifications" aria-label={t("shell.notifications.title")}>
+                    <div className="notifications-panel-heading">
+                      <strong>{t("shell.notifications.title")}</strong>
+                      <span>{t("shell.notifications.all")}</span>
+                    </div>
+                    <div className="notifications-empty" role="status">
+                      <Notifications size={22} />
+                      <strong>{t("shell.notifications.emptyTitle")}</strong>
+                      <p>{t("shell.notifications.unavailable")}</p>
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+              <a className="icon-button header-help-link" href="https://github.com/openbastion/openbastion/tree/main/docs" target="_blank" rel="noreferrer" aria-label={t("shell.help.open")} title={t("shell.help.open")}>
+                <ApiDocumentation size={18} />
+              </a>
+              <button
+                ref={menuButton}
+                type="button"
+                className="icon-button mobile-menu-toggle"
+                aria-label={mobileOpen ? t("shell.menu.close") : t("shell.menu.open")}
+                aria-expanded={mobileOpen}
+                aria-controls="admin-navigation"
+                onClick={() => setMobileOpen((open) => !open)}
+              >
+                <span aria-hidden="true">☰</span>
+              </button>
+            </div>
+          </header>
+          <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
+            {children}
+          </main>
+        </div>
       </div>
     </>
   );

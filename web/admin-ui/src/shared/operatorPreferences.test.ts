@@ -8,6 +8,10 @@ import {
 } from "./operatorPreferences";
 
 describe("operator preferences", () => {
+  it("starts in the light theme to match the product reference", () => {
+    expect(defaultOperatorPreferences.theme).toBe("light");
+  });
+
   it("loads only known, versioned presentation preferences", () => {
     expect(parseOperatorPreferences({
       version: 1,

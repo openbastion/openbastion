@@ -13,7 +13,7 @@ export interface OperatorPreferences {
 export const operatorPreferencesKey = "openbastion.admin-ui.preferences.v1";
 
 export const defaultOperatorPreferences: OperatorPreferences = {
-  theme: "system",
+  theme: "light",
   density: "comfortable",
   sidebarCollapsed: false,
   defaultTab: "overview",

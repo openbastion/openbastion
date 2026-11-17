@@ -123,3 +123,7 @@ Sur le worktree isolé, avant toute modification :
 - Le panneau droit expose les métadonnées et les actions déjà disponibles (approbation/refus avec confirmation, injection de secret selon les règles existantes, ouverture d'écran RDP/VNC, terminaison avec confirmation). Le terminal SSH de démonstration du SVG n'est pas reproduit : aucun flux terminal interactif SSH n'est fourni par l'Admin UI.
 - Les cartes indiquent le nombre de demandes autorisées, l'absence d'API de listing actif global, la disponibilité de la recherche de commandes enregistrées et l'absence du contrat d'alertes. Aucun nombre illustratif de sessions actives, de commandes, de durée moyenne ou d'interruptions n'est repris.
 - La création de demande reste disponible dans une disclosure et le bouton d'en-tête l'ouvre ; Historique, Enregistrements et Alertes conservent leurs composants et contrats précédents.
+
+## Reprise shell — 2026-11-17
+
+La référence Dashboard définit une composition latérale pleine hauteur : sidebar de 232 unités de dessin sur 1440, topbar démarrant à droite de la sidebar, champ de recherche au centre, actions globales et profil opérateur en bas de la sidebar. Le shell Admin UI reprend maintenant cette hiérarchie dans une grille viewport-height. Les liens Documentation et Centre d'aide pointent vers les guides versionnés du dépôt. Le menu Notifications est présent mais annonce l'absence d'API globale ; il ne simule aucun événement. Le thème clair est le défaut pour correspondre à la référence claire ; le thème sombre reste disponible explicitement.
