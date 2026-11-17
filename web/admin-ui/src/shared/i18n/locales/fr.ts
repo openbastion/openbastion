@@ -169,6 +169,14 @@ export default {
     },
   },
   secondFactor: {
+    title: "Vérifiez votre identité",
+    enrollTitle: "Configurez votre second facteur",
+    description: "Saisissez le code à 6 chiffres généré par votre application d'authentification.",
+    back: "Retour à la connexion",
+    account: "Compte",
+    codeHint: "Le code se renouvelle toutes les 30 secondes.",
+    helpTitle: "Besoin d'aide ?",
+    helpBody: "Vous ne pouvez plus utiliser votre facteur d'authentification ? Contactez votre administrateur pour rétablir l'accès.",
     aria: "Second facteur",
     keyOnly: "Votre rôle demande votre clé de sécurité.",
     factorRequired: "Votre rôle demande un second facteur.",
@@ -181,7 +189,7 @@ export default {
     signThenAdd: "Signer avec ma clé, puis ajouter la nouvelle",
     codeFormAria: "Code du second facteur",
     codeLabel: "Code de l'application d'authentification",
-    validate: "Valider",
+    validate: "Vérifier et continuer",
     enrollAria: "Enrôlement du second facteur",
     enrollKeyOnly:
       "Votre rôle demande une clé de sécurité, que ce compte n'a pas encore. Un administrateur vous a remis un code d'enrôlement.",

@@ -125,12 +125,36 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
+    expect(await screen.findByRole("heading", { name: "Vérifiez votre identité" })).toBeTruthy();
+    expect(screen.getByText("root", { selector: ".second-factor-account strong" })).toBeTruthy();
+    expect(screen.queryByDisplayValue("pw")).toBeNull(); // the password is cleared before entering MFA
+    expect(screen.getByText("Le code se renouvelle toutes les 30 secondes.")).toBeTruthy();
+    expect(document.querySelectorAll(".second-factor-code-cell")).toHaveLength(6);
+    expect(screen.getByText("Besoin d'aide ?")).toBeTruthy();
     const input = await screen.findByLabelText("Code de l'application d'authentification");
     expect(screen.queryByRole("alert")).toBeNull(); // a step, not an error
+    const verify = screen.getByRole("button", { name: "Vérifier et continuer" });
+    expect((verify as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "12 34-56" } });
-    fireEvent.click(screen.getByText("Valider"));
+    expect((input as HTMLInputElement).value).toBe("123456");
+    expect((verify as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(verify);
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("mfa-tok"));
     expect(calls.find((c) => c.path === "/auth/mfa/verify")?.body).toEqual({ challenge: "ch-1", code: "123456" });
+  });
+
+  it("returns to sign-in from the MFA step without sending a verification request", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { status: 401, body: { mfa: "required", challenge: "ch-back", factors: ["totp"] } },
+    });
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    await screen.findByRole("heading", { name: "Vérifiez votre identité" });
+    fireEvent.click(screen.getByRole("button", { name: "Retour à la connexion" }));
+    expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();
+    expect(calls.map((call) => call.path)).toEqual(["/auth/ldap", "/auth/oidc", "/auth/login"]);
   });
 
   it("enrolls with the administrator's code, shows the secret once, and confirms with a first code", async () => {
@@ -148,7 +172,7 @@ describe("Login", () => {
     fireEvent.click(screen.getByText("Recevoir le secret"));
     expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Code de l'application d'authentification"), { target: { value: "654321" } });
-    fireEvent.click(screen.getByText("Valider"));
+    fireEvent.click(screen.getByText("Vérifier et continuer"));
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("enrolled-tok"));
     expect(calls.find((c) => c.path === "/auth/mfa/enroll")?.body).toEqual({ challenge: "ch-2", enrollmentCode: "abcd-efgh", factor: "totp" });
     expect(calls.find((c) => c.path === "/auth/mfa/enroll/confirm")?.body).toEqual({ challenge: "ch-2", code: "654321" });

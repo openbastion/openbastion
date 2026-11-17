@@ -132,14 +132,13 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
         <div className="login-content">
           <div className="login-card">
             {challenge ? (
-              <>
-                <div className="login-heading">
-                  <p className="login-form-eyebrow">{t("login.secureAccess")}</p>
-                  <h1>{t("secondFactor.aria")}</h1>
-                  <p className="login-sub">{t("secondFactor.factorRequired")}</p>
-                </div>
-                <SecondFactor api={api} challenge={challenge} onToken={onToken} onCancel={() => setChallenge(null)} />
-              </>
+              <SecondFactor
+                api={api}
+                challenge={challenge}
+                identifier={username}
+                onToken={onToken}
+                onCancel={() => setChallenge(null)}
+              />
             ) : (
               <>
                 <div className="login-heading">

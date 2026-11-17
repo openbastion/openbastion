@@ -4833,3 +4833,15 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Le pied de panneau reprend trois niveaux visuels, mais ne reprend pas les valeurs fictives de la maquette (« ACME CORPORATION », « v2.8.0 », hébergement UE). Elles sont remplacées par des informations génériques exactes sur le produit et ses modes de déploiement.
 - Les couleurs du pictogramme, du texte de la carte et du pied sont des tokens dédiés ; le contrôle `check-app-colors` ne doit trouver aucune couleur littérale dans le JSX/CSS applicatif.
 - Validation finale : `make ui-test ui-build` PASS — 25 fichiers, 246 tests ; TypeScript et build Vite PASS ; contrôles de contraste des tokens clair/sombre PASS ; `check-app-colors` PASS sans couleur littérale dans le code applicatif ; `git diff --check` PASS. Le rendu navigateur à 1440 × 1024 reste à confirmer : la tentative de capture headless Edge n'a pas produit de fichier exploitable.
+
+
+## 2026-11-17 — Alignement de l'écran de vérification MFA
+
+- Référence : `/home/eldorplus/Downloads/Ecrans/openbastion-mfa-validation.svg` (1440 × 1024). Le second facteur réutilise le panneau de marque de la connexion et reprend à droite le lien de retour, le badge smartphone, le titre, l'identifiant du compte, les six cases OTP, le CTA et le bandeau d'aide.
+- `SecondFactor` reçoit l'identifiant déjà saisi au login ; aucun appel supplémentaire n'est fait pour l'afficher. Le challenge serveur, les vérifications TOTP/WebAuthn, l'enrôlement et l'ajout d'une clé restent inchangés.
+- Les six cases visuelles reposent sur un unique champ `one-time-code` accessible : saisie numérique, collage, filtrage des caractères, plafond de six chiffres et soumission désactivée avant six chiffres. WebAuthn-only n'affiche aucun champ TOTP ; si les deux facteurs sont autorisés, la clé reste proposée comme alternative.
+- Le bouton de retour abandonne le challenge local sans appeler `/auth/mfa/verify`. Le code n'est jamais validé dans le navigateur.
+- Aucun endpoint public de code de récupération n'existe dans l'OpenAPI ni dans Authentication au moment de cette vérification. Le lien « code de récupération » de la maquette est donc volontairement omis ; il ne doit être ajouté qu'avec un contrat backend réel.
+- Tests ajoutés pour l'écran TOTP (six cases, identité, nettoyage du code, CTA désactivé avant six chiffres, soumission) et pour le retour sans requête de vérification ; le parcours WebAuthn-only conserve ses tests dédiés.
+- Suite complète après le test de retour à la connexion : `make ui-test ui-build` PASS — 25 fichiers, 249 tests ; TypeScript/Vite, contraste clair/sombre, `check-app-colors` et `git diff --check` PASS.
+- Limite : pas de capture navigateur exploitable à ce stade ; la géométrie est dérivée du SVG et les tests DOM ne prouvent pas un rendu pixel-à-pixel. Vérification visuelle à faire dans un navigateur à 1440 × 1024 et sur mobile.
