@@ -3414,12 +3414,11 @@ main.login {
 }
 
 
-/* The legal footer is a first-class full-width shell row, not part of the content column. */
+/* The legal footer belongs to the content column; the sidebar keeps its own full-height footer area. */
 .app-workspace > .legal-notice {
-  position: relative;
-  z-index: 3;
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   grid-row: 2;
+  align-self: stretch;
   justify-self: stretch;
   box-sizing: border-box;
   width: 100%;
@@ -3435,6 +3434,7 @@ main.login {
 .app-workspace > .legal-notice nav { min-width: 0; }
 
 @media (max-width: 760px) {
+  .app-workspace > .legal-notice { width: 100%; }
   .sidebar-user-menu-panel {
     right: 0;
     left: 0;

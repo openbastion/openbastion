@@ -151,3 +151,8 @@ Le placement précédent faisait se chevaucher deux éléments de grille : la si
 ## Correction de superposition du footer et de débordement du menu utilisateur — 2026-11-17
 
 La capture `User-menu-and-Footer.png` montre deux défauts : le footer de la grille est peint sous la sidebar sticky (z-index 2), et le panneau utilisateur de 18 rem est rogné par `overflow-x: hidden` de la sidebar de 14,5 rem. Le footer est maintenant un élément positionné avec z-index 3, au-dessus de la sidebar pour la ligne globale dédiée. En navigation développée, le panneau utilisateur est contraint à la largeur disponible de la sidebar (`left: 0; right: 0; width: auto`) pour éviter tout rognage. En navigation réduite, le panneau devient un popover fixe qui s'ouvre à droite de la sidebar, sans être découpé par son overflow. Sur mobile, le panneau reste contenu dans la largeur du tiroir de navigation.
+
+
+## Alignement du footer légal sur la seule colonne de contenu — 2026-11-17
+
+La capture `Footer.png` montre une sidebar autonome à gauche, avec son propre bloc « Console OpenBastion », et le footer légal aligné sous la zone de contenu à droite. Le footer ne doit donc ni traverser la colonne sidebar, ni se superposer à elle. Sa grille est fixée à `grid-column: 2 / -1` et `grid-row: 2`. La sidebar reste en colonne 1, ligne 1, sur la hauteur disponible du viewport ; elle conserve ses éléments bas de navigation. En mobile, où le shell repasse en flux bloc, le footer retrouve naturellement la largeur totale.

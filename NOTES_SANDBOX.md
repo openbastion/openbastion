@@ -4930,3 +4930,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 
 - Footer derrière la sidebar : cause confirmée, `.app-sidebar` sticky avec `z-index: 2` au-dessus du footer grid. Le footer global passe en `position: relative; z-index: 3` sur sa propre ligne.
 - Menu utilisateur tronqué : le panneau de 18 rem dépassait de la sidebar (14,5 rem) et était coupé par `overflow-x: hidden`. En sidebar développée, le panneau utilise toute la largeur intérieure disponible. En sidebar réduite, il devient un popover fixe ouvert à droite de la sidebar. En mobile, il reste borné à la largeur du tiroir.
+
+
+## 2026-11-17 — Alignement footer selon Footer.png
+
+- La capture montre explicitement le footer légal sous la zone de contenu uniquement, à partir de la limite droite de la sidebar. La sidebar reste indépendante sur toute la hauteur et conserve son propre bloc « Console OpenBastion ».
+- `grid-column: 1 / -1` était incorrect : il faisait traverser le footer sous la sidebar. Le footer utilise maintenant `grid-column: 2 / -1`, ligne 2, sans z-index artificiel. Sur mobile, le shell en flux bloc conserve un footer pleine largeur.
