@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { RecordingPage, sessionPath } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
@@ -13,7 +13,7 @@ const pageSize = 100;
 
 // Reading back what was typed in a session (GET /sessions/{id}/recording). Each page read is
 // itself an audit event (ADR-0022). Commands are shown as text, never interpreted.
-export function Recording() {
+export function Recording({ requestedSessionId, onSessionLookupComplete }: { requestedSessionId?: string | null; onSessionLookupComplete?: () => void } = {}) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [sessionId, setSessionId] = useState("");
@@ -21,8 +21,9 @@ export function Recording() {
   const [loading, setLoading] = useState(false);
   const [hasRead, setHasRead] = useState(false);
   const [error, setError] = useState<unknown>();
+  const requested = useRef<string | null>(null);
 
-  async function read(n: number, targetSessionId = sessionId) {
+  const read = useCallback(async (n: number, targetSessionId = sessionId) => {
     setError(undefined);
     setPage(undefined);
     setLoading(true);
@@ -36,7 +37,15 @@ export function Recording() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [api, sessionId]);
+
+  useEffect(() => {
+    if (!requestedSessionId || requested.current === requestedSessionId) return;
+    requested.current = requestedSessionId;
+    setSessionId(requestedSessionId);
+    void read(1, requestedSessionId);
+    onSessionLookupComplete?.();
+  }, [requestedSessionId, read, onSessionLookupComplete]);
 
   return (
     <AdminPage title={t("recording.title")} hints={[t("recording.hint")]}>

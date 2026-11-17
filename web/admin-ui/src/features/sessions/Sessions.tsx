@@ -10,6 +10,10 @@ import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
+import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { SessionHistory } from "./SessionHistory";
+import { SessionRecordings } from "./SessionRecordings";
+import { SessionAlerts } from "./SessionAlerts";
 
 // A session request — with the ticket an account that requires approval asks for (ADR-0067) —,
 // the requests waiting for this user's decision (break-glass, ADR-0012, and approval, ADR-0067),
@@ -17,9 +21,11 @@ import { useAppTranslation } from "../../shared/i18n";
 export function Sessions({
   requestedSessionId,
   onSessionLookupComplete,
+  onOpenRecording = () => undefined,
 }: {
   requestedSessionId?: string | null;
   onSessionLookupComplete?: () => void;
+  onOpenRecording?: (sessionId: string) => void;
 } = {}) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
@@ -31,6 +37,7 @@ export function Sessions({
   const [lookup, setLookup] = useState("");
   const [found, setFound] = useState<Session>();
   const [screen, setScreen] = useState<AttachedScreen>();
+  const [view, setView] = useState("live");
 
   const load = useCallback(() => {
     setPendingLoading(true);
@@ -54,6 +61,7 @@ export function Sessions({
 
   useEffect(() => {
     if (!requestedSessionId) return;
+    setView("live");
     void findById(requestedSessionId);
     onSessionLookupComplete?.();
   }, [findById, onSessionLookupComplete, requestedSessionId]);
@@ -123,48 +131,64 @@ export function Sessions({
   return (
     <AdminPage title={t("sessions.title")}>
       <Notice error={decision ? undefined : error} ok={decision ? undefined : ok} />
-      <SessionRequest
-        onDone={(s) => {
-          setLookup(s.id);
-          setFound(s);
-          setScreen(undefined);
-          act(
-            s.status === "pending_approval"
-              ? t("sessions.request.pendingApproval", { id: s.id, expiresAt: s.expiresAt })
-              : t("sessions.request.status", { id: s.id, status: s.status }),
-            async () => undefined,
-          );
-        }}
-      />
-      <PendingRequests
-        pending={pending}
-        loading={pendingLoading}
-        onApprove={(s) => askDecision("approve", s)}
-        onReject={(s) => askDecision("reject", s)}
-      />
-      <section className="ob-surface ob-panel session-lookup" aria-labelledby="session-lookup-title">
-        <h3 id="session-lookup-title">{t("sessions.lookup.title")}</h3>
-        <form onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
-          <div className="ob-form-fields">
-            <label>
-              {t("sessions.lookup.identifier")}
-              <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required />
-            </label>
-          </div>
-          <div className="ob-form-actions">
-            <Button type="submit" variant="primary">{t("sessions.lookup.show")}</Button>
-          </div>
-        </form>
-        {found ? <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={terminate} /> : null}
-        {screen ? (
-          <ScreenViewer
-            key={screen.key}
-            attach={screen.attach}
-            onReconnect={() => openScreen(screen.sessionId)}
-            onClose={() => setScreen(undefined)}
+      <Tabs value={view} onValueChange={setView} className="session-tabs">
+        <TabsList aria-label={t("sessions.tabs.aria")}>
+          <TabsTrigger value="live">{t("sessions.tabs.live")}</TabsTrigger>
+          <TabsTrigger value="history">{t("sessions.tabs.history")}</TabsTrigger>
+          <TabsTrigger value="recordings">{t("sessions.tabs.recordings")}</TabsTrigger>
+          <TabsTrigger value="alerts">
+            {t("sessions.tabs.alerts")}
+            <Badge tone="warning" className="session-alert-tab-badge">{t("sessions.alerts.badge")}</Badge>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="live">
+          <SessionRequest
+            onDone={(s) => {
+              setLookup(s.id);
+              setFound(s);
+              setScreen(undefined);
+              act(
+                s.status === "pending_approval"
+                  ? t("sessions.request.pendingApproval", { id: s.id, expiresAt: s.expiresAt })
+                  : t("sessions.request.status", { id: s.id, status: s.status }),
+                async () => undefined,
+              );
+            }}
           />
-        ) : null}
-      </section>
+          <PendingRequests
+            pending={pending}
+            loading={pendingLoading}
+            onApprove={(s) => askDecision("approve", s)}
+            onReject={(s) => askDecision("reject", s)}
+          />
+          <section className="ob-surface ob-panel session-lookup" aria-labelledby="session-lookup-title">
+            <h3 id="session-lookup-title">{t("sessions.lookup.title")}</h3>
+            <form onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
+              <div className="ob-form-fields">
+                <label>
+                  {t("sessions.lookup.identifier")}
+                  <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required />
+                </label>
+              </div>
+              <div className="ob-form-actions">
+                <Button type="submit" variant="primary">{t("sessions.lookup.show")}</Button>
+              </div>
+            </form>
+            {found ? <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={terminate} /> : null}
+            {screen ? (
+              <ScreenViewer
+                key={screen.key}
+                attach={screen.attach}
+                onReconnect={() => openScreen(screen.sessionId)}
+                onClose={() => setScreen(undefined)}
+              />
+            ) : null}
+          </section>
+        </TabsContent>
+        <TabsContent value="history"><SessionHistory /></TabsContent>
+        <TabsContent value="recordings"><SessionRecordings onOpenRecording={onOpenRecording} /></TabsContent>
+        <TabsContent value="alerts"><SessionAlerts /></TabsContent>
+      </Tabs>
       {decision ? (
         <ConfirmDialog
           title={

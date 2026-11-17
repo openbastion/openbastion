@@ -1,0 +1,255 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080">
+  <defs>
+    <style>
+      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      .font-mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }
+    </style>
+  </defs>
+
+
+  <g id="Layer_Background">
+    <rect x="0" y="0" width="1440" height="1080" fill="#F8FAFC" />
+  </g>
+
+
+  <g id="Layer_Sidebar">
+    <rect x="0" y="0" width="240" height="1080" fill="#0B1E33" />
+
+
+    <g id="Sidebar_Brand" transform="translate(20, 24)">
+      <path d="M16 2 L28 7 V16 C28 24 22.8 30.8 16 33 C9.2 30.8 4 24 4 16 V7 L16 2 Z" fill="#1E3A5F" stroke="#38BDF8" stroke-width="1.5" />
+      <path d="M16 7 L23 10 V16 C23 21 20 25.5 16 27 C12 25.5 9 21 9 16 V10 L16 7 Z" fill="#0F2942" />
+      <circle cx="16" cy="15.5" r="2.2" fill="#E2E8F0" />
+      <path d="M14.8 17.5 L17.2 17.5 L17.8 21.5 L14.2 21.5 Z" fill="#E2E8F0" />
+      <text x="40" y="18" class="font-sans" font-size="16" font-weight="700" fill="#FFFFFF">OpenBastion</text>
+      <text x="40" y="30" class="font-sans" font-size="8" font-weight="600" letter-spacing="1.2" fill="#64748B">PRIVILEGED ACCESS</text>
+    </g>
+
+
+    <g id="Sidebar_WorkspaceSwitcher" transform="translate(16, 84)">
+      <rect x="0" y="0" width="208" height="58" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1" />
+      <text x="14" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Production</text>
+      <text x="14" y="43" class="font-sans" font-size="11" fill="#94A3B8">Acme Corporation</text>
+      <path d="M188 25 L193 29 L188 33" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+
+
+    <g id="Sidebar_Nav_Workspace" transform="translate(0, 172)">
+      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">ESPACE DE TRAVAIL</text>
+
+
+      <g id="Nav_Overview" transform="translate(12, 16)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <rect x="0" y="0" width="6" height="6" rx="1" />
+          <rect x="9" y="0" width="6" height="6" rx="1" />
+          <rect x="0" y="9" width="6" height="6" rx="1" />
+          <rect x="9" y="9" width="6" height="6" rx="1" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Vue d'ensemble</text>
+      </g>
+
+
+      <g id="Nav_PrivilegedAccess" transform="translate(12, 62)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <circle cx="5" cy="5" r="3.5" />
+          <path d="M7.5 7.5 L15 15 M12 12 L14.5 9.5 M14 14 L16 12" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Accès privilégiés</text>
+      </g>
+
+
+      <g id="Nav_Sessions_Active" transform="translate(12, 108)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="#153254" />
+        <rect x="0" y="4" width="3.5" height="32" rx="1.5" fill="#38BDF8" />
+        <g transform="translate(12, 12)" stroke="#38BDF8" stroke-width="1.5" fill="none">
+          <rect x="0" y="1" width="16" height="11" rx="1.5" />
+          <path d="M5 15 H11 M8 12 V15" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Sessions</text>
+        <rect x="176" y="10" width="28" height="20" rx="4" fill="#1D63ED" />
+        <text x="190" y="24" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#FFFFFF">24</text>
+      </g>
+
+
+      <g id="Nav_Infrastructure" transform="translate(12, 154)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <rect x="1" y="1" width="14" height="5" rx="1" />
+          <rect x="1" y="9" width="14" height="5" rx="1" />
+          <circle cx="4" cy="3.5" r="0.7" fill="#94A3B8" />
+          <circle cx="4" cy="11.5" r="0.7" fill="#94A3B8" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Infrastructure</text>
+      </g>
+
+
+      <g id="Nav_Audit" transform="translate(12, 200)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <path d="M3 1 H11 L14 4 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z" />
+          <path d="M5 8 L7 10 L11 6" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Audit &amp; conformité</text>
+      </g>
+
+
+      <g id="Nav_Settings" transform="translate(12, 246)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <circle cx="8" cy="8" r="2.5" />
+          <path d="M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15 M3 3 L4.5 4.5 M11.5 11.5 L13 13 M13 3 L11.5 4.5 M4.5 11.5 L3 13" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Paramètres</text>
+      </g>
+    </g>
+
+
+    <line x1="20" y1="485" x2="220" y2="485" stroke="#1E3A5F" stroke-width="1" />
+
+
+    <g id="Sidebar_Nav_Resources" transform="translate(0, 515)">
+      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">RESSOURCES</text>
+
+
+      <g id="Nav_Docs" transform="translate(12, 16)">
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <path d="M3 1 H10 L14 5 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z" />
+          <path d="M5 7 H11 M5 10 H11 M5 13 H8" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Documentation</text>
+      </g>
+
+
+      <g id="Nav_Help" transform="translate(12, 60)">
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <circle cx="8" cy="8" r="6.5" />
+          <path d="M6.2 6.2 C6.2 5 7 4.3 8 4.3 C9 4.3 9.8 5 9.8 6 C9.8 7 8 7.5 8 8.8" />
+          <circle cx="8" cy="11.2" r="0.6" fill="#94A3B8" />
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Centre d'aide</text>
+      </g>
+    </g>
+
+
+    <g id="Sidebar_StatusCard" transform="translate(16, 875)">
+      <rect x="0" y="0" width="208" height="78" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1" />
+      <circle cx="16" cy="20" r="3.5" fill="#38BDF8" />
+      <text x="27" y="24" class="font-sans" font-size="11.5" font-weight="600" fill="#FFFFFF">Bastion opérationnel</text>
+      <text x="14" y="43" class="font-sans" font-size="10.5" fill="#94A3B8">Tous les services sont disponibles</text>
+      <text x="14" y="62" class="font-sans" font-size="10" fill="#64748B">v2.8.0  •  EU / Paris</text>
+    </g>
+
+
+    <g id="Sidebar_UserProfile" transform="translate(0, 975)">
+      <line x1="0" y1="0" x2="240" y2="0" stroke="#1E3A5F" stroke-width="1" />
+      <g transform="translate(20, 22)">
+        <circle cx="14" cy="10" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
+        <path d="M5 25 C5 19.5 9 17 14 17 C19 17 23 19.5 23 25" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
+        <text x="38" y="14" class="font-sans" font-size="12.5" font-weight="600" fill="#FFFFFF">Camille Martin</text>
+        <text x="38" y="30" class="font-sans" font-size="11" fill="#94A3B8">Administrateur</text>
+        <path d="M192 14 L197 18 L192 22" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      </g>
+    </g>
+  </g>
+
+
+  <g id="Layer_TopHeader">
+    <rect x="240" y="0" width="1200" height="64" fill="#FFFFFF" />
+    <line x1="240" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1" />
+
+
+    <g id="Header_Breadcrumbs" transform="translate(272, 37)">
+      <text x="0" y="0" class="font-sans" font-size="13" fill="#64748B">Espace de travail</text>
+      <text x="112" y="0" class="font-sans" font-size="13" fill="#CBD5E1">/</text>
+      <text x="128" y="0" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Sessions</text>
+    </g>
+
+
+    <g id="Header_Search" transform="translate(880, 15)">
+      <rect x="0" y="0" width="300" height="34" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+      <circle cx="17" cy="16" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
+      <line x1="21" y1="20" x2="24" y2="23" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
+      <text x="34" y="21" class="font-sans" font-size="12.5" fill="#94A3B8">Rechercher une ressource...</text>
+      <text x="272" y="21" class="font-sans" font-size="11" font-weight="500" fill="#94A3B8">⌘ K</text>
+    </g>
+
+
+    <g id="Header_Actions" transform="translate(1204, 15)">
+
+      <circle cx="16" cy="17" r="8" fill="none" stroke="#64748B" stroke-width="1.5" />
+      <text x="16" y="21" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#64748B">?</text>
+
+
+      <g transform="translate(46, 8)">
+        <path d="M9 2 C6.2 2 4 4.2 4 7 V11 L2.5 13 H15.5 L14 11 V7 C14 4.2 11.8 2 9 2 Z" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linejoin="round" />
+        <path d="M7.2 15 C7.6 15.8 8.2 16.2 9 16.2 C9.8 16.2 10.4 15.8 10.8 15" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <circle cx="13.5" cy="3.5" r="2.2" fill="#2563EB" />
+      </g>
+
+
+      <g transform="translate(88, 4)">
+        <rect x="0" y="0" width="110" height="26" rx="5" fill="#EFF6FF" />
+        <text x="14" y="17" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">Production</text>
+      </g>
+    </g>
+  </g>
+
+
+  <g id="Layer_PageHeader" transform="translate(272, 92)">
+    <text x="0" y="26" class="font-sans" font-size="26" font-weight="700" fill="#0F172A">Alertes de sessions</text>
+    <text x="0" y="50" class="font-sans" font-size="13.5" fill="#64748B">Identifiez et traitez les comportements inhabituels pendant les sessions.</text>
+
+
+    <g id="Btn_ExportHistory" transform="translate(966, 4)">
+      <rect x="0" y="0" width="170" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+      <path d="M18 13 V21 M14.5 18 L18 21.5 L21.5 18" fill="none" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      <text x="32" y="23" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Exporter les alertes</text>
+    </g>
+  </g>
+
+
+  <g id="Layer_KPICards" transform="translate(272, 174)">
+
+    <g transform="translate(0, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Alertes non traitées</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">02</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Nécessitent une revue</text></g><g transform="translate(288, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Critiques</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">01</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Priorité immédiate</text></g><g transform="translate(576, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Élevées</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">02</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">À examiner rapidement</text></g><g transform="translate(864, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Traitées aujourd’hui</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">08</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Actions journalisées</text></g></g>
+
+
+  <g id="Layer_SubNavTabs" transform="translate(272, 314)">
+    <line x1="0" y1="26" x2="1136" y2="26" stroke="#E2E8F0" stroke-width="1" />
+
+
+    <g id="Tab_Live">
+      <text x="8" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">En direct</text>
+      <text x="72" y="10" class="font-sans" font-size="13" font-weight="500" fill="#64748B">24</text>
+      </g>
+
+
+    <g id="Tab_History" transform="translate(142, 0)">
+      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Historique</text>
+    </g>
+
+
+    <g id="Tab_Recordings" transform="translate(262, 0)">
+      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Enregistrements</text>
+    </g>
+
+
+    <g id="Tab_Alerts" transform="translate(426, 0)">
+      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="600" fill="#2563EB">Alertes de session</text>
+      <rect x="-8" y="24" width="150" height="2.5" rx="1" fill="#2563EB" /><rect x="118" y="-7" width="22" height="18" rx="9" fill="#FEE2E2" /><text x="129" y="6" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="700" fill="#B91C1C">2</text></g>
+  </g>
+
+
+  <g id="Layer_MainSplitView" transform="translate(272, 364)">
+
+
+    <rect x="0" y="0" width="1136" height="632" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="22" y="29" class="font-sans" font-size="15" font-weight="700" fill="#0F172A">Alertes de sessions</text><text x="22" y="49" class="font-sans" font-size="11.5" font-weight="400" fill="#64748B">Détections de sécurité liées aux accès privilégiés et à leur activité.</text><rect x="22" y="68" width="300" height="36" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" /><text x="36" y="91" class="font-sans" font-size="11.5" font-weight="400" fill="#94A3B8">⌕  Rechercher une alerte…</text><rect x="334" y="68" width="136" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="348" y="91" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">Toutes sévérités  ▾</text><rect x="482" y="68" width="128" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="496" y="91" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">Non traitées  ▾</text><rect x="622" y="68" width="140" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="636" y="91" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">Dernières 24 h  ▾</text><rect x="22" y="122" width="500" height="478" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="42" y="151" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">ALERTES RÉCENTES</text><rect x="428" y="132" width="76" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="466.0" y="147" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">2 non traitées</text><rect x="28" y="166" width="488" height="76" rx="7" fill="#FFF7F7" stroke="#FECACA" stroke-width="1" /><text x="44" y="189" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Commande à risque détectée</text><text x="44" y="209" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">camille.martin · srv-prod-web-01</text><rect x="44" y="215" width="72" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="80.0" y="230" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">CRITIQUE</text><text x="492" y="193" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 4 min</text><circle cx="500" cy="178" r="3" fill="#DC2626" /><line x1="34" y1="328" x2="510" y2="328" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="271" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Élévation sudo inhabituelle</text><text x="44" y="291" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">lucas.petit · k8s-prod-master</text><rect x="44" y="297" width="72" height="22" rx="5" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="0" /><text x="80.0" y="312" class="font-sans" font-size="10.5" font-weight="600" fill="#C2410C" text-anchor="middle">ÉLEVÉE</text><text x="492" y="275" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 18 min</text><circle cx="500" cy="260" r="3" fill="#DC2626" /><line x1="34" y1="410" x2="510" y2="410" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="353" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Connexion depuis un nouvel emplacement</text><text x="44" y="373" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">thomas.bernard · db-postgres-prod</text><rect x="44" y="379" width="72" height="22" rx="5" fill="#FFFBEB" stroke="#FFFBEB" stroke-width="0" /><text x="80.0" y="394" class="font-sans" font-size="10.5" font-weight="600" fill="#A16207" text-anchor="middle">MOYENNE</text><text x="492" y="357" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 1 h</text><line x1="34" y1="492" x2="510" y2="492" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="435" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Transfert de données volumineux</text><text x="44" y="455" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">sarah.dubois · win-ad-primary</text><rect x="44" y="461" width="72" height="22" rx="5" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="0" /><text x="80.0" y="476" class="font-sans" font-size="10.5" font-weight="600" fill="#C2410C" text-anchor="middle">ÉLEVÉE</text><text x="492" y="439" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 3 h</text><line x1="34" y1="574" x2="510" y2="574" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="517" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Session hors plage habituelle</text><text x="44" y="537" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">nora.legrand · fw-edge-paris-01</text><rect x="44" y="543" width="72" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="80.0" y="558" class="font-sans" font-size="10.5" font-weight="600" fill="#64748B" text-anchor="middle">FAIBLE</text><text x="492" y="521" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Hier, 22:14</text><rect x="542" y="122" width="572" height="478" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><rect x="564" y="142" width="72" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="600.0" y="157" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">CRITIQUE</text><rect x="644" y="142" width="90" height="22" rx="5" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="0" /><text x="689.0" y="157" class="font-sans" font-size="10.5" font-weight="600" fill="#C2410C" text-anchor="middle">NON TRAITÉE</text><text x="564" y="197" class="font-sans" font-size="16" font-weight="700" fill="#0F172A">Commande à risque détectée</text><text x="564" y="221" class="font-sans" font-size="10.8" font-weight="400" fill="#64748B">Une commande sensible a été exécutée pendant une session SSH.</text><line x1="564" y1="242" x2="1092" y2="242" stroke="#E2E8F0" stroke-width="1" /><text x="564" y="267" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">SESSION CONCERNÉE</text><text x="564" y="289" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">camille.martin  ·  srv-prod-web-01</text><text x="564" y="321" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">DÉTECTION</text><text x="564" y="343" class="font-sans" font-size="10.8" font-weight="400" fill="#475569">Exécution de commande classée à haut risque</text><rect x="564" y="360" width="528" height="58" rx="6" fill="#0D192B" stroke="#0D192B" stroke-width="0" /><text x="580" y="385" class="font-mono" font-size="10.5" font-weight="500" fill="#FCA5A5">root@srv-prod-web-01:~$ chmod -R 777 /etc/nginx</text><text x="580" y="403" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Règle : OB-CMD-004  ·  Score de risque : 92/100</text><text x="564" y="449" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">DÉCLENCHÉE LE</text><text x="564" y="470" class="font-sans" font-size="10.8" font-weight="400" fill="#475569">17 nov. 2026 · 09:34:12 UTC</text><text x="564" y="500" class="font-sans" font-size="10.5" font-weight="700" fill="#64748B">Actions de traitement</text><rect x="564" y="516" width="168" height="38" rx="6" fill="#2563EB" stroke="#2563EB" stroke-width="0" /><text x="648" y="540" class="font-sans" font-size="10.5" font-weight="600" fill="#FFFFFF" text-anchor="middle">Examiner la session</text><rect x="744" y="516" width="148" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="818" y="540" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">Marquer traitée</text><rect x="904" y="516" width="188" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="998" y="540" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">Créer un incident</text><text x="564" y="580" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">Les actions de traitement sont journalisées dans l’audit.</text></g>
+
+
+  <g id="Layer_PageFooter" transform="translate(272, 1044)">
+    <text x="0" y="0" class="font-sans" font-size="11.5" fill="#94A3B8">Données de démonstration</text>
+    <text x="1136" y="0" text-anchor="end" class="font-sans" font-size="11.5" fill="#94A3B8">Mode observateur  •  Les actions sensibles sont journalisées</text>
+  </g>
+</svg>

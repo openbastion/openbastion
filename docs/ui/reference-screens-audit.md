@@ -92,3 +92,15 @@ Sur le worktree isolé, avant toute modification :
 - **Code de récupération non affiché** : aucun endpoint de vérification d'un code de récupération n'a été trouvé dans OpenAPI ni dans Authentication. Le lien de la maquette est donc omis plutôt que de simuler une capacité absente. Il nécessitera un contrat backend et ses tests avant d'être ajouté.
 - Suite complète finale : `make ui-test ui-build` PASS — 25 fichiers, 249 tests ; TypeScript et Vite production PASS ; contrastes clair/sombre et `check-app-colors` PASS ; `git diff --check` PASS.
 - Limite : aucune capture navigateur de comparaison pixel-à-pixel n'a été obtenue dans ce worktree ; les dimensions et la hiérarchie ont été reprises du SVG et vérifiées par le code/tests, mais le rendu réel à 1440 × 1024 et sur mobile reste à confirmer dans un navigateur.
+
+
+## Sessions — onglets Historique, Enregistrements et Alertes — 2026-11-17
+
+- Les onze SVG fournis dans `/home/eldorplus/Downloads/Ecrans` ont été déplacés dans `docs/ui/reference-screens/` pour les conserver dans le dépôt. Le dossier source est désormais vide. `README.md` décrit la provenance et l'état d'intégration de chaque écran.
+- `openbastion-sessions-historique.svg`, `openbastion-sessions-enregistrements.svg` et `openbastion-sessions-alertes.svg` sont les trois maquettes dérivées de `openbastion-sessions.svg`, validées avant intégration.
+- `Sessions.tsx` conserve le parcours existant sous « En direct » et ajoute la navigation accessible par les primitives Tabs partagées.
+- Historique : `GET /sessions/search` avec bornes temporelles obligatoires (31 jours maximum), recherche facultative (3 caractères minimum), statut, protocole et pagination par curseur. Les autorisations et l'audit restent ceux du Broker ; aucun accès global n'est accordé par l'UI.
+- Enregistrements : `GET /recordings/search` recherche du texte de commandes enregistrées sur une période. Le résultat est borné et peut être tronqué. Le bouton d'un résultat ouvre l'écran d'enregistrements existant (`GET /sessions/{id}/recording`) en réutilisant la navigation de l'Admin UI. Cette recherche ne prétend pas être un inventaire de tous les replays vidéo.
+- Alertes : aucun contrat public de file d'alertes de session, de compteur non lu, de statut de traitement ou d'action d'acquittement n'est défini. L'onglet reste visible avec un badge « API requise » et explique la limite ; aucun compteur fictif, appel inventé ou bouton inopérant n'est ajouté. Les événements d'audit ne sont pas requalifiés en alertes.
+- Les références originales et les trois variantes SVG sont archivées avec un index dans `docs/ui/reference-screens/README.md`.
+- Les tests couvrent le chargement de l'historique, la recherche de commandes, le transfert vers le replay existant, l'absence d'appel non contractuel pour les alertes et le rejet d'une requête de recherche trop courte.

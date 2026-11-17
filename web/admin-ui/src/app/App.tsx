@@ -31,6 +31,7 @@ export function App({
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(() => readOperatorPreferences().defaultTab);
   const [sessionLookup, setSessionLookup] = useState<string | null>(null);
+  const [recordingLookup, setRecordingLookup] = useState<string | null>(null);
   const onToken = useCallback(
     (t: string) => {
       api.setToken(t);
@@ -43,6 +44,8 @@ export function App({
     setSessionLookup(id);
   }, []);
   const clearSessionLookup = useCallback(() => setSessionLookup(null), []);
+  const openRecording = useCallback((id: string) => { setRecordingLookup(id); setTab("audit"); }, []);
+  const clearRecordingLookup = useCallback(() => setRecordingLookup(null), []);
   const signOut = useCallback(() => {
     api.setToken(null);
     setToken(null);
@@ -65,8 +68,8 @@ export function App({
         {tab === "overview" && <Overview onNavigate={setTab} />}
         {tab === "accounts" && <Accounts />}
         {tab === "policies" && <Policies />}
-        {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
-        {tab === "audit" && <Recording />}
+        {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} onOpenRecording={openRecording} />}
+        {tab === "audit" && <Recording requestedSessionId={recordingLookup} onSessionLookupComplete={clearRecordingLookup} />}
         {tab === "security" && <SecurityCenter />}
       </AppShell>
       <LegalNotice />

@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080">
+  <defs>
+    <style>
+      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      .font-mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }
+    </style>
+  </defs>
+
+  <!-- CALQUE 1 : ARRIERE-PLAN GLOBAL -->
+  <g id="Layer_Background">
+    <rect x="0" y="0" width="1440" height="1080" fill="#F8FAFC"/>
+  </g>
+
+  <!-- CALQUE 2 : BARRE LATERALE GAUCHE (SIDEBAR) -->
+  <g id="Layer_Sidebar">
+    <rect x="0" y="0" width="240" height="1080" fill="#0B1E33"/>
+
+    <!-- Logo OpenBastion -->
+    <g id="Sidebar_Brand" transform="translate(20, 24)">
+      <path d="M16 2 L28 7 V16 C28 24 22.8 30.8 16 33 C9.2 30.8 4 24 4 16 V7 L16 2 Z" fill="#1E3A5F" stroke="#38BDF8" stroke-width="1.5"/>
+      <path d="M16 7 L23 10 V16 C23 21 20 25.5 16 27 C12 25.5 9 21 9 16 V10 L16 7 Z" fill="#0F2942"/>
+      <circle cx="16" cy="15.5" r="2.2" fill="#E2E8F0"/>
+      <path d="M14.8 17.5 L17.2 17.5 L17.8 21.5 L14.2 21.5 Z" fill="#E2E8F0"/>
+      <text x="40" y="18" class="font-sans" font-size="16" font-weight="700" fill="#FFFFFF">OpenBastion</text>
+      <text x="40" y="30" class="font-sans" font-size="8" font-weight="600" letter-spacing="1.2" fill="#64748B">PRIVILEGED ACCESS</text>
+    </g>
+
+    <!-- Sélecteur d'espace de travail -->
+    <g id="Sidebar_WorkspaceSwitcher" transform="translate(16, 84)">
+      <rect x="0" y="0" width="208" height="58" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1"/>
+      <text x="14" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Production</text>
+      <text x="14" y="43" class="font-sans" font-size="11" fill="#94A3B8">Acme Corporation</text>
+      <path d="M188 25 L193 29 L188 33" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Section Navigation : ESPACE DE TRAVAIL -->
+    <g id="Sidebar_Nav_Workspace" transform="translate(0, 172)">
+      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">ESPACE DE TRAVAIL</text>
+
+      <!-- Vue d'ensemble -->
+      <g id="Nav_Overview" transform="translate(12, 16)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent"/>
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <rect x="0" y="0" width="6" height="6" rx="1"/>
+          <rect x="9" y="0" width="6" height="6" rx="1"/>
+          <rect x="0" y="9" width="6" height="6" rx="1"/>
+          <rect x="9" y="9" width="6" height="6" rx="1"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Vue d'ensemble</text>
+      </g>
+
+      <!-- Accès privilégiés -->
+      <g id="Nav_PrivilegedAccess" transform="translate(12, 62)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent"/>
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <circle cx="5" cy="5" r="3.5"/>
+          <path d="M7.5 7.5 L15 15 M12 12 L14.5 9.5 M14 14 L16 12"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Accès privilégiés</text>
+      </g>
+
+      <!-- Sessions (Actif) -->
+      <g id="Nav_Sessions_Active" transform="translate(12, 108)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="#153254"/>
+        <rect x="0" y="4" width="3.5" height="32" rx="1.5" fill="#38BDF8"/>
+        <g transform="translate(12, 12)" stroke="#38BDF8" stroke-width="1.5" fill="none">
+          <rect x="0" y="1" width="16" height="11" rx="1.5"/>
+          <path d="M5 15 H11 M8 12 V15"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Sessions</text>
+        <rect x="176" y="10" width="28" height="20" rx="4" fill="#1D63ED"/>
+        <text x="190" y="24" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#FFFFFF">24</text>
+      </g>
+
+      <!-- Infrastructure -->
+      <g id="Nav_Infrastructure" transform="translate(12, 154)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent"/>
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <rect x="1" y="1" width="14" height="5" rx="1"/>
+          <rect x="1" y="9" width="14" height="5" rx="1"/>
+          <circle cx="4" cy="3.5" r="0.7" fill="#94A3B8"/>
+          <circle cx="4" cy="11.5" r="0.7" fill="#94A3B8"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Infrastructure</text>
+      </g>
+
+      <!-- Audit & conformité -->
+      <g id="Nav_Audit" transform="translate(12, 200)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent"/>
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <path d="M3 1 H11 L14 4 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z"/>
+          <path d="M5 8 L7 10 L11 6"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Audit &amp; conformité</text>
+      </g>
+
+      <!-- Paramètres -->
+      <g id="Nav_Settings" transform="translate(12, 246)">
+        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent"/>
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15 M3 3 L4.5 4.5 M11.5 11.5 L13 13 M13 3 L11.5 4.5 M4.5 11.5 L3 13"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Paramètres</text>
+      </g>
+    </g>
+
+    <!-- Séparateur -->
+    <line x1="20" y1="485" x2="220" y2="485" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Section Navigation : RESSOURCES -->
+    <g id="Sidebar_Nav_Resources" transform="translate(0, 515)">
+      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">RESSOURCES</text>
+
+      <!-- Documentation -->
+      <g id="Nav_Docs" transform="translate(12, 16)">
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <path d="M3 1 H10 L14 5 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z"/>
+          <path d="M5 7 H11 M5 10 H11 M5 13 H8"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Documentation</text>
+      </g>
+
+      <!-- Centre d'aide -->
+      <g id="Nav_Help" transform="translate(12, 60)">
+        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+          <circle cx="8" cy="8" r="6.5"/>
+          <path d="M6.2 6.2 C6.2 5 7 4.3 8 4.3 C9 4.3 9.8 5 9.8 6 C9.8 7 8 7.5 8 8.8"/>
+          <circle cx="8" cy="11.2" r="0.6" fill="#94A3B8"/>
+        </g>
+        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Centre d'aide</text>
+      </g>
+    </g>
+
+    <!-- Statut Bastion opérationnel -->
+    <g id="Sidebar_StatusCard" transform="translate(16, 875)">
+      <rect x="0" y="0" width="208" height="78" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1"/>
+      <circle cx="16" cy="20" r="3.5" fill="#38BDF8"/>
+      <text x="27" y="24" class="font-sans" font-size="11.5" font-weight="600" fill="#FFFFFF">Bastion opérationnel</text>
+      <text x="14" y="43" class="font-sans" font-size="10.5" fill="#94A3B8">Tous les services sont disponibles</text>
+      <text x="14" y="62" class="font-sans" font-size="10" fill="#64748B">v2.8.0  •  EU / Paris</text>
+    </g>
+
+    <!-- Profil Utilisateur -->
+    <g id="Sidebar_UserProfile" transform="translate(0, 975)">
+      <line x1="0" y1="0" x2="240" y2="0" stroke="#1E3A5F" stroke-width="1"/>
+      <g transform="translate(20, 22)">
+        <circle cx="14" cy="10" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+        <path d="M5 25 C5 19.5 9 17 14 17 C19 17 23 19.5 23 25" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
+        <text x="38" y="14" class="font-sans" font-size="12.5" font-weight="600" fill="#FFFFFF">Camille Martin</text>
+        <text x="38" y="30" class="font-sans" font-size="11" fill="#94A3B8">Administrateur</text>
+        <path d="M192 14 L197 18 L192 22" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- CALQUE 3 : EN-TETE SUPERIEUR (TOP HEADER) -->
+  <g id="Layer_TopHeader">
+    <rect x="240" y="0" width="1200" height="64" fill="#FFFFFF"/>
+    <line x1="240" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Fil d'Ariane (Breadcrumbs) -->
+    <g id="Header_Breadcrumbs" transform="translate(272, 37)">
+      <text x="0" y="0" class="font-sans" font-size="13" fill="#64748B">Espace de travail</text>
+      <text x="112" y="0" class="font-sans" font-size="13" fill="#CBD5E1">/</text>
+      <text x="128" y="0" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Sessions</text>
+    </g>
+
+    <!-- Barre de recherche globale -->
+    <g id="Header_Search" transform="translate(880, 15)">
+      <rect x="0" y="0" width="300" height="34" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+      <circle cx="17" cy="16" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+      <line x1="21" y1="20" x2="24" y2="23" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
+      <text x="34" y="21" class="font-sans" font-size="12.5" fill="#94A3B8">Rechercher une ressource...</text>
+      <text x="272" y="21" class="font-sans" font-size="11" font-weight="500" fill="#94A3B8">⌘ K</text>
+    </g>
+
+    <!-- Icônes d'actions et badge environnement -->
+    <g id="Header_Actions" transform="translate(1204, 15)">
+      <!-- Aide -->
+      <circle cx="16" cy="17" r="8" fill="none" stroke="#64748B" stroke-width="1.5"/>
+      <text x="16" y="21" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#64748B">?</text>
+
+      <!-- Notifications -->
+      <g transform="translate(46, 8)">
+        <path d="M9 2 C6.2 2 4 4.2 4 7 V11 L2.5 13 H15.5 L14 11 V7 C14 4.2 11.8 2 9 2 Z" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M7.2 15 C7.6 15.8 8.2 16.2 9 16.2 C9.8 16.2 10.4 15.8 10.8 15" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="13.5" cy="3.5" r="2.2" fill="#2563EB"/>
+      </g>
+
+      <!-- Badge Production -->
+      <g transform="translate(88, 4)">
+        <rect x="0" y="0" width="110" height="26" rx="5" fill="#EFF6FF"/>
+        <text x="14" y="17" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">Production</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- CALQUE 4 : EN-TETE DE PAGE (TITRE & BOUTON EXPORT) -->
+  <g id="Layer_PageHeader" transform="translate(272, 92)">
+    <text x="0" y="26" class="font-sans" font-size="26" font-weight="700" fill="#0F172A">Sessions</text>
+    <text x="0" y="50" class="font-sans" font-size="13.5" fill="#64748B">Observez, contrôlez et rejouez chaque accès privilégié.</text>
+
+    <!-- Bouton Exporter l'historique -->
+    <g id="Btn_ExportHistory" transform="translate(966, 4)">
+      <rect x="0" y="0" width="170" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+      <path d="M18 13 V21 M14.5 18 L18 21.5 L21.5 18" fill="none" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="32" y="23" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Exporter l'historique</text>
+    </g>
+  </g>
+
+  <!-- CALQUE 5 : CARTES DE STATISTIQUES (KPI CARDS) -->
+  <g id="Layer_KPICards" transform="translate(272, 174)">
+    <!-- Carte 1 : Sessions actives -->
+    <g id="KPI_ActiveSessions" transform="translate(0, 0)">
+      <rect x="0" y="0" width="272" height="106" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="26" class="font-sans" font-size="12" font-weight="500" fill="#64748B">Sessions actives</text>
+      <text x="20" y="64" class="font-sans" font-size="30" font-weight="700" fill="#0F172A">24</text>
+      <text x="20" y="88" class="font-sans" font-size="11.5" fill="#64748B">16 SSH · 6 RDP · 2 SQL</text>
+    </g>
+
+    <!-- Carte 2 : Enregistrées aujourd'hui -->
+    <g id="KPI_RecordedToday" transform="translate(288, 0)">
+      <rect x="0" y="0" width="272" height="106" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="26" class="font-sans" font-size="12" font-weight="500" fill="#64748B">Enregistrées aujourd'hui</text>
+      <text x="20" y="64" class="font-sans" font-size="30" font-weight="700" fill="#0F172A">187</text>
+      <text x="20" y="88" class="font-sans" font-size="11.5" fill="#64748B">100 % des sessions</text>
+    </g>
+
+    <!-- Carte 3 : Durée moyenne -->
+    <g id="KPI_AverageDuration" transform="translate(576, 0)">
+      <rect x="0" y="0" width="272" height="106" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="26" class="font-sans" font-size="12" font-weight="500" fill="#64748B">Durée moyenne</text>
+      <text x="20" y="64" class="font-sans" font-size="30" font-weight="700" fill="#0F172A">32 min</text>
+      <text x="20" y="88" class="font-sans" font-size="11.5" fill="#64748B">Sur les dernières 24 h</text>
+    </g>
+
+    <!-- Carte 4 : Sessions interrompues -->
+    <g id="KPI_TerminatedSessions" transform="translate(864, 0)">
+      <rect x="0" y="0" width="272" height="106" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="26" class="font-sans" font-size="12" font-weight="500" fill="#64748B">Sessions interrompues</text>
+      <text x="20" y="64" class="font-sans" font-size="30" font-weight="700" fill="#0F172A">02</text>
+      <text x="20" y="88" class="font-sans" font-size="11.5" fill="#64748B">Par une politique de sécurité</text>
+    </g>
+  </g>
+
+  <!-- CALQUE 6 : BARRE D'ONGLETS (TABS) -->
+  <g id="Layer_SubNavTabs" transform="translate(272, 314)">
+    <line x1="0" y1="26" x2="1136" y2="26" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Onglet En direct 24 (Actif) -->
+    <g id="Tab_Live">
+      <text x="8" y="10" class="font-sans" font-size="13.5" font-weight="600" fill="#2563EB">En direct</text>
+      <text x="72" y="10" class="font-sans" font-size="13" font-weight="600" fill="#2563EB">24</text>
+      <rect x="0" y="24" width="96" height="2.5" rx="1" fill="#2563EB"/>
+    </g>
+
+    <!-- Onglet Historique -->
+    <g id="Tab_History" transform="translate(142, 0)">
+      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Historique</text>
+    </g>
+
+    <!-- Onglet Enregistrements -->
+    <g id="Tab_Recordings" transform="translate(262, 0)">
+      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Enregistrements</text>
+    </g>
+
+    <!-- Onglet Alertes de session 2 -->
+    <g id="Tab_Alerts" transform="translate(426, 0)">
+      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Alertes de session</text>
+      <text x="122" y="10" class="font-sans" font-size="12.5" font-weight="500" fill="#64748B">2</text>
+    </g>
+  </g>
+
+  <!-- CALQUE 7 : CONTENU PRINCIPAL (LISTE DES SESSIONS & CONSOLE DE SUPERVISION) -->
+  <g id="Layer_MainSplitView" transform="translate(272, 364)">
+
+    <!-- PANNEAU GAUCHE : Liste des sessions actives -->
+    <g id="LeftPanel_SessionList">
+      <rect x="0" y="0" width="318" height="632" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+      <!-- Champ de recherche session -->
+      <g transform="translate(16, 16)">
+        <rect x="0" y="0" width="286" height="36" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <circle cx="16" cy="17" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.4"/>
+        <line x1="19.5" y1="20.5" x2="22" y2="23" stroke="#94A3B8" stroke-width="1.4" stroke-linecap="round"/>
+        <text x="30" y="22" class="font-sans" font-size="12.5" fill="#94A3B8">Rechercher une session...</text>
+      </g>
+
+      <!-- Sous-en-tête liste -->
+      <g transform="translate(16, 74)">
+        <text x="0" y="0" class="font-sans" font-size="10.5" font-weight="600" letter-spacing="0.4" fill="#64748B">24 SESSIONS ACTIVES</text>
+        <text x="242" y="0" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Récentes</text>
+        <path d="M294 -4 L297 -1 L300 -4" fill="none" stroke="#64748B" stroke-width="1.2" stroke-linecap="round"/>
+      </g>
+
+      <!-- Item 1 : camille.martin (Sélectionné) -->
+      <g id="SessionItem_1_Selected" transform="translate(16, 90)">
+        <rect x="0" y="0" width="286" height="94" rx="8" fill="#F4F8FF" stroke="#1E3A8A" stroke-width="1.5"/>
+        <text x="14" y="24" class="font-sans" font-size="13.5" font-weight="700" fill="#0F172A">camille.martin</text>
+        <text x="14" y="44" class="font-mono" font-size="11.5" fill="#64748B">srv-prod-web-01</text>
+
+        <rect x="14" y="58" width="36" height="22" rx="4" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+        <text x="32" y="73" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="600" fill="#475569">SSH</text>
+
+        <text x="272" y="74" text-anchor="end" class="font-mono" font-size="11.5" fill="#64748B">00:24:12</text>
+      </g>
+
+      <!-- Item 2 : thomas.bernard -->
+      <g id="SessionItem_2" transform="translate(16, 194)">
+        <text x="14" y="24" class="font-sans" font-size="13.5" font-weight="600" fill="#0F172A">thomas.bernard</text>
+        <text x="14" y="44" class="font-mono" font-size="11.5" fill="#64748B">db-postgres-prod</text>
+
+        <rect x="14" y="58" width="36" height="22" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="32" y="73" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="600" fill="#475569">SQL</text>
+
+        <text x="272" y="74" text-anchor="end" class="font-mono" font-size="11.5" fill="#64748B">00:27:39</text>
+        <line x1="0" y1="96" x2="286" y2="96" stroke="#F1F5F9" stroke-width="1"/>
+      </g>
+
+      <!-- Item 3 : sarah.dubois -->
+      <g id="SessionItem_3" transform="translate(16, 302)">
+        <text x="14" y="24" class="font-sans" font-size="13.5" font-weight="600" fill="#0F172A">sarah.dubois</text>
+        <text x="14" y="44" class="font-mono" font-size="11.5" fill="#64748B">win-ad-primary</text>
+
+        <rect x="14" y="58" width="36" height="22" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="32" y="73" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="600" fill="#475569">RDP</text>
+
+        <text x="272" y="74" text-anchor="end" class="font-mono" font-size="11.5" fill="#64748B">00:40:17</text>
+        <line x1="0" y1="96" x2="286" y2="96" stroke="#F1F5F9" stroke-width="1"/>
+      </g>
+
+      <!-- Item 4 : lucas.petit -->
+      <g id="SessionItem_4" transform="translate(16, 410)">
+        <text x="14" y="24" class="font-sans" font-size="13.5" font-weight="600" fill="#0F172A">lucas.petit</text>
+        <text x="14" y="44" class="font-mono" font-size="11.5" fill="#64748B">k8s-prod-master</text>
+
+        <rect x="14" y="58" width="36" height="22" rx="4" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="32" y="73" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="600" fill="#475569">SSH</text>
+
+        <text x="272" y="74" text-anchor="end" class="font-mono" font-size="11.5" fill="#64748B">00:12:58</text>
+        <line x1="0" y1="96" x2="286" y2="96" stroke="#F1F5F9" stroke-width="1"/>
+      </g>
+
+      <!-- Lien bas de liste -->
+      <g id="SessionList_ShowMore" transform="translate(16, 560)">
+        <text x="135" y="18" text-anchor="middle" class="font-sans" font-size="12.5" font-weight="600" fill="#2563EB">Afficher les 20 autres sessions</text>
+        <path d="M236 11 V18 M233 15.5 L236 18.5 L239 15.5" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+
+    <!-- PANNEAU DROIT : Détails et Terminal de la session -->
+    <g id="RightPanel_SessionDetail" transform="translate(338, 0)">
+      <rect x="0" y="0" width="798" height="632" rx="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+      <!-- En-tête de session -->
+      <g id="Detail_Header" transform="translate(24, 24)">
+        <text x="0" y="18" class="font-sans" font-size="17" font-weight="700" fill="#0F172A">srv-prod-web-01</text>
+        <text x="0" y="40" class="font-mono" font-size="12" fill="#64748B">camille.martin   /   SSH   /   10.0.1.12</text>
+
+        <!-- Badges statut en haut à droite -->
+        <g transform="translate(570, 2)">
+          <rect x="0" y="0" width="84" height="28" rx="5" fill="#EFF6FF"/>
+          <circle cx="14" cy="14" r="3.5" fill="#2563EB"/>
+          <text x="24" y="18" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">En direct</text>
+
+          <rect x="92" y="0" width="88" height="28" rx="5" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+          <text x="136" y="18" text-anchor="middle" class="font-sans" font-size="12" font-weight="500" fill="#64748B">Enregistrée</text>
+        </g>
+      </g>
+
+      <!-- Fenêtre Terminal SSH -->
+      <g id="Detail_Terminal" transform="translate(24, 86)">
+        <rect x="0" y="0" width="750" height="312" rx="8" fill="#0D192B"/>
+
+        <!-- Barre supérieure du terminal -->
+        <rect x="0" y="0" width="750" height="36" rx="8" fill="#13233A"/>
+        <rect x="0" y="28" width="750" height="8" fill="#13233A"/>
+        <line x1="0" y1="36" x2="750" y2="36" stroke="#1E293B" stroke-width="1"/>
+        <text x="16" y="22" class="font-mono" font-size="11.5" fill="#94A3B8">SSH  ·  root@srv-prod-web-01</text>
+        <text x="734" y="22" text-anchor="end" class="font-sans" font-size="11.5" fill="#94A3B8">Lecture seule</text>
+
+        <!-- Contenu du terminal -->
+        <g id="Terminal_Output" transform="translate(18, 62)">
+          <text x="0" y="0" class="font-mono" font-size="12" fill="#94A3B8">Connexion sécurisée établie via OpenBastion</text>
+          <text x="0" y="24" class="font-mono" font-size="12" fill="#94A3B8">Dernière connexion : 13 nov. 2026, 14:32:08</text>
+
+          <text x="0" y="48" class="font-mono" font-size="12" font-weight="600" fill="#22D3EE">root@srv-prod-web-01:~$ systemctl status nginx</text>
+
+          <circle cx="5" cy="68" r="3.5" fill="#E2E8F0"/>
+          <text x="16" y="72" class="font-mono" font-size="12" font-weight="600" fill="#E2E8F0">nginx.service - A high performance web server</text>
+
+          <text x="20" y="96" class="font-mono" font-size="12" fill="#94A3B8">Loaded: loaded (/lib/systemd/system/nginx.service)</text>
+          <text x="20" y="120" class="font-mono" font-size="12" fill="#94A3B8">Active: active (running) since Fri 2026-11-13 08:00:12</text>
+          <text x="20" y="144" class="font-mono" font-size="12" fill="#94A3B8">Main PID: 1248 (nginx)</text>
+
+          <text x="0" y="168" class="font-mono" font-size="12" font-weight="600" fill="#22D3EE">root@srv-prod-web-01:~$ tail -f /var/log/nginx/access.log</text>
+
+          <text x="0" y="192" class="font-mono" font-size="12" fill="#94A3B8">10.0.0.42 - - [13/Nov/2026:14:56:20 +0100] "GET /health" 200</text>
+        </g>
+      </g>
+
+      <!-- Encadré d'activité et conformité -->
+      <g id="Detail_ActivityBanner" transform="translate(24, 414)">
+        <rect x="0" y="0" width="750" height="62" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="16" y="25" class="font-sans" font-size="12.5" font-weight="700" fill="#0F172A">3 commandes exécutées</text>
+        <text x="235" y="25" class="font-sans" font-size="12.5" fill="#64748B">0 transfert de fichier</text>
+        <text x="734" y="25" text-anchor="end" class="font-sans" font-size="12.5" font-weight="600" fill="#2563EB">Aucune anomalie détectée</text>
+        <text x="16" y="46" class="font-sans" font-size="11.5" fill="#64748B">Dernière activité : <tspan class="font-mono" font-size="11">tail -f /var/log/nginx/access.log</tspan></text>
+      </g>
+
+      <!-- Métadonnées de la session (3 colonnes) -->
+      <g id="Detail_Metadata" transform="translate(24, 514)">
+        <!-- Colonne 1 -->
+        <g transform="translate(0, 0)">
+          <text x="0" y="0" class="font-sans" font-size="10.5" font-weight="600" letter-spacing="0.4" fill="#64748B">DÉBUT DE SESSION</text>
+          <text x="0" y="22" class="font-sans" font-size="13.5" font-weight="600" fill="#0F172A">13 nov. 2026 · 14:32:08</text>
+        </g>
+        <!-- Colonne 2 -->
+        <g transform="translate(250, 0)">
+          <text x="0" y="0" class="font-sans" font-size="10.5" font-weight="600" letter-spacing="0.4" fill="#64748B">ADRESSE SOURCE</text>
+          <text x="0" y="22" class="font-mono" font-size="13.5" font-weight="600" fill="#0F172A">192.168.1.42</text>
+        </g>
+        <!-- Colonne 3 -->
+        <g transform="translate(500, 0)">
+          <text x="0" y="0" class="font-sans" font-size="10.5" font-weight="600" letter-spacing="0.4" fill="#64748B">POLITIQUE APPLIQUÉE</text>
+          <text x="0" y="22" class="font-sans" font-size="13.5" font-weight="600" fill="#0F172A">Production · Admin SSH</text>
+        </g>
+      </g>
+
+      <!-- Pied de carte détail & bouton Interrompre -->
+      <g id="Detail_Footer" transform="translate(24, 566)">
+        <line x1="0" y1="0" x2="750" y2="0" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="0" y="34" class="font-sans" font-size="12" fill="#64748B">Chiffrée de bout en bout  •  Rétention : 90 jours</text>
+
+        <g id="Btn_TerminateSession" transform="translate(566, 12)">
+          <rect x="0" y="0" width="184" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+          <text x="92" y="23" text-anchor="middle" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Interrompre la session</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- CALQUE 8 : PIED DE PAGE GLOBAL (FOOTER) -->
+  <g id="Layer_PageFooter" transform="translate(272, 1044)">
+    <text x="0" y="0" class="font-sans" font-size="11.5" fill="#94A3B8">Données de démonstration</text>
+    <text x="1136" y="0" text-anchor="end" class="font-sans" font-size="11.5" fill="#94A3B8">Mode observateur  •  Les actions sensibles sont journalisées</text>
+  </g>
+</svg>

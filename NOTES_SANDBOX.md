@@ -4845,3 +4845,15 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Tests ajoutés pour l'écran TOTP (six cases, identité, nettoyage du code, CTA désactivé avant six chiffres, soumission) et pour le retour sans requête de vérification ; le parcours WebAuthn-only conserve ses tests dédiés.
 - Suite complète après le test de retour à la connexion : `make ui-test ui-build` PASS — 25 fichiers, 249 tests ; TypeScript/Vite, contraste clair/sombre, `check-app-colors` et `git diff --check` PASS.
 - Limite : pas de capture navigateur exploitable à ce stade ; la géométrie est dérivée du SVG et les tests DOM ne prouvent pas un rendu pixel-à-pixel. Vérification visuelle à faire dans un navigateur à 1440 × 1024 et sur mobile.
+
+
+## 2026-11-17 — Sessions : archivage des références et intégration des onglets
+
+- Les onze fichiers SVG de `/home/eldorplus/Downloads/Ecrans/` ont été déplacés dans `docs/ui/reference-screens/` : les huit écrans sources, la référence Sessions de base et les trois variantes Historique, Enregistrements et Alertes. Le répertoire Downloads/Ecrans est vide.
+- `Sessions.tsx` est organisé avec les onglets En direct, Historique, Enregistrements et Alertes ; le parcours live existant (demande, approbation, recherche par identifiant, ouverture d'écran et terminaison confirmée) reste dans son onglet.
+- Historique branché sur `GET /sessions/search`, avec fenêtre locale obligatoire (borne supérieure exclusive), maximum 31 jours, filtres et pagination par curseur. Les résultats restent soumis aux droits de lecture du Broker et à son audit préalable.
+- Enregistrements branché sur `GET /recordings/search` : recherche plein texte des commandes SSH sur une fenêtre locale de 31 jours maximum (borne supérieure exclusive) ; les résultats peuvent être tronqués. L'action d'ouverture passe vers l'écran d'enregistrements existant et charge `GET /sessions/{id}/recording`.
+- Alertes : pas d'API publique de file/compteur/acquittement. L'onglet affiche un badge « API requise » et documente la limite ; il ne compte pas des événements d'audit comme des alertes et ne propose aucune action fictive.
+- Aucun endpoint ni schéma backend n'a été modifié. Les onze références sont indexées dans `docs/ui/reference-screens/README.md`.
+- Validation finale : `make ui-test ui-build` PASS — 26 fichiers Vitest, 258 tests ; TypeScript et build Vite production PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
+- Rendu navigateur et comparaison pixel-à-pixel non encore vérifiés.

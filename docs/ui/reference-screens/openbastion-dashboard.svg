@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- Dégradés des graphiques -->
+    <linearGradient id="sshAreaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2563EB" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="rdpAreaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2563EB" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#2563EB" stop-opacity="0.0"/>
+    </linearGradient>
+
+    <!-- Ombre légère pour les cartes -->
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
+    </filter>
+  </defs>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                          -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Background">
+    <rect width="1440" height="1080" fill="#F8FAFC"/>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 2 : BARRE LATÉRALE GAUCHE (SIDEBAR)                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Sidebar">
+    <rect x="0" y="0" width="232" height="1080" fill="#0D2137"/>
+    <line x1="232" y1="0" x2="232" y2="1080" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Logo OpenBastion -->
+    <g id="Sidebar_Logo" transform="translate(20, 22)">
+      <path d="M14 2L3 7v7c0 7.2 4.7 13.9 11 16 6.3-2.1 11-8.8 11-16V7L14 2z" fill="#1E3A5F" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M14 6l-7 3v5c0 4.8 3 9.2 7 10.8 4-1.6 7-6 7-10.8V9l-7-3z" fill="#38BDF8" fill-opacity="0.3"/>
+      <circle cx="14" cy="14" r="2.2" fill="#FFFFFF"/>
+      <text x="38" y="16" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="-0.3">OpenBastion</text>
+      <text x="38" y="29" fill="#64748B" font-size="8.5" font-weight="600" letter-spacing="1.2">PRIVILEGED ACCESS</text>
+    </g>
+
+    <!-- Sélecteur Workspace : Production -->
+    <g id="Sidebar_Workspace_Selector" transform="translate(16, 86)">
+      <rect width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
+      <text x="16" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Production</text>
+      <text x="16" y="42" fill="#94A3B8" font-size="11.5">Acme Corporation</text>
+      <path d="M176 25l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Titre section ESPACE DE TRAVAIL -->
+    <text x="20" y="182" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">ESPACE DE TRAVAIL</text>
+
+    <!-- Menu Navigation Principale -->
+    <g id="Sidebar_Nav_Main" transform="translate(12, 196)">
+      <!-- Item Actif : Vue d'ensemble -->
+      <g id="Nav_Vue_Ensemble">
+        <rect width="208" height="40" rx="8" fill="#133356"/>
+        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
+        <g transform="translate(14, 12)" stroke="#38BDF8" stroke-width="1.6" fill="none">
+          <rect x="1" y="1" width="6" height="6" rx="1"/>
+          <rect x="10" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="10" width="6" height="6" rx="1"/>
+          <rect x="10" y="10" width="6" height="6" rx="1"/>
+        </g>
+        <text x="42" y="25" fill="#FFFFFF" font-size="13" font-weight="600">Vue d'ensemble</text>
+      </g>
+
+      <!-- Item : Accès privilégiés -->
+      <g id="Nav_Acces" transform="translate(0, 46)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="11" r="4"/>
+          <path d="M9 8l6-6M13 4l2 2M15 2l2 2"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Accès privilégiés</text>
+      </g>
+
+      <!-- Item : Sessions (Badge 24) -->
+      <g id="Nav_Sessions" transform="translate(0, 92)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="2" width="15" height="11" rx="2"/>
+          <path d="M5 16h7M8.5 13v3"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
+        <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
+        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">24</text>
+      </g>
+
+      <!-- Item : Infrastructure -->
+      <g id="Nav_Infrastructure" transform="translate(0, 138)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="2" width="15" height="5" rx="1"/>
+          <rect x="1" y="10" width="15" height="5" rx="1"/>
+          <circle cx="4.5" cy="4.5" r="0.6" fill="#94A3B8"/>
+          <circle cx="4.5" cy="12.5" r="0.6" fill="#94A3B8"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Infrastructure</text>
+      </g>
+
+      <!-- Item : Audit & conformité -->
+      <g id="Nav_Audit" transform="translate(0, 184)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3H4a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V4a1 1 0 00-1-1h-2"/>
+          <rect x="6" y="1" width="5" height="3" rx="1"/>
+          <path d="M6 8h5M6 11h5"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Audit &amp; conformité</text>
+      </g>
+
+      <!-- Item : Paramètres -->
+      <g id="Nav_Parametres" transform="translate(0, 230)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="2.5"/>
+          <path d="M8.5 1.5v2M8.5 13.5v2M1.5 8.5h2M13.5 8.5h2M3.5 3.5l1.5 1.5M12 12l1.5 1.5M13.5 3.5L12 5M5 12l-1.5 1.5"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Paramètres</text>
+      </g>
+    </g>
+
+    <!-- Séparateur -->
+    <line x1="20" y1="490" x2="212" y2="490" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Section RESSOURCES -->
+    <text x="20" y="528" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">RESSOURCES</text>
+
+    <g id="Sidebar_Nav_Resources" transform="translate(12, 542)">
+      <!-- Documentation -->
+      <g transform="translate(0, 0)">
+        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 2h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+          <path d="M10 2v4h4M6 9h5M6 12h3"/>
+        </g>
+        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Documentation</text>
+      </g>
+
+      <!-- Centre d'aide -->
+      <g transform="translate(0, 44)">
+        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="7"/>
+          <path d="M6.5 6.5a2 2 0 013.8.8c0 1.3-1.8 1.8-1.8 3"/>
+          <circle cx="8.5" cy="12.5" r="0.5" fill="#94A3B8"/>
+        </g>
+        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Centre d'aide</text>
+      </g>
+    </g>
+
+    <!-- Carte Statut : Bastion opérationnel -->
+    <g id="Sidebar_Status_Card" transform="translate(16, 868)">
+      <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
+      <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
+      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Bastion opérationnel</text>
+      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Tous les services sont disponibles</text>
+      <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
+    </g>
+
+    <!-- Profil Utilisateur : Camille Martin -->
+    <g id="Sidebar_User_Profile" transform="translate(0, 976)">
+      <line x1="0" y1="0" x2="232" y2="0" stroke="#1E3A5F" stroke-width="1"/>
+      <g transform="translate(18, 22)">
+        <circle cx="16" cy="16" r="16" fill="#1E3A5F"/>
+        <circle cx="16" cy="12" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+        <path d="M8.5 25c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
+        <text x="42" y="14" fill="#FFFFFF" font-size="12.5" font-weight="600">Camille Martin</text>
+        <text x="42" y="30" fill="#94A3B8" font-size="11">Administrateur</text>
+        <path d="M180 13l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 3 : BARRE SUPÉRIEURE (TOPBAR)                                    -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Topbar">
+    <rect x="232" y="0" width="1208" height="64" fill="#FFFFFF"/>
+    <line x1="232" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Fil d'Ariane -->
+    <g id="Topbar_Breadcrumb" transform="translate(264, 37)">
+      <text x="0" y="0" fill="#64748B" font-size="12.5" font-weight="500">Espace de travail</text>
+      <text x="108" y="0" fill="#CBD5E1" font-size="13">/</text>
+      <text x="124" y="0" fill="#0F172A" font-size="12.5" font-weight="600">Vue d'ensemble</text>
+    </g>
+
+    <!-- Champ de recherche -->
+    <g id="Topbar_Search" transform="translate(880, 14)">
+      <rect width="310" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(12, 10)" stroke="#64748B" stroke-width="1.6" fill="none">
+        <circle cx="7" cy="7" r="5.5"/>
+        <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <text x="36" y="23" fill="#64748B" font-size="12.5">Rechercher une ressource...</text>
+      <rect x="268" y="8" width="32" height="20" rx="4" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="284" y="22" fill="#94A3B8" font-size="11" font-weight="600" text-anchor="middle">⌘ K</text>
+    </g>
+
+    <!-- Actions droite -->
+    <g id="Topbar_Actions" transform="translate(1212, 16)">
+      <!-- Icône Aide -->
+      <g transform="translate(0, 7)" stroke="#475569" stroke-width="1.6" fill="none">
+        <circle cx="9" cy="9" r="7.5"/>
+        <path d="M7 7a2 2 0 013.8.8c0 1.4-1.8 1.8-1.8 3" stroke-linecap="round"/>
+        <circle cx="9" cy="13.2" r="0.5" fill="#475569"/>
+      </g>
+      <!-- Icône Notifications -->
+      <g transform="translate(44, 7)">
+        <path d="M9 2a5 5 0 00-5 5v3.5L2.5 13h13L14 10.5V7a5 5 0 00-5-5zM7 15a2 2 0 004 0" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14" cy="4" r="2.8" fill="#2563EB"/>
+      </g>
+      <!-- Badge Production -->
+      <g transform="translate(94, 2)">
+        <rect width="102" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+        <text x="51" y="18" fill="#2563EB" font-size="12" font-weight="600" text-anchor="middle">Production</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 4 : EN-TÊTE DE PAGE & BANNIÈRE D'ALERTE                          -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Page_Header" transform="translate(264, 96)">
+    <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Vue d'ensemble</text>
+    <text x="0" y="54" fill="#64748B" font-size="13.5">Gardez le contrôle de vos accès privilégiés, en temps réel.</text>
+
+    <!-- Bouton Actualiser -->
+    <g transform="translate(898, 4)">
+      <rect width="118" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(14, 11)" stroke="#334155" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 6A6 6 0 1011.5 11.5"/>
+        <path d="M13 2v4h-4"/>
+      </g>
+      <text x="36" y="23" fill="#0F172A" font-size="13" font-weight="600">Actualiser</text>
+    </g>
+
+    <!-- Bouton Exporter -->
+    <g transform="translate(1030, 4)">
+      <rect width="114" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(14, 11)" stroke="#334155" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 2v9M4 8l3 3 3-3M2 13h10"/>
+      </g>
+      <text x="36" y="23" fill="#0F172A" font-size="13" font-weight="600">Exporter</text>
+    </g>
+
+    <!-- Bannière Sécurité -->
+    <g id="Security_Banner" transform="translate(0, 78)">
+      <rect width="1144" height="46" rx="10" fill="#EFF6FF" stroke="#DBEAFE" stroke-width="1"/>
+      <g transform="translate(16, 13)" stroke="#2563EB" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 1L2 4.5v5c0 4.8 3.4 9.2 8 10.5 4.6-1.3 8-5.7 8-10.5v-5L10 1z"/>
+        <path d="M7 10l2 2 4-4"/>
+      </g>
+      <text x="48" y="28" fill="#0F172A" font-size="13" font-weight="700">Votre périmètre est protégé.</text>
+      <text x="234" y="28" fill="#475569" font-size="13">Toutes les sessions sont chiffrées et enregistrées.</text>
+      <text x="1120" y="28" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Voir les politiques  →</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 5 : CARTES KPI (4 MÉTRIQUES)                                     -->
+  <!-- ======================================================================= -->
+  <g id="Layer_KPI_Cards" transform="translate(264, 244)">
+    <!-- Carte 1 : Sessions actives -->
+    <g id="KPI_Sessions" transform="translate(0, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Sessions actives</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">24</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">+ 4 depuis hier</text>
+      <path d="M174 78 L188 73 L202 76 L216 64 L230 69 L246 54 L246 82 L174 82 Z" fill="url(#sparklineGrad)"/>
+      <polyline points="174,78 188,73 202,76 216,64 230,69 246,54" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Carte 2 : Ressources protégées -->
+    <g id="KPI_Resources" transform="translate(291, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Ressources protégées</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">128</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">100 % sous contrôle</text>
+      <path d="M174 78 L188 75 L202 72 L216 66 L230 68 L246 58 L246 82 L174 82 Z" fill="url(#sparklineGrad)"/>
+      <polyline points="174,78 188,75 202,72 216,66 230,68 246,58" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Carte 3 : Identités privilégiées -->
+    <g id="KPI_Identities" transform="translate(582, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Identités privilégiées</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">86</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">MFA activé pour tous</text>
+      <path d="M174 76 L192 74 L210 71 L228 66 L246 61 L246 82 L174 82 Z" fill="url(#sparklineGrad)"/>
+      <polyline points="174,76 192,74 210,71 228,66 246,61" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Carte 4 : Demandes en attente -->
+    <g id="KPI_Requests" transform="translate(873, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Demandes en attente</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">03</text>
+      <text x="20" y="102" fill="#2563EB" font-size="11.5" font-weight="600">2 à approuver aujourd'hui</text>
+      <polyline points="174,58 192,58 210,69 228,64 236,75 252,75" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 6 : GRAPHIQUE ACTIVITÉ & CARTE POSTURE DE SÉCURITÉ               -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Analytics_Row" transform="translate(264, 390)">
+    <!-- Carte Gauche : Activité des connexions -->
+    <g id="Card_Connection_Activity" filter="url(#cardShadow)">
+      <rect width="746" height="310" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Activité des connexions</text>
+      <text x="24" y="54" fill="#64748B" font-size="12">Sessions initiées sur les dernières 24 heures</text>
+
+      <!-- Légende SSH / RDP -->
+      <g transform="translate(432, 48)">
+        <circle cx="0" cy="4" r="3.5" fill="#2563EB"/>
+        <text x="10" y="8" fill="#475569" font-size="11.5" font-weight="500">SSH</text>
+        <circle cx="52" cy="4" r="3.5" fill="#06B6D4"/>
+        <text x="62" y="8" fill="#475569" font-size="11.5" font-weight="500">RDP</text>
+      </g>
+
+      <!-- Dropdown 24 heures -->
+      <g transform="translate(626, 18)">
+        <rect width="96" height="30" rx="7" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="14" y="19" fill="#0F172A" font-size="12" font-weight="500">24 heures</text>
+        <path d="M78 14l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Zone du graphique -->
+      <g id="Chart_Grid_And_Curves" transform="translate(56, 88)">
+        <!-- Lignes horizontales et labels Y -->
+        <line x1="0" y1="0" x2="660" y2="0" stroke="#F1F5F9" stroke-width="1"/>
+        <text x="-12" y="4" fill="#94A3B8" font-size="10.5" text-anchor="end">30</text>
+
+        <line x1="0" y1="45" x2="660" y2="45" stroke="#F1F5F9" stroke-width="1"/>
+        <text x="-12" y="49" fill="#94A3B8" font-size="10.5" text-anchor="end">20</text>
+
+        <line x1="0" y1="90" x2="660" y2="90" stroke="#F1F5F9" stroke-width="1"/>
+        <text x="-12" y="94" fill="#94A3B8" font-size="10.5" text-anchor="end">10</text>
+
+        <line x1="0" y1="135" x2="660" y2="135" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="-12" y="139" fill="#94A3B8" font-size="10.5" text-anchor="end">0</text>
+
+        <!-- Labels Axe X -->
+        <text x="0" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">00:00</text>
+        <text x="108" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">04:00</text>
+        <text x="216" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">08:00</text>
+        <text x="324" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">12:00</text>
+        <text x="432" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">16:00</text>
+        <text x="540" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">20:00</text>
+        <text x="648" y="166" fill="#64748B" font-size="10.5" text-anchor="middle">23:59</text>
+
+        <!-- Courbe SSH -->
+        <path d="M0,120 L28,112 L56,115 L84,104 L112,107 L140,86 L168,94 L196,68 L224,78 L252,44 L280,58 L308,35 L336,52 L364,67 L392,48 L420,16 L448,36 L476,62 L504,48 L532,68 L560,40 L588,58 L616,74 L654,53 L654,135 L0,135 Z" fill="url(#sshAreaGrad)"/>
+        <polyline points="0,120 28,112 56,115 84,104 112,107 140,86 168,94 196,68 224,78 252,44 280,58 308,35 336,52 364,67 392,48 420,16 448,36 476,62 504,48 532,68 560,40 588,58 616,74 654,53" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- Courbe RDP -->
+        <path d="M0,130 L28,125 L56,128 L84,122 L112,124 L140,112 L168,115 L196,104 L224,115 L252,98 L280,108 L308,92 L336,105 L364,96 L392,100 L420,84 L448,93 L476,108 L504,102 L532,115 L560,94 L588,104 L616,112 L654,100 L654,135 L0,135 Z" fill="url(#rdpAreaGrad)"/>
+        <polyline points="0,130 28,125 56,128 84,122 112,124 140,112 168,115 196,104 224,115 252,98 280,108 308,92 336,105 364,96 392,100 420,84 448,93 476,108 504,102 532,115 560,94 588,104 616,112 654,100" fill="none" stroke="#06B6D4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+
+    <!-- Carte Droite : Posture de sécurité -->
+    <g id="Card_Security_Posture" transform="translate(766, 0)" filter="url(#cardShadow)">
+      <rect width="378" height="310" rx="12" fill="#0B1F36"/>
+
+      <text x="24" y="36" fill="#FFFFFF" font-size="15.5" font-weight="700">Posture de sécurité</text>
+
+      <!-- Badge ZERO TRUST -->
+      <rect x="274" y="18" width="80" height="24" rx="5" fill="#153254" stroke="#1E4673" stroke-width="1"/>
+      <text x="314" y="34" fill="#38BDF8" font-size="10" font-weight="700" letter-spacing="0.5" text-anchor="middle">ZERO TRUST</text>
+
+      <!-- Score 98 / 100 -->
+      <text x="24" y="108" fill="#FFFFFF" font-size="48" font-weight="700" letter-spacing="-1.5">98</text>
+      <text x="88" y="106" fill="#94A3B8" font-size="18" font-weight="500">/ 100</text>
+      <text x="24" y="136" fill="#CBD5E1" font-size="12.5">Excellent niveau de protection</text>
+
+      <!-- Barre de progression -->
+      <g transform="translate(24, 158)">
+        <rect width="330" height="5" rx="2.5" fill="#1E3A5F"/>
+        <rect width="322" height="5" rx="2.5" fill="#38BDF8"/>
+        <circle cx="322" cy="2.5" r="3.5" fill="#FFFFFF"/>
+      </g>
+
+      <!-- Détails métriques -->
+      <g transform="translate(24, 198)">
+        <text x="0" y="0" fill="#94A3B8" font-size="12">MFA</text>
+        <text x="330" y="0" fill="#FFFFFF" font-size="12" font-weight="600" text-anchor="end">86 / 86 identités</text>
+
+        <text x="0" y="28" fill="#94A3B8" font-size="12">Rotation des secrets</text>
+        <text x="330" y="28" fill="#FFFFFF" font-size="12" font-weight="600" text-anchor="end">100 % à jour</text>
+      </g>
+
+      <!-- Séparateur -->
+      <line x1="24" y1="250" x2="354" y2="250" stroke="#1E3A5F" stroke-width="1"/>
+
+      <!-- Lien recommandations -->
+      <g transform="translate(24, 282)">
+        <text x="0" y="0" fill="#38BDF8" font-size="12.5" font-weight="600">2 recommandations à examiner</text>
+        <text x="330" y="0" fill="#38BDF8" font-size="14" font-weight="600" text-anchor="end">→</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 7 : TABLEAU SESSIONS RÉCENTES                                    -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Recent_Sessions" transform="translate(264, 724)" filter="url(#cardShadow)">
+    <rect width="1144" height="304" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- En-tête de la carte -->
+    <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Sessions récentes</text>
+    <text x="172" y="36" fill="#64748B" font-size="12.5">24 actives</text>
+    <text x="1120" y="36" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Toutes les sessions  →</text>
+
+    <!-- Bandeau colonnes -->
+    <rect x="0" y="60" width="1144" height="36" fill="#F8FAFC"/>
+    <line x1="0" y1="60" x2="1144" y2="60" stroke="#F1F5F9" stroke-width="1"/>
+    <line x1="0" y1="96" x2="1144" y2="96" stroke="#E2E8F0" stroke-width="1"/>
+
+    <g transform="translate(24, 82)" fill="#64748B" font-size="10.5" font-weight="700" letter-spacing="0.6">
+      <text x="0" y="0">UTILISATEUR</text>
+      <text x="190" y="0">RESSOURCE</text>
+      <text x="420" y="0">PROTOCOLE</text>
+      <text x="568" y="0">DÉBUT</text>
+      <text x="706" y="0">DURÉE</text>
+      <text x="854" y="0">STATUT</text>
+      <text x="1002" y="0">ACTION</text>
+    </g>
+
+    <!-- Ligne 1 : camille.martin -->
+    <g id="Row_1" transform="translate(24, 128)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">camille.martin</text>
+      <text x="190" y="0" fill="#334155" font-size="12.5" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">srv-prod-web-01</text>
+
+      <rect x="420" y="-15" width="44" height="22" rx="5" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="442" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
+
+      <text x="568" y="0" fill="#64748B" font-size="12.5" font-family="monospace">14:32:08</text>
+      <text x="706" y="0" fill="#64748B" font-size="12.5" font-family="monospace">00:24:12</text>
+
+      <rect x="854" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="892" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">En cours</text>
+
+      <text x="1002" y="0" fill="#2563EB" font-size="12.5" font-weight="600">Observer  ↗</text>
+      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 2 : thomas.bernard -->
+    <g id="Row_2" transform="translate(24, 178)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">thomas.bernard</text>
+      <text x="190" y="0" fill="#334155" font-size="12.5" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">db-postgres-prod</text>
+
+      <rect x="420" y="-15" width="44" height="22" rx="5" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="442" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SQL</text>
+
+      <text x="568" y="0" fill="#64748B" font-size="12.5" font-family="monospace">14:28:41</text>
+      <text x="706" y="0" fill="#64748B" font-size="12.5" font-family="monospace">00:27:39</text>
+
+      <rect x="854" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="892" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">En cours</text>
+
+      <text x="1002" y="0" fill="#2563EB" font-size="12.5" font-weight="600">Observer  ↗</text>
+      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 3 : sarah.dubois -->
+    <g id="Row_3" transform="translate(24, 228)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">sarah.dubois</text>
+      <text x="190" y="0" fill="#334155" font-size="12.5" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">win-ad-primary</text>
+
+      <rect x="420" y="-15" width="44" height="22" rx="5" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="442" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">RDP</text>
+
+      <text x="568" y="0" fill="#64748B" font-size="12.5" font-family="monospace">14:16:03</text>
+      <text x="706" y="0" fill="#64748B" font-size="12.5" font-family="monospace">00:40:17</text>
+
+      <rect x="854" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="892" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">En cours</text>
+
+      <text x="1002" y="0" fill="#2563EB" font-size="12.5" font-weight="600">Observer  ↗</text>
+      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 4 : lucas.petit -->
+    <g id="Row_4" transform="translate(24, 278)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">lucas.petit</text>
+      <text x="190" y="0" fill="#334155" font-size="12.5" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">k8s-prod-master</text>
+
+      <rect x="420" y="-15" width="44" height="22" rx="5" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="442" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
+
+      <text x="568" y="0" fill="#64748B" font-size="12.5" font-family="monospace">13:58:12</text>
+      <text x="706" y="0" fill="#64748B" font-size="12.5" font-family="monospace">00:18:45</text>
+
+      <rect x="854" y="-15" width="76" height="22" rx="6" fill="#F1F5F9"/>
+      <text x="892" y="0" fill="#64748B" font-size="11.5" font-weight="600" text-anchor="middle">Terminée</text>
+
+      <text x="1002" y="0" fill="#2563EB" font-size="12.5" font-weight="600">Revoir  ↗</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 8 : PIED DE PAGE (FOOTER)                                        -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Footer" transform="translate(264, 1056)">
+    <text x="0" y="0" fill="#94A3B8" font-size="11">Données de démonstration</text>
+    <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">Dernière synchronisation : 14:56:20 UTC+1  •  Secure Access. Total Control.</text>
+  </g>
+</svg>

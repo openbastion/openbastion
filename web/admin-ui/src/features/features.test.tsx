@@ -192,6 +192,16 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
   });
 });
 
+describe("Recording navigation", () => {
+  it("loads the requested session recording when opened from the Sessions workspace", async () => {
+    const page = { sessionId: "sess_from_search", page: 1, pageSize: 100, totalEntries: 1, entries: [{ timestamp: "2026-11-17T08:00:00Z", command: "id" }] };
+    const { api, calls } = fakeApi({ "GET /sessions/sess_from_search/recording?page=1&pageSize=100": { body: page } });
+    signedIn(api, <Recording requestedSessionId="sess_from_search" />);
+    expect(await screen.findByText("id")).toBeTruthy();
+    expect(calls.filter((call) => call.method === "GET" && call.path.includes("/recording?")).length).toBe(1);
+  });
+});
+
 describe("Recording", () => {
   it("shows the commands typed, as text — never as markup", async () => {
     const page = { sessionId: "s1", page: 1, pageSize: 100, totalEntries: 2, entries: [

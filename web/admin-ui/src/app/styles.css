@@ -2799,3 +2799,33 @@ main.login {
   .second-factor-code-cell { min-height: 3.4rem; font-size: 1.25rem; }
   .second-factor-help { margin-top: 2rem; }
 }
+
+/* Sessions workspace: compact, reference-led navigation and filter layout. */
+.session-tabs { min-width: 0; }
+.session-tabs .ob-tabs-list { gap: 0.35rem; overflow-x: auto; }
+.session-tabs .ob-tabs-trigger { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+.session-alert-tab-badge { font-size: 0.68rem; line-height: 1.2; }
+.session-filter-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin: 1rem 0; }
+.session-filter-bar label { display: grid; gap: 0.35rem; min-width: 9rem; color: var(--ob-color-text-secondary); font-size: 0.78rem; }
+.session-filter-bar .session-filter-query { flex: 1 1 17rem; min-width: min(100%, 15rem); }
+.session-filter-bar > button { min-height: 2.45rem; }
+.session-history, .session-recordings { min-width: 0; }
+.session-history .ob-section-heading, .session-recordings .ob-section-heading { align-items: flex-start; }
+.session-history .ob-section-heading h3, .session-recordings .ob-section-heading h3 { margin: 0; }
+.session-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; color: var(--ob-color-text-secondary); font-size: 0.82rem; }
+.session-recording-results { display: grid; gap: 0.75rem; margin-top: 1rem; }
+.session-recording-result { padding: 1rem; }
+.session-recording-result .ob-section-heading { align-items: center; }
+.session-recording-result h4 { margin: 0; font-size: 0.9rem; }
+.session-recording-result .commands { max-height: 18rem; overflow: auto; }
+.session-alerts-unavailable { display: grid; gap: 0.75rem; padding: 1.25rem; }
+.session-alerts-unavailable .ob-section-heading { align-items: center; }
+.session-alerts-unavailable h3 { margin: 0; }
+.session-alerts-unavailable p { margin: 0; max-width: 72ch; }
+@media (max-width: 720px) {
+  .session-filter-bar { align-items: stretch; }
+  .session-filter-bar label { flex: 1 1 calc(50% - 0.75rem); min-width: 0; }
+  .session-filter-bar .session-filter-query { flex-basis: 100%; }
+  .session-filter-bar > button { width: 100%; }
+  .session-tabs .ob-tabs-trigger { padding-inline: 0.55rem; font-size: 0.8rem; }
+}
