@@ -1,5 +1,7 @@
 import { createContext, forwardRef, useContext, useId, useState, type FieldsetHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { cn } from "../lib/cn";
+import { Input } from "./Input";
+import { Label } from "./Label";
 
 type RadioGroupContextValue = {
   name: string;
@@ -47,10 +49,10 @@ export const RadioGroupItem = forwardRef<HTMLInputElement, RadioGroupItemProps>(
   const generatedId = useId();
   const inputId = id ?? generatedId;
   return (
-    <label className={cn("ob-radio-group__item", className)} htmlFor={inputId}>
-      <input {...props} ref={ref} id={inputId} type="radio" name={context.name} value={value} checked={context.value === value} disabled={context.disabled || props.disabled} onChange={() => context.select(value)} className="ob-radio-group__control" />
+    <Label className={cn("ob-radio-group__item", className)} htmlFor={inputId}>
+      <Input {...props} ref={ref} id={inputId} type="radio" name={context.name} value={value} checked={context.value === value} disabled={context.disabled || props.disabled} onChange={() => context.select(value)} className="ob-radio-group__control" />
       <span>{label}</span>
-    </label>
+    </Label>
   );
 });
 RadioGroupItem.displayName = "RadioGroupItem";
