@@ -42,6 +42,13 @@ describe("App", () => {
     }
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
     expect(screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" })).toBeTruthy();
+    expect(screen.getByText("Production", { selector: ".environment-badge" })).toBeTruthy();
+    const workspaceSelector = screen.getByRole("button", { name: /Production.*Console d’administration/ });
+    fireEvent.click(workspaceSelector);
+    expect(screen.getByRole("region", { name: "Espaces de travail disponibles" })).toBeTruthy();
+    expect(screen.getByText("Un seul espace est configuré sur cette instance.")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Espaces de travail disponibles" })).toBeNull();
     expect(screen.getByRole("link", { name: "Documentation" }).getAttribute("href")).toContain("/tree/main/docs");
     expect(screen.getByRole("link", { name: "Centre d'aide" }).getAttribute("href")).toContain("/tree/main/docs/user-guide");
     const notifications = screen.getByRole("button", { name: "Ouvrir les notifications" });
@@ -72,13 +79,14 @@ describe("App", () => {
     expect(screen.getAllByRole("banner")[0].hasAttribute("inert")).toBe(true);
     expect(screen.getByRole("main").hasAttribute("inert")).toBe(true);
     const mobileNavigation = within(mobileDialog).getByRole("navigation", { name: "Sections" });
-    const firstNavigationItem = within(mobileNavigation).getByRole("button", { name: "Vue générale" });
-    expect(document.activeElement).toBe(firstNavigationItem);
+    expect(within(mobileNavigation).getByRole("button", { name: "Vue générale" })).toBeTruthy();
+    const mobileWorkspaceSelector = within(mobileDialog).getByRole("button", { name: /Production.*Console d’administration/ });
+    expect(document.activeElement).toBe(mobileWorkspaceSelector);
     const sidebarUserMenu = within(mobileDialog).getByRole("button", { name: /alice.*platform-admin/ });
-    fireEvent.keyDown(firstNavigationItem, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(mobileWorkspaceSelector, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(sidebarUserMenu);
     fireEvent.keyDown(sidebarUserMenu, { key: "Tab" });
-    expect(document.activeElement).toBe(firstNavigationItem);
+    expect(document.activeElement).toBe(mobileWorkspaceSelector);
     fireEvent.keyDown(document, { key: "Escape" });
     const restoredMenuButton = screen.getByRole("button", { name: "Ouvrir la navigation" });
     expect(restoredMenuButton).toBeTruthy();

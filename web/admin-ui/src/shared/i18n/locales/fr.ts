@@ -26,6 +26,12 @@ export default {
     },
   },
   shell: {
+    environment: {
+      production: "Production",
+      menuLabel: "Espaces de travail disponibles",
+      configured: "ESPACE CONFIGURÉ",
+      singleWorkspace: "Un seul espace est configuré sur cette instance.",
+    },
     nav: {
       overview: { label: "Vue générale", description: "Synthèse opérationnelle" },
       accounts: { label: "Comptes", description: "Comptes privilégiés" },

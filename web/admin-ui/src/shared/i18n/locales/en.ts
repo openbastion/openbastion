@@ -25,6 +25,12 @@ export default {
     },
   },
   shell: {
+    environment: {
+      production: "Production",
+      menuLabel: "Available workspaces",
+      configured: "CONFIGURED WORKSPACE",
+      singleWorkspace: "Only one workspace is configured on this instance.",
+    },
     nav: {
       overview: { label: "Overview", description: "Operational summary" },
       accounts: { label: "Accounts", description: "Privileged accounts" },

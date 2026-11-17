@@ -3509,3 +3509,69 @@ main.login {
     max-width: none;
   }
 }
+
+
+/* Shared shell geometry: the expanded reference sidebar is exactly 240px. */
+@media (min-width: 761px) {
+  .app-workspace,
+  .app-workspace.sidebar-collapsed { grid-template-columns: 15rem minmax(0, 1fr); }
+  .app-workspace.sidebar-collapsed { grid-template-columns: 4.5rem minmax(0, 1fr); }
+  .app-sidebar { width: 15rem; }
+  .app-workspace.sidebar-collapsed > .app-sidebar { width: 4.5rem; }
+}
+.sidebar-workspace-selector { position: relative; display: grid; gap: 0.45rem; margin: 0 0 1.25rem; }
+.sidebar-workspace-label { padding-inline: 0.15rem; }
+.sidebar-workspace-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 3.45rem;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  color: var(--ob-color-chrome-text);
+  text-align: start;
+  cursor: pointer;
+}
+.sidebar-workspace-copy { display: grid; gap: 0.15rem; min-width: 0; flex: 1; }
+.sidebar-workspace-copy strong { color: var(--ob-color-chrome-text); font-size: 0.82rem; }
+.sidebar-workspace-copy small { color: var(--ob-color-chrome-muted); font-size: 0.66rem; }
+.workspace-environment-mark { width: 0.5rem; height: 0.5rem; flex: 0 0 auto; border-radius: 50%; background: var(--ob-color-status-success); box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--ob-color-status-success) 18%, transparent); }
+.workspace-selector-chevron { color: var(--ob-color-chrome-muted); font-size: 0.95rem; }
+.workspace-menu {
+  position: absolute;
+  z-index: 30;
+  inset-inline: 0;
+  top: calc(100% + 0.35rem);
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem;
+  color: var(--ob-color-chrome-text);
+  background: var(--ob-color-chrome-background-raised);
+  border: 1px solid var(--ob-color-chrome-border);
+  border-radius: 0.55rem;
+  box-shadow: var(--shadow);
+}
+.workspace-menu-caption { color: var(--ob-color-chrome-muted); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; }
+.workspace-menu-current { display: flex; align-items: center; gap: 0.55rem; font-size: 0.76rem; font-weight: 650; }
+.workspace-menu-current > span:last-child { margin-inline-start: auto; color: var(--ob-color-chrome-accent); }
+.workspace-menu p { margin: 0; color: var(--ob-color-chrome-muted); font-size: 0.66rem; line-height: 1.45; }
+.environment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.7rem;
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+  border-radius: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.environment-badge .workspace-environment-mark { width: 0.42rem; height: 0.42rem; box-shadow: none; }
+.sidebar-collapsed .sidebar-workspace-selector { display: none; }
+@media (max-width: 760px) {
+  .environment-badge { display: none; }
+  .sidebar-workspace-selector { margin-bottom: 1rem; }
+}

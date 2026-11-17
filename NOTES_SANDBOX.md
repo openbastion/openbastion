@@ -4942,3 +4942,13 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 
 - La sidebar desktop ne doit pas suivre le scroll du document. `position: sticky` dans la grille ne garantissait pas son indépendance sur les pages longues.
 - Elle est désormais fixée sous la topbar (`top: 4rem; bottom: 0; position: fixed`) et occupe la hauteur disponible du viewport. Sa largeur suit l'état expanded/collapsed (14,5 rem / 4,5 rem). Le scroll éventuel reste interne à la navigation uniquement. Le comportement mobile en tiroir reste distinct.
+
+## 2026-11-17 — Shell partagé : sidebar 240 px et contexte Production
+
+- Sidebar desktop développée fixée à 240 px (15 rem), mesurée dans Chromium à 1440 × 1080 ; la variante réduite existante reste disponible à 72 px. Le tiroir mobile conserve sa largeur adaptative.
+- Le sélecteur d'espace de travail affiche « Production ». Son menu indique explicitement qu'un seul espace est configuré sur cette instance : aucune bascule fictive entre tenants/environnements n'est proposée en l'absence de contrat API de sélection. Le contexte est également rappelé dans la topbar.
+- Navigation conserve uniquement les six destinations déjà implémentées et leurs API publiques. La carte d'état Console OpenBastion et le profil opérateur restent ancrés en bas de la sidebar.
+- Menu Production fermé par Échap et clic extérieur ; le focus initial du tiroir mobile respecte désormais l'ordre DOM et son cycle clavier inclut le sélecteur.
+- Libellés français/anglais ajoutés avec parité de clés. Test shell ajouté pour le badge Production, le menu mono-espace et sa fermeture clavier.
+- Capture navigateur réelle produite : `/tmp/openbastion-shell-actual.png`. Mesure DOM Chromium : sidebar `width=240px`, `x=0`, `y=64`, hauteur `1016px` à 1440 × 1080.
+- Limite : la sélection d'un autre workspace/tenant n'est pas implémentée car aucun contrat public de découverte et de changement d'espace n'existe. Le sélecteur n'affiche donc qu'un espace unique configuré.

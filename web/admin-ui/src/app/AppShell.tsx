@@ -58,6 +58,7 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -178,6 +179,22 @@ export function AppShell({
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
     };
   }, [userMenuOpen]);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWorkspaceMenuOpen(false);
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest(".sidebar-workspace-selector")) setWorkspaceMenuOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [workspaceMenuOpen]);
 
   useEffect(() => {
     if (!notificationsOpen) return;
@@ -323,10 +340,29 @@ export function AppShell({
               <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
             </button>
           </div>
-          <div className="sidebar-workspace-card">
+          <div className="sidebar-workspace-selector">
             <span className="sidebar-workspace-label">{t("shell.sidebar.workspace")}</span>
-            <strong>{t("shell.sidebar.workspaceName")}</strong>
-            <small>{t("shell.sidebar.workspaceContext")}</small>
+            <button
+              type="button"
+              className="sidebar-workspace-card"
+              aria-expanded={workspaceMenuOpen}
+              aria-controls="workspace-menu"
+              onClick={() => setWorkspaceMenuOpen((open) => !open)}
+            >
+              <span className="workspace-environment-mark" aria-hidden="true" />
+              <span className="sidebar-workspace-copy">
+                <strong>{t("shell.environment.production")}</strong>
+                <small>{t("shell.sidebar.workspaceContext")}</small>
+              </span>
+              <span className="workspace-selector-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {workspaceMenuOpen ? (
+              <div className="workspace-menu" id="workspace-menu" role="region" aria-label={t("shell.environment.menuLabel")}>
+                <span className="workspace-menu-caption">{t("shell.environment.configured")}</span>
+                <span className="workspace-menu-current"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}<span aria-hidden="true">✓</span></span>
+                <p>{t("shell.environment.singleWorkspace")}</p>
+              </div>
+            ) : null}
           </div>
           <nav aria-label={t("shell.navigation.sections")}>
             {favoriteTabs.length > 0 ? (
@@ -421,6 +457,7 @@ export function AppShell({
               <kbd>Ctrl K</kbd>
             </button>
             <div className="header-actions">
+              <span className="environment-badge"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}</span>
               <div className="notifications-menu" ref={notificationsRef}>
                 <button
                   ref={notificationsButton}
