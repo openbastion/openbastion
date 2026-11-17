@@ -128,7 +128,9 @@ export default {
       aria: "Présentation d'OpenBastion",
       product: "ACCÈS PRIVILÉGIÉS",
       eyebrow: "SECURE ACCESS. TOTAL CONTROL.",
-      title: "Vos accès privilégiés. La confiance en plus.",
+      titleAccessible: "Vos accès privilégiés. La confiance en plus.",
+      titleFirstLine: "Vos accès privilégiés.",
+      titleSecondLine: "La confiance en plus.",
       description: "Un point d’entrée unique pour vos infrastructures. Chaque identité est vérifiée, chaque session est protégée.",
       securityTitle: "La sécurité, à chaque connexion",
       security: {

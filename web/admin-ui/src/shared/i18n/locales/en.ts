@@ -127,7 +127,9 @@ export default {
       aria: "About OpenBastion",
       product: "PRIVILEGED ACCESS",
       eyebrow: "SECURE ACCESS. TOTAL CONTROL.",
-      title: "Your privileged access. With trust built in.",
+      titleAccessible: "Your privileged access. With trust built in.",
+      titleFirstLine: "Your privileged access.",
+      titleSecondLine: "With trust built in.",
       description: "One secure entry point to your infrastructure. Every identity is verified, every session is protected.",
       securityTitle: "Security at every connection",
       security: {

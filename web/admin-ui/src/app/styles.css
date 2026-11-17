@@ -2317,6 +2317,9 @@ main.login {
   line-height: 1.47;
   letter-spacing: -0.02em;
 }
+.login-brand-message h2 > span {
+  display: block;
+}
 .login-brand-message > p:last-child {
   max-width: 28rem;
   margin: 0;

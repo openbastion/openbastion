@@ -108,7 +108,10 @@ export function Login({ api, onToken, navigate }: { api: Api; onToken: (t: strin
           </div>
           <div className="login-brand-message">
             <p className="login-eyebrow">{t("login.brand.eyebrow")}</p>
-            <h2>{t("login.brand.title")}</h2>
+            <h2 aria-label={t("login.brand.titleAccessible")}>
+              <span>{t("login.brand.titleFirstLine")}</span>
+              <span>{t("login.brand.titleSecondLine")}</span>
+            </h2>
             <p>{t("login.brand.description")}</p>
           </div>
           <section className="login-security-note" aria-labelledby="login-security-title">

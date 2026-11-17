@@ -15,7 +15,10 @@ describe("Login", () => {
     expect(within(legalLinks).getByRole("link", { name: /Code source/ })).toBeTruthy();
     expect(within(legalLinks).getByRole("link", { name: "Texte de la licence" })).toBeTruthy();
     expect(legalLinks.parentElement?.classList.contains("login-footer-links")).toBe(true);
-    expect(screen.getByRole("heading", { name: "Vos accès privilégiés. La confiance en plus." })).toBeTruthy();
+    const brandHeading = screen.getByRole("heading", { name: "Vos accès privilégiés. La confiance en plus." });
+    expect(brandHeading.querySelectorAll(":scope > span")).toHaveLength(2);
+    expect(brandHeading.querySelector(":scope > span:first-child")?.textContent).toBe("Vos accès privilégiés.");
+    expect(brandHeading.querySelector(":scope > span:last-child")?.textContent).toBe("La confiance en plus.");
     expect(screen.getByText("MFA appliquée selon la politique d'accès")).toBeTruthy();
     expect(screen.getByText("Sessions chiffrées et intégralement tracées")).toBeTruthy();
     expect(screen.getByText("Secrets conservés dans le coffre-fort")).toBeTruthy();
