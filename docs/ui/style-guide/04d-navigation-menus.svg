@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="682" viewBox="0 0 1440 682" role="img" aria-labelledby="title desc">
+  <title id="title">OpenBastion — Navigation &amp; menus</title>
+  <desc id="desc">Composants de navigation, menus et orientation dans l’application. Planche de composants illustratifs alignés sur les références UI du projet.</desc>
+
+  <defs>
+    <style>
+      svg {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      .brand-kicker { fill: #2563EB; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .page-title { fill: #0F172A; font-size: 34px; font-weight: 700; }
+      .page-subtitle { fill: #64748B; font-size: 15px; font-weight: 400; }
+      .section-label { fill: #2563EB; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+      .card-bg { fill: #FFFFFF; stroke: #E2E8F0; stroke-width: 1; }
+      .card-title { fill: #0F172A; font-size: 12px; font-weight: 700; }
+      .card-tag { fill: #94A3B8; font-size: 8px; font-weight: 700; text-anchor: end; }
+      .card-divider { stroke: #F1F5F9; stroke-width: 1; }
+      .field-label { fill: #334155; font-size: 10px; font-weight: 500; }
+      .footer-text { fill: #64748B; font-size: 9px; font-weight: 500; }
+    </style>
+
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+
+    <!-- Gabarit de carte standard (420 x 112) -->
+    <g id="card-shell">
+      <rect width="420" height="112" rx="8" class="card-bg" filter="url(#cardShadow)" />
+      <line x1="16" y1="31" x2="404" y2="31" class="card-divider" />
+      <text x="404" y="22" class="card-tag">UI COMPONENT</text>
+    </g>
+  </defs>
+
+  <!-- Arrière-plan et bandeau supérieur -->
+  <g id="Layer_Background">
+    <rect width="1440" height="682" fill="#F8FAFC" />
+  </g>
+  <g id="Layer_BrandChrome">
+    <rect width="1440" height="10" fill="#0D2137" />
+  </g>
+
+  <!-- En-tête de planche -->
+  <g id="Layer_Header">
+    <text x="64" y="62" class="brand-kicker">OPENBASTION / DESIGN SYSTEM</text>
+    <text x="64" y="116" class="page-title">Navigation &amp; menus</text>
+    <text x="64" y="148" class="page-subtitle">Navigation, menus et repères de parcours · composants illustratifs alignés sur les références</text>
+  </g>
+
+  <!-- Contenu principal : Grille 3 colonnes (x = 64, 510, 956 | largeur carte = 420 | gouttière = 26) -->
+  <g id="Layer_Content">
+    <!-- Séparateur de section -->
+    <g id="Section_Header">
+      <text x="64" y="207" class="section-label">NAVIGATION &amp; MENUS</text>
+      <line x1="220" y1="203" x2="1376" y2="203" stroke="#E2E8F0" stroke-width="1" />
+    </g>
+
+    <!-- RANGÉE 1 (y = 221) -->
+    <g id="Row_1">
+      <!-- Carte 1 : Breadcrumb -->
+      <g id="Card_Breadcrumb" transform="translate(64, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Breadcrumb</text>
+
+        <text x="16" y="72" font-size="10" fill="#64748B" font-weight="500">Ressources</text>
+        <text x="82" y="72" font-size="11" fill="#CBD5E1" font-weight="500">/</text>
+        <text x="96" y="72" font-size="10" fill="#64748B" font-weight="500">Serveurs</text>
+        <text x="154" y="72" font-size="11" fill="#CBD5E1" font-weight="500">/</text>
+        <text x="168" y="72" font-size="10" fill="#0F172A" font-weight="700">srv-prod-01</text>
+      </g>
+
+      <!-- Carte 2 : Command -->
+      <g id="Card_Command" transform="translate(510, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Command</text>
+
+        <rect x="16" y="44" width="388" height="58" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="28" y="62" font-size="9.5" fill="#94A3B8" font-weight="500">⌕  Rechercher une commande…</text>
+        <line x1="16" y1="70" x2="404" y2="70" stroke="#E2E8F0" stroke-width="1" />
+        <text x="28" y="85" font-size="9.5" fill="#334155" font-weight="500">⌘  Ouvrir une session</text>
+      </g>
+
+      <!-- Carte 3 : ContextMenu -->
+      <g id="Card_ContextMenu" transform="translate(956, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">ContextMenu</text>
+
+        <rect x="120" y="38" width="180" height="66" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#cardShadow)" />
+        <text x="132" y="56" font-size="9.5" fill="#334155" font-weight="500">Ouvrir dans un nouvel onglet</text>
+        <text x="132" y="74" font-size="9.5" fill="#334155" font-weight="500">Copier l’identifiant</text>
+        <line x1="128" y1="81" x2="292" y2="81" stroke="#E2E8F0" stroke-width="1" />
+        <text x="132" y="96" font-size="9.5" fill="#DC2626" font-weight="600">Supprimer</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 2 (y = 345) -->
+    <g id="Row_2">
+      <!-- Carte 4 : DropdownMenu -->
+      <g id="Card_DropdownMenu" transform="translate(64, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">DropdownMenu</text>
+
+        <rect x="16" y="44" width="130" height="26" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="26" y="61" font-size="9.5" fill="#334155" font-weight="600">Camille Martin  ⌄</text>
+
+        <rect x="16" y="74" width="150" height="32" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="28" y="90" font-size="9" fill="#334155" font-weight="500">Mon profil</text>
+        <text x="28" y="103" font-size="9" fill="#DC2626" font-weight="600">Déconnexion</text>
+      </g>
+
+      <!-- Carte 5 : Menubar -->
+      <g id="Card_Menubar" transform="translate(510, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Menubar</text>
+
+        <rect x="16" y="50" width="388" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="30" y="70" font-size="9.5" fill="#334155" font-weight="600">Fichier  ⌄</text>
+        <text x="110" y="70" font-size="9.5" fill="#334155" font-weight="600">Édition  ⌄</text>
+        <text x="190" y="70" font-size="9.5" fill="#334155" font-weight="600">Affichage  ⌄</text>
+        <text x="280" y="70" font-size="9.5" fill="#334155" font-weight="600">Aide</text>
+      </g>
+
+      <!-- Carte 6 : NavigationMenu -->
+      <g id="Card_NavigationMenu" transform="translate(956, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">NavigationMenu</text>
+
+        <rect x="16" y="50" width="388" height="32" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="30" y="70" font-size="9.5" fill="#2563EB" font-weight="700">Plateforme  ⌄</text>
+        <text x="140" y="70" font-size="9.5" fill="#334155" font-weight="600">Accès  ⌄</text>
+        <text x="230" y="70" font-size="9.5" fill="#334155" font-weight="600">Gouvernance  ⌄</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 3 (y = 469) -->
+    <g id="Row_3">
+      <!-- Carte 7 : Pagination -->
+      <g id="Card_Pagination" transform="translate(64, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Pagination</text>
+
+        <!-- Boutons pagination -->
+        <g transform="translate(16, 54)">
+          <rect x="0" y="0" width="28" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+          <text x="14" y="18" font-size="10" fill="#475569" font-weight="600" text-anchor="middle">‹</text>
+
+          <rect x="34" y="0" width="28" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+          <text x="48" y="18" font-size="9.5" fill="#475569" font-weight="600" text-anchor="middle">1</text>
+
+          <rect x="68" y="0" width="28" height="28" rx="6" fill="#2563EB" />
+          <text x="82" y="18" font-size="9.5" fill="#FFFFFF" font-weight="700" text-anchor="middle">2</text>
+
+          <rect x="102" y="0" width="28" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+          <text x="116" y="18" font-size="9.5" fill="#475569" font-weight="600" text-anchor="middle">3</text>
+
+          <rect x="136" y="0" width="28" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+          <text x="150" y="18" font-size="9.5" fill="#475569" font-weight="600" text-anchor="middle">…</text>
+
+          <rect x="170" y="0" width="28" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+          <text x="184" y="18" font-size="9.5" fill="#475569" font-weight="600" text-anchor="middle">8</text>
+
+          <rect x="204" y="0" width="28" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+          <text x="218" y="18" font-size="10" fill="#475569" font-weight="600" text-anchor="middle">›</text>
+        </g>
+      </g>
+
+      <!-- Carte 8 : Sidebar -->
+      <g id="Card_Sidebar" transform="translate(510, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Sidebar</text>
+
+        <rect x="16" y="44" width="90" height="54" rx="5" fill="#0D2137" />
+        <text x="22" y="58" font-size="7" fill="#FFFFFF" font-weight="700">OPENBASTION</text>
+        <rect x="20" y="63" width="82" height="14" rx="3" fill="#1E3A5F" />
+        <text x="25" y="73" font-size="7" fill="#FFFFFF" font-weight="600">◈ Vue globale</text>
+        <text x="25" y="87" font-size="7" fill="#CBD5E1" font-weight="500">▤ Sessions</text>
+
+        <text x="120" y="65" font-size="10" fill="#334155" font-weight="600">Navigation compacte et étendue</text>
+        <text x="120" y="81" font-size="9" fill="#64748B" font-weight="500">Groupes · liens · pied de menu</text>
+      </g>
+
+      <!-- Carte 9 : Tabs -->
+      <g id="Card_Tabs" transform="translate(956, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Tabs</text>
+
+        <line x1="16" y1="80" x2="404" y2="80" stroke="#E2E8F0" stroke-width="1" />
+        <text x="24" y="65" font-size="9.5" fill="#2563EB" font-weight="700">Vue générale</text>
+        <text x="118" y="65" font-size="9.5" fill="#64748B" font-weight="500">Accès</text>
+        <text x="170" y="65" font-size="9.5" fill="#64748B" font-weight="500">Activité</text>
+        <text x="232" y="65" font-size="9.5" fill="#64748B" font-weight="500">Paramètres</text>
+        <!-- Indicateur actif -->
+        <line x1="24" y1="80" x2="100" y2="80" stroke="#2563EB" stroke-width="2" />
+      </g>
+    </g>
+  </g>
+
+  <!-- Pied de page -->
+  <g id="Layer_Footer">
+    <line x1="64" y1="634" x2="1376" y2="634" stroke="#E2E8F0" stroke-width="1" />
+    <text x="64" y="652" class="footer-text">OPENBASTION · UI KIT / PR #223 · DOCUMENT DE TRAVAIL</text>
+    <text x="1376" y="652" class="footer-text" text-anchor="end">04d-navigation-menus.svg</text>
+  </g>
+</svg>

@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="682" viewBox="0 0 1440 682" role="img" aria-labelledby="title desc">
+  <title id="title">OpenBastion — Fondations &amp; présentation</title>
+  <desc id="desc">Fondations et composants de présentation OpenBastion. Planche de composants illustratifs alignés sur les références UI du projet.</desc>
+
+  <defs>
+    <style>
+      svg {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      .brand-kicker { fill: #2563EB; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .page-title { fill: #0F172A; font-size: 34px; font-weight: 700; }
+      .page-subtitle { fill: #64748B; font-size: 15px; font-weight: 400; }
+      .section-label { fill: #2563EB; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+      .card-bg { fill: #FFFFFF; stroke: #E2E8F0; stroke-width: 1; }
+      .card-title { fill: #0F172A; font-size: 12px; font-weight: 700; }
+      .card-tag { fill: #94A3B8; font-size: 8px; font-weight: 700; text-anchor: end; }
+      .card-divider { stroke: #F1F5F9; stroke-width: 1; }
+      .footer-text { fill: #64748B; font-size: 9px; font-weight: 500; }
+    </style>
+
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+
+    <!-- Gabarit de carte standard (420 x 112) -->
+    <g id="card-shell">
+      <rect width="420" height="112" rx="8" class="card-bg" filter="url(#cardShadow)" />
+      <line x1="16" y1="31" x2="404" y2="31" class="card-divider" />
+      <text x="404" y="22" class="card-tag">UI COMPONENT</text>
+    </g>
+  </defs>
+
+  <!-- Arrière-plan et bandeau supérieur -->
+  <g id="Layer_Background">
+    <rect width="1440" height="682" fill="#F8FAFC" />
+  </g>
+  <g id="Layer_BrandChrome">
+    <rect width="1440" height="10" fill="#0D2137" />
+  </g>
+
+  <!-- En-tête de planche -->
+  <g id="Layer_Header">
+    <text x="64" y="62" class="brand-kicker">OPENBASTION / DESIGN SYSTEM</text>
+    <text x="64" y="116" class="page-title">Fondations &amp; présentation</text>
+    <text x="64" y="148" class="page-subtitle">Fondations, identité et composants de présentation · composants illustratifs alignés sur les références</text>
+  </g>
+
+  <!-- Contenu principal : Grille 3 colonnes (x = 64, 510, 956 | largeur carte = 420 | gouttière = 26) -->
+  <g id="Layer_Content">
+    <!-- Séparateur de section -->
+    <g id="Section_Header">
+      <text x="64" y="207" class="section-label">FONDATIONS &amp; PRÉSENTATION</text>
+      <line x1="250" y1="203" x2="1376" y2="203" stroke="#E2E8F0" stroke-width="1" />
+    </g>
+
+    <!-- RANGÉE 1 (y = 221) -->
+    <g id="Row_1">
+      <!-- Carte 1 : AspectRatio -->
+      <g id="Card_AspectRatio" transform="translate(64, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">AspectRatio</text>
+
+        <rect x="16" y="45" width="116" height="58" rx="5" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1" />
+        <text x="74" y="78" font-size="12" fill="#2563EB" font-weight="700" text-anchor="middle">16:9</text>
+
+        <rect x="140" y="45" width="58" height="58" rx="5" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1" />
+        <text x="169" y="78" font-size="10" fill="#475569" font-weight="700" text-anchor="middle">1:1</text>
+
+        <rect x="206" y="45" width="44" height="58" rx="5" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1" />
+        <text x="228" y="78" font-size="9.5" fill="#475569" font-weight="700" text-anchor="middle">3:4</text>
+      </g>
+
+      <!-- Carte 2 : Avatar -->
+      <g id="Card_Avatar" transform="translate(510, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Avatar</text>
+
+        <circle cx="30" cy="73" r="12" fill="#DBEAFE" />
+        <text x="30" y="76.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1D4ED8">CM</text>
+
+        <circle cx="75" cy="73" r="17" fill="#DBEAFE" />
+        <text x="75" y="76.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1D4ED8">JD</text>
+
+        <circle cx="130" cy="73" r="23" fill="#DBEAFE" />
+        <text x="130" y="76.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#1D4ED8">AL</text>
+
+        <text x="168" y="74" font-size="11" fill="#0F172A" font-weight="600">Camille Martin</text>
+        <text x="168" y="90" font-size="9.5" fill="#64748B" font-weight="500">Administrateur</text>
+      </g>
+
+      <!-- Carte 3 : Card -->
+      <g id="Card_Card" transform="translate(956, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Card</text>
+
+        <!-- Sous-carte 1 -->
+        <rect x="16" y="42" width="186" height="56" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="28" y="61" font-size="9.5" fill="#64748B" font-weight="500">Sessions actives</text>
+        <text x="28" y="86" font-size="20" fill="#0F172A" font-weight="700">128</text>
+        <rect x="143" y="52" width="47" height="20" rx="4" fill="#ECFDF5" />
+        <text x="166" y="65" font-size="9.5" fill="#047857" font-weight="600" text-anchor="middle">+12 %</text>
+
+        <!-- Sous-carte 2 -->
+        <rect x="214" y="42" width="186" height="56" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="226" y="61" font-size="9.5" fill="#64748B" font-weight="500">Risque moyen</text>
+        <text x="226" y="86" font-size="17" fill="#047857" font-weight="700">Faible</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 2 (y = 345) -->
+    <g id="Row_2">
+      <!-- Carte 4 : Image -->
+      <g id="Card_Image" transform="translate(64, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Image</text>
+
+        <rect x="16" y="46" width="92" height="56" rx="5" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="1" />
+        <circle cx="40" cy="62" r="7" fill="#BFDBFE" />
+
+        <text x="124" y="68" font-size="10" fill="#334155" font-weight="600">Aperçu de ressource</text>
+        <text x="124" y="86" font-size="9.5" fill="#64748B" font-weight="500">Image avec fallback et placeholder</text>
+      </g>
+
+      <!-- Carte 5 : Separator -->
+      <g id="Card_Separator" transform="translate(510, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Separator</text>
+
+        <text x="16" y="55" font-size="9.5" fill="#64748B" font-weight="500">Informations</text>
+        <line x1="16" y1="67" x2="404" y2="67" stroke="#E2E8F0" stroke-width="1" />
+        <text x="16" y="86" font-size="9.5" fill="#64748B" font-weight="500">Paramètres avancés</text>
+      </g>
+
+      <!-- Carte 6 : Skeleton -->
+      <g id="Card_Skeleton" transform="translate(956, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Skeleton</text>
+
+        <rect x="16" y="47" width="44" height="44" rx="12" fill="#E2E8F0" />
+        <rect x="72" y="50" width="160" height="9" rx="4" fill="#E2E8F0" />
+        <rect x="72" y="68" width="118" height="8" rx="4" fill="#F1F5F9" />
+        <rect x="72" y="84" width="220" height="8" rx="4" fill="#F1F5F9" />
+      </g>
+    </g>
+  </g>
+
+  <!-- Pied de page -->
+  <g id="Layer_Footer">
+    <line x1="64" y1="634" x2="1376" y2="634" stroke="#E2E8F0" stroke-width="1" />
+    <text x="64" y="652" class="footer-text">OPENBASTION · UI KIT / PR #223 · DOCUMENT DE TRAVAIL</text>
+    <text x="1376" y="652" class="footer-text" text-anchor="end">04a-fondations-presentation.svg</text>
+  </g>
+</svg>

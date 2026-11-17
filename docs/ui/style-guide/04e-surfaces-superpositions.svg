@@ -1,0 +1,228 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="682" viewBox="0 0 1440 682" role="img" aria-labelledby="title desc">
+  <title id="title">OpenBastion — Surfaces &amp; superpositions</title>
+  <desc id="desc">Dialogues, panneaux, surfaces contextuelles et composants superposés. Planche de composants illustratifs alignés sur les références UI du projet.</desc>
+
+  <defs>
+    <style>
+      svg {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      .brand-kicker { fill: #2563EB; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .page-title { fill: #0F172A; font-size: 34px; font-weight: 700; }
+      .page-subtitle { fill: #64748B; font-size: 15px; font-weight: 400; }
+      .section-label { fill: #2563EB; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+      .card-bg { fill: #FFFFFF; stroke: #E2E8F0; stroke-width: 1; }
+      .card-title { fill: #0F172A; font-size: 12px; font-weight: 700; }
+      .card-tag { fill: #94A3B8; font-size: 8px; font-weight: 700; text-anchor: end; }
+      .card-divider { stroke: #F1F5F9; stroke-width: 1; }
+      .footer-text { fill: #64748B; font-size: 9px; font-weight: 500; }
+    </style>
+
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+
+    <!-- Gabarit de carte standard (420 x 112) -->
+    <g id="card-shell">
+      <rect width="420" height="112" rx="8" class="card-bg" filter="url(#cardShadow)" />
+      <line x1="16" y1="31" x2="404" y2="31" class="card-divider" />
+      <text x="404" y="22" class="card-tag">UI COMPONENT</text>
+    </g>
+  </defs>
+
+  <!-- Arrière-plan et bandeau supérieur -->
+  <g id="Layer_Background">
+    <rect width="1440" height="682" fill="#F8FAFC" />
+  </g>
+  <g id="Layer_BrandChrome">
+    <rect width="1440" height="10" fill="#0D2137" />
+  </g>
+
+  <!-- En-tête de planche -->
+  <g id="Layer_Header">
+    <text x="64" y="62" class="brand-kicker">OPENBASTION / DESIGN SYSTEM</text>
+    <text x="64" y="116" class="page-title">Surfaces &amp; superpositions</text>
+    <text x="64" y="148" class="page-subtitle">Surfaces, dialogues et composants superposés · composants illustratifs alignés sur les références</text>
+  </g>
+
+  <!-- Contenu principal : Grille 3 colonnes (x = 64, 510, 956 | largeur carte = 420 | gouttière = 26) -->
+  <g id="Layer_Content">
+    <!-- Séparateur de section -->
+    <g id="Section_Header">
+      <text x="64" y="207" class="section-label">SURFACES &amp; SUPERPOSITIONS</text>
+      <line x1="250" y1="203" x2="1376" y2="203" stroke="#E2E8F0" stroke-width="1" />
+    </g>
+
+    <!-- RANGÉE 1 (y = 221) -->
+    <g id="Row_1">
+      <!-- Carte 1 : Accordion -->
+      <g id="Card_Accordion" transform="translate(64, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Accordion</text>
+
+        <rect x="16" y="44" width="388" height="26" rx="5" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="26" y="61" font-size="9.5" fill="#334155" font-weight="600">Authentification multifacteur</text>
+        <text x="382" y="62" font-size="11" fill="#64748B" font-weight="600">⌄</text>
+
+        <rect x="16" y="74" width="388" height="26" rx="5" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="26" y="91" font-size="9.5" fill="#64748B" font-weight="500">WebAuthn · TOTP · clés FIDO2</text>
+      </g>
+
+      <!-- Carte 2 : AlertDialog -->
+      <g id="Card_AlertDialog" transform="translate(510, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">AlertDialog</text>
+
+        <!-- Modale interne -->
+        <rect x="54" y="38" width="312" height="64" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#cardShadow)" />
+        <text x="66" y="54" font-size="10" fill="#0F172A" font-weight="700">Révoquer cet accès ?</text>
+        <text x="66" y="68" font-size="9" fill="#64748B" font-weight="500">Cette action termine la session en cours.</text>
+
+        <rect x="232" y="76" width="60" height="20" rx="4" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="262" y="90" font-size="9" fill="#334155" font-weight="500" text-anchor="middle">Annuler</text>
+
+        <rect x="298" y="76" width="60" height="20" rx="4" fill="#DC2626" />
+        <text x="328" y="90" font-size="9" fill="#FFFFFF" font-weight="500" text-anchor="middle">Révoquer</text>
+      </g>
+
+      <!-- Carte 3 : Collapsible -->
+      <g id="Card_Collapsible" transform="translate(956, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Collapsible</text>
+
+        <rect x="16" y="44" width="388" height="52" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+        <text x="28" y="62" font-size="9.5" fill="#334155" font-weight="600">Options avancées</text>
+        <text x="382" y="63" font-size="11" fill="#64748B" font-weight="500">⌄</text>
+        <text x="28" y="81" font-size="9" fill="#64748B" font-weight="500">Durée · restrictions · justification</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 2 (y = 345) -->
+    <g id="Row_2">
+      <!-- Carte 4 : Dialog -->
+      <g id="Card_Dialog" transform="translate(64, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Dialog</text>
+
+        <rect x="64" y="38" width="292" height="64" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#cardShadow)" />
+        <text x="78" y="55" font-size="10" fill="#0F172A" font-weight="700">Nouvelle connexion</text>
+        <text x="78" y="70" font-size="9" fill="#64748B" font-weight="500">Sélectionner une ressource et un compte.</text>
+        <rect x="270" y="76" width="76" height="20" rx="4" fill="#2563EB" />
+        <text x="308" y="90" font-size="9" fill="#FFFFFF" font-weight="600" text-anchor="middle">Continuer</text>
+      </g>
+
+      <!-- Carte 5 : Drawer -->
+      <g id="Card_Drawer" transform="translate(510, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Drawer</text>
+
+        <rect x="220" y="38" width="184" height="64" rx="7" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#cardShadow)" />
+        <line x1="220" y1="38" x2="220" y2="102" stroke="#2563EB" stroke-width="3" />
+        <text x="234" y="55" font-size="9.5" fill="#0F172A" font-weight="700">Détails de session</text>
+        <text x="234" y="71" font-size="9" fill="#64748B" font-weight="500">Utilisateur · hôte</text>
+        <text x="234" y="85" font-size="9" fill="#64748B" font-weight="500">Durée · statut</text>
+      </g>
+
+      <!-- Carte 6 : HoverCard -->
+      <g id="Card_HoverCard" transform="translate(956, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">HoverCard</text>
+
+        <text x="16" y="72" font-size="9.5" fill="#2563EB" font-weight="600">Survoler un utilisateur</text>
+
+        <rect x="156" y="38" width="232" height="62" rx="7" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#cardShadow)" />
+        <circle cx="178" cy="60" r="11" fill="#DBEAFE" />
+        <text x="178" y="63" text-anchor="middle" font-size="9" font-weight="700" fill="#1D4ED8">JD</text>
+        <text x="198" y="56" font-size="9.5" fill="#0F172A" font-weight="700">Jean Dupont</text>
+        <text x="198" y="70" font-size="8" fill="#64748B" font-weight="500">Équipe Infrastructure</text>
+        <rect x="198" y="76" width="56" height="18" rx="4" fill="#ECFDF5" />
+        <text x="226" y="88" font-size="8.5" fill="#047857" font-weight="600" text-anchor="middle">En ligne</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 3 (y = 469) -->
+    <g id="Row_3">
+      <!-- Carte 7 : Popover -->
+      <g id="Card_Popover" transform="translate(64, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Popover</text>
+
+        <rect x="16" y="50" width="80" height="26" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="30" y="67" font-size="9.5" fill="#334155" font-weight="600">Filtres  ⌄</text>
+
+        <rect x="106" y="38" width="190" height="60" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#cardShadow)" />
+        <text x="118" y="54" font-size="9" fill="#64748B" font-weight="600">Environnement</text>
+        <rect x="118" y="62" width="76" height="20" rx="4" fill="#DBEAFE" />
+        <text x="156" y="75" font-size="9" fill="#1D4ED8" font-weight="600" text-anchor="middle">Production</text>
+        <rect x="200" y="62" width="84" height="20" rx="4" fill="#F1F5F9" />
+        <text x="242" y="75" font-size="9" fill="#475569" font-weight="600" text-anchor="middle">Préproduction</text>
+      </g>
+
+      <!-- Carte 8 : Resizable -->
+      <g id="Card_Resizable" transform="translate(510, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Resizable</text>
+
+        <rect x="16" y="44" width="176" height="52" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="26" y="68" font-size="9" fill="#334155" font-weight="500">Liste des sessions</text>
+
+        <rect x="200" y="44" width="188" height="52" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="210" y="68" font-size="9" fill="#334155" font-weight="500">Détail de session</text>
+
+        <!-- Poignée resizable -->
+        <rect x="192" y="44" width="8" height="52" rx="2" fill="#DBEAFE" stroke="#BFDBFE" stroke-width="1" />
+      </g>
+
+      <!-- Carte 9 : ScrollArea -->
+      <g id="Card_ScrollArea" transform="translate(956, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">ScrollArea</text>
+
+        <rect x="16" y="42" width="220" height="58" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="26" y="58" font-size="9" fill="#0F172A" font-weight="700">Événements récents</text>
+        <text x="26" y="74" font-size="9" fill="#334155" font-weight="500">Connexion établie</text>
+        <text x="26" y="88" font-size="9" fill="#334155" font-weight="500">Commande exécutée</text>
+
+        <!-- Barre de défilement -->
+        <rect x="224" y="46" width="4" height="50" rx="2" fill="#F1F5F9" />
+        <rect x="224" y="52" width="4" height="20" rx="2" fill="#94A3B8" />
+      </g>
+    </g>
+
+    <!-- RANGÉE 4 (y = 593, centrée sur les colonnes 1 et 2 -> x = 64 et 510) -->
+    <g id="Row_4">
+      <!-- Carte 10 : Sheet -->
+      <g id="Card_Sheet" transform="translate(64, 593)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Sheet</text>
+
+        <rect x="230" y="36" width="174" height="64" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#cardShadow)" />
+        <text x="242" y="52" font-size="9.5" fill="#0F172A" font-weight="700">Panneau latéral</text>
+        <text x="242" y="66" font-size="8" fill="#64748B" font-weight="500">Navigation secondaire</text>
+        <rect x="242" y="72" width="84" height="20" rx="4" fill="#2563EB" />
+        <text x="284" y="85" font-size="9" fill="#FFFFFF" font-weight="600" text-anchor="middle">Enregistrer</text>
+      </g>
+
+      <!-- Carte 11 : Tooltip -->
+      <g id="Card_Tooltip" transform="translate(510, 593)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Tooltip</text>
+
+        <!-- Infobulle au-dessus -->
+        <rect x="110" y="35" width="132" height="24" rx="4" fill="#0F172A" />
+        <text x="176" y="51" font-size="9" fill="#FFFFFF" font-weight="600" text-anchor="middle">Action indisponible</text>
+
+        <!-- Bouton cible -->
+        <rect x="130" y="68" width="92" height="26" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="176" y="84" font-size="9.5" fill="#334155" font-weight="600" text-anchor="middle">Survoler</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Pied de page -->
+  <g id="Layer_Footer">
+    <line x1="64" y1="634" x2="1376" y2="634" stroke="#E2E8F0" stroke-width="1" />
+    <text x="64" y="652" class="footer-text">OPENBASTION · UI KIT / PR #223 · DOCUMENT DE TRAVAIL</text>
+    <text x="1376" y="652" class="footer-text" text-anchor="end">04e-surfaces-superpositions.svg</text>
+  </g>
+</svg>

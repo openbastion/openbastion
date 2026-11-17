@@ -1,64 +1,113 @@
-/* OpenBastion shared application styles. This is the single CSS entry point for Admin UI and User Portal. */
-/* Design tokens */
-/* OpenBastion Infrastructure — canonical visual tokens. */
+/*
+ * OpenBastion design system stylesheet
+ * --------------------------------------------------------------------------
+ * 01. Design tokens and theme values
+ * 02. Shared framework-neutral primitives (.ob-*)
+ * 03. Admin UI foundation and legacy application patterns
+ * 04. Operator shell, navigation and command palette
+ * 05. Workflows, overview and preferences
+ * 06. Account filters and inventory ergonomics
+ * 07. Reference-led screens: login, MFA, sessions and dashboard
+ * 08. Shared reference shell and responsive refinements
+ *
+ * Visual authority: docs/ui/style-guide/ and docs/ui/reference-screens/.
+ * Keep public class names stable; keep later overrides after their base rules.
+ */
+
+/* ==========================================================================
+   01. DESIGN TOKENS — primitive values, semantic roles and foundations
+   ========================================================================== */
 :root {
   color-scheme: light;
 
-  /* Primitive palette: each value is assigned to a semantic role below. */
+  /* Neutral scale sampled from the approved SVG references. */
   --ob-palette-neutral-0: #FFFFFF;
   --ob-palette-neutral-25: #F8FAFC;
   --ob-palette-neutral-50: #F8FAFC;
-  --ob-palette-neutral-100: #F8FAFC;
+  --ob-palette-neutral-100: #F1F5F9;
+  --ob-palette-surface: #FFFFFF;
+  --ob-palette-surface-muted: #F8FAFC;
+  --ob-palette-surface-subtle: #F8FAFC;
   --ob-palette-neutral-200: #E2E8F0;
+  --ob-palette-neutral-300: #CBD5E1;
+  --ob-palette-neutral-400: #94A3B8;
   --ob-palette-neutral-500: #64748B;
-  --ob-palette-neutral-600: #64748B;
-  --ob-palette-neutral-700: #94A3B8;
+  --ob-palette-neutral-600: #475569;
+  --ob-palette-neutral-700: #334155;
+  --ob-palette-neutral-800: #1E293B;
   --ob-palette-neutral-900: #0F172A;
   --ob-palette-neutral-950: #0F1720;
   --ob-palette-neutral-1000: #F3F6F9;
 
-  --ob-palette-surface: #FFFFFF;
-  --ob-palette-surface-muted: #F8FAFC;
-  --ob-palette-surface-subtle: #F8FAFC;
-  --ob-palette-surface-raised: #FFFFFF;
-
+  /* Brand blues and cyan accents used by the shell, charts and actions. */
+  --ob-palette-blue-50: #EFF6FF;
   --ob-palette-blue-100: #EFF6FF;
+  --ob-palette-blue-500: #2563EB;
+  --ob-palette-blue-600: #1D63DC;
   --ob-palette-blue-700: #2563EB;
   --ob-palette-blue-800: #1D4ED8;
   --ob-palette-blue-900: #1E40AF;
+  --ob-palette-blue-login: #0F62FE;
+  --ob-palette-cyan-500: #06B6D4;
+  --ob-palette-cyan-600: #0EA5E9;
+  --ob-palette-cyan-400: #38BDF8;
+
+  /* Status colors: distinct foreground and subtle background roles. */
+  --ob-palette-green-50: #ECFDF5;
   --ob-palette-green-100: #EAF5EF;
+  --ob-palette-green-700: #047857;
   --ob-palette-green-800: #126B4F;
+  --ob-palette-green-900: #0F766E;
+  --ob-palette-amber-50: #FFFBEB;
   --ob-palette-amber-100: #FFF5E4;
+  --ob-palette-amber-200: #FFF7ED;
+  --ob-palette-amber-700: #B45309;
   --ob-palette-amber-800: #8A5700;
+  --ob-palette-red-50: #FEF2F2;
   --ob-palette-red-100: #FBEFEE;
+  --ob-palette-red-600: #DC2626;
   --ob-palette-red-700: #B42318;
+  --ob-palette-red-700-alt: #B91C1C;
   --ob-palette-red-800: #912018;
 
-  --ob-palette-chrome-background: #0D2137;
-  --ob-palette-chrome-background-raised: #152E4D;
+  /* Navigation chrome and authentication brand panel. */
+  --ob-palette-navy-950: #0B192C;
+  --ob-palette-navy-900: #0B1E33;
+  --ob-palette-navy-800: #0D2137;
+  --ob-palette-navy-700: #13263E;
+  --ob-palette-navy-600: #152E4D;
+  --ob-palette-navy-500: #1E3A5F;
+  --ob-palette-navy-400: #23436B;
+  --ob-palette-chrome-background: var(--ob-palette-navy-800);
+  --ob-palette-chrome-background-raised: var(--ob-palette-navy-600);
   --ob-palette-chrome-text: #FFFFFF;
   --ob-palette-chrome-muted: #94A3B8;
   --ob-palette-overlay: rgb(15 23 32 / 0.58);
   --ob-palette-focus-ring: rgb(23 105 170 / 0.24);
 
-  /* Semantic palette: components consume these roles, never primitives. */
+  /* Semantic surfaces and text. Components must consume semantic roles. */
   --ob-color-bg-canvas: var(--ob-palette-neutral-25);
   --ob-color-bg-surface: var(--ob-palette-surface);
   --ob-color-bg-surface-muted: var(--ob-palette-surface-muted);
   --ob-color-bg-surface-subtle: var(--ob-palette-surface-subtle);
-  --ob-color-bg-surface-raised: var(--ob-palette-surface-raised);
+  --ob-color-bg-surface-raised: var(--ob-palette-neutral-0);
   --ob-color-text-primary: var(--ob-palette-neutral-900);
-  --ob-color-text-secondary: var(--ob-palette-neutral-600);
-  --ob-color-text-tertiary: var(--ob-palette-neutral-700);
+  --ob-color-text-secondary: var(--ob-palette-neutral-500);
+  --ob-color-text-tertiary: var(--ob-palette-neutral-400);
   --ob-color-border-subtle: var(--ob-palette-neutral-200);
   --ob-color-border-control: var(--ob-palette-neutral-500);
+
+  /* Actions, focus and feedback. */
   --ob-color-accent: var(--ob-palette-blue-700);
   --ob-color-accent-strong: var(--ob-palette-blue-800);
   --ob-color-accent-ink: var(--ob-palette-blue-900);
-  --ob-color-accent-subtle: var(--ob-palette-blue-100);
+  --ob-color-accent-subtle: var(--ob-palette-blue-50);
   --ob-color-text-on-accent: var(--ob-palette-neutral-0);
   --ob-color-focus: var(--ob-palette-blue-700);
   --ob-color-focus-shadow: 0 0 0 3px var(--ob-palette-focus-ring);
+  --ob-color-action-danger: var(--ob-palette-red-600);
+  --ob-color-status-info: var(--ob-palette-blue-700);
+  --ob-color-status-info-subtle: var(--ob-palette-blue-50);
   --ob-color-status-success: var(--ob-palette-green-800);
   --ob-color-status-success-subtle: var(--ob-palette-green-100);
   --ob-color-status-warning: var(--ob-palette-amber-800);
@@ -66,12 +115,14 @@
   --ob-color-status-danger: var(--ob-palette-red-700);
   --ob-color-status-danger-strong: var(--ob-palette-red-800);
   --ob-color-status-danger-subtle: var(--ob-palette-red-100);
-  --ob-color-chrome-background: #0D2137;
-  --ob-color-chrome-background-raised: #152E4D;
-  --ob-color-chrome-text: #FFFFFF;
-  --ob-color-chrome-muted: #94A3B8;
-  --ob-color-chrome-border: #1E3A5F;
-  --ob-color-chrome-accent: #38BDF8;
+
+  /* Navigation and top application chrome. */
+  --ob-color-chrome-background: var(--ob-palette-chrome-background);
+  --ob-color-chrome-background-raised: var(--ob-palette-chrome-background-raised);
+  --ob-color-chrome-text: var(--ob-palette-chrome-text);
+  --ob-color-chrome-muted: var(--ob-palette-chrome-muted);
+  --ob-color-chrome-border: var(--ob-palette-navy-500);
+  --ob-color-chrome-accent: var(--ob-palette-cyan-400);
   --ob-color-chrome-accent-subtle: #133356;
   --ob-color-shell-topbar-background: #FFFFFF;
   --ob-color-shell-topbar-border: #E2E8F0;
@@ -81,119 +132,291 @@
   --ob-color-shell-topbar-field: #F8FAFC;
   --ob-color-overlay: var(--ob-palette-overlay);
 
-  --ob-shadow-sm: 0 1px 2px rgb(15 23 32 / 0.06), 0 1px 3px rgb(15 23 32 / 0.08);
-  --ob-shadow-overlay: 0 18px 40px -24px rgb(15 23 32 / 0.28);
-  --ob-radius-sm: 4px;
-  --ob-radius-md: 6px;
-  --ob-radius-lg: 8px;
+  /* Authentication screen: deliberately keeps its light workspace in both themes. */
+  --ob-color-login-canvas: var(--ob-palette-neutral-25);
+  --ob-color-login-surface: var(--ob-palette-neutral-0);
+  --ob-color-login-panel: var(--ob-palette-navy-950);
+  --ob-color-login-panel-raised: var(--ob-palette-navy-700);
+  --ob-color-login-panel-text: var(--ob-palette-neutral-0);
+  --ob-color-login-panel-muted: var(--ob-palette-neutral-400);
+  --ob-color-login-panel-body: var(--ob-palette-neutral-300);
+  --ob-color-login-panel-footer: var(--ob-palette-neutral-500);
+  --ob-color-login-panel-mark-accent: var(--ob-palette-cyan-400);
+  --ob-color-login-panel-accent: var(--ob-palette-cyan-600);
+  --ob-color-login-text: var(--ob-palette-neutral-900);
+  --ob-color-login-muted: var(--ob-palette-neutral-500);
+  --ob-color-login-border: var(--ob-palette-neutral-200);
+  --ob-color-login-accent: var(--ob-palette-blue-login);
+  --ob-color-login-primary: var(--ob-palette-blue-login);
+  --ob-color-login-assurance: #EBF2FE;
+  --ob-color-login-assurance-text: var(--ob-palette-neutral-600);
+
+  /* Auth/connexion reference geometry (1440 × 1024 artboard). */
+  --ob-login-panel-width: 38.8888889%;
+  --ob-login-panel-padding-x: 3.5rem;
+  --ob-login-panel-padding-top: 3.625rem;
+  --ob-login-content-width: 27.5rem;
+  --ob-login-content-padding-top: 9.7rem;
+  --ob-login-control-height: 2.875rem;
+  --ob-login-submit-height: 3rem;
+  --ob-login-control-radius: 0.5rem;
+  --ob-login-security-card-radius: 0.625rem;
+  --ob-login-heading-size: 1.875rem;
+  --ob-login-body-size: 0.875rem;
+  --ob-login-label-size: 0.8125rem;
+
+  /* MFA validation reference geometry (1440 × 1024 artboard). */
+  --ob-mfa-content-width: 27.5rem;
+  --ob-mfa-content-padding-top: 9.125rem;
+  --ob-mfa-back-height: 1.5rem;
+  --ob-mfa-back-gap: 2rem;
+  --ob-mfa-icon-size: 3.25rem;
+  --ob-mfa-icon-heading-gap: 2.25rem;
+  --ob-mfa-heading-size: 1.875rem;
+  --ob-mfa-heading-description-gap: 0.5rem;
+  --ob-mfa-heading-account-gap: 1.625rem;
+  --ob-mfa-account-height: 2.875rem;
+  --ob-mfa-account-code-gap: 2.375rem;
+  --ob-mfa-code-label-gap: 0.5rem;
+  --ob-mfa-otp-cell-width: 3.75rem;
+  --ob-mfa-otp-cell-height: 3.875rem;
+  --ob-mfa-otp-gap: 1rem;
+  --ob-mfa-code-hint-top: 1.25rem;
+  --ob-mfa-code-hint-bottom: 1.9rem;
+  --ob-mfa-submit-height: 3rem;
+  --ob-mfa-help-margin-top: 5.125rem;
+  --ob-mfa-help-padding: 1rem;
+  --ob-mfa-help-radius: 0.625rem;
+
+  /* Typography. */
+  --ob-font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ob-font-family-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --ob-font-size-xs: 0.7rem;
+  --ob-font-size-sm: 0.8rem;
+  --ob-font-size-md: 0.875rem;
+  --ob-font-size-lg: 1rem;
+  --ob-font-size-xl: 1.25rem;
+  --ob-font-size-2xl: 1.5rem;
+  --ob-font-size-3xl: 1.875rem;
+  --ob-line-height-tight: 1.2;
+  --ob-line-height-normal: 1.5;
+  --ob-line-height-relaxed: 1.65;
+  --ob-font-weight-normal: 400;
+  --ob-font-weight-medium: 550;
+  --ob-font-weight-semibold: 650;
+  --ob-font-weight-bold: 700;
+
+  /* Spacing scale: 4px base unit. */
   --ob-space-1: 0.25rem;
   --ob-space-2: 0.5rem;
   --ob-space-3: 0.75rem;
   --ob-space-4: 1rem;
   --ob-space-5: 1.25rem;
   --ob-space-6: 1.5rem;
-  --ob-font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ob-space-7: 1.75rem;
+  --ob-space-8: 2rem;
+  --ob-space-9: 2.25rem;
+  --ob-space-10: 2.5rem;
+  --ob-space-12: 3rem;
+
+  /* Shape, elevation and motion. */
+  --ob-radius-xs: 3px;
+  --ob-radius-sm: 4px;
+  --ob-radius-md: 6px;
+  --ob-radius-lg: 8px;
+  --ob-radius-xl: 12px;
+  --ob-radius-pill: 999px;
+  --ob-shadow-sm: 0 1px 2px rgb(15 23 32 / 0.06), 0 1px 3px rgb(15 23 32 / 0.08);
+  --ob-shadow-md: 0 8px 24px -12px rgb(15 23 32 / 0.18);
+  --ob-shadow-overlay: 0 18px 40px -24px rgb(15 23 32 / 0.28);
   --ob-motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ob-motion-duration-fast: 120ms;
   --ob-motion-duration-standard: 180ms;
-  --ob-icon-accent: var(--ob-color-accent);
-  /* Login reference: dark brand panel on the left, light workspace on the right. */
-  --ob-color-login-canvas: #F8FAFC;
-  --ob-color-login-surface: #FFFFFF;
-  --ob-color-login-panel: #0B192C;
-  --ob-color-login-panel-raised: #13263E;
-  --ob-color-login-panel-text: #FFFFFF;
-  --ob-color-login-panel-muted: #94A3B8;
-  --ob-color-login-panel-body: #CBD5E1;
-  --ob-color-login-panel-footer: #64748B;
-  --ob-color-login-panel-mark-accent: #38BDF8;
-  --ob-color-login-panel-accent: #0EA5E9;
-  --ob-color-login-text: #0F172A;
-  --ob-color-login-muted: #64748B;
-  --ob-color-login-border: #E2E8F0;
-  --ob-color-login-accent: #0F62FE;
-  --ob-color-login-primary: #0F62FE;
-  --ob-color-login-assurance: #EBF2FE;
-  --ob-color-login-assurance-text: #475569;
+  --ob-motion-duration-slow: 240ms;
+
+  /* Layering and responsive breakpoints. */
+  --ob-z-shell: 20;
+  --ob-z-dropdown: 100;
+  --ob-z-overlay: 1000;
+  --ob-z-popover: 1001;
+  --ob-z-toast: 1100;
+  --ob-breakpoint-sm: 36rem;
+  --ob-breakpoint-md: 48rem;
+  --ob-breakpoint-lg: 64rem;
+  --ob-breakpoint-xl: 80rem;
+  /* Legacy aliases retained for existing consumers; values map to canonical tokens. */
+  --canvas: var(--ob-color-bg-canvas);
+  --surface: var(--ob-color-bg-surface);
+  --surface-2: var(--ob-color-bg-surface-muted);
+  --surface-3: var(--ob-color-bg-surface-subtle);
+  --ink-1: var(--ob-color-text-primary);
+  --ink-2: var(--ob-color-text-secondary);
+  --ink-3: var(--ob-color-text-tertiary);
+  --line: var(--ob-color-border-subtle);
+  --line-strong: var(--ob-color-border-control);
+  --brand: var(--ob-color-accent);
+  --brand-strong: var(--ob-color-accent-strong);
+  --brand-ink: var(--ob-color-accent-ink);
+  --brand-soft: var(--ob-color-accent-subtle);
+  --danger: var(--ob-color-status-danger);
+  --danger-strong: var(--ob-color-status-danger-strong);
+  --danger-soft: var(--ob-color-status-danger-subtle);
+  --ok: var(--ob-color-status-success);
+  --ok-soft: var(--ob-color-status-success-subtle);
+  --warning: var(--ob-color-status-warning);
+  --warning-soft: var(--ob-color-status-warning-subtle);
+  --navy: var(--ob-color-chrome-background);
+  --navy-2: var(--ob-color-chrome-background-raised);
+  --radius-sm: var(--ob-radius-sm);
+  --radius: var(--ob-radius-md);
+  --radius-lg: var(--ob-radius-lg);
+  --shadow-sm: var(--ob-shadow-sm);
+  --shadow: var(--ob-shadow-overlay);
+  --ease: var(--ob-motion-ease-standard);
+  --font-sans: var(--ob-font-family-sans);
+  --space-1: var(--ob-space-1);
+  --space-2: var(--ob-space-2);
+  --space-3: var(--ob-space-3);
+  --space-4: var(--ob-space-4);
+  --space-5: var(--ob-space-5);
+  --space-6: var(--ob-space-6);
+  --focus-ring: var(--ob-color-focus-shadow);
+  --ob-icon-accent: var(--ob-color-accent, currentColor);
+  font-family: var(--ob-font-family-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-canvas);
 }
 
+/* Theme overrides change token values, not component selectors. */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
   --ob-palette-neutral-25: #0F1720;
   --ob-palette-neutral-50: #17222D;
   --ob-palette-neutral-100: #1D2B38;
-  --ob-palette-neutral-200: #334353;
-  --ob-palette-neutral-500: #72869A;
-  --ob-palette-neutral-600: #B4C0CB;
-  --ob-palette-neutral-700: #8D9EAF;
-  --ob-palette-neutral-900: #F3F6F9;
-
   --ob-palette-surface: #17222D;
   --ob-palette-surface-muted: #1A2734;
   --ob-palette-surface-subtle: #1D2B38;
-  --ob-palette-surface-raised: #1D2B38;
+  --ob-palette-neutral-200: #334353;
+  --ob-palette-neutral-300: #536577;
+  --ob-palette-neutral-400: #8D9EAF;
+  --ob-palette-neutral-500: #B4C0CB;
+  --ob-palette-neutral-600: #C5CFD8;
+  --ob-palette-neutral-700: #D6DEE5;
+  --ob-palette-neutral-800: #E4EAF0;
+  --ob-palette-neutral-900: #F3F6F9;
+  --ob-palette-neutral-950: #0F1720;
 
+  --ob-palette-blue-50: #18364E;
   --ob-palette-blue-100: #18364E;
+  --ob-palette-blue-500: #66B8FF;
+  --ob-palette-blue-600: #7FC4FF;
   --ob-palette-blue-700: #66B8FF;
   --ob-palette-blue-800: #93CEFF;
   --ob-palette-blue-900: #B9DFFF;
+  --ob-palette-green-50: #1E3A31;
   --ob-palette-green-100: #1E3A31;
+  --ob-palette-green-700: #66D6A5;
   --ob-palette-green-800: #66D6A5;
+  --ob-palette-green-900: #78DDB3;
+  --ob-palette-amber-50: #41331F;
   --ob-palette-amber-100: #41331F;
+  --ob-palette-amber-200: #49351F;
+  --ob-palette-amber-700: #FFD27A;
   --ob-palette-amber-800: #FFD27A;
+  --ob-palette-red-50: #40252A;
   --ob-palette-red-100: #40252A;
+  --ob-palette-red-600: #FF8D86;
   --ob-palette-red-700: #FF8D86;
+  --ob-palette-red-700-alt: #FFAAA3;
   --ob-palette-red-800: #FFAAA3;
-  --ob-palette-focus-ring: rgb(102 184 255 / 0.28);
+
   --ob-palette-chrome-background: #17222D;
   --ob-palette-chrome-background-raised: #1D2B38;
   --ob-palette-chrome-text: #F3F6F9;
   --ob-palette-chrome-muted: #B4C0CB;
-
-  --ob-color-chrome-border: #1E3A5F;
-  --ob-color-chrome-accent: #38BDF8;
-  --ob-color-chrome-accent-subtle: #133356;
-  --ob-color-shell-topbar-background: #FFFFFF;
-  --ob-color-shell-topbar-border: #E2E8F0;
-  --ob-color-shell-topbar-text: #0F172A;
-  --ob-color-shell-topbar-muted: #64748B;
-  --ob-color-shell-topbar-link: #2563EB;
-  --ob-color-shell-topbar-field: #F8FAFC;
+  --ob-palette-overlay: rgb(0 0 0 / 0.68);
+  --ob-palette-focus-ring: rgb(102 184 255 / 0.28);
 
   --ob-color-text-on-accent: var(--ob-palette-neutral-950);
   --ob-color-focus: var(--ob-palette-blue-700);
+  --ob-color-action-danger: var(--ob-palette-red-600);
   --ob-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.24), 0 1px 3px rgb(0 0 0 / 0.2);
+  --ob-shadow-md: 0 8px 24px -12px rgb(0 0 0 / 0.48);
   --ob-shadow-overlay: 0 18px 40px -24px rgb(0 0 0 / 0.72);
   --ob-icon-accent: var(--ob-color-accent);
-  /* Login reference: dark brand panel on the left, light workspace on the right. */
-  --ob-color-login-canvas: #F8FAFC;
-  --ob-color-login-surface: #FFFFFF;
-  --ob-color-login-panel: #0B192C;
-  --ob-color-login-panel-raised: #13263E;
-  --ob-color-login-panel-text: #FFFFFF;
-  --ob-color-login-panel-muted: #94A3B8;
-  --ob-color-login-panel-body: #CBD5E1;
-  --ob-color-login-panel-footer: #64748B;
-  --ob-color-login-panel-mark-accent: #38BDF8;
-  --ob-color-login-panel-accent: #0EA5E9;
-  --ob-color-login-text: #0F172A;
-  --ob-color-login-muted: #64748B;
-  --ob-color-login-border: #E2E8F0;
-  --ob-color-login-accent: #0F62FE;
-  --ob-color-login-primary: #0F62FE;
-  --ob-color-login-assurance: #EBF2FE;
-  --ob-color-login-assurance-text: #475569;
 }
 
-/* Icon semantic styles */
-:root {
-  /* Accent details follow the shared OpenBastion semantic palette. */
-  --ob-icon-accent: var(--ob-color-accent, currentColor);
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-/* Shared UI primitives */
-/* OpenBastion Infrastructure — shared, framework-neutral UI primitives. */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--ob-color-accent-subtle);
+  color: var(--ob-color-accent-ink);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--ink-1);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 1.65rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.4rem;
+  font-weight: 650;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--brand);
+  font-weight: 550;
+  text-underline-offset: 2px;
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+  border-radius: 6px;
+  padding: 0.08rem 0.35rem;
+}
+
+/* ==========================================================================
+   02. SHARED PRIMITIVES — framework-neutral .ob-* public API
+   ========================================================================== */
+
+/* 02.1 Actions and feedback */
 .ob-button {
   display: inline-flex;
   align-items: center;
@@ -250,9 +473,9 @@
 }
 
 .ob-button--danger {
-  color: var(--ob-color-status-danger);
+  color: var(--ob-color-action-danger);
   background: var(--ob-color-bg-surface);
-  border-color: var(--ob-color-status-danger);
+  border-color: var(--ob-color-action-danger);
 }
 
 .ob-button--danger:hover:not(:disabled) {
@@ -357,6 +580,7 @@
   border-color: var(--ob-color-accent);
 }
 
+/* 02.2 Surfaces, page structure and inline guidance */
 .ob-surface {
   min-width: 0;
   background: var(--ob-color-bg-surface);
@@ -436,7 +660,7 @@
   }
 }
 
-/* Operational data patterns shared by overview, inventory and security screens. */
+/* 02.3 Operational data: panels, metrics and empty states */
 .ob-panel {
   display: grid;
   gap: 0.9rem;
@@ -537,7 +761,7 @@
   }
 }
 
-/* Dense, readable data tables and filter controls shared by inventory screens. */
+/* 02.4 Data tables, filters, saved views and detail lists */
 .ob-table-wrap {
   min-width: 0;
   overflow-x: auto;
@@ -788,7 +1012,7 @@
 }
 
 
-/* Shared React component primitives. All colors and radii come from design tokens. */
+/* 02.5 Display primitives: cards, separators, skeletons and labels */
 .ob-card { min-width: 0; padding: 1rem; color: var(--ob-color-text-primary); background: var(--ob-color-bg-surface); border: 1px solid var(--ob-color-border-subtle); border-radius: var(--ob-radius-lg); box-shadow: var(--ob-shadow-sm); }
 .ob-separator { flex: none; background: var(--ob-color-border-subtle); }
 .ob-separator--horizontal { width: 100%; height: 1px; }
@@ -806,7 +1030,7 @@
 @media (forced-colors: active) { .ob-card, .ob-input, .ob-textarea { border-color: CanvasText; } .ob-separator { background: CanvasText; } }
 
 
-/* Native form primitives: labels and validation remain owned by the consuming app. */
+/* 02.6 Form controls: fields, validation, selection and OTP */
 .ob-form { display: grid; gap: var(--ob-space-4); min-width: 0; }
 .ob-form-field { display: grid; align-content: start; gap: var(--ob-space-2); min-width: 0; }
 .ob-form-field__label { color: var(--ob-color-text-secondary); font-size: 0.84rem; font-weight: 600; }
@@ -828,7 +1052,7 @@
 @media (forced-colors: active) { .ob-select, .ob-input-otp, .ob-radio-group__control { border-color: CanvasText; } .ob-slider { accent-color: Highlight; } }
 
 
-/* Radix-backed overlays: primitives remain private behind the OpenBastion API. */
+/* 02.7 Overlays: dialog, alert dialog, menu, popover, tooltip, sheet and drawer */
 .ob-overlay { position: fixed; inset: 0; z-index: 1000; background: var(--ob-color-overlay); }
 .ob-dialog-content, .ob-popover-content, .ob-menu-content, .ob-tooltip-content { z-index: 1001; color: var(--ob-color-text-primary); background: var(--ob-color-bg-surface); border: 1px solid var(--ob-color-border-subtle); border-radius: var(--ob-radius-lg); box-shadow: var(--ob-shadow-overlay); }
 .ob-dialog-content { position: fixed; top: 50%; left: 50%; display: grid; gap: var(--ob-space-3); width: min(32rem, calc(100vw - 2rem)); max-height: min(85vh, 48rem); overflow: auto; padding: 1.25rem; transform: translate(-50%, -50%); }
@@ -853,7 +1077,7 @@
 @media (prefers-reduced-motion: reduce) { .ob-dialog-content, .ob-sheet-content, .ob-drawer-content { scroll-behavior: auto; } }
 @media (forced-colors: active) { .ob-overlay { background: Canvas; opacity: 0.8; } .ob-dialog-content, .ob-menu-content, .ob-popover-content, .ob-tooltip-content, .ob-sheet-content, .ob-drawer-content { border-color: CanvasText; } .ob-menu-item[data-highlighted] { outline: 1px solid Highlight; } }
 
-/* Navigation and disclosure primitives. */
+/* 02.8 Navigation and disclosure: accordion, breadcrumb, tabs, sidebar and command */
 .ob-accordion { display: grid; width: 100%; }
 .ob-accordion-item { border-bottom: 1px solid var(--ob-color-border-subtle); }
 .ob-accordion-header { margin: 0; }
@@ -910,7 +1134,7 @@
 @media (forced-colors: active) { .ob-tabs-trigger[data-state="active"], .ob-sidebar-menu-button[data-active], .ob-sidebar-menu-link[data-active], .ob-pagination-link[data-active] { outline: 1px solid Highlight; } }
 
 
-/* Advanced content and utility primitives. */
+/* 02.9 Content and utility: media, charts, scrolling, resizing and toggles */
 .ob-aspect-ratio { position: relative; width: 100%; overflow: hidden; }
 .ob-aspect-ratio[data-ratio="square"] { aspect-ratio: 1 / 1; }
 .ob-aspect-ratio[data-ratio="video"] { aspect-ratio: 16 / 9; }
@@ -937,9 +1161,9 @@
 .ob-chart-line { stroke: var(--ob-color-accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .ob-chart-label { fill: var(--ob-color-text-tertiary); font-size: 8px; }
 .ob-image { display: block; max-width: 100%; height: auto; object-fit: contain; }
-.ob-image-placeholder { display: inline-flex; align-items: center; justify-content: center; min-width: 3rem; min-height: 3rem; padding: 0.5rem; color: var(--ob-color-text-tertiary); background: var(--ob-color-bg-surface-muted); border: 1px dashed var(--ob-color-border-control); border-radius: var(--ob-radius-sm); font-size: 0.78rem; text-align: center; }
+.ob-image-placeholder { display: inline-flex; align-items: center; justify-content: center; min-width: 3rem; min-height: var(--ob-login-submit-height); padding: 0.5rem; color: var(--ob-color-text-tertiary); background: var(--ob-color-bg-surface-muted); border: 1px dashed var(--ob-color-border-control); border-radius: var(--ob-radius-sm); font-size: 0.78rem; text-align: center; }
 .ob-progress { display: block; width: 100%; height: 0.65rem; overflow: hidden; accent-color: var(--ob-color-accent); border-radius: 999px; }
-.ob-resizable { min-width: 4rem; min-height: 3rem; max-width: 100%; max-height: 80vh; overflow: auto; resize: both; border: 1px solid var(--ob-color-border-control); border-radius: var(--ob-radius-sm); }
+.ob-resizable { min-width: 4rem; min-height: var(--ob-login-submit-height); max-width: 100%; max-height: 80vh; overflow: auto; resize: both; border: 1px solid var(--ob-color-border-control); border-radius: var(--ob-radius-sm); }
 .ob-resizable[data-axis="horizontal"] { resize: horizontal; }
 .ob-resizable[data-axis="vertical"] { resize: vertical; }
 .ob-resizable:focus-visible, .ob-scroll-area:focus-visible { outline: 2px solid var(--ob-color-focus); outline-offset: 2px; }
@@ -992,7 +1216,7 @@
 .ob-resizable[data-axis="horizontal"][data-size="12"], .ob-resizable[data-axis="both"][data-size="12"] { width: calc(20rem + 12rem); }
 .ob-resizable[data-axis="vertical"][data-size="12"], .ob-resizable[data-axis="both"][data-size="12"] { height: calc(12rem + 12rem); }
 
-/* Notification primitives. */
+/* 02.10 Notifications: toaster and toast states */
 .ob-toaster { position: fixed; z-index: 1100; display: grid; width: min(24rem, calc(100vw - 2rem)); max-height: min(70vh, 32rem); gap: 0.55rem; overflow: auto; pointer-events: none; }
 .ob-toaster[data-position="top-left"] { top: 1rem; left: 1rem; }
 .ob-toaster[data-position="top-right"] { top: 1rem; right: 1rem; }
@@ -1013,7 +1237,7 @@
 @media (max-width: 36rem) { .ob-toaster[data-position^="top-"] { top: 0.5rem; } .ob-toaster[data-position^="bottom-"] { bottom: 0.5rem; } .ob-toaster[data-position$="left"] { left: 0.5rem; } .ob-toaster[data-position$="right"] { right: 0.5rem; } }
 @media (forced-colors: active) { .ob-toast { border-color: CanvasText; } .ob-toast-close:focus-visible { outline-color: Highlight; } }
 
-/* Semantic data tables. */
+/* 02.11 Semantic table primitives */
 .ob-table-container { width: 100%; max-width: 100%; overflow-x: auto; border: 1px solid var(--ob-color-border-subtle); border-radius: var(--ob-radius-md); }
 .ob-table { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--ob-color-text-primary); font-size: 0.84rem; text-align: left; }
 .ob-table-head { padding: 0.7rem 0.8rem; color: var(--ob-color-text-secondary); background: var(--ob-color-bg-surface-muted); border-bottom: 1px solid var(--ob-color-border-subtle); font-size: 0.75rem; font-weight: 650; white-space: nowrap; }
@@ -1024,117 +1248,11 @@
 .ob-table-caption { padding: 0.65rem 0.8rem; color: var(--ob-color-text-tertiary); font-size: 0.78rem; text-align: left; caption-side: bottom; }
 @media (forced-colors: active) { .ob-table-container, .ob-table-head, .ob-table-cell { border-color: CanvasText; } }
 
-/* Application shell and feature presentation */
-/* Application compatibility aliases; canonical values live in @openbastion/design-tokens. */
-:root {
-  --canvas: var(--ob-color-bg-canvas);
-  --surface: var(--ob-color-bg-surface);
-  --surface-2: var(--ob-color-bg-surface-muted);
-  --surface-3: var(--ob-color-bg-surface-subtle);
-  --ink-1: var(--ob-color-text-primary);
-  --ink-2: var(--ob-color-text-secondary);
-  --ink-3: var(--ob-color-text-tertiary);
-  --line: var(--ob-color-border-subtle);
-  --line-strong: var(--ob-color-border-control);
-  --brand: var(--ob-color-accent);
-  --ob-icon-accent: var(--ob-color-accent);
-  --brand-strong: var(--ob-color-accent-strong);
-  --brand-ink: var(--ob-color-accent-ink);
-  --brand-soft: var(--ob-color-accent-subtle);
-  --danger: var(--ob-color-status-danger);
-  --danger-strong: var(--ob-color-status-danger-strong);
-  --danger-soft: var(--ob-color-status-danger-subtle);
-  --ok: var(--ob-color-status-success);
-  --ok-soft: var(--ob-color-status-success-subtle);
-  --warning: var(--ob-color-status-warning);
-  --warning-soft: var(--ob-color-status-warning-subtle);
-  --navy: var(--ob-color-chrome-background);
-  --navy-2: var(--ob-color-chrome-background-raised);
-  --radius-sm: var(--ob-radius-sm);
-  --radius: var(--ob-radius-md);
-  --radius-lg: var(--ob-radius-lg);
-  --shadow-sm: var(--ob-shadow-sm);
-  --shadow: var(--ob-shadow-overlay);
-  --ease: var(--ob-motion-ease-standard);
-  --font-sans: var(--ob-font-family-sans);
-  --space-1: var(--ob-space-1);
-  --space-2: var(--ob-space-2);
-  --space-3: var(--ob-space-3);
-  --space-4: var(--ob-space-4);
-  --space-5: var(--ob-space-5);
-  --space-6: var(--ob-space-6);
-  --focus-ring: var(--ob-color-focus-shadow);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--ink-1);
-  background: var(--canvas);
-}
+/* ==========================================================================
+   03. ADMIN UI FOUNDATION — application-level patterns
+   ========================================================================== */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--canvas);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-::selection {
-  background: var(--ob-color-accent-subtle);
-  color: var(--ob-color-accent-ink);
-}
-
-h1,
-h2,
-h3 {
-  margin: 0;
-  color: var(--ink-1);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-h1 {
-  font-size: 1.65rem;
-  font-weight: 700;
-}
-
-h2 {
-  font-size: 1.4rem;
-  font-weight: 650;
-}
-
-h3 {
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-p {
-  margin: 0;
-}
-
-a {
-  color: var(--brand);
-  font-weight: 550;
-  text-underline-offset: 2px;
-}
-
-code {
-  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.86em;
-  color: var(--brand-ink);
-  background: var(--brand-soft);
-  border-radius: 6px;
-  padding: 0.08rem 0.35rem;
-}
-
-/* ---------- Application header ---------- */
+/* 03.1 Application header */
 
 .app-header {
   position: sticky;
@@ -1281,7 +1399,7 @@ code {
   border-color: var(--line-strong);
 }
 
-/* ---------- Page layout ---------- */
+/* 03.2 Page layout and responsive content constraints */
 
 main {
   width: 100%;
@@ -1296,7 +1414,7 @@ main {
   min-width: 0;
 }
 
-/* ---------- Surfaces ---------- */
+/* 03.3 Application surfaces and content panels */
 
 .card {
   background: var(--surface);
@@ -1339,7 +1457,7 @@ main {
 }
 
 /* An account whose target's host key is not pinned (ADR-0039): it gets no session. */
-/* ---------- Forms ---------- */
+/* 03.4 Application forms and validation */
 
 form {
   display: grid;
@@ -1405,7 +1523,7 @@ textarea:focus {
   box-shadow: var(--ob-color-focus-shadow);
 }
 
-/* ---------- Buttons ---------- */
+/* 03.5 Application button variants */
 
 button {
   font: inherit;
@@ -1447,7 +1565,7 @@ button:disabled:active {
   outline-color: var(--ob-color-focus);
 }
 
-/* ---------- Recorded commands ---------- */
+/* 03.6 Recorded command and terminal presentation */
 
 .commands {
   margin: 0;
@@ -1483,7 +1601,7 @@ button:disabled:active {
   font-size: inherit;
 }
 
-/* ---------- Login ---------- */
+/* 03.7 Legacy login composition (reference-led implementation follows below) */
 
 main.login {
   display: grid;
@@ -1622,7 +1740,7 @@ main.login {
   background: var(--line);
 }
 
-/* ---------- Responsive ---------- */
+/* 03.8 Base application responsive rules */
 
 @media (max-width: 760px) {
   .app-header {
@@ -1824,7 +1942,9 @@ main.login {
   }
 }
 
-/* ---------- ADR-0073 UX-01: operator shell, navigation and themes ---------- */
+/* ==========================================================================
+   04. OPERATOR SHELL — ADR-0073 UX-01
+   ========================================================================== */
 :root[data-theme="dark"] body {
   background: var(--canvas);
 }
@@ -2244,7 +2364,9 @@ main.login {
   }
 }
 
-/* ---------- ADR-0073 UX-02: keyboard command palette ---------- */
+/* ==========================================================================
+   05. COMMAND PALETTE — ADR-0073 UX-02
+   ========================================================================== */
 .command-trigger {
   display: inline-flex;
   align-items: center;
@@ -2435,7 +2557,9 @@ main.login {
   overflow: hidden;
 }
 
-/* ---------- ADR-0073 UX-03: PAM workflow states and confirmations ---------- */
+/* ==========================================================================
+   06. WORKFLOWS AND CONFIRMATIONS — ADR-0073 UX-03
+   ========================================================================== */
 
 .request-kind {
   display: grid;
@@ -2487,7 +2611,9 @@ main.login {
   }
 }
 
-/* ---------- Overview and Security Center (ADR-0073 UX-04) ---------- */
+/* ==========================================================================
+   07. OVERVIEW AND SECURITY CENTER — ADR-0073 UX-04
+   ========================================================================== */
 .overview-guidance,
 .security-limitations {
   color: var(--ink-2);
@@ -2532,7 +2658,9 @@ main.login {
   }
 }
 
-/* ---------- ADR-0073 UX-05: operator preferences and saved views ---------- */
+/* ==========================================================================
+   08. OPERATOR PREFERENCES AND SAVED VIEWS — ADR-0073 UX-05
+   ========================================================================== */
 .preferences-trigger {
   display: inline-flex;
   align-items: center;
@@ -2895,7 +3023,9 @@ main.login {
   }
 }
 
-/* ADR-0073 — account filters arranged as an explicit, accessible rule builder. */
+/* ==========================================================================
+   09. ACCOUNT FILTER BUILDER — accessible rule composition
+   ========================================================================== */
 .account-filter-bar {
   gap: 0.8rem;
   padding: 1rem 1.1rem;
@@ -3049,7 +3179,7 @@ main.login {
 }
 
 
-/* ADR-0073 — dynamic account filter rules, inspired by the supplied builder references. */
+/* 09.2 Dynamic filter rules and responsive behavior */
 .account-filter-toolbar { gap: 0.75rem; }
 .account-filter-trigger {
   min-height: 2.75rem;
@@ -3158,7 +3288,9 @@ main.login {
   .account-filter-remove { grid-column: 2; grid-row: 2 / span 3; }
 }
 
-/* ---------- Ergonomie : en-tête de page, consignes repliées, inventaire des comptes ---------- */
+/* ==========================================================================
+   10. INVENTORY ERGONOMICS — page heading, guidance and account list
+   ========================================================================== */
 
 /* Le titre et l'action principale de la page sur une même ligne, action à la portée du regard. */
 .page-heading {
@@ -3267,7 +3399,9 @@ button.ob-stat-card {
   }
 }
 
-/* Login — faithful implementation of the supplied 1440×1040 reference. */
+/* ==========================================================================
+   11. REFERENCE SCREENS — login (1440 × 1040)
+   ========================================================================== */
 main.login {
   display: block;
   width: 100%;
@@ -3282,7 +3416,7 @@ main.login {
 
 .login-layout {
   display: grid;
-  grid-template-columns: 38.9% minmax(0, 1fr);
+  grid-template-columns: var(--ob-login-panel-width) minmax(0, 1fr);
   width: 100%;
   min-height: 100vh;
   overflow: hidden;
@@ -3295,7 +3429,7 @@ main.login {
   justify-content: flex-start;
   min-width: 0;
   min-height: 100vh;
-  padding: 3.625rem 3.5rem 2.625rem;
+  padding: var(--ob-login-panel-padding-top) var(--ob-login-panel-padding-x) 2.625rem;
   color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-panel);
 }
@@ -3439,14 +3573,14 @@ main.login {
   align-items: center;
   min-width: 0;
   min-height: 100vh;
-  padding: 9.7rem 3rem 2rem;
+  padding: var(--ob-login-content-padding-top) 3rem 2rem;
   background: var(--ob-color-login-canvas);
 }
 .login-content .login-card {
   display: flex;
   flex-direction: column;
   gap: 0;
-  width: min(100%, 27.5rem);
+  width: min(100%, var(--ob-login-content-width));
   padding: 0;
   color: var(--ob-color-login-text);
   background: transparent;
@@ -3464,7 +3598,7 @@ main.login {
 .login-heading h1 {
   margin: 0 0 0.55rem;
   color: var(--ob-color-login-text);
-  font-size: 1.9rem;
+  font-size: var(--ob-login-heading-size);
   font-weight: 650;
   line-height: 1.2;
   letter-spacing: -0.03em;
@@ -3472,7 +3606,7 @@ main.login {
 .login-heading .login-sub {
   margin: 0;
   color: var(--ob-color-login-muted);
-  font-size: 0.92rem;
+  font-size: var(--ob-login-body-size);
   line-height: 1.5;
 }
 .login-sso { margin: 0 0 1.6rem; }
@@ -3481,12 +3615,12 @@ main.login {
   display: flex;
   justify-content: center;
   width: 100%;
-  min-height: 2.875rem;
+  min-height: var(--ob-login-control-height);
   padding: 0.7rem 3rem;
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-surface);
   border: 1px solid var(--ob-color-login-border);
-  border-radius: 0.55rem;
+  border-radius: var(--ob-login-control-radius);
   font-size: 0.88rem;
   font-weight: 600;
   box-shadow: none;
@@ -3520,19 +3654,19 @@ main.login {
   display: grid;
   gap: 0.6rem;
   color: var(--ob-color-login-text);
-  font-size: 0.82rem;
-  font-weight: 550;
+  font-size: var(--ob-login-label-size);
+  font-weight: 600;
 }
 .login-form .login-field input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 2.875rem;
+  min-height: var(--ob-login-control-height);
   padding: 0.75rem 0.95rem;
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-surface);
   border: 1px solid var(--ob-color-login-border);
-  border-radius: 0.55rem;
-  font-size: 0.88rem;
+  border-radius: var(--ob-login-control-radius);
+  font-size: var(--ob-login-body-size);
   font-weight: 400;
   outline-offset: 2px;
 }
@@ -3572,12 +3706,12 @@ main.login {
 }
 .login-form button[type="submit"] {
   width: 100%;
-  min-height: 3rem;
+  min-height: var(--ob-login-submit-height);
   margin-top: 0.2rem;
   color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-primary);
   border: 1px solid var(--ob-color-login-primary);
-  border-radius: 0.55rem;
+  border-radius: var(--ob-login-control-radius);
   font-size: 0.88rem;
   font-weight: 650;
   box-shadow: none;
@@ -3591,7 +3725,7 @@ main.login {
   padding: 1rem 1.15rem;
   color: var(--ob-color-login-assurance-text);
   background: var(--ob-color-login-assurance);
-  border-radius: 0.55rem;
+  border-radius: var(--ob-login-control-radius);
 }
 .login-assurance-icon {
   display: grid;
@@ -3604,7 +3738,7 @@ main.login {
 .login-assurance-icon svg { width: 1.8rem; height: 1.8rem; }
 .login-assurance p { margin: 0; font-size: 0.76rem; line-height: 1.45; }
 .login-content-footer {
-  width: min(100%, 27.5rem);
+  width: min(100%, var(--ob-login-content-width));
   margin-top: auto;
   padding-top: 3rem;
   border-top: 1px solid var(--ob-color-login-border);
@@ -3650,7 +3784,7 @@ main.login {
   .login-layout { grid-template-columns: minmax(0, 1fr); min-height: 100vh; }
   .login-brand-panel { display: none; }
   .login-content { min-height: 100vh; padding: 6rem 1.25rem 2rem; }
-  .login-content .login-card { width: min(100%, 27.5rem); }
+  .login-content .login-card { width: min(100%, var(--ob-login-content-width)); }
   .login-language { top: 1rem; right: 1rem; }
   .login-content-footer { padding-top: 3rem; }
 }
@@ -3660,7 +3794,7 @@ main.login {
 }
 
 
-/* MFA verification — second step aligned with the supplied 1440×1024 reference. */
+/* 11.2 MFA verification — openbastion-mfa-validation.svg (1440 × 1024) */
 .second-factor {
   display: grid;
   gap: 0;
@@ -3668,12 +3802,12 @@ main.login {
 }
 .second-factor-back {
   justify-self: start;
-  min-height: 1.5rem;
-  margin: 0 0 2rem -0.35rem;
+  min-height: var(--ob-mfa-back-height);
+  margin: 0 0 var(--ob-mfa-back-gap) -0.35rem;
   padding: 0.15rem 0.35rem;
   color: var(--ob-color-login-accent);
-  font-size: 0.78rem;
-  font-weight: 550;
+  font-size: 0.78125rem;
+  font-weight: 500;
 }
 .second-factor-back svg {
   width: 1rem;
@@ -3688,9 +3822,9 @@ main.login {
 .second-factor-icon {
   display: grid;
   place-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  margin-bottom: 3.45rem;
+  width: var(--ob-mfa-icon-size);
+  height: var(--ob-mfa-icon-size);
+  margin-bottom: var(--ob-mfa-icon-heading-gap);
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-assurance);
   border-radius: 0.75rem;
@@ -3703,59 +3837,59 @@ main.login {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.second-factor-heading { margin: 0 0 1.65rem; }
+.second-factor-heading { margin: 0 0 var(--ob-mfa-heading-account-gap); }
 .second-factor-heading h1 {
-  margin: 0 0 0.55rem;
+  margin: 0 0 var(--ob-mfa-heading-description-gap);
   color: var(--ob-color-login-text);
-  font-size: 1.875rem;
+  font-size: var(--ob-mfa-heading-size);
   font-weight: 700;
   line-height: 1.2;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 .second-factor-heading p {
   margin: 0;
   color: var(--ob-color-login-muted);
   font-size: 0.875rem;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 .second-factor-account {
   display: flex;
   align-items: center;
-  min-height: 2.875rem;
-  margin-bottom: 2.75rem;
-  padding: 0.7rem 0.95rem;
+  min-height: var(--ob-mfa-account-height);
+  margin-bottom: var(--ob-mfa-account-code-gap);
+  padding: 0.7rem 1rem;
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-surface);
-  border: 1px solid var(--ob-color-login-border);
-  border-radius: 0.5rem;
-  font-size: 0.84rem;
+  border: 1.2px solid var(--ob-color-login-border);
+  border-radius: var(--ob-login-control-radius);
+  font-size: 0.84375rem;
 }
 .second-factor-account span { display: none; }
-.second-factor-account strong { font-weight: 550; overflow-wrap: anywhere; }
+.second-factor-account strong { font-weight: 500; overflow-wrap: anywhere; }
 .second-factor-code-form { display: grid; gap: 0; }
 .second-factor-code-label {
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--ob-mfa-code-label-gap);
   color: var(--ob-color-login-text);
-  font-size: 0.82rem;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 .second-factor-code-control {
   position: relative;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 1rem;
+  gap: var(--ob-mfa-otp-gap);
   width: 100%;
-  min-height: 3.875rem;
+  min-height: var(--ob-mfa-otp-cell-height);
 }
 .second-factor-code-cell {
   display: grid;
   place-items: center;
   min-width: 0;
-  min-height: 3.875rem;
+  min-height: var(--ob-mfa-otp-cell-height);
   color: var(--ob-color-login-text);
   background: var(--ob-color-login-surface);
-  border: 1px solid var(--ob-color-login-border);
-  border-radius: 0.5rem;
+  border: 1.2px solid var(--ob-color-login-border);
+  border-radius: var(--ob-login-control-radius);
   font-size: 1.5rem;
   font-weight: 600;
   line-height: 1;
@@ -3774,45 +3908,46 @@ main.login {
   cursor: text;
 }
 .second-factor-code-hint {
-  margin: 1.55rem 0 1.9rem;
+  margin: var(--ob-mfa-code-hint-top) 0 var(--ob-mfa-code-hint-bottom);
   color: var(--ob-color-login-muted);
-  font-size: 0.78rem;
+  font-size: 0.78125rem;
 }
 .second-factor-code-form button[type="submit"],
 .second-factor-enroll-form button[type="submit"] {
   width: 100%;
-  min-height: 3rem;
+  min-height: var(--ob-mfa-submit-height);
   color: var(--ob-color-login-panel-text);
   background: var(--ob-color-login-primary);
   border: 1px solid var(--ob-color-login-primary);
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
-  font-weight: 650;
+  border-radius: var(--ob-login-control-radius);
+  font-size: 0.90625rem;
+  font-weight: 600;
 }
 .second-factor-alternate,
 .second-factor-add-key {
   justify-self: center;
   margin-top: 1.5rem;
   color: var(--ob-color-login-accent);
-  font-size: 0.82rem;
-  font-weight: 550;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 .second-factor-add-key { margin-top: 0.35rem; }
 .second-factor-help {
   display: grid;
   gap: 0.45rem;
-  margin-top: 2.6rem;
-  padding: 1rem;
+  margin-top: var(--ob-mfa-help-margin-top);
+  padding: var(--ob-mfa-help-padding);
   color: var(--ob-color-login-assurance-text);
   background: var(--ob-color-login-assurance);
-  border-radius: 0.625rem;
-  font-size: 0.78rem;
+  border-radius: var(--ob-mfa-help-radius);
+  font-size: 0.78125rem;
   line-height: 1.5;
 }
 .second-factor-help p { margin: 0; }
-.second-factor-help p:first-child { font-weight: 600; }
+.second-factor-help p:first-child { font-weight: 400; }
 .second-factor > [role="alert"] { margin-top: 1rem; }
-.login-content:has(.second-factor) { padding-top: 10rem; }
+.login-content:has(.second-factor) { padding-top: var(--ob-mfa-content-padding-top); }
+.login-content:has(.second-factor) .login-card { width: min(100%, var(--ob-mfa-content-width)); }
 .login-content:has(.second-factor) .login-content-footer { padding-top: 2.2rem; }
 
 @media (max-width: 900px) {
@@ -3831,7 +3966,7 @@ main.login {
   .second-factor-help { margin-top: 2rem; }
 }
 
-/* Sessions workspace: compact, reference-led navigation and filter layout. */
+/* 11.3 Sessions workspace: navigation, filters and content layout */
 .session-tabs { min-width: 0; }
 .session-tabs .ob-tabs-list { gap: 0.35rem; overflow-x: auto; }
 .session-tabs .ob-tabs-trigger { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
@@ -3846,7 +3981,7 @@ main.login {
   padding: 1.35rem 1.25rem 0.9rem;
   background: var(--ob-color-bg-surface, var(--surface));
   border: 1px solid var(--ob-color-border-control, var(--line));
-  border-radius: 0.55rem;
+  border-radius: var(--ob-login-control-radius);
 }
 .session-history .ob-section-heading, .session-recordings .ob-section-heading { align-items: flex-start; }
 .session-history .ob-section-heading { margin: 0 0 1rem; }
@@ -3900,7 +4035,9 @@ main.login {
   .session-tabs .ob-tabs-trigger { padding-inline: 0.55rem; font-size: 0.8rem; }
 }
 
-/* ---------- Reference shell: sidebar identity, workspace sections and operator menu ---------- */
+/* ==========================================================================
+   12. REFERENCE SHELL — sidebar identity, workspace and operator menu
+   ========================================================================== */
 .app-header {
   min-height: 4rem;
   display: flex;
@@ -3968,7 +4105,7 @@ main.login {
   color: var(--ink-1);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 0.55rem;
+  border-radius: var(--ob-login-control-radius);
   text-align: left;
 }
 
@@ -4064,29 +4201,29 @@ main.login {
 .sidebar-collapsed .sidebar-brand .sidebar-collapse-toggle { display: inline-flex; position: absolute; top: 3.5rem; right: 0.55rem; width: 1.8rem; min-height: 1.8rem; }
 .sidebar-collapsed .app-sidebar nav { gap: 1rem; }
 
-/* ---------- Overview dashboard, aligned to the supplied 1440×1080 reference ---------- */
+/* ==========================================================================
+   13. REFERENCE DASHBOARD — overview (1440 × 1080)
+   ========================================================================== */
 .ob-page:has(.dashboard-welcome) { display: grid; gap: 1.25rem; }
-.ob-page:has(.dashboard-welcome) .ob-page-header { margin-bottom: 0.15rem; }
-.ob-page:has(.dashboard-welcome) .ob-page-header h2 { font-size: clamp(1.55rem, 2vw, 1.9rem); letter-spacing: -0.035em; }
-.ob-page:has(.dashboard-welcome) .ob-hint { max-width: 62rem; font-size: 0.83rem; }
+.ob-page:has(.dashboard-welcome) .ob-page-header { margin-bottom: 0; }
+.ob-page:has(.dashboard-welcome) .ob-page-header h2 { font-size: 1.625rem; letter-spacing: -0.025em; }
+.ob-page:has(.dashboard-welcome) .ob-hint { max-width: 62rem; font-size: 0.78rem; }
 .dashboard-welcome {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  min-height: 7.1rem;
-  padding: 1.25rem 1.55rem;
-  color: var(--ob-color-text-on-accent);
-  background: var(--ob-color-chrome-background);
-  border: 1px solid var(--ob-color-chrome-border);
-  border-radius: 0.8rem;
+  gap: 0.9rem;
+  min-height: 2.875rem;
+  padding: 0.65rem 1rem;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-accent-subtle);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: 0.625rem;
 }
-.dashboard-eyebrow { color: var(--ob-color-chrome-accent); font-size: 0.62rem; font-weight: 750; letter-spacing: 0.12em; }
-.dashboard-welcome h3 { margin: 0.3rem 0 0.28rem; color: var(--ob-color-chrome-text); font-size: 1.22rem; letter-spacing: -0.025em; }
-.dashboard-welcome p { margin: 0; color: var(--ob-color-chrome-muted); font-size: 0.78rem; line-height: 1.5; }
-.dashboard-welcome-icon { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; flex: 0 0 auto; color: var(--ob-color-chrome-accent); background: var(--ob-color-chrome-background-raised); border: 1px solid var(--ob-color-chrome-border); border-radius: 0.9rem; font-size: 2.3rem; }
-.dashboard-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
-.dashboard-metric { display: grid; align-content: start; gap: 0.45rem; min-width: 0; min-height: 8rem; padding: 1.05rem 1.15rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.7rem; box-shadow: var(--shadow-sm); }
+.dashboard-welcome-copy { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.2rem 1rem; min-width: 0; }
+.dashboard-welcome h3 { margin: 0; color: var(--ob-color-text-primary); font-size: 0.82rem; letter-spacing: 0; }
+.dashboard-welcome p { margin: 0; color: var(--ob-color-text-secondary); font-size: 0.75rem; line-height: 1.45; }
+.dashboard-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
+.dashboard-metric { display: grid; align-content: start; gap: 0.45rem; min-width: 0; min-height: 7.625rem; padding: 1rem 1.15rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.7rem; }
 .dashboard-metric-topline { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .dashboard-metric-label { margin: 0; color: var(--ink-2); font-size: 0.75rem; font-weight: 600; }
 .dashboard-metric-mark { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--dashboard-tone); box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--dashboard-tone) 13%, transparent); }
@@ -4094,30 +4231,36 @@ main.login {
 .dashboard-metric-cyan { --dashboard-tone: var(--ob-color-chrome-accent); }
 .dashboard-metric-amber { --dashboard-tone: var(--ob-color-status-warning); }
 .dashboard-metric-violet { --dashboard-tone: var(--ob-color-accent-strong); }
-.dashboard-metric-value { margin: 0.05rem 0 0; color: var(--ink-1); font-size: 1.85rem; font-weight: 720; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.dashboard-metric-value { margin: 0.05rem 0 0; color: var(--ink-1); font-size: 2.125rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .dashboard-metric-unavailable { margin: 0.15rem 0; color: var(--ink-3); font-size: 0.9rem; }
 .dashboard-metric-detail { margin: 0; color: var(--ink-3); font-size: 0.7rem; line-height: 1.45; }
 .dashboard-metric-link { display: inline-flex; align-items: center; gap: 0.4rem; justify-self: start; margin-top: 0.1rem; padding: 0; color: var(--brand-ink); background: transparent; border: 0; font-size: 0.7rem; font-weight: 650; }
-.dashboard-content-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 0.95fr); gap: 1rem; align-items: stretch; }
-.dashboard-panel { min-width: 0; padding: 1.15rem 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.7rem; box-shadow: var(--shadow-sm); }
+.dashboard-content-grid { display: grid; grid-template-columns: minmax(0, 1.973fr) minmax(0, 1fr); gap: 1.25rem; align-items: stretch; }
+.dashboard-panel { min-width: 0; padding: 1.15rem 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.7rem; }
 .dashboard-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.dashboard-panel-heading h3 { margin: 0; color: var(--ink-1); font-size: 0.95rem; letter-spacing: -0.015em; }
-.dashboard-panel-heading p { margin: 0.25rem 0 0; color: var(--ink-3); font-size: 0.72rem; }
+.dashboard-panel-heading h3 { margin: 0; color: var(--ink-1); font-size: 0.97rem; letter-spacing: -0.015em; }
+.dashboard-panel-heading p { margin: 0.25rem 0 0; color: var(--ink-3); font-size: 0.72rem; line-height: 1.45; }
 .dashboard-panel-tag { padding: 0.25rem 0.45rem; color: var(--ink-3); background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.3rem; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
-.dashboard-unavailable-state { display: grid; justify-items: center; align-content: center; gap: 0.45rem; min-height: 12.4rem; padding: 1.25rem; text-align: center; }
+.dashboard-activity, .dashboard-posture { min-height: 19.375rem; }
+.dashboard-activity { padding: 1.4rem 1.5rem; }
+.dashboard-unavailable-state { display: grid; justify-items: center; align-content: center; gap: 0.55rem; min-height: 14rem; padding: 1.25rem; text-align: center; }
 .dashboard-empty-icon { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; color: var(--ink-3); background: var(--surface-2); border-radius: 0.65rem; font-size: 1.4rem; }
 .dashboard-unavailable-state strong { color: var(--ink-2); font-size: 0.8rem; }
 .dashboard-unavailable-state p { max-width: 27rem; margin: 0; color: var(--ink-3); font-size: 0.72rem; line-height: 1.5; }
-.dashboard-posture-icon { display: grid; place-items: center; width: 2rem; height: 2rem; color: var(--brand-ink); background: var(--brand-soft); border-radius: 0.55rem; font-size: 1.3rem; }
+.dashboard-posture { display: flex; flex-direction: column; padding: 1.4rem 1.5rem; color: var(--ob-color-chrome-text); background: var(--ob-color-chrome-background); border-color: var(--ob-color-chrome-background); }
+.dashboard-posture .dashboard-panel-heading h3 { color: var(--ob-color-chrome-text); }
+.dashboard-posture .dashboard-panel-heading p { color: var(--ob-color-chrome-muted); }
+.dashboard-posture-tag { padding: 0.3rem 0.5rem; color: var(--ob-color-chrome-accent); background: var(--ob-color-chrome-background-raised); border: 1px solid var(--ob-color-chrome-border); border-radius: 0.3rem; font-size: 0.58rem; font-weight: 750; letter-spacing: 0.06em; }
 .dashboard-posture-list { display: grid; gap: 0; margin: 1.1rem 0 0.9rem; }
-.dashboard-posture-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 0.75rem; }
+.dashboard-posture-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--ob-color-chrome-border); color: var(--ob-color-chrome-muted); font-size: 0.75rem; }
 .dashboard-posture-row span { display: inline-flex; align-items: center; gap: 0.55rem; }
-.dashboard-posture-row strong { color: var(--ink-1); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
-.dashboard-posture-dot { width: 0.48rem; height: 0.48rem; border-radius: 50%; }
-.dashboard-dot-blue { background: var(--ob-color-accent); }.dashboard-dot-amber { background: var(--ob-color-status-warning); }.dashboard-dot-violet { background: var(--ob-color-accent-strong); }
+.dashboard-posture-row strong { color: var(--ob-color-chrome-text); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.dashboard-posture-dot { width: 0.48rem; height: 0.48rem; flex: 0 0 auto; border-radius: 50%; }
+.dashboard-dot-blue { background: var(--ob-color-chrome-accent); }.dashboard-dot-amber { background: var(--ob-color-status-warning); }.dashboard-dot-violet { background: var(--ob-color-accent-strong); }
 .dashboard-panel-note { margin: 0.65rem 0; color: var(--ink-3); font-size: 0.68rem; line-height: 1.45; }
-.dashboard-posture .ob-button { width: 100%; justify-content: center; }
-.dashboard-approvals { padding-bottom: 0.75rem; }
+.dashboard-posture .dashboard-panel-note { color: var(--ob-color-chrome-muted); }
+.dashboard-posture-action { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: auto; padding: 0.65rem 0; color: var(--ob-color-chrome-accent); background: transparent; border: 0; font-size: 0.75rem; font-weight: 650; text-align: start; }
+.dashboard-approvals { min-height: 19rem; padding-bottom: 0.75rem; }
 .dashboard-text-link { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0; color: var(--brand-ink); background: transparent; border: 0; font-size: 0.72rem; font-weight: 650; white-space: nowrap; }
 .dashboard-table-wrap { width: 100%; margin-top: 0.8rem; overflow-x: auto; }
 .dashboard-table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -4129,72 +4272,28 @@ main.login {
 .dashboard-table td small { margin-top: 0.18rem; color: var(--ink-3); font-family: ui-monospace, monospace; font-size: 0.62rem; }
 .dashboard-protocol { padding: 0.2rem 0.35rem; color: var(--ink-2); background: var(--surface-2); border-radius: 0.25rem; font-size: 0.63rem; font-weight: 700; }
 .dashboard-table-state { margin: 0.9rem 0 0.25rem; padding: 1.2rem; color: var(--ink-3); text-align: center; font-size: 0.75rem; }
-
 @media (max-width: 1100px) {
   .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-content-grid { grid-template-columns: minmax(0, 1.3fr) minmax(16rem, 1fr); }
 }
 @media (max-width: 760px) {
-  .app-header { min-height: 4rem; padding: 0.5rem 0.85rem; }
-  .topbar-breadcrumb { display: none; }
-  .header-actions { gap: 0.5rem; }
-  .command-trigger { min-width: 0; width: 2.5rem; justify-content: center; padding: 0.4rem; }
-  .command-trigger > span:not(:first-child), .command-trigger kbd { display: none; }
-  .user-menu-identity, .user-menu-chevron { display: none; }
-  .app-workspace, .app-workspace.sidebar-collapsed { display: block; min-height: calc(100vh - 4rem); }
-  .app-sidebar { top: 4rem; height: auto; max-height: calc(100vh - 4rem); }
-  .app-main { padding: 1.15rem 0.9rem 2.5rem; }
   .dashboard-content-grid { grid-template-columns: minmax(0, 1fr); }
-  .dashboard-welcome { min-height: 0; padding: 1.1rem; }
-  .dashboard-welcome-icon { display: none; }
+  .dashboard-welcome { align-items: flex-start; flex-wrap: wrap; }
+  .dashboard-welcome-copy { display: grid; gap: 0.25rem; }
+  .dashboard-activity, .dashboard-posture { min-height: 0; }
+  .dashboard-unavailable-state { min-height: 11rem; }
   .dashboard-table { min-width: 38rem; }
 }
 @media (max-width: 430px) {
   .dashboard-metrics { grid-template-columns: minmax(0, 1fr); }
   .dashboard-metric { min-height: 0; }
   .dashboard-panel { padding: 1rem; }
+  .dashboard-panel-heading { gap: 0.6rem; }
 }
 
-/* Dashboard proportions from the 1440×1080 SVG reference. */
-@media (min-width: 761px) {
-  .app-main { padding-left: 2.5rem; padding-right: 1.5rem; }
-}
-.dashboard-welcome {
-  min-height: 2.875rem;
-  padding: 0.65rem 1rem;
-  color: var(--ob-color-text-primary);
-  background: var(--ob-color-accent-subtle);
-  border: 1px solid var(--ob-color-border-subtle);
-}
-.dashboard-welcome-copy { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 1rem; }
-.dashboard-welcome h3 { margin: 0; color: var(--ob-color-text-primary); font-size: 0.82rem; letter-spacing: 0; }
-.dashboard-welcome p { margin: 0; color: var(--ob-color-text-secondary); font-size: 0.75rem; }
-.dashboard-metrics { gap: 1.25rem; }
-.dashboard-metric { min-height: 7.625rem; }
-.dashboard-content-grid { grid-template-columns: minmax(0, 1.973fr) minmax(0, 1fr); gap: 1.25rem; }
-.dashboard-activity, .dashboard-posture { min-height: 19.375rem; }
-.dashboard-unavailable-state { min-height: 14rem; }
-.dashboard-approvals { min-height: 19rem; }
-.sidebar-footer {
-  display: grid;
-  gap: 0.45rem;
-  margin-top: auto;
-  padding: 0.85rem 0.8rem;
-  background: var(--ob-color-chrome-background-raised);
-  border: 1px solid var(--ob-color-chrome-border);
-  border-radius: 0.6rem;
-}
-.sidebar-footer-heading { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
-.sidebar-footer-heading strong { overflow: hidden; color: var(--ob-color-chrome-text); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-footer p { margin: 0; color: var(--ob-color-chrome-muted); font-size: 0.66rem; line-height: 1.4; }
-.sidebar-collapsed .sidebar-footer { display: flex; justify-content: center; padding: 0.7rem; }
-.sidebar-collapsed .sidebar-footer-heading strong, .sidebar-collapsed .sidebar-footer p { display: none; }
-@media (max-width: 760px) {
-  .dashboard-content-grid { grid-template-columns: minmax(0, 1fr); }
-  .dashboard-welcome { min-height: 0; }
-}
-
-/* ---------- Sessions workspace, aligned to the two-pane reference without synthetic sessions ---------- */
+/* ==========================================================================
+   14. REFERENCE SESSIONS — two-pane workspace
+   ========================================================================== */
 .ob-page:has(.sessions-overview-metrics) { display: grid; gap: 1.1rem; }
 .ob-page:has(.sessions-overview-metrics) .ob-page-header { margin-bottom: 0; }
 .sessions-overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
@@ -4220,7 +4319,7 @@ main.login {
 .sessions-live-search input { width: 100%; min-width: 0; min-height: 2.3rem; padding: 0.45rem 0.6rem; color: var(--ink-1); background: var(--canvas); border: 1px solid var(--line); border-radius: 0.45rem; font: inherit; font-size: 0.73rem; }
 .sessions-live-search .ob-button { flex: 0 0 auto; min-height: 2.3rem; padding-inline: 0.65rem; font-size: 0.7rem; }
 .sessions-live-list { display: grid; align-content: start; gap: 0.55rem; min-height: 0; overflow-y: auto; }
-.sessions-live-item { display: grid; gap: 0.4rem; width: 100%; min-width: 0; padding: 0.8rem; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 0.55rem; text-align: left; }
+.sessions-live-item { display: grid; gap: 0.4rem; width: 100%; min-width: 0; padding: 0.8rem; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--ob-login-control-radius); text-align: left; }
 .sessions-live-item:hover { background: var(--surface-2); border-color: var(--line-strong); }
 .sessions-live-item[aria-current="true"] { background: var(--ob-color-accent-subtle); border-color: var(--ob-color-accent); box-shadow: inset 3px 0 0 var(--ob-color-accent); }
 .sessions-live-item-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
@@ -4263,7 +4362,9 @@ main.login {
   .sessions-live-search .ob-button { width: 100%; }
 }
 
-/* ---------- Shared reference shell: content-height sidebar and full-width footer ---------- */
+/* ==========================================================================
+   15. SHARED REFERENCE SHELL — content-height sidebar and full-width footer
+   ========================================================================== */
 .app-workspace,
 .app-workspace.sidebar-collapsed {
   grid-template-columns: 14.5rem minmax(0, 1fr);
@@ -4278,16 +4379,17 @@ main.login {
 .app-sidebar {
   grid-column: 1;
   grid-row: 1;
-  position: sticky;
+  position: fixed;
   top: 5rem;
-  bottom: auto;
-  left: auto;
-  align-self: start;
+  bottom: 0;
+  left: 0;
+  align-self: initial;
   width: 14.5rem;
-  height: fit-content;
-  max-height: calc(100vh - 6rem);
+  height: auto;
+  /*  height: fit-content; */
+  /* max-height: calc(100vh - 6rem); */
   min-height: 0;
-  margin-block: 1rem;
+  /* margin-block: 1rem; */
   overflow-x: hidden;
   overflow-y: auto;
   color: var(--ob-color-chrome-muted);
@@ -4581,7 +4683,7 @@ main.login {
   color: var(--ob-color-chrome-text);
   background: var(--ob-color-chrome-background-raised);
   border: 1px solid var(--ob-color-chrome-border);
-  border-radius: 0.55rem;
+  border-radius: var(--ob-login-control-radius);
   box-shadow: var(--shadow);
 }
 .workspace-menu-caption { color: var(--ob-color-chrome-muted); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; }

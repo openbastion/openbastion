@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { Overview } from "./Overview";
 import { SignedInContext } from "../../shared/session";
 import { fakeApi, fakeToken } from "../../test-helpers";
 
-function renderOverview(routes: Parameters<typeof fakeApi>[0]) {
+function renderOverview(routes: Parameters<typeof fakeApi>[0], onNavigate?: (tab: "accounts" | "sessions" | "policies" | "security") => void) {
   const { api, calls } = fakeApi(routes);
   api.setToken(fakeToken("operator", ["platform-admin"]));
   const who = { sub: "user-1", username: "operator", roles: ["platform-admin"], exp: 9999999999 };
-  render(<SignedInContext.Provider value={{ api, who, signOut: () => api.setToken(null) }}><Overview /></SignedInContext.Provider>);
+  render(<SignedInContext.Provider value={{ api, who, signOut: () => api.setToken(null) }}><Overview onNavigate={onNavigate} /></SignedInContext.Provider>);
   return calls;
 }
 
@@ -58,5 +58,22 @@ describe("Overview — reference dashboard", () => {
     expect(await screen.findByText("Historique agrégé indisponible")).toBeTruthy();
     expect(screen.getByText("alice")).toBeTruthy();
     expect(screen.getByText("acc_1")).toBeTruthy();
+  });
+});
+
+
+describe("Overview — reference actions", () => {
+  it("opens policy and security views from their dashboard actions", async () => {
+    const onNavigate = vi.fn();
+    renderOverview({
+      "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
+      "GET /sessions": { body: { items: [], page: 1, pageSize: 100, totalItems: 0 } },
+    }, onNavigate);
+
+    await screen.findByRole("button", { name: /Voir les politiques/ });
+    screen.getByRole("button", { name: /Voir les politiques/ }).click();
+    expect(onNavigate).toHaveBeenCalledWith("policies");
+    screen.getByRole("button", { name: /Examiner les contrôles/ }).click();
+    expect(onNavigate).toHaveBeenCalledWith("security");
   });
 });

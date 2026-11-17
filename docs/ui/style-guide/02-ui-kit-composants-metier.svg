@@ -1,0 +1,126 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1200" viewBox="0 0 1440 1200" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="title">UI Kit — composants métier</title>
+  <desc id="desc">Échantillons dessinés à partir des composants réellement présents dans les références OpenBastion.</desc>
+  <defs>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+  </defs>
+  <g id="Layer_Background">
+    <rect width="1440" height="1200" fill="#F8FAFC" />
+  </g>
+  <g id="Layer_BrandChrome">
+    <rect x="0" y="0" width="1440" height="10" fill="#0D2137" />
+  </g>
+  <g id="Layer_Header">
+    <text x="64" y="62" fill="#2563EB" font-size="12" font-weight="700" letter-spacing="2">OPENBASTION / UI REFERENCE ALIGNMENT</text>
+    <text x="64" y="116" fill="#0F172A" font-size="34" font-weight="700">UI Kit — composants métier</text>
+    <text x="64" y="148" fill="#64748B" font-size="15">Échantillons dessinés à partir des composants réellement présents dans les références OpenBastion.</text>
+  </g>
+  <g id="Layer_Content">
+    <rect x="64" y="190" width="420" height="850" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="84" y="220" font-size="16" fill="#0F172A" font-weight="700">01 / Navigation métier</text>
+    <text x="84" y="242" font-size="11" fill="#64748B" font-weight="400">Navigation complète : espace, sections, état du bastion et profil utilisateur</text>
+    <rect x="88" y="260" width="232" height="760" rx="8" fill="#0D2137" stroke="#0D2137" stroke-width="1" />
+    <text x="108" y="292" font-size="17" fill="#FFFFFF" font-weight="700">◈  OpenBastion</text>
+    <text x="108" y="310" font-size="8.5" fill="#94A3B8" font-weight="700" letter-spacing="1.2">PRIVILEGED ACCESS</text>
+    <rect x="104" y="336" width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1" />
+    <text x="120" y="360" font-size="13" fill="#FFFFFF" font-weight="600">Production</text>
+    <text x="120" y="380" font-size="11" fill="#94A3B8" font-weight="400">Acme Corporation</text>
+    <text x="108" y="432" font-size="10" fill="#64748B" font-weight="700" letter-spacing=".8">ESPACE DE TRAVAIL</text>
+    <rect x="100" y="450" width="208" height="40" rx="8" fill="#133356" stroke="#133356" stroke-width="1" />
+    <rect x="100" y="458" width="3" height="24" rx="1" fill="#38BDF8" stroke="#38BDF8" stroke-width="1" />
+    <text x="142" y="475" font-size="13" fill="#FFFFFF" font-weight="600">Vue d’ensemble</text>
+    <text x="142" y="523" font-size="13" fill="#94A3B8" font-weight="500">Accès privilégiés</text>
+    <text x="142" y="571" font-size="13" fill="#94A3B8" font-weight="500">Sessions</text>
+    <text x="142" y="619" font-size="13" fill="#94A3B8" font-weight="500">Infrastructure</text>
+    <text x="142" y="667" font-size="13" fill="#94A3B8" font-weight="500">Audit &amp; conformité</text>
+    <text x="142" y="715" font-size="13" fill="#94A3B8" font-weight="500">Paramètres</text>
+    <text x="108" y="780" font-size="10" fill="#64748B" font-weight="700" letter-spacing=".8">RESSOURCES</text>
+    <text x="142" y="820" font-size="13" fill="#94A3B8" font-weight="400">Documentation</text>
+    <text x="142" y="864" font-size="13" fill="#94A3B8" font-weight="400">Centre d’aide</text>
+    <rect x="104" y="890" width="200" height="68" rx="8" fill="#152E4D" stroke="#23436B" stroke-width="1" />
+    <text x="118" y="916" font-size="11" fill="#FFFFFF" font-weight="600">● Bastion opérationnel</text>
+    <text x="118" y="938" font-size="10" fill="#94A3B8" font-weight="400">EU / Paris</text>
+    <line x1="104" y1="972" x2="304" y2="972" stroke="#1E3A5F" stroke-width="1" />
+    <circle cx="128" cy="994" r="16" fill="#1E3A5F" stroke="#23436B" stroke-width="1" />
+    <circle cx="128" cy="990" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
+    <path d="M120.5 1003c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
+    <text x="154" y="991" font-size="11.5" fill="#FFFFFF" font-weight="600">Camille Martin</text>
+    <text x="154" y="1007" font-size="10" fill="#94A3B8" font-weight="400">Administrateur</text>
+    <path d="M286 988l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    <rect x="512" y="190" width="864" height="400" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="532" y="220" font-size="16" fill="#0F172A" font-weight="700">02 / Données et navigation secondaire</text>
+    <text x="532" y="242" font-size="11" fill="#64748B" font-weight="400">Composants repris des vues Dashboard, Sessions et Enregistrements</text>
+    <text x="540" y="270" font-size="11" fill="#64748B" font-weight="700">KPI / 4 colonnes</text>
+    <rect x="540" y="292" width="182" height="112" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="556" y="318" font-size="11" fill="#64748B" font-weight="600">Sessions actives</text>
+    <text x="556" y="358" font-size="25" fill="#0F172A" font-weight="700">24</text>
+    <text x="556" y="384" font-size="10" fill="#64748B" font-weight="400">En temps réel</text>
+    <rect x="738" y="292" width="182" height="112" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="754" y="318" font-size="11" fill="#64748B" font-weight="600">Connexions</text>
+    <text x="754" y="358" font-size="25" fill="#0F172A" font-weight="700">1 247</text>
+    <text x="754" y="384" font-size="10" fill="#64748B" font-weight="400">Sur la période</text>
+    <rect x="936" y="292" width="182" height="112" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="952" y="318" font-size="11" fill="#64748B" font-weight="600">Intégrité</text>
+    <text x="952" y="358" font-size="25" fill="#0F172A" font-weight="700">100 %</text>
+    <text x="952" y="384" font-size="10" fill="#64748B" font-weight="400">Empreintes vérifiées</text>
+    <rect x="1134" y="292" width="182" height="112" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="1150" y="318" font-size="11" fill="#64748B" font-weight="600">Expiration</text>
+    <text x="1150" y="358" font-size="25" fill="#0F172A" font-weight="700">12</text>
+    <text x="1150" y="384" font-size="10" fill="#64748B" font-weight="400">Selon rétention</text>
+    <text x="540" y="452" font-size="10" fill="#64748B" font-weight="700">TABS</text>
+    <text x="540" y="482" font-size="13" fill="#2563EB" font-weight="600">En direct</text>
+    <text x="650" y="482" font-size="13" fill="#64748B" font-weight="500">Historique</text>
+    <text x="780" y="482" font-size="13" fill="#64748B" font-weight="500">Enregistrements</text>
+    <text x="940" y="482" font-size="13" fill="#64748B" font-weight="500">Alertes de session</text>
+    <rect x="540" y="491" width="76" height="2" rx="1" fill="#2563EB" stroke="#2563EB" stroke-width="1" />
+    <text x="540" y="540" font-size="10" fill="#64748B" font-weight="700">BADGES</text>
+    <rect x="540" y="554" width="112" height="28" rx="4" fill="#ECFDF5" stroke="#ECFDF5" stroke-width="1" />
+    <text x="596" y="573" font-size="11" fill="#047857" font-weight="650" text-anchor="middle">Actif</text>
+    <rect x="690" y="554" width="112" height="28" rx="4" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="1" />
+    <text x="746" y="573" font-size="11" fill="#B45309" font-weight="650" text-anchor="middle">En attente</text>
+    <rect x="840" y="554" width="112" height="28" rx="4" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="1" />
+    <text x="896" y="573" font-size="11" fill="#B91C1C" font-weight="650" text-anchor="middle">Critique</text>
+    <rect x="990" y="554" width="112" height="28" rx="4" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="1" />
+    <text x="1046" y="573" font-size="11" fill="#64748B" font-weight="650" text-anchor="middle">Terminal</text>
+    <rect x="512" y="620" width="864" height="420" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="532" y="650" font-size="16" fill="#0F172A" font-weight="700">03 / Filtrage, table et formulaire</text>
+    <text x="532" y="672" font-size="11" fill="#64748B" font-weight="400">Exemples de structure observés — contenu de démonstration</text>
+    <rect x="540" y="690" width="300" height="38" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+    <text x="554" y="714" font-size="11" fill="#94A3B8" font-weight="400">⌕  Rechercher une ressource…</text>
+    <rect x="852" y="690" width="154" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+    <text x="866" y="714" font-size="11" fill="#475569" font-weight="400">Tous les types  ▾</text>
+    <rect x="1018" y="690" width="154" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+    <text x="1032" y="714" font-size="11" fill="#475569" font-weight="400">Disponibilité  ▾</text>
+    <rect x="540" y="748" width="808" height="42" rx="4" fill="#F8FAFC" stroke="#F8FAFC" stroke-width="1" />
+    <text x="558" y="774" font-size="9.5" fill="#64748B" font-weight="700">UTILISATEUR / CIBLE</text>
+    <text x="810" y="774" font-size="9.5" fill="#64748B" font-weight="700">TYPE</text>
+    <text x="934" y="774" font-size="9.5" fill="#64748B" font-weight="700">DURÉE</text>
+    <text x="1042" y="774" font-size="9.5" fill="#64748B" font-weight="700">STATUT</text>
+    <text x="1210" y="774" font-size="9.5" fill="#64748B" font-weight="700">ACTION</text>
+    <text x="558" y="832" font-size="11" fill="#0F172A" font-weight="600">camille.martin · srv-prod-web-01</text>
+    <text x="810" y="832" font-size="11" fill="#64748B" font-weight="500">SSH</text>
+    <text x="934" y="832" font-size="11" fill="#64748B" font-weight="500">24:12</text>
+    <text x="1042" y="832" font-size="11" fill="#047857" font-weight="600">Chiffré</text>
+    <text x="1250" y="832" font-size="18" fill="#64748B" font-weight="600">⋯</text>
+    <line x1="540" y1="850" x2="1348" y2="850" stroke="#E2E8F0" />
+    <text x="558" y="894" font-size="11" fill="#0F172A" font-weight="600">sarah.dubois · win-ad-primary</text>
+    <text x="810" y="894" font-size="11" fill="#64748B" font-weight="500">RDP</text>
+    <text x="934" y="894" font-size="11" fill="#64748B" font-weight="500">1:08:17</text>
+    <text x="1042" y="894" font-size="11" fill="#B45309" font-weight="600">En attente</text>
+    <text x="1250" y="894" font-size="18" fill="#64748B" font-weight="600">⋯</text>
+    <rect x="540" y="958" width="808" height="58" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+    <text x="558" y="982" font-size="10" fill="#64748B" font-weight="650">Justification</text>
+    <text x="558" y="1003" font-size="11" fill="#94A3B8" font-weight="400">Saisir le motif de la demande…</text>
+    <rect x="1200" y="970" width="128" height="34" rx="6" fill="#2563EB" stroke="#2563EB" stroke-width="1" />
+    <text x="1264" y="992" font-size="11" fill="#FFFFFF" font-weight="650" text-anchor="middle">Soumettre</text>
+    <text x="540" y="1070" font-size="11" fill="#64748B" font-weight="400">Formulaires métier : champs compacts, labels visibles, justification explicite, actions alignées à droite.</text>
+  </g>
+  <g id="Layer_Footer">
+    <line x1="64" y1="1140" x2="1376" y2="1140" stroke="#E2E8F0" />
+    <text x="64" y="1170" fill="#64748B" font-size="11">OPENBASTION · DESIGN SYSTEM / DOCUMENT DE TRAVAIL</text>
+    <text x="1376" y="1170" fill="#64748B" font-size="11" text-anchor="end">PR #223 · FEAT/UI-REFERENCE-ALIGNMENT · NON FUSIONNÉE</text>
+  </g>
+</svg>

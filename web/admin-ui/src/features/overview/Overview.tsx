@@ -5,6 +5,7 @@ import { AdminPage } from "../../shared/ui/AdminPage";
 import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { useAppTranslation } from "../../shared/i18n";
+import { AccessControl as AccessControlIcon  } from '@openbastion/icons';
 
 type Widget<T> = { data?: Page<T>; error?: unknown; loading: boolean };
 
@@ -94,10 +95,12 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
       actions={<Button variant="secondary" onClick={() => setRefreshKey((key) => key + 1)}>{t("overview.refresh")}</Button>}
     >
       <section className="dashboard-welcome" aria-label={t("overview.welcome.aria")}>
+        <AccessControlIcon />
         <div className="dashboard-welcome-copy">
           <h3>{t("overview.welcome.title")}</h3>
           <p>{t("overview.welcome.body")}</p>
         </div>
+        {onNavigate ? <button type="button" className="dashboard-metric-link" onClick={() => onNavigate("policies")}>{t("overview.welcome.action")} <span aria-hidden="true">→</span></button> : null}
       </section>
 
       <div className="dashboard-metrics" role="group" aria-label={t("overview.metricsAria")}>
@@ -129,7 +132,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
               <h3 id="dashboard-posture-title">{t("overview.posture.title")}</h3>
               <p>{t("overview.posture.subtitle")}</p>
             </div>
-            <span className="dashboard-posture-icon" aria-hidden="true">◇</span>
+            <span className="dashboard-posture-tag">{t("overview.posture.tag")}</span>
           </div>
           <div className="dashboard-posture-list">
             <div className="dashboard-posture-row">
@@ -148,7 +151,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
           {accounts.data && accounts.data.totalItems > accountItems.length ? (
             <p className="dashboard-panel-note">{t("overview.scope.rotationNote", { loaded: accountItems.length, total: accounts.data.totalItems })}</p>
           ) : null}
-          {onNavigate ? <Button variant="secondary" onClick={() => onNavigate("security")}>{t("overview.posture.action")}</Button> : null}
+          {onNavigate ? <button type="button" className="dashboard-posture-action" onClick={() => onNavigate("security")}>{t("overview.posture.action")} <span aria-hidden="true">→</span></button> : null}
         </section>
       </div>
 

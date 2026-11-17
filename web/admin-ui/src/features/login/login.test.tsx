@@ -130,8 +130,8 @@ describe("Login", () => {
     expect(screen.queryByDisplayValue("pw")).toBeNull(); // the password is cleared before entering MFA
     expect(screen.getByText("Le code se renouvelle toutes les 30 secondes.")).toBeTruthy();
     expect(document.querySelectorAll(".second-factor-code-cell")).toHaveLength(6);
-    expect(screen.getByText("Besoin d'aide ?")).toBeTruthy();
-    const input = await screen.findByLabelText("Code de l'application d'authentification") as HTMLInputElement;
+    expect(screen.getByText("Vous n'avez plus accès à votre application ?")).toBeTruthy();
+    const input = await screen.findByLabelText("Code de vérification") as HTMLInputElement;
     expect(input.classList.contains("ob-input-otp")).toBe(true);
     expect(input.maxLength).toBe(6);
     expect(input.autocomplete).toBe("one-time-code");
@@ -175,7 +175,7 @@ describe("Login", () => {
     fireEvent.change(await screen.findByLabelText("Code d'enrôlement"), { target: { value: "abcd-efgh" } });
     fireEvent.click(screen.getByText("Recevoir le secret"));
     expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Code de l'application d'authentification"), { target: { value: "654321" } });
+    fireEvent.change(screen.getByLabelText("Code de vérification"), { target: { value: "654321" } });
     fireEvent.click(screen.getByText("Vérifier et continuer"));
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("enrolled-tok"));
     expect(calls.find((c) => c.path === "/auth/mfa/enroll")?.body).toEqual({ challenge: "ch-2", enrollmentCode: "abcd-efgh", factor: "totp" });
@@ -189,7 +189,7 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull();
+    expect(screen.queryByLabelText("Code de vérification")).toBeNull();
   });
 
   it("shows no directory choice when the Gateway does not say it is on", async () => {
