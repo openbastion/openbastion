@@ -4005,74 +4005,10 @@ main.login {
   .second-factor-help { margin-top: 2rem; }
 }
 
-/* 11.3 Sessions workspace: navigation, filters and content layout */
+/* 11.3 Sessions workspace: navigation and the reference panels */
 .session-tabs { min-width: 0; }
-.session-tabs .ob-tabs-list { gap: 0.35rem; overflow-x: auto; }
-.session-tabs .ob-tabs-trigger { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
 .session-alert-tab-badge { font-size: 0.68rem; line-height: 1.2; }
-.session-filter-bar { display: flex; flex-wrap: wrap; align-items: end; gap: 0.75rem; margin: 1rem 0; }
-.session-filter-bar label { display: grid; gap: 0.35rem; min-width: 9rem; color: var(--ob-color-text-secondary); font-size: 0.78rem; }
-.session-filter-bar .session-filter-query { flex: 1 1 17rem; min-width: min(100%, 15rem); }
-.session-filter-bar > button { min-height: 2.45rem; }
-.session-history, .session-recordings { min-width: 0; }
-.session-history {
-  margin-top: 1.25rem;
-  padding: 1.35rem 1.25rem 0.9rem;
-  background: var(--ob-color-bg-surface, var(--surface));
-  border: 1px solid var(--ob-color-border-control, var(--line));
-  border-radius: var(--ob-login-control-radius);
-}
-.session-history .ob-section-heading, .session-recordings .ob-section-heading { align-items: flex-start; }
-.session-history .ob-section-heading { margin: 0 0 1rem; }
-.session-history .ob-section-heading h3, .session-recordings .ob-section-heading h3 { margin: 0; }
-.session-history .ob-section-heading h3 { color: var(--ob-color-text-primary, var(--ink)); font-size: 0.94rem; font-weight: 700; letter-spacing: -0.015em; }
-.session-history .ob-section-heading .ob-hint { margin-top: 0.28rem; font-size: 0.72rem; }
-.session-history .session-filter-bar {
-  display: grid;
-  grid-template-columns: minmax(14rem, 1.8fr) repeat(2, minmax(7.5rem, 0.9fr)) minmax(7rem, auto) auto;
-  align-items: end;
-  gap: 0.65rem;
-  margin: 0 0 1rem;
-}
-.session-history .session-filter-bar label { min-width: 0; gap: 0.3rem; font-size: 0.7rem; }
-.session-history .session-filter-bar input,
-.session-history .session-filter-bar select { min-width: 0; min-height: 2.25rem; font-size: 0.75rem; }
-.session-history .session-filter-bar > button { min-height: 2.25rem; white-space: nowrap; }
-.session-history .ob-table-wrap { overflow-x: auto; border: 1px solid var(--ob-color-border-control, var(--line)); border-radius: 0.5rem; }
-.session-history .ob-data-table { width: 100%; min-width: 47rem; border-collapse: separate; border-spacing: 0; }
-.session-history .ob-data-table thead { background: var(--ob-color-bg-surface-subtle, var(--surface)); }
-.session-history .ob-data-table th { height: 2.6rem; padding: 0.65rem 0.9rem; color: var(--ob-color-text-secondary, var(--ink-3)); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.025em; text-align: start; white-space: nowrap; }
-.session-history .ob-data-table td { height: 3.85rem; padding: 0.65rem 0.9rem; border-top: 1px solid var(--ob-color-border-subtle, var(--line)); color: var(--ob-color-text-secondary, var(--ink-2)); font-size: 0.68rem; white-space: nowrap; }
-.session-history .ob-data-table td:first-child { color: var(--ob-color-text-primary, var(--ink)); font-weight: 600; }
-.session-history .ob-data-table td:first-child code { display: block; margin-top: 0.2rem; color: var(--ob-color-text-tertiary, var(--ink-3)); font-size: 0.59rem; font-weight: 400; }
-.session-history .ob-data-table .badge { font-size: 0.62rem; }
-.session-history .session-pagination { justify-content: space-between; margin: 0; padding: 0.75rem 0.25rem 0; font-size: 0.68rem; }
-.session-history .session-pagination > span { margin-inline: auto; }
-.session-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; color: var(--ob-color-text-secondary); font-size: 0.82rem; }
-.session-recording-results { display: grid; gap: 0.75rem; margin-top: 1rem; }
-.session-recording-result { padding: 1rem; }
-.session-recording-result .ob-section-heading { align-items: center; }
-.session-recording-result h4 { margin: 0; font-size: 0.9rem; }
-.session-recording-result .commands { max-height: 18rem; overflow: auto; }
-.session-alerts-unavailable { display: grid; gap: 0.75rem; padding: 1.25rem; }
-.session-alerts-unavailable .ob-section-heading { align-items: center; }
-.session-alerts-unavailable h3 { margin: 0; }
-.session-alerts-unavailable p { margin: 0; max-width: 72ch; }
-@media (max-width: 900px) {
-  .session-history .session-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .session-history .session-filter-query { grid-column: 1 / -1; }
-  .session-history .session-filter-bar > button { justify-self: start; }
-}
-@media (max-width: 720px) {
-  .session-history { padding: 1rem 0.75rem 0.7rem; }
-  .session-history .session-filter-bar { grid-template-columns: minmax(0, 1fr); }
-  .session-history .session-filter-query { grid-column: auto; }
-  .session-filter-bar { align-items: stretch; }
-  .session-filter-bar label { flex: 1 1 calc(50% - 0.75rem); min-width: 0; }
-  .session-filter-bar .session-filter-query { flex-basis: 100%; }
-  .session-filter-bar > button { width: 100%; }
-  .session-tabs .ob-tabs-trigger { padding-inline: 0.55rem; font-size: 0.8rem; }
-}
+.session-history, .session-recordings, .session-alerts { min-width: 0; }
 
 /* ==========================================================================
    12. REFERENCE SHELL — sidebar identity, workspace and operator menu
@@ -4334,19 +4270,120 @@ main.login {
 /* ==========================================================================
    14. REFERENCE SESSIONS — two-pane workspace
    ========================================================================== */
-.ob-page:has(.sessions-overview-metrics) { display: grid; gap: 1.1rem; }
-.ob-page:has(.sessions-overview-metrics) .ob-page-header { margin-bottom: 0; }
-.sessions-overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
-.sessions-overview-metric { display: grid; align-content: start; gap: 0.45rem; min-width: 0; min-height: 6.625rem; padding: 1rem 1.15rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.7rem; box-shadow: var(--shadow-sm); }
-.sessions-overview-metric > span { color: var(--ink-2); font-size: 0.74rem; font-weight: 600; }
-.sessions-overview-metric strong { color: var(--ink-1); font-size: 1.7rem; font-weight: 720; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
-.sessions-overview-metric strong.sessions-metric-text { font-size: 0.9rem; letter-spacing: 0; }
-.sessions-overview-metric small { color: var(--ink-3); font-size: 0.68rem; line-height: 1.4; }
-.sessions-metric-primary { border-top: 3px solid var(--ob-color-accent); }
+.ob-page:has(.reference-metrics) { display: grid; gap: 1.1rem; }
 .session-tabs { min-width: 0; }
-.session-tabs .ob-tabs-list { gap: 0.45rem; min-height: 2.8rem; overflow-x: auto; border-bottom: 1px solid var(--line); }
-.session-tabs .ob-tabs-trigger { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2.6rem; padding-inline: 0.95rem; white-space: nowrap; }
 .session-alert-tab-badge { font-size: 0.66rem; line-height: 1.2; }
+
+/* The filter row of the reference screens keeps its date fields on the control height. */
+.session-toolbar-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-control-radius);
+  color: var(--ob-color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.session-toolbar-date input {
+  height: 100%;
+  padding: 0;
+  color: var(--ob-color-text-primary);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.session-toolbar-date:focus-within { border-color: var(--ob-color-focus); box-shadow: var(--ob-color-focus-shadow); }
+
+/* History keeps the reference columns readable before the page scrolls sideways. */
+.session-history-table { min-width: 52rem; }
+.session-history .ob-empty-state { margin: 1rem var(--ob-reference-card-padding-x); }
+
+/* Recordings: the library on the left, the selected recording on the right. */
+.session-recordings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(16rem, 1fr);
+  gap: 1.25rem;
+  padding: 0 var(--ob-reference-card-padding-x) 1.1rem;
+}
+
+.session-recordings-list { min-width: 0; }
+.session-recordings-rows { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+
+.session-recording-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  color: var(--ob-color-text-secondary);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-control-radius);
+  text-align: start;
+  cursor: pointer;
+}
+
+.session-recording-row:hover { background: var(--ob-color-bg-surface-muted); }
+.session-recording-row[aria-current="true"] {
+  background: var(--ob-color-accent-subtle);
+  border-color: var(--ob-color-accent);
+}
+.session-recording-row-id { display: grid; gap: 0.1rem; min-width: 0; }
+.session-recording-row-id code { overflow: hidden; text-overflow: ellipsis; }
+.session-recording-row-meta { display: inline-flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; font-size: 0.7rem; }
+
+.session-recording-preview {
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.9rem;
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-card-radius);
+}
+
+.session-recording-preview-heading h4 { margin: 0; color: var(--ob-color-text-primary); font-size: 0.82rem; font-weight: 700; }
+.session-recording-preview-heading p { margin: 0.15rem 0 0; color: var(--ob-color-text-tertiary); font-size: 0.65rem; letter-spacing: 0.06em; }
+
+.session-recording-preview-commands {
+  max-height: 15rem;
+  margin: 0;
+  padding: 0.85rem 0.9rem 0.85rem 1.9rem;
+  border-radius: var(--ob-reference-control-radius);
+}
+
+.session-recording-preview-commands li { color: var(--ob-color-chrome-text); }
+.session-recording-preview-commands time { display: block; color: var(--ob-color-chrome-muted); font-size: 0.62rem; }
+.session-recording-preview-commands code { color: var(--ob-color-chrome-text); font-size: 0.72rem; }
+
+.session-recording-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.session-recording-footer {
+  margin: 0;
+  padding: 0.7rem var(--ob-reference-card-padding-x) 0;
+  color: var(--ob-color-text-secondary);
+  border-top: 1px solid var(--ob-color-border-subtle);
+  font-size: 0.72rem;
+}
+
+.session-recording-truncated { padding: 0 var(--ob-reference-card-padding-x) 1rem; }
+
+/* Alerts: the reference split screen without an invented queue. */
+.session-alerts .reference-unavailable { padding-top: 0.5rem; }
 .sessions-live-workspace { display: grid; grid-template-columns: minmax(17rem, 318fr) minmax(0, 798fr); gap: 1.75rem; align-items: stretch; margin-top: 1.1rem; }
 .sessions-live-queue, .sessions-live-detail { min-width: 0; min-height: 39.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.75rem; box-shadow: var(--shadow-sm); }
 .sessions-live-queue { display: flex; flex-direction: column; padding: 1rem; }
@@ -4385,21 +4422,22 @@ main.login {
 .session-request-disclosure[open] > summary { margin-bottom: 0.8rem; }
 .session-request-disclosure .ob-form-card { margin: 0; box-shadow: none; }
 @media (max-width: 1080px) {
-  .sessions-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sessions-live-workspace { grid-template-columns: minmax(15rem, 0.85fr) minmax(0, 1.5fr); gap: 1rem; }
+  .session-recordings-layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
-  .sessions-overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
   .sessions-live-workspace { grid-template-columns: minmax(0, 1fr); gap: 0.8rem; }
   .sessions-live-queue, .sessions-live-detail { min-height: 0; }
   .sessions-live-list { max-height: 22rem; }
   .sessions-live-empty { min-height: 16rem; }
   .sessions-live-detail { padding: 1rem; }
+  .session-recordings-layout { padding-inline: 1rem; }
+  .session-toolbar-date { flex: 1 1 12rem; }
 }
 @media (max-width: 430px) {
-  .sessions-overview-metrics { grid-template-columns: minmax(0, 1fr); }
   .sessions-live-search > div { flex-wrap: wrap; }
   .sessions-live-search .ob-button { width: 100%; }
+  .session-toolbar-date { flex-basis: 100%; }
 }
 
 /* ==========================================================================

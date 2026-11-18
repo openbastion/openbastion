@@ -6,10 +6,10 @@ Ces SVG sont les sources de conception fournies pour l'alignement de l'Admin UI.
 |---|---|---|
 | `openbastion-auth-connexion.svg` | Connexion | Intégré dans l'Admin UI |
 | `openbastion-mfa-validation.svg` | Vérification MFA | Intégré dans l'Admin UI |
-| `openbastion-sessions.svg` | Sessions — écran de base | Référence de l'écran Sessions |
-| `openbastion-sessions-historique.svg` | Sessions — Historique | Maquette validée et onglet React intégré |
-| `openbastion-sessions-enregistrements.svg` | Sessions — Enregistrements | Maquette validée ; recherche des commandes SSH et ouverture du replay intégrées |
-| `openbastion-sessions-alertes.svg` | Sessions — Alertes | Maquette validée et écran d'état intégré ; contrat API de file d'alertes manquant |
+| `openbastion-sessions.svg` | Sessions — écran de base | Intégré dans l'Admin UI : en-tête, quatre indicateurs, onglets, espace à deux panneaux (demandes à décider, détail) |
+| `openbastion-sessions-historique.svg` | Sessions — Historique | Intégré : en-tête dédié, indicateurs, filtres, tableau de référence et pagination par curseur |
+| `openbastion-sessions-enregistrements.svg` | Sessions — Enregistrements | Intégré : bibliothèque et aperçu ; recherche des commandes SSH et ouverture du replay réelles |
+| `openbastion-sessions-alertes.svg` | Sessions — Alertes | Intégré : en-tête, indicateurs et panneau « alertes récentes » ; contrat API de file d'alertes manquant, état explicite |
 | `openbastion-dashboard.svg` | Vue générale | Shell et Dashboard React intégrés ; séries temporelles signalées comme indisponibles faute de contrat API |
 | `openbastion-acces-privilegies.svg` | Accès privilégiés | À intégrer |
 | `openbastion-audit-conformite.svg` | Audit et conformité | À intégrer |

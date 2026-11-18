@@ -50,7 +50,7 @@ describe("Sessions workspace tabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rechercher" }));
     expect(await screen.findByText("systemctl status nginx")).toBeTruthy();
     expect(calls.some((call) => call.path.startsWith("/recordings/search?") && call.path.includes("q=systemctl"))).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Ouvrir la relecture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lire le replay" }));
     expect(opened).toEqual(["sess_recorded"]);
   });
 

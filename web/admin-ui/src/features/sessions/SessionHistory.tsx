@@ -6,7 +6,7 @@ import { Notice } from "../../shared/Notice";
 import { Button } from "../../shared/ui/Button";
 import { Badge } from "../../shared/ui/Badge";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { Input, Select } from "@openbastion/ui";
+import { ChevronDown, Search } from "@openbastion/icons";
 
 function datePart(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -33,8 +33,12 @@ function validRange(from: string, to: string): boolean {
   return Number.isFinite(start) && Number.isFinite(end) && duration > 0 && duration <= 31 * 86_400_000;
 }
 
+// The reference table (docs/ui/reference-screens/openbastion-sessions-historique.svg): one panel,
+// a filter row, the user/target/protocol/start/status columns. Duration and recording availability
+// have no public contract — the Session record carries no end time and no recording reference —
+// so those cells stay an em dash with their reason instead of a plausible value.
 export function SessionHistory() {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
   const { api } = useSignedIn();
   const initial = defaultRange();
   const [from, setFrom] = useState(initial.from);
@@ -101,44 +105,57 @@ export function SessionHistory() {
     void load(filters, stack[stack.length - 1] ?? "");
   }
 
+  function startedAt(value?: string): string {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString(i18n.language, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+
   return (
-    <section className="session-history" aria-labelledby="session-history-title">
-      <div className="ob-section-heading">
+    <section className="ob-surface reference-panel session-history" aria-labelledby="session-history-title">
+      <div className="reference-panel-heading">
         <div>
           <h3 id="session-history-title">{t("sessions.history.title")}</h3>
-          <p className="ob-hint">{t("sessions.history.description")}</p>
+          <p>{t("sessions.history.description")}</p>
         </div>
-        {page ? <Badge>{t("sessions.history.pageCount", { count: page.sessions.length })}</Badge> : null}
       </div>
-      <form className="session-filter-bar" onSubmit={search} aria-label={t("sessions.history.filtersAria")}>
-        <label className="session-filter-query">
-          {t("sessions.history.query")}
-          <Input type="search" maxLength={256} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("sessions.history.queryPlaceholder")} />
+      <form className="reference-table-toolbar session-history-toolbar" onSubmit={search} aria-label={t("sessions.history.filtersAria")}>
+        <label className="reference-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label={t("sessions.history.query")}
+            maxLength={256}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("sessions.history.queryPlaceholder")}
+          />
         </label>
-        <label>
-          {t("sessions.history.from")}
-          <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
-        </label>
-        <label>
-          {t("sessions.history.to")}
-          <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
-        </label>
-        <label>
-          {t("sessions.history.status")}
-          <Select value={status} onChange={(event) => setStatus(event.target.value)}>
+        <label className="reference-select">
+          <select aria-label={t("sessions.history.status")} value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="">{t("sessions.history.allStatuses")}</option>
             <option value="active">{t("common.status.active")}</option>
             <option value="terminated">{t("common.status.terminated")}</option>
             <option value="expired">{t("common.status.expired")}</option>
             <option value="denied">{t("common.status.denied")}</option>
-          </Select>
+          </select>
+          <ChevronDown size={14} aria-hidden="true" />
         </label>
-        <label>
-          {t("sessions.history.protocol")}
-          <Select value={protocol} onChange={(event) => setProtocol(event.target.value)}>
+        <label className="reference-select">
+          <select aria-label={t("sessions.history.protocol")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
             <option value="">{t("sessions.history.allProtocols")}</option>
             {(["ssh", "rdp", "vnc"] as const).map((value) => <option key={value} value={value}>{value.toUpperCase()}</option>)}
-          </Select>
+          </select>
+          <ChevronDown size={14} aria-hidden="true" />
+        </label>
+        <label className="session-toolbar-date">
+          <span>{t("sessions.history.from")}</span>
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+        </label>
+        <label className="session-toolbar-date">
+          <span>{t("sessions.history.to")}</span>
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
         </label>
         <Button type="submit" variant="primary" disabled={loading}>{t("sessions.history.search")}</Button>
       </form>
@@ -146,35 +163,48 @@ export function SessionHistory() {
       {loading ? <p className="ob-empty-state" role="status">{t("sessions.history.loading")}</p> : null}
       {!loading && page && page.sessions.length === 0 ? <p className="ob-empty-state">{t("sessions.history.empty")}</p> : null}
       {!loading && page && page.sessions.length > 0 ? (
-        <div className="ob-table-wrap">
-          <table className="ob-data-table">
+        <div className="reference-table-wrap">
+          <table className="reference-table session-history-table">
             <caption className="ob-visually-hidden">{t("sessions.history.caption")}</caption>
             <thead><tr>
-              <th scope="col">{t("sessions.columns.session")}</th>
-              <th scope="col">{t("sessions.columns.requester")}</th>
+              <th scope="col">{t("sessions.columns.user")}</th>
               <th scope="col">{t("sessions.columns.target")}</th>
               <th scope="col">{t("sessions.columns.protocol")}</th>
-              <th scope="col">{t("sessions.columns.status")}</th>
               <th scope="col">{t("sessions.columns.started")}</th>
+              <th scope="col">{t("sessions.columns.duration")}</th>
+              <th scope="col">{t("sessions.columns.status")}</th>
+              <th scope="col">{t("sessions.columns.recording")}</th>
             </tr></thead>
             <tbody>{page.sessions.map((session) => (
               <tr key={session.id}>
-                <td><code>{session.id}</code>{session.breakGlass ? <Badge tone="warning">{t("sessions.pending.emergency")}</Badge> : null}</td>
-                <td>{session.requestedBy}</td>
-                <td>{session.targetHost ?? session.privilegedAccountId}</td>
-                <td><Badge>{session.protocol.toUpperCase()}</Badge></td>
+                <td>
+                  <span className="reference-identifier">{session.requestedBy}</span>
+                  <span className="reference-cell-note"><code>{session.id}</code></span>
+                </td>
+                <td><span className="reference-address">{session.targetHost ?? session.privilegedAccountId}</span></td>
+                <td><Badge className="reference-pill">{session.protocol.toUpperCase()}</Badge></td>
+                <td>{session.createdAt ? <time dateTime={session.createdAt}>{startedAt(session.createdAt)}</time> : "—"}</td>
+                <td><span className="reference-cell-muted" title={t("sessions.history.durationUnavailable")}>—</span></td>
                 <td><StatusBadge status={session.status} /></td>
-                <td>{session.createdAt ? <time dateTime={session.createdAt}>{new Date(session.createdAt).toLocaleString()}</time> : "—"}</td>
+                <td><span className="reference-cell-muted" title={t("sessions.history.recordingUnavailable")}>—</span></td>
               </tr>
             ))}</tbody>
           </table>
         </div>
       ) : null}
-      {!loading && page ? <div className="session-pagination">
-        <Button disabled={cursorStack.length === 0} onClick={previousPage}>{t("common.pager.previous")}</Button>
-        <span>{t("sessions.history.page", { page: pageNumber })}</span>
-        <Button disabled={!page.next} onClick={nextPage}>{t("common.pager.next")}</Button>
-      </div> : null}
+      {!loading && page ? (
+        <div className="reference-table-footer">
+          <p className="reference-table-range">
+            {t("sessions.history.resultsOnPage", { count: page.sessions.length })}
+            {" · "}{t("sessions.history.page", { page: pageNumber })}
+          </p>
+          <nav className="reference-pager" aria-label={t("common.pager.aria")}>
+            <button type="button" aria-label={t("sessions.history.previous")} disabled={cursorStack.length === 0} onClick={previousPage}>‹</button>
+            <button type="button" aria-current="page">{pageNumber}</button>
+            <button type="button" aria-label={t("sessions.history.next")} disabled={!page.next} onClick={nextPage}>›</button>
+          </nav>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -5,7 +5,7 @@ import { useAppTranslation } from "../../shared/i18n";
 import { Notice } from "../../shared/Notice";
 import { Button } from "../../shared/ui/Button";
 import { Badge } from "../../shared/ui/Badge";
-import { Input } from "@openbastion/ui";
+import { Search } from "@openbastion/icons";
 
 function datePart(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -32,14 +32,19 @@ function validRange(from: string, to: string): boolean {
   return Number.isFinite(start) && Number.isFinite(end) && duration > 0 && duration <= 31 * 86_400_000;
 }
 
+// The reference library (docs/ui/reference-screens/openbastion-sessions-enregistrements.svg): the
+// list on the left, the selected recording on the right. The only search the public API serves is
+// the bounded SSH command search (ADR-0112); storage and retention have no contract, so they say
+// so instead of showing a plausible figure.
 export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessionId: string) => void }) {
-  const { t } = useAppTranslation();
+  const { t, i18n } = useAppTranslation();
   const { api } = useSignedIn();
   const initial = defaultRange();
   const [query, setQuery] = useState("");
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [result, setResult] = useState<RecordingSearchResult>();
+  const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>();
   const [searched, setSearched] = useState(false);
@@ -48,6 +53,7 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
     event.preventDefault();
     setError(undefined);
     setResult(undefined);
+    setSelected("");
     setSearched(true);
     if (!validRange(from, to)) {
       setError(new Error(t("sessions.recordings.invalidRange")));
@@ -60,7 +66,9 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
     setLoading(true);
     try {
       const params = new URLSearchParams({ q: query.trim(), from: dateTime(from), to: dateTime(to, true) });
-      setResult(await api.request<RecordingSearchResult>("GET", `/recordings/search?${params.toString()}`));
+      const found = await api.request<RecordingSearchResult>("GET", `/recordings/search?${params.toString()}`);
+      setResult(found);
+      setSelected(found.sessions[0]?.sessionId ?? "");
     } catch (err) {
       setError(err);
     } finally {
@@ -69,56 +77,104 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
   }
 
   const hitCount = result?.sessions.reduce((count, session) => count + session.hits.length, 0) ?? 0;
+  const current = result?.sessions.find((session) => session.sessionId === selected);
 
   return (
-    <section className="session-recordings" aria-labelledby="session-recordings-title">
-      <div className="ob-section-heading">
+    <section className="ob-surface reference-panel session-recordings" aria-labelledby="session-recordings-title">
+      <div className="reference-panel-heading">
         <div>
-          <h3 id="session-recordings-title">{t("sessions.recordings.title")}</h3>
-          <p className="ob-hint">{t("sessions.recordings.description")}</p>
+          <h3 id="session-recordings-title">{t("sessions.recordings.libraryTitle")}</h3>
+          <p>{t("sessions.recordings.libraryDescription")}</p>
         </div>
-        {result ? <Badge>{t("sessions.recordings.hitCount", { count: hitCount })}</Badge> : null}
       </div>
-      <form className="session-filter-bar session-recording-search" onSubmit={search} aria-label={t("sessions.recordings.formAria")}>
-        <label className="session-filter-query">
-          {t("sessions.recordings.query")}
-          <Input type="search" minLength={3} maxLength={256} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("sessions.recordings.queryPlaceholder")} required />
+      <form className="reference-table-toolbar session-recording-search" onSubmit={search} aria-label={t("sessions.recordings.formAria")}>
+        <label className="reference-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label={t("sessions.recordings.query")}
+            minLength={3}
+            maxLength={256}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("sessions.recordings.queryPlaceholder")}
+            required
+          />
         </label>
-        <label>
-          {t("sessions.history.from")}
-          <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+        <label className="session-toolbar-date">
+          <span>{t("sessions.history.from")}</span>
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
         </label>
-        <label>
-          {t("sessions.history.to")}
-          <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
+        <label className="session-toolbar-date">
+          <span>{t("sessions.history.to")}</span>
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
         </label>
         <Button type="submit" variant="primary" disabled={loading}>{t("sessions.recordings.search")}</Button>
       </form>
-      <p className="ob-hint">{t("sessions.recordings.scope")}</p>
       <Notice error={error} />
-      {loading ? <p className="ob-empty-state" role="status">{t("sessions.recordings.loading")}</p> : null}
-      {!loading && searched && result && result.sessions.length === 0 ? <p className="ob-empty-state">{t("sessions.recordings.empty")}</p> : null}
-      {!loading && result && result.sessions.length > 0 ? (
-        <div className="session-recording-results">
-          {result.sessions.map((session) => (
-            <article className="ob-surface session-recording-result" key={session.sessionId}>
-              <div className="ob-section-heading">
-                <h4><code>{session.sessionId}</code></h4>
-                <Button onClick={() => onOpenRecording(session.sessionId)}>{t("sessions.recordings.open")}</Button>
-              </div>
-              <ol className="commands">
-                {session.hits.map((hit, index) => (
+      <div className="session-recordings-layout">
+        <div className="session-recordings-list" aria-label={t("sessions.recordings.libraryTitle")}>
+          {loading ? <p className="ob-empty-state" role="status">{t("sessions.recordings.loading")}</p> : null}
+          {!loading && !searched ? <p className="ob-empty-state">{t("sessions.recordings.scope")}</p> : null}
+          {!loading && searched && result && result.sessions.length === 0 ? <p className="ob-empty-state">{t("sessions.recordings.empty")}</p> : null}
+          {!loading && result && result.sessions.length > 0 ? (
+            <ul className="session-recordings-rows">
+              {result.sessions.map((session) => (
+                <li key={session.sessionId}>
+                  <button
+                    type="button"
+                    className="session-recording-row"
+                    aria-current={selected === session.sessionId ? "true" : undefined}
+                    aria-label={t("sessions.recordings.selectAria", { id: session.sessionId })}
+                    onClick={() => setSelected(session.sessionId)}
+                  >
+                    <span className="session-recording-row-id">
+                      <span className="reference-identifier"><code>{session.sessionId}</code></span>
+                      <span className="reference-cell-note">{t("sessions.recordings.hitsCount", { count: session.hits.length })}</span>
+                    </span>
+                    <span className="session-recording-row-meta">
+                      <Badge className="reference-pill">{t("sessions.recordings.terminal")}</Badge>
+                      <span className="reference-cell-muted" title={t("sessions.recordings.storageUnavailable")}>{t("sessions.recordings.storageUnavailable")}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+
+        <aside className="session-recording-preview" aria-label={t("sessions.recordings.previewTitle")}>
+          <header className="session-recording-preview-heading">
+            <h4>{t("sessions.recordings.previewTitle")}</h4>
+            <p>{t("sessions.recordings.previewKind")}</p>
+          </header>
+          {current ? (
+            <>
+              <ol className="commands session-recording-preview-commands">
+                {current.hits.map((hit, index) => (
                   <li key={`${hit.timestamp ?? ""}-${index}`}>
-                    {hit.timestamp ? <time dateTime={hit.timestamp}>{new Date(hit.timestamp).toLocaleString()}</time> : null}
+                    {hit.timestamp ? <time dateTime={hit.timestamp}>{new Date(hit.timestamp).toLocaleString(i18n.language)}</time> : null}
                     <code>{hit.command ?? ""}</code>
                   </li>
                 ))}
               </ol>
-            </article>
-          ))}
-        </div>
+              <footer className="session-recording-preview-footer">
+                <span className="reference-cell-note"><code>{current.sessionId}</code></span>
+                <Button variant="primary" onClick={() => onOpenRecording(current.sessionId)}>{t("sessions.recordings.play")}</Button>
+              </footer>
+            </>
+          ) : (
+            <p className="ob-empty-state">{t("sessions.recordings.previewEmpty")}</p>
+          )}
+        </aside>
+      </div>
+      {result ? (
+        <p className="session-recording-footer">
+          {t("sessions.recordings.shown", { count: result.sessions.length })}
+          {" · "}{t("sessions.recordings.hitCount", { count: hitCount })}
+        </p>
       ) : null}
-      {!loading && result?.truncated ? <p className="ob-hint" role="status">{t("sessions.recordings.truncated")}</p> : null}
+      {!loading && result?.truncated ? <p className="ob-hint session-recording-truncated" role="status">{t("sessions.recordings.truncated")}</p> : null}
     </section>
   );
 }

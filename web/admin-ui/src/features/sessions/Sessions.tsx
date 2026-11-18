@@ -9,12 +9,15 @@ import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
 import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { useAppTranslation } from "../../shared/i18n";
 import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
-import { Search } from "@openbastion/icons";
+import { Download, Search } from "@openbastion/icons";
+import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { SessionHistory } from "./SessionHistory";
 import { SessionRecordings } from "./SessionRecordings";
 import { SessionAlerts } from "./SessionAlerts";
+import { useAppTranslation } from "../../shared/i18n";
+
+type View = "live" | "history" | "recordings" | "alerts";
 
 function formatExpiry(value: string, locale: string): string {
   const date = new Date(value);
@@ -23,6 +26,10 @@ function formatExpiry(value: string, locale: string): string {
 
 // The page deliberately lists only requests returned by the caller-scoped approval endpoint.
 // There is no global active-session feed or SSH terminal stream in the public API/UI contract.
+//
+// Layout follows docs/ui/reference-screens/openbastion-sessions*.svg: one header per view, four
+// indicator cards, the tab strip, then the view's panel. A figure the public API cannot produce
+// stays an em dash with its reason — the reference cards' numbers are illustrative, never data.
 export function Sessions({
   requestedSessionId,
   onSessionLookupComplete,
@@ -42,7 +49,7 @@ export function Sessions({
   const [lookup, setLookup] = useState("");
   const [found, setFound] = useState<Session>();
   const [screen, setScreen] = useState<AttachedScreen>();
-  const [view, setView] = useState("live");
+  const [view, setView] = useState<View>("live");
   const [requestFormOpen, setRequestFormOpen] = useState(false);
 
   const load = useCallback(() => {
@@ -138,48 +145,88 @@ export function Sessions({
   }
 
   const pendingCount = pending?.totalItems;
+  const pendingCountLabel = pendingLoading ? "…" : error && !pending ? "—" : String(pendingCount ?? 0);
+
+  const header =
+    view === "history"
+      ? { title: t("sessions.history.title"), subtitle: t("sessions.subtitles.history") }
+      : view === "recordings"
+        ? { title: t("sessions.titles.recordings"), subtitle: t("sessions.subtitles.recordings") }
+        : view === "alerts"
+          ? { title: t("sessions.alerts.title"), subtitle: t("sessions.subtitles.alerts") }
+          : { title: t("sessions.title"), subtitle: t("sessions.subtitles.live") };
+
+  const exportAction = (
+    <Button type="button" variant="secondary" disabled title={t("sessions.exportUnavailable")}>
+      <Download size={16} aria-hidden="true" />
+      {t(`sessions.exports.${view}`)}
+    </Button>
+  );
 
   return (
     <AdminPage
-      title={t("sessions.title")}
-      hints={[t("sessions.live.description")]}
-      actions={<Button variant="primary" onClick={() => { setView("live"); setRequestFormOpen(true); }}>{t("sessions.live.newRequest")}</Button>}
+      title={header.title}
+      subtitle={header.subtitle}
+      actions={
+        view === "live" ? (
+          <>
+            {exportAction}
+            <Button variant="primary" onClick={() => { setView("live"); setRequestFormOpen(true); }}>{t("sessions.live.newRequest")}</Button>
+          </>
+        ) : exportAction
+      }
     >
       <Notice error={decision ? undefined : error} ok={decision ? undefined : ok} />
 
-      <div className="sessions-overview-metrics" role="group" aria-label={t("sessions.live.metricsAria")}>
-        <article className="sessions-overview-metric sessions-metric-primary">
-          <span>{t("sessions.live.pendingMetric")}</span>
-          <strong>{pendingLoading ? "…" : error && !pending ? "—" : pendingCount ?? 0}</strong>
-          <small>{t("sessions.live.pendingDetail")}</small>
-        </article>
-        <article className="sessions-overview-metric">
-          <span>{t("sessions.live.activeMetric")}</span>
-          <strong className="sessions-metric-text">{t("sessions.live.required")}</strong>
-          <small>{t("sessions.live.activeDetail")}</small>
-        </article>
-        <article className="sessions-overview-metric">
-          <span>{t("sessions.live.recordingMetric")}</span>
-          <strong className="sessions-metric-text">{t("sessions.live.searchAvailable")}</strong>
-          <small>{t("sessions.live.recordingDetail")}</small>
-        </article>
-        <article className="sessions-overview-metric">
-          <span>{t("sessions.live.alertMetric")}</span>
-          <strong className="sessions-metric-text">{t("sessions.live.required")}</strong>
-          <small>{t("sessions.live.alertDetail")}</small>
-        </article>
+      <div className="reference-metrics" role="group" aria-label={t("sessions.metrics.aria")}>
+        {view === "live" ? (
+          <>
+            <ReferenceMetric label={t("sessions.metrics.active")} detail={t("sessions.metrics.activeDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.recordedToday")} detail={t("sessions.metrics.recordedTodayDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.averageDuration")} detail={t("sessions.metrics.averageDurationDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.interrupted")} detail={t("sessions.metrics.interruptedDetail")} />
+          </>
+        ) : null}
+        {view === "history" ? (
+          <>
+            <ReferenceMetric label={t("sessions.metrics.last30Days")} detail={t("sessions.metrics.last30DaysDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.recordings")} detail={t("sessions.metrics.recordingsDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.averageDuration")} detail={t("sessions.metrics.averageDurationDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.interrupted")} detail={t("sessions.metrics.interruptedDetail")} />
+          </>
+        ) : null}
+        {view === "recordings" ? (
+          <>
+            <ReferenceMetric label={t("sessions.metrics.recordings")} detail={t("sessions.metrics.recordingsDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.totalDuration")} detail={t("sessions.metrics.totalDurationDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.integrity")} detail={t("sessions.metrics.integrityDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.expiringSoon")} detail={t("sessions.metrics.expiringSoonDetail")} />
+          </>
+        ) : null}
+        {view === "alerts" ? (
+          <>
+            <ReferenceMetric label={t("sessions.metrics.alertsUnhandled")} detail={t("sessions.metrics.alertsUnavailable")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsCritical")} detail={t("sessions.metrics.alertsUnavailable")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsHigh")} detail={t("sessions.metrics.alertsUnavailable")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsHandled")} detail={t("sessions.metrics.alertsUnavailable")} />
+          </>
+        ) : null}
       </div>
 
-      <Tabs value={view} onValueChange={setView} className="session-tabs">
+      <Tabs value={view} onValueChange={(next) => setView(next as View)} className="reference-tabs session-tabs">
         <TabsList aria-label={t("sessions.tabs.aria")}>
-          <TabsTrigger value="live">{t("sessions.tabs.live")}</TabsTrigger>
+          <TabsTrigger value="live" aria-label={t("sessions.tabs.live")}>
+            {t("sessions.tabs.live")}
+            <span className="reference-tab-count">{pendingCountLabel}</span>
+          </TabsTrigger>
           <TabsTrigger value="history">{t("sessions.tabs.history")}</TabsTrigger>
           <TabsTrigger value="recordings">{t("sessions.tabs.recordings")}</TabsTrigger>
-          <TabsTrigger value="alerts">
+          <TabsTrigger value="alerts" aria-label={t("sessions.tabs.alerts")}>
             {t("sessions.tabs.alerts")}
             <Badge tone="warning" className="session-alert-tab-badge">{t("sessions.alerts.badge")}</Badge>
           </TabsTrigger>
         </TabsList>
+
         <TabsContent value="live">
           <div className="sessions-live-workspace">
             <section className="sessions-live-queue" aria-labelledby="sessions-live-queue-title">
@@ -188,13 +235,19 @@ export function Sessions({
                   <h3 id="sessions-live-queue-title">{t("sessions.live.queueTitle")}</h3>
                   <p>{pendingLoading ? t("sessions.pending.loading") : t("sessions.live.queueCount", { count: pendingCount ?? 0 })}</p>
                 </div>
-                <Badge>{pendingLoading ? "…" : pendingCount ?? 0}</Badge>
               </div>
               <form className="sessions-live-search" onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
                 <label htmlFor="session-lookup">{t("sessions.lookup.identifier")}</label>
                 <div>
-                  <input id="session-lookup" value={lookup} onChange={(e) => setLookup(e.target.value)} required placeholder={t("sessions.live.searchPlaceholder")} />
-                  <Button type="submit" variant="secondary">{t("sessions.lookup.show")}</Button>
+                  <input
+                    id="session-lookup"
+                    type="search"
+                    value={lookup}
+                    onChange={(e) => setLookup(e.target.value)}
+                    placeholder={t("sessions.live.searchPlaceholder")}
+                    required
+                  />
+                  <Button type="submit" variant="primary">{t("sessions.lookup.show")}</Button>
                 </div>
               </form>
               <div className="sessions-live-list" aria-label={t("sessions.live.queueAria")}>
@@ -211,7 +264,7 @@ export function Sessions({
                   >
                     <span className="sessions-live-item-top">
                       <strong>{session.requestedBy}</strong>
-                      <Badge tone={session.breakGlass ? "warning" : "neutral"}>{session.protocol.toUpperCase()}</Badge>
+                      <Badge className="reference-pill">{session.protocol.toUpperCase()}</Badge>
                     </span>
                     <span className="sessions-live-item-account">{session.privilegedAccountId}</span>
                     <span className="sessions-live-item-meta">
