@@ -4979,3 +4979,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Le gate tolère uniquement GHSA-fc5q-39xc-vjpf lorsque tous les paquets vulnérables de la chaîne sont présents dans le lockfile et marqués `dev: true`. Toute autre alerte, dépendance runtime, chaîne incomplète/ambiguë ou cycle reste bloquante.
 - Exception temporaire jusqu'au 2026-12-02, documentée dans `docs/security/vulnerability-management.md`. Ce n'est pas une correction de la vulnérabilité ; `npm audit` reste exécuté et ses constats autorisés sont affichés comme exception.
 - Tests dédiés : `node --test scripts/npm-audit-gate.test.mjs`.
+
+## 2026-11-18 — Sessions : alignement des quatre vues sur les maquettes
+
+- `Sessions.tsx` porte désormais l'en-tête et les quatre cartes d'indicateurs de la vue active, puis la barre d'onglets (référence `openbastion-sessions.svg`) : chaque onglet a son titre et son sous-titre (Sessions, Historique des sessions, Bibliothèque des enregistrements, Alertes de sessions).
+- Historique : panneau unique avec filtres (recherche, statut, protocole, du/au, recherche), colonnes Utilisateur/Cible/Protocole/Début/Durée/Statut/Enregistrement, pied de page et pagination par curseur. Enregistrements : bibliothèque à gauche, aperçu des commandes retrouvées à droite, bouton « Lire le replay ». Alertes : panneau « Alertes récentes » avec l'état explicite du contrat manquant.
+- Aucune valeur de démonstration des maquettes n'est reprise. Les cartes affichent un tiret et la raison (total non exposé par la recherche paginée, aucun agrégat, aucune durée, aucune politique de rétention). Les boutons d'export sont présents et désactivés : l'API publique n'expose aucun export.
+- Les styles propres aux sessions utilisent les primitives de référence déjà centralisées (`reference-metrics`, `reference-tabs`, `reference-panel`, `reference-table`) ; l'ancien bloc CSS 11.3 (barre de filtres, tableaux ad hoc, résultats d'enregistrements) est supprimé.
+- Validation : `npx tsc --noEmit -p .` PASS ; Vitest 26 fichiers / 261 tests PASS ; captures Chromium desktop et mobile (aucun débordement horizontal) ; `docs/ui/reference-screens/README.md` et l'audit mis à jour.
+- Limites : la file d'alertes n'a toujours aucun contrat public ; les lignes du tableau d'historique n'ont pas pu être vues avec des données réelles dans la sandbox (aucune session accessible), leur rendu est couvert par `SessionViews.test.tsx`.
