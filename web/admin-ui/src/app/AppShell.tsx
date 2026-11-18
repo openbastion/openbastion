@@ -8,12 +8,14 @@ import {
   ChevronRight,
   Dashboard,
   HelpCircle,
+  Infrastructure,
   Menu,
   Moon,
   Notifications,
   Policies as PoliciesIcon,
   Search,
   Session,
+  Security,
   Settings,
   Shield,
   Star,
@@ -41,14 +43,29 @@ const tabs = {
   accounts: { icon: Users, group: "workspace" },
   policies: { icon: PoliciesIcon, group: "workspace" },
   sessions: { icon: Session, group: "workspace" },
+  infrastructure: { icon: Infrastructure, group: "workspace" },
   audit: { icon: Audit, group: "workspace" },
   security: { icon: Shield, group: "workspace" },
+  posture: { icon: Security, group: "workspace" },
+  settings: { icon: Settings, group: "workspace" },
 } as const;
 
 const groups = ["workspace"] as const;
 
 export type Tab = keyof typeof tabs;
-const tabOrder: Tab[] = ["overview", "accounts", "policies", "sessions", "audit", "security"];
+// The reference sidebar order (Vue d'ensemble, Accès privilégiés, Sessions, Infrastructure,
+// Audit & conformité, Paramètres) with the screens that existed before it kept in place.
+const tabOrder: Tab[] = [
+  "overview",
+  "accounts",
+  "policies",
+  "sessions",
+  "infrastructure",
+  "audit",
+  "security",
+  "posture",
+  "settings",
+];
 
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

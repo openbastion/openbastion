@@ -6,6 +6,9 @@ import { OidcCallback } from "../features/login/OidcCallback";
 import { Accounts } from "../features/accounts/Accounts";
 import { Overview } from "../features/overview/Overview";
 import { AuditCompliance } from "../features/audit/AuditCompliance";
+import { SecurityCenter } from "../features/security/SecurityCenter";
+import { Infrastructure } from "../features/infrastructure/Infrastructure";
+import { Settings } from "../features/settings/Settings";
 import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
@@ -69,8 +72,11 @@ export function App({
         {tab === "accounts" && <Accounts onNavigate={setTab} />}
         {tab === "policies" && <Policies />}
         {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} onOpenRecording={openRecording} />}
+        {tab === "infrastructure" && <Infrastructure onNavigate={setTab} />}
         {tab === "audit" && <Recording requestedSessionId={recordingLookup} onSessionLookupComplete={clearRecordingLookup} />}
         {tab === "security" && <AuditCompliance onNavigate={setTab} />}
+        {tab === "posture" && <SecurityCenter />}
+        {tab === "settings" && <Settings />}
       </AppShell>
     </SignedInContext.Provider>
   );

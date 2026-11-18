@@ -94,6 +94,7 @@
   --ob-color-text-primary: var(--ob-palette-neutral-900);
   --ob-color-text-secondary: var(--ob-palette-neutral-500);
   --ob-color-text-tertiary: var(--ob-palette-neutral-400);
+  --ob-color-text-label: var(--ob-palette-neutral-700);
   --ob-color-border-subtle: var(--ob-palette-neutral-200);
   --ob-color-border-control: var(--ob-palette-neutral-500);
 
@@ -213,6 +214,20 @@
   --ob-reference-tab-size: 0.8125rem;
   --ob-reference-tab-indicator-width: 2.5px;
   --ob-reference-pill-radius: 0.375rem;
+
+  /* Reference screens — Paramètres and Infrastructure (1440 × 1080 artboards): 17px card title,
+     12.5px subtitle, 14px row title, 34px round mark, and the dark "Your instance" panel. */
+  --ob-reference-card-title-size: 1.0625rem;
+  --ob-reference-card-subtitle-size: 0.78125rem;
+  --ob-reference-row-mark-size: 2.125rem;
+  --ob-reference-row-title-size: 0.875rem;
+  --ob-reference-row-description-size: 0.78125rem;
+  --ob-reference-helper-size: 0.71875rem;
+  --ob-reference-state-size: 0.71875rem;
+  --ob-color-border-accent-subtle: #DBEAFE;
+  --ob-color-border-success-subtle: #D1FAE5;
+  --ob-color-chrome-card: #0B1E38;
+  --ob-color-chrome-card-raised: #0E3A5D;
 
   /* Audit & conformité: the dark recommendations card of the reference. */
   --ob-color-audit-panel: #0B1F36;
@@ -372,6 +387,10 @@
   --ob-palette-chrome-background-raised: #1D2B38;
   --ob-palette-chrome-text: #F3F6F9;
   --ob-palette-chrome-muted: #B4C0CB;
+  --ob-color-border-accent-subtle: #2C4A6B;
+  --ob-color-border-success-subtle: #2A4A3B;
+  --ob-color-chrome-card: #17222D;
+  --ob-color-chrome-card-raised: #1D2B38;
   --ob-palette-overlay: rgb(0 0 0 / 0.68);
   --ob-palette-focus-ring: rgb(102 184 255 / 0.28);
 
@@ -5294,3 +5313,238 @@ main.login {
 
 /* Rotation flags sit beside the account state, on the same note line. */
 .reference-cell-note .reference-pill { margin-inline-start: 0.3rem; }
+
+/* ==========================================================================
+   18. REFERENCE SETTINGS — workspace, security, identities, integrations, notifications
+   (docs/ui/reference-screens/openbastion-parametres*.svg, 1440 × 1080)
+   ========================================================================== */
+.settings-tabs { min-width: 0; }
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.973fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.settings-column { display: grid; gap: 1.25rem; align-content: start; min-width: 0; }
+
+/* One card of the reference: a 12px surface, a 17px title, one line under it, then its rows. */
+.reference-card {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  min-width: 0;
+  padding: 1.35rem var(--ob-reference-card-padding-x) 0;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-card-radius);
+  box-shadow: var(--ob-shadow-sm);
+}
+
+.reference-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.reference-card-heading { display: grid; gap: 0.35rem; min-width: 0; }
+.reference-card-heading h3 { margin: 0; color: var(--ob-color-text-primary); font-size: var(--ob-reference-card-title-size); font-weight: var(--ob-font-weight-bold); letter-spacing: -0.01em; }
+.reference-card-subtitle { color: var(--ob-color-text-secondary); font-size: var(--ob-reference-card-subtitle-size); line-height: 1.45; }
+.reference-card-rows { display: grid; gap: 0; margin-top: 0.85rem; }
+.reference-card-foot { margin: 0.9rem 0 0; padding-bottom: 1.2rem; color: var(--ob-color-text-tertiary); font-size: var(--ob-reference-helper-size); line-height: 1.5; }
+.reference-card-foot a { text-decoration: none; }
+
+.reference-card--chrome {
+  color: var(--ob-color-chrome-text);
+  background: var(--ob-color-chrome-card);
+  border-color: var(--ob-color-chrome-card);
+}
+.reference-card--chrome .reference-card-heading h3 { color: var(--ob-color-chrome-text); }
+.reference-card--chrome .reference-card-subtitle,
+.reference-card--chrome .reference-fact dt,
+.reference-card--chrome .reference-card-foot { color: var(--ob-color-chrome-muted); }
+.reference-card--chrome .reference-fact dd { color: var(--ob-color-chrome-text); }
+.reference-card--chrome .reference-fact dd.is-unavailable { color: var(--ob-color-chrome-muted); }
+
+.reference-card--accent { background: var(--ob-color-accent-subtle); border-color: var(--ob-color-border-accent-subtle); box-shadow: none; }
+
+.reference-link--chrome { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ob-color-chrome-accent); font-size: var(--ob-reference-row-description-size); font-weight: 600; text-decoration: none; }
+.reference-link--chrome:hover { text-decoration: underline; }
+
+/* A row: a round mark, a title, one line of detail, and the state on the right. */
+.reference-row { display: flex; align-items: flex-start; gap: 0.9rem; padding: 0.85rem 0; border-bottom: 1px solid var(--ob-color-bg-surface-muted); }
+.reference-row:first-child { padding-top: 0.35rem; }
+.reference-row:last-child { border-bottom: 0; padding-bottom: 0.9rem; }
+.reference-row-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--ob-reference-row-mark-size);
+  height: var(--ob-reference-row-mark-size);
+  color: var(--ob-color-accent);
+  background: var(--ob-color-accent-subtle);
+  border-radius: 50%;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.reference-row-copy { display: grid; gap: 0.3rem; flex: 1 1 auto; min-width: 0; }
+.reference-row-title { color: var(--ob-color-text-primary); font-size: var(--ob-reference-row-title-size); font-weight: 600; line-height: 1.35; }
+.reference-row-description { color: var(--ob-color-text-secondary); font-size: var(--ob-reference-row-description-size); line-height: 1.45; }
+
+.reference-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 1.5rem;
+  padding: 0.15rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: var(--ob-reference-pill-radius);
+  font-size: var(--ob-reference-state-size);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.reference-state--accent { color: var(--ob-color-accent); background: var(--ob-color-accent-subtle); border-color: var(--ob-color-border-accent-subtle); }
+.reference-state--success { color: var(--ob-color-status-success); background: var(--ob-color-status-success-subtle); border-color: var(--ob-color-border-success-subtle); }
+.reference-state--quiet { color: var(--ob-color-text-tertiary); background: var(--ob-color-bg-surface-muted); border-color: var(--ob-color-border-subtle); }
+.reference-state--chrome { color: var(--ob-color-chrome-accent); background: var(--ob-color-chrome-card-raised); }
+
+/* Label/value pairs of the side panels. */
+.reference-facts { display: grid; gap: 1.1rem; margin: 0.9rem 0 1.2rem; }
+.reference-fact { display: grid; grid-template-columns: 8.75rem minmax(0, 1fr); gap: 0.65rem; align-items: baseline; }
+.reference-fact dt { color: var(--ob-color-text-secondary); font-size: var(--ob-reference-row-description-size); }
+.reference-fact dd { margin: 0; color: var(--ob-color-text-primary); font-size: var(--ob-reference-row-description-size); font-weight: 600; overflow-wrap: anywhere; }
+.reference-fact dd.is-unavailable { color: var(--ob-color-text-tertiary); font-weight: 500; }
+.reference-facts--stacked .reference-fact { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+.reference-facts--stacked dd { color: var(--ob-color-text-secondary); font-weight: 400; }
+.reference-facts--stacked dd.is-unavailable { color: var(--ob-color-text-tertiary); }
+.reference-facts-action { display: inline-flex; align-items: center; gap: 0.4rem; justify-self: start; margin-bottom: 1.2rem; }
+
+/* Declared values are shown in the reference's field shape, never as an editable control. */
+.settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem 1.5rem; margin-top: 0.85rem; }
+.settings-fields--single { grid-template-columns: minmax(0, 1fr); }
+.settings-field { display: grid; gap: 0.45rem; min-width: 0; }
+.settings-field > span { color: var(--ob-color-text-label); font-size: var(--ob-reference-card-subtitle-size); font-weight: 600; }
+.settings-field input {
+  width: 100%;
+  height: 2.5rem;
+  padding: 0 0.85rem;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-control-radius);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.settings-field input[readonly] { cursor: default; }
+.settings-field input[readonly]:focus-visible { outline: 2px solid var(--ob-color-focus); outline-offset: 1px; }
+.settings-field small { color: var(--ob-color-text-tertiary); font-size: var(--ob-reference-helper-size); line-height: 1.45; }
+
+.settings-inline-note { margin: 0.75rem 0 1.2rem; color: var(--ob-color-text-tertiary); font-size: var(--ob-reference-helper-size); line-height: 1.5; }
+.settings-inline-fact { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; align-items: baseline; margin: 0 0 1.2rem; font-size: var(--ob-reference-card-subtitle-size); }
+.settings-inline-fact > span { color: var(--ob-color-text-label); font-weight: 600; }
+.settings-inline-fact > strong { color: var(--ob-color-text-primary); font-weight: 400; }
+.settings-footnote { color: var(--ob-color-text-tertiary); font-size: var(--ob-reference-helper-size); line-height: 1.5; }
+.settings-promo-body { color: var(--ob-color-text-secondary); font-size: var(--ob-reference-row-description-size); line-height: 1.55; padding-bottom: 0.4rem; }
+.settings-promo-body + .settings-promo-body { padding-top: 0.35rem; }
+.reference-card--accent .reference-card-heading h3 { color: var(--ob-color-text-primary); font-size: 0.9rem; }
+
+/* The rules of the Général section: shown in their reference position, declared at deployment. */
+.settings-toggle { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--ob-color-bg-surface-muted); }
+.settings-toggle:first-child { padding-top: 0.35rem; }
+.settings-toggle:last-of-type { border-bottom: 0; }
+.settings-toggle-copy { display: grid; gap: 0.3rem; min-width: 0; }
+.reference-switch {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  background: var(--ob-color-bg-surface-subtle);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-radius-pill);
+}
+.reference-switch[data-checked="true"] { background: var(--ob-color-accent-strong); border-color: var(--ob-color-accent-strong); }
+.reference-switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  background: var(--ob-color-bg-surface);
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.reference-switch[data-checked="true"] .reference-switch-knob { transform: translate(0.9rem, -50%); }
+
+/* ==========================================================================
+   19. REFERENCE INFRASTRUCTURE — indicators, access topology, cluster health, connectors
+   (docs/ui/reference-screens/openbastion-infrastructure.svg, 1440 × 1080)
+   ========================================================================== */
+.infrastructure-metrics .reference-metric { min-height: 7.625rem; }
+
+.infrastructure-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1.973fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.topology-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) 2.75rem minmax(0, 1fr) 2.75rem minmax(0, 1.15fr);
+  align-items: center;
+  margin: 1.4rem 0 0.4rem;
+}
+.topology-node {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  background: var(--ob-color-bg-surface-muted);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-radius-lg);
+}
+.topology-node strong { color: var(--ob-color-text-primary); font-size: 0.875rem; }
+.topology-node small { color: var(--ob-color-text-secondary); font-size: 0.7rem; }
+.topology-node .is-unavailable { color: var(--ob-color-text-tertiary); }
+.topology-node--bastion { background: var(--ob-color-chrome-card); border-color: var(--ob-color-chrome-card); }
+.topology-node--bastion strong { color: var(--ob-color-chrome-text); }
+.topology-node--bastion small { color: var(--ob-color-chrome-accent); font-weight: 500; }
+.topology-targets { display: grid; gap: 0.85rem; }
+.topology-node--target { position: relative; }
+.topology-node--target::before { content: ""; position: absolute; top: 50%; right: 100%; width: 1.5rem; height: 2px; background: var(--ob-color-accent); }
+.topology-link { height: 2px; background: var(--ob-color-accent); }
+.topology-branch { position: relative; align-self: stretch; }
+.topology-branch::before { content: ""; position: absolute; top: 14%; bottom: 14%; left: 0; width: 2px; background: var(--ob-color-accent); }
+
+.cluster-health { display: grid; gap: 1.15rem; margin-top: 1.15rem; }
+.cluster-health-row { display: grid; gap: 0.5rem; }
+.cluster-health-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; color: var(--ob-color-text-secondary); font-size: var(--ob-reference-row-description-size); }
+.cluster-health-head strong { color: var(--ob-color-text-primary); font-weight: 700; }
+.cluster-health .is-unavailable { color: var(--ob-color-text-tertiary); font-weight: 600; }
+.cluster-health-track { display: block; height: 5px; background: var(--ob-color-bg-surface-subtle); border-radius: 2.5px; }
+.cluster-health-latency { margin: 1.25rem 0 0.5rem; padding-top: 1rem; border-top: 1px solid var(--ob-color-bg-surface-muted); }
+
+.infrastructure-connectors { padding-inline: 0; }
+.infrastructure-connectors .reference-card-head,
+.infrastructure-connectors .reference-card-foot { padding-inline: var(--ob-reference-card-padding-x); }
+.infrastructure-connectors .reference-table { min-width: 44rem; }
+.infrastructure-table tbody td.infrastructure-table-empty { height: auto; padding: 1.5rem var(--ob-reference-card-padding-x); white-space: normal; }
+.infrastructure-table-empty strong { display: block; color: var(--ob-color-text-primary); font-size: 0.8rem; }
+.infrastructure-table-empty span { display: block; max-width: 62ch; margin-top: 0.35rem; color: var(--ob-color-text-secondary); font-size: 0.75rem; line-height: 1.5; }
+
+@media (max-width: 1100px) {
+  .settings-layout,
+  .infrastructure-panels { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .settings-fields { grid-template-columns: minmax(0, 1fr); }
+  .reference-fact { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+  .reference-card-head { flex-wrap: wrap; }
+  .topology-flow { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+  .topology-link,
+  .topology-branch { display: none; }
+  .topology-node--target::before { display: none; }
+}

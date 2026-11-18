@@ -3,7 +3,17 @@ import { AdminTab, DensityPreference, OperatorPreferences, ThemePreference } fro
 import { Button } from "./Button";
 import { useAppTranslation } from "../i18n";
 
-const destinations: AdminTab[] = ["overview", "accounts", "policies", "sessions", "audit", "security"];
+const destinations: AdminTab[] = [
+  "overview",
+  "accounts",
+  "policies",
+  "sessions",
+  "infrastructure",
+  "audit",
+  "security",
+  "posture",
+  "settings",
+];
 
 export function OperatorPreferencesDialog({
   preferences,
