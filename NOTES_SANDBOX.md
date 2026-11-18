@@ -4965,3 +4965,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Le dépôt courant ne contient pas encore d'application `user-portal` ; le point d'entrée partagé est prêt pour son intégration lorsqu'elle sera ajoutée.
 - Validation : `make ui-tokens-test ui-test ui-build` PASS ; 26 fichiers Vitest / 260 tests ; build TypeScript + Vite PASS ; contrastes clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
 - Le build signale toujours le chunk JavaScript principal > 500 kB (616,30 kB minifié) ; avertissement préexistant hors du périmètre CSS.
+
+## 2026-11-18 — Sidebar sur toute la hauteur de la page
+
+- La sidebar desktop était fixée à `top: 5rem` : elle laissait un bandeau de 80 px au-dessus d'elle, alors que les maquettes `docs/ui/reference-screens/` la dessinent de `y=0` à la hauteur totale (`232 × 1080`).
+- Elle est désormais fixée à `top: 0; bottom: 0; left: 0` : elle couvre toute la hauteur du viewport, la topbar restant dans la colonne de contenu (à droite de la sidebar), comme sur la maquette.
+- Mesure Chromium à 1280 × 800 : `y=0`, hauteur `800 px` (plein viewport), largeur `232 px`. Tiroir mobile inchangé (`top: 4rem`, sous la topbar).
+- Validation : `npm test` dans `web` — 26 fichiers, 261 tests PASS.

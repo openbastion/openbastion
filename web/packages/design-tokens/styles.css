@@ -4385,16 +4385,13 @@ main.login {
   grid-column: 1;
   grid-row: 1;
   position: fixed;
-  top: 5rem;
+  top: 0;
   bottom: 0;
   left: 0;
   align-self: initial;
   width: 14.5rem;
   height: auto;
-  /*  height: fit-content; */
-  /* max-height: calc(100vh - 6rem); */
   min-height: 0;
-  /* margin-block: 1rem; */
   overflow-x: hidden;
   overflow-y: auto;
   color: var(--ob-color-chrome-muted);
