@@ -1,4 +1,13 @@
-export type AdminTab = "overview" | "accounts" | "policies" | "sessions" | "audit" | "security";
+export type AdminTab =
+  | "overview"
+  | "accounts"
+  | "policies"
+  | "sessions"
+  | "infrastructure"
+  | "audit"
+  | "security"
+  | "posture"
+  | "settings";
 export type ThemePreference = "system" | "light" | "dark";
 export type DensityPreference = "comfortable" | "compact";
 
@@ -20,7 +29,17 @@ export const defaultOperatorPreferences: OperatorPreferences = {
   favorites: [],
 };
 
-const tabs = new Set<AdminTab>(["overview", "accounts", "policies", "sessions", "audit", "security"]);
+const tabs = new Set<AdminTab>([
+  "overview",
+  "accounts",
+  "policies",
+  "sessions",
+  "infrastructure",
+  "audit",
+  "security",
+  "posture",
+  "settings",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

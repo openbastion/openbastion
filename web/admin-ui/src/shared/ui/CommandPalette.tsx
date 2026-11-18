@@ -28,7 +28,7 @@ export function CommandPalette({
 
   const commands = useMemo<Command[]>(() => {
     const destinations: { tab: Tab; label: string; detail: string; keywords: string }[] = (
-      ["overview", "accounts", "policies", "sessions", "audit", "security"] as const
+      ["overview", "accounts", "policies", "sessions", "infrastructure", "audit", "security", "posture", "settings"] as const
     ).map((tab) => ({
       tab,
       label: t(`palette.destinations.${tab}.label`),
