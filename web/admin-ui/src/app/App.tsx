@@ -5,7 +5,7 @@ import { Login } from "../features/login/Login";
 import { OidcCallback } from "../features/login/OidcCallback";
 import { Accounts } from "../features/accounts/Accounts";
 import { Overview } from "../features/overview/Overview";
-import { SecurityCenter } from "../features/security/SecurityCenter";
+import { AuditCompliance } from "../features/audit/AuditCompliance";
 import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
 import { Recording } from "../features/audit/Recording";
@@ -66,11 +66,11 @@ export function App({
     <SignedInContext.Provider value={{ api, who, signOut }}>
       <AppShell who={who} tab={tab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
         {tab === "overview" && <Overview onNavigate={setTab} />}
-        {tab === "accounts" && <Accounts />}
+        {tab === "accounts" && <Accounts onNavigate={setTab} />}
         {tab === "policies" && <Policies />}
         {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} onOpenRecording={openRecording} />}
         {tab === "audit" && <Recording requestedSessionId={recordingLookup} onSessionLookupComplete={clearRecordingLookup} />}
-        {tab === "security" && <SecurityCenter />}
+        {tab === "security" && <AuditCompliance onNavigate={setTab} />}
       </AppShell>
     </SignedInContext.Provider>
   );

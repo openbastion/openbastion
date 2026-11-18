@@ -36,7 +36,7 @@ describe("App", () => {
     expect(within(navigation).getByRole("button", { name: "Vue d’ensemble" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
     expect(screen.getByRole("main").parentElement?.classList.contains("app-content")).toBe(true);
-    for (const label of ["Vue d’ensemble", "Comptes", "Politiques", "Sessions", "Enregistrements", "Sécurité"]) {
+    for (const label of ["Vue d’ensemble", "Accès privilégiés", "Politiques", "Sessions", "Enregistrements", "Audit & conformité"]) {
       const button = within(navigation).getByRole("button", { name: label });
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
@@ -95,7 +95,7 @@ describe("App", () => {
 
     fireEvent.click(restoredMenuButton);
     const accountsNavigationItem = within(screen.getByRole("dialog", { name: "Navigation principale" }))
-      .getByRole("button", { name: "Comptes" });
+      .getByRole("button", { name: "Accès privilégiés" });
     fireEvent.click(accountsNavigationItem);
     expect(document.activeElement).toBe(restoredMenuButton);
     expect(screen.getByRole("main").hasAttribute("inert")).toBe(false);
@@ -195,7 +195,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
     const query = await screen.findByRole("combobox", { name: "Rechercher une section ou une session" }); // the palette opens after a render
     fireEvent.change(query, { target: { value: "politiques" } });
     expect(screen.getByRole("option", { name: /Politiques/ })).toBeTruthy();
-    expect(screen.queryByRole("option", { name: /Comptes privilégiés/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: /Accès privilégiés/ })).toBeNull();
     fireEvent.keyDown(query, { key: "Tab", shiftKey: true });
     const close = screen.getByRole("button", { name: "Fermer" });
     expect(document.activeElement).toBe(close);

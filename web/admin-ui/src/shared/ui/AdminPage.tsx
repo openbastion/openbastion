@@ -5,18 +5,22 @@ import { useAppTranslation } from "../i18n";
 // are what an operator must know before acting on the screen, never a tour of it.
 export function AdminPage({
   title,
+  subtitle,
   hints = [],
   actions,
   children,
 }: {
   title: string;
+  // The reference screens put one sentence under the title: what the screen is, in the product's
+  // own words. It replaces nothing else — the hints below stay what an operator must know.
+  subtitle?: ReactNode;
   hints?: ReactNode[];
   actions?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <section className="ob-page">
-      <PageHead title={title} hints={hints} actions={actions} />
+      <PageHead title={title} subtitle={subtitle} hints={hints} actions={actions} />
       {children}
     </section>
   );
@@ -26,10 +30,12 @@ export function AdminPage({
 // exists to show below the fold: one hint stays visible, three become a disclosure.
 export function PageHead({
   title,
+  subtitle,
   hints = [],
   actions,
 }: {
   title: string;
+  subtitle?: ReactNode;
   hints?: ReactNode[];
   actions?: ReactNode;
 }) {
@@ -40,6 +46,7 @@ export function PageHead({
         <h2 tabIndex={-1} data-confirm-focus-fallback>{title}</h2>
         {actions ? <div className="page-actions">{actions}</div> : null}
       </div>
+      {subtitle ? <p className="ob-page-subtitle">{subtitle}</p> : null}
       {hints.length > 1 ? (
         <details className="page-hints">
           <summary>{t("common.hints", { count: hints.length })}</summary>

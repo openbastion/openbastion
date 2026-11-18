@@ -779,9 +779,21 @@
     },
     {
       "category": "administration",
+      "name": "download",
+      "component": "Download",
+      "motif": "download"
+    },
+    {
+      "category": "administration",
       "name": "check",
       "component": "Check",
       "motif": "check"
+    },
+    {
+      "category": "administration",
+      "name": "plus",
+      "component": "Plus",
+      "motif": "plus"
     },
     {
       "category": "administration",

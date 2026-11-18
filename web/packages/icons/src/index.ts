@@ -130,6 +130,8 @@ export { ChevronLeft } from "./icons/ChevronLeft";
 export { ChevronRight } from "./icons/ChevronRight";
 export { ArrowRight } from "./icons/ArrowRight";
 export { Check } from "./icons/Check";
+export { Download } from "./icons/Download";
+export { Plus } from "./icons/Plus";
 export { Close } from "./icons/Close";
 export { Menu } from "./icons/Menu";
 export { HelpCircle } from "./icons/HelpCircle";
@@ -270,6 +272,8 @@ export const iconNames = [
   "chevron-right",
   "arrow-right",
   "check",
+  "download",
+  "plus",
   "close",
   "menu",
   "help-circle",
