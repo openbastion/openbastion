@@ -252,14 +252,16 @@ ui-build: ui-icons ui-tokens-test
 	cd web/admin-ui && OPENBASTION_SOURCE_REVISION=${OPENBASTION_SOURCE_REVISION:-$(GIT_SHA_FULL)} npm ci --no-audit --no-fund && OPENBASTION_SOURCE_REVISION=${OPENBASTION_SOURCE_REVISION:-$(GIT_SHA_FULL)} npm run build
 
 ## Les vulnérabilités connues (ADR-0052) : govulncheck, épinglé, sur chaque module du go.work
-## (une vulnérabilité dont le code est appelé fait échouer), puis npm audit sur les deux lockfiles.
+## (une vulnérabilité dont le code est appelé fait échouer), puis audit npm strict sur les deux lockfiles.
+## scripts/npm-audit-gate.mjs n'accepte que l'exception GHSA documentée, dev-only et à échéance.
 GOVULNCHECK ?= golang.org/x/vuln/cmd/govulncheck@v1.9.0
 vuln: proto-gen
 	@set -e; for m in $$(awk '/^use \(/{f=1;next} f&&/\)/{exit} f{print $$1}' go.work); do \
 		echo "govulncheck $$m"; $(GO) run $(GOVULNCHECK) -C $$m ./...; \
 	done
-	cd web/admin-ui && npm audit
-	cd web/packages/icons && npm audit
+	node --test scripts/npm-audit-gate.test.mjs
+	cd web/admin-ui && node ../../scripts/npm-audit-gate.mjs
+	cd web/packages/icons && node ../../../scripts/npm-audit-gate.mjs
 
 ## Vérifie les déclarations de licence et la conservation des notices tierces.
 license-check:

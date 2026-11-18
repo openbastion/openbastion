@@ -4972,3 +4972,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Elle est désormais fixée à `top: 0; bottom: 0; left: 0` : elle couvre toute la hauteur du viewport, la topbar restant dans la colonne de contenu (à droite de la sidebar), comme sur la maquette.
 - Mesure Chromium à 1280 × 800 : `y=0`, hauteur `800 px` (plein viewport), largeur `232 px`. Tiroir mobile inchangé (`top: 4rem`, sous la topbar).
 - Validation : `npm test` dans `web` — 26 fichiers, 261 tests PASS.
+
+## 2026-11-18 — Exception npm audit bornée à GHSA-fc5q-39xc-vjpf
+
+- `make vuln` conserve `govulncheck` inchangé et remplace les deux appels `npm audit` directs par `scripts/npm-audit-gate.mjs`.
+- Le gate tolère uniquement GHSA-fc5q-39xc-vjpf lorsque tous les paquets vulnérables de la chaîne sont présents dans le lockfile et marqués `dev: true`. Toute autre alerte, dépendance runtime, chaîne incomplète/ambiguë ou cycle reste bloquante.
+- Exception temporaire jusqu'au 2026-12-02, documentée dans `docs/security/vulnerability-management.md`. Ce n'est pas une correction de la vulnérabilité ; `npm audit` reste exécuté et ses constats autorisés sont affichés comme exception.
+- Tests dédiés : `node --test scripts/npm-audit-gate.test.mjs`.
