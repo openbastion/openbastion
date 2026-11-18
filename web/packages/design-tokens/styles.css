@@ -188,6 +188,41 @@
   --ob-mfa-help-padding: 1rem;
   --ob-mfa-help-radius: 0.625rem;
 
+  /* Reference screens — Accès privilégiés and Audit & conformité (1440 × 1080 artboards).
+     Geometry is read from docs/ui/reference-screens/openbastion-acces-privilegies.svg and
+     openbastion-audit-conformite.svg: content 1144px wide, 271px indicator cards on a 20px gap,
+     12px card radius, 46px table rows. */
+  --ob-reference-content-max: 71.5rem;
+  --ob-reference-card-radius: 0.75rem;
+  --ob-reference-control-radius: 0.5rem;
+  --ob-reference-card-padding-x: 1.25rem;
+  --ob-reference-page-title-size: 1.625rem;
+  --ob-reference-page-title-tracking: -0.02em;
+  --ob-reference-page-subtitle-size: 0.84375rem;
+  --ob-reference-metric-height: 6.75rem;
+  --ob-reference-metric-label-size: 0.78rem;
+  --ob-reference-metric-value-size: 2.125rem;
+  --ob-reference-metric-value-size-compact: 1.875rem;
+  --ob-reference-metric-value-tracking: -0.03em;
+  --ob-reference-metric-detail-size: 0.72rem;
+  --ob-reference-table-row-height: 2.875rem;
+  --ob-reference-table-header-height: 2.125rem;
+  --ob-reference-table-header-size: 0.656rem;
+  --ob-reference-table-font-size: 0.78rem;
+  --ob-reference-table-note-size: 0.688rem;
+  --ob-reference-tab-size: 0.8125rem;
+  --ob-reference-tab-indicator-width: 2.5px;
+  --ob-reference-pill-radius: 0.375rem;
+
+  /* Audit & conformité: the dark recommendations card of the reference. */
+  --ob-color-audit-panel: #0B1F36;
+  --ob-color-audit-panel-raised: #133356;
+  --ob-color-audit-panel-border: #1E3A5F;
+  --ob-color-audit-panel-outline: #1E4976;
+  --ob-color-audit-panel-text: #FFFFFF;
+  --ob-color-audit-panel-muted: #94A3B8;
+  --ob-color-audit-panel-accent: #38BDF8;
+
   /* Typography. */
   --ob-font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --ob-font-family-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
@@ -4699,3 +4734,525 @@ main.login {
   .environment-badge { display: none; }
   .sidebar-workspace-selector { margin-bottom: 1rem; }
 }
+
+/* ==========================================================================
+   16. REFERENCE PRIVILEGED ACCESS — resources, accounts and approvals
+   (docs/ui/reference-screens/openbastion-acces-privilegies.svg, 1440 × 1080)
+   ========================================================================== */
+/* Reference page head: 26px/700 title, 13.5px subtitle, actions on the same line. */
+.ob-page-subtitle {
+  max-width: 68ch;
+  color: var(--ob-color-text-secondary);
+  font-size: var(--ob-reference-page-subtitle-size);
+  line-height: 1.45;
+}
+
+.ob-page:has(.reference-metrics) .ob-page-header h2 {
+  font-size: var(--ob-reference-page-title-size);
+  font-weight: var(--ob-font-weight-bold);
+  letter-spacing: var(--ob-reference-page-title-tracking);
+}
+
+.ob-page:has(.reference-metrics) .ob-page-header { margin-bottom: 0; }
+
+/* Indicator cards: 271 × 108, 12px radius, one figure and what it covers. */
+.reference-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.reference-metric {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: var(--ob-reference-metric-height);
+  padding: 1rem var(--ob-reference-card-padding-x);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-card-radius);
+  box-shadow: var(--ob-shadow-sm);
+}
+
+.reference-metric-label {
+  color: var(--ob-color-text-secondary);
+  font-size: var(--ob-reference-metric-label-size);
+  font-weight: 500;
+}
+
+.reference-metric-value {
+  color: var(--ob-color-text-primary);
+  font-size: var(--ob-reference-metric-value-size);
+  font-weight: var(--ob-font-weight-bold);
+  letter-spacing: var(--ob-reference-metric-value-tracking);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.reference-metric--compact .reference-metric-value { font-size: var(--ob-reference-metric-value-size-compact); }
+.reference-metric-value.is-unavailable { color: var(--ob-color-text-tertiary); }
+.reference-metric--accent .reference-metric-detail { color: var(--ob-color-accent); font-weight: 600; }
+
+.reference-metric-detail {
+  color: var(--ob-color-text-tertiary);
+  font-size: var(--ob-reference-metric-detail-size);
+  line-height: 1.35;
+}
+
+/* Tabs: 13px labels, a 2.5px indicator, counts beside the active label. */
+.reference-tabs .ob-tabs-list {
+  gap: 0;
+  min-height: 2rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ob-color-border-subtle);
+}
+
+.reference-tabs .ob-tabs-trigger {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-height: 2.1rem;
+  padding: 0 0.9rem 0.55rem;
+  color: var(--ob-color-text-secondary);
+  border-bottom: var(--ob-reference-tab-indicator-width) solid transparent;
+  font-size: var(--ob-reference-tab-size);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.reference-tabs .ob-tabs-trigger[data-state="active"] {
+  color: var(--ob-color-accent);
+  border-bottom-color: var(--ob-color-accent);
+  font-weight: 600;
+}
+
+.reference-tab-count { color: var(--ob-color-text-tertiary); font-size: 0.75rem; font-weight: 600; }
+.reference-tabs .ob-tabs-trigger[data-state="active"] .reference-tab-count { color: var(--ob-color-accent); }
+.reference-tabs .ob-tabs-content { padding-top: 1.25rem; }
+
+/* One card holds the filters, the table and the pagination line. */
+.reference-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.reference-table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem var(--ob-reference-card-padding-x);
+}
+
+.reference-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 20rem;
+  min-width: 0;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  color: var(--ob-color-text-tertiary);
+  background: var(--ob-color-bg-surface-muted);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-control-radius);
+}
+
+.reference-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: var(--ob-color-text-primary);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.reference-search input::placeholder { color: var(--ob-color-text-tertiary); }
+.reference-search input:focus-visible,
+.reference-select select:focus-visible { outline: none; }
+.reference-search:focus-within,
+.reference-select:focus-within { border-color: var(--ob-color-focus); box-shadow: var(--ob-color-focus-shadow); }
+.reference-search.is-unavailable { background: var(--ob-color-bg-surface-muted); }
+
+.reference-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 2.25rem;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-control-radius);
+}
+
+.reference-select select {
+  height: 100%;
+  padding: 0 2rem 0 0.85rem;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  appearance: none;
+}
+
+.reference-select svg {
+  position: absolute;
+  right: 0.6rem;
+  color: var(--ob-color-text-secondary);
+  pointer-events: none;
+}
+
+.reference-select.is-unavailable { background: var(--ob-color-bg-surface-muted); }
+.reference-select.is-unavailable select { color: var(--ob-color-text-tertiary); }
+
+.reference-toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.25rem;
+  margin-inline-start: auto;
+  padding: 0 0.9rem;
+  color: var(--ob-color-text-primary);
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-control-radius);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.reference-toolbar-action:disabled { color: var(--ob-color-text-tertiary); cursor: not-allowed; }
+
+.reference-table-wrap { overflow-x: auto; }
+
+.reference-table {
+  width: 100%;
+  min-width: 60rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--ob-reference-table-font-size);
+}
+
+.reference-table thead th {
+  height: var(--ob-reference-table-header-height);
+  padding: 0 var(--ob-reference-card-padding-x);
+  color: var(--ob-color-text-tertiary);
+  background: var(--ob-color-bg-surface-muted);
+  border-bottom: 1px solid var(--ob-color-border-subtle);
+  font-size: var(--ob-reference-table-header-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: start;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.reference-table tbody td {
+  height: var(--ob-reference-table-row-height);
+  padding: 0.5rem var(--ob-reference-card-padding-x);
+  color: var(--ob-color-text-secondary);
+  border-bottom: 1px solid var(--ob-color-bg-surface-muted);
+  vertical-align: middle;
+}
+
+.reference-table tbody tr:last-child td { border-bottom: 0; }
+.reference-identifier { display: block; color: var(--ob-color-text-primary); font-size: var(--ob-reference-table-font-size); font-weight: 600; }
+
+.reference-address {
+  display: block;
+  padding: 0;
+  color: var(--ob-color-text-secondary);
+  background: transparent;
+  font-family: var(--ob-font-family-mono);
+  font-size: 0.75rem;
+}
+
+.reference-cell-note {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ob-color-text-tertiary);
+  font-size: var(--ob-reference-table-note-size);
+}
+
+.reference-cell-note code {
+  display: inline-block;
+  max-width: 11rem;
+  overflow: hidden;
+  padding: 0;
+  color: var(--ob-color-text-tertiary);
+  background: transparent;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+.reference-cell-muted { color: var(--ob-color-text-tertiary); }
+.reference-cell-warning { color: var(--ob-color-status-warning); }
+
+/* The pills of the reference tables: 6px radius, no border. */
+.reference-pill {
+  min-height: 0;
+  padding: 0.2rem 0.5rem;
+  border: 0;
+  border-radius: var(--ob-reference-pill-radius);
+  font-size: 0.688rem;
+  font-weight: 600;
+}
+
+.reference-pill.ob-badge--neutral { color: var(--ob-color-text-secondary); background: var(--ob-color-bg-surface-subtle); }
+.reference-pill.ob-badge--info { color: var(--ob-color-accent); background: var(--ob-color-accent-subtle); }
+.reference-pill.ob-badge--warning { color: var(--ob-color-status-warning); background: var(--ob-color-status-warning-subtle); }
+
+.reference-link {
+  padding: 0;
+  color: var(--ob-color-accent);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: var(--ob-reference-table-font-size);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reference-link:hover { text-decoration: underline; }
+.reference-link:focus-visible { outline: 2px solid var(--ob-color-focus); outline-offset: 2px; border-radius: var(--ob-radius-xs); }
+.reference-open-cell { text-align: end; }
+.reference-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: flex-end;
+  max-width: 13rem;
+  margin-inline-start: auto;
+}
+
+/* The account view keeps its four actions in a narrow column that wraps, so the reference
+   columns stay readable without scrolling the table sideways. */
+.account-table td.ob-table-actions { min-width: 0; width: 1%; }
+
+.reference-row-actions .ob-button { min-height: 1.9rem; padding: 0.25rem 0.55rem; font-size: 0.7rem; }
+
+/* Pagination line: the range shown, then the pages the API can serve. */
+.reference-table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem var(--ob-reference-card-padding-x);
+  border-top: 1px solid var(--ob-color-border-subtle);
+}
+
+.reference-table-range { color: var(--ob-color-text-secondary); font-size: 0.72rem; }
+.reference-pager { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+.reference-pager button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  padding: 0 0.3rem;
+  color: var(--ob-color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--ob-radius-md);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.reference-pager button:hover:not(:disabled) { background: var(--ob-color-bg-surface-muted); }
+.reference-pager button[aria-current="page"] { color: var(--ob-color-accent); background: var(--ob-color-accent-subtle); font-weight: 700; }
+.reference-pager button:disabled { color: var(--ob-color-text-tertiary); cursor: not-allowed; }
+.reference-pager button:focus-visible { outline: 2px solid var(--ob-color-focus); outline-offset: 1px; }
+.reference-pager-gap { color: var(--ob-color-text-tertiary); font-size: 0.72rem; }
+
+/* Requests to approve: a heading line and up to three cards. */
+.reference-section { display: grid; gap: 0.85rem; min-width: 0; }
+.reference-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.reference-section-heading h3 { font-size: 1rem; font-weight: 700; }
+
+.approval-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approval-card {
+  display: grid;
+  gap: 0.3rem;
+  height: 100%;
+  padding: 1rem 1.1rem;
+  background: var(--ob-color-bg-surface);
+  border: 1px solid var(--ob-color-border-subtle);
+  border-radius: var(--ob-reference-card-radius);
+  box-shadow: var(--ob-shadow-sm);
+}
+
+.approval-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.approval-card header strong { color: var(--ob-color-text-primary); font-size: 0.84rem; font-weight: 700; }
+.approval-card-time { color: var(--ob-color-text-tertiary); font-size: 0.688rem; white-space: nowrap; }
+
+.approval-card-account {
+  padding: 0;
+  color: var(--ob-color-text-secondary);
+  background: transparent;
+  font-family: var(--ob-font-family-mono);
+  font-size: 0.75rem;
+}
+
+.approval-card-reason { color: var(--ob-color-text-secondary); font-size: 0.75rem; line-height: 1.45; }
+.approval-card .reference-link { justify-self: start; margin-top: 0.55rem; }
+
+/* A panel whose data has no public contract says what is missing, and nothing else. */
+.reference-unavailable { display: grid; gap: 0.6rem; justify-items: start; padding: 1.5rem var(--ob-reference-card-padding-x); }
+.reference-unavailable h3 { font-size: 0.95rem; }
+.reference-unavailable p { max-width: 62ch; color: var(--ob-color-text-secondary); font-size: 0.8rem; line-height: 1.55; }
+
+.reference-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem var(--ob-reference-card-padding-x) 0;
+}
+
+.reference-panel-heading h3 { font-size: 0.95rem; }
+.reference-panel-heading p { margin-top: 0.25rem; color: var(--ob-color-text-tertiary); font-size: 0.72rem; }
+
+.reference-panel-badge {
+  padding: 0.2rem 0.45rem;
+  color: var(--ob-color-accent);
+  background: var(--ob-color-accent-subtle);
+  border-radius: var(--ob-reference-pill-radius);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.reference-panel > .approval-cards,
+.reference-panel > .ob-empty-state { margin: 1rem var(--ob-reference-card-padding-x); }
+
+@media (max-width: 1080px) {
+  .reference-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
+  .approval-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .reference-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+  .reference-table-toolbar { gap: 0.5rem; }
+  .reference-search { flex-basis: 100%; }
+  .approval-cards { grid-template-columns: minmax(0, 1fr); gap: 0.85rem; }
+  .reference-section-heading { align-items: flex-start; flex-direction: column; gap: 0.35rem; }
+}
+
+@media (max-width: 430px) {
+  .reference-metrics { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==========================================================================
+   17. REFERENCE AUDIT & COMPLIANCE — coverage, recommendations and journal
+   (docs/ui/reference-screens/openbastion-audit-conformite.svg, 1440 × 1080)
+   ========================================================================== */
+.audit-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1.97fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.audit-coverage { display: grid; align-content: start; gap: 0.4rem; padding: 1.25rem 1.5rem; }
+.audit-coverage h3 { font-size: 0.95rem; font-weight: 700; }
+.audit-panel-note { color: var(--ob-color-text-tertiary); font-size: 0.72rem; }
+.audit-coverage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin-top: 1.1rem; }
+.audit-coverage-item { display: grid; align-content: start; gap: 0.35rem; min-width: 0; }
+.audit-coverage-label { color: var(--ob-color-text-secondary); font-size: 0.72rem; font-weight: 600; }
+.audit-coverage-value {
+  color: var(--ob-color-text-tertiary);
+  font-size: var(--ob-reference-metric-value-size-compact);
+  font-weight: var(--ob-font-weight-bold);
+  letter-spacing: var(--ob-reference-metric-value-tracking);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-coverage-track { height: 5px; border-radius: var(--ob-radius-pill); background: var(--ob-color-border-subtle); }
+.audit-coverage-detail { color: var(--ob-color-text-tertiary); font-size: 0.72rem; }
+.audit-panel-footnote { margin-top: 0.9rem; color: var(--ob-color-text-tertiary); font-size: 0.7rem; line-height: 1.5; }
+
+/* The dark card of the reference: what to fix, computed from the accounts the Vault returns. */
+.audit-recommendations {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1.25rem 1.5rem;
+  color: var(--ob-color-audit-panel-text);
+  background: var(--ob-color-audit-panel);
+  border-radius: var(--ob-reference-card-radius);
+  box-shadow: var(--ob-shadow-sm);
+}
+
+.audit-recommendations-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.audit-recommendations-heading h3 { color: var(--ob-color-audit-panel-text); font-size: 0.95rem; }
+
+.audit-recommendations-badge {
+  padding: 0.2rem 0.45rem;
+  color: var(--ob-color-audit-panel-accent);
+  background: var(--ob-color-audit-panel-raised);
+  border: 1px solid var(--ob-color-audit-panel-outline);
+  border-radius: var(--ob-radius-md);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.audit-recommendation { display: grid; gap: 0.25rem; padding: 0.9rem 0; border-bottom: 1px solid var(--ob-color-audit-panel-border); }
+.audit-recommendation:last-of-type { border-bottom: 0; }
+.audit-recommendation strong { color: var(--ob-color-audit-panel-text); font-size: 0.78rem; font-weight: 600; }
+.audit-recommendation span { color: var(--ob-color-audit-panel-muted); font-size: 0.7rem; line-height: 1.45; }
+.audit-recommendations-state { margin-top: 1rem; color: var(--ob-color-audit-panel-muted); font-size: 0.72rem; }
+
+.audit-recommendations-link {
+  align-self: flex-end;
+  margin-top: auto;
+  padding: 0;
+  color: var(--ob-color-audit-panel-accent);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audit-recommendations-link:hover { text-decoration: underline; }
+.audit-recommendations-link:focus-visible { outline: 2px solid var(--ob-color-audit-panel-accent); outline-offset: 2px; }
+
+.audit-journal-state { padding: 2rem 1.25rem; text-align: center; }
+.audit-journal-state strong { display: block; margin-bottom: 0.35rem; color: var(--ob-color-text-primary); font-size: 0.85rem; }
+.audit-journal-state p { max-width: 62ch; margin: 0 auto; color: var(--ob-color-text-secondary); font-size: 0.78rem; line-height: 1.55; }
+
+@media (max-width: 1080px) {
+  .audit-panels { grid-template-columns: minmax(0, 1fr); }
+  .audit-recommendations-link { margin-top: 1rem; }
+}
+
+@media (max-width: 760px) {
+  .audit-coverage-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .audit-coverage,
+  .audit-recommendations { padding: 1rem; }
+}
+
+/* Rotation flags sit beside the account state, on the same note line. */
+.reference-cell-note .reference-pill { margin-inline-start: 0.3rem; }

@@ -53,14 +53,14 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     fireEvent.click(within(dialog).getByLabelText("Réduire la navigation latérale"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Enregistrer les préférences" }));
 
-    expect(await screen.findByRole("heading", { name: "Comptes privilégiés" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Accès privilégiés" })).toBeTruthy();
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.density).toBe("compact");
     expect(screen.getByRole("button", { name: "Développer la navigation" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ajouter Comptes aux favoris" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter Accès privilégiés aux favoris" }));
     expect(screen.getByRole("heading", { name: "Favoris" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Retirer Comptes des favoris" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Retirer Accès privilégiés des favoris" })).toHaveLength(2);
 
     const raw = window.localStorage.getItem("openbastion.admin-ui.preferences.v1") ?? "";
     expect(raw).toContain('"theme":"dark"');
@@ -94,18 +94,18 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     first.unmount();
 
     await signIn();
-    expect(await screen.findByRole("heading", { name: "Centre de sécurité" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Audit & conformité" })).toBeTruthy();
   });
 
   it("supports section shortcuts but ignores them in text fields", async () => {
     window.localStorage.clear();
     await signIn();
     fireEvent.keyDown(screen.getByRole("main"), { key: "2", altKey: true, shiftKey: true });
-    expect(await screen.findByRole("heading", { name: "Comptes privilégiés" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Accès privilégiés" })).toBeTruthy();
 
     const filter = screen.getByLabelText("Filtrer les comptes de cette page");
     fireEvent.keyDown(filter, { key: "3", altKey: true, shiftKey: true });
-    expect(screen.getByRole("heading", { name: "Comptes privilégiés" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Accès privilégiés" })).toBeTruthy();
   });
 
   it("does not apply a preference draft when local storage refuses the write", async () => {

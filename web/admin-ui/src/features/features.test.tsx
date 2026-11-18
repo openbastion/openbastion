@@ -11,12 +11,18 @@ import { fakeApi } from "../test-helpers";
 
 const signedIn = (api: Api, node: ReactNode) => render(<SignedInContext.Provider value={{ api, who: null, signOut: () => {} }}>{node}</SignedInContext.Provider>);
 
+// The reference screen opens on the resource view; the account actions live in the "Comptes" tab.
+function openAccountsTab() {
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /Comptes/ }), { button: 0 });
+}
+
 describe("Accounts", () => {
   const account = { id: "acc_1", name: "prod db", username: "root", targetHost: "db:22", protocol: "ssh", rotationPolicy: "manual", createdAt: "2026-10-30T10:00:00Z" };
 
   it("lists the accounts, and rotates one on its target", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { status: 202, body: "" } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect(await screen.findByText("prod db")).toBeTruthy();
     fireEvent.click(screen.getByText("Renouveler le secret"));
     expect(screen.getByRole("alertdialog").textContent).toContain("compte de réconciliation");
@@ -32,6 +38,7 @@ describe("Accounts", () => {
       "DELETE /vault/accounts/acc_1": { status: 200, body: "{}" },
     });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     fireEvent.click(await screen.findByText("Désactiver"));
     expect(screen.getByRole("alertdialog").textContent).toContain("ne pourra plus être utilisé");
     expect(calls.some((call) => call.method === "DELETE")).toBe(false);
@@ -43,6 +50,7 @@ describe("Accounts", () => {
   it("presents account filters as an accessible rule builder and reports active criteria", async () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     const trigger = await screen.findByRole("button", { name: /Filtres avancés/ });
     // The rule builder starts closed: the inventory is what the screen exists to show.
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
@@ -67,6 +75,7 @@ describe("Accounts", () => {
     const rows = [account, { ...account, id: "acc_2", name: "web frontend", targetHost: "web:22" }, { ...account, id: "acc_3", name: "cache", targetHost: "redis:6379", protocol: "ssh" }];
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: rows, page: 1, pageSize: 20, totalItems: 27 } } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect(await screen.findByText("prod db")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Filtrer les comptes de cette page"), { target: { value: "web" } });
     expect(screen.getByText("web frontend")).toBeTruthy();
@@ -80,6 +89,7 @@ describe("Accounts", () => {
   it("says why a rotation is refused", async () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [account], page: 1, pageSize: 20, totalItems: 1 } }, "POST /vault/accounts/acc_1/rotate": { status: 409, body: "the account has no usable reconciliation account: it cannot be rotated" } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     fireEvent.click(await screen.findByText("Renouveler le secret"));
     fireEvent.click(screen.getByText("Renouveler le secret", { selector: ".confirm-dialog button" }));
     expect((await screen.findByRole("alert")).textContent).toContain("409 — the account has no usable reconciliation account");
@@ -89,6 +99,7 @@ describe("Accounts", () => {
   it("onboards an account with its secret as bytes, and never shows it again", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -116,6 +127,7 @@ describe("Accounts — host key (ADR-0039)", () => {
   it("shows each account's fingerprint, and the accounts that are not pinned", async () => {
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [pinned, unpinned], page: 1, pageSize: 20, totalItems: 2 } } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect((await screen.findByRole("table")).className).toContain("ob-data-table");
     expect(await screen.findByText("SHA256:old")).toBeTruthy();
     expect(screen.getByText("non épinglée")).toBeTruthy();
@@ -132,6 +144,7 @@ describe("Accounts — host key (ADR-0039)", () => {
     try {
       window.prompt = () => null;
       signedIn(api, <Accounts />);
+    openAccountsTab();
       fireEvent.click(await screen.findByText("Changer la clé d'hôte"));
       expect(calls.some((c) => c.method === "PUT")).toBe(false);
 
@@ -151,6 +164,7 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
   it("asks for an interval only for a scheduled account, and sends it as a number", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     const label = "Intervalle de rotation (jours, 1 à 365)";
@@ -171,6 +185,7 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
       rotationIntervalDays: 30, nextRotationAt: "2026-11-29T10:00:00Z", hostKeyFingerprint: "SHA256:k" };
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc], page: 1, pageSize: 20, totalItems: 1 } } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect((await screen.findByText(/tous les 30 j/)).textContent).toContain("prochaine : 2026-11-29T10:00:00Z");
     expect(screen.queryByText(/en échec/)).toBeNull();
   });
@@ -180,6 +195,7 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
       rotationIntervalDays: 30, nextRotationAt: "2026-11-29T10:00:00Z", hostKeyFingerprint: "SHA256:k", rotationFailures: 4 };
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc], page: 1, pageSize: 20, totalItems: 1 } } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect((await screen.findByText("en échec (4)")).className).toContain("warn");
   });
 
@@ -188,6 +204,7 @@ describe("Accounts — scheduled rotation (ADR-0040)", () => {
       hostKeyFingerprint: "SHA256:k", rotationOwedSince: "2026-10-31T09:00:00Z" };
     const { api } = fakeApi({ "GET /vault/accounts": { body: { items: [acc, { ...acc, id: "acc_2", name: "web", rotationOwedSince: undefined }], page: 1, pageSize: 20, totalItems: 2 } } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect((await screen.findAllByText("renouvellement dû")).length).toBe(1);
   });
 });
@@ -298,7 +315,8 @@ describe("Approval with a ticket (ADR-0067)", () => {
       "PUT /vault/accounts/acc_1/approval": { body: { approvalRequired: true } },
     });
     signedIn(api, <Accounts />);
-    expect(await screen.findByText("requise")).toBeTruthy();
+    openAccountsTab();
+    expect(await screen.findByText("Approbation requise")).toBeTruthy();
     expect(screen.getByText("Ne plus exiger l'approbation")).toBeTruthy(); // acc_2
     fireEvent.click(screen.getByText("Exiger l'approbation")); // acc_1
     expect((await screen.findByRole("status")).textContent).toContain("acc_1 : approbation requise");
@@ -308,6 +326,7 @@ describe("Approval with a ticket (ADR-0067)", () => {
   it("onboards an account that requires approval", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } }, "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     fireEvent.click(screen.getByLabelText("Approbation requise : chaque session attend l'accord d'une autre personne, avec un ticket"));
@@ -370,6 +389,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
   it("onboards a VNC account with neither host key nor rotation, and sends its secret once", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": page([]), "POST /vault/accounts": { status: 201, body: {} } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     fireEvent.click(await screen.findByRole("button", { name: "Enregistrer un compte" }));
     const form = await screen.findByRole("form", { name: "Enregistrer un compte" });
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -390,6 +410,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
   it("pins a VNC account's certificate, offers no rotation, and says when it is not pinned", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": page([vnc]), "PUT /vault/accounts/acc_v/tls-pin": { body: {} } });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect(await screen.findByText("non épinglée")).toBeTruthy();
     expect(screen.queryByText("Renouveler le secret")).toBeNull();
     const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce(" ab12 ").mockReturnValueOnce("desk.example");
@@ -402,6 +423,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
   it("changes nothing when the pin is cancelled at either question", async () => {
     const { api, calls } = fakeApi({ "GET /vault/accounts": page([vnc]) });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     await screen.findByText("non épinglée");
     const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce(null).mockReturnValueOnce("ab12").mockReturnValueOnce(null);
     fireEvent.click(screen.getByText("Épingler le certificat TLS"));
@@ -413,6 +435,7 @@ describe("Graphical accounts and sessions (ADR-0071)", () => {
   it("shows a pinned certificate where an SSH account shows its host key", async () => {
     const { api } = fakeApi({ "GET /vault/accounts": page([{ ...vnc, tlsCertificateSha256: "ab".repeat(32), targetDomain: "desk.example" }]) });
     signedIn(api, <Accounts />);
+    openAccountsTab();
     expect(await screen.findByText("ab".repeat(32))).toBeTruthy();
     expect(screen.getByText("Changer le certificat TLS")).toBeTruthy();
   });
