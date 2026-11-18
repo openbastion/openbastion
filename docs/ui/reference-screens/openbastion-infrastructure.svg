@@ -69,7 +69,7 @@
         </g>
         <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
         <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
-        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">24</text>
+        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">—</text>
       </g>
 
       <!-- Item Actif : Infrastructure -->
@@ -136,8 +136,8 @@
     <g id="Sidebar_Status_Card" transform="translate(16, 868)">
       <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
       <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
-      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Bastion opérationnel</text>
-      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Tous les services sont disponibles</text>
+      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Santé agrégée non disponible</text>
+      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Aucun contrat de santé public disponible</text>
       <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
     </g>
 
@@ -226,33 +226,33 @@
     <!-- Carte 1 : Ressources protégées -->
     <g id="KPI_Resources" transform="translate(0, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Ressources protégées</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">128</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">6 environnements</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Comptes Vault examinés</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Inventaire non disponible</text>
     </g>
 
     <!-- Carte 2 : Connecteurs actifs -->
     <g id="KPI_Connectors" transform="translate(291, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Connecteurs actifs</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">06</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Tous opérationnels</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Connecteurs non évalués</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Non évalué</text>
     </g>
 
     <!-- Carte 3 : Bastions déployés -->
     <g id="KPI_Bastions" transform="translate(582, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Bastions déployés</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">03</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Cluster haute disponibilité</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Topologie masquée</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Santé non exposée</text>
     </g>
 
     <!-- Carte 4 : Disponibilité -->
     <g id="KPI_Availability" transform="translate(873, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Disponibilité</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">99,98 %</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Sur les 30 derniers jours</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Disponibilité non mesurée</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Aucune série de disponibilité</text>
     </g>
   </g>
 
@@ -264,8 +264,8 @@
     <g id="Card_Access_Topology" filter="url(#cardShadow)">
       <rect width="746" height="314" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
 
-      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Topologie des accès</text>
-      <text x="24" y="54" fill="#64748B" font-size="12">Un accès vérifié. Aucune connexion directe.</text>
+      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Périmètre des ressources</text>
+      <text x="24" y="54" fill="#64748B" font-size="12">Les accès cibles passent par les proxys autorisés.</text>
 
       <!-- Sélecteur Production -->
       <g transform="translate(626, 18)">
@@ -283,7 +283,7 @@
         <!-- Noeud Gauche : 86 identités -->
         <g transform="translate(0, 58)">
           <rect width="164" height="74" rx="10" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="18" y="32" fill="#0F172A" font-size="14" font-weight="700">86 identités</text>
+          <text x="18" y="32" fill="#0F172A" font-size="14" font-weight="700">Identités non agrégées</text>
           <text x="18" y="53" fill="#64748B" font-size="11.5">SSO + MFA</text>
         </g>
 
@@ -291,30 +291,30 @@
         <g transform="translate(236, 54)">
           <rect width="166" height="82" rx="10" fill="#0B1F36"/>
           <text x="18" y="34" fill="#FFFFFF" font-size="14.5" font-weight="700">OpenBastion</text>
-          <text x="18" y="56" fill="#38BDF8" font-size="11.5" font-weight="500">3 nœuds · Zero Trust</text>
+          <text x="18" y="56" fill="#38BDF8" font-size="11.5" font-weight="500">Topologie non exposée</text>
         </g>
 
         <!-- Noeud Droite 1 : Cloud privé -->
         <g transform="translate(512, 0)">
           <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Cloud privé</text>
-          <text x="16" y="41" fill="#64748B" font-size="11">62 ressources</text>
+          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Domaine non évalué</text>
+          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
           <circle cx="166" cy="18" r="3" fill="#2563EB"/>
         </g>
 
         <!-- Noeud Droite 2 : Kubernetes -->
         <g transform="translate(512, 68)">
           <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Kubernetes</text>
-          <text x="16" y="41" fill="#64748B" font-size="11">42 ressources</text>
+          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Connecteur non évalué</text>
+          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
           <circle cx="166" cy="18" r="3" fill="#2563EB"/>
         </g>
 
         <!-- Noeud Droite 3 : On-premise -->
         <g transform="translate(512, 136)">
           <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">On-premise</text>
-          <text x="16" y="41" fill="#64748B" font-size="11">24 ressources</text>
+          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Domaine non évalué</text>
+          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
           <circle cx="166" cy="18" r="3" fill="#2563EB"/>
         </g>
       </g>
@@ -324,42 +324,42 @@
     <g id="Card_Cluster_Health" transform="translate(766, 0)" filter="url(#cardShadow)">
       <rect width="378" height="314" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
 
-      <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Santé du cluster</text>
+      <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Santé indisponible</text>
 
       <!-- Badge Opérationnel -->
       <g transform="translate(262, 18)">
         <rect width="92" height="24" rx="6" fill="#EFF6FF"/>
-        <text x="46" y="16" fill="#2563EB" font-size="11" font-weight="600" text-anchor="middle">Opérationnel</text>
+        <text x="46" y="16" fill="#2563EB" font-size="11" font-weight="600" text-anchor="middle">Inconnu</text>
       </g>
 
       <!-- Barre 1 : CPU -->
       <g transform="translate(24, 86)">
-        <text x="0" y="0" fill="#64748B" font-size="12.5">CPU</text>
-        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">28 %</text>
+        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
+        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
         <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
         <rect x="0" y="12" width="92" height="5" rx="2.5" fill="#2563EB"/>
       </g>
 
       <!-- Barre 2 : Mémoire -->
       <g transform="translate(24, 146)">
-        <text x="0" y="0" fill="#64748B" font-size="12.5">Mémoire</text>
-        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">46 %</text>
+        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
+        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
         <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
         <rect x="0" y="12" width="152" height="5" rx="2.5" fill="#2563EB"/>
       </g>
 
       <!-- Barre 3 : Stockage -->
       <g transform="translate(24, 206)">
-        <text x="0" y="0" fill="#64748B" font-size="12.5">Stockage</text>
-        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">62 %</text>
+        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
+        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
         <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
         <rect x="0" y="12" width="205" height="5" rx="2.5" fill="#2563EB"/>
       </g>
 
       <!-- Séparateur + Latence moyenne -->
       <line x1="24" y1="252" x2="354" y2="252" stroke="#F1F5F9" stroke-width="1"/>
-      <text x="24" y="280" fill="#64748B" font-size="12">Latence moyenne</text>
-      <text x="354" y="280" fill="#2563EB" font-size="12.5" font-weight="700" text-anchor="end">12 ms</text>
+      <text x="24" y="280" fill="#64748B" font-size="12">Latence non mesurée</text>
+      <text x="354" y="280" fill="#2563EB" font-size="12.5" font-weight="700" text-anchor="end">—</text>
     </g>
   </g>
 
@@ -391,7 +391,7 @@
       <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">AWS · eu-west-3</text>
       <rect x="275" y="-15" width="52" height="22" rx="4" fill="#F1F5F9"/>
       <text x="301" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cloud</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">38</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
       <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 30 s</text>
       <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
       <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
@@ -404,7 +404,7 @@
       <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">Azure · France Central</text>
       <rect x="275" y="-15" width="52" height="22" rx="4" fill="#F1F5F9"/>
       <text x="301" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cloud</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">24</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
       <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 42 s</text>
       <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
       <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
@@ -417,7 +417,7 @@
       <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">Kubernetes · production</text>
       <rect x="275" y="-15" width="56" height="22" rx="4" fill="#F1F5F9"/>
       <text x="303" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cluster</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">42</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
       <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 15 s</text>
       <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
       <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
@@ -429,8 +429,8 @@
     <g transform="translate(24, 282)">
       <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">VMware · datacenter Paris</text>
       <rect x="275" y="-15" width="76" height="22" rx="4" fill="#F1F5F9"/>
-      <text x="313" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">On-premise</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">24</text>
+      <text x="313" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Domaine non évalué</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
       <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 28 s</text>
       <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
       <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
@@ -446,7 +446,7 @@
   <!-- CALQUE 8 : PIED DE PAGE (FOOTER)                                        -->
   <!-- ======================================================================= -->
   <g id="Layer_Footer" transform="translate(264, 1054)">
-    <text x="0" y="0" fill="#94A3B8" font-size="11">Données de démonstration</text>
+    <text x="0" y="0" fill="#94A3B8" font-size="11">Maquette illustrative · aucune télémétrie réelle</text>
     <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">Découverte automatique toutes les 5 minutes  •  Dernier passage : 14:55</text>
   </g>
 </svg>

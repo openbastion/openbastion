@@ -2,14 +2,14 @@
 
 Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
-## 0. État d'avancement — 15 novembre 2026
+## 0. État d'avancement — 18 novembre 2026
 
 La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
 
 - **MVP SSH/SFTP/SCP** : parcours fonctionnel de référence, avec Gateway, Broker, Vault, proxy SSH, audit et replay texte.
 - **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API et dans l'Admin UI (lecteur d'écran enregistré, page « Enregistrements ») ; plusieurs fonctions de redirection restent à faire.
 - **Marqueurs de relecture vidéo (ADR-0111)** : contrat Protobuf, stockage append-only, RPC mTLS proxy/Gateway et route REST paginée implémentés dans la branche de réalisation ; le raccordement à la transaction d’injection Vault VNC/RDP et l’affichage dans la timeline Admin UI restent à intégrer.
-- **Rapprochement des injections Vault (ADR-0112)** : projection en lecture seule sur chaîne retenue et archives vérifiées, route interne mTLS `admin-cli` et commande `openbastion-cli audit secret-injections` implémentées. Restent le test multi-processus de perte de l’acquittement Audit après frappe, le scénario PostgreSQL 16 archive → redémarrage → relecture, et l’Admin UI : ADR-0113 et ADR-0114 acceptés ; le moteur Authorization évalue désormais la ressource et l’action. Les politiques historiques conservent `action_pattern=*` par compatibilité ; leur réduction vers des actions explicites reste un travail de durcissement.
+- **Rapprochement des injections Vault (ADR-0112)** : projection en lecture seule sur chaîne retenue et archives vérifiées, route interne mTLS `admin-cli` et commande `openbastion-cli audit secret-injections` implémentées. La façade Gateway et le composant Admin UI `SecretInjectionReconciliation` sont livrés sous ADR-0113/0114. Restent le test multi-processus de perte de l’acquittement Audit après frappe et le scénario PostgreSQL 16 archive → redémarrage → relecture. Les politiques historiques conservent `action_pattern=*` par compatibilité ; leur réduction vers des actions explicites reste un travail de durcissement.
 - **RDP** : moteur Go pur ([ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md)), éprouvé contre FreeRDP 3 et Windows Server 2022 en CI :
   - CredSSP/NTLMv2 avec certificat épinglé avant tout secret ;
   - image en 15, 16 et 32 bpp, fragments Fast-Path, réactivation ;
@@ -129,7 +129,45 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 
 **Explicitement hors périmètre v0.0.3** : binaire agent de production, tunnel réseau opérationnel, enrôlement runtime, collecte effective Linux/Windows, mise à jour automatique, réponse EDR, exécution distante, accès SOCKS/UDP et déploiement multi-site. Ces travaux ne commencent qu'après acceptation des ADR et clôture des portes de sécurité.
 
-## 6. Matrice de couverture par microservice
+## 6. Alignement des écrans SVG sur la roadmap
+
+Les SVG sont des propositions d'interface et ne constituent jamais une preuve de disponibilité. Leur statut doit suivre les contrats et les tests réels (ADR-0129). Les nouveaux écrans ci-dessous sont des maquettes de capacité planifiée ; aucun bouton ne doit être activé avant livraison de l'API publique Gateway correspondante.
+
+### MVP / capacités déjà livrées
+
+- `openbastion-dashboard.svg` : uniquement métriques réellement calculées et états de couverture.
+- `openbastion-acces-privilegies.svg` : comptes Vault, politiques et rotations réellement disponibles.
+- `openbastion-sessions-historique.svg` : recherche selon les filtres réellement exposés.
+- `openbastion-sessions-enregistrements.svg` : replay terminal/vidéo selon protocole et couverture effective ; aucune affirmation de vérification cryptographique UI.
+- `openbastion-securite.svg` : constats Vault livrés ; posture transverse ADR-0118 reste proposée.
+- `openbastion-audit-conformite.svg` : métadonnées d'injection ADR-0113 seulement ; `verify-chain` reste `admin-cli` mTLS.
+
+### v0.0.1 — nouveaux écrans proposés
+
+| SVG | Domaine | Dépendances |
+|---|---|---|
+| `openbastion-workflows-approbations.svg` | Demandes, double validation, tickets, échéances | ADR-0067, ADR-0074, ADR-0126 |
+| `openbastion-secrets-dynamiques.svg` | Secrets dynamiques, TTL, rotation et révocation | ADR-0005, ADR-0040, ADR-0127 |
+| `openbastion-identites-federation.svg` | Fournisseurs, fédération et provisioning | ADR-0061, ADR-0076, contrats SCIM/SAML |
+| `openbastion-acces-database-kubernetes.svg` | Accès proxifiés DB et Kubernetes | Database Proxy, Kubernetes Proxy, ADR-0130 |
+
+### v0.0.2 — nouveaux écrans proposés
+
+| SVG | Domaine | Dépendances |
+|---|---|---|
+| `openbastion-forensics-recherche.svg` | Recherche et forensics bornés | ADR-0080, ADR-0096, ADR-0125 |
+| `openbastion-risque-anomalies.svg` | Règles explicables, risque et ML optionnel | ADR-0128 |
+| `openbastion-reporting-conformite.svg` | Rapports et preuves vérifiables | ADR-0123 |
+| `openbastion-protocoles-etendus.svg` | Docker, WinRM, hyperviseurs, Telnet/IPMI et HTTP(S) | ADR-0130 et ADR protocolaires dédiés |
+
+### v0.0.3 — extension proposée
+
+- `openbastion-agents-distribues.svg` : inventaire d'enrôlement PKI, tunnels sortants mTLS, état de télémétrie en lecture seule, provenance et posture de déploiement. Cet écran est conceptuel : les agents de production restent hors périmètre v0.0.3.
+- Les écrans v0.0.3 ne doivent jamais proposer d'exécution distante arbitraire, d'accès direct aux ports cibles ou de modification de politique agent depuis un navigateur.
+
+**Règle de livraison UI :** chaque élément doit être traçable à un contrat Gateway, une permission ressource/action, un service propriétaire, un ADR, des tests et un état `implemented|partial|planned|proposed|unavailable`. Les routes internes et leurs schémas ne sont pas des contrats UI.
+
+## 7. Matrice de couverture par microservice
 
 | Composant | MVP | v0.0.1 | v0.0.2 |
 |---|:---:|:---:|:---:|
@@ -173,7 +211,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 | SDK Go | | ✅ | |
 | SDK Python / Java / JavaScript | | | ✅ |
 
-## 7. Risques de séquencement
+## 8. Risques de séquencement
 
 | Risque | Mitigation |
 |---|---|

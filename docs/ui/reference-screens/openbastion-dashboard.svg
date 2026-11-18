@@ -87,7 +87,7 @@
         </g>
         <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
         <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
-        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">24</text>
+        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">—</text>
       </g>
 
       <!-- Item : Infrastructure -->
@@ -223,7 +223,7 @@
   <!-- ======================================================================= -->
   <g id="Layer_Page_Header" transform="translate(264, 96)">
     <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Vue d'ensemble</text>
-    <text x="0" y="54" fill="#64748B" font-size="13.5">Gardez le contrôle de vos accès privilégiés, en temps réel.</text>
+    <text x="0" y="54" fill="#64748B" font-size="13.5">Vue calculée à partir des données disponibles via l’API.</text>
 
     <!-- Bouton Actualiser -->
     <g transform="translate(898, 4)">
@@ -264,8 +264,8 @@
     <!-- Carte 1 : Sessions actives -->
     <g id="KPI_Sessions" transform="translate(0, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Sessions actives</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">24</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Demandes en attente</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
       <text x="20" y="102" fill="#64748B" font-size="11.5">+ 4 depuis hier</text>
       <path d="M174 78 L188 73 L202 76 L216 64 L230 69 L246 54 L246 82 L174 82 Z" fill="url(#sparklineGrad)"/>
       <polyline points="174,78 188,73 202,76 216,64 230,69 246,54" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -274,8 +274,8 @@
     <!-- Carte 2 : Ressources protégées -->
     <g id="KPI_Resources" transform="translate(291, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Ressources protégées</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">128</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Comptes Vault</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
       <text x="20" y="102" fill="#64748B" font-size="11.5">100 % sous contrôle</text>
       <path d="M174 78 L188 75 L202 72 L216 66 L230 68 L246 58 L246 82 L174 82 Z" fill="url(#sparklineGrad)"/>
       <polyline points="174,78 188,75 202,72 216,66 230,68 246,58" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -284,9 +284,9 @@
     <!-- Carte 3 : Identités privilégiées -->
     <g id="KPI_Identities" transform="translate(582, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Identités privilégiées</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">86</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">MFA activé pour tous</text>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Signaux Vault</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Couverture MFA non agrégée</text>
       <path d="M174 76 L192 74 L210 71 L228 66 L246 61 L246 82 L174 82 Z" fill="url(#sparklineGrad)"/>
       <polyline points="174,76 192,74 210,71 228,66 246,61" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
@@ -295,7 +295,7 @@
     <g id="KPI_Requests" transform="translate(873, 0)" filter="url(#cardShadow)">
       <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
       <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Demandes en attente</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">03</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
       <text x="20" y="102" fill="#2563EB" font-size="11.5" font-weight="600">2 à approuver aujourd'hui</text>
       <polyline points="174,58 192,58 210,69 228,64 236,75 252,75" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
@@ -309,8 +309,8 @@
     <g id="Card_Connection_Activity" filter="url(#cardShadow)">
       <rect width="746" height="310" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
 
-      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Activité des connexions</text>
-      <text x="24" y="54" fill="#64748B" font-size="12">Sessions initiées sur les dernières 24 heures</text>
+      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Activité globale indisponible</text>
+      <text x="24" y="54" fill="#64748B" font-size="12">Aucun flux global de sessions ni série temporelle disponible.</text>
 
       <!-- Légende SSH / RDP -->
       <g transform="translate(432, 48)">
@@ -365,16 +365,16 @@
     <g id="Card_Security_Posture" transform="translate(766, 0)" filter="url(#cardShadow)">
       <rect width="378" height="310" rx="12" fill="#0B1F36"/>
 
-      <text x="24" y="36" fill="#FFFFFF" font-size="15.5" font-weight="700">Posture de sécurité</text>
+      <text x="24" y="36" fill="#FFFFFF" font-size="15.5" font-weight="700">Constats Vault</text>
 
       <!-- Badge ZERO TRUST -->
       <rect x="274" y="18" width="80" height="24" rx="5" fill="#153254" stroke="#1E4673" stroke-width="1"/>
-      <text x="314" y="34" fill="#38BDF8" font-size="10" font-weight="700" letter-spacing="0.5" text-anchor="middle">ZERO TRUST</text>
+      <text x="314" y="34" fill="#38BDF8" font-size="10" font-weight="700" letter-spacing="0.5" text-anchor="middle">COUVERTURE PARTIELLE</text>
 
       <!-- Score 98 / 100 -->
-      <text x="24" y="108" fill="#FFFFFF" font-size="48" font-weight="700" letter-spacing="-1.5">98</text>
-      <text x="88" y="106" fill="#94A3B8" font-size="18" font-weight="500">/ 100</text>
-      <text x="24" y="136" fill="#CBD5E1" font-size="12.5">Excellent niveau de protection</text>
+      <text x="24" y="108" fill="#FFFFFF" font-size="48" font-weight="700" letter-spacing="-1.5">—</text>
+      <text x="88" y="106" fill="#94A3B8" font-size="18" font-weight="500"></text>
+      <text x="24" y="136" fill="#CBD5E1" font-size="12.5">Aucun score global calculé</text>
 
       <!-- Barre de progression -->
       <g transform="translate(24, 158)">
@@ -386,10 +386,10 @@
       <!-- Détails métriques -->
       <g transform="translate(24, 198)">
         <text x="0" y="0" fill="#94A3B8" font-size="12">MFA</text>
-        <text x="330" y="0" fill="#FFFFFF" font-size="12" font-weight="600" text-anchor="end">86 / 86 identités</text>
+        <text x="330" y="0" fill="#FFFFFF" font-size="12" font-weight="600" text-anchor="end">Non évalué</text>
 
         <text x="0" y="28" fill="#94A3B8" font-size="12">Rotation des secrets</text>
-        <text x="330" y="28" fill="#FFFFFF" font-size="12" font-weight="600" text-anchor="end">100 % à jour</text>
+        <text x="330" y="28" fill="#FFFFFF" font-size="12" font-weight="600" text-anchor="end">Calculé sur les comptes examinés</text>
       </g>
 
       <!-- Séparateur -->
@@ -411,7 +411,7 @@
 
     <!-- En-tête de la carte -->
     <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Sessions récentes</text>
-    <text x="172" y="36" fill="#64748B" font-size="12.5">24 actives</text>
+    <text x="172" y="36" fill="#64748B" font-size="12.5">Demandes en attente</text>
     <text x="1120" y="36" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Toutes les sessions  →</text>
 
     <!-- Bandeau colonnes -->
@@ -505,7 +505,7 @@
   <!-- CALQUE 8 : PIED DE PAGE (FOOTER)                                        -->
   <!-- ======================================================================= -->
   <g id="Layer_Footer" transform="translate(264, 1056)">
-    <text x="0" y="0" fill="#94A3B8" font-size="11">Données de démonstration</text>
+    <text x="0" y="0" fill="#94A3B8" font-size="11">Maquette illustrative · valeurs non contractuelles</text>
     <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">Dernière synchronisation : 14:56:20 UTC+1  •  Secure Access. Total Control.</text>
   </g>
 </svg>

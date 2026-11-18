@@ -142,7 +142,7 @@
 
       <!-- Lien secondaire : Utiliser un code de récupération -->
       <g id="Recovery-Code-Link">
-        <text x="1000" y="726" text-anchor="middle" fill="#0F62FE" class="font-inter t-medium" font-size="13">Utiliser un code de récupération</text>
+        <text x="1000" y="726" text-anchor="middle" fill="#0F62FE" class="font-inter t-medium" font-size="13">Autre méthode disponible</text>
       </g>
 
       <!-- Encart d'assistance MFA -->
