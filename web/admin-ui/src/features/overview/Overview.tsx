@@ -5,7 +5,7 @@ import { AdminPage } from "../../shared/ui/AdminPage";
 import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
 import { useAppTranslation } from "../../shared/i18n";
-import { AccessControl as AccessControlIcon  } from '@openbastion/icons';
+import { AccessControl as AccessControlIcon, ArrowRight, Metrics } from '@openbastion/icons';
 
 type Widget<T> = { data?: Page<T>; error?: unknown; loading: boolean };
 
@@ -39,7 +39,7 @@ function Metric({
       <p className="dashboard-metric-detail">{error ? t("overview.apiUnavailable") : detail}</p>
       {action && !loading && !error ? (
         <button type="button" className="dashboard-metric-link" onClick={action.onClick}>
-          {action.label}<span aria-hidden="true">→</span>
+          {action.label}<ArrowRight size={15} />
         </button>
       ) : null}
     </article>
@@ -100,7 +100,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
           <h3>{t("overview.welcome.title")}</h3>
           <p>{t("overview.welcome.body")}</p>
         </div>
-        {onNavigate ? <button type="button" className="dashboard-metric-link" onClick={() => onNavigate("policies")}>{t("overview.welcome.action")} <span aria-hidden="true">→</span></button> : null}
+        {onNavigate ? <button type="button" className="dashboard-metric-link" onClick={() => onNavigate("policies")}>{t("overview.welcome.action")} <ArrowRight size={15} /></button> : null}
       </section>
 
       <div className="dashboard-metrics" role="group" aria-label={t("overview.metricsAria")}>
@@ -120,7 +120,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
             <span className="dashboard-panel-tag">{t("overview.activity.tag")}</span>
           </div>
           <div className="dashboard-unavailable-state">
-            <span className="dashboard-empty-icon" aria-hidden="true">⌁</span>
+            <span className="dashboard-empty-icon"><Metrics size={18} /></span>
             <strong>{t("overview.activity.unavailableTitle")}</strong>
             <p>{t("overview.activity.unavailableBody")}</p>
           </div>
@@ -151,7 +151,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
           {accounts.data && accounts.data.totalItems > accountItems.length ? (
             <p className="dashboard-panel-note">{t("overview.scope.rotationNote", { loaded: accountItems.length, total: accounts.data.totalItems })}</p>
           ) : null}
-          {onNavigate ? <button type="button" className="dashboard-posture-action" onClick={() => onNavigate("security")}>{t("overview.posture.action")} <span aria-hidden="true">→</span></button> : null}
+          {onNavigate ? <button type="button" className="dashboard-posture-action" onClick={() => onNavigate("security")}>{t("overview.posture.action")} <ArrowRight size={15} /></button> : null}
         </section>
       </div>
 
@@ -161,7 +161,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
             <h3 id="dashboard-approvals-title">{t("overview.recent.title")}</h3>
             <p>{t("overview.recent.subtitle")}</p>
           </div>
-          {onNavigate ? <button type="button" className="dashboard-text-link" onClick={() => onNavigate("sessions")}>{t("overview.recent.action")} <span aria-hidden="true">→</span></button> : null}
+          {onNavigate ? <button type="button" className="dashboard-text-link" onClick={() => onNavigate("sessions")}>{t("overview.recent.action")} <ArrowRight size={15} /></button> : null}
         </div>
         {approvals.loading ? <p className="dashboard-table-state" role="status">{t("common.loading")}</p> : null}
         {approvals.error ? <p className="dashboard-table-state" role="alert">{t("overview.apiUnavailable")}</p> : null}

@@ -33,10 +33,10 @@ describe("App", () => {
     fireEvent.click(screen.getByText("Se connecter"));
     expect(await screen.findByRole("button", { name: /alice.*platform-admin/ })).toBeTruthy();
     const navigation = screen.getByRole("navigation", { name: "Sections" });
-    expect(within(navigation).getByRole("button", { name: "Vue générale" }).getAttribute("aria-current")).toBe("page");
+    expect(within(navigation).getByRole("button", { name: "Vue d’ensemble" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
     expect(screen.getByRole("main").parentElement?.classList.contains("app-content")).toBe(true);
-    for (const label of ["Vue générale", "Comptes", "Politiques", "Sessions", "Enregistrements", "Centre de sécurité"]) {
+    for (const label of ["Vue d’ensemble", "Comptes", "Politiques", "Sessions", "Enregistrements", "Sécurité"]) {
       const button = within(navigation).getByRole("button", { name: label });
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
@@ -79,7 +79,7 @@ describe("App", () => {
     expect(screen.getAllByRole("banner")[0].hasAttribute("inert")).toBe(true);
     expect(screen.getByRole("main").hasAttribute("inert")).toBe(true);
     const mobileNavigation = within(mobileDialog).getByRole("navigation", { name: "Sections" });
-    expect(within(mobileNavigation).getByRole("button", { name: "Vue générale" })).toBeTruthy();
+    expect(within(mobileNavigation).getByRole("button", { name: "Vue d’ensemble" })).toBeTruthy();
     const mobileWorkspaceSelector = within(mobileDialog).getByRole("button", { name: /Production.*Console d’administration/ });
     expect(document.activeElement).toBe(mobileWorkspaceSelector);
     const sidebarUserMenu = within(mobileDialog).getByRole("button", { name: /alice.*platform-admin/ });

@@ -1,0 +1,15 @@
+import type { SVGProps } from "react";
+
+export interface IconProps extends Omit<SVGProps<SVGSVGElement>, "width" | "height"> {
+  size?: number | string;
+  ariaLabel?: string;
+}
+
+export function Close({ size = 24, ariaLabel, ...props }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" role="img" aria-hidden={ariaLabel ? undefined : true} aria-label={ariaLabel} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <style>{`.accent{stroke:var(--ob-icon-accent, currentColor);} .secondary{stroke:var(--ob-icon-accent, currentColor);}`}</style>
+      <path d="M6 6l12 12"/><path d="M18 6 6 18"/>
+    </svg>
+  );
+}

@@ -37,7 +37,7 @@ export default {
       policies: { label: "Policies", description: "Access policies" },
       sessions: { label: "Sessions", description: "Privileged sessions" },
       audit: { label: "Recordings", description: "Session recordings" },
-      security: { label: "Security centre", description: "Account posture" },
+      security: { label: "Security", description: "Account posture" },
     },
     groups: {
       workspace: "Workspace",
@@ -102,7 +102,7 @@ export default {
       policies: { label: "Policies", detail: "Privileged access", keywords: "policies authorisations rules" },
       sessions: { label: "Sessions", detail: "Activity", keywords: "sessions requests approvals" },
       audit: { label: "Recordings", detail: "Activity", keywords: "replay video commands" },
-      security: { label: "Security centre", detail: "Security", keywords: "posture rotation pinning configuration" },
+      security: { label: "Security", detail: "Posture", keywords: "posture rotation pinning configuration" },
     },
     findSession: {
       label: "Find session “{{query}}”",
