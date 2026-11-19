@@ -76,8 +76,9 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 	// The HELLO offered both directions: the panel says so.
 	page.waitTrue("the clipboard panel", `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Coller vers la cible…")`, 15*time.Second)
 
-	// Notepad's text, found on the screen as the page shows it: the first all-white square of 120
-	// pixels, in the canvas's own pixels, then where that is in the page.
+	// Notepad's text, found on the screen as the page shows it: the centre of the first all-white
+	// square of 120 pixels, in the canvas's own pixels. Where that is in the page is measured only
+	// when it is clicked: the paste field and the history open above the canvas and move it.
 	page.eval(`document.querySelector("canvas.screen-canvas").scrollIntoView({ block: "start" }), true`)
 	const notepad = `(() => { const c = document.querySelector("canvas.screen-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
 		const white = (x, y) => { const i = (y * c.width + x) * 4; return d[i] >= 248 && d[i+1] >= 248 && d[i+2] >= 248; };
@@ -85,7 +86,7 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 		// text area is below its title bar; search only the lower 70% so a desktop patch cannot steal focus.
 		for (let y = Math.floor(c.height * 0.30); y + 120 <= c.height; y += 8) { next: for (let x = 0; x + 120 <= c.width; x += 8) {
 			for (let dy = 0; dy < 120; dy += 4) for (let dx = 0; dx < 120; dx += 4) if (!white(x + dx, y + dy)) continue next;
-			const r = c.getBoundingClientRect(); return [r.left + (x + 60) * r.width / c.width, r.top + (y + 60) * r.height / c.height]; } }
+			return [x + 60, y + 60]; } }
 		return null; })()`
 	var at []float64
 	for deadline := time.Now().Add(90 * time.Second); ; {
@@ -99,7 +100,7 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 		}
 		time.Sleep(time.Second)
 	}
-	t.Logf("Notepad text-area click at page coordinates %.0f, %.0f", at[0], at[1])
+	t.Logf("Notepad text area at canvas pixel %.0f, %.0f", at[0], at[1])
 	selectAll := cdpKeyA
 	if os.Getenv("RDP_WINDOWS_KEYBOARD") == "fr-FR" {
 		selectAll = cdpKeyQ // A sits where Q does in AZERTY: the page sends the physical key
@@ -116,7 +117,19 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 	page.waitTrue("the pasted text, recorded and shown back",
 		fmt.Sprintf(`[...document.querySelectorAll(".screen-clipboard-history li")].some((li) => li.innerText.includes("Collé dans la cible") && li.querySelector("pre").innerText === %s)`, quoted), 30*time.Second)
 	// Into Notepad, everything replaced by the pasted text, then copied back.
-	page.clickAt(at[0], at[1])
+	// The canvas brought to the middle of the window, clear of the sticky header, then the canvas
+	// pixel turned into page coordinates as the page stands now (CI of pull request 234, Windows
+	// Server 2019: measured before the paste field opened, the click fell on the desktop below).
+	var click []float64
+	if err := json.Unmarshal(page.eval(fmt.Sprintf(`(() => { const c = document.querySelector("canvas.screen-canvas");
+		c.scrollIntoView({ block: "center" }); const r = c.getBoundingClientRect();
+		const x = r.left + %f * r.width / c.width, y = r.top + %f * r.height / c.height;
+		return document.elementFromPoint(x, y) === c ? [x, y] : null; })()`, at[0], at[1])), &click); err != nil || len(click) != 2 {
+		page.screenshot(dump, "browser-clipboard-point-hidden.png")
+		t.Fatalf("the Notepad point is not on the canvas as the page stands: %v %v", click, err)
+	}
+	t.Logf("Notepad text-area click at page coordinates %.0f, %.0f", click[0], click[1])
+	page.clickAt(click[0], click[1])
 	time.Sleep(time.Second)
 	page.press(cdpControl, selectAll)
 	page.press(cdpControl, cdpKeyV)
