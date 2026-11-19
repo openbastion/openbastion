@@ -5539,6 +5539,33 @@ main.login {
   .infrastructure-panels { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Components from @openbastion/ui used inside the reference chrome. The library Button and
+   Input carry their own base metrics; the reference screens place some of them in a control
+   that already sets the shape, so these overrides keep the reference geometry without
+   changing the shared component defaults. */
+.ob-button.reference-link,
+.ob-button.command-close,
+.ob-button.audit-recommendations-link,
+.ob-button.reference-toolbar-action,
+.ob-button.dashboard-metric-link,
+.ob-button.dashboard-posture-action,
+.ob-button.dashboard-text-link,
+.ob-button.account-filter-remove,
+.ob-button.user-menu-item,
+.ob-button.sessions-live-item,
+.ob-button.session-recording-row { min-height: 0; line-height: inherit; }
+.ob-button.account-filter-trigger,
+.ob-button.user-menu-item { justify-content: flex-start; }
+.ob-button.sessions-live-item,
+.ob-button.session-recording-row { font-size: inherit; }
+.reference-pager .ob-button { min-height: 0; line-height: 1; }
+.reference-search .ob-input,
+.session-toolbar-date .ob-input { min-height: 0; height: 100%; }
+
+/* The new-access request opens in the design system's modal; the form keeps the reference card. */
+.request-access-dialog { width: min(46rem, calc(100vw - 2rem)); }
+.request-access-dialog .ob-form-card { margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }
+
 @media (max-width: 760px) {
   .settings-fields { grid-template-columns: minmax(0, 1fr); }
   .reference-fact { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }

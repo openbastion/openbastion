@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { Checkbox, FormField, Input, Label, Select, Textarea } from "@openbastion/ui";
 import { useSignedIn } from "../../shared/session";
 import { FormCard } from "../../shared/ui/FormCard";
 import { useAppTranslation } from "../../shared/i18n";
@@ -56,68 +57,58 @@ export function OnboardAccount({ onDone }: { onDone: (id: string) => void }) {
       onSubmit={submit}
       error={error}
     >
-      <label>
-        {t("accounts.onboard.id")}
-        <input value={f.id} onChange={set("id")} required pattern="[A-Za-z0-9_.\-]+" />
-      </label>
-      <label>
-        {t("accounts.onboard.name")}
-        <input value={f.name} onChange={set("name")} required />
-      </label>
-      <label>
-        {t("accounts.onboard.target")}
-        <input value={f.targetHost} onChange={set("targetHost")} required />
-      </label>
-      <label>
-        {t("accounts.onboard.username")}
-        <input value={f.username} onChange={set("username")} required />
-      </label>
-      <label>
-        {t("accounts.onboard.protocol")}
-        <select value={f.protocol} onChange={set("protocol")}>
+      <FormField id="onboard-id" label={t("accounts.onboard.id")} required>
+        <Input value={f.id} onChange={set("id")} pattern="[A-Za-z0-9_.\-]+" />
+      </FormField>
+      <FormField id="onboard-name" label={t("accounts.onboard.name")} required>
+        <Input value={f.name} onChange={set("name")} />
+      </FormField>
+      <FormField id="onboard-target" label={t("accounts.onboard.target")} required>
+        <Input value={f.targetHost} onChange={set("targetHost")} />
+      </FormField>
+      <FormField id="onboard-username" label={t("accounts.onboard.username")} required>
+        <Input value={f.username} onChange={set("username")} />
+      </FormField>
+      <FormField id="onboard-protocol" label={t("accounts.onboard.protocol")}>
+        <Select value={f.protocol} onChange={set("protocol")}>
           <option value="ssh">SSH</option>
           <option value="vnc">VNC</option>
           <option value="rdp">RDP</option>
-        </select>
-      </label>
+        </Select>
+      </FormField>
       {ssh ? (
-        <label>
-          {t("accounts.onboard.rotation")}
-          <select value={f.rotationPolicy} onChange={set("rotationPolicy")}>
+        <FormField id="onboard-rotation" label={t("accounts.onboard.rotation")}>
+          <Select value={f.rotationPolicy} onChange={set("rotationPolicy")}>
             <option value="manual">{t("accounts.onboard.rotationManual")}</option>
             <option value="post_use">{t("accounts.onboard.rotationPostUse")}</option>
             <option value="scheduled">{t("accounts.onboard.rotationScheduled")}</option>
-          </select>
-        </label>
+          </Select>
+        </FormField>
       ) : null}
       {ssh && f.rotationPolicy === "scheduled" ? (
-        <label>
-          {t("accounts.onboard.interval")}
-          <input type="number" min={1} max={365} value={f.rotationIntervalDays} onChange={set("rotationIntervalDays")} required />
-        </label>
+        <FormField id="onboard-interval" label={t("accounts.onboard.interval")} required>
+          <Input type="number" min={1} max={365} value={f.rotationIntervalDays} onChange={set("rotationIntervalDays")} />
+        </FormField>
       ) : null}
       {ssh ? (
-        <label>
-          {t("accounts.onboard.reconciliation")}
-          <input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} />
-        </label>
+        <FormField id="onboard-reconciliation" label={t("accounts.onboard.reconciliation")}>
+          <Input value={f.reconciliationAccountId} onChange={set("reconciliationAccountId")} />
+        </FormField>
       ) : null}
       {ssh ? (
-        <label className="wide">
-          {t("accounts.onboard.hostKey")}
-          <textarea value={f.hostKey} onChange={set("hostKey")} required rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
-        </label>
+        <FormField id="onboard-host-key" label={t("accounts.onboard.hostKey")} required className="wide">
+          <Textarea value={f.hostKey} onChange={set("hostKey")} rows={2} spellCheck={false} placeholder="ssh-ed25519 AAAA…" />
+        </FormField>
       ) : (
         <p className="ob-hint wide">{t("accounts.onboard.tlsHint")}</p>
       )}
-      <label className="check">
-        <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
+      <Label className="check">
+        <Checkbox checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
         {t("accounts.onboard.approval")}
-      </label>
-      <label>
-        {t("accounts.onboard.initialSecret")}
-        <input type="password" autoComplete="new-password" value={f.initialSecret} onChange={set("initialSecret")} required />
-      </label>
+      </Label>
+      <FormField id="onboard-secret" label={t("accounts.onboard.initialSecret")} required>
+        <Input type="password" autoComplete="new-password" value={f.initialSecret} onChange={set("initialSecret")} />
+      </FormField>
     </FormCard>
   );
 }

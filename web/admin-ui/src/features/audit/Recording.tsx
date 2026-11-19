@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormField, Input } from "@openbastion/ui";
 import { RecordingPage, sessionPath } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
@@ -13,10 +14,13 @@ const pageSize = 100;
 
 // Reading back what was typed in a session (GET /sessions/{id}/recording). Each page read is
 // itself an audit event (ADR-0022). Commands are shown as text, never interpreted.
-export function Recording({ requestedSessionId, onSessionLookupComplete }: { requestedSessionId?: string | null; onSessionLookupComplete?: () => void } = {}) {
+//
+// The panel is the recording screen itself: the Sessions page shows it inside its
+// "Enregistrements" tab, and the standalone screen wraps it with its own header.
+export function RecordingPanel({ requestedSessionId, onSessionLookupComplete }: { requestedSessionId?: string | null; onSessionLookupComplete?: () => void } = {}) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useState(requestedSessionId ?? "");
   const [page, setPage] = useState<RecordingPage>();
   const [loading, setLoading] = useState(false);
   const [hasRead, setHasRead] = useState(false);
@@ -48,7 +52,7 @@ export function Recording({ requestedSessionId, onSessionLookupComplete }: { req
   }, [requestedSessionId, read, onSessionLookupComplete]);
 
   return (
-    <AdminPage title={t("recording.title")} hints={[t("recording.hint")]}>
+    <>
       <FormCard
         label={t("recording.form.label")}
         submitLabel={t("recording.form.submit")}
@@ -58,10 +62,9 @@ export function Recording({ requestedSessionId, onSessionLookupComplete }: { req
         }}
         error={error}
       >
-        <label>
-          {t("recording.form.session")}
-          <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
-        </label>
+        <FormField id="recording-session" label={t("recording.form.session")} required>
+          <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+        </FormField>
       </FormCard>
       {loading ? <p className="ob-empty-state" role="status">{t("recording.loading")}</p> : null}
       {!loading && hasRead && page && page.entries.length === 0 ? <p className="ob-empty-state">{t("recording.empty")}</p> : null}
@@ -80,6 +83,15 @@ export function Recording({ requestedSessionId, onSessionLookupComplete }: { req
       ) : null}
       <VideoReplay />
       <SecretInjectionReconciliation />
+    </>
+  );
+}
+
+export function Recording(props: { requestedSessionId?: string | null; onSessionLookupComplete?: () => void } = {}) {
+  const { t } = useAppTranslation();
+  return (
+    <AdminPage title={t("recording.title")} hints={[t("recording.hint")]}>
+      <RecordingPanel {...props} />
     </AdminPage>
   );
 }

@@ -8,8 +8,9 @@ import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { ReferencePager } from "../../shared/ui/ReferencePager";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { Form, Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { ChevronDown, ChevronUp, Download, Filter, Plus, Search } from "@openbastion/icons";
+import { PolicyForm } from "../policies/Policies";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { ResourceTable } from "./ResourceTable";
 import { ApprovalCards } from "./ApprovalCards";
@@ -46,12 +47,14 @@ type View = "resources" | "accounts" | "policies" | "requests";
 // showing a plausible number.
 export function Accounts({
   onNavigate,
+  initialView = "resources",
 }: {
-  onNavigate?: (tab: "policies" | "sessions") => void;
+  onNavigate?: (tab: "sessions") => void;
+  initialView?: View;
 } = {}) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
-  const [view, setView] = useState<View>("resources");
+  const [view, setView] = useState<View>(initialView);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Account>>();
   const [loading, setLoading] = useState(true);
@@ -236,9 +239,9 @@ export function Accounts({
 
   const toolbar = (
     <div className="reference-table-toolbar">
-      <div className="reference-search">
+      <Label className="reference-search">
         <Search size={15} aria-hidden="true" />
-        <input
+        <Input
           id="account-page-filter"
           type="search"
           aria-label={t("accounts.filter.searchAria")}
@@ -246,28 +249,28 @@ export function Accounts({
           onChange={(event) => setFilter(event.target.value)}
           placeholder={t("accounts.filter.searchPlaceholder")}
         />
-      </div>
-      <div className="reference-select">
-        <select aria-label={t("accounts.reference.allTypes")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
+      </Label>
+      <Label className="reference-select">
+        <Select aria-label={t("accounts.reference.allTypes")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
           <option value="">{t("accounts.reference.allTypes")}</option>
           <option value="ssh">SSH</option>
           <option value="rdp">RDP</option>
           <option value="vnc">VNC</option>
-        </select>
+        </Select>
         <ChevronDown size={14} aria-hidden="true" />
-      </div>
+      </Label>
       {/* The reference screen filters on an environment the Vault does not store: the control
           keeps its place and says why it cannot filter anything. */}
-      <div className="reference-select is-unavailable">
-        <select disabled aria-label={t("accounts.reference.environment")} title={t("accounts.reference.environmentUnavailable")}>
+      <Label className="reference-select is-unavailable">
+        <Select disabled aria-label={t("accounts.reference.environment")} title={t("accounts.reference.environmentUnavailable")}>
           <option>{t("accounts.reference.environment")}</option>
-        </select>
+        </Select>
         <ChevronDown size={14} aria-hidden="true" />
-      </div>
+      </Label>
       {view === "accounts" ? (
-        <button
+        <Button
+          variant="ghost"
           className="account-filter-trigger"
-          type="button"
           aria-expanded={filtersOpen}
           aria-controls="account-filter-builder"
           onClick={() => setFiltersOpen((open) => !open)}
@@ -276,7 +279,7 @@ export function Accounts({
           <span>{t("accounts.filter.advanced")}</span>
           <span className="account-filter-count" aria-label={t("accounts.filter.activeCount", { count: activeFilterCount })}>{activeFilterCount}</span>
           <span className="account-filter-chevron">{filtersOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -401,21 +404,21 @@ export function Accounts({
                       {filterRules.map((rule, index) => (
                         <div className="account-filter-rule" key={index}>
                           {index > 0 ? (
-                            <label className="account-filter-join-control">
+                            <Label className="account-filter-join-control">
                               <span>{t("accounts.filter.combination")}</span>
-                              <select
+                              <Select
                                 aria-label={t("accounts.filter.combinationAria", { position: index + 1 })}
                                 value={rule.join}
                                 onChange={(event) => updateFilterRule(index, { join: event.target.value as AccountFilterRule["join"] })}
                               >
                                 <option value="AND">{t("accounts.filter.and")}</option>
                                 <option value="OR">{t("accounts.filter.or")}</option>
-                              </select>
-                            </label>
+                              </Select>
+                            </Label>
                           ) : <span className="account-filter-join-placeholder" aria-hidden="true">{t("accounts.filter.where")}</span>}
-                          <label className="account-filter-field">
+                          <Label className="account-filter-field">
                             <span>{t("accounts.filter.field")}</span>
-                            <select
+                            <Select
                               aria-label={t("accounts.filter.fieldAria", { position: index + 1 })}
                               value={rule.field}
                               onChange={(event) => {
@@ -427,22 +430,22 @@ export function Accounts({
                               <option value="approval" disabled={filterRules.some((other, position) => position !== index && other.field === "approval")}>{t("accounts.filter.fields.approval")}</option>
                               <option value="identity" disabled={filterRules.some((other, position) => position !== index && other.field === "identity")}>{t("accounts.filter.fields.identity")}</option>
                               <option value="rotation" disabled={filterRules.some((other, position) => position !== index && other.field === "rotation")}>{t("accounts.filter.fields.rotation")}</option>
-                            </select>
-                          </label>
-                          <label className="account-filter-operator">
+                            </Select>
+                          </Label>
+                          <Label className="account-filter-operator">
                             <span>{t("accounts.filter.operator")}</span>
-                            <select
+                            <Select
                               aria-label={t("accounts.filter.operatorAria", { position: index + 1 })}
                               value={rule.comparison}
                               onChange={(event) => updateFilterRule(index, { comparison: event.target.value as AccountFilterRule["comparison"] })}
                             >
                               <option value="is">{t("accounts.filter.is")}</option>
                               <option value="is-not">{t("accounts.filter.isNot")}</option>
-                            </select>
-                          </label>
-                          <label className="account-filter-value">
+                            </Select>
+                          </Label>
+                          <Label className="account-filter-value">
                             <span>{t("accounts.filter.value")}</span>
-                            <select
+                            <Select
                               aria-label={t("accounts.filter.valueAria", { position: index + 1 })}
                               value={rule.value}
                               onChange={(event) => updateFilterRule(index, { value: event.target.value })}
@@ -459,9 +462,9 @@ export function Accounts({
                               {rule.field === "rotation" ? <>
                                 <option value="due">{t("accounts.filter.values.due")}</option><option value="failed">{t("accounts.filter.values.failed")}</option><option value="none">{t("accounts.filter.values.none")}</option>
                               </> : null}
-                            </select>
-                          </label>
-                          <button className="account-filter-remove" type="button" aria-label={t("accounts.filter.removeAria", { position: index + 1 })} onClick={() => removeFilterRule(index)}>×</button>
+                            </Select>
+                          </Label>
+                          <Button variant="ghost" className="account-filter-remove" aria-label={t("accounts.filter.removeAria", { position: index + 1 })} onClick={() => removeFilterRule(index)}>×</Button>
                         </div>
                       ))}
                     </div>
@@ -475,20 +478,20 @@ export function Accounts({
                       <span className="ob-filter-help">{t("accounts.filter.textAlwaysAnd")}</span>
                     </div>
                     <div className="ob-saved-views">
-                      <label>
+                      <Label>
                         {t("accounts.views.label")}
-                        <select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
+                        <Select value={selectedSavedView} onChange={(event) => applySavedView(event.target.value)}>
                           <option value="">{t("accounts.views.choose")}</option>
                           {savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}
-                        </select>
-                      </label>
-                      <form className="ob-saved-view-form" onSubmit={saveCurrentView}>
-                        <label>
+                        </Select>
+                      </Label>
+                      <Form className="ob-saved-view-form" onSubmit={saveCurrentView}>
+                        <Label>
                           {t("accounts.views.name")}
-                          <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder={t("accounts.views.namePlaceholder")} />
-                        </label>
+                          <Input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} maxLength={32} minLength={2} required placeholder={t("accounts.views.namePlaceholder")} />
+                        </Label>
                         <Button type="submit">{t("accounts.views.save")}</Button>
-                      </form>
+                      </Form>
                       <Button disabled={!selectedSavedView} onClick={deleteSavedView}>{t("accounts.views.delete")}</Button>
                     </div>
                     {viewNotice ? <InlineNotice tone="success">{viewNotice}</InlineNotice> : null}
@@ -506,10 +509,18 @@ export function Accounts({
         </TabsContent>
 
         <TabsContent value="policies">
-          <section className="ob-surface reference-panel reference-unavailable" aria-label={t("accounts.tabs.policies")}>
-            <h3>{t("accounts.policies.title")}</h3>
-            <p>{t("accounts.policies.body")}</p>
-            {onNavigate ? <Button onClick={() => onNavigate("policies")}>{t("accounts.policies.action")}</Button> : null}
+          <section className="ob-surface reference-panel accounts-policies" aria-label={t("accounts.tabs.policies")}>
+            <div className="reference-panel-heading">
+              <div>
+                <h3>{t("policies.title")}</h3>
+                <p>
+                  {t("policies.prefix")} <code>vault:account:&lt;id&gt;</code> {t("policies.session")}{" "}
+                  <code>recording:session:*</code> {t("policies.recording")} <code>breakglass-approve:account:&lt;id&gt;</code>{" "}
+                  {t("policies.breakglass")}
+                </p>
+              </div>
+            </div>
+            <PolicyForm />
           </section>
         </TabsContent>
 
@@ -535,9 +546,9 @@ export function Accounts({
         <section className="reference-section" aria-labelledby="accounts-approvals-title">
           <div className="reference-section-heading">
             <h3 id="accounts-approvals-title">{t("accounts.approvals.title")}</h3>
-            <button type="button" className="reference-link" onClick={() => setView("requests")}>
+            <Button variant="ghost" className="reference-link" onClick={() => setView("requests")}>
               {t("accounts.approvals.all", { count: approvals?.totalItems ?? pendingItems.length })} <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           </div>
           <ApprovalCards sessions={pendingItems.slice(0, approvalPreview)} onOpen={() => onNavigate?.("sessions")} />
         </section>

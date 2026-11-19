@@ -1,6 +1,8 @@
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Tab } from "../../app/AppShell";
+import { Input, Label } from "@openbastion/ui";
 import { ArrowRight } from "@openbastion/icons";
+import { Button } from "./Button";
 import { useAppTranslation } from "../i18n";
 
 type Command = {
@@ -28,7 +30,7 @@ export function CommandPalette({
 
   const commands = useMemo<Command[]>(() => {
     const destinations: { tab: Tab; label: string; detail: string; keywords: string }[] = (
-      ["overview", "accounts", "policies", "sessions", "infrastructure", "audit", "security", "posture", "settings"] as const
+      ["overview", "accounts", "sessions", "infrastructure", "security", "posture", "settings"] as const
     ).map((tab) => ({
       tab,
       label: t(`palette.destinations.${tab}.label`),
@@ -109,8 +111,8 @@ export function CommandPalette({
         onKeyDown={handleKeyDown}
       >
         <h2 id="command-palette-title" className="visually-hidden">{t("palette.title")}</h2>
-        <label className="visually-hidden" htmlFor="command-palette-query">{t("palette.queryLabel")}</label>
-        <input
+        <Label className="visually-hidden" htmlFor="command-palette-query">{t("palette.queryLabel")}</Label>
+        <Input
           ref={input}
           id="command-palette-query"
           type="search"
@@ -149,7 +151,7 @@ export function CommandPalette({
           <span>{t("palette.footer.navigate")}</span>
           <span>{t("palette.footer.select")}</span>
           <span>{t("palette.footer.close")}</span>
-          <button type="button" className="command-close" onClick={onClose}>{t("palette.footer.closeButton")}</button>
+          <Button variant="ghost" className="command-close" onClick={onClose}>{t("palette.footer.closeButton")}</Button>
         </footer>
       </section>
     </div>

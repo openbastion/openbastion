@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { FormField, Input, Select } from "@openbastion/ui";
 import { Session } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { FormCard } from "../../shared/ui/FormCard";
@@ -39,30 +40,25 @@ export function SessionRequest({ onDone }: { onDone: (s: Session) => void }) {
       onSubmit={submit}
       error={error}
     >
-      <label>
-        {t("sessions.request.account")}
-        <input value={f.targetAccountId} onChange={set("targetAccountId")} required />
-      </label>
-      <label>
-        {t("sessions.request.protocol")}
-        <select value={f.protocol} onChange={set("protocol")}>
+      <FormField id="session-request-account" label={t("sessions.request.account")} required>
+        <Input value={f.targetAccountId} onChange={set("targetAccountId")} />
+      </FormField>
+      <FormField id="session-request-protocol" label={t("sessions.request.protocol")}>
+        <Select value={f.protocol} onChange={set("protocol")}>
           <option value="ssh">SSH</option>
           <option value="vnc">VNC</option>
           <option value="rdp">RDP</option>
-        </select>
-      </label>
-      <label>
-        {t("sessions.request.duration")}
-        <input type="number" min={1} value={f.durationMinutes} onChange={set("durationMinutes")} required />
-      </label>
-      <label className="wide">
-        {t("sessions.columns.justification")}
-        <input value={f.justification} onChange={set("justification")} required />
-      </label>
-      <label>
-        {t("sessions.request.ticket")}
-        <input value={f.ticket} onChange={set("ticket")} maxLength={128} autoComplete="off" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="session-request-duration" label={t("sessions.request.duration")} required>
+        <Input type="number" min={1} value={f.durationMinutes} onChange={set("durationMinutes")} />
+      </FormField>
+      <FormField id="session-request-justification" label={t("sessions.columns.justification")} required className="wide">
+        <Input value={f.justification} onChange={set("justification")} />
+      </FormField>
+      <FormField id="session-request-ticket" label={t("sessions.request.ticket")}>
+        <Input value={f.ticket} onChange={set("ticket")} maxLength={128} autoComplete="off" />
+      </FormField>
     </FormCard>
   );
 }

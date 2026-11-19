@@ -1,6 +1,7 @@
 import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { MAX_CLIPBOARD_TEXT_LENGTH, SUBPROTOCOL, clampResize, decodeScreenMessage, encodeClipboard, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
+import { Label, Textarea } from "@openbastion/ui";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { translate, useAppTranslation } from "../../shared/i18n";
@@ -414,10 +415,10 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
           </div>
           {pasteDraft !== null ? (
             <div className="screen-clipboard-draft">
-              <label>
+              <Label>
                 {t("screen.clipboard.pasteLabel")}
-                <textarea value={pasteDraft} onChange={(e) => setPasteDraft(e.target.value)} rows={4} />
-              </label>
+                <Textarea value={pasteDraft} onChange={(e) => setPasteDraft(e.target.value)} rows={4} />
+              </Label>
               <p className="ob-hint">
                 {t("screen.clipboard.counter", { count: pasteDraft.length, max: MAX_CLIPBOARD_TEXT_LENGTH })}
               </p>

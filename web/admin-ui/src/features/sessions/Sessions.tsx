@@ -9,12 +9,14 @@ import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { SessionRequest } from "./SessionRequest";
 import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
-import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { Badge, Form, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { Download, Search } from "@openbastion/icons";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
+import { Modal } from "../../shared/ui/Modal";
 import { SessionHistory } from "./SessionHistory";
 import { SessionRecordings } from "./SessionRecordings";
 import { SessionAlerts } from "./SessionAlerts";
+import { RecordingPanel } from "../audit/Recording";
 import { useAppTranslation } from "../../shared/i18n";
 
 type View = "live" | "history" | "recordings" | "alerts";
@@ -33,11 +35,11 @@ function formatExpiry(value: string, locale: string): string {
 export function Sessions({
   requestedSessionId,
   onSessionLookupComplete,
-  onOpenRecording = () => undefined,
+  initialView = "live",
 }: {
   requestedSessionId?: string | null;
   onSessionLookupComplete?: () => void;
-  onOpenRecording?: (sessionId: string) => void;
+  initialView?: View;
 } = {}) {
   const { t, i18n } = useAppTranslation();
   const { api } = useSignedIn();
@@ -49,8 +51,11 @@ export function Sessions({
   const [lookup, setLookup] = useState("");
   const [found, setFound] = useState<Session>();
   const [screen, setScreen] = useState<AttachedScreen>();
-  const [view, setView] = useState<View>("live");
+  const [view, setView] = useState<View>(initialView);
   const [requestFormOpen, setRequestFormOpen] = useState(false);
+  // The recording screen lives in this page's "Enregistrements" tab: the library opens its
+  // replay here instead of sending the operator to another page.
+  const [replaySessionId, setReplaySessionId] = useState<string>();
 
   const load = useCallback(() => {
     setPendingLoading(true);
@@ -236,10 +241,10 @@ export function Sessions({
                   <p>{pendingLoading ? t("sessions.pending.loading") : t("sessions.live.queueCount", { count: pendingCount ?? 0 })}</p>
                 </div>
               </div>
-              <form className="sessions-live-search" onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
-                <label htmlFor="session-lookup">{t("sessions.lookup.identifier")}</label>
+              <Form className="sessions-live-search" onSubmit={find} aria-label={t("sessions.lookup.formAria")}>
+                <Label htmlFor="session-lookup">{t("sessions.lookup.identifier")}</Label>
                 <div>
-                  <input
+                  <Input
                     id="session-lookup"
                     type="search"
                     value={lookup}
@@ -249,13 +254,13 @@ export function Sessions({
                   />
                   <Button type="submit" variant="primary">{t("sessions.lookup.show")}</Button>
                 </div>
-              </form>
+              </Form>
               <div className="sessions-live-list" aria-label={t("sessions.live.queueAria")}>
                 {pendingLoading ? <p className="sessions-live-state" role="status">{t("sessions.pending.loading")}</p> : null}
                 {!pendingLoading && !error && pending?.items.length === 0 ? <p className="sessions-live-state">{t("sessions.pending.empty")}</p> : null}
                 {!pendingLoading && pending?.items.map((session) => (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
                     key={session.id}
                     className="sessions-live-item"
                     aria-current={found?.id === session.id ? "true" : undefined}
@@ -271,7 +276,7 @@ export function Sessions({
                       <code>{session.id}</code>
                       <time dateTime={session.expiresAt}>{formatExpiry(session.expiresAt, i18n.language)}</time>
                     </span>
-                  </button>
+                  </Button>
                 ))}
               </div>
               {pending?.truncated ? <p className="sessions-live-truncated">{t("sessions.pending.truncated")}</p> : null}
@@ -313,21 +318,34 @@ export function Sessions({
             </section>
           </div>
 
-          <details className="session-request-disclosure" open={requestFormOpen} onToggle={(event) => setRequestFormOpen(event.currentTarget.open)}>
-            <summary>{t("sessions.live.requestDisclosure")}</summary>
+          <Modal
+            open={requestFormOpen}
+            onOpenChange={setRequestFormOpen}
+            title={t("sessions.live.newRequest")}
+            description={t("sessions.live.requestModalDescription")}
+            className="request-access-dialog"
+          >
             <SessionRequest onDone={(session) => {
               setLookup(session.id);
               setFound(session);
               setScreen(undefined);
+              setRequestFormOpen(false);
               setOk(session.status === "pending_approval"
                 ? t("sessions.request.pendingApproval", { id: session.id, expiresAt: session.expiresAt })
                 : t("sessions.request.status", { id: session.id, status: session.status }));
               load();
             }} />
-          </details>
+          </Modal>
         </TabsContent>
         <TabsContent value="history"><SessionHistory /></TabsContent>
-        <TabsContent value="recordings"><SessionRecordings onOpenRecording={onOpenRecording} /></TabsContent>
+        <TabsContent value="recordings">
+          <SessionRecordings onOpenRecording={setReplaySessionId} />
+          {replaySessionId ? (
+            <div className="session-recording-replay">
+              <RecordingPanel key={replaySessionId} requestedSessionId={replaySessionId} />
+            </div>
+          ) : null}
+        </TabsContent>
         <TabsContent value="alerts"><SessionAlerts /></TabsContent>
       </Tabs>
       {decision ? (

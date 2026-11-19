@@ -6,6 +6,7 @@ import { Notice } from "../../shared/Notice";
 import { Button } from "../../shared/ui/Button";
 import { Badge } from "../../shared/ui/Badge";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
+import { Form, Input, Label, Select } from "@openbastion/ui";
 import { ChevronDown, Search } from "@openbastion/icons";
 
 function datePart(date: Date): string {
@@ -120,10 +121,10 @@ export function SessionHistory() {
           <p>{t("sessions.history.description")}</p>
         </div>
       </div>
-      <form className="reference-table-toolbar session-history-toolbar" onSubmit={search} aria-label={t("sessions.history.filtersAria")}>
-        <label className="reference-search">
+      <Form className="reference-table-toolbar session-history-toolbar" onSubmit={search} aria-label={t("sessions.history.filtersAria")}>
+        <Label className="reference-search">
           <Search size={15} aria-hidden="true" />
-          <input
+          <Input
             type="search"
             aria-label={t("sessions.history.query")}
             maxLength={256}
@@ -131,34 +132,34 @@ export function SessionHistory() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("sessions.history.queryPlaceholder")}
           />
-        </label>
-        <label className="reference-select">
-          <select aria-label={t("sessions.history.status")} value={status} onChange={(event) => setStatus(event.target.value)}>
+        </Label>
+        <Label className="reference-select">
+          <Select aria-label={t("sessions.history.status")} value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="">{t("sessions.history.allStatuses")}</option>
             <option value="active">{t("common.status.active")}</option>
             <option value="terminated">{t("common.status.terminated")}</option>
             <option value="expired">{t("common.status.expired")}</option>
             <option value="denied">{t("common.status.denied")}</option>
-          </select>
+          </Select>
           <ChevronDown size={14} aria-hidden="true" />
-        </label>
-        <label className="reference-select">
-          <select aria-label={t("sessions.history.protocol")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
+        </Label>
+        <Label className="reference-select">
+          <Select aria-label={t("sessions.history.protocol")} value={protocol} onChange={(event) => setProtocol(event.target.value)}>
             <option value="">{t("sessions.history.allProtocols")}</option>
             {(["ssh", "rdp", "vnc"] as const).map((value) => <option key={value} value={value}>{value.toUpperCase()}</option>)}
-          </select>
+          </Select>
           <ChevronDown size={14} aria-hidden="true" />
-        </label>
-        <label className="session-toolbar-date">
+        </Label>
+        <Label className="session-toolbar-date">
           <span>{t("sessions.history.from")}</span>
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
-        </label>
-        <label className="session-toolbar-date">
+          <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+        </Label>
+        <Label className="session-toolbar-date">
           <span>{t("sessions.history.to")}</span>
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
-        </label>
+          <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
+        </Label>
         <Button type="submit" variant="primary" disabled={loading}>{t("sessions.history.search")}</Button>
-      </form>
+      </Form>
       <Notice error={error} />
       {loading ? <p className="ob-empty-state" role="status">{t("sessions.history.loading")}</p> : null}
       {!loading && page && page.sessions.length === 0 ? <p className="ob-empty-state">{t("sessions.history.empty")}</p> : null}
@@ -199,9 +200,9 @@ export function SessionHistory() {
             {" · "}{t("sessions.history.page", { page: pageNumber })}
           </p>
           <nav className="reference-pager" aria-label={t("common.pager.aria")}>
-            <button type="button" aria-label={t("sessions.history.previous")} disabled={cursorStack.length === 0} onClick={previousPage}>‹</button>
-            <button type="button" aria-current="page">{pageNumber}</button>
-            <button type="button" aria-label={t("sessions.history.next")} disabled={!page.next} onClick={nextPage}>›</button>
+            <Button variant="ghost" aria-label={t("sessions.history.previous")} disabled={cursorStack.length === 0} onClick={previousPage}>‹</Button>
+            <Button variant="ghost" aria-current="page">{pageNumber}</Button>
+            <Button variant="ghost" aria-label={t("sessions.history.next")} disabled={!page.next} onClick={nextPage}>›</Button>
           </nav>
         </div>
       ) : null}

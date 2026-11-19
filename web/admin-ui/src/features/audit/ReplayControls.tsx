@@ -1,3 +1,4 @@
+import { Label, Select, Slider } from "@openbastion/ui";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 
@@ -41,18 +42,18 @@ export function ReplayControls({
         <Button disabled={position >= loaded - 1} onClick={() => onStep(1)}>
           {t("replay.nextFrame")}
         </Button>
-        <label>
+        <Label>
           {t("replay.position")}
-          <input type="range" min={0} max={loaded - 1} value={position} onChange={(e) => onSeek(Number(e.target.value))} />
-        </label>
-        <label>
+          <Slider min={0} max={loaded - 1} value={position} onChange={(e) => onSeek(Number(e.target.value))} />
+        </Label>
+        <Label>
           {t("replay.speed")}
-          <select value={speed} onChange={(e) => onSpeed(Number(e.target.value))}>
+          <Select value={speed} onChange={(e) => onSpeed(Number(e.target.value))}>
             <option value={1}>×1</option>
             <option value={2}>×2</option>
             <option value={4}>×4</option>
-          </select>
-        </label>
+          </Select>
+        </Label>
       </div>
       <p className="ob-hint" role="status">
         {t("replay.status", { sequence, position: position + 1, loaded })}{" "}

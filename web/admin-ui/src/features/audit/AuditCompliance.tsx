@@ -7,7 +7,7 @@ import { Notice } from "../../shared/Notice";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
 import { ReferencePager } from "../../shared/ui/ReferencePager";
 import { useAppTranslation } from "../../shared/i18n";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
+import { Input, Label, Select, Tabs, TabsContent, TabsList, TabsTrigger } from "@openbastion/ui";
 import { ChevronDown, Download, Search } from "@openbastion/icons";
 import { countByKind, findingsFor } from "./posture";
 
@@ -25,7 +25,7 @@ const pageSize = 20;
 export function AuditCompliance({
   onNavigate,
 }: {
-  onNavigate?: (tab: "accounts" | "audit") => void;
+  onNavigate?: (tab: "accounts" | "sessions") => void;
 } = {}) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
@@ -126,9 +126,9 @@ export function AuditCompliance({
             </div>
           ) : null}
           {onNavigate ? (
-            <button type="button" className="audit-recommendations-link" onClick={() => onNavigate("accounts")}>
+            <Button variant="ghost" className="audit-recommendations-link" onClick={() => onNavigate("accounts")}>
               {t("auditCompliance.recommendations.action")} <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
         </section>
       </div>
@@ -144,32 +144,32 @@ export function AuditCompliance({
         <TabsContent value="journal">
           <section className="ob-surface reference-panel audit-journal" aria-label={t("auditCompliance.journal.title")}>
             <div className="reference-table-toolbar">
-              <div className="reference-search is-unavailable">
+              <Label className="reference-search is-unavailable">
                 <Search size={15} aria-hidden="true" />
-                <input
+                <Input
                   type="search"
                   disabled
                   aria-label={t("auditCompliance.journal.searchAria")}
                   title={t("auditCompliance.journal.unavailable")}
                   placeholder={t("auditCompliance.journal.searchPlaceholder")}
                 />
-              </div>
-              <div className="reference-select is-unavailable">
-                <select disabled aria-label={t("auditCompliance.journal.period")} title={t("auditCompliance.journal.unavailable")}>
+              </Label>
+              <Label className="reference-select is-unavailable">
+                <Select disabled aria-label={t("auditCompliance.journal.period")} title={t("auditCompliance.journal.unavailable")}>
                   <option>{t("auditCompliance.journal.periodToday")}</option>
-                </select>
+                </Select>
                 <ChevronDown size={14} aria-hidden="true" />
-              </div>
-              <div className="reference-select is-unavailable">
-                <select disabled aria-label={t("auditCompliance.journal.eventType")} title={t("auditCompliance.journal.unavailable")}>
+              </Label>
+              <Label className="reference-select is-unavailable">
+                <Select disabled aria-label={t("auditCompliance.journal.eventType")} title={t("auditCompliance.journal.unavailable")}>
                   <option>{t("auditCompliance.journal.allEvents")}</option>
-                </select>
+                </Select>
                 <ChevronDown size={14} aria-hidden="true" />
-              </div>
-              <button type="button" className="reference-toolbar-action" disabled title={t("auditCompliance.journal.unavailable")}>
+              </Label>
+              <Button variant="ghost" className="reference-toolbar-action" disabled title={t("auditCompliance.journal.unavailable")}>
                 <Download size={15} aria-hidden="true" />
                 {t("auditCompliance.journal.export")}
-              </button>
+              </Button>
             </div>
             <div className="ob-table-wrap reference-table-wrap">
               <table className="ob-data-table reference-table audit-journal-table">
@@ -210,7 +210,7 @@ export function AuditCompliance({
             <h3>{t("auditCompliance.evidence.title")}</h3>
             <p>{t("auditCompliance.evidence.body")}</p>
             {onNavigate
-              ? <Button onClick={() => onNavigate("audit")}>{t("auditCompliance.evidence.action")}</Button>
+              ? <Button onClick={() => onNavigate("sessions")}>{t("auditCompliance.evidence.action")}</Button>
               : null}
           </section>
         </TabsContent>

@@ -1,5 +1,6 @@
 import { Account } from "../../shared/api";
 import { Badge } from "../../shared/ui/Badge";
+import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 import { AccountStatePill, EnvironmentCell } from "./AccountTable";
 
@@ -37,9 +38,9 @@ export function ResourceTable({ accounts, onOpen }: { accounts: Account[]; onOpe
               </td>
               <td><AccountStatePill account={account} /></td>
               <td className="reference-open-cell">
-                <button type="button" className="reference-link" onClick={() => onOpen(account)}>
+                <Button variant="ghost" className="reference-link" onClick={() => onOpen(account)}>
                   {t("accounts.reference.open")} <span aria-hidden="true">↗</span>
-                </button>
+                </Button>
               </td>
             </tr>
           ))}
