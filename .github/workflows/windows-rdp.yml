@@ -23,6 +23,15 @@ on:
       - pkg/rdp/**
       - services/proxy/rdp-vnc-proxy/internal/interfaces/rdp_recording_test.go
       - .github/workflows/windows-rdp.yml
+      # The browser tests drive the Admin UI: a change to the screens they go through, or to
+      # their own steps, runs them (the UI redesign once left a dead check here unseen).
+      - test/integration/screen_rdp_browser_test.go
+      - test/integration/screen_rdp_clipboard_browser_test.go
+      - test/integration/cdp_test.go
+      - web/admin-ui/src/features/screen/**
+      - web/admin-ui/src/features/sessions/Sessions.tsx
+      - web/admin-ui/src/features/sessions/SessionDetail.tsx
+      - web/admin-ui/src/app/AppShell.tsx
 permissions:
   contents: read
 concurrency:
