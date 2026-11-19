@@ -69,17 +69,9 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 	page.dump = dump
 	page.viewport(1400, 1000)
 	page.call("Page.navigate", map[string]any{"url": stack.gatewayURL + "/ui/"})
-	page.waitTrue("the login form", `!!document.querySelector('input[name="username"]')`, 30*time.Second)
-	page.fill(`input[name="username"]`, "rdp-operator")
-	page.fill(`input[name="password"]`, "op-password-123")
-	page.clickButton("Se connecter")
-	page.waitTrue("the sections", `[...document.querySelectorAll("nav button")].some((b) => b.innerText.trim() === "Sessions")`, 30*time.Second)
-	page.clickButton("Sessions")
-	page.waitTrue("the session lookup", `!!document.querySelector('form[aria-label="Chercher une session"] input')`, 15*time.Second)
-	page.fill(`form[aria-label="Chercher une session"] input`, id)
-	page.clickButton("Afficher")
-	page.waitTrue("the screen button", `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Ouvrir l'écran")`, 15*time.Second)
-	page.clickButton("Ouvrir l'écran")
+	page.signIn("rdp-operator", "op-password-123")
+	page.showSession(id)
+	page.openScreen()
 	page.waitTrue("the first frame", `(() => { const c = document.querySelector("canvas.screen-canvas"); return !!c && !c.hidden && c.width > 0; })()`, 120*time.Second)
 	// The HELLO offered both directions: the panel says so.
 	page.waitTrue("the clipboard panel", `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Coller vers la cible…")`, 15*time.Second)
@@ -141,6 +133,11 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 	page.clickButton("Copier le texte de la cible")
 	page.waitTrue("the copy's outcome", `/copié dans votre presse-papiers|refusé l'écriture/.test(document.querySelector(".screen-clipboard").innerText)`, 15*time.Second)
 	t.Logf("the copy button: %s", page.eval(`[...document.querySelectorAll(".screen-clipboard [role]")].map((e) => e.innerText).join(" | ")`))
+	// The screen lived through both transfers: the viewer does not show its end.
+	if string(page.eval(screenEndedNotice)) == "true" {
+		page.screenshot(dump, "browser-clipboard-ended.png")
+		t.Fatal("the screen ended during the clipboard transfers")
+	}
 
 	// The session ends; the auditor replays it and finds both transfers in the recording.
 	status, raw = stack.api.call(stack.operatorToken, http.MethodDelete, "/sessions/"+id, nil)

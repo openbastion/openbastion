@@ -55,17 +55,9 @@ func TestScreenFlow_RDPResizeInAHeadlessBrowser(t *testing.T) {
 	page.dump = dump
 	page.viewport(1400, 1000)
 	page.call("Page.navigate", map[string]any{"url": stack.gatewayURL + "/ui/"})
-	page.waitTrue("the login form", `!!document.querySelector('input[name="username"]')`, 30*time.Second)
-	page.fill(`input[name="username"]`, "rdp-operator")
-	page.fill(`input[name="password"]`, "op-password-123")
-	page.clickButton("Se connecter")
-	page.waitTrue("the sections", `[...document.querySelectorAll("nav button")].some((b) => b.innerText.trim() === "Sessions")`, 30*time.Second)
-	page.clickButton("Sessions")
-	page.waitTrue("the session lookup", `!!document.querySelector('form[aria-label="Chercher une session"] input')`, 15*time.Second)
-	page.fill(`form[aria-label="Chercher une session"] input`, id)
-	page.clickButton("Afficher")
-	page.waitTrue("the screen button", `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Ouvrir l'écran")`, 15*time.Second)
-	page.clickButton("Ouvrir l'écran")
+	page.signIn("rdp-operator", "op-password-123")
+	page.showSession(id)
+	page.openScreen()
 	page.waitTrue("the first frame", `(() => { const c = document.querySelector("canvas.screen-canvas"); return !!c && !c.hidden && c.width > 0; })()`, 120*time.Second)
 
 	// The size the page asks for, as ScreenViewer measures it: the width of its area, the window's
@@ -102,7 +94,7 @@ func TestScreenFlow_RDPResizeInAHeadlessBrowser(t *testing.T) {
 		t.Fatalf("the sizes did not change: %v, %v, %v", first, second, third)
 	}
 	// The session goes on: the page says it is live, not ended.
-	if string(page.eval(`!!document.querySelector('.notice.error[role="alert"]')`)) == "true" {
+	if string(page.eval(screenEndedNotice)) == "true" {
 		page.screenshot(dump, "browser-resize-ended.png")
 		t.Fatal("the screen ended during the resizes")
 	}
