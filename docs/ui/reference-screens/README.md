@@ -1,12 +1,31 @@
 # Références visuelles OpenBastion
 
-Ces SVG sont les sources de conception de l'Admin UI. Ils sont conservés dans le dépôt pour assurer leur traçabilité et permettre leur consultation sans dépendre de Figma ni d'un poste de développement.
+Ces SVG sont les maquettes de l'Admin UI, extraites de Figma. Ils sont conservés dans le dépôt pour assurer leur traçabilité et permettre leur consultation sans dépendre de Figma ni d'un poste de développement.
 
 ## Source Figma
 
-Fichier : [OpenBastion](https://www.figma.com/design/yUuwYSnGX7kSLzYX2rZXIU/OpenBastion) (clé `yUuwYSnGX7kSLzYX2rZXIU`). Extraction du 19 novembre 2026 : les 40 cadres de premier niveau des 8 pages, exportés en SVG par l'API REST de Figma (`GET /v1/images/{clé}?format=svg&svg_outline_text=false&svg_simplify_stroke=true`), texte conservé en `<text>` (cherchable, 1,2 Mo pour les 40). Le texte appelle les polices Inter et IBM Plex Mono : sans elles, le lecteur affiche une police de repli.
+Fichier : [OpenBastion](https://www.figma.com/design/yUuwYSnGX7kSLzYX2rZXIU/OpenBastion) (clé `yUuwYSnGX7kSLzYX2rZXIU`), **seule source** des maquettes : aucun SVG de ce dossier n'existe hors de Figma. Extraction du 19 novembre 2026 : les 40 cadres de premier niveau des 8 pages.
 
-Pour refaire l'extraction : un token personnel Figma en lecture seule (*File content: Read-only*), jamais commité, puis le même appel avec les identifiants de nœud ci-dessous, et un fichier par cadre sous le nom indiqué.
+Chaque SVG est reconstitué pour rester fidèle au cadre Figma hors de Figma :
+
+- **Calques** : chaque groupe, texte et forme porte le nom de son calque Figma (`id`) et son nœud (`data-node-id`). Figma écrit ces noms octet par octet en UTF-8 (`Acc&#195;&#168;s`) ; ils sont rétablis (`Accès`).
+- **Textes** : conservés en `<text>` (cherchables, sélectionnables), pas convertis en tracés.
+- **Graisses** : l'export SVG de Figma ne connaît que « normal » et « bold » ; la graisse exacte de chaque texte (400, 500, 600) est relue dans le document Figma par son nœud et réappliquée.
+- **Polices** : un sous-ensemble WOFF2 d'**Inter 4.001** (axe des graisses 400–600, taille optique 14) et d'**IBM Plex Mono** Regular, limité aux caractères du fichier, est intégré dans chaque SVG : le rendu ne dépend pas des polices installées et tient dans un `<img>`. Licences SIL OFL 1.1 dans [`fonts/`](fonts/). Trois symboles absents de ces polices (`⌕`, `☷`, `●`) restent rendus par la police de repli du lecteur, comme dans Figma.
+- **Icônes et formes** : tracés vectoriels tels que Figma les exporte (contours non simplifiés).
+
+Contrôle mesuré sur Sessions, Vue d'ensemble et Paramètres — Sécurité : rendu Chromium du SVG comparé au PNG que Figma rend du même cadre, 0,7 à 1,2 % de pixels s'écartent de plus de 48/255 (anticrénelage), contre 2,0 à 2,5 % pour l'export brut.
+
+Les calques masqués dans Figma (états de démonstration « États et erreurs », 27 cadres et 47 textes) ne sont pas exportés : Figma ne rend pas un calque masqué.
+
+### Refaire l'extraction
+
+Un token personnel Figma en lecture seule (*File content: Read-only*), dans un fichier hors du dépôt, jamais commité. Avec `IDS` la liste des nœuds du tableau ci-dessous :
+
+1. `GET https://api.figma.com/v1/images/yUuwYSnGX7kSLzYX2rZXIU?ids=$IDS&format=svg&svg_outline_text=false&svg_include_id=true&svg_include_node_id=true&svg_simplify_stroke=false` (en-tête `X-Figma-Token`), puis télécharger chaque URL rendue sous le nom du tableau ;
+2. `GET https://api.figma.com/v1/files/yUuwYSnGX7kSLzYX2rZXIU/nodes?ids=$IDS` pour les styles de texte ;
+3. Inter et IBM Plex Mono depuis `google/fonts` (`ofl/inter/Inter[opsz,wght].ttf`, `ofl/ibmplexmono/IBMPlexMono-Regular.ttf`) ;
+4. `python3 -I scripts/figma-reference-screens.py <svg-bruts> <sortie> nodes.json map.tsv <polices>` (fontTools et brotli requis), `map.tsv` donnant `nœud<TAB>nom` pour chaque ligne du tableau.
 
 | Fichier | Page | Cadre Figma | Nœud | Statut |
 |---|---|---|---|---|
@@ -51,19 +70,6 @@ Pour refaire l'extraction : un token personnel Figma en lecture seule (*File con
 | `openbastion-icones-h-developpement-livraison.svg` | Icônes | H · Icônes — Développement & livraison | `5:1559` | Planche d'icônes : source de `@openbastion/icons` |
 | `openbastion-identite-ressources.svg` | Icônes | 00 · OpenBastion — Identité & ressources | `2039:174` | Planche d'icônes : source de `@openbastion/icons` |
 
-## Maquettes hors Figma
-
-Ces SVG n'ont pas de cadre dans le fichier Figma : ils sont conservés tels quels.
-
-- `openbastion-acces-database-kubernetes.svg`
-- `openbastion-agents-distribues.svg`
-- `openbastion-forensics-recherche.svg`
-- `openbastion-identites-federation.svg`
-- `openbastion-protocoles-etendus.svg`
-- `openbastion-reporting-conformite.svg`
-- `openbastion-risque-anomalies.svg`
-- `openbastion-secrets-dynamiques.svg`
-- `openbastion-workflows-approbations.svg`
 
 ## Règles
 
