@@ -22,9 +22,10 @@ export function FormField({ id, label, description, error, required = false, cla
   const errorId = error ? `${id}-error` : undefined;
   return (
     <div className={cn("ob-form-field", className)}>
-      <Label className="ob-form-field__label" htmlFor={id}>
-        {label}{required ? <span aria-hidden="true"> *</span> : null}
-      </Label>
+      <div className="ob-form-field__label-row">
+        <Label className="ob-form-field__label" htmlFor={id}>{label}</Label>
+        {required ? <span className="ob-form-field__required-marker" aria-hidden="true">*</span> : null}
+      </div>
       {isValidElement(children)
         ? cloneElement(children as ReactElement<Record<string, unknown>>, {
             id,

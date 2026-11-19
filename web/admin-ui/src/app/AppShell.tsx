@@ -21,7 +21,6 @@ import {
   Sun,
   Users,
 } from "@openbastion/icons";
-import { Button } from "../shared/ui/Button";
 import { TokenClaims } from "../shared/api";
 import {
   OperatorPreferences,

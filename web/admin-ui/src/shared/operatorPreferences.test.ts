@@ -32,6 +32,13 @@ describe("operator preferences", () => {
     });
   });
 
+  it("migrates retired destinations to their parent workspaces", () => {
+    expect(parseOperatorPreferences({
+      version: 1,
+      preferences: { defaultTab: "policies", favorites: ["policies", "audit", "sessions"] },
+    })).toMatchObject({ defaultTab: "accounts", favorites: ["accounts", "security", "sessions"] });
+  });
+
   it("rejects unknown versions and invalid values to safe defaults", () => {
     expect(parseOperatorPreferences({ version: 9, preferences: { theme: "dark" } })).toEqual(defaultOperatorPreferences);
     expect(parseOperatorPreferences({

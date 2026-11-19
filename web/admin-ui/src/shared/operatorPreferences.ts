@@ -1,10 +1,8 @@
 export type AdminTab =
   | "overview"
   | "accounts"
-  | "policies"
   | "sessions"
   | "infrastructure"
-  | "audit"
   | "security"
   | "posture"
   | "settings";
@@ -32,14 +30,22 @@ export const defaultOperatorPreferences: OperatorPreferences = {
 const tabs = new Set<AdminTab>([
   "overview",
   "accounts",
-  "policies",
   "sessions",
   "infrastructure",
-  "audit",
   "security",
   "posture",
   "settings",
 ]);
+
+// v1 preferences may outlive the navigation model. Policies and the audit page were moved
+// into their parent workspaces; migrate their old identifiers instead of dropping the preference.
+function normalizeTab(value: unknown): AdminTab | undefined {
+  if (typeof value !== "string") return undefined;
+  if (tabs.has(value as AdminTab)) return value as AdminTab;
+  if (value === "policies") return "accounts";
+  if (value === "audit") return "security";
+  return undefined;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -51,7 +57,7 @@ export function parseOperatorPreferences(value: unknown): OperatorPreferences {
   }
   const candidate = value.preferences;
   const favorites = Array.isArray(candidate.favorites)
-    ? [...new Set(candidate.favorites.filter((item): item is AdminTab => typeof item === "string" && tabs.has(item as AdminTab)))]
+    ? [...new Set(candidate.favorites.map(normalizeTab).filter((item): item is AdminTab => item !== undefined))]
     : [];
   return {
     theme: candidate.theme === "light" || candidate.theme === "dark" || candidate.theme === "system"
@@ -63,9 +69,7 @@ export function parseOperatorPreferences(value: unknown): OperatorPreferences {
     sidebarCollapsed: typeof candidate.sidebarCollapsed === "boolean"
       ? candidate.sidebarCollapsed
       : defaultOperatorPreferences.sidebarCollapsed,
-    defaultTab: typeof candidate.defaultTab === "string" && tabs.has(candidate.defaultTab as AdminTab)
-      ? candidate.defaultTab as AdminTab
-      : defaultOperatorPreferences.defaultTab,
+    defaultTab: normalizeTab(candidate.defaultTab) ?? defaultOperatorPreferences.defaultTab,
     favorites,
   };
 }

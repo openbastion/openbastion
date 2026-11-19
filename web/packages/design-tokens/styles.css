@@ -5575,3 +5575,7 @@ main.login {
   .topology-branch { display: none; }
   .topology-node--target::before { display: none; }
 }
+
+/* Required markers are visual only; the required input attribute carries the semantics. */
+.ob-form-field__label-row { display: flex; align-items: baseline; gap: .2rem; }
+.ob-form-field__required-marker { color: var(--ob-color-status-danger); font-size: .9em; line-height: 1; }

@@ -53,7 +53,7 @@ func startHeadlessChrome(t *testing.T, chrome string) *cdpPage {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(chrome, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu",
-		"--disable-extensions", "--remote-debugging-port=0", "--user-data-dir="+profile, "--window-size=1400,1000", "about:blank")
+		"--disable-extensions", "--no-proxy-server", "--remote-debugging-port=0", "--user-data-dir="+profile, "--window-size=1400,1000", "about:blank")
 	if os.Getuid() == 0 {
 		cmd.Args = append(cmd.Args, "--no-sandbox")
 	}

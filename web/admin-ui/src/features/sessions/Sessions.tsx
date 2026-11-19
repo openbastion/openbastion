@@ -36,9 +36,11 @@ export function Sessions({
   requestedSessionId,
   onSessionLookupComplete,
   initialView = "live",
+  onOpenRecording,
 }: {
   requestedSessionId?: string | null;
   onSessionLookupComplete?: () => void;
+  onOpenRecording?: (sessionId: string) => void;
   initialView?: View;
 } = {}) {
   const { t, i18n } = useAppTranslation();
@@ -339,8 +341,8 @@ export function Sessions({
         </TabsContent>
         <TabsContent value="history"><SessionHistory /></TabsContent>
         <TabsContent value="recordings">
-          <SessionRecordings onOpenRecording={setReplaySessionId} />
-          {replaySessionId ? (
+          <SessionRecordings onOpenRecording={onOpenRecording ?? setReplaySessionId} />
+          {!onOpenRecording && replaySessionId ? (
             <div className="session-recording-replay">
               <RecordingPanel key={replaySessionId} requestedSessionId={replaySessionId} />
             </div>

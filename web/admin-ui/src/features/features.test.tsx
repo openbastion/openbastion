@@ -6,7 +6,7 @@ import { SignedInContext } from "../shared/session";
 import { Accounts } from "./accounts/Accounts";
 import { Recording } from "./audit/Recording";
 import { Sessions } from "./sessions/Sessions";
-import { Policies } from "./policies/Policies";
+import { PolicyForm } from "./policies/Policies";
 import { fakeApi } from "../test-helpers";
 
 const signedIn = (api: Api, node: ReactNode) => render(<SignedInContext.Provider value={{ api, who: null, signOut: () => {} }}>{node}</SignedInContext.Provider>);
@@ -369,7 +369,7 @@ describe("Approval with a ticket (ADR-0067)", () => {
 describe("Policies", () => {
   it("creates a policy with what the form says — the creator is the Gateway's business", async () => {
     const { api, calls } = fakeApi({ "POST /policies": { status: 201, body: {} } });
-    signedIn(api, <Policies />);
+    signedIn(api, <PolicyForm />);
     expect((await screen.findByRole("form", { name: "Créer une politique" })).className).toContain("ob-surface");
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Nom", "dba-on-prod");

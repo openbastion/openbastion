@@ -9,9 +9,7 @@ import { AuditCompliance } from "../features/audit/AuditCompliance";
 import { SecurityCenter } from "../features/security/SecurityCenter";
 import { Infrastructure } from "../features/infrastructure/Infrastructure";
 import { Settings } from "../features/settings/Settings";
-import { Policies } from "../features/policies/Policies";
 import { Sessions } from "../features/sessions/Sessions";
-import { Recording } from "../features/audit/Recording";
 import { LegalNotice } from "../shared/LegalNotice";
 import { AppShell, Tab } from "./AppShell";
 import { readOperatorPreferences } from "../shared/operatorPreferences";
@@ -33,8 +31,8 @@ export function App({
   const api = given ?? own.current!;
   const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(() => readOperatorPreferences().defaultTab);
+  const [accountsInitialView, setAccountsInitialView] = useState<"resources" | "accounts" | "policies" | "requests">("resources");
   const [sessionLookup, setSessionLookup] = useState<string | null>(null);
-  const [recordingLookup, setRecordingLookup] = useState<string | null>(null);
   const onToken = useCallback(
     (t: string) => {
       api.setToken(t);
@@ -42,13 +40,19 @@ export function App({
     },
     [api],
   );
+  const navigateToTab = useCallback((next: Tab | "policies") => {
+    if (next === "policies") {
+      setAccountsInitialView("policies");
+      setTab("accounts");
+      return;
+    }
+    setTab(next);
+  }, []);
   const findSession = useCallback((id: string) => {
     setTab("sessions");
     setSessionLookup(id);
   }, []);
   const clearSessionLookup = useCallback(() => setSessionLookup(null), []);
-  const openRecording = useCallback((id: string) => { setRecordingLookup(id); setTab("audit"); }, []);
-  const clearRecordingLookup = useCallback(() => setRecordingLookup(null), []);
   const signOut = useCallback(() => {
     api.setToken(null);
     setToken(null);
@@ -68,13 +72,11 @@ export function App({
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
       <AppShell who={who} tab={tab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
-        {tab === "overview" && <Overview onNavigate={setTab} />}
-        {tab === "accounts" && <Accounts onNavigate={setTab} />}
-        {tab === "policies" && <Policies />}
-        {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} onOpenRecording={openRecording} />}
-        {tab === "infrastructure" && <Infrastructure onNavigate={setTab} />}
-        {tab === "audit" && <Recording requestedSessionId={recordingLookup} onSessionLookupComplete={clearRecordingLookup} />}
-        {tab === "security" && <AuditCompliance onNavigate={setTab} />}
+        {tab === "overview" && <Overview onNavigate={navigateToTab} />}
+        {tab === "accounts" && <Accounts onNavigate={navigateToTab} initialView={accountsInitialView} />}
+        {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
+        {tab === "infrastructure" && <Infrastructure onNavigate={navigateToTab} />}
+        {tab === "security" && <AuditCompliance onNavigate={navigateToTab} />}
         {tab === "posture" && <SecurityCenter />}
         {tab === "settings" && <Settings />}
       </AppShell>
