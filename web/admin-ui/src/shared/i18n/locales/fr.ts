@@ -897,6 +897,7 @@ export default {
   sessions: {
     live: {
       description: "Consultez les demandes que vous êtes autorisé à décider et recherchez une session par son identifiant. Les sessions actives globales et les flux terminaux ne sont pas exposés par l'API de l'Admin UI.",
+      requestModalDescription: "Demandez un accès privilégié à un compte cible autorisé.",
       newRequest: "Nouvelle demande",
       metricsAria: "État des sessions et des capacités",
       pendingMetric: "Demandes à décider",
@@ -1037,6 +1038,23 @@ export default {
       ticket: "Ticket (si le compte exige une approbation)",
       pendingApproval: "{{id}} en attente de l'approbation d'une autre personne, jusqu'à {{expiresAt}}",
       status: "{{id}} {{status}}",
+      submitting: "Envoi en cours…",
+      cancel: "Annuler",
+      requiredNote: "* Champs obligatoires",
+      accountHelp: "Un compte existant est requis, pas une cible réseau arbitraire.",
+      protocolHelp: "Le protocole doit correspondre au compte cible. Le Broker valide cette correspondance.",
+      durationHelp: "Minimum : 1 minute.",
+      justificationHelp: "Précisez pourquoi cet accès privilégié est nécessaire.",
+      ticketHelp: "128 caractères maximum · aucune validation distante Jira / ServiceNow.",
+      ticketCount: "{{count}}/{{max}}",
+      notApproval: "La création ne vaut ni approbation ni ouverture de session.",
+      errors: {
+        account: "Renseignez le compte cible.",
+        justification: "Une justification explicite est obligatoire.",
+        duration: "Une durée d'au moins une minute est requise.",
+        summary: "Corrigez les champs obligatoires avant l'envoi.",
+        server: "La création n'est pas confirmée. Vos champs sont conservés.",
+      },
     },
     lookup: { title: "Une session", formAria: "Chercher une session", identifier: "Identifiant", show: "Afficher" },
     confirm: {

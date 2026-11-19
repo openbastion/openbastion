@@ -336,7 +336,7 @@ export function Sessions({
                 ? t("sessions.request.pendingApproval", { id: session.id, expiresAt: session.expiresAt })
                 : t("sessions.request.status", { id: session.id, status: session.status }));
               load();
-            }} />
+            }} onCancel={() => setRequestFormOpen(false)} />
           </Modal>
         </TabsContent>
         <TabsContent value="history"><SessionHistory /></TabsContent>
