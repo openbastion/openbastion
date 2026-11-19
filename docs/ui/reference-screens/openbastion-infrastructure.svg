@@ -1,452 +1,222 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-  <defs>
-    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
-    </filter>
-  </defs>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                          -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Background">
-    <rect width="1440" height="1080" fill="#F8FAFC"/>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 2 : BARRE LATÉRALE GAUCHE (SIDEBAR)                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Sidebar">
-    <rect x="0" y="0" width="232" height="1080" fill="#0D2137"/>
-    <line x1="232" y1="0" x2="232" y2="1080" stroke="#1E3A5F" stroke-width="1"/>
-
-    <!-- Logo OpenBastion -->
-    <g id="Sidebar_Logo" transform="translate(20, 22)">
-      <path d="M14 2L3 7v7c0 7.2 4.7 13.9 11 16 6.3-2.1 11-8.8 11-16V7L14 2z" fill="#1E3A5F" stroke="#FFFFFF" stroke-width="1.8"/>
-      <path d="M14 6l-7 3v5c0 4.8 3 9.2 7 10.8 4-1.6 7-6 7-10.8V9l-7-3z" fill="#38BDF8" fill-opacity="0.3"/>
-      <circle cx="14" cy="14" r="2.2" fill="#FFFFFF"/>
-      <text x="38" y="16" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="-0.3">OpenBastion</text>
-      <text x="38" y="29" fill="#64748B" font-size="8.5" font-weight="600" letter-spacing="1.2">PRIVILEGED ACCESS</text>
-    </g>
-
-    <!-- Sélecteur Workspace : Production -->
-    <g id="Sidebar_Workspace_Selector" transform="translate(16, 86)">
-      <rect width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
-      <text x="16" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Production</text>
-      <text x="16" y="42" fill="#94A3B8" font-size="11.5">Acme Corporation</text>
-      <path d="M176 25l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-
-    <!-- Titre section ESPACE DE TRAVAIL -->
-    <text x="20" y="182" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">ESPACE DE TRAVAIL</text>
-
-    <!-- Menu Navigation Principale -->
-    <g id="Sidebar_Nav_Main" transform="translate(12, 196)">
-      <!-- Item : Vue d'ensemble -->
-      <g id="Nav_Vue_Ensemble" transform="translate(0, 0)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none">
-          <rect x="1" y="1" width="6" height="6" rx="1"/>
-          <rect x="10" y="1" width="6" height="6" rx="1"/>
-          <rect x="1" y="10" width="6" height="6" rx="1"/>
-          <rect x="10" y="10" width="6" height="6" rx="1"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Vue d'ensemble</text>
-      </g>
-
-      <!-- Item : Accès privilégiés -->
-      <g id="Nav_Acces" transform="translate(0, 46)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="6" cy="11" r="4"/>
-          <path d="M9 8l6-6M13 4l2 2M15 2l2 2"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Accès privilégiés</text>
-      </g>
-
-      <!-- Item : Sessions (Badge 24) -->
-      <g id="Nav_Sessions" transform="translate(0, 92)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="2" width="15" height="11" rx="2"/>
-          <path d="M5 16h7M8.5 13v3"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
-        <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
-        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">—</text>
-      </g>
-
-      <!-- Item Actif : Infrastructure -->
-      <g id="Nav_Infrastructure" transform="translate(0, 138)">
-        <rect width="208" height="40" rx="8" fill="#133356"/>
-        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
-        <g transform="translate(14, 12)" stroke="#38BDF8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="2" width="15" height="5" rx="1"/>
-          <rect x="1" y="10" width="15" height="5" rx="1"/>
-          <circle cx="4.5" cy="4.5" r="0.6" fill="#38BDF8"/>
-          <circle cx="4.5" cy="12.5" r="0.6" fill="#38BDF8"/>
-        </g>
-        <text x="42" y="25" fill="#FFFFFF" font-size="13" font-weight="600">Infrastructure</text>
-      </g>
-
-      <!-- Item : Audit & conformité -->
-      <g id="Nav_Audit" transform="translate(0, 184)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 3H4a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V4a1 1 0 00-1-1h-2"/>
-          <rect x="6" y="1" width="5" height="3" rx="1"/>
-          <path d="M6 8h5M6 11h5"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Audit &amp; conformité</text>
-      </g>
-
-      <!-- Item : Paramètres -->
-      <g id="Nav_Parametres" transform="translate(0, 230)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8.5" cy="8.5" r="2.5"/>
-          <path d="M8.5 1.5v2M8.5 13.5v2M1.5 8.5h2M13.5 8.5h2M3.5 3.5l1.5 1.5M12 12l1.5 1.5M13.5 3.5L12 5M5 12l-1.5 1.5"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Paramètres</text>
-      </g>
-    </g>
-
-    <!-- Séparateur -->
-    <line x1="20" y1="490" x2="212" y2="490" stroke="#1E3A5F" stroke-width="1"/>
-
-    <!-- Section RESSOURCES -->
-    <text x="20" y="528" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">RESSOURCES</text>
-
-    <g id="Sidebar_Nav_Resources" transform="translate(12, 542)">
-      <!-- Documentation -->
-      <g transform="translate(0, 0)">
-        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 2h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
-          <path d="M10 2v4h4M6 9h5M6 12h3"/>
-        </g>
-        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Documentation</text>
-      </g>
-
-      <!-- Centre d'aide -->
-      <g transform="translate(0, 44)">
-        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8.5" cy="8.5" r="7"/>
-          <path d="M6.5 6.5a2 2 0 013.8.8c0 1.3-1.8 1.8-1.8 3"/>
-          <circle cx="8.5" cy="12.5" r="0.5" fill="#94A3B8"/>
-        </g>
-        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Centre d'aide</text>
-      </g>
-    </g>
-
-    <!-- Carte Statut : Bastion opérationnel -->
-    <g id="Sidebar_Status_Card" transform="translate(16, 868)">
-      <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
-      <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
-      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Santé agrégée non disponible</text>
-      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Aucun contrat de santé public disponible</text>
-      <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
-    </g>
-
-    <!-- Profil Utilisateur : Camille Martin -->
-    <g id="Sidebar_User_Profile" transform="translate(0, 976)">
-      <line x1="0" y1="0" x2="232" y2="0" stroke="#1E3A5F" stroke-width="1"/>
-      <g transform="translate(18, 22)">
-        <circle cx="16" cy="16" r="16" fill="#1E3A5F"/>
-        <circle cx="16" cy="12" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
-        <path d="M8.5 25c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="42" y="14" fill="#FFFFFF" font-size="12.5" font-weight="600">Camille Martin</text>
-        <text x="42" y="30" fill="#94A3B8" font-size="11">Administrateur</text>
-        <path d="M180 13l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 3 : BARRE SUPÉRIEURE (TOPBAR)                                    -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Topbar">
-    <rect x="232" y="0" width="1208" height="64" fill="#FFFFFF"/>
-    <line x1="232" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Fil d'Ariane -->
-    <g id="Topbar_Breadcrumb" transform="translate(264, 37)">
-      <text x="0" y="0" fill="#64748B" font-size="12.5" font-weight="500">Espace de travail</text>
-      <text x="108" y="0" fill="#CBD5E1" font-size="13">/</text>
-      <text x="124" y="0" fill="#0F172A" font-size="12.5" font-weight="600">Infrastructure</text>
-    </g>
-
-    <!-- Champ de recherche -->
-    <g id="Topbar_Search" transform="translate(880, 14)">
-      <rect width="310" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-      <g transform="translate(12, 10)" stroke="#64748B" stroke-width="1.6" fill="none">
-        <circle cx="7" cy="7" r="5.5"/>
-        <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
-      </g>
-      <text x="36" y="23" fill="#64748B" font-size="12.5">Rechercher une ressource...</text>
-      <text x="275" y="22" fill="#94A3B8" font-size="11" font-weight="600">⌘ K</text>
-    </g>
-
-    <!-- Actions droite Topbar -->
-    <g id="Topbar_Actions" transform="translate(1212, 16)">
-      <!-- Icône Aide -->
-      <g transform="translate(0, 7)" stroke="#475569" stroke-width="1.6" fill="none">
-        <circle cx="9" cy="9" r="7.5"/>
-        <path d="M7 7a2 2 0 013.8.8c0 1.4-1.8 1.8-1.8 3" stroke-linecap="round"/>
-        <circle cx="9" cy="13.2" r="0.5" fill="#475569"/>
-      </g>
-      <!-- Icône Notification -->
-      <g transform="translate(44, 7)">
-        <path d="M9 2a5 5 0 00-5 5v3.5L2.5 13h13L14 10.5V7a5 5 0 00-5-5zM7 15a2 2 0 004 0" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="14" cy="4" r="2.8" fill="#2563EB"/>
-      </g>
-      <!-- Badge Production -->
-      <g transform="translate(94, 2)">
-        <rect width="102" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
-        <text x="51" y="18" fill="#2563EB" font-size="12" font-weight="600" text-anchor="middle">Production</text>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 4 : EN-TÊTE DE PAGE                                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Page_Header" transform="translate(264, 96)">
-    <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Infrastructure</text>
-    <text x="0" y="54" fill="#64748B" font-size="13.5">Votre périmètre, connecté et protégé par un bastion unique.</text>
-
-    <!-- Bouton Découvrir des ressources -->
-    <g transform="translate(940, 4)">
-      <rect width="204" height="36" rx="8" fill="#1D63ED"/>
-      <g transform="translate(16, 11)" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M13 6A6 6 0 1011.5 11.5"/>
-        <path d="M13 2v4h-4"/>
-      </g>
-      <text x="38" y="23" fill="#FFFFFF" font-size="13" font-weight="600">Découvrir des ressources</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 5 : CARTES DE MÉTRIQUES (KPI CARDS)                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_KPI_Cards" transform="translate(264, 180)">
-    <!-- Carte 1 : Ressources protégées -->
-    <g id="KPI_Resources" transform="translate(0, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Comptes Vault examinés</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Inventaire non disponible</text>
-    </g>
-
-    <!-- Carte 2 : Connecteurs actifs -->
-    <g id="KPI_Connectors" transform="translate(291, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Connecteurs non évalués</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Non évalué</text>
-    </g>
-
-    <!-- Carte 3 : Bastions déployés -->
-    <g id="KPI_Bastions" transform="translate(582, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Topologie masquée</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Santé non exposée</text>
-    </g>
-
-    <!-- Carte 4 : Disponibilité -->
-    <g id="KPI_Availability" transform="translate(873, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Disponibilité non mesurée</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
-      <text x="20" y="102" fill="#64748B" font-size="11.5">Aucune série de disponibilité</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 6 : TOPOLOGIE DES ACCÈS & SANTÉ DU CLUSTER                       -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Topology_And_Health" transform="translate(264, 326)">
-    <!-- Carte Gauche : Topologie des accès -->
-    <g id="Card_Access_Topology" filter="url(#cardShadow)">
-      <rect width="746" height="314" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-
-      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Périmètre des ressources</text>
-      <text x="24" y="54" fill="#64748B" font-size="12">Les accès cibles passent par les proxys autorisés.</text>
-
-      <!-- Sélecteur Production -->
-      <g transform="translate(626, 18)">
-        <rect width="96" height="30" rx="7" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="14" y="19" fill="#0F172A" font-size="12" font-weight="500">Production</text>
-        <path d="M80 14l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-
-      <!-- Diagramme de Topologie -->
-      <g id="Topology_Diagram" transform="translate(24, 84)">
-        <!-- Lignes de connexion -->
-        <line x1="164" y1="95" x2="236" y2="95" stroke="#2563EB" stroke-width="1.6"/>
-        <path d="M402 95 H464 M464 25 V165 M464 25 H512 M464 95 H512 M464 165 H512" fill="none" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-
-        <!-- Noeud Gauche : 86 identités -->
-        <g transform="translate(0, 58)">
-          <rect width="164" height="74" rx="10" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="18" y="32" fill="#0F172A" font-size="14" font-weight="700">Identités non agrégées</text>
-          <text x="18" y="53" fill="#64748B" font-size="11.5">SSO + MFA</text>
-        </g>
-
-        <!-- Noeud Central : OpenBastion -->
-        <g transform="translate(236, 54)">
-          <rect width="166" height="82" rx="10" fill="#0B1F36"/>
-          <text x="18" y="34" fill="#FFFFFF" font-size="14.5" font-weight="700">OpenBastion</text>
-          <text x="18" y="56" fill="#38BDF8" font-size="11.5" font-weight="500">Topologie non exposée</text>
-        </g>
-
-        <!-- Noeud Droite 1 : Cloud privé -->
-        <g transform="translate(512, 0)">
-          <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Domaine non évalué</text>
-          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
-          <circle cx="166" cy="18" r="3" fill="#2563EB"/>
-        </g>
-
-        <!-- Noeud Droite 2 : Kubernetes -->
-        <g transform="translate(512, 68)">
-          <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Connecteur non évalué</text>
-          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
-          <circle cx="166" cy="18" r="3" fill="#2563EB"/>
-        </g>
-
-        <!-- Noeud Droite 3 : On-premise -->
-        <g transform="translate(512, 136)">
-          <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Domaine non évalué</text>
-          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
-          <circle cx="166" cy="18" r="3" fill="#2563EB"/>
-        </g>
-      </g>
-    </g>
-
-    <!-- Carte Droite : Santé du cluster -->
-    <g id="Card_Cluster_Health" transform="translate(766, 0)" filter="url(#cardShadow)">
-      <rect width="378" height="314" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-
-      <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Santé indisponible</text>
-
-      <!-- Badge Opérationnel -->
-      <g transform="translate(262, 18)">
-        <rect width="92" height="24" rx="6" fill="#EFF6FF"/>
-        <text x="46" y="16" fill="#2563EB" font-size="11" font-weight="600" text-anchor="middle">Inconnu</text>
-      </g>
-
-      <!-- Barre 1 : CPU -->
-      <g transform="translate(24, 86)">
-        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
-        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
-        <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
-        <rect x="0" y="12" width="92" height="5" rx="2.5" fill="#2563EB"/>
-      </g>
-
-      <!-- Barre 2 : Mémoire -->
-      <g transform="translate(24, 146)">
-        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
-        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
-        <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
-        <rect x="0" y="12" width="152" height="5" rx="2.5" fill="#2563EB"/>
-      </g>
-
-      <!-- Barre 3 : Stockage -->
-      <g transform="translate(24, 206)">
-        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
-        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
-        <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
-        <rect x="0" y="12" width="205" height="5" rx="2.5" fill="#2563EB"/>
-      </g>
-
-      <!-- Séparateur + Latence moyenne -->
-      <line x1="24" y1="252" x2="354" y2="252" stroke="#F1F5F9" stroke-width="1"/>
-      <text x="24" y="280" fill="#64748B" font-size="12">Latence non mesurée</text>
-      <text x="354" y="280" fill="#2563EB" font-size="12.5" font-weight="700" text-anchor="end">—</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 7 : TABLEAU CONNECTEURS & SERVICES                               -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Connectors_Table" transform="translate(264, 664)" filter="url(#cardShadow)">
-    <rect width="1144" height="356" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- En-tête carte -->
-    <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Connecteurs &amp; services</text>
-    <text x="1120" y="36" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Gérer les intégrations  →</text>
-
-    <!-- En-tête colonnes -->
-    <rect x="0" y="60" width="1144" height="36" fill="#F8FAFC"/>
-    <line x1="0" y1="60" x2="1144" y2="60" stroke="#F1F5F9" stroke-width="1"/>
-    <line x1="0" y1="96" x2="1144" y2="96" stroke="#E2E8F0" stroke-width="1"/>
-
-    <g transform="translate(24, 82)" fill="#94A3B8" font-size="10.5" font-weight="700" letter-spacing="0.5">
-      <text x="0" y="0">CONNECTEUR</text>
-      <text x="275" y="0">TYPE</text>
-      <text x="462" y="0">RESSOURCES</text>
-      <text x="622" y="0">DERNIÈRE SYNC.</text>
-      <text x="788" y="0">ÉTAT</text>
-    </g>
-
-    <!-- Ligne 1 : AWS · eu-west-3 -->
-    <g transform="translate(24, 126)">
-      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">AWS · eu-west-3</text>
-      <rect x="275" y="-15" width="52" height="22" rx="4" fill="#F1F5F9"/>
-      <text x="301" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cloud</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
-      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 30 s</text>
-      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
-      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
-      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 2 : Azure · France Central -->
-    <g transform="translate(24, 178)">
-      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">Azure · France Central</text>
-      <rect x="275" y="-15" width="52" height="22" rx="4" fill="#F1F5F9"/>
-      <text x="301" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cloud</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
-      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 42 s</text>
-      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
-      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
-      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 3 : Kubernetes · production -->
-    <g transform="translate(24, 230)">
-      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">Kubernetes · production</text>
-      <rect x="275" y="-15" width="56" height="22" rx="4" fill="#F1F5F9"/>
-      <text x="303" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cluster</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
-      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 15 s</text>
-      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
-      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
-      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 4 : VMware · datacenter Paris -->
-    <g transform="translate(24, 282)">
-      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">VMware · datacenter Paris</text>
-      <rect x="275" y="-15" width="76" height="22" rx="4" fill="#F1F5F9"/>
-      <text x="313" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Domaine non évalué</text>
-      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
-      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 28 s</text>
-      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
-      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
-      <line x1="-24" y1="24" x2="1120" y2="24" stroke="#E2E8F0" stroke-width="1"/>
-    </g>
-
-    <!-- Pied de tableau -->
-    <text x="24" y="336" fill="#64748B" font-size="11.5">4 connecteurs d'infrastructure  ·  2 connecteurs d'identité : Keycloak et LDAP</text>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 8 : PIED DE PAGE (FOOTER)                                        -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Footer" transform="translate(264, 1054)">
-    <text x="0" y="0" fill="#94A3B8" font-size="11">Maquette illustrative · aucune télémétrie réelle</text>
-    <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">Découverte automatique toutes les 5 minutes  •  Dernier passage : 14:55</text>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_5_336)">
+<rect width="1440" height="1040" fill="#F4F7FB"/>
+<rect width="232" height="1038" transform="translate(1 1)" fill="#0B1F3B"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="bold" letter-spacing="0em"><tspan x="66" y="46.5455">OpenBastion</tspan></text>
+<text fill="#8DA5C4" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="8" letter-spacing="0em"><tspan x="66" y="61.9091">PRIVILEGED ACCESS</tspan></text>
+<rect x="17" y="101" width="200" height="56" rx="7" fill="#142D4D"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="33" y="123.727">Production</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="33" y="141.5">Acme Corporation</tspan></text>
+<path d="M194.25 123.917L198.333 128L194.25 132.083" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="25" y="200.773">ESPACE DE TRAVAIL</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="242.864">Vue d&#x2019;ensemble</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="290.864">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="338.864">Sessions</tspan></text>
+<rect x="184" y="326" width="24" height="20" rx="4" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="189" y="337.636">24</tspan></text>
+<rect x="13" y="363" width="208" height="42" rx="6" fill="#193D63"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-weight="bold" letter-spacing="0em"><tspan x="57" y="386.864">Infrastructure</tspan></text>
+<rect x="1" y="371" width="3" height="26" rx="1" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="434.864">Audit &#38; conformit&#xe9;</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="530.864">Param&#xe8;tres</tspan></text>
+<rect width="184" height="1" transform="translate(25 581)" fill="#26405E"/>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="25" y="618.773">RESSOURCES</tspan></text>
+<path d="M35.5 642.5H29.5C29.1022 642.5 28.7206 642.658 28.4393 642.939C28.158 643.221 28 643.602 28 644V656C28 656.398 28.158 656.779 28.4393 657.061C28.7206 657.342 29.1022 657.5 29.5 657.5H38.5C38.8978 657.5 39.2794 657.342 39.5607 657.061C39.842 656.779 40 656.398 40 656V647L35.5 642.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M35.5 642.5V647H40M31 650.75H37M31 653.75H34.75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="653.864">Documentation</tspan></text>
+<path d="M40.75 693C40.75 696.728 37.7279 699.75 34 699.75C30.2721 699.75 27.25 696.728 27.25 693C27.25 689.272 30.2721 686.25 34 686.25C37.7279 686.25 40.75 689.272 40.75 693Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M31.75 690.75C31.75 690.153 31.9871 689.581 32.409 689.159C32.831 688.737 33.4033 688.5 34 688.5C34.5967 688.5 35.169 688.737 35.591 689.159C36.0129 689.581 36.25 690.153 36.25 690.75C36.25 692.25 34 692.25 34 694.5M34 696.75H34.0075" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="696.864">Centre d&#x2019;aide</tspan></text>
+<rect x="17" y="847" width="200" height="81" rx="8" fill="#142D4D"/>
+<rect x="31" y="865" width="6" height="6" rx="3" fill="#00D1FF"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="45" y="869.5">Bastion op&#xe9;rationnel</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="31" y="890.773">Tous les services sont disponibles</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="31" y="911.773">v2.8.0  &#x2022;  EU / Paris</tspan></text>
+<rect width="200" height="1" transform="translate(17 951)" fill="#26405E"/>
+<path d="M41.6666 985.333C41.6666 987.635 39.8011 989.5 37.4999 989.5C35.1987 989.5 33.3333 987.635 33.3333 985.333C33.3333 983.032 35.1987 981.167 37.4999 981.167C39.8011 981.167 41.6666 983.032 41.6666 985.333Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<path d="M29.1667 998.875V996.792C29.1667 995.134 29.8252 993.544 30.9973 992.372C32.1694 991.2 33.7591 990.542 35.4167 990.542H39.5834C41.241 990.542 42.8307 991.2 44.0028 992.372C45.1749 993.544 45.8334 995.134 45.8334 996.792V998.875" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="64" y="982.864">Camille Martin</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="64" y="1000.64">Administrateur</tspan></text>
+<path d="M200.875 985.708L204.667 989.5L200.875 993.292" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M28.3333 232.5H32.5C32.9602 232.5 33.3333 232.873 33.3333 233.333V239.167C33.3333 239.627 32.9602 240 32.5 240H28.3333C27.8731 240 27.5 239.627 27.5 239.167V233.333C27.5 232.873 27.8731 232.5 28.3333 232.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M37.5001 232.5H41.6667C42.127 232.5 42.5001 232.873 42.5001 233.333V235.833C42.5001 236.294 42.127 236.667 41.6667 236.667H37.5001C37.0398 236.667 36.6667 236.294 36.6667 235.833V233.333C36.6667 232.873 37.0398 232.5 37.5001 232.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M37.5001 240H41.6667C42.127 240 42.5001 240.373 42.5001 240.833V246.667C42.5001 247.127 42.127 247.5 41.6667 247.5H37.5001C37.0398 247.5 36.6667 247.127 36.6667 246.667V240.833C36.6667 240.373 37.0398 240 37.5001 240Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M28.3333 243.333H32.5C32.9602 243.333 33.3333 243.706 33.3333 244.167V246.667C33.3333 247.127 32.9602 247.5 32.5 247.5H28.3333C27.8731 247.5 27.5 247.127 27.5 246.667V244.167C27.5 243.706 27.8731 243.333 28.3333 243.333Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<g clip-path="url(#clip1_5_336)">
+<path d="M27.1551 292.512C26.8425 292.824 26.6668 293.248 26.6667 293.69V295.5C26.6667 295.721 26.7545 295.933 26.9108 296.089C27.0671 296.246 27.2791 296.333 27.5001 296.333H30.0001C30.2211 296.333 30.4331 296.246 30.5893 296.089C30.7456 295.933 30.8334 295.721 30.8334 295.5V294.667C30.8334 294.446 30.9212 294.234 31.0775 294.077C31.2338 293.921 31.4457 293.833 31.6667 293.833H32.5001C32.7211 293.833 32.9331 293.746 33.0893 293.589C33.2456 293.433 33.3334 293.221 33.3334 293V292.167C33.3334 291.946 33.4212 291.734 33.5775 291.577C33.7338 291.421 33.9457 291.333 34.1667 291.333H34.3101C34.7521 291.333 35.1759 291.158 35.4884 290.845L36.1667 290.167C37.3249 290.57 38.5858 290.569 39.743 290.162C40.9002 289.756 41.8853 288.969 42.537 287.93C43.1888 286.891 43.4688 285.662 43.331 284.443C43.1933 283.224 42.646 282.089 41.7788 281.221C40.9115 280.354 39.7757 279.807 38.557 279.669C37.3383 279.531 36.1089 279.811 35.07 280.463C34.0311 281.115 33.2441 282.1 32.8378 283.257C32.4315 284.414 32.43 285.675 32.8334 286.833L27.1551 292.512Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M38.7499 284.667C38.98 284.667 39.1666 284.48 39.1666 284.25C39.1666 284.02 38.98 283.833 38.7499 283.833C38.5198 283.833 38.3333 284.02 38.3333 284.25C38.3333 284.48 38.5198 284.667 38.7499 284.667Z" fill="#9EB0C7" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<path d="M35.0001 340.167V343.5M43.3334 336.256V338.5C43.3334 338.942 43.1578 339.366 42.8453 339.679C42.5327 339.991 42.1088 340.167 41.6667 340.167H28.3334C27.8914 340.167 27.4675 339.991 27.1549 339.679C26.8423 339.366 26.6667 338.942 26.6667 338.5V330.167C26.6667 329.725 26.8423 329.301 27.1549 328.988C27.4675 328.676 27.8914 328.5 28.3334 328.5H35.5776M31.6667 343.5H38.3334" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M43.3333 331C43.3333 332.381 42.214 333.5 40.8333 333.5C39.4525 333.5 38.3333 332.381 38.3333 331C38.3333 329.619 39.4525 328.5 40.8333 328.5C42.214 328.5 43.3333 329.619 43.3333 331Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<g clip-path="url(#clip2_5_336)">
+<path d="M28.3334 375.667H41.6667C42.5872 375.667 43.3334 376.413 43.3334 377.333V380.667C43.3334 381.587 42.5872 382.333 41.6667 382.333H28.3334C27.4129 382.333 26.6667 381.587 26.6667 380.667V377.333C26.6667 376.413 27.4129 375.667 28.3334 375.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path d="M28.3334 385.667H41.6667C42.5872 385.667 43.3334 386.413 43.3334 387.333V390.667C43.3334 391.587 42.5872 392.333 41.6667 392.333H28.3334C27.4129 392.333 26.6667 391.587 26.6667 390.667V387.333C26.6667 386.413 27.4129 385.667 28.3334 385.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path d="M30 379H30.0083M30 389H30.0083" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+</g>
+<path d="M32.5001 423.667H37.5001C37.9603 423.667 38.3334 424.04 38.3334 424.5V426.167C38.3334 426.627 37.9603 427 37.5001 427H32.5001C32.0398 427 31.6667 426.627 31.6667 426.167V424.5C31.6667 424.04 32.0398 423.667 32.5001 423.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M38.3333 425.333H39.9999C40.4419 425.333 40.8659 425.509 41.1784 425.821C41.491 426.134 41.6666 426.558 41.6666 427V438.667C41.6666 439.109 41.491 439.533 41.1784 439.845C40.8659 440.158 40.4419 440.333 39.9999 440.333H29.9999C29.5579 440.333 29.134 440.158 28.8214 439.845C28.5088 439.533 28.3333 439.109 28.3333 438.667V427C28.3333 426.558 28.5088 426.134 28.8214 425.821C29.134 425.509 29.5579 425.333 29.9999 425.333H31.6666M34.9999 431.167H38.3333M34.9999 435.333H38.3333M31.6666 431.167H31.6749M31.6666 435.333H31.6749" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M33.0594 521.447C33.1053 520.964 33.3297 520.515 33.6887 520.189C34.0476 519.862 34.5154 519.681 35.0007 519.681C35.4859 519.681 35.9537 519.862 36.3127 520.189C36.6716 520.515 36.896 520.964 36.9419 521.447C36.9695 521.759 37.0719 522.06 37.2404 522.324C37.4088 522.588 37.6385 522.807 37.9098 522.964C38.1811 523.12 38.4862 523.209 38.7992 523.223C39.1121 523.237 39.4238 523.175 39.7078 523.043C40.1487 522.842 40.6483 522.813 41.1094 522.961C41.5705 523.109 41.9601 523.423 42.2024 523.843C42.4446 524.262 42.5222 524.756 42.42 525.23C42.3178 525.703 42.0431 526.121 41.6494 526.403C41.3931 526.583 41.1838 526.822 41.0393 527.1C40.8949 527.378 40.8195 527.686 40.8195 528C40.8195 528.313 40.8949 528.621 41.0393 528.899C41.1838 529.177 41.3931 529.416 41.6494 529.596C42.0431 529.878 42.3178 530.296 42.42 530.77C42.5222 531.243 42.4446 531.737 42.2024 532.157C41.9601 532.576 41.5705 532.89 41.1094 533.038C40.6483 533.186 40.1487 533.157 39.7078 532.957C39.4238 532.824 39.1121 532.762 38.7992 532.776C38.4862 532.79 38.1811 532.879 37.9098 533.035C37.6385 533.192 37.4088 533.411 37.2404 533.676C37.0719 533.94 36.9695 534.24 36.9419 534.553C36.896 535.036 36.6716 535.484 36.3127 535.811C35.9537 536.137 35.4859 536.318 35.0007 536.318C34.5154 536.318 34.0476 536.137 33.6887 535.811C33.3297 535.484 33.1053 535.036 33.0594 534.553C33.0319 534.24 32.9295 533.939 32.761 533.675C32.5924 533.411 32.3627 533.191 32.0913 533.035C31.8198 532.878 31.5146 532.789 31.2016 532.776C30.8885 532.762 30.5768 532.824 30.2928 532.957C29.8518 533.157 29.3522 533.186 28.8911 533.038C28.43 532.89 28.0404 532.576 27.7982 532.157C27.5559 531.737 27.4783 531.243 27.5806 530.77C27.6828 530.296 27.9574 529.878 28.3511 529.596C28.6074 529.416 28.8167 529.177 28.9612 528.899C29.1056 528.621 29.181 528.313 29.181 528C29.181 527.686 29.1056 527.378 28.9612 527.1C28.8167 526.822 28.6074 526.583 28.3511 526.403C27.958 526.121 27.6838 525.703 27.5818 525.23C27.4799 524.757 27.5574 524.263 27.7994 523.844C28.0414 523.425 28.4305 523.111 28.8912 522.963C29.3518 522.815 29.8511 522.843 30.2919 523.043C30.5759 523.175 30.8875 523.237 31.2005 523.223C31.5135 523.209 31.8185 523.12 32.0899 522.964C32.3612 522.807 32.5908 522.588 32.7593 522.324C32.9278 522.06 33.0302 521.759 33.0578 521.447" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M37.5 528C37.5 529.381 36.3807 530.5 35 530.5C33.6193 530.5 32.5 529.381 32.5 528C32.5 526.619 33.6193 525.5 35 525.5C36.3807 525.5 37.5 526.619 37.5 528Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M29.6875 33.1562H34.8438V35.9688H45.1562V33.1562H50.3125V43.4688L47.5 48.625L40 53.7812L32.5 48.625L29.6875 43.4688V33.1562ZM40 39.4844C38.9688 39.4844 38.125 40.3281 38.125 41.3594C38.125 42.0625 38.5 42.6719 39.0625 43V45.8125H40.9375V43C41.5 42.6719 41.875 42.0625 41.875 41.3594C41.875 40.3281 41.0312 39.4844 40 39.4844Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M45.1562 33.1562H50.3125V40.6562L47.5 42.5312V35.9688H45.1562V33.1562Z" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="57" y="482.864">S&#xe9;curit&#xe9;</tspan></text>
+<path d="M51.6666 487.333C51.6666 494 46.9999 497.333 41.4533 499.267C41.1628 499.365 40.8473 499.36 40.5599 499.253C34.9999 497.333 30.3333 494 30.3333 487.333V478C30.3333 477.646 30.4737 477.307 30.7238 477.057C30.9738 476.807 31.313 476.667 31.6666 476.667C34.3333 476.667 37.6666 475.067 39.9866 473.04C40.2691 472.799 40.6284 472.666 40.9999 472.666C41.3714 472.666 41.7308 472.799 42.0133 473.04C44.3466 475.08 47.6666 476.667 50.3333 476.667C50.6869 476.667 51.026 476.807 51.2761 477.057C51.5261 477.307 51.6666 477.646 51.6666 478V487.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<path d="M37 486L39.6667 488.667L45 483.333" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<g clip-path="url(#clip3_5_336)">
+<rect width="1208" height="1040" transform="translate(233 1)" fill="#F4F7FB"/>
+<rect width="1208" height="72" transform="translate(233 1)" fill="white"/>
+<rect width="1208" height="1" transform="translate(233 72)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="265" y="39.5">Espace de travail</tspan></text>
+<text fill="#A8B5C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="376" y="39.5">/</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="393" y="39.5">Infrastructure</tspan></text>
+<rect x="878" y="19" width="306" height="36" rx="6" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="916" y="39.5">Rechercher une ressource&#x2026;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1143" y="38.6364">&#x2318; K</tspan></text>
+<path d="M904.875 42.875L901.801 39.8008" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M903.458 35.7917C903.458 38.9213 900.921 41.4583 897.792 41.4583C894.662 41.4583 892.125 38.9213 892.125 35.7917C892.125 32.6621 894.662 30.125 897.792 30.125C900.921 30.125 903.458 32.6621 903.458 35.7917Z" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M1228.75 37C1228.75 40.7279 1225.73 43.75 1222 43.75C1218.27 43.75 1215.25 40.7279 1215.25 37C1215.25 33.2721 1218.27 30.25 1222 30.25C1225.73 30.25 1228.75 33.2721 1228.75 37Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M1219.75 34.75C1219.75 34.1533 1219.99 33.581 1220.41 33.159C1220.83 32.7371 1221.4 32.5 1222 32.5C1222.6 32.5 1223.17 32.7371 1223.59 33.159C1224.01 33.581 1224.25 34.1533 1224.25 34.75C1224.25 36.25 1222 36.25 1222 38.5M1222 40.75H1222.01" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<rect x="1271" y="26" width="5" height="5" rx="2.5" fill="#0B5ED7"/>
+<rect x="1307" y="23" width="107" height="28" rx="5" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1321" y="39.6364">Production</tspan></text>
+<path d="M1265.7 43.75C1265.83 43.978 1266.02 44.1674 1266.25 44.299C1266.48 44.4306 1266.74 44.4999 1267 44.4999C1267.26 44.4999 1267.52 44.4306 1267.75 44.299C1267.98 44.1674 1268.17 43.978 1268.3 43.75M1260.45 39.4945C1260.35 39.6019 1260.28 39.7354 1260.26 39.8789C1260.24 40.0223 1260.26 40.1695 1260.31 40.3025C1260.37 40.4356 1260.47 40.5487 1260.59 40.6281C1260.71 40.7075 1260.86 40.7499 1261 40.75H1273C1273.15 40.7501 1273.29 40.7079 1273.41 40.6286C1273.53 40.5493 1273.63 40.4363 1273.69 40.3034C1273.75 40.1705 1273.76 40.0233 1273.74 39.8798C1273.72 39.7364 1273.65 39.6028 1273.56 39.4952C1272.56 38.467 1271.5 37.3743 1271.5 34C1271.5 32.8065 1271.03 31.6619 1270.18 30.818C1269.34 29.9741 1268.19 29.5 1267 29.5C1265.81 29.5 1264.66 29.9741 1263.82 30.818C1262.97 31.6619 1262.5 32.8065 1262.5 34C1262.5 37.3743 1261.44 38.467 1260.45 39.4945Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<rect width="1208" height="968" transform="translate(233 73)" fill="#F4F7FB"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="27" font-weight="bold" letter-spacing="0em"><tspan x="265" y="129.318">Infrastructure</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="265" y="155.864">Votre p&#xe9;rim&#xe8;tre, connect&#xe9; et prot&#xe9;g&#xe9; par un bastion unique.</tspan></text>
+<rect x="1204" y="106" width="205" height="36" rx="6" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1217" y="126.5">&#x21bb;  D&#xe9;couvrir des ressources</tspan></text>
+<rect x="265.5" y="186.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="265.5" y="186.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="283" y="211.5">Ressources prot&#xe9;g&#xe9;es</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="283" y="251.045">128</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="283" y="273.773">6 environnements</tspan></text>
+<rect x="557.5" y="186.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="557.5" y="186.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="575" y="211.5">Connecteurs actifs</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="575" y="251.045">06</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="575" y="273.773">Tous op&#xe9;rationnels</tspan></text>
+<rect x="849.5" y="186.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="849.5" y="186.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="867" y="211.5">Bastions d&#xe9;ploy&#xe9;s</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="867" y="251.045">03</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="867" y="273.773">Cluster haute disponibilit&#xe9;</tspan></text>
+<rect x="1141.5" y="186.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="1141.5" y="186.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1159" y="211.5">Disponibilit&#xe9;</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="1159" y="251.045">99,98 %</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1159" y="273.773">Sur les 30 derniers jours</tspan></text>
+<rect x="265.5" y="313.5" width="743" height="301" rx="7.5" fill="white"/>
+<rect x="265.5" y="313.5" width="743" height="301" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="bold" letter-spacing="0em"><tspan x="285" y="345.591">Topologie des acc&#xe8;s</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="285" y="367.636">Un acc&#xe8;s v&#xe9;rifi&#xe9;. Aucune connexion directe.</tspan></text>
+<rect x="877" y="330" width="112" height="23" rx="4" fill="#F4F7FB"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="885" y="344.636">Production  &#x2304;</tspan></text>
+<path d="M435 508H507M675 508H739H787M787 431H739V585H787" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#0B5ED7"/>
+<rect x="285.5" y="472.5" width="149" height="74" rx="5.5" fill="#F4F7FB"/>
+<rect x="285.5" y="472.5" width="149" height="74" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" font-weight="bold" letter-spacing="0em"><tspan x="300" y="498.727">86 identit&#xe9;s</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="300" y="522.636">SSO + MFA</tspan></text>
+<rect x="507" y="464" width="168" height="91" rx="7" fill="#0B1F3B"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="bold" letter-spacing="0em"><tspan x="524" y="496.455">OpenBastion</tspan></text>
+<text fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="524" y="520.636">3 n&#x153;uds &#xb7; Zero Trust</tspan></text>
+<rect x="787.5" y="401.5" width="201" height="55" rx="5.5" fill="#F4F7FB"/>
+<rect x="787.5" y="401.5" width="201" height="55" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="802" y="423.864">Cloud priv&#xe9;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="802" y="443.636">62 ressources</tspan></text>
+<rect x="963" y="417" width="6" height="6" rx="3" fill="#0B5ED7"/>
+<rect x="787.5" y="478.5" width="201" height="55" rx="5.5" fill="#F4F7FB"/>
+<rect x="787.5" y="478.5" width="201" height="55" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="802" y="500.864">Kubernetes</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="802" y="520.636">42 ressources</tspan></text>
+<rect x="963" y="494" width="6" height="6" rx="3" fill="#0B5ED7"/>
+<rect x="787.5" y="555.5" width="201" height="55" rx="5.5" fill="#F4F7FB"/>
+<rect x="787.5" y="555.5" width="201" height="55" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="802" y="577.864">On-premise</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="802" y="597.636">24 ressources</tspan></text>
+<rect x="963" y="571" width="6" height="6" rx="3" fill="#0B5ED7"/>
+<rect x="1033.5" y="313.5" width="375" height="301" rx="7.5" fill="white"/>
+<rect x="1033.5" y="313.5" width="375" height="301" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="bold" letter-spacing="0em"><tspan x="1053" y="345.591">Sant&#xe9; du cluster</tspan></text>
+<rect x="1283" y="330" width="106" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1291" y="344.636">Op&#xe9;rationnel</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1053" y="400.5">CPU</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1350" y="400.5">28 %</tspan></text>
+<rect x="1053" y="415" width="336" height="5" rx="2.5" fill="#E2E8F0"/>
+<rect x="1053" y="415" width="94.08" height="5" rx="2.5" fill="#0B5ED7"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1053" y="464.5">M&#xe9;moire</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1350" y="464.5">46 %</tspan></text>
+<rect x="1053" y="479" width="336" height="5" rx="2.5" fill="#E2E8F0"/>
+<rect x="1053" y="479" width="154.56" height="5" rx="2.5" fill="#0B5ED7"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1053" y="528.5">Stockage</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1350" y="528.5">62 %</tspan></text>
+<rect x="1053" y="543" width="336" height="5" rx="2.5" fill="#E2E8F0"/>
+<rect x="1053" y="543" width="208.32" height="5" rx="2.5" fill="#0B5ED7"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1053" y="595.636">Latence moyenne</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1350" y="595.636">12 ms</tspan></text>
+<rect x="265.5" y="639.5" width="1143" height="340" rx="7.5" fill="white"/>
+<rect x="265.5" y="639.5" width="1143" height="340" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="bold" letter-spacing="0em"><tspan x="285" y="672.591">Connecteurs &#38; services</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1249" y="671.636">G&#xe9;rer les int&#xe9;grations  &#x2192;</tspan></text>
+<rect width="1142" height="36" transform="translate(266 697)" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="285" y="719.773">CONNECTEUR</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="565" y="719.773">TYPE</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="748" y="719.773">RESSOURCES</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="907" y="719.773">DERNI&#xc8;RE SYNC.</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1075" y="719.773">&#xc9;TAT</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="285" y="763.5">AWS &#xb7; eu-west-3</tspan></text>
+<rect x="565" y="749" width="90" height="23" rx="4" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="573" y="763.636">Cloud</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="748" y="763.5">38</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="907" y="762.636">Il y a 30 s</tspan></text>
+<rect x="1075" y="749" width="82" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1083" y="763.636">Connect&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1310" y="762.636">Configurer  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(285 784)" fill="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="285" y="811.5">Azure &#xb7; France Central</tspan></text>
+<rect x="565" y="797" width="90" height="23" rx="4" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="573" y="811.636">Cloud</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="748" y="811.5">24</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="907" y="810.636">Il y a 42 s</tspan></text>
+<rect x="1075" y="797" width="82" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1083" y="811.636">Connect&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1310" y="810.636">Configurer  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(285 832)" fill="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="285" y="859.5">Kubernetes &#xb7; production</tspan></text>
+<rect x="565" y="845" width="90" height="23" rx="4" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="573" y="859.636">Cluster</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="748" y="859.5">42</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="907" y="858.636">Il y a 15 s</tspan></text>
+<rect x="1075" y="845" width="82" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1083" y="859.636">Connect&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1310" y="858.636">Configurer  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(285 880)" fill="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="285" y="907.5">VMware &#xb7; datacenter Paris</tspan></text>
+<rect x="565" y="893" width="90" height="23" rx="4" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="573" y="907.636">On-premise</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="748" y="907.5">24</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="907" y="906.636">Il y a 28 s</tspan></text>
+<rect x="1075" y="893" width="82" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1083" y="907.636">Connect&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1310" y="906.636">Configurer  &#x2192;</tspan></text>
+<rect width="1144" height="1" transform="translate(265 941)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="285" y="966.636">4 connecteurs d&#x2019;infrastructure  &#xb7;  2 connecteurs d&#x2019;identit&#xe9; : Keycloak et LDAP</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="265" y="1017.77">Donn&#xe9;es de d&#xe9;monstration</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1023" y="1017.77">D&#xe9;couverte automatique toutes les 5 minutes  &#x2022;  Dernier passage : 14:55</tspan></text>
+</g>
+</g>
+<rect x="0.5" y="0.5" width="1439" height="1039" stroke="black"/>
+<defs>
+<clipPath id="clip0_5_336">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+<clipPath id="clip1_5_336">
+<rect width="20" height="20" fill="white" transform="translate(25 278)"/>
+</clipPath>
+<clipPath id="clip2_5_336">
+<rect width="20" height="20" fill="white" transform="translate(25 374)"/>
+</clipPath>
+<clipPath id="clip3_5_336">
+<rect width="1208" height="1040" fill="white" transform="translate(233 1)"/>
+</clipPath>
+</defs>
 </svg>

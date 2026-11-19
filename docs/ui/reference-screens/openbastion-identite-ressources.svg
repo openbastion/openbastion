@@ -1,0 +1,76 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1600" height="900" fill="white"/>
+<rect width="1600" height="356" fill="#0B1F3B"/>
+<text fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="48" y="46.8636">OPENBASTION  /  DESIGN SYSTEM</tspan></text>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="64" font-weight="bold" letter-spacing="0em"><tspan x="48" y="147.773">Secure Access.&#10;</tspan><tspan x="48" y="224.773">Total Control.</tspan></text>
+<text fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" letter-spacing="0em"><tspan x="51" y="287.545">Le syst&#xe8;me visuel des acc&#xe8;s privil&#xe9;gi&#xe9;s.</tspan></text>
+<text fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="48" y="331.636">01  /  IDENTIT&#xc9;</tspan></text>
+<rect x="876" y="73" width="144" height="144" rx="8" fill="white"/>
+<path d="M904 103H926V115H970V103H992V147L980 169L948 191L916 169L904 147V103ZM948 130C943.6 130 940 133.6 940 138C940 141 941.6 143.6 944 145V157H952V145C954.4 143.6 956 141 956 138C956 133.6 952.4 130 948 130Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M970 103H992V135L980 143V115H970V103Z" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="876" y="242.5">Couleur &#xb7; clair</tspan></text>
+<rect x="1043" y="73" width="144" height="144" rx="8" fill="#142D4D"/>
+<path d="M1071 103H1093V115H1137V103H1159V147L1147 169L1115 191L1083 169L1071 147V103ZM1115 130C1110.6 130 1107 133.6 1107 138C1107 141 1108.6 143.6 1111 145V157H1119V145C1121.4 143.6 1123 141 1123 138C1123 133.6 1119.4 130 1115 130Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M1137 103H1159V135L1147 143V115H1137V103Z" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1043" y="242.5">Couleur &#xb7; sombre</tspan></text>
+<rect x="1210" y="73" width="144" height="144" rx="8" fill="white"/>
+<path d="M1238 103H1260V115H1304V103H1326V147L1314 169L1282 191L1250 169L1238 147V103ZM1282 130C1277.6 130 1274 133.6 1274 138C1274 141 1275.6 143.6 1278 145V157H1286V145C1288.4 143.6 1290 141 1290 138C1290 133.6 1286.4 130 1282 130Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M1304 103H1326V135L1314 143V115H1304V103Z" fill="#0B1F3B"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1210" y="242.5">Mono &#xb7; clair</tspan></text>
+<rect x="1377" y="73" width="144" height="144" rx="8" fill="#142D4D"/>
+<path d="M1405 103H1427V115H1471V103H1493V147L1481 169L1449 191L1417 169L1405 147V103ZM1449 130C1444.6 130 1441 133.6 1441 138C1441 141 1442.6 143.6 1445 145V157H1453V145C1455.4 143.6 1457 141 1457 138C1457 133.6 1453.4 130 1449 130Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M1471 103H1493V135L1481 143V115H1471V103Z" fill="white"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1377" y="242.5">Mono &#xb7; sombre</tspan></text>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="34" font-weight="bold" letter-spacing="0em"><tspan x="922" y="307.864">OpenBastion</tspan></text>
+<text fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="922" y="333.5">Un symbole. Deux th&#xe8;mes. Un m&#xea;me niveau d&#x2019;exigence.</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="22" font-weight="bold" letter-spacing="0em"><tspan x="48" y="416.5">Palette officielle</tspan></text>
+<rect x="48" y="444" width="230" height="66" rx="5" fill="#0B1F3B"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="48" y="535.727">Navy</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="48" y="555.5">#0B1F3B</tspan></text>
+<rect x="302" y="444" width="230" height="66" rx="5" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="302" y="535.727">Cyan</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="302" y="555.5">#00D1FF</tspan></text>
+<rect x="556" y="444" width="230" height="66" rx="5" fill="#0B5ED7"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="556" y="535.727">Blue</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="556" y="555.5">#0B5ED7</tspan></text>
+<rect x="810.5" y="444.5" width="229" height="65" rx="4.5" fill="white"/>
+<rect x="810.5" y="444.5" width="229" height="65" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="810" y="535.727">White</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="810" y="555.5">#FFFFFF</tspan></text>
+<rect x="1064" y="444" width="230" height="66" rx="5" fill="#101F32"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1064" y="535.727">Dark</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1064" y="555.5">#101F32</tspan></text>
+<rect x="1318" y="444" width="230" height="66" rx="5" fill="#64748B"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="1318" y="535.727">Slate</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1318" y="555.5">#64748B</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="22" font-weight="bold" letter-spacing="0em"><tspan x="48" y="618.5">Une grille, huit &#xe9;chelles</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="48" y="644.864">SVG ma&#xee;tre &#xb7; PNG transparent &#xb7; aper&#xe7;us r&#xe9;duits au-del&#xe0; de 64 px</tspan></text>
+<path d="M94.5 711.75H97.25V713.25H102.75V711.75H105.5V717.25L104 720L100 722.75L96 720L94.5 717.25V711.75ZM100 715.125C99.45 715.125 99 715.575 99 716.125C99 716.5 99.2 716.825 99.5 717V718.5H100.5V717C100.8 716.825 101 716.5 101 716.125C101 715.575 100.55 715.125 100 715.125Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M102.75 711.75H105.5V715.75L104 716.75V713.25H102.75V711.75Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="73" y="782.864">16 px</tspan></text>
+<path d="M283.75 709.125H287.875V711.375H296.125V709.125H300.25V717.375L298 721.5L292 725.625L286 721.5L283.75 717.375V709.125ZM292 714.188C291.175 714.188 290.5 714.863 290.5 715.688C290.5 716.25 290.8 716.738 291.25 717V719.25H292.75V717C293.2 716.738 293.5 716.25 293.5 715.688C293.5 714.863 292.825 714.188 292 714.188Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M296.125 709.125H300.25V715.125L298 716.625V711.375H296.125V709.125Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="265" y="782.864">24 px</tspan></text>
+<path d="M473 706.5H478.5V709.5H489.5V706.5H495V717.5L492 723L484 728.5L476 723L473 717.5V706.5ZM484 713.25C482.9 713.25 482 714.15 482 715.25C482 716 482.4 716.65 483 717V720H485V717C485.6 716.65 486 716 486 715.25C486 714.15 485.1 713.25 484 713.25Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M489.5 706.5H495V714.5L492 716.5V709.5H489.5V706.5Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="457" y="782.864">32 px</tspan></text>
+<path d="M659.5 701.25H667.75V705.75H684.25V701.25H692.5V717.75L688 726L676 734.25L664 726L659.5 717.75V701.25ZM676 711.375C674.35 711.375 673 712.725 673 714.375C673 715.5 673.6 716.475 674.5 717V721.5H677.5V717C678.4 716.475 679 715.5 679 714.375C679 712.725 677.65 711.375 676 711.375Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M684.25 701.25H692.5V713.25L688 716.25V705.75H684.25V701.25Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="649" y="782.864">48 px</tspan></text>
+<path d="M846 696H857V702H879V696H890V718L884 729L868 740L852 729L846 718V696ZM868 709.5C865.8 709.5 864 711.3 864 713.5C864 715 864.8 716.3 866 717V723H870V717C871.2 716.3 872 715 872 713.5C872 711.3 870.2 709.5 868 709.5Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M879 696H890V712L884 716V702H879V696Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="841" y="782.864">64 px</tspan></text>
+<path d="M1034.56 692.719H1047.28V699.656H1072.72V692.719H1085.44V718.156L1078.5 730.875L1060 743.594L1041.5 730.875L1034.56 718.156V692.719ZM1060 708.328C1057.46 708.328 1055.38 710.409 1055.38 712.953C1055.38 714.688 1056.3 716.191 1057.69 717V723.938H1062.31V717C1063.7 716.191 1064.62 714.688 1064.62 712.953C1064.62 710.409 1062.54 708.328 1060 708.328Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M1072.72 692.719H1085.44V711.219L1078.5 715.844V699.656H1072.72V692.719Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1033" y="782.864">128 px</tspan></text>
+<path d="M1226.56 692.719H1239.28V699.656H1264.72V692.719H1277.44V718.156L1270.5 730.875L1252 743.594L1233.5 730.875L1226.56 718.156V692.719ZM1252 708.328C1249.46 708.328 1247.38 710.409 1247.38 712.953C1247.38 714.688 1248.3 716.191 1249.69 717V723.938H1254.31V717C1255.7 716.191 1256.62 714.688 1256.62 712.953C1256.62 710.409 1254.54 708.328 1252 708.328Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M1264.72 692.719H1277.44V711.219L1270.5 715.844V699.656H1264.72V692.719Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1225" y="782.864">256 px</tspan></text>
+<path d="M1418.56 692.719H1431.28V699.656H1456.72V692.719H1469.44V718.156L1462.5 730.875L1444 743.594L1425.5 730.875L1418.56 718.156V692.719ZM1444 708.328C1441.46 708.328 1439.38 710.409 1439.38 712.953C1439.38 714.688 1440.3 716.191 1441.69 717V723.938H1446.31V717C1447.7 716.191 1448.62 714.688 1448.62 712.953C1448.62 710.409 1446.54 708.328 1444 708.328Z" fill-rule="evenodd" clip-rule="evenodd" fill="#0B1F3B"/>
+<path d="M1456.72 692.719H1469.44V711.219L1462.5 715.844V699.656H1456.72V692.719Z" fill="#00D1FF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1417" y="782.864">512 px</tspan></text>
+<rect width="1504" height="1" transform="translate(48 812)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="48" y="847.636">EXPORTS</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="132" y="846.864">SVG + PNG : r&#xe9;glages inclus  /  ICO + ICNS : conversion externe requise</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1267" y="848.636">Pictogrammes : base Lucide &#xb7; ISC</tspan></text>
+</svg>

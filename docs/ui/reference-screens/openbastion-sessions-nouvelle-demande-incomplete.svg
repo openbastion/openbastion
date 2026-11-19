@@ -1,0 +1,59 @@
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1440" height="1040" fill="#0B1F3B" fill-opacity="0.52"/>
+<g clip-path="url(#clip0_2044_1013)">
+<rect x="400" y="88" width="640" height="864" rx="8" fill="white"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="22" font-weight="bold" letter-spacing="0em"><tspan x="432" y="138">Nouvelle demande d&#x2019;acc&#xe8;s</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="432" y="168.227">Demandez un acc&#xe8;s privil&#xe9;gi&#xe9; &#xe0; un compte cible autoris&#xe9;.</tspan></text>
+<rect x="972.5" y="112.5" width="35" height="35" rx="4.5" fill="white"/>
+<rect x="972.5" y="112.5" width="35" height="35" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="984" y="133.864">&#xd7;</tspan></text>
+<rect x="400" y="199" width="640" height="1" rx="0.5" fill="#D7E1EF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="432" y="228.227">Compte privil&#xe9;gi&#xe9; / identifiant du compte cible *</tspan></text>
+<rect x="433" y="241" width="574" height="38" rx="4" fill="white"/>
+<rect x="433" y="241" width="574" height="38" rx="4" stroke="#0B5ED7" stroke-width="2"/>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="444" y="264.227">Identifiant du compte privil&#xe9;gi&#xe9;</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="432" y="300.864">Un compte existant est requis, pas une cible r&#xe9;seau arbitraire.</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="432" y="344.227">Protocole *</tspan></text>
+<rect x="432.5" y="356.5" width="275" height="39" rx="4.5" fill="white"/>
+<rect x="432.5" y="356.5" width="275" height="39" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="444" y="380.227">SSH</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="677" y="380.227">&#x2304;</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="732" y="344.227">Dur&#xe9;e demand&#xe9;e (minutes) *</tspan></text>
+<rect x="732.5" y="356.5" width="275" height="39" rx="4.5" fill="white"/>
+<rect x="732.5" y="356.5" width="275" height="39" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="744" y="380.227">30</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="432" y="416.864">Choix : SSH, VNC, RDP &#xb7; minimum : 1 minute.</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="432" y="442.864">Le protocole doit correspondre au compte cible. Le Broker valide cette correspondance.</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="432" y="498.227">Justification *</tspan></text>
+<rect x="432.5" y="510.5" width="575" height="83" rx="4.5" fill="white"/>
+<rect x="432.5" y="510.5" width="575" height="83" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="444" y="536.227">Expliquez le besoin et le p&#xe9;rim&#xe8;tre de votre intervention.</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="432" y="614.864">Pr&#xe9;cisez pourquoi cet acc&#xe8;s privil&#xe9;gi&#xe9; est n&#xe9;cessaire.</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="432" y="658.227">R&#xe9;f&#xe9;rence de ticket (facultatif)</tspan></text>
+<rect x="432.5" y="670.5" width="575" height="39" rx="4.5" fill="white"/>
+<rect x="432.5" y="670.5" width="575" height="39" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="444" y="694.227">Ex. CHG-2026-0142</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="942" y="693.136">0/128</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="432" y="730.864">128 caract&#xe8;res maximum &#xb7; aucune validation distante Jira / ServiceNow.</tspan></text>
+<rect x="432" y="753" width="576" height="54" rx="5" fill="#F4F7FB"/>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="444" y="775.864">La cr&#xe9;ation ne vaut ni approbation ni ouverture de session.</tspan></text>
+<rect x="400" y="812" width="640" height="1" rx="0.5" fill="#D7E1EF"/>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="432" y="838">* Champs obligatoires</tspan></text>
+<rect x="660.5" y="857.5" width="109" height="35" rx="4.5" fill="white"/>
+<rect x="660.5" y="857.5" width="109" height="35" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="672" y="878.864">Annuler</tspan></text>
+<rect x="786" y="857" width="222" height="36" rx="5" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="798" y="878.864">Envoyer la demande</tspan></text>
+<text fill="#526580" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="432" y="925">&#xc9;chap : fermer &#xb7; retour du focus sur &#xab; Nouvelle demande &#xbb;</tspan></text>
+</g>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="400" y="985.864">MAQUETTE &#xb7; Ouvert &#xb7; formulaire incomplet &#xb7; aucune requ&#xea;te r&#xe9;elle</tspan></text>
+<rect x="1048.5" y="904.5" width="261" height="35" rx="4.5" fill="white"/>
+<rect x="1048.5" y="904.5" width="261" height="35" rx="4.5" stroke="#D7E1EF"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1060" y="925.864">Aper&#xe7;u renseign&#xe9; &#xb7; d&#xe9;mo</tspan></text>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="240" y="1017">A11Y &#xc0; IMPL&#xc9;MENTER &#xb7; focus compte cible, Tab / Maj+Tab contenus dans le modal, restitution du focus au d&#xe9;clencheur.</tspan></text>
+<defs>
+<clipPath id="clip0_2044_1013">
+<rect x="400" y="88" width="640" height="864" rx="8" fill="white"/>
+</clipPath>
+</defs>
+</svg>

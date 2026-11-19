@@ -1,504 +1,225 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-  <defs>
-    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
-    </filter>
-  </defs>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                          -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Background">
-    <rect width="1440" height="1080" fill="#F8FAFC"/>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 2 : BARRE LATÉRALE GAUCHE (SIDEBAR)                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Sidebar">
-    <rect x="0" y="0" width="232" height="1080" fill="#0D2137"/>
-    <line x1="232" y1="0" x2="232" y2="1080" stroke="#1E3A5F" stroke-width="1"/>
-
-    <!-- Logo OpenBastion -->
-    <g id="Sidebar_Logo" transform="translate(20, 22)">
-      <path d="M14 2L3 7v7c0 7.2 4.7 13.9 11 16 6.3-2.1 11-8.8 11-16V7L14 2z" fill="#1E3A5F" stroke="#FFFFFF" stroke-width="1.8"/>
-      <path d="M14 6l-7 3v5c0 4.8 3 9.2 7 10.8 4-1.6 7-6 7-10.8V9l-7-3z" fill="#38BDF8" fill-opacity="0.3"/>
-      <circle cx="14" cy="14" r="2.2" fill="#FFFFFF"/>
-      <text x="38" y="16" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="-0.3">OpenBastion</text>
-      <text x="38" y="29" fill="#64748B" font-size="8.5" font-weight="600" letter-spacing="1.2">PRIVILEGED ACCESS</text>
-    </g>
-
-    <!-- Sélecteur Workspace : Production -->
-    <g id="Sidebar_Workspace_Selector" transform="translate(16, 86)">
-      <rect width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
-      <text x="16" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Production</text>
-      <text x="16" y="42" fill="#94A3B8" font-size="11.5">Acme Corporation</text>
-      <path d="M176 25l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-
-    <!-- Titre section ESPACE DE TRAVAIL -->
-    <text x="20" y="182" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">ESPACE DE TRAVAIL</text>
-
-    <!-- Menu Navigation Principale -->
-    <g id="Sidebar_Nav_Main" transform="translate(12, 196)">
-      <!-- Item : Vue d'ensemble -->
-      <g id="Nav_Vue_Ensemble" transform="translate(0, 0)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none">
-          <rect x="1" y="1" width="6" height="6" rx="1"/>
-          <rect x="10" y="1" width="6" height="6" rx="1"/>
-          <rect x="1" y="10" width="6" height="6" rx="1"/>
-          <rect x="10" y="10" width="6" height="6" rx="1"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Vue d'ensemble</text>
-      </g>
-
-      <!-- Item : Accès privilégiés -->
-      <g id="Nav_Acces" transform="translate(0, 46)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="6" cy="11" r="4"/>
-          <path d="M9 8l6-6M13 4l2 2M15 2l2 2"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Accès privilégiés</text>
-      </g>
-
-      <!-- Item : Sessions (Badge 24) -->
-      <g id="Nav_Sessions" transform="translate(0, 92)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="2" width="15" height="11" rx="2"/>
-          <path d="M5 16h7M8.5 13v3"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
-        <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
-        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">24</text>
-      </g>
-
-      <!-- Item : Infrastructure -->
-      <g id="Nav_Infrastructure" transform="translate(0, 138)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="2" width="15" height="5" rx="1"/>
-          <rect x="1" y="10" width="15" height="5" rx="1"/>
-          <circle cx="4.5" cy="4.5" r="0.6" fill="#94A3B8"/>
-          <circle cx="4.5" cy="12.5" r="0.6" fill="#94A3B8"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Infrastructure</text>
-      </g>
-
-      <!-- Item Actif : Audit & conformité -->
-      <g id="Nav_Audit" transform="translate(0, 184)">
-        <rect width="208" height="40" rx="8" fill="#133356"/>
-        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
-        <g transform="translate(14, 12)" stroke="#38BDF8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 3H4a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V4a1 1 0 00-1-1h-2"/>
-          <rect x="6" y="1" width="5" height="3" rx="1"/>
-          <path d="M6 8h5M6 11h5"/>
-        </g>
-        <text x="42" y="25" fill="#FFFFFF" font-size="13" font-weight="600">Audit &amp; conformité</text>
-      </g>
-
-      <!-- Item : Paramètres -->
-      <g id="Nav_Parametres" transform="translate(0, 230)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8.5" cy="8.5" r="2.5"/>
-          <path d="M8.5 1.5v2M8.5 13.5v2M1.5 8.5h2M13.5 8.5h2M3.5 3.5l1.5 1.5M12 12l1.5 1.5M13.5 3.5L12 5M5 12l-1.5 1.5"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Paramètres</text>
-      </g>
-    </g>
-
-    <!-- Séparateur -->
-    <line x1="20" y1="490" x2="212" y2="490" stroke="#1E3A5F" stroke-width="1"/>
-
-    <!-- Section RESSOURCES -->
-    <text x="20" y="528" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">RESSOURCES</text>
-
-    <g id="Sidebar_Nav_Resources" transform="translate(12, 542)">
-      <!-- Documentation -->
-      <g transform="translate(0, 0)">
-        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 2h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
-          <path d="M10 2v4h4M6 9h5M6 12h3"/>
-        </g>
-        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Documentation</text>
-      </g>
-
-      <!-- Centre d'aide -->
-      <g transform="translate(0, 44)">
-        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8.5" cy="8.5" r="7"/>
-          <path d="M6.5 6.5a2 2 0 013.8.8c0 1.3-1.8 1.8-1.8 3"/>
-          <circle cx="8.5" cy="12.5" r="0.5" fill="#94A3B8"/>
-        </g>
-        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Centre d'aide</text>
-      </g>
-    </g>
-
-    <!-- Carte Statut : Bastion opérationnel -->
-    <g id="Sidebar_Status_Card" transform="translate(16, 868)">
-      <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
-      <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
-      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Bastion opérationnel</text>
-      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Tous les services sont disponibles</text>
-      <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
-    </g>
-
-    <!-- Profil Utilisateur : Camille Martin -->
-    <g id="Sidebar_User_Profile" transform="translate(0, 976)">
-      <line x1="0" y1="0" x2="232" y2="0" stroke="#1E3A5F" stroke-width="1"/>
-      <g transform="translate(18, 22)">
-        <circle cx="16" cy="16" r="16" fill="#1E3A5F"/>
-        <circle cx="16" cy="12" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
-        <path d="M8.5 25c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="42" y="14" fill="#FFFFFF" font-size="12.5" font-weight="600">Camille Martin</text>
-        <text x="42" y="30" fill="#94A3B8" font-size="11">Administrateur</text>
-        <path d="M180 13l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 3 : BARRE SUPÉRIEURE (TOPBAR)                                    -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Topbar">
-    <rect x="232" y="0" width="1208" height="64" fill="#FFFFFF"/>
-    <line x1="232" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Fil d'Ariane -->
-    <g id="Topbar_Breadcrumb" transform="translate(264, 37)">
-      <text x="0" y="0" fill="#64748B" font-size="12.5" font-weight="500">Espace de travail</text>
-      <text x="108" y="0" fill="#CBD5E1" font-size="13">/</text>
-      <text x="124" y="0" fill="#0F172A" font-size="12.5" font-weight="600">Audit &amp; conformité</text>
-    </g>
-
-    <!-- Champ Recherche -->
-    <g id="Topbar_Search" transform="translate(880, 14)">
-      <rect width="310" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-      <g transform="translate(12, 10)" stroke="#64748B" stroke-width="1.6" fill="none">
-        <circle cx="7" cy="7" r="5.5"/>
-        <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
-      </g>
-      <text x="36" y="23" fill="#64748B" font-size="12.5">Rechercher une ressource...</text>
-      <text x="275" y="22" fill="#94A3B8" font-size="11" font-weight="600">⌘ K</text>
-    </g>
-
-    <!-- Actions droite -->
-    <g id="Topbar_Actions" transform="translate(1212, 16)">
-      <!-- Aide -->
-      <g transform="translate(0, 7)" stroke="#475569" stroke-width="1.6" fill="none">
-        <circle cx="9" cy="9" r="7.5"/>
-        <path d="M7 7a2 2 0 013.8.8c0 1.4-1.8 1.8-1.8 3" stroke-linecap="round"/>
-        <circle cx="9" cy="13.2" r="0.5" fill="#475569"/>
-      </g>
-      <!-- Notifications -->
-      <g transform="translate(44, 7)">
-        <path d="M9 2a5 5 0 00-5 5v3.5L2.5 13h13L14 10.5V7a5 5 0 00-5-5zM7 15a2 2 0 004 0" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="14" cy="4" r="2.8" fill="#2563EB"/>
-      </g>
-      <!-- Badge Production -->
-      <g transform="translate(94, 2)">
-        <rect width="102" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
-        <text x="51" y="18" fill="#2563EB" font-size="12" font-weight="600" text-anchor="middle">Production</text>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 4 : EN-TÊTE DE PAGE                                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Page_Header" transform="translate(264, 96)">
-    <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Audit &amp; conformité</text>
-    <text x="0" y="54" fill="#64748B" font-size="13.5">Consultation limitée aux projections explicitement autorisées.</text>
-
-    <!-- Bouton : Générer un rapport -->
-    <g id="Btn_Generate_Report" transform="translate(968, 4)">
-      <rect width="176" height="36" rx="8" fill="#1D63DC"/>
-      <g transform="translate(15, 11)" stroke="#FFFFFF" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M6 2v9M3 8l3 3 3-3"/>
-      </g>
-      <text x="34" y="23" fill="#FFFFFF" font-size="13" font-weight="600">Générer un rapport</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 5 : CARTES DE MÉTRIQUES (KPI CARDS)                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_KPI_Cards" transform="translate(264, 182)">
-    <!-- Carte 1 : Événements aujourd'hui -->
-    <g id="KPI_Events" transform="translate(0, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="106" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12" font-weight="500">Événements aujourd'hui</text>
-      <text x="20" y="68" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">Non disponible</text>
-      <text x="20" y="90" fill="#64748B" font-size="11">Chaîne non vérifiable dans l’UI</text>
-    </g>
-
-    <!-- Carte 2 : Sessions journalisées -->
-    <g id="KPI_Logged_Sessions" transform="translate(291, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="106" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12" font-weight="500">Couverture des sessions</text>
-      <text x="20" y="68" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">Non évalué</text>
-      <text x="20" y="90" fill="#64748B" font-size="11">187 sessions aujourd'hui</text>
-    </g>
-
-    <!-- Carte 3 : Accès refusés -->
-    <g id="KPI_Denied_Access" transform="translate(582, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="106" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12" font-weight="500">Accès refusés</text>
-      <text x="20" y="68" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">Non disponible</text>
-      <text x="20" y="90" fill="#64748B" font-size="11">Par les politiques d'accès</text>
-    </g>
-
-    <!-- Carte 4 : Rétention des preuves -->
-    <g id="KPI_Retention" transform="translate(873, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="106" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12" font-weight="500">Rétention</text>
-      <text x="20" y="68" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">Non agrégé</text>
-      <text x="20" y="90" fill="#64748B" font-size="11">Stockage chiffré</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 6 : COUVERTURE DES CONTRÔLES & RECOMMANDATIONS                   -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Controls_And_Recommendations" transform="translate(264, 312)">
-    <!-- Carte Gauche : Couverture des contrôles -->
-    <g id="Card_Control_Coverage" filter="url(#cardShadow)">
-      <rect width="746" height="214" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="24" y="34" fill="#0F172A" font-size="15" font-weight="700">Couverture des contrôles</text>
-      <text x="24" y="54" fill="#64748B" font-size="11.5">Contrôles non évalués · aucune certification affirmée</text>
-
-      <!-- Colonne 1 : ISO 27001 -->
-      <g id="Metric_ISO27001" transform="translate(24, 96)">
-        <text x="0" y="0" fill="#64748B" font-size="11.5" font-weight="600">ISO 27001</text>
-        <text x="0" y="38" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">—</text>
-        <rect x="0" y="56" width="212" height="5" rx="2.5" fill="#E2E8F0"/>
-        <rect x="0" y="56" width="204" height="5" rx="2.5" fill="#1D63DC"/>
-        <text x="0" y="84" fill="#64748B" font-size="11.5">Non évalué</text>
-      </g>
-
-      <!-- Colonne 2 : SOC 2 -->
-      <g id="Metric_SOC2" transform="translate(267, 96)">
-        <text x="0" y="0" fill="#64748B" font-size="11.5" font-weight="600">SOC 2</text>
-        <text x="0" y="38" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">—</text>
-        <rect x="0" y="56" width="212" height="5" rx="2.5" fill="#E2E8F0"/>
-        <rect x="0" y="56" width="208" height="5" rx="2.5" fill="#1D63DC"/>
-        <text x="0" y="84" fill="#64748B" font-size="11.5">Non évalué</text>
-      </g>
-
-      <!-- Colonne 3 : NIS2 -->
-      <g id="Metric_NIS2" transform="translate(510, 96)">
-        <text x="0" y="0" fill="#64748B" font-size="11.5" font-weight="600">NIS2</text>
-        <text x="0" y="38" fill="#0F172A" font-size="30" font-weight="700" letter-spacing="-0.8">—</text>
-        <rect x="0" y="56" width="212" height="5" rx="2.5" fill="#E2E8F0"/>
-        <rect x="0" y="56" width="195" height="5" rx="2.5" fill="#1D63DC"/>
-        <text x="0" y="84" fill="#64748B" font-size="11.5">Non évalué</text>
-      </g>
-    </g>
-
-    <!-- Carte Droite : Recommandations (Dark Card) -->
-    <g id="Card_Recommendations" transform="translate(766, 0)" filter="url(#cardShadow)">
-      <rect width="378" height="214" rx="12" fill="#0B1F36"/>
-      <text x="24" y="34" fill="#FFFFFF" font-size="15" font-weight="700">Recommandations</text>
-
-      <!-- Badge 02 -->
-      <rect x="322" y="18" width="32" height="22" rx="6" fill="#133356" stroke="#1E4976" stroke-width="1"/>
-      <text x="338" y="33" fill="#38BDF8" font-size="11" font-weight="700" text-anchor="middle">—</text>
-
-      <!-- Recommandation 1 -->
-      <g transform="translate(24, 78)">
-        <text x="0" y="0" fill="#FFFFFF" font-size="12.5" font-weight="600">Revoir 2 comptes de service inactifs</text>
-        <text x="0" y="19" fill="#94A3B8" font-size="11">Aucune utilisation depuis plus de 30 jours</text>
-      </g>
-
-      <line x1="24" y1="114" x2="354" y2="114" stroke="#1E3A5F" stroke-width="1"/>
-
-      <!-- Recommandation 2 -->
-      <g transform="translate(24, 146)">
-        <text x="0" y="0" fill="#FFFFFF" font-size="12.5" font-weight="600">Renforcer la politique des exports</text>
-        <text x="0" y="19" fill="#94A3B8" font-size="11">Exiger une approbation pour les transferts</text>
-      </g>
-
-      <!-- Lien Examiner -->
-      <text x="354" y="194" fill="#38BDF8" font-size="11.5" font-weight="600" text-anchor="end">Examiner  →</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 7 : ONGLETS DE NAVIGATION (TABS)                                 -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Tabs" transform="translate(264, 560)">
-    <line x1="0" y1="32" x2="1144" y2="32" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Onglet 1 (Actif) : Journal d'audit -->
-    <g id="Tab_Journal" transform="translate(0, 0)">
-      <text x="0" y="14" fill="#1D63DC" font-size="13" font-weight="600">Journal d'audit</text>
-      <rect x="0" y="30" width="96" height="2.5" fill="#1D63DC"/>
-    </g>
-
-    <!-- Onglet 2 : Rapports -->
-    <g id="Tab_Rapports" transform="translate(132, 0)">
-      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Rapports non disponibles</text>
-    </g>
-
-    <!-- Onglet 3 : Preuves -->
-    <g id="Tab_Preuves" transform="translate(232, 0)">
-      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Vérification réservée à admin-cli</text>
-    </g>
-
-    <!-- Onglet 4 : Politiques de rétention -->
-    <g id="Tab_Retention" transform="translate(326, 0)">
-      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Politiques de rétention</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 8 : JOURNAL D'AUDIT (FILTRES & TABLEAU)                          -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Audit_Log_Table" transform="translate(264, 616)" filter="url(#cardShadow)">
-    <rect width="1144" height="404" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Barre de filtres et recherche -->
-    <g id="Table_Filters" transform="translate(16, 16)">
-      <!-- Recherche -->
-      <rect width="290" height="36" rx="8" fill="#F8FAFC" stroke="#F1F5F9" stroke-width="1"/>
-      <g transform="translate(12, 11)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-        <circle cx="6" cy="6" r="4.5"/>
-        <path d="M9.5 9.5l3 3" stroke-linecap="round"/>
-      </g>
-      <text x="34" y="23" fill="#64748B" font-size="12.5">Recherche générale non disponible</text>
-
-      <!-- Filtre : Aujourd'hui -->
-      <g transform="translate(302, 0)">
-        <rect width="108" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="14" y="23" fill="#0F172A" font-size="12.5" font-weight="500">Aujourd'hui</text>
-        <path d="M88 16l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-
-      <!-- Filtre : Tous les événements -->
-      <g transform="translate(422, 0)">
-        <rect width="154" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="14" y="23" fill="#0F172A" font-size="12.5" font-weight="500">Tous les événements</text>
-        <path d="M134 16l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-
-      <!-- Bouton : Export CSV -->
-      <g transform="translate(1006, 0)">
-        <rect width="106" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <g transform="translate(14, 11)" stroke="#334155" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 2v9M3 8l3 3 3-3"/>
-        </g>
-        <text x="32" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Export non disponible</text>
-      </g>
-    </g>
-
-    <!-- En-tête du tableau -->
-    <rect x="0" y="68" width="1144" height="34" fill="#F8FAFC"/>
-    <line x1="0" y1="68" x2="1144" y2="68" stroke="#F1F5F9" stroke-width="1"/>
-    <line x1="0" y1="102" x2="1144" y2="102" stroke="#E2E8F0" stroke-width="1"/>
-
-    <g id="Table_Columns_Header" transform="translate(24, 89)" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.6">
-      <text x="0" y="0">HORODATAGE</text>
-      <text x="148" y="0">ACTEUR</text>
-      <text x="316" y="0">ÉVÉNEMENT</text>
-      <text x="580" y="0">RESSOURCE</text>
-      <text x="832" y="0">RÉSULTAT</text>
-    </g>
-
-    <!-- Ligne 1 : 14:56:20 -->
-    <g id="Row_1" transform="translate(24, 130)">
-      <text x="0" y="0" fill="#64748B" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">14:56:20</text>
-      <text x="148" y="0" fill="#0F172A" font-size="12.5" font-weight="600">camille.martin</text>
-      <text x="316" y="0" fill="#334155" font-size="12.5">Commande exécutée</text>
-      <text x="580" y="0" fill="#475569" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">srv-prod-web-01</text>
-
-      <!-- Badge Autorisé -->
-      <rect x="832" y="-14" width="88" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="842" y="0" fill="#1D63DC" font-size="11" font-weight="600">Autorisé</text>
-
-      <text x="1096" y="0" fill="#1D63DC" font-size="12" font-weight="600" text-anchor="end">Détails  →</text>
-      <line x1="-24" y1="20" x2="1120" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 2 : 14:52:08 -->
-    <g id="Row_2" transform="translate(24, 178)">
-      <text x="0" y="0" fill="#64748B" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">14:52:08</text>
-      <text x="148" y="0" fill="#0F172A" font-size="12.5" font-weight="600">sarah.dubois</text>
-      <text x="316" y="0" fill="#334155" font-size="12.5">Ouverture de session RDP</text>
-      <text x="580" y="0" fill="#475569" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">win-ad-primary</text>
-
-      <!-- Badge Autorisé -->
-      <rect x="832" y="-14" width="88" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="842" y="0" fill="#1D63DC" font-size="11" font-weight="600">Autorisé</text>
-
-      <text x="1096" y="0" fill="#1D63DC" font-size="12" font-weight="600" text-anchor="end">Détails  →</text>
-      <line x1="-24" y1="20" x2="1120" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 3 : 14:48:36 -->
-    <g id="Row_3" transform="translate(24, 226)">
-      <text x="0" y="0" fill="#64748B" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">14:48:36</text>
-      <text x="148" y="0" fill="#0F172A" font-size="12.5" font-weight="600">svc-backup</text>
-      <text x="316" y="0" fill="#334155" font-size="12.5">Tentative d'accès hors plage</text>
-      <text x="580" y="0" fill="#475569" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">vault-backup-01</text>
-
-      <!-- Badge Refusé -->
-      <rect x="832" y="-14" width="88" height="22" rx="6" fill="#E2E8F0"/>
-      <text x="842" y="0" fill="#0F172A" font-size="11" font-weight="600">Refusé</text>
-
-      <text x="1096" y="0" fill="#1D63DC" font-size="12" font-weight="600" text-anchor="end">Détails  →</text>
-      <line x1="-24" y1="20" x2="1120" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 4 : 14:42:15 -->
-    <g id="Row_4" transform="translate(24, 274)">
-      <text x="0" y="0" fill="#64748B" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">14:42:15</text>
-      <text x="148" y="0" fill="#0F172A" font-size="12.5" font-weight="600">thomas.bernard</text>
-      <text x="316" y="0" fill="#334155" font-size="12.5">Demande d'accès créée</text>
-      <text x="580" y="0" fill="#475569" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">db-postgres-prod</text>
-
-      <!-- Badge En attente -->
-      <rect x="832" y="-14" width="88" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="842" y="0" fill="#1D63DC" font-size="11" font-weight="600">En attente</text>
-
-      <text x="1096" y="0" fill="#1D63DC" font-size="12" font-weight="600" text-anchor="end">Détails  →</text>
-      <line x1="-24" y1="20" x2="1120" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 5 : 14:38:02 -->
-    <g id="Row_5" transform="translate(24, 322)">
-      <text x="0" y="0" fill="#64748B" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">14:38:02</text>
-      <text x="148" y="0" fill="#0F172A" font-size="12.5" font-weight="600">camille.martin</text>
-      <text x="316" y="0" fill="#334155" font-size="12.5">Rotation du secret terminée</text>
-      <text x="580" y="0" fill="#475569" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace">srv-staging-api</text>
-
-      <!-- Badge Succès -->
-      <rect x="832" y="-14" width="88" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="842" y="0" fill="#1D63DC" font-size="11" font-weight="600">Succès</text>
-
-      <text x="1096" y="0" fill="#1D63DC" font-size="12" font-weight="600" text-anchor="end">Détails  →</text>
-    </g>
-
-    <!-- Pied de tableau & Pagination -->
-    <line x1="0" y1="354" x2="1144" y2="354" stroke="#E2E8F0" stroke-width="1"/>
-    <g id="Table_Pagination" transform="translate(24, 382)">
-      <text x="0" y="0" fill="#64748B" font-size="11.5">Projection limitée · verify-chain réservé à admin-cli</text>
-
-      <g transform="translate(970, -14)" font-size="11.5" text-anchor="middle">
-        <text x="8" y="14" fill="#94A3B8">‹</text>
-        <rect x="20" y="-1" width="22" height="22" rx="5" fill="#F1F5F9"/>
-        <text x="31" y="14" fill="#0F172A" font-weight="600">1</text>
-        <text x="53" y="14" fill="#64748B">2</text>
-        <text x="73" y="14" fill="#64748B">3</text>
-        <text x="93" y="14" fill="#94A3B8">...</text>
-        <text x="115" y="14" fill="#64748B">‹</text>
-        <text x="132" y="14" fill="#64748B">›</text>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 9 : PIED DE PAGE (FOOTER)                                        -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Footer" transform="translate(264, 1054)">
-    <text x="0" y="0" fill="#94A3B8" font-size="11">Maquette illustrative · aucune certification ni intégrité UI affirmée</text>
-    <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">Tous les événements sont horodatés et signés  •  UTC+1</text>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_5_427)">
+<rect width="1440" height="1040" fill="#F4F7FB"/>
+<rect width="232" height="1040" fill="#0B1F3B"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="bold" letter-spacing="0em"><tspan x="65" y="45.5455">OpenBastion</tspan></text>
+<text fill="#8DA5C4" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="8" letter-spacing="0em"><tspan x="65" y="60.9091">PRIVILEGED ACCESS</tspan></text>
+<rect x="16" y="100" width="200" height="56" rx="7" fill="#142D4D"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="32" y="122.727">Production</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="32" y="140.5">Acme Corporation</tspan></text>
+<path d="M193.25 122.917L197.333 127L193.25 131.083" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="24" y="199.773">ESPACE DE TRAVAIL</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="241.864">Vue d&#x2019;ensemble</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="289.864">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="337.864">Sessions</tspan></text>
+<rect x="183" y="325" width="24" height="20" rx="4" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="188" y="336.636">24</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="385.864">Infrastructure</tspan></text>
+<rect x="12" y="410" width="208" height="42" rx="6" fill="#193D63"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-weight="bold" letter-spacing="0em"><tspan x="56" y="433.864">Audit &#38; conformit&#xe9;</tspan></text>
+<rect y="418" width="3" height="26" rx="1" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="529.864">Param&#xe8;tres</tspan></text>
+<rect width="184" height="1" transform="translate(24 580)" fill="#26405E"/>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="24" y="617.773">RESSOURCES</tspan></text>
+<path d="M34.5 641.5H28.5C28.1022 641.5 27.7206 641.658 27.4393 641.939C27.158 642.221 27 642.602 27 643V655C27 655.398 27.158 655.779 27.4393 656.061C27.7206 656.342 28.1022 656.5 28.5 656.5H37.5C37.8978 656.5 38.2794 656.342 38.5607 656.061C38.842 655.779 39 655.398 39 655V646L34.5 641.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M34.5 641.5V646H39M30 649.75H36M30 652.75H33.75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="652.864">Documentation</tspan></text>
+<path d="M39.75 692C39.75 695.728 36.7279 698.75 33 698.75C29.2721 698.75 26.25 695.728 26.25 692C26.25 688.272 29.2721 685.25 33 685.25C36.7279 685.25 39.75 688.272 39.75 692Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M30.75 689.75C30.75 689.153 30.9871 688.581 31.409 688.159C31.831 687.737 32.4033 687.5 33 687.5C33.5967 687.5 34.169 687.737 34.591 688.159C35.0129 688.581 35.25 689.153 35.25 689.75C35.25 691.25 33 691.25 33 693.5M33 695.75H33.0075" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="695.864">Centre d&#x2019;aide</tspan></text>
+<rect x="16" y="846" width="200" height="81" rx="8" fill="#142D4D"/>
+<rect x="30" y="864" width="6" height="6" rx="3" fill="#00D1FF"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="44" y="868.5">Bastion op&#xe9;rationnel</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="30" y="889.773">Tous les services sont disponibles</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="30" y="910.773">v2.8.0  &#x2022;  EU / Paris</tspan></text>
+<rect width="200" height="1" transform="translate(16 950)" fill="#26405E"/>
+<path d="M40.6668 984.333C40.6668 986.635 38.8013 988.5 36.5002 988.5C34.199 988.5 32.3335 986.635 32.3335 984.333C32.3335 982.032 34.199 980.167 36.5002 980.167C38.8013 980.167 40.6668 982.032 40.6668 984.333Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<path d="M28.1665 997.875V995.792C28.1665 994.134 28.825 992.544 29.9971 991.372C31.1692 990.2 32.7589 989.542 34.4165 989.542H38.5832C40.2408 989.542 41.8305 990.2 43.0026 991.372C44.1747 992.544 44.8332 994.134 44.8332 995.792V997.875" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="63" y="981.864">Camille Martin</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="63" y="999.636">Administrateur</tspan></text>
+<path d="M199.875 984.708L203.667 988.5L199.875 992.292" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M27.3333 231.5H31.5C31.9602 231.5 32.3333 231.873 32.3333 232.333V238.167C32.3333 238.627 31.9602 239 31.5 239H27.3333C26.8731 239 26.5 238.627 26.5 238.167V232.333C26.5 231.873 26.8731 231.5 27.3333 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M36.4998 231.5H40.6665C41.1267 231.5 41.4998 231.873 41.4998 232.333V234.833C41.4998 235.294 41.1267 235.667 40.6665 235.667H36.4998C36.0396 235.667 35.6665 235.294 35.6665 234.833V232.333C35.6665 231.873 36.0396 231.5 36.4998 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M36.4998 239H40.6665C41.1267 239 41.4998 239.373 41.4998 239.833V245.667C41.4998 246.127 41.1267 246.5 40.6665 246.5H36.4998C36.0396 246.5 35.6665 246.127 35.6665 245.667V239.833C35.6665 239.373 36.0396 239 36.4998 239Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M27.3333 242.333H31.5C31.9602 242.333 32.3333 242.706 32.3333 243.167V245.667C32.3333 246.127 31.9602 246.5 31.5 246.5H27.3333C26.8731 246.5 26.5 246.127 26.5 245.667V243.167C26.5 242.706 26.8731 242.333 27.3333 242.333Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<g clip-path="url(#clip1_5_427)">
+<path d="M26.1548 291.512C25.8423 291.824 25.6666 292.248 25.6665 292.69V294.5C25.6665 294.721 25.7543 294.933 25.9106 295.089C26.0669 295.246 26.2788 295.333 26.4998 295.333H28.9998C29.2209 295.333 29.4328 295.246 29.5891 295.089C29.7454 294.933 29.8332 294.721 29.8332 294.5V293.667C29.8332 293.446 29.921 293.234 30.0772 293.077C30.2335 292.921 30.4455 292.833 30.6665 292.833H31.4998C31.7209 292.833 31.9328 292.746 32.0891 292.589C32.2454 292.433 32.3332 292.221 32.3332 292V291.167C32.3332 290.946 32.421 290.734 32.5772 290.577C32.7335 290.421 32.9455 290.333 33.1665 290.333H33.3098C33.7518 290.333 34.1757 290.158 34.4882 289.845L35.1665 289.167C36.3247 289.57 37.5855 289.569 38.7427 289.162C39.8999 288.756 40.885 287.969 41.5368 286.93C42.1886 285.891 42.4685 284.662 42.3308 283.443C42.193 282.224 41.6458 281.089 40.7785 280.221C39.9113 279.354 38.7754 278.807 37.5567 278.669C36.338 278.531 35.1087 278.811 34.0697 279.463C33.0308 280.115 32.2438 281.1 31.8375 282.257C31.4313 283.414 31.4297 284.675 31.8332 285.833L26.1548 291.512Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M37.7502 283.667C37.9803 283.667 38.1668 283.48 38.1668 283.25C38.1668 283.02 37.9803 282.833 37.7502 282.833C37.52 282.833 37.3335 283.02 37.3335 283.25C37.3335 283.48 37.52 283.667 37.7502 283.667Z" fill="#9EB0C7" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<path d="M33.9998 339.167V342.5M42.3332 335.256V337.5C42.3332 337.942 42.1576 338.366 41.845 338.679C41.5325 338.991 41.1085 339.167 40.6665 339.167H27.3332C26.8911 339.167 26.4672 338.991 26.1547 338.679C25.8421 338.366 25.6665 337.942 25.6665 337.5V329.167C25.6665 328.725 25.8421 328.301 26.1547 327.988C26.4672 327.676 26.8911 327.5 27.3332 327.5H34.5773M30.6665 342.5H37.3332" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M42.3335 330C42.3335 331.381 41.2142 332.5 39.8335 332.5C38.4528 332.5 37.3335 331.381 37.3335 330C37.3335 328.619 38.4528 327.5 39.8335 327.5C41.2142 327.5 42.3335 328.619 42.3335 330Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<g clip-path="url(#clip2_5_427)">
+<path d="M27.3332 374.667H40.6665C41.587 374.667 42.3332 375.413 42.3332 376.333V379.667C42.3332 380.587 41.587 381.333 40.6665 381.333H27.3332C26.4127 381.333 25.6665 380.587 25.6665 379.667V376.333C25.6665 375.413 26.4127 374.667 27.3332 374.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M27.3332 384.667H40.6665C41.587 384.667 42.3332 385.413 42.3332 386.333V389.667C42.3332 390.587 41.587 391.333 40.6665 391.333H27.3332C26.4127 391.333 25.6665 390.587 25.6665 389.667V386.333C25.6665 385.413 26.4127 384.667 27.3332 384.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M29 378H29.0083M29 388H29.0083" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<path d="M31.4998 422.667H36.4998C36.9601 422.667 37.3332 423.04 37.3332 423.5V425.167C37.3332 425.627 36.9601 426 36.4998 426H31.4998C31.0396 426 30.6665 425.627 30.6665 425.167V423.5C30.6665 423.04 31.0396 422.667 31.4998 422.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path d="M37.3335 424.333H39.0002C39.4422 424.333 39.8661 424.509 40.1787 424.821C40.4912 425.134 40.6668 425.558 40.6668 426V437.667C40.6668 438.109 40.4912 438.533 40.1787 438.845C39.8661 439.158 39.4422 439.333 39.0002 439.333H29.0002C28.5581 439.333 28.1342 439.158 27.8217 438.845C27.5091 438.533 27.3335 438.109 27.3335 437.667V426C27.3335 425.558 27.5091 425.134 27.8217 424.821C28.1342 424.509 28.5581 424.333 29.0002 424.333H30.6668M34.0002 430.167H37.3335M34.0002 434.333H37.3335M30.6668 430.167H30.6752M30.6668 434.333H30.6752" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path d="M32.0594 520.447C32.1053 519.964 32.3297 519.515 32.6887 519.189C33.0476 518.862 33.5154 518.681 34.0007 518.681C34.4859 518.681 34.9537 518.862 35.3127 519.189C35.6716 519.515 35.896 519.964 35.9419 520.447C35.9695 520.759 36.0719 521.06 36.2404 521.324C36.4088 521.588 36.6385 521.807 36.9098 521.964C37.1811 522.12 37.4862 522.209 37.7992 522.223C38.1121 522.237 38.4238 522.175 38.7078 522.043C39.1487 521.842 39.6483 521.813 40.1094 521.961C40.5705 522.109 40.9601 522.423 41.2024 522.843C41.4446 523.262 41.5222 523.756 41.42 524.23C41.3178 524.703 41.0431 525.121 40.6494 525.403C40.3931 525.583 40.1838 525.822 40.0393 526.1C39.8949 526.378 39.8195 526.686 39.8195 527C39.8195 527.313 39.8949 527.621 40.0393 527.899C40.1838 528.177 40.3931 528.416 40.6494 528.596C41.0431 528.878 41.3178 529.296 41.42 529.77C41.5222 530.243 41.4446 530.737 41.2024 531.157C40.9601 531.576 40.5705 531.89 40.1094 532.038C39.6483 532.186 39.1487 532.157 38.7078 531.957C38.4238 531.824 38.1121 531.762 37.7992 531.776C37.4862 531.79 37.1811 531.879 36.9098 532.035C36.6385 532.192 36.4088 532.411 36.2404 532.676C36.0719 532.94 35.9695 533.24 35.9419 533.553C35.896 534.036 35.6716 534.484 35.3127 534.811C34.9537 535.137 34.4859 535.318 34.0007 535.318C33.5154 535.318 33.0476 535.137 32.6887 534.811C32.3297 534.484 32.1053 534.036 32.0594 533.553C32.0319 533.24 31.9295 532.939 31.761 532.675C31.5924 532.411 31.3627 532.191 31.0913 532.035C30.8198 531.878 30.5146 531.789 30.2016 531.776C29.8885 531.762 29.5768 531.824 29.2928 531.957C28.8518 532.157 28.3522 532.186 27.8911 532.038C27.43 531.89 27.0404 531.576 26.7982 531.157C26.5559 530.737 26.4783 530.243 26.5806 529.77C26.6828 529.296 26.9574 528.878 27.3511 528.596C27.6074 528.416 27.8167 528.177 27.9612 527.899C28.1056 527.621 28.181 527.313 28.181 527C28.181 526.686 28.1056 526.378 27.9612 526.1C27.8167 525.822 27.6074 525.583 27.3511 525.403C26.958 525.121 26.6838 524.703 26.5818 524.23C26.4799 523.757 26.5574 523.263 26.7994 522.844C27.0414 522.425 27.4305 522.111 27.8912 521.963C28.3518 521.815 28.8511 521.843 29.2919 522.043C29.5759 522.175 29.8875 522.237 30.2005 522.223C30.5135 522.209 30.8185 522.12 31.0899 521.964C31.3612 521.807 31.5908 521.588 31.7593 521.324C31.9278 521.06 32.0302 520.759 32.0578 520.447" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M36.5 527C36.5 528.381 35.3807 529.5 34 529.5C32.6193 529.5 31.5 528.381 31.5 527C31.5 525.619 32.6193 524.5 34 524.5C35.3807 524.5 36.5 525.619 36.5 527Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M28.6875 32.1562H33.8438V34.9688H44.1562V32.1562H49.3125V42.4688L46.5 47.625L39 52.7812L31.5 47.625L28.6875 42.4688V32.1562ZM39 38.4844C37.9688 38.4844 37.125 39.3281 37.125 40.3594C37.125 41.0625 37.5 41.6719 38.0625 42V44.8125H39.9375V42C40.5 41.6719 40.875 41.0625 40.875 40.3594C40.875 39.3281 40.0312 38.4844 39 38.4844Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M44.1562 32.1562H49.3125V39.6562L46.5 41.5312V34.9688H44.1562V32.1562Z" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="481.864">S&#xe9;curit&#xe9;</tspan></text>
+<path d="M50.6668 486.333C50.6668 493 46.0002 496.333 40.4535 498.267C40.163 498.365 39.8475 498.36 39.5602 498.253C34.0002 496.333 29.3335 493 29.3335 486.333V477C29.3335 476.646 29.474 476.307 29.724 476.057C29.9741 475.807 30.3132 475.667 30.6668 475.667C33.3335 475.667 36.6668 474.067 38.9868 472.04C39.2693 471.799 39.6286 471.666 40.0002 471.666C40.3717 471.666 40.731 471.799 41.0135 472.04C43.3468 474.08 46.6668 475.667 49.3335 475.667C49.6871 475.667 50.0263 475.807 50.2763 476.057C50.5264 476.307 50.6668 476.646 50.6668 477V486.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<path d="M36 485L38.6667 487.667L44 482.333" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<g clip-path="url(#clip3_5_427)">
+<rect width="1208" height="1040" transform="translate(232)" fill="#F4F7FB"/>
+<rect width="1208" height="72" transform="translate(232)" fill="white"/>
+<rect width="1208" height="1" transform="translate(232 71)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="264" y="38.5">Espace de travail</tspan></text>
+<text fill="#A8B5C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="375" y="38.5">/</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="392" y="38.5">Audit &#38; conformit&#xe9;</tspan></text>
+<rect x="877" y="18" width="306" height="36" rx="6" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="915" y="38.5">Rechercher une ressource&#x2026;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1142" y="37.6364">&#x2318; K</tspan></text>
+<path d="M903.875 41.875L900.801 38.8008" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M902.458 34.7917C902.458 37.9213 899.921 40.4583 896.792 40.4583C893.662 40.4583 891.125 37.9213 891.125 34.7917C891.125 31.6621 893.662 29.125 896.792 29.125C899.921 29.125 902.458 31.6621 902.458 34.7917Z" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M1227.75 36C1227.75 39.7279 1224.73 42.75 1221 42.75C1217.27 42.75 1214.25 39.7279 1214.25 36C1214.25 32.2721 1217.27 29.25 1221 29.25C1224.73 29.25 1227.75 32.2721 1227.75 36Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M1218.75 33.75C1218.75 33.1533 1218.99 32.581 1219.41 32.159C1219.83 31.7371 1220.4 31.5 1221 31.5C1221.6 31.5 1222.17 31.7371 1222.59 32.159C1223.01 32.581 1223.25 33.1533 1223.25 33.75C1223.25 35.25 1221 35.25 1221 37.5M1221 39.75H1221.01" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<rect x="1270" y="25" width="5" height="5" rx="2.5" fill="#0B5ED7"/>
+<rect x="1306" y="22" width="107" height="28" rx="5" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1320" y="38.6364">Production</tspan></text>
+<path d="M1264.7 42.75C1264.83 42.978 1265.02 43.1674 1265.25 43.299C1265.48 43.4306 1265.74 43.4999 1266 43.4999C1266.26 43.4999 1266.52 43.4306 1266.75 43.299C1266.98 43.1674 1267.17 42.978 1267.3 42.75M1259.45 38.4945C1259.35 38.6019 1259.28 38.7354 1259.26 38.8789C1259.24 39.0223 1259.26 39.1695 1259.31 39.3025C1259.37 39.4356 1259.47 39.5487 1259.59 39.6281C1259.71 39.7075 1259.86 39.7499 1260 39.75H1272C1272.15 39.7501 1272.29 39.7079 1272.41 39.6286C1272.53 39.5493 1272.63 39.4363 1272.69 39.3034C1272.75 39.1705 1272.76 39.0233 1272.74 38.8798C1272.72 38.7364 1272.65 38.6028 1272.56 38.4952C1271.56 37.467 1270.5 36.3743 1270.5 33C1270.5 31.8065 1270.03 30.6619 1269.18 29.818C1268.34 28.9741 1267.19 28.5 1266 28.5C1264.81 28.5 1263.66 28.9741 1262.82 29.818C1261.97 30.6619 1261.5 31.8065 1261.5 33C1261.5 36.3743 1260.44 37.467 1259.45 38.4945Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<rect width="1208" height="968" transform="translate(232 72)" fill="#F4F7FB"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="27" font-weight="bold" letter-spacing="0em"><tspan x="264" y="128.318">Audit &#38; conformit&#xe9;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="264" y="154.864">Une tra&#xe7;abilit&#xe9; compl&#xe8;te. Des preuves toujours disponibles.</tspan></text>
+<rect x="1233" y="105" width="175" height="36" rx="6" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1246" y="125.5">&#x2193;  G&#xe9;n&#xe9;rer un rapport</tspan></text>
+<rect x="264.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="264.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="282" y="210.5">&#xc9;v&#xe9;nements aujourd&#x2019;hui</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="282" y="250.045">1 248</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="282" y="272.773">Journal immuable</tspan></text>
+<rect x="556.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="556.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="574" y="210.5">Sessions journalis&#xe9;es</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="574" y="250.045">100 %</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="574" y="272.773">187 sessions aujourd&#x2019;hui</tspan></text>
+<rect x="848.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="848.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="866" y="210.5">Acc&#xe8;s refus&#xe9;s</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="866" y="250.045">03</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="866" y="272.773">Par les politiques d&#x2019;acc&#xe8;s</tspan></text>
+<rect x="1140.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="1140.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1158" y="210.5">R&#xe9;tention des preuves</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" font-weight="bold" letter-spacing="0em"><tspan x="1158" y="250.045">90 jours</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1158" y="272.773">Stockage chiffr&#xe9;</tspan></text>
+<rect x="264.5" y="312.5" width="743" height="207" rx="7.5" fill="white"/>
+<rect x="264.5" y="312.5" width="743" height="207" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="bold" letter-spacing="0em"><tspan x="284" y="343.591">Couverture des contr&#xf4;les</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="284" y="364.636">Indicateurs internes &#xb7; ne constituent pas une certification</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="284" y="404.5">ISO 27001</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="28" font-weight="bold" letter-spacing="0em"><tspan x="284" y="444.182">96 %</tspan></text>
+<rect x="284" y="463" width="213" height="5" rx="2.5" fill="#E2E8F0"/>
+<rect x="284" y="463" width="204.48" height="5" rx="2.5" fill="#0B5ED7"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="284" y="490.636">24 / 25 contr&#xf4;les</tspan></text>
+<rect width="1" height="103" transform="translate(513 391)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="525" y="404.5">SOC 2</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="28" font-weight="bold" letter-spacing="0em"><tspan x="525" y="444.182">98 %</tspan></text>
+<rect x="525" y="463" width="213" height="5" rx="2.5" fill="#E2E8F0"/>
+<rect x="525" y="463" width="208.74" height="5" rx="2.5" fill="#0B5ED7"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="525" y="490.636">49 / 50 contr&#xf4;les</tspan></text>
+<rect width="1" height="103" transform="translate(754 391)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="766" y="404.5">NIS2</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="28" font-weight="bold" letter-spacing="0em"><tspan x="766" y="444.182">92 %</tspan></text>
+<rect x="766" y="463" width="213" height="5" rx="2.5" fill="#E2E8F0"/>
+<rect x="766" y="463" width="195.96" height="5" rx="2.5" fill="#0B5ED7"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="766" y="490.636">23 / 25 contr&#xf4;les</tspan></text>
+<rect x="1032" y="312" width="376" height="208" rx="8" fill="#0B1F3B"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="bold" letter-spacing="0em"><tspan x="1052" y="343.591">Recommandations</tspan></text>
+<rect x="1354" y="329" width="34" height="23" rx="4" fill="#193D63"/>
+<text fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1362" y="343.636">02</tspan></text>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1052" y="388.864">Revoir 2 comptes de service inactifs</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1052" y="407.636">Aucune utilisation depuis plus de 30 jours</tspan></text>
+<rect width="336" height="1" transform="translate(1052 425)" fill="#2D4667"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1052" y="456.864">Renforcer la politique des exports</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1052" y="476.636">Exiger une approbation pour les transferts</tspan></text>
+<text fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1314" y="505.636">Examiner  &#x2192;</tspan></text>
+<rect width="1144" height="36" transform="translate(264 544)" fill="#F4F7FB"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-weight="bold" letter-spacing="0em"><tspan x="270" y="560.864">Journal d&#x2019;audit</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="439" y="560.864">Rapports</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="608" y="560.864">Preuves</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="777" y="560.864">Politiques de r&#xe9;tention</tspan></text>
+<rect width="1144" height="1" transform="translate(264 579)" fill="#E2E8F0"/>
+<rect width="126" height="3" transform="translate(264 577)" fill="#0B5ED7"/>
+<rect x="264.5" y="604.5" width="1143" height="374" rx="7.5" fill="white"/>
+<rect x="264.5" y="604.5" width="1143" height="374" rx="7.5" stroke="#E2E8F0"/>
+<rect x="284" y="620" width="337" height="35" rx="6" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="296" y="640.5">&#x2315;   Rechercher dans le journal&#x2026;</tspan></text>
+<rect x="633.5" y="620.5" width="128" height="35" rx="5.5" fill="white"/>
+<rect x="633.5" y="620.5" width="128" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="646" y="640.5">Aujourd&#x2019;hui  &#x2304;</tspan></text>
+<rect x="774.5" y="620.5" width="181" height="35" rx="5.5" fill="white"/>
+<rect x="774.5" y="620.5" width="181" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="787" y="640.5">Tous les &#xe9;v&#xe9;nements  &#x2304;</tspan></text>
+<rect x="1267.5" y="620.5" width="120" height="35" rx="5.5" fill="white"/>
+<rect x="1267.5" y="620.5" width="120" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1280" y="640.5">&#x2193;  Export CSV</tspan></text>
+<rect width="1142" height="35" transform="translate(265 673)" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="284" y="693.773">HORODATAGE</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="433" y="693.773">ACTEUR</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="616" y="693.773">&#xc9;V&#xc9;NEMENT</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="889" y="693.773">RESSOURCE</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1155" y="693.773">R&#xc9;SULTAT</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="284" y="736.25">14:56:20</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="433" y="736.5">camille.martin</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="616" y="735.636">Commande ex&#xe9;cut&#xe9;e</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="889" y="736.25">srv-prod-web-01</tspan></text>
+<rect x="1155" y="722" width="89" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1163" y="736.636">Autoris&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1316" y="735.636">D&#xe9;tails  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(284 754)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="284" y="779.25">14:52:08</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="433" y="779.5">sarah.dubois</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="616" y="778.636">Ouverture de session RDP</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="889" y="779.25">win-ad-primary</tspan></text>
+<rect x="1155" y="765" width="89" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1163" y="779.636">Autoris&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1316" y="778.636">D&#xe9;tails  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(284 797)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="284" y="822.25">14:48:36</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="433" y="822.5">svc-backup</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="616" y="821.636">Tentative d&#x2019;acc&#xe8;s hors plage</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="889" y="822.25">vault-backup-01</tspan></text>
+<rect x="1155" y="808" width="89" height="23" rx="4" fill="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1163" y="822.636">Refus&#xe9;</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1316" y="821.636">D&#xe9;tails  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(284 840)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="284" y="865.25">14:42:15</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="433" y="865.5">thomas.bernard</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="616" y="864.636">Demande d&#x2019;acc&#xe8;s cr&#xe9;&#xe9;e</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="889" y="865.25">db-postgres-prod</tspan></text>
+<rect x="1155" y="851" width="89" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1163" y="865.636">En attente</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1316" y="864.636">D&#xe9;tails  &#x2192;</tspan></text>
+<rect width="1104" height="1" transform="translate(284 883)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="284" y="908.25">14:38:02</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="433" y="908.5">camille.martin</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="616" y="907.636">Rotation du secret termin&#xe9;e</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em"><tspan x="889" y="908.25">srv-staging-api</tspan></text>
+<rect x="1155" y="894" width="89" height="23" rx="4" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1163" y="908.636">Succ&#xe8;s</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1316" y="907.636">D&#xe9;tails  &#x2192;</tspan></text>
+<rect width="1144" height="1" transform="translate(264 943)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="284" y="964.773">1&#x2013;5 sur 1 248 &#xe9;v&#xe9;nements  &#x2022;  Int&#xe9;grit&#xe9; v&#xe9;rifi&#xe9;e</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1253" y="963.636">&#x2039;     1     2     3     &#x2026;     &#x203a;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="264" y="1016.77">Donn&#xe9;es de d&#xe9;monstration</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1140" y="1016.77">Tous les &#xe9;v&#xe9;nements sont horodat&#xe9;s et sign&#xe9;s  &#x2022;  UTC+1</tspan></text>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_5_427">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+<clipPath id="clip1_5_427">
+<rect width="20" height="20" fill="white" transform="translate(24 277)"/>
+</clipPath>
+<clipPath id="clip2_5_427">
+<rect width="20" height="20" fill="white" transform="translate(24 373)"/>
+</clipPath>
+<clipPath id="clip3_5_427">
+<rect width="1208" height="1040" fill="white" transform="translate(232)"/>
+</clipPath>
+</defs>
 </svg>

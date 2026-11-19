@@ -1,168 +1,63 @@
-<svg width="1440" height="1024" viewBox="0 0 1440 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      .font-inter { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-      .t-regular { font-weight: 400; }
-      .t-medium { font-weight: 500; }
-      .t-semibold { font-weight: 600; }
-      .t-bold { font-weight: 700; }
-    </style>
-  </defs>
-
-  <!-- ===================================================================== -->
-  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                        -->
-  <!-- ===================================================================== -->
-  <g id="Background-Global">
-    <rect width="1440" height="1024" fill="#F8FAFC"/>
-  </g>
-
-  <!-- ===================================================================== -->
-  <!-- CALQUE 2 : PANNEAU GAUCHE (BRANDING & SÉCURITÉ)                       -->
-  <!-- ===================================================================== -->
-  <g id="Left-Panel">
-    <rect width="560" height="1024" fill="#0B192C"/>
-
-    <!-- Logo OpenBastion -->
-    <g id="Brand-Logo">
-      <path d="M76 58L63 63.5V73.5C63 81.8 68.5 89.2 76 91C83.5 89.2 89 81.8 89 73.5V63.5L76 58Z" fill="#FFFFFF"/>
-      <path d="M76 62L69 65V71C69 75.5 72 79.5 76 80.5C80 79.5 83 75.5 83 71V65L76 62Z" fill="#38BDF8"/>
-      <circle cx="76" cy="70.5" r="2" fill="#0B192C"/>
-      <path d="M76 72.5V75.5" stroke="#0B192C" stroke-width="1.8" stroke-linecap="round"/>
-
-      <text x="110" y="80" fill="#FFFFFF" class="font-inter t-bold" font-size="22">OpenBastion</text>
-      <text x="110" y="99" fill="#8A9BB0" class="font-inter t-semibold" font-size="9.5" letter-spacing="0.06em">PRIVILEGED ACCESS</text>
-    </g>
-
-    <!-- Titre et accroche principale -->
-    <g id="Hero-Copy">
-      <text x="56" y="264" fill="#0EA5E9" class="font-inter t-bold" font-size="10.5" letter-spacing="0.06em">SECURE ACCESS. TOTAL CONTROL.</text>
-
-      <text x="56" y="334" fill="#FFFFFF" class="font-inter t-bold" font-size="38" letter-spacing="-0.02em">Vos accès privilégiés.</text>
-      <text x="56" y="390" fill="#FFFFFF" class="font-inter t-bold" font-size="38" letter-spacing="-0.02em">La confiance en plus.</text>
-
-      <text x="56" y="446" fill="#94A3B8" class="font-inter t-regular" font-size="15">Un point d'entrée unique pour vos infrastructures.</text>
-      <text x="56" y="468" fill="#94A3B8" class="font-inter t-regular" font-size="15">Chaque identité vérifiée, chaque session protégée.</text>
-    </g>
-
-    <!-- Carte : La sécurité, à chaque connexion -->
-    <g id="Security-Features-Card">
-      <rect x="56" y="558" width="448" height="200" rx="10" fill="#13263E"/>
-
-      <!-- Icône Bouclier -->
-      <path d="M96 588L85 592.5V600.5C85 607.5 89.7 613.7 96 615.2C102.3 613.7 107 607.5 107 600.5V592.5L96 588Z" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
-      <text x="120" y="601" fill="#FFFFFF" class="font-inter t-semibold" font-size="15">La sécurité, à chaque connexion</text>
-
-      <!-- Liste des points -->
-      <text x="80" y="652" fill="#CBD5E1" class="font-inter t-regular" font-size="13.5">Authentification multifacteur obligatoire</text>
-      <text x="80" y="686" fill="#CBD5E1" class="font-inter t-regular" font-size="13.5">Sessions chiffrées et intégralement tracées</text>
-      <text x="80" y="720" fill="#CBD5E1" class="font-inter t-regular" font-size="13.5">Accès limités au strict nécessaire</text>
-    </g>
-
-    <!-- Pied de page panneau gauche -->
-    <g id="Left-Panel-Footer">
-      <text x="56" y="896" fill="#CBD5E1" class="font-inter t-semibold" font-size="11" letter-spacing="0.04em">PRODUCTION  /  ACME CORPORATION</text>
-      <text x="56" y="927" fill="#64748B" class="font-inter t-regular" font-size="11.5">v2.8.0  •  Hébergé en Union européenne</text>
-      <text x="56" y="980" fill="#64748B" class="font-inter t-regular" font-size="11.5">© 2026 OpenBastion — GNU Affero General Public License v3.0 (AGPL-3.0-only)</text>
-    </g>
-  </g>
-
-  <!-- ===================================================================== -->
-  <!-- CALQUE 3 : PANNEAU DROIT (VÉRIFICATION MFA)                           -->
-  <!-- ===================================================================== -->
-  <g id="Right-Panel">
-    <!-- Sélecteur de langue en haut à droite -->
-    <g id="Language-Selector">
-      <text x="1332" y="52" text-anchor="end" fill="#64748B" class="font-inter t-regular" font-size="12">Français  ·  FR</text>
-    </g>
-
-    <!-- Conteneur central du formulaire MFA (x=780 à 1220, largeur=440) -->
-    <g id="MFA-Form-Container">
-      <!-- Lien : Retour à la connexion -->
-      <g id="Back-Link">
-        <path d="M790 163H781M781 163L784.5 159.5M781 163L784.5 166.5" stroke="#0F62FE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="798" y="167" fill="#0F62FE" class="font-inter t-medium" font-size="12.5">Retour à la connexion</text>
-      </g>
-
-      <!-- Badge icône Authentification / Smartphone -->
-      <g id="MFA-Icon-Badge">
-        <rect x="780" y="202" width="52" height="52" rx="12" fill="#EBF2FE"/>
-        <!-- Smartphone -->
-        <rect x="798" y="219" width="11" height="18" rx="2" stroke="#0F172A" stroke-width="1.8"/>
-        <!-- Ondes sans contact -->
-        <path d="M813 224.5C814.5 226.5 814.5 229.5 813 231.5" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M816.5 222.5C819 225.8 819 230.2 816.5 233.5" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M820 220.5C823.5 225 823.5 231 820 235.5" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
-      </g>
-
-      <!-- Titre et sous-titre -->
-      <text x="780" y="315" fill="#0F172A" class="font-inter t-bold" font-size="30" letter-spacing="-0.02em">Vérifiez votre identité</text>
-      <text x="780" y="350" fill="#64748B" class="font-inter t-regular" font-size="14">Saisissez le code à 6 chiffres généré par votre</text>
-      <text x="780" y="370" fill="#64748B" class="font-inter t-regular" font-size="14">application d'authentification.</text>
-
-      <!-- Champ : Adresse e-mail du compte -->
-      <g id="Account-Email-Display">
-        <rect x="780" y="400" width="440" height="46" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-        <text x="796" y="428" fill="#0F172A" class="font-inter t-medium" font-size="13.5">camille.martin@acme.com</text>
-      </g>
-
-      <!-- Section : Code de vérification à 6 chiffres -->
-      <g id="OTP-Verification-Section">
-        <text x="780" y="494" fill="#0F172A" class="font-inter t-semibold" font-size="13">Code de vérification</text>
-
-        <!-- 6 Cases OTP (largeur 60px, hauteur 62px, espacement 16px) -->
-        <g id="OTP-Inputs">
-          <!-- Case 1 (Active avec bordure bleue et curseur) -->
-          <rect x="780" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#0F62FE" stroke-width="1.8"/>
-          <line x1="810" y1="528" x2="810" y2="554" stroke="#0F62FE" stroke-width="2" stroke-linecap="round"/>
-
-          <!-- Case 2 -->
-          <rect x="856" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 3 -->
-          <rect x="932" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 4 -->
-          <rect x="1008" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 5 -->
-          <rect x="1084" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 6 -->
-          <rect x="1160" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-        </g>
-
-        <text x="780" y="603" fill="#64748B" class="font-inter t-regular" font-size="12.5">Le code se renouvelle toutes les 30 secondes.</text>
-      </g>
-
-      <!-- Bouton principal : Vérifier et continuer -->
-      <g id="Button-Verify">
-        <rect x="780" y="636" width="440" height="48" rx="8" fill="#0F62FE"/>
-        <text x="1000" y="665" text-anchor="middle" fill="#FFFFFF" class="font-inter t-semibold" font-size="14.5">Vérifier et continuer</text>
-      </g>
-
-      <!-- Lien secondaire : Utiliser un code de récupération -->
-      <g id="Recovery-Code-Link">
-        <text x="1000" y="726" text-anchor="middle" fill="#0F62FE" class="font-inter t-medium" font-size="13">Autre méthode disponible</text>
-      </g>
-
-      <!-- Encart d'assistance MFA -->
-      <g id="MFA-Help-Banner">
-        <rect x="780" y="766" width="440" height="74" rx="10" fill="#EBF2FE"/>
-        <text x="796" y="796" fill="#475569" class="font-inter t-regular" font-size="12.5">Vous n'avez plus accès à votre application ?</text>
-        <text x="796" y="821" fill="#475569" class="font-inter t-regular" font-size="12.5">Contactez votre administrateur pour rétablir l'accès.</text>
-      </g>
-    </g>
-
-    <!-- Pied de page panneau droit -->
-    <g id="Right-Panel-Footer">
-      <line x1="780" y1="886" x2="1220" y2="886" stroke="#E2E8F0" stroke-width="1"/>
-
-      <text x="836" y="944" text-anchor="middle" fill="#64748B" class="font-inter t-regular" font-size="12">Besoin d'aide ?</text>
-      <text x="974" y="944" text-anchor="middle" fill="#64748B" class="font-inter t-medium" font-size="12">Contactez votre administrateur</text>
-
-      <text x="836" y="982" text-anchor="middle" fill="#64748B" class="font-inter t-regular" font-size="11.5">Confidentialité</text>
-      <text x="888" y="982" text-anchor="middle" fill="#CBD5E1" class="font-inter t-regular" font-size="11.5">·</text>
-      <text x="966" y="982" text-anchor="middle" fill="#64748B" class="font-inter t-regular" font-size="11.5">Conditions d'utilisation</text>
-    </g>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_34_36)">
+<rect width="1440" height="1040" fill="#F4F7FB"/>
+<rect width="560" height="1040" fill="#0B1F3B"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="24" font-weight="bold" letter-spacing="0em"><tspan x="110" y="82.2273">OpenBastion</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="111" y="102.136">PRIVILEGED ACCESS</tspan></text>
+<text fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" font-weight="bold" letter-spacing="0em"><tspan x="56" y="268">SECURE ACCESS. TOTAL CONTROL.</tspan></text>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="40" font-weight="bold" letter-spacing="0em"><tspan x="56" y="338.545">Vos acc&#xe8;s privil&#xe9;gi&#xe9;s.&#10;</tspan><tspan x="56" y="396.545">La confiance en plus.</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em"><tspan x="56" y="453.455">Un point d&#x2019;entr&#xe9;e unique pour vos infrastructures.&#10;</tspan><tspan x="56" y="475.455">Chaque identit&#xe9; v&#xe9;rifi&#xe9;e, chaque session prot&#xe9;g&#xe9;e.</tspan></text>
+<rect x="56" y="570" width="448" height="200" rx="12" fill="#142E4D"/>
+<path d="M106.667 611.333C106.667 618 102 621.333 96.4533 623.267C96.1628 623.365 95.8473 623.36 95.5599 623.253C89.9999 621.333 85.3333 618 85.3333 611.333V602C85.3333 601.646 85.4737 601.307 85.7238 601.057C85.9738 600.807 86.313 600.667 86.6666 600.667C89.3333 600.667 92.6666 599.067 94.9866 597.04C95.2691 596.799 95.6284 596.666 95.9999 596.666C96.3714 596.666 96.7308 596.799 97.0133 597.04C99.3466 599.08 102.667 600.667 105.333 600.667C105.687 600.667 106.026 600.807 106.276 601.057C106.526 601.307 106.667 601.646 106.667 602V611.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="bold" letter-spacing="0em"><tspan x="120" y="610.455">La s&#xe9;curit&#xe9;, &#xe0; chaque connexion</tspan></text>
+<text fill="#D0DCEB" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="80" y="662.227">Authentification multifacteur obligatoire</tspan></text>
+<text fill="#D0DCEB" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="80" y="697.227">Sessions chiffr&#xe9;es et int&#xe9;gralement trac&#xe9;es</tspan></text>
+<text fill="#D0DCEB" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="80" y="732.227">Acc&#xe8;s limit&#xe9;s au strict n&#xe9;cessaire</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="56" y="911">PRODUCTION  /  ACME CORPORATION</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="56" y="942">v2.8.0  &#x2022;  H&#xe9;berg&#xe9; en Union europ&#xe9;enne</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="56" y="996">&#xa9; 2026 OpenBastion</tspan></text>
+<path d="M62.25 62.875H69.125V66.625H82.875V62.875H89.75V76.625L86 83.5L76 90.375L66 83.5L62.25 76.625V62.875ZM76 71.3125C74.625 71.3125 73.5 72.4375 73.5 73.8125C73.5 74.75 74 75.5625 74.75 76V79.75H77.25V76C78 75.5625 78.5 74.75 78.5 73.8125C78.5 72.4375 77.375 71.3125 76 71.3125Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M82.875 62.875H89.75V72.875L86 75.375V66.625H82.875V62.875Z" fill="#00D1FF"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="1252" y="52.8636">Fran&#xe7;ais  &#xb7;  FR</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="740" y="959.864">Besoin d&#x2019;aide ?  Contactez votre administrateur</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="778" y="998">Confidentialit&#xe9;     &#xb7;     Conditions d&#x2019;utilisation</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="780" y="169.864">&#x2190;  Retour &#xe0; la connexion</tspan></text>
+<rect x="780.5" y="205.5" width="55" height="55" rx="11.5" fill="#E9F2FF"/>
+<rect x="780.5" y="205.5" width="55" height="55" rx="11.5" stroke="#E9F2FF"/>
+<path d="M800 229H806.667C807.403 229 808 229.597 808 230.333V243.667C808 244.403 807.403 245 806.667 245H800C799.264 245 798.667 244.403 798.667 243.667V230.333C798.667 229.597 799.264 229 800 229Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#0B1F3B"/>
+<path d="M813.333 232.093C814.186 233.588 814.634 235.279 814.634 237C814.634 238.721 814.186 240.412 813.333 241.907M817.947 229.28C819.279 231.635 819.979 234.294 819.979 237C819.979 239.706 819.279 242.365 817.947 244.72M822.547 226.467C824.383 229.673 825.351 233.303 825.353 236.998C825.355 240.693 824.393 244.325 822.56 247.533" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#0B1F3B"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="30" font-weight="bold" letter-spacing="0em"><tspan x="780" y="319.909">V&#xe9;rifiez votre identit&#xe9;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em"><tspan x="780" y="356.091">Saisissez le code &#xe0; 6 chiffres g&#xe9;n&#xe9;r&#xe9; par votre&#10;</tspan><tspan x="780" y="376.091">application d&#x2019;authentification.</tspan></text>
+<rect x="780.5" y="405.5" width="439" height="47" rx="7.5" fill="white"/>
+<rect x="780.5" y="405.5" width="439" height="47" rx="7.5" stroke="#DCE4EF"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="796" y="433.227">camille.martin@acme.com</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="780" y="501.227">Code de v&#xe9;rification</tspan></text>
+<rect x="780.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="780.5" y="518.5" width="59" height="63" rx="7.5" stroke="#0B5ED7"/>
+<rect width="2" height="26" transform="translate(809 537)" fill="#0B5ED7"/>
+<rect x="856.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="856.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+<rect x="932.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="932.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+<rect x="1008.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="1008.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+<rect x="1084.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="1084.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+<rect x="1160.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="1160.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="780" y="611.864">Le code se renouvelle toutes les 30 secondes.</tspan></text>
+<rect x="780.5" y="646.5" width="439" height="47" rx="7.5" fill="#0B5ED7"/>
+<rect x="780.5" y="646.5" width="439" height="47" rx="7.5" stroke="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" font-weight="bold" letter-spacing="0em"><tspan x="932.427" y="674.091">V&#xe9;rifier et continuer</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="900.57" y="737.227">Utiliser un code de r&#xe9;cup&#xe9;ration</tspan></text>
+<rect x="780.5" y="780.5" width="439" height="76" rx="7.5" fill="#E9F2FF"/>
+<rect x="780.5" y="780.5" width="439" height="76" rx="7.5" stroke="#E9F2FF"/>
+<text fill="#365477" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="796" y="807.864">Vous n&#x2019;avez plus acc&#xe8;s &#xe0; votre application ?</tspan></text>
+<text fill="#365477" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="796" y="833.864">Contactez votre administrateur pour r&#xe9;tablir l&#x2019;acc&#xe8;s.</tspan></text>
+</g>
+<defs>
+<clipPath id="clip0_34_36">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+</defs>
 </svg>

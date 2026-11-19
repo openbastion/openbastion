@@ -1,255 +1,226 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080">
-  <defs>
-    <style>
-      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-      .font-mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }
-    </style>
-  </defs>
-
-
-  <g id="Layer_Background">
-    <rect x="0" y="0" width="1440" height="1080" fill="#F8FAFC" />
-  </g>
-
-
-  <g id="Layer_Sidebar">
-    <rect x="0" y="0" width="240" height="1080" fill="#0B1E33" />
-
-
-    <g id="Sidebar_Brand" transform="translate(20, 24)">
-      <path d="M16 2 L28 7 V16 C28 24 22.8 30.8 16 33 C9.2 30.8 4 24 4 16 V7 L16 2 Z" fill="#1E3A5F" stroke="#38BDF8" stroke-width="1.5" />
-      <path d="M16 7 L23 10 V16 C23 21 20 25.5 16 27 C12 25.5 9 21 9 16 V10 L16 7 Z" fill="#0F2942" />
-      <circle cx="16" cy="15.5" r="2.2" fill="#E2E8F0" />
-      <path d="M14.8 17.5 L17.2 17.5 L17.8 21.5 L14.2 21.5 Z" fill="#E2E8F0" />
-      <text x="40" y="18" class="font-sans" font-size="16" font-weight="700" fill="#FFFFFF">OpenBastion</text>
-      <text x="40" y="30" class="font-sans" font-size="8" font-weight="600" letter-spacing="1.2" fill="#64748B">PRIVILEGED ACCESS</text>
-    </g>
-
-
-    <g id="Sidebar_WorkspaceSwitcher" transform="translate(16, 84)">
-      <rect x="0" y="0" width="208" height="58" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1" />
-      <text x="14" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Production</text>
-      <text x="14" y="43" class="font-sans" font-size="11" fill="#94A3B8">Acme Corporation</text>
-      <path d="M188 25 L193 29 L188 33" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-    </g>
-
-
-    <g id="Sidebar_Nav_Workspace" transform="translate(0, 172)">
-      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">ESPACE DE TRAVAIL</text>
-
-
-      <g id="Nav_Overview" transform="translate(12, 16)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <rect x="0" y="0" width="6" height="6" rx="1" />
-          <rect x="9" y="0" width="6" height="6" rx="1" />
-          <rect x="0" y="9" width="6" height="6" rx="1" />
-          <rect x="9" y="9" width="6" height="6" rx="1" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Vue d'ensemble</text>
-      </g>
-
-
-      <g id="Nav_PrivilegedAccess" transform="translate(12, 62)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <circle cx="5" cy="5" r="3.5" />
-          <path d="M7.5 7.5 L15 15 M12 12 L14.5 9.5 M14 14 L16 12" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Accès privilégiés</text>
-      </g>
-
-
-      <g id="Nav_Sessions_Active" transform="translate(12, 108)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="#153254" />
-        <rect x="0" y="4" width="3.5" height="32" rx="1.5" fill="#38BDF8" />
-        <g transform="translate(12, 12)" stroke="#38BDF8" stroke-width="1.5" fill="none">
-          <rect x="0" y="1" width="16" height="11" rx="1.5" />
-          <path d="M5 15 H11 M8 12 V15" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Sessions</text>
-        <rect x="176" y="10" width="28" height="20" rx="4" fill="#1D63ED" />
-        <text x="190" y="24" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#FFFFFF">24</text>
-      </g>
-
-
-      <g id="Nav_Infrastructure" transform="translate(12, 154)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <rect x="1" y="1" width="14" height="5" rx="1" />
-          <rect x="1" y="9" width="14" height="5" rx="1" />
-          <circle cx="4" cy="3.5" r="0.7" fill="#94A3B8" />
-          <circle cx="4" cy="11.5" r="0.7" fill="#94A3B8" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Infrastructure</text>
-      </g>
-
-
-      <g id="Nav_Audit" transform="translate(12, 200)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <path d="M3 1 H11 L14 4 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z" />
-          <path d="M5 8 L7 10 L11 6" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Audit &amp; conformité</text>
-      </g>
-
-
-      <g id="Nav_Settings" transform="translate(12, 246)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <circle cx="8" cy="8" r="2.5" />
-          <path d="M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15 M3 3 L4.5 4.5 M11.5 11.5 L13 13 M13 3 L11.5 4.5 M4.5 11.5 L3 13" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Paramètres</text>
-      </g>
-    </g>
-
-
-    <line x1="20" y1="485" x2="220" y2="485" stroke="#1E3A5F" stroke-width="1" />
-
-
-    <g id="Sidebar_Nav_Resources" transform="translate(0, 515)">
-      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">RESSOURCES</text>
-
-
-      <g id="Nav_Docs" transform="translate(12, 16)">
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <path d="M3 1 H10 L14 5 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z" />
-          <path d="M5 7 H11 M5 10 H11 M5 13 H8" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Documentation</text>
-      </g>
-
-
-      <g id="Nav_Help" transform="translate(12, 60)">
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <circle cx="8" cy="8" r="6.5" />
-          <path d="M6.2 6.2 C6.2 5 7 4.3 8 4.3 C9 4.3 9.8 5 9.8 6 C9.8 7 8 7.5 8 8.8" />
-          <circle cx="8" cy="11.2" r="0.6" fill="#94A3B8" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Centre d'aide</text>
-      </g>
-    </g>
-
-
-    <g id="Sidebar_StatusCard" transform="translate(16, 875)">
-      <rect x="0" y="0" width="208" height="78" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1" />
-      <circle cx="16" cy="20" r="3.5" fill="#38BDF8" />
-      <text x="27" y="24" class="font-sans" font-size="11.5" font-weight="600" fill="#FFFFFF">Bastion opérationnel</text>
-      <text x="14" y="43" class="font-sans" font-size="10.5" fill="#94A3B8">Tous les services sont disponibles</text>
-      <text x="14" y="62" class="font-sans" font-size="10" fill="#64748B">v2.8.0  •  EU / Paris</text>
-    </g>
-
-
-    <g id="Sidebar_UserProfile" transform="translate(0, 975)">
-      <line x1="0" y1="0" x2="240" y2="0" stroke="#1E3A5F" stroke-width="1" />
-      <g transform="translate(20, 22)">
-        <circle cx="14" cy="10" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
-        <path d="M5 25 C5 19.5 9 17 14 17 C19 17 23 19.5 23 25" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
-        <text x="38" y="14" class="font-sans" font-size="12.5" font-weight="600" fill="#FFFFFF">Camille Martin</text>
-        <text x="38" y="30" class="font-sans" font-size="11" fill="#94A3B8">Administrateur</text>
-        <path d="M192 14 L197 18 L192 22" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      </g>
-    </g>
-  </g>
-
-
-  <g id="Layer_TopHeader">
-    <rect x="240" y="0" width="1200" height="64" fill="#FFFFFF" />
-    <line x1="240" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1" />
-
-
-    <g id="Header_Breadcrumbs" transform="translate(272, 37)">
-      <text x="0" y="0" class="font-sans" font-size="13" fill="#64748B">Espace de travail</text>
-      <text x="112" y="0" class="font-sans" font-size="13" fill="#CBD5E1">/</text>
-      <text x="128" y="0" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Sessions</text>
-    </g>
-
-
-    <g id="Header_Search" transform="translate(880, 15)">
-      <rect x="0" y="0" width="300" height="34" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
-      <circle cx="17" cy="16" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
-      <line x1="21" y1="20" x2="24" y2="23" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
-      <text x="34" y="21" class="font-sans" font-size="12.5" fill="#94A3B8">Rechercher une ressource...</text>
-      <text x="272" y="21" class="font-sans" font-size="11" font-weight="500" fill="#94A3B8">⌘ K</text>
-    </g>
-
-
-    <g id="Header_Actions" transform="translate(1204, 15)">
-
-      <circle cx="16" cy="17" r="8" fill="none" stroke="#64748B" stroke-width="1.5" />
-      <text x="16" y="21" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#64748B">?</text>
-
-
-      <g transform="translate(46, 8)">
-        <path d="M9 2 C6.2 2 4 4.2 4 7 V11 L2.5 13 H15.5 L14 11 V7 C14 4.2 11.8 2 9 2 Z" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linejoin="round" />
-        <path d="M7.2 15 C7.6 15.8 8.2 16.2 9 16.2 C9.8 16.2 10.4 15.8 10.8 15" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
-        <circle cx="13.5" cy="3.5" r="2.2" fill="#2563EB" />
-      </g>
-
-
-      <g transform="translate(88, 4)">
-        <rect x="0" y="0" width="110" height="26" rx="5" fill="#EFF6FF" />
-        <text x="14" y="17" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">Production</text>
-      </g>
-    </g>
-  </g>
-
-
-  <g id="Layer_PageHeader" transform="translate(272, 92)">
-    <text x="0" y="26" class="font-sans" font-size="26" font-weight="700" fill="#0F172A">Historique des sessions</text>
-    <text x="0" y="50" class="font-sans" font-size="13.5" fill="#64748B">Consultez, filtrez et auditez les sessions privilégiées terminées.</text>
-
-
-    <g id="Btn_ExportHistory" transform="translate(966, 4)">
-      <rect x="0" y="0" width="170" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
-      <path d="M18 13 V21 M14.5 18 L18 21.5 L21.5 18" fill="none" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      <text x="32" y="23" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Exporter l’historique</text>
-    </g>
-  </g>
-
-
-  <g id="Layer_KPICards" transform="translate(272, 174)">
-
-    <g transform="translate(0, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Sessions sur 30 jours</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">1 284</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Tous protocoles confondus</text></g><g transform="translate(288, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Enregistrements</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">1 247</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Disponibles au replay</text></g><g transform="translate(576, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Durée moyenne</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">32 min</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Sur les 30 derniers jours</text></g><g transform="translate(864, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Sessions interrompues</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">07</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Par une politique de sécurité</text></g></g>
-
-
-  <g id="Layer_SubNavTabs" transform="translate(272, 314)">
-    <line x1="0" y1="26" x2="1136" y2="26" stroke="#E2E8F0" stroke-width="1" />
-
-
-    <g id="Tab_Live">
-      <text x="8" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">En direct</text>
-      <text x="72" y="10" class="font-sans" font-size="13" font-weight="500" fill="#64748B">24</text>
-      </g>
-
-
-    <g id="Tab_History" transform="translate(142, 0)">
-      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="600" fill="#2563EB">Historique</text>
-    <rect x="-8" y="24" width="102" height="2.5" rx="1" fill="#2563EB" /></g>
-
-
-    <g id="Tab_Recordings" transform="translate(262, 0)">
-      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Enregistrements</text>
-    </g>
-
-
-    <g id="Tab_Alerts" transform="translate(426, 0)">
-      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Alertes de session</text>
-      <rect x="118" y="-7" width="22" height="18" rx="9" fill="#FEE2E2" /><text x="129" y="6" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="700" fill="#B91C1C">2</text></g>
-  </g>
-
-
-  <g id="Layer_MainSplitView" transform="translate(272, 364)">
-
-
-    <rect x="0" y="0" width="1136" height="632" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="22" y="29" class="font-sans" font-size="15" font-weight="700" fill="#0F172A">Historique des sessions</text><text x="22" y="49" class="font-sans" font-size="11.5" font-weight="400" fill="#64748B">Consultez les accès terminés et leurs événements d’audit.</text><rect x="22" y="68" width="300" height="36" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" /><text x="36" y="91" class="font-sans" font-size="11.5" font-weight="400" fill="#94A3B8">⌕  Rechercher utilisateur, cible, ID…</text><rect x="334" y="68" width="142" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="348" y="91" class="font-sans" font-size="11.5" font-weight="400" fill="#475569">Tous les statuts  ▾</text><rect x="488" y="68" width="142" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="502" y="91" class="font-sans" font-size="11" font-weight="400" fill="#475569">Tous les protocoles  ▾</text><rect x="642" y="68" width="150" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="656" y="91" class="font-sans" font-size="11" font-weight="400" fill="#475569">Période : 30 jours  ▾</text><rect x="1000" y="68" width="114" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="1057" y="91" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A" text-anchor="middle">Exporter CSV</text><rect x="22" y="122" width="1092" height="478" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><rect x="22" y="122" width="1092" height="42" rx="8" fill="#F8FAFC" stroke="#F8FAFC" stroke-width="0" /><text x="40" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">UTILISATEUR</text><text x="220" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">CIBLE</text><text x="430" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">PROTOCOLE</text><text x="535" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">DÉBUT</text><text x="700" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">DURÉE</text><text x="810" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">STATUT</text><text x="930" y="148" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">ENREGISTREMENT</text><line x1="22" y1="234" x2="1114" y2="234" stroke="#F1F5F9" stroke-width="1" /><text x="40" y="191" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">camille.martin</text><text x="40" y="209" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Session #OB-261821</text><text x="220" y="196" class="font-mono" font-size="11" font-weight="500" fill="#475569">srv-prod-web-01</text><rect x="430" y="182" width="48" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="454.0" y="197" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">SSH</text><text x="535" y="196" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">17 nov. · 09:12</text><text x="700" y="196" class="font-mono" font-size="10.5" font-weight="500" fill="#475569">24 min</text><rect x="810" y="182" width="80" height="22" rx="5" fill="#EFF6FF" stroke="#EFF6FF" stroke-width="0" /><text x="850.0" y="197" class="font-sans" font-size="10.5" font-weight="600" fill="#1D4ED8" text-anchor="middle">Terminée</text><text x="930" y="196" class="font-sans" font-size="10.5" font-weight="600" fill="#2563EB">Disponible</text><text x="1080" y="196" class="font-sans" font-size="18" font-weight="600" fill="#64748B" text-anchor="middle">⋯</text><line x1="22" y1="304" x2="1114" y2="304" stroke="#F1F5F9" stroke-width="1" /><text x="40" y="261" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">thomas.bernard</text><text x="40" y="279" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Session #OB-261820</text><text x="220" y="266" class="font-mono" font-size="11" font-weight="500" fill="#475569">db-postgres-prod</text><rect x="430" y="252" width="48" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="454.0" y="267" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">SQL</text><text x="535" y="266" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">17 nov. · 08:46</text><text x="700" y="266" class="font-mono" font-size="10.5" font-weight="500" fill="#475569">41 min</text><rect x="810" y="252" width="80" height="22" rx="5" fill="#EFF6FF" stroke="#EFF6FF" stroke-width="0" /><text x="850.0" y="267" class="font-sans" font-size="10.5" font-weight="600" fill="#1D4ED8" text-anchor="middle">Terminée</text><text x="930" y="266" class="font-sans" font-size="10.5" font-weight="600" fill="#2563EB">Disponible</text><text x="1080" y="266" class="font-sans" font-size="18" font-weight="600" fill="#64748B" text-anchor="middle">⋯</text><line x1="22" y1="374" x2="1114" y2="374" stroke="#F1F5F9" stroke-width="1" /><text x="40" y="331" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">sarah.dubois</text><text x="40" y="349" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Session #OB-261819</text><text x="220" y="336" class="font-mono" font-size="11" font-weight="500" fill="#475569">win-ad-primary</text><rect x="430" y="322" width="48" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="454.0" y="337" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">RDP</text><text x="535" y="336" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">16 nov. · 17:32</text><text x="700" y="336" class="font-mono" font-size="10.5" font-weight="500" fill="#475569">1 h 08</text><rect x="810" y="322" width="80" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="850.0" y="337" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">Interrompue</text><text x="930" y="336" class="font-sans" font-size="10.5" font-weight="600" fill="#2563EB">Disponible</text><text x="1080" y="336" class="font-sans" font-size="18" font-weight="600" fill="#64748B" text-anchor="middle">⋯</text><line x1="22" y1="444" x2="1114" y2="444" stroke="#F1F5F9" stroke-width="1" /><text x="40" y="401" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">lucas.petit</text><text x="40" y="419" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Session #OB-261818</text><text x="220" y="406" class="font-mono" font-size="11" font-weight="500" fill="#475569">k8s-prod-master</text><rect x="430" y="392" width="48" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="454.0" y="407" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">SSH</text><text x="535" y="406" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">16 nov. · 16:05</text><text x="700" y="406" class="font-mono" font-size="10.5" font-weight="500" fill="#475569">18 min</text><rect x="810" y="392" width="80" height="22" rx="5" fill="#EFF6FF" stroke="#EFF6FF" stroke-width="0" /><text x="850.0" y="407" class="font-sans" font-size="10.5" font-weight="600" fill="#1D4ED8" text-anchor="middle">Terminée</text><text x="930" y="406" class="font-sans" font-size="10.5" font-weight="600" fill="#2563EB">Disponible</text><text x="1080" y="406" class="font-sans" font-size="18" font-weight="600" fill="#64748B" text-anchor="middle">⋯</text><line x1="22" y1="514" x2="1114" y2="514" stroke="#F1F5F9" stroke-width="1" /><text x="40" y="471" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">nora.legrand</text><text x="40" y="489" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Session #OB-261817</text><text x="220" y="476" class="font-mono" font-size="11" font-weight="500" fill="#475569">fw-edge-paris-01</text><rect x="430" y="462" width="48" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="454.0" y="477" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">HTTPS</text><text x="535" y="476" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">16 nov. · 14:21</text><text x="700" y="476" class="font-mono" font-size="10.5" font-weight="500" fill="#475569">12 min</text><rect x="810" y="462" width="80" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="850.0" y="477" class="font-sans" font-size="10.5" font-weight="600" fill="#64748B" text-anchor="middle">Refusée</text><text x="930" y="476" class="font-sans" font-size="10.5" font-weight="600" fill="#94A3B8">—</text><text x="1080" y="476" class="font-sans" font-size="18" font-weight="600" fill="#64748B" text-anchor="middle">⋯</text><line x1="22" y1="584" x2="1114" y2="584" stroke="#F1F5F9" stroke-width="1" /><text x="40" y="541" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">alex.morel</text><text x="40" y="559" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Session #OB-261816</text><text x="220" y="546" class="font-mono" font-size="11" font-weight="500" fill="#475569">nas-backup-02</text><rect x="430" y="532" width="48" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="454.0" y="547" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">SFTP</text><text x="535" y="546" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">16 nov. · 11:03</text><text x="700" y="546" class="font-mono" font-size="10.5" font-weight="500" fill="#475569">32 min</text><rect x="810" y="532" width="80" height="22" rx="5" fill="#EFF6FF" stroke="#EFF6FF" stroke-width="0" /><text x="850.0" y="547" class="font-sans" font-size="10.5" font-weight="600" fill="#1D4ED8" text-anchor="middle">Terminée</text><text x="930" y="546" class="font-sans" font-size="10.5" font-weight="600" fill="#2563EB">Disponible</text><text x="1080" y="546" class="font-sans" font-size="18" font-weight="600" fill="#64748B" text-anchor="middle">⋯</text><text x="28" y="620" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Affichage 1–6 sur 1 284 sessions</text><text x="1095" y="620" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="end">‹     1   2   3   …   214     ›</text></g>
-
-
-  <g id="Layer_PageFooter" transform="translate(272, 1044)">
-    <text x="0" y="0" class="font-sans" font-size="11.5" fill="#94A3B8">Données de démonstration</text>
-    <text x="1136" y="0" text-anchor="end" class="font-sans" font-size="11.5" fill="#94A3B8">Mode observateur  •  Les actions sensibles sont journalisées</text>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_2007_949)">
+<rect width="1440" height="1040" fill="white"/>
+<rect width="232" height="1040" fill="#0B1F3B"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" font-weight="bold" letter-spacing="0em"><tspan x="65" y="45.5455">OpenBastion</tspan></text>
+<text fill="#8DA5C4" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="8" letter-spacing="0em"><tspan x="65" y="60.9091">PRIVILEGED ACCESS</tspan></text>
+<rect x="16" y="100" width="200" height="56" rx="7" fill="#142D4D"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="32" y="122.727">Production</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="32" y="140.5">Acme Corporation</tspan></text>
+<path d="M193.25 122.917L197.333 127L193.25 131.083" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="24" y="199.773">ESPACE DE TRAVAIL</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="241.864">Vue d&#x2019;ensemble</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="289.864">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<rect x="12" y="314" width="208" height="42" rx="6" fill="#193D63"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-weight="bold" letter-spacing="0em"><tspan x="56" y="337.864">Sessions</tspan></text>
+<rect y="322" width="3" height="26" rx="1" fill="#00D1FF"/>
+<rect x="183" y="325" width="24" height="20" rx="4" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="188" y="336.636">&#x2014;</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="385.864">Infrastructure</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="433.864">Audit &#38; conformit&#xe9;</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="529.864">Param&#xe8;tres</tspan></text>
+<rect width="184" height="1" transform="translate(24 580)" fill="#26405E"/>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="24" y="617.773">RESSOURCES</tspan></text>
+<path d="M34.5 641.5H28.5C28.1022 641.5 27.7206 641.658 27.4393 641.939C27.158 642.221 27 642.602 27 643V655C27 655.398 27.158 655.779 27.4393 656.061C27.7206 656.342 28.1022 656.5 28.5 656.5H37.5C37.8978 656.5 38.2794 656.342 38.5607 656.061C38.842 655.779 39 655.398 39 655V646L34.5 641.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M34.5 641.5V646H39M30 649.75H36M30 652.75H33.75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="652.864">Documentation</tspan></text>
+<path d="M39.75 692C39.75 695.728 36.7279 698.75 33 698.75C29.2721 698.75 26.25 695.728 26.25 692C26.25 688.272 29.2721 685.25 33 685.25C36.7279 685.25 39.75 688.272 39.75 692Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M30.75 689.75C30.75 689.153 30.9871 688.581 31.409 688.159C31.831 687.737 32.4033 687.5 33 687.5C33.5967 687.5 34.169 687.737 34.591 688.159C35.0129 688.581 35.25 689.153 35.25 689.75C35.25 691.25 33 691.25 33 693.5M33 695.75H33.0075" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="56" y="695.864">Centre d&#x2019;aide</tspan></text>
+<rect x="16" y="846" width="200" height="81" rx="8" fill="#142D4D"/>
+<rect x="30" y="864" width="6" height="6" rx="3" fill="#00D1FF"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="44" y="868.5">&#xc9;tat non &#xe9;valu&#xe9;</tspan></text>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="30" y="889.773">Source &#xe0; confirmer</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="30" y="910.773">v2.8.0  &#x2022;  EU / Paris</tspan></text>
+<rect width="200" height="1" transform="translate(16 950)" fill="#26405E"/>
+<path d="M40.6666 984.333C40.6666 986.635 38.8011 988.5 36.4999 988.5C34.1987 988.5 32.3333 986.635 32.3333 984.333C32.3333 982.032 34.1987 980.167 36.4999 980.167C38.8011 980.167 40.6666 982.032 40.6666 984.333Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<path d="M28.1667 997.875V995.792C28.1667 994.134 28.8252 992.544 29.9973 991.372C31.1694 990.2 32.7591 989.542 34.4167 989.542H38.5834C40.241 989.542 41.8307 990.2 43.0028 991.372C44.1749 992.544 44.8334 994.134 44.8334 995.792V997.875" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="63" y="981.864">Camille Martin</tspan></text>
+<text fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="63" y="999.636">Administrateur</tspan></text>
+<path d="M199.875 984.708L203.667 988.5L199.875 992.292" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M27.3333 231.5H31.5C31.9602 231.5 32.3333 231.873 32.3333 232.333V238.167C32.3333 238.627 31.9602 239 31.5 239H27.3333C26.8731 239 26.5 238.627 26.5 238.167V232.333C26.5 231.873 26.8731 231.5 27.3333 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M36.5001 231.5H40.6667C41.127 231.5 41.5001 231.873 41.5001 232.333V234.833C41.5001 235.294 41.127 235.667 40.6667 235.667H36.5001C36.0398 235.667 35.6667 235.294 35.6667 234.833V232.333C35.6667 231.873 36.0398 231.5 36.5001 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M36.5001 239H40.6667C41.127 239 41.5001 239.373 41.5001 239.833V245.667C41.5001 246.127 41.127 246.5 40.6667 246.5H36.5001C36.0398 246.5 35.6667 246.127 35.6667 245.667V239.833C35.6667 239.373 36.0398 239 36.5001 239Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M27.3333 242.333H31.5C31.9602 242.333 32.3333 242.706 32.3333 243.167V245.667C32.3333 246.127 31.9602 246.5 31.5 246.5H27.3333C26.8731 246.5 26.5 246.127 26.5 245.667V243.167C26.5 242.706 26.8731 242.333 27.3333 242.333Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<g clip-path="url(#clip1_2007_949)">
+<path d="M26.1551 291.512C25.8425 291.824 25.6668 292.248 25.6667 292.69V294.5C25.6667 294.721 25.7545 294.933 25.9108 295.089C26.0671 295.246 26.2791 295.333 26.5001 295.333H29.0001C29.2211 295.333 29.4331 295.246 29.5893 295.089C29.7456 294.933 29.8334 294.721 29.8334 294.5V293.667C29.8334 293.446 29.9212 293.234 30.0775 293.077C30.2338 292.921 30.4457 292.833 30.6667 292.833H31.5001C31.7211 292.833 31.9331 292.746 32.0893 292.589C32.2456 292.433 32.3334 292.221 32.3334 292V291.167C32.3334 290.946 32.4212 290.734 32.5775 290.577C32.7338 290.421 32.9457 290.333 33.1667 290.333H33.3101C33.7521 290.333 34.1759 290.158 34.4884 289.845L35.1667 289.167C36.3249 289.57 37.5858 289.569 38.743 289.162C39.9002 288.756 40.8853 287.969 41.537 286.93C42.1888 285.891 42.4688 284.662 42.331 283.443C42.1933 282.224 41.646 281.089 40.7788 280.221C39.9115 279.354 38.7757 278.807 37.557 278.669C36.3383 278.531 35.1089 278.811 34.07 279.463C33.0311 280.115 32.2441 281.1 31.8378 282.257C31.4315 283.414 31.43 284.675 31.8334 285.833L26.1551 291.512Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M37.7499 283.667C37.98 283.667 38.1666 283.48 38.1666 283.25C38.1666 283.02 37.98 282.833 37.7499 282.833C37.5198 282.833 37.3333 283.02 37.3333 283.25C37.3333 283.48 37.5198 283.667 37.7499 283.667Z" fill="#9EB0C7" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<path d="M34.0001 339.167V342.5M42.3334 335.256V337.5C42.3334 337.942 42.1578 338.366 41.8453 338.679C41.5327 338.991 41.1088 339.167 40.6667 339.167H27.3334C26.8914 339.167 26.4675 338.991 26.1549 338.679C25.8423 338.366 25.6667 337.942 25.6667 337.5V329.167C25.6667 328.725 25.8423 328.301 26.1549 327.988C26.4675 327.676 26.8914 327.5 27.3334 327.5H34.5776M30.6667 342.5H37.3334" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path d="M42.3333 330C42.3333 331.381 41.214 332.5 39.8333 332.5C38.4525 332.5 37.3333 331.381 37.3333 330C37.3333 328.619 38.4525 327.5 39.8333 327.5C41.214 327.5 42.3333 328.619 42.3333 330Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<g clip-path="url(#clip2_2007_949)">
+<path d="M27.3334 374.667H40.6667C41.5872 374.667 42.3334 375.413 42.3334 376.333V379.667C42.3334 380.587 41.5872 381.333 40.6667 381.333H27.3334C26.4129 381.333 25.6667 380.587 25.6667 379.667V376.333C25.6667 375.413 26.4129 374.667 27.3334 374.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M27.3334 384.667H40.6667C41.5872 384.667 42.3334 385.413 42.3334 386.333V389.667C42.3334 390.587 41.5872 391.333 40.6667 391.333H27.3334C26.4129 391.333 25.6667 390.587 25.6667 389.667V386.333C25.6667 385.413 26.4129 384.667 27.3334 384.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M29 378H29.0083M29 388H29.0083" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<path d="M31.5001 422.667H36.5001C36.9603 422.667 37.3334 423.04 37.3334 423.5V425.167C37.3334 425.627 36.9603 426 36.5001 426H31.5001C31.0398 426 30.6667 425.627 30.6667 425.167V423.5C30.6667 423.04 31.0398 422.667 31.5001 422.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M37.3333 424.333H38.9999C39.4419 424.333 39.8659 424.509 40.1784 424.821C40.491 425.134 40.6666 425.558 40.6666 426V437.667C40.6666 438.109 40.491 438.533 40.1784 438.845C39.8659 439.158 39.4419 439.333 38.9999 439.333H28.9999C28.5579 439.333 28.134 439.158 27.8214 438.845C27.5088 438.533 27.3333 438.109 27.3333 437.667V426C27.3333 425.558 27.5088 425.134 27.8214 424.821C28.134 424.509 28.5579 424.333 28.9999 424.333H30.6666M33.9999 430.167H37.3333M33.9999 434.333H37.3333M30.6666 430.167H30.6749M30.6666 434.333H30.6749" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M32.0594 520.447C32.1053 519.964 32.3297 519.515 32.6887 519.189C33.0476 518.862 33.5154 518.681 34.0007 518.681C34.4859 518.681 34.9537 518.862 35.3127 519.189C35.6716 519.515 35.896 519.964 35.9419 520.447C35.9695 520.759 36.0719 521.06 36.2404 521.324C36.4088 521.588 36.6385 521.807 36.9098 521.964C37.1811 522.12 37.4862 522.209 37.7992 522.223C38.1121 522.237 38.4238 522.175 38.7078 522.043C39.1487 521.842 39.6483 521.813 40.1094 521.961C40.5705 522.109 40.9601 522.423 41.2024 522.843C41.4446 523.262 41.5222 523.756 41.42 524.23C41.3178 524.703 41.0431 525.121 40.6494 525.403C40.3931 525.583 40.1838 525.822 40.0393 526.1C39.8949 526.378 39.8195 526.686 39.8195 527C39.8195 527.313 39.8949 527.621 40.0393 527.899C40.1838 528.177 40.3931 528.416 40.6494 528.596C41.0431 528.878 41.3178 529.296 41.42 529.77C41.5222 530.243 41.4446 530.737 41.2024 531.157C40.9601 531.576 40.5705 531.89 40.1094 532.038C39.6483 532.186 39.1487 532.157 38.7078 531.957C38.4238 531.824 38.1121 531.762 37.7992 531.776C37.4862 531.79 37.1811 531.879 36.9098 532.035C36.6385 532.192 36.4088 532.411 36.2404 532.676C36.0719 532.94 35.9695 533.24 35.9419 533.553C35.896 534.036 35.6716 534.484 35.3127 534.811C34.9537 535.137 34.4859 535.318 34.0007 535.318C33.5154 535.318 33.0476 535.137 32.6887 534.811C32.3297 534.484 32.1053 534.036 32.0594 533.553C32.0319 533.24 31.9295 532.939 31.761 532.675C31.5924 532.411 31.3627 532.191 31.0913 532.035C30.8198 531.878 30.5146 531.789 30.2016 531.776C29.8885 531.762 29.5768 531.824 29.2928 531.957C28.8518 532.157 28.3522 532.186 27.8911 532.038C27.43 531.89 27.0404 531.576 26.7982 531.157C26.5559 530.737 26.4783 530.243 26.5806 529.77C26.6828 529.296 26.9574 528.878 27.3511 528.596C27.6074 528.416 27.8167 528.177 27.9612 527.899C28.1056 527.621 28.181 527.313 28.181 527C28.181 526.686 28.1056 526.378 27.9612 526.1C27.8167 525.822 27.6074 525.583 27.3511 525.403C26.958 525.121 26.6838 524.703 26.5818 524.23C26.4799 523.757 26.5574 523.263 26.7994 522.844C27.0414 522.425 27.4305 522.111 27.8912 521.963C28.3518 521.815 28.8511 521.843 29.2919 522.043C29.5759 522.175 29.8875 522.237 30.2005 522.223C30.5135 522.209 30.8185 522.12 31.0899 521.964C31.3612 521.807 31.5908 521.588 31.7593 521.324C31.9278 521.06 32.0302 520.759 32.0578 520.447" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M36.5 527C36.5 528.381 35.3807 529.5 34 529.5C32.6193 529.5 31.5 528.381 31.5 527C31.5 525.619 32.6193 524.5 34 524.5C35.3807 524.5 36.5 525.619 36.5 527Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path d="M28.6875 32.1562H33.8438V34.9688H44.1562V32.1562H49.3125V42.4688L46.5 47.625L39 52.7812L31.5 47.625L28.6875 42.4688V32.1562ZM39 38.4844C37.9688 38.4844 37.125 39.3281 37.125 40.3594C37.125 41.0625 37.5 41.6719 38.0625 42V44.8125H39.9375V42C40.5 41.6719 40.875 41.0625 40.875 40.3594C40.875 39.3281 40.0312 38.4844 39 38.4844Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M44.1562 32.1562H49.3125V39.6562L46.5 41.5312V34.9688H44.1562V32.1562Z" fill="#00D1FF"/>
+<text fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em"><tspan x="56" y="484.227">S&#xe9;curit&#xe9;</tspan></text>
+<path d="M50.6666 486.333C50.6666 493 45.9999 496.333 40.4533 498.267C40.1628 498.365 39.8473 498.36 39.5599 498.253C33.9999 496.333 29.3333 493 29.3333 486.333V477C29.3333 476.646 29.4737 476.307 29.7238 476.057C29.9738 475.807 30.313 475.667 30.6666 475.667C33.3333 475.667 36.6666 474.067 38.9866 472.04C39.2691 471.799 39.6284 471.666 39.9999 471.666C40.3714 471.666 40.7308 471.799 41.0133 472.04C43.3466 474.08 46.6666 475.667 49.3333 475.667C49.6869 475.667 50.026 475.807 50.2761 476.057C50.5261 476.307 50.6666 476.646 50.6666 477V486.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<path d="M36 485L38.6667 487.667L44 482.333" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<g clip-path="url(#clip3_2007_949)">
+<rect width="1208" height="1040" transform="translate(232)" fill="#F4F7FB"/>
+<rect width="1208" height="72" transform="translate(232)" fill="white"/>
+<rect width="1208" height="1" transform="translate(232 71)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="264" y="38.5">Espace de travail</tspan></text>
+<text fill="#A8B5C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="375" y="38.5">/</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="392" y="38.5">Sessions</tspan></text>
+<rect x="877" y="18" width="306" height="36" rx="6" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="915" y="38.5">Rechercher une ressource&#x2026;</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1142" y="37.6364">&#x2318; K</tspan></text>
+<path d="M903.875 41.875L900.801 38.8008" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M902.458 34.7917C902.458 37.9213 899.921 40.4583 896.792 40.4583C893.662 40.4583 891.125 37.9213 891.125 34.7917C891.125 31.6621 893.662 29.125 896.792 29.125C899.921 29.125 902.458 31.6621 902.458 34.7917Z" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M1227.75 36C1227.75 39.7279 1224.73 42.75 1221 42.75C1217.27 42.75 1214.25 39.7279 1214.25 36C1214.25 32.2721 1217.27 29.25 1221 29.25C1224.73 29.25 1227.75 32.2721 1227.75 36Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path d="M1218.75 33.75C1218.75 33.1533 1218.99 32.581 1219.41 32.159C1219.83 31.7371 1220.4 31.5 1221 31.5C1221.6 31.5 1222.17 31.7371 1222.59 32.159C1223.01 32.581 1223.25 33.1533 1223.25 33.75C1223.25 35.25 1221 35.25 1221 37.5M1221 39.75H1221.01" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<rect x="1270" y="25" width="5" height="5" rx="2.5" fill="#0B5ED7"/>
+<rect x="1306" y="22" width="107" height="28" rx="5" fill="#EAF2FC"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1320" y="38.6364">Production</tspan></text>
+<path d="M1264.7 42.75C1264.83 42.978 1265.02 43.1674 1265.25 43.299C1265.48 43.4306 1265.74 43.4999 1266 43.4999C1266.26 43.4999 1266.52 43.4306 1266.75 43.299C1266.98 43.1674 1267.17 42.978 1267.3 42.75M1259.45 38.4945C1259.35 38.6019 1259.28 38.7354 1259.26 38.8789C1259.24 39.0223 1259.26 39.1695 1259.31 39.3025C1259.37 39.4356 1259.47 39.5487 1259.59 39.6281C1259.71 39.7075 1259.86 39.7499 1260 39.75H1272C1272.15 39.7501 1272.29 39.7079 1272.41 39.6286C1272.53 39.5493 1272.63 39.4363 1272.69 39.3034C1272.75 39.1705 1272.76 39.0233 1272.74 38.8798C1272.72 38.7364 1272.65 38.6028 1272.56 38.4952C1271.56 37.467 1270.5 36.3743 1270.5 33C1270.5 31.8065 1270.03 30.6619 1269.18 29.818C1268.34 28.9741 1267.19 28.5 1266 28.5C1264.81 28.5 1263.66 28.9741 1262.82 29.818C1261.97 30.6619 1261.5 31.8065 1261.5 33C1261.5 36.3743 1260.44 37.467 1259.45 38.4945Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<rect width="1208" height="968" transform="translate(232 72)" fill="#F4F7FB"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="27" font-weight="bold" letter-spacing="0em"><tspan x="264" y="128.318">Sessions</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="264" y="155.864">Recherchez les sessions pass&#xe9;es et consultez leurs m&#xe9;tadonn&#xe9;es autoris&#xe9;es.</tspan></text>
+<rect x="1056" y="105" width="161" height="34" rx="5" fill="#FFF7E6"/>
+<text fill="#805500" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1068" y="124.636">Partiel &#xb7; selon l&#x2019;API</tspan></text>
+<rect x="264.5" y="185.5" width="1143" height="102" rx="7.5" fill="white"/>
+<rect x="264.5" y="185.5" width="1143" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" font-weight="bold" letter-spacing="0em"><tspan x="282" y="209.636">MAQUETTE &#xb7; DONN&#xc9;ES FICTIVES</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="282" y="235.864">Recherche de sessions livr&#xe9;e, limit&#xe9;e au p&#xe9;rim&#xe8;tre et aux m&#xe9;tadonn&#xe9;es renvoy&#xe9;s par l&#x2019;API.</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="282" y="267.636">Une session termin&#xe9;e ne garantit pas un replay disponible. Les exemples ci-dessous sont fictifs.</tspan></text>
+<rect width="1144" height="41" transform="translate(264 312)" fill="#F4F7FB"/>
+<rect width="180" height="40" transform="translate(264 312)" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="270" y="331.864">En direct</tspan></text>
+<rect width="180" height="40" transform="translate(454 312)" fill="#F4F7FB"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" font-weight="bold" letter-spacing="0em"><tspan x="460" y="331.864">Historique</tspan></text>
+<rect width="180" height="40" transform="translate(644 312)" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="650" y="331.864">Enregistrements</tspan></text>
+<rect width="210" height="40" transform="translate(834 312)" fill="#F4F7FB"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em"><tspan x="840" y="331.864">Alertes de Session</tspan></text>
+<rect width="1144" height="1" transform="translate(264 352)" fill="#E2E8F0"/>
+<rect width="135" height="3" transform="translate(454 350)" fill="#0B5ED7"/>
+<rect x="264.5" y="377.5" width="1143" height="311" rx="7.5" fill="white"/>
+<rect x="264.5" y="377.5" width="1143" height="311" rx="7.5" stroke="#E2E8F0"/>
+<rect x="280.5" y="391.5" width="217" height="31" rx="4.5" fill="white"/>
+<rect x="280.5" y="391.5" width="217" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="290" y="409.636">Rechercher &#xab; camille &#xbb; &#xb7; d&#xe9;mo</tspan></text>
+<rect x="1264.5" y="391.5" width="127" height="31" rx="4.5" fill="white"/>
+<rect x="1264.5" y="391.5" width="127" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1274" y="409.636">R&#xe9;initialiser</tspan></text>
+<rect x="510.5" y="391.5" width="114" height="31" rx="4.5" fill="white"/>
+<rect x="510.5" y="391.5" width="114" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="520" y="409.636">Utilisateur &#xb7; Tous</tspan></text>
+<rect x="633.5" y="391.5" width="114" height="31" rx="4.5" fill="white"/>
+<rect x="633.5" y="391.5" width="114" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="643" y="409.636">Ressource &#xb7; Toutes</tspan></text>
+<rect x="756.5" y="391.5" width="114" height="31" rx="4.5" fill="white"/>
+<rect x="756.5" y="391.5" width="114" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="766" y="409.636">Protocole &#xb7; Tous</tspan></text>
+<rect x="879.5" y="391.5" width="114" height="31" rx="4.5" fill="white"/>
+<rect x="879.5" y="391.5" width="114" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="889" y="409.636">Statut &#xb7; Tous</tspan></text>
+<rect x="1002.5" y="391.5" width="114" height="31" rx="4.5" fill="white"/>
+<rect x="1002.5" y="391.5" width="114" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1012" y="409.636">Date &#xb7; 19 nov.</tspan></text>
+<rect x="1125.5" y="391.5" width="114" height="31" rx="4.5" fill="white"/>
+<rect x="1125.5" y="391.5" width="114" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1135" y="409.636">Dur&#xe9;e &#xb7; Toutes</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="280" y="451.773">UTILISATEUR / SESSION</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="460" y="451.773">RESSOURCE / COMPTE</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="660" y="451.773">PROTOCOLE</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="755" y="451.773">D&#xc9;BUT &#x2192; FIN</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1000" y="451.773">DUR&#xc9;E</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1100" y="451.773">STATUT / REPLAY</tspan></text>
+<rect width="1144" height="1" transform="translate(264 465)" fill="#E2E8F0"/>
+<rect width="1120" height="42" transform="translate(276 467)" fill="#EAF2FC"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="280" y="489.636">camille.martin &#xb7; SES-A7</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="460" y="489.636">RES-A4 &#xb7; compte-admin</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="660" y="489.636">SSH</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="755" y="489.636">19 nov. &#xb7; 09:00 &#x2192; 09:24</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1000" y="489.636">24 min</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1100" y="489.636">Termin&#xe9;e &#xb7; terminal disponible</tspan></text>
+<rect width="1120" height="1" transform="translate(276 508)" fill="#E2E8F0"/>
+<rect width="1120" height="42" transform="translate(276 509)" fill="white"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="280" y="531.636">thomas.bernard &#xb7; SES-B2</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="460" y="531.636">RES-C2 &#xb7; compte-service</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="660" y="531.636">RDP</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="755" y="531.636">19 nov. &#xb7; 08:30 &#x2192; 08:42</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1000" y="531.636">12 min</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1100" y="531.636">Expir&#xe9;e &#xb7; indisponible</tspan></text>
+<rect width="1120" height="1" transform="translate(276 550)" fill="#E2E8F0"/>
+<rect width="1120" height="42" transform="translate(276 551)" fill="white"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="280" y="573.636">sarah.dubois &#xb7; SES-C5</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="460" y="573.636">RES-B8 &#xb7; compte-admin</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="660" y="573.636">VNC</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="755" y="573.636">18 nov. &#xb7; 16:00 &#x2192; 16:31</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1000" y="573.636">31 min</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1100" y="573.636">Cl&#xf4;tur&#xe9;e &#xb7; incomplet</tspan></text>
+<rect width="1120" height="1" transform="translate(276 592)" fill="#E2E8F0"/>
+<rect width="1120" height="42" transform="translate(276 593)" fill="white"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="280" y="615.636">lucas.petit &#xb7; SES-D1</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="460" y="615.636">RES-D3 &#xb7; compte-op&#xe9;rateur</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="660" y="615.636">SSH</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="755" y="615.636">18 nov. &#xb7; 14:00 &#x2192; 14:18</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1000" y="615.636">18 min</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1100" y="615.636">Termin&#xe9;e &#xb7; expir&#xe9;</tspan></text>
+<rect width="1120" height="1" transform="translate(276 634)" fill="#E2E8F0"/>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="280" y="665.636">4 exemples fictifs &#xb7; s&#xe9;lectionnez la premi&#xe8;re ligne pour le d&#xe9;tail</tspan></text>
+<rect x="1234.5" y="644.5" width="157" height="31" rx="4.5" fill="white"/>
+<rect x="1234.5" y="644.5" width="157" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1244" y="662.636">Suivant &#x2192; &#xb7; d&#xe9;mo</tspan></text>
+<rect x="264.5" y="709.5" width="743" height="269" rx="7.5" fill="white"/>
+<rect x="264.5" y="709.5" width="743" height="269" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="bold" letter-spacing="0em"><tspan x="282" y="741.455">Session SES-A7</tspan></text>
+<rect x="910.5" y="721.5" width="79" height="31" rx="4.5" fill="white"/>
+<rect x="910.5" y="721.5" width="79" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="920" y="739.636">Fermer</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="282" y="775.636">Contexte autoris&#xe9;</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="454" y="776.5">camille.martin &#xb7; RES-A4 &#xb7; compte-admin</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="282" y="811.636">Cl&#xf4;ture</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="454" y="812.5">Fin demand&#xe9;e par l&#x2019;utilisateur &#xb7; exemple fictif</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="282" y="847.636">D&#xe9;but / fin</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="454" y="848.5">19 nov. 2026 &#xb7; 09:00 &#x2192; 09:24 &#xb7; dur&#xe9;e 24 min</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="282" y="883.636">Enregistrement</tspan></text>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="454" y="884.5">REC-A7 &#xb7; terminal SSH &#xb7; disponibilit&#xe9; fictive</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="282" y="925.636">Lecture de session et lecture d&#x2019;enregistrement : permissions distinctes.</tspan></text>
+<rect x="282.5" y="939.5" width="229" height="31" rx="4.5" fill="white"/>
+<rect x="282.5" y="939.5" width="229" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="292" y="957.636">Consulter le catalogue &#x2192;</tspan></text>
+<rect x="1032.5" y="709.5" width="375" height="269" rx="7.5" fill="white"/>
+<rect x="1032.5" y="709.5" width="375" height="269" rx="7.5" stroke="#E2E8F0"/>
+<text fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" font-weight="bold" letter-spacing="0em"><tspan x="1050" y="741.455">Lecture de l&#x2019;historique</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1050" y="769.5">Seules les m&#xe9;tadonn&#xe9;es autoris&#xe9;es sont pr&#xe9;sent&#xe9;es. Aucun </tspan><tspan x="1050" y="782.5">contenu de frappe, secret ou adresse interne.&#10;</tspan><tspan x="1050" y="795.5">&#10;</tspan><tspan x="1050" y="808.5">Fra&#xee;cheur et couverture de la projection : &#xe0; confirmer par le </tspan><tspan x="1050" y="821.5">serveur.</tspan></text>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1050" y="893.636">Sc&#xe9;narios de projection &#xb7; d&#xe9;mo</tspan></text>
+<rect x="1050.5" y="907.5" width="103" height="31" rx="4.5" fill="white"/>
+<rect x="1050.5" y="907.5" width="103" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1060" y="925.636">Vide</tspan></text>
+<rect x="1162.5" y="907.5" width="103" height="31" rx="4.5" fill="white"/>
+<rect x="1162.5" y="907.5" width="103" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1172" y="925.636">Erreur</tspan></text>
+<rect x="1274.5" y="907.5" width="103" height="31" rx="4.5" fill="white"/>
+<rect x="1274.5" y="907.5" width="103" height="31" rx="4.5" stroke="#E2E8F0"/>
+<text fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1284" y="925.636">Refus</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em"><tspan x="1050" y="959.636">Chargement, partiel, p&#xe9;rim&#xe9; : &#xe9;tats explicites &#xe0; r&#xe9;ception serveur.</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="264" y="1016.77">Maquette fictive &#xb7; ADR-0122 / ADR-0125 / ADR-0129 &#xb7; Statuts r&#xe9;els &#xe0; confirmer</tspan></text>
+<text fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em"><tspan x="1162" y="1016.77">Gateway uniquement &#xb7; Refus par d&#xe9;faut</tspan></text>
+<rect x="1253" y="99" width="155" height="36" rx="6" fill="#0B5ED7"/>
+<text fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em"><tspan x="1266" y="119.5">Nouvelle demande</tspan></text>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_2007_949">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+<clipPath id="clip1_2007_949">
+<rect width="20" height="20" fill="white" transform="translate(24 277)"/>
+</clipPath>
+<clipPath id="clip2_2007_949">
+<rect width="20" height="20" fill="white" transform="translate(24 373)"/>
+</clipPath>
+<clipPath id="clip3_2007_949">
+<rect width="1208" height="1040" fill="white" transform="translate(232)"/>
+</clipPath>
+</defs>
 </svg>
