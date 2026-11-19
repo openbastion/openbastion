@@ -24,12 +24,19 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("api-gateway", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("session-broker", "GET", "/authz/v1/check-access"),
 
+		// ADR-0131: only the Gateway asks the Admin UI's capabilities.
+		mtlstest.Allow("api-gateway", "POST", "/authz/v1/capabilities"),
+		mtlstest.Deny("session-broker", "POST", "/authz/v1/capabilities"),
+		mtlstest.Deny("password-vault", "POST", "/authz/v1/capabilities"),
+		mtlstest.Deny("admin-cli", "POST", "/authz/v1/capabilities"),
+		mtlstest.Deny("api-gateway", "GET", "/authz/v1/capabilities"),
+
 		mtlstest.Allow("ssh-proxy", "GET", "/healthz"),
 	})
 }
 
 func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), CallerRules(), []mtlstest.Route{
-		{Method: "POST", Path: "/authz/v1/policies"}, {Method: "POST", Path: "/authz/v1/check-access"}, {Method: "GET", Path: "/healthz"},
+		{Method: "POST", Path: "/authz/v1/policies"}, {Method: "POST", Path: "/authz/v1/check-access"}, {Method: "POST", Path: "/authz/v1/capabilities"}, {Method: "GET", Path: "/healthz"},
 	})
 }

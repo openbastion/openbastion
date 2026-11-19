@@ -137,7 +137,15 @@ func (s *AuthorizationService) CheckAccess(ctx context.Context, actorRoles []str
 	if err != nil {
 		return Decision{}, err
 	}
+	return decide(policies, resource, action), nil
+}
 
+// decide is CheckAccess's rule on policies already read: Capabilities asks it many times on one
+// read of the store.
+func decide(policies []*domain.Policy, resource, action string) Decision {
+	if resource == "" || action == "" {
+		return Decision{Allowed: false, Reason: "resource and action are required"}
+	}
 	matched := false
 	allowed := false
 	for _, p := range policies {
@@ -146,7 +154,7 @@ func (s *AuthorizationService) CheckAccess(ctx context.Context, actorRoles []str
 		}
 		matched = true
 		if p.Effect == domain.EffectDeny {
-			return Decision{Allowed: false, Reason: "explicit deny policy matched: " + p.Name}, nil
+			return Decision{Allowed: false, Reason: "explicit deny policy matched: " + p.Name}
 		}
 		if p.Effect == domain.EffectAllow {
 			allowed = true
@@ -154,12 +162,54 @@ func (s *AuthorizationService) CheckAccess(ctx context.Context, actorRoles []str
 	}
 
 	if !matched {
-		return Decision{Allowed: false, Reason: "no policy matches this resource for the caller's roles"}, nil
+		return Decision{Allowed: false, Reason: "no policy matches this resource for the caller's roles"}
 	}
 	if !allowed {
-		return Decision{Allowed: false, Reason: "matching policies present but none grant allow"}, nil
+		return Decision{Allowed: false, Reason: "matching policies present but none grant allow"}
 	}
-	return Decision{Allowed: true, Reason: "allow policy matched"}, nil
+	return Decision{Allowed: true, Reason: "allow policy matched"}
+}
+
+// MaxCapabilityQueries bounds one Capabilities call (ADR-0131): the Gateway's catalogue is a
+// closed list far below it, and a caller cannot make one request cost an unbounded evaluation.
+const MaxCapabilityQueries = 32
+
+// CapabilityQuery is one question of ADR-0131. Exact asks CheckAccess's own question on Resource;
+// Prefix asks whether the action is allowed on at least one resource whose name starts with
+// Resource (domain.AllowsSomeUnder). Neither grants anything: the answer only shapes a screen.
+type CapabilityQuery struct {
+	Resource string
+	Action   string
+	Prefix   bool
+}
+
+// ErrInvalidCapabilityQuery: an empty, oversized or malformed list of questions.
+var ErrInvalidCapabilityQuery = errors.New("invalid capability query")
+
+// Capabilities answers each query for actorRoles on one read of the policy store, in order. A
+// store error is an error (fail closed: nothing is answered), never "no".
+func (s *AuthorizationService) Capabilities(ctx context.Context, actorRoles []string, queries []CapabilityQuery) ([]bool, error) {
+	if len(queries) == 0 || len(queries) > MaxCapabilityQueries {
+		return nil, fmt.Errorf("%w: between 1 and %d queries", ErrInvalidCapabilityQuery, MaxCapabilityQueries)
+	}
+	for _, q := range queries {
+		if q.Resource == "" || q.Action == "" || len(q.Resource) > 256 || len(q.Action) > 256 {
+			return nil, fmt.Errorf("%w: a resource and an action of 1 to 256 bytes", ErrInvalidCapabilityQuery)
+		}
+	}
+	policies, err := s.policies.ForRoles(ctx, actorRoles)
+	if err != nil {
+		return nil, err
+	}
+	answers := make([]bool, len(queries))
+	for i, q := range queries {
+		if q.Prefix {
+			answers[i] = domain.AllowsSomeUnder(policies, q.Resource, q.Action)
+		} else {
+			answers[i] = decide(policies, q.Resource, q.Action).Allowed
+		}
+	}
+	return answers, nil
 }
 
 func randomID(prefix string) string {
