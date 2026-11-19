@@ -64,7 +64,9 @@ jobs:
             sleep 0.25
           done
           if [[ "$ready" != 1 ]]; then cat "$work/server.log"; exit 1; fi
-          test/integration/testdata/vnc/target.sh "$work" --env >> "$GITHUB_ENV"
+          # GITHUB_ENV takes NAME=value lines: "export NAME=value" would name the variable
+          # "export NAME", and the tests would never see the real target (found 19 Nov. 2026).
+          test/integration/testdata/vnc/target.sh "$work" --env | sed 's/^export //' >> "$GITHUB_ENV"
       # TestScreenFlow_VNCInAHeadlessBrowser drives the built Admin UI, served by the Gateway, in
       # the runner's Chrome, against the real TigerVNC target above: without the build it skips.
       - uses: ./.github/actions/setup-node
@@ -73,6 +75,10 @@ jobs:
       - name: Admin UI for the VNC browser test
         run: make ui-build
       - name: integration with the database (purged first)
+        # The real target is required here: without it, the real-target tests fail instead of
+        # quietly running against the fake one.
+        env:
+          OPENBASTION_VNC_REQUIRED: "1"
         run: |
           psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q -c "$PURGE"
           GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s
