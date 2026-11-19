@@ -36,6 +36,9 @@ func TestAdminUI_ScreenEndIsSeenInAHeadlessBrowser(t *testing.T) {
 			writeBrowserJSON(w, http.StatusOK, map[string]any{"enabled": false, "providers": []any{}})
 		case r.Method == http.MethodPost && r.URL.Path == "/auth/login":
 			writeBrowserJSON(w, http.StatusOK, map[string]any{"accessToken": token})
+		case r.Method == http.MethodGet && r.URL.Path == "/auth/me/capabilities":
+			// ADR-0131: what the caller's policies open; the page greys the rest.
+			writeBrowserJSON(w, http.StatusOK, map[string]any{"capabilities": map[string]bool{"sessions.terminate": false, "sessions.create": true}})
 		case r.Header.Get("Authorization") != "Bearer "+token && r.URL.Path != "/sessions/"+id+"/screen":
 			http.Error(w, "missing bearer", http.StatusUnauthorized)
 		case r.Method == http.MethodGet && r.URL.Path == "/sessions":
@@ -43,7 +46,7 @@ func TestAdminUI_ScreenEndIsSeenInAHeadlessBrowser(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/sessions/"+id:
 			writeBrowserJSON(w, http.StatusOK, map[string]any{
 				"id": id, "status": "active", "protocol": "rdp",
-				"requestedBy": "browser-operator", "privilegedAccountId": "acc-browser-rdp",
+				"requestedBy": "user-browser-e2e", "privilegedAccountId": "acc-browser-rdp",
 				"justification": "Chromium screen end", "breakGlass": false,
 				"expiresAt": time.Now().Add(5 * time.Minute).UTC().Format(time.RFC3339),
 			})

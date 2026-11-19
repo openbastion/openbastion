@@ -33,6 +33,9 @@ import { OperatorPreferencesDialog } from "../shared/ui/OperatorPreferencesDialo
 import { LanguageSwitcher } from "../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../shared/i18n";
 import { LegalNotice } from "../shared/LegalNotice";
+import { useCapabilities } from "../shared/capabilities";
+import { tabAllowed } from "./tabAccess";
+import { InlineNotice } from "../shared/ui/InlineNotice";
 
 // Labels and descriptions live in the translation files (locales/*.ts), one key per tab: the
 // navigation is translated like the screens it opens, and the groups keep the same order.
@@ -86,6 +89,8 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { t } = useAppTranslation();
+  const capabilities = useCapabilities();
+  const shownTabs = tabOrder.filter((key) => tabAllowed(capabilities, key));
   const [preferences, setPreferences] = useState<OperatorPreferences>(readOperatorPreferences);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -108,7 +113,7 @@ export function AppShell({
   const userMenuWasOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
   const collapsed = preferences.sidebarCollapsed;
-  const favoriteTabs = tabOrder.filter((key) => preferences.favorites.includes(key));
+  const favoriteTabs = shownTabs.filter((key) => preferences.favorites.includes(key));
 
   function updatePreferences(next: OperatorPreferences): boolean {
     setPreferences(next);
@@ -171,7 +176,8 @@ export function AppShell({
       if (isTextEntry(event.target) || paletteOpen || preferencesOpen) return;
       if (event.altKey && event.shiftKey && /^[1-6]$/.test(event.key)) {
         event.preventDefault();
-        chooseTab(tabOrder[Number(event.key) - 1]);
+        const next = tabOrder[Number(event.key) - 1];
+        if (tabAllowed(capabilities, next)) chooseTab(next);
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -407,7 +413,7 @@ export function AppShell({
             {groups.map((group) => (
               <div className="nav-group" key={group}>
                 <h2 className="nav-group-title">{t(`shell.groups.${group}`)}</h2>
-                {tabOrder.filter((key) => tabs[key].group === group).map(renderNavItem)}
+                {shownTabs.filter((key) => tabs[key].group === group).map(renderNavItem)}
               </div>
             ))}
             <div className="nav-group nav-resources">
@@ -535,6 +541,7 @@ export function AppShell({
             </div>
           </header>
           <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
+            {capabilities.status === "unavailable" ? <InlineNotice tone="warning">{t("capabilities.unavailableBanner")}</InlineNotice> : null}
             {children}
           </main>
         </div>

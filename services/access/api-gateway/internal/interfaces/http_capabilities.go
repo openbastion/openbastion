@@ -57,6 +57,12 @@ type capabilityQueryJSON struct {
 	Prefix   bool   `json:"prefix"`
 }
 
+// capabilitiesRequestBody is what the Gateway asks the Authorization Service.
+type capabilitiesRequestBody struct {
+	ActorRoles []string              `json:"actor_roles"`
+	Queries    []capabilityQueryJSON `json:"queries"`
+}
+
 type capabilitiesResponseJSON struct {
 	Capabilities map[string]bool `json:"capabilities"`
 }
@@ -80,7 +86,7 @@ func (g *GatewayServer) handleCapabilities(w http.ResponseWriter, r *http.Reques
 			queries = append(queries, capabilityQueryJSON{Resource: check.resource, Action: check.action, Prefix: check.prefix})
 		}
 	}
-	body, _ := json.Marshal(map[string]any{"actor_roles": id.Roles, "queries": queries})
+	body, _ := json.Marshal(capabilitiesRequestBody{ActorRoles: id.Roles, Queries: queries})
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, g.authorizationURL+"/authz/v1/capabilities", bytes.NewReader(body))
 	if err != nil {
 		http.Error(w, "capabilities unavailable", http.StatusServiceUnavailable)

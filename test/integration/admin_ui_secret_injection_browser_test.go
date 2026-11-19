@@ -40,6 +40,9 @@ func TestAdminUI_SecretInjectionStepUpInAHeadlessBrowser(t *testing.T) {
 			writeBrowserJSON(w, http.StatusOK, map[string]any{"enabled": false, "providers": []any{}})
 		case r.Method == http.MethodPost && r.URL.Path == "/auth/login":
 			writeBrowserJSON(w, http.StatusOK, map[string]any{"accessToken": token})
+		case r.Method == http.MethodGet && r.URL.Path == "/auth/me/capabilities":
+			// ADR-0131: what the caller's policies open; the page greys the rest.
+			writeBrowserJSON(w, http.StatusOK, map[string]any{"capabilities": map[string]bool{"secrets.inject": true, "sessions.create": true}})
 		case r.Method == http.MethodGet && r.URL.Path == "/sessions":
 			if r.URL.Query().Get("status") != "pending_approval" || r.Header.Get("Authorization") != "Bearer "+token {
 				http.Error(w, "unexpected sessions request", http.StatusUnauthorized)

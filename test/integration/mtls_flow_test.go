@@ -19,6 +19,7 @@ package integration_test
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -129,6 +130,48 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	// ---------------------------------------------------------------------
 	// The journey worked, over mutual TLS, end to end.
 	// ---------------------------------------------------------------------
+	t.Run("the Admin UI's capabilities follow each caller's policies, over mutual TLS (ADR-0131)", func(t *testing.T) {
+		capabilities := func(token string) map[string]bool {
+			t.Helper()
+			req, _ := http.NewRequest(http.MethodGet, gatewayURL+"/auth/me/capabilities", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var body struct {
+				Capabilities map[string]bool `json:"capabilities"`
+			}
+			if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&body) != nil {
+				t.Fatalf("GET /auth/me/capabilities: %d", resp.StatusCode)
+			}
+			return body.Capabilities
+		}
+		for _, who := range []struct {
+			name  string
+			token string
+			want  map[string]bool
+		}{
+			{"the platform and vault admin", adminToken, map[string]bool{"accounts.list": true, "accounts.rotate": true, "accounts.onboard": true, "policies.create": true, "sessions.create": false, "recordings.read": false}},
+			{"the operator, on one account", operatorToken, map[string]bool{"accounts.list": false, "accounts.rotate": false, "policies.create": false, "sessions.create": true, "recordings.read": false, "sessions.approve": false}},
+			{"the auditor", auditorToken, map[string]bool{"accounts.list": false, "policies.create": false, "sessions.create": false, "recordings.read": true}},
+		} {
+			got := capabilities(who.token)
+			for name, want := range who.want {
+				if v, ok := got[name]; !ok || v != want {
+					t.Errorf("%s: %s = %v (present %v), want %v", who.name, name, v, ok, want)
+				}
+			}
+		}
+		// Only the Gateway may ask: any other service is refused at the door.
+		status, _ := mustCall(t, p.clientAs(t, mtls.CommandRecorder), http.MethodPost, authzURL+"/authz/v1/capabilities",
+			map[string]any{"actor_roles": []string{"platform-admin"}, "queries": []map[string]any{{"resource": "authz:policy-admin", "action": "authz:policy:create"}}})
+		if status != http.StatusForbidden {
+			t.Errorf("the recorder asked the Admin UI's capabilities: %d, want 403", status)
+		}
+	})
+
 	t.Run("an auditor reads, through the Gateway, what the operator typed", func(t *testing.T) {
 		var page recordingPage
 		waitUntil(t, 5*time.Second, "the recording to be readable", func() bool {

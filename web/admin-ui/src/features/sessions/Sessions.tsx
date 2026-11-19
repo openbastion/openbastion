@@ -18,6 +18,8 @@ import { SessionRecordings } from "./SessionRecordings";
 import { SessionAlerts } from "./SessionAlerts";
 import { RecordingPanel } from "../audit/Recording";
 import { useAppTranslation } from "../../shared/i18n";
+import { useCapabilities } from "../../shared/capabilities";
+import { GatedButton } from "../../shared/ui/GatedButton";
 
 type View = "live" | "history" | "recordings" | "alerts";
 
@@ -53,7 +55,11 @@ export function Sessions({
   const [lookup, setLookup] = useState("");
   const [found, setFound] = useState<Session>();
   const [screen, setScreen] = useState<AttachedScreen>();
-  const [view, setView] = useState<View>(initialView);
+  const { visible } = useCapabilities();
+  // ADR-0131: the recordings tab is for those who may replay; the others stay on the live view.
+  const recordingsShown = visible("recordings.read");
+  const [chosenView, setView] = useState<View>(initialView);
+  const view: View = chosenView === "recordings" && !recordingsShown ? "live" : chosenView;
   const [requestFormOpen, setRequestFormOpen] = useState(false);
   // The recording screen lives in this page's "Enregistrements" tab: the library opens its
   // replay here instead of sending the operator to another page.
@@ -178,7 +184,7 @@ export function Sessions({
         view === "live" ? (
           <>
             {exportAction}
-            <Button variant="primary" onClick={() => { setView("live"); setRequestFormOpen(true); }}>{t("sessions.live.newRequest")}</Button>
+            <GatedButton capability="sessions.create" variant="primary" onClick={() => { setView("live"); setRequestFormOpen(true); }}>{t("sessions.live.newRequest")}</GatedButton>
           </>
         ) : exportAction
       }
@@ -227,7 +233,7 @@ export function Sessions({
             <span className="reference-tab-count">{pendingCountLabel}</span>
           </TabsTrigger>
           <TabsTrigger value="history">{t("sessions.tabs.history")}</TabsTrigger>
-          <TabsTrigger value="recordings">{t("sessions.tabs.recordings")}</TabsTrigger>
+          {recordingsShown ? <TabsTrigger value="recordings">{t("sessions.tabs.recordings")}</TabsTrigger> : null}
           <TabsTrigger value="alerts" aria-label={t("sessions.tabs.alerts")}>
             {t("sessions.tabs.alerts")}
             <Badge tone="warning" className="session-alert-tab-badge">{t("sessions.alerts.badge")}</Badge>
@@ -308,8 +314,8 @@ export function Sessions({
                       </div>
                     ) : (
                       <div className="sessions-live-decision-actions">
-                        <Button variant="primary" aria-label={t("sessions.pending.approveAria", { id: found.id })} onClick={() => askDecision("approve", found)}>{t("sessions.pending.approve")}</Button>
-                        <Button variant="danger" aria-label={t("sessions.pending.rejectAria", { id: found.id })} onClick={() => askDecision("reject", found)}>{t("sessions.pending.reject")}</Button>
+                        <GatedButton capability="sessions.approve" variant="primary" aria-label={t("sessions.pending.approveAria", { id: found.id })} onClick={() => askDecision("approve", found)}>{t("sessions.pending.approve")}</GatedButton>
+                        <GatedButton capability="sessions.approve" variant="danger" aria-label={t("sessions.pending.rejectAria", { id: found.id })} onClick={() => askDecision("reject", found)}>{t("sessions.pending.reject")}</GatedButton>
                       </div>
                     )
                   ) : null}

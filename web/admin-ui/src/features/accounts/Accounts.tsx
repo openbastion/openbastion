@@ -17,6 +17,8 @@ import { ApprovalCards } from "./ApprovalCards";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
 import { useAppTranslation } from "../../shared/i18n";
+import { useCapabilities } from "../../shared/capabilities";
+import { GatedButton } from "../../shared/ui/GatedButton";
 import {
   AccountFilterRule,
   accountFilterFields,
@@ -54,7 +56,19 @@ export function Accounts({
 } = {}) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
-  const [view, setView] = useState<View>(initialView);
+  const { can, visible, status: capabilityStatus } = useCapabilities();
+  // ADR-0131: a tab is present when the caller may do what it is for; the page opens on the first
+  // one that is.
+  const viewShown: Record<View, boolean> = {
+    resources: visible("accounts.list"),
+    accounts: visible("accounts.list"),
+    policies: visible("policies.create"),
+    requests: visible("sessions.approve"),
+  };
+  const firstShown = (["resources", "accounts", "policies", "requests"] as const).find((v) => viewShown[v]) ?? "resources";
+  const [chosenView, setView] = useState<View>(initialView);
+  const view: View = viewShown[chosenView] ? chosenView : firstShown;
+  const mayList = visible("accounts.list");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Account>>();
   const [loading, setLoading] = useState(true);
@@ -76,12 +90,16 @@ export function Accounts({
   const [approvalsError, setApprovalsError] = useState<unknown>();
 
   const load = useCallback(() => {
+    // The inventory waits for the caller's capabilities, and is not asked for without the right
+    // to list (the Vault would refuse).
+    if (capabilityStatus === "loading") return;
+    if (!mayList) { setLoading(false); return; }
     setLoading(true);
     api.request<Page<Account>>("GET", `/vault/accounts?page=${page}&pageSize=${pageSize}`)
       .then((result) => { setData(result); setError(undefined); })
       .catch(setError)
       .finally(() => setLoading(false));
-  }, [api, page]);
+  }, [api, page, mayList, capabilityStatus]);
   useEffect(load, [load]);
 
   // The approval list is what this caller could decide right now (GET /sessions, the only status
@@ -294,7 +312,8 @@ export function Accounts({
             <Download size={16} aria-hidden="true" />
             {t("accounts.import.label")}
           </Button>
-          <Button
+          <GatedButton
+            capability="accounts.onboard"
             type="button"
             variant="primary"
             aria-expanded={onboardOpen}
@@ -303,13 +322,13 @@ export function Accounts({
           >
             <Plus size={16} aria-hidden="true" />
             {onboardOpen ? t("accounts.closeForm") : t("accounts.openForm")}
-          </Button>
+          </GatedButton>
         </>
       }
       hints={[t("accounts.hints.rotation"), t("accounts.hints.hostKey"), t("accounts.hints.tls")]}
     >
       <Notice error={accountAction ? undefined : error} ok={accountAction ? undefined : ok} />
-      {onboardOpen ? (
+      {onboardOpen && can("accounts.onboard") ? (
         <div id="onboard-account">
           <OnboardAccount onDone={(id) => act(t("accounts.notices.onboarded", { id }), async () => undefined)} />
         </div>
@@ -342,22 +361,22 @@ export function Accounts({
 
       <Tabs value={view} onValueChange={(next) => setView(next as View)} className="reference-tabs">
         <TabsList aria-label={t("accounts.tabsAria")}>
-          <TabsTrigger value="resources">
+          {viewShown.resources ? <TabsTrigger value="resources">
             {t("accounts.tabs.resources")}
             <span className="reference-tab-count">{loading || !data ? "…" : data.totalItems}</span>
-          </TabsTrigger>
-          <TabsTrigger value="accounts">
+          </TabsTrigger> : null}
+          {viewShown.accounts ? <TabsTrigger value="accounts">
             {t("accounts.tabs.accounts")}
             <span className="reference-tab-count">{loading || !data ? "…" : data.totalItems}</span>
-          </TabsTrigger>
-          <TabsTrigger value="policies">
+          </TabsTrigger> : null}
+          {viewShown.policies ? <TabsTrigger value="policies">
             {t("accounts.tabs.policies")}
             <span className="reference-tab-count">—</span>
-          </TabsTrigger>
-          <TabsTrigger value="requests">
+          </TabsTrigger> : null}
+          {viewShown.requests ? <TabsTrigger value="requests">
             {t("accounts.tabs.requests")}
             <span className="reference-tab-count">{approvalsUnavailable ? "—" : approvals?.totalItems ?? "…"}</span>
-          </TabsTrigger>
+          </TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="resources">
