@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="682" viewBox="0 0 1440 682" role="img" aria-labelledby="title desc">
+  <title id="title">OpenBastion — Actions &amp; sélection</title>
+  <desc id="desc">Boutons, contrôles interactifs et composants de sélection. Planche de composants illustratifs alignés sur les références UI du projet.</desc>
+
+  <defs>
+    <style>
+      svg {
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      .brand-kicker { fill: #2563EB; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+      .page-title { fill: #0F172A; font-size: 34px; font-weight: 700; }
+      .page-subtitle { fill: #64748B; font-size: 15px; font-weight: 400; }
+      .section-label { fill: #2563EB; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+      .card-bg { fill: #FFFFFF; stroke: #E2E8F0; stroke-width: 1; }
+      .card-title { fill: #0F172A; font-size: 12px; font-weight: 700; }
+      .card-tag { fill: #94A3B8; font-size: 8px; font-weight: 700; text-anchor: end; }
+      .card-divider { stroke: #F1F5F9; stroke-width: 1; }
+      .field-label { fill: #334155; font-size: 10px; font-weight: 500; }
+      .footer-text { fill: #64748B; font-size: 9px; font-weight: 500; }
+    </style>
+
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+
+    <!-- Gabarit de carte standard (420 x 112) -->
+    <g id="card-shell">
+      <rect width="420" height="112" rx="8" class="card-bg" filter="url(#cardShadow)" />
+      <line x1="16" y1="31" x2="404" y2="31" class="card-divider" />
+      <text x="404" y="22" class="card-tag">UI COMPONENT</text>
+    </g>
+  </defs>
+
+  <!-- Arrière-plan et bandeau supérieur -->
+  <g id="Layer_Background">
+    <rect width="1440" height="682" fill="#F8FAFC" />
+  </g>
+  <g id="Layer_BrandChrome">
+    <rect width="1440" height="10" fill="#0D2137" />
+  </g>
+
+  <!-- En-tête de planche -->
+  <g id="Layer_Header">
+    <text x="64" y="62" class="brand-kicker">OPENBASTION / DESIGN SYSTEM</text>
+    <text x="64" y="116" class="page-title">Actions &amp; sélection</text>
+    <text x="64" y="148" class="page-subtitle">Actions, états interactifs et sélection · composants illustratifs alignés sur les références</text>
+  </g>
+
+  <!-- Contenu principal : Grille 3 colonnes (x = 64, 510, 956 | largeur carte = 420 | gouttière = 26) -->
+  <g id="Layer_Content">
+    <!-- Séparateur de section -->
+    <g id="Section_Header">
+      <text x="64" y="207" class="section-label">ACTIONS &amp; SÉLECTION</text>
+      <line x1="220" y1="203" x2="1376" y2="203" stroke="#E2E8F0" stroke-width="1" />
+    </g>
+
+    <!-- RANGÉE 1 (y = 221) -->
+    <g id="Row_1">
+      <!-- Carte 1 : Button -->
+      <g id="Card_Button" transform="translate(64, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Button</text>
+
+        <!-- Bouton primaire -->
+        <rect x="16" y="48" width="68" height="28" rx="6" fill="#2563EB" />
+        <text x="50" y="66" font-size="10" fill="#FFFFFF" font-weight="600" text-anchor="middle">Créer</text>
+
+        <!-- Bouton secondaire -->
+        <rect x="92" y="48" width="86" height="28" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="135" y="66" font-size="10" fill="#334155" font-weight="600" text-anchor="middle">Secondaire</text>
+
+        <!-- Bouton danger -->
+        <rect x="186" y="48" width="84" height="28" rx="6" fill="#DC2626" />
+        <text x="228" y="66" font-size="10" fill="#FFFFFF" font-weight="600" text-anchor="middle">Supprimer</text>
+
+        <!-- Bouton ghost / outline -->
+        <rect x="278" y="48" width="68" height="28" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+      </g>
+
+      <!-- Carte 2 : Checkbox -->
+      <g id="Card_Checkbox" transform="translate(510, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Checkbox</text>
+
+        <!-- Option 1 : Checkbox cochée -->
+        <rect x="16" y="49" width="16" height="16" rx="4" fill="#2563EB" />
+        <text x="24" y="61" font-size="11" fill="#FFFFFF" font-weight="700" text-anchor="middle">✓</text>
+        <text x="42" y="61" class="field-label">Enregistrer la session</text>
+
+        <!-- Option 2 : Checkbox décochée -->
+        <rect x="16" y="77" width="16" height="16" rx="4" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1" />
+        <text x="42" y="89" class="field-label">Inclure le presse-papiers</text>
+      </g>
+
+      <!-- Carte 3 : RadioGroup -->
+      <g id="Card_RadioGroup" transform="translate(956, 221)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">RadioGroup</text>
+
+        <!-- Radio 1 (Sélectionné) -->
+        <circle cx="24" cy="62" r="7" fill="#FFFFFF" stroke="#2563EB" stroke-width="1.5" />
+        <circle cx="24" cy="62" r="3.5" fill="#2563EB" />
+        <text x="38" y="65" class="field-label">SSH</text>
+
+        <!-- Radio 2 -->
+        <circle cx="106" cy="62" r="7" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.2" />
+        <text x="120" y="65" class="field-label">RDP</text>
+
+        <!-- Radio 3 -->
+        <circle cx="188" cy="62" r="7" fill="#FFFFFF" stroke="#94A3B8" stroke-width="1.2" />
+        <text x="202" y="65" class="field-label">HTTPS</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 2 (y = 345) -->
+    <g id="Row_2">
+      <!-- Carte 4 : Switch -->
+      <g id="Card_Switch" transform="translate(64, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Switch</text>
+
+        <!-- Switch actif -->
+        <rect x="16" y="52" width="36" height="20" rx="10" fill="#2563EB" />
+        <circle cx="32" cy="62" r="7" fill="#FFFFFF" />
+        <text x="60" y="66" font-size="10" fill="#334155" font-weight="600">MFA obligatoire</text>
+
+        <!-- Switch inactif -->
+        <rect x="210" y="52" width="36" height="20" rx="10" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="1" />
+        <circle cx="220" cy="62" r="7" fill="#FFFFFF" />
+        <text x="254" y="66" font-size="10" fill="#64748B" font-weight="500">Désactivé</text>
+      </g>
+
+      <!-- Carte 5 : Toggle -->
+      <g id="Card_Toggle" transform="translate(510, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Toggle</text>
+
+        <!-- Toggle actif -->
+        <rect x="16" y="48" width="36" height="32" rx="6" fill="#2563EB" />
+        <text x="34" y="69" font-size="12" fill="#FFFFFF" font-weight="700" text-anchor="middle">B</text>
+
+        <!-- Toggle inactifs -->
+        <rect x="58" y="48" width="36" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="76" y="69" font-size="12" fill="#475569" font-weight="700" text-anchor="middle">I</text>
+
+        <rect x="100" y="48" width="36" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <text x="118" y="69" font-size="12" fill="#475569" font-weight="700" text-anchor="middle">U</text>
+
+        <text x="148" y="67" font-size="10" fill="#64748B" font-weight="500">État pressé / non pressé</text>
+      </g>
+
+      <!-- Carte 6 : ToggleGroup -->
+      <g id="Card_ToggleGroup" transform="translate(956, 345)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">ToggleGroup</text>
+
+        <!-- Conteneur groupe -->
+        <rect x="16" y="48" width="220" height="34" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
+        <!-- Segment actif -->
+        <rect x="18" y="50" width="71" height="30" rx="5" fill="#2563EB" />
+        <text x="53" y="69" font-size="9.5" fill="#FFFFFF" font-weight="700" text-anchor="middle">Jour</text>
+
+        <text x="131" y="69" font-size="9.5" fill="#475569" font-weight="600" text-anchor="middle">Semaine</text>
+        <text x="193" y="69" font-size="9.5" fill="#475569" font-weight="600" text-anchor="middle">Mois</text>
+      </g>
+    </g>
+
+    <!-- RANGÉE 3 (y = 469, centrée sur la colonne médiane x = 510) -->
+    <g id="Row_3">
+      <!-- Carte 7 : Slider -->
+      <g id="Card_Slider" transform="translate(510, 469)">
+        <use href="#card-shell" />
+        <text x="16" y="23" class="card-title">Slider</text>
+
+        <!-- Piste de fond -->
+        <line x1="16" y1="72" x2="330" y2="72" stroke="#CBD5E1" stroke-width="2" />
+        <!-- Piste active -->
+        <line x1="16" y1="72" x2="230" y2="72" stroke="#2563EB" stroke-width="2" />
+        <!-- Bouton du curseur -->
+        <circle cx="230" cy="72" r="8" fill="#FFFFFF" stroke="#2563EB" stroke-width="2" />
+        <!-- Étiquette pourcentage -->
+        <text x="350" y="76" font-size="10" fill="#2563EB" font-weight="700">67 %</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Pied de page -->
+  <g id="Layer_Footer">
+    <line x1="64" y1="634" x2="1376" y2="634" stroke="#E2E8F0" stroke-width="1" />
+    <text x="64" y="652" class="footer-text">OPENBASTION · UI KIT / PR #223 · DOCUMENT DE TRAVAIL</text>
+    <text x="1376" y="652" class="footer-text" text-anchor="end">04b-actions-selection.svg</text>
+  </g>
+</svg>

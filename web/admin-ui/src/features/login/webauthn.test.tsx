@@ -38,6 +38,8 @@ describe("WebAuthn in the login (ADR-0065)", () => {
     const options = { publicKey: { challenge: "AQID", rpId: "localhost", allowCredentials: [{ id: "CQk", type: "public-key" }] } };
     render(<SecondFactor api={api} challenge={{ kind: "required", challenge: "ch-k", factors: ["webauthn"], webauthn: options }} onToken={onToken} onCancel={vi.fn()} credentials={credentials} />);
     expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull(); // no TOTP for a strict role
+    expect(screen.queryByText("Vérifier et continuer")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Vérifiez votre identité" })).toBeTruthy();
     fireEvent.click(screen.getByText("Utiliser ma clé de sécurité"));
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("key-tok"));
     expect(new Uint8Array(asked.get!.publicKey!.challenge as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]));

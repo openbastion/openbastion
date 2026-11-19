@@ -1,0 +1,124 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1200" viewBox="0 0 1440 1200" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="title">Foundations — extrait des références</title>
+  <desc id="desc">Mesures consolidées des 11 SVG fournis. Les variantes de source restent visibles plutôt que masquées.</desc>
+  <defs>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+  </defs>
+  <g id="Layer_Background">
+    <rect width="1440" height="1200" fill="#F8FAFC" />
+  </g>
+  <g id="Layer_BrandChrome">
+    <rect x="0" y="0" width="1440" height="10" fill="#0D2137" />
+  </g>
+  <g id="Layer_Header">
+    <text x="64" y="62" fill="#2563EB" font-size="12" font-weight="700" letter-spacing="2">OPENBASTION / UI REFERENCE ALIGNMENT</text>
+    <text x="64" y="116" fill="#0F172A" font-size="34" font-weight="700">Foundations — extrait des références</text>
+    <text x="64" y="148" fill="#64748B" font-size="15">Mesures consolidées des 11 SVG fournis. Les variantes de source restent visibles plutôt que masquées.</text>
+  </g>
+  <g id="Layer_Content">
+    <rect x="64" y="190" width="620" height="420" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="84" y="220" font-size="16" fill="#0F172A" font-weight="700">01 / Palette issue des références</text>
+    <text x="84" y="242" font-size="11" fill="#64748B" font-weight="400">Valeurs dominantes relevées dans les 11 SVG sources</text>
+    <rect x="88" y="260" width="54" height="42" rx="6" fill="#F8FAFC" stroke="#F8FAFC" stroke-width="1" />
+    <text x="156" y="277" font-size="12" fill="#0F172A" font-weight="650">Canvas</text>
+    <text x="156" y="294" font-size="11" fill="#64748B" font-weight="500">#F8FAFC</text>
+    <text x="156" y="311" font-size="10" fill="#64748B" font-weight="400">fonds de page</text>
+    <rect x="88" y="326" width="54" height="42" rx="6" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="1" />
+    <text x="156" y="343" font-size="12" fill="#0F172A" font-weight="650">Surface</text>
+    <text x="156" y="360" font-size="11" fill="#64748B" font-weight="500">#FFFFFF</text>
+    <text x="156" y="377" font-size="10" fill="#64748B" font-weight="400">cartes et panneaux</text>
+    <rect x="88" y="392" width="54" height="42" rx="6" fill="#0D2137" stroke="#0D2137" stroke-width="1" />
+    <text x="156" y="409" font-size="12" fill="#0F172A" font-weight="650">Chrome principal</text>
+    <text x="156" y="426" font-size="11" fill="#64748B" font-weight="500">#0D2137</text>
+    <text x="156" y="443" font-size="10" fill="#64748B" font-weight="400">sidebar Dashboard / écrans métier</text>
+    <rect x="88" y="458" width="54" height="42" rx="6" fill="#152E4D" stroke="#152E4D" stroke-width="1" />
+    <text x="156" y="475" font-size="12" fill="#0F172A" font-weight="650">Chrome élevé</text>
+    <text x="156" y="492" font-size="11" fill="#64748B" font-weight="500">#152E4D</text>
+    <text x="156" y="509" font-size="10" fill="#64748B" font-weight="400">workspace, cartes sidebar</text>
+    <rect x="88" y="524" width="54" height="42" rx="6" fill="#2563EB" stroke="#2563EB" stroke-width="1" />
+    <text x="156" y="541" font-size="12" fill="#0F172A" font-weight="650">Action primaire</text>
+    <text x="156" y="558" font-size="11" fill="#64748B" font-weight="500">#2563EB</text>
+    <text x="156" y="575" font-size="10" fill="#64748B" font-weight="400">actions et sélection</text>
+    <rect x="380" y="260" width="54" height="42" rx="6" fill="#38BDF8" stroke="#38BDF8" stroke-width="1" />
+    <text x="448" y="277" font-size="12" fill="#0F172A" font-weight="650">Accent chrome</text>
+    <text x="448" y="294" font-size="11" fill="#64748B" font-weight="500">#38BDF8</text>
+    <text x="448" y="311" font-size="10" fill="#64748B" font-weight="400">état actif / détails</text>
+    <rect x="380" y="326" width="54" height="42" rx="6" fill="#0F172A" stroke="#0F172A" stroke-width="1" />
+    <text x="448" y="343" font-size="12" fill="#0F172A" font-weight="650">Texte principal</text>
+    <text x="448" y="360" font-size="11" fill="#64748B" font-weight="500">#0F172A</text>
+    <text x="448" y="377" font-size="10" fill="#64748B" font-weight="400">titres et contenu</text>
+    <rect x="380" y="392" width="54" height="42" rx="6" fill="#64748B" stroke="#64748B" stroke-width="1" />
+    <text x="448" y="409" font-size="12" fill="#0F172A" font-weight="650">Texte secondaire</text>
+    <text x="448" y="426" font-size="11" fill="#64748B" font-weight="500">#64748B</text>
+    <text x="448" y="443" font-size="10" fill="#64748B" font-weight="400">labels et métadonnées</text>
+    <rect x="380" y="458" width="54" height="42" rx="6" fill="#94A3B8" stroke="#94A3B8" stroke-width="1" />
+    <text x="448" y="475" font-size="12" fill="#0F172A" font-weight="650">Texte tertiaire</text>
+    <text x="448" y="492" font-size="11" fill="#64748B" font-weight="500">#94A3B8</text>
+    <text x="448" y="509" font-size="10" fill="#64748B" font-weight="400">aide et éléments discrets</text>
+    <rect x="380" y="524" width="54" height="42" rx="6" fill="#E2E8F0" stroke="#E2E8F0" stroke-width="1" />
+    <text x="448" y="541" font-size="12" fill="#0F172A" font-weight="650">Bordure</text>
+    <text x="448" y="558" font-size="11" fill="#64748B" font-weight="500">#E2E8F0</text>
+    <text x="448" y="575" font-size="10" fill="#64748B" font-weight="400">séparateurs et contours</text>
+    <rect x="712" y="190" width="664" height="420" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="732" y="220" font-size="16" fill="#0F172A" font-weight="700">02 / Typographie mesurée</text>
+    <text x="732" y="242" font-size="11" fill="#64748B" font-weight="400">Famille déclarée dans les SVG : système / Inter en priorité</text>
+    <text x="740" y="270" font-size="13" fill="#0F172A" font-weight="500">-apple-system · BlinkMacSystemFont · Inter · Segoe UI · Roboto · Arial</text>
+    <text x="740" y="324" font-size="30" fill="#0F172A" font-weight="700">Vue d’ensemble</text>
+    <text x="740" y="350" font-size="12" fill="#64748B" font-weight="400">Titre de page observé : 26 px (quelques écrans : 30 px)</text>
+    <text x="740" y="402" font-size="17" fill="#0F172A" font-weight="700">Bibliothèque des enregistrements</text>
+    <text x="740" y="428" font-size="12" fill="#64748B" font-weight="400">Titre de panneau observé : 15–16 px</text>
+    <text x="740" y="480" font-size="13" fill="#0F172A" font-weight="600">Sessions actives · 12</text>
+    <text x="740" y="506" font-size="12" fill="#64748B" font-weight="400">Corps / navigation : 12–13,5 px</text>
+    <text x="740" y="558" font-size="10" fill="#64748B" font-weight="700" letter-spacing=".8">CAMÉRA / CIBLE / UTILISATEUR</text>
+    <text x="740" y="582" font-size="12" fill="#64748B" font-weight="400">En-têtes de tableau : 9,5–10,5 px</text>
+    <rect x="64" y="632" width="620" height="450" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="84" y="662" font-size="16" fill="#0F172A" font-weight="700">03 / Géométrie du shell</text>
+    <text x="84" y="684" font-size="11" fill="#64748B" font-weight="400">Mesures extraites des éléments SVG, coordonnées en px sur viewBox 1440 × 1080</text>
+    <text x="90" y="720" font-size="13" fill="#0F172A" font-weight="650">Référence Dashboard / Accès / Audit / Infrastructure</text>
+    <text x="90" y="744" font-size="12" fill="#64748B" font-weight="400">Sidebar : 232 px · topbar : 64 px · contenu débute à x=264</text>
+    <rect x="90" y="770" width="232" height="100" rx="4" fill="#0D2137" stroke="#0D2137" stroke-width="1" />
+    <rect x="322" y="770" width="290" height="18" rx="2" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+    <rect x="322" y="788" width="290" height="82" rx="2" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+    <text x="104" y="800" font-size="12" fill="#FFFFFF" font-weight="700">232 px</text>
+    <text x="336" y="803" font-size="11" fill="#0F172A" font-weight="600">Topbar 64 px</text>
+    <text x="90" y="910" font-size="13" fill="#0F172A" font-weight="650">Référence Sessions / Historique / Enregistrements / Alertes</text>
+    <text x="90" y="934" font-size="12" fill="#64748B" font-weight="400">Sidebar : 240 px · topbar : 64 px · contenu débute à x=272</text>
+    <rect x="90" y="958" width="240" height="80" rx="4" fill="#0B1E33" stroke="#0B1E33" stroke-width="1" />
+    <rect x="330" y="958" width="282" height="16" rx="2" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" />
+    <rect x="330" y="974" width="282" height="64" rx="2" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+    <text x="104" y="988" font-size="12" fill="#FFFFFF" font-weight="700">240 px</text>
+    <rect x="712" y="632" width="664" height="450" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)" />
+    <text x="732" y="662" font-size="16" fill="#0F172A" font-weight="700">04 / Espacements, formes et effets</text>
+    <text x="732" y="684" font-size="11" fill="#64748B" font-weight="400">Mesures et motifs observés, non une grille supposée uniforme</text>
+    <text x="740" y="710" font-size="12" fill="#0F172A" font-weight="700">Rayons</text>
+    <text x="900" y="710" font-size="12" fill="#2563EB" font-weight="700">6 / 8 / 10 / 12 px</text>
+    <text x="740" y="729" font-size="11" fill="#64748B" font-weight="400">contrôles, cartes, sélecteur workspace</text>
+    <text x="740" y="765" font-size="12" fill="#0F172A" font-weight="700">Contrôles</text>
+    <text x="900" y="765" font-size="12" fill="#2563EB" font-weight="700">34–40 px</text>
+    <text x="740" y="784" font-size="11" fill="#64748B" font-weight="400">hauteurs fréquentes des champs et boutons</text>
+    <text x="740" y="820" font-size="12" fill="#0F172A" font-weight="700">Cartes KPI</text>
+    <text x="900" y="820" font-size="12" fill="#2563EB" font-weight="700">≈ 106 px</text>
+    <text x="740" y="839" font-size="11" fill="#64748B" font-weight="400">sessions / enregistrements : hauteur observée</text>
+    <text x="740" y="875" font-size="12" fill="#0F172A" font-weight="700">Gouttières</text>
+    <text x="900" y="875" font-size="12" fill="#2563EB" font-weight="700">16 / 20 / 24 px</text>
+    <text x="740" y="894" font-size="11" fill="#64748B" font-weight="400">marges internes récurrentes</text>
+    <text x="740" y="930" font-size="12" fill="#0F172A" font-weight="700">Bordures</text>
+    <text x="900" y="930" font-size="12" fill="#2563EB" font-weight="700">1 px · #E2E8F0</text>
+    <text x="740" y="949" font-size="11" fill="#64748B" font-weight="400">trait discret, séparateurs #F1F5F9</text>
+    <text x="740" y="985" font-size="12" fill="#0F172A" font-weight="700">Ombres</text>
+    <text x="900" y="985" font-size="12" fill="#2563EB" font-weight="700">0 1px · blur 2px · 4%</text>
+    <text x="740" y="1004" font-size="11" fill="#64748B" font-weight="400">Dashboard : ombre très légère</text>
+    <text x="740" y="1060" font-size="10" fill="#64748B" font-weight="400">Ombre source dashboard : dx 0 · dy 1 · stdDeviation 2 · #0F172A / 0,04</text>
+    <text x="90" y="1100" font-size="11" fill="#B45309" font-weight="600">Arbitrage : 232 px est la référence dominante des écrans métier ; 240 px est conservé comme variante Sessions tant qu’une normalisation explicite n’est pas validée.</text>
+    <line x1="64" y1="1140" x2="1376" y2="1140" stroke="#E2E8F0" />
+    <text x="64" y="1170" fill="#64748B" font-size="11">OPENBASTION · DESIGN SYSTEM / DOCUMENT DE TRAVAIL</text>
+  </g>
+  <g id="Layer_Footer">
+    <text x="1376" y="1170" fill="#64748B" font-size="11" text-anchor="end">PR #223 · FEAT/UI-REFERENCE-ALIGNMENT · NON FUSIONNÉE</text>
+    <text x="90" y="1120" fill="#B45309" font-size="10.5" font-weight="600">Écart avec e368900 : styles.css définit sidebar 16rem (256 px), rayons 4/6/8 px et espacements 4/8/12/16/20/24 px.</text>
+    <text x="90" y="1134" fill="#64748B" font-size="9.5">Les tokens actuels sont conservés comme état d’implémentation ; leur convergence avec les mesures sources attend validation.</text>
+  </g>
+</svg>

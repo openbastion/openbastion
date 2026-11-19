@@ -18,6 +18,8 @@ function renderAccounts(routes: Record<string, { status?: number; body?: unknown
   const { api, calls } = fakeApi(routes);
   api.setToken("test-token");
   render(<SignedInContext.Provider value={{ api, who: null, signOut: () => api.setToken(null) }}><Accounts /></SignedInContext.Provider>);
+  // The reference screen opens on the resource view; the rule builder lives in "Comptes".
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /Comptes/ }), { button: 0 });
   return { api, calls };
 }
 

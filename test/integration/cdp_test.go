@@ -53,7 +53,7 @@ func startHeadlessChrome(t *testing.T, chrome string) *cdpPage {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(chrome, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu",
-		"--disable-extensions", "--remote-debugging-port=0", "--user-data-dir="+profile, "--window-size=1400,1000", "about:blank")
+		"--disable-extensions", "--no-proxy-server", "--remote-debugging-port=0", "--user-data-dir="+profile, "--window-size=1400,1000", "about:blank")
 	if os.Getuid() == 0 {
 		cmd.Args = append(cmd.Args, "--no-sandbox")
 	}
@@ -279,4 +279,38 @@ func (p *cdpPage) press(chord ...cdpKey) {
 		}
 	}
 	time.Sleep(300 * time.Millisecond)
+}
+
+// screenEndedNotice is true when the screen viewer shows its own end of session: the danger notice
+// that is a direct child of the viewer (ScreenViewer, phase "ended"), found by its role, not by a
+// class of the design system. The clipboard's notices sit in their own panel, and the page's notices
+// outside the viewer: neither counts. A class selector here went dead when the notices moved to
+// @openbastion/ui (".notice.error" matched nothing, and the check could never fail).
+const screenEndedNotice = `!!document.querySelector('.screen > [role="alert"]')`
+
+// signIn logs in through the local form and waits for the authenticated navigation.
+func (p *cdpPage) signIn(username, password string) {
+	p.t.Helper()
+	p.waitTrue("the login form", `!!document.querySelector('input[name="username"]')`, 30*time.Second)
+	p.fill(`input[name="username"]`, username)
+	p.fill(`input[name="password"]`, password)
+	p.clickButton("Se connecter")
+	p.waitTrue("the sections", `[...document.querySelectorAll("nav button")].some((b) => b.innerText.trim() === "Sessions")`, 30*time.Second)
+}
+
+// showSession opens the Sessions page and looks one session up by its identifier, as an operator
+// does: the "Chercher une session" form of the live view, then "Afficher".
+func (p *cdpPage) showSession(id string) {
+	p.t.Helper()
+	p.clickButton("Sessions")
+	p.waitTrue("the session lookup", `!!document.querySelector('form[aria-label="Chercher une session"] input')`, 15*time.Second)
+	p.fill(`form[aria-label="Chercher une session"] input`, id)
+	p.clickButton("Afficher")
+}
+
+// openScreen opens the screen of the session shown, through its "Ouvrir l'écran" button.
+func (p *cdpPage) openScreen() {
+	p.t.Helper()
+	p.waitTrue("the screen button", `[...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Ouvrir l'écran")`, 15*time.Second)
+	p.clickButton("Ouvrir l'écran")
 }

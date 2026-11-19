@@ -100,7 +100,15 @@ func TestAdminUI_SecretInjectionStepUpInAHeadlessBrowser(t *testing.T) {
 	page := startHeadlessChrome(t, chrome)
 	page.dump = os.Getenv("ADMIN_UI_BROWSER_DUMP")
 	page.viewport(1440, 1000)
-	page.call("Page.navigate", map[string]any{"url": uiURL + "/"})
+	var navigation struct {
+		ErrorText string `json:"errorText"`
+	}
+	if err := json.Unmarshal(page.call("Page.navigate", map[string]any{"url": uiURL + "/"}), &navigation); err != nil {
+		t.Fatalf("decode browser navigation result: %v", err)
+	}
+	if navigation.ErrorText != "" {
+		t.Fatalf("navigate to Admin UI at %s: %s", uiURL, navigation.ErrorText)
+	}
 	page.waitTrue("login form", "!!document.querySelector('input[name=\"username\"]')", 30*time.Second)
 	page.fill("input[name=\"username\"]", "browser-operator")
 	page.fill("input[name=\"password\"]", "browser-password")

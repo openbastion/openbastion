@@ -28,8 +28,15 @@ async function signIn(api = createApi()) {
   fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
   fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
   fireEvent.click(screen.getByText("Se connecter"));
-  expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
+  expect(await screen.findByRole("button", { name: /alice.*platform-admin/ })).toBeTruthy();
   return { api, ...view };
+}
+
+async function openPreferences() {
+  const userMenu = screen.getByRole("button", { name: /alice.*platform-admin/ });
+  fireEvent.click(userMenu);
+  fireEvent.click(screen.getByRole("button", { name: "Préférences" }));
+  return userMenu;
 }
 
 describe("ADR-0073 UX-05 — préférences opérateur", () => {
@@ -38,7 +45,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     window.sessionStorage.clear();
     await signIn();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ouvrir les préférences" }));
+    await openPreferences();
     const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
     fireEvent.change(within(dialog).getByLabelText("Thème"), { target: { value: "dark" } });
     fireEvent.change(within(dialog).getByLabelText("Densité de l'interface"), { target: { value: "compact" } });
@@ -46,14 +53,14 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     fireEvent.click(within(dialog).getByLabelText("Réduire la navigation latérale"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Enregistrer les préférences" }));
 
-    expect(await screen.findByRole("heading", { name: "Comptes privilégiés" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Accès privilégiés" })).toBeTruthy();
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.density).toBe("compact");
     expect(screen.getByRole("button", { name: "Développer la navigation" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Ajouter Comptes aux favoris" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter Accès privilégiés aux favoris" }));
     expect(screen.getByRole("heading", { name: "Favoris" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Retirer Comptes des favoris" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Retirer Accès privilégiés des favoris" })).toHaveLength(2);
 
     const raw = window.localStorage.getItem("openbastion.admin-ui.preferences.v1") ?? "";
     expect(raw).toContain('"theme":"dark"');
@@ -68,8 +75,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
   it("does not persist a cancelled draft and restores the dialog trigger focus", async () => {
     window.localStorage.clear();
     await signIn();
-    const trigger = screen.getByRole("button", { name: "Ouvrir les préférences" });
-    fireEvent.click(trigger);
+    const trigger = await openPreferences();
     const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
     fireEvent.change(within(dialog).getByLabelText("Thème"), { target: { value: "dark" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Annuler" }));
@@ -81,25 +87,25 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
   it("uses the saved default destination on the next application load", async () => {
     window.localStorage.clear();
     const first = await signIn();
-    fireEvent.click(screen.getByRole("button", { name: "Ouvrir les préférences" }));
+    await openPreferences();
     const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
     fireEvent.change(within(dialog).getByLabelText("Vue affichée à la connexion"), { target: { value: "security" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Enregistrer les préférences" }));
     first.unmount();
 
     await signIn();
-    expect(await screen.findByRole("heading", { name: "Centre de sécurité" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Audit & conformité" })).toBeTruthy();
   });
 
   it("supports section shortcuts but ignores them in text fields", async () => {
     window.localStorage.clear();
     await signIn();
     fireEvent.keyDown(screen.getByRole("main"), { key: "2", altKey: true, shiftKey: true });
-    expect(await screen.findByRole("heading", { name: "Comptes privilégiés" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Accès privilégiés" })).toBeTruthy();
 
     const filter = screen.getByLabelText("Filtrer les comptes de cette page");
     fireEvent.keyDown(filter, { key: "3", altKey: true, shiftKey: true });
-    expect(screen.getByRole("heading", { name: "Comptes privilégiés" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Accès privilégiés" })).toBeTruthy();
   });
 
   it("does not apply a preference draft when local storage refuses the write", async () => {
@@ -108,7 +114,7 @@ describe("ADR-0073 UX-05 — préférences opérateur", () => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function () { throw new Error("blocked"); };
     try {
-      fireEvent.click(screen.getByRole("button", { name: "Ouvrir les préférences" }));
+      await openPreferences();
       const dialog = screen.getByRole("dialog", { name: "Préférences et raccourcis" });
       fireEvent.change(within(dialog).getByLabelText("Thème"), { target: { value: "dark" } });
       fireEvent.click(within(dialog).getByRole("button", { name: "Enregistrer les préférences" }));

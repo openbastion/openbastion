@@ -3,10 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Api } from "../shared/api";
 import { readOperatorPreferences } from "../shared/operatorPreferences";
-import "@openbastion/icons/styles.css";
-import "@openbastion/design-tokens/tokens.css";
-import "@openbastion/ui/styles.css";
-import "./styles.css";
+import "@openbastion/design-tokens/styles.css";
 
 // Apply non-sensitive presentation preferences before the first React render to avoid a theme flash.
 const initialPreferences = readOperatorPreferences();

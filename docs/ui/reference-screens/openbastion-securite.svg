@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="1440" height="1080" viewBox="0 0 1440 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs xmlns="http://www.w3.org/2000/svg">
+    <style>
+      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      .title-lg { font-size: 28px; font-weight: 700; fill: #0F172A; letter-spacing: -0.02em; }
+      .subtitle-md { font-size: 13.5px; font-weight: 400; fill: #64748B; }
+      .card-title { font-size: 17px; font-weight: 700; fill: #0F172A; }
+      .card-subtitle { font-size: 12.5px; font-weight: 400; fill: #64748B; }
+      .label-sm { font-size: 12.5px; font-weight: 600; fill: #334155; }
+      .input-text { font-size: 13px; font-weight: 400; fill: #1E293B; }
+      .helper-text { font-size: 11.5px; font-weight: 400; fill: #64748B; }
+      .tab-active { font-size: 13.5px; font-weight: 600; fill: #0F172A; }
+      .tab-inactive { font-size: 13.5px; font-weight: 500; fill: #64748B; }
+      .nav-section { font-size: 10.5px; font-weight: 600; fill: #64748B; letter-spacing: 0.06em; }
+      .nav-item { font-size: 13.5px; font-weight: 500; fill: #94A3B8; }
+      .nav-item-active { font-size: 13.5px; font-weight: 600; fill: #FFFFFF; }
+      .toggle-title { font-size: 14px; font-weight: 600; fill: #0F172A; }
+      .toggle-desc { font-size: 12.5px; font-weight: 400; fill: #64748B; }
+      .dark-card-title { font-size: 17px; font-weight: 700; fill: #FFFFFF; }
+      .dark-label { font-size: 12.5px; font-weight: 400; fill: #94A3B8; }
+      .dark-value { font-size: 12.5px; font-weight: 600; fill: #F8FAFC; }
+      .link-cyan { font-size: 12.5px; font-weight: 600; fill: #38BDF8; }
+      .link-blue { font-size: 12.5px; font-weight: 600; fill: #2563EB; }
+    </style>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04" />
+    </filter>
+  </defs>
+
+<g xmlns="http://www.w3.org/2000/svg" id="Layer_Background">
+    <rect width="1440" height="1080" fill="#F8FAFC" />
+  </g>
+
+<g xmlns="http://www.w3.org/2000/svg" id="Layer_Sidebar">
+    <rect x="0" y="0" width="234" height="1080" fill="#0A192F" />
+    <line x1="234" y1="0" x2="234" y2="1080" stroke="#1E293B" stroke-width="1" />
+    <g id="Brand_Logo" transform="translate(22, 24)">
+      <rect x="0" y="0" width="32" height="32" rx="8" fill="#172A46" stroke="#233858" stroke-width="1" />
+      <path d="M16 7L9.5 9.8V14.8C9.5 19.1 12.3 23.1 16 24.3C19.7 23.1 22.5 19.1 22.5 14.8V9.8L16 7Z" stroke="#E2E8F0" stroke-width="1.5" fill="none" />
+      <path d="M16 11V19M13 14.5L16 11.5L19 14.5" stroke="#38BDF8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+      <text x="42" y="17" class="font-sans" font-size="16" font-weight="700" fill="#FFFFFF">OpenBastion</text>
+      <text x="42" y="30" class="font-sans" font-size="8.5" font-weight="600" fill="#64748B" letter-spacing="0.08em">PRIVILEGED ACCESS</text>
+    </g>
+    <g id="Workspace_Selector" transform="translate(14, 96)">
+      <rect x="0" y="0" width="206" height="58" rx="10" fill="#112240" stroke="#1E3A5F" stroke-width="1" />
+      <text x="16" y="25" class="font-sans" font-size="13.5" font-weight="600" fill="#F8FAFC">Production</text>
+      <text x="16" y="43" class="font-sans" font-size="11.5" font-weight="400" fill="#94A3B8">Acme Corporation</text>
+      <path d="M188 25L193 30L188 35" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+    <g id="Nav_Workspace" transform="translate(14, 188)">
+      <text x="10" y="10" class="font-sans nav-section">ESPACE DE TRAVAIL</text>
+      <g id="Nav_Overview" transform="translate(0, 26)">
+        <rect x="8" y="10" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5" />
+        <rect x="17" y="10" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5" />
+        <rect x="8" y="19" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5" />
+        <rect x="17" y="19" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5" />
+        <text x="36" y="22" class="font-sans nav-item">Vue d'ensemble</text>
+      </g>
+      <g id="Nav_PrivilegedAccess" transform="translate(0, 72)">
+        <circle cx="13" cy="15" r="4.5" stroke="#64748B" stroke-width="1.5" />
+        <path d="M16.5 18.5L23 25M20 22L22 20M22 24L24 22" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <text x="36" y="22" class="font-sans nav-item">Accès privilégiés</text>
+      </g>
+      <g id="Nav_Sessions" transform="translate(0, 118)">
+        <rect x="7" y="10" width="17" height="12" rx="2" stroke="#64748B" stroke-width="1.5" />
+        <path d="M12 25H19M15.5 22V25" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <text x="36" y="22" class="font-sans nav-item">Sessions</text>
+        <rect x="172" y="8" width="26" height="20" rx="5" fill="#1D4ED8" />
+        <text x="185" y="22" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#FFFFFF">24</text>
+      </g>
+      <g id="Nav_Infrastructure" transform="translate(0, 164)">
+        <rect x="8" y="9" width="15" height="6" rx="1.5" stroke="#64748B" stroke-width="1.5" />
+        <rect x="8" y="18" width="15" height="6" rx="1.5" stroke="#64748B" stroke-width="1.5" />
+        <circle cx="11.5" cy="12" r="1" fill="#64748B" />
+        <circle cx="11.5" cy="21" r="1" fill="#64748B" />
+        <text x="36" y="22" class="font-sans nav-item">Infrastructure</text>
+      </g>
+      <g id="Nav_Audit" transform="translate(0, 210)">
+        <rect x="9" y="8" width="13" height="17" rx="2" stroke="#64748B" stroke-width="1.5" />
+        <path d="M12.5 13H18.5M12.5 17H18.5M12.5 21H16" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <text x="36" y="22" class="font-sans nav-item">Audit &amp; conformité</text>
+      </g>
+      <g id="Nav_Security_Active" transform="translate(0, 254)">
+        <rect x="0" y="0" width="206" height="40" rx="8" fill="#162D4D" />
+        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8" />
+        <path d="M15.5 9L7.5 12V18C7.5 23 10.8 27.4 15.5 29C20.2 27.4 23.5 23 23.5 18V12L15.5 9Z" stroke="#38BDF8" stroke-width="1.5" fill="none"/>
+        <path d="M12 18L14.5 20.5L19.5 15.5" stroke="#38BDF8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="36" y="24" class="font-sans nav-item-active">Sécurité</text>
+      </g>
+      <g id="Nav_Settings" transform="translate(0, 300)">
+        <circle cx="15.5" cy="20" r="3.5" stroke="#64748B" stroke-width="1.6" />
+        <path d="M15.5 12V14M15.5 26V28M7.5 20H9.5M21.5 20H23.5M10 14.5L11.5 16M19.5 24L21 25.5M21 14.5L19.5 16M11.5 24L10 25.5" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <text x="36" y="24" class="font-sans nav-item">Paramètres</text>
+      </g>
+    </g>
+    <g id="Nav_Resources" transform="translate(14, 534)">
+      <text x="10" y="10" class="font-sans nav-section">RESSOURCES</text>
+      <g id="Nav_Docs" transform="translate(0, 26)">
+        <path d="M9 8H17L21 12V24C21 24.6 20.6 25 20 25H9C8.4 25 8 24.6 8 24V9C8 8.4 8.4 8 9 8Z" stroke="#64748B" stroke-width="1.5" />
+        <path d="M12 15H17M12 19H17" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <text x="36" y="22" class="font-sans nav-item">Documentation</text>
+      </g>
+      <g id="Nav_HelpCenter" transform="translate(0, 72)">
+        <circle cx="15" cy="17" r="8" stroke="#64748B" stroke-width="1.5" />
+        <path d="M13 14.5C13 13.3 13.9 12.5 15 12.5C16.1 12.5 17 13.3 17 14.5C17 15.5 15.8 16 15 17V18" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+        <circle cx="15" cy="21" r="1" fill="#64748B" />
+        <text x="36" y="22" class="font-sans nav-item">Centre d'aide</text>
+      </g>
+    </g>
+    <g id="Sidebar_Status_Card" transform="translate(14, 872)">
+      <rect x="0" y="0" width="206" height="96" rx="10" fill="#112240" stroke="#1E3A5F" stroke-width="1" />
+      <circle cx="18" cy="22" r="3.5" fill="#06B6D4" />
+      <text x="29" y="26" class="font-sans" font-size="12" font-weight="600" fill="#F8FAFC">Supervision à agréger</text>
+      <text x="16" y="48" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">Aucun état consolidé disponible</text>
+      <line x1="16" y1="64" x2="190" y2="64" stroke="#1E3A5F" stroke-width="1" />
+      <text x="16" y="81" class="font-sans" font-size="10.5" font-weight="500" fill="#64748B">v2.8.0  ·  EU / Paris</text>
+    </g>
+    <g id="Sidebar_User_Profile" transform="translate(14, 994)">
+      <line x1="-14" y1="-10" x2="220" y2="-10" stroke="#1E293B" stroke-width="1" />
+      <circle cx="22" cy="24" r="16" fill="#172A46" stroke="#233858" stroke-width="1" />
+      <circle cx="22" cy="19" r="5" stroke="#94A3B8" stroke-width="1.5" />
+      <path d="M13 33C14.5 28.5 18 27 22 27C26 27 29.5 28.5 31 33" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
+      <text x="48" y="21" class="font-sans" font-size="13" font-weight="600" fill="#F8FAFC">Camille Martin</text>
+      <text x="48" y="38" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">Administrateur</text>
+      <path d="M194 22L199 27L194 32" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+  </g>
+
+<g xmlns="http://www.w3.org/2000/svg" id="Layer_TopHeader">
+    <rect x="234" y="0" width="1206" height="68" fill="#FFFFFF" />
+    <line x1="234" y1="68" x2="1440" y2="68" stroke="#E2E8F0" stroke-width="1" />
+    <g id="Header_Breadcrumb" transform="translate(264, 39)">
+      <text x="0" y="0" class="font-sans" font-size="13" font-weight="500" fill="#64748B">Espace de travail</text>
+      <text x="114" y="0" class="font-sans" font-size="13" font-weight="400" fill="#CBD5E1">/</text>
+      <text x="130" y="0" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Sécurité</text>
+    </g>
+    <g id="Header_Search" transform="translate(876, 16)">
+      <rect x="0" y="0" width="300" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
+      <circle cx="18" cy="17" r="5.5" stroke="#64748B" stroke-width="1.5" />
+      <path d="M22 21L26 25" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
+      <text x="36" y="22" class="font-sans" font-size="12.5" font-weight="400" fill="#94A3B8">Rechercher une ressource...</text>
+      <text x="266" y="22" class="font-sans" font-size="11.5" font-weight="500" fill="#94A3B8">⌘ K</text>
+    </g>
+    <g id="Header_Help" transform="translate(1210, 24)">
+      <circle cx="10" cy="10" r="8.5" stroke="#475569" stroke-width="1.5" />
+      <text x="10" y="14" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#475569">?</text>
+    </g>
+    <g id="Header_Notifications" transform="translate(1254, 24)">
+      <path d="M10 3C6.7 3 4 5.7 4 9V14L2 16V17H18V16L16 14V9C16 5.7 13.3 3 10 3Z" stroke="#475569" stroke-width="1.5" stroke-linejoin="round" />
+      <path d="M8 17C8 18.1 8.9 19 10 19C11.1 19 12 18.1 12 17" stroke="#475569" stroke-width="1.5" stroke-linecap="round" />
+      <circle cx="15" cy="4" r="3" fill="#2563EB" />
+    </g>
+    <g id="Header_EnvBadge" transform="translate(1304, 20)">
+      <rect x="0" y="0" width="106" height="28" rx="6" fill="#EFF6FF" stroke="#DBEAFE" stroke-width="1" />
+      <text x="53" y="18" text-anchor="middle" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">Production</text>
+    </g>
+  </g>
+
+<g id="Layer_PageHeader" transform="translate(264, 104)">
+  <text x="0" y="26" class="font-sans title-lg">Sécurité</text>
+  <text x="0" y="52" class="font-sans subtitle-md">État des comptes privilégiés : épinglage des identités de cible et suivi des rotations.</text>
+  <g transform="translate(906, 0)"><rect x="0" y="4" width="240" height="30" rx="7" fill="#EFF6FF" stroke="#DBEAFE"/><circle cx="16" cy="19" r="4" fill="#2563EB"/><text x="28" y="23" class="font-sans" font-size="11.5" font-weight="600" fill="#1D4ED8">ANALYSE DES COMPTES VAULT</text></g>
+</g>
+<g id="Layer_MainContent" transform="translate(264, 184)">
+  <g id="Security_Metrics" filter="url(#cardShadow)">
+    <rect x="0" y="0" width="1146" height="126" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+    <text x="22" y="30" class="font-sans card-title">Indicateurs de sécurité</text>
+    <text x="1122" y="29" text-anchor="end" class="font-sans helper-text">Exemple de données · calculé sur les comptes retournés</text>
+    <line x1="382" y1="48" x2="382" y2="108" stroke="#E2E8F0"/><line x1="764" y1="48" x2="764" y2="108" stroke="#E2E8F0"/>
+    <g transform="translate(22,48)"><text x="0" y="18" class="font-sans label-sm">Comptes examinés</text><text x="0" y="53" class="font-sans" font-size="29" font-weight="700" fill="#0F172A">24<tspan font-size="17" font-weight="500" fill="#64748B"> / 24</tspan></text><text x="116" y="52" class="font-sans" font-size="11" font-weight="600" fill="#047857">INVENTAIRE COMPLET</text></g>
+    <g transform="translate(404,48)"><text x="0" y="18" class="font-sans label-sm">Configurations à corriger</text><text x="0" y="53" class="font-sans" font-size="29" font-weight="700" fill="#B45309">5</text><text x="42" y="52" class="font-sans helper-text">comptes avec au moins un signal</text></g>
+    <g transform="translate(786,48)"><text x="0" y="18" class="font-sans label-sm">Rotations en anomalie</text><text x="0" y="53" class="font-sans" font-size="29" font-weight="700" fill="#B45309">3</text><text x="42" y="52" class="font-sans helper-text">dues, échouées ou en retard</text></g>
+  </g>
+  <g id="Security_Findings" transform="translate(0,148)" filter="url(#cardShadow)">
+    <rect x="0" y="0" width="744" height="580" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+    <text x="22" y="36" class="font-sans card-title">Points à examiner</text>
+    <text x="22" y="58" class="font-sans card-subtitle">Signaux explicites calculés à partir des métadonnées du coffre-fort, sans score ni pondération.</text>
+    <rect x="642" y="18" width="80" height="24" rx="6" fill="#FFF7ED" stroke="#FED7AA"/><text x="682" y="34" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="600" fill="#9A3412">5 COMPTES</text>
+    <g transform="translate(22,82)">
+      <rect width="700" height="82" rx="8" fill="#FFFBEB" stroke="#FDE68A"/>
+      <circle cx="18" cy="22" r="5" fill="#D97706"/><text x="34" y="26" class="font-sans toggle-title">Clé d’hôte SSH non épinglée</text>
+      <text x="34" y="48" class="font-sans helper-text">legacy-ssh-prod · SSH · bastion-db-01.internal:22</text>
+      <text x="34" y="67" class="font-sans helper-text">Sans empreinte connue, aucune session vers cette cible ne doit être ouverte.</text>
+      <rect x="584" y="12" width="100" height="22" rx="5" fill="#FEF3C7"/><text x="634" y="27" text-anchor="middle" class="font-sans" font-size="10" font-weight="600" fill="#92400E">À ÉPINGLER</text>
+    </g>
+    <g transform="translate(22,174)">
+      <rect width="700" height="82" rx="8" fill="#FFF7ED" stroke="#FED7AA"/>
+      <circle cx="18" cy="22" r="5" fill="#D97706"/><text x="34" y="26" class="font-sans toggle-title">Identité TLS de la cible incomplète</text>
+      <text x="34" y="48" class="font-sans helper-text">windows-admin · RDP · win-prod-02.internal:3389</text>
+      <text x="34" y="67" class="font-sans helper-text">Empreinte SHA-256 du certificat ou nom DNS cible manquant.</text>
+      <rect x="584" y="12" width="100" height="22" rx="5" fill="#FFEDD5"/><text x="634" y="27" text-anchor="middle" class="font-sans" font-size="10" font-weight="600" fill="#9A3412">À COMPLÉTER</text>
+    </g>
+    <g transform="translate(22,266)">
+      <rect width="700" height="82" rx="8" fill="#FFF7ED" stroke="#FED7AA"/>
+      <circle cx="18" cy="22" r="5" fill="#D97706"/><text x="34" y="26" class="font-sans toggle-title">Rotation après utilisation en attente</text>
+      <text x="34" y="48" class="font-sans helper-text">oracle-dba · SSH · db-prod-01.internal:22</text>
+      <text x="34" y="67" class="font-sans helper-text">Une session s’est terminée ; la rotation du secret reste à effectuer.</text>
+      <rect x="584" y="12" width="100" height="22" rx="5" fill="#FEF3C7"/><text x="634" y="27" text-anchor="middle" class="font-sans" font-size="10" font-weight="600" fill="#92400E">À ROTATION</text>
+    </g>
+    <g transform="translate(22,358)">
+      <rect width="700" height="82" rx="8" fill="#FEF2F2" stroke="#FECACA"/>
+      <circle cx="18" cy="22" r="5" fill="#DC2626"/><text x="34" y="26" class="font-sans toggle-title">Échecs de rotation consécutifs : 2</text>
+      <text x="34" y="48" class="font-sans helper-text">svc-deploy · SSH · ci-prod-01.internal:22</text>
+      <text x="34" y="67" class="font-sans helper-text">Le Vault signale deux rotations planifiées échouées d’affilée.</text>
+      <rect x="584" y="12" width="100" height="22" rx="5" fill="#FEE2E2"/><text x="634" y="27" text-anchor="middle" class="font-sans" font-size="10" font-weight="600" fill="#991B1B">ÉCHEC</text>
+    </g>
+    <g transform="translate(22,450)">
+      <rect width="700" height="82" rx="8" fill="#FFF7ED" stroke="#FED7AA"/>
+      <circle cx="18" cy="22" r="5" fill="#D97706"/><text x="34" y="26" class="font-sans toggle-title">Rotation planifiée arrivée à échéance</text>
+      <text x="34" y="48" class="font-sans helper-text">svc-backup · SSH · backup-01.internal:22</text>
+      <text x="34" y="67" class="font-sans helper-text">La prochaine date de rotation est dépassée selon le Vault.</text>
+      <rect x="584" y="12" width="100" height="22" rx="5" fill="#FEF3C7"/><text x="634" y="27" text-anchor="middle" class="font-sans" font-size="10" font-weight="600" fill="#92400E">EN RETARD</text>
+    </g>
+    <text x="22" y="560" class="font-sans helper-text">Un compte peut présenter plusieurs signaux ; les compteurs portent sur les comptes concernés.</text>
+  </g>
+  <g id="Security_Scope" transform="translate(768,148)" filter="url(#cardShadow)">
+    <rect width="378" height="254" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+    <text x="22" y="36" class="font-sans card-title">Périmètre de l’analyse</text>
+    <text x="22" y="58" class="font-sans card-subtitle">Source et limites de couverture.</text>
+    <text x="22" y="94" class="font-sans label-sm">Source interrogée</text>
+    <text x="22" y="116" class="font-sans input-text">Password Vault · GET /vault/accounts</text>
+    <line x1="22" y1="132" x2="356" y2="132" stroke="#F1F5F9"/>
+    <text x="22" y="160" class="font-sans label-sm">Pagination</text>
+    <text x="22" y="182" class="font-sans helper-text">Première page chargée · maximum 100 comptes.</text>
+    <rect x="22" y="202" width="334" height="34" rx="6" fill="#ECFDF5" stroke="#D1FAE5"/><circle cx="38" cy="219" r="4" fill="#059669"/><text x="50" y="223" class="font-sans" font-size="10.5" font-weight="600" fill="#047857">24 / 24 · COUVERTURE COMPLÈTE</text>
+  </g>
+  <g id="Security_Limitations" transform="translate(768,420)" filter="url(#cardShadow)">
+    <rect width="378" height="308" rx="12" fill="#0F2745" stroke="#1E3A5F"/>
+    <text x="22" y="36" class="font-sans dark-card-title">Ce que cette vue ne mesure pas</text>
+    <text x="22" y="62" class="font-sans dark-label">Cette page n’est ni un score de risque ni un audit</text>
+    <text x="22" y="80" class="font-sans dark-label">de conformité.</text>
+    <g transform="translate(22,108)"><circle cx="5" cy="5" r="3" fill="#F59E0B"/><text x="18" y="9" class="font-sans dark-value">Métadonnées des injections Vault</text><text x="18" y="27" class="font-sans dark-label">Lecture seule via Gateway · ADR-0113.</text></g>
+    <g transform="translate(22,154)"><circle cx="5" cy="5" r="3" fill="#F59E0B"/><text x="18" y="9" class="font-sans dark-value">Intégrité de la chaîne</text><text x="18" y="27" class="font-sans dark-label">Vérification réservée à admin-cli par mTLS.</text></g>
+    <g transform="translate(22,200)"><circle cx="5" cy="5" r="3" fill="#F59E0B"/><text x="18" y="9" class="font-sans dark-value">Disponibilité des proxys</text><text x="18" y="27" class="font-sans dark-label">Pas de contrôle de santé depuis cette vue.</text></g>
+    <g transform="translate(22,246)"><circle cx="5" cy="5" r="3" fill="#F59E0B"/><text x="18" y="9" class="font-sans dark-value">Couverture des référentiels</text><text x="18" y="27" class="font-sans dark-label">Aucun taux de conformité calculé.</text></g>
+  </g>
+</g>
+<g id="Layer_PageFooter" transform="translate(264, 1036)">
+  <text x="0" y="0" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">Maquette · données fictives. Métadonnées d’injection : ADR-0113. Vérification : admin-cli uniquement.</text>
+  <text x="1146" y="0" text-anchor="end" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">OpenBastion — Secure Access. Total Control.</text>
+</g>
+</svg>

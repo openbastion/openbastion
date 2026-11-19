@@ -82,9 +82,9 @@ describe("Vault secret injection in a session (ADR-0097)", () => {
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toMatchObject({ method: "POST", path: "/sessions/session-1/secret-injection-step-up" });
     expect(calls[0].body).toBeUndefined();
-    expect(await screen.findByLabelText("Code de l'application d'authentification")).toBeTruthy();
+    expect(await screen.findByLabelText("Code de vérification")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Code de l'application d'authentification"), { target: { value: "123456" } });
+    fireEvent.change(screen.getByLabelText("Code de vérification"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmer et saisir" }));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[1].body).toEqual({ challenge: "opaque-challenge", factor: "totp", totp_code: "123456" });
@@ -103,7 +103,7 @@ describe("Vault secret injection in a session (ADR-0097)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continuer vers la confirmation MFA" }));
     expect(await screen.findByText("Aucun facteur MFA utilisable n'a été fourni. La saisie est refusée.")).toBeTruthy();
     expect(calls).toHaveLength(1);
-    expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull();
+    expect(screen.queryByLabelText("Code de vérification")).toBeNull();
   });
 
   it("uses the browser WebAuthn assertion when only the security key is allowed", async () => {
@@ -123,7 +123,7 @@ describe("Vault secret injection in a session (ADR-0097)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Saisir le secret Vault" }));
     fireEvent.click(screen.getByRole("button", { name: "Continuer vers la confirmation MFA" }));
     await screen.findByRole("button", { name: "Utiliser ma clé de sécurité" });
-    expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull();
+    expect(screen.queryByLabelText("Code de vérification")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Utiliser ma clé de sécurité" }));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(credentials.get).toHaveBeenCalledTimes(1);
@@ -141,7 +141,7 @@ describe("Vault secret injection in a session (ADR-0097)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Saisir le secret Vault" }));
     fireEvent.click(screen.getByRole("button", { name: "Continuer vers la confirmation MFA" }));
-    fireEvent.change(await screen.findByLabelText("Code de l'application d'authentification"), { target: { value: "123456" } });
+    fireEvent.change(await screen.findByLabelText("Code de vérification"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirmer et saisir" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.queryByDisplayValue("123456")).toBeNull();
@@ -158,12 +158,12 @@ describe("Vault secret injection in a session (ADR-0097)", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "Saisir le secret Vault" }));
       fireEvent.click(screen.getByRole("button", { name: "Continuer vers la confirmation MFA" }));
-      fireEvent.change(await screen.findByLabelText("Code de l'application d'authentification"), { target: { value: "123456" } });
+      fireEvent.change(await screen.findByLabelText("Code de vérification"), { target: { value: "123456" } });
       now.mockReturnValue(121_000);
       fireEvent.click(screen.getByRole("button", { name: "Confirmer et saisir" }));
       expect(await screen.findByRole("alert")).toBeTruthy();
       expect(calls).toHaveLength(1); // challenge only; no proof reached the Gateway
-      expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull();
+      expect(screen.queryByLabelText("Code de vérification")).toBeNull();
     } finally {
       now.mockRestore();
     }

@@ -31,28 +31,47 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
-    expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /alice.*platform-admin/ })).toBeTruthy();
     const navigation = screen.getByRole("navigation", { name: "Sections" });
-    expect(within(navigation).getByRole("button", { name: "Vue générale" }).getAttribute("aria-current")).toBe("page");
+    expect(within(navigation).getByRole("button", { name: "Vue d’ensemble" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Aller au contenu principal" }).getAttribute("href")).toBe("#main-content");
-    expect(screen.getByRole("main").parentElement?.classList.contains("app-workspace")).toBe(true);
-    for (const label of ["Vue générale", "Comptes", "Politiques", "Sessions", "Enregistrements", "Centre de sécurité"]) {
+    expect(screen.getByRole("main").parentElement?.classList.contains("app-content")).toBe(true);
+    for (const label of ["Vue d’ensemble", "Accès privilégiés", "Sessions", "Infrastructure", "Sécurité", "Audit & conformité", "Paramètres"]) {
       const button = within(navigation).getByRole("button", { name: label });
       expect(button.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+    expect(screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" })).toBeTruthy();
+    expect(screen.getByText("Production", { selector: ".environment-badge" })).toBeTruthy();
+    const workspaceSelector = screen.getByRole("button", { name: /Production.*Console d’administration/ });
+    fireEvent.click(workspaceSelector);
+    expect(screen.getByRole("region", { name: "Espaces de travail disponibles" })).toBeTruthy();
+    expect(screen.getByText("Un seul espace est configuré sur cette instance.")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Espaces de travail disponibles" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Documentation" }).getAttribute("href")).toContain("/tree/main/docs");
+    expect(screen.getByRole("link", { name: "Centre d'aide" }).getAttribute("href")).toContain("/tree/main/docs/user-guide");
+    const notifications = screen.getByRole("button", { name: "Ouvrir les notifications" });
+    fireEvent.click(notifications);
+    expect(screen.getByRole("region", { name: "Notifications" })).toBeTruthy();
+    expect(screen.getByText("Aucune notification à afficher")).toBeTruthy();
+    expect(screen.getByText(/Aucune alerte n'est simulée/)).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Notifications" })).toBeNull();
 
     // The shell exposes accessible collapse, mobile and theme controls without persisting state.
     const collapse = screen.getByRole("button", { name: "Réduire la navigation" });
     fireEvent.click(collapse);
     expect(screen.getByRole("button", { name: "Développer la navigation" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Développer la navigation" }));
+    fireEvent.click(screen.getByRole("button", { name: /alice.*platform-admin/ }));
     const darkTheme = screen.getByRole("button", { name: "Activer le thème sombre" });
     fireEvent.click(darkTheme);
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(screen.getByRole("button", { name: "Activer le thème clair" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Activer le thème clair" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Activer le thème clair" }));
     expect(document.documentElement.dataset.theme).toBe("light");
+    fireEvent.click(screen.getByRole("button", { name: /alice.*platform-admin/ }));
     const openNavigation = screen.getByRole("button", { name: "Ouvrir la navigation" });
     fireEvent.click(openNavigation);
     const mobileDialog = screen.getByRole("dialog", { name: "Navigation principale" });
@@ -60,14 +79,14 @@ describe("App", () => {
     expect(screen.getAllByRole("banner")[0].hasAttribute("inert")).toBe(true);
     expect(screen.getByRole("main").hasAttribute("inert")).toBe(true);
     const mobileNavigation = within(mobileDialog).getByRole("navigation", { name: "Sections" });
-    const firstNavigationItem = within(mobileNavigation).getByRole("button", { name: "Vue générale" });
-    expect(document.activeElement).toBe(firstNavigationItem);
-    const navigationItems = within(mobileNavigation).getAllByRole("button");
-    const lastNavigationItem = navigationItems[navigationItems.length - 1];
-    fireEvent.keyDown(firstNavigationItem, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(lastNavigationItem);
-    fireEvent.keyDown(lastNavigationItem, { key: "Tab" });
-    expect(document.activeElement).toBe(firstNavigationItem);
+    expect(within(mobileNavigation).getByRole("button", { name: "Vue d’ensemble" })).toBeTruthy();
+    const mobileWorkspaceSelector = within(mobileDialog).getByRole("button", { name: /Production.*Console d’administration/ });
+    expect(document.activeElement).toBe(mobileWorkspaceSelector);
+    const sidebarUserMenu = within(mobileDialog).getByRole("button", { name: /alice.*platform-admin/ });
+    fireEvent.keyDown(mobileWorkspaceSelector, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(sidebarUserMenu);
+    fireEvent.keyDown(sidebarUserMenu, { key: "Tab" });
+    expect(document.activeElement).toBe(mobileWorkspaceSelector);
     fireEvent.keyDown(document, { key: "Escape" });
     const restoredMenuButton = screen.getByRole("button", { name: "Ouvrir la navigation" });
     expect(restoredMenuButton).toBeTruthy();
@@ -76,30 +95,44 @@ describe("App", () => {
 
     fireEvent.click(restoredMenuButton);
     const accountsNavigationItem = within(screen.getByRole("dialog", { name: "Navigation principale" }))
-      .getByRole("button", { name: "Comptes" });
+      .getByRole("button", { name: "Accès privilégiés" });
     fireEvent.click(accountsNavigationItem);
     expect(document.activeElement).toBe(restoredMenuButton);
     expect(screen.getByRole("main").hasAttribute("inert")).toBe(false);
 
-    expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
+    const legalFooter = screen.getByRole("contentinfo", { name: "Informations légales" });
+    const shellGrid = legalFooter.parentElement;
+    expect(shellGrid?.classList.contains("app-workspace")).toBe(true);
+    expect(legalFooter.classList.contains("legal-notice")).toBe(true);
+    const sidebar = screen.getByRole("complementary", { name: "Navigation principale" });
+    expect(sidebar.parentElement).toBe(shellGrid);
+    expect(screen.getByRole("main").parentElement?.classList.contains("app-content")).toBe(true);
+    expect(legalFooter.parentElement?.classList.contains("app-workspace")).toBe(true);
+    expect(legalFooter.parentElement?.children).toContain(legalFooter); // footer remains a direct shell grid item
+    expect(legalFooter.classList.contains("legal-notice")).toBe(true);
     expect(screen.getByRole("link", { name: /Code source/ }).getAttribute("href")).toContain("github.com/openbastion/openbastion");
     expect(screen.getByRole("link", { name: "Texte de la licence" }).getAttribute("href")).toContain("/LICENSE");
-    fireEvent.click(screen.getByText("Se déconnecter"));
+    fireEvent.click(screen.getByRole("button", { name: /alice.*platform-admin/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Se déconnecter" }));
     await waitFor(() => expect(screen.getByLabelText("Utilisateur")).toBeTruthy());
     expect(api.hasToken()).toBe(false);
   });
 
-  it("shows the AGPL source and licence notice before authentication", () => {
+  it("shows the AGPL source and licence links alongside the login legal links", () => {
     render(<App location={{ pathname: "/ui/", search: "" } as Location} navigate={vi.fn()} />);
-    expect(screen.getByRole("contentinfo", { name: "Informations légales" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Code source/ })).toBeTruthy();
+    expect(screen.queryByRole("contentinfo", { name: "Informations légales" })).toBeNull();
+    const source = screen.getByRole("link", { name: /Code source/ });
+    const license = screen.getByRole("link", { name: "Texte de la licence" });
+    expect(source.parentElement?.classList.contains("login-license-links")).toBe(true);
+    expect(license.parentElement).toBe(source.parentElement);
+    expect(screen.getByText(/GNU Affero General Public License v3.0/)).toBeTruthy();
   });
 
   it("is the OIDC return page at /ui/oidc/callback", async () => {
     vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
     const { api } = fakeApi({ "POST /auth/oidc/callback": { body: { accessToken: fakeToken("oidc:sub-1", ["dba"]), expiresIn: 3600 } }, "GET /vault/accounts": { body: { items: [], page: 1, pageSize: 20, totalItems: 0 } } });
     render(<App api={api} location={{ pathname: "/ui/oidc/callback", search: "?code=c&state=s" } as Location} navigate={vi.fn()} />);
-    expect(await screen.findByText("oidc:sub-1 (dba)")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /oidc:sub-1.*dba/ })).toBeTruthy();
   });
 });
 
@@ -109,7 +142,7 @@ describe("Command palette — ADR-0073 UX-02", () => {
     fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice" } });
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
-    expect(await screen.findByText("alice (platform-admin)")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /alice.*platform-admin/ })).toBeTruthy();
   }
 
   it("opens with Ctrl+K, searches a session through the public API and displays its detail", async () => {
@@ -160,9 +193,9 @@ describe("Command palette — ADR-0073 UX-02", () => {
     const trigger = screen.getByRole("button", { name: "Ouvrir la recherche et les commandes" });
     fireEvent.click(trigger);
     const query = await screen.findByRole("combobox", { name: "Rechercher une section ou une session" }); // the palette opens after a render
-    fireEvent.change(query, { target: { value: "politiques" } });
-    expect(screen.getByRole("option", { name: /Politiques/ })).toBeTruthy();
-    expect(screen.queryByRole("option", { name: /Comptes privilégiés/ })).toBeNull();
+    fireEvent.change(query, { target: { value: "infrastructure" } });
+    expect(screen.getByRole("option", { name: /Infrastructure/ })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /Sessions/ })).toBeNull();
     fireEvent.keyDown(query, { key: "Tab", shiftKey: true });
     const close = screen.getByRole("button", { name: "Fermer" });
     expect(document.activeElement).toBe(close);

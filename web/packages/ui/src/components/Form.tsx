@@ -1,5 +1,6 @@
 import { cloneElement, forwardRef, isValidElement, type FormHTMLAttributes, type HTMLAttributes, type ReactElement, type ReactNode } from "react";
 import { cn } from "../lib/cn";
+import { Label } from "./Label";
 
 export type FormProps = FormHTMLAttributes<HTMLFormElement>;
 export const Form = forwardRef<HTMLFormElement, FormProps>(function Form({ className, ...props }, ref) {
@@ -21,9 +22,10 @@ export function FormField({ id, label, description, error, required = false, cla
   const errorId = error ? `${id}-error` : undefined;
   return (
     <div className={cn("ob-form-field", className)}>
-      <label className="ob-form-field__label" htmlFor={id}>
-        {label}{required ? <span aria-hidden="true"> *</span> : null}
-      </label>
+      <div className="ob-form-field__label-row">
+        <Label className="ob-form-field__label" htmlFor={id}>{label}</Label>
+        {required ? <span className="ob-form-field__required-marker" aria-hidden="true">*</span> : null}
+      </div>
       {isValidElement(children)
         ? cloneElement(children as ReactElement<Record<string, unknown>>, {
             id,

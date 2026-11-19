@@ -30,10 +30,10 @@ jobs:
         run: |
           make ui-icons
           npm --prefix web/admin-ui ci --no-audit --no-fund
-      - name: Admin UI secret injection in headless Chrome
+      - name: Admin UI secret injection and screen end in headless Chrome
         shell: bash
         run: |
           chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           if [[ -z "$chrome" ]]; then echo "A Chromium/Chrome binary is required for the Admin UI browser test" >&2; exit 1; fi
-          GOWORK=$PWD/go.work CHROME="$chrome" go test ./test/integration -run '^TestAdminUI_SecretInjectionStepUpInAHeadlessBrowser$' -count=1 -v -timeout=180s
+          GOWORK=$PWD/go.work CHROME="$chrome" go test ./test/integration -run '^TestAdminUI_(SecretInjectionStepUp|ScreenEndIsSeen)InAHeadlessBrowser$' -count=1 -v -timeout=180s
       - run: GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s

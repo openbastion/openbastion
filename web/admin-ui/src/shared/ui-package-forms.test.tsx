@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Form, FormDescription, FormField, Input, InputOTP, RadioGroup, RadioGroupItem, Select, Slider } from "@openbastion/ui";
+import { Form, FormDescription, FormField, Input, InputOTP, RadioGroup, RadioGroupItem, Select, Slider, Switch, Toggle, ToggleGroup, ToggleGroupItem } from "@openbastion/ui";
 
 describe("@openbastion/ui advanced form primitives", () => {
   it("connects labels, descriptions and validation errors to their control", () => {
@@ -17,6 +17,7 @@ describe("@openbastion/ui advanced form primitives", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(input.getAttribute("aria-describedby")).toBe("account-name-description account-name-error");
     expect(input.hasAttribute("required")).toBe(true);
+    expect(screen.getByText("Nom du compte").closest("label")?.classList.contains("ob-label")).toBe(true);
     expect(screen.getByRole("alert").textContent).toBe("Ce nom est déjà utilisé");
   });
 
@@ -35,6 +36,8 @@ describe("@openbastion/ui advanced form primitives", () => {
     fireEvent.click(screen.getByRole("radio", { name: "RDP" }));
     expect(change).toHaveBeenCalledWith("rdp");
     expect((screen.getByRole("radio", { name: "RDP" }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("radio", { name: "RDP" }).classList.contains("ob-input")).toBe(true);
+    expect(screen.getByRole("radio", { name: "RDP" }).parentElement?.classList.contains("ob-label")).toBe(true);
   });
 
   it("keeps select options and native keyboard interaction available", () => {
@@ -52,6 +55,30 @@ describe("@openbastion/ui advanced form primitives", () => {
     expect(slider.max).toBe("60");
     expect(slider.step).toBe("5");
     expect(slider.value).toBe("30");
+    expect(slider.classList.contains("ob-input")).toBe(true);
+  });
+
+  it("composes switches and toggles from the shared input and button primitives", () => {
+    render(<><Switch aria-label="Activer le MFA" defaultChecked /><Toggle aria-label="Épingler" /></>);
+    const control = screen.getByRole("switch", { name: "Activer le MFA" });
+    expect(control.classList.contains("ob-input")).toBe(true);
+    const toggle = screen.getByRole("button", { name: "Épingler" });
+    expect(toggle.classList.contains("ob-button")).toBe(true);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("composes toggle-group items from Toggle and preserves selection semantics", () => {
+    const change = vi.fn();
+    render(<ToggleGroup type="single" defaultValue="ssh" onValueChange={change}><ToggleGroupItem value="ssh">SSH</ToggleGroupItem><ToggleGroupItem value="rdp">RDP</ToggleGroupItem></ToggleGroup>);
+    const ssh = screen.getByRole("button", { name: "SSH" });
+    const rdp = screen.getByRole("button", { name: "RDP" });
+    expect(ssh.classList.contains("ob-button")).toBe(true);
+    expect(ssh.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(rdp);
+    expect(change).toHaveBeenCalledWith("rdp");
+    expect(rdp.getAttribute("aria-pressed")).toBe("true");
+    expect(ssh.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("uses the browser one-time-code autofill contract and enforces the requested length", () => {

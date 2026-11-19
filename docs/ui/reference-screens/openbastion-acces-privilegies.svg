@@ -1,0 +1,504 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
+    </filter>
+  </defs>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                          -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Background">
+    <rect width="1440" height="1080" fill="#F8FAFC"/>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 2 : BARRE LATÉRALE GAUCHE (SIDEBAR)                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Sidebar">
+    <rect x="0" y="0" width="232" height="1080" fill="#0D2137"/>
+    <line x1="232" y1="0" x2="232" y2="1080" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Logo OpenBastion -->
+    <g id="Sidebar_Logo" transform="translate(20, 22)">
+      <path d="M14 2L3 7v7c0 7.2 4.7 13.9 11 16 6.3-2.1 11-8.8 11-16V7L14 2z" fill="#1E3A5F" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M14 6l-7 3v5c0 4.8 3 9.2 7 10.8 4-1.6 7-6 7-10.8V9l-7-3z" fill="#38BDF8" fill-opacity="0.3"/>
+      <circle cx="14" cy="14" r="2.2" fill="#FFFFFF"/>
+      <text x="38" y="16" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="-0.3">OpenBastion</text>
+      <text x="38" y="29" fill="#64748B" font-size="8.5" font-weight="600" letter-spacing="1.2">PRIVILEGED ACCESS</text>
+    </g>
+
+    <!-- Sélecteur Workspace : Production -->
+    <g id="Sidebar_Workspace_Selector" transform="translate(16, 86)">
+      <rect width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
+      <text x="16" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Production</text>
+      <text x="16" y="42" fill="#94A3B8" font-size="11.5">Acme Corporation</text>
+      <path d="M176 25l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Titre section ESPACE DE TRAVAIL -->
+    <text x="20" y="182" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">ESPACE DE TRAVAIL</text>
+
+    <!-- Menu Navigation Principale -->
+    <g id="Sidebar_Nav_Main" transform="translate(12, 196)">
+      <!-- Item : Vue d'ensemble -->
+      <g id="Nav_Vue_Ensemble">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none">
+          <rect x="1" y="1" width="6" height="6" rx="1"/>
+          <rect x="10" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="10" width="6" height="6" rx="1"/>
+          <rect x="10" y="10" width="6" height="6" rx="1"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Vue d'ensemble</text>
+      </g>
+
+      <!-- Item Actif : Accès privilégiés -->
+      <g id="Nav_Acces" transform="translate(0, 46)">
+        <rect width="208" height="40" rx="8" fill="#133356"/>
+        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
+        <g transform="translate(14, 12)" stroke="#38BDF8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="11" r="4"/>
+          <path d="M9 8l6-6M13 4l2 2M15 2l2 2"/>
+        </g>
+        <text x="42" y="25" fill="#FFFFFF" font-size="13" font-weight="600">Accès privilégiés</text>
+      </g>
+
+      <!-- Item : Sessions (Badge 24) -->
+      <g id="Nav_Sessions" transform="translate(0, 92)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="2" width="15" height="11" rx="2"/>
+          <path d="M5 16h7M8.5 13v3"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
+        <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
+        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">24</text>
+      </g>
+
+      <!-- Item : Infrastructure -->
+      <g id="Nav_Infrastructure" transform="translate(0, 138)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="2" width="15" height="5" rx="1"/>
+          <rect x="1" y="10" width="15" height="5" rx="1"/>
+          <circle cx="4.5" cy="4.5" r="0.6" fill="#94A3B8"/>
+          <circle cx="4.5" cy="12.5" r="0.6" fill="#94A3B8"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Infrastructure</text>
+      </g>
+
+      <!-- Item : Audit & conformité -->
+      <g id="Nav_Audit" transform="translate(0, 184)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3H4a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V4a1 1 0 00-1-1h-2"/>
+          <rect x="6" y="1" width="5" height="3" rx="1"/>
+          <path d="M6 8h5M6 11h5"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Audit &amp; conformité</text>
+      </g>
+
+      <!-- Item : Paramètres -->
+      <g id="Nav_Parametres" transform="translate(0, 230)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="2.5"/>
+          <path d="M8.5 1.5v2M8.5 13.5v2M1.5 8.5h2M13.5 8.5h2M3.5 3.5l1.5 1.5M12 12l1.5 1.5M13.5 3.5L12 5M5 12l-1.5 1.5"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Paramètres</text>
+      </g>
+    </g>
+
+    <!-- Séparateur -->
+    <line x1="20" y1="490" x2="212" y2="490" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Section RESSOURCES -->
+    <text x="20" y="528" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">RESSOURCES</text>
+
+    <g id="Sidebar_Nav_Resources" transform="translate(12, 542)">
+      <g transform="translate(0, 0)">
+        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 2h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+          <path d="M10 2v4h4M6 9h5M6 12h3"/>
+        </g>
+        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Documentation</text>
+      </g>
+
+      <g transform="translate(0, 44)">
+        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="7"/>
+          <path d="M6.5 6.5a2 2 0 013.8.8c0 1.3-1.8 1.8-1.8 3"/>
+          <circle cx="8.5" cy="12.5" r="0.5" fill="#94A3B8"/>
+        </g>
+        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Centre d'aide</text>
+      </g>
+    </g>
+
+    <!-- Carte Statut : Bastion opérationnel -->
+    <g id="Sidebar_Status_Card" transform="translate(16, 868)">
+      <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
+      <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
+      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Bastion opérationnel</text>
+      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Tous les services sont disponibles</text>
+      <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
+    </g>
+
+    <!-- Profil Utilisateur : Camille Martin -->
+    <g id="Sidebar_User_Profile" transform="translate(0, 976)">
+      <line x1="0" y1="0" x2="232" y2="0" stroke="#1E3A5F" stroke-width="1"/>
+      <g transform="translate(18, 22)">
+        <circle cx="16" cy="16" r="16" fill="#1E3A5F"/>
+        <circle cx="16" cy="12" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+        <path d="M8.5 25c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
+        <text x="42" y="14" fill="#FFFFFF" font-size="12.5" font-weight="600">Camille Martin</text>
+        <text x="42" y="30" fill="#94A3B8" font-size="11">Administrateur</text>
+        <path d="M180 13l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 3 : BARRE SUPÉRIEURE (TOPBAR)                                    -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Topbar">
+    <rect x="232" y="0" width="1208" height="64" fill="#FFFFFF"/>
+    <line x1="232" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Fil d'Ariane -->
+    <g id="Topbar_Breadcrumb" transform="translate(264, 37)">
+      <text x="0" y="0" fill="#64748B" font-size="12.5" font-weight="500">Espace de travail</text>
+      <text x="108" y="0" fill="#CBD5E1" font-size="13">/</text>
+      <text x="124" y="0" fill="#0F172A" font-size="12.5" font-weight="600">Accès privilégiés</text>
+    </g>
+
+    <!-- Champ de recherche -->
+    <g id="Topbar_Search" transform="translate(880, 14)">
+      <rect width="310" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(12, 10)" stroke="#64748B" stroke-width="1.6" fill="none">
+        <circle cx="7" cy="7" r="5.5"/>
+        <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <text x="36" y="23" fill="#64748B" font-size="12.5">Rechercher une ressource...</text>
+      <text x="275" y="22" fill="#94A3B8" font-size="11" font-weight="600">⌘ K</text>
+    </g>
+
+    <!-- Actions droite Topbar -->
+    <g id="Topbar_Actions" transform="translate(1212, 16)">
+      <g transform="translate(0, 7)" stroke="#475569" stroke-width="1.6" fill="none">
+        <circle cx="9" cy="9" r="7.5"/>
+        <path d="M7 7a2 2 0 013.8.8c0 1.4-1.8 1.8-1.8 3" stroke-linecap="round"/>
+        <circle cx="9" cy="13.2" r="0.5" fill="#475569"/>
+      </g>
+      <g transform="translate(44, 7)">
+        <path d="M9 2a5 5 0 00-5 5v3.5L2.5 13h13L14 10.5V7a5 5 0 00-5-5zM7 15a2 2 0 004 0" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14" cy="4" r="2.8" fill="#2563EB"/>
+      </g>
+      <g transform="translate(94, 2)">
+        <rect width="102" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+        <text x="51" y="18" fill="#2563EB" font-size="12" font-weight="600" text-anchor="middle">Production</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 4 : EN-TÊTE DE PAGE                                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Page_Header" transform="translate(264, 96)">
+    <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Accès privilégiés</text>
+    <text x="0" y="54" fill="#64748B" font-size="13.5">Un point d'entrée sécurisé pour toutes vos ressources.</text>
+
+    <!-- Bouton Importer -->
+    <g id="Btn_Importer" transform="translate(840, 4)">
+      <rect width="114" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(14, 11)" stroke="#334155" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 2v9M4 8l3 3 3-3M2 13h10"/>
+      </g>
+      <text x="36" y="23" fill="#0F172A" font-size="13" font-weight="600">Importer</text>
+    </g>
+
+    <!-- Bouton + Ajouter une ressource -->
+    <g id="Btn_Ajouter_Ressource" transform="translate(968, 4)">
+      <rect width="176" height="36" rx="8" fill="#1D63ED"/>
+      <path d="M18 13v10M13 18h10" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+      <text x="34" y="23" fill="#FFFFFF" font-size="13" font-weight="600">Ajouter une ressource</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 5 : CARTES DE MÉTRIQUES (KPI CARDS)                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_KPI_Cards" transform="translate(264, 178)">
+    <!-- Carte 1 : Ressources -->
+    <g id="KPI_Ressources" transform="translate(0, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Ressources</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">128</text>
+      <text x="82" y="70" fill="#64748B" font-size="11.5">Sous gestion</text>
+    </g>
+
+    <!-- Carte 2 : Comptes privilégiés -->
+    <g id="KPI_Comptes" transform="translate(291, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Comptes privilégiés</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">214</text>
+      <text x="82" y="70" fill="#64748B" font-size="11.5">Secrets stockés dans le coffre</text>
+    </g>
+
+    <!-- Carte 3 : Politiques actives -->
+    <g id="KPI_Politiques" transform="translate(582, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Politiques actives</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">18</text>
+      <text x="68" y="70" fill="#64748B" font-size="11.5">Accès à moindre privilège</text>
+    </g>
+
+    <!-- Carte 4 : Demandes en attente -->
+    <g id="KPI_Demandes" transform="translate(873, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Demandes en attente</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">03</text>
+      <text x="68" y="70" fill="#2563EB" font-size="11.5" font-weight="600">Validation requise</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 6 : BARRE D'ONGLETS (TABS)                                       -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Tabs" transform="translate(264, 316)">
+    <line x1="0" y1="32" x2="1144" y2="32" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Onglet Actif : Ressources 128 -->
+    <g id="Tab_Ressources">
+      <text x="16" y="14" fill="#2563EB" font-size="13" font-weight="600">Ressources</text>
+      <text x="94" y="14" fill="#2563EB" font-size="12" font-weight="600">128</text>
+      <rect x="0" y="30" width="132" height="2.5" rx="1" fill="#2563EB"/>
+    </g>
+
+    <!-- Onglet : Comptes 214 -->
+    <g id="Tab_Comptes" transform="translate(174, 0)">
+      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Comptes</text>
+      <text x="62" y="14" fill="#94A3B8" font-size="12" font-weight="500">214</text>
+    </g>
+
+    <!-- Onglet : Politiques 18 -->
+    <g id="Tab_Politiques" transform="translate(342, 0)">
+      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Politiques</text>
+      <text x="66" y="14" fill="#94A3B8" font-size="12" font-weight="500">18</text>
+    </g>
+
+    <!-- Onglet : Demandes 3 -->
+    <g id="Tab_Demandes" transform="translate(514, 0)">
+      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Demandes</text>
+      <text x="72" y="14" fill="#94A3B8" font-size="12" font-weight="500">3</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 7 : TABLEAU PRINCIPAL DES RESSOURCES                             -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Resources_Table" transform="translate(264, 368)" filter="url(#cardShadow)">
+    <rect width="1144" height="456" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Barre de filtres du tableau -->
+    <g id="Table_Filter_Bar" transform="translate(16, 16)">
+      <!-- Champ recherche table -->
+      <rect width="354" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(12, 11)" stroke="#94A3B8" stroke-width="1.5" fill="none">
+        <circle cx="6" cy="6" r="4.5"/>
+        <path d="M9.5 9.5l3 3" stroke-linecap="round"/>
+      </g>
+      <text x="34" y="23" fill="#64748B" font-size="12.5">Rechercher un nom, une adresse IP...</text>
+
+      <!-- Dropdown Tous les types -->
+      <g transform="translate(366, 0)">
+        <rect width="136" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="14" y="23" fill="#0F172A" font-size="12.5" font-weight="500">Tous les types</text>
+        <path d="M114 16l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Dropdown Environnement -->
+      <g transform="translate(514, 0)">
+        <rect width="142" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="14" y="23" fill="#0F172A" font-size="12.5" font-weight="500">Environnement</text>
+        <path d="M120 16l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Bouton Filtres à droite -->
+      <g transform="translate(1018, 0)">
+        <rect width="94" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <g transform="translate(14, 12)" stroke="#334155" stroke-width="1.5" stroke-linecap="round">
+          <line x1="0" y1="3" x2="12" y2="3"/>
+          <circle cx="4" cy="3" r="1.5" fill="#FFFFFF"/>
+          <line x1="0" y1="9" x2="12" y2="9"/>
+          <circle cx="8" cy="9" r="1.5" fill="#FFFFFF"/>
+        </g>
+        <text x="36" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Filtres</text>
+      </g>
+    </g>
+
+    <!-- En-têtes des colonnes -->
+    <g id="Table_Header" transform="translate(0, 68)">
+      <rect width="1144" height="34" fill="#F8FAFC"/>
+      <line x1="0" y1="0" x2="1144" y2="0" stroke="#F1F5F9" stroke-width="1"/>
+      <line x1="0" y1="34" x2="1144" y2="34" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(52, 22)" fill="#94A3B8" font-size="10.5" font-weight="700" letter-spacing="0.6">
+        <text x="0" y="0">RESSOURCE</text>
+        <text x="268" y="0">ADRESSE</text>
+        <text x="436" y="0">PROTOCOLE</text>
+        <text x="562" y="0">ENVIRONNEMENT</text>
+        <text x="698" y="0">ACCÈS</text>
+        <text x="836" y="0">ÉTAT</text>
+      </g>
+    </g>
+
+    <!-- Lignes de données -->
+    <!-- Ligne 1 : srv-prod-web-01 -->
+    <g id="Row_1" transform="translate(20, 128)">
+      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">srv-prod-web-01</text>
+      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.1.12</text>
+      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
+      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
+      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
+      <text x="730" y="0" fill="#64748B" font-size="12.5">12 identités</text>
+      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
+      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
+      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 2 : db-postgres-prod -->
+    <g id="Row_2" transform="translate(20, 174)">
+      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">db-postgres-prod</text>
+      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.2.45</text>
+      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
+      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SQL</text>
+      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
+      <text x="730" y="0" fill="#64748B" font-size="12.5">8 identités</text>
+      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
+      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
+      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 3 : win-ad-primary -->
+    <g id="Row_3" transform="translate(20, 220)">
+      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">win-ad-primary</text>
+      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.3.10</text>
+      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
+      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">RDP</text>
+      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
+      <text x="730" y="0" fill="#64748B" font-size="12.5">6 identités</text>
+      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
+      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
+      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 4 : k8s-prod-master -->
+    <g id="Row_4" transform="translate(20, 266)">
+      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">k8s-prod-master</text>
+      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.4.20</text>
+      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
+      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
+      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
+      <text x="730" y="0" fill="#64748B" font-size="12.5">14 identités</text>
+      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
+      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
+      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 5 : srv-staging-api -->
+    <g id="Row_5" transform="translate(20, 312)">
+      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">srv-staging-api</text>
+      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.1.1.14</text>
+      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
+      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
+      <text x="594" y="0" fill="#64748B" font-size="12.5">Staging</text>
+      <text x="730" y="0" fill="#64748B" font-size="12.5">9 identités</text>
+      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
+      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
+      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 6 : vault-backup-01 -->
+    <g id="Row_6" transform="translate(20, 358)">
+      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">vault-backup-01</text>
+      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.5.31</text>
+      <rect x="468" y="-14" width="54" height="20" rx="5" fill="#F1F5F9"/>
+      <text x="495" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">HTTPS</text>
+      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
+      <text x="730" y="0" fill="#64748B" font-size="12.5">3 identités</text>
+      <rect x="868" y="-15" width="90" height="22" rx="6" fill="#F1F5F9"/>
+      <text x="913" y="0" fill="#64748B" font-size="11.5" font-weight="600" text-anchor="middle">Maintenance</text>
+      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
+    </g>
+
+    <!-- Pied de tableau et Pagination -->
+    <g id="Table_Footer" transform="translate(0, 404)">
+      <line x1="0" y1="0" x2="1144" y2="0" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="31" fill="#64748B" font-size="11.5">1–6 sur 128 ressources</text>
+
+      <!-- Contrôles de pagination -->
+      <g transform="translate(960, 14)">
+        <text x="10" y="17" fill="#94A3B8" font-size="13" text-anchor="middle">‹</text>
+        <rect x="24" y="0" width="26" height="26" rx="6" fill="#EFF6FF"/>
+        <text x="37" y="17" fill="#2563EB" font-size="11.5" font-weight="700" text-anchor="middle">1</text>
+        <text x="64" y="17" fill="#64748B" font-size="11.5" font-weight="500" text-anchor="middle">2</text>
+        <text x="90" y="17" fill="#64748B" font-size="11.5" font-weight="500" text-anchor="middle">3</text>
+        <text x="114" y="17" fill="#94A3B8" font-size="11.5" text-anchor="middle">...</text>
+        <text x="138" y="17" fill="#64748B" font-size="11.5" font-weight="500" text-anchor="middle">22</text>
+        <text x="164" y="17" fill="#64748B" font-size="13" text-anchor="middle">›</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 8 : SECTION DEMANDES À APPROUVER                                 -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Approval_Requests" transform="translate(264, 856)">
+    <text x="0" y="16" fill="#0F172A" font-size="16" font-weight="700">Demandes à approuver</text>
+    <text x="1144" y="16" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Voir les 3 demandes  →</text>
+
+    <!-- Carte Demande 1 : thomas.bernard -->
+    <g id="Request_Card_1" transform="translate(0, 34)" filter="url(#cardShadow)">
+      <rect width="368" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="18" y="28" fill="#0F172A" font-size="13.5" font-weight="700">thomas.bernard</text>
+      <text x="350" y="28" fill="#94A3B8" font-size="11" text-anchor="end">Il y a 12 min</text>
+      <text x="18" y="48" fill="#64748B" font-size="12" font-family="monospace">db-postgres-prod</text>
+      <text x="18" y="68" fill="#475569" font-size="12">Maintenance base de données</text>
+      <text x="18" y="102" fill="#2563EB" font-size="12" font-weight="600">Examiner la demande  →</text>
+    </g>
+
+    <!-- Carte Demande 2 : sarah.dubois -->
+    <g id="Request_Card_2" transform="translate(388, 34)" filter="url(#cardShadow)">
+      <rect width="368" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="18" y="28" fill="#0F172A" font-size="13.5" font-weight="700">sarah.dubois</text>
+      <text x="350" y="28" fill="#94A3B8" font-size="11" text-anchor="end">Il y a 28 min</text>
+      <text x="18" y="48" fill="#64748B" font-size="12" font-family="monospace">win-ad-primary</text>
+      <text x="18" y="68" fill="#475569" font-size="12">Mise à jour des politiques AD</text>
+      <text x="18" y="102" fill="#2563EB" font-size="12" font-weight="600">Examiner la demande  →</text>
+    </g>
+
+    <!-- Carte Demande 3 : lucas.petit -->
+    <g id="Request_Card_3" transform="translate(776, 34)" filter="url(#cardShadow)">
+      <rect width="368" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="18" y="28" fill="#0F172A" font-size="13.5" font-weight="700">lucas.petit</text>
+      <text x="350" y="28" fill="#94A3B8" font-size="11" text-anchor="end">Il y a 41 min</text>
+      <text x="18" y="48" fill="#64748B" font-size="12" font-family="monospace">k8s-prod-master</text>
+      <text x="18" y="68" fill="#475569" font-size="12">Déploiement de production</text>
+      <text x="18" y="102" fill="#2563EB" font-size="12" font-weight="600">Examiner la demande  →</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 9 : PIED DE PAGE (FOOTER)                                        -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Footer" transform="translate(264, 1054)">
+    <text x="0" y="0" fill="#94A3B8" font-size="11">Données de démonstration</text>
+    <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">128 ressources  •  6 environnements  •  Dernière synchronisation : 14:56:20</text>
+  </g>
+</svg>

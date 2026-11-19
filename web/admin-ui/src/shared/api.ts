@@ -152,12 +152,25 @@ export interface Session {
   privilegedAccountId: string;
   justification: string;
   breakGlass: boolean;
+  targetHost?: string;
+  createdAt?: string;
   // An ordinary session that waits, or waited, for another person's approval, and its ticket (ADR-0067).
   approvalRequired?: boolean;
   ticket?: string;
   expiresAt: string;
   decidedBy?: string;
   decidedAt?: string;
+}
+
+export interface SessionSearchResult {
+  sessions: Session[];
+  next: string;
+}
+
+export interface RecordingSearchResult {
+  searchId: string;
+  truncated: boolean;
+  sessions: { sessionId: string; hits: { timestamp?: string; command?: string }[] }[];
 }
 
 // What connecting to a graphical session gives the page: a path, no ticket and no proxy address.

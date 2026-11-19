@@ -1,10 +1,75 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Login } from "./Login";
 import { OidcCallback } from "./OidcCallback";
 import { fakeApi } from "../../test-helpers";
 
 describe("Login", () => {
+  it("uses the split-screen reference composition and states only implemented security guarantees", () => {
+    const { api } = fakeApi({});
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    expect(screen.getByRole("complementary", { name: "Présentation d'OpenBastion" })).toBeTruthy();
+    expect(screen.getByText("OpenBastion", { selector: ".login-brand-lockup strong" })).toBeTruthy();
+    expect(screen.getByText(/© 2026 OpenBastion — GNU Affero General Public License v3.0 \(AGPL-3.0-only\)/)).toBeTruthy();
+    const legalLinks = screen.getByRole("navigation", { name: "Licence et code source" });
+    expect(within(legalLinks).getByRole("link", { name: /Code source/ })).toBeTruthy();
+    expect(within(legalLinks).getByRole("link", { name: "Texte de la licence" })).toBeTruthy();
+    expect(legalLinks.parentElement?.classList.contains("login-footer-links")).toBe(true);
+    const brandHeading = screen.getByRole("heading", { name: "Vos accès privilégiés. La confiance en plus." });
+    expect(brandHeading.querySelectorAll(":scope > span")).toHaveLength(2);
+    expect(brandHeading.querySelector(":scope > span:first-child")?.textContent).toBe("Vos accès privilégiés.");
+    expect(brandHeading.querySelector(":scope > span:last-child")?.textContent).toBe("La confiance en plus.");
+    expect(screen.getByText("MFA appliquée selon la politique d'accès")).toBeTruthy();
+    expect(screen.getByText("Sessions chiffrées et intégralement tracées")).toBeTruthy();
+    expect(screen.getByText("Secrets conservés dans le coffre-fort")).toBeTruthy();
+    expect(screen.getByText("OPENBASTION / ACCÈS PRIVILÉGIÉS")).toBeTruthy();
+    expect(screen.getByText("Déploiement sur site ou dans le cloud")).toBeTruthy();
+    expect(document.querySelector(".login-brand-mark")?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector(".login-brand-mark svg path")?.getAttribute("d")).toContain("M13 0L0 5.5");
+    expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();
+  });
+
+  it("remembers only the email address after an explicit opt-in and successful sign-in", async () => {
+    const key = "openbastion.login.remembered-username";
+    window.localStorage.removeItem(key);
+    const { api } = fakeApi({ "POST /auth/login": { body: { accessToken: "remembered-token", expiresIn: 3600 } } });
+    const onToken = vi.fn();
+    const first = render(<Login api={api} onToken={onToken} navigate={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "alice@example.test" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "never-store-this" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Se souvenir de mon adresse e-mail" }));
+    fireEvent.click(screen.getByText("Se connecter"));
+    await waitFor(() => expect(onToken).toHaveBeenCalledWith("remembered-token"));
+
+    expect(window.localStorage.getItem(key)).toBe("alice@example.test");
+    expect(window.localStorage.getItem(key)).not.toContain("never-store-this");
+    first.unmount();
+
+    const { api: nextApi } = fakeApi({});
+    render(<Login api={nextApi} onToken={vi.fn()} navigate={vi.fn()} />);
+    expect((screen.getByLabelText("Utilisateur") as HTMLInputElement).value).toBe("alice@example.test");
+    const remember = screen.getByRole("checkbox", { name: "Se souvenir de mon adresse e-mail" });
+    expect((remember as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(remember);
+    expect(window.localStorage.getItem(key)).toBeNull();
+  });
+
+  it("places enterprise SSO before local credentials and toggles password visibility", () => {
+    const { api } = fakeApi({});
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    const sso = screen.getByRole("button", { name: "Se connecter avec le fournisseur d'identité" });
+    const form = screen.getByRole("form", { name: "Connexion locale" });
+    expect(Boolean(sso.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+
+    const password = screen.getByLabelText("Mot de passe");
+    expect(password.getAttribute("type")).toBe("password");
+    fireEvent.click(screen.getByRole("button", { name: "Afficher" }));
+    expect(password.getAttribute("type")).toBe("text");
+    fireEvent.click(screen.getByRole("button", { name: "Masquer" }));
+    expect(password.getAttribute("type")).toBe("password");
+  });
+
   it("logs in with a local account and hands the token on", async () => {
     const { api, calls } = fakeApi({ "POST /auth/login": { body: { accessToken: "tok", expiresIn: 3600 } } });
     const onToken = vi.fn();
@@ -60,12 +125,40 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
-    const input = await screen.findByLabelText("Code de l'application d'authentification");
+    expect(await screen.findByRole("heading", { name: "Vérifiez votre identité" })).toBeTruthy();
+    expect(screen.getByText("root", { selector: ".second-factor-account strong" })).toBeTruthy();
+    expect(screen.queryByDisplayValue("pw")).toBeNull(); // the password is cleared before entering MFA
+    expect(screen.getByText("Le code se renouvelle toutes les 30 secondes.")).toBeTruthy();
+    expect(document.querySelectorAll(".second-factor-code-cell")).toHaveLength(6);
+    expect(screen.getByText("Vous n'avez plus accès à votre application ?")).toBeTruthy();
+    const input = await screen.findByLabelText("Code de vérification") as HTMLInputElement;
+    expect(input.classList.contains("ob-input-otp")).toBe(true);
+    expect(input.maxLength).toBe(6);
+    expect(input.autocomplete).toBe("one-time-code");
+    expect(input.inputMode).toBe("numeric");
     expect(screen.queryByRole("alert")).toBeNull(); // a step, not an error
+    const verify = screen.getByRole("button", { name: "Vérifier et continuer" });
+    expect((verify as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: "12 34-56" } });
-    fireEvent.click(screen.getByText("Valider"));
+    expect((input as HTMLInputElement).value).toBe("123456");
+    expect((verify as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(verify);
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("mfa-tok"));
     expect(calls.find((c) => c.path === "/auth/mfa/verify")?.body).toEqual({ challenge: "ch-1", code: "123456" });
+  });
+
+  it("returns to sign-in from the MFA step without sending a verification request", async () => {
+    const { api, calls } = fakeApi({
+      "POST /auth/login": { status: 401, body: { mfa: "required", challenge: "ch-back", factors: ["totp"] } },
+    });
+    render(<Login api={api} onToken={vi.fn()} navigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Utilisateur"), { target: { value: "root" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByText("Se connecter"));
+    await screen.findByRole("heading", { name: "Vérifiez votre identité" });
+    fireEvent.click(screen.getByRole("button", { name: "Retour à la connexion" }));
+    expect(screen.getByRole("form", { name: "Connexion locale" })).toBeTruthy();
+    expect(calls.map((call) => call.path)).toEqual(["/auth/ldap", "/auth/oidc", "/auth/login"]);
   });
 
   it("enrolls with the administrator's code, shows the secret once, and confirms with a first code", async () => {
@@ -82,8 +175,8 @@ describe("Login", () => {
     fireEvent.change(await screen.findByLabelText("Code d'enrôlement"), { target: { value: "abcd-efgh" } });
     fireEvent.click(screen.getByText("Recevoir le secret"));
     expect(await screen.findByText("JBSWY3DPEHPK3PXP")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Code de l'application d'authentification"), { target: { value: "654321" } });
-    fireEvent.click(screen.getByText("Valider"));
+    fireEvent.change(screen.getByLabelText("Code de vérification"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByText("Vérifier et continuer"));
     await waitFor(() => expect(onToken).toHaveBeenCalledWith("enrolled-tok"));
     expect(calls.find((c) => c.path === "/auth/mfa/enroll")?.body).toEqual({ challenge: "ch-2", enrollmentCode: "abcd-efgh", factor: "totp" });
     expect(calls.find((c) => c.path === "/auth/mfa/enroll/confirm")?.body).toEqual({ challenge: "ch-2", code: "654321" });
@@ -96,7 +189,7 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "pw" } });
     fireEvent.click(screen.getByText("Se connecter"));
     expect(await screen.findByRole("alert")).toBeTruthy();
-    expect(screen.queryByLabelText("Code de l'application d'authentification")).toBeNull();
+    expect(screen.queryByLabelText("Code de vérification")).toBeNull();
   });
 
   it("shows no directory choice when the Gateway does not say it is on", async () => {

@@ -1,5 +1,26 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Audit, Dashboard, Policies as PoliciesIcon, Session, Settings, Shield, Users } from "@openbastion/icons";
+import {
+  ApiDocumentation,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Dashboard,
+  HelpCircle,
+  Infrastructure,
+  Menu,
+  Moon,
+  Notifications,
+  Search,
+  Session,
+  Security,
+  Settings,
+  Shield,
+  Star,
+  StarFilled,
+  Sun,
+  Users,
+} from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import {
   OperatorPreferences,
@@ -11,22 +32,35 @@ import { CommandPalette } from "../shared/ui/CommandPalette";
 import { OperatorPreferencesDialog } from "../shared/ui/OperatorPreferencesDialog";
 import { LanguageSwitcher } from "../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../shared/i18n";
+import { LegalNotice } from "../shared/LegalNotice";
 
 // Labels and descriptions live in the translation files (locales/*.ts), one key per tab: the
 // navigation is translated like the screens it opens, and the groups keep the same order.
 const tabs = {
-  overview: { icon: Dashboard, group: "overview" },
-  accounts: { icon: Users, group: "access" },
-  policies: { icon: PoliciesIcon, group: "access" },
-  sessions: { icon: Session, group: "operations" },
-  audit: { icon: Audit, group: "operations" },
-  security: { icon: Shield, group: "security" },
+  overview: { icon: Dashboard, group: "workspace" },
+  accounts: { icon: Users, group: "workspace" },
+  sessions: { icon: Session, group: "workspace" },
+  infrastructure: { icon: Infrastructure, group: "workspace" },
+  security: { icon: Shield, group: "workspace" },
+  posture: { icon: Security, group: "workspace" },
+  settings: { icon: Settings, group: "workspace" },
 } as const;
 
-const groups = ["overview", "access", "operations", "security"] as const;
+const groups = ["workspace"] as const;
 
 export type Tab = keyof typeof tabs;
-const tabOrder: Tab[] = ["overview", "accounts", "policies", "sessions", "audit", "security"];
+// The reference sidebar order (Vue d'ensemble, Accès privilégiés, Sessions, Infrastructure,
+// Audit & conformité, Paramètres). Policies and the recording screen are tabs of those pages,
+// not destinations of their own.
+const tabOrder: Tab[] = [
+  "overview",
+  "accounts",
+  "sessions",
+  "infrastructure",
+  "security",
+  "posture",
+  "settings",
+];
 
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -56,15 +90,22 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const paletteButton = useRef<HTMLButtonElement>(null);
-  const preferencesButton = useRef<HTMLButtonElement>(null);
+  const userMenuButton = useRef<HTMLButtonElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const notificationsButton = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileWasOpen = useRef(false);
   const paletteWasOpen = useRef(false);
   const preferencesWereOpen = useRef(false);
+  const userMenuWasOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
   const collapsed = preferences.sidebarCollapsed;
   const favoriteTabs = tabOrder.filter((key) => preferences.favorites.includes(key));
@@ -147,9 +188,65 @@ export function AppShell({
   }, [paletteOpen]);
 
   useEffect(() => {
-    if (preferencesWereOpen.current && !preferencesOpen) preferencesButton.current?.focus();
+    if (preferencesWereOpen.current && !preferencesOpen) userMenuButton.current?.focus();
     preferencesWereOpen.current = preferencesOpen;
   }, [preferencesOpen]);
+
+  useEffect(() => {
+    if (userMenuWasOpen.current && !userMenuOpen && !paletteOpen && !preferencesOpen) userMenuButton.current?.focus();
+    userMenuWasOpen.current = userMenuOpen;
+  }, [userMenuOpen, paletteOpen, preferencesOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !userMenuRef.current?.contains(event.target)) setUserMenuOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [userMenuOpen]);
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWorkspaceMenuOpen(false);
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest(".sidebar-workspace-selector")) setWorkspaceMenuOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [workspaceMenuOpen]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNotificationsOpen(false);
+        notificationsButton.current?.focus();
+      }
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !notificationsRef.current?.contains(event.target)) setNotificationsOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    };
+  }, [notificationsOpen]);
 
   useEffect(() => {
     if (mobileWasOpen.current && !mobileOpen) menuButton.current?.focus();
@@ -214,7 +311,7 @@ export function AppShell({
           title={t(favorite ? "shell.favoriteTitle.remove" : "shell.favoriteTitle.add")}
           onClick={() => toggleFavorite(key)}
         >
-          <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+          {favorite ? <StarFilled size={15} /> : <Star size={15} />}
         </button>
       </div>
     );
@@ -223,68 +320,6 @@ export function AppShell({
   return (
     <>
       <a className="skip-link" href="#main-content" inert={mobileOpen}>{t("shell.skipToContent")}</a>
-      <header className="app-header" inert={mobileOpen}>
-        <div className="brand">
-          <BrandMark />
-          <span className="brand-name">OpenBastion</span>
-          <span className="brand-tag">Admin</span>
-        </div>
-        <div className="header-actions">
-          <button
-            ref={paletteButton}
-            type="button"
-            className="command-trigger"
-            onClick={() => setPaletteOpen(true)}
-            aria-haspopup="dialog"
-            aria-keyshortcuts="Control+K Meta+K"
-            aria-label={t("shell.search.open")}
-          >
-            <span aria-hidden="true">⌕</span>
-            <span>{t("shell.search.label")}</span>
-            <kbd>Ctrl K</kbd>
-          </button>
-          <LanguageSwitcher />
-          <button
-            ref={preferencesButton}
-            type="button"
-            className="preferences-trigger"
-            onClick={() => setPreferencesOpen(true)}
-            aria-haspopup="dialog"
-            aria-label={t("shell.preferences.open")}
-          >
-            <Settings size={17} />
-            <span>{t("shell.preferences.label")}</span>
-          </button>
-          <button
-            ref={menuButton}
-            type="button"
-            className="icon-button mobile-menu-toggle"
-            aria-label={mobileOpen ? t("shell.menu.close") : t("shell.menu.open")}
-            aria-expanded={mobileOpen}
-            aria-controls="admin-navigation"
-            onClick={() => setMobileOpen((open) => !open)}
-          >
-            <span aria-hidden="true">☰</span>
-          </button>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}
-            aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")}
-            aria-pressed={effectiveTheme() === "dark"}
-          >
-            <span aria-hidden="true">{effectiveTheme() === "light" ? "◐" : "☀"}</span>
-            <span className="theme-toggle-label">{effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}</span>
-          </button>
-          <div className="session-chip">
-            <span className="avatar" aria-hidden="true">{initials}</span>
-            <span className="who" title={who ? `${who.username}${who.roles.length ? " (" + who.roles.join(", ") + ")" : ""}` : undefined}>
-              {who?.username} {who?.roles.length ? "(" + who.roles.join(", ") + ")" : ""}
-            </span>
-            <button type="button" className="ghost" onClick={onSignOut}>{t("shell.signOut")}</button>
-          </div>
-        </div>
-      </header>
       {paletteOpen ? (
         <CommandPalette
           onClose={() => setPaletteOpen(false)}
@@ -321,8 +356,12 @@ export function AppShell({
           role={mobileOpen ? "dialog" : undefined}
           aria-modal={mobileOpen ? "true" : undefined}
         >
-          <div className="sidebar-heading">
-            <span className="sidebar-heading-label">{t("shell.sidebar.workspace")}</span>
+          <div className="sidebar-brand">
+            <BrandMark />
+            <span className="sidebar-brand-copy">
+              <strong>OpenBastion</strong>
+              <small>{t("shell.sidebar.brandTag")}</small>
+            </span>
             <button
               type="button"
               className="sidebar-collapse-toggle"
@@ -331,8 +370,32 @@ export function AppShell({
               aria-expanded={!collapsed}
               onClick={() => updatePreferences({ ...preferences, sidebarCollapsed: !collapsed })}
             >
-              <span aria-hidden="true">{collapsed ? "›" : "‹"}</span>
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
+          </div>
+          <div className="sidebar-workspace-selector">
+            <span className="sidebar-workspace-label">{t("shell.sidebar.workspace")}</span>
+            <button
+              type="button"
+              className="sidebar-workspace-card"
+              aria-expanded={workspaceMenuOpen}
+              aria-controls="workspace-menu"
+              onClick={() => setWorkspaceMenuOpen((open) => !open)}
+            >
+              <span className="workspace-environment-mark" aria-hidden="true" />
+              <span className="sidebar-workspace-copy">
+                <strong>{t("shell.environment.production")}</strong>
+                <small>{t("shell.sidebar.workspaceContext")}</small>
+              </span>
+              <ChevronDown className="workspace-selector-chevron" size={16} />
+            </button>
+            {workspaceMenuOpen ? (
+              <div className="workspace-menu" id="workspace-menu" role="region" aria-label={t("shell.environment.menuLabel")}>
+                <span className="workspace-menu-caption">{t("shell.environment.configured")}</span>
+                <span className="workspace-menu-current"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}<Check size={15} /></span>
+                <p>{t("shell.environment.singleWorkspace")}</p>
+              </div>
+            ) : null}
           </div>
           <nav aria-label={t("shell.navigation.sections")}>
             {favoriteTabs.length > 0 ? (
@@ -347,15 +410,135 @@ export function AppShell({
                 {tabOrder.filter((key) => tabs[key].group === group).map(renderNavItem)}
               </div>
             ))}
+            <div className="nav-group nav-resources">
+              <h2 className="nav-group-title">{t("shell.sidebar.resources")}</h2>
+              <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs" target="_blank" rel="noreferrer">
+                <ApiDocumentation size={16} />{t("shell.sidebar.documentation")}
+              </a>
+              <a className="sidebar-resource-link" href="https://github.com/openbastion/openbastion/tree/main/docs/user-guide" target="_blank" rel="noreferrer">
+                <HelpCircle size={16} />{t("shell.sidebar.helpCentre")}
+              </a>
+            </div>
           </nav>
           <div className="sidebar-footer">
-            <span className="sidebar-status-dot" aria-hidden="true" />
-            <span className="sidebar-status-label">{t("shell.sidebar.console")}</span>
+            <div className="sidebar-footer-heading">
+              <span className="sidebar-status-dot" aria-hidden="true" />
+              <strong>{t("shell.sidebar.console")}</strong>
+            </div>
+            <p>{t("shell.sidebar.statusDetail")}</p>
+          </div>
+          <div className="sidebar-user-menu" ref={userMenuRef}>
+            <button
+              ref={userMenuButton}
+              type="button"
+              className="user-menu-trigger sidebar-user-menu-trigger"
+              aria-haspopup="true"
+              aria-expanded={userMenuOpen}
+              aria-controls="operator-menu"
+              onClick={() => setUserMenuOpen((open) => !open)}
+            >
+              <span className="avatar" aria-hidden="true">{initials}</span>
+              <span className="user-menu-identity">
+                <strong>{who?.username}</strong>
+                <small>{who?.roles[0] ?? t("shell.user.defaultRole")}</small>
+              </span>
+              <ChevronDown className="user-menu-chevron" size={16} />
+            </button>
+            {userMenuOpen ? (
+              <div className="user-menu-panel sidebar-user-menu-panel" id="operator-menu" aria-label={t("shell.user.menuLabel")}>
+                <div className="user-menu-summary">
+                  <strong>{who?.username}</strong>
+                  <span>{who?.roles.join(", ") || t("shell.user.defaultRole")}</span>
+                </div>
+                <div className="user-menu-section">
+                  <span>{t("common.language.label")}</span>
+                  <LanguageSwitcher />
+                </div>
+                <div className="user-menu-section">
+                  <span>{t("shell.theme.label")}</span>
+                  <button type="button" className="user-menu-item" aria-label={effectiveTheme() === "light" ? t("shell.theme.enableDark") : t("shell.theme.enableLight")} onClick={() => updatePreferences({ ...preferences, theme: effectiveTheme() === "light" ? "dark" : "light" })}>
+                    {effectiveTheme() === "light" ? <Moon size={17} /> : <Sun size={17} />}
+                    {effectiveTheme() === "light" ? t("shell.theme.dark") : t("shell.theme.light")}
+                  </button>
+                </div>
+                <button type="button" className="user-menu-item" onClick={() => { setPreferencesOpen(true); setUserMenuOpen(false); }}>
+                  <Settings size={17} />{t("shell.preferences.label")}
+                </button>
+                <button type="button" className="user-menu-item user-menu-signout" onClick={() => { setUserMenuOpen(false); onSignOut(); }}>
+                  {t("shell.signOut")}
+                </button>
+              </div>
+            ) : null}
           </div>
         </aside>
-        <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
-          {children}
-        </main>
+        <div className="app-content">
+          <header className="app-header" inert={mobileOpen}>
+            <div className="topbar-breadcrumb" aria-label={t("shell.breadcrumb.aria")}>
+              <span>{t("shell.breadcrumb.workspace")}</span>
+              <span aria-hidden="true">/</span>
+              <strong>{t(`shell.nav.${tab}.label`)}</strong>
+            </div>
+            <button
+              ref={paletteButton}
+              type="button"
+              className="command-trigger"
+              aria-label={t("shell.search.open")}
+              onClick={() => setPaletteOpen(true)}
+            >
+              <Search size={16} />
+              <span>{t("shell.search.placeholder")}</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+            <div className="header-actions">
+              <span className="environment-badge"><span className="workspace-environment-mark" aria-hidden="true" />{t("shell.environment.production")}</span>
+              <div className="notifications-menu" ref={notificationsRef}>
+                <button
+                  ref={notificationsButton}
+                  type="button"
+                  className="icon-button"
+                  aria-label={t("shell.notifications.open")}
+                  aria-haspopup="true"
+                  aria-expanded={notificationsOpen}
+                  aria-controls="global-notifications"
+                  onClick={() => setNotificationsOpen((open) => !open)}
+                >
+                  <Notifications size={18} />
+                </button>
+                {notificationsOpen ? (
+                  <section className="notifications-panel" id="global-notifications" aria-label={t("shell.notifications.title")}>
+                    <div className="notifications-panel-heading">
+                      <strong>{t("shell.notifications.title")}</strong>
+                      <span>{t("shell.notifications.all")}</span>
+                    </div>
+                    <div className="notifications-empty" role="status">
+                      <Notifications size={22} />
+                      <strong>{t("shell.notifications.emptyTitle")}</strong>
+                      <p>{t("shell.notifications.unavailable")}</p>
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+              <a className="icon-button header-help-link" href="https://github.com/openbastion/openbastion/tree/main/docs" target="_blank" rel="noreferrer" aria-label={t("shell.help.open")} title={t("shell.help.open")}>
+                <ApiDocumentation size={18} />
+              </a>
+              <button
+                ref={menuButton}
+                type="button"
+                className="icon-button mobile-menu-toggle"
+                aria-label={mobileOpen ? t("shell.menu.close") : t("shell.menu.open")}
+                aria-expanded={mobileOpen}
+                aria-controls="admin-navigation"
+                onClick={() => setMobileOpen((open) => !open)}
+              >
+                <Menu size={18} />
+              </button>
+            </div>
+          </header>
+          <main ref={mainRef} id="main-content" className="app-main" tabIndex={-1} inert={mobileOpen}>
+            {children}
+          </main>
+        </div>
+        <LegalNotice />
       </div>
     </>
   );

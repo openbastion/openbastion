@@ -1,4 +1,11 @@
-export type AdminTab = "overview" | "accounts" | "policies" | "sessions" | "audit" | "security";
+export type AdminTab =
+  | "overview"
+  | "accounts"
+  | "sessions"
+  | "infrastructure"
+  | "security"
+  | "posture"
+  | "settings";
 export type ThemePreference = "system" | "light" | "dark";
 export type DensityPreference = "comfortable" | "compact";
 
@@ -13,14 +20,32 @@ export interface OperatorPreferences {
 export const operatorPreferencesKey = "openbastion.admin-ui.preferences.v1";
 
 export const defaultOperatorPreferences: OperatorPreferences = {
-  theme: "system",
+  theme: "light",
   density: "comfortable",
   sidebarCollapsed: false,
   defaultTab: "overview",
   favorites: [],
 };
 
-const tabs = new Set<AdminTab>(["overview", "accounts", "policies", "sessions", "audit", "security"]);
+const tabs = new Set<AdminTab>([
+  "overview",
+  "accounts",
+  "sessions",
+  "infrastructure",
+  "security",
+  "posture",
+  "settings",
+]);
+
+// v1 preferences may outlive the navigation model. Policies and the audit page were moved
+// into their parent workspaces; migrate their old identifiers instead of dropping the preference.
+function normalizeTab(value: unknown): AdminTab | undefined {
+  if (typeof value !== "string") return undefined;
+  if (tabs.has(value as AdminTab)) return value as AdminTab;
+  if (value === "policies") return "accounts";
+  if (value === "audit") return "security";
+  return undefined;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32,7 +57,7 @@ export function parseOperatorPreferences(value: unknown): OperatorPreferences {
   }
   const candidate = value.preferences;
   const favorites = Array.isArray(candidate.favorites)
-    ? [...new Set(candidate.favorites.filter((item): item is AdminTab => typeof item === "string" && tabs.has(item as AdminTab)))]
+    ? [...new Set(candidate.favorites.map(normalizeTab).filter((item): item is AdminTab => item !== undefined))]
     : [];
   return {
     theme: candidate.theme === "light" || candidate.theme === "dark" || candidate.theme === "system"
@@ -44,9 +69,7 @@ export function parseOperatorPreferences(value: unknown): OperatorPreferences {
     sidebarCollapsed: typeof candidate.sidebarCollapsed === "boolean"
       ? candidate.sidebarCollapsed
       : defaultOperatorPreferences.sidebarCollapsed,
-    defaultTab: typeof candidate.defaultTab === "string" && tabs.has(candidate.defaultTab as AdminTab)
-      ? candidate.defaultTab as AdminTab
-      : defaultOperatorPreferences.defaultTab,
+    defaultTab: normalizeTab(candidate.defaultTab) ?? defaultOperatorPreferences.defaultTab,
     favorites,
   };
 }

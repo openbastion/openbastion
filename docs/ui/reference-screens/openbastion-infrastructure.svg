@@ -1,0 +1,452 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
+    </filter>
+  </defs>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                          -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Background">
+    <rect width="1440" height="1080" fill="#F8FAFC"/>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 2 : BARRE LATÉRALE GAUCHE (SIDEBAR)                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Sidebar">
+    <rect x="0" y="0" width="232" height="1080" fill="#0D2137"/>
+    <line x1="232" y1="0" x2="232" y2="1080" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Logo OpenBastion -->
+    <g id="Sidebar_Logo" transform="translate(20, 22)">
+      <path d="M14 2L3 7v7c0 7.2 4.7 13.9 11 16 6.3-2.1 11-8.8 11-16V7L14 2z" fill="#1E3A5F" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M14 6l-7 3v5c0 4.8 3 9.2 7 10.8 4-1.6 7-6 7-10.8V9l-7-3z" fill="#38BDF8" fill-opacity="0.3"/>
+      <circle cx="14" cy="14" r="2.2" fill="#FFFFFF"/>
+      <text x="38" y="16" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="-0.3">OpenBastion</text>
+      <text x="38" y="29" fill="#64748B" font-size="8.5" font-weight="600" letter-spacing="1.2">PRIVILEGED ACCESS</text>
+    </g>
+
+    <!-- Sélecteur Workspace : Production -->
+    <g id="Sidebar_Workspace_Selector" transform="translate(16, 86)">
+      <rect width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
+      <text x="16" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Production</text>
+      <text x="16" y="42" fill="#94A3B8" font-size="11.5">Acme Corporation</text>
+      <path d="M176 25l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Titre section ESPACE DE TRAVAIL -->
+    <text x="20" y="182" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">ESPACE DE TRAVAIL</text>
+
+    <!-- Menu Navigation Principale -->
+    <g id="Sidebar_Nav_Main" transform="translate(12, 196)">
+      <!-- Item : Vue d'ensemble -->
+      <g id="Nav_Vue_Ensemble" transform="translate(0, 0)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none">
+          <rect x="1" y="1" width="6" height="6" rx="1"/>
+          <rect x="10" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="10" width="6" height="6" rx="1"/>
+          <rect x="10" y="10" width="6" height="6" rx="1"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Vue d'ensemble</text>
+      </g>
+
+      <!-- Item : Accès privilégiés -->
+      <g id="Nav_Acces" transform="translate(0, 46)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="11" r="4"/>
+          <path d="M9 8l6-6M13 4l2 2M15 2l2 2"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Accès privilégiés</text>
+      </g>
+
+      <!-- Item : Sessions (Badge 24) -->
+      <g id="Nav_Sessions" transform="translate(0, 92)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="2" width="15" height="11" rx="2"/>
+          <path d="M5 16h7M8.5 13v3"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
+        <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
+        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">—</text>
+      </g>
+
+      <!-- Item Actif : Infrastructure -->
+      <g id="Nav_Infrastructure" transform="translate(0, 138)">
+        <rect width="208" height="40" rx="8" fill="#133356"/>
+        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
+        <g transform="translate(14, 12)" stroke="#38BDF8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="2" width="15" height="5" rx="1"/>
+          <rect x="1" y="10" width="15" height="5" rx="1"/>
+          <circle cx="4.5" cy="4.5" r="0.6" fill="#38BDF8"/>
+          <circle cx="4.5" cy="12.5" r="0.6" fill="#38BDF8"/>
+        </g>
+        <text x="42" y="25" fill="#FFFFFF" font-size="13" font-weight="600">Infrastructure</text>
+      </g>
+
+      <!-- Item : Audit & conformité -->
+      <g id="Nav_Audit" transform="translate(0, 184)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3H4a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V4a1 1 0 00-1-1h-2"/>
+          <rect x="6" y="1" width="5" height="3" rx="1"/>
+          <path d="M6 8h5M6 11h5"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Audit &amp; conformité</text>
+      </g>
+
+      <!-- Item : Paramètres -->
+      <g id="Nav_Parametres" transform="translate(0, 230)">
+        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="2.5"/>
+          <path d="M8.5 1.5v2M8.5 13.5v2M1.5 8.5h2M13.5 8.5h2M3.5 3.5l1.5 1.5M12 12l1.5 1.5M13.5 3.5L12 5M5 12l-1.5 1.5"/>
+        </g>
+        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Paramètres</text>
+      </g>
+    </g>
+
+    <!-- Séparateur -->
+    <line x1="20" y1="490" x2="212" y2="490" stroke="#1E3A5F" stroke-width="1"/>
+
+    <!-- Section RESSOURCES -->
+    <text x="20" y="528" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">RESSOURCES</text>
+
+    <g id="Sidebar_Nav_Resources" transform="translate(12, 542)">
+      <!-- Documentation -->
+      <g transform="translate(0, 0)">
+        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 2h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+          <path d="M10 2v4h4M6 9h5M6 12h3"/>
+        </g>
+        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Documentation</text>
+      </g>
+
+      <!-- Centre d'aide -->
+      <g transform="translate(0, 44)">
+        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8.5" r="7"/>
+          <path d="M6.5 6.5a2 2 0 013.8.8c0 1.3-1.8 1.8-1.8 3"/>
+          <circle cx="8.5" cy="12.5" r="0.5" fill="#94A3B8"/>
+        </g>
+        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Centre d'aide</text>
+      </g>
+    </g>
+
+    <!-- Carte Statut : Bastion opérationnel -->
+    <g id="Sidebar_Status_Card" transform="translate(16, 868)">
+      <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
+      <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
+      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Santé agrégée non disponible</text>
+      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Aucun contrat de santé public disponible</text>
+      <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
+    </g>
+
+    <!-- Profil Utilisateur : Camille Martin -->
+    <g id="Sidebar_User_Profile" transform="translate(0, 976)">
+      <line x1="0" y1="0" x2="232" y2="0" stroke="#1E3A5F" stroke-width="1"/>
+      <g transform="translate(18, 22)">
+        <circle cx="16" cy="16" r="16" fill="#1E3A5F"/>
+        <circle cx="16" cy="12" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
+        <path d="M8.5 25c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
+        <text x="42" y="14" fill="#FFFFFF" font-size="12.5" font-weight="600">Camille Martin</text>
+        <text x="42" y="30" fill="#94A3B8" font-size="11">Administrateur</text>
+        <path d="M180 13l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 3 : BARRE SUPÉRIEURE (TOPBAR)                                    -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Topbar">
+    <rect x="232" y="0" width="1208" height="64" fill="#FFFFFF"/>
+    <line x1="232" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- Fil d'Ariane -->
+    <g id="Topbar_Breadcrumb" transform="translate(264, 37)">
+      <text x="0" y="0" fill="#64748B" font-size="12.5" font-weight="500">Espace de travail</text>
+      <text x="108" y="0" fill="#CBD5E1" font-size="13">/</text>
+      <text x="124" y="0" fill="#0F172A" font-size="12.5" font-weight="600">Infrastructure</text>
+    </g>
+
+    <!-- Champ de recherche -->
+    <g id="Topbar_Search" transform="translate(880, 14)">
+      <rect width="310" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+      <g transform="translate(12, 10)" stroke="#64748B" stroke-width="1.6" fill="none">
+        <circle cx="7" cy="7" r="5.5"/>
+        <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <text x="36" y="23" fill="#64748B" font-size="12.5">Rechercher une ressource...</text>
+      <text x="275" y="22" fill="#94A3B8" font-size="11" font-weight="600">⌘ K</text>
+    </g>
+
+    <!-- Actions droite Topbar -->
+    <g id="Topbar_Actions" transform="translate(1212, 16)">
+      <!-- Icône Aide -->
+      <g transform="translate(0, 7)" stroke="#475569" stroke-width="1.6" fill="none">
+        <circle cx="9" cy="9" r="7.5"/>
+        <path d="M7 7a2 2 0 013.8.8c0 1.4-1.8 1.8-1.8 3" stroke-linecap="round"/>
+        <circle cx="9" cy="13.2" r="0.5" fill="#475569"/>
+      </g>
+      <!-- Icône Notification -->
+      <g transform="translate(44, 7)">
+        <path d="M9 2a5 5 0 00-5 5v3.5L2.5 13h13L14 10.5V7a5 5 0 00-5-5zM7 15a2 2 0 004 0" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14" cy="4" r="2.8" fill="#2563EB"/>
+      </g>
+      <!-- Badge Production -->
+      <g transform="translate(94, 2)">
+        <rect width="102" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
+        <text x="51" y="18" fill="#2563EB" font-size="12" font-weight="600" text-anchor="middle">Production</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 4 : EN-TÊTE DE PAGE                                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Page_Header" transform="translate(264, 96)">
+    <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Infrastructure</text>
+    <text x="0" y="54" fill="#64748B" font-size="13.5">Votre périmètre, connecté et protégé par un bastion unique.</text>
+
+    <!-- Bouton Découvrir des ressources -->
+    <g transform="translate(940, 4)">
+      <rect width="204" height="36" rx="8" fill="#1D63ED"/>
+      <g transform="translate(16, 11)" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 6A6 6 0 1011.5 11.5"/>
+        <path d="M13 2v4h-4"/>
+      </g>
+      <text x="38" y="23" fill="#FFFFFF" font-size="13" font-weight="600">Découvrir des ressources</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 5 : CARTES DE MÉTRIQUES (KPI CARDS)                              -->
+  <!-- ======================================================================= -->
+  <g id="Layer_KPI_Cards" transform="translate(264, 180)">
+    <!-- Carte 1 : Ressources protégées -->
+    <g id="KPI_Resources" transform="translate(0, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Comptes Vault examinés</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Inventaire non disponible</text>
+    </g>
+
+    <!-- Carte 2 : Connecteurs actifs -->
+    <g id="KPI_Connectors" transform="translate(291, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Connecteurs non évalués</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Non évalué</text>
+    </g>
+
+    <!-- Carte 3 : Bastions déployés -->
+    <g id="KPI_Bastions" transform="translate(582, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Topologie masquée</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Santé non exposée</text>
+    </g>
+
+    <!-- Carte 4 : Disponibilité -->
+    <g id="KPI_Availability" transform="translate(873, 0)" filter="url(#cardShadow)">
+      <rect width="271" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Disponibilité non mesurée</text>
+      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">—</text>
+      <text x="20" y="102" fill="#64748B" font-size="11.5">Aucune série de disponibilité</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 6 : TOPOLOGIE DES ACCÈS & SANTÉ DU CLUSTER                       -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Topology_And_Health" transform="translate(264, 326)">
+    <!-- Carte Gauche : Topologie des accès -->
+    <g id="Card_Access_Topology" filter="url(#cardShadow)">
+      <rect width="746" height="314" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text x="24" y="34" fill="#0F172A" font-size="15.5" font-weight="700">Périmètre des ressources</text>
+      <text x="24" y="54" fill="#64748B" font-size="12">Les accès cibles passent par les proxys autorisés.</text>
+
+      <!-- Sélecteur Production -->
+      <g transform="translate(626, 18)">
+        <rect width="96" height="30" rx="7" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+        <text x="14" y="19" fill="#0F172A" font-size="12" font-weight="500">Production</text>
+        <path d="M80 14l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Diagramme de Topologie -->
+      <g id="Topology_Diagram" transform="translate(24, 84)">
+        <!-- Lignes de connexion -->
+        <line x1="164" y1="95" x2="236" y2="95" stroke="#2563EB" stroke-width="1.6"/>
+        <path d="M402 95 H464 M464 25 V165 M464 25 H512 M464 95 H512 M464 165 H512" fill="none" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- Noeud Gauche : 86 identités -->
+        <g transform="translate(0, 58)">
+          <rect width="164" height="74" rx="10" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+          <text x="18" y="32" fill="#0F172A" font-size="14" font-weight="700">Identités non agrégées</text>
+          <text x="18" y="53" fill="#64748B" font-size="11.5">SSO + MFA</text>
+        </g>
+
+        <!-- Noeud Central : OpenBastion -->
+        <g transform="translate(236, 54)">
+          <rect width="166" height="82" rx="10" fill="#0B1F36"/>
+          <text x="18" y="34" fill="#FFFFFF" font-size="14.5" font-weight="700">OpenBastion</text>
+          <text x="18" y="56" fill="#38BDF8" font-size="11.5" font-weight="500">Topologie non exposée</text>
+        </g>
+
+        <!-- Noeud Droite 1 : Cloud privé -->
+        <g transform="translate(512, 0)">
+          <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Domaine non évalué</text>
+          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
+          <circle cx="166" cy="18" r="3" fill="#2563EB"/>
+        </g>
+
+        <!-- Noeud Droite 2 : Kubernetes -->
+        <g transform="translate(512, 68)">
+          <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Connecteur non évalué</text>
+          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
+          <circle cx="166" cy="18" r="3" fill="#2563EB"/>
+        </g>
+
+        <!-- Noeud Droite 3 : On-premise -->
+        <g transform="translate(512, 136)">
+          <rect width="186" height="54" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
+          <text x="16" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Domaine non évalué</text>
+          <text x="16" y="41" fill="#64748B" font-size="11">—</text>
+          <circle cx="166" cy="18" r="3" fill="#2563EB"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- Carte Droite : Santé du cluster -->
+    <g id="Card_Cluster_Health" transform="translate(766, 0)" filter="url(#cardShadow)">
+      <rect width="378" height="314" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+      <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Santé indisponible</text>
+
+      <!-- Badge Opérationnel -->
+      <g transform="translate(262, 18)">
+        <rect width="92" height="24" rx="6" fill="#EFF6FF"/>
+        <text x="46" y="16" fill="#2563EB" font-size="11" font-weight="600" text-anchor="middle">Inconnu</text>
+      </g>
+
+      <!-- Barre 1 : CPU -->
+      <g transform="translate(24, 86)">
+        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
+        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
+        <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
+        <rect x="0" y="12" width="92" height="5" rx="2.5" fill="#2563EB"/>
+      </g>
+
+      <!-- Barre 2 : Mémoire -->
+      <g transform="translate(24, 146)">
+        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
+        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
+        <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
+        <rect x="0" y="12" width="152" height="5" rx="2.5" fill="#2563EB"/>
+      </g>
+
+      <!-- Barre 3 : Stockage -->
+      <g transform="translate(24, 206)">
+        <text x="0" y="0" fill="#64748B" font-size="12.5">Métrique non disponible</text>
+        <text x="330" y="0" fill="#0F172A" font-size="12.5" font-weight="700" text-anchor="end">—</text>
+        <rect x="0" y="12" width="330" height="5" rx="2.5" fill="#F1F5F9"/>
+        <rect x="0" y="12" width="205" height="5" rx="2.5" fill="#2563EB"/>
+      </g>
+
+      <!-- Séparateur + Latence moyenne -->
+      <line x1="24" y1="252" x2="354" y2="252" stroke="#F1F5F9" stroke-width="1"/>
+      <text x="24" y="280" fill="#64748B" font-size="12">Latence non mesurée</text>
+      <text x="354" y="280" fill="#2563EB" font-size="12.5" font-weight="700" text-anchor="end">—</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 7 : TABLEAU CONNECTEURS & SERVICES                               -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Connectors_Table" transform="translate(264, 664)" filter="url(#cardShadow)">
+    <rect width="1144" height="356" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+
+    <!-- En-tête carte -->
+    <text x="24" y="36" fill="#0F172A" font-size="15.5" font-weight="700">Connecteurs &amp; services</text>
+    <text x="1120" y="36" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Gérer les intégrations  →</text>
+
+    <!-- En-tête colonnes -->
+    <rect x="0" y="60" width="1144" height="36" fill="#F8FAFC"/>
+    <line x1="0" y1="60" x2="1144" y2="60" stroke="#F1F5F9" stroke-width="1"/>
+    <line x1="0" y1="96" x2="1144" y2="96" stroke="#E2E8F0" stroke-width="1"/>
+
+    <g transform="translate(24, 82)" fill="#94A3B8" font-size="10.5" font-weight="700" letter-spacing="0.5">
+      <text x="0" y="0">CONNECTEUR</text>
+      <text x="275" y="0">TYPE</text>
+      <text x="462" y="0">RESSOURCES</text>
+      <text x="622" y="0">DERNIÈRE SYNC.</text>
+      <text x="788" y="0">ÉTAT</text>
+    </g>
+
+    <!-- Ligne 1 : AWS · eu-west-3 -->
+    <g transform="translate(24, 126)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">AWS · eu-west-3</text>
+      <rect x="275" y="-15" width="52" height="22" rx="4" fill="#F1F5F9"/>
+      <text x="301" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cloud</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
+      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 30 s</text>
+      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
+      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
+      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 2 : Azure · France Central -->
+    <g transform="translate(24, 178)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">Azure · France Central</text>
+      <rect x="275" y="-15" width="52" height="22" rx="4" fill="#F1F5F9"/>
+      <text x="301" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cloud</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
+      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 42 s</text>
+      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
+      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
+      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 3 : Kubernetes · production -->
+    <g transform="translate(24, 230)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">Kubernetes · production</text>
+      <rect x="275" y="-15" width="56" height="22" rx="4" fill="#F1F5F9"/>
+      <text x="303" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Cluster</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
+      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 15 s</text>
+      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
+      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
+      <line x1="-24" y1="22" x2="1120" y2="22" stroke="#F1F5F9" stroke-width="1"/>
+    </g>
+
+    <!-- Ligne 4 : VMware · datacenter Paris -->
+    <g transform="translate(24, 282)">
+      <text x="0" y="0" fill="#0F172A" font-size="13" font-weight="600">VMware · datacenter Paris</text>
+      <rect x="275" y="-15" width="76" height="22" rx="4" fill="#F1F5F9"/>
+      <text x="313" y="0" fill="#64748B" font-size="11" font-weight="600" text-anchor="middle">Domaine non évalué</text>
+      <text x="462" y="0" fill="#0F172A" font-size="12.5" font-weight="500">—</text>
+      <text x="622" y="0" fill="#64748B" font-size="12.5">Il y a 28 s</text>
+      <rect x="788" y="-15" width="76" height="22" rx="6" fill="#EFF6FF"/>
+      <text x="826" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Connecté</text>
+      <text x="1096" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Configurer  →</text>
+      <line x1="-24" y1="24" x2="1120" y2="24" stroke="#E2E8F0" stroke-width="1"/>
+    </g>
+
+    <!-- Pied de tableau -->
+    <text x="24" y="336" fill="#64748B" font-size="11.5">4 connecteurs d'infrastructure  ·  2 connecteurs d'identité : Keycloak et LDAP</text>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CALQUE 8 : PIED DE PAGE (FOOTER)                                        -->
+  <!-- ======================================================================= -->
+  <g id="Layer_Footer" transform="translate(264, 1054)">
+    <text x="0" y="0" fill="#94A3B8" font-size="11">Maquette illustrative · aucune télémétrie réelle</text>
+    <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">Découverte automatique toutes les 5 minutes  •  Dernier passage : 14:55</text>
+  </g>
+</svg>

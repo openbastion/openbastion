@@ -1,3 +1,4 @@
+import { Label, Select } from "@openbastion/ui";
 import { changeLanguage, currentLanguage, Language, supportedLanguages, useAppTranslation } from "../i18n";
 
 const names: Record<Language, string> = { fr: "Français", en: "English" };
@@ -9,9 +10,9 @@ export function LanguageSwitcher({ className = "" }: { className?: string }) {
   // re-renders in step with the first, and the label follows the new language.
   const { t } = useAppTranslation();
   return (
-    <label className={"language-switcher " + className}>
+    <Label className={"language-switcher " + className}>
       <span className="language-switcher-label">{t("common.language.label")}</span>
-      <select
+      <Select
         value={currentLanguage()}
         aria-label={t("common.language.label")}
         onChange={(event) => changeLanguage(event.target.value as Language)}
@@ -21,7 +22,7 @@ export function LanguageSwitcher({ className = "" }: { className?: string }) {
             {names[code]}
           </option>
         ))}
-      </select>
-    </label>
+      </Select>
+    </Label>
   );
 }

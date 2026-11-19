@@ -1,9 +1,18 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { Checkbox, Form, Label, Select } from "@openbastion/ui";
 import { AdminTab, DensityPreference, OperatorPreferences, ThemePreference } from "../operatorPreferences";
 import { Button } from "./Button";
 import { useAppTranslation } from "../i18n";
 
-const destinations: AdminTab[] = ["overview", "accounts", "policies", "sessions", "audit", "security"];
+const destinations: AdminTab[] = [
+  "overview",
+  "accounts",
+  "sessions",
+  "infrastructure",
+  "security",
+  "posture",
+  "settings",
+];
 
 export function OperatorPreferencesDialog({
   preferences,
@@ -65,11 +74,11 @@ export function OperatorPreferencesDialog({
           </div>
           <Button variant="icon" className="preferences-close" aria-label={t("preferences.close")} onClick={onClose}>×</Button>
         </header>
-        <form onSubmit={submit}>
+        <Form onSubmit={submit}>
           <div className="preferences-fields">
-            <label>
+            <Label>
               {t("preferences.theme")}
-              <select
+              <Select
                 ref={firstField}
                 value={draft.theme}
                 onChange={(event) => setDraft((current) => ({ ...current, theme: event.target.value as ThemePreference }))}
@@ -77,37 +86,36 @@ export function OperatorPreferencesDialog({
                 <option value="system">{t("preferences.themeSystem")}</option>
                 <option value="light">{t("preferences.themeLight")}</option>
                 <option value="dark">{t("preferences.themeDark")}</option>
-              </select>
-            </label>
-            <label>
+              </Select>
+            </Label>
+            <Label>
               {t("preferences.density")}
-              <select
+              <Select
                 value={draft.density}
                 onChange={(event) => setDraft((current) => ({ ...current, density: event.target.value as DensityPreference }))}
               >
                 <option value="comfortable">{t("preferences.densityComfortable")}</option>
                 <option value="compact">{t("preferences.densityCompact")}</option>
-              </select>
-            </label>
-            <label>
+              </Select>
+            </Label>
+            <Label>
               {t("preferences.defaultTab")}
-              <select
+              <Select
                 value={draft.defaultTab}
                 onChange={(event) => setDraft((current) => ({ ...current, defaultTab: event.target.value as AdminTab }))}
               >
                 {destinations.map((destination) => (
                   <option key={destination} value={destination}>{t(`preferences.destinations.${destination}`)}</option>
                 ))}
-              </select>
-            </label>
-            <label className="preferences-checkbox">
-              <input
-                type="checkbox"
+              </Select>
+            </Label>
+            <Label className="preferences-checkbox">
+              <Checkbox
                 checked={draft.sidebarCollapsed}
                 onChange={(event) => setDraft((current) => ({ ...current, sidebarCollapsed: event.target.checked }))}
               />
               {t("preferences.sidebarCollapsed")}
-            </label>
+            </Label>
           </div>
           <section className="shortcut-help" aria-labelledby="shortcut-help-title">
             <h3 id="shortcut-help-title">{t("preferences.shortcuts.title")}</h3>
@@ -123,7 +131,7 @@ export function OperatorPreferencesDialog({
             <Button onClick={onClose}>{t("common.actions.cancel")}</Button>
             <Button type="submit" variant="primary">{t("preferences.save")}</Button>
           </div>
-        </form>
+        </Form>
       </section>
     </div>
   );

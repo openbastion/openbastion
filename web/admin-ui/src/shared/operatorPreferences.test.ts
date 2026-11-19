@@ -8,6 +8,10 @@ import {
 } from "./operatorPreferences";
 
 describe("operator preferences", () => {
+  it("starts in the light theme to match the product reference", () => {
+    expect(defaultOperatorPreferences.theme).toBe("light");
+  });
+
   it("loads only known, versioned presentation preferences", () => {
     expect(parseOperatorPreferences({
       version: 1,
@@ -26,6 +30,13 @@ describe("operator preferences", () => {
       defaultTab: "sessions",
       favorites: ["accounts"],
     });
+  });
+
+  it("migrates retired destinations to their parent workspaces", () => {
+    expect(parseOperatorPreferences({
+      version: 1,
+      preferences: { defaultTab: "policies", favorites: ["policies", "audit", "sessions"] },
+    })).toMatchObject({ defaultTab: "accounts", favorites: ["accounts", "security", "sessions"] });
   });
 
   it("rejects unknown versions and invalid values to safe defaults", () => {

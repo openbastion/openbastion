@@ -746,6 +746,102 @@
       "name": "api-documentation",
       "component": "ApiDocumentation",
       "motif": "link"
+    },
+    {
+      "category": "administration",
+      "name": "chevron-down",
+      "component": "ChevronDown",
+      "motif": "chevron"
+    },
+    {
+      "category": "administration",
+      "name": "chevron-up",
+      "component": "ChevronUp",
+      "motif": "chevron"
+    },
+    {
+      "category": "administration",
+      "name": "chevron-left",
+      "component": "ChevronLeft",
+      "motif": "chevron"
+    },
+    {
+      "category": "administration",
+      "name": "chevron-right",
+      "component": "ChevronRight",
+      "motif": "chevron"
+    },
+    {
+      "category": "administration",
+      "name": "arrow-right",
+      "component": "ArrowRight",
+      "motif": "arrow"
+    },
+    {
+      "category": "administration",
+      "name": "download",
+      "component": "Download",
+      "motif": "download"
+    },
+    {
+      "category": "administration",
+      "name": "check",
+      "component": "Check",
+      "motif": "check"
+    },
+    {
+      "category": "administration",
+      "name": "plus",
+      "component": "Plus",
+      "motif": "plus"
+    },
+    {
+      "category": "administration",
+      "name": "close",
+      "component": "Close",
+      "motif": "close"
+    },
+    {
+      "category": "administration",
+      "name": "menu",
+      "component": "Menu",
+      "motif": "menu"
+    },
+    {
+      "category": "administration",
+      "name": "help-circle",
+      "component": "HelpCircle",
+      "motif": "help"
+    },
+    {
+      "category": "administration",
+      "name": "star",
+      "component": "Star",
+      "motif": "star"
+    },
+    {
+      "category": "administration",
+      "name": "star-filled",
+      "component": "StarFilled",
+      "motif": "star"
+    },
+    {
+      "category": "administration",
+      "name": "filter",
+      "component": "Filter",
+      "motif": "filter"
+    },
+    {
+      "category": "administration",
+      "name": "sun",
+      "component": "Sun",
+      "motif": "sun"
+    },
+    {
+      "category": "administration",
+      "name": "moon",
+      "component": "Moon",
+      "motif": "moon"
     }
   ]
 }

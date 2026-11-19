@@ -4824,3 +4824,185 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - La lecture vérifie MAC + tête Audit ; rollback, altération ou Audit indisponible = refus fail-closed. Une ligne exactement une révision en avance peut être réconciliée idempotemment si son HMAC est valide ; les écarts supérieurs sont refusés.
 - Migration retenue : fenêtre de maintenance, zéro session active/en attente ; l'historique antérieur reste `legacy_unverified`, visible en lecture seule et jamais signé automatiquement. C'est une contrainte opérationnelle explicite de sécurité.
 - La PR de cet incrément porte la décision et les contrats d'intégrité ; le code, les migrations, la tête Audit, l'API mTLS et les contre-épreuves anti-rejeu restent à réaliser avant de considérer SI-08 fermé.
+
+## 2026-11-16 — Alignement du panneau gauche de connexion sur le SVG
+
+- La référence `openbastion-auth-connexion.svg` (1440 × 1024) sert de grille : panneau gauche de 560 px, marge de 56 px, verrouillage de marque à 58 px du haut, accroche à y≈264, carte sécurité à (56, 558) en 448 × 200 et pied de panneau en bas.
+- Le logo de connexion utilise maintenant le bouclier à trou de serrure du SVG (et non le pictogramme générique à coche utilisé dans les vues applicatives). La taille du mot-symbole, l'interlettrage, le corps du titre, les lignes descriptives et les espacements de la carte ont été rapprochés de la référence.
+- Les trois bénéfices de sécurité sont raccourcis pour retrouver les lignes de la maquette sans annoncer une MFA obligatoire pour tous les rôles : la MFA reste appliquée selon la politique d'accès ; les sessions sont chiffrées et tracées ; les secrets restent dans le coffre-fort.
+- Le pied de panneau reprend trois niveaux visuels, mais ne reprend pas les valeurs fictives de la maquette (« ACME CORPORATION », « v2.8.0 », hébergement UE). Elles sont remplacées par des informations génériques exactes sur le produit et ses modes de déploiement.
+- Les couleurs du pictogramme, du texte de la carte et du pied sont des tokens dédiés ; le contrôle `check-app-colors` ne doit trouver aucune couleur littérale dans le JSX/CSS applicatif.
+- Validation finale : `make ui-test ui-build` PASS — 25 fichiers, 246 tests ; TypeScript et build Vite PASS ; contrôles de contraste des tokens clair/sombre PASS ; `check-app-colors` PASS sans couleur littérale dans le code applicatif ; `git diff --check` PASS. Le rendu navigateur à 1440 × 1024 reste à confirmer : la tentative de capture headless Edge n'a pas produit de fichier exploitable.
+
+
+## 2026-11-17 — Alignement de l'écran de vérification MFA
+
+- Référence : `/home/eldorplus/Downloads/Ecrans/openbastion-mfa-validation.svg` (1440 × 1024). Le second facteur réutilise le panneau de marque de la connexion et reprend à droite le lien de retour, le badge smartphone, le titre, l'identifiant du compte, les six cases OTP, le CTA et le bandeau d'aide.
+- `SecondFactor` reçoit l'identifiant déjà saisi au login ; aucun appel supplémentaire n'est fait pour l'afficher. Le challenge serveur, les vérifications TOTP/WebAuthn, l'enrôlement et l'ajout d'une clé restent inchangés.
+- Les six cases visuelles reposent sur un unique champ `one-time-code` accessible : saisie numérique, collage, filtrage des caractères, plafond de six chiffres et soumission désactivée avant six chiffres. WebAuthn-only n'affiche aucun champ TOTP ; si les deux facteurs sont autorisés, la clé reste proposée comme alternative.
+- Le bouton de retour abandonne le challenge local sans appeler `/auth/mfa/verify`. Le code n'est jamais validé dans le navigateur.
+- Aucun endpoint public de code de récupération n'existe dans l'OpenAPI ni dans Authentication au moment de cette vérification. Le lien « code de récupération » de la maquette est donc volontairement omis ; il ne doit être ajouté qu'avec un contrat backend réel.
+- Tests ajoutés pour l'écran TOTP (six cases, identité, nettoyage du code, CTA désactivé avant six chiffres, soumission) et pour le retour sans requête de vérification ; le parcours WebAuthn-only conserve ses tests dédiés.
+- Suite complète après le test de retour à la connexion : `make ui-test ui-build` PASS — 25 fichiers, 249 tests ; TypeScript/Vite, contraste clair/sombre, `check-app-colors` et `git diff --check` PASS.
+- Limite : pas de capture navigateur exploitable à ce stade ; la géométrie est dérivée du SVG et les tests DOM ne prouvent pas un rendu pixel-à-pixel. Vérification visuelle à faire dans un navigateur à 1440 × 1024 et sur mobile.
+
+
+## 2026-11-17 — Sessions : archivage des références et intégration des onglets
+
+- Les onze fichiers SVG de `/home/eldorplus/Downloads/Ecrans/` ont été déplacés dans `docs/ui/reference-screens/` : les huit écrans sources, la référence Sessions de base et les trois variantes Historique, Enregistrements et Alertes. Le répertoire Downloads/Ecrans est vide.
+- `Sessions.tsx` est organisé avec les onglets En direct, Historique, Enregistrements et Alertes ; le parcours live existant (demande, approbation, recherche par identifiant, ouverture d'écran et terminaison confirmée) reste dans son onglet.
+- Historique branché sur `GET /sessions/search`, avec fenêtre locale obligatoire (borne supérieure exclusive), maximum 31 jours, filtres et pagination par curseur. Les résultats restent soumis aux droits de lecture du Broker et à son audit préalable.
+- Enregistrements branché sur `GET /recordings/search` : recherche plein texte des commandes SSH sur une fenêtre locale de 31 jours maximum (borne supérieure exclusive) ; les résultats peuvent être tronqués. L'action d'ouverture passe vers l'écran d'enregistrements existant et charge `GET /sessions/{id}/recording`.
+- Alertes : pas d'API publique de file/compteur/acquittement. L'onglet affiche un badge « API requise » et documente la limite ; il ne compte pas des événements d'audit comme des alertes et ne propose aucune action fictive.
+- Aucun endpoint ni schéma backend n'a été modifié. Les onze références sont indexées dans `docs/ui/reference-screens/README.md`.
+- Validation finale : `make ui-test ui-build` PASS — 26 fichiers Vitest, 258 tests ; TypeScript et build Vite production PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
+- Rendu navigateur et comparaison pixel-à-pixel non encore vérifiés.
+
+
+## 2026-11-17 — Shell partagé et Dashboard alignés sur la référence
+
+- L'incrément reste dans le worktree `/tmp/openbastion-ui-reference`, branche `feat/ui-reference-alignment`, destiné à la PR #223. Le checkout principal et les worktrees de sécurité n'ont pas été touchés.
+- Le shell place désormais la marque et le contexte de l'espace de travail dans la sidebar, avec une section « Espace de travail » pour les destinations existantes et une section « Ressources » distincte. Les contrôles non implémentés (Infrastructure, paramètres tenant, documentation/help) ne sont pas exposés comme de faux liens. Le fil d'Ariane reste dans la topbar.
+- Le menu utilisateur regroupe palette de commandes, langue, thème, préférences et déconnexion. `Ctrl+K` reste actif globalement ; l'ouverture/fermeture du menu gère Échap, clic extérieur et retour du focus. La topbar ne contient plus le déclencheur de la palette.
+- Dashboard : composition de référence reprise (titre/actions, bandeau, quatre indicateurs, panneaux de pilotage et liste opérationnelle). Les indicateurs proviennent des réponses Vault et Broker ; les signaux de rotation et d'épinglage sont calculés uniquement sur les comptes chargés et la note précise le périmètre. Le tableau montre les demandes `pending_approval` visibles par l'appelant, pas un flux global de sessions.
+- Le graphique temporel de connexion est remplacé par un état explicite « historique agrégé indisponible » : aucune route publique ne fournit cette série. Aucun faux chiffre de sessions actives, ressource protégée, identité ou score de risque n'est affiché. Un bouton Actualiser relance les deux appels publics.
+- Les textes FR/EN sont synchronisés. Tests ajoutés/ajustés pour la composition du Dashboard, les données réelles, les limites API, le menu utilisateur, la palette et le retour de focus des préférences.
+- Validation : `make ui-test ui-build` PASS — 26 fichiers, 259 tests ; TypeScript et build Vite production PASS ; `check-app-colors` PASS sans couleur littérale ; contrôles de contraste clair/sombre PASS ; `git diff --check` PASS.
+- Pas de navigateur ni de binaire Chromium/Firefox installé sur LT209227 dans cet environnement : capture navigateur, vérification responsive réelle et comparaison pixel-à-pixel restent **non vérifiées**. Aucun résultat visuel navigateur n'est revendiqué.
+
+### Ce que cela ne fait PAS
+
+- Ne fournit pas un listing global des sessions actives, un flux de sessions récentes, un agrégat temporel, un score Zero Trust ni un état de santé global des services.
+- Ne transforme pas les préférences locales en paramètres de tenant ou de sécurité serveur.
+- Ne crée pas de destinations de navigation factices pour Infrastructure, Paramètres tenant, Documentation ou Centre d'aide.
+- Ne garantit pas encore une fidélité pixel-à-pixel : aucune capture navigateur n'a pu être produite sur cette machine.
+
+
+## 2026-11-17 — Sessions : workspace à deux panneaux
+
+- La page reprend la structure de la maquette : quatre cartes d'état, onglets, colonne de gauche (318 px à 1440 px) et panneau de détail à droite. Le formulaire de nouvelle demande est conservé dans une disclosure et reste accessible depuis l'action de l'en-tête.
+- La liste latérale est volontairement nommée « Demandes à décider » : elle utilise uniquement `GET /sessions?status=pending_approval`. Elle ne prétend pas être une liste des sessions actives. Une demande sélectionnée est détaillée depuis l'objet déjà retourné par l'API ; aucun `GET /sessions/{id}` additionnel n'est fait pour franchir la frontière de lecture. La recherche par ID conserve le GET et son contrôle d'autorisation.
+- Le panneau droit garde les détails, approbation/refus avec confirmation, injection du secret, ouverture d'écran RDP/VNC et terminaison. Le terminal SSH de démonstration du SVG n'est pas reproduit, car l'Admin UI ne possède pas de flux terminal SSH.
+- Les cartes indiquent explicitement les limites de listing actif et d'alertes ; elles ne reprennent aucun faux compteur. Les onglets Historique, Enregistrements et Alertes conservent leurs composants et contrats précédents.
+- Validation complète après cette évolution : `make ui-test ui-build` PASS — 26 fichiers, 259 tests ; TypeScript/Vite production PASS ; `check-app-colors` PASS ; contraste clair/sombre PASS ; `git diff --check` PASS.
+
+### Ce que cela ne fait PAS
+
+- Ne crée pas un endpoint de listing global des sessions actives et n'affiche pas de sessions fictives.
+- Ne crée pas de terminal SSH dans le navigateur ni de flux temps réel qui n'existe pas dans l'API.
+- Ne modifie pas les politiques d'autorisation : les objets issus de la file d'approbation ne déclenchent pas une lecture par identifiant ; la recherche manuelle reste soumise à l'autorisation `GET /sessions/{id}`.
+- Ne met pas en œuvre le contrat d'alertes de sessions ; l'onglet indique toujours que l'API est requise.
+
+## 2026-11-17 — Reprise du shell selon la maquette Dashboard
+
+- Le shell authentifié est maintenant une grille plein écran : sidebar sur toute la hauteur à gauche, colonne de contenu à droite, topbar dans cette colonne. La topbar et le contenu ne sont plus empilés au-dessus de la sidebar ; la page n'est plus limitée par la largeur maximale générique de `main`.
+- La palette de commandes revient dans la topbar sous forme de champ de recherche visible, avec le raccourci `Ctrl K`. Le menu utilisateur est déplacé en bas de la sidebar, sous la carte d'état.
+- La zone RESSOURCES expose deux destinations documentaires réelles : l'index de documentation technique et le guide utilisateur. Le lien « Centre d'aide » pointe vers le guide existant en attendant un centre d'aide dédié.
+- Le header expose le menu des notifications globales et le lien d'aide. Le panneau notifications présente explicitement l'indisponibilité de l'API globale ; aucun compteur ni événement fictif n'est affiché. Le contrat d'alertes de session reste une proposition ADR-0117, non implémentée.
+- La capture précédente était en thème sombre : le thème initial `system` suivait la préférence sombre du système d'exploitation et appliquait les tokens sombres à toute la zone de contenu. Le thème initial devient `light`, conforme à la maquette ; le thème sombre reste activable explicitement dans le menu opérateur.
+- Tests shell étendus : structure pleine hauteur, champ de recherche, liens Ressources, panneau notifications vide et fermeture clavier. Validation : `make ui-test ui-build` PASS — 26 fichiers Vitest, 259 tests ; TypeScript/Vite PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
+- Limite : aucune capture navigateur n'a été produite sur LT209227 ; le rendu responsive et la comparaison visuelle pixel-à-pixel restent à confirmer dans un navigateur.
+
+
+## 2026-11-17 — Footer global et fidélité de la palette (Footer.png)
+
+- `Footer.png` lu via le compte bonikiss : le pied de page légal était limité à la colonne de contenu, laissant un vide sous la sidebar. `LegalNotice` est maintenant intégré comme ligne finale de `.app-workspace`, en `grid-column: 1 / -1`.
+- Palette Admin UI alignée sur les couleurs du SVG Dashboard : canvas `#F8FAFC`, surface/topbar `#FFFFFF`, texte `#0F172A`, secondaire `#64748B`, bordure `#E2E8F0`, accent `#2563EB`, sidebar `#0D2137`, surface sidebar `#152E4D`, bordure `#1E3A5F`, muted `#94A3B8`, cyan `#38BDF8`, actif `#133356`. Les couleurs sont exposées par des tokens sémantiques, pas par des déclarations locales.
+- La palette de la sidebar et de la topbar est fixe, fidèle à la maquette, y compris en thème sombre ; la zone de contenu continue de suivre le thème opérateur. Le thème clair reste le défaut. Une préférence sombre explicitement persistée dans le navigateur n'est pas écrasée automatiquement.
+- `make ui-test ui-build` PASS : 26 fichiers, 260 tests, TypeScript/Vite PASS. `npm --prefix web/packages/design-tokens run check:contrast` PASS en clair et sombre, dont les nouveaux contrôles topbar/footer. `check-app-colors` PASS ; `git diff --check` PASS.
+
+
+## 2026-11-17 — Correctif shell après WorkEspace-Footer.png
+
+- Cause : la grille plaçait le footer sur une seconde ligne mais la sidebar restait limitée à la première ; `.app-content` imposait également `min-height: 100vh`, repoussant la ligne footer sous le viewport.
+- Correction : sidebar en première colonne sur les deux lignes, fond chrome opaque explicite, contenu limité à la première ligne et hauteur minimale de grille répartie entre contenu/footer. Footer étiré sur les deux colonnes sans max-width ni clipping horizontal.
+- Import `LegalNotice` redondant retiré de `App.tsx` ; le shell authentifié reste son seul propriétaire.
+
+
+## 2026-11-17 — Séparation topbar, sidebar et footer
+
+- Le fond de `.app-header` ne doit pas utiliser les tokens chrome/topbar globaux : il est limité à la zone de contenu et utilise `--surface` / `--line`. La sidebar a son propre fond opaque `--ob-color-chrome-background`.
+- Cause du footer tronqué/chevauchement : sidebar placée sur les lignes 1 et 2, footer sur ligne 2 et toutes les colonnes. Le footer recouvrait donc la partie basse de la sidebar.
+- Correction : sidebar et `.app-content` en ligne 1 seulement ; footer global en ligne 2 sur toutes les colonnes. La ligne 1 réserve `100vh - hauteur footer` au shell, et le footer conserve sa hauteur intrinsèque.
+
+
+## 2026-11-17 — User-menu-and-Footer.png
+
+- Footer derrière la sidebar : cause confirmée, `.app-sidebar` sticky avec `z-index: 2` au-dessus du footer grid. Le footer global passe en `position: relative; z-index: 3` sur sa propre ligne.
+- Menu utilisateur tronqué : le panneau de 18 rem dépassait de la sidebar (14,5 rem) et était coupé par `overflow-x: hidden`. En sidebar développée, le panneau utilise toute la largeur intérieure disponible. En sidebar réduite, il devient un popover fixe ouvert à droite de la sidebar. En mobile, il reste borné à la largeur du tiroir.
+
+
+## 2026-11-17 — Alignement footer selon Footer.png
+
+- La capture montre explicitement le footer légal sous la zone de contenu uniquement, à partir de la limite droite de la sidebar. La sidebar reste indépendante sur toute la hauteur et conserve son propre bloc « Console OpenBastion ».
+- `grid-column: 1 / -1` était incorrect : il faisait traverser le footer sous la sidebar. Le footer utilise maintenant `grid-column: 2 / -1`, ligne 2, sans z-index artificiel. Sur mobile, le shell en flux bloc conserve un footer pleine largeur.
+
+
+## 2026-11-17 — Sidebar fixe au viewport
+
+- La sidebar desktop ne doit pas suivre le scroll du document. `position: sticky` dans la grille ne garantissait pas son indépendance sur les pages longues.
+- Elle est désormais fixée sous la topbar (`top: 4rem; bottom: 0; position: fixed`) et occupe la hauteur disponible du viewport. Sa largeur suit l'état expanded/collapsed (14,5 rem / 4,5 rem). Le scroll éventuel reste interne à la navigation uniquement. Le comportement mobile en tiroir reste distinct.
+
+## 2026-11-17 — Shell partagé : sidebar 240 px et contexte Production
+
+- Sidebar desktop développée fixée à 240 px (15 rem), mesurée dans Chromium à 1440 × 1080 ; la variante réduite existante reste disponible à 72 px. Le tiroir mobile conserve sa largeur adaptative.
+- Le sélecteur d'espace de travail affiche « Production ». Son menu indique explicitement qu'un seul espace est configuré sur cette instance : aucune bascule fictive entre tenants/environnements n'est proposée en l'absence de contrat API de sélection. Le contexte est également rappelé dans la topbar.
+- Navigation conserve uniquement les six destinations déjà implémentées et leurs API publiques. La carte d'état Console OpenBastion et le profil opérateur restent ancrés en bas de la sidebar.
+- Menu Production fermé par Échap et clic extérieur ; le focus initial du tiroir mobile respecte désormais l'ordre DOM et son cycle clavier inclut le sélecteur.
+- Libellés français/anglais ajoutés avec parité de clés. Test shell ajouté pour le badge Production, le menu mono-espace et sa fermeture clavier.
+- Capture navigateur réelle produite : `/tmp/openbastion-shell-actual.png`. Mesure DOM Chromium : sidebar `width=240px`, `x=0`, `y=64`, hauteur `1016px` à 1440 × 1080. Contrôle responsive Chromium : 320 / 768 / 1024 / 1440 px, sans débordement horizontal du document ni de la topbar ; sidebar 240 px à partir de 761 px.
+- Validation : `make ui-test ui-build` PASS — 26 fichiers Vitest, 260 tests ; TypeScript et build Vite production PASS ; contrôles de contraste clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS. Après l'ajustement sémantique final du panneau, le test shell ciblé (7 tests) et `tsc --noEmit` PASS.
+- Limite : la sélection d'un autre workspace/tenant n'est pas implémentée car aucun contrat public de découverte et de changement d'espace n'existe. Le sélecteur n'affiche donc qu'un espace unique configuré.
+
+## 2026-11-17 — Correction Sidebar.png et centralisation CSS
+
+- La largeur desktop de la sidebar suit la capture de référence : 14,5 rem, soit 232 px (et non 240 px). La variante réduite reste à 72 px.
+- La sidebar desktop n'est plus fixée entre le haut et le bas du viewport. Elle est sticky, de hauteur intrinsèque (`fit-content`) et limitée à `calc(100vh - 6rem)` pour les navigations longues. Son footer suit le contenu au lieu d'être ancré au bas de l'écran. Le tiroir mobile reste volontairement pleine hauteur et scrollable.
+- Capture Chromium `/tmp/openbastion-shell-shared.png` à 1440 × 1080 : sidebar 232 × 800,6 px, position sticky, top 80 px, bas 880,6 px ; le panneau ne remplit plus la hauteur du viewport.
+- Consolidation physique des CSS : tokens primitifs/sémantiques + styles des icônes + primitives UI (`packages/ui/styles.css`) + styles applicatifs (`admin-ui/src/app/styles.css`) sont maintenant réunis dans `web/packages/design-tokens/styles.css`.
+- Suppression des anciennes feuilles `web/packages/design-tokens/tokens.css`, `web/packages/ui/styles.css` et `web/admin-ui/src/app/styles.css`. Le package design-tokens n'expose plus qu'un point d'entrée CSS : `@openbastion/design-tokens/styles.css`.
+- `admin-ui/src/app/main.tsx` importe cette feuille unique. Le script de contraste et les README ont été adaptés. L'API JS de `@openbastion/ui` et le package d'icônes restent distincts ; leurs styles CSS globaux sont centralisés.
+- Le dépôt courant ne contient pas encore d'application `user-portal` ; le point d'entrée partagé est prêt pour son intégration lorsqu'elle sera ajoutée.
+- Validation : `make ui-tokens-test ui-test ui-build` PASS ; 26 fichiers Vitest / 260 tests ; build TypeScript + Vite PASS ; contrastes clair/sombre PASS ; `check-app-colors` PASS ; `git diff --check` PASS.
+- Le build signale toujours le chunk JavaScript principal > 500 kB (616,30 kB minifié) ; avertissement préexistant hors du périmètre CSS.
+
+## 2026-11-18 — Sidebar sur toute la hauteur de la page
+
+- La sidebar desktop était fixée à `top: 5rem` : elle laissait un bandeau de 80 px au-dessus d'elle, alors que les maquettes `docs/ui/reference-screens/` la dessinent de `y=0` à la hauteur totale (`232 × 1080`).
+- Elle est désormais fixée à `top: 0; bottom: 0; left: 0` : elle couvre toute la hauteur du viewport, la topbar restant dans la colonne de contenu (à droite de la sidebar), comme sur la maquette.
+- Mesure Chromium à 1280 × 800 : `y=0`, hauteur `800 px` (plein viewport), largeur `232 px`. Tiroir mobile inchangé (`top: 4rem`, sous la topbar).
+- Validation : `npm test` dans `web` — 26 fichiers, 261 tests PASS.
+
+## 2026-11-18 — Exception npm audit bornée à GHSA-fc5q-39xc-vjpf
+
+- `make vuln` conserve `govulncheck` inchangé et remplace les deux appels `npm audit` directs par `scripts/npm-audit-gate.mjs`.
+- Le gate tolère uniquement GHSA-fc5q-39xc-vjpf lorsque tous les paquets vulnérables de la chaîne sont présents dans le lockfile et marqués `dev: true`. Toute autre alerte, dépendance runtime, chaîne incomplète/ambiguë ou cycle reste bloquante.
+- Exception temporaire jusqu'au 2026-12-02, documentée dans `docs/security/vulnerability-management.md`. Ce n'est pas une correction de la vulnérabilité ; `npm audit` reste exécuté et ses constats autorisés sont affichés comme exception.
+- Tests dédiés : `node --test scripts/npm-audit-gate.test.mjs`.
+
+## 2026-11-18 — Sessions : alignement des quatre vues sur les maquettes
+
+- `Sessions.tsx` porte désormais l'en-tête et les quatre cartes d'indicateurs de la vue active, puis la barre d'onglets (référence `openbastion-sessions.svg`) : chaque onglet a son titre et son sous-titre (Sessions, Historique des sessions, Bibliothèque des enregistrements, Alertes de sessions).
+- Historique : panneau unique avec filtres (recherche, statut, protocole, du/au, recherche), colonnes Utilisateur/Cible/Protocole/Début/Durée/Statut/Enregistrement, pied de page et pagination par curseur. Enregistrements : bibliothèque à gauche, aperçu des commandes retrouvées à droite, bouton « Lire le replay ». Alertes : panneau « Alertes récentes » avec l'état explicite du contrat manquant.
+- Aucune valeur de démonstration des maquettes n'est reprise. Les cartes affichent un tiret et la raison (total non exposé par la recherche paginée, aucun agrégat, aucune durée, aucune politique de rétention). Les boutons d'export sont présents et désactivés : l'API publique n'expose aucun export.
+- Les styles propres aux sessions utilisent les primitives de référence déjà centralisées (`reference-metrics`, `reference-tabs`, `reference-panel`, `reference-table`) ; l'ancien bloc CSS 11.3 (barre de filtres, tableaux ad hoc, résultats d'enregistrements) est supprimé.
+- Validation : `npx tsc --noEmit -p .` PASS ; Vitest 26 fichiers / 261 tests PASS ; captures Chromium desktop et mobile (aucun débordement horizontal) ; `docs/ui/reference-screens/README.md` et l'audit mis à jour.
+- Limites : la file d'alertes n'a toujours aucun contrat public ; les lignes du tableau d'historique n'ont pas pu être vues avec des données réelles dans la sandbox (aucune session accessible), leur rendu est couvert par `SessionViews.test.tsx`.
+
+## 2026-11-19 — Parcours navigateur : fin d'écran réalignée sur le design system
+
+- Défaut trouvé : `TestScreenFlow_RDPResizeInAHeadlessBrowser` (Windows, CI seulement) vérifiait que l'écran ne s'était pas terminé pendant les redimensionnements par `.notice.error[role="alert"]`. Depuis le passage des notices à `@openbastion/ui` (`ob-notice ob-notice--danger`, déjà sur `main`), ce sélecteur ne trouve rien : la vérification ne pouvait plus échouer.
+- Correctif : `screenEndedNotice` (`test/integration/cdp_test.go`) cherche l'alerte enfant direct du viewer (`.screen > [role="alert"]`), par son rôle et non par une classe du design system ; les notices du presse-papiers (dans leur panneau) et de la page (hors viewer) ne comptent pas. Le test presse-papiers fait désormais la même vérification après les deux transferts.
+- Les étapes connexion → Sessions → « Chercher une session » → « Ouvrir l'écran » sont mutualisées (`signIn`, `showSession`, `openScreen`) pour les deux tests Windows.
+- Nouveau test hermétique `TestAdminUI_ScreenEndIsSeenInAHeadlessBrowser` (job navigateur de `integration.yml`) : vrai React sous Vite, API simulée, WebSocket de l'écran retenu puis refusé. Il éprouve ces étapes sans Windows, et la contre-épreuve du sélecteur : faux pendant la connexion, vrai à la fin. Mesuré : PASS (4,1 s) ; avec l'ancien sélecteur remis, **FAIL** (attente de 15 s épuisée).
+- Validation locale : `TestAdminUI_*` 2/2 PASS avec Chromium (Playwright 1255) après `make ui-icons` ; `go vet` et `gofmt` PASS. Les tests Windows eux-mêmes ne tournent qu'en CI (`windows-rdp.yml`) : non exécutés ici.
+- `windows-rdp.yml` ne se déclenchait sur aucun des fichiers que traversent ses tests navigateur : la refonte UI n'a jamais fait tourner ces parcours sur une PR. Ses chemins incluent désormais les deux tests navigateur, `cdp_test.go`, `features/screen/**`, `Sessions.tsx`, `SessionDetail.tsx` et `AppShell.tsx` (pas tout `web/admin-ui/**` : le job coûte KVM et ~40 Go, choix renversable).
+- Premier passage Windows de la PR 234 : 4 cibles sur 5 vertes (redimensionnement et presse-papiers sur 2022, fr-FR compris). Sur 2019, le presse-papiers échouait : le point de Notepad était converti en coordonnées de page **avant** l'ouverture du champ de collage et de l'historique, qui s'insèrent au-dessus du canvas dans la nouvelle mise en page ; le clic tombait sur le bureau (capture `browser-clipboard-1-pasted.png`). Le test garde le point en pixels du canvas et le convertit au moment du clic, canvas centré, et vérifie par `elementFromPoint` que le point est bien sur le canvas.
+
+## 2026-11-19 — VNC dans le navigateur, et relecture compose/Base44
+
+- Aucun test ne faisait passer une session **VNC** par l'Admin UI : les tests VNC (`screen_flow_test.go`, `secret_injection_vnc_flow_test.go`, `compose_screen_test.go`, `base44_preview_test.go`) passent par l'API publique. Nouveau `TestScreenFlow_VNCInAHeadlessBrowser` : services réels, UI construite servie par la Gateway sous sa politique stricte, Chrome sans interface ; connexion, Sessions, « Chercher une session », « Ouvrir l'écran », première image, pas de bouton Ctrl+Alt+Suppr pour un VNC, une touche tapée sur le canvas reçue par la cible (keysym `0x61`), puis la fin de session affichée par la page (`screenEndedNotice`).
+- Cible : le TigerVNC réel du job PostgreSQL (oracle X11 indépendant) quand `OPENBASTION_VNC_TARGET` est défini, sinon la cible RFB simulée. Le job PostgreSQL construit désormais l'UI (`make ui-build`) ; sans le build, le test se met en skip.
+- Mesuré en local (PostgreSQL 16 en conteneur, cible simulée, Chromium Playwright 1255) : PASS (34,9 s). Contre-épreuve : sans le clic qui donne le focus au canvas, **FAIL** (la cible ne reçoit pas la touche).
+- Compose/Base44 : seule hypothèse d'interface, `src="/ui/assets/` dans l'index servi par la Gateway (`compose_test.go`) ; le build garde `base: "/ui/"` hors aperçu, vérifié sur `dist/index.html`. `make test-compose` et `TestBase44Preview` n'ont pas été relancés ici (Docker complet, et la pile Base44 locale redémarre en boucle hors de cette session). `AGENTS.md` citait `Comptes privilégiés` dans la vérification Base44 : c'est désormais `Accès privilégiés`, onglet `Comptes`.
+- **Défaut de CI trouvé (antérieur, depuis 08bdc70 du 16 nov.)** : le job PostgreSQL écrivait `target.sh --env` tel quel dans `$GITHUB_ENV`, soit des lignes `export NOM=valeur` ; GitHub crée alors des variables nommées `export NOM`, et `OPENBASTION_VNC_TARGET` n'était jamais défini. Les sous-tests sur le vrai TigerVNC de `screen_flow_test.go` (injection du secret Vault sur la surface de saisie réelle, parcours et mauvais mot de passe sur cible réelle) étaient sautés en silence, et le nouveau test navigateur tournait contre la cible simulée (constaté au premier passage de la PR 235). Correctif : `sed 's/^export //'` avant `$GITHUB_ENV` ; et `OPENBASTION_VNC_REQUIRED=1` sur l'étape d'intégration, qui fait échouer tout test sur cible réelle sans cible réelle (contre-épreuve locale : FAIL immédiat). `target.sh --env` garde le format `export` pour `eval` en local (`docs/development/testing.md`).
