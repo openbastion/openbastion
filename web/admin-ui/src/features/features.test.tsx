@@ -341,6 +341,9 @@ describe("Approval with a ticket (ADR-0067)", () => {
     signedIn(api, <Sessions />);
     fireEvent.click(screen.getByRole("button", { name: "Nouvelle demande" }));
     const form = await screen.findByRole("form", { name: "Demander une session" });
+    // The dialog says what it is for, in words: never a translation key.
+    expect(screen.getByRole("dialog").textContent).toContain("Demandez un accès privilégié à un compte cible autorisé.");
+    expect(screen.getByRole("dialog").textContent).not.toMatch(/sessions\.live\./);
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Compte", "acc_1");
     field("Justification", "patch");

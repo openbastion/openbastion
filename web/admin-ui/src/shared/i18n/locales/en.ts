@@ -896,6 +896,7 @@ export default {
   sessions: {
     live: {
       description: "Review requests you are allowed to decide and find a session by its identifier. Global active sessions and terminal streams are not exposed by the Admin UI API.",
+      requestModalDescription: "Request privileged access to an authorised target account.",
       newRequest: "New request",
       metricsAria: "Session and capability status",
       pendingMetric: "Requests to decide",
@@ -1036,6 +1037,23 @@ export default {
       ticket: "Ticket (when the account requires approval)",
       pendingApproval: "{{id}} awaiting another person's approval, until {{expiresAt}}",
       status: "{{id}} {{status}}",
+      submitting: "Sending…",
+      cancel: "Cancel",
+      requiredNote: "* Required fields",
+      accountHelp: "An existing account is required, not an arbitrary network target.",
+      protocolHelp: "The protocol must match the target account. The Broker checks it.",
+      durationHelp: "Minimum: 1 minute.",
+      justificationHelp: "Say why this privileged access is needed.",
+      ticketHelp: "128 characters at most · not checked against Jira / ServiceNow.",
+      ticketCount: "{{count}}/{{max}}",
+      notApproval: "Creating a request neither approves it nor opens a session.",
+      errors: {
+        account: "Enter the target account.",
+        justification: "An explicit justification is required.",
+        duration: "A duration of at least one minute is required.",
+        summary: "Correct the required fields before sending.",
+        server: "The request is not confirmed as created. Your fields are kept.",
+      },
     },
     lookup: { title: "One session", formAria: "Find a session", identifier: "Identifier", show: "Show" },
     confirm: {
