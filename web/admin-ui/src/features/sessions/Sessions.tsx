@@ -44,7 +44,7 @@ export function Sessions({
   initialView?: View;
 } = {}) {
   const { t, i18n } = useAppTranslation();
-  const { api } = useSignedIn();
+  const { api, who } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
   const [pendingLoading, setPendingLoading] = useState(true);
   const [decision, setDecision] = useState<{ kind: "approve" | "reject" | "terminate"; session: Session }>();
@@ -296,10 +296,22 @@ export function Sessions({
                   </header>
                   <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={askDecision.bind(null, "terminate")} />
                   {found.status === "pending_approval" ? (
-                    <div className="sessions-live-decision-actions">
-                      <Button variant="primary" aria-label={t("sessions.pending.approveAria", { id: found.id })} onClick={() => askDecision("approve", found)}>{t("sessions.pending.approve")}</Button>
-                      <Button variant="danger" aria-label={t("sessions.pending.rejectAria", { id: found.id })} onClick={() => askDecision("reject", found)}>{t("sessions.pending.reject")}</Button>
-                    </div>
+                    // The Broker's rule (decide): the requester never approves their own request,
+                    // and may only withdraw a break-glass one. The page offers what the caller may
+                    // do and nothing else; an unknown caller sees both, and the Broker decides.
+                    who?.sub && who.sub === found.requestedBy ? (
+                      <div className="sessions-live-decision-actions">
+                        <p className="ob-hint">{t("sessions.pending.ownRequest")}</p>
+                        {found.breakGlass ? (
+                          <Button variant="danger" aria-label={t("sessions.pending.withdrawAria", { id: found.id })} onClick={() => askDecision("reject", found)}>{t("sessions.pending.withdraw")}</Button>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="sessions-live-decision-actions">
+                        <Button variant="primary" aria-label={t("sessions.pending.approveAria", { id: found.id })} onClick={() => askDecision("approve", found)}>{t("sessions.pending.approve")}</Button>
+                        <Button variant="danger" aria-label={t("sessions.pending.rejectAria", { id: found.id })} onClick={() => askDecision("reject", found)}>{t("sessions.pending.reject")}</Button>
+                      </div>
+                    )
                   ) : null}
                   {screen ? (
                     <ScreenViewer
