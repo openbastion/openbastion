@@ -131,7 +131,7 @@ Suivre [ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-u
 
 ## 6. Alignement des écrans SVG sur la roadmap
 
-Les SVG sont des propositions d'interface et ne constituent jamais une preuve de disponibilité. Leur statut doit suivre les contrats et les tests réels (ADR-0129). Les nouveaux écrans ci-dessous sont des maquettes de capacité planifiée ; aucun bouton ne doit être activé avant livraison de l'API publique Gateway correspondante.
+Les SVG de `docs/ui/reference-screens/` sont extraits du fichier Figma OpenBastion, seule source des maquettes. Ce sont des propositions d'interface ; ils ne constituent jamais une preuve de disponibilité. Leur statut doit suivre les contrats et les tests réels (ADR-0129). Les nouveaux écrans ci-dessous sont des maquettes de capacité planifiée ; aucun bouton ne doit être activé avant livraison de l'API publique Gateway correspondante.
 
 ### MVP / capacités déjà livrées
 
@@ -144,25 +144,27 @@ Les SVG sont des propositions d'interface et ne constituent jamais une preuve de
 
 ### v0.0.1 — nouveaux écrans proposés
 
-| SVG | Domaine | Dépendances |
+Ces écrans n'ont pas encore de maquette : elle est à produire dans le fichier Figma, puis à extraire dans `docs/ui/reference-screens/` (procédure dans son `README.md`). Il en va de même pour les écrans v0.0.2 et v0.0.3.
+
+| Écran proposé | Domaine | Dépendances |
 |---|---|---|
-| `openbastion-workflows-approbations.svg` | Demandes, double validation, tickets, échéances | ADR-0067, ADR-0074, ADR-0126 |
-| `openbastion-secrets-dynamiques.svg` | Secrets dynamiques, TTL, rotation et révocation | ADR-0005, ADR-0040, ADR-0127 |
-| `openbastion-identites-federation.svg` | Fournisseurs, fédération et provisioning | ADR-0061, ADR-0076, contrats SCIM/SAML |
-| `openbastion-acces-database-kubernetes.svg` | Accès proxifiés DB et Kubernetes | Database Proxy, Kubernetes Proxy, ADR-0130 |
+| Workflows d'approbation | Demandes, double validation, tickets, échéances | ADR-0067, ADR-0074, ADR-0126 |
+| Secrets dynamiques | Secrets dynamiques, TTL, rotation et révocation | ADR-0005, ADR-0040, ADR-0127 |
+| Identités et fédération | Fournisseurs, fédération et provisioning | ADR-0061, ADR-0076, contrats SCIM/SAML |
+| Accès bases de données et Kubernetes | Accès proxifiés DB et Kubernetes | Database Proxy, Kubernetes Proxy, ADR-0130 |
 
 ### v0.0.2 — nouveaux écrans proposés
 
-| SVG | Domaine | Dépendances |
+| Écran proposé | Domaine | Dépendances |
 |---|---|---|
-| `openbastion-forensics-recherche.svg` | Recherche et forensics bornés | ADR-0080, ADR-0096, ADR-0125 |
-| `openbastion-risque-anomalies.svg` | Règles explicables, risque et ML optionnel | ADR-0128 |
-| `openbastion-reporting-conformite.svg` | Rapports et preuves vérifiables | ADR-0123 |
-| `openbastion-protocoles-etendus.svg` | Docker, WinRM, hyperviseurs, Telnet/IPMI et HTTP(S) | ADR-0130 et ADR protocolaires dédiés |
+| Recherche et forensics | Recherche et forensics bornés | ADR-0080, ADR-0096, ADR-0125 |
+| Risque et anomalies | Règles explicables, risque et ML optionnel | ADR-0128 |
+| Rapports de conformité | Rapports et preuves vérifiables | ADR-0123 |
+| Protocoles étendus | Docker, WinRM, hyperviseurs, Telnet/IPMI et HTTP(S) | ADR-0130 et ADR protocolaires dédiés |
 
 ### v0.0.3 — extension proposée
 
-- `openbastion-agents-distribues.svg` : inventaire d'enrôlement PKI, tunnels sortants mTLS, état de télémétrie en lecture seule, provenance et posture de déploiement. Cet écran est conceptuel : les agents de production restent hors périmètre v0.0.3.
+- Agents distribués : inventaire d'enrôlement PKI, tunnels sortants mTLS, état de télémétrie en lecture seule, provenance et posture de déploiement. Cet écran est conceptuel : les agents de production restent hors périmètre v0.0.3.
 - Les écrans v0.0.3 ne doivent jamais proposer d'exécution distante arbitraire, d'accès direct aux ports cibles ou de modification de politique agent depuis un navigateur.
 
 **Règle de livraison UI :** chaque élément doit être traçable à un contrat Gateway, une permission ressource/action, un service propriétaire, un ADR, des tests et un état `implemented|partial|planned|proposed|unavailable`. Les routes internes et leurs schémas ne sont pas des contrats UI.

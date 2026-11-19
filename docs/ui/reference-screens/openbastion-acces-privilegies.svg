@@ -1,504 +1,421 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-  <defs>
-    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
-    </filter>
-  </defs>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                          -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Background">
-    <rect width="1440" height="1080" fill="#F8FAFC"/>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 2 : BARRE LATÉRALE GAUCHE (SIDEBAR)                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Sidebar">
-    <rect x="0" y="0" width="232" height="1080" fill="#0D2137"/>
-    <line x1="232" y1="0" x2="232" y2="1080" stroke="#1E3A5F" stroke-width="1"/>
-
-    <!-- Logo OpenBastion -->
-    <g id="Sidebar_Logo" transform="translate(20, 22)">
-      <path d="M14 2L3 7v7c0 7.2 4.7 13.9 11 16 6.3-2.1 11-8.8 11-16V7L14 2z" fill="#1E3A5F" stroke="#FFFFFF" stroke-width="1.8"/>
-      <path d="M14 6l-7 3v5c0 4.8 3 9.2 7 10.8 4-1.6 7-6 7-10.8V9l-7-3z" fill="#38BDF8" fill-opacity="0.3"/>
-      <circle cx="14" cy="14" r="2.2" fill="#FFFFFF"/>
-      <text x="38" y="16" fill="#FFFFFF" font-size="16" font-weight="700" letter-spacing="-0.3">OpenBastion</text>
-      <text x="38" y="29" fill="#64748B" font-size="8.5" font-weight="600" letter-spacing="1.2">PRIVILEGED ACCESS</text>
-    </g>
-
-    <!-- Sélecteur Workspace : Production -->
-    <g id="Sidebar_Workspace_Selector" transform="translate(16, 86)">
-      <rect width="200" height="58" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
-      <text x="16" y="24" fill="#FFFFFF" font-size="13" font-weight="600">Production</text>
-      <text x="16" y="42" fill="#94A3B8" font-size="11.5">Acme Corporation</text>
-      <path d="M176 25l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-
-    <!-- Titre section ESPACE DE TRAVAIL -->
-    <text x="20" y="182" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">ESPACE DE TRAVAIL</text>
-
-    <!-- Menu Navigation Principale -->
-    <g id="Sidebar_Nav_Main" transform="translate(12, 196)">
-      <!-- Item : Vue d'ensemble -->
-      <g id="Nav_Vue_Ensemble">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none">
-          <rect x="1" y="1" width="6" height="6" rx="1"/>
-          <rect x="10" y="1" width="6" height="6" rx="1"/>
-          <rect x="1" y="10" width="6" height="6" rx="1"/>
-          <rect x="10" y="10" width="6" height="6" rx="1"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Vue d'ensemble</text>
-      </g>
-
-      <!-- Item Actif : Accès privilégiés -->
-      <g id="Nav_Acces" transform="translate(0, 46)">
-        <rect width="208" height="40" rx="8" fill="#133356"/>
-        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
-        <g transform="translate(14, 12)" stroke="#38BDF8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="6" cy="11" r="4"/>
-          <path d="M9 8l6-6M13 4l2 2M15 2l2 2"/>
-        </g>
-        <text x="42" y="25" fill="#FFFFFF" font-size="13" font-weight="600">Accès privilégiés</text>
-      </g>
-
-      <!-- Item : Sessions (Badge 24) -->
-      <g id="Nav_Sessions" transform="translate(0, 92)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="2" width="15" height="11" rx="2"/>
-          <path d="M5 16h7M8.5 13v3"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Sessions</text>
-        <rect x="172" y="10" width="26" height="20" rx="6" fill="#2563EB"/>
-        <text x="185" y="24" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">24</text>
-      </g>
-
-      <!-- Item : Infrastructure -->
-      <g id="Nav_Infrastructure" transform="translate(0, 138)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="2" width="15" height="5" rx="1"/>
-          <rect x="1" y="10" width="15" height="5" rx="1"/>
-          <circle cx="4.5" cy="4.5" r="0.6" fill="#94A3B8"/>
-          <circle cx="4.5" cy="12.5" r="0.6" fill="#94A3B8"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Infrastructure</text>
-      </g>
-
-      <!-- Item : Audit & conformité -->
-      <g id="Nav_Audit" transform="translate(0, 184)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 3H4a1 1 0 00-1 1v11a1 1 0 001 1h9a1 1 0 001-1V4a1 1 0 00-1-1h-2"/>
-          <rect x="6" y="1" width="5" height="3" rx="1"/>
-          <path d="M6 8h5M6 11h5"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Audit &amp; conformité</text>
-      </g>
-
-      <!-- Item : Paramètres -->
-      <g id="Nav_Parametres" transform="translate(0, 230)">
-        <g transform="translate(14, 12)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8.5" cy="8.5" r="2.5"/>
-          <path d="M8.5 1.5v2M8.5 13.5v2M1.5 8.5h2M13.5 8.5h2M3.5 3.5l1.5 1.5M12 12l1.5 1.5M13.5 3.5L12 5M5 12l-1.5 1.5"/>
-        </g>
-        <text x="42" y="25" fill="#94A3B8" font-size="13" font-weight="500">Paramètres</text>
-      </g>
-    </g>
-
-    <!-- Séparateur -->
-    <line x1="20" y1="490" x2="212" y2="490" stroke="#1E3A5F" stroke-width="1"/>
-
-    <!-- Section RESSOURCES -->
-    <text x="20" y="528" fill="#64748B" font-size="10" font-weight="700" letter-spacing="0.8">RESSOURCES</text>
-
-    <g id="Sidebar_Nav_Resources" transform="translate(12, 542)">
-      <g transform="translate(0, 0)">
-        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 2h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
-          <path d="M10 2v4h4M6 9h5M6 12h3"/>
-        </g>
-        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Documentation</text>
-      </g>
-
-      <g transform="translate(0, 44)">
-        <g transform="translate(14, 10)" stroke="#94A3B8" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="8.5" cy="8.5" r="7"/>
-          <path d="M6.5 6.5a2 2 0 013.8.8c0 1.3-1.8 1.8-1.8 3"/>
-          <circle cx="8.5" cy="12.5" r="0.5" fill="#94A3B8"/>
-        </g>
-        <text x="42" y="23" fill="#94A3B8" font-size="13" font-weight="500">Centre d'aide</text>
-      </g>
-    </g>
-
-    <!-- Carte Statut : Bastion opérationnel -->
-    <g id="Sidebar_Status_Card" transform="translate(16, 868)">
-      <rect width="200" height="86" rx="10" fill="#152E4D" stroke="#23436B" stroke-width="1"/>
-      <circle cx="18" cy="22" r="4" fill="#38BDF8"/>
-      <text x="29" y="26" fill="#FFFFFF" font-size="11.5" font-weight="600">Bastion opérationnel</text>
-      <text x="14" y="45" fill="#94A3B8" font-size="10.5">Tous les services sont disponibles</text>
-      <text x="14" y="68" fill="#64748B" font-size="10" font-weight="500">v2.8.0  •  EU / Paris</text>
-    </g>
-
-    <!-- Profil Utilisateur : Camille Martin -->
-    <g id="Sidebar_User_Profile" transform="translate(0, 976)">
-      <line x1="0" y1="0" x2="232" y2="0" stroke="#1E3A5F" stroke-width="1"/>
-      <g transform="translate(18, 22)">
-        <circle cx="16" cy="16" r="16" fill="#1E3A5F"/>
-        <circle cx="16" cy="12" r="4.5" fill="none" stroke="#94A3B8" stroke-width="1.5"/>
-        <path d="M8.5 25c1.5-3.5 4.2-5 7.5-5s6 1.5 7.5 5" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="42" y="14" fill="#FFFFFF" font-size="12.5" font-weight="600">Camille Martin</text>
-        <text x="42" y="30" fill="#94A3B8" font-size="11">Administrateur</text>
-        <path d="M180 13l4 4-4 4" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 3 : BARRE SUPÉRIEURE (TOPBAR)                                    -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Topbar">
-    <rect x="232" y="0" width="1208" height="64" fill="#FFFFFF"/>
-    <line x1="232" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Fil d'Ariane -->
-    <g id="Topbar_Breadcrumb" transform="translate(264, 37)">
-      <text x="0" y="0" fill="#64748B" font-size="12.5" font-weight="500">Espace de travail</text>
-      <text x="108" y="0" fill="#CBD5E1" font-size="13">/</text>
-      <text x="124" y="0" fill="#0F172A" font-size="12.5" font-weight="600">Accès privilégiés</text>
-    </g>
-
-    <!-- Champ de recherche -->
-    <g id="Topbar_Search" transform="translate(880, 14)">
-      <rect width="310" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-      <g transform="translate(12, 10)" stroke="#64748B" stroke-width="1.6" fill="none">
-        <circle cx="7" cy="7" r="5.5"/>
-        <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
-      </g>
-      <text x="36" y="23" fill="#64748B" font-size="12.5">Rechercher une ressource...</text>
-      <text x="275" y="22" fill="#94A3B8" font-size="11" font-weight="600">⌘ K</text>
-    </g>
-
-    <!-- Actions droite Topbar -->
-    <g id="Topbar_Actions" transform="translate(1212, 16)">
-      <g transform="translate(0, 7)" stroke="#475569" stroke-width="1.6" fill="none">
-        <circle cx="9" cy="9" r="7.5"/>
-        <path d="M7 7a2 2 0 013.8.8c0 1.4-1.8 1.8-1.8 3" stroke-linecap="round"/>
-        <circle cx="9" cy="13.2" r="0.5" fill="#475569"/>
-      </g>
-      <g transform="translate(44, 7)">
-        <path d="M9 2a5 5 0 00-5 5v3.5L2.5 13h13L14 10.5V7a5 5 0 00-5-5zM7 15a2 2 0 004 0" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="14" cy="4" r="2.8" fill="#2563EB"/>
-      </g>
-      <g transform="translate(94, 2)">
-        <rect width="102" height="28" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1"/>
-        <text x="51" y="18" fill="#2563EB" font-size="12" font-weight="600" text-anchor="middle">Production</text>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 4 : EN-TÊTE DE PAGE                                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Page_Header" transform="translate(264, 96)">
-    <text x="0" y="28" fill="#0F172A" font-size="26" font-weight="700" letter-spacing="-0.5">Accès privilégiés</text>
-    <text x="0" y="54" fill="#64748B" font-size="13.5">Un point d'entrée sécurisé pour toutes vos ressources.</text>
-
-    <!-- Bouton Importer -->
-    <g id="Btn_Importer" transform="translate(840, 4)">
-      <rect width="114" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <g transform="translate(14, 11)" stroke="#334155" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M7 2v9M4 8l3 3 3-3M2 13h10"/>
-      </g>
-      <text x="36" y="23" fill="#0F172A" font-size="13" font-weight="600">Importer</text>
-    </g>
-
-    <!-- Bouton + Ajouter une ressource -->
-    <g id="Btn_Ajouter_Ressource" transform="translate(968, 4)">
-      <rect width="176" height="36" rx="8" fill="#1D63ED"/>
-      <path d="M18 13v10M13 18h10" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
-      <text x="34" y="23" fill="#FFFFFF" font-size="13" font-weight="600">Ajouter une ressource</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 5 : CARTES DE MÉTRIQUES (KPI CARDS)                              -->
-  <!-- ======================================================================= -->
-  <g id="Layer_KPI_Cards" transform="translate(264, 178)">
-    <!-- Carte 1 : Ressources -->
-    <g id="KPI_Ressources" transform="translate(0, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Ressources</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">128</text>
-      <text x="82" y="70" fill="#64748B" font-size="11.5">Sous gestion</text>
-    </g>
-
-    <!-- Carte 2 : Comptes privilégiés -->
-    <g id="KPI_Comptes" transform="translate(291, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Comptes privilégiés</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">214</text>
-      <text x="82" y="70" fill="#64748B" font-size="11.5">Secrets stockés dans le coffre</text>
-    </g>
-
-    <!-- Carte 3 : Politiques actives -->
-    <g id="KPI_Politiques" transform="translate(582, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Politiques actives</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">18</text>
-      <text x="68" y="70" fill="#64748B" font-size="11.5">Accès à moindre privilège</text>
-    </g>
-
-    <!-- Carte 4 : Demandes en attente -->
-    <g id="KPI_Demandes" transform="translate(873, 0)" filter="url(#cardShadow)">
-      <rect width="271" height="108" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="28" fill="#64748B" font-size="12.5" font-weight="500">Demandes en attente</text>
-      <text x="20" y="72" fill="#0F172A" font-size="34" font-weight="700" letter-spacing="-1">03</text>
-      <text x="68" y="70" fill="#2563EB" font-size="11.5" font-weight="600">Validation requise</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 6 : BARRE D'ONGLETS (TABS)                                       -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Tabs" transform="translate(264, 316)">
-    <line x1="0" y1="32" x2="1144" y2="32" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Onglet Actif : Ressources 128 -->
-    <g id="Tab_Ressources">
-      <text x="16" y="14" fill="#2563EB" font-size="13" font-weight="600">Ressources</text>
-      <text x="94" y="14" fill="#2563EB" font-size="12" font-weight="600">128</text>
-      <rect x="0" y="30" width="132" height="2.5" rx="1" fill="#2563EB"/>
-    </g>
-
-    <!-- Onglet : Comptes 214 -->
-    <g id="Tab_Comptes" transform="translate(174, 0)">
-      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Comptes</text>
-      <text x="62" y="14" fill="#94A3B8" font-size="12" font-weight="500">214</text>
-    </g>
-
-    <!-- Onglet : Politiques 18 -->
-    <g id="Tab_Politiques" transform="translate(342, 0)">
-      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Politiques</text>
-      <text x="66" y="14" fill="#94A3B8" font-size="12" font-weight="500">18</text>
-    </g>
-
-    <!-- Onglet : Demandes 3 -->
-    <g id="Tab_Demandes" transform="translate(514, 0)">
-      <text x="0" y="14" fill="#64748B" font-size="13" font-weight="500">Demandes</text>
-      <text x="72" y="14" fill="#94A3B8" font-size="12" font-weight="500">3</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 7 : TABLEAU PRINCIPAL DES RESSOURCES                             -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Resources_Table" transform="translate(264, 368)" filter="url(#cardShadow)">
-    <rect width="1144" height="456" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-
-    <!-- Barre de filtres du tableau -->
-    <g id="Table_Filter_Bar" transform="translate(16, 16)">
-      <!-- Champ recherche table -->
-      <rect width="354" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-      <g transform="translate(12, 11)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-        <circle cx="6" cy="6" r="4.5"/>
-        <path d="M9.5 9.5l3 3" stroke-linecap="round"/>
-      </g>
-      <text x="34" y="23" fill="#64748B" font-size="12.5">Rechercher un nom, une adresse IP...</text>
-
-      <!-- Dropdown Tous les types -->
-      <g transform="translate(366, 0)">
-        <rect width="136" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="14" y="23" fill="#0F172A" font-size="12.5" font-weight="500">Tous les types</text>
-        <path d="M114 16l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-
-      <!-- Dropdown Environnement -->
-      <g transform="translate(514, 0)">
-        <rect width="142" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="14" y="23" fill="#0F172A" font-size="12.5" font-weight="500">Environnement</text>
-        <path d="M120 16l3 3 3-3" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-
-      <!-- Bouton Filtres à droite -->
-      <g transform="translate(1018, 0)">
-        <rect width="94" height="36" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <g transform="translate(14, 12)" stroke="#334155" stroke-width="1.5" stroke-linecap="round">
-          <line x1="0" y1="3" x2="12" y2="3"/>
-          <circle cx="4" cy="3" r="1.5" fill="#FFFFFF"/>
-          <line x1="0" y1="9" x2="12" y2="9"/>
-          <circle cx="8" cy="9" r="1.5" fill="#FFFFFF"/>
-        </g>
-        <text x="36" y="23" fill="#0F172A" font-size="12.5" font-weight="600">Filtres</text>
-      </g>
-    </g>
-
-    <!-- En-têtes des colonnes -->
-    <g id="Table_Header" transform="translate(0, 68)">
-      <rect width="1144" height="34" fill="#F8FAFC"/>
-      <line x1="0" y1="0" x2="1144" y2="0" stroke="#F1F5F9" stroke-width="1"/>
-      <line x1="0" y1="34" x2="1144" y2="34" stroke="#E2E8F0" stroke-width="1"/>
-      <g transform="translate(52, 22)" fill="#94A3B8" font-size="10.5" font-weight="700" letter-spacing="0.6">
-        <text x="0" y="0">RESSOURCE</text>
-        <text x="268" y="0">ADRESSE</text>
-        <text x="436" y="0">PROTOCOLE</text>
-        <text x="562" y="0">ENVIRONNEMENT</text>
-        <text x="698" y="0">ACCÈS</text>
-        <text x="836" y="0">ÉTAT</text>
-      </g>
-    </g>
-
-    <!-- Lignes de données -->
-    <!-- Ligne 1 : srv-prod-web-01 -->
-    <g id="Row_1" transform="translate(20, 128)">
-      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
-      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">srv-prod-web-01</text>
-      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.1.12</text>
-      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
-      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
-      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
-      <text x="730" y="0" fill="#64748B" font-size="12.5">12 identités</text>
-      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
-      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
-      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 2 : db-postgres-prod -->
-    <g id="Row_2" transform="translate(20, 174)">
-      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
-      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">db-postgres-prod</text>
-      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.2.45</text>
-      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
-      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SQL</text>
-      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
-      <text x="730" y="0" fill="#64748B" font-size="12.5">8 identités</text>
-      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
-      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
-      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 3 : win-ad-primary -->
-    <g id="Row_3" transform="translate(20, 220)">
-      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
-      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">win-ad-primary</text>
-      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.3.10</text>
-      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
-      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">RDP</text>
-      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
-      <text x="730" y="0" fill="#64748B" font-size="12.5">6 identités</text>
-      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
-      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
-      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 4 : k8s-prod-master -->
-    <g id="Row_4" transform="translate(20, 266)">
-      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
-      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">k8s-prod-master</text>
-      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.4.20</text>
-      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
-      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
-      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
-      <text x="730" y="0" fill="#64748B" font-size="12.5">14 identités</text>
-      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
-      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
-      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 5 : srv-staging-api -->
-    <g id="Row_5" transform="translate(20, 312)">
-      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
-      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">srv-staging-api</text>
-      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.1.1.14</text>
-      <rect x="468" y="-14" width="44" height="20" rx="5" fill="#F1F5F9"/>
-      <text x="490" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">SSH</text>
-      <text x="594" y="0" fill="#64748B" font-size="12.5">Staging</text>
-      <text x="730" y="0" fill="#64748B" font-size="12.5">9 identités</text>
-      <rect x="868" y="-15" width="84" height="22" rx="6" fill="#EFF6FF"/>
-      <text x="910" y="0" fill="#2563EB" font-size="11.5" font-weight="600" text-anchor="middle">Disponible</text>
-      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
-      <line x1="-20" y1="20" x2="1124" y2="20" stroke="#F1F5F9" stroke-width="1"/>
-    </g>
-
-    <!-- Ligne 6 : vault-backup-01 -->
-    <g id="Row_6" transform="translate(20, 358)">
-      <rect x="0" y="-11" width="14" height="14" rx="3.5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
-      <text x="32" y="0" fill="#0F172A" font-size="12.5" font-weight="600" font-family="'SFMono-Regular', Consolas, monospace">vault-backup-01</text>
-      <text x="300" y="0" fill="#64748B" font-size="12.5" font-family="monospace">10.0.5.31</text>
-      <rect x="468" y="-14" width="54" height="20" rx="5" fill="#F1F5F9"/>
-      <text x="495" y="0" fill="#475569" font-size="11" font-weight="600" text-anchor="middle">HTTPS</text>
-      <text x="594" y="0" fill="#64748B" font-size="12.5">Production</text>
-      <text x="730" y="0" fill="#64748B" font-size="12.5">3 identités</text>
-      <rect x="868" y="-15" width="90" height="22" rx="6" fill="#F1F5F9"/>
-      <text x="913" y="0" fill="#64748B" font-size="11.5" font-weight="600" text-anchor="middle">Maintenance</text>
-      <text x="1058" y="0" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Ouvrir  ↗</text>
-    </g>
-
-    <!-- Pied de tableau et Pagination -->
-    <g id="Table_Footer" transform="translate(0, 404)">
-      <line x1="0" y1="0" x2="1144" y2="0" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="20" y="31" fill="#64748B" font-size="11.5">1–6 sur 128 ressources</text>
-
-      <!-- Contrôles de pagination -->
-      <g transform="translate(960, 14)">
-        <text x="10" y="17" fill="#94A3B8" font-size="13" text-anchor="middle">‹</text>
-        <rect x="24" y="0" width="26" height="26" rx="6" fill="#EFF6FF"/>
-        <text x="37" y="17" fill="#2563EB" font-size="11.5" font-weight="700" text-anchor="middle">1</text>
-        <text x="64" y="17" fill="#64748B" font-size="11.5" font-weight="500" text-anchor="middle">2</text>
-        <text x="90" y="17" fill="#64748B" font-size="11.5" font-weight="500" text-anchor="middle">3</text>
-        <text x="114" y="17" fill="#94A3B8" font-size="11.5" text-anchor="middle">...</text>
-        <text x="138" y="17" fill="#64748B" font-size="11.5" font-weight="500" text-anchor="middle">22</text>
-        <text x="164" y="17" fill="#64748B" font-size="13" text-anchor="middle">›</text>
-      </g>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 8 : SECTION DEMANDES À APPROUVER                                 -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Approval_Requests" transform="translate(264, 856)">
-    <text x="0" y="16" fill="#0F172A" font-size="16" font-weight="700">Demandes à approuver</text>
-    <text x="1144" y="16" fill="#2563EB" font-size="12.5" font-weight="600" text-anchor="end">Voir les 3 demandes  →</text>
-
-    <!-- Carte Demande 1 : thomas.bernard -->
-    <g id="Request_Card_1" transform="translate(0, 34)" filter="url(#cardShadow)">
-      <rect width="368" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="18" y="28" fill="#0F172A" font-size="13.5" font-weight="700">thomas.bernard</text>
-      <text x="350" y="28" fill="#94A3B8" font-size="11" text-anchor="end">Il y a 12 min</text>
-      <text x="18" y="48" fill="#64748B" font-size="12" font-family="monospace">db-postgres-prod</text>
-      <text x="18" y="68" fill="#475569" font-size="12">Maintenance base de données</text>
-      <text x="18" y="102" fill="#2563EB" font-size="12" font-weight="600">Examiner la demande  →</text>
-    </g>
-
-    <!-- Carte Demande 2 : sarah.dubois -->
-    <g id="Request_Card_2" transform="translate(388, 34)" filter="url(#cardShadow)">
-      <rect width="368" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="18" y="28" fill="#0F172A" font-size="13.5" font-weight="700">sarah.dubois</text>
-      <text x="350" y="28" fill="#94A3B8" font-size="11" text-anchor="end">Il y a 28 min</text>
-      <text x="18" y="48" fill="#64748B" font-size="12" font-family="monospace">win-ad-primary</text>
-      <text x="18" y="68" fill="#475569" font-size="12">Mise à jour des politiques AD</text>
-      <text x="18" y="102" fill="#2563EB" font-size="12" font-weight="600">Examiner la demande  →</text>
-    </g>
-
-    <!-- Carte Demande 3 : lucas.petit -->
-    <g id="Request_Card_3" transform="translate(776, 34)" filter="url(#cardShadow)">
-      <rect width="368" height="122" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="18" y="28" fill="#0F172A" font-size="13.5" font-weight="700">lucas.petit</text>
-      <text x="350" y="28" fill="#94A3B8" font-size="11" text-anchor="end">Il y a 41 min</text>
-      <text x="18" y="48" fill="#64748B" font-size="12" font-family="monospace">k8s-prod-master</text>
-      <text x="18" y="68" fill="#475569" font-size="12">Déploiement de production</text>
-      <text x="18" y="102" fill="#2563EB" font-size="12" font-weight="600">Examiner la demande  →</text>
-    </g>
-  </g>
-
-  <!-- ======================================================================= -->
-  <!-- CALQUE 9 : PIED DE PAGE (FOOTER)                                        -->
-  <!-- ======================================================================= -->
-  <g id="Layer_Footer" transform="translate(264, 1054)">
-    <text x="0" y="0" fill="#94A3B8" font-size="11">Données de démonstration</text>
-    <text x="1144" y="0" fill="#94A3B8" font-size="11" text-anchor="end">128 ressources  •  6 environnements  •  Dernière synchronisation : 14:56:20</text>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Figma: OpenBastion (yUuwYSnGX7kSLzYX2rZXIU), node 5:154. Embedded font subsets: Inter 4.001 (SIL OFL 1.1, Copyright 2020 The Inter Project Authors) and IBM Plex Mono (SIL OFL 1.1, Copyright 2017 IBM Corp., Reserved Font Name "Plex"); licences in fonts/. -->
+<defs><style>@font-face{font-family:"Inter";font-style:normal;font-weight:400 600;src:url(data:font/woff2;base64,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) format("woff2");}@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;src:url(data:font/woff2;base64,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) format("woff2");}</style></defs>
+<g id="OpenBastion · Accès privilégiés" data-node-id="5:154" clip-path="url(#clip0_5_154)">
+<rect width="1440" height="1040" fill="#F4F7FB"/>
+<g id="Navigation principale" data-node-id="5:155">
+<rect width="232" height="1040" fill="#0B1F3B"/>
+<text id="OpenBastion" data-node-id="5:161" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" letter-spacing="0em" font-weight="600"><tspan x="65" y="45.5455">OpenBastion</tspan></text>
+<text id="PRIVILEGED ACCESS" data-node-id="5:162" fill="#8DA5C4" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="8" letter-spacing="0em" font-weight="500"><tspan x="65" y="60.9091">PRIVILEGED ACCESS</tspan></text>
+<g id="Espace de travail" data-node-id="5:163">
+<rect x="16" y="100" width="200" height="56" rx="7" fill="#142D4D"/>
+<text id="Production" data-node-id="5:164" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="500"><tspan x="32" y="122.727">Production</tspan></text>
+<text id="Acme Corporation" data-node-id="5:165" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="32" y="140.5">Acme Corporation</tspan></text>
+<g id="arrow" data-node-id="5:166">
+<path id="Vector" data-node-id="5:167" d="M193.25 122.917L197.333 127L193.25 131.083" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<text id="ESPACE DE TRAVAIL" data-node-id="5:168" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="24" y="199.773">ESPACE DE TRAVAIL</tspan></text>
+<text id="Vue d’ensemble" data-node-id="5:174" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="241.864">Vue d&#x2019;ensemble</tspan></text>
+<g id="Page active" data-node-id="5:175">
+<rect x="12" y="266" width="208" height="42" rx="6" fill="#193D63"/>
+</g>
+<text id="Accès privilégiés" data-node-id="5:179" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="56" y="289.864">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<g id="Repère actif" data-node-id="5:180">
+<rect y="274" width="3" height="26" rx="1" fill="#00D1FF"/>
+</g>
+<text id="Sessions" data-node-id="5:184" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="337.864">Sessions</tspan></text>
+<g id="Sessions actives" data-node-id="5:185">
+<rect x="183" y="325" width="24" height="20" rx="4" fill="#0B5ED7"/>
+<text id="24" data-node-id="5:186" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="188" y="336.636">24</tspan></text>
+</g>
+<text id="Infrastructure" data-node-id="5:191" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="385.864">Infrastructure</tspan></text>
+<text id="Audit &amp; conformité" data-node-id="5:195" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="433.864">Audit &#38; conformit&#xe9;</tspan></text>
+<text id="Paramètres" data-node-id="5:200" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="529.864">Param&#xe8;tres</tspan></text>
+<g id="Séparateur" data-node-id="5:201">
+<rect width="184" height="1" transform="translate(24 580)" fill="#26405E"/>
+</g>
+<text id="RESSOURCES" data-node-id="5:202" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="24" y="617.773">RESSOURCES</tspan></text>
+<g id="audit" data-node-id="5:203">
+<path id="Vector_2" data-node-id="5:204" d="M34.5 641.5H28.5C28.1022 641.5 27.7206 641.658 27.4393 641.939C27.158 642.221 27 642.602 27 643V655C27 655.398 27.158 655.779 27.4393 656.061C27.7206 656.342 28.1022 656.5 28.5 656.5H37.5C37.8978 656.5 38.2794 656.342 38.5607 656.061C38.842 655.779 39 655.398 39 655V646L34.5 641.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_3" data-node-id="5:205" d="M34.5 641.5V646H39M30 649.75H36M30 652.75H33.75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<text id="Documentation" data-node-id="5:206" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="652.864">Documentation</tspan></text>
+<g id="help" data-node-id="5:207">
+<path id="Vector_4" data-node-id="5:208" d="M39.75 692C39.75 695.728 36.7279 698.75 33 698.75C29.2721 698.75 26.25 695.728 26.25 692C26.25 688.272 29.2721 685.25 33 685.25C36.7279 685.25 39.75 688.272 39.75 692Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_5" data-node-id="5:209" d="M30.75 689.75C30.75 689.153 30.9871 688.581 31.409 688.159C31.831 687.737 32.4033 687.5 33 687.5C33.5967 687.5 34.169 687.737 34.591 688.159C35.0129 688.581 35.25 689.153 35.25 689.75C35.25 691.25 33 691.25 33 693.5M33 695.75H33.0075" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<text id="Centre d’aide" data-node-id="5:210" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="695.864">Centre d&#x2019;aide</tspan></text>
+<g id="État du bastion" data-node-id="5:211">
+<rect x="16" y="846" width="200" height="81" rx="8" fill="#142D4D"/>
+<g id="État connecté" data-node-id="5:212">
+<rect x="30" y="864" width="6" height="6" rx="3" fill="#00D1FF"/>
+</g>
+<text id="Bastion opérationnel" data-node-id="5:213" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="44" y="868.5">Bastion op&#xe9;rationnel</tspan></text>
+<text id="Tous les services sont disponibles" data-node-id="5:214" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="30" y="889.773">Tous les services sont disponibles</tspan></text>
+<text id="v2.8.0  •  EU / Paris" data-node-id="5:215" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="30" y="910.773">v2.8.0  &#x2022;  EU / Paris</tspan></text>
+</g>
+<g id="Séparateur compte" data-node-id="5:216">
+<rect width="200" height="1" transform="translate(16 950)" fill="#26405E"/>
+</g>
+<g id="user" data-node-id="5:217">
+<path id="Vector_6" data-node-id="5:218" d="M40.6666 984.333C40.6666 986.635 38.8012 988.5 36.5 988.5C34.1988 988.5 32.3333 986.635 32.3333 984.333C32.3333 982.032 34.1988 980.167 36.5 980.167C38.8012 980.167 40.6666 982.032 40.6666 984.333Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<path id="Vector_7" data-node-id="5:219" d="M28.1667 997.875V995.792C28.1667 994.134 28.8252 992.544 29.9973 991.372C31.1694 990.2 32.7591 989.542 34.4167 989.542H38.5834C40.241 989.542 41.8307 990.2 43.0028 991.372C44.1749 992.544 44.8334 994.134 44.8334 995.792V997.875" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+</g>
+<text id="Camille Martin" data-node-id="5:220" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="63" y="981.864">Camille Martin</tspan></text>
+<text id="Administrateur" data-node-id="5:221" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="63" y="999.636">Administrateur</tspan></text>
+<g id="arrow_2" data-node-id="5:222">
+<path id="Vector_8" data-node-id="5:223" d="M199.875 984.708L203.667 988.5L199.875 992.292" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<g id="dashboard" data-node-id="5:3420">
+<g id="Géométrie" data-node-id="I5:3420;5:2776">
+<path id="Vector_9" data-node-id="I5:3420;5:2777" d="M27.3333 231.5H31.5C31.9602 231.5 32.3333 231.873 32.3333 232.333V238.167C32.3333 238.627 31.9602 239 31.5 239H27.3333C26.8731 239 26.5 238.627 26.5 238.167V232.333C26.5 231.873 26.8731 231.5 27.3333 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_10" data-node-id="I5:3420;5:2778" d="M36.5 231.5H40.6667C41.1269 231.5 41.5 231.873 41.5 232.333V234.833C41.5 235.294 41.1269 235.667 40.6667 235.667H36.5C36.0398 235.667 35.6667 235.294 35.6667 234.833V232.333C35.6667 231.873 36.0398 231.5 36.5 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_11" data-node-id="I5:3420;5:2779" d="M36.5 239H40.6667C41.1269 239 41.5 239.373 41.5 239.833V245.667C41.5 246.127 41.1269 246.5 40.6667 246.5H36.5C36.0398 246.5 35.6667 246.127 35.6667 245.667V239.833C35.6667 239.373 36.0398 239 36.5 239Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_12" data-node-id="I5:3420;5:2780" d="M27.3333 242.333H31.5C31.9602 242.333 32.3333 242.706 32.3333 243.167V245.667C32.3333 246.127 31.9602 246.5 31.5 246.5H27.3333C26.8731 246.5 26.5 246.127 26.5 245.667V243.167C26.5 242.706 26.8731 242.333 27.3333 242.333Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="key" data-node-id="5:3426">
+<g id="Géométrie_2" data-node-id="I5:3426;5:1759" clip-path="url(#clip1_5_154)">
+<path id="Vector_13" data-node-id="I5:3426;5:1760" d="M26.155 291.512C25.8424 291.824 25.6668 292.248 25.6667 292.69V294.5C25.6667 294.721 25.7545 294.933 25.9108 295.089C26.067 295.246 26.279 295.333 26.5 295.333H29C29.221 295.333 29.433 295.246 29.5893 295.089C29.7456 294.933 29.8334 294.721 29.8334 294.5V293.667C29.8334 293.446 29.9212 293.234 30.0774 293.077C30.2337 292.921 30.4457 292.833 30.6667 292.833H31.5C31.721 292.833 31.933 292.746 32.0893 292.589C32.2456 292.433 32.3334 292.221 32.3334 292V291.167C32.3334 290.946 32.4212 290.734 32.5774 290.577C32.7337 290.421 32.9457 290.333 33.1667 290.333H33.31C33.752 290.333 34.1759 290.158 34.4884 289.845L35.1667 289.167C36.3249 289.57 37.5857 289.569 38.7429 289.162C39.9001 288.756 40.8852 287.969 41.537 286.93C42.1888 285.891 42.4687 284.662 42.3309 283.443C42.1932 282.224 41.6459 281.089 40.7787 280.221C39.9115 279.354 38.7756 278.807 37.5569 278.669C36.3382 278.531 35.1088 278.811 34.0699 279.463C33.031 280.115 32.244 281.1 31.8377 282.257C31.4314 283.414 31.4299 284.675 31.8334 285.833L26.155 291.512Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path id="Vector_14" data-node-id="I5:3426;5:1761" d="M37.75 283.667C37.9801 283.667 38.1666 283.48 38.1666 283.25C38.1666 283.02 37.9801 282.833 37.75 282.833C37.5199 282.833 37.3333 283.02 37.3333 283.25C37.3333 283.48 37.5199 283.667 37.75 283.667Z" fill="#00D1FF" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+</g>
+</g>
+<g id="sessions" data-node-id="5:3430">
+<g id="Géométrie_3" data-node-id="I5:3430;5:2606">
+<path id="Vector_15" data-node-id="I5:3430;5:2607" d="M34 339.167V342.5M42.3334 335.256V337.5C42.3334 337.942 42.1578 338.366 41.8452 338.679C41.5326 338.991 41.1087 339.167 40.6667 339.167H27.3334C26.8913 339.167 26.4674 338.991 26.1548 338.679C25.8423 338.366 25.6667 337.942 25.6667 337.5V329.167C25.6667 328.725 25.8423 328.301 26.1548 327.988C26.4674 327.676 26.8913 327.5 27.3334 327.5H34.5775M30.6667 342.5H37.3334" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_16" data-node-id="I5:3430;5:2608" d="M42.3333 330C42.3333 331.381 41.214 332.5 39.8333 332.5C38.4526 332.5 37.3333 331.381 37.3333 330C37.3333 328.619 38.4526 327.5 39.8333 327.5C41.214 327.5 42.3333 328.619 42.3333 330Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="server" data-node-id="5:3434">
+<g id="Géométrie_4" data-node-id="I5:3434;5:2165" clip-path="url(#clip2_5_154)">
+<path id="Vector_17" data-node-id="I5:3434;5:2166" d="M27.3334 374.667H40.6667C41.5872 374.667 42.3334 375.413 42.3334 376.333V379.667C42.3334 380.587 41.5872 381.333 40.6667 381.333H27.3334C26.4129 381.333 25.6667 380.587 25.6667 379.667V376.333C25.6667 375.413 26.4129 374.667 27.3334 374.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_18" data-node-id="I5:3434;5:2167" d="M27.3334 384.667H40.6667C41.5872 384.667 42.3334 385.413 42.3334 386.333V389.667C42.3334 390.587 41.5872 391.333 40.6667 391.333H27.3334C26.4129 391.333 25.6667 390.587 25.6667 389.667V386.333C25.6667 385.413 26.4129 384.667 27.3334 384.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_19" data-node-id="I5:3434;5:2168" d="M29 378H29.0083M29 388H29.0083" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="audit_2" data-node-id="5:3439">
+<g id="Géométrie_5" data-node-id="I5:3439;5:2985">
+<path id="Vector_20" data-node-id="I5:3439;5:2986" d="M31.5 422.667H36.5C36.9603 422.667 37.3334 423.04 37.3334 423.5V425.167C37.3334 425.627 36.9603 426 36.5 426H31.5C31.0398 426 30.6667 425.627 30.6667 425.167V423.5C30.6667 423.04 31.0398 422.667 31.5 422.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_21" data-node-id="I5:3439;5:2987" d="M37.3333 424.333H39C39.442 424.333 39.8659 424.509 40.1785 424.821C40.4911 425.134 40.6666 425.558 40.6666 426V437.667C40.6666 438.109 40.4911 438.533 40.1785 438.845C39.8659 439.158 39.442 439.333 39 439.333H29C28.558 439.333 28.134 439.158 27.8215 438.845C27.5089 438.533 27.3333 438.109 27.3333 437.667V426C27.3333 425.558 27.5089 425.134 27.8215 424.821C28.134 424.509 28.558 424.333 29 424.333H30.6666M34 430.167H37.3333M34 434.333H37.3333M30.6666 430.167H30.675M30.6666 434.333H30.675" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="settings" data-node-id="5:3443">
+<g id="Géométrie_6" data-node-id="I5:3443;5:2785">
+<path id="Vector_22" data-node-id="I5:3443;5:2786" d="M32.0594 520.447C32.1053 519.964 32.3297 519.515 32.6887 519.189C33.0476 518.862 33.5154 518.681 34.0007 518.681C34.4859 518.681 34.9537 518.862 35.3127 519.189C35.6716 519.515 35.896 519.964 35.9419 520.447C35.9695 520.759 36.0719 521.06 36.2404 521.324C36.4088 521.588 36.6385 521.807 36.9098 521.964C37.1811 522.12 37.4862 522.209 37.7992 522.223C38.1121 522.237 38.4238 522.175 38.7078 522.043C39.1487 521.842 39.6483 521.813 40.1094 521.961C40.5705 522.109 40.9601 522.423 41.2024 522.843C41.4446 523.262 41.5222 523.756 41.42 524.23C41.3178 524.703 41.0431 525.121 40.6494 525.403C40.3931 525.583 40.1838 525.822 40.0393 526.1C39.8949 526.378 39.8195 526.686 39.8195 527C39.8195 527.313 39.8949 527.621 40.0393 527.899C40.1838 528.177 40.3931 528.416 40.6494 528.596C41.0431 528.878 41.3178 529.296 41.42 529.77C41.5222 530.243 41.4446 530.737 41.2024 531.157C40.9601 531.576 40.5705 531.89 40.1094 532.038C39.6483 532.186 39.1487 532.157 38.7078 531.957C38.4238 531.824 38.1121 531.762 37.7992 531.776C37.4862 531.79 37.1811 531.879 36.9098 532.035C36.6385 532.192 36.4088 532.411 36.2404 532.676C36.0719 532.94 35.9695 533.24 35.9419 533.553C35.896 534.036 35.6716 534.484 35.3127 534.811C34.9537 535.137 34.4859 535.318 34.0007 535.318C33.5154 535.318 33.0476 535.137 32.6887 534.811C32.3297 534.484 32.1053 534.036 32.0594 533.553C32.0319 533.24 31.9295 532.939 31.761 532.675C31.5924 532.411 31.3627 532.191 31.0913 532.035C30.8198 531.878 30.5146 531.789 30.2016 531.776C29.8885 531.762 29.5768 531.824 29.2928 531.957C28.8518 532.157 28.3522 532.186 27.8911 532.038C27.43 531.89 27.0404 531.576 26.7982 531.157C26.5559 530.737 26.4783 530.243 26.5806 529.77C26.6828 529.296 26.9574 528.878 27.3511 528.596C27.6074 528.416 27.8167 528.177 27.9612 527.899C28.1056 527.621 28.181 527.313 28.181 527C28.181 526.686 28.1056 526.378 27.9612 526.1C27.8167 525.822 27.6074 525.583 27.3511 525.403C26.958 525.121 26.6838 524.703 26.5818 524.23C26.4799 523.757 26.5574 523.263 26.7994 522.844C27.0414 522.425 27.4305 522.111 27.8912 521.963C28.3518 521.815 28.8511 521.843 29.2919 522.043C29.5759 522.175 29.8875 522.237 30.2005 522.223C30.5135 522.209 30.8185 522.12 31.0899 521.964C31.3612 521.807 31.5908 521.588 31.7593 521.324C31.9278 521.06 32.0302 520.759 32.0578 520.447" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_23" data-node-id="I5:3443;5:2787" d="M36.5 527C36.5 528.381 35.3807 529.5 34 529.5C32.6193 529.5 31.5 528.381 31.5 527C31.5 525.619 32.6193 524.5 34 524.5C35.3807 524.5 36.5 525.619 36.5 527Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="Logo OpenBastion" data-node-id="5:3447">
+<g id="Symbole" data-node-id="I5:3447;5:1304">
+<g id="Construction du symbole" data-node-id="I5:3447;5:1305">
+<g id="bastion-symbol" data-node-id="I5:3447;5:1306">
+<path id="Vector_24" data-node-id="I5:3447;5:1307" d="M28.6875 32.1562H33.8438V34.9688H44.1562V32.1562H49.3125V42.4688L46.5 47.625L39 52.7812L31.5 47.625L28.6875 42.4688V32.1562ZM39 38.4844C37.9688 38.4844 37.125 39.3281 37.125 40.3594C37.125 41.0625 37.5 41.6719 38.0625 42V44.8125H39.9375V42C40.5 41.6719 40.875 41.0625 40.875 40.3594C40.875 39.3281 40.0312 38.4844 39 38.4844Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path id="Vector_25" data-node-id="I5:3447;5:1308" d="M44.1562 32.1562H49.3125V39.6562L46.5 41.5312V34.9688H44.1562V32.1562Z" fill="#00D1FF"/>
+</g>
+</g>
+</g>
+</g>
+<text id="Sécurité" data-node-id="2044:2352" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="481.864">S&#xe9;curit&#xe9;</tspan></text>
+<g id="OpenBastion / A / Security / Dark" data-node-id="2044:2353">
+<g id="Géométrie_7" data-node-id="I2044:2353;5:1705">
+<path id="Vector_26" data-node-id="I2044:2353;5:1706" d="M50.6666 486.333C50.6666 493 46 496.333 40.4533 498.267C40.1629 498.365 39.8474 498.36 39.56 498.253C34 496.333 29.3333 493 29.3333 486.333V477C29.3333 476.646 29.4738 476.307 29.7238 476.057C29.9739 475.807 30.313 475.667 30.6666 475.667C33.3333 475.667 36.6666 474.067 38.9866 472.04C39.2691 471.799 39.6285 471.666 40 471.666C40.3715 471.666 40.7308 471.799 41.0133 472.04C43.3466 474.08 46.6666 475.667 49.3333 475.667C49.6869 475.667 50.0261 475.807 50.2761 476.057C50.5262 476.307 50.6666 476.646 50.6666 477V486.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<path id="Vector_27" data-node-id="I2044:2353;5:1707" d="M36 485L38.6667 487.667L44 482.333" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+</g>
+</g>
+</g>
+<g id="Espace principal" data-node-id="5:224" clip-path="url(#clip3_5_154)">
+<rect width="1208" height="1040" transform="translate(232)" fill="#F4F7FB"/>
+<g id="Barre supérieure" data-node-id="5:225">
+<rect width="1208" height="72" transform="translate(232)" fill="white"/>
+<g id="Bordure inférieure" data-node-id="5:226">
+<rect width="1208" height="1" transform="translate(232 71)" fill="#E2E8F0"/>
+</g>
+<text id="Espace de travail_2" data-node-id="5:227" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="264" y="38.5">Espace de travail</tspan></text>
+<text id="/" data-node-id="5:228" fill="#A8B5C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="375" y="38.5">/</tspan></text>
+<text id="Accès privilégiés_2" data-node-id="5:229" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="392" y="38.5">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<g id="Recherche globale" data-node-id="5:230">
+<rect x="877" y="18" width="306" height="36" rx="6" fill="#F4F7FB"/>
+<text id="Rechercher une ressource…" data-node-id="5:234" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="915" y="38.5">Rechercher une ressource&#x2026;</tspan></text>
+<text id="⌘ K" data-node-id="5:235" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1142" y="37.6364">&#x2318; K</tspan></text>
+<g id="search" data-node-id="5:3456">
+<g id="Géométrie_8" data-node-id="I5:3456;5:2763">
+<path id="Vector_28" data-node-id="I5:3456;5:2764" d="M903.875 41.875L900.801 38.8008" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path id="Vector_29" data-node-id="I5:3456;5:2765" d="M902.458 34.7917C902.458 37.9213 899.921 40.4583 896.792 40.4583C893.662 40.4583 891.125 37.9213 891.125 34.7917C891.125 31.6621 893.662 29.125 896.792 29.125C899.921 29.125 902.458 31.6621 902.458 34.7917Z" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+</g>
+</g>
+<g id="help_2" data-node-id="5:236">
+<path id="Vector_30" data-node-id="5:237" d="M1227.75 36C1227.75 39.7279 1224.73 42.75 1221 42.75C1217.27 42.75 1214.25 39.7279 1214.25 36C1214.25 32.2721 1217.27 29.25 1221 29.25C1224.73 29.25 1227.75 32.2721 1227.75 36Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path id="Vector_31" data-node-id="5:238" d="M1218.75 33.75C1218.75 33.1533 1218.99 32.581 1219.41 32.159C1219.83 31.7371 1220.4 31.5 1221 31.5C1221.6 31.5 1222.17 31.7371 1222.59 32.159C1223.01 32.581 1223.25 33.1533 1223.25 33.75C1223.25 35.25 1221 35.25 1221 37.5M1221 39.75H1221.01" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+<g id="Notification non lue" data-node-id="5:241">
+<rect x="1270" y="25" width="5" height="5" rx="2.5" fill="#0B5ED7"/>
+</g>
+<g id="État environnement" data-node-id="5:242">
+<rect x="1306" y="22" width="107" height="28" rx="5" fill="#EAF2FC"/>
+</g>
+<text id="Production_2" data-node-id="5:243" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1320" y="38.6364">Production</tspan></text>
+<g id="bell" data-node-id="5:3453">
+<g id="Géométrie_9" data-node-id="I5:3453;5:2751">
+<path id="Vector_32" data-node-id="I5:3453;5:2752" d="M1264.7 42.75C1264.83 42.978 1265.02 43.1674 1265.25 43.299C1265.48 43.4306 1265.74 43.4999 1266 43.4999C1266.26 43.4999 1266.52 43.4306 1266.75 43.299C1266.98 43.1674 1267.17 42.978 1267.3 42.75M1259.45 38.4945C1259.35 38.6019 1259.28 38.7354 1259.26 38.8789C1259.24 39.0223 1259.26 39.1695 1259.31 39.3025C1259.37 39.4356 1259.47 39.5487 1259.59 39.6281C1259.71 39.7075 1259.85 39.7499 1260 39.75H1272C1272.15 39.7501 1272.29 39.7079 1272.41 39.6286C1272.53 39.5493 1272.63 39.4363 1272.69 39.3034C1272.75 39.1705 1272.76 39.0233 1272.74 38.8798C1272.72 38.7364 1272.65 38.6028 1272.56 38.4952C1271.56 37.467 1270.5 36.3743 1270.5 33C1270.5 31.8065 1270.03 30.6619 1269.18 29.818C1268.34 28.9741 1267.19 28.5 1266 28.5C1264.81 28.5 1263.66 28.9741 1262.82 29.818C1261.97 30.6619 1261.5 31.8065 1261.5 33C1261.5 36.3743 1260.44 37.467 1259.45 38.4945Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+</g>
+</g>
+<g id="Contenu de la page" data-node-id="5:244">
+<rect width="1208" height="968" transform="translate(232 72)" fill="#F4F7FB"/>
+<text id="Accès privilégiés_3" data-node-id="5:744" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="27" letter-spacing="0em" font-weight="600"><tspan x="264" y="128.318">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<text id="Un point d’entrée sécurisé pour toutes vos ressources." data-node-id="5:745" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="264" y="154.864">Un point d&#x2019;entr&#xe9;e s&#xe9;curis&#xe9; pour toutes vos ressources.</tspan></text>
+<g id="↓  Importer" data-node-id="5:746">
+<rect x="1105.5" y="105.5" width="115" height="35" rx="5.5" fill="white"/>
+<rect x="1105.5" y="105.5" width="115" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text id="↓  Importer_2" data-node-id="5:747" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1118" y="125.5">&#x2193;  Importer</tspan></text>
+</g>
+<g id="+  Ajouter une ressource" data-node-id="5:748">
+<rect x="1233" y="105" width="175" height="36" rx="6" fill="#0B5ED7"/>
+<text id="+  Ajouter une ressource_2" data-node-id="5:749" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1246" y="125.5">+  Ajouter une ressource</tspan></text>
+</g>
+<g id="Ressources" data-node-id="5:750">
+<rect x="264.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="264.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text id="Ressources_2" data-node-id="5:751" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="282" y="210.5">Ressources</tspan></text>
+<text id="128" data-node-id="5:752" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" letter-spacing="0em" font-weight="600"><tspan x="282" y="249.045">128</tspan></text>
+<text id="Sous gestion" data-node-id="5:753" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="347" y="247.773">Sous gestion</tspan></text>
+</g>
+<g id="Comptes privilégiés" data-node-id="5:754">
+<rect x="556.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="556.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text id="Comptes privilégiés_2" data-node-id="5:755" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="574" y="210.5">Comptes privil&#xe9;gi&#xe9;s</tspan></text>
+<text id="214" data-node-id="5:756" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" letter-spacing="0em" font-weight="600"><tspan x="574" y="249.045">214</tspan></text>
+<text id="Secrets stockés dans le coffre" data-node-id="5:757" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="639" y="247.773">Secrets stock&#xe9;s dans le coffre</tspan></text>
+</g>
+<g id="Politiques actives" data-node-id="5:758">
+<rect x="848.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="848.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text id="Politiques actives_2" data-node-id="5:759" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="866" y="210.5">Politiques actives</tspan></text>
+<text id="18" data-node-id="5:760" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" letter-spacing="0em" font-weight="600"><tspan x="866" y="249.045">18</tspan></text>
+<text id="Accès à moindre privilège" data-node-id="5:761" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="931" y="247.773">Acc&#xe8;s &#xe0; moindre privil&#xe8;ge</tspan></text>
+</g>
+<g id="Demandes en attente" data-node-id="5:762">
+<rect x="1140.5" y="185.5" width="267" height="102" rx="7.5" fill="white"/>
+<rect x="1140.5" y="185.5" width="267" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text id="Demandes en attente_2" data-node-id="5:763" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1158" y="210.5">Demandes en attente</tspan></text>
+<text id="03" data-node-id="5:764" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="29" letter-spacing="0em" font-weight="600"><tspan x="1158" y="249.045">03</tspan></text>
+<text id="Validation requise" data-node-id="5:765" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="1223" y="247.773">Validation requise</tspan></text>
+</g>
+<g id="Onglets des accès" data-node-id="5:766">
+<rect width="1144" height="41" transform="translate(264 312)" fill="#F4F7FB"/>
+<text id="Ressources  128" data-node-id="5:767" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="270" y="331.864">Ressources  128</tspan></text>
+<text id="Comptes  214" data-node-id="5:768" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="441" y="331.864">Comptes  214</tspan></text>
+<text id="Politiques  18" data-node-id="5:769" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="612" y="331.864">Politiques  18</tspan></text>
+<text id="Demandes  3" data-node-id="5:770" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="783" y="331.864">Demandes  3</tspan></text>
+<g id="Séparateur_2" data-node-id="5:771">
+<rect width="1144" height="1" transform="translate(264 352)" fill="#E2E8F0"/>
+</g>
+<g id="Onglet actif" data-node-id="5:772">
+<rect width="134" height="3" transform="translate(264 350)" fill="#0B5ED7"/>
+</g>
+</g>
+<g id="Inventaire des ressources" data-node-id="5:773">
+<rect x="264.5" y="377.5" width="1143" height="414" rx="7.5" fill="white"/>
+<rect x="264.5" y="377.5" width="1143" height="414" rx="7.5" stroke="#E2E8F0"/>
+<g id="Recherche des ressources" data-node-id="5:774">
+<rect x="284" y="394" width="352" height="35" rx="6" fill="#F4F7FB"/>
+<text id="⌕   Rechercher un nom, une adresse IP…" data-node-id="5:775" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="296" y="414.5">&#x2315;   Rechercher un nom, une adresse IP&#x2026;</tspan></text>
+</g>
+<g id="Tous les types  ⌄" data-node-id="5:776">
+<rect x="648.5" y="394.5" width="141" height="35" rx="5.5" fill="white"/>
+<rect x="648.5" y="394.5" width="141" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text id="Tous les types  ⌄_2" data-node-id="5:777" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="661" y="414.5">Tous les types  &#x2304;</tspan></text>
+</g>
+<g id="Environnement  ⌄" data-node-id="5:778">
+<rect x="802.5" y="394.5" width="147" height="35" rx="5.5" fill="white"/>
+<rect x="802.5" y="394.5" width="147" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text id="Environnement  ⌄_2" data-node-id="5:779" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="815" y="414.5">Environnement  &#x2304;</tspan></text>
+</g>
+<g id="☷  Filtres" data-node-id="5:780">
+<rect x="1294.5" y="394.5" width="93" height="35" rx="5.5" fill="white"/>
+<rect x="1294.5" y="394.5" width="93" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text id="☷  Filtres_2" data-node-id="5:781" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1307" y="414.5">&#x2637;  Filtres</tspan></text>
+</g>
+<g id="En-tête inventaire" data-node-id="5:782">
+<rect width="1142" height="36" transform="translate(265 449)" fill="#F4F7FB"/>
+</g>
+<text id="RESSOURCE" data-node-id="5:784" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="314" y="470.773">RESSOURCE</tspan></text>
+<text id="ADRESSE" data-node-id="5:785" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="582" y="470.773">ADRESSE</tspan></text>
+<text id="PROTOCOLE" data-node-id="5:786" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="735" y="470.773">PROTOCOLE</tspan></text>
+<text id="ENVIRONNEMENT" data-node-id="5:787" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="875" y="470.773">ENVIRONNEMENT</tspan></text>
+<text id="ACCÈS" data-node-id="5:788" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="1009" y="470.773">ACC&#xc8;S</tspan></text>
+<text id="ÉTAT" data-node-id="5:789" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="1148" y="470.773">&#xc9;TAT</tspan></text>
+<g id="Sélection" data-node-id="5:791">
+<rect x="284.5" y="499.5" width="12" height="12" rx="2.5" fill="white"/>
+<rect x="284.5" y="499.5" width="12" height="12" rx="2.5" stroke="#E2E8F0"/>
+</g>
+<text id="srv-prod-web-01" data-node-id="5:792" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="314" y="509.5">srv-prod-web-01</tspan></text>
+<text id="10.0.1.12" data-node-id="5:793" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="582" y="510.25">10.0.1.12</tspan></text>
+<g id="SSH" data-node-id="5:794">
+<rect x="735" y="496" width="53" height="23" rx="4" fill="#F4F7FB"/>
+<text id="SSH_2" data-node-id="5:795" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="743" y="510.636">SSH</tspan></text>
+</g>
+<text id="Production_3" data-node-id="5:796" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="875" y="509.636">Production</tspan></text>
+<text id="12 identités" data-node-id="5:797" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1009" y="509.636">12 identit&#xe9;s</tspan></text>
+<g id="Disponible" data-node-id="5:798">
+<rect x="1148" y="496" width="92" height="23" rx="4" fill="#EAF2FC"/>
+<text id="Disponible_2" data-node-id="5:799" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1156" y="510.636">Disponible</tspan></text>
+</g>
+<text id="Ouvrir  ↗" data-node-id="5:800" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1308" y="509.636">Ouvrir  &#x2197;</tspan></text>
+<g id="Séparateur_3" data-node-id="5:801">
+<rect width="1104" height="1" transform="translate(284 529)" fill="#E2E8F0"/>
+</g>
+<g id="Sélection_2" data-node-id="5:802">
+<rect x="284.5" y="542.5" width="12" height="12" rx="2.5" fill="white"/>
+<rect x="284.5" y="542.5" width="12" height="12" rx="2.5" stroke="#E2E8F0"/>
+</g>
+<text id="db-postgres-prod" data-node-id="5:803" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="314" y="552.5">db-postgres-prod</tspan></text>
+<text id="10.0.2.45" data-node-id="5:804" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="582" y="553.25">10.0.2.45</tspan></text>
+<g id="SQL" data-node-id="5:805">
+<rect x="735" y="539" width="53" height="23" rx="4" fill="#F4F7FB"/>
+<text id="SQL_2" data-node-id="5:806" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="743" y="553.636">SQL</tspan></text>
+</g>
+<text id="Production_4" data-node-id="5:807" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="875" y="552.636">Production</tspan></text>
+<text id="8 identités" data-node-id="5:808" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1009" y="552.636">8 identit&#xe9;s</tspan></text>
+<g id="Disponible_3" data-node-id="5:809">
+<rect x="1148" y="539" width="92" height="23" rx="4" fill="#EAF2FC"/>
+<text id="Disponible_4" data-node-id="5:810" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1156" y="553.636">Disponible</tspan></text>
+</g>
+<text id="Ouvrir  ↗_2" data-node-id="5:811" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1308" y="552.636">Ouvrir  &#x2197;</tspan></text>
+<g id="Séparateur_4" data-node-id="5:812">
+<rect width="1104" height="1" transform="translate(284 572)" fill="#E2E8F0"/>
+</g>
+<g id="Sélection_3" data-node-id="5:813">
+<rect x="284.5" y="585.5" width="12" height="12" rx="2.5" fill="white"/>
+<rect x="284.5" y="585.5" width="12" height="12" rx="2.5" stroke="#E2E8F0"/>
+</g>
+<text id="win-ad-primary" data-node-id="5:814" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="314" y="595.5">win-ad-primary</tspan></text>
+<text id="10.0.3.10" data-node-id="5:815" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="582" y="596.25">10.0.3.10</tspan></text>
+<g id="RDP" data-node-id="5:816">
+<rect x="735" y="582" width="53" height="23" rx="4" fill="#F4F7FB"/>
+<text id="RDP_2" data-node-id="5:817" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="743" y="596.636">RDP</tspan></text>
+</g>
+<text id="Production_5" data-node-id="5:818" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="875" y="595.636">Production</tspan></text>
+<text id="6 identités" data-node-id="5:819" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1009" y="595.636">6 identit&#xe9;s</tspan></text>
+<g id="Disponible_5" data-node-id="5:820">
+<rect x="1148" y="582" width="92" height="23" rx="4" fill="#EAF2FC"/>
+<text id="Disponible_6" data-node-id="5:821" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1156" y="596.636">Disponible</tspan></text>
+</g>
+<text id="Ouvrir  ↗_3" data-node-id="5:822" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1308" y="595.636">Ouvrir  &#x2197;</tspan></text>
+<g id="Séparateur_5" data-node-id="5:823">
+<rect width="1104" height="1" transform="translate(284 615)" fill="#E2E8F0"/>
+</g>
+<g id="Sélection_4" data-node-id="5:824">
+<rect x="284.5" y="628.5" width="12" height="12" rx="2.5" fill="white"/>
+<rect x="284.5" y="628.5" width="12" height="12" rx="2.5" stroke="#E2E8F0"/>
+</g>
+<text id="k8s-prod-master" data-node-id="5:825" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="314" y="638.5">k8s-prod-master</tspan></text>
+<text id="10.0.4.20" data-node-id="5:826" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="582" y="639.25">10.0.4.20</tspan></text>
+<g id="SSH_3" data-node-id="5:827">
+<rect x="735" y="625" width="53" height="23" rx="4" fill="#F4F7FB"/>
+<text id="SSH_4" data-node-id="5:828" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="743" y="639.636">SSH</tspan></text>
+</g>
+<text id="Production_6" data-node-id="5:829" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="875" y="638.636">Production</tspan></text>
+<text id="14 identités" data-node-id="5:830" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1009" y="638.636">14 identit&#xe9;s</tspan></text>
+<g id="Disponible_7" data-node-id="5:831">
+<rect x="1148" y="625" width="92" height="23" rx="4" fill="#EAF2FC"/>
+<text id="Disponible_8" data-node-id="5:832" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1156" y="639.636">Disponible</tspan></text>
+</g>
+<text id="Ouvrir  ↗_4" data-node-id="5:833" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1308" y="638.636">Ouvrir  &#x2197;</tspan></text>
+<g id="Séparateur_6" data-node-id="5:834">
+<rect width="1104" height="1" transform="translate(284 658)" fill="#E2E8F0"/>
+</g>
+<g id="Sélection_5" data-node-id="5:835">
+<rect x="284.5" y="671.5" width="12" height="12" rx="2.5" fill="white"/>
+<rect x="284.5" y="671.5" width="12" height="12" rx="2.5" stroke="#E2E8F0"/>
+</g>
+<text id="srv-staging-api" data-node-id="5:836" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="314" y="681.5">srv-staging-api</tspan></text>
+<text id="10.1.1.14" data-node-id="5:837" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="582" y="682.25">10.1.1.14</tspan></text>
+<g id="SSH_5" data-node-id="5:838">
+<rect x="735" y="668" width="53" height="23" rx="4" fill="#F4F7FB"/>
+<text id="SSH_6" data-node-id="5:839" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="743" y="682.636">SSH</tspan></text>
+</g>
+<text id="Staging" data-node-id="5:840" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="875" y="681.636">Staging</tspan></text>
+<text id="9 identités" data-node-id="5:841" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1009" y="681.636">9 identit&#xe9;s</tspan></text>
+<g id="Disponible_9" data-node-id="5:842">
+<rect x="1148" y="668" width="92" height="23" rx="4" fill="#EAF2FC"/>
+<text id="Disponible_10" data-node-id="5:843" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1156" y="682.636">Disponible</tspan></text>
+</g>
+<text id="Ouvrir  ↗_5" data-node-id="5:844" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1308" y="681.636">Ouvrir  &#x2197;</tspan></text>
+<g id="Séparateur_7" data-node-id="5:845">
+<rect width="1104" height="1" transform="translate(284 701)" fill="#E2E8F0"/>
+</g>
+<g id="Sélection_6" data-node-id="5:846">
+<rect x="284.5" y="714.5" width="12" height="12" rx="2.5" fill="white"/>
+<rect x="284.5" y="714.5" width="12" height="12" rx="2.5" stroke="#E2E8F0"/>
+</g>
+<text id="vault-backup-01" data-node-id="5:847" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="314" y="724.5">vault-backup-01</tspan></text>
+<text id="10.0.5.31" data-node-id="5:848" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="582" y="725.25">10.0.5.31</tspan></text>
+<g id="HTTPS" data-node-id="5:849">
+<rect x="735" y="711" width="53" height="23" rx="4" fill="#F4F7FB"/>
+<text id="HTTPS_2" data-node-id="5:850" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="743" y="725.636">HTTPS</tspan></text>
+</g>
+<text id="Production_7" data-node-id="5:851" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="875" y="724.636">Production</tspan></text>
+<text id="3 identités" data-node-id="5:852" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1009" y="724.636">3 identit&#xe9;s</tspan></text>
+<g id="Maintenance" data-node-id="5:853">
+<rect x="1148" y="711" width="92" height="23" rx="4" fill="#F4F7FB"/>
+<text id="Maintenance_2" data-node-id="5:854" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1156" y="725.636">Maintenance</tspan></text>
+</g>
+<text id="Ouvrir  ↗_6" data-node-id="5:855" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1308" y="724.636">Ouvrir  &#x2197;</tspan></text>
+<g id="Séparateur_8" data-node-id="5:856">
+<rect width="1144" height="1" transform="translate(264 756)" fill="#E2E8F0"/>
+</g>
+<text id="1–6 sur 128 ressources" data-node-id="5:857" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="284" y="778.773">1&#x2013;6 sur 128 ressources</tspan></text>
+<text id="‹     1     2     3     …     22     ›" data-node-id="5:858" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1215" y="777.636">&#x2039;     1     2     3     &#x2026;     22     &#x203a;</tspan></text>
+</g>
+<text id="Demandes à approuver" data-node-id="5:859" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="600"><tspan x="264" y="837.455">Demandes &#xe0; approuver</tspan></text>
+<text id="Voir les 3 demandes  →" data-node-id="5:860" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1255" y="835.636">Voir les 3 demandes  &#x2192;</tspan></text>
+<g id="Demande de thomas.bernard" data-node-id="5:861">
+<rect x="264.5" y="861.5" width="365" height="113" rx="7.5" fill="white"/>
+<rect x="264.5" y="861.5" width="365" height="113" rx="7.5" stroke="#E2E8F0"/>
+<text id="thomas.bernard" data-node-id="5:862" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="280" y="887.864">thomas.bernard</tspan></text>
+<text id="Il y a 12 min" data-node-id="5:863" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="536" y="886.773">Il y a 12 min</tspan></text>
+<text id="db-postgres-prod_2" data-node-id="5:864" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="280" y="910.25">db-postgres-prod</tspan></text>
+<text id="Maintenance base de données" data-node-id="5:865" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="280" y="931.636">Maintenance base de donn&#xe9;es</tspan></text>
+<text id="Examiner la demande  →" data-node-id="5:866" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="280" y="957.636">Examiner la demande  &#x2192;</tspan></text>
+</g>
+<g id="Demande de sarah.dubois" data-node-id="5:867">
+<rect x="653.5" y="861.5" width="365" height="113" rx="7.5" fill="white"/>
+<rect x="653.5" y="861.5" width="365" height="113" rx="7.5" stroke="#E2E8F0"/>
+<text id="sarah.dubois" data-node-id="5:868" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="669" y="887.864">sarah.dubois</tspan></text>
+<text id="Il y a 28 min" data-node-id="5:869" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="925" y="886.773">Il y a 28 min</tspan></text>
+<text id="win-ad-primary_2" data-node-id="5:870" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="669" y="910.25">win-ad-primary</tspan></text>
+<text id="Mise à jour des politiques AD" data-node-id="5:871" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="669" y="931.636">Mise &#xe0; jour des politiques AD</tspan></text>
+<text id="Examiner la demande  →_2" data-node-id="5:872" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="669" y="957.636">Examiner la demande  &#x2192;</tspan></text>
+</g>
+<g id="Demande de lucas.petit" data-node-id="5:873">
+<rect x="1042.5" y="861.5" width="365" height="113" rx="7.5" fill="white"/>
+<rect x="1042.5" y="861.5" width="365" height="113" rx="7.5" stroke="#E2E8F0"/>
+<text id="lucas.petit" data-node-id="5:874" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="1058" y="887.864">lucas.petit</tspan></text>
+<text id="Il y a 41 min" data-node-id="5:875" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="1314" y="886.773">Il y a 41 min</tspan></text>
+<text id="k8s-prod-master_2" data-node-id="5:876" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="IBM Plex Mono" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1058" y="910.25">k8s-prod-master</tspan></text>
+<text id="Déploiement de production" data-node-id="5:877" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1058" y="931.636">D&#xe9;ploiement de production</tspan></text>
+<text id="Examiner la demande  →_3" data-node-id="5:878" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1058" y="957.636">Examiner la demande  &#x2192;</tspan></text>
+</g>
+<text id="Données de démonstration" data-node-id="5:879" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="264" y="1016.77">Donn&#xe9;es de d&#xe9;monstration</tspan></text>
+<text id="128 ressources  •  6 environnements  •  Dernière synchronisation : 14:56:20" data-node-id="5:880" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="1017" y="1016.77">128 ressources  &#x2022;  6 environnements  &#x2022;  Derni&#xe8;re synchronisation : 14:56:20</tspan></text>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_5_154">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+<clipPath id="clip1_5_154">
+<rect width="20" height="20" fill="white" transform="translate(24 277)"/>
+</clipPath>
+<clipPath id="clip2_5_154">
+<rect width="20" height="20" fill="white" transform="translate(24 373)"/>
+</clipPath>
+<clipPath id="clip3_5_154">
+<rect width="1208" height="1040" fill="white" transform="translate(232)"/>
+</clipPath>
+</defs>
 </svg>

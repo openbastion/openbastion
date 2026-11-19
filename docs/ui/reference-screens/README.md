@@ -1,24 +1,77 @@
 # Références visuelles OpenBastion
 
-Ces SVG sont les sources de conception fournies pour l'alignement de l'Admin UI. Ils sont conservés dans le dépôt pour assurer leur traçabilité et permettre leur consultation sans dépendre du dossier Downloads d'un poste de développement.
+Ces SVG sont les maquettes de l'Admin UI, extraites de Figma. Ils sont conservés dans le dépôt pour assurer leur traçabilité et permettre leur consultation sans dépendre de Figma ni d'un poste de développement.
 
-| Fichier | Écran | Statut |
-|---|---|---|
-| `openbastion-auth-connexion.svg` | Connexion | Intégré dans l'Admin UI |
-| `openbastion-mfa-validation.svg` | Vérification MFA | Intégré dans l'Admin UI |
-| `openbastion-sessions.svg` | Sessions — écran de base | Intégré dans l'Admin UI : en-tête, quatre indicateurs, onglets, espace à deux panneaux (demandes à décider, détail) |
-| `openbastion-sessions-historique.svg` | Sessions — Historique | Intégré : en-tête dédié, indicateurs, filtres, tableau de référence et pagination par curseur |
-| `openbastion-sessions-enregistrements.svg` | Sessions — Enregistrements | Intégré : bibliothèque et aperçu ; recherche des commandes SSH et ouverture du replay réelles |
-| `openbastion-sessions-alertes.svg` | Sessions — Alertes | Intégré : en-tête, indicateurs et panneau « alertes récentes » ; contrat API de file d'alertes manquant, état explicite |
-| `openbastion-dashboard.svg` | Vue générale | Shell et Dashboard React intégrés ; séries temporelles signalées comme indisponibles faute de contrat API |
-| `openbastion-acces-privilegies.svg` | Accès privilégiés | Intégré dans l'Admin UI |
-| `openbastion-audit-conformite.svg` | Audit et conformité | Intégré dans l'Admin UI |
-| `openbastion-infrastructure.svg` | Infrastructure | Intégré : en-tête, quatre indicateurs, topologie des accès, santé du cluster et tableau des connecteurs. Seul le nombre de comptes du Vault est produit par l'API publique ; les contrats manquants (connecteurs, cluster, disponibilité) sont signalés sur place |
-| `openbastion-parametres.svg` | Paramètres | Intégré : en-tête, onglets et sections ; valeurs déclarées au déploiement en lecture seule, l'API publique n'expose aucune écriture des paramètres |
-| `openbastion-parametres-securite.svg` | Paramètres - Sécurités | Intégré : facteurs, règles d'accès, enregistrement, état de sécurité et intégrité de l'audit |
-| `openbastion-parametres-identites-sso.svg` | Paramètres - Identités & SSO | Intégré : fournisseurs déclarés, mappage des groupes, provisionnement et second facteur |
-| `openbastion-parametres-integrations.svg` | Paramètres - Intégrations | Intégré : clés et secrets, messageries et architecture des échanges ; URL et clés restent hors de l'UI |
-| `openbastion-parametres-notifications.svg` | Paramètres - Notifications | Intégré : canaux, configuration déclarative, fiabilité et limites connues |
+## Source Figma
+
+Fichier : [OpenBastion](https://www.figma.com/design/yUuwYSnGX7kSLzYX2rZXIU/OpenBastion) (clé `yUuwYSnGX7kSLzYX2rZXIU`), **seule source** des maquettes : aucun SVG de ce dossier n'existe hors de Figma. Extraction du 19 novembre 2026 : les 40 cadres de premier niveau des 8 pages.
+
+Chaque SVG est reconstitué pour rester fidèle au cadre Figma hors de Figma :
+
+- **Calques** : chaque groupe, texte et forme porte le nom de son calque Figma (`id`) et son nœud (`data-node-id`). Figma écrit ces noms octet par octet en UTF-8 (`Acc&#195;&#168;s`) ; ils sont rétablis (`Accès`).
+- **Textes** : conservés en `<text>` (cherchables, sélectionnables), pas convertis en tracés.
+- **Graisses** : l'export SVG de Figma ne connaît que « normal » et « bold » ; la graisse exacte de chaque texte (400, 500, 600) est relue dans le document Figma par son nœud et réappliquée.
+- **Polices** : un sous-ensemble WOFF2 d'**Inter 4.001** (axe des graisses 400–600, taille optique 14) et d'**IBM Plex Mono** Regular, limité aux caractères du fichier, est intégré dans chaque SVG : le rendu ne dépend pas des polices installées et tient dans un `<img>`. Licences SIL OFL 1.1 dans [`fonts/`](fonts/). Trois symboles absents de ces polices (`⌕`, `☷`, `●`) restent rendus par la police de repli du lecteur, comme dans Figma.
+- **Icônes et formes** : tracés vectoriels tels que Figma les exporte (contours non simplifiés).
+
+Contrôle mesuré sur Sessions, Vue d'ensemble et Paramètres — Sécurité : rendu Chromium du SVG comparé au PNG que Figma rend du même cadre, 0,7 à 1,2 % de pixels s'écartent de plus de 48/255 (anticrénelage), contre 2,0 à 2,5 % pour l'export brut.
+
+Les calques masqués dans Figma (états de démonstration « États et erreurs », 27 cadres et 47 textes) ne sont pas exportés : Figma ne rend pas un calque masqué.
+
+### Refaire l'extraction
+
+Un token personnel Figma en lecture seule (*File content: Read-only*), dans un fichier hors du dépôt, jamais commité. Avec `IDS` la liste des nœuds du tableau ci-dessous :
+
+1. `GET https://api.figma.com/v1/images/yUuwYSnGX7kSLzYX2rZXIU?ids=$IDS&format=svg&svg_outline_text=false&svg_include_id=true&svg_include_node_id=true&svg_simplify_stroke=false` (en-tête `X-Figma-Token`), puis télécharger chaque URL rendue sous le nom du tableau ;
+2. `GET https://api.figma.com/v1/files/yUuwYSnGX7kSLzYX2rZXIU/nodes?ids=$IDS` pour les styles de texte ;
+3. Inter et IBM Plex Mono depuis `google/fonts` (`ofl/inter/Inter[opsz,wght].ttf`, `ofl/ibmplexmono/IBMPlexMono-Regular.ttf`) ;
+4. `python3 -I scripts/figma-reference-screens.py <svg-bruts> <sortie> nodes.json map.tsv <polices>` (fontTools et brotli requis), `map.tsv` donnant `nœud<TAB>nom` pour chaque ligne du tableau.
+
+| Fichier | Page | Cadre Figma | Nœud | Statut |
+|---|---|---|---|---|
+| `openbastion-dashboard.svg` | Vue d’ensemble | OpenBastion · Vue d’ensemble | `5:63` | Shell et Dashboard React intégrés ; séries temporelles signalées comme indisponibles faute de contrat API |
+| `openbastion-auth-connexion.svg` | Vue d’ensemble | Auth + MFA · Connexion | `34:33` | Intégré dans l'Admin UI |
+| `openbastion-mfa-validation.svg` | Vue d’ensemble | Auth + MFA · Vérification à deux facteurs | `34:36` | Intégré dans l'Admin UI |
+| `openbastion-acces-privilegies.svg` | Accès privilégiés | OpenBastion · Accès privilégiés | `5:154` | Intégré dans l'Admin UI |
+| `openbastion-acces-privilegies-comptes.svg` | Accès privilégiés | Accès privilégiés — Comptes | `2007:1543` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-acces-privilegies-politiques.svg` | Accès privilégiés | Accès privilégiés — Politiques | `2007:1748` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-acces-privilegies-demandes.svg` | Accès privilégiés | Accès privilégiés — Demandes | `2007:1953` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-alertes.svg` | Sessions | Sessions — Alertes de Session | `2007:1345` | Intégré : en-tête, indicateurs et panneau « alertes récentes » ; contrat API de file d'alertes manquant, état explicite |
+| `openbastion-sessions-enregistrements.svg` | Sessions | Sessions — Enregistrements | `2007:1147` | Intégré : bibliothèque et aperçu ; recherche des commandes SSH et ouverture du replay réelles |
+| `openbastion-sessions-historique.svg` | Sessions | Sessions — Historique | `2007:949` | Intégré : en-tête dédié, indicateurs, filtres, tableau de référence et pagination par curseur |
+| `openbastion-sessions.svg` | Sessions | OpenBastion · Sessions | `52:116` | Intégré dans l'Admin UI : en-tête, quatre indicateurs, onglets, espace à deux panneaux (demandes à décider, détail) |
+| `openbastion-sessions-nouvelle-demande-incomplete.svg` | Sessions | Sessions — Nouvelle demande — Ouvert · formulaire incomplet | `2044:1013` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-nouvelle-demande-erreur-validation.svg` | Sessions | Sessions — Nouvelle demande — Erreur de validation | `2044:1018` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-nouvelle-demande-prete.svg` | Sessions | Sessions — Nouvelle demande — Prêt à envoyer · exemple fictif | `2044:1023` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-nouvelle-demande-soumission.svg` | Sessions | Sessions — Nouvelle demande — Soumission en cours | `2044:1028` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-nouvelle-demande-erreur-serveur.svg` | Sessions | Sessions — Nouvelle demande — Erreur serveur | `2044:1033` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-replay-ssh.svg` | Sessions | Sessions — Enregistrements — Replay terminal SSH | `2044:1335` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-demande-confirmee.svg` | Sessions | Sessions — Demande créée — Création confirmée | `2044:1530` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-demande-en-attente.svg` | Sessions | Sessions — Demande créée — En attente d’approbation | `2044:1760` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-sessions-demande-autre-statut.svg` | Sessions | Sessions — Demande créée — Autre statut retourné | `2044:1990` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-infrastructure.svg` | Infrastructure | OpenBastion · Infrastructure | `5:336` | Intégré : en-tête, quatre indicateurs, topologie des accès, santé du cluster et tableau des connecteurs. Seul le nombre de comptes du Vault est produit par l'API publique ; les contrats manquants (connecteurs, cluster, disponibilité) sont signalés sur place |
+| `openbastion-audit-conformite.svg` | Audit & conformité | OpenBastion · Audit & conformité | `5:427` | Intégré dans l'Admin UI |
+| `openbastion-audit-conformite-rapports.svg` | Audit & conformité | Audit & conformité — Rapports | `2007:3322` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-audit-conformite-preuves.svg` | Audit & conformité | Audit & conformité — Preuves | `2007:3638` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-audit-conformite-retention.svg` | Audit & conformité | Audit & conformité — Politiques de rétention | `2007:3954` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-securite.svg` | Sécurité | Sécurité — Centre de sécurité | `2044:611` | Nouvelle référence : écart avec l'Admin UI à évaluer |
+| `openbastion-parametres.svg` | Paramètres | OpenBastion · Paramètres | `5:518` | Intégré : en-tête, onglets et sections ; valeurs déclarées au déploiement en lecture seule, l'API publique n'expose aucune écriture des paramètres |
+| `openbastion-parametres-securite.svg` | Paramètres | Paramètres — Sécurité | `2007:209` | Intégré : facteurs, règles d'accès, enregistrement, état de sécurité et intégrité de l'audit |
+| `openbastion-parametres-identites-sso.svg` | Paramètres | Paramètres — Identités & SSO | `2007:394` | Intégré : fournisseurs déclarés, mappage des groupes, provisionnement et second facteur |
+| `openbastion-parametres-integrations.svg` | Paramètres | Paramètres — Intégrations | `2007:579` | Intégré : clés et secrets, messageries et architecture des échanges ; URL et clés restent hors de l'UI |
+| `openbastion-parametres-notifications.svg` | Paramètres | Paramètres — Notifications | `2007:764` | Intégré : canaux, configuration déclarative, fiabilité et limites connues |
+| `openbastion-icones-a-securite-acces.svg` | Icônes | A · Icônes — Sécurité & accès | `5:1412` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-b-utilisateurs-identites.svg` | Icônes | B · Icônes — Utilisateurs & identités | `5:1433` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-c-infrastructure-systemes.svg` | Icônes | C · Icônes — Infrastructure & systèmes | `5:1454` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-d-protocoles-connexions.svg` | Icônes | D · Icônes — Protocoles & connexions | `5:1475` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-e-sessions-controle.svg` | Icônes | E · Icônes — Sessions & contrôle | `5:1496` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-f-administration-operations.svg` | Icônes | F · Icônes — Administration & opérations | `5:1517` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-g-audit-observabilite.svg` | Icônes | G · Icônes — Audit & observabilité | `5:1538` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-icones-h-developpement-livraison.svg` | Icônes | H · Icônes — Développement & livraison | `5:1559` | Planche d'icônes : source de `@openbastion/icons` |
+| `openbastion-identite-ressources.svg` | Icônes | 00 · OpenBastion — Identité & ressources | `2039:174` | Planche d'icônes : source de `@openbastion/icons` |
+
+
+## Règles
 
 Le shell partagé et le Dashboard ont été rapprochés de la référence Dashboard. Les trois maquettes Sessions ont été dérivées de la référence Sessions, avec les mêmes dimensions et la même structure de navigation. Les données de maquette sont illustratives et ne constituent pas des métriques de production ni des contrats d'API.
 

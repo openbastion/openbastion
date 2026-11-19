@@ -1,255 +1,237 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080" width="1440" height="1080">
-  <defs>
-    <style>
-      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-      .font-mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }
-    </style>
-  </defs>
-
-
-  <g id="Layer_Background">
-    <rect x="0" y="0" width="1440" height="1080" fill="#F8FAFC" />
-  </g>
-
-
-  <g id="Layer_Sidebar">
-    <rect x="0" y="0" width="240" height="1080" fill="#0B1E33" />
-
-
-    <g id="Sidebar_Brand" transform="translate(20, 24)">
-      <path d="M16 2 L28 7 V16 C28 24 22.8 30.8 16 33 C9.2 30.8 4 24 4 16 V7 L16 2 Z" fill="#1E3A5F" stroke="#38BDF8" stroke-width="1.5" />
-      <path d="M16 7 L23 10 V16 C23 21 20 25.5 16 27 C12 25.5 9 21 9 16 V10 L16 7 Z" fill="#0F2942" />
-      <circle cx="16" cy="15.5" r="2.2" fill="#E2E8F0" />
-      <path d="M14.8 17.5 L17.2 17.5 L17.8 21.5 L14.2 21.5 Z" fill="#E2E8F0" />
-      <text x="40" y="18" class="font-sans" font-size="16" font-weight="700" fill="#FFFFFF">OpenBastion</text>
-      <text x="40" y="30" class="font-sans" font-size="8" font-weight="600" letter-spacing="1.2" fill="#64748B">PRIVILEGED ACCESS</text>
-    </g>
-
-
-    <g id="Sidebar_WorkspaceSwitcher" transform="translate(16, 84)">
-      <rect x="0" y="0" width="208" height="58" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1" />
-      <text x="14" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Production</text>
-      <text x="14" y="43" class="font-sans" font-size="11" fill="#94A3B8">Acme Corporation</text>
-      <path d="M188 25 L193 29 L188 33" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-    </g>
-
-
-    <g id="Sidebar_Nav_Workspace" transform="translate(0, 172)">
-      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">ESPACE DE TRAVAIL</text>
-
-
-      <g id="Nav_Overview" transform="translate(12, 16)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <rect x="0" y="0" width="6" height="6" rx="1" />
-          <rect x="9" y="0" width="6" height="6" rx="1" />
-          <rect x="0" y="9" width="6" height="6" rx="1" />
-          <rect x="9" y="9" width="6" height="6" rx="1" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Vue d'ensemble</text>
-      </g>
-
-
-      <g id="Nav_PrivilegedAccess" transform="translate(12, 62)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <circle cx="5" cy="5" r="3.5" />
-          <path d="M7.5 7.5 L15 15 M12 12 L14.5 9.5 M14 14 L16 12" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Accès privilégiés</text>
-      </g>
-
-
-      <g id="Nav_Sessions_Active" transform="translate(12, 108)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="#153254" />
-        <rect x="0" y="4" width="3.5" height="32" rx="1.5" fill="#38BDF8" />
-        <g transform="translate(12, 12)" stroke="#38BDF8" stroke-width="1.5" fill="none">
-          <rect x="0" y="1" width="16" height="11" rx="1.5" />
-          <path d="M5 15 H11 M8 12 V15" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Sessions</text>
-        <rect x="176" y="10" width="28" height="20" rx="4" fill="#1D63ED" />
-        <text x="190" y="24" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#FFFFFF">—</text>
-      </g>
-
-
-      <g id="Nav_Infrastructure" transform="translate(12, 154)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <rect x="1" y="1" width="14" height="5" rx="1" />
-          <rect x="1" y="9" width="14" height="5" rx="1" />
-          <circle cx="4" cy="3.5" r="0.7" fill="#94A3B8" />
-          <circle cx="4" cy="11.5" r="0.7" fill="#94A3B8" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Infrastructure</text>
-      </g>
-
-
-      <g id="Nav_Audit" transform="translate(12, 200)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <path d="M3 1 H11 L14 4 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z" />
-          <path d="M5 8 L7 10 L11 6" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Audit &amp; conformité</text>
-      </g>
-
-
-      <g id="Nav_Settings" transform="translate(12, 246)">
-        <rect x="0" y="0" width="216" height="40" rx="6" fill="transparent" />
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <circle cx="8" cy="8" r="2.5" />
-          <path d="M8 1 V3 M8 13 V15 M1 8 H3 M13 8 H15 M3 3 L4.5 4.5 M11.5 11.5 L13 13 M13 3 L11.5 4.5 M4.5 11.5 L3 13" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Paramètres</text>
-      </g>
-    </g>
-
-
-    <line x1="20" y1="485" x2="220" y2="485" stroke="#1E3A5F" stroke-width="1" />
-
-
-    <g id="Sidebar_Nav_Resources" transform="translate(0, 515)">
-      <text x="20" y="0" class="font-sans" font-size="10" font-weight="600" letter-spacing="0.8" fill="#64748B">RESSOURCES</text>
-
-
-      <g id="Nav_Docs" transform="translate(12, 16)">
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <path d="M3 1 H10 L14 5 V14 C14 14.6 13.6 15 13 15 H3 C2.4 15 2 14.6 2 14 V2 C2 1.4 2.4 1 3 1 Z" />
-          <path d="M5 7 H11 M5 10 H11 M5 13 H8" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Documentation</text>
-      </g>
-
-
-      <g id="Nav_Help" transform="translate(12, 60)">
-        <g transform="translate(12, 12)" stroke="#94A3B8" stroke-width="1.5" fill="none">
-          <circle cx="8" cy="8" r="6.5" />
-          <path d="M6.2 6.2 C6.2 5 7 4.3 8 4.3 C9 4.3 9.8 5 9.8 6 C9.8 7 8 7.5 8 8.8" />
-          <circle cx="8" cy="11.2" r="0.6" fill="#94A3B8" />
-        </g>
-        <text x="38" y="25" class="font-sans" font-size="13" font-weight="500" fill="#CBD5E1">Centre d'aide</text>
-      </g>
-    </g>
-
-
-    <g id="Sidebar_StatusCard" transform="translate(16, 875)">
-      <rect x="0" y="0" width="208" height="78" rx="8" fill="#132A46" stroke="#1E3A5F" stroke-width="1" />
-      <circle cx="16" cy="20" r="3.5" fill="#38BDF8" />
-      <text x="27" y="24" class="font-sans" font-size="11.5" font-weight="600" fill="#FFFFFF">Bastion opérationnel</text>
-      <text x="14" y="43" class="font-sans" font-size="10.5" fill="#94A3B8">Tous les services sont disponibles</text>
-      <text x="14" y="62" class="font-sans" font-size="10" fill="#64748B">v2.8.0  •  EU / Paris</text>
-    </g>
-
-
-    <g id="Sidebar_UserProfile" transform="translate(0, 975)">
-      <line x1="0" y1="0" x2="240" y2="0" stroke="#1E3A5F" stroke-width="1" />
-      <g transform="translate(20, 22)">
-        <circle cx="14" cy="10" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
-        <path d="M5 25 C5 19.5 9 17 14 17 C19 17 23 19.5 23 25" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
-        <text x="38" y="14" class="font-sans" font-size="12.5" font-weight="600" fill="#FFFFFF">Camille Martin</text>
-        <text x="38" y="30" class="font-sans" font-size="11" fill="#94A3B8">Administrateur</text>
-        <path d="M192 14 L197 18 L192 22" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      </g>
-    </g>
-  </g>
-
-
-  <g id="Layer_TopHeader">
-    <rect x="240" y="0" width="1200" height="64" fill="#FFFFFF" />
-    <line x1="240" y1="64" x2="1440" y2="64" stroke="#E2E8F0" stroke-width="1" />
-
-
-    <g id="Header_Breadcrumbs" transform="translate(272, 37)">
-      <text x="0" y="0" class="font-sans" font-size="13" fill="#64748B">Espace de travail</text>
-      <text x="112" y="0" class="font-sans" font-size="13" fill="#CBD5E1">/</text>
-      <text x="128" y="0" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Sessions</text>
-    </g>
-
-
-    <g id="Header_Search" transform="translate(880, 15)">
-      <rect x="0" y="0" width="300" height="34" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" />
-      <circle cx="17" cy="16" r="5" fill="none" stroke="#94A3B8" stroke-width="1.5" />
-      <line x1="21" y1="20" x2="24" y2="23" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" />
-      <text x="34" y="21" class="font-sans" font-size="12.5" fill="#94A3B8">Rechercher une ressource...</text>
-      <text x="272" y="21" class="font-sans" font-size="11" font-weight="500" fill="#94A3B8">⌘ K</text>
-    </g>
-
-
-    <g id="Header_Actions" transform="translate(1204, 15)">
-
-      <circle cx="16" cy="17" r="8" fill="none" stroke="#64748B" stroke-width="1.5" />
-      <text x="16" y="21" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#64748B">?</text>
-
-
-      <g transform="translate(46, 8)">
-        <path d="M9 2 C6.2 2 4 4.2 4 7 V11 L2.5 13 H15.5 L14 11 V7 C14 4.2 11.8 2 9 2 Z" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linejoin="round" />
-        <path d="M7.2 15 C7.6 15.8 8.2 16.2 9 16.2 C9.8 16.2 10.4 15.8 10.8 15" fill="none" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" />
-        <circle cx="13.5" cy="3.5" r="2.2" fill="#2563EB" />
-      </g>
-
-
-      <g transform="translate(88, 4)">
-        <rect x="0" y="0" width="110" height="26" rx="5" fill="#EFF6FF" />
-        <text x="14" y="17" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">Production</text>
-      </g>
-    </g>
-  </g>
-
-
-  <g id="Layer_PageHeader" transform="translate(272, 92)">
-    <text x="0" y="26" class="font-sans" font-size="26" font-weight="700" fill="#0F172A">Alertes de sessions</text>
-    <text x="0" y="50" class="font-sans" font-size="13.5" fill="#64748B">File d’alertes opérateur : contrat ADR-0117 proposé, non disponible.</text>
-
-
-    <g id="Btn_ExportHistory" transform="translate(966, 4)">
-      <rect x="0" y="0" width="170" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
-      <path d="M18 13 V21 M14.5 18 L18 21.5 L21.5 18" fill="none" stroke="#0F172A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      <text x="32" y="23" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Exporter les alertes</text>
-    </g>
-  </g>
-
-
-  <g id="Layer_KPICards" transform="translate(272, 174)">
-
-    <g transform="translate(0, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">File non disponible</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">—</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Aucune occurrence fournie</text></g><g transform="translate(288, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Critiques</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">—</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Priorité immédiate</text></g><g transform="translate(576, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Élevées</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">—</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">À examiner rapidement</text></g><g transform="translate(864, 0)"><rect x="0" y="0" width="272" height="106" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="18" y="23" class="font-sans" font-size="11.5" font-weight="500" fill="#64748B">Traitées aujourd’hui</text><text x="18" y="59" class="font-sans" font-size="25" font-weight="700" fill="#0F172A">—</text><text x="18" y="83" class="font-sans" font-size="10.5" font-weight="400" fill="#64748B">Actions journalisées</text></g></g>
-
-
-  <g id="Layer_SubNavTabs" transform="translate(272, 314)">
-    <line x1="0" y1="26" x2="1136" y2="26" stroke="#E2E8F0" stroke-width="1" />
-
-
-    <g id="Tab_Live">
-      <text x="8" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">En direct</text>
-      <text x="72" y="10" class="font-sans" font-size="13" font-weight="500" fill="#64748B">—</text>
-      </g>
-
-
-    <g id="Tab_History" transform="translate(142, 0)">
-      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Historique</text>
-    </g>
-
-
-    <g id="Tab_Recordings" transform="translate(262, 0)">
-      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="500" fill="#64748B">Enregistrements</text>
-    </g>
-
-
-    <g id="Tab_Alerts" transform="translate(426, 0)">
-      <text x="0" y="10" class="font-sans" font-size="13.5" font-weight="600" fill="#2563EB">Alertes de session</text>
-      <rect x="-8" y="24" width="150" height="2.5" rx="1" fill="#2563EB" /><rect x="118" y="-7" width="22" height="18" rx="9" fill="#FEE2E2" /><text x="129" y="6" text-anchor="middle" class="font-sans" font-size="10.5" font-weight="700" fill="#B91C1C">—</text></g>
-  </g>
-
-
-  <g id="Layer_MainSplitView" transform="translate(272, 364)">
-
-
-    <rect x="0" y="0" width="1136" height="632" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="22" y="29" class="font-sans" font-size="15" font-weight="700" fill="#0F172A">Alertes de sessions</text><text x="22" y="49" class="font-sans" font-size="11.5" font-weight="400" fill="#64748B">Aucune alerte ne doit être simulée. ADR-0117 définit le futur contrat.</text><rect x="22" y="68" width="300" height="36" rx="6" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1" /><text x="36" y="91" class="font-sans" font-size="11.5" font-weight="400" fill="#94A3B8">⌕  Rechercher une alerte…</text><rect x="334" y="68" width="136" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="348" y="91" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">Toutes sévérités  ▾</text><rect x="482" y="68" width="128" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="496" y="91" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">Non traitées  ▾</text><rect x="622" y="68" width="140" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="636" y="91" class="font-sans" font-size="10.5" font-weight="400" fill="#475569">Dernières 24 h  ▾</text><rect x="22" y="122" width="500" height="478" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><text x="42" y="151" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">ALERTES RÉCENTES</text><rect x="428" y="132" width="76" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="466.0" y="147" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">File non disponible</text><rect x="28" y="166" width="488" height="76" rx="7" fill="#FFF7F7" stroke="#FECACA" stroke-width="1" /><text x="44" y="189" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Signal non activé</text><text x="44" y="209" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">camille.martin · srv-prod-web-01</text><rect x="44" y="215" width="72" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="80.0" y="230" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">CRITIQUE</text><text x="492" y="193" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 4 min</text><circle cx="500" cy="178" r="3" fill="#DC2626" /><line x1="34" y1="328" x2="510" y2="328" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="271" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Signal non activé</text><text x="44" y="291" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">lucas.petit · k8s-prod-master</text><rect x="44" y="297" width="72" height="22" rx="5" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="0" /><text x="80.0" y="312" class="font-sans" font-size="10.5" font-weight="600" fill="#C2410C" text-anchor="middle">ÉLEVÉE</text><text x="492" y="275" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 18 min</text><circle cx="500" cy="260" r="3" fill="#DC2626" /><line x1="34" y1="410" x2="510" y2="410" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="353" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Hors périmètre</text><text x="44" y="373" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">thomas.bernard · db-postgres-prod</text><rect x="44" y="379" width="72" height="22" rx="5" fill="#FFFBEB" stroke="#FFFBEB" stroke-width="0" /><text x="80.0" y="394" class="font-sans" font-size="10.5" font-weight="600" fill="#A16207" text-anchor="middle">MOYENNE</text><text x="492" y="357" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 1 h</text><line x1="34" y1="492" x2="510" y2="492" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="435" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Hors périmètre</text><text x="44" y="455" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">sarah.dubois · win-ad-primary</text><rect x="44" y="461" width="72" height="22" rx="5" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="0" /><text x="80.0" y="476" class="font-sans" font-size="10.5" font-weight="600" fill="#C2410C" text-anchor="middle">ÉLEVÉE</text><text x="492" y="439" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Il y a 3 h</text><line x1="34" y1="574" x2="510" y2="574" stroke="#F1F5F9" stroke-width="1" /><text x="44" y="517" class="font-sans" font-size="11.2" font-weight="600" fill="#0F172A">Hors périmètre</text><text x="44" y="537" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">nora.legrand · fw-edge-paris-01</text><rect x="44" y="543" width="72" height="22" rx="5" fill="#F1F5F9" stroke="#F1F5F9" stroke-width="0" /><text x="80.0" y="558" class="font-sans" font-size="10.5" font-weight="600" fill="#64748B" text-anchor="middle">FAIBLE</text><text x="492" y="521" class="font-sans" font-size="9.5" font-weight="400" fill="#94A3B8" text-anchor="end">Hier, 22:14</text><rect x="542" y="122" width="572" height="478" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" /><rect x="564" y="142" width="72" height="22" rx="5" fill="#FEF2F2" stroke="#FEF2F2" stroke-width="0" /><text x="600.0" y="157" class="font-sans" font-size="10.5" font-weight="600" fill="#B91C1C" text-anchor="middle">CRITIQUE</text><rect x="644" y="142" width="90" height="22" rx="5" fill="#FFF7ED" stroke="#FFF7ED" stroke-width="0" /><text x="689.0" y="157" class="font-sans" font-size="10.5" font-weight="600" fill="#C2410C" text-anchor="middle">NON TRAITÉE</text><text x="564" y="197" class="font-sans" font-size="16" font-weight="700" fill="#0F172A">Signal non activé</text><text x="564" y="221" class="font-sans" font-size="10.8" font-weight="400" fill="#64748B">Une commande sensible a été exécutée pendant une session SSH.</text><line x1="564" y1="242" x2="1092" y2="242" stroke="#E2E8F0" stroke-width="1" /><text x="564" y="267" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">SESSION CONCERNÉE</text><text x="564" y="289" class="font-sans" font-size="11.5" font-weight="600" fill="#0F172A">camille.martin  ·  srv-prod-web-01</text><text x="564" y="321" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">DÉTECTION</text><text x="564" y="343" class="font-sans" font-size="10.8" font-weight="400" fill="#475569">Exécution de commande classée à haut risque</text><rect x="564" y="360" width="528" height="58" rx="6" fill="#0D192B" stroke="#0D192B" stroke-width="0" /><text x="580" y="385" class="font-mono" font-size="10.5" font-weight="500" fill="#FCA5A5">root@srv-prod-web-01:~$ chmod -R 777 /etc/nginx</text><text x="580" y="403" class="font-mono" font-size="9.5" font-weight="400" fill="#94A3B8">Règle et score non disponibles</text><text x="564" y="449" class="font-sans" font-size="9.5" font-weight="700" fill="#64748B">DÉCLENCHÉE LE</text><text x="564" y="470" class="font-sans" font-size="10.8" font-weight="400" fill="#475569">17 nov. 2026 · 09:34:12 UTC</text><text x="564" y="500" class="font-sans" font-size="10.5" font-weight="700" fill="#64748B">Actions de traitement</text><rect x="564" y="516" width="168" height="38" rx="6" fill="#2563EB" stroke="#2563EB" stroke-width="0" /><text x="648" y="540" class="font-sans" font-size="10.5" font-weight="600" fill="#FFFFFF" text-anchor="middle">Examiner la session</text><rect x="744" y="516" width="148" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="818" y="540" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">Marquer traitée</text><rect x="904" y="516" width="188" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" /><text x="998" y="540" class="font-sans" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">Créer un incident</text><text x="564" y="580" class="font-sans" font-size="9.8" font-weight="400" fill="#64748B">Les actions de traitement sont journalisées dans l’audit.</text></g>
-
-
-  <g id="Layer_PageFooter" transform="translate(272, 1044)">
-    <text x="0" y="0" class="font-sans" font-size="11.5" fill="#94A3B8">Proposition UX · ADR-0117 proposé · aucune alerte réelle</text>
-    <text x="1136" y="0" text-anchor="end" class="font-sans" font-size="11.5" fill="#94A3B8">Mode observateur  •  Les actions sensibles sont journalisées</text>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Figma: OpenBastion (yUuwYSnGX7kSLzYX2rZXIU), node 2007:1345. Embedded font subsets: Inter 4.001 (SIL OFL 1.1, Copyright 2020 The Inter Project Authors) and IBM Plex Mono (SIL OFL 1.1, Copyright 2017 IBM Corp., Reserved Font Name "Plex"); licences in fonts/. -->
+<defs><style>@font-face{font-family:"Inter";font-style:normal;font-weight:400 600;src:url(data:font/woff2;base64,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) format("woff2");}</style></defs>
+<g id="Sessions — Alertes de Session" data-node-id="2007:1345" clip-path="url(#clip0_2007_1345)">
+<rect width="1440" height="1040" fill="white"/>
+<g id="Navigation principale" data-node-id="2007:1346">
+<rect width="232" height="1040" fill="#0B1F3B"/>
+<text id="OpenBastion" data-node-id="2007:1347" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" letter-spacing="0em" font-weight="600"><tspan x="65" y="45.5455">OpenBastion</tspan></text>
+<text id="PRIVILEGED ACCESS" data-node-id="2007:1348" fill="#8DA5C4" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="8" letter-spacing="0em" font-weight="500"><tspan x="65" y="60.9091">PRIVILEGED ACCESS</tspan></text>
+<g id="Espace de travail" data-node-id="2007:1349">
+<rect x="16" y="100" width="200" height="56" rx="7" fill="#142D4D"/>
+<text id="Production" data-node-id="2007:1350" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="500"><tspan x="32" y="122.727">Production</tspan></text>
+<text id="Acme Corporation" data-node-id="2007:1351" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="32" y="140.5">Acme Corporation</tspan></text>
+<g id="arrow" data-node-id="2007:1352">
+<path id="Vector" data-node-id="2007:1353" d="M193.25 122.917L197.333 127L193.25 131.083" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<text id="ESPACE DE TRAVAIL" data-node-id="2007:1354" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="24" y="199.773">ESPACE DE TRAVAIL</tspan></text>
+<text id="Vue d’ensemble" data-node-id="2007:1355" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="241.864">Vue d&#x2019;ensemble</tspan></text>
+<text id="Accès privilégiés" data-node-id="2007:1356" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="289.864">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<g id="Page active" data-node-id="2007:1357">
+<rect x="12" y="314" width="208" height="42" rx="6" fill="#193D63"/>
+</g>
+<text id="Sessions" data-node-id="2007:1358" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="56" y="337.864">Sessions</tspan></text>
+<g id="Repère actif" data-node-id="2007:1359">
+<rect y="322" width="3" height="26" rx="1" fill="#00D1FF"/>
+</g>
+<g id="Sessions actives" data-node-id="2007:1360">
+<rect x="183" y="325" width="24" height="20" rx="4" fill="#0B5ED7"/>
+<text id="24" data-node-id="2007:1361" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="188" y="336.636">&#x2014;</tspan></text>
+</g>
+<text id="Infrastructure" data-node-id="2007:1362" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="385.864">Infrastructure</tspan></text>
+<text id="Audit &amp; conformité" data-node-id="2007:1363" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="433.864">Audit &#38; conformit&#xe9;</tspan></text>
+<text id="Paramètres" data-node-id="2007:1364" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="529.864">Param&#xe8;tres</tspan></text>
+<g id="Séparateur" data-node-id="2007:1365">
+<rect width="184" height="1" transform="translate(24 580)" fill="#26405E"/>
+</g>
+<text id="RESSOURCES" data-node-id="2007:1366" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="24" y="617.773">RESSOURCES</tspan></text>
+<g id="audit" data-node-id="2007:1367">
+<path id="Vector_2" data-node-id="2007:1368" d="M34.5 641.5H28.5C28.1022 641.5 27.7206 641.658 27.4393 641.939C27.158 642.221 27 642.602 27 643V655C27 655.398 27.158 655.779 27.4393 656.061C27.7206 656.342 28.1022 656.5 28.5 656.5H37.5C37.8978 656.5 38.2794 656.342 38.5607 656.061C38.842 655.779 39 655.398 39 655V646L34.5 641.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_3" data-node-id="2007:1369" d="M34.5 641.5V646H39M30 649.75H36M30 652.75H33.75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<text id="Documentation" data-node-id="2007:1370" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="652.864">Documentation</tspan></text>
+<g id="help" data-node-id="2007:1371">
+<path id="Vector_4" data-node-id="2007:1372" d="M39.75 692C39.75 695.728 36.7279 698.75 33 698.75C29.2721 698.75 26.25 695.728 26.25 692C26.25 688.272 29.2721 685.25 33 685.25C36.7279 685.25 39.75 688.272 39.75 692Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_5" data-node-id="2007:1373" d="M30.75 689.75C30.75 689.153 30.9871 688.581 31.409 688.159C31.831 687.737 32.4033 687.5 33 687.5C33.5967 687.5 34.169 687.737 34.591 688.159C35.0129 688.581 35.25 689.153 35.25 689.75C35.25 691.25 33 691.25 33 693.5M33 695.75H33.0075" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<text id="Centre d’aide" data-node-id="2007:1374" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="695.864">Centre d&#x2019;aide</tspan></text>
+<g id="État du bastion" data-node-id="2007:1375">
+<rect x="16" y="846" width="200" height="81" rx="8" fill="#142D4D"/>
+<g id="État connecté" data-node-id="2007:1376">
+<rect x="30" y="864" width="6" height="6" rx="3" fill="#00D1FF"/>
+</g>
+<text id="Bastion opérationnel" data-node-id="2007:1377" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="44" y="868.5">&#xc9;tat non &#xe9;valu&#xe9;</tspan></text>
+<text id="Tous les services sont disponibles" data-node-id="2007:1378" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="30" y="889.773">Source &#xe0; confirmer</tspan></text>
+<text id="v2.8.0  •  EU / Paris" data-node-id="2007:1379" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="30" y="910.773">v2.8.0  &#x2022;  EU / Paris</tspan></text>
+</g>
+<g id="Séparateur compte" data-node-id="2007:1380">
+<rect width="200" height="1" transform="translate(16 950)" fill="#26405E"/>
+</g>
+<g id="user" data-node-id="2007:1381">
+<path id="Vector_6" data-node-id="2007:1382" d="M40.6668 984.333C40.6668 986.635 38.8013 988.5 36.5002 988.5C34.199 988.5 32.3335 986.635 32.3335 984.333C32.3335 982.032 34.199 980.167 36.5002 980.167C38.8013 980.167 40.6668 982.032 40.6668 984.333Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<path id="Vector_7" data-node-id="2007:1383" d="M28.1665 997.875V995.792C28.1665 994.134 28.825 992.544 29.9971 991.372C31.1692 990.2 32.7589 989.542 34.4165 989.542H38.5832C40.2408 989.542 41.8305 990.2 43.0026 991.372C44.1747 992.544 44.8332 994.134 44.8332 995.792V997.875" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+</g>
+<text id="Camille Martin" data-node-id="2007:1384" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="63" y="981.864">Camille Martin</tspan></text>
+<text id="Administrateur" data-node-id="2007:1385" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="63" y="999.636">Administrateur</tspan></text>
+<g id="arrow_2" data-node-id="2007:1386">
+<path id="Vector_8" data-node-id="2007:1387" d="M199.875 984.708L203.667 988.5L199.875 992.292" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<g id="dashboard" data-node-id="2007:1388">
+<g id="Géométrie" data-node-id="I2007:1388;5:2776">
+<path id="Vector_9" data-node-id="I2007:1388;5:2777" d="M27.3333 231.5H31.5C31.9602 231.5 32.3333 231.873 32.3333 232.333V238.167C32.3333 238.627 31.9602 239 31.5 239H27.3333C26.8731 239 26.5 238.627 26.5 238.167V232.333C26.5 231.873 26.8731 231.5 27.3333 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_10" data-node-id="I2007:1388;5:2778" d="M36.4998 231.5H40.6665C41.1267 231.5 41.4998 231.873 41.4998 232.333V234.833C41.4998 235.294 41.1267 235.667 40.6665 235.667H36.4998C36.0396 235.667 35.6665 235.294 35.6665 234.833V232.333C35.6665 231.873 36.0396 231.5 36.4998 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_11" data-node-id="I2007:1388;5:2779" d="M36.4998 239H40.6665C41.1267 239 41.4998 239.373 41.4998 239.833V245.667C41.4998 246.127 41.1267 246.5 40.6665 246.5H36.4998C36.0396 246.5 35.6665 246.127 35.6665 245.667V239.833C35.6665 239.373 36.0396 239 36.4998 239Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_12" data-node-id="I2007:1388;5:2780" d="M27.3333 242.333H31.5C31.9602 242.333 32.3333 242.706 32.3333 243.167V245.667C32.3333 246.127 31.9602 246.5 31.5 246.5H27.3333C26.8731 246.5 26.5 246.127 26.5 245.667V243.167C26.5 242.706 26.8731 242.333 27.3333 242.333Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="key" data-node-id="2007:1389">
+<g id="Géométrie_2" data-node-id="I2007:1389;5:1759" clip-path="url(#clip1_2007_1345)">
+<path id="Vector_13" data-node-id="I2007:1389;5:1760" d="M26.1548 291.512C25.8423 291.824 25.6666 292.248 25.6665 292.69V294.5C25.6665 294.721 25.7543 294.933 25.9106 295.089C26.0669 295.246 26.2788 295.333 26.4998 295.333H28.9998C29.2209 295.333 29.4328 295.246 29.5891 295.089C29.7454 294.933 29.8332 294.721 29.8332 294.5V293.667C29.8332 293.446 29.921 293.234 30.0772 293.077C30.2335 292.921 30.4455 292.833 30.6665 292.833H31.4998C31.7209 292.833 31.9328 292.746 32.0891 292.589C32.2454 292.433 32.3332 292.221 32.3332 292V291.167C32.3332 290.946 32.421 290.734 32.5772 290.577C32.7335 290.421 32.9455 290.333 33.1665 290.333H33.3098C33.7518 290.333 34.1757 290.158 34.4882 289.845L35.1665 289.167C36.3247 289.57 37.5855 289.569 38.7427 289.162C39.8999 288.756 40.885 287.969 41.5368 286.93C42.1886 285.891 42.4685 284.662 42.3308 283.443C42.193 282.224 41.6458 281.089 40.7785 280.221C39.9113 279.354 38.7754 278.807 37.5567 278.669C36.338 278.531 35.1087 278.811 34.0697 279.463C33.0308 280.115 32.2438 281.1 31.8375 282.257C31.4313 283.414 31.4297 284.675 31.8332 285.833L26.1548 291.512Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_14" data-node-id="I2007:1389;5:1761" d="M37.7502 283.667C37.9803 283.667 38.1668 283.48 38.1668 283.25C38.1668 283.02 37.9803 282.833 37.7502 282.833C37.52 282.833 37.3335 283.02 37.3335 283.25C37.3335 283.48 37.52 283.667 37.7502 283.667Z" fill="#9EB0C7" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="sessions" data-node-id="2007:1390">
+<g id="Géométrie_3" data-node-id="I2007:1390;5:2606">
+<path id="Vector_15" data-node-id="I2007:1390;5:2607" d="M33.9998 339.167V342.5M42.3332 335.256V337.5C42.3332 337.942 42.1576 338.366 41.845 338.679C41.5325 338.991 41.1085 339.167 40.6665 339.167H27.3332C26.8911 339.167 26.4672 338.991 26.1547 338.679C25.8421 338.366 25.6665 337.942 25.6665 337.5V329.167C25.6665 328.725 25.8421 328.301 26.1547 327.988C26.4672 327.676 26.8911 327.5 27.3332 327.5H34.5773M30.6665 342.5H37.3332" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path id="Vector_16" data-node-id="I2007:1390;5:2608" d="M42.3335 330C42.3335 331.381 41.2142 332.5 39.8335 332.5C38.4528 332.5 37.3335 331.381 37.3335 330C37.3335 328.619 38.4528 327.5 39.8335 327.5C41.2142 327.5 42.3335 328.619 42.3335 330Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+</g>
+</g>
+<g id="server" data-node-id="2007:1391">
+<g id="Géométrie_4" data-node-id="I2007:1391;5:2165" clip-path="url(#clip2_2007_1345)">
+<path id="Vector_17" data-node-id="I2007:1391;5:2166" d="M27.3332 374.667H40.6665C41.587 374.667 42.3332 375.413 42.3332 376.333V379.667C42.3332 380.587 41.587 381.333 40.6665 381.333H27.3332C26.4127 381.333 25.6665 380.587 25.6665 379.667V376.333C25.6665 375.413 26.4127 374.667 27.3332 374.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_18" data-node-id="I2007:1391;5:2167" d="M27.3332 384.667H40.6665C41.587 384.667 42.3332 385.413 42.3332 386.333V389.667C42.3332 390.587 41.587 391.333 40.6665 391.333H27.3332C26.4127 391.333 25.6665 390.587 25.6665 389.667V386.333C25.6665 385.413 26.4127 384.667 27.3332 384.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_19" data-node-id="I2007:1391;5:2168" d="M29 378H29.0083M29 388H29.0083" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="audit_2" data-node-id="2007:1392">
+<g id="Géométrie_5" data-node-id="I2007:1392;5:2985">
+<path id="Vector_20" data-node-id="I2007:1392;5:2986" d="M31.4998 422.667H36.4998C36.9601 422.667 37.3332 423.04 37.3332 423.5V425.167C37.3332 425.627 36.9601 426 36.4998 426H31.4998C31.0396 426 30.6665 425.627 30.6665 425.167V423.5C30.6665 423.04 31.0396 422.667 31.4998 422.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_21" data-node-id="I2007:1392;5:2987" d="M37.3335 424.333H39.0002C39.4422 424.333 39.8661 424.509 40.1787 424.821C40.4912 425.134 40.6668 425.558 40.6668 426V437.667C40.6668 438.109 40.4912 438.533 40.1787 438.845C39.8661 439.158 39.4422 439.333 39.0002 439.333H29.0002C28.5581 439.333 28.1342 439.158 27.8217 438.845C27.5091 438.533 27.3335 438.109 27.3335 437.667V426C27.3335 425.558 27.5091 425.134 27.8217 424.821C28.1342 424.509 28.5581 424.333 29.0002 424.333H30.6668M34.0002 430.167H37.3335M34.0002 434.333H37.3335M30.6668 430.167H30.6752M30.6668 434.333H30.6752" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="settings" data-node-id="2007:1393">
+<g id="Géométrie_6" data-node-id="I2007:1393;5:2785">
+<path id="Vector_22" data-node-id="I2007:1393;5:2786" d="M32.0594 520.447C32.1053 519.964 32.3297 519.515 32.6887 519.189C33.0476 518.862 33.5154 518.681 34.0007 518.681C34.4859 518.681 34.9537 518.862 35.3127 519.189C35.6716 519.515 35.896 519.964 35.9419 520.447C35.9695 520.759 36.0719 521.06 36.2404 521.324C36.4088 521.588 36.6385 521.807 36.9098 521.964C37.1811 522.12 37.4862 522.209 37.7992 522.223C38.1121 522.237 38.4238 522.175 38.7078 522.043C39.1487 521.842 39.6483 521.813 40.1094 521.961C40.5705 522.109 40.9601 522.423 41.2024 522.843C41.4446 523.262 41.5222 523.756 41.42 524.23C41.3178 524.703 41.0431 525.121 40.6494 525.403C40.3931 525.583 40.1838 525.822 40.0393 526.1C39.8949 526.378 39.8195 526.686 39.8195 527C39.8195 527.313 39.8949 527.621 40.0393 527.899C40.1838 528.177 40.3931 528.416 40.6494 528.596C41.0431 528.878 41.3178 529.296 41.42 529.77C41.5222 530.243 41.4446 530.737 41.2024 531.157C40.9601 531.576 40.5705 531.89 40.1094 532.038C39.6483 532.186 39.1487 532.157 38.7078 531.957C38.4238 531.824 38.1121 531.762 37.7992 531.776C37.4862 531.79 37.1811 531.879 36.9098 532.035C36.6385 532.192 36.4088 532.411 36.2404 532.676C36.0719 532.94 35.9695 533.24 35.9419 533.553C35.896 534.036 35.6716 534.484 35.3127 534.811C34.9537 535.137 34.4859 535.318 34.0007 535.318C33.5154 535.318 33.0476 535.137 32.6887 534.811C32.3297 534.484 32.1053 534.036 32.0594 533.553C32.0319 533.24 31.9295 532.939 31.761 532.675C31.5924 532.411 31.3627 532.191 31.0913 532.035C30.8198 531.878 30.5146 531.789 30.2016 531.776C29.8885 531.762 29.5768 531.824 29.2928 531.957C28.8518 532.157 28.3522 532.186 27.8911 532.038C27.43 531.89 27.0404 531.576 26.7982 531.157C26.5559 530.737 26.4783 530.243 26.5806 529.77C26.6828 529.296 26.9574 528.878 27.3511 528.596C27.6074 528.416 27.8167 528.177 27.9612 527.899C28.1056 527.621 28.181 527.313 28.181 527C28.181 526.686 28.1056 526.378 27.9612 526.1C27.8167 525.822 27.6074 525.583 27.3511 525.403C26.958 525.121 26.6838 524.703 26.5818 524.23C26.4799 523.757 26.5574 523.263 26.7994 522.844C27.0414 522.425 27.4305 522.111 27.8912 521.963C28.3518 521.815 28.8511 521.843 29.2919 522.043C29.5759 522.175 29.8875 522.237 30.2005 522.223C30.5135 522.209 30.8185 522.12 31.0899 521.964C31.3612 521.807 31.5908 521.588 31.7593 521.324C31.9278 521.06 32.0302 520.759 32.0578 520.447" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_23" data-node-id="I2007:1393;5:2787" d="M36.5 527C36.5 528.381 35.3807 529.5 34 529.5C32.6193 529.5 31.5 528.381 31.5 527C31.5 525.619 32.6193 524.5 34 524.5C35.3807 524.5 36.5 525.619 36.5 527Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="Logo OpenBastion" data-node-id="2007:1394">
+<g id="Symbole" data-node-id="I2007:1394;5:1304">
+<g id="Construction du symbole" data-node-id="I2007:1394;5:1305">
+<g id="bastion-symbol" data-node-id="I2007:1394;5:1306">
+<path id="Vector_24" data-node-id="I2007:1394;5:1307" d="M28.6875 32.1562H33.8438V34.9688H44.1562V32.1562H49.3125V42.4688L46.5 47.625L39 52.7812L31.5 47.625L28.6875 42.4688V32.1562ZM39 38.4844C37.9688 38.4844 37.125 39.3281 37.125 40.3594C37.125 41.0625 37.5 41.6719 38.0625 42V44.8125H39.9375V42C40.5 41.6719 40.875 41.0625 40.875 40.3594C40.875 39.3281 40.0312 38.4844 39 38.4844Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path id="Vector_25" data-node-id="I2007:1394;5:1308" d="M44.1562 32.1562H49.3125V39.6562L46.5 41.5312V34.9688H44.1562V32.1562Z" fill="#00D1FF"/>
+</g>
+</g>
+</g>
+</g>
+<text id="Sécurité" data-node-id="2044:2318" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="400"><tspan x="56" y="484.227">S&#xe9;curit&#xe9;</tspan></text>
+<g id="OpenBastion / A / Security / Dark" data-node-id="2044:2319">
+<g id="Géométrie_7" data-node-id="I2044:2319;5:1705">
+<path id="Vector_26" data-node-id="I2044:2319;5:1706" d="M50.6668 486.333C50.6668 493 46.0002 496.333 40.4535 498.267C40.163 498.365 39.8475 498.36 39.5602 498.253C34.0002 496.333 29.3335 493 29.3335 486.333V477C29.3335 476.646 29.474 476.307 29.724 476.057C29.9741 475.807 30.3132 475.667 30.6668 475.667C33.3335 475.667 36.6668 474.067 38.9868 472.04C39.2693 471.799 39.6286 471.666 40.0002 471.666C40.3717 471.666 40.731 471.799 41.0135 472.04C43.3468 474.08 46.6668 475.667 49.3335 475.667C49.6871 475.667 50.0263 475.807 50.2763 476.057C50.5264 476.307 50.6668 476.646 50.6668 477V486.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+<path id="Vector_27" data-node-id="I2044:2319;5:1707" d="M36 485L38.6667 487.667L44 482.333" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+</g>
+</g>
+</g>
+<g id="Espace principal" data-node-id="2007:1395" clip-path="url(#clip3_2007_1345)">
+<rect width="1208" height="1040" transform="translate(232)" fill="#F4F7FB"/>
+<g id="Barre supérieure" data-node-id="2007:1396">
+<rect width="1208" height="72" transform="translate(232)" fill="white"/>
+<g id="Bordure inférieure" data-node-id="2007:1397">
+<rect width="1208" height="1" transform="translate(232 71)" fill="#E2E8F0"/>
+</g>
+<text id="Espace de travail_2" data-node-id="2007:1398" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="264" y="38.5">Espace de travail</tspan></text>
+<text id="/" data-node-id="2007:1399" fill="#A8B5C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="375" y="38.5">/</tspan></text>
+<text id="Sessions_2" data-node-id="2007:1400" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="392" y="38.5">Sessions</tspan></text>
+<g id="Recherche globale" data-node-id="2007:1401">
+<rect x="877" y="18" width="306" height="36" rx="6" fill="#F4F7FB"/>
+<text id="Rechercher une ressource…" data-node-id="2007:1402" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="915" y="38.5">Rechercher une ressource&#x2026;</tspan></text>
+<text id="⌘ K" data-node-id="2007:1403" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1142" y="37.6364">&#x2318; K</tspan></text>
+<g id="search" data-node-id="2007:1404">
+<g id="Géométrie_8" data-node-id="I2007:1404;5:2763">
+<path id="Vector_28" data-node-id="I2007:1404;5:2764" d="M903.875 41.875L900.801 38.8008" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path id="Vector_29" data-node-id="I2007:1404;5:2765" d="M902.458 34.7917C902.458 37.9213 899.921 40.4583 896.792 40.4583C893.662 40.4583 891.125 37.9213 891.125 34.7917C891.125 31.6621 893.662 29.125 896.792 29.125C899.921 29.125 902.458 31.6621 902.458 34.7917Z" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+</g>
+</g>
+<g id="help_2" data-node-id="2007:1405">
+<path id="Vector_30" data-node-id="2007:1406" d="M1227.75 36C1227.75 39.7279 1224.73 42.75 1221 42.75C1217.27 42.75 1214.25 39.7279 1214.25 36C1214.25 32.2721 1217.27 29.25 1221 29.25C1224.73 29.25 1227.75 32.2721 1227.75 36Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path id="Vector_31" data-node-id="2007:1407" d="M1218.75 33.75C1218.75 33.1533 1218.99 32.581 1219.41 32.159C1219.83 31.7371 1220.4 31.5 1221 31.5C1221.6 31.5 1222.17 31.7371 1222.59 32.159C1223.01 32.581 1223.25 33.1533 1223.25 33.75C1223.25 35.25 1221 35.25 1221 37.5M1221 39.75H1221.01" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+<g id="Notification non lue" data-node-id="2007:1408">
+<rect x="1270" y="25" width="5" height="5" rx="2.5" fill="#0B5ED7"/>
+</g>
+<g id="État environnement" data-node-id="2007:1409">
+<rect x="1306" y="22" width="107" height="28" rx="5" fill="#EAF2FC"/>
+</g>
+<text id="Production_2" data-node-id="2007:1410" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1320" y="38.6364">Production</tspan></text>
+<g id="bell" data-node-id="2007:1411">
+<g id="Géométrie_9" data-node-id="I2007:1411;5:2751">
+<path id="Vector_32" data-node-id="I2007:1411;5:2752" d="M1264.7 42.75C1264.83 42.978 1265.02 43.1674 1265.25 43.299C1265.48 43.4306 1265.74 43.4999 1266 43.4999C1266.26 43.4999 1266.52 43.4306 1266.75 43.299C1266.98 43.1674 1267.17 42.978 1267.3 42.75M1259.45 38.4945C1259.35 38.6019 1259.28 38.7354 1259.26 38.8789C1259.24 39.0223 1259.26 39.1695 1259.31 39.3025C1259.37 39.4356 1259.47 39.5487 1259.59 39.6281C1259.71 39.7075 1259.86 39.7499 1260 39.75H1272C1272.15 39.7501 1272.29 39.7079 1272.41 39.6286C1272.53 39.5493 1272.63 39.4363 1272.69 39.3034C1272.75 39.1705 1272.76 39.0233 1272.74 38.8798C1272.72 38.7364 1272.65 38.6028 1272.56 38.4952C1271.56 37.467 1270.5 36.3743 1270.5 33C1270.5 31.8065 1270.03 30.6619 1269.18 29.818C1268.34 28.9741 1267.19 28.5 1266 28.5C1264.81 28.5 1263.66 28.9741 1262.82 29.818C1261.97 30.6619 1261.5 31.8065 1261.5 33C1261.5 36.3743 1260.44 37.467 1259.45 38.4945Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+</g>
+</g>
+<g id="Contenu de la page" data-node-id="2007:1412">
+<rect width="1208" height="968" transform="translate(232 72)" fill="#F4F7FB"/>
+<text id="Sessions_3" data-node-id="2007:4643" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="27" letter-spacing="0em" font-weight="600"><tspan x="264" y="128.318">Sessions</tspan></text>
+<text id="Consultez les signaux, leur provenance et leur traitement sans co" data-node-id="2007:4644" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="264" y="155.864">Alertes de session : destination conserv&#xe9;e, fonctionnalit&#xe9; indisponible dans cette version.</tspan></text>
+<g id="Maturité proposée" data-node-id="2007:4645">
+<rect x="1056" y="105" width="161" height="34" rx="5" fill="#FFF7E6"/>
+<text id="◇  Proposé · à confirmer" data-node-id="2007:4646" fill="#805500" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1068" y="124.636">Indisponible</tspan></text>
+</g>
+<g id="Contexte et maturité" data-node-id="2007:4647">
+<rect x="264.5" y="185.5" width="1143" height="102" rx="7.5" fill="white"/>
+<rect x="264.5" y="185.5" width="1143" height="102" rx="7.5" stroke="#E2E8F0"/>
+<text id="MAQUETTE · DONNÉES FICTIVES" data-node-id="2007:4648" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="600"><tspan x="282" y="209.636">INDISPONIBLE &#xb7; CONTRAT API NON EXPOS&#xc9;</tspan></text>
+<text id="Sévérité et transitions fournies par le serveur. Une absence de s" data-node-id="2007:4649" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="282" y="235.864">L&#x2019;interface existe, mais la consultation et l&#x2019;acquittement ne sont pas disponibles.</tspan></text>
+<text id="Contrats, permissions, disponibilité et fraîcheur réelles : statu" data-node-id="2007:4650" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="282" y="267.636">Aucune alerte, aucun compteur et aucune action d&#x2019;acquittement ne sont pr&#xe9;sent&#xe9;s.</tspan></text>
+</g>
+<g id="Onglets des sessions" data-node-id="2007:4651">
+<rect width="1144" height="41" transform="translate(264 312)" fill="#F4F7FB"/>
+<g id="En direct" data-node-id="2007:4652">
+<rect width="180" height="40" transform="translate(264 312)" fill="#F4F7FB"/>
+<text id="En direct_2" data-node-id="2007:4653" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="270" y="331.864">En direct</tspan></text>
+</g>
+<g id="Historique" data-node-id="2007:4655">
+<rect width="180" height="40" transform="translate(454 312)" fill="#F4F7FB"/>
+<text id="Historique_2" data-node-id="2007:4656" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="460" y="331.864">Historique</tspan></text>
+</g>
+<g id="Enregistrements" data-node-id="2007:4658">
+<rect width="180" height="40" transform="translate(644 312)" fill="#F4F7FB"/>
+<text id="Enregistrements_2" data-node-id="2007:4659" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="650" y="331.864">Enregistrements</tspan></text>
+</g>
+<g id="Alertes de Session" data-node-id="2007:4661">
+<rect width="210" height="40" transform="translate(834 312)" fill="#F4F7FB"/>
+<text id="Alertes de Session_2" data-node-id="2007:4662" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="840" y="331.864">Alertes de Session</tspan></text>
+</g>
+<g id="Séparateur_2" data-node-id="2007:4663">
+<rect width="1144" height="1" transform="translate(264 352)" fill="#E2E8F0"/>
+</g>
+<g id="Onglet actif" data-node-id="2007:4664">
+<rect width="160" height="3" transform="translate(834 350)" fill="#0B5ED7"/>
+</g>
+</g>
+<text id="Maquette fictive · ADR-0122 / ADR-0125 / ADR-0129 · Statuts réels" data-node-id="2007:4768" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="264" y="1016.77">Maquette fictive &#xb7; ADR-0122 / ADR-0125 / ADR-0129 &#xb7; Statuts r&#xe9;els &#xe0; confirmer</tspan></text>
+<text id="Gateway uniquement · Refus par défaut" data-node-id="2007:4769" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="1162" y="1016.77">Gateway uniquement &#xb7; Refus par d&#xe9;faut</tspan></text>
+<g id="Destination Alertes indisponible" data-node-id="2044:1007">
+<rect x="264.5" y="377.5" width="1143" height="601" rx="5.5" fill="white"/>
+<rect x="264.5" y="377.5" width="1143" height="601" rx="5.5" stroke="#E2E8F0"/>
+<text id="Alertes de Session_3" data-node-id="2044:1008" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="24" letter-spacing="0em" font-weight="600"><tspan x="312" y="535.727">Alertes de Session</tspan></text>
+<text id="Indisponible" data-node-id="2044:1009" fill="#80540F" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" letter-spacing="0em" font-weight="600"><tspan x="312" y="578.818">Indisponible</tspan></text>
+<text id="Les API de consultation et d’acquittement ne sont pas exposé" data-node-id="2044:1010" fill="#526380" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="16" letter-spacing="0em" font-weight="400"><tspan x="312" y="630.818">Les API de consultation et d&#x2019;acquittement ne sont pas expos&#xe9;es dans l&#x2019;Admin UI livr&#xe9;e.</tspan></text>
+<text id="Cet espace ne représente ni une absence d’alertes ni un état" data-node-id="2044:1011" fill="#526380" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em" font-weight="400"><tspan x="312" y="686.591">Cet espace ne repr&#xe9;sente ni une absence d&#x2019;alertes ni un &#xe9;tat de s&#xe9;curit&#xe9; sain.&#10;</tspan><tspan x="312" y="707.591">Les capacit&#xe9;s futures restent pr&#xe9;vues, sans contr&#xf4;le actif.</tspan></text>
+<text id="Vous pouvez consulter les sessions accessibles depuis En dir" data-node-id="2044:1012" fill="#526380" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="400"><tspan x="312" y="809.727">Vous pouvez consulter les sessions accessibles depuis En direct, Historique et Enregistrements.</tspan></text>
+</g>
+<g id="Nouvelle demande" data-node-id="2044:2224">
+<rect x="1253" y="99" width="155" height="36" rx="6" fill="#0B5ED7"/>
+<text id="↻  Nouvelle demande" data-node-id="2044:2225" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1266" y="119.5">Nouvelle demande</tspan></text>
+</g>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_2007_1345">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+<clipPath id="clip1_2007_1345">
+<rect width="20" height="20" fill="white" transform="translate(24 277)"/>
+</clipPath>
+<clipPath id="clip2_2007_1345">
+<rect width="20" height="20" fill="white" transform="translate(24 373)"/>
+</clipPath>
+<clipPath id="clip3_2007_1345">
+<rect width="1208" height="1040" fill="white" transform="translate(232)"/>
+</clipPath>
+</defs>
 </svg>

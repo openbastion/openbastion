@@ -1,168 +1,111 @@
-<svg width="1440" height="1024" viewBox="0 0 1440 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      .font-inter { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
-      .t-regular { font-weight: 400; }
-      .t-medium { font-weight: 500; }
-      .t-semibold { font-weight: 600; }
-      .t-bold { font-weight: 700; }
-    </style>
-  </defs>
-
-  <!-- ===================================================================== -->
-  <!-- CALQUE 1 : ARRIÈRE-PLAN GLOBAL                                        -->
-  <!-- ===================================================================== -->
-  <g id="Background-Global">
-    <rect width="1440" height="1024" fill="#F8FAFC"/>
-  </g>
-
-  <!-- ===================================================================== -->
-  <!-- CALQUE 2 : PANNEAU GAUCHE (BRANDING & SÉCURITÉ)                       -->
-  <!-- ===================================================================== -->
-  <g id="Left-Panel">
-    <rect width="560" height="1024" fill="#0B192C"/>
-
-    <!-- Logo OpenBastion -->
-    <g id="Brand-Logo">
-      <path d="M76 58L63 63.5V73.5C63 81.8 68.5 89.2 76 91C83.5 89.2 89 81.8 89 73.5V63.5L76 58Z" fill="#FFFFFF"/>
-      <path d="M76 62L69 65V71C69 75.5 72 79.5 76 80.5C80 79.5 83 75.5 83 71V65L76 62Z" fill="#38BDF8"/>
-      <circle cx="76" cy="70.5" r="2" fill="#0B192C"/>
-      <path d="M76 72.5V75.5" stroke="#0B192C" stroke-width="1.8" stroke-linecap="round"/>
-
-      <text x="110" y="80" fill="#FFFFFF" class="font-inter t-bold" font-size="22">OpenBastion</text>
-      <text x="110" y="99" fill="#8A9BB0" class="font-inter t-semibold" font-size="9.5" letter-spacing="0.06em">PRIVILEGED ACCESS</text>
-    </g>
-
-    <!-- Titre et accroche principale -->
-    <g id="Hero-Copy">
-      <text x="56" y="264" fill="#0EA5E9" class="font-inter t-bold" font-size="10.5" letter-spacing="0.06em">SECURE ACCESS. TOTAL CONTROL.</text>
-
-      <text x="56" y="334" fill="#FFFFFF" class="font-inter t-bold" font-size="38" letter-spacing="-0.02em">Vos accès privilégiés.</text>
-      <text x="56" y="390" fill="#FFFFFF" class="font-inter t-bold" font-size="38" letter-spacing="-0.02em">La confiance en plus.</text>
-
-      <text x="56" y="446" fill="#94A3B8" class="font-inter t-regular" font-size="15">Un point d'entrée unique pour vos infrastructures.</text>
-      <text x="56" y="468" fill="#94A3B8" class="font-inter t-regular" font-size="15">Chaque identité vérifiée, chaque session protégée.</text>
-    </g>
-
-    <!-- Carte : La sécurité, à chaque connexion -->
-    <g id="Security-Features-Card">
-      <rect x="56" y="558" width="448" height="200" rx="10" fill="#13263E"/>
-
-      <!-- Icône Bouclier -->
-      <path d="M96 588L85 592.5V600.5C85 607.5 89.7 613.7 96 615.2C102.3 613.7 107 607.5 107 600.5V592.5L96 588Z" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
-      <text x="120" y="601" fill="#FFFFFF" class="font-inter t-semibold" font-size="15">La sécurité, à chaque connexion</text>
-
-      <!-- Liste des points -->
-      <text x="80" y="652" fill="#CBD5E1" class="font-inter t-regular" font-size="13.5">Authentification multifacteur obligatoire</text>
-      <text x="80" y="686" fill="#CBD5E1" class="font-inter t-regular" font-size="13.5">Sessions chiffrées et intégralement tracées</text>
-      <text x="80" y="720" fill="#CBD5E1" class="font-inter t-regular" font-size="13.5">Accès limités au strict nécessaire</text>
-    </g>
-
-    <!-- Pied de page panneau gauche -->
-    <g id="Left-Panel-Footer">
-      <text x="56" y="896" fill="#CBD5E1" class="font-inter t-semibold" font-size="11" letter-spacing="0.04em">PRODUCTION  /  ACME CORPORATION</text>
-      <text x="56" y="927" fill="#64748B" class="font-inter t-regular" font-size="11.5">v2.8.0  •  Hébergé en Union européenne</text>
-      <text x="56" y="980" fill="#64748B" class="font-inter t-regular" font-size="11.5">© 2026 OpenBastion — GNU Affero General Public License v3.0 (AGPL-3.0-only)</text>
-    </g>
-  </g>
-
-  <!-- ===================================================================== -->
-  <!-- CALQUE 3 : PANNEAU DROIT (VÉRIFICATION MFA)                           -->
-  <!-- ===================================================================== -->
-  <g id="Right-Panel">
-    <!-- Sélecteur de langue en haut à droite -->
-    <g id="Language-Selector">
-      <text x="1332" y="52" text-anchor="end" fill="#64748B" class="font-inter t-regular" font-size="12">Français  ·  FR</text>
-    </g>
-
-    <!-- Conteneur central du formulaire MFA (x=780 à 1220, largeur=440) -->
-    <g id="MFA-Form-Container">
-      <!-- Lien : Retour à la connexion -->
-      <g id="Back-Link">
-        <path d="M790 163H781M781 163L784.5 159.5M781 163L784.5 166.5" stroke="#0F62FE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="798" y="167" fill="#0F62FE" class="font-inter t-medium" font-size="12.5">Retour à la connexion</text>
-      </g>
-
-      <!-- Badge icône Authentification / Smartphone -->
-      <g id="MFA-Icon-Badge">
-        <rect x="780" y="202" width="52" height="52" rx="12" fill="#EBF2FE"/>
-        <!-- Smartphone -->
-        <rect x="798" y="219" width="11" height="18" rx="2" stroke="#0F172A" stroke-width="1.8"/>
-        <!-- Ondes sans contact -->
-        <path d="M813 224.5C814.5 226.5 814.5 229.5 813 231.5" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M816.5 222.5C819 225.8 819 230.2 816.5 233.5" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M820 220.5C823.5 225 823.5 231 820 235.5" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round"/>
-      </g>
-
-      <!-- Titre et sous-titre -->
-      <text x="780" y="315" fill="#0F172A" class="font-inter t-bold" font-size="30" letter-spacing="-0.02em">Vérifiez votre identité</text>
-      <text x="780" y="350" fill="#64748B" class="font-inter t-regular" font-size="14">Saisissez le code à 6 chiffres généré par votre</text>
-      <text x="780" y="370" fill="#64748B" class="font-inter t-regular" font-size="14">application d'authentification.</text>
-
-      <!-- Champ : Adresse e-mail du compte -->
-      <g id="Account-Email-Display">
-        <rect x="780" y="400" width="440" height="46" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-        <text x="796" y="428" fill="#0F172A" class="font-inter t-medium" font-size="13.5">camille.martin@acme.com</text>
-      </g>
-
-      <!-- Section : Code de vérification à 6 chiffres -->
-      <g id="OTP-Verification-Section">
-        <text x="780" y="494" fill="#0F172A" class="font-inter t-semibold" font-size="13">Code de vérification</text>
-
-        <!-- 6 Cases OTP (largeur 60px, hauteur 62px, espacement 16px) -->
-        <g id="OTP-Inputs">
-          <!-- Case 1 (Active avec bordure bleue et curseur) -->
-          <rect x="780" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#0F62FE" stroke-width="1.8"/>
-          <line x1="810" y1="528" x2="810" y2="554" stroke="#0F62FE" stroke-width="2" stroke-linecap="round"/>
-
-          <!-- Case 2 -->
-          <rect x="856" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 3 -->
-          <rect x="932" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 4 -->
-          <rect x="1008" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 5 -->
-          <rect x="1084" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-
-          <!-- Case 6 -->
-          <rect x="1160" y="510" width="60" height="62" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.2"/>
-        </g>
-
-        <text x="780" y="603" fill="#64748B" class="font-inter t-regular" font-size="12.5">Le code se renouvelle toutes les 30 secondes.</text>
-      </g>
-
-      <!-- Bouton principal : Vérifier et continuer -->
-      <g id="Button-Verify">
-        <rect x="780" y="636" width="440" height="48" rx="8" fill="#0F62FE"/>
-        <text x="1000" y="665" text-anchor="middle" fill="#FFFFFF" class="font-inter t-semibold" font-size="14.5">Vérifier et continuer</text>
-      </g>
-
-      <!-- Lien secondaire : Utiliser un code de récupération -->
-      <g id="Recovery-Code-Link">
-        <text x="1000" y="726" text-anchor="middle" fill="#0F62FE" class="font-inter t-medium" font-size="13">Autre méthode disponible</text>
-      </g>
-
-      <!-- Encart d'assistance MFA -->
-      <g id="MFA-Help-Banner">
-        <rect x="780" y="766" width="440" height="74" rx="10" fill="#EBF2FE"/>
-        <text x="796" y="796" fill="#475569" class="font-inter t-regular" font-size="12.5">Vous n'avez plus accès à votre application ?</text>
-        <text x="796" y="821" fill="#475569" class="font-inter t-regular" font-size="12.5">Contactez votre administrateur pour rétablir l'accès.</text>
-      </g>
-    </g>
-
-    <!-- Pied de page panneau droit -->
-    <g id="Right-Panel-Footer">
-      <line x1="780" y1="886" x2="1220" y2="886" stroke="#E2E8F0" stroke-width="1"/>
-
-      <text x="836" y="944" text-anchor="middle" fill="#64748B" class="font-inter t-regular" font-size="12">Besoin d'aide ?</text>
-      <text x="974" y="944" text-anchor="middle" fill="#64748B" class="font-inter t-medium" font-size="12">Contactez votre administrateur</text>
-
-      <text x="836" y="982" text-anchor="middle" fill="#64748B" class="font-inter t-regular" font-size="11.5">Confidentialité</text>
-      <text x="888" y="982" text-anchor="middle" fill="#CBD5E1" class="font-inter t-regular" font-size="11.5">·</text>
-      <text x="966" y="982" text-anchor="middle" fill="#64748B" class="font-inter t-regular" font-size="11.5">Conditions d'utilisation</text>
-    </g>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Figma: OpenBastion (yUuwYSnGX7kSLzYX2rZXIU), node 34:36. Embedded font subsets: Inter 4.001 (SIL OFL 1.1, Copyright 2020 The Inter Project Authors) and IBM Plex Mono (SIL OFL 1.1, Copyright 2017 IBM Corp., Reserved Font Name "Plex"); licences in fonts/. -->
+<defs><style>@font-face{font-family:"Inter";font-style:normal;font-weight:400 600;src:url(data:font/woff2;base64,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) format("woff2");}</style></defs>
+<g id="Auth + MFA · Vérification à deux facteurs" data-node-id="34:36" clip-path="url(#clip0_34_36)">
+<rect width="1440" height="1040" fill="#F4F7FB"/>
+<g id="Panneau de marque" data-node-id="34:37">
+<rect width="560" height="1040" fill="#0B1F3B"/>
+<text id="OpenBastion" data-node-id="34:67" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="24" letter-spacing="0em" font-weight="600"><tspan x="110" y="82.2273">OpenBastion</tspan></text>
+<text id="PRIVILEGED ACCESS" data-node-id="34:68" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="111" y="102.136">PRIVILEGED ACCESS</tspan></text>
+<text id="SECURE ACCESS. TOTAL CONTROL." data-node-id="34:69" fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="600"><tspan x="56" y="268">SECURE ACCESS. TOTAL CONTROL.</tspan></text>
+<text id="Vos accès privilégiés.
+La confiance en plus." data-node-id="34:70" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="40" letter-spacing="0em" font-weight="600"><tspan x="56" y="338.545">Vos acc&#xe8;s privil&#xe9;gi&#xe9;s.&#10;</tspan><tspan x="56" y="396.545">La confiance en plus.</tspan></text>
+<text id="Un point d’entrée unique pour vos infrastruct" data-node-id="34:71" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="400"><tspan x="56" y="453.455">Un point d&#x2019;entr&#xe9;e unique pour vos infrastructures.&#10;</tspan><tspan x="56" y="475.455">Chaque identit&#xe9; v&#xe9;rifi&#xe9;e, chaque session prot&#xe9;g&#xe9;e.</tspan></text>
+<g id="Engagements de sécurité" data-node-id="34:72">
+<rect x="56" y="570" width="448" height="200" rx="12" fill="#142E4D"/>
+<g id="OpenBastion / A / Shield / Dark" data-node-id="34:73">
+<g id="Géométrie" data-node-id="I34:73;5:1712">
+<path id="Vector" data-node-id="I34:73;5:1713" d="M106.667 611.333C106.667 618 102 621.333 96.4533 623.267C96.1628 623.365 95.8473 623.36 95.5599 623.253C89.9999 621.333 85.3333 618 85.3333 611.333V602C85.3333 601.646 85.4737 601.307 85.7238 601.057C85.9738 600.807 86.313 600.667 86.6666 600.667C89.3333 600.667 92.6666 599.067 94.9866 597.04C95.2691 596.799 95.6284 596.666 95.9999 596.666C96.3714 596.666 96.7308 596.799 97.0133 597.04C99.3466 599.08 102.667 600.667 105.333 600.667C105.687 600.667 106.026 600.807 106.276 601.057C106.526 601.307 106.667 601.646 106.667 602V611.333Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="white"/>
+</g>
+</g>
+<text id="La sécurité, à chaque connexion" data-node-id="34:76" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="600"><tspan x="120" y="610.455">La s&#xe9;curit&#xe9;, &#xe0; chaque connexion</tspan></text>
+<text id="Authentification multifacteur obligatoire" data-node-id="34:77" fill="#D0DCEB" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="400"><tspan x="80" y="662.227">Authentification multifacteur obligatoire</tspan></text>
+<text id="Sessions chiffrées et intégralement tracées" data-node-id="34:78" fill="#D0DCEB" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="400"><tspan x="80" y="697.227">Sessions chiffr&#xe9;es et int&#xe9;gralement trac&#xe9;es</tspan></text>
+<text id="Accès limités au strict nécessaire" data-node-id="34:79" fill="#D0DCEB" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="400"><tspan x="80" y="732.227">Acc&#xe8;s limit&#xe9;s au strict n&#xe9;cessaire</tspan></text>
+</g>
+<text id="PRODUCTION  /  ACME CORPORATION" data-node-id="34:80" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="56" y="911">PRODUCTION  /  ACME CORPORATION</tspan></text>
+<text id="v2.8.0  •  Hébergé en Union européenne" data-node-id="34:81" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="56" y="942">v2.8.0  &#x2022;  H&#xe9;berg&#xe9; en Union europ&#xe9;enne</tspan></text>
+<text id="© 2026 OpenBastion" data-node-id="34:82" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="56" y="996">&#xa9; 2026 OpenBastion</tspan></text>
+<g id="OpenBastion / Logo / Dark" data-node-id="34:146">
+<g id="Symbole" data-node-id="I34:146;5:1304">
+<g id="Construction du symbole" data-node-id="I34:146;5:1305">
+<g id="bastion-symbol" data-node-id="I34:146;5:1306">
+<path id="Vector_2" data-node-id="I34:146;5:1307" d="M62.25 62.875H69.125V66.625H82.875V62.875H89.75V76.625L86 83.5L76 90.375L66 83.5L62.25 76.625V62.875ZM76 71.3125C74.625 71.3125 73.5 72.4375 73.5 73.8125C73.5 74.75 74 75.5625 74.75 76V79.75H77.25V76C78 75.5625 78.5 74.75 78.5 73.8125C78.5 72.4375 77.375 71.3125 76 71.3125Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path id="Vector_3" data-node-id="I34:146;5:1308" d="M82.875 62.875H89.75V72.875L86 75.375V66.625H82.875V62.875Z" fill="#00D1FF"/>
+</g>
+</g>
+</g>
+</g>
+</g>
+<g id="Authentification" data-node-id="34:38">
+<text id="Français  ·  FR" data-node-id="34:86" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="1252" y="52.8636">Fran&#xe7;ais  &#xb7;  FR</tspan></text>
+<text id="Besoin d’aide ?  Contactez votre administrateur" data-node-id="34:87" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="740" y="959.864">Besoin d&#x2019;aide ?  Contactez votre administrateur</tspan></text>
+<text id="Confidentialité     ·     Conditions d’utilisation" data-node-id="34:88" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="778" y="998">Confidentialit&#xe9;     &#xb7;     Conditions d&#x2019;utilisation</tspan></text>
+<text id="←  Retour à la connexion" data-node-id="34:115" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="780" y="169.864">&#x2190;  Retour &#xe0; la connexion</tspan></text>
+<g id="Authentification multifacteur" data-node-id="34:116">
+<rect x="780.5" y="205.5" width="55" height="55" rx="11.5" fill="#E9F2FF"/>
+<rect x="780.5" y="205.5" width="55" height="55" rx="11.5" stroke="#E9F2FF"/>
+<g id="OpenBastion / A / MFA / Light" data-node-id="34:117">
+<g id="Géométrie_2" data-node-id="I34:117;5:1629">
+<path id="Vector_4" data-node-id="I34:117;5:1630" d="M800 229H806.667C807.403 229 808 229.597 808 230.333V243.667C808 244.403 807.403 245 806.667 245H800C799.264 245 798.667 244.403 798.667 243.667V230.333C798.667 229.597 799.264 229 800 229Z" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#0B1F3B"/>
+<path id="Vector_5" data-node-id="I34:117;5:1631" d="M813.333 232.093C814.186 233.588 814.634 235.279 814.634 237C814.634 238.721 814.186 240.412 813.333 241.907M817.947 229.28C819.279 231.635 819.979 234.294 819.979 237C819.979 239.706 819.279 242.365 817.947 244.72M822.547 226.467C824.383 229.673 825.351 233.303 825.353 236.998C825.355 240.693 824.393 244.325 822.56 247.533" stroke-width="2.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#0B1F3B"/>
+</g>
+</g>
+</g>
+<text id="Vérifiez votre identité" data-node-id="34:121" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="30" letter-spacing="0em" font-weight="600"><tspan x="780" y="319.909">V&#xe9;rifiez votre identit&#xe9;</tspan></text>
+<text id="Saisissez le code à 6 chiffres généré par votre
+ap" data-node-id="34:122" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em" font-weight="400"><tspan x="780" y="356.091">Saisissez le code &#xe0; 6 chiffres g&#xe9;n&#xe9;r&#xe9; par votre&#10;</tspan><tspan x="780" y="376.091">application d&#x2019;authentification.</tspan></text>
+<g id="Compte connecté" data-node-id="34:123">
+<rect x="780.5" y="405.5" width="439" height="47" rx="7.5" fill="white"/>
+<rect x="780.5" y="405.5" width="439" height="47" rx="7.5" stroke="#DCE4EF"/>
+<text id="camille.martin@acme.com" data-node-id="34:124" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="500"><tspan x="796" y="433.227">camille.martin@acme.com</tspan></text>
+</g>
+<text id="Code de vérification" data-node-id="34:125" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="500"><tspan x="780" y="501.227">Code de v&#xe9;rification</tspan></text>
+<g id="Chiffre 1" data-node-id="34:126">
+<rect x="780.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="780.5" y="518.5" width="59" height="63" rx="7.5" stroke="#0B5ED7"/>
+<g id="Curseur de saisie" data-node-id="34:127">
+<rect width="2" height="26" transform="translate(809 537)" fill="#0B5ED7"/>
+</g>
+</g>
+<g id="Chiffre 2" data-node-id="34:128">
+<rect x="856.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="856.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+</g>
+<g id="Chiffre 3" data-node-id="34:129">
+<rect x="932.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="932.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+</g>
+<g id="Chiffre 4" data-node-id="34:130">
+<rect x="1008.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="1008.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+</g>
+<g id="Chiffre 5" data-node-id="34:131">
+<rect x="1084.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="1084.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+</g>
+<g id="Chiffre 6" data-node-id="34:132">
+<rect x="1160.5" y="518.5" width="59" height="63" rx="7.5" fill="white"/>
+<rect x="1160.5" y="518.5" width="59" height="63" rx="7.5" stroke="#CBD5E1"/>
+</g>
+<text id="Le code se renouvelle toutes les 30 secondes." data-node-id="34:133" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="780" y="611.864">Le code se renouvelle toutes les 30 secondes.</tspan></text>
+<g id="Vérifier et continuer" data-node-id="34:134">
+<rect x="780.5" y="646.5" width="439" height="47" rx="7.5" fill="#0B5ED7"/>
+<rect x="780.5" y="646.5" width="439" height="47" rx="7.5" stroke="#0B5ED7"/>
+<text id="Vérifier et continuer_2" data-node-id="34:135" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="14" letter-spacing="0em" font-weight="600"><tspan x="932.427" y="674.091">V&#xe9;rifier et continuer</tspan></text>
+</g>
+<text id="Utiliser un code de récupération" data-node-id="34:136" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="500"><tspan x="900.57" y="737.227">Utiliser un code de r&#xe9;cup&#xe9;ration</tspan></text>
+<g id="Aide authentificateur" data-node-id="34:137">
+<rect x="780.5" y="780.5" width="439" height="76" rx="7.5" fill="#E9F2FF"/>
+<rect x="780.5" y="780.5" width="439" height="76" rx="7.5" stroke="#E9F2FF"/>
+<text id="Vous n’avez plus accès à votre application ?" data-node-id="34:138" fill="#365477" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="796" y="807.864">Vous n&#x2019;avez plus acc&#xe8;s &#xe0; votre application ?</tspan></text>
+<text id="Contactez votre administrateur pour rétablir l’acc" data-node-id="34:139" fill="#365477" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="796" y="833.864">Contactez votre administrateur pour r&#xe9;tablir l&#x2019;acc&#xe8;s.</tspan></text>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_34_36">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+</defs>
 </svg>

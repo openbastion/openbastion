@@ -1,272 +1,306 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="1440" height="1080" viewBox="0 0 1440 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-      .title-lg { font-size: 28px; font-weight: 700; fill: #0F172A; letter-spacing: -0.02em; }
-      .subtitle-md { font-size: 13.5px; font-weight: 400; fill: #64748B; }
-      .card-title { font-size: 17px; font-weight: 700; fill: #0F172A; }
-      .card-subtitle { font-size: 12.5px; font-weight: 400; fill: #64748B; }
-      .label-sm { font-size: 12.5px; font-weight: 600; fill: #334155; }
-      .input-text { font-size: 13px; font-weight: 400; fill: #1E293B; }
-      .helper-text { font-size: 11.5px; font-weight: 400; fill: #64748B; }
-      .tab-active { font-size: 13.5px; font-weight: 600; fill: #0F172A; }
-      .tab-inactive { font-size: 13.5px; font-weight: 500; fill: #64748B; }
-      .nav-section { font-size: 10.5px; font-weight: 600; fill: #64748B; letter-spacing: 0.06em; }
-      .nav-item { font-size: 13.5px; font-weight: 500; fill: #94A3B8; }
-      .nav-item-active { font-size: 13.5px; font-weight: 600; fill: #FFFFFF; }
-      .toggle-title { font-size: 14px; font-weight: 600; fill: #0F172A; }
-      .toggle-desc { font-size: 12.5px; font-weight: 400; fill: #64748B; }
-      .dark-card-title { font-size: 17px; font-weight: 700; fill: #FFFFFF; }
-      .dark-label { font-size: 12.5px; font-weight: 400; fill: #94A3B8; }
-      .dark-value { font-size: 12.5px; font-weight: 600; fill: #F8FAFC; }
-      .link-cyan { font-size: 12.5px; font-weight: 600; fill: #38BDF8; }
-      .link-blue { font-size: 12.5px; font-weight: 600; fill: #2563EB; }
-    </style>
-    <filter id="cardShadow" x="-2%" y="-2%" width="104%" height="106%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0F172A" flood-opacity="0.04"/>
-    </filter>
-  </defs>
-  <g id="Layer_Background">
-    <rect width="1440" height="1080" fill="#F8FAFC"/>
-  </g>
-  <g id="Layer_Sidebar">
-    <rect x="0" y="0" width="234" height="1080" fill="#0A192F"/>
-    <line x1="234" y1="0" x2="234" y2="1080" stroke="#1E293B" stroke-width="1"/>
-    <g id="Brand_Logo" transform="translate(22, 24)">
-      <rect x="0" y="0" width="32" height="32" rx="8" fill="#172A46" stroke="#233858" stroke-width="1"/>
-      <path d="M16 7L9.5 9.8V14.8C9.5 19.1 12.3 23.1 16 24.3C19.7 23.1 22.5 19.1 22.5 14.8V9.8L16 7Z" stroke="#E2E8F0" stroke-width="1.5" fill="none"/>
-      <path d="M16 11V19M13 14.5L16 11.5L19 14.5" stroke="#38BDF8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="42" y="17" class="font-sans" font-size="16" font-weight="700" fill="#FFFFFF">OpenBastion</text>
-      <text x="42" y="30" class="font-sans" font-size="8.5" font-weight="600" fill="#64748B" letter-spacing="0.08em">PRIVILEGED ACCESS</text>
-    </g>
-    <g id="Workspace_Selector" transform="translate(14, 96)">
-      <rect x="0" y="0" width="206" height="58" rx="10" fill="#112240" stroke="#1E3A5F" stroke-width="1"/>
-      <text x="16" y="25" class="font-sans" font-size="13.5" font-weight="600" fill="#F8FAFC">Production</text>
-      <text x="16" y="43" class="font-sans" font-size="11.5" font-weight="400" fill="#94A3B8">Acme Corporation</text>
-      <path d="M188 25L193 30L188 35" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-    <g id="Nav_Workspace" transform="translate(14, 188)">
-      <text x="10" y="10" class="font-sans nav-section">ESPACE DE TRAVAIL</text>
-      <g id="Nav_Overview" transform="translate(0, 26)">
-        <rect x="8" y="10" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5"/>
-        <rect x="17" y="10" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5"/>
-        <rect x="8" y="19" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5"/>
-        <rect x="17" y="19" width="6" height="6" rx="1" stroke="#64748B" stroke-width="1.5"/>
-        <text x="36" y="22" class="font-sans nav-item">Vue d'ensemble</text>
-      </g>
-      <g id="Nav_PrivilegedAccess" transform="translate(0, 72)">
-        <circle cx="13" cy="15" r="4.5" stroke="#64748B" stroke-width="1.5"/>
-        <path d="M16.5 18.5L23 25M20 22L22 20M22 24L24 22" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="36" y="22" class="font-sans nav-item">Accès privilégiés</text>
-      </g>
-      <g id="Nav_Sessions" transform="translate(0, 118)">
-        <rect x="7" y="10" width="17" height="12" rx="2" stroke="#64748B" stroke-width="1.5"/>
-        <path d="M12 25H19M15.5 22V25" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="36" y="22" class="font-sans nav-item">Sessions</text>
-        <rect x="172" y="8" width="26" height="20" rx="5" fill="#1D4ED8"/>
-        <text x="185" y="22" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#FFFFFF">24</text>
-      </g>
-      <g id="Nav_Infrastructure" transform="translate(0, 164)">
-        <rect x="8" y="9" width="15" height="6" rx="1.5" stroke="#64748B" stroke-width="1.5"/>
-        <rect x="8" y="18" width="15" height="6" rx="1.5" stroke="#64748B" stroke-width="1.5"/>
-        <circle cx="11.5" cy="12" r="1" fill="#64748B"/>
-        <circle cx="11.5" cy="21" r="1" fill="#64748B"/>
-        <text x="36" y="22" class="font-sans nav-item">Infrastructure</text>
-      </g>
-      <g id="Nav_Audit" transform="translate(0, 210)">
-        <rect x="9" y="8" width="13" height="17" rx="2" stroke="#64748B" stroke-width="1.5"/>
-        <path d="M12.5 13H18.5M12.5 17H18.5M12.5 21H16" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="36" y="22" class="font-sans nav-item">Audit &amp; conformité</text>
-      </g>
-      <g id="Nav_Settings_Active" transform="translate(0, 254)">
-        <rect x="0" y="0" width="206" height="40" rx="8" fill="#162D4D"/>
-        <rect x="0" y="8" width="3" height="24" rx="1.5" fill="#38BDF8"/>
-        <circle cx="15.5" cy="20" r="3.5" stroke="#38BDF8" stroke-width="1.6"/>
-        <path d="M15.5 12V14M15.5 26V28M7.5 20H9.5M21.5 20H23.5M10 14.5L11.5 16M19.5 24L21 25.5M21 14.5L19.5 16M11.5 24L10 25.5" stroke="#38BDF8" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="36" y="24" class="font-sans nav-item-active">Paramètres</text>
-      </g>
-    </g>
-    <g id="Nav_Resources" transform="translate(14, 534)">
-      <text x="10" y="10" class="font-sans nav-section">RESSOURCES</text>
-      <g id="Nav_Docs" transform="translate(0, 26)">
-        <path d="M9 8H17L21 12V24C21 24.6 20.6 25 20 25H9C8.4 25 8 24.6 8 24V9C8 8.4 8.4 8 9 8Z" stroke="#64748B" stroke-width="1.5"/>
-        <path d="M12 15H17M12 19H17" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="36" y="22" class="font-sans nav-item">Documentation</text>
-      </g>
-      <g id="Nav_HelpCenter" transform="translate(0, 72)">
-        <circle cx="15" cy="17" r="8" stroke="#64748B" stroke-width="1.5"/>
-        <path d="M13 14.5C13 13.3 13.9 12.5 15 12.5C16.1 12.5 17 13.3 17 14.5C17 15.5 15.8 16 15 17V18" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
-        <circle cx="15" cy="21" r="1" fill="#64748B"/>
-        <text x="36" y="22" class="font-sans nav-item">Centre d'aide</text>
-      </g>
-    </g>
-    <g id="Sidebar_Status_Card" transform="translate(14, 872)">
-      <rect x="0" y="0" width="206" height="96" rx="10" fill="#112240" stroke="#1E3A5F" stroke-width="1"/>
-      <circle cx="18" cy="22" r="3.5" fill="#06B6D4"/>
-      <text x="29" y="26" class="font-sans" font-size="12" font-weight="600" fill="#F8FAFC">Bastion opérationnel</text>
-      <text x="16" y="48" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">Tous les services sont disponibles</text>
-      <line x1="16" y1="64" x2="190" y2="64" stroke="#1E3A5F" stroke-width="1"/>
-      <text x="16" y="81" class="font-sans" font-size="10.5" font-weight="500" fill="#64748B">v2.8.0  ·  EU / Paris</text>
-    </g>
-    <g id="Sidebar_User_Profile" transform="translate(14, 994)">
-      <line x1="-14" y1="-10" x2="220" y2="-10" stroke="#1E293B" stroke-width="1"/>
-      <circle cx="22" cy="24" r="16" fill="#172A46" stroke="#233858" stroke-width="1"/>
-      <circle cx="22" cy="19" r="5" stroke="#94A3B8" stroke-width="1.5"/>
-      <path d="M13 33C14.5 28.5 18 27 22 27C26 27 29.5 28.5 31 33" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round"/>
-      <text x="48" y="21" class="font-sans" font-size="13" font-weight="600" fill="#F8FAFC">Camille Martin</text>
-      <text x="48" y="38" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">Administrateur</text>
-      <path d="M194 22L199 27L194 32" stroke="#94A3B8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-  </g>
-  <g id="Layer_TopHeader">
-    <rect x="234" y="0" width="1206" height="68" fill="#FFFFFF"/>
-    <line x1="234" y1="68" x2="1440" y2="68" stroke="#E2E8F0" stroke-width="1"/>
-    <g id="Header_Breadcrumb" transform="translate(264, 39)">
-      <text x="0" y="0" class="font-sans" font-size="13" font-weight="500" fill="#64748B">Espace de travail</text>
-      <text x="114" y="0" class="font-sans" font-size="13" font-weight="400" fill="#CBD5E1">/</text>
-      <text x="130" y="0" class="font-sans" font-size="13" font-weight="600" fill="#0F172A">Paramètres</text>
-    </g>
-    <g id="Header_Search" transform="translate(876, 16)">
-      <rect x="0" y="0" width="300" height="36" rx="8" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1"/>
-      <circle cx="18" cy="17" r="5.5" stroke="#64748B" stroke-width="1.5"/>
-      <path d="M22 21L26 25" stroke="#64748B" stroke-width="1.5" stroke-linecap="round"/>
-      <text x="36" y="22" class="font-sans" font-size="12.5" font-weight="400" fill="#94A3B8">Rechercher une ressource...</text>
-      <text x="266" y="22" class="font-sans" font-size="11.5" font-weight="500" fill="#94A3B8">⌘ K</text>
-    </g>
-    <g id="Header_Help" transform="translate(1210, 24)">
-      <circle cx="10" cy="10" r="8.5" stroke="#475569" stroke-width="1.5"/>
-      <text x="10" y="14" text-anchor="middle" class="font-sans" font-size="11" font-weight="600" fill="#475569">?</text>
-    </g>
-    <g id="Header_Notifications" transform="translate(1254, 24)">
-      <path d="M10 3C6.7 3 4 5.7 4 9V14L2 16V17H18V16L16 14V9C16 5.7 13.3 3 10 3Z" stroke="#475569" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M8 17C8 18.1 8.9 19 10 19C11.1 19 12 18.1 12 17" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>
-      <circle cx="15" cy="4" r="3" fill="#2563EB"/>
-    </g>
-    <g id="Header_EnvBadge" transform="translate(1304, 20)">
-      <rect x="0" y="0" width="106" height="28" rx="6" fill="#EFF6FF" stroke="#DBEAFE" stroke-width="1"/>
-      <text x="53" y="18" text-anchor="middle" class="font-sans" font-size="12" font-weight="600" fill="#2563EB">Production</text>
-    </g>
-  </g>
-  <g id="Layer_PageHeader" transform="translate(264, 104)">
-    <text x="0" y="26" class="font-sans title-lg">Paramètres</text>
-    <text x="0" y="52" class="font-sans subtitle-md">Configurez votre espace et les règles de sécurité du bastion.</text>
-    <g id="Header_Buttons" transform="translate(840, 2)">
-      <rect x="0" y="0" width="90" height="38" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="45" y="24" text-anchor="middle" class="font-sans" font-size="13" font-weight="600" fill="#334155">Annuler</text>
-      <rect x="106" y="0" width="196" height="38" rx="8" fill="#1D63DC"/>
-      <text x="204" y="24" text-anchor="middle" class="font-sans" font-size="13" font-weight="600" fill="#FFFFFF">Enregistrer les modifications</text>
-    </g>
-    <g id="Settings_Tabs" transform="translate(0, 88)">
-      <line x1="0" y1="34" x2="1146" y2="34" stroke="#E2E8F0" stroke-width="1"/>
-      <text x="8" y="16" class="font-sans tab-active">Général</text>
-      <rect x="0" y="32" width="72" height="2.5" rx="1" fill="#1D63DC"/>
-      <text x="180" y="16" class="font-sans tab-inactive">Sécurité</text>
-      <text x="354" y="16" class="font-sans tab-inactive">Identités &amp; SSO</text>
-      <text x="530" y="16" class="font-sans tab-inactive">Intégrations</text>
-      <text x="704" y="16" class="font-sans tab-inactive">Notifications</text>
-    </g>
-  </g>
-  <g id="Layer_MainContent" transform="translate(264, 256)">
-    <g id="Column_Left">
-      <g id="Card_WorkspaceInfo" filter="url(#cardShadow)">
-        <rect x="0" y="0" width="744" height="292" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="24" y="38" class="font-sans card-title">Informations de l'espace</text>
-        <text x="24" y="61" class="font-sans card-subtitle">Les informations partagées par tous les administrateurs.</text>
-        <g id="Field_OrgName" transform="translate(24, 92)">
-          <text x="0" y="12" class="font-sans label-sm">Nom de l'organisation</text>
-          <rect x="0" y="22" width="336" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="14" y="47" class="font-sans input-text">Acme Corporation</text>
-        </g>
-        <g id="Field_SpaceName" transform="translate(384, 92)">
-          <text x="0" y="12" class="font-sans label-sm">Nom de l'espace</text>
-          <rect x="0" y="22" width="336" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="14" y="47" class="font-sans input-text">Production</text>
-        </g>
-        <g id="Field_BastionURL" transform="translate(24, 180)">
-          <text x="0" y="12" class="font-sans label-sm">URL du bastion</text>
-          <rect x="0" y="22" width="336" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="14" y="47" class="font-sans input-text">bastion.acme.internal</text>
-        </g>
-        <g id="Field_Timezone" transform="translate(384, 180)">
-          <text x="0" y="12" class="font-sans label-sm">Fuseau horaire</text>
-          <rect x="0" y="22" width="336" height="40" rx="8" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-          <text x="14" y="47" class="font-sans input-text">Europe / Paris (UTC+1)</text>
-          <path d="M312 40L316 45L320 40" stroke="#64748B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </g>
-        <text x="24" y="274" class="font-sans helper-text">Cet espace est hébergé dans la région EU · Paris.</text>
-      </g>
-      <g id="Card_DefaultSecurity" transform="translate(0, 316)" filter="url(#cardShadow)">
-        <rect x="0" y="0" width="744" height="334" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="24" y="38" class="font-sans card-title">Sécurité par défaut</text>
-        <text x="24" y="61" class="font-sans card-subtitle">Ces règles s'appliquent à toutes les nouvelles connexions.</text>
-        <g id="Toggle_MFA" transform="translate(24, 94)">
-          <text x="0" y="14" class="font-sans toggle-title">Authentification multifacteur</text>
-          <text x="0" y="35" class="font-sans toggle-desc">Exiger un second facteur pour tous les comptes.</text>
-          <rect x="662" y="10" width="36" height="20" rx="10" fill="#1D63DC"/>
-          <circle cx="688" cy="20" r="7.5" fill="#FFFFFF"/>
-        </g>
-        <line x1="24" y1="150" x2="720" y2="150" stroke="#F1F5F9" stroke-width="1"/>
-        <g id="Toggle_SessionRecording" transform="translate(24, 166)">
-          <text x="0" y="14" class="font-sans toggle-title">Enregistrement des sessions</text>
-          <text x="0" y="35" class="font-sans toggle-desc">Capturer les commandes et les flux de session.</text>
-          <rect x="662" y="10" width="36" height="20" rx="10" fill="#1D63DC"/>
-          <circle cx="688" cy="20" r="7.5" fill="#FFFFFF"/>
-        </g>
-        <line x1="24" y1="222" x2="720" y2="222" stroke="#F1F5F9" stroke-width="1"/>
-        <g id="Toggle_SensitiveApproval" transform="translate(24, 238)">
-          <text x="0" y="14" class="font-sans toggle-title">Approbation des accès sensibles</text>
-          <text x="0" y="35" class="font-sans toggle-desc">Soumettre les ressources critiques à une validation.</text>
-          <rect x="662" y="10" width="36" height="20" rx="10" fill="#1D63DC"/>
-          <circle cx="688" cy="20" r="7.5" fill="#FFFFFF"/>
-        </g>
-        <text x="24" y="314" class="font-sans helper-text">Les modifications de sécurité sont conservées dans le journal d'audit.</text>
-      </g>
-      <text x="0" y="688" class="font-sans helper-text">Dernière modification par Camille Martin · Aujourd'hui à 13:42</text>
-    </g>
-    <g id="Column_Right" transform="translate(768, 0)">
-      <g id="Card_YourInstance">
-        <rect x="0" y="0" width="378" height="262" rx="12" fill="#0B1E38"/>
-        <text x="24" y="38" class="font-sans dark-card-title">Votre instance</text>
-        <rect x="294" y="19" width="60" height="24" rx="6" fill="#0E3A5D"/>
-        <text x="324" y="35" text-anchor="middle" class="font-sans" font-size="11.5" font-weight="600" fill="#38BDF8">À jour</text>
-        <g transform="translate(24, 82)">
-          <text x="0" y="0" class="font-sans dark-label">Version</text>
-          <text x="150" y="0" class="font-sans dark-value">OpenBastion 2.8.0</text>
-          <text x="0" y="34" class="font-sans dark-label">Déploiement</text>
-          <text x="150" y="34" class="font-sans dark-value">Kubernetes · HA</text>
-          <text x="0" y="68" class="font-sans dark-label">Région</text>
-          <text x="150" y="68" class="font-sans dark-value">EU / Paris</text>
-          <text x="0" y="102" class="font-sans dark-label">Licence</text>
-          <text x="150" y="102" class="font-sans dark-value">Open source</text>
-        </g>
-        <text x="24" y="232" class="font-sans link-cyan">Voir les notes de version  ↗</text>
-      </g>
-      <g id="Card_IdentityProvider" transform="translate(0, 286)" filter="url(#cardShadow)">
-        <rect x="0" y="0" width="378" height="242" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-        <text x="24" y="38" class="font-sans card-title">Fournisseur d'identité</text>
-        <rect x="274" y="19" width="80" height="24" rx="6" fill="#EFF6FF"/>
-        <text x="314" y="35" text-anchor="middle" class="font-sans" font-size="11.5" font-weight="600" fill="#2563EB">Connecté</text>
-        <text x="24" y="84" class="font-sans" font-size="20" font-weight="700" fill="#0F172A">Keycloak</text>
-        <text x="24" y="106" class="font-sans card-subtitle">OpenID Connect · acme-production</text>
-        <line x1="24" y1="126" x2="354" y2="126" stroke="#F1F5F9" stroke-width="1"/>
-        <text x="24" y="152" class="font-sans helper-text">Dernière synchronisation</text>
-        <text x="354" y="152" text-anchor="end" class="font-sans label-sm">Il y a 2 min</text>
-        <text x="24" y="180" class="font-sans helper-text">Identités synchronisées</text>
-        <text x="354" y="180" text-anchor="end" class="font-sans label-sm">86</text>
-        <text x="24" y="218" class="font-sans link-blue">Configurer le SSO  →</text>
-      </g>
-      <g id="Card_SecurityByDesign" transform="translate(0, 552)">
-        <rect x="0" y="0" width="378" height="122" rx="12" fill="#EFF6FF" stroke="#DBEAFE" stroke-width="1"/>
-        <text x="24" y="34" class="font-sans" font-size="14.5" font-weight="700" fill="#0F172A">La sécurité, par conception.</text>
-        <text x="24" y="58" class="font-sans" font-size="12.5" font-weight="400" fill="#475569">Privilégiez des accès temporaires et une rotation automatique</text>
-        <text x="24" y="76" class="font-sans" font-size="12.5" font-weight="400" fill="#475569">des secrets.</text>
-        <text x="24" y="104" class="font-sans link-blue">Consulter les bonnes pratiques  ↗</text>
-      </g>
-    </g>
-  </g>
-  <g id="Layer_PageFooter" transform="translate(264, 1036)">
-    <text x="0" y="0" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">Données de démonstration</text>
-    <text x="1146" y="0" text-anchor="end" class="font-sans" font-size="11" font-weight="400" fill="#94A3B8">OpenBastion — Secure Access. Total Control.</text>
-  </g>
+<svg width="1440" height="1040" viewBox="0 0 1440 1040" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Figma: OpenBastion (yUuwYSnGX7kSLzYX2rZXIU), node 5:518. Embedded font subsets: Inter 4.001 (SIL OFL 1.1, Copyright 2020 The Inter Project Authors) and IBM Plex Mono (SIL OFL 1.1, Copyright 2017 IBM Corp., Reserved Font Name "Plex"); licences in fonts/. -->
+<defs><style>@font-face{font-family:"Inter";font-style:normal;font-weight:400 600;src:url(data:font/woff2;base64,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) format("woff2");}</style></defs>
+<g id="OpenBastion · Paramètres" data-node-id="5:518" clip-path="url(#clip0_5_518)">
+<rect width="1440" height="1040" fill="#F4F7FB"/>
+<g id="Navigation principale" data-node-id="5:519">
+<rect width="232" height="1040" fill="#0B1F3B"/>
+<text id="OpenBastion" data-node-id="5:525" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" letter-spacing="0em" font-weight="600"><tspan x="65" y="45.5455">OpenBastion</tspan></text>
+<text id="PRIVILEGED ACCESS" data-node-id="5:526" fill="#8DA5C4" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="8" letter-spacing="0em" font-weight="500"><tspan x="65" y="60.9091">PRIVILEGED ACCESS</tspan></text>
+<g id="Espace de travail" data-node-id="5:527">
+<rect x="16" y="100" width="200" height="56" rx="7" fill="#142D4D"/>
+<text id="Production" data-node-id="5:528" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="500"><tspan x="32" y="122.727">Production</tspan></text>
+<text id="Acme Corporation" data-node-id="5:529" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="32" y="140.5">Acme Corporation</tspan></text>
+<g id="arrow" data-node-id="5:530">
+<path id="Vector" data-node-id="5:531" d="M193.25 122.917L197.333 127L193.25 131.083" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<text id="ESPACE DE TRAVAIL" data-node-id="5:532" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="24" y="199.773">ESPACE DE TRAVAIL</tspan></text>
+<text id="Vue d’ensemble" data-node-id="5:538" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="241.864">Vue d&#x2019;ensemble</tspan></text>
+<text id="Accès privilégiés" data-node-id="5:542" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="289.864">Acc&#xe8;s privil&#xe9;gi&#xe9;s</tspan></text>
+<text id="Sessions" data-node-id="5:546" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="337.864">Sessions</tspan></text>
+<g id="Sessions actives" data-node-id="5:547">
+<rect x="183" y="325" width="24" height="20" rx="4" fill="#0B5ED7"/>
+<text id="24" data-node-id="5:548" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="188" y="336.636">24</tspan></text>
+</g>
+<text id="Infrastructure" data-node-id="5:553" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="385.864">Infrastructure</tspan></text>
+<text id="Audit &amp; conformité" data-node-id="5:557" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="433.864">Audit &#38; conformit&#xe9;</tspan></text>
+<g id="Page active" data-node-id="5:558">
+<rect x="12" y="506" width="208" height="42" rx="6" fill="#193D63"/>
+</g>
+<text id="Paramètres" data-node-id="5:563" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="56" y="529.864">Param&#xe8;tres</tspan></text>
+<g id="Repère actif" data-node-id="5:564">
+<rect y="514" width="3" height="26" rx="1" fill="#00D1FF"/>
+</g>
+<g id="Séparateur" data-node-id="5:565">
+<rect width="184" height="1" transform="translate(24 580)" fill="#26405E"/>
+</g>
+<text id="RESSOURCES" data-node-id="5:566" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="500"><tspan x="24" y="617.773">RESSOURCES</tspan></text>
+<g id="audit" data-node-id="5:567">
+<path id="Vector_2" data-node-id="5:568" d="M34.5 641.5H28.5C28.1022 641.5 27.7206 641.658 27.4393 641.939C27.158 642.221 27 642.602 27 643V655C27 655.398 27.158 655.779 27.4393 656.061C27.7206 656.342 28.1022 656.5 28.5 656.5H37.5C37.8978 656.5 38.2794 656.342 38.5607 656.061C38.842 655.779 39 655.398 39 655V646L34.5 641.5Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_3" data-node-id="5:569" d="M34.5 641.5V646H39M30 649.75H36M30 652.75H33.75" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<text id="Documentation" data-node-id="5:570" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="652.864">Documentation</tspan></text>
+<g id="help" data-node-id="5:571">
+<path id="Vector_4" data-node-id="5:572" d="M39.75 692C39.75 695.728 36.7279 698.75 33 698.75C29.2721 698.75 26.25 695.728 26.25 692C26.25 688.272 29.2721 685.25 33 685.25C36.7279 685.25 39.75 688.272 39.75 692Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_5" data-node-id="5:573" d="M30.75 689.75C30.75 689.153 30.9871 688.581 31.409 688.159C31.831 687.737 32.4033 687.5 33 687.5C33.5967 687.5 34.169 687.737 34.591 688.159C35.0129 688.581 35.25 689.153 35.25 689.75C35.25 691.25 33 691.25 33 693.5M33 695.75H33.0075" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<text id="Centre d’aide" data-node-id="5:574" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="695.864">Centre d&#x2019;aide</tspan></text>
+<g id="État du bastion" data-node-id="5:575">
+<rect x="16" y="846" width="200" height="81" rx="8" fill="#142D4D"/>
+<g id="État connecté" data-node-id="5:576">
+<rect x="30" y="864" width="6" height="6" rx="3" fill="#00D1FF"/>
+</g>
+<text id="Bastion opérationnel" data-node-id="5:577" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="44" y="868.5">Bastion op&#xe9;rationnel</tspan></text>
+<text id="Tous les services sont disponibles" data-node-id="5:578" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="30" y="889.773">Tous les services sont disponibles</tspan></text>
+<text id="v2.8.0  •  EU / Paris" data-node-id="5:579" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="30" y="910.773">v2.8.0  &#x2022;  EU / Paris</tspan></text>
+</g>
+<g id="Séparateur compte" data-node-id="5:580">
+<rect width="200" height="1" transform="translate(16 950)" fill="#26405E"/>
+</g>
+<g id="user" data-node-id="5:581">
+<path id="Vector_6" data-node-id="5:582" d="M40.6668 984.333C40.6668 986.635 38.8013 988.5 36.5002 988.5C34.199 988.5 32.3335 986.635 32.3335 984.333C32.3335 982.032 34.199 980.167 36.5002 980.167C38.8013 980.167 40.6668 982.032 40.6668 984.333Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+<path id="Vector_7" data-node-id="5:583" d="M28.1665 997.875V995.792C28.1665 994.134 28.825 992.544 29.9971 991.372C31.1692 990.2 32.7589 989.542 34.4165 989.542H38.5832C40.2408 989.542 41.8305 990.2 43.0026 991.372C44.1747 992.544 44.8332 994.134 44.8332 995.792V997.875" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#B4C3D6"/>
+</g>
+<text id="Camille Martin" data-node-id="5:584" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="63" y="981.864">Camille Martin</tspan></text>
+<text id="Administrateur" data-node-id="5:585" fill="#9EB0C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="63" y="999.636">Administrateur</tspan></text>
+<g id="arrow_2" data-node-id="5:586">
+<path id="Vector_8" data-node-id="5:587" d="M199.875 984.708L203.667 988.5L199.875 992.292" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+<g id="dashboard" data-node-id="5:3580">
+<g id="Géométrie" data-node-id="I5:3580;5:2776">
+<path id="Vector_9" data-node-id="I5:3580;5:2777" d="M27.3333 231.5H31.5C31.9602 231.5 32.3333 231.873 32.3333 232.333V238.167C32.3333 238.627 31.9602 239 31.5 239H27.3333C26.8731 239 26.5 238.627 26.5 238.167V232.333C26.5 231.873 26.8731 231.5 27.3333 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_10" data-node-id="I5:3580;5:2778" d="M36.4998 231.5H40.6665C41.1267 231.5 41.4998 231.873 41.4998 232.333V234.833C41.4998 235.294 41.1267 235.667 40.6665 235.667H36.4998C36.0396 235.667 35.6665 235.294 35.6665 234.833V232.333C35.6665 231.873 36.0396 231.5 36.4998 231.5Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_11" data-node-id="I5:3580;5:2779" d="M36.4998 239H40.6665C41.1267 239 41.4998 239.373 41.4998 239.833V245.667C41.4998 246.127 41.1267 246.5 40.6665 246.5H36.4998C36.0396 246.5 35.6665 246.127 35.6665 245.667V239.833C35.6665 239.373 36.0396 239 36.4998 239Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_12" data-node-id="I5:3580;5:2780" d="M27.3333 242.333H31.5C31.9602 242.333 32.3333 242.706 32.3333 243.167V245.667C32.3333 246.127 31.9602 246.5 31.5 246.5H27.3333C26.8731 246.5 26.5 246.127 26.5 245.667V243.167C26.5 242.706 26.8731 242.333 27.3333 242.333Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="key" data-node-id="5:3586">
+<g id="Géométrie_2" data-node-id="I5:3586;5:1759" clip-path="url(#clip1_5_518)">
+<path id="Vector_13" data-node-id="I5:3586;5:1760" d="M26.1548 291.512C25.8423 291.824 25.6666 292.248 25.6665 292.69V294.5C25.6665 294.721 25.7543 294.933 25.9106 295.089C26.0669 295.246 26.2788 295.333 26.4998 295.333H28.9998C29.2209 295.333 29.4328 295.246 29.5891 295.089C29.7454 294.933 29.8332 294.721 29.8332 294.5V293.667C29.8332 293.446 29.921 293.234 30.0772 293.077C30.2335 292.921 30.4455 292.833 30.6665 292.833H31.4998C31.7209 292.833 31.9328 292.746 32.0891 292.589C32.2454 292.433 32.3332 292.221 32.3332 292V291.167C32.3332 290.946 32.421 290.734 32.5772 290.577C32.7335 290.421 32.9455 290.333 33.1665 290.333H33.3098C33.7518 290.333 34.1757 290.158 34.4882 289.845L35.1665 289.167C36.3247 289.57 37.5855 289.569 38.7427 289.162C39.8999 288.756 40.885 287.969 41.5368 286.93C42.1886 285.891 42.4685 284.662 42.3308 283.443C42.193 282.224 41.6458 281.089 40.7785 280.221C39.9113 279.354 38.7754 278.807 37.5567 278.669C36.338 278.531 35.1087 278.811 34.0697 279.463C33.0308 280.115 32.2438 281.1 31.8375 282.257C31.4313 283.414 31.4297 284.675 31.8332 285.833L26.1548 291.512Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_14" data-node-id="I5:3586;5:1761" d="M37.7502 283.667C37.9803 283.667 38.1668 283.48 38.1668 283.25C38.1668 283.02 37.9803 282.833 37.7502 282.833C37.52 282.833 37.3335 283.02 37.3335 283.25C37.3335 283.48 37.52 283.667 37.7502 283.667Z" fill="#9EB0C7" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="sessions" data-node-id="5:3590">
+<g id="Géométrie_3" data-node-id="I5:3590;5:2606">
+<path id="Vector_15" data-node-id="I5:3590;5:2607" d="M33.9998 339.167V342.5M42.3332 335.256V337.5C42.3332 337.942 42.1576 338.366 41.845 338.679C41.5325 338.991 41.1085 339.167 40.6665 339.167H27.3332C26.8911 339.167 26.4672 338.991 26.1547 338.679C25.8421 338.366 25.6665 337.942 25.6665 337.5V329.167C25.6665 328.725 25.8421 328.301 26.1547 327.988C26.4672 327.676 26.8911 327.5 27.3332 327.5H34.5773M30.6665 342.5H37.3332" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_16" data-node-id="I5:3590;5:2608" d="M42.3335 330C42.3335 331.381 41.2142 332.5 39.8335 332.5C38.4528 332.5 37.3335 331.381 37.3335 330C37.3335 328.619 38.4528 327.5 39.8335 327.5C41.2142 327.5 42.3335 328.619 42.3335 330Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="server" data-node-id="5:3594">
+<g id="Géométrie_4" data-node-id="I5:3594;5:2165" clip-path="url(#clip2_5_518)">
+<path id="Vector_17" data-node-id="I5:3594;5:2166" d="M27.3332 374.667H40.6665C41.587 374.667 42.3332 375.413 42.3332 376.333V379.667C42.3332 380.587 41.587 381.333 40.6665 381.333H27.3332C26.4127 381.333 25.6665 380.587 25.6665 379.667V376.333C25.6665 375.413 26.4127 374.667 27.3332 374.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_18" data-node-id="I5:3594;5:2167" d="M27.3332 384.667H40.6665C41.587 384.667 42.3332 385.413 42.3332 386.333V389.667C42.3332 390.587 41.587 391.333 40.6665 391.333H27.3332C26.4127 391.333 25.6665 390.587 25.6665 389.667V386.333C25.6665 385.413 26.4127 384.667 27.3332 384.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_19" data-node-id="I5:3594;5:2168" d="M29 378H29.0083M29 388H29.0083" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="audit_2" data-node-id="5:3599">
+<g id="Géométrie_5" data-node-id="I5:3599;5:2985">
+<path id="Vector_20" data-node-id="I5:3599;5:2986" d="M31.4998 422.667H36.4998C36.9601 422.667 37.3332 423.04 37.3332 423.5V425.167C37.3332 425.627 36.9601 426 36.4998 426H31.4998C31.0396 426 30.6665 425.627 30.6665 425.167V423.5C30.6665 423.04 31.0396 422.667 31.4998 422.667Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_21" data-node-id="I5:3599;5:2987" d="M37.3335 424.333H39.0002C39.4422 424.333 39.8661 424.509 40.1787 424.821C40.4912 425.134 40.6668 425.558 40.6668 426V437.667C40.6668 438.109 40.4912 438.533 40.1787 438.845C39.8661 439.158 39.4422 439.333 39.0002 439.333H29.0002C28.5581 439.333 28.1342 439.158 27.8217 438.845C27.5091 438.533 27.3335 438.109 27.3335 437.667V426C27.3335 425.558 27.5091 425.134 27.8217 424.821C28.1342 424.509 28.5581 424.333 29.0002 424.333H30.6668M34.0002 430.167H37.3335M34.0002 434.333H37.3335M30.6668 430.167H30.6752M30.6668 434.333H30.6752" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+<g id="settings" data-node-id="5:3603">
+<g id="Géométrie_6" data-node-id="I5:3603;5:2785">
+<path id="Vector_22" data-node-id="I5:3603;5:2786" d="M32.0594 520.447C32.1053 519.964 32.3297 519.515 32.6887 519.189C33.0476 518.862 33.5154 518.681 34.0007 518.681C34.4859 518.681 34.9537 518.862 35.3127 519.189C35.6716 519.515 35.896 519.964 35.9419 520.447C35.9695 520.759 36.0719 521.06 36.2404 521.324C36.4088 521.588 36.6385 521.807 36.9098 521.964C37.1811 522.12 37.4862 522.209 37.7992 522.223C38.1121 522.237 38.4238 522.175 38.7078 522.043C39.1487 521.842 39.6483 521.813 40.1094 521.961C40.5705 522.109 40.9601 522.423 41.2024 522.843C41.4446 523.262 41.5222 523.756 41.42 524.23C41.3178 524.703 41.0431 525.121 40.6494 525.403C40.3931 525.583 40.1838 525.822 40.0393 526.1C39.8949 526.378 39.8195 526.686 39.8195 527C39.8195 527.313 39.8949 527.621 40.0393 527.899C40.1838 528.177 40.3931 528.416 40.6494 528.596C41.0431 528.878 41.3178 529.296 41.42 529.77C41.5222 530.243 41.4446 530.737 41.2024 531.157C40.9601 531.576 40.5705 531.89 40.1094 532.038C39.6483 532.186 39.1487 532.157 38.7078 531.957C38.4238 531.824 38.1121 531.762 37.7992 531.776C37.4862 531.79 37.1811 531.879 36.9098 532.035C36.6385 532.192 36.4088 532.411 36.2404 532.676C36.0719 532.94 35.9695 533.24 35.9419 533.553C35.896 534.036 35.6716 534.484 35.3127 534.811C34.9537 535.137 34.4859 535.318 34.0007 535.318C33.5154 535.318 33.0476 535.137 32.6887 534.811C32.3297 534.484 32.1053 534.036 32.0594 533.553C32.0319 533.24 31.9295 532.939 31.761 532.675C31.5924 532.411 31.3627 532.191 31.0913 532.035C30.8198 531.878 30.5146 531.789 30.2016 531.776C29.8885 531.762 29.5768 531.824 29.2928 531.957C28.8518 532.157 28.3522 532.186 27.8911 532.038C27.43 531.89 27.0404 531.576 26.7982 531.157C26.5559 530.737 26.4783 530.243 26.5806 529.77C26.6828 529.296 26.9574 528.878 27.3511 528.596C27.6074 528.416 27.8167 528.177 27.9612 527.899C28.1056 527.621 28.181 527.313 28.181 527C28.181 526.686 28.1056 526.378 27.9612 526.1C27.8167 525.822 27.6074 525.583 27.3511 525.403C26.958 525.121 26.6838 524.703 26.5818 524.23C26.4799 523.757 26.5574 523.263 26.7994 522.844C27.0414 522.425 27.4305 522.111 27.8912 521.963C28.3518 521.815 28.8511 521.843 29.2919 522.043C29.5759 522.175 29.8875 522.237 30.2005 522.223C30.5135 522.209 30.8185 522.12 31.0899 521.964C31.3612 521.807 31.5908 521.588 31.7593 521.324C31.9278 521.06 32.0302 520.759 32.0578 520.447" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+<path id="Vector_23" data-node-id="I5:3603;5:2787" d="M36.5 527C36.5 528.381 35.3807 529.5 34 529.5C32.6193 529.5 31.5 528.381 31.5 527C31.5 525.619 32.6193 524.5 34 524.5C35.3807 524.5 36.5 525.619 36.5 527Z" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round" stroke="#00D1FF"/>
+</g>
+</g>
+<g id="Logo OpenBastion" data-node-id="5:3607">
+<g id="Symbole" data-node-id="I5:3607;5:1304">
+<g id="Construction du symbole" data-node-id="I5:3607;5:1305">
+<g id="bastion-symbol" data-node-id="I5:3607;5:1306">
+<path id="Vector_24" data-node-id="I5:3607;5:1307" d="M28.6875 32.1562H33.8438V34.9688H44.1562V32.1562H49.3125V42.4688L46.5 47.625L39 52.7812L31.5 47.625L28.6875 42.4688V32.1562ZM39 38.4844C37.9688 38.4844 37.125 39.3281 37.125 40.3594C37.125 41.0625 37.5 41.6719 38.0625 42V44.8125H39.9375V42C40.5 41.6719 40.875 41.0625 40.875 40.3594C40.875 39.3281 40.0312 38.4844 39 38.4844Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path id="Vector_25" data-node-id="I5:3607;5:1308" d="M44.1562 32.1562H49.3125V39.6562L46.5 41.5312V34.9688H44.1562V32.1562Z" fill="#00D1FF"/>
+</g>
+</g>
+</g>
+</g>
+<text id="Navigation · Sécurité" data-node-id="2044:967" fill="#B4C3D6" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="56" y="481.864">S&#xe9;curit&#xe9;</tspan></text>
+<g id="Navigation · Sécurité_2" data-node-id="2044:968">
+<g id="Géométrie_7" data-node-id="I2044:968;5:1705">
+<path id="Vector_26" data-node-id="I2044:968;5:1706" d="M50.6668 486.333C50.6668 493 46.0002 496.333 40.4535 498.267C40.163 498.365 39.8475 498.36 39.5602 498.253C34.0002 496.333 29.3335 493 29.3335 486.333V477C29.3335 476.646 29.474 476.307 29.724 476.057C29.9741 475.807 30.3132 475.667 30.6668 475.667C33.3335 475.667 36.6668 474.067 38.9868 472.04C39.2693 471.799 39.6286 471.666 40.0002 471.666C40.3717 471.666 40.731 471.799 41.0135 472.04C43.3468 474.08 46.6668 475.667 49.3335 475.667C49.6871 475.667 50.0263 475.807 50.2763 476.057C50.5264 476.307 50.6668 476.646 50.6668 477V486.333Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+<path id="Vector_27" data-node-id="I2044:968;5:1707" d="M36 485L38.6667 487.667L44 482.333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#9EB0C7"/>
+</g>
+</g>
+</g>
+<g id="Espace principal" data-node-id="5:588" clip-path="url(#clip3_5_518)">
+<rect width="1208" height="1040" transform="translate(232)" fill="#F4F7FB"/>
+<g id="Barre supérieure" data-node-id="5:589">
+<rect width="1208" height="72" transform="translate(232)" fill="white"/>
+<g id="Bordure inférieure" data-node-id="5:590">
+<rect width="1208" height="1" transform="translate(232 71)" fill="#E2E8F0"/>
+</g>
+<text id="Espace de travail_2" data-node-id="5:591" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="264" y="38.5">Espace de travail</tspan></text>
+<text id="/" data-node-id="5:592" fill="#A8B5C7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="375" y="38.5">/</tspan></text>
+<text id="Paramètres_2" data-node-id="5:593" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="392" y="38.5">Param&#xe8;tres</tspan></text>
+<g id="Recherche globale" data-node-id="5:594">
+<rect x="877" y="18" width="306" height="36" rx="6" fill="#F4F7FB"/>
+<text id="Rechercher une ressource…" data-node-id="5:598" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="915" y="38.5">Rechercher une ressource&#x2026;</tspan></text>
+<text id="⌘ K" data-node-id="5:599" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1142" y="37.6364">&#x2318; K</tspan></text>
+<g id="search" data-node-id="5:3616">
+<g id="Géométrie_8" data-node-id="I5:3616;5:2763">
+<path id="Vector_28" data-node-id="I5:3616;5:2764" d="M903.875 41.875L900.801 38.8008" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path id="Vector_29" data-node-id="I5:3616;5:2765" d="M902.458 34.7917C902.458 37.9213 899.921 40.4583 896.792 40.4583C893.662 40.4583 891.125 37.9213 891.125 34.7917C891.125 31.6621 893.662 29.125 896.792 29.125C899.921 29.125 902.458 31.6621 902.458 34.7917Z" stroke-width="1.41667" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+</g>
+</g>
+<g id="help_2" data-node-id="5:600">
+<path id="Vector_30" data-node-id="5:601" d="M1227.75 36C1227.75 39.7279 1224.73 42.75 1221 42.75C1217.27 42.75 1214.25 39.7279 1214.25 36C1214.25 32.2721 1217.27 29.25 1221 29.25C1224.73 29.25 1227.75 32.2721 1227.75 36Z" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+<path id="Vector_31" data-node-id="5:602" d="M1218.75 33.75C1218.75 33.1533 1218.99 32.581 1219.41 32.159C1219.83 31.7371 1220.4 31.5 1221 31.5C1221.6 31.5 1222.17 31.7371 1222.59 32.159C1223.01 32.581 1223.25 33.1533 1223.25 33.75C1223.25 35.25 1221 35.25 1221 37.5M1221 39.75H1221.01" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+<g id="Notification non lue" data-node-id="5:605">
+<rect x="1270" y="25" width="5" height="5" rx="2.5" fill="#0B5ED7"/>
+</g>
+<g id="État environnement" data-node-id="5:606">
+<rect x="1306" y="22" width="107" height="28" rx="5" fill="#EAF2FC"/>
+</g>
+<text id="Production_2" data-node-id="5:607" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1320" y="38.6364">Production</tspan></text>
+<g id="bell" data-node-id="5:3613">
+<g id="Géométrie_9" data-node-id="I5:3613;5:2751">
+<path id="Vector_32" data-node-id="I5:3613;5:2752" d="M1264.7 42.75C1264.83 42.978 1265.02 43.1674 1265.25 43.299C1265.48 43.4306 1265.74 43.4999 1266 43.4999C1266.26 43.4999 1266.52 43.4306 1266.75 43.299C1266.98 43.1674 1267.17 42.978 1267.3 42.75M1259.45 38.4945C1259.35 38.6019 1259.28 38.7354 1259.26 38.8789C1259.24 39.0223 1259.26 39.1695 1259.31 39.3025C1259.37 39.4356 1259.47 39.5487 1259.59 39.6281C1259.71 39.7075 1259.86 39.7499 1260 39.75H1272C1272.15 39.7501 1272.29 39.7079 1272.41 39.6286C1272.53 39.5493 1272.63 39.4363 1272.69 39.3034C1272.75 39.1705 1272.76 39.0233 1272.74 38.8798C1272.72 38.7364 1272.65 38.6028 1272.56 38.4952C1271.56 37.467 1270.5 36.3743 1270.5 33C1270.5 31.8065 1270.03 30.6619 1269.18 29.818C1268.34 28.9741 1267.19 28.5 1266 28.5C1264.81 28.5 1263.66 28.9741 1262.82 29.818C1261.97 30.6619 1261.5 31.8065 1261.5 33C1261.5 36.3743 1260.44 37.467 1259.45 38.4945Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#64748B"/>
+</g>
+</g>
+</g>
+<g id="Contenu de la page" data-node-id="5:608">
+<rect width="1208" height="968" transform="translate(232 72)" fill="#F4F7FB"/>
+<text id="Paramètres_3" data-node-id="5:1209" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="27" letter-spacing="0em" font-weight="600"><tspan x="264" y="128.318">Param&#xe8;tres</tspan></text>
+<text id="Configurez votre espace et les règles de sécurité du bastion." data-node-id="5:1210" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="264" y="154.864">Param&#xe8;tres du d&#xe9;ploiement &#xb7; consultation en lecture seule.</tspan></text>
+<g id="Statut · Lecture seule" data-node-id="5:1213">
+<rect x="1211.5" y="105.5" width="196" height="35" rx="5.5" fill="#EAF2FC"/>
+<rect x="1211.5" y="105.5" width="196" height="35" rx="5.5" stroke="#E2E8F0"/>
+<text id="Enregistrer les modifications" data-node-id="5:1214" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1231" y="126.5">Lecture seule</tspan></text>
+</g>
+<g id="Sections des paramètres" data-node-id="5:1215">
+<rect width="1144" height="41" transform="translate(264 184)" fill="#F4F7FB"/>
+<text id="Général" data-node-id="5:1216" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="600"><tspan x="270" y="203.864">G&#xe9;n&#xe9;ral</tspan></text>
+<text id="Sécurité" data-node-id="5:1217" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="445" y="203.864">S&#xe9;curit&#xe9;</tspan></text>
+<text id="Identités &amp; SSO" data-node-id="5:1218" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="620" y="203.864">Identit&#xe9;s &#38; SSO</tspan></text>
+<text id="Intégrations" data-node-id="5:1219" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="795" y="203.864">Int&#xe9;grations</tspan></text>
+<text id="Notifications" data-node-id="5:1220" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="400"><tspan x="970" y="203.864">Notifications</tspan></text>
+<g id="Séparateur_2" data-node-id="5:1221">
+<rect width="1144" height="1" transform="translate(264 224)" fill="#E2E8F0"/>
+</g>
+<g id="Onglet actif" data-node-id="5:1222">
+<rect width="74" height="3" transform="translate(264 222)" fill="#0B5ED7"/>
+</g>
+</g>
+<g id="Informations de l’espace" data-node-id="5:1223">
+<rect x="264.5" y="249.5" width="743" height="299" rx="7.5" fill="white"/>
+<rect x="264.5" y="249.5" width="743" height="299" rx="7.5" stroke="#E2E8F0"/>
+<text id="Informations de l’espace_2" data-node-id="5:1224" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="600"><tspan x="284" y="283.455">Informations de l&#x2019;espace</tspan></text>
+<text id="Les informations partagées par tous les administrateurs." data-node-id="5:1225" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="284" y="306.5">Valeurs descriptives &#xb7; aucune modification depuis cette interface.</tspan></text>
+<text id="Nom de l’organisation" data-node-id="5:1226" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="284" y="347.5">Nom de l&#x2019;organisation</tspan></text>
+<g id="Nom de l’organisation · lecture seule" data-node-id="5:1227">
+<rect x="284.5" y="360.5" width="339" height="36" rx="4.5" fill="#F4F7FB"/>
+<rect x="284.5" y="360.5" width="339" height="36" rx="4.5" stroke="#E2E8F0"/>
+<text id="Acme Corporation_2" data-node-id="5:1228" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="296" y="381.5">Acme Corporation</tspan></text>
+</g>
+<text id="Nom de l’espace" data-node-id="5:1229" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="648" y="347.5">Nom de l&#x2019;espace</tspan></text>
+<g id="Nom de l’espace · lecture seule" data-node-id="5:1230">
+<rect x="648.5" y="360.5" width="339" height="36" rx="4.5" fill="#F4F7FB"/>
+<rect x="648.5" y="360.5" width="339" height="36" rx="4.5" stroke="#E2E8F0"/>
+<text id="Production_3" data-node-id="5:1231" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="660" y="381.5">Production</tspan></text>
+</g>
+<text id="URL du bastion" data-node-id="5:1232" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="284" y="434.5">URL du bastion</tspan></text>
+<g id="URL du bastion · lecture seule" data-node-id="5:1233">
+<rect x="284.5" y="447.5" width="339" height="36" rx="4.5" fill="#F4F7FB"/>
+<rect x="284.5" y="447.5" width="339" height="36" rx="4.5" stroke="#E2E8F0"/>
+<text id="bastion.acme.internal" data-node-id="5:1234" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="296" y="468.5">bastion.acme.internal</tspan></text>
+</g>
+<text id="Fuseau horaire" data-node-id="5:1235" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="648" y="434.5">Fuseau horaire</tspan></text>
+<g id="Fuseau horaire · lecture seule" data-node-id="5:1236">
+<rect x="648.5" y="447.5" width="339" height="36" rx="4.5" fill="#F4F7FB"/>
+<rect x="648.5" y="447.5" width="339" height="36" rx="4.5" stroke="#E2E8F0"/>
+<text id="Europe / Paris (UTC+1)" data-node-id="5:1237" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="660" y="468.5">Europe / Paris (UTC+1)</tspan></text>
+</g>
+<text id="Cet espace est hébergé dans la région EU · Paris." data-node-id="5:1239" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="284" y="525.636">Exemple fictif de d&#xe9;ploiement &#xb7; configuration g&#xe9;r&#xe9;e hors Admin UI.</tspan></text>
+</g>
+<g id="Sécurité par défaut" data-node-id="5:1240">
+<rect x="264.5" y="573.5" width="743" height="324" rx="7.5" fill="white"/>
+<rect x="264.5" y="573.5" width="743" height="324" rx="7.5" stroke="#E2E8F0"/>
+<text id="Sécurité par défaut_2" data-node-id="5:1241" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="600"><tspan x="284" y="607.455">S&#xe9;curit&#xe9; par d&#xe9;faut</tspan></text>
+<text id="Ces règles s’appliquent à toutes les nouvelles connexions." data-node-id="5:1242" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="284" y="630.5">M&#xe9;canismes d&#xe9;crits au niveau du d&#xe9;ploiement, sans commande de configuration.</tspan></text>
+<text id="Authentification multifacteur" data-node-id="5:1243" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="284" y="673.864">Authentification multifacteur</tspan></text>
+<text id="Exiger un second facteur pour tous les comptes." data-node-id="5:1244" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="284" y="692.636">Second facteur selon les r&#xe8;gles du d&#xe9;ploiement.</tspan></text>
+<g id="Séparateur_3" data-node-id="5:1247">
+<rect width="704" height="1" transform="translate(284 712)" fill="#E2E8F0"/>
+</g>
+<text id="Enregistrement des sessions" data-node-id="5:1248" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="284" y="740.864">Enregistrement des sessions</tspan></text>
+<text id="Capturer les commandes et les flux de session." data-node-id="5:1249" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="284" y="759.636">Capacit&#xe9;s selon le protocole et la disponibilit&#xe9; r&#xe9;elle.</tspan></text>
+<g id="Séparateur_4" data-node-id="5:1252">
+<rect width="704" height="1" transform="translate(284 779)" fill="#E2E8F0"/>
+</g>
+<text id="Approbation des accès sensibles" data-node-id="5:1253" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="12" letter-spacing="0em" font-weight="500"><tspan x="284" y="807.864">Approbation des acc&#xe8;s sensibles</tspan></text>
+<text id="Soumettre les ressources critiques à une validation." data-node-id="5:1254" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="284" y="826.636">D&#xe9;cision soumise aux autorisations et &#xe0; la confirmation du serveur.</tspan></text>
+<g id="Séparateur_5" data-node-id="5:1257">
+<rect width="704" height="1" transform="translate(284 858)" fill="#E2E8F0"/>
+</g>
+<text id="Les modifications de sécurité sont conservées dans le journal d’audit." data-node-id="5:1258" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="284" y="884.636">Aucune modification de s&#xe9;curit&#xe9; expos&#xe9;e ici.</tspan></text>
+<text id="Valeur descriptive · Déploiement" data-node-id="2044:604" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="884" y="679.636">D&#xe9;ploiement</tspan></text>
+<text id="Valeur descriptive · Déploiement_2" data-node-id="2044:605" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="884" y="746.636">D&#xe9;ploiement</tspan></text>
+<text id="Valeur descriptive · Déploiement_3" data-node-id="2044:606" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="884" y="813.636">D&#xe9;ploiement</tspan></text>
+</g>
+<g id="Informations du système" data-node-id="5:1259">
+<rect x="1032" y="249" width="376" height="249" rx="8" fill="#0B1F3B"/>
+<text id="Votre instance" data-node-id="5:1260" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="600"><tspan x="1052" y="283.455">Votre instance</tspan></text>
+<g id="À jour" data-node-id="5:1261">
+<rect x="1326" y="267" width="62" height="23" rx="4" fill="#193D63"/>
+<text id="À jour_2" data-node-id="5:1262" fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1334" y="281.636">Exemple</tspan></text>
+</g>
+<text id="Version" data-node-id="5:1263" fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="1052" y="335.5">Version</tspan></text>
+<text id="OpenBastion 2.8.0" data-node-id="5:1264" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1204" y="335.5">OpenBastion 2.8.0</tspan></text>
+<text id="Déploiement" data-node-id="5:1265" fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="1052" y="369.5">D&#xe9;ploiement</tspan></text>
+<text id="Kubernetes · HA" data-node-id="5:1266" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1204" y="369.5">Kubernetes &#xb7; HA</tspan></text>
+<text id="Région" data-node-id="5:1267" fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="1052" y="403.5">R&#xe9;gion</tspan></text>
+<text id="EU / Paris" data-node-id="5:1268" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1204" y="403.5">EU / Paris</tspan></text>
+<text id="Licence" data-node-id="5:1269" fill="#A9BCD3" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="1052" y="437.5">Licence</tspan></text>
+<text id="Open source" data-node-id="5:1270" fill="white" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="500"><tspan x="1204" y="437.5">Open source</tspan></text>
+<text id="Voir les notes de version  ↗" data-node-id="5:1271" fill="#00D1FF" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1052" y="477.636">Voir les notes de version  &#x2197;</tspan></text>
+</g>
+<g id="Fournisseur d’identité" data-node-id="5:1272">
+<rect x="1032.5" y="522.5" width="375" height="235" rx="7.5" fill="white"/>
+<rect x="1032.5" y="522.5" width="375" height="235" rx="7.5" stroke="#E2E8F0"/>
+<text id="Fournisseur d’identité_2" data-node-id="5:1273" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="15" letter-spacing="0em" font-weight="600"><tspan x="1052" y="556.455">Fournisseur d&#x2019;identit&#xe9;</tspan></text>
+<g id="Connecté" data-node-id="5:1274">
+<rect x="1306" y="541" width="82" height="23" rx="4" fill="#EAF2FC"/>
+<text id="Connecté_2" data-node-id="5:1275" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1314" y="555.636">Inconnu</tspan></text>
+</g>
+<text id="Keycloak" data-node-id="5:1276" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="18" letter-spacing="0em" font-weight="600"><tspan x="1052" y="605.545">Keycloak</tspan></text>
+<text id="OpenID Connect · acme-production" data-node-id="5:1277" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="1052" y="627.5">OpenID Connect &#xb7; acme-production</tspan></text>
+<g id="Séparateur_6" data-node-id="5:1278">
+<rect width="336" height="1" transform="translate(1052 645)" fill="#E2E8F0"/>
+</g>
+<text id="Dernière synchronisation" data-node-id="5:1279" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1052" y="672.636">Derni&#xe8;re synchronisation</tspan></text>
+<text id="Il y a 2 min" data-node-id="5:1280" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1317" y="672.636">Non expos&#xe9;e</tspan></text>
+<text id="Identités synchronisées" data-node-id="5:1281" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="1052" y="699.636">Identit&#xe9;s synchronis&#xe9;es</tspan></text>
+<text id="86" data-node-id="5:1282" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1368" y="699.636">&#x2014;</tspan></text>
+<text id="Configurer le SSO  →" data-node-id="5:1283" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1052" y="738.636">Configuration hors Admin UI</tspan></text>
+</g>
+<g id="Conseil de configuration" data-node-id="5:1284">
+<rect x="1032" y="782" width="376" height="116" rx="8" fill="#EAF2FC"/>
+<text id="La sécurité, par conception." data-node-id="5:1285" fill="#0B1F3B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="13" letter-spacing="0em" font-weight="600"><tspan x="1050" y="811.727">La s&#xe9;curit&#xe9;, par conception.</tspan></text>
+<text id="Privilégiez des accès temporaires et une rotation automatique des secrets." data-node-id="5:1286" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="11" letter-spacing="0em" font-weight="400"><tspan x="1050" y="836.5">Privil&#xe9;giez des acc&#xe8;s temporaires et une rotation automatique </tspan><tspan x="1050" y="849.5">des secrets.</tspan></text>
+<text id="Consulter les bonnes pratiques  ↗" data-node-id="5:1287" fill="#0B5ED7" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="500"><tspan x="1050" y="882.636">Consulter les bonnes pratiques  &#x2197;</tspan></text>
+</g>
+<text id="Dernière modification par Camille Martin · Aujourd’hui à 13:42" data-node-id="5:1288" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="10" letter-spacing="0em" font-weight="400"><tspan x="264" y="946.636">Lecture seule &#xb7; aucune modification ni synchronisation ex&#xe9;cut&#xe9;e.</tspan></text>
+<text id="Données de démonstration" data-node-id="5:1289" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="264" y="1016.77">Donn&#xe9;es de d&#xe9;monstration</tspan></text>
+<text id="OpenBastion — Secure Access. Total Control." data-node-id="5:1290" fill="#64748B" style="white-space: pre" xml:space="preserve" font-family="Inter" font-size="9" letter-spacing="0em" font-weight="400"><tspan x="1174" y="1016.77">OpenBastion &#x2014; Secure Access. Total Control.</tspan></text>
+</g>
+</g>
+</g>
+<defs>
+<clipPath id="clip0_5_518">
+<rect width="1440" height="1040" fill="white"/>
+</clipPath>
+<clipPath id="clip1_5_518">
+<rect width="20" height="20" fill="white" transform="translate(24 277)"/>
+</clipPath>
+<clipPath id="clip2_5_518">
+<rect width="20" height="20" fill="white" transform="translate(24 373)"/>
+</clipPath>
+<clipPath id="clip3_5_518">
+<rect width="1208" height="1040" fill="white" transform="translate(232)"/>
+</clipPath>
+</defs>
 </svg>
