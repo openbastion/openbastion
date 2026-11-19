@@ -38,9 +38,9 @@ function Metric({
         : <p className="dashboard-metric-value">{value ?? "—"}</p>}
       <p className="dashboard-metric-detail">{error ? t("overview.apiUnavailable") : detail}</p>
       {action && !loading && !error ? (
-        <button type="button" className="dashboard-metric-link" onClick={action.onClick}>
+        <Button variant="ghost" className="dashboard-metric-link" onClick={action.onClick}>
           {action.label}<ArrowRight size={15} />
-        </button>
+        </Button>
       ) : null}
     </article>
   );
@@ -100,7 +100,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
           <h3>{t("overview.welcome.title")}</h3>
           <p>{t("overview.welcome.body")}</p>
         </div>
-        {onNavigate ? <button type="button" className="dashboard-metric-link" onClick={() => onNavigate("policies")}>{t("overview.welcome.action")} <ArrowRight size={15} /></button> : null}
+        {onNavigate ? <Button variant="ghost" className="dashboard-metric-link" onClick={() => onNavigate("policies")}>{t("overview.welcome.action")} <ArrowRight size={15} /></Button> : null}
       </section>
 
       <div className="dashboard-metrics" role="group" aria-label={t("overview.metricsAria")}>
@@ -151,7 +151,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
           {accounts.data && accounts.data.totalItems > accountItems.length ? (
             <p className="dashboard-panel-note">{t("overview.scope.rotationNote", { loaded: accountItems.length, total: accounts.data.totalItems })}</p>
           ) : null}
-          {onNavigate ? <button type="button" className="dashboard-posture-action" onClick={() => onNavigate("security")}>{t("overview.posture.action")} <ArrowRight size={15} /></button> : null}
+          {onNavigate ? <Button variant="ghost" className="dashboard-posture-action" onClick={() => onNavigate("security")}>{t("overview.posture.action")} <ArrowRight size={15} /></Button> : null}
         </section>
       </div>
 
@@ -161,7 +161,7 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
             <h3 id="dashboard-approvals-title">{t("overview.recent.title")}</h3>
             <p>{t("overview.recent.subtitle")}</p>
           </div>
-          {onNavigate ? <button type="button" className="dashboard-text-link" onClick={() => onNavigate("sessions")}>{t("overview.recent.action")} <ArrowRight size={15} /></button> : null}
+          {onNavigate ? <Button variant="ghost" className="dashboard-text-link" onClick={() => onNavigate("sessions")}>{t("overview.recent.action")} <ArrowRight size={15} /></Button> : null}
         </div>
         {approvals.loading ? <p className="dashboard-table-state" role="status">{t("common.loading")}</p> : null}
         {approvals.error ? <p className="dashboard-table-state" role="alert">{t("overview.apiUnavailable")}</p> : null}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Select } from "@openbastion/ui";
 import { ChevronDown, Search } from "@openbastion/icons";
 import { Account, ApiError, Page } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
@@ -67,9 +68,9 @@ export function Infrastructure({ onNavigate }: { onNavigate?: (tab: "accounts") 
           subtitle={t("infrastructure.topology.subtitle")}
           badge={
             <span className="reference-select is-unavailable">
-              <select disabled aria-label={t("infrastructure.topology.environment")} title={unavailable}>
+              <Select disabled aria-label={t("infrastructure.topology.environment")} title={unavailable}>
                 <option>{t("shell.environment.production")}</option>
-              </select>
+              </Select>
               <ChevronDown size={14} aria-hidden="true" />
             </span>
           }
@@ -124,9 +125,9 @@ export function Infrastructure({ onNavigate }: { onNavigate?: (tab: "accounts") 
         className="infrastructure-connectors"
         badge={
           onNavigate ? (
-            <button type="button" className="reference-link" onClick={() => onNavigate("accounts")}>
+            <Button variant="ghost" className="reference-link" onClick={() => onNavigate("accounts")}>
               {t("infrastructure.connectors.action")} <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : undefined
         }
         footer={t("infrastructure.connectors.note")}

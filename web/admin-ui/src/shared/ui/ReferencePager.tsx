@@ -1,3 +1,4 @@
+import { Button } from "./Button";
 import { useAppTranslation } from "../i18n";
 
 // The pagination line of the reference tables: the range shown, then numbered pages around the
@@ -39,25 +40,25 @@ export function ReferencePager({
           : t("common.pager.range", { first, last, total: totalItems, noun })}
       </p>
       <nav className="reference-pager" aria-label={t("common.pager.aria")}>
-        <button type="button" aria-label={t("common.pager.previous")} disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <Button variant="ghost" aria-label={t("common.pager.previous")} disabled={page <= 1} onClick={() => onPage(page - 1)}>
           ‹
-        </button>
+        </Button>
         {pageWindow(page, pageCount).map((entry, index) => entry === "gap"
           ? <span key={`gap-${index}`} className="reference-pager-gap" aria-hidden="true">…</span>
           : (
-            <button
+            <Button
               key={entry}
-              type="button"
+              variant="ghost"
               aria-label={t("common.pager.page", { page: entry })}
               aria-current={entry === page ? "page" : undefined}
               onClick={() => onPage(entry)}
             >
               {entry}
-            </button>
+            </Button>
           ))}
-        <button type="button" aria-label={t("common.pager.next")} disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
+        <Button variant="ghost" aria-label={t("common.pager.next")} disabled={page >= pageCount} onClick={() => onPage(page + 1)}>
           ›
-        </button>
+        </Button>
       </nav>
     </div>
   );

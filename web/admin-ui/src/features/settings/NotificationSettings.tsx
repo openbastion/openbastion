@@ -1,3 +1,4 @@
+import { Input, Label } from "@openbastion/ui";
 import { useAppTranslation } from "../../shared/i18n";
 import { ReferenceCard, ReferenceFact, ReferenceFacts, ReferenceRow, ReferenceState } from "../../shared/ui/ReferenceCard";
 
@@ -35,16 +36,16 @@ export function NotificationSettings() {
           footer={t("settings.notifications.config.note")}
         >
           <div className="settings-fields">
-            <label className="settings-field">
+            <Label className="settings-field">
               <span>{t("settings.notifications.config.alert")}</span>
-              <input value={t("settings.notifications.config.alertValue")} readOnly />
+              <Input value={t("settings.notifications.config.alertValue")} readOnly />
               <small>{t("settings.notifications.config.alertNote")}</small>
-            </label>
-            <label className="settings-field">
+            </Label>
+            <Label className="settings-field">
               <span>{t("settings.notifications.config.breakglass")}</span>
-              <input value={t("settings.notifications.config.breakglassValue")} readOnly />
+              <Input value={t("settings.notifications.config.breakglassValue")} readOnly />
               <small>{t("settings.notifications.config.breakglassNote")}</small>
-            </label>
+            </Label>
           </div>
           <ReferenceFacts className="settings-facts-inline">
             <ReferenceFact label={t("settings.notifications.config.transport")} value={t("settings.notifications.config.transportValue")} />

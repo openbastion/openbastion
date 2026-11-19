@@ -1,3 +1,4 @@
+import { Input, Label } from "@openbastion/ui";
 import { useAppTranslation } from "../../shared/i18n";
 import { ReferenceCard, ReferenceFact, ReferenceFacts, ReferenceRow, ReferenceState } from "../../shared/ui/ReferenceCard";
 
@@ -44,10 +45,10 @@ export function IdentitySettings() {
 
         <ReferenceCard title={t("settings.identities.mapping.title")} subtitle={t("settings.identities.mapping.subtitle")}>
           <div className="settings-fields settings-fields--single">
-            <label className="settings-field">
+            <Label className="settings-field">
               <span>{t("settings.identities.mapping.variable")}</span>
-              <input value={t("settings.identities.mapping.variableValue")} readOnly />
-            </label>
+              <Input value={t("settings.identities.mapping.variableValue")} readOnly />
+            </Label>
           </div>
           <p className="settings-inline-note">{t("settings.identities.mapping.variableNote")}</p>
           <p className="settings-inline-fact">

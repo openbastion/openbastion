@@ -1,4 +1,5 @@
 import { FormEvent, ReactNode } from "react";
+import { Form } from "@openbastion/ui";
 import { Notice } from "../Notice";
 import { Button } from "./Button";
 
@@ -24,7 +25,7 @@ export function FormCard({
   children: ReactNode;
 }) {
   return (
-    <form onSubmit={onSubmit} aria-label={label} className="ob-surface ob-form-card">
+    <Form onSubmit={onSubmit} aria-label={label} className="ob-surface ob-form-card">
       {title ? <h3>{title}</h3> : null}
       {hint ? <p className="ob-hint">{hint}</p> : null}
       <div className="ob-form-fields">{children}</div>
@@ -34,6 +35,6 @@ export function FormCard({
           {submitLabel}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

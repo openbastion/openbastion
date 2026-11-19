@@ -2,6 +2,7 @@ import { FormEvent, useRef, useState } from "react";
 import { ApiError, SecretActionStepUpChallenge, Session, sessionPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
+import { Form, FormField, Input } from "@openbastion/ui";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Button } from "../../shared/ui/Button";
 import { Credentials, sign } from "../../shared/webauthn";
@@ -139,10 +140,9 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
         <div className="ob-form-fields" aria-busy={busy}>
           <p className="ob-hint">{t("sessions.secretInjection.challengeExpires", { seconds: challenge.expires_in })}</p>
           {challenge.factors.includes("totp") ? (
-            <form onSubmit={submitTOTP} aria-label={t("sessions.secretInjection.totpForm")}>
-              <label>
-                {t("secondFactor.codeLabel")}
-                <input
+            <Form onSubmit={submitTOTP} aria-label={t("sessions.secretInjection.totpForm")}>
+              <FormField id="secret-injection-totp" label={t("secondFactor.codeLabel")} required>
+                <Input
                   name="totp_code"
                   inputMode="numeric"
                   autoComplete="one-time-code"
@@ -151,13 +151,12 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
                   disabled={busy}
                   value={code}
                   onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 8))}
-                  required
                 />
-              </label>
+              </FormField>
               <Button type="submit" variant="primary" disabled={busy || !/^\d{6,8}$/.test(code)}>
                 {busy ? t("common.actions.working") : t("sessions.secretInjection.confirm")}
               </Button>
-            </form>
+            </Form>
           ) : null}
           {challenge.factors.includes("webauthn") ? (
             <Button variant={challenge.factors.includes("totp") ? "secondary" : "primary"} onClick={() => void useSecurityKey()} disabled={busy}>

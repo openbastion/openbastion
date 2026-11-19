@@ -1,3 +1,4 @@
+import { Button, Input, Label } from "@openbastion/ui";
 import { useAppTranslation } from "../../shared/i18n";
 import { ReferenceCard, ReferenceFact, ReferenceFacts, ReferenceState, ReferenceSwitch } from "../../shared/ui/ReferenceCard";
 
@@ -22,22 +23,22 @@ export function GeneralSettings({ onOpenIdentities }: { onOpenIdentities?: () =>
           footer={t("settings.general.workspace.note")}
         >
           <div className="settings-fields">
-            <label className="settings-field">
+            <Label className="settings-field">
               <span>{t("settings.general.workspace.organisation")}</span>
-              <input value={t("settings.general.unavailable")} readOnly title={unavailable} />
-            </label>
-            <label className="settings-field">
+              <Input value={t("settings.general.unavailable")} readOnly title={unavailable} />
+            </Label>
+            <Label className="settings-field">
               <span>{t("settings.general.workspace.space")}</span>
-              <input value={t("shell.environment.production")} readOnly />
-            </label>
-            <label className="settings-field">
+              <Input value={t("shell.environment.production")} readOnly />
+            </Label>
+            <Label className="settings-field">
               <span>{t("settings.general.workspace.url")}</span>
-              <input value={origin} readOnly title={origin} />
-            </label>
-            <label className="settings-field">
+              <Input value={origin} readOnly title={origin} />
+            </Label>
+            <Label className="settings-field">
               <span>{t("settings.general.workspace.timezone")}</span>
-              <input value={timeZone} readOnly />
-            </label>
+              <Input value={timeZone} readOnly />
+            </Label>
           </div>
         </ReferenceCard>
 
@@ -102,9 +103,9 @@ export function GeneralSettings({ onOpenIdentities }: { onOpenIdentities?: () =>
             <ReferenceFact label={t("settings.general.identity.synced")} value={t("settings.general.unavailable")} unavailable />
           </ReferenceFacts>
           {onOpenIdentities ? (
-            <button type="button" className="reference-link reference-facts-action" onClick={onOpenIdentities}>
+            <Button variant="ghost" className="reference-link reference-facts-action" onClick={onOpenIdentities}>
               {t("settings.general.identity.configure")} <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           ) : null}
         </ReferenceCard>
 

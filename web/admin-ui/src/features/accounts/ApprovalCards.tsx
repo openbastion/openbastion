@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui/Button";
 import { Session } from "../../shared/api";
 import { useAppTranslation } from "../../shared/i18n";
 
@@ -34,9 +35,9 @@ export function ApprovalCards({ sessions, onOpen }: { sessions: Session[]; onOpe
             </header>
             <code className="approval-card-account">{session.privilegedAccountId}</code>
             <p className="approval-card-reason">{session.justification || t("accounts.approvals.noReason")}</p>
-            <button type="button" className="reference-link" onClick={onOpen}>
+            <Button variant="ghost" className="reference-link" onClick={onOpen}>
               {t("accounts.approvals.open")} <span aria-hidden="true">→</span>
-            </button>
+            </Button>
           </article>
         </li>
       ))}

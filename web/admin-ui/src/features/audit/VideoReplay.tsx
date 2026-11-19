@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, VideoRecordingEvent, VideoRecordingEventPage, VideoRecordingSegment } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
+import { FormField, Input } from "@openbastion/ui";
 import { FormCard } from "../../shared/ui/FormCard";
 import { Frame, framesOf, paintFrame, ReplayPainter, UnreadableSegment } from "./replayFrames";
 import { ReplayControls } from "./ReplayControls";
@@ -237,10 +238,9 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
         onSubmit={open}
         error={error}
       >
-        <label>
-          {t("replay.form.session")}
-          <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} required />
-        </label>
+        <FormField id="replay-session" label={t("replay.form.session")} required>
+          <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+        </FormField>
       </FormCard>
       {loading && !frame ? <p className="ob-empty-state" role="status">{t("replay.loading")}</p> : null}
       {frame ? (

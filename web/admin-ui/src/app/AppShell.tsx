@@ -1,7 +1,6 @@
 import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ApiDocumentation,
-  Audit,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -12,7 +11,6 @@ import {
   Menu,
   Moon,
   Notifications,
-  Policies as PoliciesIcon,
   Search,
   Session,
   Security,
@@ -23,6 +21,7 @@ import {
   Sun,
   Users,
 } from "@openbastion/icons";
+import { Button } from "../shared/ui/Button";
 import { TokenClaims } from "../shared/api";
 import {
   OperatorPreferences,
@@ -41,10 +40,8 @@ import { LegalNotice } from "../shared/LegalNotice";
 const tabs = {
   overview: { icon: Dashboard, group: "workspace" },
   accounts: { icon: Users, group: "workspace" },
-  policies: { icon: PoliciesIcon, group: "workspace" },
   sessions: { icon: Session, group: "workspace" },
   infrastructure: { icon: Infrastructure, group: "workspace" },
-  audit: { icon: Audit, group: "workspace" },
   security: { icon: Shield, group: "workspace" },
   posture: { icon: Security, group: "workspace" },
   settings: { icon: Settings, group: "workspace" },
@@ -54,14 +51,13 @@ const groups = ["workspace"] as const;
 
 export type Tab = keyof typeof tabs;
 // The reference sidebar order (Vue d'ensemble, Accès privilégiés, Sessions, Infrastructure,
-// Audit & conformité, Paramètres) with the screens that existed before it kept in place.
+// Audit & conformité, Paramètres). Policies and the recording screen are tabs of those pages,
+// not destinations of their own.
 const tabOrder: Tab[] = [
   "overview",
   "accounts",
-  "policies",
   "sessions",
   "infrastructure",
-  "audit",
   "security",
   "posture",
   "settings",

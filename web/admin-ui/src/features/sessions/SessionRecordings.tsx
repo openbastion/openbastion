@@ -5,6 +5,7 @@ import { useAppTranslation } from "../../shared/i18n";
 import { Notice } from "../../shared/Notice";
 import { Button } from "../../shared/ui/Button";
 import { Badge } from "../../shared/ui/Badge";
+import { Form, Input, Label } from "@openbastion/ui";
 import { Search } from "@openbastion/icons";
 
 function datePart(date: Date): string {
@@ -87,10 +88,10 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
           <p>{t("sessions.recordings.libraryDescription")}</p>
         </div>
       </div>
-      <form className="reference-table-toolbar session-recording-search" onSubmit={search} aria-label={t("sessions.recordings.formAria")}>
-        <label className="reference-search">
+      <Form className="reference-table-toolbar session-recording-search" onSubmit={search} aria-label={t("sessions.recordings.formAria")}>
+        <Label className="reference-search">
           <Search size={15} aria-hidden="true" />
-          <input
+          <Input
             type="search"
             aria-label={t("sessions.recordings.query")}
             minLength={3}
@@ -100,17 +101,17 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
             placeholder={t("sessions.recordings.queryPlaceholder")}
             required
           />
-        </label>
-        <label className="session-toolbar-date">
+        </Label>
+        <Label className="session-toolbar-date">
           <span>{t("sessions.history.from")}</span>
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
-        </label>
-        <label className="session-toolbar-date">
+          <Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+        </Label>
+        <Label className="session-toolbar-date">
           <span>{t("sessions.history.to")}</span>
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
-        </label>
+          <Input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
+        </Label>
         <Button type="submit" variant="primary" disabled={loading}>{t("sessions.recordings.search")}</Button>
-      </form>
+      </Form>
       <Notice error={error} />
       <div className="session-recordings-layout">
         <div className="session-recordings-list" aria-label={t("sessions.recordings.libraryTitle")}>
@@ -121,8 +122,8 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
             <ul className="session-recordings-rows">
               {result.sessions.map((session) => (
                 <li key={session.sessionId}>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
                     className="session-recording-row"
                     aria-current={selected === session.sessionId ? "true" : undefined}
                     aria-label={t("sessions.recordings.selectAria", { id: session.sessionId })}
@@ -136,7 +137,7 @@ export function SessionRecordings({ onOpenRecording }: { onOpenRecording: (sessi
                       <Badge className="reference-pill">{t("sessions.recordings.terminal")}</Badge>
                       <span className="reference-cell-muted" title={t("sessions.recordings.storageUnavailable")}>{t("sessions.recordings.storageUnavailable")}</span>
                     </span>
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
