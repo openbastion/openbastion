@@ -768,6 +768,11 @@ func realVNCTargetFromEnv(t *testing.T) *realVNCTarget {
 	t.Helper()
 	address := os.Getenv("OPENBASTION_VNC_TARGET")
 	if address == "" {
+		// Where a real target is provided (the PostgreSQL CI job), its absence is a failure: a
+		// variable lost on the way once made every real-target test run against the fake alone.
+		if os.Getenv("OPENBASTION_VNC_REQUIRED") != "" {
+			t.Fatal("OPENBASTION_VNC_REQUIRED is set, but OPENBASTION_VNC_TARGET is not: the real VNC target is missing")
+		}
 		return nil
 	}
 	certPEM, err := os.ReadFile(os.Getenv("OPENBASTION_VNC_CA_FILE"))
