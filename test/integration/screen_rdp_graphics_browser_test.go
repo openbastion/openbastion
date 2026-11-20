@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,10 +140,15 @@ func TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser(t *testing.T) {
 	}
 	page.eval(`document.querySelector("canvas.screen-canvas").scrollIntoView({ block: "end" }), true`)
 	page.screenshot(dump, "browser-graphics-3-whole.png")
-	if bright < 100 {
-		t.Fatalf("the taskbar is not on the screen (%d bright pixel(s) in its rows): the page shows only part of the desktop", bright)
-	}
-	t.Logf("the whole desktop is shown: %d bright pixel(s) in the taskbar's rows", bright)
+	// Judged after the replay is read and kept: the replay's key frames are what the proxy's own
+	// framebuffer held, which tells a proxy that lost part of the screen from a page that did.
+	defer func() {
+		if bright < 100 {
+			t.Errorf("the taskbar is not on the screen (%d bright pixel(s) in its rows): the page shows only part of the desktop", bright)
+		} else {
+			t.Logf("the whole desktop is shown: %d bright pixel(s) in the taskbar's rows", bright)
+		}
+	}()
 	var shown [2]int
 	_ = json.Unmarshal(page.eval(`(() => { const c = document.querySelector("canvas.screen-canvas"); return [c.width, c.height]; })()`), &shown)
 
@@ -170,8 +176,10 @@ func TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser(t *testing.T) {
 	// The auditor replays the recording through the public API: complete, at the size shown.
 	var replayed, keyFrames int
 	var lastKey []byte
+	var keys [][]byte
+	var sequence []string
 	waitUntil(t, 60*time.Second, "the sealed recording", func() bool {
-		replayed, keyFrames, lastKey = 0, 0, nil
+		replayed, keyFrames, lastKey, keys, sequence = 0, 0, nil, nil, nil
 		for firstSequence := uint64(1); ; {
 			status, raw := stack.api.call(stack.auditorToken, http.MethodGet, fmt.Sprintf("/sessions/%s/recording/video/segments/%d", id, firstSequence), nil)
 			if status == http.StatusNotFound && firstSequence > 1 {
@@ -199,9 +207,12 @@ func TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser(t *testing.T) {
 					keyFrames++
 					if data, err := base64.StdEncoding.DecodeString(f.FrameData); err == nil {
 						lastKey = data
+						keys = append(keys, data)
+						sequence = append(sequence, "K")
 					}
 				case "png-delta-v1":
 					replayed++
+					sequence = append(sequence, "d")
 				}
 			}
 			if segment.Complete {
@@ -212,6 +223,16 @@ func TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser(t *testing.T) {
 	})
 	if replayed == 0 || keyFrames == 0 || lastKey == nil {
 		t.Fatalf("the replay holds %d frame(s), %d key frame(s)", replayed, keyFrames)
+	}
+	// Every key frame the auditor replays, with its size, for a person to compare with the page.
+	t.Logf("the replay, in order (K key frame, d partial frame): %s", strings.Join(sequence, ""))
+	for i, k := range keys {
+		if cfg, err := png.DecodeConfig(bytes.NewReader(k)); err == nil {
+			t.Logf("replayed key frame %d: %dx%d", i+1, cfg.Width, cfg.Height)
+		}
+		if dump != "" {
+			_ = os.WriteFile(filepath.Join(dump, fmt.Sprintf("browser-graphics-replay-key-%02d.png", i+1)), k, 0o644)
+		}
 	}
 	img, err := png.Decode(bytes.NewReader(lastKey))
 	if err != nil {
