@@ -904,6 +904,7 @@ export default {
       "accounts_disable": "disable an account",
       "accounts_pin": "pin a target's identity",
       "accounts_approval": "require approval on an account",
+      "accounts_screenProfile": "set an account's screen profile",
       "policies_create": "create a policy",
       "sessions_create": "request a session",
       "sessions_breakglass": "request emergency access",

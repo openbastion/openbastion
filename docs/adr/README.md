@@ -280,6 +280,7 @@ Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et
 | 9 | [ADR-0129](0129-tracabilite-ui-roadmap.md) | Les écrans roadmap distinguent les capacités livrées des capacités planifiées | Proposé |
 | 10 | [ADR-0130](0130-connecteurs-protocoles.md) | Les connecteurs et protocoles ne sont visibles qu’après preuve de disponibilité | Proposé |
 | 11 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté |
+| 12 | [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté |
 
 ## Index numérique
 
@@ -418,3 +419,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0129](0129-tracabilite-ui-roadmap.md) | Les écrans roadmap distinguent les capacités livrées des capacités planifiées | Proposé | Alignement UI, contrats et roadmap |
 | [ADR-0130](0130-connecteurs-protocoles.md) | Les connecteurs et protocoles ne sont visibles qu’après preuve de disponibilité | Proposé | Alignement UI, contrats et roadmap |
 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté | Alignement UI, contrats et roadmap |
+| [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté | Alignement UI, contrats et roadmap |

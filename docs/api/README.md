@@ -27,6 +27,7 @@ L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification 
 | `/vault/accounts` | GET / POST | vault | Lister / onboarder un compte privilégié |
 | `/vault/accounts/{id}` | GET / DELETE | vault | Détail / suppression |
 | `/vault/accounts/{id}/host-key` | PUT | vault | Épingler la clé d'hôte de la cible (ADR-0039) |
+| `/vault/accounts/{id}/screen-profile` | PUT | vault | Profil d'écran d'un compte RDP : canaux (`graphics`, `bitmap`) et profondeurs (16, 32) permis, et leurs défauts ; l'opérateur choisit dans ces limites (ADR-0132) |
 | `/vault/accounts/{id}/rotate` | POST | vault | Rotation manuelle |
 | `/policies` | GET / POST | policies | Politiques RBAC |
 | `/audit/events` | GET | audit | Recherche d'événements d'audit |
