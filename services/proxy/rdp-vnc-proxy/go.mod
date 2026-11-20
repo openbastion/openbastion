@@ -14,6 +14,10 @@ require (
 )
 
 require (
+	github.com/go-crypt/x v0.4.12 // indirect
+	github.com/go-krb5/krb5 v0.1.0 // indirect
+	github.com/go-krb5/x v0.3.2 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
