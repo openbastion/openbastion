@@ -45,3 +45,30 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
 
 - **Carte à puce ou Remote Guard** : écartées pour cet ADR. Remote Guard ne délègue aucun secret, ce qui contredit la saisie du secret par le proxy ; la carte à puce demande un matériel côté proxy.
 - **Laisser NTLM rouvert par l'exploitant** : c'est le statu quo, il affaiblit le domaine.
+
+## Mise en œuvre
+
+### Incrément 1 — les tickets, le contexte GSS-API et ses jetons d'enveloppe (20 novembre 2026)
+
+- **Dépendance** : `github.com/go-krb5/krb5` v0.1.0, choisie par le propriétaire le 13 novembre 2026 (« go-krb5/krb5 v0.1.0 »), seule version publiée (15 février 2026), Apache-2.0, épinglée par `go.sum`. Elle tire `go-crypt/x`, `go-krb5/x` et `google/uuid`. `gorilla/sessions`, requis par son module, n'est pas compilé : seuls ses paquets HTTP l'importent, et `pkg/rdp` ne les importe pas. `govulncheck` (v1.9.0) ne trouve aucune vulnérabilité dans le code appelé. Il signale `GO-2026-5932` dans `golang.org/x/crypto` v0.58.0, déjà requis par `main`, non appelé, et sans rapport avec cette dépendance.
+- **Fait** (`pkg/rdp/kerberos.go`, non branché à CredSSP) :
+  - `KerberosConfig` : le royaume, ses KDC (`host:port`, quatre au plus) et le principal de service `TERMSRV/<hôte>`, vérifiés avant tout envoi. La configuration de la bibliothèque est tirée de là seulement : ni `krb5.conf`, ni découverte DNS, ni canonicalisation du nom d'hôte. Les requêtes passent en TCP, et seul AES est permis (RFC 3962), RC4 et DES étant refusés.
+  - les tickets : l'échange AS, puis l'échange TGS, par la bibliothèque. La clé de session doit être AES.
+  - le jeton initial : un AP-REQ qui exige l'authentification mutuelle, avec une sous-clé et un numéro de séquence. Sa somme GSS-API (RFC 4121 §4.1.1) demande l'authentification mutuelle, le séquencement, la confidentialité et l'intégrité, jamais la délégation. Le jeton est encadré pour GSS-API (RFC 1964 §1.1) par `pkg/rdp`.
+  - l'AP-REP : déchiffré sous la clé de session, il doit répéter l'heure de l'authentificateur à la microseconde. La sous-clé de l'accepteur doit être AES. Un KRB-ERROR est refusé avec son code.
+  - les jetons d'enveloppe scellés (RFC 4121 §4.2.6.2), écrits dans `pkg/rdp`, car celui de la bibliothèque ne fait que l'intégrité. Ils utilisent la sous-clé de l'accepteur, sinon celle de l'initiateur. À la lecture : numéros de séquence vérifiés, rotation (RRC) défaite, remplissage (EC) retiré, et l'en-tête chiffré doit être l'en-tête en clair.
+- **Trouvé par le fuzzer** : le `DecryptMessage` de la bibliothèque panique sur un chiffré plus court que son HMAC. La longueur est désormais bornée avant tout déchiffrement, et une panique de la bibliothèque devient un refus (`kerberosDecrypt`). L'entrée du corpus est gardée.
+- **Le mot de passe** : la bibliothèque le prend comme une chaîne Go, que `pkg/rdp` ne peut pas effacer. C'est la limite déjà connue d'ADR-0115. Le client est détruit dès les tickets obtenus.
+- **Prouvé** :
+  - sans KDC : un accepteur écrit à part dans le test lit l'AP-REQ et y répond, et les jetons d'enveloppe circulent dans les deux sens, en AES-256 et AES-128, avec ou sans sous-clé de l'accepteur, avec rotation de 28 octets, rotation plus longue que le jeton, et remplissage ;
+  - 31 refus, un fuzzer (`FuzzKerberosAcceptReplyAndUnwrap`), et 20 mutations tuées sur 21. La survivante, l'octet de remplissage, est équivalente : l'en-tête chiffré refuse déjà le même jeton.
+- **Contre un vrai KDC** (`TestKerberos_AgainstAnMITKDC`, `KERBEROS_INTEROP=1`, MIT krb5 sous Docker, `test/integration/testdata/kerberos/mit-kdc`) :
+  - les tickets sont obtenus en TCP, avec la pré-authentification exigée ;
+  - un accepteur qui ne détient que la clé du service vérifie le ticket et l'authentificateur avec l'accepteur de la bibliothèque ;
+  - les jetons d'enveloppe circulent ;
+  - un mauvais mot de passe est refusé à l'échange AS, et un service inconnu à l'échange TGS.
+- **Reste** :
+  - **incrément 2** : CredSSP choisit Kerberos quand le compte a un royaume, sans aucun repli vers NTLM, et SPNEGO propose Kerberos (avec `mechListMIC` si la cible l'exige) ;
+  - **incrément 3** : les champs du compte au Vault (royaume, KDC), qui ajoutent au contrat des comptes ;
+  - **incrément 4** : la preuve contre Windows, avec un contrôleur Samba AD en CI, la cible jointe au domaine et NTLM interdit. Cette cible Windows de plus en CI sera soumise au propriétaire à cet incrément, comme l'ADR le prévoit.
+

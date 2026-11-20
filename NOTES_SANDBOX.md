@@ -5080,3 +5080,13 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - `pkg/rdp` : `MCSClientSettings.ColorDepth`. 16 bpp se demande comme FreeRDP le fait pour `/bpp:16` (`postBeta2ColorDepth` 0xCA03, `highColorDepth` 16, sans `WANT_32BPP`). 0 et 32 laissent la demande identique à l'octet près. 8, 15, 24 et 33 sont refusés.
 - Preuves : domaine (9 cas) ; service (10 cas : défauts, choix permis, interdit, inconnu, Vault muet, VNC ; ni scope ni proxy après un refus, choix au proxy et à l'audit) ; contre-épreuve : sans `ResolveScreen`, 7 cas sur 10 échouent. Gateway : choix relayé, appelant forgé écarté, 4 corps refusés. Proxy : ticket, codec de session distinct, plafond, 5 refus, codec incapable. `pkg/rdp` : octets de CS_CORE à 0, 16 et 32 bpp, 4 profondeurs refusées.
 - Non éprouvé : l'effet sur un vrai Windows (16 bpp demandé, chemin bitmap choisi). Ce sera l'incrément 4, en CI Windows. Restent l'Admin UI (incrément 3) et cette vérification.
+
+## 2026-11-20 — ADR-0100, incrément 1 : Kerberos dans `pkg/rdp`
+
+- **Fait** : `pkg/rdp/kerberos.go`, avec `github.com/go-krb5/krb5` v0.1.0, épinglé. Il obtient les tickets AS et TGS auprès d'un KDC explicite, en TCP et en AES seulement, sans DNS. Il construit l'AP-REQ avec authentification mutuelle et sous-clé, vérifie l'AP-REP, et écrit les jetons d'enveloppe scellés de la RFC 4121. Rien n'est encore branché à CredSSP.
+- **Prouvé** :
+  - 31 refus, un fuzzer, 20 mutations tuées sur 21 ;
+  - contre un vrai KDC MIT sous Docker (`KERBEROS_INTEROP=1`), le ticket est vérifié par un accepteur qui ne détient que la clé du service.
+- **Défaut de la bibliothèque, trouvé par le fuzzer** : `DecryptMessage` panique sur un chiffré trop court. La longueur est maintenant bornée et la panique rattrapée.
+- **`govulncheck`** : aucune vulnérabilité appelée. `GO-2026-5932` (`x/crypto` v0.58.0), non appelée, existait déjà sur `main`.
+- **Reste** : CredSSP et SPNEGO (incrément 2), les champs du Vault (incrément 3), Windows dans un domaine en CI (incrément 4).
