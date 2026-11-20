@@ -119,7 +119,7 @@ Mêmes scènes et même banc que le lot A d'ADR-0090, dans les deux modes et dan
   - la scène pointeur de FreeRDP ne mesure rien, xterm y cachant le pointeur ;
   - le pic du tas est celui du processus de test ;
   - la latence se mesure sur le même hôte que la cible.
-- **Non éprouvé** : l'Admin UI dans un vrai navigateur (direct et rejeu). La composition y repose sur `clearRect` puis `drawImage` ; elle n'est vérifiée qu'en Go (`Composer`, et la composition indépendante du test Base44) et en tests de composant.
+- ~~**Non éprouvé** : l'Admin UI dans un vrai navigateur (direct et rejeu).~~ **Éprouvé le 12 novembre 2026** par le propriétaire du projet, dans un vrai navigateur, sur le bac à sable Base44 : la session en direct, puis le rejeu (point 6 ci-dessus). `SCREEN_PARTIAL_FRAMES` est allumé par défaut depuis. Ces chiffres datent d'avant cette vérification.
 
 ## Alternatives envisagées
 
