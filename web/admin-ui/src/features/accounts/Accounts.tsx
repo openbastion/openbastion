@@ -4,6 +4,7 @@ import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
+import { ScreenProfileDialog } from "./ScreenProfileDialog";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
@@ -86,6 +87,7 @@ export function Accounts({
   const [newViewName, setNewViewName] = useState("");
   const [viewNotice, setViewNotice] = useState<string>();
   const [accountAction, setAccountAction] = useState<{ kind: "disable" | "rotate"; account: Account }>();
+  const [screenProfileFor, setScreenProfileFor] = useState<Account>();
   const [approvals, setApprovals] = useState<Page<Session>>();
   const [approvalsError, setApprovalsError] = useState<unknown>();
 
@@ -243,6 +245,11 @@ export function Accounts({
         api.request("PUT", `${accountPath(a.id)}/approval`, { approvalRequired: !a.approvalRequired }),
       );
     },
+    screenProfile(a) {
+      setError(undefined);
+      setOk(undefined);
+      setScreenProfileFor(a);
+    },
     rotate(a) {
       setError(undefined);
       setOk(undefined);
@@ -327,7 +334,7 @@ export function Accounts({
       }
       hints={[t("accounts.hints.rotation"), t("accounts.hints.hostKey"), t("accounts.hints.tls")]}
     >
-      <Notice error={accountAction ? undefined : error} ok={accountAction ? undefined : ok} />
+      <Notice error={accountAction || screenProfileFor ? undefined : error} ok={accountAction || screenProfileFor ? undefined : ok} />
       {onboardOpen && can("accounts.onboard") ? (
         <div id="onboard-account">
           <OnboardAccount onDone={(id) => act(t("accounts.notices.onboarded", { id }), async () => undefined)} />
@@ -573,6 +580,26 @@ export function Accounts({
         </section>
       ) : null}
 
+      {screenProfileFor ? (
+        <ScreenProfileDialog
+          account={screenProfileFor}
+          error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
+          onCancel={() => { setScreenProfileFor(undefined); }}
+          onSave={async (screenProfile) => {
+            const account = screenProfileFor;
+            try {
+              await api.request("PUT", `${accountPath(account.id)}/screen-profile`, { screenProfile });
+              setOk(screenProfile ? t("accounts.notices.screenProfileSet", { id: account.id }) : t("accounts.notices.screenProfileRemoved", { id: account.id }));
+              setError(undefined);
+              load();
+              return true;
+            } catch (err) {
+              setError(err);
+              return false;
+            }
+          }}
+        />
+      ) : null}
       {accountAction ? (
         <ConfirmDialog
           title={accountAction.kind === "disable" ? t("accounts.confirm.disableTitle") : t("accounts.confirm.rotateTitle")}

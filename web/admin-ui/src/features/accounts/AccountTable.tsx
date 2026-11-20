@@ -9,6 +9,8 @@ export interface AccountActions {
   pinKey: (account: Account) => void;
   pinTls: (account: Account) => void;
   toggleApproval: (account: Account) => void;
+  // The screen profile of an RDP account (ADR-0132).
+  screenProfile: (account: Account) => void;
   rotate: (account: Account) => void;
   disable: (account: Account) => void;
 }
@@ -89,6 +91,11 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
                   <GatedButton capability="accounts.approval" onClick={() => actions.toggleApproval(a)}>
                     {a.approvalRequired ? t("accounts.table.noApproval") : t("accounts.table.requireApproval")}
                   </GatedButton>
+                  {a.protocol === "rdp" ? (
+                    <GatedButton capability="accounts.screenProfile" onClick={() => actions.screenProfile(a)}>
+                      {t("accounts.table.screenProfile")}
+                    </GatedButton>
+                  ) : null}
                   {a.protocol === "ssh" ? (
                     <GatedButton capability="accounts.rotate" onClick={() => actions.rotate(a)}>
                       {t("accounts.table.rotate")}
