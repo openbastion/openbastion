@@ -74,6 +74,10 @@ type RDPGraphicsCompositor struct {
 	frameOpen    bool
 	frameID      uint32
 	decoded      uint32
+	// whole: the output was reset (ResetGraphics), and the next frame's update carries all of it.
+	// The screen proxy starts a fresh framebuffer of the new size, while the target redraws only
+	// what changes, keeping the rest in its surfaces (CI of PR #243).
+	whole bool
 }
 
 // NewRDPGraphicsCompositor is a compositor with no output yet: the target sizes it (ResetGraphics).
@@ -170,6 +174,7 @@ func (c *RDPGraphicsCompositor) Apply(pdu RDPGraphicsPDU) (frame RDPGraphicsFram
 				min(int(w), c.output.Rect.Dx()), min(int(h), c.output.Rect.Dy()))
 		}
 		c.output = output
+		c.whole = true
 		return frame, false, nil
 	case RDPGraphicsCreateSurface:
 		// 2.2.2.9: surfaceId, width, height, pixelFormat.
@@ -510,13 +515,16 @@ func MarshalGraphicsFrameAcknowledge(frameID, totalFramesDecoded uint32) []byte 
 
 // FrameUpdate is the part of the output a frame changed, as a bitmap update the framebuffer draws
 // (ADR-0101 increment 5): one rectangle of RGBA pixels, on a desktop of the output's size, which a
-// ResetGraphics may have changed. ok is false when the frame changed nothing, or before the output
-// exists.
+// ResetGraphics may have changed — the first frame after one carries the whole output. ok is false
+// when the frame changed nothing, or before the output exists.
 func (c *RDPGraphicsCompositor) FrameUpdate(frame RDPGraphicsFrame) (update RDPBitmapUpdate, ok bool) {
 	if c.output == nil {
 		return update, false
 	}
 	r := frame.Changed.Intersect(c.output.Rect)
+	if c.whole {
+		r, c.whole = c.output.Rect, false
+	}
 	if r.Empty() {
 		return update, false
 	}

@@ -341,3 +341,42 @@ func TestGraphicsSurfaces_TheFrameAsAnUpdate(t *testing.T) {
 		t.Fatal("an update of a frame that changed nothing")
 	}
 }
+
+// After a ResetGraphics (a desktop resized, ADR-0095), the screen proxy starts a fresh framebuffer
+// of the new size: the first frame after it must carry the whole output, not only what that frame
+// changed. The target keeps what it drew in its surfaces and redraws only what changes, as it would
+// for a client that keeps them too (CI of PR #243: the browser showed a black desktop, Notepad cut
+// where the first frame after the resize stopped).
+func TestGraphicsSurfaces_TheFirstFrameAfterAResetCarriesTheWholeOutput(t *testing.T) {
+	c := NewRDPGraphicsCompositor()
+	red, blue := [4]byte{0, 0, 0xff, 0}, [4]byte{0xff, 0, 0, 0}
+	mustApply(t, c, resetGraphics(64, 48), createSurface(1, 64, 48, rdpGraphicsPixelXRGB), mapSurface(1, 0, 0))
+	frames := mustApply(t, c, startFrame(1), solidFill(1, red, [4]int{0, 0, 64, 48}), endFrame(1))
+	if update, ok := c.FrameUpdate(frames[0]); !ok || update.Rectangles[0].Width != 64 || update.Rectangles[0].Height != 48 {
+		t.Fatalf("the first frame: %v %+v", ok, update.Rectangles)
+	}
+	// Resized to 40 x 30: the next frame changes one 4 x 4 square.
+	mustApply(t, c, resetGraphics(40, 30))
+	frames = mustApply(t, c, startFrame(2), solidFill(1, blue, [4]int{2, 2, 6, 6}), endFrame(2))
+	update, ok := c.FrameUpdate(frames[0])
+	if !ok || update.DesktopWidth != 40 || update.DesktopHeight != 30 || len(update.Rectangles) != 1 {
+		t.Fatalf("the frame after the reset: %v %+v", ok, update)
+	}
+	r := update.Rectangles[0]
+	if r.X != 0 || r.Y != 0 || r.Width != 40 || r.Height != 30 {
+		t.Fatalf("the frame after the reset carries %d,%d %dx%d, want the whole 40x30 output", r.X, r.Y, r.Width, r.Height)
+	}
+	// What was drawn before the reset is in it, and so is the new square.
+	at := func(x, y int) [4]byte { i := (y*40 + x) * 4; return [4]byte(r.Pixels[i : i+4]) }
+	if got := at(30, 20); got != [4]byte{0, 0, 0xff, 0xff} && got != [4]byte{0xff, 0, 0, 0xff} {
+		t.Fatalf("(30, 20) = % x: what was drawn before the reset is lost", got)
+	}
+	if got, red := at(30, 20), at(3, 3); got == red {
+		t.Fatalf("the new square is not drawn: (3, 3) = % x", red)
+	}
+	// And only that one: the frame after carries only what it changed.
+	frames = mustApply(t, c, startFrame(3), solidFill(1, red, [4]int{0, 0, 2, 2}), endFrame(3))
+	if update, _ := c.FrameUpdate(frames[0]); update.Rectangles[0].Width != 2 || update.Rectangles[0].Height != 2 {
+		t.Fatalf("the second frame after the reset carries %+v", update.Rectangles[0])
+	}
+}

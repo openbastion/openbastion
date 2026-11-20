@@ -124,9 +124,10 @@ func runService() {
 	if clipboard {
 		listener.Clipboard = audit
 	}
-	// The graphics pipeline of RDP (ADR-0101): off unless said "true", until it is proven in a real
-	// browser against the five Windows targets; anything but "true" or "false" stops the service.
-	graphicsPipeline, err := switchFromEnv("SCREEN_RDPGFX", os.Getenv("SCREEN_RDPGFX"), false)
+	// The graphics pipeline of RDP (ADR-0101): on by default since the owner's decision of 20
+	// November 2026, once proven in a real browser against the five Windows targets; "false" turns
+	// it off for every session of this proxy; anything else stops the service.
+	graphicsPipeline, err := switchFromEnv("SCREEN_RDPGFX", os.Getenv("SCREEN_RDPGFX"), screenRDPGFXDefault)
 	if err != nil {
 		log.Fatalf("rdp-vnc-proxy: %v", err)
 	}
@@ -211,6 +212,10 @@ func splitOrigins(value string) []string {
 }
 
 // main dispatches version before entering the proxy lifecycle.
+// screenRDPGFXDefault is SCREEN_RDPGFX when it is not set: on since 20 November 2026 (ADR-0101,
+// increment 6), after the graphics pipeline was proven in a real browser against five Windows.
+const screenRDPGFXDefault = true
+
 func main() {
 	root := command.NewServiceCommand("rdp-vnc-proxy", runService)
 	// The healthcheck of the distroless image (deploy/docker-compose): the running service, asked

@@ -21,3 +21,14 @@ func TestSwitchFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// SCREEN_RDPGFX absent is on (ADR-0101, the owner's decision of 20 November 2026); "false" turns
+// the graphics pipeline off, and the proxy then reads the screen from the bitmap updates.
+func TestScreenRDPGFXIsOnByDefault(t *testing.T) {
+	if on, err := switchFromEnv("SCREEN_RDPGFX", "", screenRDPGFXDefault); err != nil || !on {
+		t.Fatalf("SCREEN_RDPGFX absent: %v %v, want on", on, err)
+	}
+	if on, err := switchFromEnv("SCREEN_RDPGFX", "false", screenRDPGFXDefault); err != nil || on {
+		t.Fatalf("SCREEN_RDPGFX=false: %v %v, want off", on, err)
+	}
+}
