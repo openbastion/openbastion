@@ -1,4 +1,6 @@
-import { Session } from "../../shared/api";
+import { useState } from "react";
+import { FormField, Select } from "@openbastion/ui";
+import { ScreenChannel, ScreenChoice, ScreenColorDepth, Session } from "../../shared/api";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 import { SecretInjection } from "./SecretInjection";
@@ -11,6 +13,8 @@ export interface AttachedScreen {
   sessionId: string;
   attach: string;
   key: number;
+  // The screen it was opened with (ADR-0132), asked again on a reconnection.
+  choice?: ScreenChoice;
 }
 
 // One session, as its identifier returns it: what it is, what it carries, and what its status
@@ -22,7 +26,7 @@ export function SessionDetail({
   onTerminate,
 }: {
   session: Session;
-  onOpenScreen: (sessionId: string) => void;
+  onOpenScreen: (sessionId: string, choice?: ScreenChoice) => void;
   onTerminate: (session: Session) => void;
 }) {
   const { t, i18n } = useAppTranslation();
@@ -31,6 +35,12 @@ export function SessionDetail({
   // their own session without a policy (ADR-0017); anyone else needs session-terminate.
   const isRequester = Boolean(who?.sub) && who?.sub === session.requestedBy;
   const unknownCaller = !who?.sub;
+  // The operator's screen choice for an RDP session (ADR-0132). The page does not know the
+  // account's profile — an operator may not read the account — so "Account default" sends nothing
+  // and the Broker refuses, with 403, a choice the profile does not allow.
+  const [channel, setChannel] = useState<ScreenChannel | "">("");
+  const [colorDepth, setColorDepth] = useState<ScreenColorDepth | 0>(0);
+  const mayOpen = isRequester || unknownCaller;
   return (
     <>
       <dl className="ob-detail-list" aria-label={t("sessions.detail.aria")}>
@@ -74,10 +84,34 @@ export function SessionDetail({
       {session.status === "active" ? (
         <>
           <SecretInjection session={session} />
+          {session.protocol === "rdp" && mayOpen ? (
+            <fieldset className="screen-choice" aria-describedby={`screen-choice-hint-${session.id}`}>
+              <legend>{t("screen.choice.label")}</legend>
+              <FormField id={`screen-choice-channel-${session.id}`} label={t("screen.choice.channel")}>
+                <Select value={channel} onChange={(e) => setChannel(e.target.value as ScreenChannel | "")}>
+                  <option value="">{t("screen.choice.accountDefault")}</option>
+                  <option value="graphics">{t("screen.channel.graphics")}</option>
+                  <option value="bitmap">{t("screen.channel.bitmap")}</option>
+                </Select>
+              </FormField>
+              <FormField id={`screen-choice-depth-${session.id}`} label={t("screen.choice.colorDepth")}>
+                <Select value={String(colorDepth)} onChange={(e) => setColorDepth(Number(e.target.value) as ScreenColorDepth | 0)}>
+                  <option value="0">{t("screen.choice.accountDefault")}</option>
+                  <option value="16">{t("screen.depth.d16")}</option>
+                  <option value="32">{t("screen.depth.d32")}</option>
+                </Select>
+              </FormField>
+              <p className="ob-hint" id={`screen-choice-hint-${session.id}`}>{t("screen.choice.hint")}</p>
+            </fieldset>
+          ) : null}
           <div className="ob-form-actions">
             {session.protocol === "vnc" || session.protocol === "rdp" ? (
-              <span title={isRequester || unknownCaller ? undefined : t("sessions.detail.screenRequesterOnly")}>
-                <Button variant="primary" disabled={!isRequester && !unknownCaller} onClick={() => onOpenScreen(session.id)}>
+              <span title={mayOpen ? undefined : t("sessions.detail.screenRequesterOnly")}>
+                <Button
+                  variant="primary"
+                  disabled={!mayOpen}
+                  onClick={() => onOpenScreen(session.id, session.protocol === "rdp" ? screenChoice(channel, colorDepth) : undefined)}
+                >
                   {t("sessions.detail.openScreen")}
                 </Button>
               </span>
@@ -90,4 +124,12 @@ export function SessionDetail({
       ) : null}
     </>
   );
+}
+
+// The choice as the Gateway takes it: only what was chosen, nothing for "Account default".
+export function screenChoice(channel: ScreenChannel | "", colorDepth: ScreenColorDepth | 0): ScreenChoice | undefined {
+  const choice: ScreenChoice = {};
+  if (channel) choice.channel = channel;
+  if (colorDepth) choice.colorDepth = colorDepth;
+  return choice.channel || choice.colorDepth ? choice : undefined;
 }

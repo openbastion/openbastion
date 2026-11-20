@@ -5566,6 +5566,16 @@ main.login {
 .request-access-dialog { width: min(46rem, calc(100vw - 2rem)); }
 .request-access-dialog .ob-form-card { margin: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }
 
+/* The screen profile of an RDP account and the operator's screen choice (ADR-0132). */
+.screen-profile-dialog { width: min(32rem, calc(100vw - 2rem)); }
+.screen-profile-form { display: grid; gap: var(--ob-space-3); }
+.screen-profile-form fieldset,
+.screen-choice { display: grid; gap: 0.4rem; margin: 0; padding: var(--ob-space-3); border: 1px solid var(--ob-color-border-subtle); border-radius: 0.5rem; }
+.screen-choice { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); margin-block: var(--ob-space-3); }
+.screen-choice legend,
+.screen-profile-form legend { padding-inline: 0.25rem; font-weight: 600; }
+.screen-choice .ob-hint { grid-column: 1 / -1; margin: 0; }
+
 @media (max-width: 760px) {
   .settings-fields { grid-template-columns: minmax(0, 1fr); }
   .reference-fact { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
