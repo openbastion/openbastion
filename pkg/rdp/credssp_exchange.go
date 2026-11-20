@@ -1,8 +1,20 @@
 package rdp
 
-import "errors"
+import (
+	"encoding/asn1"
+	"errors"
+)
 
 var ErrCredSSPBindingExchange = errors.New("rdp: invalid CredSSP public-key binding exchange")
+
+// credsspSecurity is the security context CredSSP protects pubKeyAuth and authInfo with: NTLM's
+// (NTLMSSPClientSecurityContext) or Kerberos's (kerberosSecurity, ADR-0100).
+type credsspSecurity interface {
+	WrapClientToServer(plaintext []byte) ([]byte, error)
+	UnwrapServerToClient(message []byte) ([]byte, error)
+	VerifyMechListMIC(mechTypes, mic []byte) error
+	Close()
+}
 
 // NewCredSSPClientBindingRequest creates the final client TSRequest for a
 // CredSSP v5/v6 exchange. lastSPNEGOToken must be the final token produced by
@@ -18,6 +30,13 @@ func NewCredSSPClientBindingRequest(
 	binding CredSSPPublicKeyBinding,
 	security *NTLMSSPClientSecurityContext,
 ) (TSRequest, error) {
+	if security == nil {
+		return TSRequest{}, ErrCredSSPBindingExchange
+	}
+	return newCredSSPClientBindingRequest(version, lastSPNEGOToken, binding, security)
+}
+
+func newCredSSPClientBindingRequest(version uint32, lastSPNEGOToken []byte, binding CredSSPPublicKeyBinding, security credsspSecurity) (TSRequest, error) {
 	if version < 5 || version > 6 || !binding.valid || security == nil || len(lastSPNEGOToken) > maxCredSSPToken {
 		return TSRequest{}, ErrCredSSPBindingExchange
 	}
@@ -48,7 +67,10 @@ func VerifyCredSSPServerBindingResponse(
 	binding CredSSPPublicKeyBinding,
 	security *NTLMSSPClientSecurityContext,
 ) error {
-	return verifyCredSSPServerCompletion(encoded, version, binding, security, nil)
+	if security == nil {
+		return ErrCredSSPBindingExchange
+	}
+	return verifyCredSSPServerCompletion(encoded, version, binding, security, nil, ntlmOID)
 }
 
 // verifyCredSSPServerCompletion also accepts the server's last SPNEGO token beside pubKeyAuth when
@@ -58,8 +80,9 @@ func verifyCredSSPServerCompletion(
 	encoded []byte,
 	version uint32,
 	binding CredSSPPublicKeyBinding,
-	security *NTLMSSPClientSecurityContext,
+	security credsspSecurity,
 	mechTypes []byte,
+	mech asn1.ObjectIdentifier,
 ) error {
 	if security == nil || !binding.valid || version < 5 || version > 6 {
 		if security != nil {
@@ -74,7 +97,7 @@ func verifyCredSSPServerCompletion(
 		security.Close()
 		return ErrCredSSPBindingExchange
 	}
-	if err := verifySPNEGOCompletion(request.NegoTokens, security, mechTypes, false); err != nil {
+	if err := verifySPNEGOCompletion(request.NegoTokens, security, mechTypes, false, mech); err != nil {
 		security.Close()
 		return ErrCredSSPBindingExchange
 	}
@@ -93,7 +116,7 @@ func verifyCredSSPServerCompletion(
 }
 
 // verifySPNEGOCompletion: an exchange the server asked for and did not finish is not finished.
-func verifySPNEGOCompletion(tokens [][]byte, security *NTLMSSPClientSecurityContext, mechTypes []byte, micRequired bool) error {
+func verifySPNEGOCompletion(tokens [][]byte, security credsspSecurity, mechTypes []byte, micRequired bool, mech asn1.ObjectIdentifier) error {
 	if len(tokens) == 0 {
 		if micRequired {
 			return ErrCredSSPBindingExchange
@@ -103,7 +126,7 @@ func verifySPNEGOCompletion(tokens [][]byte, security *NTLMSSPClientSecurityCont
 	if len(tokens) != 1 {
 		return ErrCredSSPBindingExchange
 	}
-	completion, err := ParseSPNEGONegTokenResp(tokens[0])
+	completion, err := parseSPNEGONegTokenResp(tokens[0], mech)
 	if err != nil || completion.State != spnegoStateAcceptCompleted || len(completion.ResponseToken) != 0 {
 		return ErrCredSSPBindingExchange
 	}

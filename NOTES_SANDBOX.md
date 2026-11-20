@@ -5098,3 +5098,20 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Preuves : 6 tests Vitest (`screenChoice.test.tsx`). Contre-épreuves : choix jamais envoyé → 1 échec ; contrôle du défaut retiré → 1 échec. Suite Admin UI : 294 tests verts, construction verte.
 - Vu dans un vrai Chromium, à 1400 px et à 390 px, contre la Gateway du sandbox. Celle-ci tourne sur le checkout principal, antérieur aux #244 et #246 : la capacité y est inconnue et le bouton reste grisé, comportement fermé attendu. La capacité, le compte RDP et la session ont donc été simulés par le script de capture. L'enregistrement réel du profil n'a pas été éprouvé dans le sandbox.
 - Reste l'incrément 4 : « bitmap » et 16 bits, contre les cinq Windows, en navigateur.
+
+## 2026-11-20 — ADR-0100, incrément 2 : CredSSP et SPNEGO avec Kerberos
+
+- **Fait** : `CredSSPClientConfig.Kerberos`. L'échange passe alors par Kerberos seul, sans repli vers NTLM :
+  - un NegTokenInit qui ne propose que Kerberos 5 ;
+  - l'AP-REP vérifié, et les `mechListMIC` dans les deux sens ;
+  - `pubKeyAuth` et `authInfo` sous le contexte Kerberos.
+- **Refus des identifiants** : un KDC qui les refuse se dit `ErrTargetCredentialsRefused`, donc `target_auth_failed`.
+- **Prouvé** :
+  - un faux serveur CredSSP, dont les MIC sont signés par la bibliothèque, va jusqu'à `authInfo` dans quatre variantes ;
+  - six refus ;
+  - aucun octet n'est envoyé à la cible quand le KDC refuse ;
+  - 7 mutations tuées sur 10, les trois survivantes équivalentes ;
+  - le KDC MIT, avec la pré-authentification exigée, donne les codes 24 et 6 ;
+  - l'échange CredSSP complet passe avec de vrais tickets du KDC MIT, le serveur du test n'ayant que la clé du service.
+- **Limite** : la bibliothèque aplatit le KRB-ERROR en texte, et le code y est lu. Une autre forme de texte ne donne pas de code.
+- **Reste** : les champs du Vault (incrément 3), Windows dans un domaine (incrément 4).

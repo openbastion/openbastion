@@ -56,3 +56,46 @@ func MarshalSPNEGONTLMResponse(mechanismToken, mechListMIC []byte) ([]byte, erro
 	}
 	return encoded, nil
 }
+
+// spnegoKerberosMechTypes is the MechTypeList offered with Kerberos (ADR-0100): Kerberos 5 alone.
+// Neither NTLM, nor Microsoft's alias of Kerberos 5, is offered: a target that wants another
+// mechanism refuses, and the session with it.
+func spnegoKerberosMechTypes() ([]byte, error) {
+	krb5, err := asn1.Marshal(oidKerberos5)
+	if err != nil {
+		return nil, ErrSPNEGOToken
+	}
+	return derWrap(0x30, krb5), nil
+}
+
+// marshalSPNEGOKerberosInit wraps the initial Kerberos context token (an AP-REQ) in a NegTokenInit
+// offering Kerberos 5 alone, its optimistic token.
+func marshalSPNEGOKerberosInit(mechanismToken []byte) ([]byte, error) {
+	if len(mechanismToken) == 0 || len(mechanismToken) > maxSPNEGOToken {
+		return nil, ErrSPNEGOToken
+	}
+	spnego, err := asn1.Marshal(spnegoOID)
+	if err != nil {
+		return nil, ErrSPNEGOToken
+	}
+	list, err := spnegoKerberosMechTypes()
+	if err != nil {
+		return nil, ErrSPNEGOToken
+	}
+	mechToken := derWrap(0xa2, derWrap(0x04, mechanismToken))
+	negTokenInit := derWrap(0xa0, derWrap(0x30, append(derWrap(0xa0, list), mechToken...)))
+	encoded := derWrap(0x60, append(spnego, negTokenInit...))
+	if len(encoded) > maxSPNEGOToken {
+		return nil, ErrSPNEGOToken
+	}
+	return encoded, nil
+}
+
+// marshalSPNEGOMICResponse is a NegTokenResp carrying the client's mechListMIC alone (RFC 4178
+// §5): what answers a target that sent its own, or asked for one.
+func marshalSPNEGOMICResponse(mechListMIC []byte) ([]byte, error) {
+	if len(mechListMIC) == 0 || len(mechListMIC) > maxSPNEGOToken {
+		return nil, ErrSPNEGOToken
+	}
+	return derWrap(0xa1, derWrap(0x30, derWrap(0xa3, derWrap(0x04, mechListMIC)))), nil
+}

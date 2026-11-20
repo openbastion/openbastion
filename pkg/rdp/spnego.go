@@ -141,6 +141,12 @@ func ParseSPNEGONegTokenInit(data []byte) (SPNEGONegTokenInit, error) {
 
 // ParseSPNEGONegTokenResp parses the RFC 4178 NegTokenResp choice.
 func ParseSPNEGONegTokenResp(data []byte) (SPNEGONegTokenResp, error) {
+	return parseSPNEGONegTokenResp(data, ntlmOID)
+}
+
+// parseSPNEGONegTokenResp is ParseSPNEGONegTokenResp for one mechanism: NTLM's, or Kerberos 5's
+// (ADR-0100). A supportedMech other than mech is refused.
+func parseSPNEGONegTokenResp(data []byte, mech asn1.ObjectIdentifier) (SPNEGONegTokenResp, error) {
 	var out SPNEGONegTokenResp
 	if len(data) == 0 || len(data) > maxSPNEGOToken {
 		return out, ErrSPNEGOToken
@@ -181,7 +187,7 @@ func ParseSPNEGONegTokenResp(data []byte) (SPNEGONegTokenResp, error) {
 			if e != nil {
 				return SPNEGONegTokenResp{}, ErrSPNEGOToken
 			}
-			if !out.SupportedMech.Equal(ntlmOID) {
+			if !out.SupportedMech.Equal(mech) {
 				return SPNEGONegTokenResp{}, ErrSPNEGOMechanism
 			}
 		case 0xa2:
