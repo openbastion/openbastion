@@ -5090,3 +5090,19 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Défaut de la bibliothèque, trouvé par le fuzzer** : `DecryptMessage` panique sur un chiffré trop court. La longueur est maintenant bornée et la panique rattrapée.
 - **`govulncheck`** : aucune vulnérabilité appelée. `GO-2026-5932` (`x/crypto` v0.58.0), non appelée, existait déjà sur `main`.
 - **Reste** : CredSSP et SPNEGO (incrément 2), les champs du Vault (incrément 3), Windows dans un domaine en CI (incrément 4).
+
+## 2026-11-20 — ADR-0100, incrément 2 : CredSSP et SPNEGO avec Kerberos
+
+- **Fait** : `CredSSPClientConfig.Kerberos`. L'échange passe alors par Kerberos seul, sans repli vers NTLM :
+  - un NegTokenInit qui ne propose que Kerberos 5 ;
+  - l'AP-REP vérifié, et les `mechListMIC` dans les deux sens ;
+  - `pubKeyAuth` et `authInfo` sous le contexte Kerberos.
+- **Refus des identifiants** : un KDC qui les refuse se dit `ErrTargetCredentialsRefused`, donc `target_auth_failed`.
+- **Prouvé** :
+  - un faux serveur CredSSP, dont les MIC sont signés par la bibliothèque, va jusqu'à `authInfo` dans quatre variantes ;
+  - six refus ;
+  - aucun octet n'est envoyé à la cible quand le KDC refuse ;
+  - 7 mutations tuées sur 10, les trois survivantes équivalentes ;
+  - le KDC MIT, avec la pré-authentification exigée, donne les codes 24 et 6.
+- **Limite** : la bibliothèque aplatit le KRB-ERROR en texte, et le code y est lu. Une autre forme de texte ne donne pas de code.
+- **Reste** : les champs du Vault (incrément 3), Windows dans un domaine (incrément 4).

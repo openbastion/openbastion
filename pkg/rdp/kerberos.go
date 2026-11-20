@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/go-krb5/krb5/config"
 	"github.com/go-krb5/krb5/crypto"
 	"github.com/go-krb5/krb5/iana/chksumtype"
+	"github.com/go-krb5/krb5/iana/errorcode"
 	"github.com/go-krb5/krb5/iana/etypeID"
 	"github.com/go-krb5/krb5/iana/flags"
 	"github.com/go-krb5/krb5/iana/keyusage"
@@ -67,6 +69,38 @@ const (
 
 // oidKerberos5 is the Kerberos 5 GSS-API mechanism, 1.2.840.113554.1.2.2.
 var oidKerberos5 = asn1.ObjectIdentifier{1, 2, 840, 113554, 1, 2, 2}
+
+// kerberosCredentialsRefused are the KDC's errors that refuse the account's credentials (RFC 4120
+// §7.5.9): a wrong password (PREAUTH_FAILED), an unknown, revoked or expired account.
+var kerberosCredentialsRefused = map[int32]bool{
+	errorcode.KDC_ERR_PREAUTH_FAILED: true, errorcode.KDC_ERR_C_PRINCIPAL_UNKNOWN: true,
+	errorcode.KDC_ERR_CLIENT_REVOKED: true, errorcode.KDC_ERR_KEY_EXPIRED: true,
+}
+
+// kdcErrorCode is the KDC's error code in the library's error. The library flattens a KRB-ERROR into
+// its text ("KRB Error: (24) ..."): the code is read there, the only place left. A message of
+// another shape gives no code, and the refusal stays a plain Kerberos one.
+func kdcErrorCode(err error) (int32, bool) {
+	var krbErr messages.KRBError
+	if errors.As(err, &krbErr) {
+		return krbErr.ErrorCode, true
+	}
+	text := err.Error()
+	i := strings.Index(text, "KRB Error: (")
+	if i < 0 {
+		return 0, false
+	}
+	rest := text[i+len("KRB Error: ("):]
+	j := strings.IndexByte(rest, ')')
+	if j <= 0 || j > 4 {
+		return 0, false
+	}
+	code, convErr := strconv.Atoi(rest[:j])
+	if convErr != nil {
+		return 0, false
+	}
+	return int32(code), true
+}
 
 // kerberosEtypes are the encryption types accepted, AES only (RFC 3962).
 var kerberosEtypes = map[int32]bool{etypeID.AES256_CTS_HMAC_SHA1_96: true, etypeID.AES128_CTS_HMAC_SHA1_96: true}
@@ -138,6 +172,12 @@ var kerberosTickets = func(cfg KerberosConfig, user string, password []byte) (me
 	cl := client.NewWithPassword(user, cfg.Realm, string(password), cfg.libraryConfig(), client.DisablePAFXFAST(true))
 	defer cl.Destroy()
 	if err := cl.Login(); err != nil {
+		// The KDC refusing the account's credentials is said as NTLM's refusal is
+		// (ErrTargetCredentialsRefused, target_auth_failed): the secret in the Vault is to be checked.
+		if code, ok := kdcErrorCode(err); ok && kerberosCredentialsRefused[code] {
+			return messages.Ticket{}, types.EncryptionKey{}, fmt.Errorf("%w: %w: the AS exchange: KDC error %d",
+				ErrRDPKerberos, ErrTargetCredentialsRefused, code)
+		}
 		return messages.Ticket{}, types.EncryptionKey{}, kerberosRefused("the AS exchange: %v", err)
 	}
 	ticket, key, err := cl.GetServiceTicket(cfg.ServicePrincipal)
@@ -374,3 +414,92 @@ func kerberosDecrypt(key types.EncryptionKey, ciphertext []byte, usage uint32, m
 	}
 	return plain, nil
 }
+
+const (
+	gssMICTokenID    = uint16(0x0404)
+	gssMICHeaderSize = 16
+)
+
+// micHeader is the header of a MIC token (RFC 4121 §4.2.6.1): its ID, flags, five filler bytes and
+// the sequence number.
+func micHeader(flags byte, seq uint64) []byte {
+	header := make([]byte, gssMICHeaderSize)
+	binary.BigEndian.PutUint16(header[0:2], gssMICTokenID)
+	header[2] = flags
+	for i := 3; i < 8; i++ {
+		header[i] = 0xff
+	}
+	binary.BigEndian.PutUint64(header[8:16], seq)
+	return header
+}
+
+// getMIC signs data (RFC 4121 §4.2.6.1): the checksum of data then the header, under the wrap key,
+// at the next sequence number of this direction, which wrap tokens share.
+func (k *kerberosContext) getMIC(data []byte) ([]byte, error) {
+	if k == nil || !k.established {
+		return nil, kerberosRefused("a MIC before the context is established")
+	}
+	key, keyFlag := k.wrapKey()
+	et, err := crypto.GetEtype(key.KeyType)
+	if err != nil {
+		return nil, kerberosRefused("encryption type %d", key.KeyType)
+	}
+	header := micHeader(keyFlag, k.sendSeq)
+	sum, err := et.GetChecksumHash(key.KeyValue, append(append([]byte(nil), data...), header...), keyusage.GSSAPI_INITIATOR_SIGN)
+	if err != nil {
+		return nil, kerberosRefused("signing: %v", err)
+	}
+	k.sendSeq++
+	return append(header, sum...), nil
+}
+
+// verifyMIC checks the target's MIC token over data: sent by the acceptor, under the agreed key, at
+// the sequence number expected next.
+func (k *kerberosContext) verifyMIC(data, token []byte) error {
+	if k == nil || !k.established {
+		return kerberosRefused("a MIC before the context is established")
+	}
+	key, keyFlag := k.wrapKey()
+	et, err := crypto.GetEtype(key.KeyType)
+	if err != nil {
+		return kerberosRefused("encryption type %d", key.KeyType)
+	}
+	if len(token) != gssMICHeaderSize+et.GetHMACBitLength()/8 {
+		return kerberosRefused("a MIC token of %d bytes", len(token))
+	}
+	header := token[:gssMICHeaderSize]
+	if !bytes.Equal(header, micHeader(gssWrapSentByAcceptor|keyFlag, k.recvSeq)) {
+		return kerberosRefused("a MIC token's header % x, sequence %d expected", header, k.recvSeq)
+	}
+	if !et.VerifyChecksum(key.KeyValue, append(append([]byte(nil), data...), header...), token[gssMICHeaderSize:], keyusage.GSSAPI_ACCEPTOR_SIGN) {
+		return kerberosRefused("a MIC that does not verify")
+	}
+	k.recvSeq++
+	return nil
+}
+
+// close forgets the keys.
+func (k *kerberosContext) close() {
+	if k == nil {
+		return
+	}
+	clear(k.sessionKey.KeyValue)
+	clear(k.subkey.KeyValue)
+	if k.acceptorSubkey != nil {
+		clear(k.acceptorSubkey.KeyValue)
+	}
+	k.established = false
+}
+
+// kerberosSecurity is the Kerberos context as CredSSP uses a security context: pubKeyAuth and
+// authInfo wrapped, the target's wrap tokens opened, SPNEGO's mechListMIC checked.
+type kerberosSecurity struct{ ctx *kerberosContext }
+
+func (s kerberosSecurity) WrapClientToServer(plain []byte) ([]byte, error) { return s.ctx.wrap(plain) }
+func (s kerberosSecurity) UnwrapServerToClient(token []byte) ([]byte, error) {
+	return s.ctx.unwrap(token)
+}
+func (s kerberosSecurity) VerifyMechListMIC(mechTypes, mic []byte) error {
+	return s.ctx.verifyMIC(mechTypes, mic)
+}
+func (s kerberosSecurity) Close() { s.ctx.close() }

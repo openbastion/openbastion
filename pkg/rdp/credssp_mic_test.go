@@ -169,7 +169,7 @@ func TestCredSSPServerProof_AReflectedPubKeyAuthIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyCredSSPServerCompletion(reflected, 6, binding, client, types); !errors.Is(err, ErrCredSSPBindingExchange) {
+	if err := verifyCredSSPServerCompletion(reflected, 6, binding, client, types, ntlmOID); !errors.Is(err, ErrCredSSPBindingExchange) {
 		t.Fatalf("a reflected pubKeyAuth: %v", err)
 	}
 }
@@ -191,20 +191,20 @@ func TestCredSSPServerProof_ALastTokenIsCheckedLikeAnyOther(t *testing.T) {
 	t.Run("its MIC verifies", func(t *testing.T) {
 		client, server := ntlmSSPSecurityContexts(t)
 		mic, _ := server.SignMechListMIC(types)
-		if err := verifyCredSSPServerCompletion(build(t, server, micTestCompletion(mic)), 6, binding, client, types); err != nil {
+		if err := verifyCredSSPServerCompletion(build(t, server, micTestCompletion(mic)), 6, binding, client, types, ntlmOID); err != nil {
 			t.Fatal(err)
 		}
 	})
 	t.Run("its MIC does not", func(t *testing.T) {
 		client, server := ntlmSSPSecurityContexts(t)
-		if err := verifyCredSSPServerCompletion(build(t, server, micTestCompletion(bytes.Repeat([]byte{9}, 16))), 6, binding, client, types); !errors.Is(err, ErrCredSSPBindingExchange) {
+		if err := verifyCredSSPServerCompletion(build(t, server, micTestCompletion(bytes.Repeat([]byte{9}, 16))), 6, binding, client, types, ntlmOID); !errors.Is(err, ErrCredSSPBindingExchange) {
 			t.Fatalf("%v", err)
 		}
 	})
 	t.Run("it reopens the negotiation", func(t *testing.T) {
 		client, server := ntlmSSPSecurityContexts(t)
 		token := derWrap(0xa1, derWrap(0x30, derWrap(0xa0, derWrap(0x0a, []byte{spnegoStateAcceptIncomplete}))))
-		if err := verifyCredSSPServerCompletion(build(t, server, token), 6, binding, client, types); !errors.Is(err, ErrCredSSPBindingExchange) {
+		if err := verifyCredSSPServerCompletion(build(t, server, token), 6, binding, client, types, ntlmOID); !errors.Is(err, ErrCredSSPBindingExchange) {
 			t.Fatalf("%v", err)
 		}
 	})

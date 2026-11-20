@@ -59,6 +59,10 @@ type CredSSPClientConfig struct {
 	Domain   string
 	Password []byte
 	Timeout  time.Duration
+	// Kerberos, when set, authenticates with Kerberos (ADR-0100): the account's realm, its KDCs and
+	// the target's TERMSRV principal. NTLM is then never offered nor sent: a target or a KDC that
+	// refuses Kerberos refuses the session. Nil keeps NTLMv2, as before.
+	Kerberos *KerberosConfig
 
 	// sealAuthInfo replaces the sealing of authInfo. Unexported: only this package's tests set it,
 	// to see how Windows answers an authInfo it must refuse or one naming another domain (ADR-0071
@@ -202,6 +206,9 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 	defer clear(binding.ClientNonce[:])
 	defer clear(binding.ClientToServerHash[:])
 	defer clear(binding.ServerToClientHash[:])
+	if cfg.Kerberos != nil {
+		return t.establishCredSSPKerberos(ctx, cfg, binding)
+	}
 
 	negotiate := MarshalNTLMSSPNegotiate()
 	defer clear(negotiate)
@@ -358,7 +365,7 @@ func (t *Transport) EstablishCredSSP(ctx context.Context, cfg CredSSPClientConfi
 		security.Close()
 		return nil, credsspFailure(fmt.Sprintf("reading the server's answer to AUTHENTICATE (MIC requested %v): %v", micRequested, err), nil)
 	}
-	if err := verifyCredSSPServerCompletion(serverBindingResponse, negotiatedVersion, binding, security, mechTypes); err != nil {
+	if err := verifyCredSSPServerCompletion(serverBindingResponse, negotiatedVersion, binding, security, mechTypes, ntlmOID); err != nil {
 		var code *uint32
 		if answer, perr := ParseTSRequest(serverBindingResponse); perr == nil {
 			code = answer.ErrorCode
@@ -511,7 +518,7 @@ func completeSPNEGOMICExchange(conn io.ReadWriter, version uint32, token []byte,
 		return credsspFailure(fmt.Sprintf("the server's answer to the MIC: version %d (sent %d), pubKeyAuth %d bytes, parse error %v",
 			answer.Version, version, len(answer.PubKeyAuth), err != nil), answer.ErrorCode)
 	}
-	if err := verifySPNEGOCompletion(answer.NegoTokens, security, mechTypes, true); err != nil {
+	if err := verifySPNEGOCompletion(answer.NegoTokens, security, mechTypes, true, ntlmOID); err != nil {
 		return credsspFailure(fmt.Sprintf("the server's SPNEGO completion of the MIC: %v", err), nil)
 	}
 	return security.mechListMICExchanged()

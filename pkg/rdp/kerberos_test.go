@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -385,4 +386,24 @@ func FuzzKerberosAcceptReplyAndUnwrap(f *testing.F) {
 			t.Fatalf("an error outside ErrRDPKerberos: %v", err)
 		}
 	})
+}
+
+func TestKerberos_TheKDCsErrorCode(t *testing.T) {
+	for text, want := range map[string]int32{
+		"[Root cause: KDC_Error] KDC_Error: AS Exchange Error: kerberos error response from KDC: KRB Error: (24) KDC_ERR_PREAUTH_FAILED": 24,
+		"KRB Error: (6) KDC_ERR_C_PRINCIPAL_UNKNOWN": 6,
+	} {
+		if code, ok := kdcErrorCode(errors.New(text)); !ok || code != want {
+			t.Errorf("%q: %d, %v", text, code, ok)
+		}
+	}
+	for _, text := range []string{"no code here", "KRB Error: (24", "KRB Error: (abc)", "KRB Error: (123456)"} {
+		if _, ok := kdcErrorCode(errors.New(text)); ok {
+			t.Errorf("%q gave a code", text)
+		}
+	}
+	kerr := messages.NewKRBError(types.NewPrincipalName(1, "x"), "R", 18, "")
+	if code, ok := kdcErrorCode(fmt.Errorf("wrapped: %w", kerr)); !ok || code != 18 {
+		t.Errorf("a wrapped KRBError: %d, %v", code, ok)
+	}
 }

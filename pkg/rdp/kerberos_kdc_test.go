@@ -98,8 +98,12 @@ func TestKerberos_AgainstAnMITKDC(t *testing.T) {
 		t.Fatalf("the acceptor's wrap: %q, %v", got, err)
 	}
 	// A wrong password: the AS exchange is refused; an unknown service: the TGS exchange.
-	if _, _, err := kerberosInitiate(cfg, "operator", []byte("wrong")); !errors.Is(err, ErrRDPKerberos) || !strings.Contains(err.Error(), "AS exchange") {
+	// A wrong password, an unknown user: refused credentials, as NTLM's are (target_auth_failed).
+	if _, _, err := kerberosInitiate(cfg, "operator", []byte("wrong")); !errors.Is(err, ErrTargetCredentialsRefused) || !strings.Contains(err.Error(), "AS exchange") {
 		t.Errorf("a wrong password: %v", err)
+	}
+	if _, _, err := kerberosInitiate(cfg, "nobody", []byte(userPassword)); !errors.Is(err, ErrTargetCredentialsRefused) {
+		t.Errorf("an unknown user: %v", err)
 	}
 	other := cfg
 	other.ServicePrincipal = "TERMSRV/unknown.openbastion.test"

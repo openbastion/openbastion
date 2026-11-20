@@ -72,3 +72,22 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
   - **incrément 3** : les champs du compte au Vault (royaume, KDC), qui ajoutent au contrat des comptes ;
   - **incrément 4** : la preuve contre Windows, avec un contrôleur Samba AD en CI, la cible jointe au domaine et NTLM interdit. Cette cible Windows de plus en CI sera soumise au propriétaire à cet incrément, comme l'ADR le prévoit.
 
+### Incrément 2 — CredSSP et SPNEGO avec Kerberos (20 novembre 2026)
+
+- **Fait** (`pkg/rdp`, non branché au service) :
+  - `CredSSPClientConfig.Kerberos` : quand elle est posée, l'échange passe par Kerberos (`credssp_kerberos.go`). NTLM n'est alors ni proposé ni envoyé. Un KDC ou une cible qui refuse Kerberos refuse la session, sans aucun repli.
+  - le jeton initial : un NegTokenInit qui propose Kerberos 5 seul, avec l'AP-REQ. Ni NTLM, ni l'alias Microsoft de Kerberos ne sont proposés.
+  - la réponse de la cible doit nommer Kerberos 5 et porter un AP-REP. Son `mechListMIC`, quand elle en envoie un, est vérifié. Le client répond alors par le sien (RFC 4178 §5), comme il le fait quand la cible demande un MIC ou n'a pas terminé.
+  - les jetons MIC de la RFC 4121 (`getMIC`, `verifyMIC`), qui partagent leurs numéros de séquence avec les jetons d'enveloppe, comme la RFC le veut.
+  - `pubKeyAuth`, celui de la cible et `authInfo` passent sous le contexte Kerberos. L'échange de liaison de CredSSP est désormais commun aux deux mécanismes, par une petite interface que le contexte NTLM satisfait déjà ; les fonctions exportées gardent leur signature.
+  - un refus des identifiants par le KDC (mot de passe faux, compte inconnu, révoqué ou expiré) se dit comme celui de NTLM : `ErrTargetCredentialsRefused`, donc `target_auth_failed` au proxy. La bibliothèque aplatit le KRB-ERROR en texte : le code y est lu (« KRB Error: (24) »), seul endroit qui le garde. Un texte d'une autre forme ne donne pas de code, et le refus reste un refus Kerberos ordinaire.
+- **Prouvé** :
+  - un faux serveur CredSSP sur TLS épinglé, écrit à part du client. Les MIC de ce serveur sont signés et vérifiés par le code RFC 4121 de la bibliothèque, une implémentation indépendante de la nôtre. L'échange va jusqu'à `authInfo` dans les quatre cas (terminé sans MIC, terminé avec le MIC de la cible, incomplet, MIC demandé) ;
+  - six refus : une autre liaison de certificat, NTLM en réponse, pas d'AP-REP, un KRB-ERROR, un MIC forgé, un AP-REP d'une autre heure ;
+  - un KDC qui refuse arrête tout avant le moindre octet envoyé à la cible ;
+  - 7 mutations tuées sur 10. Les trois survivantes sont équivalentes : le mécanisme annoncé, déjà refusé par l'analyse SPNEGO restreinte à Kerberos ; un AP-REP vide, déjà refusé par la lecture du cadre GSS-API ; et une mutation mal écrite, qui appelait encore la vérification.
+  - contre le KDC MIT, qui exige désormais la pré-authentification comme Active Directory, un mauvais mot de passe donne `KDC_ERR_PREAUTH_FAILED` (24), et un utilisateur inconnu `KDC_ERR_C_PRINCIPAL_UNKNOWN` (6). Les deux sont des identifiants refusés.
+- **Corrigé en chemin** : le KDC de test n'exigeait pas la pré-authentification. Dans `kadmin`, `-requires_preauth` retire l'attribut ; c'est `+requires_preauth` qui le pose.
+- **Non éprouvé** : contre Windows. Ce qu'un contrôleur de domaine réel envoie (MIC ou non, rotation des jetons, alias Microsoft de Kerberos) se mesurera à l'incrément 4.
+- **Reste** : les champs du compte au Vault (incrément 3), puis Windows dans un domaine Samba AD en CI (incrément 4).
+

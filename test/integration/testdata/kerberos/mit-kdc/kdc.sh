@@ -24,7 +24,7 @@ cat > /etc/krb5kdc/kdc.conf <<CONF
 CONF
 master=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
 kdb5_util create -s -r "${KDC_REALM}" -P "$master" >/dev/null
-kadmin.local -q "addprinc -requires_preauth -pw ${KDC_USER_PASSWORD} ${KDC_USER}" >/dev/null
+kadmin.local -q "addprinc +requires_preauth -pw ${KDC_USER_PASSWORD} ${KDC_USER}" >/dev/null
 kadmin.local -q "addprinc -pw ${KDC_SERVICE_PASSWORD} ${KDC_SERVICE}" >/dev/null
 echo "kdc ready"
 exec krb5kdc -n
