@@ -54,6 +54,8 @@ func windowsTarget(t *testing.T) rdpWindowsTarget {
 	if os.Getenv("RDP_WINDOWS") == "" {
 		t.Skip("RDP_WINDOWS not set: this test needs a Windows target (test/integration/testdata/rdp/windows)")
 	}
+	// If this test fails, the virtual machine's state at that moment (guest_state_test.go).
+	captureGuestStateOnFailure(t)
 	target := rdpWindowsTarget{address: os.Getenv("RDP_WINDOWS_ADDRESS"), user: os.Getenv("RDP_WINDOWS_USER"),
 		password: os.Getenv("RDP_WINDOWS_PASSWORD"), pin: os.Getenv("RDP_WINDOWS_PIN"), name: os.Getenv("RDP_WINDOWS_SERVER_NAME")}
 	raw, err := os.ReadFile(os.Getenv("RDP_WINDOWS_CA_FILE"))
