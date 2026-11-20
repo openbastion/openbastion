@@ -278,3 +278,49 @@ func TestRDPInterop_ScreenThroughTheGraphicsPipeline(t *testing.T) {
 		t.Fatal("no frame came through the graphics pipeline")
 	}
 }
+
+// Once the graphics pipeline has an output, its size is the desktop's: the updates the session's
+// own reader still brings (the pointer's, on the slow path) carry the size of the connection, which a
+// resize by ResetGraphics leaves unchanged. Taken as is, each of them resized the proxy's framebuffer
+// back and forth, black each time (CI of PR #243: key frames of 1280 x 800 and 698 x 888 in turn,
+// the page showing pieces of the desktop). A reactivation keeps its own size: it is a new share.
+func TestRDPGraphics_TheOutputsSizeIsTheDesktopsForTheSessionsOwnUpdates(t *testing.T) {
+	target := &rdpTargetSession{}
+	target.enableGraphics()
+	target.graphics.send = func(context.Context, string, []byte, time.Duration) error { return nil }
+	target.channelOpened(rdp.RDPGraphicsChannel)
+	// The target resizes the output to 698 x 888 (2.2.2.14: width, height, one monitor, its rect).
+	body := binary.LittleEndian.AppendUint32(nil, 698)
+	body = binary.LittleEndian.AppendUint32(body, 888)
+	body = binary.LittleEndian.AppendUint32(body, 1)
+	body = binary.LittleEndian.AppendUint32(body, 0)
+	body = binary.LittleEndian.AppendUint32(body, 0)
+	body = binary.LittleEndian.AppendUint32(body, 697)
+	body = binary.LittleEndian.AppendUint32(body, 887)
+	body = binary.LittleEndian.AppendUint32(body, 1)
+	body = append(body, make([]byte, 332-len(body))...)
+	target.graphics.mu.Lock()
+	_, _, err := target.graphics.compositor.Apply(rdp.RDPGraphicsPDU{Command: rdp.RDPGraphicsResetGraphics, Body: body})
+	target.graphics.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The session's reader brings a pointer update, then a reactivation, at the connection's size.
+	pointer := rdp.RDPBitmapUpdate{DesktopWidth: 1280, DesktopHeight: 800}
+	reactivation := rdp.RDPBitmapUpdate{DesktopWidth: 1024, DesktopHeight: 768, Reactivated: true}
+	reads := make(chan rdp.RDPBitmapUpdate, 2)
+	reads <- pointer
+	reads <- reactivation
+	read := func() (rdp.RDPBitmapUpdate, error) { return <-reads, nil }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, err := target.graphics.next(ctx, read)
+	if err != nil || got.DesktopWidth != 698 || got.DesktopHeight != 888 {
+		t.Fatalf("the pointer's update: %dx%d %v, want the output's 698x888", got.DesktopWidth, got.DesktopHeight, err)
+	}
+	got, err = target.graphics.next(ctx, read)
+	if err != nil || got.DesktopWidth != 1024 || got.DesktopHeight != 768 || !got.Reactivated {
+		t.Fatalf("the reactivation: %dx%d %v %v, want its own 1024x768", got.DesktopWidth, got.DesktopHeight, got.Reactivated, err)
+	}
+	target.graphics.close()
+}

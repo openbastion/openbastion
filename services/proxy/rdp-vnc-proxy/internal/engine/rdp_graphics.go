@@ -138,6 +138,7 @@ func (g *rdpGraphics) next(ctx context.Context, read func() (rdp.RDPBitmapUpdate
 					g.failed <- err
 					return
 				}
+				g.outputSize(&update)
 				select {
 				case g.updates <- update:
 				case <-g.closed:
@@ -158,6 +159,25 @@ func (g *rdpGraphics) next(ctx context.Context, read func() (rdp.RDPBitmapUpdate
 }
 
 func (g *rdpGraphics) close() { g.stopOnce.Do(func() { close(g.closed) }) }
+
+// outputSize gives an update of the session's own reader the pipeline's output size, once it has
+// one. That reader's updates (the pointer's, on the slow path) carry the size of the connection,
+// which a resize by ResetGraphics leaves as it was; taken as is, each resized the proxy's
+// framebuffer back and forth, black each time (CI of PR #243). A reactivation keeps its own size:
+// it is a new share, and the channel opens again with a new output.
+func (g *rdpGraphics) outputSize(update *rdp.RDPBitmapUpdate) {
+	if update.Reactivated {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.compositor == nil {
+		return
+	}
+	if out := g.compositor.Output(); out != nil {
+		update.DesktopWidth, update.DesktopHeight = uint16(out.Rect.Dx()), uint16(out.Rect.Dy())
+	}
+}
 
 // graphicsFrames is how many frames of the graphics pipeline were handed on.
 func (s *rdpTargetSession) graphicsFrames() int {
