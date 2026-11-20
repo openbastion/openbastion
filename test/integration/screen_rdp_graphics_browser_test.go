@@ -122,6 +122,27 @@ func TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser(t *testing.T) {
 	if string(page.eval(screenEndedNotice)) == "true" {
 		t.Fatal("the screen ended while typing")
 	}
+	// The whole screen, not only what changed lately: the taskbar, drawn before the page resized the
+	// desktop, is at the bottom with its clock and icons. A pipeline that sends only the frames'
+	// changes after a resize left it black (CI of PR #243, before the compositor's fix): a fresh
+	// session's wallpaper is black too, so it is the taskbar's bright pixels that are counted.
+	const taskbar = `(() => { const c = document.querySelector("canvas.screen-canvas"); const h = Math.min(48, c.height);
+		const d = c.getContext("2d").getImageData(0, c.height - h, c.width, h).data; let bright = 0;
+		for (let i = 0; i < d.length; i += 4) if (d[i] + d[i+1] + d[i+2] > 3 * 160) bright++;
+		return bright; })()`
+	var bright int
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(time.Second) {
+		_ = json.Unmarshal(page.eval(taskbar), &bright)
+		if bright >= 100 || time.Now().After(deadline) {
+			break
+		}
+	}
+	page.eval(`document.querySelector("canvas.screen-canvas").scrollIntoView({ block: "end" }), true`)
+	page.screenshot(dump, "browser-graphics-3-whole.png")
+	if bright < 100 {
+		t.Fatalf("the taskbar is not on the screen (%d bright pixel(s) in its rows): the page shows only part of the desktop", bright)
+	}
+	t.Logf("the whole desktop is shown: %d bright pixel(s) in the taskbar's rows", bright)
 	var shown [2]int
 	_ = json.Unmarshal(page.eval(`(() => { const c = document.querySelector("canvas.screen-canvas"); return [c.width, c.height]; })()`), &shown)
 
