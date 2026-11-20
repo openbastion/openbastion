@@ -8,7 +8,9 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -61,17 +63,23 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	var a domain.PrivilegedAccount
 	var rotationPolicy string
 	var lastRotatedAt, disabledAt, attemptedAt, owedSince sql.NullTime
+	var profile []byte
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key,
-		       rotation_interval_days, rotation_attempted_at, rotation_failures, rotation_owed_since, approval_required, tls_certificate_sha256, target_domain
+		       rotation_interval_days, rotation_attempted_at, rotation_failures, rotation_owed_since, approval_required, tls_certificate_sha256, target_domain, screen_profile
 		FROM privileged_accounts WHERE id = $1`, id)
 	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey,
-		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures, &owedSince, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain); err != nil {
+		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures, &owedSince, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain, &profile); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
 		return nil, err
 	}
+	screenProfile, err := decodeScreenProfile(profile)
+	if err != nil {
+		return nil, err
+	}
+	a.ScreenProfile = screenProfile
 	a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
 	if lastRotatedAt.Valid {
 		a.LastRotatedAt = &lastRotatedAt.Time
@@ -102,7 +110,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures, approval_required, tls_certificate_sha256, target_domain
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures, approval_required, tls_certificate_sha256, target_domain, screen_profile
 		FROM privileged_accounts WHERE disabled_at IS NULL
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, pageSize, offset)
@@ -116,7 +124,12 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 		var a domain.PrivilegedAccount
 		var rotationPolicy string
 		var lastRotatedAt, disabledAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain); err != nil {
+		var profile []byte
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain, &profile); err != nil {
+			return nil, 0, err
+		}
+		var err error
+		if a.ScreenProfile, err = decodeScreenProfile(profile); err != nil {
 			return nil, 0, err
 		}
 		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
@@ -154,6 +167,42 @@ func (s *PostgresStore) SetApprovalRequired(ctx context.Context, id string, requ
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+// SetScreenProfile is domain.AccountRepository.SetScreenProfile: the profile as JSON, NULL for none.
+func (s *PostgresStore) SetScreenProfile(ctx context.Context, id string, profile *domain.ScreenProfile) error {
+	var value any
+	if profile != nil {
+		raw, err := json.Marshal(profile)
+		if err != nil {
+			return err
+		}
+		value = string(raw)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET screen_profile = $2::jsonb WHERE id = $1`, id, value)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// decodeScreenProfile reads the screen_profile column: NULL is no profile; a stored profile that
+// does not validate is an error, never taken as "everything allowed".
+func decodeScreenProfile(raw []byte) (*domain.ScreenProfile, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var p domain.ScreenProfile
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("reading a stored screen profile: %w", err)
+	}
+	if err := p.Validate(); err != nil {
+		return nil, fmt.Errorf("reading a stored screen profile: %w", err)
+	}
+	return &p, nil
 }
 
 // SetHostKey is domain.AccountRepository.SetHostKey.

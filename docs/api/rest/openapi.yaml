@@ -1783,6 +1783,61 @@ paths:
               schema: { type: integer, minimum: 1 }
         "503": { description: L'audit ou une dépendance du Vault ne répond pas ; aucun changement non audité n'est appliqué. }
 
+  /vault/accounts/{accountId}/screen-profile:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [vault]
+      summary: Règle le profil d'écran d'un compte RDP (ADR-0132)
+      description: >
+        Ce qu'une session sur un compte RDP peut utiliser pour son écran :
+        canaux permis (`graphics`, le pipeline graphique ; `bitmap`, les mises à
+        jour bitmap) et profondeurs de couleur permises (16, 32), avec leurs
+        défauts. L'opérateur choisit dans ces limites à l'ouverture de l'écran.
+        `null` retire le profil : tout est permis, `graphics` et 32 bits par
+        défaut. Réservé à l'administrateur du compte (politique sur
+        `vault:account-admin:{accountId}`, action `vault:account:screen-profile`).
+        L'auteur et ses rôles viennent du jeton vérifié, jamais du corps ; le
+        changement est audité (`vault.screen_profile_set`) avant d'être appliqué.
+        La Gateway borne ces écritures par identité, comme l'approbation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [screenProfile]
+              properties:
+                screenProfile:
+                  oneOf:
+                    - { $ref: "#/components/schemas/ScreenProfile" }
+                    - { type: "null" }
+      responses:
+        "200":
+          description: Profil mis à jour
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  screenProfile:
+                    oneOf:
+                      - { $ref: "#/components/schemas/ScreenProfile" }
+                      - { type: "null" }
+        "400": { description: Profil invalide (ensemble vide ou inconnu, doublon, défaut hors de son ensemble), ou compte qui n'est pas RDP. }
+        "403": { description: L'appelant n'administre pas ce compte. }
+        "404": { description: Compte inconnu ou désactivé. }
+        "429":
+          description: Le budget par utilisateur de modification de compte est épuisé ; réessayer après Retry-After.
+          headers:
+            Retry-After:
+              description: Secondes avant le prochain jeton.
+              schema: { type: integer, minimum: 1 }
+        "503": { description: L'audit ou une dépendance du Vault ne répond pas ; aucun changement non audité n'est appliqué. }
+
   /vault/accounts/{accountId}/rotate:
     parameters:
       - name: accountId
@@ -2226,6 +2281,31 @@ components:
         rotationIntervalDays: { type: integer, minimum: 1, maximum: 365, description: "Obligatoire pour rotationPolicy scheduled, refusé pour les autres (400) — ADR-0040. Le Vault fait tourner le compte cet intervalle après sa dernière rotation (ou sa création)." }
         hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…", description: "Obligatoire pour SSH ; vide pour VNC/RDP, qui exigent ensuite PUT /vault/accounts/{accountId}/tls-pin (ADR-0071). Pour SSH : clé d'hôte publique relevée sur la cible ou ligne known_hosts (ADR-0039), ou autorité @cert-authority (ADR-0048), avec lignes @revoked possibles (ADR-0054)." }
 
+    ScreenProfile:
+      type: object
+      description: >
+        Ce qu'une session sur un compte RDP peut utiliser pour son écran (ADR-0132). Chaque ensemble
+        est non vide, sans doublon, et son défaut en fait partie.
+      required: [channels, defaultChannel, colorDepths, defaultColorDepth]
+      properties:
+        channels:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string, enum: [graphics, bitmap] }
+          description: "`graphics` : le pipeline graphique (ADR-0101) ; `bitmap` : les mises à jour bitmap de l'ancien protocole."
+        defaultChannel: { type: string, enum: [graphics, bitmap] }
+        colorDepths:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { type: integer, enum: [16, 32] }
+          description: Profondeurs demandées à la cible ; une stratégie de la cible peut les plafonner.
+        defaultColorDepth: { type: integer, enum: [16, 32] }
+      example: { channels: [graphics, bitmap], defaultChannel: graphics, colorDepths: [16, 32], defaultColorDepth: 32 }
+
     PrivilegedAccount:
       allOf:
         - $ref: "#/components/schemas/PrivilegedAccountInput"
@@ -2235,6 +2315,9 @@ components:
             approvalRequired:
               type: boolean
               description: Toute session ordinaire sur ce compte attend une seconde personne (ADR-0067).
+            screenProfile:
+              $ref: "#/components/schemas/ScreenProfile"
+              description: Compte RDP seulement (ADR-0132) ; absent, tout est permis, `graphics` et 32 bits par défaut.
             lastRotatedAt: { type: string, format: date-time }
             rotationOwedSince: { type: string, format: date-time, description: "Une session s'est terminée et le compte doit une rotation (ADR-0044) ; absent : il ne doit rien. Le Vault la paie, et la réessaie tant qu'il n'y arrive pas." }
             rotationFailures: { type: integer, description: "Rotations planifiées échouées d'affilée (ADR-0041) ; absent à 0. Tous les ROTATION_ALERT_AFTER_FAILURES échecs, vault.rotation_overdue est écrit à l'audit." }

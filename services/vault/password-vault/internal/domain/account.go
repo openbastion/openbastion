@@ -51,6 +51,10 @@ type PrivilegedAccount struct {
 	// ticket (ADR-0067).
 	ApprovalRequired bool
 
+	// ScreenProfile is what a session on an RDP account may use for its screen (ADR-0132); nil:
+	// everything, DefaultScreenProfile.
+	ScreenProfile *ScreenProfile
+
 	// RotationIntervalDays is how often a scheduled account rotates (ADR-0040): 1 to 365 for
 	// RotationScheduled, 0 for any other policy.
 	RotationIntervalDays int

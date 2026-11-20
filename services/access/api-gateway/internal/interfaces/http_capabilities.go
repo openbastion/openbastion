@@ -35,6 +35,7 @@ var capabilityCatalogue = []struct {
 	{"accounts.disable", []capabilityCheck{{"vault:account-admin:", "vault:account:delete", true}}},
 	{"accounts.pin", []capabilityCheck{{"vault:account-admin:", "vault:account:pin", true}}},
 	{"accounts.approval", []capabilityCheck{{"vault:account-admin:", "vault:account:approval", true}}},
+	{"accounts.screenProfile", []capabilityCheck{{"vault:account-admin:", "vault:account:screen-profile", true}}}, // ADR-0132
 	// Authorization (requirePolicyAdmin).
 	{"policies.create", []capabilityCheck{{"authz:policy-admin", "authz:policy:create", false}}},
 	// Session Broker.

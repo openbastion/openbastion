@@ -669,3 +669,48 @@ func TestPostgresStore_SetTLSPin_RoundTripsGraphicalTargetIdentity(t *testing.T)
 		t.Fatal("List did not return the pinned target identity")
 	}
 }
+
+// ADR-0132: the screen profile round-trips through PostgreSQL, Get and List, and NULL removes it.
+func TestPostgresStore_ScreenProfile_RoundTrips(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("rdp")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "operator", TargetHost: id + ":3389", Protocol: "rdp", RotationPolicy: domain.RotationManual}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.ScreenProfile != nil {
+		t.Fatalf("a new account has no profile: %+v err=%v", got, err)
+	}
+	want := domain.ScreenProfile{Channels: []string{"bitmap", "graphics"}, DefaultChannel: "bitmap", ColorDepths: []int{16}, DefaultColorDepth: 16}
+	if err := store.SetScreenProfile(ctx, id, &want); err != nil {
+		t.Fatalf("SetScreenProfile: %v", err)
+	}
+	got, err := store.Get(ctx, id)
+	if err != nil || got.ScreenProfile == nil || got.ScreenProfile.DefaultChannel != "bitmap" || len(got.ScreenProfile.Channels) != 2 ||
+		got.ScreenProfile.DefaultColorDepth != 16 || len(got.ScreenProfile.ColorDepths) != 1 {
+		t.Fatalf("Get after set: %+v err=%v", got.ScreenProfile, err)
+	}
+	accounts, _, err := store.List(ctx, 1, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range accounts {
+		if a.ID == id {
+			found = a.ScreenProfile != nil && a.ScreenProfile.DefaultChannel == "bitmap"
+		}
+	}
+	if !found {
+		t.Fatal("List lost the profile")
+	}
+	if err := store.SetScreenProfile(ctx, id, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.ScreenProfile != nil {
+		t.Fatalf("removed: %+v err=%v", got.ScreenProfile, err)
+	}
+	if err := store.SetScreenProfile(ctx, uniqueID("nobody"), &want); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("an unknown account: %v", err)
+	}
+}

@@ -1395,6 +1395,40 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// PUT /vault/accounts/{id}/screen-profile sets what a session on an RDP account may use for its
+	// screen (ADR-0132). Only the profile is the client's, in its known fields; who sets it, and with
+	// which roles, are the verified token's — the Vault checks, validates and audits.
+	if accountID, ok := strings.CutSuffix(rest, "/screen-profile"); ok {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if accountID == "" || strings.Contains(accountID, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		// The same per-user budget as the approval setting (ADR-0067): an account action.
+		if !g.admitVaultAccountAction(w, id) {
+			return
+		}
+		var body struct {
+			ScreenProfile *struct {
+				Channels          []string `json:"channels"`
+				DefaultChannel    string   `json:"defaultChannel"`
+				ColorDepths       []int    `json:"colorDepths"`
+				DefaultColorDepth int      `json:"defaultColorDepth"`
+			} `json:"screenProfile"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
+			http.Error(w, "the body is {\"screenProfile\": {...} | null}", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/screen-profile", map[string]any{
+			"screenProfile": body.ScreenProfile, "actorRoles": id.Roles, "actorId": id.UserID,
+		})
+		return
+	}
+
 	// PUT /vault/accounts/{id}/approval says whether a session on the account waits for another
 	// person's approval (ADR-0067). The setting only is the client's; who sets it is the token's.
 	if accountID, ok := strings.CutSuffix(rest, "/approval"); ok {
