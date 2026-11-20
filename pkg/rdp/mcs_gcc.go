@@ -27,7 +27,9 @@ const (
 	rdpClientVersion    = uint32(0x00080004)
 	rdpClientBuild      = uint32(1)
 	rdpColor8BPP        = uint16(0xca01)
+	rdpColor16BPP       = uint16(0xca03) // RNS_UD_COLOR_16BPP_565
 	rdpColor24BPP       = uint16(0xca04)
+	rdpHighColor16BPP   = uint16(0x0010)
 	rdpHighColor24BPP   = uint16(0x0018)
 	rdpSupported24BPP   = uint16(0x0001)
 	rdpSupported16BPP   = uint16(0x0002)
@@ -89,6 +91,12 @@ type MCSClientSettings struct {
 	// target may then open the graphics pipeline (MS-RDPEGFX) on drdynvc, and stops sending bitmap
 	// updates once it does (ADR-0101). It needs DynamicChannels. Off, the flag stays 0, as before.
 	GraphicsPipeline bool
+	// ColorDepth is the depth the client asks for (ADR-0132): 0 or 32, 24 bpp in highColorDepth
+	// and RNS_UD_CS_WANT_32BPP_SESSION, as before; 16, 16 bpp (5-6-5) in postBeta2ColorDepth and
+	// highColorDepth, without WANT_32BPP, as FreeRDP asks for /bpp:16. Only a request: the target's
+	// policy may lower it (ADR-0086), and the graphics pipeline draws at 32 bpp whatever it is. Any
+	// other value is refused, nothing sent.
+	ColorDepth uint16
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches
@@ -231,12 +239,20 @@ func marshalClientDataBlocks(settings MCSClientSettings) ([]byte, error) {
 	put32(0) // keyboardSubType
 	put32(rdpKeyboardFunctionKeys)
 	offset += 64 // imeFileName, unused
-	put16(rdpColor24BPP)
+	postBeta2, highColor, early := rdpColor24BPP, rdpHighColor24BPP, rdpClientErrInfo|rdpClientWant32BPP
+	switch settings.ColorDepth {
+	case 0, 32:
+	case 16:
+		postBeta2, highColor, early = rdpColor16BPP, rdpHighColor16BPP, rdpClientErrInfo
+	default:
+		clear(core)
+		return nil, ErrMCSConnection
+	}
+	put16(postBeta2)
 	put16(1) // clientProductId
 	put32(0) // serialNumber
-	put16(rdpHighColor24BPP)
+	put16(highColor)
 	put16(rdpSupportedColorDepths)
-	early := rdpClientErrInfo | rdpClientWant32BPP
 	if settings.GraphicsPipeline {
 		early |= rdpClientSupportGraphics
 	}

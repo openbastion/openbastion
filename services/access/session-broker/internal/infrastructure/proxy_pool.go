@@ -19,7 +19,7 @@ const MaxProxyInstances = 16
 // InstanceClient is what the pool needs of one instance: the shape of application.ProxyClient,
 // which ProxyClientHTTPClient implements.
 type InstanceClient interface {
-	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error)
+	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights, screen domain.ScreenChoice) (string, string, error)
 	RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error
 	InjectVaultSecret(ctx context.Context, sessionID, accountID, scopeToken string) error
 }
@@ -77,9 +77,9 @@ func (p *ProxyPool) selected(sessionID string) ProxyInstance {
 // EstablishSession asks only the deterministic owner of this session. If it is
 // unavailable the operation fails closed; another instance cannot own the ticket
 // and later receive the session's privileged control commands.
-func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
+func (p *ProxyPool) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights, screen domain.ScreenChoice) (string, string, error) {
 	in := p.selected(sessionID)
-	endpoint, ticket, err := in.Client.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard)
+	endpoint, ticket, err := in.Client.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard, screen)
 	if err != nil {
 		if errors.Is(err, domain.ErrRecordingUnavailable) {
 			return "", "", err

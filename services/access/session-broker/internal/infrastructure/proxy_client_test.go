@@ -23,7 +23,7 @@ func establish(t *testing.T, status int, body string) error {
 		http.Error(w, body, status)
 	}))
 	defer srv.Close()
-	_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
+	_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}, domain.ScreenChoice{})
 	return err
 }
 
@@ -59,7 +59,7 @@ func TestProxyClient_SendsTheBreakGlassAuthorisation(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			_, _ = w.Write([]byte(`{"proxy_endpoint":"127.0.0.1:2222","connection_ticket":"ticket_x"}`))
 		}))
-		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, want, domain.ClipboardRights{})
+		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "ssh", "h", "u", "scope", time.Minute, want, domain.ClipboardRights{}, domain.ScreenChoice{})
 		srv.Close()
 		if err != nil {
 			t.Fatal(err)
@@ -83,7 +83,7 @@ func TestProxyClient_SendsEachClipboardDirection(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			_, _ = w.Write([]byte(`{"proxy_endpoint":"127.0.0.1:3389","connection_ticket":"ticket_x"}`))
 		}))
-		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "rdp", "h", "u", "scope", time.Minute, false, want)
+		_, _, err := (&infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}).EstablishSession(context.Background(), "s", "rdp", "h", "u", "scope", time.Minute, false, want, domain.ScreenChoice{})
 		srv.Close()
 		if err != nil {
 			t.Fatal(err)

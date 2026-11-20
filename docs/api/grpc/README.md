@@ -193,6 +193,11 @@ message EstablishSessionRequest {
   // droit ; faux = refusé. RDP seulement : rdp-vnc-proxy refuse un droit pour un autre protocole.
   bool clipboard_to_target = 9;
   bool clipboard_from_target = 10;
+  // Écran d'une session RDP (ADR-0132), résolu par le Broker contre le profil du compte :
+  // canal (graphics, bitmap) et profondeur de couleur (16, 32). Vides : le défaut du proxy.
+  // RDP seulement.
+  string screen_channel = 11;
+  int32 color_depth = 12;
 }
 
 message EstablishSessionResponse {

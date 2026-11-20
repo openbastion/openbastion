@@ -1047,6 +1047,24 @@ paths:
         soit appelé : une action refusée ici n'atteint ni le Broker, ni le
         Vault, ni le proxy, et n'écrit aucun événement d'audit. Une méthode
         non permise ne coûte rien. La limite est par processus du Gateway.
+
+        **Choix d'écran (ADR-0132).** Le corps est facultatif. Pour une session
+        RDP, `screen` choisit le canal et la profondeur de couleur dans les
+        limites du profil d'écran du compte (`screenProfile`) ; un champ absent
+        prend le défaut du compte (sans profil : `graphics` et `32`). Le Broker
+        résout le choix, l'écrit dans l'événement `session.connect`
+        (`screen_channel`, `color_depth`) et le transmet au proxy. Une valeur
+        inconnue, un corps qui n'est pas du JSON ou un choix pour une session
+        qui n'est pas RDP donne `400`. Un choix hors du profil donne `403`. Dans
+        les deux cas, rien n'est émis au Vault et rien n'est ouvert. Un proxy
+        sans pipeline graphique (`SCREEN_RDPGFX=false`) ouvre `graphics` en
+        `bitmap` et le journalise. Les autres champs sont ignorés (l'appelant est
+        celui du jeton).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectRequest" }
       responses:
         "200":
           description: Ticket de connexion
@@ -1063,8 +1081,17 @@ paths:
                 /sessions/{sessionId}/screen et valable au plus 30 secondes. Le ticket proxy n'est
                 pas présent dans le corps de la réponse.
               schema: { type: string }
+        "400":
+          description: >
+            Corps illisible, ou choix d'écran inconnu, ou choix d'écran pour une
+            session qui n'est pas RDP (ADR-0132).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "403":
-          description: L'appelant n'est pas le demandeur de la session.
+          description: >
+            L'appelant n'est pas le demandeur de la session, ou le choix d'écran
+            sort du profil du compte (ADR-0132).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -2281,6 +2308,17 @@ components:
         rotationIntervalDays: { type: integer, minimum: 1, maximum: 365, description: "Obligatoire pour rotationPolicy scheduled, refusé pour les autres (400) — ADR-0040. Le Vault fait tourner le compte cet intervalle après sa dernière rotation (ou sa création)." }
         hostKey: { type: string, example: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA…", description: "Obligatoire pour SSH ; vide pour VNC/RDP, qui exigent ensuite PUT /vault/accounts/{accountId}/tls-pin (ADR-0071). Pour SSH : clé d'hôte publique relevée sur la cible ou ligne known_hosts (ADR-0039), ou autorité @cert-authority (ADR-0048), avec lignes @revoked possibles (ADR-0054)." }
 
+    ConnectRequest:
+      type: object
+      description: Corps facultatif de POST /sessions/{sessionId}/connect (ADR-0132).
+      properties:
+        screen:
+          type: object
+          description: Choix d'écran de l'opérateur, RDP seulement ; un champ absent prend le défaut du compte.
+          additionalProperties: false
+          properties:
+            channel: { type: string, enum: [graphics, bitmap] }
+            colorDepth: { type: integer, enum: [16, 32] }
     ScreenProfile:
       type: object
       description: >

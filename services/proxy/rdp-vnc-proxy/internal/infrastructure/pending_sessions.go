@@ -20,6 +20,11 @@ type PendingScreenSession struct {
 
 	// The clipboard directions the Broker granted at creation (ADR-0096 §1): RDP only.
 	ClipboardToTarget, ClipboardFromTarget bool
+
+	// The screen the Broker resolved against the account's profile (ADR-0132): RDP only; empty,
+	// the deployment's.
+	ScreenChannel string
+	ColorDepth    int
 }
 
 // PendingScreenSessions stores only one-use admission tickets, never credentials.

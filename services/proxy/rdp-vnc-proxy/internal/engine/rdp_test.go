@@ -549,3 +549,42 @@ func TestRDPCodec_AWaitingScreenGoesOutAtTheInterval(t *testing.T) {
 		}
 	}
 }
+
+// WithScreen is a session's own codec (ADR-0132): the receiver keeps its settings, the channel
+// and the depth are applied, an unknown value is refused, and graphics on a proxy without the
+// pipeline is bitmap, said so.
+func TestRDPCodec_WithScreen(t *testing.T) {
+	on := &RDPCodec{GraphicsPipeline: true, Resize: true}
+	for _, c := range []struct {
+		codec                  *RDPCodec
+		channel                string
+		depth                  int
+		wantGraphics, wantDown bool
+		wantDepth              uint16
+		wantErr                bool
+	}{
+		{codec: on, wantGraphics: true},
+		{codec: on, channel: "graphics", depth: 16, wantGraphics: true, wantDepth: 16},
+		{codec: on, channel: "bitmap", depth: 32, wantDepth: 32},
+		{codec: &RDPCodec{}, channel: "graphics", wantDown: true},
+		{codec: &RDPCodec{}, channel: "bitmap"},
+		{codec: on, channel: "remotefx", wantErr: true},
+		{codec: on, depth: 24, wantErr: true},
+		{codec: nil, wantErr: true},
+	} {
+		got, down, err := c.codec.WithScreen(c.channel, c.depth)
+		if c.wantErr {
+			if err == nil {
+				t.Fatalf("%q %d: no error", c.channel, c.depth)
+			}
+			continue
+		}
+		session := got.(*RDPCodec)
+		if err != nil || session == c.codec || session.GraphicsPipeline != c.wantGraphics || session.ColorDepth != c.wantDepth || down != c.wantDown || session.Resize != c.codec.Resize {
+			t.Fatalf("%q %d: %+v down=%v err=%v", c.channel, c.depth, session, down, err)
+		}
+	}
+	if !on.GraphicsPipeline || on.ColorDepth != 0 {
+		t.Fatal("the proxy's codec was changed")
+	}
+}
