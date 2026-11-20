@@ -48,6 +48,8 @@ func TestScreenFlow_RDPClipboardInAHeadlessBrowser(t *testing.T) {
 	target := rdpStackTarget{address: os.Getenv("RDP_WINDOWS_ADDRESS"), pin: os.Getenv("RDP_WINDOWS_PIN"), certPEM: certPEM,
 		user: os.Getenv("RDP_WINDOWS_USER"), password: os.Getenv("RDP_WINDOWS_PASSWORD"), serverName: os.Getenv("RDP_WINDOWS_SERVER_NAME")}
 	dump := os.Getenv("RDP_WINDOWS_DUMP")
+	// A new Windows session, not the one the previous test left disconnected (freshWindowsSession).
+	freshWindowsSession(t)
 	stack := startRDPScreenStack(t, root, dsn, target, []string{"SCREEN_CLIPBOARD=true"}, []string{"ADMIN_UI_DIR=" + ui})
 	// Both directions for the operator's role (ADR-0096 §1), refused by default.
 	for _, pol := range []struct{ name, resource string }{
