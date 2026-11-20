@@ -28,6 +28,7 @@ on:
       - test/integration/screen_rdp_browser_test.go
       - test/integration/screen_rdp_clipboard_browser_test.go
       - test/integration/screen_rdp_graphics_browser_test.go
+      - test/integration/screen_rdp_choice_browser_test.go
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp_graphics.go
       - test/integration/cdp_test.go
       - web/admin-ui/src/features/screen/**
@@ -181,6 +182,18 @@ jobs:
           make build ui-build
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
           go test ./test/integration/ -run TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser -v -count=1 -timeout=20m
+      # ADR-0132, increment 4: the operator's screen choice in a real browser. The account allows the
+      # bitmap channel only (graphics refused, 403); bitmap and 16 bits chosen in the page, keys into
+      # Notepad, the proxy's word on what was asked and what the target chose, no pipeline offered,
+      # then the replay through the public API (browser-choice-*.png).
+      - name: The screen choice in a headless browser
+        if: ${{ !cancelled() }}
+        env:
+          TEST_DATABASE_URL: postgres://openbastion:openbastion@127.0.0.1:5432/openbastion?sslmode=disable
+        run: |
+          make build ui-build
+          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          go test ./test/integration/ -run TestScreenFlow_RDPScreenChoiceInAHeadlessBrowser -v -count=1 -timeout=20m
       # Runs #16 to #32 settled CredSSP, TLS, the Connect-Initial and the Confirm Active (ADR-0071):
       # only the connection sequence runs by default, before the reference clients (run #34: after
       # them, Windows answered no X.224 request); every TestRDPWindowsIsolation test stays in

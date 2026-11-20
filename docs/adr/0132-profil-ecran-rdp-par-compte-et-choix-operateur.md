@@ -66,6 +66,13 @@ Un choix de codecs fin n'est donc pas réalisable sans un décodeur de plus. Le 
   - Sous « Ouvrir l'écran » d'une session RDP active, et pour son demandeur seulement : canal et profondeur, chacun sur « Défaut du compte » par défaut. Un choix laissé au défaut n'est pas envoyé. Une reconnexion redemande le même choix.
   - La page ne lit pas le profil du compte (un opérateur peut ne pas avoir le droit de lire le compte) : toutes les valeurs sont proposées, et le Broker répond `403` à un choix hors du profil, affiché comme les autres refus (choix renversable : une route de lecture du profil pour l'opérateur permettrait de griser ces valeurs).
 
+- **Incrément 4** (CI Windows, `TestScreenFlow_RDPScreenChoiceInAHeadlessBrowser`, PR #250) : le compte ne permet que `bitmap` ; `graphics` demandé donne `403`. L'opérateur choisit `bitmap` et `16` dans la page, ouvre l'écran et tape dans Notepad. Mesuré sur les cinq Windows (2019 et 2022, 16 et 32 bpp, session console, fr-FR) :
+  - chaque fois, `16 bpp asked` et 16 bpp choisi par la cible, y compris sur le job dont la politique permet 32 ;
+  - aucun pipeline graphique proposé ;
+  - 19 à 25 images relues par l'API publique, dont 5 à 7 images clés à 698 × 888, la taille montrée.
+
+  Le proxy écrit maintenant `the target opened the screen at N bpp (M asked)` à chaque ouverture.
+
 ## Conséquences
 
 - (+) Une cible fragile passe sur le chemin bitmap sans toucher aux autres, et l'opérateur choisit pour sa session dans ce que l'administrateur permet.
