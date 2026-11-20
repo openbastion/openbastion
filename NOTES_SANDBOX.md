@@ -5014,3 +5014,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - `FormCard` gagne des options facultatives (`submitting`, `submittingLabel`, `noValidate`, `footer`, `secondaryAction`) ; les autres formulaires sont inchangés.
 - Défaut antérieur vu à la capture : le sous-titre de la fenêtre affichait la clé `sessions.live.requestModalDescription`, absente des traductions ; ajoutée en français et en anglais, et le test de la demande vérifie le texte.
 - Validation : Vitest 30 fichiers / 278 tests, `tsc` et build Vite **PASS** ; captures Chromium (API simulée) des états ouvert, erreurs de validation, envoi en cours, erreur serveur.
+
+## 2026-11-19 — Sessions : le demandeur ne se voit plus proposer « Approuver »
+
+- L'écran Sessions proposait « Approuver » et « Refuser » à quiconque ouvrait une demande en attente, y compris à son auteur, qui recevait alors le refus du Broker. Il suit maintenant la règle du Broker (`decide`, `session_broker_service.go`) : l'approbateur voit les deux actions ; le demandeur voit « Vous avez fait cette demande : une autre personne doit la décider. », aucune action sur une demande d'approbation, et « Retirer ma demande » (le refus) sur une demande break-glass.
+- Le demandeur est reconnu en comparant `sub` du jeton (l'identifiant que la Gateway transmet comme appelant) à `requestedBy`. Identité inconnue : les deux actions restent, le Broker décide. L'interface n'est pas une garantie : le refus serveur reste la seule.
+- Tests : `SessionDecisions.test.tsx` (3), rouges avant ; contre-épreuve (comparaison neutralisée) : 2 échecs. Vitest 30 fichiers / 276 tests, `tsc` PASS.
