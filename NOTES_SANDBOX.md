@@ -5142,3 +5142,14 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - les échecs Kerberos autres que le refus d'identifiants restent `target_unreachable`.
 - **Base de test** : un conteneur `obpg-kerberos` à part, sur le port 55432, pour ne pas toucher à la base du sandbox.
 - **Reste** : l'incrément 4, Windows dans un domaine Samba AD en CI.
+
+## 2026-11-20 — ADR-0100, incrément 4 : Kerberos contre un Windows contrôleur de domaine
+
+- **Fait** : le Windows de dockur devient son propre contrôleur de domaine (`prepare.sh DOMAIN=kerberos`, `openbastion.test`), dans un job CI à part. Le domaine a un utilisateur avec ses clés AES, `TERMSRV/rdp-windows.test` est posé sur la machine, et le NTLM entrant est refusé.
+- **Prouvé en CI** (`TestRDPWindowsKerberos`) :
+  - Kerberos seul est accepté par Windows, avec les tickets du KDC de Microsoft ;
+  - le proxy entier ouvre la session de l'utilisateur (1280×800, ouverture annoncée par Windows) ;
+  - contre-épreuve : NTLM est refusé par la même cible (`0x80090302`) ;
+  - un mauvais mot de passe s'arrête au KDC (code 24) et ressort en `target_auth_failed`.
+- **Décidé, renversable** : Windows contrôleur de lui-même plutôt que Samba AD.
+- **ADR-0100 est mise en œuvre.** Restent un formulaire dans l'Admin UI et un code d'échec Kerberos à part.

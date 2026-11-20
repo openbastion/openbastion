@@ -13,10 +13,13 @@
 # physical keys (scancodes) and the target reads them with its own layout (ADR-0088).
 # VERSION, 2022 by default: the Windows Server dockur installs; 2019 is the other one ADR-0071's
 # matrix asks for (increment 4).
+# DOMAIN, none by default: kerberos makes this Windows its own domain controller, openbastion.test
+# (ADR-0100, increment 4), with a user of the domain for the test and incoming NTLM refused; start it
+# with docker-compose.kerberos.yml too, which publishes its KDC.
 # The pin and the roots are known before Windows starts: nothing is learnt from the target.
 # Everything here is for one run and is never committed.
 set -euo pipefail
-dir=${1:?usage: prepare.sh DIR [DEPTH] [SESSION] [KEYBOARD] [VERSION]}
+dir=${1:?usage: prepare.sh DIR [DEPTH] [SESSION] [KEYBOARD] [VERSION] [DOMAIN]}
 depth=${2:-16}
 case "$depth" in 16 | 32) ;; *) echo "DEPTH must be 16 or 32, not $depth" >&2; exit 2 ;; esac
 session=${3:-none}
@@ -25,6 +28,8 @@ keyboard=${4:-en-US}
 case "$keyboard" in en-US | fr-FR) ;; *) echo "KEYBOARD must be en-US or fr-FR, not $keyboard" >&2; exit 2 ;; esac
 version=${5:-2022}
 case "$version" in 2022 | 2019) ;; *) echo "VERSION must be 2022 or 2019, not $version" >&2; exit 2 ;; esac
+domain=${6:-none}
+case "$domain" in none | kerberos) ;; *) echo "DOMAIN must be none or kerberos, not $domain" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 name=rdp-windows.test
 mkdir -p "$dir/oem" "$dir/storage" "$dir/dump" "$dir/shared"
@@ -51,6 +56,14 @@ sed 's/$/\r/' "$here/oem/rdp-video.vbs" > oem/rdp-video.vbs
 printf '%s' "$depth" > oem/color-depth
 printf '%s' "$session" > oem/session
 printf '%s' "$keyboard" > oem/keyboard
+printf '%s' "$name" > oem/server-name
+if [ "$domain" = kerberos ]; then
+  printf '%s' openbastion.test > oem/domain
+  cp "$here/oem/kerberos-dc.ps1" "$here/oem/kerberos-ready.ps1" oem/
+  # The password of the domain's test user; Windows deletes its copy once the user is made.
+  kerberos_password="Kb-$(openssl rand -hex 12)-K1"
+  printf '%s' "$kerberos_password" > oem/kerberos.pass
+fi
 
 pin=$(openssl x509 -in rdp.pem -outform DER | openssl dgst -sha256 | awk '{print $NF}')
 # Windows rejects a password without three of: lower, upper, digit, symbol.
@@ -81,4 +94,13 @@ RDP_WINDOWS_KEYBOARD=$keyboard
 RDP_WINDOWS_VERSION=$version
 RDP_WINDOWS_SHARED=$dir/shared
 ENV
+if [ "$domain" = kerberos ]; then
+  cat >> test.env <<ENV
+RDP_WINDOWS_KERBEROS=1
+RDP_WINDOWS_KERBEROS_REALM=OPENBASTION.TEST
+RDP_WINDOWS_KERBEROS_KDC=127.0.0.1:88
+RDP_WINDOWS_KERBEROS_USER=krbop
+RDP_WINDOWS_KERBEROS_PASSWORD=$kerberos_password
+ENV
+fi
 echo "prepared $dir: the RDP certificate of $name, pin $pin"

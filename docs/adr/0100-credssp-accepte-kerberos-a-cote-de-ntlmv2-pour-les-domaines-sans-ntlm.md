@@ -112,5 +112,21 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
 - **Pas encore fait** :
   - l'Admin UI n'a pas de formulaire Kerberos : la route s'appelle par l'API ;
   - les échecs Kerberos autres que le refus d'identifiants (KDC injoignable, cible qui refuse le ticket) restent `target_unreachable`. Un code à part toucherait le contrat de l'écran et l'UI.
-- **Reste** : l'incrément 4, Windows dans un domaine Samba AD en CI.
+- **Reste** : l'incrément 4, éprouver Kerberos contre Windows en CI.
+
+### Incrément 4 — Kerberos contre un Windows contrôleur de domaine (20 novembre 2026)
+
+- **Décidé en autonomie, renversable** : l'ADR prévoyait un Samba AD et un Windows joint, « à confirmer à son incrément ». J'ai choisi de faire du Windows du test d'interopérabilité (dockur, ADR-0071) **son propre contrôleur de domaine**, `openbastion.test`. Ainsi le KDC qui délivre les tickets est celui de Microsoft, et il n'y a ni image de plus ni réseau entre conteneurs. Samba reste possible pour éprouver un KDC qui ne soit pas de Microsoft.
+- **Fait** (`test/integration/testdata/rdp/windows`, `prepare.sh DOMAIN=kerberos`) :
+  - `kerberos-dc.ps1` installe le rôle AD DS puis crée la forêt, en toute dernière étape de `rdp-setup.ps1`, car la promotion redémarre Windows ;
+  - après ce redémarrage, la tâche de disponibilité exécute `kerberos-ready.ps1` avant d'installer le certificat épinglé, qui signale au test que la cible est prête. Il crée un utilisateur du domaine avec ses clés AES : un compte venu de la base locale à la promotion n'a que son empreinte NT, et le client ne demande que AES. Il pose aussi `TERMSRV/rdp-windows.test` sur la machine et refuse le NTLM entrant (`RestrictReceivingNTLMTraffic` à 2), comme un domaine qui l'a fermé ;
+  - `docker-compose.kerberos.yml` publie le KDC (88/tcp) sur la boucle locale, et dockur le relaie à la machine virtuelle ;
+  - un job à part dans `windows-rdp.yml` vérifie d'abord la syntaxe PowerShell. Les cinq cibles existantes ne changent pas.
+- **Prouvé en CI** (`TestRDPWindowsKerberos`, PR #253) :
+  - Windows accepte l'échange CredSSP en Kerberos seul, avec des tickets de son propre KDC ;
+  - **le proxy entier** : le credential porte le royaume et le KDC, le ticket est demandé pour le nom épinglé, et **la session de l'utilisateur s'ouvre** (Windows dit qu'il l'a ouverte, 1280×800) ;
+  - **contre-épreuve** : la même cible refuse le même utilisateur en NTLM (`0x80090302`, `SEC_E_UNSUPPORTED_FUNCTION`). La session ouverte au point précédent a donc bien été faite par Kerberos ;
+  - un mauvais mot de passe s'arrête au KDC (code 24) et ressort en `target_auth_failed`.
+- **Constaté en chemin** : le partage invité de dockur continue de fonctionner une fois la machine promue, et les journaux arrivent. Le test n'en dépend pas pour savoir si la cible est prête.
+- **ADR-0100 est mise en œuvre.** Restent hors de son périmètre : un formulaire Kerberos dans l'Admin UI, et un code d'échec à part pour un KDC injoignable ou un ticket refusé, aujourd'hui `target_unreachable`.
 
