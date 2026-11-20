@@ -57,7 +57,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		gatewayURL  = "http://127.0.0.1:18808" // the public listener: users, bearer tokens, TLS ends at the edge
 	)
 
-	startMTLSService(t, root, vaultBin, "18801", p, mtls.PasswordVault, "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authzURL)
+	startMTLSService(t, root, vaultBin, "18801", p, mtls.PasswordVault, "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL="+authzURL, "AUDIT_URL="+auditURL)
 	startMTLSService(t, root, auditBin, "18802", p, mtls.AuditService)
 	startMTLSService(t, root, authzBin, "18803", p, mtls.Authorization)
 	// Logins are written to the real Audit Service, under the authentication certificate (ADR-0064).
@@ -192,6 +192,81 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		}
 		if status, _ := reconcile(operatorToken); status != http.StatusForbidden {
 			t.Errorf("the operator, without the policy: %d, want 403", status)
+		}
+	})
+
+	t.Run("an RDP account's screen profile is its administrator's, over mutual TLS (ADR-0132)", func(t *testing.T) {
+		api := screenAPI{t: t, url: gatewayURL}
+		if status, raw := api.call(adminToken, http.MethodPost, "/vault/accounts", map[string]any{
+			"id": "acc_mtls_rdp", "name": "acc_mtls_rdp", "username": "operator", "targetHost": "10.0.0.9:3389",
+			"protocol": "rdp", "rotationPolicy": "manual", "initialSecret": []byte("rdp-secret"),
+		}); status != http.StatusCreated {
+			t.Fatalf("onboarding the RDP account: %d %s", status, raw)
+		}
+		bitmap16 := map[string]any{"screenProfile": map[string]any{"channels": []string{"bitmap"}, "defaultChannel": "bitmap", "colorDepths": []int{16}, "defaultColorDepth": 16}}
+		if status, _ := api.call(operatorToken, http.MethodPut, "/vault/accounts/acc_mtls_rdp/screen-profile", bitmap16); status != http.StatusForbidden {
+			t.Errorf("the operator set a screen profile: %d, want 403", status)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_rdp/screen-profile", map[string]any{
+			"screenProfile": map[string]any{"channels": []string{"bitmap"}, "defaultChannel": "graphics", "colorDepths": []int{16}, "defaultColorDepth": 16},
+		}); status != http.StatusBadRequest {
+			t.Errorf("an invalid profile: %d %s, want 400", status, raw)
+		}
+		if status, _ := api.call(adminToken, http.MethodPut, "/vault/accounts/"+accountID+"/screen-profile", bitmap16); status != http.StatusBadRequest {
+			t.Errorf("a profile on an SSH account: %d, want 400", status)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_rdp/screen-profile", bitmap16); status != http.StatusOK {
+			t.Fatalf("the administrator set the profile: %d %s", status, raw)
+		}
+		status, raw := api.call(adminToken, http.MethodGet, "/vault/accounts/acc_mtls_rdp", nil)
+		if status != http.StatusOK || !strings.Contains(raw, `"screenProfile":{"channels":["bitmap"],"defaultChannel":"bitmap","colorDepths":[16],"defaultColorDepth":16}`) {
+			t.Fatalf("the account read back: %d %s", status, raw)
+		}
+
+		// The operator's choice is bounded by that profile at the Broker, which reads it from the
+		// Vault over mutual TLS (ADR-0132, increment 2): refused before any scope, nothing opened.
+		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, "dba-on-rdp", "dba", "vault:account:acc_mtls_rdp", "allow", "ignored"); status != http.StatusCreated {
+			t.Fatalf("policy on the RDP account: %d", status)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_rdp/tls-pin", map[string]any{"tlsCertificateSha256": strings.Repeat("ab", 32), "targetDomain": "rdp.mtls.test"}); status != http.StatusOK {
+			t.Fatalf("pinning the RDP account: %d %s", status, raw)
+		}
+		status, raw = api.call(operatorToken, http.MethodPost, "/sessions", map[string]any{
+			"targetAccountId": "acc_mtls_rdp", "protocol": "rdp", "justification": "screen choice", "durationMinutes": 30,
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("the RDP session: %d %s", status, raw)
+		}
+		var rdpSession struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(raw), &rdpSession); err != nil || rdpSession.ID == "" {
+			t.Fatalf("the RDP session: %v %s", err, raw)
+		}
+		for _, c := range []struct {
+			name   string
+			screen map[string]any
+			want   int
+		}{
+			{"a channel outside the profile", map[string]any{"channel": "graphics"}, http.StatusForbidden},
+			{"a depth outside the profile", map[string]any{"colorDepth": 32}, http.StatusForbidden},
+			{"a channel that does not exist", map[string]any{"channel": "h264"}, http.StatusBadRequest},
+		} {
+			if status, raw := api.call(operatorToken, http.MethodPost, "/sessions/"+rdpSession.ID+"/connect", map[string]any{"screen": c.screen}); status != c.want {
+				t.Errorf("%s: %d %s, want %d", c.name, status, raw, c.want)
+			}
+		}
+		// Within the profile, the choice goes through; this product has no screen proxy, so the
+		// connection stops further on — not at the choice.
+		if status, raw := api.call(operatorToken, http.MethodPost, "/sessions/"+rdpSession.ID+"/connect", map[string]any{"screen": map[string]any{"channel": "bitmap", "colorDepth": 16}}); status == http.StatusForbidden || status == http.StatusBadRequest {
+			t.Errorf("a choice within the profile: %d %s", status, raw)
+		}
+
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_rdp/screen-profile", map[string]any{"screenProfile": nil}); status != http.StatusOK {
+			t.Fatalf("removing the profile: %d %s", status, raw)
+		}
+		if _, raw := api.call(adminToken, http.MethodGet, "/vault/accounts/acc_mtls_rdp", nil); strings.Contains(raw, "screenProfile") {
+			t.Fatalf("the profile is still there: %s", raw)
 		}
 	})
 

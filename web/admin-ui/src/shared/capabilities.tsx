@@ -18,6 +18,7 @@ export const capabilityNames = [
   "accounts.disable",
   "accounts.pin",
   "accounts.approval",
+  "accounts.screenProfile",
   "policies.create",
   "sessions.create",
   "sessions.breakglass",

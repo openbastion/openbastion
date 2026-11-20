@@ -112,6 +112,25 @@ func (s *InMemoryStore) SetApprovalRequired(ctx context.Context, id string, requ
 	return nil
 }
 
+// SetScreenProfile is domain.AccountRepository.SetScreenProfile.
+func (s *InMemoryStore) SetScreenProfile(ctx context.Context, id string, profile *domain.ScreenProfile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if profile == nil {
+		a.ScreenProfile = nil
+		return nil
+	}
+	copied := *profile
+	copied.Channels = append([]string(nil), profile.Channels...)
+	copied.ColorDepths = append([]int(nil), profile.ColorDepths...)
+	a.ScreenProfile = &copied
+	return nil
+}
+
 // SetHostKey is domain.AccountRepository.SetHostKey.
 func (s *InMemoryStore) SetHostKey(ctx context.Context, id, hostKey string) error {
 	s.mu.Lock()

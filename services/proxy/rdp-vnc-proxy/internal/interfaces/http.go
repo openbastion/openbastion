@@ -74,6 +74,9 @@ type establishRequest struct {
 	// The clipboard directions the Broker granted (ADR-0096 §1); absent means refused.
 	ClipboardToTarget   bool `json:"clipboard_to_target"`
 	ClipboardFromTarget bool `json:"clipboard_from_target"`
+	// The screen the Broker resolved (ADR-0132): RDP only, absent means the deployment's.
+	ScreenChannel string `json:"screen_channel"`
+	ColorDepth    int    `json:"color_depth"`
 }
 type establishResponse struct {
 	ProxyEndpoint    string `json:"proxy_endpoint"`
@@ -111,6 +114,11 @@ func (s *HTTPServer) establish(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid screen session request", http.StatusBadRequest)
 		return
 	}
+	// The screen choice is RDP's alone (ADR-0132), and only the values the Broker can resolve.
+	if !validScreenChoice(protocol, req.ScreenChannel, req.ColorDepth) {
+		http.Error(w, "invalid screen session request", http.StatusBadRequest)
+		return
+	}
 	if s.listener == nil || s.listener.Live == nil || s.pending == nil || s.gate == nil {
 		http.Error(w, "screen service unavailable", http.StatusServiceUnavailable)
 		return
@@ -127,7 +135,7 @@ func (s *HTTPServer) establish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := time.Now().UTC().Add(time.Duration(req.TTLSeconds) * time.Second)
-	ticket, err := s.pending.Register(infrastructure.PendingScreenSession{SessionID: req.SessionID, ScopeToken: req.VaultScopeToken, Protocol: protocol, ExpiresAt: expires, ClipboardToTarget: req.ClipboardToTarget, ClipboardFromTarget: req.ClipboardFromTarget})
+	ticket, err := s.pending.Register(infrastructure.PendingScreenSession{SessionID: req.SessionID, ScopeToken: req.VaultScopeToken, Protocol: protocol, ExpiresAt: expires, ClipboardToTarget: req.ClipboardToTarget, ClipboardFromTarget: req.ClipboardFromTarget, ScreenChannel: req.ScreenChannel, ColorDepth: req.ColorDepth})
 	if err != nil {
 		http.Error(w, "ticket generation unavailable", http.StatusServiceUnavailable)
 		return
@@ -288,9 +296,58 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusPolicyViolation, "screen protocol is unavailable")
 		return
 	}
+	if pending.Protocol == screenstream.ProtocolRDP {
+		var err error
+		if codec, err = sessionScreen(codec, pending); err != nil {
+			log.Printf("rdp-vnc-proxy: session %s not opened: %v", pending.SessionID, err)
+			writeTicketEnd()
+			_ = conn.Close(websocket.StatusPolicyViolation, "screen protocol is unavailable")
+			return
+		}
+	}
 	if err := s.listener.ServeScreen(ctx, meta, codec, s.recorder, s.gate, sink); err != nil {
 		log.Printf("rdp-vnc-proxy: graphical session ended: %v", err)
 	}
+}
+
+// validScreenChoice: an RDP session's channel and depth are ones the Broker resolves to (ADR-0132)
+// or empty; any other protocol carries none.
+func validScreenChoice(protocol screenstream.Protocol, channel string, colorDepth int) bool {
+	if protocol != screenstream.ProtocolRDP {
+		return channel == "" && colorDepth == 0
+	}
+	return (channel == "" || channel == "graphics" || channel == "bitmap") &&
+		(colorDepth == 0 || colorDepth == 16 || colorDepth == 32)
+}
+
+// screenChoosingCodec is a codec that opens a session with its own screen (engine.RDPCodec).
+type screenChoosingCodec interface {
+	WithScreen(channel string, colorDepth int) (proxycore.ScreenCodec, bool, error)
+}
+
+// sessionScreen is the codec of the ticket's session, with the screen the Broker resolved
+// (ADR-0132), and the line that says which. A choice the codec cannot apply is refused: the session
+// is not opened on another screen than the one on the record.
+func sessionScreen(codec proxycore.ScreenCodec, p infrastructure.PendingScreenSession) (proxycore.ScreenCodec, error) {
+	if p.ScreenChannel == "" && p.ColorDepth == 0 {
+		return codec, nil
+	}
+	choosing, ok := codec.(screenChoosingCodec)
+	if !ok {
+		return nil, fmt.Errorf("the codec cannot apply the screen choice (channel %q, %d bpp)", p.ScreenChannel, p.ColorDepth)
+	}
+	session, downgraded, err := choosing.WithScreen(p.ScreenChannel, p.ColorDepth)
+	if err != nil {
+		return nil, err
+	}
+	channel := p.ScreenChannel
+	if downgraded {
+		// SCREEN_RDPGFX=false is the deployment's ceiling (ADR-0132 §4).
+		log.Printf("rdp-vnc-proxy: session %s: graphics chosen, the graphics pipeline is off on this proxy (SCREEN_RDPGFX): bitmap", p.SessionID)
+		channel = "bitmap"
+	}
+	log.Printf("rdp-vnc-proxy: session %s screen: channel %q, %d bpp asked", p.SessionID, channel, p.ColorDepth)
+	return session, nil
 }
 
 type websocketScreenSink struct {

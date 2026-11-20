@@ -60,6 +60,10 @@ func (oneAccount) CheckAccount(context.Context, string) (bool, string, error) {
 	return false, "ssh", nil
 }
 
+func (oneAccount) GetScreenProfile(context.Context, string) (*domain.ScreenProfile, error) {
+	return nil, nil
+}
+
 func (oneAccount) GetAccount(context.Context, string) (string, string, error) {
 	return "10.0.0.5:22", "root", nil
 }
@@ -70,7 +74,7 @@ func (f failingProxy) InjectVaultSecret(context.Context, string, string, string,
 	return f.err
 }
 
-func (p failingProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool, domain.ClipboardRights) (string, string, error) {
+func (p failingProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool, domain.ClipboardRights, domain.ScreenChoice) (string, string, error) {
 	return "", "", p.err
 }
 
@@ -342,6 +346,10 @@ func TestCreateSession_NonStringTicketIsAuditedAsARefusal(t *testing.T) {
 
 // vncAccount is a graphical account, pinned: only break-glass keeps it from a session.
 type vncAccount struct{}
+
+func (vncAccount) GetScreenProfile(context.Context, string) (*domain.ScreenProfile, error) {
+	return nil, nil
+}
 
 func (vncAccount) CheckAccount(context.Context, string) (bool, string, error) {
 	return false, "vnc", nil

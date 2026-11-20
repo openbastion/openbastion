@@ -51,7 +51,7 @@ type secretInjectionProxy struct {
 	injectedScope   string
 }
 
-func (p *secretInjectionProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool, domain.ClipboardRights) (string, string, error) {
+func (p *secretInjectionProxy) EstablishSession(context.Context, string, string, string, string, string, time.Duration, bool, domain.ClipboardRights, domain.ScreenChoice) (string, string, error) {
 	return "https://ssh-proxy.example", "connection-ticket", nil
 }
 func (p *secretInjectionProxy) RevokeSession(context.Context, string, string, time.Duration) error {

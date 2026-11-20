@@ -26,14 +26,14 @@ func NewProtocolProxyRouter(pools map[string]*ProxyPool) (*ProtocolProxyRouter, 
 	copyPools["rdp"] = copyPools["vnc"]
 	return &ProtocolProxyRouter{pools: copyPools}, nil
 }
-func (r *ProtocolProxyRouter) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
+func (r *ProtocolProxyRouter) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights, screen domain.ScreenChoice) (string, string, error) {
 	// RDP is served by the screen proxies, VNC's pool (ADR-0088); whether it is open is the
 	// Broker's decision (RDP_ENABLED), taken before any scope, and the proxy's own again.
 	pool := r.pools[protocol]
 	if pool == nil {
 		return "", "", fmt.Errorf("no proxy pool for protocol %q", protocol)
 	}
-	return pool.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard)
+	return pool.EstablishSession(ctx, sessionID, protocol, targetHost, targetUser, scopeToken, ttl, breakGlass, clipboard, screen)
 }
 func (r *ProtocolProxyRouter) RevokeSession(ctx context.Context, protocol, sessionID string, remaining time.Duration) error {
 	if protocol == "rdp" {

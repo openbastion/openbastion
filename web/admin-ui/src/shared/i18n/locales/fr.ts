@@ -905,6 +905,7 @@ export default {
       "accounts_disable": "désactiver un compte",
       "accounts_pin": "épingler l'identité d'une cible",
       "accounts_approval": "exiger l'approbation d'un compte",
+      "accounts_screenProfile": "régler le profil d'écran d'un compte",
       "policies_create": "créer une politique",
       "sessions_create": "demander une session",
       "sessions_breakglass": "demander un accès d'urgence",

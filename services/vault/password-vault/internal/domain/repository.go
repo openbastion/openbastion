@@ -69,6 +69,8 @@ type AccountRepository interface {
 	SetTLSPin(ctx context.Context, id, fingerprint, targetDomain string) error
 	// SetApprovalRequired says whether a session on id waits for an approval (ADR-0067).
 	SetApprovalRequired(ctx context.Context, id string, required bool) error
+	// SetScreenProfile sets the screen profile of an RDP account (ADR-0132); nil removes it.
+	SetScreenProfile(ctx context.Context, id string, profile *ScreenProfile) error
 
 	// ListDueForRotation is at most limit enabled accounts to be rotated at now and not taken
 	// since now-retryAfter, the longest waiting first: those that owe a rotation (ADR-0044) and,

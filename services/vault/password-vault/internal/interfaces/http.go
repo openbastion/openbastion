@@ -178,7 +178,8 @@ func writeAdminError(w http.ResponseWriter, what string, err error) {
 		errors.Is(err, application.ErrNoReconciliation), errors.Is(err, application.ErrNoHostKey), errors.Is(err, application.ErrNoTLSPin),
 		errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrRotationOff),
 		// What the target answered: an administrator configured it, and needs it to act.
-		errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
+		errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified),
+		errors.Is(err, domain.ErrInvalidScreenProfile), errors.Is(err, application.ErrNotRDP):
 		msg = err.Error()
 	default:
 		status, msg = http.StatusServiceUnavailable, "a dependency of the Vault is unavailable: nothing was changed, try again shortly"
@@ -210,7 +211,8 @@ func adminErrorStatus(err error) int {
 		return http.StatusServiceUnavailable
 	case errors.Is(err, domain.ErrAlreadyExists):
 		return http.StatusConflict
-	case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadTLSPin), errors.Is(err, application.ErrBadTargetDomain), errors.Is(err, application.ErrUnsupportedProtocol), errors.Is(err, application.ErrBadRotationInterval):
+	case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadTLSPin), errors.Is(err, application.ErrBadTargetDomain), errors.Is(err, application.ErrUnsupportedProtocol), errors.Is(err, application.ErrBadRotationInterval),
+		errors.Is(err, domain.ErrInvalidScreenProfile), errors.Is(err, application.ErrNotRDP):
 		return http.StatusBadRequest
 	case errors.Is(err, application.ErrAccessDenied):
 		return http.StatusForbidden
@@ -356,6 +358,9 @@ type accountResponse struct {
 	RotationOwedSince *time.Time `json:"rotationOwedSince,omitempty"`
 	// ApprovalRequired: a session waits for another person's approval (ADR-0067).
 	ApprovalRequired bool `json:"approvalRequired"`
+	// ScreenProfile: what a session on an RDP account may use for its screen (ADR-0132); absent:
+	// everything, the graphics pipeline and 32 bits by default.
+	ScreenProfile *domain.ScreenProfile `json:"screenProfile,omitempty"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -373,7 +378,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
 		TLSCertificateSHA256: a.TLSCertificateSHA256, TargetDomain: a.TargetDomain,
 		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures, RotationOwedSince: a.RotationOwedSince,
-		ApprovalRequired: a.ApprovalRequired,
+		ApprovalRequired: a.ApprovalRequired, ScreenProfile: a.ScreenProfile,
 	}
 }
 
@@ -389,6 +394,10 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	}
 	if accountID, ok := strings.CutSuffix(id, "/tls-pin"); ok {
 		s.handleSetTLSPin(w, r, accountID)
+		return
+	}
+	if accountID, ok := strings.CutSuffix(id, "/screen-profile"); ok {
+		s.handleSetScreenProfile(w, r, accountID)
 		return
 	}
 	if accountID, ok := strings.CutSuffix(id, "/approval"); ok {
@@ -557,6 +566,34 @@ func (s *HTTPServer) handleSetApproval(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	writeJSON(w, map[string]bool{"approvalRequired": *req.ApprovalRequired})
+}
+
+// -- PUT /vault/v1/accounts/{id}/screen-profile (ADR-0132), from the Gateway ---------
+
+type setScreenProfileRequest struct {
+	// ScreenProfile: the profile; null removes it (everything allowed).
+	ScreenProfile *domain.ScreenProfile `json:"screenProfile"`
+	ActorRoles    []string              `json:"actorRoles"`
+	ActorID       string                `json:"actorId"`
+}
+
+func (s *HTTPServer) handleSetScreenProfile(w http.ResponseWriter, r *http.Request, accountID string) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req setScreenProfileRequest
+	dec := json.NewDecoder(io.LimitReader(r.Body, 16<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "the body is {\"screenProfile\": {\"channels\": [...], \"defaultChannel\": ..., \"colorDepths\": [...], \"defaultColorDepth\": ...} | null}", http.StatusBadRequest)
+		return
+	}
+	if err := s.svc.SetScreenProfile(r.Context(), req.ActorID, req.ActorRoles, accountID, req.ScreenProfile); err != nil {
+		writeAdminError(w, "setting the screen profile of account "+accountID, err)
+		return
+	}
+	writeJSON(w, map[string]*domain.ScreenProfile{"screenProfile": req.ScreenProfile})
 }
 
 // Refusal codes of authorize-scope (ADR-0042): the contract a caller reads.

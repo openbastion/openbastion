@@ -837,3 +837,49 @@ func TestGateway_ARequestItCannotBuild_NamesNoInternalURL(t *testing.T) {
 		}
 	}
 }
+
+// PUT /vault/accounts/{id}/screen-profile (ADR-0132): the profile is the client's, in its known
+// fields; who sets it is the verified token's. Attack: a body that names another actor, grants
+// itself a role and slips a host key in. Counter-proof: the profile is forwarded, null as null.
+func TestHandleVaultAccountItem_SetScreenProfileTakesOnlyTheProfileFromTheClient(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"operator"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+	put := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := put("/vault/accounts/acc1/screen-profile", `not json`); rec.Code != http.StatusBadRequest || vault.lastPinPath != "" {
+		t.Fatalf("not JSON: %d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	if rec := put("/vault/accounts/a/b/screen-profile", `{"screenProfile":null}`); rec.Code != http.StatusNotFound || vault.lastPinPath != "" {
+		t.Fatalf("a nested path: %d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	rec := put("/vault/accounts/acc1/screen-profile", `{"screenProfile":{"channels":["bitmap"],"defaultChannel":"bitmap","colorDepths":[16],"defaultColorDepth":16,"codecs":["avc"]},
+		"actorId":"user_root","actorRoles":["vault-admin"],"hostKey":"ssh-ed25519 AAAAevil"}`)
+	if rec.Code != http.StatusOK || vault.lastPinPath != "/vault/v1/accounts/acc1/screen-profile" {
+		t.Fatalf("%d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	roles, _ := vault.lastPin["actorRoles"].([]any)
+	profile, _ := vault.lastPin["screenProfile"].(map[string]any)
+	if vault.lastPin["actorId"] != "user_admin" || len(roles) != 1 || roles[0] != "operator" || profile["defaultChannel"] != "bitmap" {
+		t.Fatalf("forwarded %v", vault.lastPin)
+	}
+	if _, slipped := vault.lastPin["hostKey"]; slipped {
+		t.Fatalf("a host key rode along: %v", vault.lastPin)
+	}
+	if _, slipped := profile["codecs"]; slipped {
+		t.Fatalf("an unknown field of the profile rode along: %v", profile)
+	}
+	if rec := put("/vault/accounts/acc1/screen-profile", `{"screenProfile":null}`); rec.Code != http.StatusOK || vault.lastPin["screenProfile"] != nil {
+		t.Fatalf("null: %d, forwarded %v", rec.Code, vault.lastPin)
+	}
+}

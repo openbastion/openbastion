@@ -1015,8 +1015,54 @@ type screenAttachResponse struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+// connectBody is the public body of POST /sessions/{id}/connect, optional (ADR-0132): the
+// operator's screen choice for an RDP session. The Broker resolves it against the account's
+// profile; the Gateway only checks its shape.
+type connectBody struct {
+	Screen *connectScreenChoice `json:"screen,omitempty"`
+}
+
+type connectScreenChoice struct {
+	Channel    string `json:"channel,omitempty"`
+	ColorDepth int    `json:"colorDepth,omitempty"`
+}
+
+// brokerConnectRequest is what the Broker reads: the caller from the verified token, never
+// from the body, and the screen choice as it came.
+type brokerConnectRequest struct {
+	CallerID string               `json:"callerId"`
+	Screen   *connectScreenChoice `json:"screen,omitempty"`
+}
+
+// readConnectBody reads the optional body: none, or one JSON object. Other fields are ignored, as
+// they were before the body had any (a client's "callerId" never survives: the caller is the
+// token's); a screen of the wrong shape is refused.
+func readConnectBody(w http.ResponseWriter, r *http.Request) (connectBody, error) {
+	var body connectBody
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err != nil {
+		return body, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return body, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&body); err != nil {
+		return body, err
+	}
+	if dec.More() {
+		return body, errors.New("trailing data")
+	}
+	return body, nil
+}
+
 func (g *GatewayServer) handleConnectAction(w http.ResponseWriter, r *http.Request, url, sessionID, callerID string) {
-	body, _ := json.Marshal(map[string]string{"callerId": callerID})
+	choice, err := readConnectBody(w, r)
+	if err != nil {
+		http.Error(w, "invalid connect request", http.StatusBadRequest)
+		return
+	}
+	body, _ := json.Marshal(brokerConnectRequest{CallerID: callerID, Screen: choice.Screen})
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		internalError(w, err)
@@ -1391,6 +1437,40 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 			"targetDomain":         body.TargetDomain,
 			"actorRoles":           id.Roles,
 			"actorId":              id.UserID,
+		})
+		return
+	}
+
+	// PUT /vault/accounts/{id}/screen-profile sets what a session on an RDP account may use for its
+	// screen (ADR-0132). Only the profile is the client's, in its known fields; who sets it, and with
+	// which roles, are the verified token's — the Vault checks, validates and audits.
+	if accountID, ok := strings.CutSuffix(rest, "/screen-profile"); ok {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if accountID == "" || strings.Contains(accountID, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		// The same per-user budget as the approval setting (ADR-0067): an account action.
+		if !g.admitVaultAccountAction(w, id) {
+			return
+		}
+		var body struct {
+			ScreenProfile *struct {
+				Channels          []string `json:"channels"`
+				DefaultChannel    string   `json:"defaultChannel"`
+				ColorDepths       []int    `json:"colorDepths"`
+				DefaultColorDepth int      `json:"defaultColorDepth"`
+			} `json:"screenProfile"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
+			http.Error(w, "the body is {\"screenProfile\": {...} | null}", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/screen-profile", map[string]any{
+			"screenProfile": body.ScreenProfile, "actorRoles": id.Roles, "actorId": id.UserID,
 		})
 		return
 	}

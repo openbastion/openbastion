@@ -62,9 +62,51 @@ type RDPCodec struct {
 	// relay, the partial frames and the recording see no difference. A target that does not open it
 	// goes on with bitmap updates. Off, nothing is announced, as before.
 	GraphicsPipeline bool
-	openSession      func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
+	// ColorDepth is the depth asked of the target (ADR-0132, rdp.MCSClientSettings.ColorDepth):
+	// 0 or 32 as before, 16 for a session whose screen was chosen so. Set per session by
+	// WithScreen, never by the runtime.
+	ColorDepth  uint16
+	openSession func(context.Context, *proxycore.Credential) (rdpScreenSession, error)
 	// openSessionWith stands in for the connection in tests that look at the clipboard's rights.
 	openSessionWith func(context.Context, *proxycore.Credential, rdpClipboardRights) (rdpScreenSession, error)
+}
+
+// The screen channels a session may be opened with (ADR-0132).
+const (
+	ScreenChannelGraphics = "graphics"
+	ScreenChannelBitmap   = "bitmap"
+)
+
+// ErrInvalidScreen is a screen choice this codec does not know: the session is not opened.
+var ErrInvalidScreen = errors.New("rdp-vnc-proxy: invalid screen choice")
+
+// WithScreen is the codec of one session, opened with the screen the Broker resolved against the
+// account's profile (ADR-0132): channel "bitmap" leaves the graphics pipeline out, "graphics"
+// keeps it — when the deployment offers it: SCREEN_RDPGFX off is a ceiling, and the choice is then
+// bitmap, which downgraded reports — and colorDepth 16 or 32 is asked of the target. Empty values
+// are the deployment's. The receiver is not changed: every other session keeps its own.
+func (c *RDPCodec) WithScreen(channel string, colorDepth int) (codec proxycore.ScreenCodec, downgraded bool, err error) {
+	if c == nil {
+		return nil, false, ErrRDPConfiguration
+	}
+	session := *c
+	switch channel {
+	case "":
+	case ScreenChannelGraphics:
+		downgraded = !c.GraphicsPipeline
+	case ScreenChannelBitmap:
+		session.GraphicsPipeline = false
+	default:
+		return nil, false, ErrInvalidScreen
+	}
+	switch colorDepth {
+	case 0:
+	case 16, 32:
+		session.ColorDepth = uint16(colorDepth)
+	default:
+		return nil, false, ErrInvalidScreen
+	}
+	return &session, downgraded, nil
 }
 
 // rdpClipboardRights are the clipboard's directions a session may use (ADR-0096 §1).
@@ -191,7 +233,7 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	}
 	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
 		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize || c.GraphicsPipeline, DesktopResize: c.Resize,
-		ClipboardChannel: clipboard.any(), GraphicsPipeline: c.GraphicsPipeline}
+		ClipboardChannel: clipboard.any(), GraphicsPipeline: c.GraphicsPipeline, ColorDepth: c.ColorDepth}
 	target := &rdpTargetSession{session: client, resize: c.Resize}
 	if c.GraphicsPipeline {
 		target.enableGraphics()

@@ -16,7 +16,7 @@ import { fakeApi, fakeToken } from "../test-helpers";
 
 const none = {
   "accounts.list": false, "accounts.onboard": false, "accounts.rotate": false, "accounts.disable": false,
-  "accounts.pin": false, "accounts.approval": false, "policies.create": false, "sessions.create": false,
+  "accounts.pin": false, "accounts.approval": false, "accounts.screenProfile": false, "policies.create": false, "sessions.create": false,
   "sessions.breakglass": false, "sessions.approve": false, "sessions.read": false, "sessions.terminate": false,
   "secrets.inject": false, "recordings.read": false, "audit.secretInjections": false,
 };
