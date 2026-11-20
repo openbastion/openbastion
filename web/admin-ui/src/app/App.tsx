@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Api, claims } from "../shared/api";
 import { SignedInContext } from "../shared/session";
 import { Login } from "../features/login/Login";
@@ -12,7 +12,9 @@ import { Settings } from "../features/settings/Settings";
 import { Sessions } from "../features/sessions/Sessions";
 import { LegalNotice } from "../shared/LegalNotice";
 import { AppShell, Tab } from "./AppShell";
+import { tabAllowed } from "./tabAccess";
 import { readOperatorPreferences } from "../shared/operatorPreferences";
+import { Capabilities, CapabilitiesContext, capabilitiesFrom, parseCapabilities } from "../shared/capabilities";
 
 export function App({
   api: given,
@@ -58,6 +60,22 @@ export function App({
     setToken(null);
   }, [api]);
   const who = useMemo(() => (token ? claims(token) : null), [token]);
+  // ADR-0131: the caller's capabilities, read once per token. Until they answer, and if they
+  // cannot be read, gated actions are greyed (capabilitiesFrom fails closed for actions).
+  const [capabilities, setCapabilities] = useState<Capabilities>(() => capabilitiesFrom("loading"));
+  useEffect(() => {
+    if (!token) return;
+    let current = true;
+    setCapabilities(capabilitiesFrom("loading"));
+    api.request<unknown>("GET", "/auth/me/capabilities")
+      .then((body) => { if (current) setCapabilities(capabilitiesFrom("ready", parseCapabilities(body))); })
+      .catch(() => { if (current) setCapabilities(capabilitiesFrom("unavailable")); });
+    return () => { current = false; };
+  }, [api, token]);
+
+  // A page the caller has no capability for is not rendered, even when the stored default
+  // or a link asks for it: the overview stands in.
+  const shownTab: Tab = tabAllowed(capabilities, tab) ? tab : "overview";
 
   if (!token) {
     if (location.pathname.startsWith("/ui/oidc/callback"))
@@ -71,15 +89,17 @@ export function App({
   }
   return (
     <SignedInContext.Provider value={{ api, who, signOut }}>
-      <AppShell who={who} tab={tab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
-        {tab === "overview" && <Overview onNavigate={navigateToTab} />}
-        {tab === "accounts" && <Accounts onNavigate={navigateToTab} initialView={accountsInitialView} />}
-        {tab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
-        {tab === "infrastructure" && <Infrastructure onNavigate={navigateToTab} />}
-        {tab === "security" && <AuditCompliance onNavigate={navigateToTab} />}
-        {tab === "posture" && <SecurityCenter />}
-        {tab === "settings" && <Settings />}
+      <CapabilitiesContext.Provider value={capabilities}>
+      <AppShell who={who} tab={shownTab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
+        {shownTab === "overview" && <Overview onNavigate={navigateToTab} />}
+        {shownTab === "accounts" && <Accounts onNavigate={navigateToTab} initialView={accountsInitialView} />}
+        {shownTab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
+        {shownTab === "infrastructure" && <Infrastructure onNavigate={navigateToTab} />}
+        {shownTab === "security" && <AuditCompliance onNavigate={navigateToTab} />}
+        {shownTab === "posture" && <SecurityCenter />}
+        {shownTab === "settings" && <Settings />}
       </AppShell>
+      </CapabilitiesContext.Provider>
     </SignedInContext.Provider>
   );
 }

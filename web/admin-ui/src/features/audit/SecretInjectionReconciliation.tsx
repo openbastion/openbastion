@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useCapabilities } from "../../shared/capabilities";
 import { ApiError, SecretInjectionReconciliation as Result, SecretInjectionOutcome } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
 import { useAppTranslation } from "../../shared/i18n";
@@ -34,6 +35,7 @@ function errorLabel(error: unknown, t: (key: string) => string): string {
 export function SecretInjectionReconciliation() {
   const { api } = useSignedIn();
   const { t } = useAppTranslation();
+  const { visible } = useCapabilities();
   const [result, setResult] = useState<Result>();
   const [cursor, setCursor] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,6 +63,8 @@ export function SecretInjectionReconciliation() {
   }, [api]);
 
 
+  // ADR-0131: the reconciliation is for those whose policies open it; for the others it is absent.
+  if (!visible("audit.secretInjections")) return null;
   return (
     <section className="ob-surface" aria-labelledby="secret-injection-audit-title">
       <div className="ob-section-heading">

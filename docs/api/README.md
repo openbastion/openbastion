@@ -17,6 +17,7 @@ L'API REST publique est servie par la Gateway sous `/api/v1`. Sa spécification 
 | `/auth/mfa/webauthn/keys/add` | POST | auth | Clé de secours : la signature de la clé actuelle et un code d'administrateur → les options de la nouvelle clé (ADR-0066) |
 | `/auth/token/refresh` | POST | auth | Renouvellement de jeton |
 | `/auth/me` | GET | auth | Profil courant |
+| `/auth/me/capabilities` | GET | auth | Capacités de l'Admin UI pour l'appelant : une valeur par fonction, d'après ses politiques ; image, jamais autorisation (ADR-0131) |
 | `/sessions` | GET / POST | sessions | Lister les demandes break-glass en attente que l'on peut décider (`status=pending_approval` seul, ADR-0012) / demander une session |
 | `/sessions/{id}` | GET / DELETE | sessions | Détail (demandeur, décideur, ou politique `session-read:account:{id}`) / terminaison |
 | `/sessions/{id}/connect` | POST | sessions | Ticket de connexion vers le SSH Proxy (réservé au demandeur) |

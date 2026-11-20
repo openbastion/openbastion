@@ -5,6 +5,7 @@ import { useSignedIn } from "../../shared/session";
 import { Form, FormField, Input } from "@openbastion/ui";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { Button } from "../../shared/ui/Button";
+import { GatedButton } from "../../shared/ui/GatedButton";
 import { Credentials, sign } from "../../shared/webauthn";
 import { useAppTranslation } from "../../shared/i18n";
 
@@ -133,9 +134,9 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
       <h3 id={`secret-injection-${session.id}`}>{t("sessions.secretInjection.title")}</h3>
       <p className="ob-hint">{t("sessions.secretInjection.account", { account: session.privilegedAccountId })}</p>
       {!challenge ? (
-        <Button variant="primary" onClick={() => { setStartError(undefined); setConfirming(true); }}>
+        <GatedButton capability="secrets.inject" variant="primary" onClick={() => { setStartError(undefined); setConfirming(true); }}>
           {t("sessions.secretInjection.start")}
-        </Button>
+        </GatedButton>
       ) : (
         <div className="ob-form-fields" aria-busy={busy}>
           <p className="ob-hint">{t("sessions.secretInjection.challengeExpires", { seconds: challenge.expires_in })}</p>

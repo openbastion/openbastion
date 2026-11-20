@@ -518,7 +518,26 @@ message CheckAccessResponse {
   bool requires_approval = 2;     // false en MVP (pas de Workflow Service) ; actif dès v0.0.1
   string decision_reason = 3;
 }
+
+// ADR-0131 : les capacités de l'Admin UI, demandées par la seule Gateway pour les rôles du jeton
+// qu'elle a vérifié. Transport actuel : POST /authz/v1/capabilities, HTTP/JSON sous mTLS.
+message CapabilityQuery {
+  string resource = 1;            // ressource exacte, ou préfixe quand prefix = true
+  string action = 2;
+  bool prefix = 3;                // l'action est-elle permise sur au moins une ressource du préfixe ?
+}
+
+message CapabilitiesRequest {
+  repeated string actor_roles = 1;          // de 1 à 32 questions ; corps ≤ 32 Kio
+  repeated CapabilityQuery queries = 2;
+}
+
+message CapabilitiesResponse {
+  repeated bool allowed = 1;      // une réponse par question, dans l'ordre ; jamais de raison
+}
 ```
+
+`Capabilities` n'accorde rien : c'est une image des politiques qui façonne l'interface. Une question exacte suit `CheckAccess` ; une question par préfixe est un majorant (`AllowsSomeUnder` : un `deny` qui couvre tout le préfixe l'emporte). Liste vide ou au-delà de 32, champ inconnu, ressource ou action vide ou de plus de 256 octets : `400` ; magasin des politiques en panne : `503` sans détail.
 
 ## 9. Flux MVP annoté au niveau RPC
 

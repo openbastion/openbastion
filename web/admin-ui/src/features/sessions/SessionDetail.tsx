@@ -2,6 +2,8 @@ import { Session } from "../../shared/api";
 import { Button } from "../../shared/ui/Button";
 import { useAppTranslation } from "../../shared/i18n";
 import { SecretInjection } from "./SecretInjection";
+import { GatedButton } from "../../shared/ui/GatedButton";
+import { useSignedIn } from "../../shared/session";
 
 // The attached screen of the session being looked at: each connection is another attach, and the
 // key restarts the viewer on the new one.
@@ -24,6 +26,11 @@ export function SessionDetail({
   onTerminate: (session: Session) => void;
 }) {
   const { t, i18n } = useAppTranslation();
+  const { who } = useSignedIn();
+  // The Broker gives the screen to the requester only (POST /connect), and lets the requester end
+  // their own session without a policy (ADR-0017); anyone else needs session-terminate.
+  const isRequester = Boolean(who?.sub) && who?.sub === session.requestedBy;
+  const unknownCaller = !who?.sub;
   return (
     <>
       <dl className="ob-detail-list" aria-label={t("sessions.detail.aria")}>
@@ -69,13 +76,15 @@ export function SessionDetail({
           <SecretInjection session={session} />
           <div className="ob-form-actions">
             {session.protocol === "vnc" || session.protocol === "rdp" ? (
-              <Button variant="primary" onClick={() => onOpenScreen(session.id)}>
-                {t("sessions.detail.openScreen")}
-              </Button>
+              <span title={isRequester || unknownCaller ? undefined : t("sessions.detail.screenRequesterOnly")}>
+                <Button variant="primary" disabled={!isRequester && !unknownCaller} onClick={() => onOpenScreen(session.id)}>
+                  {t("sessions.detail.openScreen")}
+                </Button>
+              </span>
             ) : null}
-            <Button variant="danger" onClick={() => onTerminate(session)}>
+            <GatedButton capability="sessions.terminate" extraAllowed={isRequester} variant="danger" onClick={() => onTerminate(session)}>
               {t("sessions.detail.terminate")}
-            </Button>
+            </GatedButton>
           </div>
         </>
       ) : null}

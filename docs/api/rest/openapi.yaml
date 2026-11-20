@@ -429,6 +429,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/User" }
 
+  /auth/me/capabilities:
+    get:
+      tags: [auth]
+      summary: Capacités de l'Admin UI pour l'appelant (ADR-0131)
+      description: |
+        Indique, pour l'appelant authentifié et ses seuls rôles vérifiés, quelles fonctions de
+        l'Admin UI ses politiques lui ouvrent : une page sans aucune capacité est absente, une
+        action non autorisée est grisée. C'est une image des politiques, jamais une autorisation :
+        chaque route reste décidée par le service Authorization sur sa propre ressource, et une
+        capacité vraie peut encore être refusée sur une ressource précise. Une capacité est vraie
+        quand l'action est permise sur au moins une ressource de son périmètre (une politique sur
+        un seul compte suffit). Aucun paramètre ; liste de noms fermée, d'autres noms peuvent
+        s'ajouter.
+      responses:
+        "200":
+          description: Une valeur par capacité du catalogue
+          headers:
+            Cache-Control: { schema: { type: string, enum: ["no-store"] } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Capabilities" }
+        "400": { description: Un paramètre de requête a été fourni }
+        "401": { description: Jeton absent ou invalide }
+        "405": { description: Méthode autre que GET }
+        "503": { description: "Le service Authorization n'a pas répondu comme attendu : l'Admin UI grise alors toutes les actions" }
+
   /sessions:
     get:
       tags: [sessions]
@@ -1993,6 +2019,30 @@ components:
         refreshToken: { type: string }
         expiresIn: { type: integer, description: "secondes" }
 
+    Capabilities:
+      type: object
+      required: [capabilities]
+      properties:
+        capabilities:
+          type: object
+          description: Nom de capacité → permise pour l'appelant
+          additionalProperties: { type: boolean }
+          example:
+            accounts.list: true
+            accounts.onboard: true
+            accounts.rotate: true
+            accounts.disable: false
+            accounts.pin: true
+            accounts.approval: false
+            policies.create: false
+            sessions.create: true
+            sessions.breakglass: false
+            sessions.approve: false
+            sessions.read: false
+            sessions.terminate: false
+            secrets.inject: false
+            recordings.read: false
+            audit.secretInjections: false
     User:
       type: object
       properties:

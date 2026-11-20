@@ -1,6 +1,6 @@
 import { Account } from "../../shared/api";
 import { Badge } from "../../shared/ui/Badge";
-import { Button } from "../../shared/ui/Button";
+import { GatedButton } from "../../shared/ui/GatedButton";
 import { useAppTranslation } from "../../shared/i18n";
 
 // What a row can ask of its account. The screen owns the calls and the notices; the table only
@@ -78,25 +78,25 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
               <td className="ob-table-actions">
                 <div className="reference-row-actions">
                   {a.protocol === "ssh" ? (
-                    <Button onClick={() => actions.pinKey(a)}>
+                    <GatedButton capability="accounts.pin" onClick={() => actions.pinKey(a)}>
                       {a.hostKeyFingerprint ? t("accounts.table.changeHostKey") : t("accounts.table.pinHostKey")}
-                    </Button>
+                    </GatedButton>
                   ) : (
-                    <Button onClick={() => actions.pinTls(a)}>
+                    <GatedButton capability="accounts.pin" onClick={() => actions.pinTls(a)}>
                       {a.tlsCertificateSha256 ? t("accounts.table.changeCertificate") : t("accounts.table.pinCertificate")}
-                    </Button>
+                    </GatedButton>
                   )}
-                  <Button onClick={() => actions.toggleApproval(a)}>
+                  <GatedButton capability="accounts.approval" onClick={() => actions.toggleApproval(a)}>
                     {a.approvalRequired ? t("accounts.table.noApproval") : t("accounts.table.requireApproval")}
-                  </Button>
+                  </GatedButton>
                   {a.protocol === "ssh" ? (
-                    <Button onClick={() => actions.rotate(a)}>
+                    <GatedButton capability="accounts.rotate" onClick={() => actions.rotate(a)}>
                       {t("accounts.table.rotate")}
-                    </Button>
+                    </GatedButton>
                   ) : null}
-                  <Button variant="danger" onClick={() => actions.disable(a)}>
+                  <GatedButton capability="accounts.disable" variant="danger" onClick={() => actions.disable(a)}>
                     {t("accounts.table.disable")}
-                  </Button>
+                  </GatedButton>
                 </div>
               </td>
             </tr>

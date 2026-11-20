@@ -43,6 +43,8 @@ func TestScreenFlow_RDPResizeInAHeadlessBrowser(t *testing.T) {
 	target := rdpStackTarget{address: os.Getenv("RDP_WINDOWS_ADDRESS"), pin: os.Getenv("RDP_WINDOWS_PIN"), certPEM: certPEM,
 		user: os.Getenv("RDP_WINDOWS_USER"), password: os.Getenv("RDP_WINDOWS_PASSWORD"), serverName: os.Getenv("RDP_WINDOWS_SERVER_NAME")}
 	dump := os.Getenv("RDP_WINDOWS_DUMP")
+	// A new Windows session, not the one the previous test left disconnected (freshWindowsSession).
+	freshWindowsSession(t)
 	stack := startRDPScreenStack(t, root, dsn, target, []string{"SCREEN_RESIZE=true"}, []string{"ADMIN_UI_DIR=" + ui})
 	status, raw := stack.api.call(stack.operatorToken, http.MethodPost, "/sessions",
 		map[string]any{"targetAccountId": "acc_rdp", "protocol": "rdp", "justification": "ADR-0095", "durationMinutes": 10})

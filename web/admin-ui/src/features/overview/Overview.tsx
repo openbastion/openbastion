@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Account, Page, Session } from "../../shared/api";
 import { useSignedIn } from "../../shared/session";
+import { useCapabilities } from "../../shared/capabilities";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { Button } from "../../shared/ui/Button";
 import { StatusBadge } from "../../shared/ui/StatusBadge";
@@ -58,6 +59,11 @@ function formatTime(value: string | undefined, locale: string): string {
 export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sessions" | "policies" | "security") => void } = {}) {
   const { t, i18n } = useAppTranslation();
   const { api } = useSignedIn();
+  // ADR-0131: without the right to list the vault's accounts, the inventory is not asked for and
+  // its widgets say what is missing instead of showing the server's refusal.
+  const capabilities = useCapabilities();
+  const capabilitiesKnown = capabilities.status !== "loading";
+  const mayList = capabilities.visible("accounts.list");
   const [accounts, setAccounts] = useState<Widget<Account>>({ loading: true });
   const [approvals, setApprovals] = useState<Widget<Session>>({ loading: true });
   const [refreshKey, setRefreshKey] = useState(0);
@@ -66,14 +72,19 @@ export function Overview({ onNavigate }: { onNavigate?: (tab: "accounts" | "sess
     let current = true;
     setAccounts({ loading: true });
     setApprovals({ loading: true });
-    api.request<Page<Account>>("GET", "/vault/accounts?page=1&pageSize=100")
-      .then((data) => { if (current) setAccounts({ data, loading: false }); })
-      .catch((error: unknown) => { if (current) setAccounts({ error, loading: false }); });
+    if (!capabilitiesKnown) return () => { current = false; };
+    if (mayList) {
+      api.request<Page<Account>>("GET", "/vault/accounts?page=1&pageSize=100")
+        .then((data) => { if (current) setAccounts({ data, loading: false }); })
+        .catch((error: unknown) => { if (current) setAccounts({ error, loading: false }); });
+    } else {
+      setAccounts({ error: new Error(t("capabilities.missing", { name: t("capabilities.names.accounts_list") })), loading: false });
+    }
     api.request<Page<Session>>("GET", "/sessions?status=pending_approval&page=1&pageSize=100")
       .then((data) => { if (current) setApprovals({ data, loading: false }); })
       .catch((error: unknown) => { if (current) setApprovals({ error, loading: false }); });
     return () => { current = false; };
-  }, [api, refreshKey]);
+  }, [api, refreshKey, capabilitiesKnown, mayList, t]);
 
   const accountItems = accounts.data?.items ?? [];
   const rotationAttention = useMemo(() => accountItems.filter((account) =>

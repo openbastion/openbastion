@@ -202,6 +202,7 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/mfa/webauthn/enroll/confirm", g.handleMFA("/auth/v1/mfa/webauthn/enroll/confirm", "challenge", "{credential}"))
 	// One more key (ADR-0066): the current key's signature and an administrator's code.
 	mux.HandleFunc("/auth/mfa/webauthn/keys/add", g.handleMFA("/auth/v1/mfa/webauthn/keys/add", "challenge", "{credential}", "enrollmentCode"))
+	mux.HandleFunc("/auth/me/capabilities", g.requireAuth(g.handleCapabilities)) // ADR-0131
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
 	// The search of recorded commands (ADR-0080), served by the Command Recorder.
 	mux.HandleFunc("/recordings/search", g.requireAuth(g.handleRecordingSearch))

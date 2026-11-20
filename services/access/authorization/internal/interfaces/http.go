@@ -26,6 +26,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/authz/v1/policies", s.handleCreatePolicy)
 	mux.HandleFunc("/authz/v1/check-access", s.handleCheckAccess)
+	mux.HandleFunc("/authz/v1/capabilities", s.handleCapabilities)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }
@@ -119,4 +120,58 @@ func (s *HTTPServer) handleCheckAccess(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(checkAccessResponse{
 		Allowed: decision.Allowed, RequiresApproval: decision.RequiresApproval, DecisionReason: decision.Reason,
 	})
+}
+
+// -- capabilities (ADR-0131) -----------------------------------------------------------------
+
+// maxCapabilitiesBody bounds the request: 32 questions of 2 × 256 bytes fit well inside it.
+const maxCapabilitiesBody = 32 << 10
+
+type capabilityQueryJSON struct {
+	Resource string `json:"resource"`
+	Action   string `json:"action"`
+	Prefix   bool   `json:"prefix"`
+}
+
+type capabilitiesRequest struct {
+	ActorRoles []string              `json:"actor_roles"`
+	Queries    []capabilityQueryJSON `json:"queries"`
+}
+
+type capabilitiesResponse struct {
+	Allowed []bool `json:"allowed"`
+}
+
+// handleCapabilities answers the Gateway's closed list of Admin UI questions for one caller's
+// roles (ADR-0131): booleans in the order asked, never a reason, never a policy. A malformed or
+// unbounded list is a 400; a failing store a 503 that says nothing of it.
+func (s *HTTPServer) handleCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req capabilitiesRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxCapabilitiesBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "invalid capabilities request", http.StatusBadRequest)
+		return
+	}
+	queries := make([]application.CapabilityQuery, len(req.Queries))
+	for i, q := range req.Queries {
+		queries[i] = application.CapabilityQuery{Resource: q.Resource, Action: q.Action, Prefix: q.Prefix}
+	}
+	allowed, err := s.svc.Capabilities(r.Context(), req.ActorRoles, queries)
+	if errors.Is(err, application.ErrInvalidCapabilityQuery) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		log.Printf("authorization: capabilities failed: %v", err)
+		http.Error(w, "the capabilities could not be evaluated", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(capabilitiesResponse{Allowed: allowed})
 }

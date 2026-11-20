@@ -317,3 +317,59 @@ func TestCreatePolicy_RejectsInvalidActionPattern(t *testing.T) {
 		t.Fatalf("CreatePolicy error=%v, want invalid pattern", err)
 	}
 }
+
+// ADR-0131: Capabilities answers exact and prefix questions in order, on one read of the store.
+func TestCapabilities_AnswersEachQuestionInOrder(t *testing.T) {
+	svc := newTestService()
+	ctx := context.Background()
+	for _, p := range []struct {
+		name, role, resource, action string
+		effect                       domain.Effect
+	}{
+		{"ops-rotate-one", "ops", "vault:account-admin:acc_1", "vault:account:rotate", domain.EffectAllow},
+		{"ops-list", "ops", "vault:account-admin:*", "vault:account:list", domain.EffectAllow},
+		{"ops-no-delete", "ops", "vault:account-admin:*", "vault:account:delete", domain.EffectDeny},
+	} {
+		if _, err := svc.CreatePolicy(ctx, []string{testAdminRole}, p.name, p.role, p.resource, p.action, p.effect, "admin"); err != nil {
+			t.Fatalf("CreatePolicy %s: %v", p.name, err)
+		}
+	}
+	got, err := svc.Capabilities(ctx, []string{"ops"}, []application.CapabilityQuery{
+		{Resource: "vault:account-admin:", Action: "vault:account:rotate", Prefix: true}, // one account: some
+		{Resource: "vault:account-admin:*", Action: "vault:account:list"},                // exact
+		{Resource: "vault:account-admin:", Action: "vault:account:delete", Prefix: true}, // denied everywhere
+		{Resource: "authz:policy-admin", Action: "authz:policy:create"},                  // nothing
+		{Resource: "vault:account-admin:acc_2", Action: "vault:account:rotate"},          // exact: not this one
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []bool{true, true, false, false, false}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("answers %v, want %v", got, want)
+		}
+	}
+}
+
+func TestCapabilities_RefusesAnUnboundedOrEmptyListAndFailsClosed(t *testing.T) {
+	svc := newTestService()
+	ctx := context.Background()
+	if _, err := svc.Capabilities(ctx, []string{"ops"}, nil); !errors.Is(err, application.ErrInvalidCapabilityQuery) {
+		t.Fatalf("no query: %v", err)
+	}
+	many := make([]application.CapabilityQuery, application.MaxCapabilityQueries+1)
+	for i := range many {
+		many[i] = application.CapabilityQuery{Resource: "r", Action: "a"}
+	}
+	if _, err := svc.Capabilities(ctx, []string{"ops"}, many); !errors.Is(err, application.ErrInvalidCapabilityQuery) {
+		t.Fatalf("%d queries: %v", len(many), err)
+	}
+	if _, err := svc.Capabilities(ctx, []string{"ops"}, []application.CapabilityQuery{{Resource: "", Action: "a"}}); !errors.Is(err, application.ErrInvalidCapabilityQuery) {
+		t.Fatalf("empty resource: %v", err)
+	}
+	broken := application.NewAuthorizationService(erroringPolicyRepository{})
+	if got, err := broken.Capabilities(ctx, []string{"platform-admin"}, []application.CapabilityQuery{{Resource: "r", Action: "a"}}); err == nil || got != nil {
+		t.Fatalf("a failing store must answer nothing: %v %v", got, err)
+	}
+}

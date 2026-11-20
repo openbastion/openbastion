@@ -4,6 +4,8 @@ import { Input, Label } from "@openbastion/ui";
 import { ArrowRight } from "@openbastion/icons";
 import { Button } from "./Button";
 import { useAppTranslation } from "../i18n";
+import { useCapabilities } from "../capabilities";
+import { tabAllowed } from "../../app/tabAccess";
 
 type Command = {
   id: string;
@@ -24,6 +26,7 @@ export function CommandPalette({
   onFindSession: (id: string) => void;
 }) {
   const { t, i18n } = useAppTranslation();
+  const capabilities = useCapabilities();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -31,7 +34,7 @@ export function CommandPalette({
   const commands = useMemo<Command[]>(() => {
     const destinations: { tab: Tab; label: string; detail: string; keywords: string }[] = (
       ["overview", "accounts", "sessions", "infrastructure", "security", "posture", "settings"] as const
-    ).map((tab) => ({
+    ).filter((tab) => tabAllowed(capabilities, tab)).map((tab) => ({
       tab,
       label: t(`palette.destinations.${tab}.label`),
       detail: t(`palette.destinations.${tab}.detail`),
@@ -57,7 +60,7 @@ export function CommandPalette({
       });
     }
     return navigation;
-  }, [i18n.language, onFindSession, onNavigate, query, t]);
+  }, [capabilities, i18n.language, onFindSession, onNavigate, query, t]);
 
   useEffect(() => {
     input.current?.focus();

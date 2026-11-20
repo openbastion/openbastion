@@ -110,3 +110,43 @@ func TestCreatePolicy_InvalidPatternReturnsBadRequest(t *testing.T) {
 		t.Fatalf("status=%d body=%q", rec.Code, rec.Body.String())
 	}
 }
+
+// ADR-0131: POST /authz/v1/capabilities answers booleans in order, refuses a malformed or
+// unbounded list with 400, and a failing store with a 503 that names nothing of it.
+func TestCapabilities_AnswersInOrder_RefusesMalformed_FailsClosed(t *testing.T) {
+	call := func(s domain.PolicyRepository, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		interfaces.NewHTTPServer(application.NewAuthorizationService(s)).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/authz/v1/capabilities", strings.NewReader(body)))
+		return rec
+	}
+	rec := call(store{}, `{"actor_roles":["platform-admin"],"queries":[{"resource":"authz:policy-admin","action":"authz:policy:create"},{"resource":"vault:account-admin:","action":"vault:account:rotate","prefix":true}]}`)
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"allowed":[true,false]}` || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("answer: %d %q %q", rec.Code, rec.Body.String(), rec.Header().Get("Cache-Control"))
+	}
+	for name, body := range map[string]string{
+		"no query":      `{"actor_roles":["platform-admin"],"queries":[]}`,
+		"unknown field": `{"actor_roles":[],"queries":[{"resource":"r","action":"a"}],"reason":"x"}`,
+		"empty action":  `{"actor_roles":[],"queries":[{"resource":"r","action":""}]}`,
+		"not json":      `allowed please`,
+		"too many":      `{"actor_roles":[],"queries":[` + strings.Repeat(`{"resource":"r","action":"a"},`, 32) + `{"resource":"r","action":"a"}]}`,
+	} {
+		if rec := call(store{}, body); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body.String())
+		}
+	}
+	rec = call(failingStore{}, `{"actor_roles":["platform-admin"],"queries":[{"resource":"r","action":"a"}]}`)
+	if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "unreachable") {
+		t.Fatalf("failing store: %d %q", rec.Code, rec.Body.String())
+	}
+	get := httptest.NewRecorder()
+	interfaces.NewHTTPServer(application.NewAuthorizationService(store{})).Routes().ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/authz/v1/capabilities", nil))
+	if get.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET: %d", get.Code)
+	}
+}
+
+type failingStore struct{ store }
+
+func (failingStore) ForRoles(context.Context, []string) ([]*domain.Policy, error) {
+	return nil, errors.New("policy store unreachable")
+}
