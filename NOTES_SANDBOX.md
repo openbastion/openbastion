@@ -5116,6 +5116,13 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Limite** : la bibliothèque aplatit le KRB-ERROR en texte, et le code y est lu. Une autre forme de texte ne donne pas de code.
 - **Reste** : les champs du Vault (incrément 3), Windows dans un domaine (incrément 4).
 
+## 2026-11-20 — ADR-0132, incrément 4 : le choix d'écran contre les cinq Windows
+
+- `TestScreenFlow_RDPScreenChoiceInAHeadlessBrowser` (CI Windows, étape « The screen choice in a headless browser ») : profil `bitmap` seul, `graphics` refusé (`403`), puis `bitmap` et `16` choisis dans la page (`cdpPage.choose`), écran ouvert, touches dans Notepad. Le test exige la ligne du proxy, 16 bpp retenus par la cible, aucun résumé du pipeline graphique, et une relecture complète à la taille montrée.
+- Proxy : `the target opened the screen at N bpp (M asked)` à chaque ouverture RDP (rien de la cible ni du compte).
+- Mesuré (run 44788536601) : 16 bpp choisis par la cible sur les cinq jobs, y compris « 2022, 32 bpp » ; 19 à 25 images relues, dont 5 à 7 clés, à 698 × 888. Captures `browser-choice-*.png` jugées à l'œil (2022, 32 bpp) : choix visible dans la page, bureau entier, Notepad, texte tapé. La dernière image clé relue précède la frappe : le texte est dans les images partielles qui la suivent.
+- ADR-0132 achevée : profil au Vault (#244), choix borné au Broker et appliqué au proxy (#246), Admin UI (#248), vérification Windows (#250).
+
 ## 2026-11-20 — ADR-0100, incrément 3 : le royaume et les KDC du compte, du Vault au proxy
 
 - **Fait** :
