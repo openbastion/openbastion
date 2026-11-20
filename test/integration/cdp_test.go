@@ -197,6 +197,17 @@ func (p *cdpPage) fill(selector, value string) {
 		el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`, sel, sel, val))
 }
 
+// choose sets a React-controlled select as a person picking an option does: the native setter, then
+// a change event, which React listens to for a select.
+func (p *cdpPage) choose(selector, value string) {
+	p.t.Helper()
+	sel, _ := json.Marshal(selector)
+	val, _ := json.Marshal(value)
+	p.eval(fmt.Sprintf(`(() => { const el = document.querySelector(%s); if (!el) throw new Error("no " + %s);
+		Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, %s);
+		el.dispatchEvent(new Event("change", { bubbles: true })); return el.value; })()`, sel, sel, val))
+}
+
 // clickButton clicks the button whose shown text is text: innerText, what a person reads, not
 // textContent, which holds an icon's text too (run 43317319173: the section buttons).
 func (p *cdpPage) clickButton(text string) {

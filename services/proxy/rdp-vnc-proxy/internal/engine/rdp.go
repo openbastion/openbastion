@@ -241,7 +241,7 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	if clipboard.fromTarget {
 		target.copied = make(chan string, rdpCopiedTextsWaiting)
 	}
-	var negotiatedWidth, negotiatedHeight uint16
+	var negotiatedWidth, negotiatedHeight, negotiatedBPP uint16
 	steps := []rdpConnectionStep{
 		{"MCS connect", func() error { _, e := client.ConnectMCS(ctx, settings); return e }},
 		{"MCS channels", func() error {
@@ -272,7 +272,7 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 		{"capabilities", func() error {
 			capabilities, e := client.ExchangeCapabilities(ctx, c.DialTimeout)
 			if e == nil {
-				negotiatedWidth, negotiatedHeight = capabilities.DesktopWidth, capabilities.DesktopHeight
+				negotiatedWidth, negotiatedHeight, negotiatedBPP = capabilities.DesktopWidth, capabilities.DesktopHeight, capabilities.PreferredBitsPerPixel
 			}
 			return e
 		}},
@@ -288,7 +288,18 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	}
 	keep = true
 	target.width, target.height = negotiatedWidth, negotiatedHeight
+	// The depth the target chose, beside the one asked (ADR-0132): a request only, which the
+	// target's policy may lower (ADR-0086). Nothing of the target or the account is in the line.
+	log.Printf("rdp-vnc-proxy: the target opened the screen at %d bpp (%d asked)", negotiatedBPP, rdpAskedDepth(c.ColorDepth))
 	return target, nil
+}
+
+// rdpAskedDepth is the depth the client asks for: 32 unless 16 was chosen (ADR-0132).
+func rdpAskedDepth(depth uint16) uint16 {
+	if depth == 16 {
+		return 16
+	}
+	return 32
 }
 
 // rdpConnectionStep is one phase of the RDP connection sequence after CredSSP. Every phase fails
