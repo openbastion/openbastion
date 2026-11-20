@@ -2,7 +2,9 @@ package interfaces
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 )
@@ -86,26 +88,12 @@ func (g *GatewayServer) handleCapabilities(w http.ResponseWriter, r *http.Reques
 			queries = append(queries, capabilityQueryJSON{Resource: check.resource, Action: check.action, Prefix: check.prefix})
 		}
 	}
-	body, _ := json.Marshal(capabilitiesRequestBody{ActorRoles: id.Roles, Queries: queries})
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, g.authorizationURL+"/authz/v1/capabilities", bytes.NewReader(body))
+	allowed, err := g.askCapabilities(r.Context(), id.Roles, queries)
 	if err != nil {
 		http.Error(w, "capabilities unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := g.httpClient.Do(req)
-	if err != nil {
-		http.Error(w, "capabilities unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	defer resp.Body.Close()
-	var answer struct {
-		Allowed []bool `json:"allowed"`
-	}
-	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 8<<10)).Decode(&answer) != nil || len(answer.Allowed) != len(queries) {
-		http.Error(w, "capabilities unavailable", http.StatusServiceUnavailable)
-		return
-	}
+	answer := struct{ Allowed []bool }{allowed}
 	out := capabilitiesResponseJSON{Capabilities: make(map[string]bool, len(capabilityCatalogue))}
 	i := 0
 	for _, c := range capabilityCatalogue {
@@ -118,4 +106,31 @@ func (g *GatewayServer) handleCapabilities(w http.ResponseWriter, r *http.Reques
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// errCapabilities: the Authorization Service did not answer the questions as asked. Never shown.
+var errCapabilities = errors.New("capabilities unavailable")
+
+// askCapabilities asks the Authorization Service queries for roles (POST /authz/v1/capabilities,
+// the one decision route open to the Gateway, ADR-0131) and returns one answer per query, in
+// order. Unreachable, refused, malformed, or a list of another length: an error, never "no".
+func (g *GatewayServer) askCapabilities(ctx context.Context, roles []string, queries []capabilityQueryJSON) ([]bool, error) {
+	body, _ := json.Marshal(capabilitiesRequestBody{ActorRoles: roles, Queries: queries})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.authorizationURL+"/authz/v1/capabilities", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var answer struct {
+		Allowed []bool `json:"allowed"`
+	}
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 8<<10)).Decode(&answer) != nil || len(answer.Allowed) != len(queries) {
+		return nil, errCapabilities
+	}
+	return answer.Allowed, nil
 }
