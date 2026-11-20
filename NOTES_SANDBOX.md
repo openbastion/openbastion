@@ -5098,3 +5098,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Preuves : 6 tests Vitest (`screenChoice.test.tsx`). Contre-épreuves : choix jamais envoyé → 1 échec ; contrôle du défaut retiré → 1 échec. Suite Admin UI : 294 tests verts, construction verte.
 - Vu dans un vrai Chromium, à 1400 px et à 390 px, contre la Gateway du sandbox. Celle-ci tourne sur le checkout principal, antérieur aux #244 et #246 : la capacité y est inconnue et le bouton reste grisé, comportement fermé attendu. La capacité, le compte RDP et la session ont donc été simulés par le script de capture. L'enregistrement réel du profil n'a pas été éprouvé dans le sandbox.
 - Reste l'incrément 4 : « bitmap » et 16 bits, contre les cinq Windows, en navigateur.
+
+## 2026-11-20 — ADR-0132, incrément 4 : le choix d'écran contre les cinq Windows
+
+- `TestScreenFlow_RDPScreenChoiceInAHeadlessBrowser` (CI Windows, étape « The screen choice in a headless browser ») : profil `bitmap` seul, `graphics` refusé (`403`), puis `bitmap` et `16` choisis dans la page (`cdpPage.choose`), écran ouvert, touches dans Notepad. Le test exige la ligne du proxy, 16 bpp retenus par la cible, aucun résumé du pipeline graphique, et une relecture complète à la taille montrée.
+- Proxy : `the target opened the screen at N bpp (M asked)` à chaque ouverture RDP (rien de la cible ni du compte).
+- Mesuré (run 44788536601) : 16 bpp choisis par la cible sur les cinq jobs, y compris « 2022, 32 bpp » ; 19 à 25 images relues, dont 5 à 7 clés, à 698 × 888. Captures `browser-choice-*.png` jugées à l'œil (2022, 32 bpp) : choix visible dans la page, bureau entier, Notepad, texte tapé. La dernière image clé relue précède la frappe : le texte est dans les images partielles qui la suivent.
+- ADR-0132 achevée : profil au Vault (#244), choix borné au Broker et appliqué au proxy (#246), Admin UI (#248), vérification Windows (#250).
