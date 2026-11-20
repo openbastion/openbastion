@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -448,6 +449,9 @@ func (s *rdpTargetSession) Dimensions() (uint16, uint16) { return s.width, s.hei
 func (s *rdpTargetSession) Close() {
 	if s.graphics != nil {
 		s.graphics.close()
+		if summary, ok := s.graphicsSummary(); ok {
+			log.Printf("rdp-vnc-proxy: %s", summary)
+		}
 	}
 	s.session.Close()
 }

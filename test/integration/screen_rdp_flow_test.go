@@ -285,6 +285,8 @@ type rdpScreenStack struct {
 	api                                     screenAPI
 	audit                                   *screenAuditSpy
 	adminToken, operatorToken, auditorToken string
+	// proxyOut is what the screen proxy prints: what it says of a session when it closes.
+	proxyOut *syncBuffer
 }
 
 // startRDPScreenStack starts the services of the RDP flow for target, proxyEnv and gatewayEnv added
@@ -378,5 +380,5 @@ func startRDPScreenStack(t *testing.T, root, dsn string, target rdpStackTarget, 
 		t.Fatalf("pinning the RDP account: %d %s", status, raw)
 	}
 	stepUpToken, totpSecret, enrollmentStep := mfaStepUpToken(t, gatewayURL, authnURL, admin, "rdp-stepup", rdpStepUpPassword)
-	return &rdpScreenStack{gatewayURL: gatewayURL, store: store, stepUpToken: stepUpToken, totpSecret: totpSecret, enrollmentStep: enrollmentStep, api: api, audit: audit, adminToken: adminToken, operatorToken: operatorToken, auditorToken: auditorToken}
+	return &rdpScreenStack{proxyOut: proxy.out, gatewayURL: gatewayURL, store: store, stepUpToken: stepUpToken, totpSecret: totpSecret, enrollmentStep: enrollmentStep, api: api, audit: audit, adminToken: adminToken, operatorToken: operatorToken, auditorToken: auditorToken}
 }

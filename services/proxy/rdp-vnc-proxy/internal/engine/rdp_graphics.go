@@ -29,8 +29,10 @@ type rdpGraphics struct {
 	stopOnce sync.Once
 	// send sends on a dynamic channel: the session's, or a test's.
 	send func(ctx context.Context, name string, data []byte, timeout time.Duration) error
-	// frames counts the frames handed on, for the interoperability tests.
-	frames int
+	// frames counts the frames handed on; channelOpen says the target opened the channel. Both are
+	// what the proxy says of the pipeline when the session closes (graphicsSummary).
+	frames      int
+	channelOpen bool
 }
 
 func (s *rdpTargetSession) enableGraphics() {
@@ -66,6 +68,7 @@ func (s *rdpTargetSession) channelMessage(name string, message []byte) error {
 func (g *rdpGraphics) opened() {
 	g.mu.Lock()
 	g.pipeline, g.compositor = rdp.NewRDPGraphicsPipeline(), rdp.NewRDPGraphicsCompositor()
+	g.channelOpen = true
 	advertise := g.pipeline.CapsAdvertise()
 	g.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), rdpInputTimeout)
@@ -164,4 +167,16 @@ func (s *rdpTargetSession) graphicsFrames() int {
 	s.graphics.mu.Lock()
 	defer s.graphics.mu.Unlock()
 	return s.graphics.frames
+}
+
+// graphicsSummary is what the proxy says of the pipeline when a session where it was offered
+// closes: whether the target opened it, and how many frames it carried. An operator reads there
+// whether SCREEN_RDPGFX is in use with a target; nothing of the screen is in it.
+func (s *rdpTargetSession) graphicsSummary() (string, bool) {
+	if s.graphics == nil {
+		return "", false
+	}
+	s.graphics.mu.Lock()
+	defer s.graphics.mu.Unlock()
+	return fmt.Sprintf("graphics pipeline (SCREEN_RDPGFX): opened by the target %v, %d frame(s) handed on", s.graphics.channelOpen, s.graphics.frames), true
 }

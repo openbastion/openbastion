@@ -135,6 +135,29 @@ func TestRDPGraphics_AWindowsSessionThroughTheEngine(t *testing.T) {
 		t.Fatalf("%d message(s) sent, %d acknowledgement(s) for %d frame(s)", len(sent), acks, ends)
 	}
 	t.Logf("%d frame(s) ended, %d handed on with a change, %d acknowledged", ends, target.graphicsFrames(), acks)
+	// What the proxy says of the pipeline when this session closes.
+	wantSummary := fmt.Sprintf("graphics pipeline (SCREEN_RDPGFX): opened by the target true, %d frame(s) handed on", target.graphicsFrames())
+	if summary, ok := target.graphicsSummary(); !ok || summary != wantSummary {
+		t.Fatalf("summary %q, want %q", summary, wantSummary)
+	}
+}
+
+// A target that never opens the graphics channel is said so: the switch was on, the pipeline was
+// not used. Without the switch nothing is said.
+func TestRDPGraphics_TheSummarySaysWhetherTheTargetUsedThePipeline(t *testing.T) {
+	if _, ok := (&rdpTargetSession{}).graphicsSummary(); ok {
+		t.Fatal("a summary without the graphics pipeline offered")
+	}
+	target := &rdpTargetSession{}
+	target.enableGraphics()
+	if summary, _ := target.graphicsSummary(); summary != "graphics pipeline (SCREEN_RDPGFX): opened by the target false, 0 frame(s) handed on" {
+		t.Fatalf("before the channel opened: %q", summary)
+	}
+	target.graphics.send = func(context.Context, string, []byte, time.Duration) error { return nil }
+	target.channelOpened(rdp.RDPGraphicsChannel)
+	if summary, _ := target.graphicsSummary(); summary != "graphics pipeline (SCREEN_RDPGFX): opened by the target true, 0 frame(s) handed on" {
+		t.Fatalf("after the channel opened: %q", summary)
+	}
 }
 
 // A message the pipeline refuses ends the session; one before the channel opened too.

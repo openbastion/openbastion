@@ -199,6 +199,12 @@ Tout PDU ou codec hors de cette liste ferme la session, comme aujourd'hui. Le ch
 - **Contre les cinq Windows** : `TestRDPWindows_ScreenThroughTheGraphicsPipeline` fait la même chose dans Notepad, pipeline allumé puis éteint, et compare les octets reçus de la cible. Les écrans vont dans l'artefact (`graphics-on-*.png`, `graphics-off-*.png`). Le chiffre est dans la CI de la PR.
 - **Reste avant d'allumer `SCREEN_RDPGFX` par défaut** : la vérification dans un vrai navigateur contre les cinq Windows, l'enregistrement relu, et la décision du propriétaire, comme pour ADR-0095 et ADR-0096.
 
+### Incrément 6 — le pipeline dans un vrai navigateur, l'enregistrement relu (20 novembre 2026)
+
+- **Le proxy dit ce que le pipeline a porté** : à la fermeture d'une session où `SCREEN_RDPGFX` le proposait, une ligne `graphics pipeline (SCREEN_RDPGFX): opened by the target <true|false>, <n> frame(s) handed on`. Un exploitant y lit si une cible s'en sert ; rien de l'écran n'y figure. Sans elle, un test en navigateur ne distinguait pas l'écran venu du pipeline de celui venu des mises à jour bitmap.
+- **Contre les cinq Windows** (`TestScreenFlow_RDPGraphicsPipelineInAHeadlessBrowser`, étape « The graphics pipeline in a headless browser ») : les services du flux RDP sur processus réels, `SCREEN_RDPGFX=true`, l'Admin UI servie par la Gateway et Chrome sans interface. Une session neuve (`freshWindowsSession`), le premier écran, des touches dans Notepad qui changent les pixels du canevas, puis la ligne du proxy (ouvert par la cible, au moins une trame), puis la relecture par l'auditeur via l'API publique : complète, images clés présentes, la dernière à la taille que la page montrait. Captures `browser-graphics-*.png` dans l'artefact.
+- **Reste** : la décision du propriétaire d'allumer `SCREEN_RDPGFX` par défaut, sur le résultat de ces cinq jobs.
+
 ## Ce qui demande ton go
 
 - l'option A et son ordre ;
