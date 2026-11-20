@@ -5111,6 +5111,7 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - six refus ;
   - aucun octet n'est envoyé à la cible quand le KDC refuse ;
   - 7 mutations tuées sur 10, les trois survivantes équivalentes ;
-  - le KDC MIT, avec la pré-authentification exigée, donne les codes 24 et 6.
+  - le KDC MIT, avec la pré-authentification exigée, donne les codes 24 et 6 ;
+  - l'échange CredSSP complet passe avec de vrais tickets du KDC MIT, le serveur du test n'ayant que la clé du service.
 - **Limite** : la bibliothèque aplatit le KRB-ERROR en texte, et le code y est lu. Une autre forme de texte ne donne pas de code.
 - **Reste** : les champs du Vault (incrément 3), Windows dans un domaine (incrément 4).

@@ -87,6 +87,7 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
   - un KDC qui refuse arrête tout avant le moindre octet envoyé à la cible ;
   - 7 mutations tuées sur 10. Les trois survivantes sont équivalentes : le mécanisme annoncé, déjà refusé par l'analyse SPNEGO restreinte à Kerberos ; un AP-REP vide, déjà refusé par la lecture du cadre GSS-API ; et une mutation mal écrite, qui appelait encore la vérification.
   - contre le KDC MIT, qui exige désormais la pré-authentification comme Active Directory, un mauvais mot de passe donne `KDC_ERR_PREAUTH_FAILED` (24), et un utilisateur inconnu `KDC_ERR_C_PRINCIPAL_UNKNOWN` (6). Les deux sont des identifiants refusés.
+  - **l'échange CredSSP complet avec de vrais tickets** (`TestCredSSPKerberos_AgainstAnMITKDC`, `KERBEROS_INTEROP=1`) : le client obtient ses tickets du KDC MIT, et le serveur CredSSP du test lit l'AP-REQ avec la seule clé du service, comme Windows. L'échange va jusqu'à `authInfo`, avec et sans le MIC de la cible. Un mauvais mot de passe s'arrête au KDC, sans un octet vers la cible, en identifiants refusés.
 - **Corrigé en chemin** : le KDC de test n'exigeait pas la pré-authentification. Dans `kadmin`, `-requires_preauth` retire l'attribut ; c'est `+requires_preauth` qui le pose.
 - **Non éprouvé** : contre Windows. Ce qu'un contrôleur de domaine réel envoie (MIC ou non, rotation des jetons, alias Microsoft de Kerberos) se mesurera à l'incrément 4.
 - **Reste** : les champs du compte au Vault (incrément 3), puis Windows dans un domaine Samba AD en CI (incrément 4).

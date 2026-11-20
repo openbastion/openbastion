@@ -15,6 +15,7 @@ import (
 	"github.com/go-krb5/krb5/gssapi"
 	"github.com/go-krb5/krb5/iana/etypeID"
 	"github.com/go-krb5/krb5/iana/keyusage"
+	"github.com/go-krb5/krb5/keytab"
 	"github.com/go-krb5/krb5/messages"
 	"github.com/go-krb5/krb5/types"
 )
@@ -32,6 +33,15 @@ type kerberosHarness struct {
 	wantClientMIC  bool                                // the client must answer with its mechListMIC
 	corruptBinding bool                                // the server's pubKeyAuth binds another certificate
 	answer         func(acceptor *testAcceptor) []byte // replaces the server's first negoToken
+	// real, when set, takes the tickets from a real KDC, and has the server read the AP-REQ with the
+	// service's key alone, as Windows would (TestCredSSPKerberos_AgainstAnMITKDC).
+	real *realKerberos
+}
+
+type realKerberos struct {
+	config         KerberosConfig
+	user, password string
+	keytab         *keytab.Keytab
 }
 
 // parseNegTokenInitForTest reads a NegTokenInit: its mechanism list (as DER and as OIDs) and its
@@ -149,7 +159,13 @@ func runKerberosCredSSP(t *testing.T, h kerberosHarness) (*CredSSPClientSession,
 		t.Fatal(err)
 	}
 	acceptor := &testAcceptor{t: t, sessionKey: testKey(t, etypeID.AES256_CTS_HMAC_SHA1_96)}
-	stubKerberosTickets(t, acceptor.sessionKey)
+	user, password := "User", "Password"
+	kerberos := KerberosConfig{Realm: "OPENBASTION.TEST", KDCs: []string{"kdc.openbastion.test:88"}, ServicePrincipal: "TERMSRV/rdp.test"}
+	if h.real != nil {
+		user, password, kerberos = h.real.user, h.real.password, h.real.config
+	} else {
+		stubKerberosTickets(t, acceptor.sessionKey)
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +211,15 @@ func runKerberosCredSSP(t *testing.T, h kerberosHarness) (*CredSSPClientSession,
 			if len(mechs) != 1 || !mechs[0].Equal(oidKerberos5) {
 				return errors.New("the client offered another mechanism than Kerberos 5 alone")
 			}
-			acceptor.readAPReq(apReq)
+			if h.real != nil {
+				_, message, err := gssUnframe(apReq)
+				if err != nil {
+					return err
+				}
+				acceptor.readAPReqWith(message, h.real.keytab)
+			} else {
+				acceptor.readAPReq(apReq)
+			}
 			var answer []byte
 			switch {
 			case h.answer != nil:
@@ -266,8 +290,8 @@ func runKerberosCredSSP(t *testing.T, h kerberosHarness) (*CredSSPClientSession,
 			if err != nil || !tsRequestContainsOnlyVersionAndAuthInfo(raw) {
 				return errors.New("the authInfo TSRequest")
 			}
-			domain, user, password, err := parseCredSSPPasswordCredentialsForTest(acceptor.unwrap(authInfo.AuthInfo))
-			if err != nil || domain != "RDP" || user != "User" || password != "Password" {
+			domain, gotUser, gotPassword, err := parseCredSSPPasswordCredentialsForTest(acceptor.unwrap(authInfo.AuthInfo))
+			if err != nil || domain != "RDP" || gotUser != user || gotPassword != password {
 				return errors.New("the delegated credentials")
 			}
 			return nil
@@ -278,9 +302,8 @@ func runKerberosCredSSP(t *testing.T, h kerberosHarness) (*CredSSPClientSession,
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, clientErr := transport.EstablishCredSSP(context.Background(), CredSSPClientConfig{Version: 6, Username: "User", Domain: "RDP",
-		Password: []byte("Password"), Timeout: 3 * time.Second,
-		Kerberos: &KerberosConfig{Realm: "OPENBASTION.TEST", KDCs: []string{"kdc.openbastion.test:88"}, ServicePrincipal: "TERMSRV/rdp.test"}})
+	session, clientErr := transport.EstablishCredSSP(context.Background(), CredSSPClientConfig{Version: 6, Username: user, Domain: "RDP",
+		Password: []byte(password), Timeout: 10 * time.Second, Kerberos: &kerberos})
 	if clientErr != nil {
 		_ = transport.Close()
 	}
@@ -380,5 +403,39 @@ func TestCredSSPKerberos_NoFallbackToNTLM(t *testing.T) {
 	}
 	if got := <-sent; len(got) != 0 {
 		t.Fatalf("%d byte(s) sent to the target after the KDC refused", len(got))
+	}
+}
+
+// The whole CredSSP exchange with tickets from a real KDC (MIT krb5 in Docker, KERBEROS_INTEROP=1):
+// the client obtains them over TCP with pre-authentication, and the test's CredSSP server reads the
+// AP-REQ with the service's key alone, then everything goes as with Windows, authInfo included.
+func TestCredSSPKerberos_AgainstAnMITKDC(t *testing.T) {
+	userPassword, servicePassword := "Op-kerberos-1", "Svc-kerberos-2"
+	kdc := startMITKDC(t, userPassword, servicePassword)
+	kt := keytab.New()
+	for _, etype := range []int32{etypeID.AES256_CTS_HMAC_SHA1_96, etypeID.AES128_CTS_HMAC_SHA1_96} {
+		if err := kt.AddEntry(kdcService, kdcRealm, servicePassword, time.Now(), 1, etype); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, h := range map[string]kerberosHarness{
+		"completed, no MIC":           {state: spnegoStateAcceptCompleted},
+		"completed, the server's MIC": {state: spnegoStateAcceptCompleted, serverMIC: true, wantClientMIC: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h.real = &realKerberos{config: KerberosConfig{Realm: kdcRealm, KDCs: []string{kdc}, ServicePrincipal: kdcService, Timeout: 10 * time.Second},
+				user: "operator", password: userPassword, keytab: kt}
+			session, clientErr, serverErr := runKerberosCredSSP(t, h)
+			if clientErr != nil || serverErr != nil {
+				t.Fatalf("client %v, server %v", clientErr, serverErr)
+			}
+			session.Close()
+		})
+	}
+	// A wrong password: the KDC refuses before the target hears anything, and says so as NTLM does.
+	h := kerberosHarness{real: &realKerberos{config: KerberosConfig{Realm: kdcRealm, KDCs: []string{kdc}, ServicePrincipal: kdcService},
+		user: "operator", password: "wrong", keytab: kt}}
+	if _, clientErr, _ := runKerberosCredSSP(t, h); !errors.Is(clientErr, ErrTargetCredentialsRefused) {
+		t.Fatalf("a wrong password through CredSSP: %v", clientErr)
 	}
 }
