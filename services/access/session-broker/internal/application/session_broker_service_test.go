@@ -57,6 +57,8 @@ func (f *fakeVaultAuthorizer) AuthorizeScope(ctx context.Context, sessionID, acc
 type fakeAudit struct {
 	events  []string
 	failing bool
+	// details: the details of each event written with some, by action (ADR-0068).
+	details map[string]map[string]string
 }
 
 func (f *fakeAudit) EmitEvent(ctx context.Context, actorID, action, resourceType, resourceID string, success bool) error {
@@ -68,7 +70,16 @@ func (f *fakeAudit) EmitEvent(ctx context.Context, actorID, action, resourceType
 }
 
 func (f *fakeAudit) EmitEventWithDetails(ctx context.Context, actorID, action, resourceType, resourceID string, details map[string]string, success bool) error {
-	return f.EmitEvent(ctx, actorID, action, resourceType, resourceID, success)
+	if err := f.EmitEvent(ctx, actorID, action, resourceType, resourceID, success); err != nil {
+		return err
+	}
+	if details != nil {
+		if f.details == nil {
+			f.details = map[string]map[string]string{}
+		}
+		f.details[action] = details
+	}
+	return nil
 }
 
 type fakeAccountLookup struct {
@@ -80,6 +91,14 @@ type fakeAccountLookup struct {
 	// approvalRequired: the account requires another person's approval (ADR-0067).
 	approvalRequired bool
 	protocol         string
+
+	// screenProfile is the account's screen profile (ADR-0132); screenErr, the Vault failing.
+	screenProfile *domain.ScreenProfile
+	screenErr     error
+}
+
+func (f *fakeAccountLookup) GetScreenProfile(context.Context, string) (*domain.ScreenProfile, error) {
+	return f.screenProfile, f.screenErr
 }
 
 func (f *fakeAccountLookup) CheckAccount(context.Context, string) (bool, string, error) {
@@ -111,6 +130,7 @@ type fakeProxyClient struct {
 	lastTargetUser    string
 	lastBreakGlass    bool
 	lastClipboard     domain.ClipboardRights
+	lastScreen        domain.ScreenChoice
 	connectionTicket  string
 	proxyEndpoint     string
 	establishErr      error
@@ -144,8 +164,9 @@ func (f *fakeProxyClient) InjectVaultSecret(_ context.Context, protocol, session
 	return f.injectErr
 }
 
-func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
+func (f *fakeProxyClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights, screen domain.ScreenChoice) (string, string, error) {
 	f.calls++
+	f.lastScreen = screen
 	f.lastClipboard = clipboard
 	f.lastBreakGlass = breakGlass
 	f.lastScopeToken = scopeToken
@@ -354,7 +375,7 @@ func TestConnect_RDPWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	_, _, protocol, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy)
+	_, _, protocol, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy, domain.ScreenChoice{})
 	if err != nil {
 		t.Fatalf("Connect with RDP on: %v", err)
 	}
@@ -459,7 +480,7 @@ func TestCreateSession_RDPClipboardRightsPerDirection(t *testing.T) {
 					t.Fatalf("the Authorization Service was not asked for %q: %v", r, authz.asked)
 				}
 			}
-			if _, _, _, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy); err != nil {
+			if _, _, _, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy, domain.ScreenChoice{}); err != nil {
 				t.Fatalf("Connect: %v", err)
 			}
 			if proxy.lastClipboard != c.want {
@@ -506,7 +527,7 @@ func TestCreateSession_NoClipboardOutsideRDP(t *testing.T) {
 				t.Fatalf("%s: the clipboard was asked about: %v", protocol, authz.asked)
 			}
 		}
-		if _, _, _, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy); err != nil {
+		if _, _, _, _, err := broker.ConnectDetails(context.Background(), sess.ID, sess.RequestedBy, domain.ScreenChoice{}); err != nil {
 			t.Fatalf("%s: Connect: %v", protocol, err)
 		}
 		if proxy.lastClipboard != (domain.ClipboardRights{}) {

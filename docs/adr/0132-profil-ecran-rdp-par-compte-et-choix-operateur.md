@@ -52,6 +52,16 @@ Un choix de codecs fin n'est donc pas réalisable sans un décodeur de plus. Le 
 3. Admin UI : le formulaire du profil sur un compte RDP, et le sélecteur à « Ouvrir l'écran ».
 4. Contre les cinq Windows, en navigateur : `bitmap` et `16` choisis, puis vérifiés à l'écran, dans l'enregistrement relu et dans la ligne du proxy.
 
+## Mise en œuvre
+
+- **Incrément 1** (PR #244) : profil au Vault, route, Gateway, capacité, OpenAPI.
+- **Incrément 2** :
+  - Gateway : corps facultatif de `connect`, lu sans que l'appelant en vienne (il reste celui du jeton). Un corps illisible ou un `screen` mal typé donne `400`. Les autres champs sont ignorés, comme avant que le corps serve (choix renversable : les refuser romprait un client qui en envoie).
+  - Broker (`domain.ResolveScreen`) : profil lu au Vault pour une session RDP ; un Vault muet donne `503`, jamais « tout permis ». Le choix est résolu avant tout scope ; un choix pour un autre protocole donne `400`. Le résultat est écrit à `session.connect` (`screen_channel`, `color_depth`) et passé au proxy (`EstablishSessionRequest`, champs 11 et 12).
+  - Proxy : refuse un choix inconnu, ou hors RDP (`400`, avant tout ticket). Le choix est porté par le ticket ; à l'ouverture, la session a son propre codec (`RDPCodec.WithScreen`), celui du proxy restant inchangé. Un codec qui ne peut pas appliquer le choix n'ouvre pas la session. La ligne `session … screen: channel …, … bpp asked` dit ce qui est demandé ; le plafond `SCREEN_RDPGFX=false` est journalisé.
+  - `pkg/rdp` (`MCSClientSettings.ColorDepth`) : `16` demande `postBeta2ColorDepth = RNS_UD_COLOR_16BPP_565` et `highColorDepth = 16`, sans `WANT_32BPP`, comme FreeRDP le fait pour `/bpp:16`. `supportedColorDepths` reste inchangé (ADR-0071). Toute autre valeur que 0, 16 ou 32 n'envoie rien.
+  - Non éprouvé contre Windows : ce sera l'incrément 4.
+
 ## Conséquences
 
 - (+) Une cible fragile passe sur le chemin bitmap sans toucher aux autres, et l'opérateur choisit pour sa session dans ce que l'administrateur permet.

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -75,6 +76,9 @@ type AccountLookup interface {
 	// CheckAccount returns the stored protocol, checks that protocol's target identity is
 	// pinned, and reports whether another person must approve the session.
 	CheckAccount(ctx context.Context, accountID string) (approvalRequired bool, accountProtocol string, err error)
+	// GetScreenProfile is the screen profile of an RDP account (ADR-0132); nil: none, everything
+	// allowed.
+	GetScreenProfile(ctx context.Context, accountID string) (*domain.ScreenProfile, error)
 }
 
 // ProxyClient is the port to a single proxy's ProxyControl.EstablishSession
@@ -84,7 +88,7 @@ type AccountLookup interface {
 type ProxyClient interface {
 	// breakGlass is the Broker's authorisation for a recording waiver (ADR-0009).
 	// The proxy honours it only if it was itself configured to.
-	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (proxyEndpoint, connectionTicket string, err error)
+	EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights, screen domain.ScreenChoice) (proxyEndpoint, connectionTicket string, err error)
 
 	// RevokeSession tells the proxy that a session is ended (ADR-0018): its open
 	// connections are cut, its unused tickets refused and it is never established
@@ -721,13 +725,19 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 // callerID is the user the Gateway verified, and anyone else — the approver of a
 // break-glass included — is refused before anything about the session is said.
 func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID string) (proxyEndpoint, connectionTicket string, expiresAt time.Time, err error) {
-	proxyEndpoint, connectionTicket, _, expiresAt, err = s.ConnectDetails(ctx, sessionID, callerID)
+	proxyEndpoint, connectionTicket, _, expiresAt, err = s.ConnectDetails(ctx, sessionID, callerID, domain.ScreenChoice{})
 	return
 }
 
 // ConnectDetails is Connect with the stored protocol included for the Gateway's
 // screen-attach contract. Protocol is read from the persisted session, never the request.
-func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, callerID string) (proxyEndpoint, connectionTicket, protocol string, expiresAt time.Time, err error) {
+//
+// choice is the operator's screen choice for an RDP session (ADR-0132): resolved against the
+// account's screen profile before any Vault scope is issued — a value that does not exist is
+// domain.ErrInvalidScreenChoice, one the profile does not allow domain.ErrForbidden — then
+// carried to the proxy and written to the audit with the connection. Any other protocol takes no
+// choice.
+func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, callerID string, choice domain.ScreenChoice) (proxyEndpoint, connectionTicket, protocol string, expiresAt time.Time, err error) {
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
 		return "", "", "", time.Time{}, err
@@ -743,6 +753,19 @@ func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, ca
 	// refused here, before any Vault scope is issued.
 	if sess.Protocol == "rdp" && !s.rdpEnabled {
 		return "", "", "", time.Time{}, domain.ErrUnsupportedProtocol
+	}
+
+	var screen domain.ScreenChoice
+	if sess.Protocol == "rdp" {
+		profile, err := s.accounts.GetScreenProfile(ctx, sess.PrivilegedAccountID)
+		if err != nil {
+			return "", "", "", time.Time{}, fmt.Errorf("%w: reading the account's screen profile: %v", domain.ErrUnavailable, err)
+		}
+		if screen, err = domain.ResolveScreen(profile, choice); err != nil {
+			return "", "", "", time.Time{}, err
+		}
+	} else if choice != (domain.ScreenChoice{}) {
+		return "", "", "", time.Time{}, fmt.Errorf("%w: a screen choice is for RDP sessions only", domain.ErrInvalidScreenChoice)
 	}
 
 	proxyServiceID, err := s.proxies.Select(sess.Protocol)
@@ -773,13 +796,18 @@ func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, ca
 	approved := !s.approvalRequired() || sess.DecidedBy != ""
 	waiver := sess.BreakGlass && s.breakGlassMaxMinutes > 0 && approved
 	clipboard := domain.ClipboardRights{ToTarget: sess.ClipboardToTarget, FromTarget: sess.ClipboardFromTarget}
-	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, sess.Protocol, targetHost, targetUser, scopeToken, ttl, waiver, clipboard)
+	proxyEndpoint, connectionTicket, err = s.proxy.EstablishSession(ctx, sess.ID, sess.Protocol, targetHost, targetUser, scopeToken, ttl, waiver, clipboard, screen)
 	if err != nil {
 		return "", "", "", time.Time{}, fmt.Errorf("establishing session on proxy: %w", err)
 	}
 
 	expiresAt = s.clock().Add(ttl)
-	_ = s.audit.EmitEvent(ctx, sess.RequestedBy, "session.connect", "session", sess.ID, true)
+	// The screen the session was opened with is on the record (ADR-0132).
+	var details map[string]string
+	if screen != (domain.ScreenChoice{}) {
+		details = map[string]string{"screen_channel": screen.Channel, "color_depth": strconv.Itoa(screen.ColorDepth)}
+	}
+	_ = s.emitAudit(ctx, sess.RequestedBy, "session.connect", "session", sess.ID, details, true)
 	return proxyEndpoint, connectionTicket, sess.Protocol, expiresAt, nil
 }
 

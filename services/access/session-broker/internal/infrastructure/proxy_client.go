@@ -32,11 +32,12 @@ type ProxyClientHTTPClient struct {
 	Client *http.Client
 }
 
-func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights) (string, string, error) {
+func (c *ProxyClientHTTPClient) EstablishSession(ctx context.Context, sessionID, protocol, targetHost, targetUser, scopeToken string, ttl time.Duration, breakGlass bool, clipboard domain.ClipboardRights, screen domain.ScreenChoice) (string, string, error) {
 	body, _ := json.Marshal(establishSessionRequestBody{
 		SessionID: sessionID, Protocol: protocol, TargetHost: targetHost, TargetUser: targetUser,
 		VaultScopeToken: scopeToken, TTLSeconds: int(ttl.Seconds()), BreakGlass: breakGlass,
 		ClipboardToTarget: clipboard.ToTarget, ClipboardFromTarget: clipboard.FromTarget,
+		ScreenChannel: screen.Channel, ColorDepth: screen.ColorDepth,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/establish-session", bytes.NewReader(body))
 	if err != nil {
@@ -142,6 +143,9 @@ type establishSessionRequestBody struct {
 	// The clipboard's rights of an RDP session (ADR-0096), as the Broker granted them.
 	ClipboardToTarget   bool `json:"clipboard_to_target"`
 	ClipboardFromTarget bool `json:"clipboard_from_target"`
+	// The screen of an RDP session (ADR-0132), as the Broker resolved it; empty for any other.
+	ScreenChannel string `json:"screen_channel,omitempty"`
+	ColorDepth    int    `json:"color_depth,omitempty"`
 }
 
 type establishSessionResponseBody struct {

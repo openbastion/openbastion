@@ -345,8 +345,17 @@ type connectionTicketResponse struct {
 
 // connectRequest is what the Gateway sends: who is asking, from the verified token.
 // Without it — or with anyone but the session's requester — there is no ticket.
+//
+// Screen is the operator's screen choice for an RDP session (ADR-0132), relayed by the Gateway
+// from the public body; absent, the account's default.
 type connectRequest struct {
-	CallerID string `json:"callerId"`
+	CallerID string               `json:"callerId"`
+	Screen   *connectScreenChoice `json:"screen,omitempty"`
+}
+
+type connectScreenChoice struct {
+	Channel    string `json:"channel,omitempty"`
+	ColorDepth int    `json:"colorDepth,omitempty"`
 }
 
 func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessionID string) {
@@ -356,9 +365,15 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 		// requester, not described.
 		req = connectRequest{}
 	}
-	proxyEndpoint, ticket, protocol, expiresAt, err := s.svc.ConnectDetails(r.Context(), sessionID, req.CallerID)
+	var choice domain.ScreenChoice
+	if req.Screen != nil {
+		choice = domain.ScreenChoice{Channel: req.Screen.Channel, ColorDepth: req.Screen.ColorDepth}
+	}
+	proxyEndpoint, ticket, protocol, expiresAt, err := s.svc.ConnectDetails(r.Context(), sessionID, req.CallerID, choice)
 	if err != nil {
 		switch {
+		case errors.Is(err, domain.ErrInvalidScreenChoice):
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		case errors.Is(err, domain.ErrForbidden):
 			http.Error(w, err.Error(), http.StatusForbidden)
 		case errors.Is(err, domain.ErrRecordingUnavailable):

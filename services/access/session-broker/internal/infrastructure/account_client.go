@@ -45,6 +45,31 @@ func (c *AccountLookupHTTPClient) GetAccount(ctx context.Context, accountID stri
 	return out.TargetHost, out.Username, nil
 }
 
+// GetScreenProfile is application.AccountLookup.GetScreenProfile: the screen profile of the
+// account, as the Vault holds it (ADR-0132); nil when the account has none. A profile that does
+// not decode is an error, never "everything allowed".
+func (c *AccountLookupHTTPClient) GetScreenProfile(ctx context.Context, accountID string) (*domain.ScreenProfile, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/vault/v1/accounts/"+url.PathEscape(accountID), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := orDefault(c.Client).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get-account: status %d", resp.StatusCode)
+	}
+	var out struct {
+		ScreenProfile *domain.ScreenProfile `json:"screenProfile"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out.ScreenProfile, nil
+}
+
 // CheckAccount is application.AccountLookup.CheckAccount: the same read of the account, its
 // pinned host key looked at — never the key itself, only whether there is one — and whether
 // it requires another person's approval (ADR-0067).

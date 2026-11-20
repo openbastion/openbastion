@@ -281,3 +281,38 @@ func TestSessionRoutes_ARequestRefusedForItsQuotaIsRelayedAs429(t *testing.T) {
 		t.Fatalf("%d %q, want the Broker's 429 and its reason", rec.Code, rec.Body.String())
 	}
 }
+
+// The operator's screen choice (ADR-0132) reaches the Broker as it came, beside the verified
+// caller; a body that is not JSON, or a screen of the wrong shape, reaches nothing.
+func TestSessionRoutes_ConnectRelaysTheScreenChoice(t *testing.T) {
+	gw, broker := sessionGateway(t)
+	rec := do(gw, http.MethodPost, "/sessions/s-1/connect", `{"screen":{"channel":"bitmap","colorDepth":16},"callerId":"u-mallory"}`, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("connect: %d %s", rec.Code, rec.Body.String())
+	}
+	got := broker.requests()
+	if len(got) != 1 || got[0].body["callerId"] != "u-alice" {
+		t.Fatalf("the Broker saw %+v", got)
+	}
+	screen, _ := got[0].body["screen"].(map[string]any)
+	if len(got[0].body) != 2 || screen["channel"] != "bitmap" || screen["colorDepth"] != float64(16) || len(screen) != 2 {
+		t.Fatalf("the Broker was told %v, want the caller and the screen choice", got[0].body)
+	}
+
+	for name, body := range map[string]string{
+		"not JSON":          `channel=bitmap`,
+		"a depth as text":   `{"screen":{"colorDepth":"16"}}`,
+		"a channel as list": `{"screen":{"channel":["bitmap"]}}`,
+		"two objects":       `{} {}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			gw, broker := sessionGateway(t)
+			if rec := do(gw, http.MethodPost, "/sessions/s-1/connect", body, true); rec.Code != http.StatusBadRequest {
+				t.Fatalf("%s: %d, want 400", body, rec.Code)
+			}
+			if n := len(broker.requests()); n != 0 {
+				t.Fatalf("%d request(s) reached the Broker", n)
+			}
+		})
+	}
+}

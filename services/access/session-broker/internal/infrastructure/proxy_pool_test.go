@@ -30,7 +30,7 @@ type fakeInstance struct {
 	revokeDelay time.Duration
 }
 
-func (f *fakeInstance) EstablishSession(_ context.Context, sessionID, _, _, _, _ string, _ time.Duration, _ bool, _ domain.ClipboardRights) (string, string, error) {
+func (f *fakeInstance) EstablishSession(_ context.Context, sessionID, _, _, _, _ string, _ time.Duration, _ bool, _ domain.ClipboardRights, _ domain.ScreenChoice) (string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.establishes++
@@ -142,7 +142,7 @@ func TestProxyPool_AssignsSessionsDeterministicallyAcrossBrokerReplicas(t *testi
 	counts := make([]int, len(names))
 	for i := 0; i < 90; i++ {
 		sessionID := fmt.Sprintf("session-%d", i)
-		endpoint, _, err := p1.EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
+		endpoint, _, err := p1.EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}, domain.ScreenChoice{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +184,7 @@ func TestProxyPool_DoesNotFailOverToAnotherInstanceForAControlBoundSession(t *te
 	}
 	a, b, c := &fakeInstance{name: "a", establishEr: errors.New("dial tcp: refused")}, &fakeInstance{name: "b"}, &fakeInstance{name: "c"}
 	sessionID := sessionForOwner(names, 0)
-	if _, _, err := pool(t, a, b, c).EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}); err == nil {
+	if _, _, err := pool(t, a, b, c).EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}, domain.ScreenChoice{}); err == nil {
 		t.Fatal("unavailable deterministic owner unexpectedly fell back")
 	}
 	if a.establishes != 1 || b.establishes != 0 || c.establishes != 0 {
@@ -196,7 +196,7 @@ func TestProxyPool_ARefusalToRecordIsWhatTheCallerIsTold(t *testing.T) {
 	rec := fmt.Errorf("%w: establish-session refused by the proxy", domain.ErrRecordingUnavailable)
 	fs := []*fakeInstance{{name: "a", establishEr: rec}, {name: "b", establishEr: errors.New("dial tcp: refused")}}
 	sessionID := sessionForOwner([]string{"https://a", "https://b"}, 0)
-	_, _, err := pool(t, fs...).EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{})
+	_, _, err := pool(t, fs...).EstablishSession(context.Background(), sessionID, "ssh", "h", "u", "scope", time.Minute, false, domain.ClipboardRights{}, domain.ScreenChoice{})
 	if !errors.Is(err, domain.ErrRecordingUnavailable) {
 		t.Fatalf("err = %v, want the refusal to record (ADR-0008)", err)
 	}
@@ -223,7 +223,7 @@ func TestProxyPool_SecretInjectionUsesTheDeterministicSessionOwner(t *testing.T)
 	a, b := &fakeInstance{name: "a"}, &fakeInstance{name: "b"}
 	sessionID := sessionForOwner(names, 1)
 	p1 := pool(t, a, b)
-	endpoint, _, err := p1.EstablishSession(context.Background(), sessionID, "ssh", "host:22", "root", "scope", time.Minute, false, domain.ClipboardRights{})
+	endpoint, _, err := p1.EstablishSession(context.Background(), sessionID, "ssh", "host:22", "root", "scope", time.Minute, false, domain.ClipboardRights{}, domain.ScreenChoice{})
 	if err != nil || endpoint != "b:2222" {
 		t.Fatalf("establish endpoint=%q err=%v", endpoint, err)
 	}
