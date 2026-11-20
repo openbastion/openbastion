@@ -109,6 +109,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          # The virtual machine's state at the moment a test fails, not minutes later (CI instability
+          # "B", the target lost during the measure): guest_state_test.go calls it, three times at most.
+          export RDP_WINDOWS_GUEST_STATE="$GITHUB_WORKSPACE/test/integration/testdata/rdp/windows/guest-state.sh"
           make test-rdp-windows
       # ADR-0071: the recording against Windows. The proxy's real server with the RDP codec, the real
       # Video Recorder on PostgreSQL: what the operator saw is, to the byte, what an auditor replays.
@@ -225,8 +228,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           docker exec openbastion-rdp-windows bash -c 'tr "\0" " " < /proc/$(pgrep -f qemu-system | head -1)/cmdline | grep -oE -- "-(monitor|qmp|chardev|vnc) [^ ]+"' || true
-          ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' openbastion-rdp-windows)
-          python3 test/integration/testdata/rdp/windows/vnc_snapshot.py "$ip" 5900 "$RUNNER_TEMP/windows/dump/guest-screen.png" || true
+          # The same capture the tests take on failure, on every run: a green one proves it works.
+          report=$(test/integration/testdata/rdp/windows/guest-state.sh "$RUNNER_TEMP/windows/dump" guest-screen) || true
+          cat "$report" 2>/dev/null || true
       - name: What Windows showed
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
