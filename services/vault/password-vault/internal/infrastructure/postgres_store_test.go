@@ -750,7 +750,9 @@ func TestPostgresStore_Kerberos_RoundTrips(t *testing.T) {
 		t.Fatal("List lost the Kerberos settings")
 	}
 	// The corrupt row is removed whatever happens: left behind, it fails every List of this database.
-	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), `UPDATE privileged_accounts SET kerberos = NULL WHERE id = $1`, id) })
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(context.Background(), `UPDATE privileged_accounts SET kerberos = NULL WHERE id = $1`, id)
+	})
 	if _, err := db.ExecContext(ctx, `UPDATE privileged_accounts SET kerberos = '{"realm":"CORP","kdcs":[]}'::jsonb WHERE id = $1`, id); err != nil {
 		t.Fatal(err)
 	}

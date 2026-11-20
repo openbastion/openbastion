@@ -91,7 +91,8 @@ var contractPairs = []contractPair{
 		map[string]string{"ttl_seconds": "how long the proxy must remember the revocation (ADR-0018)"}, map[string]string{"context": whyContext}},
 	{"services/proxy/ssh-proxy/internal/infrastructure/vault_client.go", "fetchCredentialRequestBody", "proto/vault/v1/vault.proto", "FetchCredentialRequest", nil, nil},
 	{"services/proxy/ssh-proxy/internal/infrastructure/vault_client.go", "fetchCredentialResponseBody", "proto/vault/v1/vault.proto", "FetchCredentialResponse",
-		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed"}},
+		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed",
+			"kerberos_realm": whyKerberosRDP, "kerberos_kdcs": whyKerberosRDP}},
 	{"services/proxy/rdp-vnc-proxy/internal/infrastructure/vault_client.go", "fetchCredentialRequestBody", "proto/vault/v1/vault.proto", "FetchCredentialRequest", nil, nil},
 	{"services/proxy/rdp-vnc-proxy/internal/infrastructure/vault_client.go", "fetchCredentialResponseBody", "proto/vault/v1/vault.proto", "FetchCredentialResponse",
 		nil, map[string]string{"valid_until": "the material is good for one connection; the scope's end was checked when it was redeemed"}},
@@ -223,6 +224,10 @@ func goJSONFields(t *testing.T, root, file string) map[string][]string {
 	})
 	return out
 }
+
+// whyKerberosRDP: Kerberos settings are set on RDP accounts only (ADR-0100); the Vault never hands
+// them for an SSH account, and the SSH proxy has nothing to do with them.
+const whyKerberosRDP = "Kerberos is for RDP accounts only (ADR-0100): the Vault never sets it on an SSH account"
 
 func TestContract_EveryInternalRouteCarriesTheFieldsOfItsProtoMessage_OrSaysWhyNot(t *testing.T) {
 	root := repoRoot(t)
