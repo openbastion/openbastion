@@ -193,7 +193,9 @@ func kerberosInitiate(cfg KerberosConfig, user string, password []byte) (*kerber
 	if err := cfg.validate(); err != nil {
 		return nil, nil, err
 	}
-	if user == "" || strings.ContainsAny(user, "@/ \t\r\n") || len(password) == 0 {
+	// The user is a name in cfg.Realm alone: a DOMAIN\user or user@realm would ask the KDC for
+	// another principal than the account names.
+	if user == "" || strings.ContainsAny(user, "@/\\ \t\r\n") || len(password) == 0 {
 		return nil, nil, kerberosRefused("an empty or malformed user")
 	}
 	ticket, sessionKey, err := kerberosTickets(cfg, user, password)

@@ -1865,6 +1865,65 @@ paths:
               schema: { type: integer, minimum: 1 }
         "503": { description: L'audit ou une dépendance du Vault ne répond pas ; aucun changement non audité n'est appliqué. }
 
+  /vault/accounts/{accountId}/kerberos:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [vault]
+      summary: Règle le royaume et les KDC Kerberos d'un compte RDP (ADR-0100)
+      description: >
+        Posés, les sessions du compte s'authentifient par Kerberos seul :
+        NTLM n'est alors ni proposé ni envoyé, et un KDC ou une cible qui
+        refuse Kerberos refuse la session, sans repli. `null` les retire :
+        NTLMv2, comme avant. Les KDC sont explicites (aucune découverte DNS).
+        Le principal de service n'est jamais fourni : le proxy le tire du nom
+        épinglé du compte (`TERMSRV/<targetDomain>`, ADR-0071), qui doit donc
+        être un nom d'hôte et non une adresse IP. Le nom d'utilisateur du
+        compte est un nom du royaume, sans `DOMAINE\` ni `@royaume`.
+        Réservé à l'administrateur du compte (politique sur
+        `vault:account-admin:{accountId}`, action `vault:account:kerberos`).
+        L'auteur et ses rôles viennent du jeton vérifié, jamais du corps ; le
+        changement est audité (`vault.kerberos_set`) avant d'être appliqué.
+        La Gateway borne ces écritures par identité, comme l'approbation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kerberos]
+              properties:
+                kerberos:
+                  oneOf:
+                    - { $ref: "#/components/schemas/KerberosSettings" }
+                    - { type: "null" }
+      responses:
+        "200":
+          description: Réglages mis à jour, sous leur forme canonique (royaume en majuscules, chaque KDC en `hôte:port`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kerberos:
+                    oneOf:
+                      - { $ref: "#/components/schemas/KerberosSettings" }
+                      - { type: "null" }
+        "400": { description: Réglages invalides (royaume, aucun KDC ou plus de quatre, KDC qui n'est pas un hôte ou hôte:port, doublon), ou compte qui n'est pas RDP. }
+        "403": { description: L'appelant n'administre pas ce compte. }
+        "404": { description: Compte inconnu ou désactivé. }
+        "409": { description: Le nom épinglé du compte est une adresse IP ; un ticket Kerberos nomme un hôte. }
+        "429":
+          description: Le budget par utilisateur de modification de compte est épuisé ; réessayer après Retry-After.
+          headers:
+            Retry-After:
+              description: Secondes avant le prochain jeton.
+              schema: { type: integer, minimum: 1 }
+        "503": { description: L'audit ou une dépendance du Vault ne répond pas ; aucun changement non audité n'est appliqué. }
+
   /vault/accounts/{accountId}/rotate:
     parameters:
       - name: accountId
@@ -2343,6 +2402,20 @@ components:
           description: Profondeurs demandées à la cible ; une stratégie de la cible peut les plafonner.
         defaultColorDepth: { type: integer, enum: [16, 32] }
       example: { channels: [graphics, bitmap], defaultChannel: graphics, colorDepths: [16, 32], defaultColorDepth: 32 }
+    KerberosSettings:
+      type: object
+      description: >
+        Le royaume et les KDC d'un compte RDP qui s'authentifie par Kerberos seul (ADR-0100).
+      required: [realm, kdcs]
+      properties:
+        realm: { type: string, maxLength: 253, description: "Le royaume ; rendu en majuscules (le nom DNS d'un domaine Active Directory)." }
+        kdcs:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items: { type: string, description: "Un nom d'hôte ou une adresse IP, avec ou sans port (88 par défaut) ; IPv6 entre crochets quand un port suit." }
+      example: { realm: CORP.EXAMPLE.COM, kdcs: ["dc1.corp.example.com:88", "dc2.corp.example.com:88"] }
 
     PrivilegedAccount:
       allOf:
@@ -2356,6 +2429,9 @@ components:
             screenProfile:
               $ref: "#/components/schemas/ScreenProfile"
               description: Compte RDP seulement (ADR-0132) ; absent, tout est permis, `graphics` et 32 bits par défaut.
+            kerberos:
+              $ref: "#/components/schemas/KerberosSettings"
+              description: Compte RDP seulement (ADR-0100) ; absent, NTLMv2. Posé, Kerberos seul, sans repli vers NTLM.
             lastRotatedAt: { type: string, format: date-time }
             rotationOwedSince: { type: string, format: date-time, description: "Une session s'est terminée et le compte doit une rotation (ADR-0044) ; absent : il ne doit rien. Le Vault la paie, et la réessaie tant qu'il n'y arrive pas." }
             rotationFailures: { type: integer, description: "Rotations planifiées échouées d'affilée (ADR-0041) ; absent à 0. Tous les ROTATION_ALERT_AFTER_FAILURES échecs, vault.rotation_overdue est écrit à l'audit." }

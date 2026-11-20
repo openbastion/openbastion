@@ -26,6 +26,10 @@ type Credential struct {
 	TargetUser           string
 	TLSCertificateSHA256 string
 	TargetDomain         string
+	// KerberosRealm and KerberosKDCs, set by the Vault on an RDP account, make the session
+	// authenticate with Kerberos alone, never NTLM (ADR-0100); empty: NTLMv2.
+	KerberosRealm string
+	KerberosKDCs  []string
 }
 
 // Fetched is what the Vault delivers for one session (ADR-0039, ADR-0071).
@@ -37,6 +41,8 @@ type Fetched struct {
 	TargetUser           string
 	TLSCertificateSHA256 string
 	TargetDomain         string
+	KerberosRealm        string
+	KerberosKDCs         []string
 }
 
 func newCredential(credType string, material []byte) *Credential {
@@ -65,6 +71,7 @@ func (c *Credential) Purge() {
 	c.TargetUser = ""
 	c.TLSCertificateSHA256 = ""
 	c.TargetDomain = ""
+	c.KerberosRealm, c.KerberosKDCs = "", nil
 	c.purged = true
 }
 
@@ -108,6 +115,7 @@ func (f *CredentialFetcher) Fetch(ctx context.Context, scopeToken string) (*Cred
 	c := newCredential(got.Type, got.Material)
 	c.TargetHost, c.HostKey = got.TargetHost, got.HostKey
 	c.TargetUser, c.TLSCertificateSHA256, c.TargetDomain = got.TargetUser, got.TLSCertificateSHA256, got.TargetDomain
+	c.KerberosRealm, c.KerberosKDCs = got.KerberosRealm, append([]string(nil), got.KerberosKDCs...)
 	return c, nil
 }
 

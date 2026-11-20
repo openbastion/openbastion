@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/openbastion/openbastion/services/vault/password-vault/internal/domain"
@@ -268,6 +269,11 @@ func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingP
 	default:
 		return Delivered{}, ErrUnsupportedProtocol
 	}
+	// A Kerberos ticket names the target's host: an account pinned to an IP address since its
+	// Kerberos settings were set gets no secret, rather than a ticket for another name.
+	if account.Kerberos != nil && net.ParseIP(account.TargetDomain) != nil {
+		return Delivered{}, ErrKerberosNeedsName
+	}
 	version, err := s.secrets.CurrentVersion(ctx, grant.PrivilegedAccountID)
 	if err != nil {
 		return Delivered{}, err
@@ -276,7 +282,7 @@ func (s *VaultService) FetchCredential(ctx context.Context, scopeToken, callingP
 	if err != nil {
 		return Delivered{}, err
 	}
-	return Delivered{Type: "password", Material: plaintext, TargetHost: account.TargetHost, HostKey: account.HostKey, TargetUser: account.Username, TLSCertificateSHA256: account.TLSCertificateSHA256, TargetDomain: account.TargetDomain}, nil
+	return Delivered{Type: "password", Material: plaintext, TargetHost: account.TargetHost, HostKey: account.HostKey, TargetUser: account.Username, TLSCertificateSHA256: account.TLSCertificateSHA256, TargetDomain: account.TargetDomain, Kerberos: account.Kerberos}, nil
 }
 
 func randomID(prefix string) string {

@@ -94,3 +94,28 @@ func TestCredentialFetcher_CarriesAndPurgesScreenTargetMetadata(t *testing.T) {
 		t.Fatal("screen target metadata survived credential purge")
 	}
 }
+
+// ADR-0100: the realm and KDCs come with the secret, copied (the Vault's slice is not shared), and
+// go with the purge.
+func TestCredentialFetcher_CarriesAndPurgesKerberos(t *testing.T) {
+	kdcs := []string{"dc1.corp.example.com:88"}
+	vault := kerberosVault{fetched: Fetched{Type: "password", Material: []byte("password"), KerberosRealm: "CORP.EXAMPLE.COM", KerberosKDCs: kdcs}}
+	cred, err := NewCredentialFetcher(vault, "rdp-vnc-proxy").Fetch(context.Background(), "scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kdcs[0] = "evil:88"
+	if cred.KerberosRealm != "CORP.EXAMPLE.COM" || len(cred.KerberosKDCs) != 1 || cred.KerberosKDCs[0] != "dc1.corp.example.com:88" {
+		t.Fatalf("Kerberos was not carried, or shared: %q %q", cred.KerberosRealm, cred.KerberosKDCs)
+	}
+	cred.Purge()
+	if cred.KerberosRealm != "" || cred.KerberosKDCs != nil {
+		t.Fatal("Kerberos settings survived credential purge")
+	}
+}
+
+type kerberosVault struct{ fetched Fetched }
+
+func (v kerberosVault) FetchCredential(context.Context, string, string) (Fetched, error) {
+	return v.fetched, nil
+}

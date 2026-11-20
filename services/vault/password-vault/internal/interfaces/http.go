@@ -179,7 +179,8 @@ func writeAdminError(w http.ResponseWriter, what string, err error) {
 		errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrRotationOff),
 		// What the target answered: an administrator configured it, and needs it to act.
 		errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified),
-		errors.Is(err, domain.ErrInvalidScreenProfile), errors.Is(err, application.ErrNotRDP):
+		errors.Is(err, domain.ErrInvalidScreenProfile), errors.Is(err, application.ErrNotRDP),
+		errors.Is(err, domain.ErrInvalidKerberos), errors.Is(err, application.ErrKerberosNotRDP), errors.Is(err, application.ErrKerberosNeedsName):
 		msg = err.Error()
 	default:
 		status, msg = http.StatusServiceUnavailable, "a dependency of the Vault is unavailable: nothing was changed, try again shortly"
@@ -201,7 +202,8 @@ func adminErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrNoHostKey), errors.Is(err, application.ErrNoTLSPin):
+	case errors.Is(err, application.ErrNoReconciliation), errors.Is(err, domain.ErrRotationInProgress), errors.Is(err, application.ErrNoHostKey), errors.Is(err, application.ErrNoTLSPin),
+		errors.Is(err, application.ErrKerberosNeedsName):
 		return http.StatusConflict
 	case errors.Is(err, application.ErrRotationRefused), errors.Is(err, application.ErrRotationUnverified):
 		return http.StatusBadGateway
@@ -212,7 +214,8 @@ func adminErrorStatus(err error) int {
 	case errors.Is(err, domain.ErrAlreadyExists):
 		return http.StatusConflict
 	case errors.Is(err, application.ErrBadHostKey), errors.Is(err, application.ErrBadTLSPin), errors.Is(err, application.ErrBadTargetDomain), errors.Is(err, application.ErrUnsupportedProtocol), errors.Is(err, application.ErrBadRotationInterval),
-		errors.Is(err, domain.ErrInvalidScreenProfile), errors.Is(err, application.ErrNotRDP):
+		errors.Is(err, domain.ErrInvalidScreenProfile), errors.Is(err, application.ErrNotRDP),
+		errors.Is(err, domain.ErrInvalidKerberos), errors.Is(err, application.ErrKerberosNotRDP):
 		return http.StatusBadRequest
 	case errors.Is(err, application.ErrAccessDenied):
 		return http.StatusForbidden
@@ -280,6 +283,10 @@ type fetchCredentialResponse struct {
 	TargetUser           string `json:"target_user"`
 	TLSCertificateSHA256 string `json:"tls_certificate_sha256"`
 	TargetDomain         string `json:"target_domain"`
+	// The account's realm and KDCs (ADR-0100): set, the session authenticates with Kerberos alone,
+	// never NTLM; absent: NTLMv2.
+	KerberosRealm string   `json:"kerberos_realm,omitempty"`
+	KerberosKDCs  []string `json:"kerberos_kdcs,omitempty"`
 }
 
 func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Request) {
@@ -314,13 +321,17 @@ func (s *HTTPServer) handleFetchCredential(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		status := http.StatusForbidden
-		if errors.Is(err, application.ErrNoHostKey) || errors.Is(err, application.ErrNoTLSPin) {
+		if errors.Is(err, application.ErrNoHostKey) || errors.Is(err, application.ErrNoTLSPin) || errors.Is(err, application.ErrKerberosNeedsName) {
 			status = http.StatusConflict
 		}
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, fetchCredentialResponse{CredentialType: d.Type, CredentialMaterial: d.Material, TargetHost: d.TargetHost, HostKey: d.HostKey, TargetUser: d.TargetUser, TLSCertificateSHA256: d.TLSCertificateSHA256, TargetDomain: d.TargetDomain})
+	response := fetchCredentialResponse{CredentialType: d.Type, CredentialMaterial: d.Material, TargetHost: d.TargetHost, HostKey: d.HostKey, TargetUser: d.TargetUser, TLSCertificateSHA256: d.TLSCertificateSHA256, TargetDomain: d.TargetDomain}
+	if d.Kerberos != nil {
+		response.KerberosRealm, response.KerberosKDCs = d.Kerberos.Realm, d.Kerberos.KDCs
+	}
+	writeJSON(w, response)
 }
 
 // -- GET /vault/v1/accounts/{id}, DELETE /vault/v1/accounts/{id} -----------
@@ -361,6 +372,9 @@ type accountResponse struct {
 	// ScreenProfile: what a session on an RDP account may use for its screen (ADR-0132); absent:
 	// everything, the graphics pipeline and 32 bits by default.
 	ScreenProfile *domain.ScreenProfile `json:"screenProfile,omitempty"`
+	// Kerberos: the realm and KDCs of an RDP account that authenticates with Kerberos alone
+	// (ADR-0100); absent: NTLMv2.
+	Kerberos *domain.KerberosSettings `json:"kerberos,omitempty"`
 }
 
 // toAccountResponse is the single place that maps domain.PrivilegedAccount
@@ -378,7 +392,7 @@ func toAccountResponse(a *domain.PrivilegedAccount) accountResponse {
 		HostKey: a.HostKey, HostKeyFingerprint: application.HostKeyFingerprint(a.HostKey),
 		TLSCertificateSHA256: a.TLSCertificateSHA256, TargetDomain: a.TargetDomain,
 		RotationIntervalDays: a.RotationIntervalDays, NextRotationAt: a.RotationDueAt(), RotationFailures: a.RotationFailures, RotationOwedSince: a.RotationOwedSince,
-		ApprovalRequired: a.ApprovalRequired, ScreenProfile: a.ScreenProfile,
+		ApprovalRequired: a.ApprovalRequired, ScreenProfile: a.ScreenProfile, Kerberos: a.Kerberos,
 	}
 }
 
@@ -398,6 +412,10 @@ func (s *HTTPServer) handleAccountItem(w http.ResponseWriter, r *http.Request) {
 	}
 	if accountID, ok := strings.CutSuffix(id, "/screen-profile"); ok {
 		s.handleSetScreenProfile(w, r, accountID)
+		return
+	}
+	if accountID, ok := strings.CutSuffix(id, "/kerberos"); ok {
+		s.handleSetKerberos(w, r, accountID)
 		return
 	}
 	if accountID, ok := strings.CutSuffix(id, "/approval"); ok {
@@ -594,6 +612,35 @@ func (s *HTTPServer) handleSetScreenProfile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, map[string]*domain.ScreenProfile{"screenProfile": req.ScreenProfile})
+}
+
+// -- PUT /vault/v1/accounts/{id}/kerberos (ADR-0100), from the Gateway --------------
+
+type setKerberosRequest struct {
+	// Kerberos: the realm and KDCs; null removes them (NTLMv2).
+	Kerberos   *domain.KerberosSettings `json:"kerberos"`
+	ActorRoles []string                 `json:"actorRoles"`
+	ActorID    string                   `json:"actorId"`
+}
+
+func (s *HTTPServer) handleSetKerberos(w http.ResponseWriter, r *http.Request, accountID string) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req setKerberosRequest
+	dec := json.NewDecoder(io.LimitReader(r.Body, 16<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "the body is {\"kerberos\": {\"realm\": ..., \"kdcs\": [\"host:port\", ...]} | null}", http.StatusBadRequest)
+		return
+	}
+	stored, err := s.svc.SetKerberos(r.Context(), req.ActorID, req.ActorRoles, accountID, req.Kerberos)
+	if err != nil {
+		writeAdminError(w, "setting the Kerberos settings of account "+accountID, err)
+		return
+	}
+	writeJSON(w, map[string]*domain.KerberosSettings{"kerberos": stored})
 }
 
 // Refusal codes of authorize-scope (ADR-0042): the contract a caller reads.

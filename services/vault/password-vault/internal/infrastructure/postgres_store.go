@@ -63,13 +63,13 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 	var a domain.PrivilegedAccount
 	var rotationPolicy string
 	var lastRotatedAt, disabledAt, attemptedAt, owedSince sql.NullTime
-	var profile []byte
+	var profile, kerberos []byte
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, reconciliation_account_id, host_key,
-		       rotation_interval_days, rotation_attempted_at, rotation_failures, rotation_owed_since, approval_required, tls_certificate_sha256, target_domain, screen_profile
+		       rotation_interval_days, rotation_attempted_at, rotation_failures, rotation_owed_since, approval_required, tls_certificate_sha256, target_domain, screen_profile, kerberos
 		FROM privileged_accounts WHERE id = $1`, id)
 	if err := row.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.ReconciliationAccountID, &a.HostKey,
-		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures, &owedSince, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain, &profile); err != nil {
+		&a.RotationIntervalDays, &attemptedAt, &a.RotationFailures, &owedSince, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain, &profile, &kerberos); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrNotFound
 		}
@@ -80,6 +80,9 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.PrivilegedA
 		return nil, err
 	}
 	a.ScreenProfile = screenProfile
+	if a.Kerberos, err = decodeKerberos(kerberos); err != nil {
+		return nil, err
+	}
 	a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
 	if lastRotatedAt.Valid {
 		a.LastRotatedAt = &lastRotatedAt.Time
@@ -110,7 +113,7 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures, approval_required, tls_certificate_sha256, target_domain, screen_profile
+		SELECT id, name, username, target_host, protocol, rotation_policy, last_rotated_at, created_at, disabled_at, host_key, rotation_interval_days, rotation_failures, approval_required, tls_certificate_sha256, target_domain, screen_profile, kerberos
 		FROM privileged_accounts WHERE disabled_at IS NULL
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, pageSize, offset)
@@ -124,12 +127,15 @@ func (s *PostgresStore) List(ctx context.Context, page, pageSize int) ([]*domain
 		var a domain.PrivilegedAccount
 		var rotationPolicy string
 		var lastRotatedAt, disabledAt sql.NullTime
-		var profile []byte
-		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain, &profile); err != nil {
+		var profile, kerberos []byte
+		if err := rows.Scan(&a.ID, &a.Name, &a.Username, &a.TargetHost, &a.Protocol, &rotationPolicy, &lastRotatedAt, &a.CreatedAt, &disabledAt, &a.HostKey, &a.RotationIntervalDays, &a.RotationFailures, &a.ApprovalRequired, &a.TLSCertificateSHA256, &a.TargetDomain, &profile, &kerberos); err != nil {
 			return nil, 0, err
 		}
 		var err error
 		if a.ScreenProfile, err = decodeScreenProfile(profile); err != nil {
+			return nil, 0, err
+		}
+		if a.Kerberos, err = decodeKerberos(kerberos); err != nil {
 			return nil, 0, err
 		}
 		a.RotationPolicy = domain.RotationPolicy(rotationPolicy)
@@ -203,6 +209,43 @@ func decodeScreenProfile(raw []byte) (*domain.ScreenProfile, error) {
 		return nil, fmt.Errorf("reading a stored screen profile: %w", err)
 	}
 	return &p, nil
+}
+
+// SetKerberos is domain.AccountRepository.SetKerberos: the settings as JSON, NULL for none.
+func (s *PostgresStore) SetKerberos(ctx context.Context, id string, settings *domain.KerberosSettings) error {
+	var value any
+	if settings != nil {
+		raw, err := json.Marshal(settings)
+		if err != nil {
+			return err
+		}
+		value = string(raw)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE privileged_accounts SET kerberos = $2::jsonb WHERE id = $1`, id, value)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// decodeKerberos reads the kerberos column: NULL is NTLMv2; stored settings that do not validate
+// are an error, never taken as "no Kerberos" (which would send the secret over NTLM).
+func decodeKerberos(raw []byte) (*domain.KerberosSettings, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var k domain.KerberosSettings
+	if err := json.Unmarshal(raw, &k); err != nil {
+		return nil, fmt.Errorf("reading stored Kerberos settings: %w", err)
+	}
+	normalized, err := k.Normalized()
+	if err != nil {
+		return nil, fmt.Errorf("reading stored Kerberos settings: %w", err)
+	}
+	return &normalized, nil
 }
 
 // SetHostKey is domain.AccountRepository.SetHostKey.

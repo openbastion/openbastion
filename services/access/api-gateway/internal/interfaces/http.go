@@ -1475,6 +1475,39 @@ func (g *GatewayServer) handleVaultAccountItem(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// PUT /vault/accounts/{id}/kerberos sets the realm and KDCs of an RDP account, whose sessions
+	// then authenticate with Kerberos alone (ADR-0100). Only the realm and KDCs are the client's;
+	// who sets them, and with which roles, are the verified token's — the Vault checks, normalizes
+	// and audits. The service principal is never the client's: the proxy derives it from the
+	// account's pinned target name.
+	if accountID, ok := strings.CutSuffix(rest, "/kerberos"); ok {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if accountID == "" || strings.Contains(accountID, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		if !g.admitVaultAccountAction(w, id) {
+			return
+		}
+		var body struct {
+			Kerberos *struct {
+				Realm string   `json:"realm"`
+				KDCs  []string `json:"kdcs"`
+			} `json:"kerberos"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
+			http.Error(w, "the body is {\"kerberos\": {\"realm\": ..., \"kdcs\": [...]} | null}", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPut, g.vaultURL+"/vault/v1/accounts/"+neturl.PathEscape(accountID)+"/kerberos", map[string]any{
+			"kerberos": body.Kerberos, "actorRoles": id.Roles, "actorId": id.UserID,
+		})
+		return
+	}
+
 	// PUT /vault/accounts/{id}/approval says whether a session on the account waits for another
 	// person's approval (ADR-0067). The setting only is the client's; who sets it is the token's.
 	if accountID, ok := strings.CutSuffix(rest, "/approval"); ok {

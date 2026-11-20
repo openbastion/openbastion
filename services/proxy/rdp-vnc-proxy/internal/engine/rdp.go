@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"sort"
 	"sync"
 	"time"
@@ -218,9 +219,17 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 			_ = transport.Close()
 		}
 	}()
-	client, err := transport.EstablishCredSSP(ctx, rdp.CredSSPClientConfig{
+	credssp := rdp.CredSSPClientConfig{
 		Version: 6, Username: cred.TargetUser, Password: cred.Material(), Timeout: c.DialTimeout,
-	})
+	}
+	if cred.KerberosRealm != "" {
+		kerberos, err := rdpKerberosConfig(cred, c.DialTimeout)
+		if err != nil {
+			return nil, err
+		}
+		credssp.Kerberos = kerberos
+	}
+	client, err := transport.EstablishCredSSP(ctx, credssp)
 	if err != nil {
 		return nil, err
 	}
@@ -983,3 +992,15 @@ func (s *rdpScreenSessionAdapter) OfferClipboardText(text string) error {
 }
 
 var _ proxycore.ClipboardSession = (*rdpScreenSessionAdapter)(nil)
+
+// rdpKerberosConfig is the Kerberos of an account the Vault set to Kerberos (ADR-0100): its realm
+// and KDCs, and the ticket asked for TERMSRV/<the pinned target name>, the name the target's
+// certificate was just verified against — never another host. A pinned IP address names no host
+// for a ticket: the session is refused, never sent over NTLM instead.
+func rdpKerberosConfig(cred *proxycore.Credential, timeout time.Duration) (*rdp.KerberosConfig, error) {
+	if cred.TargetDomain == "" || net.ParseIP(cred.TargetDomain) != nil {
+		return nil, fmt.Errorf("%w: Kerberos needs the pinned target name to be a host name, not %q", rdp.ErrRDPKerberos, cred.TargetDomain)
+	}
+	return &rdp.KerberosConfig{Realm: cred.KerberosRealm, KDCs: append([]string(nil), cred.KerberosKDCs...),
+		ServicePrincipal: "TERMSRV/" + cred.TargetDomain, Timeout: timeout}, nil
+}

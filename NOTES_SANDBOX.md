@@ -5115,3 +5115,23 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - l'échange CredSSP complet passe avec de vrais tickets du KDC MIT, le serveur du test n'ayant que la clé du service.
 - **Limite** : la bibliothèque aplatit le KRB-ERROR en texte, et le code y est lu. Une autre forme de texte ne donne pas de code.
 - **Reste** : les champs du Vault (incrément 3), Windows dans un domaine (incrément 4).
+
+## 2026-11-20 — ADR-0100, incrément 3 : le royaume et les KDC du compte, du Vault au proxy
+
+- **Fait** :
+  - `PUT /vault/accounts/{id}/kerberos`, avec la colonne `kerberos JSONB` (`010_kerberos.sql`) ; l'audit précède le changement, et seuls le royaume et les KDC sont pris du client ;
+  - le proxy demande `TERMSRV/<nom épinglé>` et passe par Kerberos seul quand le royaume est là ;
+  - un nom épinglé qui est une IP ferme Kerberos au réglage, au ré-épinglage et à la remise du secret.
+- **Prouvé** :
+  - le Vault, de l'application à HTTP, et PostgreSQL réel ;
+  - la Gateway ;
+  - le proxy face à une vraie cible TLS : aucun octet CredSSP vers la cible si le KDC est muet, alors que la contre-épreuve voit NTLM arriver ;
+  - 20 mutations tuées sur 21, la survivante ayant montré une branche redondante, retirée.
+- **Décidé, renversable** :
+  - le principal de service est dérivé du nom épinglé, il n'est pas stocké ;
+  - l'utilisateur est un nom du royaume, sans `DOMAINE\`.
+- **Limites** :
+  - pas de formulaire dans l'Admin UI ;
+  - les échecs Kerberos autres que le refus d'identifiants restent `target_unreachable`.
+- **Base de test** : un conteneur `obpg-kerberos` à part, sur le port 55432, pour ne pas toucher à la base du sandbox.
+- **Reste** : l'incrément 4, Windows dans un domaine Samba AD en CI.

@@ -714,3 +714,56 @@ func TestPostgresStore_ScreenProfile_RoundTrips(t *testing.T) {
 		t.Fatalf("an unknown account: %v", err)
 	}
 }
+
+// ADR-0100: the Kerberos settings round-trip through PostgreSQL, Get and List, NULL removes them,
+// and stored settings that no longer validate are an error, never "no Kerberos" (NTLM).
+func TestPostgresStore_Kerberos_RoundTrips(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("rdp")
+	if err := store.Create(ctx, &domain.PrivilegedAccount{ID: id, Name: id, Username: "operator", TargetHost: id + ":3389", Protocol: "rdp", RotationPolicy: domain.RotationManual}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.Kerberos != nil {
+		t.Fatalf("a new account has no Kerberos settings: %+v err=%v", got, err)
+	}
+	want := domain.KerberosSettings{Realm: "CORP.EXAMPLE.COM", KDCs: []string{"dc1.corp.example.com:88", "10.0.0.4:88"}}
+	if err := store.SetKerberos(ctx, id, &want); err != nil {
+		t.Fatalf("SetKerberos: %v", err)
+	}
+	got, err := store.Get(ctx, id)
+	if err != nil || got.Kerberos == nil || got.Kerberos.Realm != want.Realm || len(got.Kerberos.KDCs) != 2 || got.Kerberos.KDCs[1] != "10.0.0.4:88" {
+		t.Fatalf("Get after set: %+v err=%v", got.Kerberos, err)
+	}
+	accounts, _, err := store.List(ctx, 1, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range accounts {
+		if a.ID == id {
+			found = a.Kerberos != nil && a.Kerberos.Realm == want.Realm
+		}
+	}
+	if !found {
+		t.Fatal("List lost the Kerberos settings")
+	}
+	// The corrupt row is removed whatever happens: left behind, it fails every List of this database.
+	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), `UPDATE privileged_accounts SET kerberos = NULL WHERE id = $1`, id) })
+	if _, err := db.ExecContext(ctx, `UPDATE privileged_accounts SET kerberos = '{"realm":"CORP","kdcs":[]}'::jsonb WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(ctx, id); err == nil {
+		t.Fatal("stored settings that do not validate were read as valid")
+	}
+	if err := store.SetKerberos(ctx, id, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := store.Get(ctx, id); err != nil || got.Kerberos != nil {
+		t.Fatalf("removed: %+v err=%v", got.Kerberos, err)
+	}
+	if err := store.SetKerberos(ctx, uniqueID("nobody"), &want); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("an unknown account: %v", err)
+	}
+}

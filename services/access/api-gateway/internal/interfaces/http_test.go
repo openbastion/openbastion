@@ -883,3 +883,52 @@ func TestHandleVaultAccountItem_SetScreenProfileTakesOnlyTheProfileFromTheClient
 		t.Fatalf("null: %d, forwarded %v", rec.Code, vault.lastPin)
 	}
 }
+
+// PUT /vault/accounts/{id}/kerberos (ADR-0100): the realm and KDCs are the client's, in their
+// known fields; the author and roles are the token's; a service principal never rides along.
+func TestHandleVaultAccountItem_SetKerberosTakesOnlyTheRealmAndKDCsFromTheClient(t *testing.T) {
+	const validToken = "tok-admin"
+	authSrv := newFakeTokenVerifierServer(t, validToken, "user_admin", "admin1", []string{"operator"})
+	defer authSrv.Close()
+	broker := newCapturingSessionBroker(t)
+	defer broker.srv.Close()
+	vault := newCapturingVault(t)
+	defer vault.srv.Close()
+	gw := newTestGateway(t, authSrv.URL, broker.srv.URL, vault.srv.URL, "")
+	send := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+validToken)
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := send(http.MethodPut, "/vault/accounts/acc1/kerberos", `not json`); rec.Code != http.StatusBadRequest || vault.lastPinPath != "" {
+		t.Fatalf("not JSON: %d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	if rec := send(http.MethodPut, "/vault/accounts/a/b/kerberos", `{"kerberos":null}`); rec.Code != http.StatusNotFound || vault.lastPinPath != "" {
+		t.Fatalf("a nested path: %d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	if rec := send(http.MethodPost, "/vault/accounts/acc1/kerberos", `{"kerberos":null}`); rec.Code != http.StatusMethodNotAllowed || vault.lastPinPath != "" {
+		t.Fatalf("POST: %d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	rec := send(http.MethodPut, "/vault/accounts/acc1/kerberos", `{"kerberos":{"realm":"CORP.EXAMPLE.COM","kdcs":["dc1.corp.example.com:88"],"servicePrincipal":"TERMSRV/evil"},
+		"actorId":"user_root","actorRoles":["vault-admin"],"servicePrincipal":"TERMSRV/evil"}`)
+	if rec.Code != http.StatusOK || vault.lastPinPath != "/vault/v1/accounts/acc1/kerberos" {
+		t.Fatalf("%d, forwarded to %q", rec.Code, vault.lastPinPath)
+	}
+	roles, _ := vault.lastPin["actorRoles"].([]any)
+	kerberos, _ := vault.lastPin["kerberos"].(map[string]any)
+	kdcs, _ := kerberos["kdcs"].([]any)
+	if vault.lastPin["actorId"] != "user_admin" || len(roles) != 1 || roles[0] != "operator" || kerberos["realm"] != "CORP.EXAMPLE.COM" || len(kdcs) != 1 {
+		t.Fatalf("forwarded %v", vault.lastPin)
+	}
+	if _, slipped := vault.lastPin["servicePrincipal"]; slipped {
+		t.Fatalf("a service principal rode along: %v", vault.lastPin)
+	}
+	if _, slipped := kerberos["servicePrincipal"]; slipped {
+		t.Fatalf("a service principal rode along in the settings: %v", kerberos)
+	}
+	if rec := send(http.MethodPut, "/vault/accounts/acc1/kerberos", `{"kerberos":null}`); rec.Code != http.StatusOK || vault.lastPin["kerberos"] != nil {
+		t.Fatalf("null: %d, forwarded %v", rec.Code, vault.lastPin)
+	}
+}

@@ -148,6 +148,7 @@ CREATE TABLE privileged_accounts (
     protocol         TEXT NOT NULL CHECK (protocol IN ('ssh','vnc','rdp')), -- ADR-0071 : clients protocolaires distincts
     approval_required BOOLEAN NOT NULL DEFAULT FALSE,             -- ADR-0067 : une autre personne approuve les sessions ordinaires
     screen_profile    JSONB,                                      -- ADR-0132 : RDP, canaux et profondeurs permis et leurs défauts ; NULL : tout permis
+    kerberos          JSONB,                                      -- ADR-0100 : RDP, royaume et KDC (1 à 4) ; posé : Kerberos seul, sans repli NTLM ; NULL : NTLMv2
     tls_certificate_sha256 TEXT NOT NULL DEFAULT '',               -- ADR-0071 : pin SHA-256 du certificat feuille, vide pour SSH
     target_domain    TEXT NOT NULL DEFAULT '',                     -- ADR-0071 : nom DNS/IP vérifié, vide pour SSH
     rotation_policy  TEXT NOT NULL DEFAULT 'post_use'
