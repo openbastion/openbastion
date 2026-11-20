@@ -77,6 +77,8 @@ Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name Ope
 # prepare.sh DIR DEPTH console keeps that session, to validate taking it over by RDP.
 $ready = @"
 Start-Sleep -Seconds 20
+# ADR-0100, increment 4: on the domain controller, the domain's part first (kerberos-ready.ps1).
+if (Test-Path 'C:\OEM\domain') { & 'C:\OEM\kerberos-ready.ps1' }
 `$ids = @()
 if ((Get-Content 'C:\OEM\session' -Raw -ErrorAction SilentlyContinue) -ne 'console') {
   Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
@@ -98,8 +100,15 @@ New-Item -ItemType Directory -Force 'C:\OEM\rdp-events' | Out-Null
 "@
 Set-Content 'C:\OEM\rdp-ready.ps1' $ready
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\rdp-ready.ps1'
-Register-ScheduledTask -TaskName 'OpenBastionRdpReady' -Action $action -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
-Start-ScheduledTask -TaskName 'OpenBastionRdpReady'
+if (Test-Path 'C:\OEM\domain') {
+  # ADR-0100, increment 4: the promotion restarts Windows; the readiness task runs at the next start,
+  # once, with the domain up (kerberos-ready.ps1 removes the task); the promotion itself is this
+  # script's very last step.
+  Register-ScheduledTask -TaskName 'OpenBastionRdpReady' -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+} else {
+  Register-ScheduledTask -TaskName 'OpenBastionRdpReady' -Action $action -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+  Start-ScheduledTask -TaskName 'OpenBastionRdpReady'
+}
 Write-Output "rdp-setup: done; certificate $($cert.Thumbprint) once every session is logged off"
 
 # What Windows says about each RDP connection, for the CI (ADR-0071): every 30 s, the RDP logs as
@@ -169,3 +178,6 @@ while ($true) {
 } catch {
   Write-Output "rdp-setup: no RDP event export: $_"
 }
+
+# ADR-0100, increment 4: the promotion to domain controller restarts Windows, so it comes last.
+if (Test-Path 'C:\OEM\domain') { & 'C:\OEM\kerberos-dc.ps1' }

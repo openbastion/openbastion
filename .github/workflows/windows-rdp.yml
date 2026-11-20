@@ -16,6 +16,7 @@ on:
     paths:
       - test/integration/testdata/rdp/windows/**
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp_windows_interop_test.go
+      - services/proxy/rdp-vnc-proxy/internal/engine/rdp_windows_kerberos_test.go
       - services/proxy/rdp-vnc-proxy/internal/engine/rdp.go
       - services/access/session-broker/internal/application/secret_action_step_up.go
       - test/integration/screen_rdp_flow_test.go
@@ -271,3 +272,83 @@ jobs:
       - name: Stop Windows
         if: always()
         run: docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml down -v || true
+
+  # Kerberos against Windows (ADR-0100, increment 4): Windows Server 2022 made its own domain
+  # controller, openbastion.test, incoming NTLM refused. The KDC that issues the proxy's tickets is
+  # Microsoft's, and the session that opens there was made by Kerberos alone; the counter-proof shows
+  # NTLM refused by the same target. A job of its own: the five targets above stay as they are.
+  kerberos:
+    name: Kerberos against a Windows Server 2022 domain controller
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: KVM
+        run: |
+          if [ ! -e /dev/kvm ]; then echo "::error::this runner has no /dev/kvm: dockur/windows cannot run here"; exit 1; fi
+      - name: Disk for a 6 GB ISO and a 40 GB disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h / "$RUNNER_TEMP"
+      # A PowerShell mistake would be seen after the installation, forty minutes later: parsed first.
+      - name: The guest's PowerShell parses
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($file in Get-ChildItem test/integration/testdata/rdp/windows/oem/*.ps1) {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors) | Out-Null
+            foreach ($e in $errors) { Write-Output "::error file=$($file.Name),line=$($e.Extent.StartLineNumber)::$($e.Message)"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: "Prepare the domain controller (authority, certificate, passwords: for this run only)"
+        run: bash test/integration/testdata/rdp/windows/prepare.sh "$RUNNER_TEMP/windows" 16 none en-US 2022 kerberos
+      - name: Start Windows
+        run: |
+          docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml \
+            -f test/integration/testdata/rdp/windows/docker-compose.kerberos.yml up -d
+      - name: Kerberos against Windows
+        run: |
+          set -a; . "$RUNNER_TEMP/windows/test.env"; set +a
+          # Ready once the pinned certificate is presented: the share dockur exports may not take a
+          # domain controller's guest access, so the readiness file on it is not waited for.
+          export RDP_WINDOWS_SHARED=
+          export RDP_WINDOWS_GUEST_STATE="$GITHUB_WORKSPACE/test/integration/testdata/rdp/windows/guest-state.sh"
+          go test ./services/proxy/rdp-vnc-proxy/internal/engine/ -run 'TestRDPWindowsKerberos$' -v -count=1 -timeout=120m
+      - name: What Windows logged
+        if: ${{ !cancelled() }}
+        run: |
+          sleep 45
+          mkdir -p "$RUNNER_TEMP/windows/dump/events"
+          sudo cp -r "$RUNNER_TEMP/windows/shared/." "$RUNNER_TEMP/windows/dump/events/" || true
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/windows/dump/events"
+          ls -l "$RUNNER_TEMP/windows/dump/events"
+          for f in "$RUNNER_TEMP"/windows/dump/events/kerberos-ready.log "$RUNNER_TEMP"/windows/dump/events/*RdpCoreTS_Operational.txt; do
+            if [ -f "$f" ]; then echo "== $f"; head -c 6000 "$f"; fi
+          done
+      - name: The virtual machine's screen and state
+        if: ${{ !cancelled() }}
+        run: |
+          report=$(test/integration/testdata/rdp/windows/guest-state.sh "$RUNNER_TEMP/windows/dump" guest-screen) || true
+          cat "$report" 2>/dev/null || true
+      - name: What Windows showed
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-rdp-kerberos
+          path: ${{ runner.temp }}/windows/dump/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: The virtual machine's log
+        if: failure()
+        run: docker logs --tail 200 openbastion-rdp-windows || true
+      - name: Stop Windows
+        if: always()
+        run: |
+          docker compose --env-file "$RUNNER_TEMP/windows/compose.env" -f test/integration/testdata/rdp/windows/docker-compose.yml \
+            -f test/integration/testdata/rdp/windows/docker-compose.kerberos.yml down -v || true

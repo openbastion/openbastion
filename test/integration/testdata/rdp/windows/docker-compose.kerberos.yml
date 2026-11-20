@@ -1,0 +1,9 @@
+# ADR-0100, increment 4: the Windows of docker-compose.yml made its own domain controller
+# (prepare.sh DOMAIN=kerberos). Its KDC, on the loopback alone, for the proxy's AS and TGS exchanges
+# over TCP. dockur forwards every port to the virtual machine in its NAT mode (NET_ADMIN, tun).
+#
+#   docker compose --env-file "$DIR/compose.env" -f docker-compose.yml -f docker-compose.kerberos.yml up -d
+services:
+  windows:
+    ports:
+      - 127.0.0.1:88:88/tcp
