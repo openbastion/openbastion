@@ -131,6 +131,24 @@ func (s *InMemoryStore) SetScreenProfile(ctx context.Context, id string, profile
 	return nil
 }
 
+// SetKerberos is domain.AccountRepository.SetKerberos.
+func (s *InMemoryStore) SetKerberos(ctx context.Context, id string, settings *domain.KerberosSettings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[id]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	if settings == nil {
+		a.Kerberos = nil
+		return nil
+	}
+	copied := *settings
+	copied.KDCs = append([]string(nil), settings.KDCs...)
+	a.Kerberos = &copied
+	return nil
+}
+
 // SetHostKey is domain.AccountRepository.SetHostKey.
 func (s *InMemoryStore) SetHostKey(ctx context.Context, id, hostKey string) error {
 	s.mu.Lock()

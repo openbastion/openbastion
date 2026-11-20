@@ -80,6 +80,9 @@ func (s *VaultService) SetTLSPin(ctx context.Context, actorID string, actorRoles
 	if a.Protocol != "vnc" && a.Protocol != "rdp" {
 		return "", "", ErrUnsupportedProtocol
 	}
+	if a.Kerberos != nil && net.ParseIP(name) != nil {
+		return "", "", ErrKerberosNeedsName
+	}
 	if s.audit == nil {
 		return "", "", ErrAuditUnavailable
 	}

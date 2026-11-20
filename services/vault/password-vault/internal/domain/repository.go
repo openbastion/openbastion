@@ -71,6 +71,8 @@ type AccountRepository interface {
 	SetApprovalRequired(ctx context.Context, id string, required bool) error
 	// SetScreenProfile sets the screen profile of an RDP account (ADR-0132); nil removes it.
 	SetScreenProfile(ctx context.Context, id string, profile *ScreenProfile) error
+	// SetKerberos sets the Kerberos settings of an RDP account (ADR-0100); nil removes them.
+	SetKerberos(ctx context.Context, id string, settings *KerberosSettings) error
 
 	// ListDueForRotation is at most limit enabled accounts to be rotated at now and not taken
 	// since now-retryAfter, the longest waiting first: those that owe a rotation (ADR-0044) and,

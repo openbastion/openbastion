@@ -92,3 +92,25 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
 - **Non éprouvé** : contre Windows. Ce qu'un contrôleur de domaine réel envoie (MIC ou non, rotation des jetons, alias Microsoft de Kerberos) se mesurera à l'incrément 4.
 - **Reste** : les champs du compte au Vault (incrément 3), puis Windows dans un domaine Samba AD en CI (incrément 4).
 
+### Incrément 3 — le royaume et les KDC du compte, du Vault au proxy (20 novembre 2026)
+
+- **Décidé en autonomie, renversable** (l'ADR laissait « les champs de compte du Vault à confirmer à leur incrément ») :
+  - deux champs seulement, le royaume et un à quatre KDC, dans une colonne `kerberos JSONB` (`010_kerberos.sql`) ; NULL veut dire NTLMv2, comme avant ;
+  - **le principal de service n'est pas un champ** : le proxy demande `TERMSRV/<targetDomain>`, le nom épinglé contre lequel le certificat de la cible est vérifié (ADR-0071). Un ticket n'est donc jamais demandé pour un autre hôte que celui qui reçoit le secret. Le prix : un compte Kerberos doit être épinglé à un nom d'hôte, pas à une IP ;
+  - le nom d'utilisateur du compte est un nom du royaume, sans `DOMAINE\` ni `@royaume` : `pkg/rdp` refuse ces formes avant de joindre le KDC.
+- **Fait** :
+  - `PUT /vault/accounts/{id}/kerberos` : à la Gateway, seuls le royaume et les KDC sont pris du client ; au Vault, la politique `vault:account:kerberos` sur `vault:account-admin:{id}`, un refus audité au mieux, des réglages normalisés (royaume en majuscules, KDC en `hôte:port`, 88 par défaut), et un compte RDP actif seulement. **L'audit `vault.kerberos_set` précède le changement, et rien ne change sans lui.** `null` retire les réglages ;
+  - un nom épinglé qui est une IP ferme Kerberos à trois endroits : au réglage (`409`), au ré-épinglage d'un compte Kerberos (`409`), et à la remise du secret (`409`, aucun secret). Le proxy refuse aussi la session, en défense en profondeur ;
+  - des réglages stockés qui ne se valident plus sont une erreur de lecture, jamais « pas de Kerberos », ce qui enverrait le secret par NTLM ;
+  - `fetch-credential` remet le royaume et les KDC avec le secret (`kerberos_realm`, `kerberos_kdcs`) ; `pkg/proxycore` les copie et les efface à la purge ; le proxy pose `CredSSPClientConfig.Kerberos` quand le royaume est là.
+- **Prouvé** :
+  - le Vault : l'autorisation, l'audit d'abord, l'audit absent, la normalisation, RDP seul, les trois gardes de l'IP, le retrait, le compte désactivé ; la route HTTP de bout en bout (champs inconnus refusés, compte, remise au proxy, retour à NTLM) ; PostgreSQL réel (aller-retour, liste, valeur stockée invalide refusée) ;
+  - la Gateway : seuls les champs connus passent, jamais un principal de service, l'auteur et les rôles viennent du jeton ;
+  - sur les huit processus réels sous TLS mutuel (`TestMTLS_TheWholeProductOverMutualTLS…`), l'opérateur reçoit `403`, un compte SSH `400`, l'épinglage à une IP `409` dans les deux sens ; l'administrateur règle, relit et revient à NTLM ;
+  - le proxy, sur TCP et TLS épinglé réels, face à une cible du test : avec un royaume et un KDC muet, la session échoue sans qu'un seul octet CredSSP atteigne la cible. La contre-épreuve, sans royaume, voit la négociation NTLM arriver à la même cible ;
+  - 20 mutations tuées sur 21. La seule survivante a montré une branche redondante dans la lecture d'un KDC, retirée depuis.
+- **Pas encore fait** :
+  - l'Admin UI n'a pas de formulaire Kerberos : la route s'appelle par l'API ;
+  - les échecs Kerberos autres que le refus d'identifiants (KDC injoignable, cible qui refuse le ticket) restent `target_unreachable`. Un code à part toucherait le contrat de l'écran et l'UI.
+- **Reste** : l'incrément 4, Windows dans un domaine Samba AD en CI.
+

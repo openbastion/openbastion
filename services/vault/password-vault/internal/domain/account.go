@@ -55,6 +55,10 @@ type PrivilegedAccount struct {
 	// everything, DefaultScreenProfile.
 	ScreenProfile *ScreenProfile
 
+	// Kerberos, set on an RDP account, makes its sessions authenticate with Kerberos alone, never
+	// NTLM (ADR-0100); nil: NTLMv2, as before.
+	Kerberos *KerberosSettings
+
 	// RotationIntervalDays is how often a scheduled account rotates (ADR-0040): 1 to 365 for
 	// RotationScheduled, 0 for any other policy.
 	RotationIntervalDays int

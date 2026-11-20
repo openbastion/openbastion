@@ -59,7 +59,8 @@ func (c *VaultCredentialHTTPClient) FetchCredential(ctx context.Context, scopeTo
 	if len(out.CredentialMaterial) == 0 {
 		return proxycore.Fetched{}, fmt.Errorf("fetch-credential: empty credential material")
 	}
-	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey, TargetUser: out.TargetUser, TLSCertificateSHA256: out.TLSCertificateSHA256, TargetDomain: out.TargetDomain}, nil
+	return proxycore.Fetched{Type: out.CredentialType, Material: out.CredentialMaterial, TargetHost: out.TargetHost, HostKey: out.HostKey, TargetUser: out.TargetUser, TLSCertificateSHA256: out.TLSCertificateSHA256, TargetDomain: out.TargetDomain,
+		KerberosRealm: out.KerberosRealm, KerberosKDCs: out.KerberosKDCs}, nil
 }
 
 type fetchCredentialRequestBody struct {
@@ -68,11 +69,13 @@ type fetchCredentialRequestBody struct {
 }
 
 type fetchCredentialResponseBody struct {
-	CredentialType       string `json:"credential_type"`
-	CredentialMaterial   []byte `json:"credential_material"`
-	TargetHost           string `json:"target_host"`
-	HostKey              string `json:"host_key"`
-	TargetUser           string `json:"target_user"`
-	TLSCertificateSHA256 string `json:"tls_certificate_sha256"`
-	TargetDomain         string `json:"target_domain"`
+	CredentialType       string   `json:"credential_type"`
+	CredentialMaterial   []byte   `json:"credential_material"`
+	TargetHost           string   `json:"target_host"`
+	HostKey              string   `json:"host_key"`
+	TargetUser           string   `json:"target_user"`
+	TLSCertificateSHA256 string   `json:"tls_certificate_sha256"`
+	TargetDomain         string   `json:"target_domain"`
+	KerberosRealm        string   `json:"kerberos_realm"`
+	KerberosKDCs         []string `json:"kerberos_kdcs"`
 }

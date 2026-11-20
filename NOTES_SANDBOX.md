@@ -5122,3 +5122,23 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - Proxy : `the target opened the screen at N bpp (M asked)` à chaque ouverture RDP (rien de la cible ni du compte).
 - Mesuré (run 44788536601) : 16 bpp choisis par la cible sur les cinq jobs, y compris « 2022, 32 bpp » ; 19 à 25 images relues, dont 5 à 7 clés, à 698 × 888. Captures `browser-choice-*.png` jugées à l'œil (2022, 32 bpp) : choix visible dans la page, bureau entier, Notepad, texte tapé. La dernière image clé relue précède la frappe : le texte est dans les images partielles qui la suivent.
 - ADR-0132 achevée : profil au Vault (#244), choix borné au Broker et appliqué au proxy (#246), Admin UI (#248), vérification Windows (#250).
+
+## 2026-11-20 — ADR-0100, incrément 3 : le royaume et les KDC du compte, du Vault au proxy
+
+- **Fait** :
+  - `PUT /vault/accounts/{id}/kerberos`, avec la colonne `kerberos JSONB` (`010_kerberos.sql`) ; l'audit précède le changement, et seuls le royaume et les KDC sont pris du client ;
+  - le proxy demande `TERMSRV/<nom épinglé>` et passe par Kerberos seul quand le royaume est là ;
+  - un nom épinglé qui est une IP ferme Kerberos au réglage, au ré-épinglage et à la remise du secret.
+- **Prouvé** :
+  - le Vault, de l'application à HTTP, et PostgreSQL réel ;
+  - la Gateway ;
+  - le proxy face à une vraie cible TLS : aucun octet CredSSP vers la cible si le KDC est muet, alors que la contre-épreuve voit NTLM arriver ;
+  - 20 mutations tuées sur 21, la survivante ayant montré une branche redondante, retirée.
+- **Décidé, renversable** :
+  - le principal de service est dérivé du nom épinglé, il n'est pas stocké ;
+  - l'utilisateur est un nom du royaume, sans `DOMAINE\`.
+- **Limites** :
+  - pas de formulaire dans l'Admin UI ;
+  - les échecs Kerberos autres que le refus d'identifiants restent `target_unreachable`.
+- **Base de test** : un conteneur `obpg-kerberos` à part, sur le port 55432, pour ne pas toucher à la base du sandbox.
+- **Reste** : l'incrément 4, Windows dans un domaine Samba AD en CI.

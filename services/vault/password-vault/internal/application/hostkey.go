@@ -142,6 +142,9 @@ type Delivered struct {
 	TargetUser           string
 	TLSCertificateSHA256 string
 	TargetDomain         string
+	// Kerberos: the account's realm and KDCs, for a session that authenticates with Kerberos alone
+	// (ADR-0100); nil: NTLMv2.
+	Kerberos *domain.KerberosSettings
 }
 
 // SetApprovalRequired says whether a session on accountID waits for another person's approval,

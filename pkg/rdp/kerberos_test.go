@@ -407,3 +407,27 @@ func TestKerberos_TheKDCsErrorCode(t *testing.T) {
 		t.Errorf("a wrapped KRBError: %d, %v", code, ok)
 	}
 }
+
+// The user is a name in the configured realm alone: DOMAIN\user, user@realm and the like are
+// refused before the KDC is asked, rather than asking it for another principal.
+func TestKerberos_TheUserIsANameInTheRealm(t *testing.T) {
+	asked := false
+	saved := kerberosTickets
+	kerberosTickets = func(KerberosConfig, string, []byte) (messages.Ticket, types.EncryptionKey, error) {
+		asked = true
+		return messages.Ticket{}, types.EncryptionKey{}, errors.New("no KDC in this test")
+	}
+	t.Cleanup(func() { kerberosTickets = saved })
+	cfg := KerberosConfig{Realm: "CORP.EXAMPLE.COM", KDCs: []string{"dc1:88"}, ServicePrincipal: "TERMSRV/desk.corp.example.com"}
+	for _, user := range []string{"", `CORP\operator`, "operator@CORP.EXAMPLE.COM", "TERMSRV/x", "op erator"} {
+		if _, _, err := kerberosInitiate(cfg, user, []byte("pw")); !errors.Is(err, ErrRDPKerberos) {
+			t.Errorf("%q: %v", user, err)
+		}
+	}
+	if asked {
+		t.Fatal("the KDC was asked for a malformed user")
+	}
+	if _, _, err := kerberosInitiate(cfg, "operator", []byte("pw")); !asked || err == nil {
+		t.Fatalf("a plain user name: asked %v, %v", asked, err)
+	}
+}

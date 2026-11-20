@@ -67,6 +67,8 @@ message FetchCredentialResponse {
   string target_user = 6;          // compte cible non secret, pour RDP/VNC (ADR-0071)
   string tls_certificate_sha256 = 7; // empreinte SHA-256 du certificat feuille épinglé
   string target_domain = 8;        // nom DNS/IP vérifié dans le certificat TLS
+  string kerberos_realm = 9;       // royaume du compte RDP (ADR-0100) : posé, Kerberos seul, sans repli NTLM ; vide : NTLMv2
+  repeated string kerberos_kdcs = 10; // ses KDC, hôte:port, un à quatre ; le ticket nomme TERMSRV/<target_domain>
 }
 
 message OnboardAccountRequest {

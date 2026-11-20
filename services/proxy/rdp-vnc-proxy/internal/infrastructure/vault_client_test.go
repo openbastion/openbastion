@@ -25,7 +25,8 @@ func TestVaultCredentialHTTPClientCarriesTargetTrustMetadata(t *testing.T) {
 			t.Errorf("request body: %#v", req)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"credential_type": "password", "credential_material": []byte("credential-data"), "target_host": "desktop:5900", "target_user": "operator", "tls_certificate_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "target_domain": "desktop.example"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"credential_type": "password", "credential_material": []byte("credential-data"), "target_host": "desktop:5900", "target_user": "operator", "tls_certificate_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "target_domain": "desktop.example",
+			"kerberos_realm": "CORP.EXAMPLE.COM", "kerberos_kdcs": []string{"dc1.corp.example.com:88"}})
 	}))
 	defer server.Close()
 	got, err := (&VaultCredentialHTTPClient{BaseURL: server.URL}).FetchCredential(context.Background(), "single-use", "rdp-vnc-proxy")
@@ -34,6 +35,10 @@ func TestVaultCredentialHTTPClientCarriesTargetTrustMetadata(t *testing.T) {
 	}
 	if string(got.Material) != "credential-data" || got.TargetHost != "desktop:5900" || got.TargetUser != "operator" || got.TLSCertificateSHA256 == "" || got.TargetDomain != "desktop.example" {
 		t.Fatalf("fetched credential mismatch: type=%q host=%q user=%q pin=%q domain=%q", got.Type, got.TargetHost, got.TargetUser, got.TLSCertificateSHA256, got.TargetDomain)
+	}
+	// ADR-0100: the account's realm and KDCs come with the secret.
+	if got.KerberosRealm != "CORP.EXAMPLE.COM" || len(got.KerberosKDCs) != 1 || got.KerberosKDCs[0] != "dc1.corp.example.com:88" {
+		t.Fatalf("Kerberos settings: %q %q", got.KerberosRealm, got.KerberosKDCs)
 	}
 }
 

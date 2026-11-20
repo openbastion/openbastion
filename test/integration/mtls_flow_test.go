@@ -195,6 +195,50 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		}
 	})
 
+	t.Run("an RDP account's Kerberos settings are its administrator's, over mutual TLS (ADR-0100)", func(t *testing.T) {
+		api := screenAPI{t: t, url: gatewayURL}
+		if status, raw := api.call(adminToken, http.MethodPost, "/vault/accounts", map[string]any{
+			"id": "acc_mtls_krb", "name": "acc_mtls_krb", "username": "operator", "targetHost": "10.0.0.10:3389",
+			"protocol": "rdp", "rotationPolicy": "manual", "initialSecret": []byte("rdp-secret"),
+		}); status != http.StatusCreated {
+			t.Fatalf("onboarding the RDP account: %d %s", status, raw)
+		}
+		corp := map[string]any{"kerberos": map[string]any{"realm": "corp.example.com", "kdcs": []string{"DC1.corp.example.com"}}}
+		if status, _ := api.call(operatorToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/kerberos", corp); status != http.StatusForbidden {
+			t.Errorf("the operator set Kerberos: %d, want 403", status)
+		}
+		if status, _ := api.call(adminToken, http.MethodPut, "/vault/accounts/"+accountID+"/kerberos", corp); status != http.StatusBadRequest {
+			t.Errorf("Kerberos on an SSH account: %d, want 400", status)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/kerberos", map[string]any{"kerberos": map[string]any{"realm": "CORP", "kdcs": []string{}}}); status != http.StatusBadRequest {
+			t.Errorf("no KDC: %d %s, want 400", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/tls-pin", map[string]any{"tlsCertificateSha256": strings.Repeat("cd", 32), "targetDomain": "10.0.0.10"}); status != http.StatusOK {
+			t.Fatalf("pinning to an IP address: %d %s", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/kerberos", corp); status != http.StatusConflict {
+			t.Errorf("Kerberos on an account pinned to an IP address: %d %s, want 409", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/tls-pin", map[string]any{"tlsCertificateSha256": strings.Repeat("cd", 32), "targetDomain": "desk.corp.example.com"}); status != http.StatusOK {
+			t.Fatalf("pinning to a host name: %d %s", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/kerberos", corp); status != http.StatusOK || !strings.Contains(raw, `"realm":"CORP.EXAMPLE.COM"`) {
+			t.Fatalf("the administrator set Kerberos: %d %s", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodGet, "/vault/accounts/acc_mtls_krb", nil); status != http.StatusOK || !strings.Contains(raw, `"kerberos":{"realm":"CORP.EXAMPLE.COM","kdcs":["dc1.corp.example.com:88"]}`) {
+			t.Fatalf("the account read back: %d %s", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/tls-pin", map[string]any{"tlsCertificateSha256": strings.Repeat("cd", 32), "targetDomain": "10.0.0.10"}); status != http.StatusConflict {
+			t.Errorf("re-pinning a Kerberos account to an IP address: %d %s, want 409", status, raw)
+		}
+		if status, raw := api.call(adminToken, http.MethodPut, "/vault/accounts/acc_mtls_krb/kerberos", map[string]any{"kerberos": nil}); status != http.StatusOK {
+			t.Fatalf("back to NTLM: %d %s", status, raw)
+		}
+		if _, raw := api.call(adminToken, http.MethodGet, "/vault/accounts/acc_mtls_krb", nil); strings.Contains(raw, `"kerberos"`) {
+			t.Fatalf("the settings outlived their removal: %s", raw)
+		}
+	})
+
 	t.Run("an RDP account's screen profile is its administrator's, over mutual TLS (ADR-0132)", func(t *testing.T) {
 		api := screenAPI{t: t, url: gatewayURL}
 		if status, raw := api.call(adminToken, http.MethodPost, "/vault/accounts", map[string]any{
