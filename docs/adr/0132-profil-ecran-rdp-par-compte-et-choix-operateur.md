@@ -61,6 +61,10 @@ Un choix de codecs fin n'est donc pas réalisable sans un décodeur de plus. Le 
   - Proxy : refuse un choix inconnu, ou hors RDP (`400`, avant tout ticket). Le choix est porté par le ticket ; à l'ouverture, la session a son propre codec (`RDPCodec.WithScreen`), celui du proxy restant inchangé. Un codec qui ne peut pas appliquer le choix n'ouvre pas la session. La ligne `session … screen: channel …, … bpp asked` dit ce qui est demandé ; le plafond `SCREEN_RDPGFX=false` est journalisé.
   - `pkg/rdp` (`MCSClientSettings.ColorDepth`) : `16` demande `postBeta2ColorDepth = RNS_UD_COLOR_16BPP_565` et `highColorDepth = 16`, sans `WANT_32BPP`, comme FreeRDP le fait pour `/bpp:16`. `supportedColorDepths` reste inchangé (ADR-0071). Toute autre valeur que 0, 16 ou 32 n'envoie rien.
   - Non éprouvé contre Windows : ce sera l'incrément 4.
+- **Incrément 3** (Admin UI) :
+  - « Profil d'écran » apparaît sur un compte RDP seulement, grisé sans la capacité `accounts.screenProfile`. Il ouvre un dialogue : canaux et profondeurs permis, défauts. Les erreurs que le Vault refuserait (ensemble vide, défaut hors de l'ensemble) sont dites avant l'envoi, et l'enregistrement est bloqué. « Retirer le profil » envoie `null`. Un refus du serveur s'affiche dans le dialogue.
+  - Sous « Ouvrir l'écran » d'une session RDP active, et pour son demandeur seulement : canal et profondeur, chacun sur « Défaut du compte » par défaut. Un choix laissé au défaut n'est pas envoyé. Une reconnexion redemande le même choix.
+  - La page ne lit pas le profil du compte (un opérateur peut ne pas avoir le droit de lire le compte) : toutes les valeurs sont proposées, et le Broker répond `403` à un choix hors du profil, affiché comme les autres refus (choix renversable : une route de lecture du profil pour l'opérateur permettrait de griser ces valeurs).
 
 ## Conséquences
 

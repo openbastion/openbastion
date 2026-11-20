@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ApiError, Page, Session, sessionPath } from "../../shared/api";
+import { ApiError, Page, ScreenChoice, Session, sessionPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
@@ -114,13 +114,13 @@ export function Sessions({
     void findById(lookup);
   }
 
-  async function openScreen(sessionId: string) {
+  async function openScreen(sessionId: string, choice?: ScreenChoice) {
     setError(undefined);
     setOk(undefined);
     setScreen(undefined);
     try {
-      const { attach } = await api.connectScreen(sessionId);
-      setScreen((previous) => ({ sessionId, attach, key: (previous?.key ?? 0) + 1 }));
+      const { attach } = await api.connectScreen(sessionId, choice);
+      setScreen((previous) => ({ sessionId, attach, key: (previous?.key ?? 0) + 1, choice }));
     } catch (err) {
       setError(err);
     }
@@ -323,7 +323,7 @@ export function Sessions({
                     <ScreenViewer
                       key={screen.key}
                       attach={screen.attach}
-                      onReconnect={() => openScreen(screen.sessionId)}
+                      onReconnect={() => openScreen(screen.sessionId, screen.choice)}
                       onClose={() => setScreen(undefined)}
                     />
                   ) : null}

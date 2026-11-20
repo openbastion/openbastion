@@ -50,8 +50,12 @@ export class Api {
   // POST /sessions/{id}/connect for a graphical session. The answer sets the HttpOnly cookie that
   // attaches the screen (ADR-0071 §7), and a browser ignores Set-Cookie on a call made with
   // credentials "omit": this one, and only this one, lets it land.
-  connectScreen(sessionId: string): Promise<ScreenAttach> {
-    return this.request<ScreenAttach>("POST", `/sessions/${encodeURIComponent(sessionId)}/connect`, undefined, "same-origin");
+  //
+  // screen is the operator's choice for an RDP session (ADR-0132), sent only when one is made: the
+  // Broker resolves it against the account's profile and refuses what the profile does not allow.
+  connectScreen(sessionId: string, screen?: ScreenChoice): Promise<ScreenAttach> {
+    const body = screen && (screen.channel || screen.colorDepth) ? { screen } : undefined;
+    return this.request<ScreenAttach>("POST", `/sessions/${encodeURIComponent(sessionId)}/connect`, body, "same-origin");
   }
 }
 
@@ -126,6 +130,26 @@ export interface Account {
   // A graphical target's pinned TLS certificate and the name it is valid for (ADR-0071).
   tlsCertificateSha256?: string;
   targetDomain?: string;
+  // An RDP account's screen profile, set by its administrator (ADR-0132); absent: everything
+  // allowed, graphics and 32 bpp by default.
+  screenProfile?: ScreenProfile;
+}
+
+export type ScreenChannel = "graphics" | "bitmap";
+export type ScreenColorDepth = 16 | 32;
+
+// What an RDP account lets its operators choose for their screen (ADR-0132).
+export interface ScreenProfile {
+  channels: ScreenChannel[];
+  defaultChannel: ScreenChannel;
+  colorDepths: ScreenColorDepth[];
+  defaultColorDepth: ScreenColorDepth;
+}
+
+// The operator's choice at "Open the screen"; an absent field is the account's default.
+export interface ScreenChoice {
+  channel?: ScreenChannel;
+  colorDepth?: ScreenColorDepth;
 }
 
 export interface Page<T> {

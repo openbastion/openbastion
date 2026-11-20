@@ -5090,3 +5090,11 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Défaut de la bibliothèque, trouvé par le fuzzer** : `DecryptMessage` panique sur un chiffré trop court. La longueur est maintenant bornée et la panique rattrapée.
 - **`govulncheck`** : aucune vulnérabilité appelée. `GO-2026-5932` (`x/crypto` v0.58.0), non appelée, existait déjà sur `main`.
 - **Reste** : CredSSP et SPNEGO (incrément 2), les champs du Vault (incrément 3), Windows dans un domaine en CI (incrément 4).
+
+## 2026-11-20 — ADR-0132, incrément 3 : le profil et le choix d'écran dans l'Admin UI
+
+- Comptes : bouton « Profil d'écran » sur un compte RDP seulement (capacité `accounts.screenProfile`, grisé sans elle). Il ouvre un dialogue (`ScreenProfileDialog`) qui énonce et bloque les erreurs que le Vault refuserait. « Retirer le profil » envoie `null` ; un refus du serveur reste affiché dans le dialogue.
+- Sessions : sous « Ouvrir l'écran » d'une session RDP, deux listes (canal, profondeur), sur « Défaut du compte » par défaut. N'est envoyé que ce qui a été choisi (`Api.connectScreen(id, screen)`), et la reconnexion garde le choix. Rien n'est proposé pour VNC.
+- Preuves : 6 tests Vitest (`screenChoice.test.tsx`). Contre-épreuves : choix jamais envoyé → 1 échec ; contrôle du défaut retiré → 1 échec. Suite Admin UI : 294 tests verts, construction verte.
+- Vu dans un vrai Chromium, à 1400 px et à 390 px, contre la Gateway du sandbox. Celle-ci tourne sur le checkout principal, antérieur aux #244 et #246 : la capacité y est inconnue et le bouton reste grisé, comportement fermé attendu. La capacité, le compte RDP et la session ont donc été simulés par le script de capture. L'enregistrement réel du profil n'a pas été éprouvé dans le sandbox.
+- Reste l'incrément 4 : « bitmap » et 16 bits, contre les cinq Windows, en navigateur.
