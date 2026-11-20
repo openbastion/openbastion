@@ -18,12 +18,12 @@ func TestSecretInjectionReconciliation_GatewayRequiresExplicitAuthorizationAndUs
 	defer auth.Close()
 	var authzBody map[string]any
 	authz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/authz/v1/check-access" || r.Method != http.MethodPost {
+		if r.URL.Path != "/authz/v1/capabilities" || r.Method != http.MethodPost {
 			t.Errorf("Authorization request %s %s", r.Method, r.URL.Path)
 		}
 		_ = json.NewDecoder(r.Body).Decode(&authzBody)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"allowed":true}`))
+		_, _ = w.Write([]byte(`{"allowed":[true]}`))
 	}))
 	defer authz.Close()
 	var auditCalls int
@@ -45,7 +45,15 @@ func TestSecretInjectionReconciliation_GatewayRequiresExplicitAuthorizationAndUs
 	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("response %d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
-	if authzBody["resource"] != "audit:secret-injections:all" || authzBody["action"] != "audit:secret-injections:read" {
+	queries, _ := authzBody["queries"].([]any)
+	query, _ := func() (map[string]any, bool) {
+		if len(queries) != 1 {
+			return nil, false
+		}
+		q, ok := queries[0].(map[string]any)
+		return q, ok
+	}()
+	if query["resource"] != "audit:secret-injections:all" || query["action"] != "audit:secret-injections:read" || query["prefix"] == true {
 		t.Fatalf("wrong policy request: %#v", authzBody)
 	}
 	roles, _ := authzBody["actor_roles"].([]any)
@@ -60,7 +68,7 @@ func TestSecretInjectionReconciliation_GatewayRequiresExplicitAuthorizationAndUs
 func TestSecretInjectionReconciliation_DeniesWithoutPolicyAndDoesNotCallAudit(t *testing.T) {
 	auth := newFakeTokenVerifierServer(t, "good-token", "user-verified", "operator", []string{"platform-admin"})
 	defer auth.Close()
-	authz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"allowed":false}`)) }))
+	authz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"allowed":[false]}`)) }))
 	defer authz.Close()
 	auditCalls := 0
 	audit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { auditCalls++ }))
@@ -107,7 +115,7 @@ func TestSecretInjectionReconciliation_RejectsForgedQueryAndAuthzFailureClosed(t
 func TestSecretInjectionReconciliation_AuditFailureIsGenericAndNoStore(t *testing.T) {
 	auth := newFakeTokenVerifierServer(t, "good-token", "user-verified", "operator", []string{"audit-reader"})
 	defer auth.Close()
-	authz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"allowed":true}`)) }))
+	authz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"allowed":[true]}`)) }))
 	defer authz.Close()
 	audit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "private archive path /srv/audit/archive", http.StatusServiceUnavailable)

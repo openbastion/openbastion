@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -72,7 +73,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL="+proxyURL)
 	startService(t, root, gatewayBin, "18808", p.env(mtls.APIGateway,
 		"AUTHENTICATION_URL="+authnURL, "SESSION_BROKER_URL="+brokerURL, "VAULT_URL="+vaultURL,
-		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+recorderURL)...)
+		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+recorderURL, "AUDIT_URL="+auditURL)...)
 
 	const targetSecret = "mtls-it-target-secret"
 	targetAddr := startInteractiveTargetSSHServer(t, targetSecret)
@@ -93,6 +94,7 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		{"vault-admins", "vault-admin", "vault:account-admin:*"},
 		{"dba-on-target", "dba", "vault:account:" + accountID},
 		{"auditors", "session-auditor", "recording:session:*"},
+		{"auditors-reconcile", "session-auditor", "audit:secret-injections:all"},
 	} {
 		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
 			t.Fatalf("policy %s through the Gateway: status %d", pol.name, status)
@@ -169,6 +171,27 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			map[string]any{"actor_roles": []string{"platform-admin"}, "queries": []map[string]any{{"resource": "authz:policy-admin", "action": "authz:policy:create"}}})
 		if status != http.StatusForbidden {
 			t.Errorf("the recorder asked the Admin UI's capabilities: %d, want 403", status)
+		}
+	})
+
+	t.Run("the secret-injection reconciliation is served over mutual TLS to its policy, refused to others", func(t *testing.T) {
+		reconcile := func(token string) (int, string) {
+			t.Helper()
+			req, _ := http.NewRequest(http.MethodGet, gatewayURL+"/audit/secret-injections?limit=10", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			raw, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(raw)
+		}
+		if status, raw := reconcile(auditorToken); status != http.StatusOK || !strings.Contains(raw, `"coverage"`) {
+			t.Errorf("the auditor, with audit:secret-injections:all: %d %.200s", status, raw)
+		}
+		if status, _ := reconcile(operatorToken); status != http.StatusForbidden {
+			t.Errorf("the operator, without the policy: %d, want 403", status)
 		}
 	})
 

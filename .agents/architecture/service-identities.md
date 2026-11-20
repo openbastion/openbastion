@@ -8,7 +8,7 @@ Les noms de service sont ceux des SAN URI `spiffe://<domaine>/<service>` : `api-
 utilisateur ──HTTP──► api-gateway ──► authentication   (login, verify)
                           │──────► session-broker      (/sessions… : création, `GET /sessions?status=pending_approval` (seul statut servi), connect, approve, reject, `secret-injection-step-up`, `secret-injection` — liste blanche ; l'identité de l'appelant est celle du jeton, la requête de liste et les corps d'action sont reconstruits)
                           │──────► password-vault      (administration des comptes, rotation, épinglage de la clé d'hôte)
-                          │──────► authorization       (création de politiques ; `POST /authz/v1/capabilities`, capacités de l'Admin UI pour les rôles vérifiés de l'appelant — ADR-0131)
+                          │──────► authorization       (création de politiques ; `POST /authz/v1/capabilities`, capacités de l'Admin UI pour les rôles vérifiés de l'appelant, et décision exacte du rapprochement des injections — ADR-0131 ; jamais `check-access`)
                           ├──────► command-recorder    (lecture d'un replay SSH)
                           └──────► video-recorder      (lecture d'un replay vidéo)
 session-broker ──mTLS──► authentication (client MFA action-step-up épinglé sur le SAN `authentication`, ADR-0097) · authorization (check-access) · password-vault (authorize-scope, métadonnées de compte)
