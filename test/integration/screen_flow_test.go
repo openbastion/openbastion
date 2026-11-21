@@ -197,6 +197,8 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		{"screen-stepup-inject", "screen-stepup", "secret:inject:account:screen_good"},
 		{"screen-stepup-real-account", "screen-stepup", "vault:account:screen_real"},
 		{"screen-stepup-real-inject", "screen-stepup", "secret:inject:account:screen_real"},
+		{"screen-stepup-paste", "screen-stepup", "secret:paste:account:screen_good"}, // ADR-0133
+		{"screen-stepup-real-paste", "screen-stepup", "secret:paste:account:screen_real"},
 	} {
 		if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
 			t.Fatalf("policy %s: %d", pol.name, status)
@@ -355,6 +357,12 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	t.Run("Vault secret injection across real VNC processes", func(t *testing.T) {
 		mfa = testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, nil, good, "screen_good", "VNC-秘密-42", audit, store, outputs)
 	})
+	t.Run("an operator's password typed across real VNC processes", func(t *testing.T) {
+		if mfa == nil {
+			t.Skip("no second factor: the Vault secret's subtest failed")
+		}
+		testScreenOperatorPaste(t, gatewayURL, api, operatorToken, auditorToken, mfa, good, "screen_good", "Op-Paste-7é", audit, store, outputs)
+	})
 
 	// Asked for now, since a session lasts a minute at least; looked at last.
 	onboard(t, "screen_lasting", lasting.address, "operator", vaultSecret, lasting.pin())
@@ -386,6 +394,9 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		onboard(t, "screen_real", relay.address, real.user, real.password, real.pin())
 		t.Run("Vault secret injection reaches the real TigerVNC input surface", func(t *testing.T) {
 			_ = testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, mfa, real, "screen_real", real.password, audit, store, outputs)
+		})
+		t.Run("an operator's password reaches the real TigerVNC input surface", func(t *testing.T) {
+			testScreenOperatorPaste(t, gatewayURL, api, operatorToken, auditorToken, mfa, real, "screen_real", "Op-Paste-7e", audit, store, outputs)
 		})
 		t.Run("the journey, against a real target", func(t *testing.T) { journey(t, "screen_real", nil, relay.openConnections) })
 		t.Run("a real target refuses a wrong password, and the operator is told so without detail", func(t *testing.T) {

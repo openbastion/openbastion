@@ -5336,3 +5336,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Défaut relevé par la recette d'ADR-0134** : une session terminée ailleurs restait affichée « Active » dans son détail ouvert. Le Broker refusait bien ce qu'on lui demandait (`409`), mais la page ne le reflétait pas.
 - **Correctif** : un `409` sur une action de la session affichée fait relire la session (`GET /sessions/{id}`). Sont concernés : le step-up et la preuve de la saisie du secret (`SecretInjection`, propriété `onConflict`), l'ouverture de l'écran, et les décisions (approuver, refuser, mettre fin). Si la session n'est plus active, son statut s'affiche, ses boutons d'action disparaissent et la page le dit (`sessions.detail.noLongerActive`). Un `409` qui ne tient pas au statut (une cible non épinglée, par exemple) laisse la session telle quelle et son message seul.
 - **Preuves** : `SessionStaleStatus.test.tsx`, 3 cas (saisie refusée, écran refusé, `409` sans rapport avec le statut). Contre-épreuve : sans la relecture, les trois échouent. Suite de l'Admin UI : 301 tests verts, construction verte.
+
+## 2026-11-21 — ADR-0133, incrément 4 : la saisie de bout en bout, trois défauts corrigés
+
+- **Défauts** : la Gateway, la limite de lecture du proxy, puis sa lecture WebSocket rejetaient chacune un `InputPaste` ; aucune saisie n'aurait atteint une cible. Chacun est corrigé, avec son test unitaire et sa contre-épreuve.
+- **Prouvé** :
+  - sur processus réels (VNC, cible simulée ; TigerVNC réel en CI) : le mot de passe tapé ; trois refus audités (jeton inventé, autre session, rejeu) ; l'empreinte salée vérifiée ; rien en clair dans le stockage, l'audit ou les journaux ;
+  - dans Chromium : le code du proxy ouvre ce que l'Admin UI a chiffré.
+- **Reste** : un test unique navigateur et processus réels ; RDP dans un Windows réel.
+
