@@ -513,13 +513,13 @@ func TestRecordingTap_RecordSecretInputStoresOnlySafeEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	operator := SecretInputEvidence{SessionID: "session-secret", InjectionID: "0123456789abcdef0123456789abcdef", Protocol: "rdp", Source: SecretInputOperator,
-		AccountID: "target-prod", Length: 12, SHA256: strings.Repeat("a", 64), Timestamp: time.Now().UTC()}
+		AccountID: "target-prod", Length: 12, SHA256: strings.Repeat("a", 64), Salt: strings.Repeat("b", 32), Timestamp: time.Now().UTC()}
 	if err := tap.RecordSecretInput(context.Background(), operator); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
 		"[vault secret db-prod injection requested via ssh operation 0123456789abcdef0123456789abcdef]",
-		"[operator password input requested: 12 bytes, sha256 " + strings.Repeat("a", 64) + ", operation 0123456789abcdef0123456789abcdef]",
+		"[operator password input requested: 12 bytes, salted sha256 " + strings.Repeat("a", 64) + ", salt " + strings.Repeat("b", 32) + ", operation 0123456789abcdef0123456789abcdef]",
 	}
 	if len(recorder.entries) != len(want) {
 		t.Fatalf("recorded %d entries, want %d", len(recorder.entries), len(want))

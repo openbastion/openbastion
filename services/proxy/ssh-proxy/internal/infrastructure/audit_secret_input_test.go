@@ -22,6 +22,7 @@ func TestAuditSecretInputSendsOnlySafeEvidence(t *testing.T) {
 		}},
 		{name: "operator", source: proxycore.SecretInputOperator, action: "session.secret_paste_started", details: map[string]string{
 			"protocol": "ssh", "account_id": "target-prod", "bytes": "8", "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "injection_id": "0123456789abcdef0123456789abcdef",
+			"salt": "fedcba9876543210fedcba9876543210", // ADR-0133 §4: the fingerprint is salted
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -38,7 +39,7 @@ func TestAuditSecretInputSendsOnlySafeEvidence(t *testing.T) {
 			defer server.Close()
 			evidence := proxycore.SecretInputEvidence{SessionID: "session-1", InjectionID: "0123456789abcdef0123456789abcdef", Protocol: "ssh", Source: tc.source, AccountID: "db-prod", Length: 8, SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 			if tc.source == proxycore.SecretInputOperator {
-				evidence.AccountID = "target-prod"
+				evidence.AccountID, evidence.Salt = "target-prod", "fedcba9876543210fedcba9876543210"
 			}
 			client := &AuditHTTPClient{BaseURL: server.URL}
 			if err := client.AuditSecretInput(context.Background(), evidence); err != nil {

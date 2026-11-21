@@ -140,7 +140,7 @@ func (s *MemoryStore) RecordVideoEvent(_ context.Context, event domain.VideoReco
 		s.events[event.SessionID] = events
 	}
 	if existing, ok := events[event.EventID]; ok {
-		if existing.SessionID != event.SessionID || existing.EventType != event.EventType || existing.Protocol != event.Protocol || existing.Source != event.Source || existing.AccountID != event.AccountID {
+		if existing.SessionID != event.SessionID || existing.EventType != event.EventType || existing.Protocol != event.Protocol || existing.Source != event.Source || existing.AccountID != event.AccountID || !existing.SamePaste(event) {
 			return domain.VideoRecordingEvent{}, domain.ErrEventConflict
 		}
 		return existing, nil

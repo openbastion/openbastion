@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/application"
@@ -156,5 +157,32 @@ func TestReadVideoEventsAuthorizationDenialIsAuditedAndFailsClosed(t *testing.T)
 	}
 	if len(audit.events) != 1 || audit.events[0].success || audit.events[0].actor != "user-denied" {
 		t.Fatalf("authorization refusal audit = %+v", audit.events)
+	}
+}
+
+// ADR-0133: what a marker may be, a Vault secret's or an operator's password's, never its text.
+func TestValidVideoEvent_AVaultSecretOrAnOperatorsPassword(t *testing.T) {
+	vault := domain.VideoRecordingEvent{EventID: "e1", SessionID: "s1", EventType: application.VideoEventSecretInjectionStarted, Protocol: "rdp", Source: application.VideoEventSourceVault, AccountID: "a1"}
+	paste := domain.VideoRecordingEvent{EventID: "e2", SessionID: "s1", EventType: application.VideoEventSecretPasteStarted, Protocol: "vnc", Source: application.VideoEventSourceOperator, AccountID: "a1",
+		PasteBytes: 9, PasteSalt: strings.Repeat("0", 32), PasteSHA256: strings.Repeat("f", 64)}
+	if !application.ValidVideoEvent(vault) || !application.ValidVideoEvent(paste) {
+		t.Fatal("a valid marker refused")
+	}
+	for name, mutate := range map[string]func(*domain.VideoRecordingEvent){
+		"a Vault marker with a size":      func(e *domain.VideoRecordingEvent) { *e = vault; e.PasteBytes = 1 },
+		"a Vault marker with a salt":      func(e *domain.VideoRecordingEvent) { *e = vault; e.PasteSalt = strings.Repeat("0", 32) },
+		"an operator marker of the Vault": func(e *domain.VideoRecordingEvent) { e.Source = application.VideoEventSourceVault },
+		"no size":                         func(e *domain.VideoRecordingEvent) { e.PasteBytes = 0 },
+		"513 bytes":                       func(e *domain.VideoRecordingEvent) { e.PasteBytes = 513 },
+		"a short salt":                    func(e *domain.VideoRecordingEvent) { e.PasteSalt = strings.Repeat("0", 30) },
+		"an upper-case fingerprint":       func(e *domain.VideoRecordingEvent) { e.PasteSHA256 = strings.Repeat("F", 64) },
+		"the text as fingerprint":         func(e *domain.VideoRecordingEvent) { e.PasteSHA256 = "hunter22" },
+		"another protocol":                func(e *domain.VideoRecordingEvent) { e.Protocol = "ssh" },
+	} {
+		event := paste
+		mutate(&event)
+		if application.ValidVideoEvent(event) {
+			t.Errorf("%s accepted", name)
+		}
 	}
 }

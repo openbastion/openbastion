@@ -69,3 +69,14 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
 - **B** et **C**, voir ci-dessus : elles ne protègent pas mieux, car l'UI vient de la Gateway, et B coûte une exposition publique du proxy.
 - **Passer le texte par le Broker, chiffré pour le proxy** : c'est le même chiffrement, avec un saut de plus. Rien n'y gagne.
 - **Un SHA-256 nu, comme ADR-0097 l'écrit** : écarté pour un mot de passe court, voir le point 4.
+
+## Mise en œuvre
+
+### Incrément 1a — l'empreinte salée et le marqueur de l'opérateur (21 novembre 2026)
+
+- **Fait** :
+  - l'empreinte d'un mot de passe de l'opérateur est SHA-256(sel ‖ texte), avec un sel aléatoire de 16 octets par saisie, gardé à côté (point 4). Le chemin commun (`InjectSecret`, `SaltedSecretFingerprint`) la calcule ; le marqueur SSH, l'audit SSH et l'audit du proxy écran l'écrivent avec son sel, jamais le texte. Les événements d'audit sont `session.secret_paste_started`, `session.secret_pasted` et `session.secret_paste_failed` ;
+  - le Video Recorder accepte un marqueur `secret_paste_started` de source `operator`, qui porte `paste_bytes` (1 à 512), `paste_salt` et `paste_sha256`. Le changement touche le contrat protobuf (ajout seul), l'application, la mémoire et PostgreSQL (`003_video_paste_events.sql`) : la contrainte de la table refuse un marqueur du Vault avec empreinte, et un marqueur de l'opérateur sans elle ou avec son texte à la place. La Gateway le relaie et le vérifie ; l'Admin UI l'affiche en relecture.
+- **Trouvé par le test PostgreSQL** : la première contrainte laissait passer un marqueur de l'opérateur sans empreinte, car un CHECK sur NULL passe. Les colonnes sont exigées NOT NULL.
+- **Prouvé** : chaque couche (application, PostgreSQL réel, Gateway, Admin UI, clients d'audit et du Video Recorder du proxy écran, audit SSH) accepte ce qu'elle doit et refuse les mélanges ; l'empreinte se retrouve à partir du sel et de la valeur.
+- **Reste** : l'incrément 1b (le canal chiffré du flux d'écran, les jetons à usage unique, la route interne du proxy), puis le Broker et la Gateway, puis l'Admin UI.

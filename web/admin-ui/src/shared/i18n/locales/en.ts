@@ -851,6 +851,7 @@ export default {
       empty: "No secret-injection marker was recorded.",
       truncated: "The safety limit was reached: only the first 1,000 markers are shown.",
       secretInjectionRequested: "Vault secret injection requested",
+      secretPasteRequested: "Operator password input requested: {{bytes}} bytes, salted fingerprint {{sha256}} (salt {{salt}})",
       note: "A marker records an attempt, not success. The outcome is kept in the session audit.",
     },
     loading: "Loading the recorded frames…",

@@ -1449,11 +1449,14 @@ paths:
                       properties:
                         eventId: { type: string, maxLength: 128 }
                         sessionId: { type: string }
-                        eventType: { type: string, enum: [secret_injection_started] }
+                        eventType: { type: string, enum: [secret_injection_started, secret_paste_started], description: "secret_paste_started : un mot de passe de l'opérateur (ADR-0133)." }
                         protocol: { type: string, enum: [vnc, rdp] }
-                        source: { type: string, enum: [vault] }
+                        source: { type: string, enum: [vault, operator] }
                         accountId: { type: string, maxLength: 256 }
                         occurredAt: { type: string, format: date-time }
+                        pasteBytes: { type: integer, minimum: 1, maximum: 512, description: "Source operator seulement : la taille du mot de passe, jamais son texte." }
+                        pasteSalt: { type: string, pattern: "^[0-9a-f]{32}$", description: "Source operator seulement : le sel de l'empreinte." }
+                        pasteSha256: { type: string, pattern: "^[0-9a-f]{64}$", description: "Source operator seulement : SHA-256(sel || texte), ADR-0133 §4." }
                   nextCursor: { type: string, maxLength: 1024 }
         "400":
           description: Session, curseur ou limite invalide.

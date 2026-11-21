@@ -2,7 +2,6 @@ package proxycore
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"regexp"
@@ -351,18 +350,15 @@ func (t *RecordingTap) RecordSecretInput(ctx context.Context, evidence SecretInp
 	var marker string
 	switch evidence.Source {
 	case SecretInputVault:
-		if evidence.Length != 0 || evidence.SHA256 != "" {
+		if evidence.Length != 0 || evidence.SHA256 != "" || evidence.Salt != "" {
 			return ErrSecretInjectionInvalid
 		}
 		marker = "[vault secret " + evidence.AccountID + " injection requested via " + evidence.Protocol + " operation " + evidence.InjectionID + "]"
 	case SecretInputOperator:
-		if evidence.Length < 1 || len(evidence.SHA256) != 64 {
+		if !validOperatorFingerprint(evidence) {
 			return ErrSecretInjectionInvalid
 		}
-		if _, err := hex.DecodeString(evidence.SHA256); err != nil {
-			return ErrSecretInjectionInvalid
-		}
-		marker = fmt.Sprintf("[operator password input requested: %d bytes, sha256 %s, operation %s]", evidence.Length, evidence.SHA256, evidence.InjectionID)
+		marker = fmt.Sprintf("[operator password input requested: %d bytes, salted sha256 %s, salt %s, operation %s]", evidence.Length, evidence.SHA256, evidence.Salt, evidence.InjectionID)
 	default:
 		return ErrSecretInjectionInvalid
 	}

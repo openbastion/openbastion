@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -309,7 +310,8 @@ func TestVideoRecorderRecordsVaultOnlySecretInjectionMarkerAndWaitsForAck(t *tes
 	}
 }
 
-func TestVideoRecorderRejectsNonVaultSecretMarker(t *testing.T) {
+// An operator's marker without its size and salted fingerprint (ADR-0133) is refused.
+func TestVideoRecorderRejectsAnOperatorMarkerWithoutItsFingerprint(t *testing.T) {
 	server := &videoRecorderTestServer{ready: true}
 	client := newVideoRecorderTestClient(t, server)
 	err := client.RecordSecretInput(context.Background(), proxycore.SecretInputEvidence{
@@ -323,5 +325,26 @@ func TestVideoRecorderRejectsNonVaultSecretMarker(t *testing.T) {
 	defer server.mu.Unlock()
 	if len(server.events) != 0 {
 		t.Fatalf("non-Vault source produced %d events", len(server.events))
+	}
+}
+
+// ADR-0133: an operator's password leaves its size and salted fingerprint in the marker, never its
+// text; the event type and source say it is the operator's.
+func TestVideoRecorderRecordsAnOperatorPasteMarker(t *testing.T) {
+	server := &videoRecorderTestServer{ready: true}
+	client := newVideoRecorderTestClient(t, server)
+	salt, sum := strings.Repeat("a", 32), strings.Repeat("b", 64)
+	if err := client.RecordSecretInput(context.Background(), proxycore.SecretInputEvidence{
+		SessionID: "session-1", Protocol: "rdp", Source: proxycore.SecretInputOperator, AccountID: "account-1",
+		InjectionID: "0123456789abcdef0123456789abcdef", Length: 12, SHA256: sum, Salt: salt,
+	}); err != nil {
+		t.Fatalf("RecordSecretInput: %v", err)
+	}
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	event := server.events[0]
+	if event.GetEventType() != "secret_paste_started" || event.GetSource() != "operator" || event.GetPasteBytes() != 12 ||
+		event.GetPasteSalt() != salt || event.GetPasteSha256() != sum || event.GetAccountId() != "account-1" {
+		t.Fatalf("unexpected marker: %+v", event)
 	}
 }
