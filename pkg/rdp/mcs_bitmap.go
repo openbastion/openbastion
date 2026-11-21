@@ -1418,28 +1418,23 @@ func decodeRDP6Bitmap(stream []byte, width, height int) ([]byte, error) {
 	return decoded, nil
 }
 
-// decodeRDP6AYCoCg converts one AYCoCg sample to RGB. Co and Cg are signed
-// 8-bit chroma samples restored by the negotiated color-loss shift. The
-// transform uses signed arithmetic shifts for the matrix's half coefficients
-// and clamps every output channel to the representable 8-bit range.
+// decodeRDP6AYCoCg converts one AYCoCg sample to RGB (MS-RDPEGDI 3.1.9.1.2). A
+// chroma byte holds a signed value of 8 - ColorLossLevel + 1 bits: it is shifted
+// left by ColorLossLevel - 1 and only then read as a signed byte, which restores
+// both its sign and half its scale; then R = Y + Co - Cg, G = Y + Cg,
+// B = Y - Co - Cg, each clamped to 8 bits. FreeRDP's YCoCg conversion does the
+// same, and so does NSCodec's (graphics_nscodec.go), proven against Windows.
+// Read as signed before the shift, a value with its top bit set lost its sign
+// from ColorLossLevel 2 on: the blue wallpaper of the CI's Windows came out
+// yellow-green.
 func decodeRDP6AYCoCg(y, co, cg byte, colorLossLevel int) (byte, byte, byte) {
-	orange := clampRDP6Chroma(int(int8(co)) << colorLossLevel)
-	greenChroma := clampRDP6Chroma(int(int8(cg)) << colorLossLevel)
+	orange := int(int8(co << (colorLossLevel - 1)))
+	greenChroma := int(int8(cg << (colorLossLevel - 1)))
 	luma := int(y)
-	red := luma + (orange >> 1) - (greenChroma >> 1)
-	green := luma + (greenChroma >> 1)
-	blue := luma - (orange >> 1) - (greenChroma >> 1)
+	red := luma + orange - greenChroma
+	green := luma + greenChroma
+	blue := luma - orange - greenChroma
 	return clampRDP6Channel(red), clampRDP6Channel(green), clampRDP6Channel(blue)
-}
-
-func clampRDP6Chroma(value int) int {
-	if value < -255 {
-		return -255
-	}
-	if value > 255 {
-		return 255
-	}
-	return value
 }
 
 func clampRDP6Channel(value int) byte {

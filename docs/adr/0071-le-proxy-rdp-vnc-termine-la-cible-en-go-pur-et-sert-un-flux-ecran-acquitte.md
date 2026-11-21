@@ -894,7 +894,7 @@ Validation de l'incrément 31 :
 
 Le décodeur RDP6 accepte désormais les profils AYCoCg (`CLL=1..7`) sans chroma subsampling (`CS=0`), en complément du profil ARGB (`CLL=0`). Les plans alpha, luma, Co et Cg sont lus dans leur ordre normatif ; l'alpha reste inchangé et l'absence de plan alpha produit une image opaque. Les plans peuvent être RAW ou RLE, en réutilisant le décodeur de plans borné existant.
 
-Les composantes Co/Cg sont interprétées comme des échantillons signés, puis restaurées selon le niveau CLL. La transformation inverse AYCoCg vers RGB utilise les coefficients normatifs à demi-précision signée et borne chaque canal de sortie à `[0,255]`. Les dimensions, tailles de plan, limites d'allocation, consommation exacte et règles de padding existantes restent appliquées. Le profil avec subsampling (`CS=1`) et les bits réservés restent refusés.
+~~Les composantes Co/Cg sont interprétées comme des échantillons signés, puis restaurées selon le niveau CLL.~~ **Corrigé le 21 novembre 2026** (voir la section de cette date) : chaque octet de chrominance est décalé de `CLL - 1`, puis seulement lu comme signé. La transformation inverse AYCoCg vers RGB utilise les coefficients normatifs à demi-précision signée et borne chaque canal de sortie à `[0,255]`. Les dimensions, tailles de plan, limites d'allocation, consommation exacte et règles de padding existantes restent appliquées. Le profil avec subsampling (`CS=1`) et les bits réservés restent refusés.
 
 Le `bitmapCompressionFlag` de Confirm Active reste à zéro : l'ajout de profils de décodage isolés ne constitue pas encore une négociation complète de toutes les capacités RDP6. Aucun test Windows/RDS réel n'est revendiqué ; le runtime et la route RDP restent désactivés.
 
@@ -1835,3 +1835,17 @@ La PR #101 avait vu la touche Windows ne pas atteindre l'interface de Windows. `
 Le drapeau `KBDFLAGS_EXTENDED` est donc bien transmis et lu. Seule la touche Windows n'est pas honorée. La cause n'est pas établie : même encodage, même chemin, et le clavier annoncé est celui de FreeRDP. **Limite** : l'opérateur ouvre le menu Démarrer par Ctrl+Échap.
 
 **Corrigé au passage** : l'export de la cible relisait le mauvais `kbd.txt`, une copie restée sur le partage. Il prend le plus récent, hors du partage.
+
+## 2026-11-21 — Correction : la chrominance AYCoCg du planar RDP 6.0
+
+**Le défaut** : `decodeRDP6AYCoCg` lisait chaque octet de chrominance comme signé, puis le décalait de `CLL` et prenait la moitié des coefficients. Or un octet de chrominance porte une valeur signée de `8 - CLL + 1` bits. À partir de `CLL` 2, une valeur dont le bit de poids fort est posé perdait son signe. Le défaut a été trouvé en corrigeant NSCodec (ADR-0101, incrément 3 bis), qui fait la même conversion : le fond d'écran bleu du Windows de la CI y était sorti orange.
+
+**Correction** : l'octet est décalé de `CLL - 1`, puis seulement lu comme signé ; ensuite R = Y + Co − Cg, G = Y + Cg, B = Y − Co − Cg, chaque canal borné à 8 bits. C'est la conversion de MS-RDPEGDI 3.1.9.1.2, celle de FreeRDP, et celle de NSCodec, éprouvée contre Windows. Rien ne change à `CLL` 1, où les deux lectures coïncident, ni en ARGB (`CLL` 0), qui n'utilise pas cette conversion.
+
+**Prouvé** :
+- le test rouge d'abord : l'échantillon réel du fond d'écran bleu (Y 107, Co 37, Cg 63 à `CLL` 3) sortait (107, 234, 0), un jaune-vert ; il sort maintenant (3, 103, 219) ;
+- les cas existants à `CLL` 1 à 7 passent sans changement ;
+- les deux fuzzers du planar restent propres.
+
+**Non éprouvé** : on ne sait pas si les Windows de la CI envoient de l'AYCoCg à `CLL` 2 ou plus sur ce chemin. Les captures à 32 bpp le montreront s'ils le font.
+
