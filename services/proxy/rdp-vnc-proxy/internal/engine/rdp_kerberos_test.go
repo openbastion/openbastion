@@ -68,13 +68,18 @@ func TestRDPCodec_AKerberosAccountNeverSendsNTLM(t *testing.T) {
 					t.Fatalf("a Kerberos account: %v; %d byte(s) reached the target", err, len(got))
 				}
 				var failure *proxycore.ScreenFailure
-				if !errors.As(err, &failure) || failure.ScreenEndCode() != "target_unreachable" {
+				if !errors.As(err, &failure) || failure.ScreenEndCode() != "kerberos_failed" {
 					t.Fatalf("the failure: %v", err)
 				}
 				return
 			}
 			if !bytes.Contains(got, []byte("NTLMSSP")) {
 				t.Fatalf("the counter-proof: the target saw no NTLM negotiation (%d bytes)", len(got))
+			}
+			// The same failed CredSSP on an NTLM account is no Kerberos failure.
+			var failure *proxycore.ScreenFailure
+			if !errors.As(err, &failure) || failure.ScreenEndCode() != "target_unreachable" {
+				t.Fatalf("an NTLM account's failure: %v", err)
 			}
 		})
 	}

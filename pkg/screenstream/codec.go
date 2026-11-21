@@ -76,6 +76,11 @@ const (
 	// EndCodeTargetAuthFailed: the target refused the account's credentials (ADR-0071 §12, amended
 	// on 13 November 2026): the secret the Vault holds for it is to be checked.
 	EndCodeTargetAuthFailed
+	// EndCodeKerberosFailed: an account set to Kerberos (ADR-0100) could not authenticate with it —
+	// a KDC out of reach, a ticket the target refused, a pinned name no ticket can name — and NTLM
+	// is never tried instead: the account's realm and KDCs, and the proxy's way to them, are to be
+	// checked. Refused credentials stay EndCodeTargetAuthFailed.
+	EndCodeKerberosFailed
 )
 
 type Protocol byte

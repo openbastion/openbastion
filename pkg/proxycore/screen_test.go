@@ -1189,3 +1189,25 @@ func TestServeScreen_ATargetRefusingTheCredentialsIsSaidAndAudited(t *testing.T)
 		t.Fatalf("END = %#v", last)
 	}
 }
+
+// An account set to Kerberos whose exchange failed (ADR-0100): the END says kerberos_failed, not a
+// refusal of the credentials — the audit writes no session.target_auth_failed — and the credential
+// is purged.
+func TestServeScreen_AKerberosFailureIsSaidApart(t *testing.T) {
+	vault := &fakeVault{material: []byte("ephemeral-secret")}
+	l, audit := screenListener(vault)
+	codec := &fakeScreenCodec{openErr: &ScreenFailure{Code: "kerberos_failed", Err: errors.New("the KDC did not answer")}}
+	sink := &fakeScreenSink{}
+	if err := l.ServeScreen(context.Background(), screenMeta(), codec, &fakeFrameRecorder{}, &fakeScreenGate{}, sink); err == nil {
+		t.Fatal("a Kerberos failure was hidden")
+	}
+	if !reflect.DeepEqual(audit.events, []string{"session.terminate"}) {
+		t.Fatalf("audit events %v", audit.events)
+	}
+	if !codec.cred.Purged() {
+		t.Fatal("credential not purged")
+	}
+	if last := sink.messages[len(sink.messages)-1]; last.Type != screenstream.TypeEnd || last.EndCode != screenstream.EndCodeKerberosFailed || last.Text != "kerberos_failed" {
+		t.Fatalf("END = %#v", last)
+	}
+}

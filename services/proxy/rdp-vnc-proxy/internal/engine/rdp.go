@@ -160,6 +160,11 @@ func (c *RDPCodec) open(ctx context.Context, cred *proxycore.Credential, clipboa
 		switch {
 		case errors.Is(err, rdp.ErrTargetCredentialsRefused):
 			code = "target_auth_failed" // the account's secret in the Vault is to be checked
+		case cred.KerberosRealm != "" && (errors.Is(err, rdp.ErrRDPKerberos) || errors.Is(err, rdp.ErrCredSSPClient)):
+			// An account set to Kerberos whose exchange failed otherwise (ADR-0100): a KDC out of
+			// reach, a ticket the target refused, a pinned name no ticket can name. NTLM was not
+			// tried; the account's realm and KDCs are to be checked.
+			code = "kerberos_failed"
 		case errors.Is(err, rdp.ErrInvalidTarget):
 			code = "pin_missing"
 		case errors.Is(err, rdp.ErrTLSVerification):

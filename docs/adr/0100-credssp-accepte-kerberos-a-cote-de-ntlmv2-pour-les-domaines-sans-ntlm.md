@@ -128,7 +128,7 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
   - **contre-épreuve** : la même cible refuse le même utilisateur en NTLM (`0x80090302`, `SEC_E_UNSUPPORTED_FUNCTION`). La session ouverte au point précédent a donc bien été faite par Kerberos ;
   - un mauvais mot de passe s'arrête au KDC (code 24) et ressort en `target_auth_failed`.
 - **Constaté en chemin** : le partage invité de dockur continue de fonctionner une fois la machine promue, et les journaux arrivent. Le test n'en dépend pas pour savoir si la cible est prête.
-- **ADR-0100 est mise en œuvre.** Reste hors de son périmètre un code d'échec à part pour un KDC injoignable ou un ticket refusé, aujourd'hui `target_unreachable`.
+- **ADR-0100 est mise en œuvre.**
 
 ### L'Admin UI : le bouton « Kerberos » d'un compte RDP (21 novembre 2026)
 
@@ -139,4 +139,14 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
   - `docs/administration/privileged-accounts.md` décrit le réglage, ses prérequis (nom épinglé, utilisateur du royaume, KDC joignables en TCP, AES) et ce que voit l'opérateur.
 - **Prouvé** : trois tests du parcours (le bouton n'apparaît que sur RDP, l'envoi correspond au formulaire, le retour à NTLM envoie `null`, le `409` du Vault reste dans le dialogue), et quatre mutations tuées (RDP seul, majuscules, IP, retour à NTLM). Les 297 tests de l'UI et la capacité de la Gateway passent.
 - **Non éprouvé** : dans un navigateur réel contre la pile. Le chemin de l'API derrière ce dialogue est celui des incréments 3 et 4.
+
+### Un code de fin à part : `kerberos_failed` (21 novembre 2026)
+
+- **Décidé en autonomie, renversable** : un code de fin d'écran de plus, ajouté au contrat d'ADR-0071 sans rien retirer. Un opérateur qui lisait `target_unreachable` cherchait la cible ; un échec Kerberos se règle sur le compte (royaume, KDC) ou sur le réseau du proxy vers les KDC.
+- **Fait** :
+  - `kerberos_failed` (code 15, `screenstream.EndCodeKerberosFailed`). Le moteur RDP le donne quand un compte réglé en Kerberos échoue au KDC ou dans l'échange CredSSP, pour toute autre raison qu'un refus d'identifiants : KDC injoignable, ticket refusé par la cible, nom épinglé qui ne permet pas de ticket ;
+  - un refus d'identifiants reste `target_auth_failed`, audité. Un compte NTLM dont l'échange CredSSP échoue reste `target_unreachable` ;
+  - aucun événement d'audit nouveau : la fin de session est écrite comme pour tout échec d'ouverture ;
+  - l'Admin UI le dit en clair, sans cause technique.
+- **Prouvé** : le numéro du code sur le fil ; proxycore (le code de fin, pas d'audit de refus d'identifiants, credential purgé) ; le moteur face à une vraie cible TLS (un KDC muet donne `kerberos_failed`, et un compte NTLM qui échoue de même donne `target_unreachable`) ; contre le Windows contrôleur de domaine, un KDC injoignable donne `kerberos_failed` ; l'UI a un texte pour ce code. Deux mutations tuées, le cas du moteur et celui de proxycore.
 
