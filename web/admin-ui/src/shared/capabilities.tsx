@@ -19,6 +19,7 @@ export const capabilityNames = [
   "accounts.pin",
   "accounts.approval",
   "accounts.screenProfile",
+  "accounts.kerberos",
   "policies.create",
   "sessions.create",
   "sessions.breakglass",

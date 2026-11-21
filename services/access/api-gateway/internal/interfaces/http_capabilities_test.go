@@ -87,7 +87,7 @@ func TestCapabilities_AsksForTheVerifiedRolesAndAnswersEachName(t *testing.T) {
 	}
 	want := map[string]bool{
 		"accounts.list": false, "accounts.onboard": false, "accounts.rotate": true, "accounts.disable": false,
-		"accounts.pin": false, "accounts.approval": false, "accounts.screenProfile": false, "policies.create": false, "sessions.create": false,
+		"accounts.pin": false, "accounts.approval": false, "accounts.screenProfile": false, "accounts.kerberos": false, "policies.create": false, "sessions.create": false,
 		"sessions.breakglass": false, "sessions.approve": true, "sessions.read": false, "sessions.terminate": false,
 		"secrets.inject": false, "recordings.read": false, "audit.secretInjections": false,
 	}

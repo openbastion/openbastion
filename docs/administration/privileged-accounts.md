@@ -67,3 +67,25 @@ scp -P 2222 rapport.pdf operator@bastion:/srv/depot/
 ```
 
 **Chaque transfert est enregistré avant d'être transmis**, dans l'enregistrement de la session (le même que les commandes, relu par `GET /sessions/{id}/recording`) : l'ouverture d'un fichier (`sftp open "…" for writing`), chaque modification (`remove`, `rename`, `mkdir`, `rmdir`, `setstat`, `symlink`, `hardlink`, requêtes étendues), et à la fermeture le sens, la taille et le **SHA-256** du contenu (`sftp upload "…" (n bytes, sha256 …)`). Le **contenu n'est pas gardé**. Si le Command Recorder n'acquitte pas, le paquet n'est pas transmis et la session s'arrête. Toute autre commande (`ssh bastion id`, `rsync`…) est refusée.
+
+## Comptes RDP d'un domaine qui ferme NTLM : Kerberos (ADR-0100)
+
+Un domaine Active Directory qui refuse NTLM (stratégie « Restreindre NTLM ») ferme ses cibles RDP à NTLMv2. Pour un tel compte, donnez au Vault **son royaume et ses KDC** : ses sessions s'authentifient alors **par Kerberos seul**. NTLM n'est plus ni proposé ni envoyé, et si un KDC ou la cible refuse Kerberos, la session s'arrête : il n'y a **aucun repli**.
+
+Dans l'Admin UI, bouton **« Kerberos »** d'un compte RDP (capacité `accounts.kerberos`). Par l'API :
+
+```sh
+curl -X PUT https://bastion.example.com/api/v1/vault/accounts/{accountId}/kerberos \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"kerberos": {"realm": "CORP.EXAMPLE.COM", "kdcs": ["dc1.corp.example.com", "dc2.corp.example.com:88"]}}'
+# -> {"kerberos":{"realm":"CORP.EXAMPLE.COM","kdcs":["dc1.corp.example.com:88","dc2.corp.example.com:88"]}}
+```
+
+`{"kerberos": null}` (bouton « Revenir à NTLM ») retire les réglages. L'action est réservée aux administrateurs du compte (`vault:account:kerberos`) et écrite dans l'audit avant d'avoir lieu (`vault.kerberos_set`).
+
+- **Le ticket est demandé pour `TERMSRV/<nom épinglé>`**, le nom contre lequel le certificat TLS de la cible est vérifié. Épinglez donc la cible **à son nom d'hôte**, pas à une adresse IP : un compte épinglé à une IP refuse Kerberos (`409`). Ce nom doit être un nom de service de la machine dans le domaine (Windows enregistre `TERMSRV/<son nom DNS>`) ; sinon, ajoutez-le avec `setspn -S TERMSRV/<nom épinglé> <machine>`.
+- **L'utilisateur du compte est un nom du royaume** (`ops`), sans `DOMAINE\` ni `@royaume`.
+- **Les KDC sont explicites** : un à quatre contrôleurs de domaine, `hôte` ou `hôte:port` (88 par défaut). Aucune découverte DNS n'est faite. **Le proxy RDP doit pouvoir les joindre en TCP** : c'est un flux réseau de plus, à ouvrir et à surveiller.
+- **Seul AES est accepté** (RC4 et DES sont refusés). Un compte qui n'a pas de clé AES, par exemple un mot de passe jamais changé depuis une migration ancienne, doit changer de mot de passe.
+- **Ce que voit l'opérateur** : un mot de passe refusé par le KDC donne `target_auth_failed`, comme en NTLM. Un KDC injoignable ou un ticket refusé par la cible donne aujourd'hui `target_unreachable`.
+- **Éprouvé** contre le KDC MIT et contre un Windows Server 2022 contrôleur de domaine qui refuse NTLM.

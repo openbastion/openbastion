@@ -5,6 +5,7 @@ import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
 import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { ScreenProfileDialog } from "./ScreenProfileDialog";
+import { KerberosDialog } from "./KerberosDialog";
 import { Button } from "../../shared/ui/Button";
 import { InlineNotice } from "../../shared/ui/InlineNotice";
 import { ReferenceMetric } from "../../shared/ui/ReferenceMetric";
@@ -88,6 +89,7 @@ export function Accounts({
   const [viewNotice, setViewNotice] = useState<string>();
   const [accountAction, setAccountAction] = useState<{ kind: "disable" | "rotate"; account: Account }>();
   const [screenProfileFor, setScreenProfileFor] = useState<Account>();
+  const [kerberosFor, setKerberosFor] = useState<Account>();
   const [approvals, setApprovals] = useState<Page<Session>>();
   const [approvalsError, setApprovalsError] = useState<unknown>();
 
@@ -250,6 +252,11 @@ export function Accounts({
       setOk(undefined);
       setScreenProfileFor(a);
     },
+    kerberos(a) {
+      setError(undefined);
+      setOk(undefined);
+      setKerberosFor(a);
+    },
     rotate(a) {
       setError(undefined);
       setOk(undefined);
@@ -334,7 +341,7 @@ export function Accounts({
       }
       hints={[t("accounts.hints.rotation"), t("accounts.hints.hostKey"), t("accounts.hints.tls")]}
     >
-      <Notice error={accountAction || screenProfileFor ? undefined : error} ok={accountAction || screenProfileFor ? undefined : ok} />
+      <Notice error={accountAction || screenProfileFor || kerberosFor ? undefined : error} ok={accountAction || screenProfileFor || kerberosFor ? undefined : ok} />
       {onboardOpen && can("accounts.onboard") ? (
         <div id="onboard-account">
           <OnboardAccount onDone={(id) => act(t("accounts.notices.onboarded", { id }), async () => undefined)} />
@@ -590,6 +597,26 @@ export function Accounts({
             try {
               await api.request("PUT", `${accountPath(account.id)}/screen-profile`, { screenProfile });
               setOk(screenProfile ? t("accounts.notices.screenProfileSet", { id: account.id }) : t("accounts.notices.screenProfileRemoved", { id: account.id }));
+              setError(undefined);
+              load();
+              return true;
+            } catch (err) {
+              setError(err);
+              return false;
+            }
+          }}
+        />
+      ) : null}
+      {kerberosFor ? (
+        <KerberosDialog
+          account={kerberosFor}
+          error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
+          onCancel={() => { setKerberosFor(undefined); }}
+          onSave={async (kerberos) => {
+            const account = kerberosFor;
+            try {
+              await api.request("PUT", `${accountPath(account.id)}/kerberos`, { kerberos });
+              setOk(kerberos ? t("accounts.notices.kerberosSet", { id: account.id, realm: kerberos.realm }) : t("accounts.notices.kerberosRemoved", { id: account.id }));
               setError(undefined);
               load();
               return true;

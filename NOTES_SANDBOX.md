@@ -5153,3 +5153,13 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - un mauvais mot de passe s'arrête au KDC (code 24) et ressort en `target_auth_failed`.
 - **Décidé, renversable** : Windows contrôleur de lui-même plutôt que Samba AD.
 - **ADR-0100 est mise en œuvre.** Restent un formulaire dans l'Admin UI et un code d'échec Kerberos à part.
+
+## 2026-11-21 — ADR-0100 : le formulaire Kerberos de l'Admin UI
+
+- **Fait** :
+  - bouton « Kerberos » sur un compte RDP, sous la capacité `accounts.kerberos` (Gateway) ;
+  - dialogue : royaume et un à quatre KDC, nom du ticket affiché, « Revenir à NTLM » ;
+  - refus annoncés avant l'envoi : royaume, KDC, doublon, IP épinglée, utilisateur `DOMAINE\`.
+- **Prouvé** : trois tests du parcours et quatre mutations tuées ; les 297 tests de l'UI passent.
+- **Documenté** : `docs/administration/privileged-accounts.md` a une section Kerberos.
+- **Non éprouvé** : dans un navigateur réel.
