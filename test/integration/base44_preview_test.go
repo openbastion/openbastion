@@ -95,7 +95,8 @@ func TestBase44Preview_AnOperatorOpensTheSeededScreenThroughTheOneOrigin(t *test
 		conn := dialScreen(t, preview, attach.path, attach.cookie)
 		defer conn.Close(websocket.StatusNormalClosure, "")
 		// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
-		if hello := readScreen(t, conn); hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1 {
+		// And the proxy's key for an operator's password (ADR-0133).
+		if hello := readScreen(t, conn); hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1|helloPaste || len(hello.helloPasteKey) != 65 {
 			t.Fatalf("first message: %+v", hello)
 		}
 		var view screenView
