@@ -206,9 +206,16 @@ func TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProc
 	if !foundMarker {
 		t.Fatalf("marker missing from recording: %#v", recording)
 	}
-	for name, output := range map[string]string{"Gateway": gateway.out.String(), "Broker": broker.out.String(), "proxy": proxy.out.String(), "recorder": recorder.out.String(), "audit": audit.out.String()} {
+	// ADR-0134 C04: neither the credential nor a step-up code is in any service's output.
+	stepUpCodes := []string{totpCode(t, totpSecret, time.Unix((loginStep+1)*30+1, 0)), totpCode(t, totpSecret, time.Unix((loginStep+2)*30+1, 0))}
+	for name, output := range map[string]string{"Gateway": gateway.out.String(), "Broker": broker.out.String(), "proxy": proxy.out.String(), "recorder": recorder.out.String(), "audit": audit.out.String(), "Authentication": authn.out.String(), "Vault": vault.out.String()} {
 		if strings.Contains(output, credential) {
 			t.Fatalf("credential leaked to %s log", name)
+		}
+		for _, code := range stepUpCodes {
+			if strings.Contains(output, "\""+code+"\"") || strings.Contains(output, "code="+code) || strings.Contains(output, "totp_code") {
+				t.Fatalf("a step-up TOTP code, or its field, is in the %s log", name)
+			}
 		}
 	}
 	chain, err := http.Get(audit.baseURL + "/audit/v1/verify-chain")

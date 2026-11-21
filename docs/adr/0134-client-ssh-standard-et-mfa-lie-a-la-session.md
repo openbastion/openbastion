@@ -1,6 +1,6 @@
 # ADR-0134 — Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l'action dans l'Admin UI
 
-**Statut** `Proposé` · 21 novembre 2026 · catégorie : Proxy SSH
+**Statut** `Proposé` · 21 novembre 2026 · catégorie : Proxy SSH · recette faite le 21 novembre 2026 (§4 et §4 bis) : 57 critères sur 59 prouvés ; A06 relève du déploiement, H08 attend la décision du propriétaire
 **Remplace** aucun ADR. Cette décision complète ADR-0097 sans en modifier ni remplacer les invariants.
 
 ## Contexte
@@ -108,86 +108,167 @@ Les cases sont des critères à prouver, pas une déclaration de réussite. Une 
 
 #### A — Connexion depuis un client SSH standard
 
-- [ ] A01 — Créer une session SSH par l'API publique avec un bearer token valide ; l'acteur est issu du jeton, jamais du corps client.
-- [ ] A02 — Connecter le demandeur uniquement ; un autre utilisateur et un approbateur non demandeur sont refusés.
-- [ ] A03 — `connect` renvoie l'endpoint du proxy et un ticket ; aucun secret cible ni scope Vault n'est renvoyé.
-- [ ] A04 — OpenSSH se connecte au proxy avec le ticket au prompt de mot de passe ; le shell cible interactif s'ouvre.
-- [ ] A05 — Le ticket est consommé une seule fois ; le rejeu, l'expiration et la révocation avant connexion sont refusés.
+- [x] A01 — Créer une session SSH par l'API publique avec un bearer token valide ; l'acteur est issu du jeton, jamais du corps client.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` (corps forgé `requestedBy`, l'acteur reste celui du jeton) ; `TestSecretInjectionStepUp_GatewayInjectsVerifiedIdentityAndDoesNotRelayClientBody`.
+- [x] A02 — Connecter le demandeur uniquement ; un autre utilisateur et un approbateur non demandeur sont refusés.
+  **Preuve** : `TestConnect_OnlyTheRequesterMayConnect`, `TestConnectOverHTTP_OnlyTheRequesterMayConnect`.
+- [x] A03 — `connect` renvoie l'endpoint du proxy et un ticket ; aucun secret cible ni scope Vault n'est renvoyé.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : `connect` donne l'adresse du proxy et un ticket, qui ne contient pas le credential.
+- [x] A04 — OpenSSH se connecte au proxy avec le ticket au prompt de mot de passe ; le shell cible interactif s'ouvre.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : OpenSSH 9.6 (`ssh -tt`), ticket au prompt par `SSH_ASKPASS` lisant un fichier 0600, shell cible ouvert ; clé d'hôte du proxy épinglée (`StrictHostKeyChecking=yes`).
+- [x] A05 — Le ticket est consommé une seule fois ; le rejeu, l'expiration et la révocation avant connexion sont refusés.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : second `ssh` avec le même ticket, puis ticket d'une session terminée avant connexion, refusés à l'authentification (« Permission denied ») ; expiration : `TestPendingSessions_ConsumeRejectsExpiredTicket`. Contre-épreuve : ticket non consommé dans `PendingSessions.Consume` → le test échoue.
 - [ ] A06 — L'accès réseau direct à la cible depuis le poste opérateur est absent ou bloqué par le déploiement ; le chemin autorisé est le proxy.
-- [ ] A07 — Le proxy vérifie la clé d'hôte épinglée de la cible ; une clé différente entraîne un refus avant livraison du credential.
-- [ ] A08 — Une session non enregistrable ne s'ouvre pas ; le Command Recorder est requis selon ADR-0008.
+  **Non prouvable par le produit** : c'est une propriété du réseau de chaque déploiement (`docs/security/session-security.md`, « Isolation réseau »). À vérifier à l'installation.
+- [x] A07 — Le proxy vérifie la clé d'hôte épinglée de la cible ; une clé différente entraîne un refus avant livraison du credential.
+  **Preuve** : `TestRelay_AnImpostorWithAnotherHostKeyIsSentNoSecret`, `TestRelay_NoPinnedHostKeyMeansNoSecret`.
+- [x] A08 — Une session non enregistrable ne s'ouvre pas ; le Command Recorder est requis selon ADR-0008.
+  **Preuve** : `TestStrictRecording_ASessionIsRefusedBeforeTheCredentialIsFetched`, `TestStrictRecording_AnUnconfiguredProxyRefusesEverySession`.
 
 #### B — Challenge lié à l'action et à la session
 
-- [ ] B01 — Le challenge est demandé avec un corps vide et l'identifiant de session seulement.
-- [ ] B02 — Le Broker dérive acteur, compte et protocole de la Gateway et de la session persistée.
-- [ ] B03 — Vérifier séparément les permutations acteur, session, compte, protocole et action ; chaque permutation est refusée.
-- [ ] B04 — Le challenge est lié à `secret:inject`, et non à une autorisation générique ou à un jeton de connexion.
-- [ ] B05 — Challenge expiré, consommé ou après cinq échecs : refus sans grant, scope ni frappe.
-- [ ] B06 — Session terminée, expirée, révoquée ou demandeur non propriétaire entre challenge et preuve : refus.
-- [ ] B07 — Authorization refusé ou indisponible : refus fermé, sans scope Vault ni appel proxy.
+- [x] B01 — Le challenge est demandé avec un corps vide et l'identifiant de session seulement.
+  **Preuve** : `TestSecretInjectionStepUp_GatewayInjectsVerifiedIdentityAndDoesNotRelayClientBody` ; le test navigateur à API simulée refuse un corps non vide.
+- [x] B02 — Le Broker dérive acteur, compte et protocole de la Gateway et de la session persistée.
+  **Preuve** : `TestSecretInjectionStepUp_ReturnsOnlyChallengeAndIsNoStore`, `TestInjectVaultSecretWithStepUp_RoutesEverySupportedProtocolToItsProxyFamily`.
+- [x] B03 — Vérifier séparément les permutations acteur, session, compte, protocole et action ; chaque permutation est refusée.
+  **Preuve** : `TestMFAActionStepUp_EachFieldOfTheTupleIsBound` (acteur, session, compte, protocole, action, chacun seul, challenge neuf à chaque fois ; contre-épreuve : protocole retiré de la comparaison → échec) ; grant : `TestMFAActionGrant_BindsEveryFieldExpiresAndCanBeConsumedOnce`.
+- [x] B04 — Le challenge est lié à `secret:inject`, et non à une autorisation générique ou à un jeton de connexion.
+  **Preuve** : `TestMFAActionStepUp_TOTPProducesOnlyBoundSingleUseActionGrant` (un grant d'action n'est pas un jeton de connexion).
+- [x] B05 — Challenge expiré, consommé ou après cinq échecs : refus sans grant, scope ni frappe.
+  **Preuve** : `TestMFAActionChallenge_ExpiryAndAttemptLimit`, `TestMFAActionChallenge_ConcurrentConsumptionHasOneWinner`.
+- [x] B06 — Session terminée, expirée, révoquée ou demandeur non propriétaire entre challenge et preuve : refus.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : session terminée entre le challenge et la clé → `409`, rien n'est tapé, l'OpenSSH de l'opérateur est coupé.
+- [x] B07 — Authorization refusé ou indisponible : refus fermé, sans scope Vault ni appel proxy.
+  **Preuve** : `TestInjectVaultSecretWithStepUp_RechecksAuthorizationAfterMFA`.
 
 #### C — TOTP
 
-- [ ] C01 — Enrôler un facteur TOTP et obtenir un challenge step-up pour une session SSH active.
-- [ ] C02 — Un code valide produit une seule opération d'injection confirmée.
-- [ ] C03 — Un code invalide, mal formé, expiré ou réutilisé est refusé.
-- [ ] C04 — Le code est effacé du champ UI avant l'envoi et absent des journaux, traces, événements d'audit et enregistrements.
-- [ ] C05 — TOTP non enrôlé ou MFA désactivé : aucune injection n'est possible.
+- [x] C01 — Enrôler un facteur TOTP et obtenir un challenge step-up pour une session SSH active.
+  **Preuve** : `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses`.
+- [x] C02 — Un code valide produit une seule opération d'injection confirmée.
+  **Preuve** : `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses` : un code, une frappe, observée par la cible.
+- [x] C03 — Un code invalide, mal formé, expiré ou réutilisé est refusé.
+  **Preuve** : `TestMFAActionStepUp_ExpiredChallengeAndWrongFactorAreRefused`, `TestMFAActionStepUp_TOTPProducesOnlyBoundSingleUseActionGrant` (rejeu).
+- [x] C04 — Le code est effacé du champ UI avant l'envoi et absent des journaux, traces, événements d'audit et enregistrements.
+  **Preuve** : `TestAdminUI_SecretInjectionStepUpInAHeadlessBrowser` (champ vidé avant l'envoi) ; `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses` : ni le credential, ni un code du step-up, ni le champ `totp_code` dans les journaux des sept services (sans contre-épreuve : aucun service ne journalise le code à retirer).
+- [x] C05 — TOTP non enrôlé ou MFA désactivé : aucune injection n'est possible.
+  **Preuve** : `TestMFAActionStepUp_RequiresEnrolledFactorAndRejectsInvalidContext`.
 
 #### D — WebAuthn / FIDO2 / passkeys
 
-- [ ] D01 — Réaliser la cérémonie réelle avec `navigator.credentials.get` dans un navigateur compatible et un authentificateur disponible.
-- [ ] D02 — Vérifier challenge, origine, RP ID, signature et compteur de l'authentificateur selon la politique WebAuthn.
-- [ ] D03 — Assertion d'une autre origine, d'un autre RP ID, d'un challenge différent ou rejoué : refus.
-- [ ] D04 — La clé privée ne quitte jamais l'authentificateur ; seule l'assertion publique est transmise à Authentication.
-- [ ] D05 — Pour un rôle strict, TOTP n'est pas proposé et aucune rétrogradation n'est possible.
-- [ ] D06 — Annulation de la cérémonie ou authentificateur indisponible : aucune injection et aucun fallback presse-papiers.
-- [ ] D07 — Les tests unitaires/mocks sont complétés par un test navigateur réel ; ne pas les présenter comme preuve d'une cérémonie réelle.
+- [x] D01 — Réaliser la cérémonie réelle avec `navigator.credentials.get` dans un navigateur compatible et un authentificateur disponible.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : Chrome sans interface, `navigator.credentials.create` à l'enrôlement et `navigator.credentials.get` au step-up, répondus par l'authentificateur virtuel de Chrome (domaine CDP `WebAuthn`) ; ce n'est pas une clé matérielle.
+- [x] D02 — Vérifier challenge, origine, RP ID, signature et compteur de l'authentificateur selon la politique WebAuthn.
+  **Preuve** : `TestWebAuthnFlow_AStrictRoleLogsInOnlyWithItsKey_AndWhatPhishingWouldSendIsRefused` (origine, RP ID, compteur) ; le step-up passe par la même vérification (`FinishLogin`). `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : origine `http://localhost:<port>`, RP ID `localhost`.
+- [x] D03 — Assertion d'une autre origine, d'un autre RP ID, d'un challenge différent ou rejoué : refus.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : assertion rejouée → `403`, rien n'est tapé ; signature altérée par l'authentificateur (`isBogusSignature`) → refus, rien n'est tapé. Deux verrous indépendants arrêtent le rejeu (challenge consommé, compteur) : chacun retiré seul, le rejeu reste refusé ; les deux retirés, il passe (`204`) et le test échoue.
+- [x] D04 — La clé privée ne quitte jamais l'authentificateur ; seule l'assertion publique est transmise à Authentication.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : la preuve envoyée est une assertion `webauthn_response` ; la clé privée reste dans l'authentificateur virtuel.
+- [x] D05 — Pour un rôle strict, TOTP n'est pas proposé et aucune rétrogradation n'est possible.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : rôle strict, aucun champ TOTP ni à l'enrôlement ni au step-up ; `TestMFAActionStepUp_StrictRoleRequiresWebAuthn`.
+- [x] D06 — Annulation de la cérémonie ou authentificateur indisponible : aucune injection et aucun fallback presse-papiers.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : cérémonie annulée (« Annuler ») → rien n'est tapé ; le presse-papiers n'est jamais touché par la page (compteur d'appels à zéro).
+- [x] D07 — Les tests unitaires/mocks sont complétés par un test navigateur réel ; ne pas les présenter comme preuve d'une cérémonie réelle.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` (cette preuve, sur processus réels et navigateur réel, s'ajoute aux tests Vitest).
 
 #### E — Grant et scope Vault
 
-- [ ] E01 — Challenge et grant sont générés avec `crypto/rand` ; seule leur empreinte SHA-256 est persistée.
-- [ ] E02 — Grant limité à 30 secondes, lié au tuple complet et consommé atomiquement.
-- [ ] E03 — Deux consommations concurrentes du même grant : une seule réussit.
-- [ ] E04 — Grant rejoué, expiré ou altéré : aucun scope Vault et aucun appel proxy.
-- [ ] E05 — Scope Vault lié au proxy propriétaire, au compte et à la session, à usage unique et limité à 15 secondes.
-- [ ] E06 — Un proxy différent, indisponible ou non joignable ne déclenche aucun failover privilégié.
-- [ ] E07 — Le Broker ne reçoit jamais le credential ; le proxy l'obtient directement du Vault.
-- [ ] E08 — Hôte/utilisateur du credential différents du shell actif : refus avant frappe.
+- [x] E01 — Challenge et grant sont générés avec `crypto/rand` ; seule leur empreinte SHA-256 est persistée.
+  **Preuve** : `crypto/rand` et SHA-256 : `services/access/authentication/internal/application/mfa_action.go`, magasins `*_action_*_store.go` ; `TestMFAActionStepUp_TOTPProducesOnlyBoundSingleUseActionGrant` (grant opaque de 32 octets).
+- [x] E02 — Grant limité à 30 secondes, lié au tuple complet et consommé atomiquement.
+  **Preuve** : `TestMFAActionGrant_BindsEveryFieldExpiresAndCanBeConsumedOnce`, `TestMFAActionGrant_ExpiredGrantIsRefused` (mémoire et PostgreSQL).
+- [x] E03 — Deux consommations concurrentes du même grant : une seule réussit.
+  **Preuve** : `TestMFAActionGrant_ConcurrentConsumptionHasOneWinner` (mémoire et PostgreSQL).
+- [x] E04 — Grant rejoué, expiré ou altéré : aucun scope Vault et aucun appel proxy.
+  **Preuve** : `TestInjectVaultSecretWithStepUp_FailsClosedBeforeProxyWhenMFAConsumptionFails`, `TestSecretInjection_MFAFailureDoesNotReachProxy`.
+- [x] E05 — Scope Vault lié au proxy propriétaire, au compte et à la session, à usage unique et limité à 15 secondes.
+  **Preuve** : `SecretInjectionScopeTTL = 15 * time.Second` ; scope à usage unique et lié au proxy : `TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses` (rejeu, mauvaise identité de proxy).
+- [x] E06 — Un proxy différent, indisponible ou non joignable ne déclenche aucun failover privilégié.
+  **Preuve** : affinité sans repli (ADR-0046) : `TestInjectVaultSecretWithStepUp_RoutesEverySupportedProtocolToItsProxyFamily`.
+- [x] E07 — Le Broker ne reçoit jamais le credential ; le proxy l'obtient directement du Vault.
+  **Preuve** : `TestInjectVaultSecretWithStepUp_KeepsGrantAndSecretOutOfGatewayAndBrokerProxyPayload`.
+- [x] E08 — Hôte/utilisateur du credential différents du shell actif : refus avant frappe.
+  **Preuve** : `TestSecretInputRegistry_RejectsCredentialForDifferentTargetAndPurges`.
 
 #### F — Injection, audit et enregistrement
 
-- [ ] F01 — L'ordre observé est audit préalable acquitté → marqueur Command Recorder acquitté → frappe → résultat d'audit.
-- [ ] F02 — Audit ou Recorder indisponible : aucune frappe.
-- [ ] F03 — Le credential exact atteint l'oracle de la cible dans le test multi-processus SSH.
-- [ ] F04 — Le credential est absent des réponses HTTP, logs Gateway/Broker/proxy/Vault/Recorder/Audit, traces et données enregistrées.
-- [ ] F05 — Le marqueur prouve la demande d'injection, sans contenir le secret, sa longueur, son empreinte ou un extrait.
-- [ ] F06 — Le credential n'apparaît pas dans l'historique du client SSH ni dans les arguments de processus.
-- [ ] F07 — Le presse-papiers n'est jamais consulté ni modifié par l'injection.
-- [ ] F08 — Les buffers contrôlés sont purgés après usage et les erreurs n'exposent pas le secret.
-- [ ] F09 — Perte de l'acquittement final après frappe possible : `outcome_unknown`, identifiant rapprochable, aucune seconde frappe automatique.
-- [ ] F10 — Les erreurs d'injection sont distinguées de l'échec de connexion SSH ; une réponse ambiguë exige une vérification manuelle de la cible.
+- [x] F01 — L'ordre observé est audit préalable acquitté → marqueur Command Recorder acquitté → frappe → résultat d'audit.
+  **Preuve** : `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses` (événement préalable, marqueur, frappe, événement terminal) ; `TestSSHCodec_InjectsSecretOutsideOperatorRecording`.
+- [x] F02 — Audit ou Recorder indisponible : aucune frappe.
+  **Preuve** : `TestMFAActionStepUp_AuditFailureNeverReturnsChallengeOrGrant`, `TestStrictRecording_*`.
+- [x] F03 — Le credential exact atteint l'oracle de la cible dans le test multi-processus SSH.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` (invite masquée de la cible) et `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses`.
+- [x] F04 — Le credential est absent des réponses HTTP, logs Gateway/Broker/proxy/Vault/Recorder/Audit, traces et données enregistrées.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` (Gateway, Broker, proxy, Vault, Authentication, recorder, audit) et `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses`.
+- [x] F05 — Le marqueur prouve la demande d'injection, sans contenir le secret, sa longueur, son empreinte ou un extrait.
+  **Preuve** : `TestAuditSecretInputSendsOnlySafeEvidence`.
+- [x] F06 — Le credential n'apparaît pas dans l'historique du client SSH ni dans les arguments de processus.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : ni le ticket ni le credential dans `/proc/<pid>/cmdline` de `ssh` ; rien du credential dans ce que reçoit OpenSSH (contre-épreuve : une cible qui renvoie la saisie → le test échoue).
+- [x] F07 — Le presse-papiers n'est jamais consulté ni modifié par l'injection.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` : aucun appel à `navigator.clipboard` pendant tout le parcours.
+- [x] F08 — Les buffers contrôlés sont purgés après usage et les erreurs n'exposent pas le secret.
+  **Preuve** : `TestSSHCodec_PurgesCredentialAfterTargetAuthenticationWhileSessionRemainsActive`, `TestSecretInputRegistry_RejectsCredentialForDifferentTargetAndPurges`.
+- [x] F09 — Perte de l'acquittement final après frappe possible : `outcome_unknown`, identifiant rapprochable, aucune seconde frappe automatique.
+  **Preuve** : `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses` (accusé perdu → `outcome_unknown`, aucune seconde frappe).
+- [x] F10 — Les erreurs d'injection sont distinguées de l'échec de connexion SSH ; une réponse ambiguë exige une vérification manuelle de la cible.
+  **Preuve** : codes distincts : `409` (session non active), `403` (MFA refusée), `outcome_unknown` ; `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser`.
 
 #### G — Chiffrement et frontières de confiance
 
-- [ ] G01 — SSH client-proxy et SSH proxy-cible sont deux sessions distinctes ; la documentation et les captures de trafic ne les décrivent pas comme un tunnel opaque.
-- [ ] G02 — HTTPS protège le navigateur vers la Gateway ; mTLS TLS 1.3 protège les appels interservices.
-- [ ] G03 — Les identités de certificats mTLS sont vérifiées et les routes internes ont une allowlist stricte.
-- [ ] G04 — Le secret Vault n'est jamais transmis à la Gateway, au navigateur, au client SSH ou au Session Broker.
-- [ ] G05 — Le secret n'est transmis qu'au proxy propriétaire, puis dans le transport SSH chiffré vers la cible.
-- [ ] G06 — Aucun secret, grant, scope ou preuve MFA n'apparaît dans les métriques, les traces ou les messages d'erreur.
+- [x] G01 — SSH client-proxy et SSH proxy-cible sont deux sessions distinctes ; la documentation et les captures de trafic ne les décrivent pas comme un tunnel opaque.
+  **Preuve** : §2 de cet ADR ; deux transports SSH distincts dans le code (`sshcodec`).
+- [x] G02 — HTTPS protège le navigateur vers la Gateway ; mTLS TLS 1.3 protège les appels interservices.
+  **Preuve** : `TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProcesses`.
+- [x] G03 — Les identités de certificats mTLS sont vérifiées et les routes internes ont une allowlist stricte.
+  **Preuve** : `TestCallerRules`, `TestEveryRegisteredRouteHasACaller` (proxy SSH), règles d'appelant d'Authentication.
+- [x] G04 — Le secret Vault n'est jamais transmis à la Gateway, au navigateur, au client SSH ou au Session Broker.
+  **Preuve** : `TestInjectVaultSecretWithStepUp_KeepsGrantAndSecretOutOfGatewayAndBrokerProxyPayload` ; `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` (réponses et journaux).
+- [x] G05 — Le secret n'est transmis qu'au proxy propriétaire, puis dans le transport SSH chiffré vers la cible.
+  **Preuve** : `TestSecretInputRegistry_FetchesFromVaultAndTypesOnlyIntoLiveTarget`.
+- [x] G06 — Aucun secret, grant, scope ou preuve MFA n'apparaît dans les métriques, les traces ou les messages d'erreur.
+  **Preuve** : journaux et réponses : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser`, `TestSecretInjectionFlow_VaultCredentialIsTypedButNotRecorded_AcrossRealProcesses`. Le produit n'exporte ni métriques ni traces de ces flux aujourd'hui.
 
 #### H — Révocation, concurrence et résilience
 
-- [ ] H01 — Révoquer la session avant le challenge : refus.
-- [ ] H02 — Révoquer la session entre challenge et preuve : refus.
-- [ ] H03 — Révoquer pendant une frappe concurrente : établir les états permis, sans nouvelle frappe après acquittement de révocation.
-- [ ] H04 — Un proxy propriétaire indisponible n'entraîne pas de routage vers un autre proxy.
-- [ ] H05 — Une session ambiguë (plusieurs shells) est refusée.
-- [ ] H06 — Les tests de concurrence sont répétés sous `-race` ; les tests d'intégration utilisent de vrais processus et PostgreSQL 16 dédié.
-- [ ] H07 — Les tests Windows restent en CI uniquement ; aucun test Windows lourd n'est lancé localement.
+- [x] H01 — Révoquer la session avant le challenge : refus.
+  **Preuve** : même contrôle d'état que H02 (`409 secret injection requires an active session`) ; `TestInjectVaultSecret_InactiveSessionDoesNotBurnVaultScope`.
+- [x] H02 — Révoquer la session entre challenge et preuve : refus.
+  **Preuve** : `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser`.
+- [x] H03 — Révoquer pendant une frappe concurrente : établir les états permis, sans nouvelle frappe après acquittement de révocation.
+  **Preuve** : `TestSecretInputRegistry_CancelsInFlightInjectionWhenSessionIsRevoked`, `TestSecretInputRegistry_DoesNotFetchAfterSessionContextIsCanceled` ; la course reste un risque P1 (H08).
+- [x] H04 — Un proxy propriétaire indisponible n'entraîne pas de routage vers un autre proxy.
+  **Preuve** : voir E06.
+- [x] H05 — Une session ambiguë (plusieurs shells) est refusée.
+  **Preuve** : `TestSecretInputRegistry_RefusesAmbiguousSessionWithMultipleShells`.
+- [x] H06 — Les tests de concurrence sont répétés sous `-race` ; les tests d'intégration utilisent de vrais processus et PostgreSQL 16 dédié.
+  **Preuve** : CI « Go / unit tests under -race » ; magasins de challenges et de grants éprouvés sous PostgreSQL 16 dans le job PostgreSQL.
+- [x] H07 — Les tests Windows restent en CI uniquement ; aucun test Windows lourd n'est lancé localement.
+  **Preuve** : aucun test Windows dans ce parcours.
 - [ ] H08 — Les risques P1 de la revue STRIDE ADR-0097 sont soit traités avec preuve, soit explicitement acceptés par le propriétaire ; cet ADR ne les accepte pas par défaut.
+  **Décision du propriétaire attendue** : course révocation/frappe (H03), copies mémoire Go/TLS/GC (ADR-0115), métadonnées de session si PostgreSQL est compromis (ADR-0116, non mis en œuvre). Aucun n'est accepté ici.
+
+### 4 bis. État de la recette au 21 novembre 2026
+
+- **Nouvelle preuve de bout en bout** : `test/integration/adr0134_openssh_webauthn_browser_test.go`, dans le job « Integration » (étape navigateur). Le parcours :
+  - huit services en processus réels ;
+  - un OpenSSH réel, dont la clé d'hôte du proxy est épinglée ;
+  - l'Admin UI dans Chrome sans interface, avec l'enrôlement d'une clé puis le step-up par `navigator.credentials` et l'authentificateur virtuel de Chrome ;
+  - une cible à invite masquée.
+
+  Il vérifie la frappe, puis les refus (ticket rejoué, ticket d'une session terminée, assertion rejouée, signature altérée, cérémonie annulée, session terminée entre challenge et clé), et l'absence du ticket et du credential dans les arguments de `ssh`, dans ce qu'il reçoit et dans les journaux des sept services.
+- **Contre-épreuves tuées** :
+  - ticket non consommé ;
+  - cible qui renvoie la saisie ;
+  - les deux verrous anti-rejeu retirés ensemble (un seul retiré ne suffit pas : défense en profondeur) ;
+  - signature non altérée ;
+  - protocole retiré du lien du challenge (B03).
+- **Ce que la preuve n'est pas** : la clé est l'authentificateur virtuel de Chrome, pas une clé matérielle. La cible est un serveur SSH de test, pas sudo sur un vrai système.
+- **Défaut d'interface relevé, sans effet de sécurité** : après une fin de session, le détail ouvert dans l'Admin UI montre encore « Active » jusqu'à une nouvelle recherche. La saisie y est refusée (`409`), et le message le dit.
+- **Restent** :
+  - A06, une propriété de chaque déploiement ;
+  - H08, les risques P1 d'ADR-0097, qui sont la décision du propriétaire ;
+  - le passage au statut `Accepté` (§5).
 
 ### 5. Critères de sortie
 
@@ -212,7 +293,7 @@ L'ADR ne pourra passer à `Accepté` qu'après décision explicite du propriéta
 
 **(−) Limites et risques qui restent ouverts**
 
-- Les tests Vitest et le code UI ne constituent pas à eux seuls une preuve de cérémonie WebAuthn réelle ni un test navigateur bout en bout contre une cible SSH réelle.
+- Les tests Vitest et le code UI ne constituaient pas à eux seuls une preuve de cérémonie WebAuthn réelle. Depuis le 21 novembre 2026, `TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser` en est une, avec l'authentificateur virtuel de Chrome. Aucune clé matérielle n'est éprouvée en CI.
 - Le test SSH multi-processus utilise une cible SSH de test ; il ne prouve pas l'interopérabilité avec toutes les implémentations SSH, les invites applicatives ou tous les comportements de terminal.
 - Le proxy ne sait pas si la cible attend une invite réellement masquée. Une saisie dans un champ visible peut apparaître dans le terminal ou l'enregistrement ; l'opérateur doit vérifier le focus et le masquage.
 - Une frappe partielle peut avoir atteint la cible avant un échec ; elle ne peut pas être annulée. `outcome_unknown` exige une vérification manuelle.

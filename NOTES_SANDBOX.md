@@ -5251,3 +5251,20 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Documentation alignée** : les deux phrases historiques de `docs/api/grpc/README.md` qui disaient que l’Admin UI n’était pas raccordée sont corrigées ; le contrat ADR-0097 §12 et le composant `SecretInjection` montrent déjà l’intégration.
 - **Limites non levées** : WebAuthn réel en navigateur contre une cible SSH, course révocation/frappe, focus/invite masquée et copies résiduelles mémoire restent à prouver ou à accepter explicitement ; le parcours B reste interdit.
 - Aucun code produit ni contrat API modifié par la contribution documentaire de la PR #261. Les tests runtime de cette contribution n’ont pas été relancés.
+
+## 2026-11-21 — ADR-0134 : la recette du client SSH standard et du step-up WebAuthn
+
+- **Inventaire** : les tests unitaires couvraient déjà l'essentiel (grant et challenge, concurrence, clé d'hôte, enregistrement exigé, shells multiples, révocation, purge). Manquaient un OpenSSH réel, une vraie cérémonie WebAuthn de bout en bout, les refus sur processus réels, et les preuves « rien dans les arguments ni dans le presse-papiers ».
+- **`TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser`** (étape navigateur du job « Integration ») :
+  - huit services réels ;
+  - OpenSSH, avec le ticket donné par `SSH_ASKPASS` depuis un fichier 0600 et la clé d'hôte du proxy épinglée ;
+  - un rôle strict enrôle sa clé dans l'Admin UI (Chrome, authentificateur virtuel CDP), puis saisit le secret avec elle, et la cible le reçoit à une invite masquée ;
+  - refusés : ticket rejoué, ticket d'une session terminée, assertion rejouée, signature altérée, cérémonie annulée, session terminée entre challenge et clé (et OpenSSH coupé) ;
+  - ni ticket ni credential dans les arguments de `ssh`, dans ce qu'il reçoit, ni dans les journaux de sept services ; zéro appel au presse-papiers ;
+  - 20 s en local.
+- **Contre-épreuves** (toutes échouent comme il faut) : ticket non consommé ; cible qui renvoie la saisie ; signature non altérée ; challenge non consommé **et** compteur ignoré. Chacun des deux derniers, retiré seul, laisse le rejeu refusé : deux verrous indépendants.
+- **B03** : `TestMFAActionStepUp_EachFieldOfTheTupleIsBound`, chacun des cinq champs du tuple pris seul. Contre-épreuve : protocole retiré de la comparaison.
+- **C04** : le test TOTP multi-processus vérifie en plus qu'aucun code du step-up ni le champ `totp_code` n'est dans les journaux. Pas de contre-épreuve : aucun service ne journalise le code, il n'y a rien à retirer.
+- **Rapport** : la recette critère par critère est dans ADR-0134 §4 et §4 bis (57 sur 59). A06 dépend du déploiement. H08 (risques P1 d'ADR-0097) et le statut `Accepté` reviennent au propriétaire.
+- **Défaut relevé** : après une fin de session, le détail ouvert dans l'Admin UI reste affiché « Active ». La saisie y est refusée (`409`).
+- **Environnement local** : le Go du snap ne répondait plus depuis le redémarrage (snapfuse). Go 1.27.4, la version de la CI, est installé dans `~/sdk/go1.27.4`, et les contrats Protobuf sont régénérés avec `~/go/bin/buf`.
