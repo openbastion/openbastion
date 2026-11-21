@@ -5252,6 +5252,39 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Limites non levées** : WebAuthn réel en navigateur contre une cible SSH, course révocation/frappe, focus/invite masquée et copies résiduelles mémoire restent à prouver ou à accepter explicitement ; le parcours B reste interdit.
 - Aucun code produit ni contrat API modifié par la contribution documentaire de la PR #261. Les tests runtime de cette contribution n’ont pas été relancés.
 
+## 2026-11-21 — ADR-0134 : la recette du client SSH standard et du step-up WebAuthn
+
+- **Inventaire** : les tests unitaires couvraient déjà l'essentiel (grant et challenge, concurrence, clé d'hôte, enregistrement exigé, shells multiples, révocation, purge). Manquaient un OpenSSH réel, une vraie cérémonie WebAuthn de bout en bout, les refus sur processus réels, et les preuves « rien dans les arguments ni dans le presse-papiers ».
+- **`TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser`** (étape navigateur du job « Integration ») :
+  - huit services réels ;
+  - OpenSSH, avec le ticket donné par `SSH_ASKPASS` depuis un fichier 0600 et la clé d'hôte du proxy épinglée ;
+  - un rôle strict enrôle sa clé dans l'Admin UI (Chrome, authentificateur virtuel CDP), puis saisit le secret avec elle, et la cible le reçoit à une invite masquée ;
+  - refusés : ticket rejoué, ticket d'une session terminée, assertion rejouée, signature altérée, cérémonie annulée, session terminée entre challenge et clé (et OpenSSH coupé) ;
+  - ni ticket ni credential dans les arguments de `ssh`, dans ce qu'il reçoit, ni dans les journaux de sept services ; zéro appel au presse-papiers ;
+  - 20 s en local.
+- **Contre-épreuves** (toutes échouent comme il faut) : ticket non consommé ; cible qui renvoie la saisie ; signature non altérée ; challenge non consommé **et** compteur ignoré. Chacun des deux derniers, retiré seul, laisse le rejeu refusé : deux verrous indépendants.
+- **B03** : `TestMFAActionStepUp_EachFieldOfTheTupleIsBound`, chacun des cinq champs du tuple pris seul. Contre-épreuve : protocole retiré de la comparaison.
+- **C04** : le test TOTP multi-processus vérifie en plus qu'aucun code du step-up ni le champ `totp_code` n'est dans les journaux. Pas de contre-épreuve : aucun service ne journalise le code, il n'y a rien à retirer.
+- **Rapport** : la recette critère par critère est dans ADR-0134 §4 et §4 bis (57 sur 59). A06 dépend du déploiement. H08 (risques P1 d'ADR-0097) et le statut `Accepté` reviennent au propriétaire.
+- **Défaut relevé** : après une fin de session, le détail ouvert dans l'Admin UI reste affiché « Active ». La saisie y est refusée (`409`).
+- **Environnement local** : le Go du snap ne répondait plus depuis le redémarrage (snapfuse). Go 1.27.4, la version de la CI, est installé dans `~/sdk/go1.27.4`, et les contrats Protobuf sont régénérés avec `~/go/bin/buf`.
+- **Statut** : ADR-0134 passe à `Accepté` le 21 novembre 2026, sur décision du propriétaire (« Oui », après la recette). Les risques P1 d'ADR-0097 (H08) restent ouverts et suivis dans `docs/security/known-limitations.md` ; ADR-0134 entre aux invariants (`.agents/architecture/invariants.md`).
+
+## 2026-11-21 — CI Windows, cas « B » : la mise à jour automatique d'Edge fige l'invité
+
+- **Le pouls (#258) l'a nommée**, deux fois sur deux, dans le job « 2022, 16 bpp, session none, fr-FR » de la #263 :
+  - run 44925111235, première tentative : `MicrosoftEdgeUpdate` monte à 16:44:23 (50 à 61 % d'un cœur) ; son installeur `setup` prend 82 à 99 % à 16:44:33, l'instant même de la dernière copie sur le partage ; le noyau (`System`) prend 176 à 187 %, soit les deux cœurs, à 16:44:53 ; le pouls se tait à 16:45:24, et l'horloge de la console reste figée à 8:45 ;
+  - seconde tentative (job 136920101317) : même suite, `MicrosoftEdgeUpdate` à 87 %, puis `setup` à 100 %, puis `System` à 148 %, à 17:22.
+- **Ce qui s'accorde** :
+  - Windows Server 2019 n'embarque pas Edge, et toutes les pertes relevées étaient sur 2022 ;
+  - la perte tombe toujours au même moment de la séquence de tests (vers `ExtendedKeys` et `Measure`), parce qu'elle suit un délai depuis le démarrage, pas une touche envoyée.
+- **Ce qui reste inconnu** : pourquoi l'installeur d'Edge pousse le noyau à saturer les deux cœurs jusqu'au gel (disque, Defender, pilote). On en retire le déclencheur, pas la cause profonde.
+- **Correctif** (`oem/rdp-setup.ps1`, machine de test seulement) :
+  - la mise à jour d'Edge est coupée : politique `EdgeUpdate` (`UpdateDefault=0`, `AutoUpdateCheckPeriodMinutes=0`), services `edgeupdate`, `edgeupdatem` et `MicrosoftEdgeElevationService` arrêtés et désactivés, tâches `MicrosoftEdgeUpdate*` désactivées ;
+  - ce qui a été coupé est écrit dans `rdp-events/edge-update.txt` ;
+  - le pouls donne aussi le chemin de l'exécutable le plus actif (`top-path`).
+- **À juger** : l'absence de cas B sur plusieurs matrices Windows. S'il revient, le pouls et `top-path` nommeront le suivant.
+
 - **Fait** :
   - l'empreinte d'un mot de passe de l'opérateur est salée partout : SHA-256(sel ‖ texte), avec un sel aléatoire de 16 octets par saisie. C'est le cas dans le chemin commun (`InjectSecret`), le marqueur SSH, l'audit SSH et l'audit du proxy écran ;
   - le Video Recorder accepte un marqueur `secret_paste_started` / `operator`, avec taille, sel et empreinte (protobuf, application, PostgreSQL `003_video_paste_events.sql`, mémoire). La Gateway le relaie et l'Admin UI l'affiche en relecture.
