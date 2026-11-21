@@ -407,7 +407,7 @@ func TestRDPWindows_KeyboardLayout(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("Notepad's file never reached the share (%s): %v", path, err)
+			t.Fatalf("Notepad's file never reached the share (%s): %v%s", path, err, guestCopiesStalled(shared, deadline.Add(-2*time.Minute)))
 		}
 		time.Sleep(5 * time.Second)
 	}
@@ -521,7 +521,7 @@ func TestRDPWindows_SecretTyperUnicode(t *testing.T) {
 			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("Notepad did not save the Unicode SecretTyper text to %s", path)
+			t.Fatalf("Notepad did not save the Unicode SecretTyper text to %s%s", path, guestCopiesStalled(shared, deadline.Add(-2*time.Minute)))
 		}
 		time.Sleep(5 * time.Second)
 	}
@@ -669,6 +669,9 @@ func TestRDPWindows_ExtendedKeys(t *testing.T) {
 			}
 		}
 		if time.Now().After(deadline) {
+			if stalled := guestCopiesStalled(shared, deadline.Add(-2*time.Minute)); stalled != "" {
+				t.Fatalf("Notepad's last line on the share is %q, want %q%s", got, want, stalled)
+			}
 			t.Fatalf("Notepad's last line is %q, want %q: an extended key did not reach Windows as one (extended-3-typed.png)", got, want)
 		}
 		time.Sleep(5 * time.Second)

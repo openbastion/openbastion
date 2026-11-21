@@ -179,5 +179,63 @@ while ($true) {
   Write-Output "rdp-setup: no RDP event export: $_"
 }
 
+# The guest's pulse, for CI instability "B" (the target lost: RDP silent, then every connection
+# refused, one vCPU at 100 %). In the runs of 19 and 20 November, the export loop above stopped
+# writing to the share 30 s to 2 min before RDP fell silent, so neither the share nor that loop can
+# say what happened. Every 5 s, its own task writes one line to COM1, which QEMU sends to the
+# container's output (-serial mon:stdio; guest-state.sh reads it with docker logs), and to
+# rdp-events\guest-pulse.txt: the processes that used a core in the interval (% of one core), the
+# state of TermService, the connections on 3389, the sessions, free memory and the age of the
+# export loop's last copy. It reads; it changes nothing. A failure here is written down and leaves
+# the target as it is.
+try {
+  $pulse = @'
+$out = 'C:\OEM\rdp-events'
+New-Item -ItemType Directory -Force $out | Out-Null
+$file = Join-Path $out 'guest-pulse.txt'
+try { [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High' } catch {}
+$port = $null
+try { $port = New-Object System.IO.Ports.SerialPort 'COM1', 115200, 'None', 8, 'One'; $port.WriteTimeout = 1000; $port.Open() }
+catch { "$(Get-Date -Format o) no COM1: $_" | Add-Content $file; $port = $null }
+$last = @{}; $lastAt = Get-Date; $n = 0
+while ($true) {
+  $now = Get-Date; $dt = ($now - $lastAt).TotalSeconds; $lastAt = $now
+  $cur = @{}; $busy = @()
+  foreach ($p in Get-Process -ErrorAction SilentlyContinue) {
+    try { $cpu = $p.TotalProcessorTime.TotalSeconds } catch { continue }
+    $cur[$p.Id] = $cpu
+    if ($dt -gt 0 -and $last.ContainsKey($p.Id)) {
+      $pct = 100 * ($cpu - $last[$p.Id]) / $dt
+      if ($pct -ge 5) { $busy += [pscustomobject]@{ Name = "$($p.ProcessName)#$($p.Id)/s$($p.SessionId)"; Pct = $pct } }
+    }
+  }
+  $last = $cur
+  $top = ($busy | Sort-Object Pct -Descending | Select-Object -First 6 | ForEach-Object { '{0}={1:N0}%' -f $_.Name, $_.Pct }) -join ' '
+  $service = (Get-Service TermService -ErrorAction SilentlyContinue).Status
+  $tcp = (@(Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue) | Group-Object State | ForEach-Object { "$($_.Name):$($_.Count)" }) -join ','
+  $free = '?'
+  try { $free = [math]::Round((Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).FreePhysicalMemory / 1024) } catch {}
+  $sessions = ((query session 2>$null) | Select-Object -Skip 1 | ForEach-Object { ($_ -replace '\s+', ' ').Trim() } | Where-Object { $_ }) -join '; '
+  $export = (Get-Item (Join-Path $out 'export-status.txt') -ErrorAction SilentlyContinue).LastWriteTime
+  $age = if ($export) { "$([int]($now - $export).TotalSeconds)s" } else { 'none' }
+  $line = "OBPULSE $($now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) cpu[$top] TermService=$service 3389[$tcp] freeMB=$free sessions[$sessions] export-age=$age"
+  if ($port) { try { $port.WriteLine($line) } catch {} }
+  Add-Content $file $line -ErrorAction SilentlyContinue
+  # The file keeps the last 200 lines, about 17 minutes.
+  if ((++$n % 50) -eq 0) { $keep = Get-Content $file -Tail 200 -ErrorAction SilentlyContinue; if ($keep) { Set-Content $file $keep } }
+  Start-Sleep -Seconds 5
+}
+'@
+  Set-Content 'C:\OEM\guest-pulse.ps1' $pulse
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\guest-pulse.ps1'
+  # Priority 4, normal: the default 7 runs below every program it is meant to watch.
+  $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -Priority 4
+  Register-ScheduledTask -TaskName 'OpenBastionGuestPulse' -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
+  Start-ScheduledTask -TaskName 'OpenBastionGuestPulse'
+  Write-Output 'rdp-setup: guest pulse every 5 s on COM1'
+} catch {
+  Write-Output "rdp-setup: no guest pulse: $_"
+}
+
 # ADR-0100, increment 4: the promotion to domain controller restarts Windows, so it comes last.
 if (Test-Path 'C:\OEM\domain') { & 'C:\OEM\kerberos-dc.ps1' }

@@ -5176,3 +5176,26 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : test rouge sur l'échantillon réel du fond d'écran bleu, qui sortait (107, 234, 0) et sort maintenant (3, 103, 219) ; cas existants et fuzzers inchangés.
 - **Constat sur l'ancienne note** : la « rouge et bleu inversés » qu'elle évoquait n'en était pas une. FreeRDP range ses plans dans l'ordre B, G, R, et lit donc Cg, Co, Y ; la formule est la même que celle de NSCodec, sans inversion.
 - **Non éprouvé** : on ne sait pas si les Windows de la CI envoient de l'AYCoCg à `CLL` 2 ou plus sur ce chemin.
+
+## 2026-11-21 — CI Windows, cas « B » (cible perdue) : ce que disent les runs, et le pouls de l'invité
+
+- **Mesure** sur les 20 jobs Windows en échec entre le 15 et le 20 novembre : 4 sont le cas B, une cascade où toutes les connexions suivantes échouent (runs 44633225741, 44639888735, 44719104004 ; le 44808411211 est autre chose, des sessions que Windows termine, sur une branche Kerberos). Les autres sont des tests navigateur isolés.
+- **Points communs des trois cas B** :
+  - tous sur Windows Server 2022, « session none » ;
+  - tous pendant ou juste après `TestRDPWindows_ExtendedKeys` (Ctrl+Échap, puis la touche Windows : le menu Démarrer s'ouvre), dans le test lui-même ou dans `TestRDPWindows_Measure` qui le suit ;
+  - la cible se tait en pleine session (0 octet à partir de « typing »), puis répond au TCP sans jamais répondre à X.224 ;
+  - QEMU tient un cœur à 100 %.
+- **Fait nouveau** : la boucle SYSTEM qui copie les journaux sur le partage toutes les 30 s s'arrête d'abord, 30 s à 2 min avant RDP :
+  - 44719104004 : dernière copie à 10:37:42Z, `ExtendedKeys` commence à 10:37:46, la perte arrive vers 10:40 ;
+  - 44633225741 : dernière copie à 23:11:05Z, Windows se tait vers 23:11:44 ;
+  - un `logoff-request` reste sur le partage, jamais traité.
+- **Conséquence** : le « OpenBastion café » qu'`ExtendedKeys` lit à la place de « /@€ » (vu aussi par la session « travail-en-cours ») est la copie périmée du test précédent, pas une touche étendue mal reçue.
+- **Ajouté** pour le prochain cas B :
+  - **pouls de l'invité** (`oem/rdp-setup.ps1`, tâche `OpenBastionGuestPulse`, priorité normale, processus en priorité haute) : toutes les 5 s, une ligne `OBPULSE` sur COM1, que QEMU écrit dans la sortie du conteneur (`-serial mon:stdio`), indépendante du partage et de RDP, ainsi que dans `rdp-events/guest-pulse.txt`. Elle donne les processus qui ont pris un cœur dans l'intervalle (en % d'un cœur, avec leur session), l'état de TermService, les connexions sur 3389, les sessions, la mémoire libre et l'âge de la dernière copie ;
+  - **`guest-state.sh`** : les 36 dernières lignes du pouls (`docker logs`, sinon `/run/shm/qemu.pty`), et l'âge d'`export-status.txt` sur le partage ;
+  - **trois tests qui attendent `kbd.txt`** (disposition du clavier, saisie Unicode, touches étendues) : quand la boucle n'a rien copié pendant leur attente, ils disent « l'invité ne copie plus, la cible se perd » au lieu d'accuser le clavier. Test unitaire et contre-épreuve.
+- **Éprouvé hors Windows** :
+  - le script analysé par le parseur de PowerShell (`pwsh`) : 0 erreur ;
+  - le pouls exécuté 12 s sous `pwsh` Linux : la ligne se forme, et la boucle survit aux commandes absentes et à un COM1 refusé ;
+  - `guest-state.sh` exécuté contre un faux conteneur.
+- **Non éprouvé** : que Windows ouvre COM1 et que QEMU en rende la sortie. Un job vert le dira (lignes `OBPULSE` dans `guest-screen.txt`).
