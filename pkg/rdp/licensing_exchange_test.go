@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -429,6 +430,11 @@ func TestLicensing_RefusesWhatAHostMayNotSend(t *testing.T) {
 			if !errors.Is(clientErr, ErrMCSConnection) || cache.get("desk") != nil {
 				t.Fatalf("the client went on: %v, kept %q", clientErr, cache.get("desk"))
 			}
+			// What failed is said, never a secret (ADR-0099: for an operator, and for the CI).
+			if !strings.Contains(clientErr.Error(), "licensing: ") {
+				t.Fatalf("the refusal does not say what failed: %v", clientErr)
+			}
+			t.Logf("%v", clientErr)
 		})
 	}
 }
