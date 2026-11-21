@@ -88,6 +88,16 @@ func secretInputDetails(evidence proxycore.SecretInputEvidence) (map[string]stri
 	return details, true
 }
 
+// AuditPasteRefused records a paste the proxy did not type (ADR-0133): the reason, never the text.
+func (c *AuditHTTPClient) AuditPasteRefused(ctx context.Context, sessionID, protocol, reason string) error {
+	if protocol != "vnc" && protocol != "rdp" {
+		return proxycore.ErrSecretInjectionInvalid
+	}
+	return c.emit(ctx, auditEventRequest{Action: "session.secret_paste_refused", ResourceType: "session", ResourceID: sessionID,
+		Success: false, Details: map[string]string{"protocol": protocol, "reason": reason}})
+}
+
+var _ proxycore.PasteRefusalAuditor = (*AuditHTTPClient)(nil)
 var _ proxycore.ClipboardAuditor = (*AuditHTTPClient)(nil)
 var _ proxycore.SecretInputAuditor = (*AuditHTTPClient)(nil)
 

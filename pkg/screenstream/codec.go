@@ -123,6 +123,9 @@ type Message struct {
 	// ClipboardToTarget says the session takes InputClipboard, ClipboardFromTarget that it sends
 	// the texts copied on the target (ADR-0096 §6): bits 2 and 3. A client offers only what they say.
 	ClipboardToTarget, ClipboardFromTarget bool
+	// PasteKey is the proxy's ECDH P-256 public key for this screen session, uncompressed (ADR-0133):
+	// the client encrypts an operator's password for it (InputPaste). Empty: the session takes none.
+	PasteKey []byte
 
 	// END-only fields. Text is a stable public message, never an internal error.
 	EndCode uint16
@@ -155,8 +158,16 @@ const (
 	HelloClipboardFromTarget = byte(0x08)
 )
 
+// HelloPaste is the HELLO flag saying the session takes an operator's password encrypted for the
+// proxy (ADR-0133): the proxy's public key, PasteKeySize bytes, follows the session ID. A HELLO
+// without it is what it always was.
+const HelloPaste = byte(0x10)
+
+// PasteKeySize is an uncompressed P-256 point: 0x04, then X and Y.
+const PasteKeySize = 65
+
 // helloFlags are the HELLO flags this version knows; the others are reserved and zero.
-const helloFlags = HelloPointerDrawn | HelloResizable | HelloClipboardToTarget | HelloClipboardFromTarget
+const helloFlags = HelloPointerDrawn | HelloResizable | HelloClipboardToTarget | HelloClipboardFromTarget | HelloPaste
 
 // Encode serializes one v1 server-to-client message. It copies the payload into
 // the returned buffer; callers may safely reuse their input slices afterwards.
@@ -197,7 +208,10 @@ func Encode(m Message) ([]byte, error) {
 			!utf8.ValidString(m.SessionID) || m.ExpiresAt.IsZero() {
 			return nil, ErrMalformedMessage
 		}
-		extra := 14 + len(m.SessionID)
+		if len(m.PasteKey) != 0 && (len(m.PasteKey) != PasteKeySize || m.PasteKey[0] != 0x04) {
+			return nil, ErrMalformedMessage
+		}
+		extra := 14 + len(m.SessionID) + len(m.PasteKey)
 		out := make([]byte, HeaderSize+extra)
 		putHeader(out, m)
 		out[HeaderSize] = byte(m.Protocol)
@@ -213,9 +227,13 @@ func Encode(m Message) ([]byte, error) {
 		if m.ClipboardFromTarget {
 			out[HeaderSize+1] |= HelloClipboardFromTarget
 		}
+		if len(m.PasteKey) != 0 {
+			out[HeaderSize+1] |= HelloPaste
+		}
 		binary.BigEndian.PutUint64(out[HeaderSize+2:], uint64(m.ExpiresAt.Unix()))
 		binary.BigEndian.PutUint32(out[HeaderSize+10:], uint32(len(m.SessionID)))
 		copy(out[HeaderSize+14:], m.SessionID)
+		copy(out[HeaderSize+14+len(m.SessionID):], m.PasteKey)
 		return out, nil
 	case TypeEnd:
 		if m.Sequence == 0 || m.Timestamp.IsZero() || m.Width != 0 || m.Height != 0 || len(m.Text) > MaxEndTextBytes || !utf8.ValidString(m.Text) {
@@ -301,11 +319,21 @@ func Decode(data []byte) (Message, error) {
 			return Message{}, ErrOutOfBounds
 		}
 		m.ExpiresAt = time.Unix(int64(expires), 0).UTC()
+		keyLen := 0
+		if p[1]&HelloPaste != 0 {
+			keyLen = PasteKeySize
+		}
 		idLen := binary.BigEndian.Uint32(p[10:14])
-		if idLen == 0 || idLen > MaxSessionIDBytes || int(idLen) != len(p)-14 {
+		if idLen == 0 || idLen > MaxSessionIDBytes || int(idLen) != len(p)-14-keyLen {
 			return Message{}, ErrMalformedMessage
 		}
-		m.SessionID = string(p[14:])
+		m.SessionID = string(p[14 : 14+idLen])
+		if keyLen != 0 {
+			m.PasteKey = append([]byte(nil), p[14+idLen:]...)
+			if m.PasteKey[0] != 0x04 {
+				return Message{}, ErrMalformedMessage
+			}
+		}
 		if !utf8.ValidString(m.SessionID) || (m.Protocol != ProtocolRDP && m.Protocol != ProtocolVNC) {
 			return Message{}, ErrMalformedMessage
 		}
@@ -350,7 +378,7 @@ func putHeader(out []byte, m Message) {
 	case TypeFrameDelta:
 		binary.BigEndian.PutUint32(out[28:32], uint32(len(out)-HeaderSize))
 	case TypeHello:
-		binary.BigEndian.PutUint32(out[28:32], uint32(14+len(m.SessionID)))
+		binary.BigEndian.PutUint32(out[28:32], uint32(14+len(m.SessionID)+len(m.PasteKey)))
 	case TypeEnd:
 		binary.BigEndian.PutUint32(out[28:32], uint32(4+len(m.Text)))
 	case TypeClipboard:

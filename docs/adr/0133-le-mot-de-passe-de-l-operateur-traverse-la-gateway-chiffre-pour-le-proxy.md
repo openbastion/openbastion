@@ -81,3 +81,20 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
 - **Prouvé** : chaque couche (application, PostgreSQL réel, Gateway, Admin UI, clients d'audit et du Video Recorder du proxy écran, audit SSH) accepte ce qu'elle doit et refuse les mélanges ; l'empreinte se retrouve à partir du sel et de la valeur.
 - **Reste** : l'incrément 1b (le canal chiffré du flux d'écran, les jetons à usage unique, la route interne du proxy), puis le Broker et la Gateway, puis l'Admin UI.
 
+### Incrément 1b — le canal chiffré du flux d'écran (21 novembre 2026)
+
+- **Fait** :
+  - **le contrat d'écran** (`pkg/screenstream`) : le `HELLO` porte la clé publique ECDH P-256 de la session derrière le drapeau `HelloPaste` (65 octets après l'identifiant de session). Un `HELLO` sans lui est, à l'octet près, celui d'avant. Le message client `InputPaste` porte le jeton (32 octets), la clé éphémère du client (65), le nonce (12) et le chiffré (au plus 512 octets de texte et 16 d'étiquette). L'Admin UI lit déjà la clé ;
+  - **la cryptographie** (`pkg/proxycore/paste.go`) : clé de session tirée à l'ouverture et jamais écrite ; HKDF-SHA-256 salé par le jeton, lié aux deux clés publiques ; AES-256-GCM, avec session, jeton et protocole comme données associées. `SealPaste` est ce que fait le navigateur, écrit en Go pour les tests. HKDF vient de `golang.org/x/crypto`, déjà dépendance du dépôt : `crypto/hkdf` demande Go 1.24, et `pkg/proxycore` passe à `go 1.26.0`, comme l'espace de travail ;
+  - **le relais** : la clé n'est publiée qu'avec un registre qui tient les jetons et un auditeur. Le jeton est pris avant de déchiffrer, puis vient le chemin commun d'ADR-0097. Un refus est audité (`session.secret_paste_refused`) et la session continue ; un `InputPaste` mal formé, ou envoyé à une session qui n'en prend pas, la termine ;
+  - **le proxy écran** : les jetons du registre servent une fois, pour une session, 60 s au plus, et leur nombre est borné. La route interne `POST /internal/v1/authorize-paste` est réservée au certificat `session-broker`, et le contrat protobuf gagne `ProxyControl.AuthorizePaste`.
+- **Prouvé** :
+  - sur le vrai relais : un mot de passe scellé pour la session est tapé, son empreinte salée enregistrée et auditée, jamais son texte ;
+  - le même message rejoué, un jeton que personne n'a émis, un chiffré pour une autre session et un texte de 129 caractères sont refusés et audités, et la session continue ;
+  - une session sans registre n'a pas de clé, et un `InputPaste` reçu malgré tout la termine ;
+  - le chiffré ne s'ouvre ni pour une autre session, ni pour un autre protocole, une autre clé, un autre jeton ou un octet changé ;
+  - le registre et la route ont leurs bornes, et le fuzzer du décodeur n'a rien trouvé ;
+  - **6 mutations tuées sur 6** (données associées, prise du jeton avant le déchiffrement, session et expiration du jeton, refus des bornes). La dernière a montré un trou du test, refermé ;
+  - `-race`.
+- **Reste** : le Broker et la Gateway (le second facteur, puis le jeton remis au proxy et à l'UI), puis l'Admin UI (WebCrypto, le bouton et le champ masqué, le test en navigateur).
+

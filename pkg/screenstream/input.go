@@ -23,7 +23,73 @@ const (
 	// bytes (uint32), then the text in UTF-8, bounded as a CLIPBOARD message's. A client sends it
 	// only when the HELLO says pasting is allowed, and only on the operator's explicit action.
 	InputClipboard InputType = 5
+	// InputPaste is an operator's password, encrypted for the proxy (ADR-0133): version, type, two
+	// reserved zero bytes, the one-use paste token (32), the client's ephemeral P-256 public key
+	// (65, uncompressed), the AES-GCM nonce (12), the ciphertext's length (uint16), then the
+	// ciphertext: at most 512 bytes of text and the 16 of the tag. A client sends it only when the
+	// HELLO carries the proxy's key, and only on the operator's explicit action.
+	InputPaste InputType = 6
 )
+
+// Sizes of an InputPaste message (ADR-0133).
+const (
+	PasteTokenSize     = 32
+	PasteNonceSize     = 12
+	PasteInputHeader   = 4 + PasteTokenSize + PasteKeySize + PasteNonceSize + 2
+	MaxPasteCiphertext = 512 + 16
+	MaxPasteInputBytes = PasteInputHeader + MaxPasteCiphertext
+	minPasteCiphertext = 1 + 16
+)
+
+// PasteInput is a decoded InputPaste message. Nothing in it is the text: it is only decrypted by the
+// proxy, with the session's key.
+type PasteInput struct {
+	Token      [PasteTokenSize]byte
+	ClientKey  [PasteKeySize]byte
+	Nonce      [PasteNonceSize]byte
+	Ciphertext []byte
+}
+
+// IsPasteInput says data is an InputPaste message, to be read with DecodePasteInput.
+func IsPasteInput(data []byte) bool {
+	return len(data) >= 2 && InputType(data[1]) == InputPaste
+}
+
+// EncodePasteInput writes the InputPaste message that DecodePasteInput reads back.
+func EncodePasteInput(in PasteInput) ([]byte, error) {
+	if len(in.Ciphertext) < minPasteCiphertext || len(in.Ciphertext) > MaxPasteCiphertext || in.ClientKey[0] != 0x04 {
+		return nil, ErrOutOfBounds
+	}
+	out := make([]byte, PasteInputHeader+len(in.Ciphertext))
+	out[0], out[1] = Version, byte(InputPaste)
+	at := 4
+	at += copy(out[at:], in.Token[:])
+	at += copy(out[at:], in.ClientKey[:])
+	at += copy(out[at:], in.Nonce[:])
+	binary.BigEndian.PutUint16(out[at:], uint16(len(in.Ciphertext)))
+	copy(out[at+2:], in.Ciphertext)
+	return out, nil
+}
+
+// DecodePasteInput reads an InputPaste message strictly: its header, an uncompressed point, and a
+// ciphertext whose length is exactly what follows and within the bounds.
+func DecodePasteInput(data []byte) (PasteInput, error) {
+	var in PasteInput
+	if len(data) < PasteInputHeader+minPasteCiphertext || len(data) > MaxPasteInputBytes ||
+		data[0] != Version || InputType(data[1]) != InputPaste || data[2] != 0 || data[3] != 0 {
+		return in, ErrMalformedMessage
+	}
+	at := 4
+	at += copy(in.Token[:], data[at:])
+	at += copy(in.ClientKey[:], data[at:])
+	at += copy(in.Nonce[:], data[at:])
+	n := int(binary.BigEndian.Uint16(data[at:]))
+	if in.ClientKey[0] != 0x04 || n < minPasteCiphertext || n > MaxPasteCiphertext || n != len(data)-PasteInputHeader {
+		return PasteInput{}, ErrMalformedMessage
+	}
+	in.Ciphertext = append([]byte(nil), data[PasteInputHeader:]...)
+	return in, nil
+}
 
 // ClipboardInputHeader is the fixed part of an InputClipboard message.
 const ClipboardInputHeader = 8

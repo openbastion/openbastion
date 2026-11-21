@@ -130,6 +130,9 @@ var contractPairs = []contractPair{
 		map[string]string{"context": whyContext}},
 	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
 		map[string]string{"context": whyContext}},
+	// ADR-0133: the Broker's grant of one operator paste; no text crosses it.
+	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "authorizePasteRequest", "proto/proxy/v1/proxy_control.proto", "AuthorizePasteRequest", nil,
+		map[string]string{"context": whyContext}},
 	// ADR-0097: the Gateway/Broker proof DTOs are intentionally narrower than the full Authentication RPC.
 	{"services/access/session-broker/internal/interfaces/http.go", "secretStepUpRequest", "proto/authentication/v1/action_step_up.proto", "StartMFAActionStepUpRequest",
 		map[string]string{"callerId": "verified actor identity, flattened by the Gateway", "actorRoles": "verified roles are flattened for Broker authorization"},

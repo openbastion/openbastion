@@ -5240,3 +5240,21 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - aller-retour PostgreSQL réel ;
   - 298 tests de l'UI.
 - **Reste** (incrément 1b) : le canal chiffré du flux d'écran, les jetons à usage unique et la route interne du proxy.
+
+## 2026-11-21 — ADR-0133, incrément 1b : le canal chiffré du flux d'écran
+
+- **Fait** :
+  - le `HELLO` porte la clé ECDH P-256 de la session, et le message `InputPaste` arrive chiffré ;
+  - la cryptographie : HKDF-SHA-256 lié au jeton et aux deux clés, puis AES-256-GCM lié à session, jeton et protocole ;
+  - le relais prend le jeton avant de déchiffrer, puis suit le chemin commun d'ADR-0097 ;
+  - le registre du proxy écran tient les jetons : une fois, 60 s, une session ;
+  - route interne `POST /internal/v1/authorize-paste`, réservée au Broker, et RPC `ProxyControl.AuthorizePaste`.
+- **Décidé, renversable** :
+  - HKDF de `golang.org/x/crypto`, déjà dépendance du dépôt ;
+  - `pkg/proxycore` passe à `go 1.26.0`. Les images se construisent depuis `go.work` (go 1.26.0).
+- **Prouvé** :
+  - sur le vrai relais : tapé une fois, puis quatre refus audités ;
+  - 6 mutations tuées sur 6 ;
+  - `-race`, fuzzer, test de contrat.
+- **Trouvé en chemin** : le lecteur de proto du test de contrat lit un message jusqu'à la prochaine ligne qui commence par `}`. Un message vide sur une ligne (`{}`) avale donc le suivant. La réponse est écrite sur deux lignes, avec un commentaire.
+- **Reste** : le Broker et la Gateway, puis l'Admin UI.

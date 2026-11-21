@@ -74,3 +74,52 @@ func TestInjectVaultSecret_RejectsInactiveSessionAndUnknownFields(t *testing.T) 
 		})
 	}
 }
+
+// ADR-0133 §2: the Broker's grant of one paste. No text crosses this route, and a text offered in it
+// is refused as an unknown field.
+func TestAuthorizePaste_TheBrokersGrant(t *testing.T) {
+	registry := infrastructure.NewSecretInputRegistry()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	unregister := registry.Register(ctx, "session-1", "rdp", "rdp.example:3389", "operator", screenInjectionTyper{}, screenInjectionAudit{})
+	defer unregister()
+	server := interfaces.NewHTTPServer(nil, nil, nil, nil, "", nil).WithSecretInputs(registry, nil, screenInjectionAudit{})
+	token := strings.Repeat("ab", 32)
+	post := func(body string) int {
+		rec := httptest.NewRecorder()
+		server.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/internal/v1/authorize-paste", strings.NewReader(body)))
+		if rec.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("no Cache-Control: no-store")
+		}
+		return rec.Code
+	}
+	grant := `{"session_id":"session-1","account_id":"account-prod","paste_token":"` + token + `","ttl_seconds":60}`
+	if code := post(grant); code != http.StatusServiceUnavailable {
+		t.Fatalf("without an auditor: %d", code)
+	}
+	registry.Auditor = screenInjectionAudit{}
+	if code := post(grant); code != http.StatusNoContent {
+		t.Fatalf("the grant: %d", code)
+	}
+	for name, c := range map[string]struct {
+		body   string
+		status int
+	}{
+		"the same token again": {grant, http.StatusBadRequest},
+		"a short token":        {`{"session_id":"session-1","account_id":"a","paste_token":"abcd","ttl_seconds":60}`, http.StatusBadRequest},
+		"61 seconds":           {`{"session_id":"session-1","account_id":"a","paste_token":"` + strings.Repeat("cd", 32) + `","ttl_seconds":61}`, http.StatusBadRequest},
+		"a text in it":         {`{"session_id":"session-1","account_id":"a","paste_token":"` + strings.Repeat("ef", 32) + `","ttl_seconds":60,"text":"hunter2"}`, http.StatusBadRequest},
+		"a session not live":   {`{"session_id":"session-9","account_id":"a","paste_token":"` + strings.Repeat("12", 32) + `","ttl_seconds":60}`, http.StatusNotFound},
+	} {
+		if code := post(c.body); code != c.status {
+			t.Errorf("%s: %d, want %d", name, code, c.status)
+		}
+	}
+	var raw [32]byte
+	for i := range raw {
+		raw[i] = 0xab
+	}
+	if account, ok := registry.TakePaste("session-1", raw); !ok || account != "account-prod" {
+		t.Fatalf("the granted token: %q %v", account, ok)
+	}
+}

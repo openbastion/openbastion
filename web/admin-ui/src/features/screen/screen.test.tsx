@@ -799,3 +799,29 @@ describe("the resize", () => {
     expect(resizes(s.socket.sent)).toEqual([]);
   });
 });
+
+// ADR-0133: a HELLO may carry the proxy's key for an operator's password; without HelloPaste it is
+// what it was, and a key that is not an uncompressed point is refused.
+describe("the HELLO's paste key (ADR-0133)", () => {
+  function helloWithKey(first = 0x04): ArrayBuffer {
+    const id = [...new TextEncoder().encode("sess-1")];
+    const key = new Uint8Array(65).fill(7);
+    key[0] = first;
+    const p = new Uint8Array(14 + id.length + 65);
+    const v = new DataView(p.buffer);
+    p[0] = 1;
+    p[1] = 0x10;
+    v.setBigUint64(2, 1893456000n);
+    v.setUint32(10, id.length);
+    p.set(id, 14);
+    p.set(key, 14 + id.length);
+    return header(2, 0n, 0, 0, [...p]);
+  }
+  it("reads the key after the session, and only with its flag", () => {
+    const decoded = decodeScreenMessage(helloWithKey());
+    expect(decoded).toMatchObject({ type: "hello", protocol: "rdp", sessionId: "sess-1" });
+    expect(decoded.type === "hello" && decoded.pasteKey?.length).toBe(65);
+    expect((decodeScreenMessage(hello("sess-1")) as { pasteKey?: Uint8Array }).pasteKey).toBeUndefined();
+    expect(() => decodeScreenMessage(helloWithKey(0x02))).toThrow();
+  });
+});

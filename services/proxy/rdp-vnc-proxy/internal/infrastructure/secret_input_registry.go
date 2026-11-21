@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
+	"github.com/openbastion/openbastion/pkg/screenstream"
 )
 
 var (
@@ -27,10 +29,84 @@ type screenSecretInputSession struct {
 type SecretInputRegistry struct {
 	mu       sync.RWMutex
 	sessions map[string]map[*screenSecretInputSession]struct{}
+
+	// The paste tokens the Session Broker issued after the operator's second factor (ADR-0133 §2):
+	// one per paste, for one session, until it expires. Auditor audits a paste, as a Vault secret.
+	pasteMu sync.Mutex
+	pastes  map[[screenstream.PasteTokenSize]byte]pasteGrant
+	Auditor proxycore.SecretInputAuditor
+	now     func() time.Time
 }
 
+type pasteGrant struct {
+	sessionID, accountID string
+	expires              time.Time
+}
+
+// MaxPasteTTL bounds how long a paste token lives; maxPasteGrants how many wait at once.
+const (
+	MaxPasteTTL    = 60 * time.Second
+	maxPasteGrants = 1024
+)
+
+var ErrPasteGrantInvalid = errors.New("invalid paste grant")
+
 func NewSecretInputRegistry() *SecretInputRegistry {
-	return &SecretInputRegistry{sessions: make(map[string]map[*screenSecretInputSession]struct{})}
+	return &SecretInputRegistry{sessions: make(map[string]map[*screenSecretInputSession]struct{}),
+		pastes: make(map[[screenstream.PasteTokenSize]byte]pasteGrant), now: time.Now}
+}
+
+// AuthorizePaste keeps a paste token for a live screen session, until ttl (at most MaxPasteTTL).
+func (r *SecretInputRegistry) AuthorizePaste(sessionID, accountID string, token [screenstream.PasteTokenSize]byte, ttl time.Duration) error {
+	if r == nil || !safeInjectionIdentifier(sessionID, 256) || !safeInjectionIdentifier(accountID, 128) ||
+		ttl <= 0 || ttl > MaxPasteTTL || token == ([screenstream.PasteTokenSize]byte{}) {
+		return ErrPasteGrantInvalid
+	}
+	r.mu.RLock()
+	live := len(r.sessions[sessionID]) == 1
+	r.mu.RUnlock()
+	if !live {
+		return ErrSecretSessionInactive
+	}
+	r.pasteMu.Lock()
+	defer r.pasteMu.Unlock()
+	now := r.now()
+	for t, g := range r.pastes { // expired grants go first
+		if !now.Before(g.expires) {
+			delete(r.pastes, t)
+		}
+	}
+	if _, taken := r.pastes[token]; taken || len(r.pastes) >= maxPasteGrants {
+		return ErrPasteGrantInvalid
+	}
+	r.pastes[token] = pasteGrant{sessionID: sessionID, accountID: accountID, expires: now.Add(ttl)}
+	return nil
+}
+
+// TakePaste consumes a paste token for this session: once, before it expires.
+func (r *SecretInputRegistry) TakePaste(sessionID string, token [screenstream.PasteTokenSize]byte) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	r.pasteMu.Lock()
+	defer r.pasteMu.Unlock()
+	grant, ok := r.pastes[token]
+	if !ok {
+		return "", false
+	}
+	delete(r.pastes, token) // taken, whatever comes next
+	if grant.sessionID != sessionID || !r.now().Before(grant.expires) {
+		return "", false
+	}
+	return grant.accountID, true
+}
+
+// PasteAuditor is the auditor of the pastes (proxycore.PasteAuditing).
+func (r *SecretInputRegistry) PasteAuditor() proxycore.SecretInputAuditor {
+	if r == nil {
+		return nil
+	}
+	return r.Auditor
 }
 
 func (r *SecretInputRegistry) Register(ctx context.Context, sessionID, protocol, targetHost, targetUser string, typer proxycore.SecretTyper, recorder proxycore.SecretInputRecorder) func() {
