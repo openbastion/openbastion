@@ -97,6 +97,11 @@ type MCSClientSettings struct {
 	// policy may lower it (ADR-0086), and the graphics pipeline draws at 32 bpp whatever it is. Any
 	// other value is refused, nothing sent.
 	ColorDepth uint16
+	// Licenses keeps the licenses a Remote Desktop Session Host issues, and LicenseScope names the
+	// target they are kept for (ADR-0099, option B): the license is presented again at the next
+	// connection with the same scope. Nil, a host that issues one gets it accepted and forgotten.
+	Licenses     *LicenseCache
+	LicenseScope string
 
 	// keyboardLayout replaces CS_CORE keyboardLayout, 0 otherwise. Unexported: only this package's
 	// tests set it (ADR-0071 isolation, CI run #41: in a session Windows opened, a click reaches

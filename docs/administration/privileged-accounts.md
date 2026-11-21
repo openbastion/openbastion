@@ -89,3 +89,11 @@ curl -X PUT https://bastion.example.com/api/v1/vault/accounts/{accountId}/kerber
 - **Seul AES est accepté** (RC4 et DES sont refusés). Un compte qui n'a pas de clé AES, par exemple un mot de passe jamais changé depuis une migration ancienne, doit changer de mot de passe.
 - **Ce que voit l'opérateur** : un mot de passe refusé par le KDC donne `target_auth_failed`, comme en NTLM. Un KDC injoignable ou un ticket refusé par la cible donne `kerberos_failed` : vérifiez le royaume, les KDC du compte et le flux du proxy vers eux. NTLM n'est jamais tenté à la place.
 - **Éprouvé** contre le KDC MIT et contre un Windows Server 2022 contrôleur de domaine qui refuse NTLM.
+
+## Hôtes de sessions Bureau à distance (RDSH) et licences (ADR-0099)
+
+Un hôte de sessions adossé à un serveur de licences mène l'échange de licences complet : le proxy y répond, garde la licence émise et la présente de nouveau à la connexion suivante vers la même cible pour le même utilisateur.
+
+- **Mode par utilisateur seulement.** Les licences sont gardées **en mémoire**, le temps du processus du proxy. En mode par utilisateur, une licence perdue ne coûte rien. **En mode par appareil, chaque licence que le proxy perd (à chaque redémarrage, ou par instance du proxy) consomme une licence d'accès client de plus**, jusqu'à épuisement. Configurez vos hôtes en mode par utilisateur avant d'y faire passer le bastion.
+- Un hôte qui refuse la licence (serveur de licences injoignable hors période de grâce, plus de licence disponible) refuse la session : l'opérateur voit `target_unreachable`.
+
