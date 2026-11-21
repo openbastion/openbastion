@@ -247,3 +247,22 @@ const END_MESSAGES: Record<string, string> = {
 export function endMessage(text: string): string {
   return END_MESSAGES[text] ?? "La session s'est arrêtée.";
 }
+
+// The InputPaste message (ADR-0133, pkg/screenstream/input.go): version, type 6, two reserved zero
+// bytes, the token (32), the client's key (65), the nonce (12), the ciphertext's length (uint16), the
+// ciphertext (at most 512 + 16 bytes).
+const PASTE_INPUT_HEADER = 4 + 32 + PASTE_KEY_SIZE + 12 + 2;
+const MAX_PASTE_CIPHERTEXT = 512 + 16;
+export function encodePasteInput(token: Uint8Array, clientKey: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array): Uint8Array<ArrayBuffer> | null {
+  if (token.length !== 32 || clientKey.length !== PASTE_KEY_SIZE || clientKey[0] !== 0x04 || nonce.length !== 12 ||
+      ciphertext.length < 17 || ciphertext.length > MAX_PASTE_CIPHERTEXT) return null;
+  const out = new Uint8Array(PASTE_INPUT_HEADER + ciphertext.length);
+  out[0] = 1;
+  out[1] = 6;
+  out.set(token, 4);
+  out.set(clientKey, 36);
+  out.set(nonce, 36 + PASTE_KEY_SIZE);
+  new DataView(out.buffer).setUint16(36 + PASTE_KEY_SIZE + 12, ciphertext.length);
+  out.set(ciphertext, PASTE_INPUT_HEADER);
+  return out;
+}
