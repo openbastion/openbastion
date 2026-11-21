@@ -127,5 +127,5 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 ### État au 21 novembre 2026
 
 - **A est livrée** : routes Gateway et Broker, Admin UI (`SecretInjection.tsx`), audit en deux phases, frappe SSH, VNC et RDP, réconciliation des saisies (`/audit/secret-injections`). Les mentions « non livré » des incréments 4 à 6 sont dépassées sur ces points.
-- **B attend son canal** : ADR-0133 (`Proposé`) le conçoit. La Gateway relaie le flux d'écran en décodant ses trames, et elle sert aussi le code de l'UI. Un chiffrement fait dans le navigateur pour le proxy protège donc d'une Gateway saine, pas d'une Gateway compromise. ADR-0133 le dit, et demande le go du propriétaire.
+- **B attend son canal** : ADR-0133 le conçoit, accepté le 21 novembre 2026 (option A, empreinte salée). La Gateway relaie le flux d'écran en décodant ses trames, et elle sert aussi le code de l'UI. Un chiffrement fait dans le navigateur pour le proxy protège donc d'une Gateway saine, pas d'une Gateway compromise. ADR-0133 le dit. L'empreinte d'un mot de passe saisi est salée (ADR-0133, point 4), et non un SHA-256 nu (point 6 ci-dessus).
 

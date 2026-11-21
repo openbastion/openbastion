@@ -1,6 +1,6 @@
 # ADR-0133 — Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy
 
-**Statut** `Proposé` · 21 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date
+**Statut** `Accepté` · 21 novembre 2026 · accepté le même jour par le propriétaire du projet : « Go pour l'option A avec l'empreinte salée ». L'option A (le chiffrement pour le proxy, avec sa limite) et l'empreinte salée (point 4) sont retenues.
 
 ## Contexte
 
@@ -32,7 +32,7 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
 - **C. Signer la clé du proxy par une autorité interne épinglée dans l'UI.** Le code de l'UI vient de la Gateway : l'épinglage ne vaut pas plus que la Gateway. Écartée.
 - **D. Renoncer à B**, garder A seul. C'est possible, mais le propriétaire a voulu garder le copier-coller d'un mot de passe (ADR-0097).
 
-## Décision proposée : A
+## Décision : A
 
 1. **Le canal.**
    - Le `HELLO` du flux d'écran porte la clé publique ECDH P-256 éphémère de la session d'écran. Le proxy la tire à l'ouverture et l'efface à la fermeture.
@@ -63,11 +63,6 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
 - (−) **Une Gateway compromise lit le mot de passe** : elle sert l'UI. C'est la limite de toute solution où la Gateway sert l'UI, et la documentation de sécurité doit le dire.
 - (−) Pour ce texte, l'enregistrement ne garde que la taille et l'empreinte salée : un auditeur ne sait pas ce qui a été saisi.
 - (−) Un nouveau message du contrat d'écran, et une cryptographie côté navigateur, à tester dans un navigateur réel (sans interface) pour RDP et VNC.
-
-## Ce qui demande ton go
-
-- **L'option** : A, le chiffrement pour le proxy, avec la limite dite ci-dessus ; ou D, renoncer à B et garder A seul.
-- **L'empreinte salée**, qui précise ADR-0097, point 6, au lieu d'un SHA-256 nu.
 
 ## Alternatives envisagées
 
