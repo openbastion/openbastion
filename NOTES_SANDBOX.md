@@ -5177,6 +5177,22 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Constat sur l'ancienne note** : la « rouge et bleu inversés » qu'elle évoquait n'en était pas une. FreeRDP range ses plans dans l'ordre B, G, R, et lit donc Cg, Co, Y ; la formule est la même que celle de NSCodec, sans inversion.
 - **Non éprouvé** : on ne sait pas si les Windows de la CI envoient de l'AYCoCg à `CLL` 2 ou plus sur ce chemin.
 
+## 2026-11-21 — ADR-0099, incrément 1 : la licence RDS complète, en mémoire
+
+- **Fait** : `CompleteLicensing` mène l'échange complet de MS-RDPELE :
+  - les clés, avec RC4 et le MAC ;
+  - le défi de plateforme et sa réponse ;
+  - la licence émise ou mise à niveau, gardée dans `LicenseCache` (en mémoire, une par cible et par utilisateur) ;
+  - la licence présentée de nouveau, et oubliée si elle est refusée.
+  Le proxy partage un cache entre ses sessions.
+- **Vérifié** ligne à ligne contre le client de FreeRDP 3.15. Les exemples de MS-RDPELE n'ont pas pu être lus.
+- **Prouvé** :
+  - contre un hôte de licences du test, qui a ses propres clés : émission, présentation, mise à niveau, `VALID_CLIENT` après le défi, huit refus ;
+  - un fuzzer ;
+  - 12 mutations tuées sur 12, après deux trous refermés dans les tests.
+- **Non éprouvé** : contre un vrai RDSH licencié (incrément 2, sixième cible CI).
+- **Mode par appareil** : non pris en charge ; documenté.
+
 ## 2026-11-21 — CI Windows, cas « B » (cible perdue) : ce que disent les runs, et le pouls de l'invité
 
 - **Mesure** sur les 20 jobs Windows en échec entre le 15 et le 20 novembre : 4 sont le cas B, une cascade où toutes les connexions suivantes échouent (runs 44633225741, 44639888735, 44719104004 ; le 44808411211 est autre chose, des sessions que Windows termine, sur une branche Kerberos). Les autres sont des tests navigateur isolés.

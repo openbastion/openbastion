@@ -40,10 +40,11 @@ const (
 	maxRDPLicenseIdentitySize = 255
 )
 
-// CompleteLicensing executes the deliberately narrow personal-terminal-server
-// flow: validate SERVER_LICENSE_REQUEST, send CLIENT_NEW_LICENSE_REQUEST, then
-// accept only STATUS_VALID_CLIENT/ST_NO_TRANSITION. CAL issuance, upgrades and
-// platform challenges are intentionally unsupported and fail closed.
+// CompleteLicensing runs the licensing phase (MS-RDPBCGR 1.3.1.1, phase 7; MS-RDPELE): a server with
+// nothing to license, or one in its grace period, answers STATUS_VALID_CLIENT at once or after the
+// client's request; a Remote Desktop Session Host may challenge the client (platform challenge),
+// then issue or upgrade a license (ADR-0099, option B), which is kept in Licenses and presented
+// again at the next connection with the same LicenseScope. Anything else fails closed.
 func (s *CredSSPClientSession) CompleteLicensing(ctx context.Context, timeout time.Duration) (err error) {
 	if s == nil || ctx == nil || ctx.Err() != nil || timeout < 0 {
 		return ErrMCSConnection
@@ -110,36 +111,107 @@ func (s *CredSSPClientSession) CompleteLicensing(ctx context.Context, timeout ti
 		clear(serverPacket)
 		return nil
 	}
-	licenseKey, parseErr := parseRDPServerLicenseRequest(serverPacket, s.mcsResponse.IOChannelID, fallbackKey)
+	licenseKey, serverRandom, parseErr := parseRDPServerLicenseRequestRandom(serverPacket, s.mcsResponse.IOChannelID, fallbackKey)
 	clear(serverPacket)
 	if parseErr != nil {
 		return ErrMCSConnection
 	}
 
-	request, buildErr := marshalRDPClientNewLicenseRequest(
-		s.userChannelID, s.mcsResponse.IOChannelID, licenseKey,
-		s.licensingUsername, s.mcsSettings.ClientName,
-	)
+	clientRandom := make([]byte, 32)
+	preMaster := make([]byte, 48)
+	defer clear(clientRandom)
+	if _, err := io.ReadFull(rand.Reader, clientRandom); err != nil {
+		return ErrMCSConnection
+	}
+	if _, err := io.ReadFull(rand.Reader, preMaster); err != nil {
+		clear(preMaster)
+		return ErrMCSConnection
+	}
+	keys := deriveLicensingKeys(preMaster, clientRandom, serverRandom)
+	defer keys.clear()
+	encryptedPreMaster, encErr := rsa.EncryptPKCS1v15(rand.Reader, licenseKey, preMaster)
+	clear(preMaster)
+	if encErr != nil || len(encryptedPreMaster) > maxRDPLicenseBlobSize {
+		return ErrMCSConnection
+	}
+	defer clear(encryptedPreMaster)
+
+	cache, scope := s.mcsSettings.Licenses, s.mcsSettings.LicenseScope
+	hwid := cache.hardwareID()
+	kept := cache.get(scope)
+	defer clear(kept)
+	var request []byte
+	var buildErr error
+	if len(kept) != 0 {
+		request, buildErr = marshalRDPClientLicenseInfo(s.userChannelID, s.mcsResponse.IOChannelID, encryptedPreMaster, clientRandom, kept, keys, hwid)
+	} else {
+		request, buildErr = marshalRDPClientNewLicenseRequestWith(s.userChannelID, s.mcsResponse.IOChannelID,
+			encryptedPreMaster, clientRandom, s.licensingUsername, s.mcsSettings.ClientName)
+	}
 	if buildErr != nil {
 		return ErrMCSConnection
 	}
-	defer clear(request)
-	if ctx.Err() != nil || writeFull(conn, request) != nil {
+	sendErr := writeFull(conn, request)
+	clear(request)
+	if ctx.Err() != nil || sendErr != nil {
 		return ErrMCSConnection
 	}
 
-	serverPacket, readErr = readMCSConnectResponse(conn)
-	if readErr != nil {
-		return ErrMCSConnection
+	for challenges := 0; ; {
+		serverPacket, readErr = readMCSConnectResponse(conn)
+		if readErr != nil {
+			return ErrMCSConnection
+		}
+		if parseRDPServerLicenseSuccess(serverPacket, s.mcsResponse.IOChannelID) {
+			clear(serverPacket)
+			return nil
+		}
+		messageType, body, ok := licensePreamble(serverPacket, s.mcsResponse.IOChannelID)
+		if !ok {
+			clear(serverPacket)
+			return ErrMCSConnection
+		}
+		switch messageType {
+		case rdpLicensePlatformChallenge:
+			challenges++
+			if challenges > maxRDPLicensePlatformChallenges {
+				clear(serverPacket)
+				return ErrMCSConnection
+			}
+			challenge, ok := parseRDPServerPlatformChallenge(body, keys)
+			clear(serverPacket)
+			if !ok {
+				return ErrMCSConnection
+			}
+			response, err := marshalRDPClientPlatformChallengeResponse(s.userChannelID, s.mcsResponse.IOChannelID, keys, challenge, hwid)
+			clear(challenge)
+			if err != nil {
+				return ErrMCSConnection
+			}
+			sendErr := writeFull(conn, response)
+			clear(response)
+			if ctx.Err() != nil || sendErr != nil {
+				return ErrMCSConnection
+			}
+		case rdpLicenseNewLicense, rdpLicenseUpgradeLicense:
+			license, ok := parseRDPServerNewLicense(body, keys)
+			clear(serverPacket)
+			if !ok {
+				return ErrMCSConnection
+			}
+			cache.put(scope, license)
+			clear(license)
+			return nil
+		default:
+			// An error alert other than STATUS_VALID_CLIENT, or any other message: refused. A
+			// license that was presented and refused is not presented again.
+			clear(serverPacket)
+			if len(kept) != 0 {
+				cache.drop(scope)
+			}
+			return ErrMCSConnection
+		}
 	}
-	defer clear(serverPacket)
-	if !parseRDPServerLicenseSuccess(serverPacket, s.mcsResponse.IOChannelID) {
-		return ErrMCSConnection
-	}
-	if ctx.Err() != nil {
-		return ErrMCSConnection
-	}
-	return nil
 }
 
 func validLicenseANSI(value string, max int) bool {
@@ -154,6 +226,8 @@ func validLicenseANSI(value string, max int) bool {
 	return true
 }
 
+// marshalRDPClientNewLicenseRequest builds CLIENT_NEW_LICENSE_REQUEST with randoms of its own (the
+// tests' entry; CompleteLicensing keeps its randoms for the keys of the exchange).
 func marshalRDPClientNewLicenseRequest(userID, ioChannelID uint16, serverKey *rsa.PublicKey, username, machineName string) ([]byte, error) {
 	if !validMCSUserID(userID) || ioChannelID != mcsGlobalChannelID ||
 		serverKey == nil || serverKey.N == nil || serverKey.N.BitLen() < 1024 ||
@@ -178,7 +252,16 @@ func marshalRDPClientNewLicenseRequest(userID, ioChannelID uint16, serverKey *rs
 		return nil, ErrMCSConnection
 	}
 	defer clear(encryptedPreMaster)
+	return marshalRDPClientNewLicenseRequestWith(userID, ioChannelID, encryptedPreMaster, clientRandom, username, machineName)
+}
 
+// marshalRDPClientNewLicenseRequestWith is CLIENT_NEW_LICENSE_REQUEST (MS-RDPELE 2.2.2.2) for the
+// given ClientRandom and encrypted premaster secret.
+func marshalRDPClientNewLicenseRequestWith(userID, ioChannelID uint16, encryptedPreMaster, clientRandom []byte, username, machineName string) ([]byte, error) {
+	if !validMCSUserID(userID) || ioChannelID != mcsGlobalChannelID || len(clientRandom) != 32 || len(encryptedPreMaster) == 0 ||
+		!validLicenseANSI(username, maxRDPLicenseIdentitySize) || !validLicenseANSI(machineName, 15) {
+		return nil, ErrMCSConnection
+	}
 	message := make([]byte, 8, 8+len(clientRandom)+len(encryptedPreMaster)+len(username)+len(machineName)+32)
 	binary.LittleEndian.PutUint32(message[0:4], rdpLicenseKeyExchangeRSA)
 	binary.LittleEndian.PutUint32(message[4:8], rdpLicensePlatformWinNT)
@@ -219,43 +302,52 @@ func appendLicenseBlob(dst []byte, typ uint16, value []byte) []byte {
 }
 
 func parseRDPServerLicenseRequest(packet []byte, expectedChannelID uint16, fallbackKey *rsa.PublicKey) (*rsa.PublicKey, error) {
+	key, serverRandom, err := parseRDPServerLicenseRequestRandom(packet, expectedChannelID, fallbackKey)
+	clear(serverRandom)
+	return key, err
+}
+
+// parseRDPServerLicenseRequestRandom reads SERVER_LICENSE_REQUEST and returns the key the premaster
+// secret is encrypted to and the ServerRandom, which the licensing keys are derived from.
+func parseRDPServerLicenseRequestRandom(packet []byte, expectedChannelID uint16, fallbackKey *rsa.PublicKey) (*rsa.PublicKey, []byte, error) {
 	userData, err := parseMCSLicensingIndication(packet, expectedChannelID)
 	if err != nil || len(userData) < 4+4+32+12+8+4 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	preamble := userData[4:]
 	if preamble[0] != rdpLicenseRequest || preamble[1]&0x0f != rdpLicenseProtocolVersion ||
 		preamble[1]&0x70 != 0 || int(binary.LittleEndian.Uint16(preamble[2:4])) != len(preamble) {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	body := preamble[4:]
 	if len(body) < 32+12 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
-	body = body[32:] // ServerRandom; TLS already authenticates the server identity.
+	serverRandom := append([]byte(nil), body[:32]...) // TLS already authenticates the server identity.
+	body = body[32:]
 	if len(body) < 12 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	body = body[4:] // ProductInfo.dwVersion
 	companyLength := int(binary.LittleEndian.Uint32(body[:4]))
 	body = body[4:]
 	if companyLength > maxRDPLicenseStringSize || !validLicenseUTF16Blob(body, companyLength) {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	body = body[companyLength:]
 	if len(body) < 4 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	productLength := int(binary.LittleEndian.Uint32(body[:4]))
 	body = body[4:]
 	if productLength > maxRDPLicenseStringSize || !validLicenseUTF16Blob(body, productLength) {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	body = body[productLength:]
 
 	blobType, blobValue, rest, ok := readLicenseBlob(body)
 	if !ok || blobType != rdpLicenseBlobKeyExchange || len(blobValue) == 0 || len(blobValue)%4 != 0 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	hasRSA := false
 	for len(blobValue) > 0 {
@@ -265,36 +357,36 @@ func parseRDPServerLicenseRequest(packet []byte, expectedChannelID uint16, fallb
 		blobValue = blobValue[4:]
 	}
 	if !hasRSA {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	body = rest
 	var certificateBlob []byte
 	blobType, certificateBlob, body, ok = readLicenseBlob(body)
 	if !ok || blobType != rdpLicenseBlobCertificate {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	licenseKey, certErr := parseRDPServerLicenseCertificate(certificateBlob, fallbackKey)
 	if certErr != nil {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	if len(body) < 4 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	scopeCount := binary.LittleEndian.Uint32(body[:4])
 	body = body[4:]
 	if scopeCount > maxRDPServerLicenseScopes {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
 	for i := uint32(0); i < scopeCount; i++ {
 		blobType, _, body, ok = readLicenseBlob(body)
 		if !ok || blobType != rdpLicenseBlobScope {
-			return nil, ErrMCSConnection
+			return nil, nil, ErrMCSConnection
 		}
 	}
 	if len(body) != 0 {
-		return nil, ErrMCSConnection
+		return nil, nil, ErrMCSConnection
 	}
-	return licenseKey, nil
+	return licenseKey, serverRandom, nil
 }
 
 // parseRDPServerLicenseCertificate extracts the RSA key from the server's
