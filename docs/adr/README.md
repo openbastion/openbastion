@@ -166,6 +166,7 @@ Terminer la cible graphique, servir un flux acquitté, ouvrir RDP, puis l'étend
 | 15 | [ADR-0099](0099-la-licence-rds-complete-est-geree-sans-consommer-une-cal-par-connexion.md) | Le client RDP gère la licence RDS complète, sans consommer une licence d'accès par connexion | Accepté |
 | 16 | [ADR-0100](0100-credssp-accepte-kerberos-a-cote-de-ntlmv2-pour-les-domaines-sans-ntlm.md) | CredSSP accepte Kerberos à côté de NTLMv2, pour les domaines qui ferment NTLM | Accepté |
 | 17 | [ADR-0101](0101-le-proxy-rdp-annonce-le-pipeline-graphique-avec-des-codecs-sans-perte.md) | Le proxy RDP annonce le pipeline graphique (RDPGFX) avec des codecs sans perte seulement | Accepté |
+| 18 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
 
 ### 10. Chaîne d'audit
 
@@ -281,6 +282,7 @@ Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et
 | 10 | [ADR-0130](0130-connecteurs-protocoles.md) | Les connecteurs et protocoles ne sont visibles qu’après preuve de disponibilité | Proposé |
 | 11 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté |
 | 12 | [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté |
+| [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté | Proxy écran RDP et VNC |
 
 ## Index numérique
 
