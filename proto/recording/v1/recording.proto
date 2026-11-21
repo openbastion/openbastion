@@ -123,10 +123,15 @@ message GetCommandRecordingResponse {
 message RecordVideoEventRequest {
   string event_id = 1;
   string session_id = 2;
-  string event_type = 3;
+  string event_type = 3;          // secret_injection_started (source vault) or secret_paste_started (source operator, ADR-0133)
   string protocol = 4;
   string source = 5;
   string account_id = 6;
+  // An operator's password (source operator, ADR-0133 §4): its size and its salted fingerprint,
+  // hex SHA-256(salt || text), never the text. Empty for a Vault secret.
+  uint32 paste_bytes = 7;
+  string paste_salt = 8;
+  string paste_sha256 = 9;
 }
 
 message RecordVideoEventResponse {
@@ -150,6 +155,9 @@ message VideoRecordingEvent {
   string source = 5;
   string account_id = 6;
   google.protobuf.Timestamp occurred_at = 7;
+  uint32 paste_bytes = 8;   // ADR-0133: an operator's password, its size and salted fingerprint
+  string paste_salt = 9;
+  string paste_sha256 = 10;
 }
 
 message GetVideoEventsResponse {

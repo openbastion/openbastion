@@ -852,6 +852,7 @@ export default {
       empty: "Aucun marqueur d'injection de secret n'a été enregistré.",
       truncated: "La limite de sécurité est atteinte : seuls les 1 000 premiers marqueurs sont affichés.",
       secretInjectionRequested: "Injection du secret Vault demandée",
+      secretPasteRequested: "Saisie d'un mot de passe de l'opérateur demandée : {{bytes}} octets, empreinte salée {{sha256}} (sel {{salt}})",
       note: "Un marqueur indique une tentative, pas une réussite. Le résultat est conservé dans l'audit de session.",
     },
     loading: "Chargement des images enregistrées…",

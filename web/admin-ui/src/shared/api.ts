@@ -228,11 +228,16 @@ export interface VideoRecordingSegment {
 export interface VideoRecordingEvent {
   eventId: string;
   sessionId: string;
-  eventType: "secret_injection_started";
+  // A Vault secret typed by the proxy (ADR-0097), or an operator's password (ADR-0133).
+  eventType: "secret_injection_started" | "secret_paste_started";
   protocol: "vnc" | "rdp";
-  source: "vault";
+  source: "vault" | "operator";
   accountId: string;
   occurredAt: string;
+  // An operator's password: its size and salted fingerprint, never its text (ADR-0133 §4).
+  pasteBytes?: number;
+  pasteSalt?: string;
+  pasteSha256?: string;
 }
 
 export interface VideoRecordingEventPage {

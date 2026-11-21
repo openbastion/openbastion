@@ -81,9 +81,12 @@ func TestInjectSecret_AuditsAndRecordsOnlyEvidenceBeforeTyping(t *testing.T) {
 						t.Fatalf("Vault evidence exposed more than its reference: %+v", evidence)
 					}
 				} else {
-					sum := sha256.Sum256([]byte("never-record-this-value"))
-					if evidence.AccountID != "account-1" || evidence.Length != len("never-record-this-value") ||
-						evidence.SHA256 != hex.EncodeToString(sum[:]) {
+					// The fingerprint is salted (ADR-0133 §4): the salt recorded next to it gives it
+					// back from the value, and the plain SHA-256 is not what is recorded.
+					salt, err := hex.DecodeString(evidence.Salt)
+					plain := sha256.Sum256([]byte("never-record-this-value"))
+					if err != nil || len(salt) != 16 || evidence.AccountID != "account-1" || evidence.Length != len("never-record-this-value") ||
+						evidence.SHA256 != SaltedSecretFingerprint(salt, []byte("never-record-this-value")) || evidence.SHA256 == hex.EncodeToString(plain[:]) {
 						t.Fatalf("operator evidence is incomplete or unsafe: %+v", evidence)
 					}
 				}

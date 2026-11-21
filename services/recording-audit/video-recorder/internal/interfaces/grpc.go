@@ -140,6 +140,7 @@ func (s *GRPCServer) RecordVideoEvent(ctx context.Context, request *recordingv1.
 	event, err := s.svc.RecordVideoEvent(ctx, domain.VideoRecordingEvent{
 		EventID: request.GetEventId(), SessionID: request.GetSessionId(), EventType: request.GetEventType(),
 		Protocol: request.GetProtocol(), Source: request.GetSource(), AccountID: request.GetAccountId(),
+		PasteBytes: int(request.GetPasteBytes()), PasteSalt: request.GetPasteSalt(), PasteSHA256: request.GetPasteSha256(),
 	})
 	if err != nil {
 		return nil, grpcError(err)
@@ -164,6 +165,7 @@ func (s *GRPCServer) GetVideoEvents(ctx context.Context, request *recordingv1.Ge
 		response.Events = append(response.Events, &recordingv1.VideoRecordingEvent{
 			EventId: event.EventID, SessionId: event.SessionID, EventType: event.EventType,
 			Protocol: event.Protocol, Source: event.Source, AccountId: event.AccountID, OccurredAt: timestamppb.New(event.OccurredAt),
+			PasteBytes: uint32(event.PasteBytes), PasteSalt: event.PasteSalt, PasteSha256: event.PasteSHA256,
 		})
 	}
 	return response, nil
