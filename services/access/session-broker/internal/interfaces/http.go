@@ -248,6 +248,8 @@ func (s *HTTPServer) handleSessionItem(w http.ResponseWriter, r *http.Request) {
 		"/reject":                   s.handleReject,
 		"/secret-injection-step-up": s.handleSecretInjectionStepUp,
 		"/secret-injection":         s.handleSecretInjection,
+		"/secret-paste-step-up":     s.handleSecretPasteStepUp,
+		"/secret-paste":             s.handleSecretPaste,
 	} {
 		if id, ok := strings.CutSuffix(rest, suffix); ok {
 			if r.Method != http.MethodPost {
@@ -479,6 +481,46 @@ func (s *HTTPServer) handleSecretInjection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// -- POST /sessions/{id}/secret-paste-step-up and /secret-paste (ADR-0133) ---------
+// The same shapes as the Vault secret's: no text crosses either route. The second returns the
+// one-use token the browser encrypts the password with, for the screen proxy.
+
+func (s *HTTPServer) handleSecretPasteStepUp(w http.ResponseWriter, r *http.Request, sessionID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	var req secretStepUpRequest
+	if err := decodeStrictBoundedJSON(w, r, &req); err != nil || req.CallerID == "" {
+		http.Error(w, "invalid secret step-up request", http.StatusBadRequest)
+		return
+	}
+	result, err := s.svc.StartSecretActionStepUp(r.Context(), req.CallerID, req.ActorRoles, sessionID, "secret:paste")
+	if err != nil {
+		writeSecretActionError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+func (s *HTTPServer) handleSecretPaste(w http.ResponseWriter, r *http.Request, sessionID string) {
+	w.Header().Set("Cache-Control", "no-store")
+	var req secretInjectionRequest
+	if err := decodeStrictBoundedJSON(w, r, &req); err != nil || req.CallerID == "" {
+		http.Error(w, "invalid secret paste request", http.StatusBadRequest)
+		return
+	}
+	proof := application.MFAActionProof{
+		Challenge: req.Challenge, Factor: req.Factor,
+		TOTPCode: req.TOTPCode, WebAuthnResponse: req.WebAuthnResponse,
+	}
+	grant, err := s.svc.AuthorizeOperatorPasteWithStepUp(r.Context(), req.CallerID, req.ActorRoles, sessionID, proof)
+	if err != nil {
+		writeSecretActionError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(grant)
 }
 
 func writeSecretActionError(w http.ResponseWriter, err error) {

@@ -98,3 +98,20 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
   - `-race`.
 - **Reste** : le Broker et la Gateway (le second facteur, puis le jeton remis au proxy et à l'UI), puis l'Admin UI (WebCrypto, le bouton et le champ masqué, le test en navigateur).
 
+### Incrément 2 — l'autorisation d'une saisie : le Broker et la Gateway (21 novembre 2026)
+
+- **Fait** :
+  - deux routes publiques, construites comme celles du secret du Vault : `POST /sessions/{id}/secret-paste-step-up` (le facteur pour `secret:paste` sur le compte de la session) et `POST /sessions/{id}/secret-paste` (la preuve, rien d'autre : un champ de plus, dont un texte, est refusé). L'identité et les rôles viennent du jeton vérifié, et les routes partagent le seau des actions de session ;
+  - au Broker, `AuthorizeOperatorPasteWithStepUp` :
+    - le demandeur seul, sur une session VNC ou RDP active (SSH n'a pas de flux d'écran : `409`) ;
+    - le facteur vérifié, la session et le droit relus après lui, le grant consommé avant que le jeton existe ;
+    - un jeton de 32 octets remis par mTLS au proxy écran qui relaie la session (pour 60 s, `ProxyControl.AuthorizePaste`, routeur de protocoles puis instance d'affinité) ;
+    - l'audit `session.secret_paste_authorized`, puis le même jeton rendu au navigateur. Sans audit, le navigateur n'a rien, et le jeton du proxy expire inutilisé.
+- **Prouvé** :
+  - le facteur, puis le jeton : la liaison du facteur, la consommation, et le même jeton au proxy et au navigateur, pour VNC et RDP ;
+  - refusés : SSH, un autre utilisateur, un droit retiré pendant le facteur (rien n'est consommé, rien n'atteint le proxy), un proxy qui refuse le jeton, un audit absent, un Broker sans proxy de saisie ;
+  - la Gateway ne fait passer que la preuve, avec l'identité du jeton, et partage le budget des actions ;
+  - le client du Broker vers le proxy n'envoie que le jeton et sa durée ;
+  - 3 mutations tuées sur 3 (la relecture après le facteur, l'audit avant le jeton, le refus de SSH) ; test de contrat.
+- **Reste** : l'Admin UI (incrément 3) : le bouton « Saisir un mot de passe », le champ masqué, le facteur, WebCrypto, l'envoi par le flux d'écran, et le test dans un vrai navigateur.
+

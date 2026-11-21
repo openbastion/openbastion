@@ -669,6 +669,53 @@ func (g *GatewayServer) handleSessionItem(w http.ResponseWriter, r *http.Request
 			TOTPCode: proof.TOTPCode, WebAuthnResponse: proof.WebAuthnResponse,
 		})
 
+	case "secret-paste-step-up":
+		// An operator's password (ADR-0133): the factor for secret:paste, as the Vault secret's.
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !g.admitSessionAction(w, id) {
+			return
+		}
+		data, readErr := io.ReadAll(io.LimitReader(r.Body, 1))
+		if readErr != nil || len(data) != 0 {
+			http.Error(w, "step-up request body must be empty", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/secret-paste-step-up",
+			map[string]any{"callerId": id.UserID, "actorRoles": id.Roles})
+
+	case "secret-paste":
+		// The proof of the factor only: no text crosses the Gateway here. The password goes later,
+		// over the screen stream, encrypted for the proxy with the token this returns (ADR-0133).
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !g.admitSessionAction(w, id) {
+			return
+		}
+		var proof secretInjectionProofRequest
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&proof); err != nil || proof.Challenge == "" || proof.Factor == "" {
+			http.Error(w, "invalid secret paste proof", http.StatusBadRequest)
+			return
+		}
+		var extra any
+		if err := dec.Decode(&extra); err != io.EOF {
+			http.Error(w, "invalid secret paste proof", http.StatusBadRequest)
+			return
+		}
+		g.forwardJSON(w, r.Context(), http.MethodPost, brokerPath+"/secret-paste", secretInjectionBrokerRequest{
+			CallerID: id.UserID, ActorRoles: id.Roles,
+			Challenge: proof.Challenge, Factor: proof.Factor,
+			TOTPCode: proof.TOTPCode, WebAuthnResponse: proof.WebAuthnResponse,
+		})
+
 	case "approve", "reject":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

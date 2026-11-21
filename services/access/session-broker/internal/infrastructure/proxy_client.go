@@ -158,6 +158,38 @@ type revokeSessionRequestBody struct {
 	TTLSeconds int    `json:"ttl_seconds"`
 }
 
+// authorizePasteRequestBody is the Broker's grant of one operator paste (ADR-0133): no text.
+type authorizePasteRequestBody struct {
+	SessionID  string `json:"session_id"`
+	AccountID  string `json:"account_id"`
+	PasteToken string `json:"paste_token"`
+	TTLSeconds int    `json:"ttl_seconds"`
+}
+
+// AuthorizePaste hands a one-use paste token to the proxy that relays the session (ADR-0133).
+func (c *ProxyClientHTTPClient) AuthorizePaste(ctx context.Context, sessionID, accountID, token string, ttl time.Duration) error {
+	body, err := json.Marshal(authorizePasteRequestBody{SessionID: sessionID, AccountID: accountID, PasteToken: token, TTLSeconds: int(ttl / time.Second)})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/internal/v1/authorize-paste", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cache-Control", "no-store")
+	resp, err := orDefault(c.Client).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("authorize-paste: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 type injectVaultSecretRequestBody struct {
 	SessionID       string `json:"session_id"`
 	AccountID       string `json:"account_id"`

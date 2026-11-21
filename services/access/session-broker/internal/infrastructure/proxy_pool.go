@@ -99,6 +99,24 @@ func (p *ProxyPool) InjectVaultSecret(ctx context.Context, sessionID, accountID,
 	return nil
 }
 
+// pasteInstance is an instance that takes paste tokens (ADR-0133): the screen proxies' client.
+type pasteInstance interface {
+	AuthorizePaste(ctx context.Context, sessionID, accountID, token string, ttl time.Duration) error
+}
+
+// AuthorizePaste sends the paste token to the instance that relays the session, as the Vault scope.
+func (p *ProxyPool) AuthorizePaste(ctx context.Context, sessionID, accountID, token string, ttl time.Duration) error {
+	in := p.selected(sessionID)
+	client, ok := in.Client.(pasteInstance)
+	if !ok {
+		return fmt.Errorf("%s: takes no paste token", in.Name)
+	}
+	if err := client.AuthorizePaste(ctx, sessionID, accountID, token, ttl); err != nil {
+		return fmt.Errorf("%s: authorize paste: %w", in.Name, err)
+	}
+	return nil
+}
+
 // RevokeSession asks every instance at once and succeeds only if every one confirms: one that
 // cannot be reached may still relay the session, and the Broker must not call it ended.
 func (p *ProxyPool) RevokeSession(ctx context.Context, sessionID string, remaining time.Duration) error {

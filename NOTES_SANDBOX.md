@@ -5312,3 +5312,15 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - `-race`, fuzzer, test de contrat.
 - **Trouvé en chemin** : le lecteur de proto du test de contrat lit un message jusqu'à la prochaine ligne qui commence par `}`. Un message vide sur une ligne (`{}`) avale donc le suivant. La réponse est écrite sur deux lignes, avec un commentaire.
 - **Reste** : le Broker et la Gateway, puis l'Admin UI.
+
+## 2026-11-21 — ADR-0133, incrément 2 : l'autorisation d'une saisie
+
+- **Fait** :
+  - routes publiques `secret-paste-step-up` et `secret-paste`, qui ne prennent que la preuve du facteur ;
+  - Broker : `AuthorizeOperatorPasteWithStepUp`. Facteur pour `secret:paste`, relecture, consommation, jeton de 32 octets remis au proxy écran (60 s), audit, puis le même jeton au navigateur ;
+  - pas de saisie pour SSH, qui n'a pas de flux d'écran.
+- **Prouvé** :
+  - VNC et RDP de bout en bout dans le Broker, six refus ;
+  - la Gateway ne fait passer que la preuve ;
+  - 3 mutations tuées sur 3 ; contrat.
+- **Reste** : l'Admin UI (incrément 3).
