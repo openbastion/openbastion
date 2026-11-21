@@ -80,4 +80,3 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
 - **Trouvé par le test PostgreSQL** : la première contrainte laissait passer un marqueur de l'opérateur sans empreinte, car un CHECK sur NULL passe. Les colonnes sont exigées NOT NULL.
 - **Prouvé** : chaque couche (application, PostgreSQL réel, Gateway, Admin UI, clients d'audit et du Video Recorder du proxy écran, audit SSH) accepte ce qu'elle doit et refuse les mélanges ; l'empreinte se retrouve à partir du sel et de la valeur.
 - **Reste** : l'incrément 1b (le canal chiffré du flux d'écran, les jetons à usage unique, la route interne du proxy), puis le Broker et la Gateway, puis l'Admin UI.
-
