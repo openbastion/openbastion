@@ -5269,3 +5269,18 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Défaut relevé** : après une fin de session, le détail ouvert dans l'Admin UI reste affiché « Active ». La saisie y est refusée (`409`).
 - **Environnement local** : le Go du snap ne répondait plus depuis le redémarrage (snapfuse). Go 1.27.4, la version de la CI, est installé dans `~/sdk/go1.27.4`, et les contrats Protobuf sont régénérés avec `~/go/bin/buf`.
 - **Statut** : ADR-0134 passe à `Accepté` le 21 novembre 2026, sur décision du propriétaire (« Oui », après la recette). Les risques P1 d'ADR-0097 (H08) restent ouverts et suivis dans `docs/security/known-limitations.md` ; ADR-0134 entre aux invariants (`.agents/architecture/invariants.md`).
+
+## 2026-11-21 — CI Windows, cas « B » : la mise à jour automatique d'Edge fige l'invité
+
+- **Le pouls (#258) l'a nommée**, deux fois sur deux, dans le job « 2022, 16 bpp, session none, fr-FR » de la #263 :
+  - run 44925111235, première tentative : `MicrosoftEdgeUpdate` monte à 16:44:23 (50 à 61 % d'un cœur) ; son installeur `setup` prend 82 à 99 % à 16:44:33, l'instant même de la dernière copie sur le partage ; le noyau (`System`) prend 176 à 187 %, soit les deux cœurs, à 16:44:53 ; le pouls se tait à 16:45:24, et l'horloge de la console reste figée à 8:45 ;
+  - seconde tentative (job 136920101317) : même suite, `MicrosoftEdgeUpdate` à 87 %, puis `setup` à 100 %, puis `System` à 148 %, à 17:22.
+- **Ce qui s'accorde** :
+  - Windows Server 2019 n'embarque pas Edge, et toutes les pertes relevées étaient sur 2022 ;
+  - la perte tombe toujours au même moment de la séquence de tests (vers `ExtendedKeys` et `Measure`), parce qu'elle suit un délai depuis le démarrage, pas une touche envoyée.
+- **Ce qui reste inconnu** : pourquoi l'installeur d'Edge pousse le noyau à saturer les deux cœurs jusqu'au gel (disque, Defender, pilote). On en retire le déclencheur, pas la cause profonde.
+- **Correctif** (`oem/rdp-setup.ps1`, machine de test seulement) :
+  - la mise à jour d'Edge est coupée : politique `EdgeUpdate` (`UpdateDefault=0`, `AutoUpdateCheckPeriodMinutes=0`), services `edgeupdate`, `edgeupdatem` et `MicrosoftEdgeElevationService` arrêtés et désactivés, tâches `MicrosoftEdgeUpdate*` désactivées ;
+  - ce qui a été coupé est écrit dans `rdp-events/edge-update.txt` ;
+  - le pouls donne aussi le chemin de l'exécutable le plus actif (`top-path`).
+- **À juger** : l'absence de cas B sur plusieurs matrices Windows. S'il revient, le pouls et `top-path` nommeront le suivant.

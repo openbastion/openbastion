@@ -181,6 +181,32 @@ while ($true) {
   Write-Output "rdp-setup: no RDP event export: $_"
 }
 
+# No automatic update of Microsoft Edge on the test machine (CI instability "B", found by the guest
+# pulse below in run 44925111235): MicrosoftEdgeUpdate woke about 25 minutes after the start, its
+# installer took a core, the kernel (System) then took both, and the whole guest froze — RDP, the
+# share, the pulse and the console's clock alike. Windows Server 2019 has no Edge, and every loss was
+# on 2022. Its services, its scheduled tasks and the policy are turned off; a machine without Edge
+# finds nothing to turn off. A failure here is written down and leaves the target as it is.
+try {
+  $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate'
+  New-Item -Path $policy -Force | Out-Null
+  Set-ItemProperty $policy -Name UpdateDefault -Value 0 -Type DWord               # no update of any Edge application
+  Set-ItemProperty $policy -Name AutoUpdateCheckPeriodMinutes -Value 0 -Type DWord # no check
+  $services = @(Get-Service -Name 'edgeupdate', 'edgeupdatem', 'MicrosoftEdgeElevationService' -ErrorAction SilentlyContinue)
+  foreach ($service in $services) {
+    Stop-Service $service.Name -Force -ErrorAction SilentlyContinue
+    Set-Service $service.Name -StartupType Disabled -ErrorAction SilentlyContinue
+  }
+  $tasks = @(Get-ScheduledTask -TaskName 'MicrosoftEdgeUpdate*' -ErrorAction SilentlyContinue)
+  foreach ($task in $tasks) { Disable-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -ErrorAction SilentlyContinue | Out-Null }
+  New-Item -ItemType Directory -Force 'C:\OEM\rdp-events' | Out-Null
+  "Edge update off: services $(($services | ForEach-Object { $_.Name }) -join ', '); tasks $(($tasks | ForEach-Object { $_.TaskName }) -join ', ')" |
+    Out-File 'C:\OEM\rdp-events\edge-update.txt' -Encoding utf8
+  Write-Output "rdp-setup: Microsoft Edge update off ($($services.Count) service(s), $($tasks.Count) task(s))"
+} catch {
+  Write-Output "rdp-setup: Microsoft Edge update not turned off: $_"
+}
+
 # The guest's pulse, for CI instability "B" (the target lost: RDP silent, then every connection
 # refused, one vCPU at 100 %). In the runs of 19 and 20 November, the export loop above stopped
 # writing to the share 30 s to 2 min before RDP fell silent, so neither the share nor that loop can
@@ -208,11 +234,14 @@ while ($true) {
     $cur[$p.Id] = $cpu
     if ($dt -gt 0 -and $last.ContainsKey($p.Id)) {
       $pct = 100 * ($cpu - $last[$p.Id]) / $dt
-      if ($pct -ge 5) { $busy += [pscustomobject]@{ Name = "$($p.ProcessName)#$($p.Id)/s$($p.SessionId)"; Pct = $pct } }
+      if ($pct -ge 5) { $busy += [pscustomobject]@{ Name = "$($p.ProcessName)#$($p.Id)/s$($p.SessionId)"; Pct = $pct; Path = $p.Path } }
     }
   }
   $last = $cur
-  $top = ($busy | Sort-Object Pct -Descending | Select-Object -First 6 | ForEach-Object { '{0}={1:N0}%' -f $_.Name, $_.Pct }) -join ' '
+  $sorted = @($busy | Sort-Object Pct -Descending)
+  $top = ($sorted | Select-Object -First 6 | ForEach-Object { '{0}={1:N0}%' -f $_.Name, $_.Pct }) -join ' '
+  # The busiest program's path: "setup" alone did not say whose installer it was (run 44925111235).
+  $topPath = if ($sorted.Count -gt 0 -and $sorted[0].Path) { $sorted[0].Path } else { '' }
   $service = (Get-Service TermService -ErrorAction SilentlyContinue).Status
   $tcp = (@(Get-NetTCPConnection -LocalPort 3389 -ErrorAction SilentlyContinue) | Group-Object State | ForEach-Object { "$($_.Name):$($_.Count)" }) -join ','
   $free = '?'
@@ -220,7 +249,7 @@ while ($true) {
   $sessions = ((query session 2>$null) | Select-Object -Skip 1 | ForEach-Object { ($_ -replace '\s+', ' ').Trim() } | Where-Object { $_ }) -join '; '
   $export = (Get-Item (Join-Path $out 'export-status.txt') -ErrorAction SilentlyContinue).LastWriteTime
   $age = if ($export) { "$([int]($now - $export).TotalSeconds)s" } else { 'none' }
-  $line = "OBPULSE $($now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) cpu[$top] TermService=$service 3389[$tcp] freeMB=$free sessions[$sessions] export-age=$age"
+  $line = "OBPULSE $($now.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) cpu[$top] top-path[$topPath] TermService=$service 3389[$tcp] freeMB=$free sessions[$sessions] export-age=$age"
   if ($port) { try { $port.WriteLine($line) } catch {} }
   Add-Content $file $line -ErrorAction SilentlyContinue
   # The file keeps the last 200 lines, about 17 minutes.
