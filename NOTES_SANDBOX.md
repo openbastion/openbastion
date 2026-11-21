@@ -5325,6 +5325,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - 3 mutations tuées sur 3 ; contrat.
 - **Reste** : l'Admin UI (incrément 3).
 
+## 2026-11-21 — ADR-0133, incrément 3 : l'Admin UI
+
+- **Fait** : bouton « Saisir un mot de passe… » dans l'écran (capacité `secrets.paste`), champ masqué, facteur, chiffrement WebCrypto, envoi `InputPaste`.
+- **Prouvé** : vecteur à réponse connue commun au Go et au navigateur ; le mot de passe ne part jamais vers l'API ; 4 mutations tuées sur 4.
+- **Reste** : le parcours dans un vrai navigateur, contre le proxy réel.
+
 ## 2026-11-21 — Admin UI : le détail d'une session terminée ailleurs ne reste plus « Active »
 
 - **Défaut relevé par la recette d'ADR-0134** : une session terminée ailleurs restait affichée « Active » dans son détail ouvert. Le Broker refusait bien ce qu'on lui demandait (`409`), mais la page ne le reflétait pas.
