@@ -89,7 +89,7 @@ func TestCapabilities_AsksForTheVerifiedRolesAndAnswersEachName(t *testing.T) {
 		"accounts.list": false, "accounts.onboard": false, "accounts.rotate": true, "accounts.disable": false,
 		"accounts.pin": false, "accounts.approval": false, "accounts.screenProfile": false, "accounts.kerberos": false, "policies.create": false, "sessions.create": false,
 		"sessions.breakglass": false, "sessions.approve": true, "sessions.read": false, "sessions.terminate": false,
-		"secrets.inject": false, "recordings.read": false, "audit.secretInjections": false,
+		"secrets.inject": false, "secrets.paste": false, "recordings.read": false, "audit.secretInjections": false,
 	}
 	if len(got.Capabilities) != len(want) {
 		t.Fatalf("capabilities %v, want the %d names of the catalogue", got.Capabilities, len(want))

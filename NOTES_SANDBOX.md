@@ -5324,3 +5324,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - la Gateway ne fait passer que la preuve ;
   - 3 mutations tuées sur 3 ; contrat.
 - **Reste** : l'Admin UI (incrément 3).
+
+## 2026-11-21 — ADR-0133, incrément 3 : l'Admin UI
+
+- **Fait** : bouton « Saisir un mot de passe… » dans l'écran (capacité `secrets.paste`), champ masqué, facteur, chiffrement WebCrypto, envoi `InputPaste`.
+- **Prouvé** : vecteur à réponse connue commun au Go et au navigateur ; le mot de passe ne part jamais vers l'API ; 4 mutations tuées sur 4.
+- **Reste** : le parcours dans un vrai navigateur, contre le proxy réel.

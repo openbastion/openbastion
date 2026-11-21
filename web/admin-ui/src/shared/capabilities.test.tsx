@@ -18,7 +18,7 @@ const none = {
   "accounts.list": false, "accounts.onboard": false, "accounts.rotate": false, "accounts.disable": false,
   "accounts.pin": false, "accounts.approval": false, "accounts.screenProfile": false, "accounts.kerberos": false, "policies.create": false, "sessions.create": false,
   "sessions.breakglass": false, "sessions.approve": false, "sessions.read": false, "sessions.terminate": false,
-  "secrets.inject": false, "recordings.read": false, "audit.secretInjections": false,
+  "secrets.inject": false, "secrets.paste": false, "recordings.read": false, "audit.secretInjections": false,
 };
 const account = { id: "acc_1", name: "web", username: "root", targetHost: "10.0.0.1:22", protocol: "ssh", rotationPolicy: "manual", createdAt: "2026-01-01T00:00:00Z", hostKeyFingerprint: "SHA256:x" };
 const accountsPage = { items: [account], page: 1, pageSize: 20, totalItems: 1 };

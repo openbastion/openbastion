@@ -1,4 +1,5 @@
 import { KeyboardEvent, MouseEvent, PointerEvent, WheelEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { OperatorPaste } from "./OperatorPaste";
 import { MAX_CLIPBOARD_TEXT_LENGTH, SUBPROTOCOL, clampResize, decodeScreenMessage, encodeClipboard, encodeKey, encodePointer, encodeReleaseAll, encodeResize, encodeScancode, endMessage } from "./protocol";
 import { keysymOf, rfbButtons, scancodeOf } from "./keys";
 import { Label, Textarea } from "@openbastion/ui";
@@ -111,6 +112,8 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
   const [clipboardFrom, setClipboardFrom] = useState(false);
   const [clipboardEntries, setClipboardEntries] = useState<ClipboardEntry[]>([]);
   const [pasteDraft, setPasteDraft] = useState<string | null>(null);
+  // The proxy's key for an operator's password (ADR-0133), and the session it belongs to, as the HELLO says.
+  const [paste, setPaste] = useState<{ sessionId: string; protocol: "rdp" | "vnc"; key: Uint8Array } | null>(null);
   const [clipboardNotice, setClipboardNotice] = useState<{ tone: "info" | "danger" | "success"; text: string } | null>(null);
 
   const send = useCallback((message: Uint8Array<ArrayBuffer>) => {
@@ -160,6 +163,7 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         setResizable(message.resizable);
         setClipboardTo(message.clipboardToTarget);
         setClipboardFrom(message.clipboardFromTarget);
+        setPaste(message.pasteKey ? { sessionId: message.sessionId, protocol: message.protocol, key: message.pasteKey } : null);
         setPhase({ name: "live", expiresAt: message.expiresAt });
       } else if (message.type === "end") {
         finish(endMessage(message.text));
@@ -406,6 +410,11 @@ export function ScreenViewer({ attach, onReconnect, onClose, deps = browserDeps 
         </p>
       ) : null}
       {phase.name === "ended" ? <InlineNotice tone="danger">{phase.message}</InlineNotice> : null}
+      {phase.name === "live" && paste ? (
+        <div className="ob-form-actions screen-operator-paste">
+          <OperatorPaste sessionId={paste.sessionId} protocol={paste.protocol} pasteKey={paste.key} send={send} />
+        </div>
+      ) : null}
       {phase.name === "live" && (clipboardTo || clipboardFrom) ? (
         <section className="screen-clipboard" aria-label={t("screen.clipboard.aria")}>
           <p className="ob-hint">{t("screen.clipboard.hint")}</p>

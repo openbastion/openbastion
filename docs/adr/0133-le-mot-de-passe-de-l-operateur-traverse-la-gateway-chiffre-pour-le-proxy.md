@@ -115,3 +115,16 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
   - 3 mutations tuées sur 3 (la relecture après le facteur, l'audit avant le jeton, le refus de SSH) ; test de contrat.
 - **Reste** : l'Admin UI (incrément 3) : le bouton « Saisir un mot de passe », le champ masqué, le facteur, WebCrypto, l'envoi par le flux d'écran, et le test dans un vrai navigateur.
 
+### Incrément 3 — l'Admin UI (21 novembre 2026)
+
+- **Fait** :
+  - le bouton « Saisir un mot de passe… » dans l'écran d'une session VNC ou RDP. Il n'apparaît que si le `HELLO` porte la clé du proxy, et il demande la capacité `secrets.paste` (`secret:paste` sur un compte) ;
+  - le mot de passe est lu dans un champ masqué, jamais dans le presse-papiers. Il est vérifié comme le proxy le vérifiera (128 caractères au plus, une ligne, sans tabulation ni caractère de contrôle) avant de demander un facteur ;
+  - le facteur (TOTP ou clé), le jeton, puis le chiffrement WebCrypto (`pasteCrypto.ts` : ECDH P-256, HKDF-SHA-256, AES-256-GCM) et l'envoi par le flux d'écran (`InputPaste`) ;
+  - le rappel de placer le curseur dans un champ masqué de la cible.
+- **Prouvé** :
+  - un **vecteur à réponse connue** commun aux deux côtés : `pkg/proxycore/paste_vector_test.go` le produit et l'ouvre, `pasteCrypto.test.ts` retrouve le même chiffré, octet pour octet ; une autre session, un autre protocole ou un autre texte donnent autre chose ;
+  - le composant : la preuve seule part vers l'API, jamais le mot de passe ; le message envoyé porte le jeton du Broker et pas le texte en clair ; un texte invalide ne coûte aucun facteur ; sans jeton, ou avec un jeton mal formé, rien n'est envoyé ;
+  - 4 mutations tuées sur 4 (validation, contrôle du jeton, données associées, sel), plus une témoin qui survit.
+- **Reste** : le parcours dans un vrai navigateur, contre le proxy réel (`TestBase44Preview` ou un test Playwright), qui prouvera le texte tapé dans la cible.
+
