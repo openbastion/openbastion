@@ -290,18 +290,32 @@ type LicenseCache struct {
 	hwid     [20]byte
 	// issued counts the licenses kept, presented those sent again: what an operator, or a test
 	// against a real host, reads to know the exchange happened (Stats).
-	issued, presented int
+	issued, presented, challenges int
 }
 
-// Stats says how many licenses this cache kept and how many times it presented one again, and how
-// many it holds now.
-func (c *LicenseCache) Stats() (issued, presented, held int) {
+// LicenseStats is what a LicenseCache saw: the platform challenges it answered, the licenses it kept
+// and presented again, and those it holds.
+type LicenseStats struct {
+	Challenges, Issued, Presented, Held int
+}
+
+// Stats says what this cache saw.
+func (c *LicenseCache) Stats() LicenseStats {
 	if c == nil {
-		return 0, 0, 0
+		return LicenseStats{}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.issued, c.presented, len(c.licenses)
+	return LicenseStats{Challenges: c.challenges, Issued: c.issued, Presented: c.presented, Held: len(c.licenses)}
+}
+
+func (c *LicenseCache) noteChallenge() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.challenges++
+	c.mu.Unlock()
 }
 
 func (c *LicenseCache) notePresented() {

@@ -76,3 +76,19 @@ Ce que le client ne garde pas, le serveur le réémet. En mode **par appareil**,
 - **Mode par appareil** : il n'est pas pris en charge (décision 2). Un hôte en mode par appareil compte une licence pour chacune que ce cache perd, à chaque redémarrage du proxy. `docs/administration/privileged-accounts.md` le dit.
 - **Non éprouvé** : contre un vrai hôte de sessions licencié. Ce sera l'incrément 2 : une sixième cible Windows en CI, avec les rôles RDSH et serveur de licences.
 
+### Incrément 2 — contre un Windows hôte de sessions (21 novembre 2026)
+
+- **Décidé en autonomie, renversable** :
+  - une sixième cible Windows en CI, que l'ADR laissait à confirmer : le Windows du test d'interopérabilité devient un hôte de sessions avec son propre serveur de licences (`prepare.sh DOMAIN=rdsh`, `rdsh-setup.ps1`, job `rdsh` de `windows-rdp.yml`) ;
+  - le mode par appareil sur cette machine de test d'un seul passage, le mode où un hôte émet la licence et la redemande. Un déploiement reste en mode par utilisateur.
+- **Ce que le vrai Windows a appris au client**, en cinq passages. Aucun de ces points n'apparaissait avec l'hôte du test de l'incrément 1, qui était écrit d'après ma lecture de la spécification :
+  1. **la chaîne X.509** du serveur de licences : la clé est celle du **dernier** certificat (le serveur Terminal Server), et non du premier, comme FreeRDP la lit ;
+  2. la chaîne finit par **8 + 4 × n octets de bourrage** (MS-RDPELE 2.2.1.4.2) ;
+  3. **`flagsHi`** de l'en-tête de sécurité est rempli de ce qui ressemble à du bruit (0x46, 0x1648, 0xafe2…) : MS-RDPBCGR demande de l'ignorer sans `SEC_FLAGSHI_VALID`, et l'hôte pose aussi `SEC_LICENSE_ENCRYPT_CS` ;
+  4. **le certificat propriétaire** (version 1) est présenté tant que l'hôte n'a pas de certificat X.509 d'un serveur de licences activé. La clé est lue dans son blob `RSA1`. La signature n'est vérifiée que dans sa forme : elle est faite avec une clé dont MS-RDPBCGR 5.3.3.1.1 publie la partie privée.
+
+  Pour les trouver, chaque refus de licence dit maintenant ce qui a échoué : étape, type de message, code d'alerte, version de certificat, forme d'un blob, jamais un secret. Une clé de certificat que Go refuse est lue dans son SubjectPublicKeyInfo.
+- **Prouvé contre Windows** (`TestRDPWindowsRDSH`, PR #259) : la session de l'utilisateur s'ouvre sur l'hôte de sessions. Le client lit la vraie demande de licence (certificat, chaîne, en-tête) et en franchit la phase.
+- **Non prouvé contre Windows** : le défi de plateforme, l'émission d'une licence et sa présentation. **Pendant sa période de grâce, un hôte de sessions ne licencie personne** : il répond `STATUS_VALID_CLIENT`. Ce point est mesuré, pas supposé : « issued 0 ». Pour qu'il émette, il faut un serveur de licences activé auprès de Microsoft et pourvu de licences, ce que cette CI n'a pas. Forcer la fin de la période de grâce serait toucher au mécanisme de licence de Windows : c'est écarté, comme l'annonce d'une licence factice. Cet échange reste prouvé contre l'hôte du test seulement, vérifié ligne à ligne contre FreeRDP. Si un hôte émet un jour une licence, le test le verra : il compte alors les défis, les licences gardées et présentées.
+- **Constaté** : dans un passage, Windows a refusé plusieurs connexions de suite dans sa propre couche TLS (événement 139, `SEC_E_CERT_UNKNOWN`), sans être perdu (le service tournait, le port était ouvert, le processeur au repos). Ce n'est pas revenu dans les passages suivants.
+

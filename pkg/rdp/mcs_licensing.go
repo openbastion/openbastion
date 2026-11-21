@@ -201,6 +201,7 @@ func (s *CredSSPClientSession) CompleteLicensing(ctx context.Context, timeout ti
 				return licensingRefused("platform challenge %d, not decrypted and checked (a MAC that does not match, or its shape): %s", challenges, shape)
 			}
 			clear(serverPacket)
+			cache.noteChallenge()
 			response, err := marshalRDPClientPlatformChallengeResponse(s.userChannelID, s.mcsResponse.IOChannelID, keys, challenge, hwid)
 			clear(challenge)
 			if err != nil {
