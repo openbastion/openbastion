@@ -145,6 +145,24 @@ func TestRDPWindowsKerberos(t *testing.T) {
 		t.Logf("NTLM refused: %v", err)
 	})
 
+	t.Run("a KDC out of reach ends the screen with kerberos_failed, never NTLM", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		cred, err := proxycore.NewCredentialFetcher(testMetadataVault{fetched: proxycore.Fetched{
+			Type: "password", Material: []byte(k.password), TargetHost: target.address, TargetUser: k.user,
+			TLSCertificateSHA256: target.pin, TargetDomain: target.name, KerberosRealm: k.realm, KerberosKDCs: []string{"127.0.0.1:1"},
+		}}, "rdp-vnc-proxy").Fetch(ctx, "one-use")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = (&RDPCodec{TLSRoots: target.roots, DialTimeout: 15 * time.Second}).Open(ctx, cred)
+		var failure *proxycore.ScreenFailure
+		if !errors.As(err, &failure) || failure.ScreenEndCode() != "kerberos_failed" {
+			t.Fatalf("a KDC out of reach: %v", err)
+		}
+		t.Logf("kerberos_failed: %v", failure.Err)
+	})
+
 	t.Run("a wrong password stops at the KDC, said as refused credentials", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()

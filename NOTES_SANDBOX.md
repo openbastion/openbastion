@@ -5163,3 +5163,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : trois tests du parcours et quatre mutations tuées ; les 297 tests de l'UI passent.
 - **Documenté** : `docs/administration/privileged-accounts.md` a une section Kerberos.
 - **Non éprouvé** : dans un navigateur réel.
+
+## 2026-11-21 — ADR-0100 : le code de fin `kerberos_failed`
+
+- **Fait** : un code de fin d'écran de plus, `kerberos_failed` (code 15). Le moteur RDP le donne pour un compte Kerberos qui échoue, sauf si les identifiants sont refusés : ce refus reste `target_auth_failed`, et un compte NTLM qui échoue reste `target_unreachable`. L'Admin UI a un texte pour ce code.
+- **Prouvé** : le numéro sur le fil, proxycore, le moteur face à une vraie cible TLS avec sa contre-épreuve NTLM, et un cas « KDC injoignable » contre le Windows contrôleur de domaine. Deux mutations tuées.
+- **Décidé, renversable** : un code ajouté au contrat d'ADR-0071 ; aucun événement d'audit nouveau.

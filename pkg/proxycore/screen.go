@@ -395,6 +395,8 @@ func screenEndStatus(err error) (uint16, string) {
 			return screenstream.EndCodeTargetUnreachable, "target_unreachable"
 		case "target_auth_failed":
 			return screenstream.EndCodeTargetAuthFailed, "target_auth_failed"
+		case "kerberos_failed":
+			return screenstream.EndCodeKerberosFailed, "kerberos_failed"
 		}
 	}
 	return screenstream.EndCodeTargetUnreachable, "target_unreachable"

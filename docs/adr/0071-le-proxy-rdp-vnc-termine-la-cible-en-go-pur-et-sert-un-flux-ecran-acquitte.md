@@ -275,7 +275,7 @@ Le relais écran (dans `proxycore`) : image → `Record` (bloque jusqu'à l'acqu
 
 ### 12. Refus : codes stables, aucune cause interne
 
-Avant le WebSocket, `connect` répond `409`/`503` selon ADR-0042. Après le WebSocket, `END` porte l'un de ces codes : `session_ended`, `pin_missing`, `pin_mismatch`, `tls_required`, `nla_required`, `protocol_version_unsupported`, `codec_unsupported`, `recording_unavailable`, `recording_lost`, `ticket_invalid`, `input_invalid`, `session_expired`, `session_revoked`, `target_unreachable`, et depuis le 13 novembre 2026 `target_auth_failed` (code 14 : la cible a refusé les identifiants du compte, sur décision du propriétaire, audité `session.target_auth_failed`). Le texte est court, stable, sans adresse, sans nom interne, sans cause de panne.
+Avant le WebSocket, `connect` répond `409`/`503` selon ADR-0042. Après le WebSocket, `END` porte l'un de ces codes : `session_ended`, `pin_missing`, `pin_mismatch`, `tls_required`, `nla_required`, `protocol_version_unsupported`, `codec_unsupported`, `recording_unavailable`, `recording_lost`, `ticket_invalid`, `input_invalid`, `session_expired`, `session_revoked`, `target_unreachable`, depuis le 13 novembre 2026 `target_auth_failed` (code 14 : la cible a refusé les identifiants du compte, sur décision du propriétaire, audité `session.target_auth_failed`), et depuis le 21 novembre 2026 `kerberos_failed` (code 15, ADR-0100 : un compte en Kerberos n'a pas pu s'authentifier — KDC injoignable, ticket refusé par la cible, nom épinglé qui ne permet pas de ticket —, sans repli vers NTLM ; un refus d'identifiants reste `target_auth_failed`). Le texte est court, stable, sans adresse, sans nom interne, sans cause de panne.
 
 ### 13. Dépendances : deux ajouts, soumis à la policy
 

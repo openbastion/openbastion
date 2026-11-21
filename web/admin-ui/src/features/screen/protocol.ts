@@ -233,6 +233,7 @@ const END_MESSAGES: Record<string, string> = {
   codec_unsupported: "La cible utilise un encodage qui n'est pas pris en charge.",
   ticket_invalid: "Ce rattachement n'est plus valable : reconnectez-vous.",
   target_auth_failed: "La cible a refusé les identifiants du compte : son secret dans le coffre est à vérifier.",
+  kerberos_failed: "Kerberos n'a pas abouti : un KDC du compte est injoignable, ou la cible a refusé le ticket. NTLM n'a pas été tenté ; le royaume et les KDC du compte sont à vérifier.",
 };
 
 export function endMessage(text: string): string {

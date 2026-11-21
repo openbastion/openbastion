@@ -87,5 +87,5 @@ curl -X PUT https://bastion.example.com/api/v1/vault/accounts/{accountId}/kerber
 - **L'utilisateur du compte est un nom du royaume** (`ops`), sans `DOMAINE\` ni `@royaume`.
 - **Les KDC sont explicites** : un à quatre contrôleurs de domaine, `hôte` ou `hôte:port` (88 par défaut). Aucune découverte DNS n'est faite. **Le proxy RDP doit pouvoir les joindre en TCP** : c'est un flux réseau de plus, à ouvrir et à surveiller.
 - **Seul AES est accepté** (RC4 et DES sont refusés). Un compte qui n'a pas de clé AES, par exemple un mot de passe jamais changé depuis une migration ancienne, doit changer de mot de passe.
-- **Ce que voit l'opérateur** : un mot de passe refusé par le KDC donne `target_auth_failed`, comme en NTLM. Un KDC injoignable ou un ticket refusé par la cible donne aujourd'hui `target_unreachable`.
+- **Ce que voit l'opérateur** : un mot de passe refusé par le KDC donne `target_auth_failed`, comme en NTLM. Un KDC injoignable ou un ticket refusé par la cible donne `kerberos_failed` : vérifiez le royaume, les KDC du compte et le flux du proxy vers eux. NTLM n'est jamais tenté à la place.
 - **Éprouvé** contre le KDC MIT et contre un Windows Server 2022 contrôleur de domaine qui refuse NTLM.
