@@ -292,16 +292,29 @@ func TestValidScreenInput(t *testing.T) {
 	malformed := append([]byte(nil), clip...)
 	malformed[2] = 1
 	short := append([]byte(nil), clip[:len(clip)-1]...)
+	// ADR-0133: an encrypted paste goes on by its form; the Gateway cannot open it.
+	in := screenstream.PasteInput{Ciphertext: make([]byte, 40)}
+	in.ClientKey[0] = 0x04
+	paste, err := screenstream.EncodePasteInput(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pasteShort := append([]byte(nil), paste[:len(paste)-1]...)
+	pasteReserved := append([]byte(nil), paste...)
+	pasteReserved[2] = 1
 	for name, c := range map[string]struct {
 		data []byte
 		ok   bool
 	}{
-		"a key":                       {key, true},
-		"a clipboard text":            {clip, true},
-		"a clipboard text, malformed": {malformed, false},
-		"a clipboard text, truncated": {short, false},
-		"17 bytes":                    {append(append([]byte(nil), key...), 0), false},
-		"an unknown 16-byte input":    {append([]byte{1, 9}, key[2:]...), false},
+		"a key":                                  {key, true},
+		"a clipboard text":                       {clip, true},
+		"a clipboard text, malformed":            {malformed, false},
+		"a clipboard text, truncated":            {short, false},
+		"an encrypted paste":                     {paste, true},
+		"an encrypted paste, truncated":          {pasteShort, false},
+		"an encrypted paste, reserved bytes set": {pasteReserved, false},
+		"17 bytes":                               {append(append([]byte(nil), key...), 0), false},
+		"an unknown 16-byte input":               {append([]byte{1, 9}, key[2:]...), false},
 	} {
 		if err := validScreenInput(c.data); (err == nil) != c.ok {
 			t.Errorf("%s: %v", name, err)

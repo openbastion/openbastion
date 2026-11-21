@@ -336,7 +336,7 @@ func (s *HTTPServer) screen(w http.ResponseWriter, r *http.Request) {
 	// the audit of the expiry and the purge of the credential run on.
 	ctx := r.Context()
 	meta := screenMetadata(pending)
-	conn.SetReadLimit(screenReadLimit(meta))
+	conn.SetReadLimit(screenReadLimit(meta, s.secretInputs != nil && s.secretInputs.PasteAuditor() != nil))
 	// The codec is the ticket's protocol's, which the Broker took from the session: never the
 	// browser's choice.
 	codec := s.codec
@@ -419,7 +419,9 @@ func (s *websocketScreenSink) ReceiveInput(context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if typ != websocket.MessageBinary || (len(data) != screenstream.InputMessageSize && !screenstream.IsClipboardInput(data)) {
+	// An input of 16 bytes, a clipboard text (ADR-0096) or an operator's encrypted password
+	// (ADR-0133); the relay decodes each strictly.
+	if typ != websocket.MessageBinary || (len(data) != screenstream.InputMessageSize && !screenstream.IsClipboardInput(data) && !screenstream.IsPasteInput(data)) {
 		return nil, fmt.Errorf("invalid screen input message")
 	}
 	return data, nil
@@ -436,10 +438,15 @@ func screenMetadata(p infrastructure.PendingScreenSession) proxycore.SessionMeta
 }
 
 // screenReadLimit is the longest message a session's client may send: a clipboard text when the
-// session may paste (ADR-0096 §6), 64 bytes otherwise, as before.
-func screenReadLimit(meta proxycore.SessionMetadata) int64 {
-	if meta.ClipboardToTarget {
-		return screenstream.MaxClipboardInputBytes
+// session may paste (ADR-0096 §6); an operator's encrypted password when the proxy takes them
+// (ADR-0133, the HELLO then offers its key); 64 bytes otherwise, as before.
+func screenReadLimit(meta proxycore.SessionMetadata, operatorPaste bool) int64 {
+	limit := int64(screenstream.MaxInputBytes)
+	if operatorPaste {
+		limit = max(limit, screenstream.PasteInputHeader+screenstream.MaxPasteCiphertext)
 	}
-	return screenstream.MaxInputBytes
+	if meta.ClipboardToTarget {
+		limit = max(limit, screenstream.MaxClipboardInputBytes)
+	}
+	return limit
 }

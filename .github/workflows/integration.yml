@@ -35,5 +35,5 @@ jobs:
         run: |
           chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           if [[ -z "$chrome" ]]; then echo "A Chromium/Chrome binary is required for the Admin UI browser test" >&2; exit 1; fi
-          GOWORK=$PWD/go.work CHROME="$chrome" go test ./test/integration -run '^(TestAdminUI_(SecretInjectionStepUp|ScreenEndIsSeen)InAHeadlessBrowser|TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser)$' -count=1 -v -timeout=600s
+          GOWORK=$PWD/go.work CHROME="$chrome" go test ./test/integration -run '^(TestAdminUI_(SecretInjectionStepUp|ScreenEndIsSeen|OperatorPasteIsOpenedByTheProxysCode)InAHeadlessBrowser|TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser)$' -count=1 -v -timeout=600s
       - run: GOWORK=$PWD/go.work go test -v ./test/integration/... -count=1 -timeout=900s

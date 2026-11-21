@@ -128,3 +128,20 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
   - 4 mutations tuées sur 4 (validation, contrôle du jeton, données associées, sel), plus une témoin qui survit.
 - **Reste** : le parcours dans un vrai navigateur, contre le proxy réel (`TestBase44Preview` ou un test Playwright), qui prouvera le texte tapé dans la cible.
 
+### Incrément 4 — le parcours de bout en bout, et trois défauts qu'il a trouvés (21 novembre 2026)
+
+- **Trois défauts réels**. Avant ce parcours, aucune saisie n'aurait atteint une cible en production :
+  1. **la Gateway** relit chaque message du navigateur avant de le relayer (`validScreenInput`) et ne connaissait que les entrées de 16 octets et le presse-papiers : un `InputPaste` coupait l'écran. Elle vérifie maintenant sa forme (`DecodePasteInput`) ; elle ne peut pas l'ouvrir ;
+  2. **la limite de lecture du proxy** (`screenReadLimit`) était de 64 octets hors presse-papiers ; elle va jusqu'à la plus longue saisie chiffrée quand le proxy prend les saisies ;
+  3. **la lecture WebSocket du proxy** (`websocketScreenSink.ReceiveInput`) rejetait tout ce qui n'était ni une entrée de 16 octets ni un texte de presse-papiers ; la session finissait en `target_unreachable`.
+  Les tests de l'incrément 1b prenaient la boucle du relais en mémoire, sans ces deux couches ; chacun a maintenant son test unitaire et sa contre-épreuve (le test échoue sans le correctif).
+- **Prouvé sur processus réels** (`operator_paste_vnc_flow_test.go`, dans le parcours VNC à huit services sous mTLS, Video Recorder sur PostgreSQL). Le client est `proxycore.SealPaste`, dont le chiffrement est celui de l'Admin UI (vecteur commun) :
+  - la cible reçoit le mot de passe, touche par touche ;
+  - un jeton inventé, un message scellé pour une autre session (qui brûle le jeton) et le même message rejoué ne tapent rien, et chacun est audité `session.secret_paste_refused` ;
+  - un autre utilisateur ne peut pas demander le facteur ;
+  - l'enregistrement porte un seul marqueur `secret_paste_started`, avec la taille et l'empreinte : `pasteSha256` vaut SHA-256(`pasteSalt`‖mot de passe), sel de 16 octets ;
+  - ni le stockage objet, ni un événement d'audit, ni un journal de service ne contient le mot de passe ;
+  - en CI, le même parcours contre le vrai TigerVNC (`OPENBASTION_VNC_TARGET`).
+- **Prouvé dans un vrai navigateur** (`admin_ui_operator_paste_browser_test.go`, Chromium, job navigateur de `integration.yml`) : l'Admin UI chiffre ; la clé est tirée par `proxycore.NewPasteKey` et ouverte par `(*PasteKey).Open`, le code même du proxy, qui retrouve le mot de passe tapé. Le message ne s'ouvre ni pour une autre session ni pour un autre protocole ; l'API n'a reçu que la preuve du facteur. Contre-épreuve : une étiquette de dérivation changée dans le navigateur, et le proxy refuse.
+- **Reste** : un même test qui enchaîne le navigateur et les processus réels (l'Admin UI servie par la Gateway, avec Chrome, dans le job PostgreSQL) ; les deux moitiés sont prouvées séparément, et le vecteur commun les relie. RDP : la saisie suit le même chemin dans le proxy (`InjectSecret`), mais aucun test ne la tape encore dans un Windows réel ; la règle de ne jamais taper de secret dans un test Windows s'applique aussi ici.
+

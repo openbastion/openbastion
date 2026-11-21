@@ -65,16 +65,24 @@ func TestEstablishSessionRefusesAClipboardRightOutsideRDP(t *testing.T) {
 	}
 }
 
-// Only a session that may paste reads a message as long as a clipboard text; every other keeps the
-// 64 bytes of before (ADR-0096 §6).
+// Only a session that may paste reads a message as long as a clipboard text; one whose proxy takes an
+// operator's password reads the longest encrypted paste (ADR-0133: at 64 bytes, the first paste
+// closed the screen); every other keeps the 64 bytes of before (ADR-0096 §6).
 func TestScreenReadLimitFollowsTheRightToPaste(t *testing.T) {
+	longestPaste := int64(screenstream.PasteInputHeader + screenstream.MaxPasteCiphertext)
 	for _, c := range []struct {
-		to, from bool
-		want     int64
-	}{{false, false, screenstream.MaxInputBytes}, {false, true, screenstream.MaxInputBytes}, {true, false, screenstream.MaxClipboardInputBytes}} {
+		to, from, paste bool
+		want            int64
+	}{
+		{false, false, false, screenstream.MaxInputBytes},
+		{false, true, false, screenstream.MaxInputBytes},
+		{true, false, false, screenstream.MaxClipboardInputBytes},
+		{false, false, true, longestPaste},
+		{true, false, true, screenstream.MaxClipboardInputBytes},
+	} {
 		meta := screenMetadata(infrastructure.PendingScreenSession{ClipboardToTarget: c.to, ClipboardFromTarget: c.from})
-		if got := screenReadLimit(meta); got != c.want {
-			t.Fatalf("to %v from %v: limit %d, want %d", c.to, c.from, got, c.want)
+		if got := screenReadLimit(meta, c.paste); got != c.want {
+			t.Fatalf("to %v from %v paste %v: limit %d, want %d", c.to, c.from, c.paste, got, c.want)
 		}
 	}
 }

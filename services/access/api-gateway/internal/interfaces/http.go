@@ -1251,10 +1251,15 @@ func (g *GatewayServer) handleScreenAttach(w http.ResponseWriter, r *http.Reques
 }
 
 // validScreenInput reads a client's message as strictly as the proxy reads it: an input of 16
-// bytes, or a clipboard text (ADR-0096 §6).
+// bytes, a clipboard text (ADR-0096 §6), or an operator's password encrypted for the proxy
+// (ADR-0133), which the Gateway checks for its form only: it cannot open it.
 func validScreenInput(data []byte) error {
 	if screenstream.IsClipboardInput(data) {
 		_, err := screenstream.DecodeClipboardInput(data)
+		return err
+	}
+	if screenstream.IsPasteInput(data) {
+		_, err := screenstream.DecodePasteInput(data)
 		return err
 	}
 	if len(data) != screenstream.InputMessageSize {
@@ -1289,8 +1294,8 @@ func relayScreenWebSockets(ctx context.Context, client, upstream *websocket.Conn
 				errs <- screenstream.ErrMalformedMessage
 				return
 			}
-			// An input of 16 bytes, or a clipboard text (ADR-0096 §6): each read as strictly as the
-			// proxy reads it, before it goes on.
+			// An input of 16 bytes, a clipboard text (ADR-0096 §6) or an encrypted paste (ADR-0133):
+			// each read as strictly as the proxy reads it, before it goes on.
 			if err := validScreenInput(data); err != nil {
 				errs <- err
 				return
