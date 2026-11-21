@@ -53,7 +53,7 @@ func testScreenOperatorPaste(t *testing.T, gatewayURL string, api screenAPI, ope
 		t.Fatalf("the HELLO carries no paste key: %+v", hello)
 	}
 	_ = readFrame(t, conn)
-	before := len(target.keySequence())
+	before := len(typedKeys(target))
 	send := func(in screenstream.PasteInput) {
 		t.Helper()
 		data, err := screenstream.EncodePasteInput(in)
@@ -121,7 +121,7 @@ func testScreenOperatorPaste(t *testing.T, gatewayURL string, api screenAPI, ope
 	wrong := seal(pasteToken, sessionID+"-other")
 	send(wrong)
 	waitUntil(t, 10*time.Second, "the refusal of a paste sealed for another session", func() bool { return refusals() == 2 })
-	if got := target.keySequence(); len(got) != before {
+	if got := typedKeys(target); len(got) != before {
 		t.Fatalf("the target received keys from a refused paste: %v", got[before:])
 	}
 
@@ -149,18 +149,18 @@ func testScreenOperatorPaste(t *testing.T, gatewayURL string, api screenAPI, ope
 		}
 		want = append(want, keysym)
 	}
-	waitUntil(t, 10*time.Second, "the password at the VNC target", func() bool { return len(target.keySequence()) >= before+len(want) })
-	if got := target.keySequence()[before:]; fmt.Sprint(got) != fmt.Sprint(want) {
+	waitUntil(t, 10*time.Second, "the password at the VNC target", func() bool { return len(typedKeys(target)) >= before+len(want) })
+	if got := typedKeys(target)[before:]; fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("VNC target keysyms = %v, want %v", got, want)
 	}
 	if !audit.saw("session.secret_pasted", sessionID) {
 		t.Fatal("the typed paste is not audited")
 	}
 	// The same message again: its token is taken, nothing is typed.
-	typed := len(target.keySequence())
+	typed := len(typedKeys(target))
 	send(sealed)
 	waitUntil(t, 10*time.Second, "the refusal of a replayed paste", func() bool { return refusals() == 3 })
-	if got := len(target.keySequence()); got != typed {
+	if got := len(typedKeys(target)); got != typed {
 		t.Fatalf("a replayed paste typed %d key(s)", got-typed)
 	}
 
@@ -224,4 +224,19 @@ func tail(s string, n int) string {
 		return s[len(s)-n:]
 	}
 	return s
+}
+
+// typedKeys is what the target received, without the modifiers (0xffe1-0xffee: Shift, Control,
+// Caps_Lock, Alt...). A real X server adds them itself: TigerVNC, for a capital the proxy sends as its
+// keysym alone, toggles Caps_Lock around it (CI of pull request 269). The characters and their order
+// are what the password is.
+func typedKeys(target secretInputObserver) []uint32 {
+	var keys []uint32
+	for _, k := range target.keySequence() {
+		if k >= 0xffe1 && k <= 0xffee {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	return keys
 }
