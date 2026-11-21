@@ -5230,9 +5230,16 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Une fois** : des refus TLS de Windows (événement 139, `SEC_E_CERT_UNKNOWN`), alors que la cible était saine. Run 44905986307.
 
 
-## 2026-11-21 — ADR-0133 : client SSH standard et step-up MFA lié à l’action
+## 2026-11-21 — ADR-0133 : canal chiffré pour la saisie opérateur RDP/VNC
 
-- **Proposé** : ADR-0133 décrit le parcours OpenSSH → SSH Proxy avec ticket à usage unique, puis le step-up `secret:inject` réalisé dans l’Admin UI par TOTP ou WebAuthn. Il complète ADR-0097 sans réécrire ses décisions acceptées.
+- **Accepté** : la PR #260 retient le chiffrement pour le proxy (ECDH P-256 éphémère, HKDF-SHA-256, AES-256-GCM et données associées liées à la session, au jeton et au protocole) ainsi qu'une empreinte salée pour l'audit.
+- **Frontière de confiance** : la Gateway relaie le ciphertext, mais sert aussi l'Admin UI. Une Gateway saine ne voit pas le mot de passe en clair ; une Gateway compromise peut servir une UI modifiée et le lire avant chiffrement. Ce n'est pas un chiffrement opaque contre la Gateway.
+- **Périmètre et limites** : conception pour RDP/VNC ; implémentation et validation navigateur réelles restent à faire. Aucun canal B SSH n'est défini. Le parcours A (credential Vault) reste distinct.
+- **Intégration** : changements de la PR #260 intégrés dans la branche de la PR #261 ; ADR SSH renuméroté ADR-0134 pour éviter le doublon.
+
+## 2026-11-21 — ADR-0134 : client SSH standard et step-up MFA lié à l’action
+
+- **Proposé** : ADR-0134 décrit le parcours OpenSSH → SSH Proxy avec ticket à usage unique, puis le step-up `secret:inject` réalisé dans l’Admin UI par TOTP ou WebAuthn. Il complète ADR-0097 sans réécrire ses décisions acceptées.
 - **Frontières clarifiées** : SSH client-proxy et SSH proxy-cible sont deux transports distincts terminés par le proxy ; HTTPS transporte le challenge/la preuve MFA et mTLS protège les appels internes. Le credential Vault n’est remis qu’au proxy propriétaire puis envoyé à la cible dans le flux SSH. Aucun chiffrement opaque de bout en bout client-cible n’est revendiqué.
 - **Documentation alignée** : les deux phrases historiques de `docs/api/grpc/README.md` qui disaient que l’Admin UI n’était pas raccordée sont corrigées ; le contrat ADR-0097 §12 et le composant `SecretInjection` montrent déjà l’intégration.
 - **Limites non levées** : WebAuthn réel en navigateur contre une cible SSH, course révocation/frappe, focus/invite masquée et copies résiduelles mémoire restent à prouver ou à accepter explicitement ; le parcours B reste interdit.

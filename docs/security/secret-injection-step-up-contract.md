@@ -2,7 +2,7 @@
 
 **État actualisé au 21 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles ; Admin UI raccordée (ADR-0097 §12) ; E2E multi-processus SSH/VNC/RDP validés ; VNC éprouvé contre TigerVNC réel ; test Chromium de l’UI avec API simulée passé dans la CI de la PR #220. Restent la réception Unicode RDP sur Windows en CI, le parcours navigateur contre une cible réelle et les risques P1 de la revue STRIDE.
 **Décision de référence :** ADR-0097 (accepté)  
-**Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) reste bloqué tant que le transport navigateur → proxy ne garantit pas que la Gateway ne voit jamais le clair.
+**Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) a désormais une conception acceptée pour RDP/VNC dans ADR-0133 : le navigateur chiffre pour le proxy et la Gateway relaie le ciphertext. Il n'est pas encore implémenté ni validé ; cette conception ne protège pas contre une Gateway compromise qui sert une UI modifiée. Aucun canal B SSH n'est défini.
 
 ## 1. Invariants
 
@@ -142,11 +142,13 @@ Le magasin en mémoire doit implémenter les mêmes garanties atomiques que Post
 
 Chaque garantie doit avoir une contre-épreuve : retirer temporairement le contrôle correspondant doit faire échouer le test. Ajouter des tests de concurrence sous -race et des tests PostgreSQL réels sur une base de test dédiée.
 
-## 7. Parcours B — secret fourni par l'opérateur : bloqué séparément
+## 7. Parcours B — secret fourni par l'opérateur : conçu, non implémenté
 
-ADR-0097 accepte le parcours B, mais le secret provient du navigateur. Le relayer en clair via une route JSON Gateway → Broker violerait l'invariant « secret jamais dans le control plane » (ADR-0003 et policy secrets-management). Il est donc interdit d'implémenter B de cette façon.
+ADR-0133 est l'ADR dédié accepté pour le canal de saisie opérateur RDP/VNC. Le secret provient du navigateur ; le relayer en clair via une route JSON Gateway → Broker violerait l'invariant « secret jamais dans le control plane » (ADR-0003 et policy secrets-management). Cette forme de transport reste interdite.
 
-Avant B, concevoir un canal client → proxy où la Gateway ne voit que du ciphertext (par exemple un mécanisme standard de chiffrement de bout en bout, avec clé éphémère liée à la session et à l'instance proxy, anti-rejeu et authentification de contexte). Le choix cryptographique et le contrat de transport nécessitent un ADR dédié et une dépendance ne sera ajoutée qu'après décision. Aucun fallback clipboard n'est permis.
+La décision acceptée chiffre le texte dans le navigateur pour le proxy : ECDH P-256 éphémère par session d'écran, HKDF-SHA-256 puis AES-256-GCM, données associées liant session, jeton de saisie, protocole et version. Le jeton est à usage unique, de courte durée et remis au proxy après le second facteur. L'empreinte auditée est salée. La Gateway relaie le ciphertext sans le déchiffrer.
+
+**Limite de confiance explicite :** la Gateway sert aussi le code de l'Admin UI. Une Gateway saine ne reçoit donc pas le texte en clair, mais une Gateway compromise peut servir une UI modifiée qui lit le mot de passe avant chiffrement. Ce mécanisme n'est pas un chiffrement opaque contre la Gateway elle-même et ne doit pas être décrit comme tel. L'implémentation et les tests navigateur réels RDP/VNC restent requis ; ADR-0133 ne définit pas de canal B pour SSH. Aucun fallback clipboard n'est permis.
 
 ## 8. Ordre d'implémentation
 

@@ -1,4 +1,4 @@
-# ADR-0133 — Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l'action dans l'Admin UI
+# ADR-0134 — Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l'action dans l'Admin UI
 
 **Statut** `Proposé` · 21 novembre 2026 · catégorie : Proxy SSH
 **Remplace** aucun ADR. Cette décision complète ADR-0097 sans en modifier ni remplacer les invariants.
@@ -100,7 +100,7 @@ sequenceDiagram
 | SSH-MFA-025 | Les buffers contrôlés du credential sont purgés au plus tôt ; aucun effacement total de toutes les copies internes Go/TLS/GC n'est promis (ADR-0115). |
 | SSH-MFA-026 | Le secret n'est injecté que lorsque l'opérateur a placé la cible sur une invite masquée. L'interface avertit du risque ; le proxy ne prétend pas détecter le focus ni le masquage de l'invite. |
 | SSH-MFA-027 | Le chiffrement est décrit par segments (SSH client-proxy, SSH proxy-cible, HTTPS et mTLS internes). Le produit ne revendique pas de chiffrement cryptographique opaque de bout en bout client-cible. |
-| SSH-MFA-028 | Le parcours B (secret saisi par l'opérateur) reste bloqué et distinct ; cet ADR ne l'autorise pas et ne crée aucun transport de secret navigateur → cible. |
+| SSH-MFA-028 | Le parcours B reste distinct du parcours Vault A et n'est pas activé par cet ADR SSH. Sa conception pour les sessions écran RDP/VNC est définie par ADR-0133 ; elle ne constitue pas une implémentation éprouvée ni un canal SSH. |
 
 ### 4. Checklist de recette OpenBastion
 
@@ -219,7 +219,7 @@ L'ADR ne pourra passer à `Accepté` qu'après décision explicite du propriéta
 - La course concurrente entre révocation et frappe reste un risque P1 dans la revue STRIDE ; l'absence de nouvelles frappes après acquittement ne prouve pas l'atomicité d'une frappe déjà en cours.
 - Go, TLS et le ramasse-miettes peuvent conserver des copies transitoires que l'application ne peut pas garantir effacées ; voir ADR-0115.
 - Un Broker, un proxy ou une identité mTLS compromise reste une compromission d'une frontière de confiance.
-- Le parcours B (secret fourni par l'opérateur) reste bloqué. Aucun chiffrement opaque navigateur → proxy n'est défini ici.
+- Le parcours B (secret fourni par l'opérateur) est conçu pour RDP/VNC par ADR-0133 (ECDH P-256, HKDF-SHA-256 et AES-256-GCM pour le proxy), mais son implémentation et sa validation restent à réaliser. Cette conception protège contre une Gateway saine qui relaie le ciphertext, pas contre une Gateway compromise qui sert une UI modifiée. Elle ne définit pas de canal pour le parcours SSH de cet ADR.
 - Le client SSH doit faire confiance à la clé d'hôte du proxy selon la configuration du déploiement ; cet ADR ne définit pas de nouveau mécanisme de distribution de cette clé.
 
 ### 7. Alternatives envisagées
