@@ -5312,3 +5312,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - `-race`, fuzzer, test de contrat.
 - **Trouvé en chemin** : le lecteur de proto du test de contrat lit un message jusqu'à la prochaine ligne qui commence par `}`. Un message vide sur une ligne (`{}`) avale donc le suivant. La réponse est écrite sur deux lignes, avec un commentaire.
 - **Reste** : le Broker et la Gateway, puis l'Admin UI.
+
+## 2026-11-21 — Admin UI : le détail d'une session terminée ailleurs ne reste plus « Active »
+
+- **Défaut relevé par la recette d'ADR-0134** : une session terminée ailleurs restait affichée « Active » dans son détail ouvert. Le Broker refusait bien ce qu'on lui demandait (`409`), mais la page ne le reflétait pas.
+- **Correctif** : un `409` sur une action de la session affichée fait relire la session (`GET /sessions/{id}`). Sont concernés : le step-up et la preuve de la saisie du secret (`SecretInjection`, propriété `onConflict`), l'ouverture de l'écran, et les décisions (approuver, refuser, mettre fin). Si la session n'est plus active, son statut s'affiche, ses boutons d'action disparaissent et la page le dit (`sessions.detail.noLongerActive`). Un `409` qui ne tient pas au statut (une cible non épinglée, par exemple) laisse la session telle quelle et son message seul.
+- **Preuves** : `SessionStaleStatus.test.tsx`, 3 cas (saisie refusée, écran refusé, `409` sans rapport avec le statut). Contre-épreuve : sans la relecture, les trois échouent. Suite de l'Admin UI : 301 tests verts, construction verte.

@@ -92,6 +92,24 @@ export function Sessions({
     }
   }, [api]);
 
+  // A 409 on an action of the session shown says the session is no longer what the page shows: it
+  // was ended or expired elsewhere (ADR-0134 recette: the detail stayed "Active" while the Broker
+  // refused the injection). The session is read again, so its status and its buttons are the true
+  // ones, and the page says why nothing was done.
+  const refreshAfterConflict = useCallback(async (sessionId: string, err: unknown) => {
+    if (!(err instanceof ApiError) || err.status !== 409) return;
+    try {
+      const fresh = await api.request<Session>("GET", sessionPath(sessionId));
+      setFound((current) => (current && current.id === sessionId ? fresh : current));
+      if (fresh.status !== "active") {
+        setScreen(undefined);
+        setError(new Error(t("sessions.detail.noLongerActive", { id: sessionId })));
+      }
+    } catch {
+      // The session cannot be read again: the conflict already shown stays the message.
+    }
+  }, [api, t]);
+
   useEffect(() => {
     if (!requestedSessionId) return;
     setView("live");
@@ -123,6 +141,7 @@ export function Sessions({
       setScreen((previous) => ({ sessionId, attach, key: (previous?.key ?? 0) + 1, choice }));
     } catch (err) {
       setError(err);
+      void refreshAfterConflict(sessionId, err);
     }
   }
 
@@ -153,6 +172,7 @@ export function Sessions({
       return true;
     } catch (err) {
       setError(err);
+      void refreshAfterConflict(session.id, err);
       return false;
     }
   }
@@ -300,7 +320,7 @@ export function Sessions({
                     </div>
                     <StatusBadge status={found.status} />
                   </header>
-                  <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={askDecision.bind(null, "terminate")} />
+                  <SessionDetail session={found} onOpenScreen={openScreen} onTerminate={askDecision.bind(null, "terminate")} onConflict={(err) => void refreshAfterConflict(found.id, err)} />
                   {found.status === "pending_approval" ? (
                     // The Broker's rule (decide): the requester never approves their own request,
                     // and may only withdraw a break-glass one. The page offers what the caller may
