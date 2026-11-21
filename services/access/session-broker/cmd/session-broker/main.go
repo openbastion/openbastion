@@ -121,7 +121,9 @@ func runService() {
 	svc := application.NewSessionBrokerService(store, authz, vault, audit, accounts, proxy).
 		// A granted session ended: the Vault rotates the account if it is post_use (ADR-0037).
 		WithAfterUseRotation(vault).
-		WithMFAActionClient(mfaAction)
+		WithMFAActionClient(mfaAction).
+		// An operator's password, encrypted for the screen proxy (ADR-0133): its token goes there.
+		WithPasteProxy(proxy)
 
 	// Sessions and requests past their end are expired, once, and each expiry is written to
 	// the audit (ADR-0034). Always on: an end is a fact, not an option.
