@@ -52,7 +52,7 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
    - écrire l'audit `session.secret_pasted` (taille, empreinte, compte, session, protocole) ;
    - poser le marqueur dans l'enregistrement, taper par le `SecretTyper` existant, effacer.
    - Sans audit, pas de frappe. Un `PASTE` qui ne se déchiffre pas, hors bornes, sans jeton ou rejoué est refusé, audité, et la session continue.
-4. **L'empreinte enregistrée** : ADR-0097 dit « SHA-256 ». Pour un mot de passe court, une empreinte nue se casse par dictionnaire hors ligne, par quiconque lit l'audit. Proposé : SHA-256 **salé**, avec un sel aléatoire par saisie, enregistré à côté. Celui qui détient une valeur candidate peut toujours la reconnaître, mais une table précalculée ne sert plus à rien. Un mot de passe faible reste attaquable, saisie par saisie.
+4. **L'empreinte enregistrée** : ADR-0097 dit « SHA-256 ». Pour un mot de passe court, une empreinte nue se casse par dictionnaire hors ligne, par quiconque lit l'audit. Retenu : SHA-256 **salé**, avec un sel aléatoire par saisie, enregistré à côté. Celui qui détient une valeur candidate peut toujours la reconnaître, mais une table précalculée ne sert plus à rien. Un mot de passe faible reste attaquable, saisie par saisie.
 5. **Le périmètre** : RDP et VNC, par le flux d'écran. SSH n'a pas de flux d'écran : le terminal est le client SSH de l'opérateur. Son canal fera l'objet d'un incrément à part.
 6. **L'Admin UI** : un bouton « Saisir un mot de passe » et un champ masqué, jamais lu du presse-papiers sans geste. Le rappel d'ADR-0097, point 9, s'affiche à chaque saisie : un champ non masqué de la cible montrera le texte à l'écran enregistré.
 
