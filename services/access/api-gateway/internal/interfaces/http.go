@@ -768,6 +768,10 @@ type videoRecordingEventResponse struct {
 	Source     string    `json:"source"`
 	AccountID  string    `json:"accountId"`
 	OccurredAt time.Time `json:"occurredAt"`
+	// An operator's password (ADR-0133): its size and salted fingerprint, never its text.
+	PasteBytes  int    `json:"pasteBytes,omitempty"`
+	PasteSalt   string `json:"pasteSalt,omitempty"`
+	PasteSHA256 string `json:"pasteSha256,omitempty"`
 }
 
 type videoEventsResponse struct {
@@ -790,8 +794,8 @@ func toVideoEventsResponse(response *recordingv1.GetVideoEventsResponse, session
 	var previousID string
 	for i, event := range response.GetEvents() {
 		if event == nil || event.GetSessionId() != sessionID || len(event.GetEventId()) > 128 || !usableVideoSessionID(event.GetEventId()) ||
-			event.GetEventType() != "secret_injection_started" || (event.GetProtocol() != "vnc" && event.GetProtocol() != "rdp") ||
-			event.GetSource() != "vault" || len(event.GetAccountId()) > 256 || !usableVideoSessionID(event.GetAccountId()) ||
+			!validVideoEventKind(event) || (event.GetProtocol() != "vnc" && event.GetProtocol() != "rdp") ||
+			len(event.GetAccountId()) > 256 || !usableVideoSessionID(event.GetAccountId()) ||
 			event.GetOccurredAt() == nil || event.GetOccurredAt().CheckValid() != nil {
 			return videoEventsResponse{}, fmt.Errorf("event %d is invalid", i)
 		}
@@ -800,9 +804,33 @@ func toVideoEventsResponse(response *recordingv1.GetVideoEventsResponse, session
 			return videoEventsResponse{}, fmt.Errorf("event order is invalid")
 		}
 		previous, previousID = occurred, event.GetEventId()
-		result.Events = append(result.Events, videoRecordingEventResponse{EventID: event.GetEventId(), SessionID: sessionID, EventType: event.GetEventType(), Protocol: event.GetProtocol(), Source: event.GetSource(), AccountID: event.GetAccountId(), OccurredAt: occurred})
+		result.Events = append(result.Events, videoRecordingEventResponse{EventID: event.GetEventId(), SessionID: sessionID, EventType: event.GetEventType(), Protocol: event.GetProtocol(), Source: event.GetSource(), AccountID: event.GetAccountId(), OccurredAt: occurred,
+			PasteBytes: int(event.GetPasteBytes()), PasteSalt: event.GetPasteSalt(), PasteSHA256: event.GetPasteSha256()})
 	}
 	return result, nil
+}
+
+// validVideoEventKind: a Vault secret's marker (no fingerprint), or an operator's password's (its
+// size, salt and salted fingerprint, ADR-0133), as the Video Recorder writes them.
+func validVideoEventKind(event *recordingv1.VideoRecordingEvent) bool {
+	hex := func(value string, length int) bool {
+		if len(value) != length {
+			return false
+		}
+		for _, c := range value {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				return false
+			}
+		}
+		return true
+	}
+	switch {
+	case event.GetEventType() == "secret_injection_started" && event.GetSource() == "vault":
+		return event.GetPasteBytes() == 0 && event.GetPasteSalt() == "" && event.GetPasteSha256() == ""
+	case event.GetEventType() == "secret_paste_started" && event.GetSource() == "operator":
+		return event.GetPasteBytes() >= 1 && event.GetPasteBytes() <= 512 && hex(event.GetPasteSalt(), 32) && hex(event.GetPasteSha256(), 64)
+	}
+	return false
 }
 
 func splitVideoRecordingPath(escapedPath string) (string, int64, bool) {

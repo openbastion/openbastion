@@ -37,8 +37,11 @@ const (
 )
 
 // SecretInputEvidence is safe metadata about a secret input. Vault inputs retain
-// only the account reference; operator-provided inputs retain length and SHA-256,
-// as required by ADR-0097. It never contains the secret itself.
+// only the account reference; operator-provided inputs retain their length and a
+// salted SHA-256 (ADR-0133 §4, which refines ADR-0097 §6): SHA-256(salt || text),
+// with a random salt per input kept next to it. Whoever holds a candidate value can
+// still recognise it; a table computed in advance is of no use. It never contains
+// the secret itself.
 type SecretInputEvidence struct {
 	SessionID   string
 	InjectionID string // random per-attempt correlation id; never a credential or Vault scope
@@ -46,7 +49,8 @@ type SecretInputEvidence struct {
 	Source      SecretInputSource
 	AccountID   string
 	Length      int
-	SHA256      string
+	SHA256      string // operator inputs: hex SHA-256(salt || text)
+	Salt        string // operator inputs: hex of the 16 random bytes salting SHA256
 	Timestamp   time.Time
 }
 
@@ -130,9 +134,13 @@ func InjectSecret(
 		Timestamp: time.Now().UTC(),
 	}
 	if source == SecretInputOperator {
+		var salt [16]byte
+		if _, err := rand.Read(salt[:]); err != nil {
+			return fmt.Errorf("%w: could not salt the input's fingerprint", ErrSecretInjectionUnavailable)
+		}
 		evidence.Length = len(secret)
-		sum := sha256.Sum256(secret)
-		evidence.SHA256 = hex.EncodeToString(sum[:])
+		evidence.SHA256 = SaltedSecretFingerprint(salt[:], secret)
+		evidence.Salt = hex.EncodeToString(salt[:])
 	}
 
 	transaction, ok := typer.(SecretInputTransaction)
@@ -204,4 +212,27 @@ func auditSecretInputResult(auditor SecretInputAuditor, ctx context.Context, evi
 	resultCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 	defer cancel()
 	return auditor.AuditSecretInputResult(resultCtx, evidence, success)
+}
+
+// SaltedSecretFingerprint is the fingerprint an operator input leaves in the audit and the
+// recording (ADR-0133 §4): hex SHA-256(salt || text). An auditor who holds a candidate value
+// recognises it with the salt recorded next to it.
+func SaltedSecretFingerprint(salt, text []byte) string {
+	h := sha256.New()
+	h.Write(salt)
+	h.Write(text)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// validOperatorFingerprint checks an operator input's evidence: a length, a 64-hex fingerprint and
+// a 32-hex salt.
+func validOperatorFingerprint(evidence SecretInputEvidence) bool {
+	if evidence.Length < 1 || len(evidence.SHA256) != 64 || len(evidence.Salt) != 32 {
+		return false
+	}
+	if _, err := hex.DecodeString(evidence.SHA256); err != nil {
+		return false
+	}
+	_, err := hex.DecodeString(evidence.Salt)
+	return err == nil
 }

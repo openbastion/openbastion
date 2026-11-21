@@ -188,23 +188,27 @@ func (s *PostgresStore) GetSegmentsFrom(ctx context.Context, sessionID string, f
 }
 
 func (s *PostgresStore) RecordVideoEvent(ctx context.Context, event domain.VideoRecordingEvent) (domain.VideoRecordingEvent, error) {
-	if event.EventID == "" || event.SessionID == "" || event.EventType != "secret_injection_started" ||
-		(event.Protocol != "vnc" && event.Protocol != "rdp") || event.Source != "vault" || event.AccountID == "" {
+	if event.EventID == "" || event.SessionID == "" || (event.Protocol != "vnc" && event.Protocol != "rdp") || event.AccountID == "" ||
+		!((event.EventType == "secret_injection_started" && event.Source == "vault") || (event.EventType == "secret_paste_started" && event.Source == "operator")) {
 		return domain.VideoRecordingEvent{}, domain.ErrInvalidSegment
 	}
 	var stored domain.VideoRecordingEvent
+	var bytes sql.NullInt32
+	var salt, sum sql.NullString
 	err := s.db.QueryRowContext(ctx, `INSERT INTO video_recording_events
-		(event_id, session_id, event_type, protocol, source, account_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		(event_id, session_id, event_type, protocol, source, account_id, paste_bytes, paste_salt, paste_sha256)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (event_id) DO NOTHING
-		RETURNING event_id, session_id, event_type, protocol, source, account_id, occurred_at`,
-		event.EventID, event.SessionID, event.EventType, event.Protocol, event.Source, event.AccountID).Scan(
-		&stored.EventID, &stored.SessionID, &stored.EventType, &stored.Protocol, &stored.Source, &stored.AccountID, &stored.OccurredAt)
+		RETURNING event_id, session_id, event_type, protocol, source, account_id, occurred_at, paste_bytes, paste_salt, paste_sha256`,
+		event.EventID, event.SessionID, event.EventType, event.Protocol, event.Source, event.AccountID,
+		nullableInt(event.PasteBytes), nullableString(event.PasteSalt), nullableString(event.PasteSHA256)).Scan(
+		&stored.EventID, &stored.SessionID, &stored.EventType, &stored.Protocol, &stored.Source, &stored.AccountID, &stored.OccurredAt, &bytes, &salt, &sum)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = s.db.QueryRowContext(ctx, `SELECT event_id, session_id, event_type, protocol, source, account_id, occurred_at
+		err = s.db.QueryRowContext(ctx, `SELECT event_id, session_id, event_type, protocol, source, account_id, occurred_at, paste_bytes, paste_salt, paste_sha256
 			FROM video_recording_events WHERE event_id = $1`, event.EventID).Scan(
-			&stored.EventID, &stored.SessionID, &stored.EventType, &stored.Protocol, &stored.Source, &stored.AccountID, &stored.OccurredAt)
-		if err == nil && (stored.SessionID != event.SessionID || stored.EventType != event.EventType || stored.Protocol != event.Protocol || stored.Source != event.Source || stored.AccountID != event.AccountID) {
+			&stored.EventID, &stored.SessionID, &stored.EventType, &stored.Protocol, &stored.Source, &stored.AccountID, &stored.OccurredAt, &bytes, &salt, &sum)
+		stored.PasteBytes, stored.PasteSalt, stored.PasteSHA256 = int(bytes.Int32), salt.String, sum.String
+		if err == nil && (stored.SessionID != event.SessionID || stored.EventType != event.EventType || stored.Protocol != event.Protocol || stored.Source != event.Source || stored.AccountID != event.AccountID || !stored.SamePaste(event)) {
 			return domain.VideoRecordingEvent{}, domain.ErrEventConflict
 		}
 	}
@@ -215,14 +219,29 @@ func (s *PostgresStore) RecordVideoEvent(ctx context.Context, event domain.Video
 		}
 		return domain.VideoRecordingEvent{}, fmt.Errorf("recording video event: %w", err)
 	}
+	stored.PasteBytes, stored.PasteSalt, stored.PasteSHA256 = int(bytes.Int32), salt.String, sum.String
 	return stored, nil
+}
+
+func nullableInt(value int) any {
+	if value == 0 {
+		return nil
+	}
+	return value
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func (s *PostgresStore) GetVideoEvents(ctx context.Context, sessionID string, after domain.EventCursor, limit int) ([]domain.VideoRecordingEvent, error) {
 	if sessionID == "" || limit < 1 {
 		return nil, domain.ErrInvalidSegment
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT event_id, session_id, event_type, protocol, source, account_id, occurred_at
+	rows, err := s.db.QueryContext(ctx, `SELECT event_id, session_id, event_type, protocol, source, account_id, occurred_at, paste_bytes, paste_salt, paste_sha256
 		FROM video_recording_events
 		WHERE session_id = $1 AND ($2::timestamptz IS NULL OR (occurred_at, event_id) > ($2, $3))
 		ORDER BY occurred_at ASC, event_id ASC LIMIT $4`, sessionID, nullableTime(after.OccurredAt), after.EventID, limit)
@@ -233,9 +252,12 @@ func (s *PostgresStore) GetVideoEvents(ctx context.Context, sessionID string, af
 	out := make([]domain.VideoRecordingEvent, 0, limit)
 	for rows.Next() {
 		var event domain.VideoRecordingEvent
-		if err := rows.Scan(&event.EventID, &event.SessionID, &event.EventType, &event.Protocol, &event.Source, &event.AccountID, &event.OccurredAt); err != nil {
+		var bytes sql.NullInt32
+		var salt, sum sql.NullString
+		if err := rows.Scan(&event.EventID, &event.SessionID, &event.EventType, &event.Protocol, &event.Source, &event.AccountID, &event.OccurredAt, &bytes, &salt, &sum); err != nil {
 			return nil, fmt.Errorf("scanning video recording event: %w", err)
 		}
+		event.PasteBytes, event.PasteSalt, event.PasteSHA256 = int(bytes.Int32), salt.String, sum.String
 		out = append(out, event)
 	}
 	if err := rows.Err(); err != nil {

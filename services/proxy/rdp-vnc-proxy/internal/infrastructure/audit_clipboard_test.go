@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
@@ -82,5 +83,45 @@ func TestAuditHTTPClient_ClipboardDetails(t *testing.T) {
 	}
 	if _, has := got[1]["details"]; has {
 		t.Fatalf("an event without details sent some: %v", got[1])
+	}
+}
+
+// ADR-0133: an operator's password is audited by its size, salted fingerprint and salt, under the
+// names the SSH proxy writes; never its text.
+func TestAuditHTTPClient_AnOperatorsPasswordIsAuditedByItsFingerprint(t *testing.T) {
+	var got []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		got = append(got, body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := &infrastructure.AuditHTTPClient{BaseURL: server.URL}
+	evidence := proxycore.SecretInputEvidence{SessionID: "s-rdp", InjectionID: "0123456789abcdef0123456789abcdef", Protocol: "rdp", Source: proxycore.SecretInputOperator,
+		AccountID: "account-prod", Length: 9, SHA256: strings.Repeat("b", 64), Salt: strings.Repeat("a", 32)}
+	if err := client.AuditSecretInput(context.Background(), evidence); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AuditSecretInputResult(context.Background(), evidence, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AuditSecretInputResult(context.Background(), evidence, false); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"session.secret_paste_started", "session.secret_pasted", "session.secret_paste_failed"} {
+		details, _ := got[i]["details"].(map[string]any)
+		if got[i]["action"] != want || details["bytes"] != "9" || details["sha256"] != strings.Repeat("b", 64) || details["salt"] != strings.Repeat("a", 32) || len(details) != 6 {
+			t.Fatalf("event %d = %#v", i, got[i])
+		}
+	}
+	// A Vault secret's evidence with a fingerprint, or an operator's without one, is refused.
+	for _, bad := range []proxycore.SecretInputEvidence{
+		{SessionID: "s", InjectionID: evidence.InjectionID, Protocol: "rdp", Source: proxycore.SecretInputVault, AccountID: "a", SHA256: strings.Repeat("b", 64)},
+		{SessionID: "s", InjectionID: evidence.InjectionID, Protocol: "rdp", Source: proxycore.SecretInputOperator, AccountID: "a", Length: 9},
+	} {
+		if err := client.AuditSecretInput(context.Background(), bad); err == nil {
+			t.Errorf("%+v audited", bad)
+		}
 	}
 }

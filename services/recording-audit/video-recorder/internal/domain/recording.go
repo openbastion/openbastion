@@ -40,6 +40,16 @@ type VideoRecordingEvent struct {
 	Source     string    `json:"source"`
 	AccountID  string    `json:"account_id"`
 	OccurredAt time.Time `json:"occurred_at"`
+	// An operator's password (source operator, ADR-0133 §4): its size and its salted fingerprint,
+	// hex SHA-256(salt || text), never the text. Zero and empty for a Vault secret.
+	PasteBytes  int    `json:"paste_bytes,omitempty"`
+	PasteSalt   string `json:"paste_salt,omitempty"`
+	PasteSHA256 string `json:"paste_sha256,omitempty"`
+}
+
+// SamePaste says two events carry the same operator evidence.
+func (e VideoRecordingEvent) SamePaste(other VideoRecordingEvent) bool {
+	return e.PasteBytes == other.PasteBytes && e.PasteSalt == other.PasteSalt && e.PasteSHA256 == other.PasteSHA256
 }
 
 type EventCursor struct {

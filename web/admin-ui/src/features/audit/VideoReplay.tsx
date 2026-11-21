@@ -124,8 +124,8 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
         for (const event of result.events) {
           const at = typeof event?.occurredAt === "string" ? Date.parse(event.occurredAt) : NaN;
           if (!event || event.sessionId !== id || typeof event.eventId !== "string" || !event.eventId ||
-              event.eventType !== "secret_injection_started" || (event.protocol !== "vnc" && event.protocol !== "rdp") ||
-              event.source !== "vault" || typeof event.accountId !== "string" || !event.accountId || !Number.isFinite(at)) {
+              !validMarkerKind(event) || (event.protocol !== "vnc" && event.protocol !== "rdp") ||
+              typeof event.accountId !== "string" || !event.accountId || !Number.isFinite(at)) {
             throw new Error("invalid video event");
           }
           collected.push(event);
@@ -273,7 +273,9 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
                 <ol className="screen-events-list">
                   {events.map((event) => (
                     <li key={event.eventId} aria-current={event.eventId === currentEventId ? "time" : undefined}>
-                      <span>{t("replay.events.secretInjectionRequested")}</span>
+                      <span>{event.source === "operator"
+                        ? t("replay.events.secretPasteRequested", { bytes: event.pasteBytes, sha256: event.pasteSha256, salt: event.pasteSalt })
+                        : t("replay.events.secretInjectionRequested")}</span>
                       <span>{event.accountId} · {event.protocol.toUpperCase()} · {t("replay.at", { time: new Date(event.occurredAt).toLocaleTimeString(i18n.language) })}</span>
                     </li>
                   ))}
@@ -305,4 +307,18 @@ export function VideoReplay({ deps = browserDeps }: { deps?: ReplayDeps }) {
       ) : null}
     </>
   );
+}
+
+// A Vault secret's marker carries no fingerprint; an operator's password's carries its size, salt and
+// salted fingerprint (ADR-0133), as the Video Recorder writes them.
+export function validMarkerKind(event: VideoRecordingEvent): boolean {
+  const hex = (value: unknown, length: number) => typeof value === "string" && value.length === length && /^[0-9a-f]+$/.test(value);
+  if (event.eventType === "secret_injection_started" && event.source === "vault") {
+    return event.pasteBytes === undefined && event.pasteSalt === undefined && event.pasteSha256 === undefined;
+  }
+  if (event.eventType === "secret_paste_started" && event.source === "operator") {
+    return Number.isInteger(event.pasteBytes) && (event.pasteBytes as number) >= 1 && (event.pasteBytes as number) <= 512 &&
+      hex(event.pasteSalt, 32) && hex(event.pasteSha256, 64);
+  }
+  return false;
 }

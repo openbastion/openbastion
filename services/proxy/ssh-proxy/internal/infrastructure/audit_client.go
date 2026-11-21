@@ -15,7 +15,8 @@ const (
 	auditDetailProtocol    = "protocol"
 	auditDetailAccountID   = "account_id"
 	auditDetailBytes       = "bytes"
-	auditDetailSHA256      = "sha256"
+	auditDetailSHA256      = "sha256" // salted (ADR-0133 §4): SHA-256(salt || text)
+	auditDetailSalt        = "salt"
 	auditDetailInjectionID = "injection_id"
 )
 
@@ -68,6 +69,7 @@ func (c *AuditHTTPClient) AuditSecretInput(ctx context.Context, evidence proxyco
 		action = "session.secret_paste_started"
 		details[auditDetailBytes] = strconv.Itoa(evidence.Length)
 		details[auditDetailSHA256] = evidence.SHA256
+		details[auditDetailSalt] = evidence.Salt
 	} else if evidence.Source != proxycore.SecretInputVault {
 		return proxycore.ErrSecretInjectionInvalid
 	}
@@ -110,6 +112,7 @@ func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence p
 		}
 		details[auditDetailBytes] = strconv.Itoa(evidence.Length)
 		details[auditDetailSHA256] = evidence.SHA256
+		details[auditDetailSalt] = evidence.Salt
 	} else if evidence.Source != proxycore.SecretInputVault {
 		return proxycore.ErrSecretInjectionInvalid
 	}

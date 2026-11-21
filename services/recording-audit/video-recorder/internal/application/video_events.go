@@ -14,9 +14,13 @@ import (
 const (
 	VideoEventSecretInjectionStarted = "secret_injection_started"
 	VideoEventSourceVault            = "vault"
-	DefaultVideoEventPageSize        = 50
-	MaxVideoEventPageSize            = 100
-	maxVideoEventCursorBytes         = 1024
+	// An operator's password typed by the proxy (ADR-0133): its size and salted fingerprint only.
+	VideoEventSecretPasteStarted = "secret_paste_started"
+	VideoEventSourceOperator     = "operator"
+	maxVideoEventPasteBytes      = 512 // 128 characters of at most four bytes
+	DefaultVideoEventPageSize    = 50
+	MaxVideoEventPageSize        = 100
+	maxVideoEventCursorBytes     = 1024
 )
 
 type VideoEventPage struct {
@@ -32,9 +36,7 @@ type videoEventCursor struct {
 
 // RecordVideoEvent durably writes a metadata-only event. The repository assigns the timestamp.
 func (s *RecorderService) RecordVideoEvent(ctx context.Context, event domain.VideoRecordingEvent) (domain.VideoRecordingEvent, error) {
-	if !usableSessionID(event.SessionID) || !usableOpaqueID(event.EventID, 128) ||
-		!usableOpaqueID(event.AccountID, 256) || event.EventType != VideoEventSecretInjectionStarted ||
-		(event.Protocol != "vnc" && event.Protocol != "rdp") || event.Source != VideoEventSourceVault {
+	if !ValidVideoEvent(event) {
 		return domain.VideoRecordingEvent{}, domain.ErrInvalidSegment
 	}
 	depCtx, cancel := dependencyContext(ctx)
@@ -133,6 +135,35 @@ func usableOpaqueID(value string, max int) bool {
 	}
 	for _, r := range value {
 		if r < 0x21 || r > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidVideoEvent is what a marker may be: a Vault secret's (its account reference, nothing else),
+// or an operator's password's (its size, salt and salted fingerprint, never its text).
+func ValidVideoEvent(event domain.VideoRecordingEvent) bool {
+	if !usableSessionID(event.SessionID) || !usableOpaqueID(event.EventID, 128) ||
+		!usableOpaqueID(event.AccountID, 256) || (event.Protocol != "vnc" && event.Protocol != "rdp") {
+		return false
+	}
+	switch {
+	case event.EventType == VideoEventSecretInjectionStarted && event.Source == VideoEventSourceVault:
+		return event.PasteBytes == 0 && event.PasteSalt == "" && event.PasteSHA256 == ""
+	case event.EventType == VideoEventSecretPasteStarted && event.Source == VideoEventSourceOperator:
+		return event.PasteBytes >= 1 && event.PasteBytes <= maxVideoEventPasteBytes &&
+			lowerHex(event.PasteSalt, 32) && lowerHex(event.PasteSHA256, 64)
+	}
+	return false
+}
+
+func lowerHex(value string, length int) bool {
+	if len(value) != length {
+		return false
+	}
+	for _, c := range value {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
 			return false
 		}
 	}

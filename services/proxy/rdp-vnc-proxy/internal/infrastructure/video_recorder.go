@@ -106,20 +106,36 @@ func NewVideoRecorderClient(runtime *mtls.Runtime, endpoint string) (*VideoRecor
 	}, nil
 }
 
-// RecordSecretInput writes the vault-only timeline marker and waits for the
-// Video Recorder's durable acknowledgement before the caller may type the secret.
+// RecordSecretInput writes the timeline marker and waits for the Video Recorder's durable
+// acknowledgement before the caller may type the secret: a Vault secret's account reference, or an
+// operator's password's size and salted fingerprint (ADR-0133), never the text.
 func (c *VideoRecorderClient) RecordSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
 	if c == nil || c.client == nil || ctx == nil || !usableVideoSessionID(evidence.SessionID) ||
-		evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || !usableVideoSessionID(evidence.InjectionID) ||
+		evidence.AccountID == "" || !usableVideoSessionID(evidence.InjectionID) ||
 		(evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+		return ErrVideoRecorderProtocol
+	}
+	eventType, source := "secret_injection_started", "vault"
+	switch evidence.Source {
+	case proxycore.SecretInputVault:
+		if evidence.Length != 0 || evidence.SHA256 != "" || evidence.Salt != "" {
+			return ErrVideoRecorderProtocol
+		}
+	case proxycore.SecretInputOperator:
+		if evidence.Length < 1 || evidence.Length > 512 || len(evidence.SHA256) != 64 || len(evidence.Salt) != 32 {
+			return ErrVideoRecorderProtocol
+		}
+		eventType, source = "secret_paste_started", "operator"
+	default:
 		return ErrVideoRecorderProtocol
 	}
 	// The recorder marker and audit intent share one attempt id so a missing
 	// terminal audit event remains reconcilable after process restarts.
 	eventID := evidence.InjectionID
 	response, err := c.client.RecordVideoEvent(ctx, &recordingv1.RecordVideoEventRequest{
-		EventId: eventID, SessionId: evidence.SessionID, EventType: "secret_injection_started",
-		Protocol: evidence.Protocol, Source: "vault", AccountId: evidence.AccountID,
+		EventId: eventID, SessionId: evidence.SessionID, EventType: eventType,
+		Protocol: evidence.Protocol, Source: source, AccountId: evidence.AccountID,
+		PasteBytes: uint32(evidence.Length), PasteSalt: evidence.Salt, PasteSha256: evidence.SHA256,
 	})
 	if err != nil {
 		return fmt.Errorf("%w: recording secret injection marker", ErrVideoRecorderUnavailable)

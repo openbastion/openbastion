@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/openbastion/openbastion/pkg/proxycore"
 )
@@ -37,26 +38,54 @@ func (c *AuditHTTPClient) EmitClipboard(ctx context.Context, sessionID string, e
 		Success: event.Success, Details: proxycore.ClipboardDetails(event)})
 }
 
-// AuditSecretInput stores only the protocol and Vault account reference; secret bytes never enter the audit request.
+// AuditSecretInput stores only the protocol and account reference, and for an operator's password
+// its size and salted fingerprint (ADR-0133 §4); secret bytes never enter the audit request.
 func (c *AuditHTTPClient) AuditSecretInput(ctx context.Context, evidence proxycore.SecretInputEvidence) error {
-	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || len(evidence.InjectionID) != 32 || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+	details, ok := secretInputDetails(evidence)
+	if !ok {
 		return proxycore.ErrSecretInjectionInvalid
 	}
-	return c.emit(ctx, auditEventRequest{Action: "session.secret_injection_started", ResourceType: "session", ResourceID: evidence.SessionID,
-		Success: true, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID, "injection_id": evidence.InjectionID}})
+	action := "session.secret_injection_started"
+	if evidence.Source == proxycore.SecretInputOperator {
+		action = "session.secret_paste_started"
+	}
+	return c.emit(ctx, auditEventRequest{Action: action, ResourceType: "session", ResourceID: evidence.SessionID, Success: true, Details: details})
 }
 
 // AuditSecretInputResult records whether the proxy's target-input attempt completed.
 func (c *AuditHTTPClient) AuditSecretInputResult(ctx context.Context, evidence proxycore.SecretInputEvidence, success bool) error {
-	if evidence.Source != proxycore.SecretInputVault || evidence.AccountID == "" || len(evidence.InjectionID) != 32 || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+	details, ok := secretInputDetails(evidence)
+	if !ok {
 		return proxycore.ErrSecretInjectionInvalid
 	}
-	action := "session.secret_injected"
-	if !success {
-		action = "session.secret_injection_failed"
+	action := map[bool]string{true: "session.secret_injected", false: "session.secret_injection_failed"}[success]
+	if evidence.Source == proxycore.SecretInputOperator {
+		action = map[bool]string{true: "session.secret_pasted", false: "session.secret_paste_failed"}[success]
 	}
-	return c.emit(ctx, auditEventRequest{Action: action, ResourceType: "session", ResourceID: evidence.SessionID,
-		Success: success, Details: map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID, "injection_id": evidence.InjectionID}})
+	return c.emit(ctx, auditEventRequest{Action: action, ResourceType: "session", ResourceID: evidence.SessionID, Success: success, Details: details})
+}
+
+// secretInputDetails: a Vault secret's account reference; an operator's password's account, size,
+// salted fingerprint and salt (the names the SSH proxy writes), never the text.
+func secretInputDetails(evidence proxycore.SecretInputEvidence) (map[string]string, bool) {
+	if evidence.AccountID == "" || len(evidence.InjectionID) != 32 || (evidence.Protocol != "vnc" && evidence.Protocol != "rdp") {
+		return nil, false
+	}
+	details := map[string]string{"protocol": evidence.Protocol, "account_id": evidence.AccountID, "injection_id": evidence.InjectionID}
+	switch evidence.Source {
+	case proxycore.SecretInputVault:
+		if evidence.Length != 0 || evidence.SHA256 != "" || evidence.Salt != "" {
+			return nil, false
+		}
+	case proxycore.SecretInputOperator:
+		if evidence.Length < 1 || len(evidence.SHA256) != 64 || len(evidence.Salt) != 32 {
+			return nil, false
+		}
+		details["bytes"], details["sha256"], details["salt"] = strconv.Itoa(evidence.Length), evidence.SHA256, evidence.Salt
+	default:
+		return nil, false
+	}
+	return details, true
 }
 
 var _ proxycore.ClipboardAuditor = (*AuditHTTPClient)(nil)

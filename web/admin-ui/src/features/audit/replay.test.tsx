@@ -398,3 +398,20 @@ describe("the replay of partial frames (ADR-0092)", () => {
     expect(d.patched).toEqual([]);
   });
 });
+
+// ADR-0133: an operator's password marker carries its size, salt and salted fingerprint; anything
+// else of that kind, or a Vault marker with a fingerprint, is refused.
+describe("Replay markers of an operator's password", () => {
+  it("are told apart from a Vault secret's, never with a text", async () => {
+    const { validMarkerKind } = await import("./VideoReplay");
+    const base = { eventId: "e", sessionId: "s", protocol: "rdp" as const, accountId: "a", occurredAt: "2026-11-21T12:00:00Z" };
+    const vault = { ...base, eventType: "secret_injection_started" as const, source: "vault" as const };
+    const paste = { ...base, eventType: "secret_paste_started" as const, source: "operator" as const, pasteBytes: 9, pasteSalt: "0".repeat(32), pasteSha256: "f".repeat(64) };
+    expect(validMarkerKind(vault)).toBe(true);
+    expect(validMarkerKind(paste)).toBe(true);
+    expect(validMarkerKind({ ...vault, pasteSha256: "f".repeat(64) })).toBe(false);
+    expect(validMarkerKind({ ...paste, pasteSha256: "hunter22" })).toBe(false);
+    expect(validMarkerKind({ ...paste, pasteBytes: 0 })).toBe(false);
+    expect(validMarkerKind({ ...paste, source: "vault" as const })).toBe(false);
+  });
+});

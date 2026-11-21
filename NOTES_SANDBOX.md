@@ -5228,3 +5228,15 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : la session s'ouvre sur un vrai hôte de sessions, à travers sa demande de licence réelle.
 - **Non prouvé contre Windows** : l'émission et la présentation d'une licence. Pendant sa période de grâce, l'hôte ne licencie personne (« issued 0 », mesuré). Il faudrait un serveur de licences activé et pourvu de licences, et forcer la fin de la grâce est écarté.
 - **Une fois** : des refus TLS de Windows (événement 139, `SEC_E_CERT_UNKNOWN`), alors que la cible était saine. Run 44905986307.
+
+## 2026-11-21 — ADR-0133, incrément 1a : l'empreinte salée et le marqueur de l'opérateur
+
+- **Fait** :
+  - l'empreinte d'un mot de passe de l'opérateur est salée partout : SHA-256(sel ‖ texte), avec un sel aléatoire de 16 octets par saisie. C'est le cas dans le chemin commun (`InjectSecret`), le marqueur SSH, l'audit SSH et l'audit du proxy écran ;
+  - le Video Recorder accepte un marqueur `secret_paste_started` / `operator`, avec taille, sel et empreinte (protobuf, application, PostgreSQL `003_video_paste_events.sql`, mémoire). La Gateway le relaie et l'Admin UI l'affiche en relecture.
+- **Trouvé en chemin** : la première contrainte SQL laissait passer un marqueur de l'opérateur sans empreinte, car un CHECK sur NULL passe. Le test PostgreSQL l'a vu ; les colonnes sont maintenant exigées NOT NULL.
+- **Prouvé** :
+  - chaque couche refuse un marqueur du Vault avec empreinte, et un marqueur de l'opérateur sans empreinte ou avec son texte à la place ;
+  - aller-retour PostgreSQL réel ;
+  - 298 tests de l'UI.
+- **Reste** (incrément 1b) : le canal chiffré du flux d'écran, les jetons à usage unique et la route interne du proxy.

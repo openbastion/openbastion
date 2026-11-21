@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -226,5 +227,45 @@ func TestPostgresStore_VideoRecordingEventsAreAppendOnly(t *testing.T) {
 	}
 	if _, err := db.ExecContext(ctx, `TRUNCATE video_recording_events`); err == nil {
 		t.Fatal("TRUNCATE unexpectedly succeeded on append-only video events")
+	}
+}
+
+// ADR-0133: an operator's password leaves its size and salted fingerprint, read back as written; the
+// table refuses a Vault marker with a fingerprint, and an operator marker without one or with its
+// text where the fingerprint goes.
+func TestPostgresStore_AnOperatorPasteMarker(t *testing.T) {
+	db := testDB(t)
+	repository := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	sessionID := uniqueSessionID("paste")
+	salt, sum := strings.Repeat("a", 32), strings.Repeat("b", 64)
+	paste := domain.VideoRecordingEvent{EventID: "paste-" + sessionID, SessionID: sessionID, EventType: "secret_paste_started", Protocol: "rdp", Source: "operator",
+		AccountID: "account-1", PasteBytes: 12, PasteSalt: salt, PasteSHA256: sum}
+	stored, err := repository.RecordVideoEvent(ctx, paste)
+	if err != nil || stored.PasteBytes != 12 || stored.PasteSalt != salt || stored.PasteSHA256 != sum {
+		t.Fatalf("stored %+v, %v", stored, err)
+	}
+	again, err := repository.RecordVideoEvent(ctx, paste)
+	if err != nil || again.PasteSHA256 != sum {
+		t.Fatalf("the same marker again: %+v, %v", again, err)
+	}
+	other := paste
+	other.PasteSHA256 = strings.Repeat("c", 64)
+	if _, err := repository.RecordVideoEvent(ctx, other); !errors.Is(err, domain.ErrEventConflict) {
+		t.Fatalf("the same event with another fingerprint: %v", err)
+	}
+	events, err := repository.GetVideoEvents(ctx, sessionID, domain.EventCursor{}, 10)
+	if err != nil || len(events) != 1 || events[0].PasteBytes != 12 || events[0].PasteSalt != salt || events[0].PasteSHA256 != sum {
+		t.Fatalf("read back: %+v, %v", events, err)
+	}
+	for name, query := range map[string]string{
+		"a Vault marker with a fingerprint":   `INSERT INTO video_recording_events (event_id, session_id, event_type, protocol, source, account_id, paste_bytes, paste_salt, paste_sha256) VALUES ($1, $2, 'secret_injection_started', 'rdp', 'vault', 'a', 1, repeat('a', 32), repeat('b', 64))`,
+		"an operator marker without one":      `INSERT INTO video_recording_events (event_id, session_id, event_type, protocol, source, account_id) VALUES ($1, $2, 'secret_paste_started', 'rdp', 'operator', 'a')`,
+		"the text where the fingerprint goes": `INSERT INTO video_recording_events (event_id, session_id, event_type, protocol, source, account_id, paste_bytes, paste_salt, paste_sha256) VALUES ($1, $2, 'secret_paste_started', 'rdp', 'operator', 'a', 8, repeat('a', 32), 'hunter22')`,
+		"an operator marker of the Vault":     `INSERT INTO video_recording_events (event_id, session_id, event_type, protocol, source, account_id, paste_bytes, paste_salt, paste_sha256) VALUES ($1, $2, 'secret_paste_started', 'rdp', 'vault', 'a', 8, repeat('a', 32), repeat('b', 64))`,
+	} {
+		if _, err := db.ExecContext(ctx, query, uniqueSessionID("bad"), sessionID); err == nil {
+			t.Errorf("%s was stored", name)
+		}
 	}
 }
