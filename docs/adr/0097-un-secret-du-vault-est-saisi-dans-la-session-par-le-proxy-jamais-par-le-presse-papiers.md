@@ -123,3 +123,9 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 - `WithExclusiveInput` partage le verrou d'écriture avec les entrées opérateur : une frappe normale ne peut pas s'intercaler au milieu du secret. La frappe est limitée à 4 Kio, UTF-8 valide, mono-ligne et sans caractères de contrôle ; le buffer fourni est purgé par le service commun.
 - Tests ajoutés : keysyms VNC, PDU Unicode RDP, adaptation RDP, ordre audit/record/type/résultat, cible et session actives, refus de cible différente, route interne et allowlist mTLS.
 - **Non livré dans cet incrément** : saisie de texte opérateur B, surface UI de saisie et revue de sécurité finale de bout en bout. Un smoke test optionnel contre une cible TigerVNC réelle est ajouté à `pkg/vnc/real_target_test.go`; un test de frappe Unicode BMP qui relit le fichier Notepad est ajouté à `TestRDPWindows_SecretTyperUnicode`, exécuté par la matrice Windows CI existante. Ces tests n'ont pas été exécutés sur le poste local (aucune cible réelle configurée ; les tests Windows restent CI uniquement). L'injection Vault ne doit pas être considérée prête à la production avant validation de la matrice et du parcours multi-services.
+
+### État au 21 novembre 2026
+
+- **A est livrée** : routes Gateway et Broker, Admin UI (`SecretInjection.tsx`), audit en deux phases, frappe SSH, VNC et RDP, réconciliation des saisies (`/audit/secret-injections`). Les mentions « non livré » des incréments 4 à 6 sont dépassées sur ces points.
+- **B attend son canal** : ADR-0133 (`Proposé`) le conçoit. La Gateway relaie le flux d'écran en décodant ses trames, et elle sert aussi le code de l'UI. Un chiffrement fait dans le navigateur pour le proxy protège donc d'une Gateway saine, pas d'une Gateway compromise. ADR-0133 le dit, et demande le go du propriétaire.
+
