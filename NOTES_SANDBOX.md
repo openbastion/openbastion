@@ -5215,3 +5215,16 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - le pouls exécuté 12 s sous `pwsh` Linux : la ligne se forme, et la boucle survit aux commandes absentes et à un COM1 refusé ;
   - `guest-state.sh` exécuté contre un faux conteneur.
 - **Non éprouvé** : que Windows ouvre COM1 et que QEMU en rende la sortie. Un job vert le dira (lignes `OBPULSE` dans `guest-screen.txt`).
+
+## 2026-11-21 — ADR-0099, incrément 2 : la licence RDS contre un Windows hôte de sessions
+
+- **Fait** : une sixième cible Windows en CI. C'est un hôte de sessions avec son propre serveur de licences, en mode par appareil sur la machine de test.
+- **Appris du vrai Windows**, quatre écarts que l'hôte de l'incrément 1, écrit d'après ma lecture de la spécification, ne montrait pas :
+  - la clé est celle du dernier certificat de la chaîne ;
+  - la chaîne finit par un bourrage de 8 + 4n octets ;
+  - `flagsHi` est à ignorer ;
+  - le certificat propriétaire doit être lu.
+  Chaque refus de licence dit maintenant ce qui a échoué.
+- **Prouvé** : la session s'ouvre sur un vrai hôte de sessions, à travers sa demande de licence réelle.
+- **Non prouvé contre Windows** : l'émission et la présentation d'une licence. Pendant sa période de grâce, l'hôte ne licencie personne (« issued 0 », mesuré). Il faudrait un serveur de licences activé et pourvu de licences, et forcer la fin de la grâce est écarté.
+- **Une fois** : des refus TLS de Windows (événement 139, `SEC_E_CERT_UNKNOWN`), alors que la cible était saine. Run 44905986307.

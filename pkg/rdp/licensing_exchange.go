@@ -288,6 +288,43 @@ type LicenseCache struct {
 	mu       sync.Mutex
 	licenses map[string][]byte
 	hwid     [20]byte
+	// issued counts the licenses kept, presented those sent again: what an operator, or a test
+	// against a real host, reads to know the exchange happened (Stats).
+	issued, presented, challenges int
+}
+
+// LicenseStats is what a LicenseCache saw: the platform challenges it answered, the licenses it kept
+// and presented again, and those it holds.
+type LicenseStats struct {
+	Challenges, Issued, Presented, Held int
+}
+
+// Stats says what this cache saw.
+func (c *LicenseCache) Stats() LicenseStats {
+	if c == nil {
+		return LicenseStats{}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return LicenseStats{Challenges: c.challenges, Issued: c.issued, Presented: c.presented, Held: len(c.licenses)}
+}
+
+func (c *LicenseCache) noteChallenge() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.challenges++
+	c.mu.Unlock()
+}
+
+func (c *LicenseCache) notePresented() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.presented++
+	c.mu.Unlock()
 }
 
 // NewLicenseCache returns an empty cache with its own hardware ID.
@@ -322,6 +359,7 @@ func (c *LicenseCache) put(scope string, license []byte) {
 		}
 	}
 	c.licenses[scope] = append([]byte(nil), license...)
+	c.issued++
 }
 
 func (c *LicenseCache) drop(scope string) {

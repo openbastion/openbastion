@@ -9,10 +9,13 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -325,6 +328,9 @@ func TestLicensing_AHostIssuesALicense_ThenItIsPresentedAgain(t *testing.T) {
 	if got := cache.get("desk"); string(got) != "LICENSE-2" {
 		t.Fatalf("the upgraded license: %q", got)
 	}
+	if stats := cache.Stats(); stats != (LicenseStats{Challenges: 2, Issued: 2, Presented: 1, Held: 1}) {
+		t.Fatalf("stats: %+v", stats)
+	}
 	// Another target has its own scope: a new request, nothing presented.
 	clientErr, hostErr = runLicensing(t, cache, "other", func(h *licensingHost) error {
 		if h.acceptFirst() != rdpLicenseNewRequest {
@@ -426,6 +432,11 @@ func TestLicensing_RefusesWhatAHostMayNotSend(t *testing.T) {
 			if !errors.Is(clientErr, ErrMCSConnection) || cache.get("desk") != nil {
 				t.Fatalf("the client went on: %v, kept %q", clientErr, cache.get("desk"))
 			}
+			// What failed is said, never a secret (ADR-0099: for an operator, and for the CI).
+			if !strings.Contains(clientErr.Error(), "licensing: ") {
+				t.Fatalf("the refusal does not say what failed: %v", clientErr)
+			}
+			t.Logf("%v", clientErr)
 		})
 	}
 }
@@ -498,4 +509,112 @@ func FuzzParseRDPServerLicensingMessages(f *testing.F) {
 			t.Fatalf("a license of %d bytes", len(license))
 		}
 	})
+}
+
+// What a Remote Desktop Session Host sends (CI of PR #259): an X.509 chain whose key is the last
+// certificate's, with its 8 + 4n bytes of padding, under SEC_LICENSE_ENCRYPT_CS.
+func TestLicensing_TheChainOfASessionHost(t *testing.T) {
+	issuer, _, issuerKey := rdpTestRSACertificate(t)
+	leaf, _, leafKey := rdpTestRSACertificate(t)
+	chain := func(padding int, certs ...[]byte) []byte {
+		blob := binary.LittleEndian.AppendUint32(nil, 0x80000002)
+		blob = binary.LittleEndian.AppendUint32(blob, uint32(len(certs)))
+		for _, der := range certs {
+			blob = binary.LittleEndian.AppendUint32(blob, uint32(len(der)))
+			blob = append(blob, der...)
+		}
+		return append(blob, make([]byte, padding)...)
+	}
+	key, err := parseRDPServerLicenseCertificate(chain(16, issuer.Certificate[0], leaf.Certificate[0]), nil)
+	if err != nil || key.N.Cmp(leafKey.N) != 0 || key.N.Cmp(issuerKey.N) == 0 {
+		t.Fatalf("the key of the chain: %v", err)
+	}
+	for name, blob := range map[string][]byte{
+		"a padding of another size": chain(15, issuer.Certificate[0], leaf.Certificate[0]),
+		"nine certificates":         chain(0, leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0], leaf.Certificate[0]),
+		"a proprietary certificate": binary.LittleEndian.AppendUint32(make([]byte, 0, 8), 1),
+	} {
+		if _, err := parseRDPServerLicenseCertificate(blob, nil); !errors.Is(err, ErrMCSConnection) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
+
+	// A certificate Go's parser refuses (here a validity that is not a time): its key is still read
+	// from its SubjectPublicKeyInfo.
+	spki, err := x509.MarshalPKIXPublicKey(&leafKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seq := func(tag int, parts ...[]byte) []byte { return derWrap(byte(tag), testConcat(parts...)) }
+	alg := seq(0x30, []byte{0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1d}) // 1.3.14.3.2.29, as Microsoft signs
+	name := seq(0x30)
+	tbs := seq(0x30, seq(0xa0, []byte{0x02, 0x01, 0x02}), []byte{0x02, 0x01, 0x01}, alg, name, seq(0x30, []byte{0x04, 0x01, 0x00}), name, spki)
+	odd := seq(0x30, tbs, alg, []byte{0x03, 0x01, 0x00})
+	if _, err := x509.ParseCertificate(odd); err == nil {
+		t.Fatal("the test's odd certificate parses: it proves nothing")
+	}
+	key, err = licenseCertificateRSAKey(odd)
+	if err != nil || key.N.Cmp(leafKey.N) != 0 {
+		t.Fatalf("the key of a certificate Go refuses: %v", err)
+	}
+}
+
+func TestLicensing_TheSecurityHeaderOfASessionHost(t *testing.T) {
+	packet := func(flags, flagsHi uint16) []byte {
+		return mcsTestServerSendData(testConcat(binary.LittleEndian.AppendUint16(nil, flags), binary.LittleEndian.AppendUint16(nil, flagsHi),
+			[]byte{rdpLicenseErrorAlert, rdpLicenseProtocolVersion, 4, 0}))
+	}
+	if _, err := parseMCSLicensingIndication(packet(0x0280, 0), mcsGlobalChannelID); err != nil {
+		t.Fatalf("SEC_LICENSE_ENCRYPT_CS refused: %v", err)
+	}
+	// flagsHi as a session host of the CI filled it, ignored without SEC_FLAGSHI_VALID.
+	for _, flagsHi := range []uint16{0x46, 0x1648, 0xafe2} {
+		if _, err := parseMCSLicensingIndication(packet(0x0080, flagsHi), mcsGlobalChannelID); err != nil {
+			t.Fatalf("flagsHi %#x refused: %v", flagsHi, err)
+		}
+	}
+	for _, flags := range []uint16{0x0000, 0x0200, 0x0088, 0x0480, 0x8080} {
+		if _, err := parseMCSLicensingIndication(packet(flags, 0), mcsGlobalChannelID); !errors.Is(err, ErrMCSConnection) {
+			t.Errorf("flags %#x accepted", flags)
+		}
+	}
+}
+
+// A session host presents its proprietary certificate until it holds an X.509 one (CI of PR #259):
+// the RSA key is read from its RSA1 blob, the signature checked for its shape alone.
+func TestLicensing_TheProprietaryCertificateOfASessionHost(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob := func(n *big.Int, bits int, magic string, signature int) []byte {
+		modulus := n.FillBytes(make([]byte, bits/8))
+		little := make([]byte, len(modulus)+8)
+		for i := range modulus {
+			little[i] = modulus[len(modulus)-1-i]
+		}
+		rsa1 := testConcat([]byte(magic), binary.LittleEndian.AppendUint32(nil, uint32(len(little))), binary.LittleEndian.AppendUint32(nil, uint32(bits)),
+			binary.LittleEndian.AppendUint32(nil, uint32(bits/8-1)), binary.LittleEndian.AppendUint32(nil, uint32(key.E)), little)
+		out := binary.LittleEndian.AppendUint32(nil, 0x00000001)
+		out = binary.LittleEndian.AppendUint32(out, 1)
+		out = binary.LittleEndian.AppendUint32(out, 1)
+		out = append(out, testLicenseBlob(0x0006, rsa1)...)
+		return append(out, testLicenseBlob(0x0008, make([]byte, signature))...)
+	}
+	got, err := parseRDPServerLicenseCertificate(blob(key.N, 2048, "RSA1", 72), nil)
+	if err != nil || got.N.Cmp(key.N) != 0 || got.E != key.E {
+		t.Fatalf("the proprietary certificate's key: %v", err)
+	}
+	// A modulus of 512 bits, as old terminal servers had: refused (Go no longer makes such keys).
+	small := new(big.Int).SetBytes(append([]byte{0xc5}, bytes.Repeat([]byte{0x11}, 63)...))
+	for name, b := range map[string][]byte{
+		"another magic":     blob(key.N, 2048, "RSA2", 72),
+		"a signature of 64": blob(key.N, 2048, "RSA1", 64),
+		"bytes after it":    append(blob(key.N, 2048, "RSA1", 72), 0),
+		"a key of 512 bits": blob(small, 512, "RSA1", 72),
+	} {
+		if _, err := parseRDPServerLicenseCertificate(b, nil); !errors.Is(err, ErrMCSConnection) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
 }
