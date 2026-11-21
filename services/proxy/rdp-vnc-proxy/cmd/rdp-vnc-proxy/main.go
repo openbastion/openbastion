@@ -20,6 +20,7 @@ import (
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/processsecurity"
 	"github.com/openbastion/openbastion/pkg/proxycore"
+	"github.com/openbastion/openbastion/pkg/rdp"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/engine"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/infrastructure"
 	"github.com/openbastion/openbastion/services/proxy/rdp-vnc-proxy/internal/interfaces"
@@ -150,8 +151,14 @@ func runService() {
 		log.Fatalf("rdp-vnc-proxy: %v", err)
 	}
 	if rdpEnabled {
+		// The licenses Remote Desktop Session Hosts issue, kept for the process (ADR-0099, B).
+		licenses, err := rdp.NewLicenseCache()
+		if err != nil {
+			log.Fatalf("rdp-vnc-proxy: the license cache: %v", err)
+		}
 		server.WithRDP(&engine.RDPCodec{
 			TLSRoots:    roots,
+			Licenses:    licenses,
 			DialTimeout: time.Duration(boundedIntEnv("RDP_CONNECT_TIMEOUT_SECONDS", 15, 1, 120)) * time.Second,
 			// The cadence VNC has (ADR-0071 §8): at most one frame encoded and recorded a interval.
 			FrameInterval:    vncCodec.FrameInterval,

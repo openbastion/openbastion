@@ -158,3 +158,12 @@ func fakeHybridTarget(t *testing.T) (string, string, *x509.CertPool, <-chan []by
 	}()
 	return listener.Addr().String(), hex.EncodeToString(sum[:]), roots, received
 }
+
+// ADR-0099: a license is kept for one target, by its pinned certificate, and one user on it.
+func TestRDPLicenseScope_TheTargetAndTheUser(t *testing.T) {
+	a := rdpTestCredentialWith(t, proxycore.Fetched{TLSCertificateSHA256: strings.Repeat("a", 64)})
+	b := rdpTestCredentialWith(t, proxycore.Fetched{TLSCertificateSHA256: strings.Repeat("b", 64)})
+	if rdpLicenseScope(a) == rdpLicenseScope(b) || rdpLicenseScope(a) != strings.Repeat("a", 64)+"/operator" {
+		t.Fatalf("scopes %q %q", rdpLicenseScope(a), rdpLicenseScope(b))
+	}
+}

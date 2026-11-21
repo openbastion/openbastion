@@ -5176,3 +5176,19 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : test rouge sur l'échantillon réel du fond d'écran bleu, qui sortait (107, 234, 0) et sort maintenant (3, 103, 219) ; cas existants et fuzzers inchangés.
 - **Constat sur l'ancienne note** : la « rouge et bleu inversés » qu'elle évoquait n'en était pas une. FreeRDP range ses plans dans l'ordre B, G, R, et lit donc Cg, Co, Y ; la formule est la même que celle de NSCodec, sans inversion.
 - **Non éprouvé** : on ne sait pas si les Windows de la CI envoient de l'AYCoCg à `CLL` 2 ou plus sur ce chemin.
+
+## 2026-11-21 — ADR-0099, incrément 1 : la licence RDS complète, en mémoire
+
+- **Fait** : `CompleteLicensing` mène l'échange complet de MS-RDPELE :
+  - les clés, avec RC4 et le MAC ;
+  - le défi de plateforme et sa réponse ;
+  - la licence émise ou mise à niveau, gardée dans `LicenseCache` (en mémoire, une par cible et par utilisateur) ;
+  - la licence présentée de nouveau, et oubliée si elle est refusée.
+  Le proxy partage un cache entre ses sessions.
+- **Vérifié** ligne à ligne contre le client de FreeRDP 3.15. Les exemples de MS-RDPELE n'ont pas pu être lus.
+- **Prouvé** :
+  - contre un hôte de licences du test, qui a ses propres clés : émission, présentation, mise à niveau, `VALID_CLIENT` après le défi, huit refus ;
+  - un fuzzer ;
+  - 12 mutations tuées sur 12, après deux trous refermés dans les tests.
+- **Non éprouvé** : contre un vrai RDSH licencié (incrément 2, sixième cible CI).
+- **Mode par appareil** : non pris en charge ; documenté.

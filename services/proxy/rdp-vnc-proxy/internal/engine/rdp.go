@@ -32,7 +32,11 @@ const (
 // proxy runtime selects it when RDP_ENABLED=true; the Broker independently
 // gates RDP session creation with the same opt-in (ADR-0088).
 type RDPCodec struct {
-	TLSRoots      *x509.CertPool
+	TLSRoots *x509.CertPool
+	// Licenses keeps the licenses Remote Desktop Session Hosts issue, for the process (ADR-0099,
+	// option B): shared by every session of the proxy, presented again to the same target for the
+	// same user. Nil: a license issued is accepted and forgotten.
+	Licenses      *rdp.LicenseCache
 	DialTimeout   time.Duration
 	DesktopWidth  uint16
 	DesktopHeight uint16
@@ -247,7 +251,8 @@ func (c *RDPCodec) openRDPSession(ctx context.Context, cred *proxycore.Credentia
 	}
 	settings := rdp.MCSClientSettings{DesktopWidth: width, DesktopHeight: height, ClientName: rdpClientName, Timeout: c.DialTimeout,
 		PointerShapes: c.DrawPointer, DynamicChannels: c.Resize || c.GraphicsPipeline, DesktopResize: c.Resize,
-		ClipboardChannel: clipboard.any(), GraphicsPipeline: c.GraphicsPipeline, ColorDepth: c.ColorDepth}
+		ClipboardChannel: clipboard.any(), GraphicsPipeline: c.GraphicsPipeline, ColorDepth: c.ColorDepth,
+		Licenses: c.Licenses, LicenseScope: rdpLicenseScope(cred)}
 	target := &rdpTargetSession{session: client, resize: c.Resize}
 	if c.GraphicsPipeline {
 		target.enableGraphics()
@@ -1019,4 +1024,11 @@ func rdpKerberosConfig(cred *proxycore.Credential, timeout time.Duration) (*rdp.
 	}
 	return &rdp.KerberosConfig{Realm: cred.KerberosRealm, KDCs: append([]string(nil), cred.KerberosKDCs...),
 		ServicePrincipal: "TERMSRV/" + cred.TargetDomain, Timeout: timeout}, nil
+}
+
+// rdpLicenseScope names what a license is kept for (ADR-0099): the target, by the certificate the
+// Vault pinned for it, and the user on it. A target whose certificate changes is asked for a new
+// license, as a new one.
+func rdpLicenseScope(cred *proxycore.Credential) string {
+	return cred.TLSCertificateSHA256 + "/" + cred.TargetUser
 }
