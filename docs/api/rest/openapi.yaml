@@ -2175,6 +2175,8 @@ components:
             accounts.disable: false
             accounts.pin: true
             accounts.approval: false
+            accounts.screenProfile: false
+            accounts.kerberos: false
             policies.create: false
             sessions.create: true
             sessions.breakglass: false

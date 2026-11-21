@@ -128,5 +128,15 @@ La cryptographie (AES-CTS-HMAC-SHA1, RC4-HMAC) et les messages ASN.1 de Kerberos
   - **contre-épreuve** : la même cible refuse le même utilisateur en NTLM (`0x80090302`, `SEC_E_UNSUPPORTED_FUNCTION`). La session ouverte au point précédent a donc bien été faite par Kerberos ;
   - un mauvais mot de passe s'arrête au KDC (code 24) et ressort en `target_auth_failed`.
 - **Constaté en chemin** : le partage invité de dockur continue de fonctionner une fois la machine promue, et les journaux arrivent. Le test n'en dépend pas pour savoir si la cible est prête.
-- **ADR-0100 est mise en œuvre.** Restent hors de son périmètre : un formulaire Kerberos dans l'Admin UI, et un code d'échec à part pour un KDC injoignable ou un ticket refusé, aujourd'hui `target_unreachable`.
+- **ADR-0100 est mise en œuvre.** Reste hors de son périmètre un code d'échec à part pour un KDC injoignable ou un ticket refusé, aujourd'hui `target_unreachable`.
+
+### L'Admin UI : le bouton « Kerberos » d'un compte RDP (21 novembre 2026)
+
+- **Fait** :
+  - le bouton « Kerberos » apparaît sur un compte RDP seulement, grisé sans la capacité `accounts.kerberos` (préfixe `vault:account-admin:`, action `vault:account:kerberos`, calculée par la Gateway comme `accounts.screenProfile`). Il affiche le royaume quand Kerberos est posé ;
+  - le dialogue demande le royaume, mis en majuscules, et un à quatre KDC, un par ligne. Il montre le nom pour lequel le ticket sera demandé (`TERMSRV/<nom épinglé>`) et propose « Revenir à NTLM » quand Kerberos est posé ;
+  - il dit avant tout envoi ce que le Vault refuserait : pas de royaume, pas de KDC ou plus de quatre, un KDC donné deux fois, une cible épinglée à une IP, un utilisateur `DOMAINE\` ou `@royaume`. Le Vault reste l'autorité : un refus de sa part s'affiche dans le dialogue ;
+  - `docs/administration/privileged-accounts.md` décrit le réglage, ses prérequis (nom épinglé, utilisateur du royaume, KDC joignables en TCP, AES) et ce que voit l'opérateur.
+- **Prouvé** : trois tests du parcours (le bouton n'apparaît que sur RDP, l'envoi correspond au formulaire, le retour à NTLM envoie `null`, le `409` du Vault reste dans le dialogue), et quatre mutations tuées (RDP seul, majuscules, IP, retour à NTLM). Les 297 tests de l'UI et la capacité de la Gateway passent.
+- **Non éprouvé** : dans un navigateur réel contre la pile. Le chemin de l'API derrière ce dialogue est celui des incréments 3 et 4.
 

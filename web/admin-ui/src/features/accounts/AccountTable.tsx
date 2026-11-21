@@ -11,6 +11,8 @@ export interface AccountActions {
   toggleApproval: (account: Account) => void;
   // The screen profile of an RDP account (ADR-0132).
   screenProfile: (account: Account) => void;
+  // The realm and KDCs of an RDP account (ADR-0100).
+  kerberos: (account: Account) => void;
   rotate: (account: Account) => void;
   disable: (account: Account) => void;
 }
@@ -94,6 +96,11 @@ export function AccountTable({ accounts, actions }: { accounts: Account[]; actio
                   {a.protocol === "rdp" ? (
                     <GatedButton capability="accounts.screenProfile" onClick={() => actions.screenProfile(a)}>
                       {t("accounts.table.screenProfile")}
+                    </GatedButton>
+                  ) : null}
+                  {a.protocol === "rdp" ? (
+                    <GatedButton capability="accounts.kerberos" onClick={() => actions.kerberos(a)}>
+                      {a.kerberos ? t("accounts.table.kerberosOn", { realm: a.kerberos.realm }) : t("accounts.table.kerberos")}
                     </GatedButton>
                   ) : null}
                   {a.protocol === "ssh" ? (

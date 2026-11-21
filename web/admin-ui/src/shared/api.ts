@@ -133,6 +133,16 @@ export interface Account {
   // An RDP account's screen profile, set by its administrator (ADR-0132); absent: everything
   // allowed, graphics and 32 bpp by default.
   screenProfile?: ScreenProfile;
+  // An RDP account's realm and KDCs (ADR-0100): set, its sessions authenticate with Kerberos alone,
+  // never NTLM; absent, NTLMv2.
+  kerberos?: KerberosSettings;
+}
+
+// The realm and KDCs of an RDP account (ADR-0100), as the Vault stores them: the realm in upper case,
+// each KDC as host:port.
+export interface KerberosSettings {
+  realm: string;
+  kdcs: string[];
 }
 
 export type ScreenChannel = "graphics" | "bitmap";
