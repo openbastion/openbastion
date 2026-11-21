@@ -487,6 +487,13 @@ func TestDecodeRDP6AYCoCgRestoresColorLossAndClampsRGB(t *testing.T) {
 	if red != 96 || green != 96 || blue != 224 {
 		t.Fatalf("negative AYCoCg = (%d,%d,%d), want (96,96,224)", red, green, blue)
 	}
+	// A chroma byte holds a signed value of 8 - ColorLossLevel + 1 bits: shifted first, then read as
+	// signed (MS-RDPEGDI 3.1.9.1.2, FreeRDP's YCoCg conversion). The sample is the blue wallpaper of the
+	// CI's Windows Server 2022, the same transform NSCodec uses (ADR-0101, CI of PRs #198 and #199):
+	// read as signed first, it came out grey-orange.
+	if red, green, blue := decodeRDP6AYCoCg(107, 37, 63, 3); red != 3 || green != 103 || blue != 219 {
+		t.Fatalf("the wallpaper's blue at CLL 3 = (%d,%d,%d), want (3,103,219)", red, green, blue)
+	}
 	for cll := 1; cll <= 7; cll++ {
 		red, green, blue = decodeRDP6AYCoCg(128, 1, 0, cll)
 		wantRed := byte(128 + (1 << (cll - 1)))

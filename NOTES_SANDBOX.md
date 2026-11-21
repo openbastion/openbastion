@@ -4525,7 +4525,7 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 
 - **Fait** : le sous-codec 0x01 de ClearCodec (`pkg/rdp/graphics_nscodec.go`), avec ses plans bruts ou en séries et sa chrominance réduite ou sous-échantillonnée.
 - **Couleur** : la conversion de FreeRDP (`nsc_decode`). Elle décale la chrominance avant de la lire comme signée, et n'inverse pas le rouge et le bleu. Deux lectures fausses l'ont précédée (orange en #198, vert en #199) ; la cause a été trouvée en rejouant les messages bruts de la CI (voir ADR-0101).
-- **À corriger à part** : le planar AYCoCg de l'ancien chemin (`decodeRDP6AYCoCg`) lit aussi l'octet comme signé avant le décalage, et n'inverse pas le rouge et le bleu, alors que FreeRDP (`prim_YCoCg.c`) et la spécification inversent. Il a été éprouvé contre Windows, peut-être seulement en ARGB (`ColorLossLevel` 0, où rien de cela ne joue). Aucune cible ne l'exerce encore.
+- ~~**À corriger à part**~~ (**corrigé le 21 novembre 2026**, voir plus bas) : le planar AYCoCg de l'ancien chemin (`decodeRDP6AYCoCg`) lit aussi l'octet comme signé avant le décalage, et n'inverse pas le rouge et le bleu, alors que FreeRDP (`prim_YCoCg.c`) et la spécification inversent. Il a été éprouvé contre Windows, peut-être seulement en ARGB (`ColorLossLevel` 0, où rien de cela ne joue). Aucune cible ne l'exerce encore.
 - **Prouvé** : 18 refus, un fuzzer, 15 mutations tuées.
 - **Contre les cinq Windows** (CI de #198) : les couleurs sont justes après l'inversion rouge-bleu.
 
@@ -5169,3 +5169,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Fait** : un code de fin d'écran de plus, `kerberos_failed` (code 15). Le moteur RDP le donne pour un compte Kerberos qui échoue, sauf si les identifiants sont refusés : ce refus reste `target_auth_failed`, et un compte NTLM qui échoue reste `target_unreachable`. L'Admin UI a un texte pour ce code.
 - **Prouvé** : le numéro sur le fil, proxycore, le moteur face à une vraie cible TLS avec sa contre-épreuve NTLM, et un cas « KDC injoignable » contre le Windows contrôleur de domaine. Deux mutations tuées.
 - **Décidé, renversable** : un code ajouté au contrat d'ADR-0071 ; aucun événement d'audit nouveau.
+
+## 2026-11-21 — Correction : la chrominance AYCoCg du planar RDP 6.0
+
+- **Corrigé** : `decodeRDP6AYCoCg` décale maintenant la chrominance de `CLL - 1` avant de la lire comme signée, comme NSCodec, FreeRDP et MS-RDPEGDI. Avant, le signe se perdait à partir de `CLL` 2.
+- **Prouvé** : test rouge sur l'échantillon réel du fond d'écran bleu, qui sortait (107, 234, 0) et sort maintenant (3, 103, 219) ; cas existants et fuzzers inchangés.
+- **Constat sur l'ancienne note** : la « rouge et bleu inversés » qu'elle évoquait n'en était pas une. FreeRDP range ses plans dans l'ordre B, G, R, et lit donc Cg, Co, Y ; la formule est la même que celle de NSCodec, sans inversion.
+- **Non éprouvé** : on ne sait pas si les Windows de la CI envoient de l'AYCoCg à `CLL` 2 ou plus sur ce chemin.
