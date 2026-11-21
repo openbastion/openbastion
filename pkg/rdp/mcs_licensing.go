@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -423,8 +424,11 @@ func parseRDPServerLicenseCertificate(blob []byte, fallback *rsa.PublicKey) (*rs
 		}
 		return fallback, nil
 	}
+	if len(blob) >= 4 && binary.LittleEndian.Uint32(blob[:4])&0x7fffffff == 1 {
+		return parseRDPProprietaryCertificate(blob[4:])
+	}
 	if len(blob) < 8 || binary.LittleEndian.Uint32(blob[:4])&0x7fffffff != 2 {
-		return nil, licensingRefused("the certificate: version %#x, an X.509 chain alone is accepted", licenseCertificateVersion(blob))
+		return nil, licensingRefused("the certificate: version %#x, neither proprietary nor an X.509 chain", licenseCertificateVersion(blob))
 	}
 	count := binary.LittleEndian.Uint32(blob[4:8])
 	if count == 0 || count > 8 {
@@ -638,4 +642,53 @@ func describeLicensingBlob(body []byte, skip int) string {
 		return fmt.Sprintf("%d bytes, no blob", len(body))
 	}
 	return fmt.Sprintf("blob type %#x of %d bytes, then %d bytes", typ, len(value), len(rest))
+}
+
+// parseRDPProprietaryCertificate reads a proprietary server certificate (MS-RDPBCGR 2.2.1.4.3.1.1),
+// after its dwVersion: RSA for the signature and the key exchange, an RSA1 public key blob, then the
+// signature blob. A session host presents it until it holds an X.509 certificate from an activated
+// license server (CI of PR #259). The signature is made with the Terminal Services signing key, whose
+// private part MS-RDPBCGR 5.3.3.1.1 publishes: verifying it would authenticate nothing, so its shape
+// alone is checked. The pinned TLS channel authenticates the server; this key only encrypts the
+// premaster secret of the licensing exchange.
+func parseRDPProprietaryCertificate(body []byte) (*rsa.PublicKey, error) {
+	if len(body) < 12 {
+		return nil, licensingRefused("the proprietary certificate: %d bytes", len(body))
+	}
+	if binary.LittleEndian.Uint32(body[0:4]) != 1 || binary.LittleEndian.Uint32(body[4:8]) != 1 {
+		return nil, licensingRefused("the proprietary certificate: algorithms %#x, %#x, RSA alone is accepted",
+			binary.LittleEndian.Uint32(body[0:4]), binary.LittleEndian.Uint32(body[4:8]))
+	}
+	keyType, keyLength := binary.LittleEndian.Uint16(body[8:10]), int(binary.LittleEndian.Uint16(body[10:12]))
+	body = body[12:]
+	if keyType != 0x0006 || keyLength < 20 || len(body) < keyLength {
+		return nil, licensingRefused("the proprietary certificate: key blob type %#x of %d bytes", keyType, keyLength)
+	}
+	keyBlob, rest := body[:keyLength], body[keyLength:]
+	// RSA_PUBLIC_KEY: "RSA1", keylen, bitlen, datalen, pubExp, then keylen bytes of modulus, little
+	// endian, of which bitlen/8 are the modulus and 8 are zero padding.
+	if string(keyBlob[0:4]) != "RSA1" {
+		return nil, licensingRefused("the proprietary certificate: key magic %q", keyBlob[0:4])
+	}
+	modulusLength, bits := int(binary.LittleEndian.Uint32(keyBlob[4:8])), int(binary.LittleEndian.Uint32(keyBlob[8:12]))
+	exponent := binary.LittleEndian.Uint32(keyBlob[16:20])
+	if bits < 1024 || bits > 16384 || bits%8 != 0 || modulusLength != bits/8+8 || len(keyBlob) != 20+modulusLength {
+		return nil, licensingRefused("the proprietary certificate: a key of %d bits in %d bytes", bits, modulusLength)
+	}
+	if exponent < 3 || exponent%2 == 0 {
+		return nil, licensingRefused("the proprietary certificate: exponent %d", exponent)
+	}
+	little := keyBlob[20 : 20+bits/8]
+	modulus := make([]byte, len(little))
+	for i := range little {
+		modulus[len(little)-1-i] = little[i]
+	}
+	if len(rest) < 4 || binary.LittleEndian.Uint16(rest[0:2]) != 0x0008 || binary.LittleEndian.Uint16(rest[2:4]) != 72 || len(rest) != 4+72 {
+		return nil, licensingRefused("the proprietary certificate: a signature blob of %d bytes", len(rest))
+	}
+	key := &rsa.PublicKey{N: new(big.Int).SetBytes(modulus), E: int(exponent)}
+	if key.N.BitLen() < 1024 {
+		return nil, licensingRefused("the proprietary certificate: a modulus of %d bits", key.N.BitLen())
+	}
+	return key, nil
 }

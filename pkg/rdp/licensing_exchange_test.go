@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"strings"
 	"testing"
@@ -575,6 +576,45 @@ func TestLicensing_TheSecurityHeaderOfASessionHost(t *testing.T) {
 	for _, flags := range []uint16{0x0000, 0x0200, 0x0088, 0x0480, 0x8080} {
 		if _, err := parseMCSLicensingIndication(packet(flags, 0), mcsGlobalChannelID); !errors.Is(err, ErrMCSConnection) {
 			t.Errorf("flags %#x accepted", flags)
+		}
+	}
+}
+
+// A session host presents its proprietary certificate until it holds an X.509 one (CI of PR #259):
+// the RSA key is read from its RSA1 blob, the signature checked for its shape alone.
+func TestLicensing_TheProprietaryCertificateOfASessionHost(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob := func(n *big.Int, bits int, magic string, signature int) []byte {
+		modulus := n.FillBytes(make([]byte, bits/8))
+		little := make([]byte, len(modulus)+8)
+		for i := range modulus {
+			little[i] = modulus[len(modulus)-1-i]
+		}
+		rsa1 := testConcat([]byte(magic), binary.LittleEndian.AppendUint32(nil, uint32(len(little))), binary.LittleEndian.AppendUint32(nil, uint32(bits)),
+			binary.LittleEndian.AppendUint32(nil, uint32(bits/8-1)), binary.LittleEndian.AppendUint32(nil, uint32(key.E)), little)
+		out := binary.LittleEndian.AppendUint32(nil, 0x00000001)
+		out = binary.LittleEndian.AppendUint32(out, 1)
+		out = binary.LittleEndian.AppendUint32(out, 1)
+		out = append(out, testLicenseBlob(0x0006, rsa1)...)
+		return append(out, testLicenseBlob(0x0008, make([]byte, signature))...)
+	}
+	got, err := parseRDPServerLicenseCertificate(blob(key.N, 2048, "RSA1", 72), nil)
+	if err != nil || got.N.Cmp(key.N) != 0 || got.E != key.E {
+		t.Fatalf("the proprietary certificate's key: %v", err)
+	}
+	// A modulus of 512 bits, as old terminal servers had: refused (Go no longer makes such keys).
+	small := new(big.Int).SetBytes(append([]byte{0xc5}, bytes.Repeat([]byte{0x11}, 63)...))
+	for name, b := range map[string][]byte{
+		"another magic":     blob(key.N, 2048, "RSA2", 72),
+		"a signature of 64": blob(key.N, 2048, "RSA1", 64),
+		"bytes after it":    append(blob(key.N, 2048, "RSA1", 72), 0),
+		"a key of 512 bits": blob(small, 512, "RSA1", 72),
+	} {
+		if _, err := parseRDPServerLicenseCertificate(b, nil); !errors.Is(err, ErrMCSConnection) {
+			t.Errorf("%s accepted: %v", name, err)
 		}
 	}
 }
