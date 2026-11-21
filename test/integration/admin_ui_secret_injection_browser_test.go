@@ -193,13 +193,25 @@ func browserTestToken(t *testing.T) string {
 
 func startAdminUIPreview(t *testing.T, root, gatewayURL string) string {
 	t.Helper()
+	return startAdminUIPreviewOn(t, root, gatewayURL, freeLocalPort(t))
+}
+
+// freeLocalPort is a loopback port free at this instant, for a server that must know its own
+// address before it starts (a WebAuthn origin, ADR-0134).
+func freeLocalPort(t *testing.T) int {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
+	return port
+}
 
+// startAdminUIPreviewOn serves the Admin UI from Vite on port, relaying the public API to gatewayURL.
+func startAdminUIPreviewOn(t *testing.T, root, gatewayURL string, port int) string {
+	t.Helper()
 	uiDir := filepath.Join(root, "web", "admin-ui")
 	cmd := exec.Command("npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", strconv.Itoa(port), "--strictPort")
 	cmd.Dir = uiDir

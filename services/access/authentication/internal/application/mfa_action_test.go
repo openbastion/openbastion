@@ -183,3 +183,44 @@ func TestMFAActionGrant_AuditFailureBurnsGrantWithoutAuthorizingAction(t *testin
 		t.Fatalf("grant survived audit failure and could authorize later: %v", err)
 	}
 }
+
+// ADR-0134 B03: a challenge is bound to the whole tuple. Each field changed on its own — the actor,
+// the session, the account, the protocol, the action — is refused, with a fresh challenge each
+// time (five failures would burn one), and the true tuple then succeeds: the refusals came from
+// the binding, not from the code. Another action is refused even before the comparison: only
+// secret:inject exists (domain.MFAActionGrantBinding.Validate).
+func TestMFAActionStepUp_EachFieldOfTheTupleIsBound(t *testing.T) {
+	w := mfaService(t)
+	secret := w.enroll(t)
+	*w.now = w.now.Add(30 * time.Second)
+	u, err := w.store.GetByUsername(context.Background(), "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := actionBinding()
+	binding.UserID = u.ID
+	for name, change := range map[string]func(*domain.MFAActionGrantBinding){
+		"another actor":    func(b *domain.MFAActionGrantBinding) { b.UserID = "user_someone_else" },
+		"another session":  func(b *domain.MFAActionGrantBinding) { b.SessionID = "session-02" },
+		"another account":  func(b *domain.MFAActionGrantBinding) { b.AccountID = "account-02" },
+		"another protocol": func(b *domain.MFAActionGrantBinding) { b.Protocol = "rdp" },
+		"another action":   func(b *domain.MFAActionGrantBinding) { b.Action = "secret:reveal" },
+	} {
+		started, err := w.svc.StartMFAActionStepUp(context.Background(), binding)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		wrong := binding
+		change(&wrong)
+		if _, err := w.svc.VerifyMFAActionStepUp(context.Background(), started.Challenge, wrong, application.FactorTOTP, code(t, secret, *w.now), nil); !errors.Is(err, application.ErrMFAActionRejected) {
+			t.Fatalf("%s: the challenge was accepted (%v)", name, err)
+		}
+	}
+	started, err := w.svc.StartMFAActionStepUp(context.Background(), binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grant, err := w.svc.VerifyMFAActionStepUp(context.Background(), started.Challenge, binding, application.FactorTOTP, code(t, secret, *w.now), nil); err != nil || grant.Grant == "" {
+		t.Fatalf("the true tuple, after the refusals: %+v %v", grant, err)
+	}
+}
