@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/internal/v1/establish-session", s.establish)
 	mux.HandleFunc("/internal/v1/revoke-session", s.revoke)
 	mux.HandleFunc("/internal/v1/inject-vault-secret", s.injectVaultSecret)
+	mux.HandleFunc("/internal/v1/authorize-paste", s.authorizePaste)
 	mux.HandleFunc("/internal/v1/screen", s.screen)
 	return mux
 }
@@ -185,6 +187,56 @@ func (s *HTTPServer) revoke(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(revokeResponse{TicketsRevoked: tickets, ConnectionsCut: cut})
+}
+
+// authorizePasteRequest is the Session Broker's grant of one operator paste (ADR-0133 §2), after
+// the operator's second factor: the session, its account, the one-use token (64 hex), its lifetime.
+type authorizePasteRequest struct {
+	SessionID  string `json:"session_id"`
+	AccountID  string `json:"account_id"`
+	PasteToken string `json:"paste_token"`
+	TTLSeconds int    `json:"ttl_seconds"`
+}
+
+// authorizePaste is called only by the Session Broker over mTLS. No text crosses it: the text comes
+// encrypted for this proxy over the screen stream, with this token.
+func (s *HTTPServer) authorizePaste(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req authorizePasteRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	dec.DisallowUnknownFields()
+	var token [screenstream.PasteTokenSize]byte
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "invalid paste grant", http.StatusBadRequest)
+		return
+	}
+	raw, hexErr := hex.DecodeString(req.PasteToken)
+	if hexErr != nil || len(raw) != screenstream.PasteTokenSize || req.TTLSeconds < 1 || req.TTLSeconds > int(infrastructure.MaxPasteTTL/time.Second) {
+		http.Error(w, "invalid paste grant", http.StatusBadRequest)
+		return
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "invalid paste grant", http.StatusBadRequest)
+		return
+	}
+	copy(token[:], raw)
+	if s.secretInputs == nil || s.secretInputs.PasteAuditor() == nil {
+		http.Error(w, "operator paste unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	switch err := s.secretInputs.AuthorizePaste(req.SessionID, req.AccountID, token, time.Duration(req.TTLSeconds)*time.Second); {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, infrastructure.ErrSecretSessionInactive):
+		http.Error(w, "session input is not active", http.StatusNotFound)
+	default:
+		http.Error(w, "invalid paste grant", http.StatusBadRequest)
+	}
 }
 
 type injectVaultSecretRequest struct {

@@ -261,7 +261,10 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 
 		hello := readScreen(t, conn)
 		// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
-		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1 {
+		// The pointer is drawn, and the session takes an operator's password encrypted for the
+		// proxy (ADR-0133): the proxy's key, an uncompressed P-256 point, follows the session.
+		if hello.kind != 2 || hello.helloProtocol != 2 || hello.helloSession != id || hello.helloFlags != 1|helloPaste ||
+			len(hello.helloPasteKey) != 65 || hello.helloPasteKey[0] != 0x04 {
 			t.Fatalf("first message: %+v", hello)
 		}
 		first := readFrame(t, conn)
@@ -619,8 +622,9 @@ type screenMessage struct {
 	sequence      uint64
 	png           []byte
 	helloProtocol byte
-	helloFlags    byte // bit 0: the pointer is in the frames (ADR-0091)
+	helloFlags    byte // bit 0: the pointer is in the frames (ADR-0091); 0x10: the paste key (ADR-0133)
 	helloSession  string
+	helloPasteKey []byte // the proxy's P-256 key for an operator's password, after the session (ADR-0133)
 	endText       string
 	raw           []byte // the whole message, for a partial frame's rectangles (ADR-0092)
 }
@@ -648,11 +652,22 @@ func readScreenWithin(t *testing.T, conn *websocket.Conn, limit time.Duration) s
 		m.png = payload
 	case 2:
 		m.helloProtocol, m.helloFlags = payload[0], payload[1]
-		m.helloSession = string(payload[14:])
+		m.helloSession, m.helloPasteKey = splitHelloSession(payload)
 	case 3:
 		m.endText = string(payload[4:])
 	}
 	return m
+}
+
+// helloPaste is the HELLO flag of ADR-0133: the proxy's key (65 bytes) follows the session ID.
+const helloPaste = 0x10
+
+// splitHelloSession reads a HELLO's session ID and, with helloPaste, the proxy's paste key after it.
+func splitHelloSession(payload []byte) (string, []byte) {
+	if payload[1]&helloPaste != 0 && len(payload) >= 14+65 {
+		return string(payload[14 : len(payload)-65]), payload[len(payload)-65:]
+	}
+	return string(payload[14:]), nil
 }
 
 func readFrame(t *testing.T, conn *websocket.Conn) screenMessage {

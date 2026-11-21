@@ -74,7 +74,8 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			case 1:
 				m.png = payload
 			case 2:
-				m.helloProtocol, m.helloFlags, m.helloSession = payload[0], payload[1], string(payload[14:])
+				m.helloProtocol, m.helloFlags = payload[0], payload[1]
+				m.helloSession, m.helloPasteKey = splitHelloSession(payload)
 			case 3:
 				m.endText = string(payload[4:])
 			}
@@ -94,7 +95,7 @@ func TestScreenFlow_RDPFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 	}
 	// The pointer is drawn by default (SCREEN_DRAW_POINTER, ADR-0091): the HELLO says so.
 	// The resize is on by default too (SCREEN_RESIZE, ADR-0095): bit 1.
-	if hello, ok := next(20 * time.Second); !ok || hello.kind != 2 || hello.helloProtocol != 1 || hello.helloSession != id || hello.helloFlags != 3 {
+	if hello, ok := next(20 * time.Second); !ok || hello.kind != 2 || hello.helloProtocol != 1 || hello.helloSession != id || hello.helloFlags != 3|helloPaste || len(hello.helloPasteKey) != 65 {
 		t.Fatalf("first message: %+v", hello)
 	}
 	// What was shown, frame by frame, as the recorder stores it: a key frame's PNG, a partial frame's

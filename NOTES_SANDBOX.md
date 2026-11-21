@@ -5284,3 +5284,31 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - ce qui a été coupé est écrit dans `rdp-events/edge-update.txt` ;
   - le pouls donne aussi le chemin de l'exécutable le plus actif (`top-path`).
 - **À juger** : l'absence de cas B sur plusieurs matrices Windows. S'il revient, le pouls et `top-path` nommeront le suivant.
+
+- **Fait** :
+  - l'empreinte d'un mot de passe de l'opérateur est salée partout : SHA-256(sel ‖ texte), avec un sel aléatoire de 16 octets par saisie. C'est le cas dans le chemin commun (`InjectSecret`), le marqueur SSH, l'audit SSH et l'audit du proxy écran ;
+  - le Video Recorder accepte un marqueur `secret_paste_started` / `operator`, avec taille, sel et empreinte (protobuf, application, PostgreSQL `003_video_paste_events.sql`, mémoire). La Gateway le relaie et l'Admin UI l'affiche en relecture.
+- **Trouvé en chemin** : la première contrainte SQL laissait passer un marqueur de l'opérateur sans empreinte, car un CHECK sur NULL passe. Le test PostgreSQL l'a vu ; les colonnes sont maintenant exigées NOT NULL.
+- **Prouvé** :
+  - chaque couche refuse un marqueur du Vault avec empreinte, et un marqueur de l'opérateur sans empreinte ou avec son texte à la place ;
+  - aller-retour PostgreSQL réel ;
+  - 298 tests de l'UI.
+- **Reste** (incrément 1b) : le canal chiffré du flux d'écran, les jetons à usage unique et la route interne du proxy.
+
+## 2026-11-21 — ADR-0133, incrément 1b : le canal chiffré du flux d'écran
+
+- **Fait** :
+  - le `HELLO` porte la clé ECDH P-256 de la session, et le message `InputPaste` arrive chiffré ;
+  - la cryptographie : HKDF-SHA-256 lié au jeton et aux deux clés, puis AES-256-GCM lié à session, jeton et protocole ;
+  - le relais prend le jeton avant de déchiffrer, puis suit le chemin commun d'ADR-0097 ;
+  - le registre du proxy écran tient les jetons : une fois, 60 s, une session ;
+  - route interne `POST /internal/v1/authorize-paste`, réservée au Broker, et RPC `ProxyControl.AuthorizePaste`.
+- **Décidé, renversable** :
+  - HKDF de `golang.org/x/crypto`, déjà dépendance du dépôt ;
+  - `pkg/proxycore` passe à `go 1.26.0`. Les images se construisent depuis `go.work` (go 1.26.0).
+- **Prouvé** :
+  - sur le vrai relais : tapé une fois, puis quatre refus audités ;
+  - 6 mutations tuées sur 6 ;
+  - `-race`, fuzzer, test de contrat.
+- **Trouvé en chemin** : le lecteur de proto du test de contrat lit un message jusqu'à la prochaine ligne qui commence par `}`. Un message vide sur une ligne (`{}`) avale donc le suivant. La réponse est écrite sur deux lignes, avec un commentaire.
+- **Reste** : le Broker et la Gateway, puis l'Admin UI.

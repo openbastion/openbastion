@@ -507,11 +507,15 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	cred.Purge()
 	// A graphical protocol opts in only by implementing both halves of the shared secret-input
 	// contract. A missing typer/recorder never falls back to the clipboard.
+	// An operator's password, encrypted for this session (ADR-0133): offered only where a Vault
+	// secret could be typed, and only by a registry that holds paste tokens and an auditor.
+	var paste *screenPaste
 	if secretInputs != nil {
 		if typer, ok := session.(SecretTyper); ok {
 			if secretRecorder, ok := recorder.(SecretInputRecorder); ok {
 				unregister := secretInputs.Register(ctx, meta.SessionID, screenProtocolName(meta.ScreenProtocol), targetHost, targetUser, typer, secretRecorder)
 				defer unregister()
+				paste = newScreenPaste(secretInputs, meta, typer, secretRecorder)
 			}
 		}
 	}
@@ -598,6 +602,9 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 	if resizer, ok := session.(Resizer); ok {
 		hello.Resizable = resizer.Resizable()
 	}
+	if paste != nil {
+		hello.PasteKey = paste.key.Public()
+	}
 	// The clipboard's directions this session allows (ADR-0096 §6): a client offers only these.
 	if clipboard != nil {
 		hello.ClipboardToTarget, hello.ClipboardFromTarget = meta.ClipboardToTarget, meta.ClipboardFromTarget
@@ -619,6 +626,17 @@ func relayScreen(ctx, cleanupCtx context.Context, meta SessionMetadata, cred *Cr
 		case incoming, ok := <-inputResults:
 			if !ok || incoming.err != nil {
 				return fmt.Errorf("proxycore: screen input transport closed")
+			}
+			if screenstream.IsPasteInput(incoming.data) {
+				// An operator's password (ADR-0133): out of the input budget. One the HELLO did not
+				// offer, or malformed, breaks the contract; one refused (no token, a ciphertext that
+				// does not open) is audited, and the session goes on.
+				in, err := screenstream.DecodePasteInput(incoming.data)
+				if err != nil || paste == nil {
+					return fmt.Errorf("%w: a paste the session does not take", ErrScreenInputInvalid)
+				}
+				paste.handle(ctx, in)
+				continue
 			}
 			if screenstream.IsClipboardInput(incoming.data) {
 				// A text pasted by the operator (ADR-0096): out of the input budget, bounded on its own.

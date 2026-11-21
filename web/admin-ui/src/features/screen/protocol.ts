@@ -32,7 +32,9 @@ export type ScreenMessage =
   // pointerDrawn: the frames carry the target's pointer (ADR-0091), the page hides its own.
   // resizable: the session follows the size of the page's screen area (ADR-0095), which then sends it.
   // clipboardToTarget / clipboardFromTarget: the clipboard's directions the session allows (ADR-0096).
-  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; resizable: boolean; clipboardToTarget: boolean; clipboardFromTarget: boolean; expiresAt: Date; sessionId: string }
+  // pasteKey: the proxy's P-256 public key for an operator's password encrypted for it (ADR-0133);
+  // absent, the session takes none.
+  | { type: "hello"; protocol: "rdp" | "vnc"; pointerDrawn: boolean; resizable: boolean; clipboardToTarget: boolean; clipboardFromTarget: boolean; expiresAt: Date; sessionId: string; pasteKey?: Uint8Array }
   | { type: "frame"; sequence: bigint; width: number; height: number; png: Uint8Array<ArrayBuffer> }
   // A partial frame (ADR-0092): its rectangles replace pixels of the frame of the sequence before.
   | { type: "delta"; sequence: bigint; width: number; height: number; rects: DeltaRect[] }
@@ -50,7 +52,10 @@ const HELLO_POINTER_DRAWN = 0x01;
 const HELLO_RESIZABLE = 0x02;
 const HELLO_CLIPBOARD_TO_TARGET = 0x04;
 const HELLO_CLIPBOARD_FROM_TARGET = 0x08;
-const HELLO_FLAGS = HELLO_POINTER_DRAWN | HELLO_RESIZABLE | HELLO_CLIPBOARD_TO_TARGET | HELLO_CLIPBOARD_FROM_TARGET;
+// ADR-0133: the proxy's key for an operator's password follows the session ID.
+const HELLO_PASTE = 0x10;
+export const PASTE_KEY_SIZE = 65;
+const HELLO_FLAGS = HELLO_POINTER_DRAWN | HELLO_RESIZABLE | HELLO_CLIPBOARD_TO_TARGET | HELLO_CLIPBOARD_FROM_TARGET | HELLO_PASTE;
 
 export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
   if (data.byteLength < HEADER_SIZE) refuse("short message");
@@ -78,8 +83,11 @@ export function decodeScreenMessage(data: ArrayBuffer): ScreenMessage {
       if ((payload[1] & ~HELLO_FLAGS) !== 0) refuse("malformed hello");
       const fields = new DataView(data, HEADER_SIZE);
       const idLength = fields.getUint32(10);
-      if (idLength === 0 || idLength > MAX_SESSION_ID_BYTES || idLength !== length - 14) refuse("malformed hello");
-      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, resizable: (payload[1] & HELLO_RESIZABLE) !== 0, clipboardToTarget: (payload[1] & HELLO_CLIPBOARD_TO_TARGET) !== 0, clipboardFromTarget: (payload[1] & HELLO_CLIPBOARD_FROM_TARGET) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14)) };
+      const keyLength = (payload[1] & HELLO_PASTE) !== 0 ? PASTE_KEY_SIZE : 0;
+      if (idLength === 0 || idLength > MAX_SESSION_ID_BYTES || idLength !== length - 14 - keyLength) refuse("malformed hello");
+      const pasteKey = keyLength ? payload.slice(14 + idLength, 14 + idLength + keyLength) : undefined;
+      if (pasteKey && pasteKey[0] !== 0x04) refuse("malformed hello");
+      return { type: "hello", protocol, pointerDrawn: (payload[1] & HELLO_POINTER_DRAWN) !== 0, resizable: (payload[1] & HELLO_RESIZABLE) !== 0, clipboardToTarget: (payload[1] & HELLO_CLIPBOARD_TO_TARGET) !== 0, clipboardFromTarget: (payload[1] & HELLO_CLIPBOARD_FROM_TARGET) !== 0, expiresAt: new Date(Number(fields.getBigUint64(2)) * 1000), sessionId: decodeText(text, payload.subarray(14, 14 + idLength)), ...(pasteKey ? { pasteKey } : {}) };
     }
     case 3: {
       if (sequence === 0n || width !== 0 || height !== 0 || length < 4) refuse("malformed end");

@@ -78,6 +78,8 @@ func runService() {
 	fetcher := proxycore.NewCredentialFetcher(vault, mtls.RDPVNCProxy)
 	listener := proxycore.NewListener(fetcher, proxycore.NewTerminator(audit))
 	secretInputs := infrastructure.NewSecretInputRegistry()
+	// The auditor of an operator's paste (ADR-0133): the same as a Vault secret's.
+	secretInputs.Auditor = audit
 	listener.ScreenSecretInputs = secretInputs
 	listener.ScreenInput = proxycore.ScreenInputLimits{
 		RatePerSecond: boundedIntEnv("SCREEN_INPUT_RATE_PER_SECOND", proxycore.DefaultScreenInputRate, 1, 10000),
