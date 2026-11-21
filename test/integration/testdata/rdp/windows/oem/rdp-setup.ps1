@@ -79,6 +79,8 @@ $ready = @"
 Start-Sleep -Seconds 20
 # ADR-0100, increment 4: on the domain controller, the domain's part first (kerberos-ready.ps1).
 if (Test-Path 'C:\OEM\domain') { & 'C:\OEM\kerberos-ready.ps1' }
+# ADR-0099, increment 2: on the session host, how it licenses (rdsh-ready.ps1).
+if (Test-Path 'C:\OEM\rdsh') { & 'C:\OEM\rdsh-ready.ps1' }
 `$ids = @()
 if ((Get-Content 'C:\OEM\session' -Raw -ErrorAction SilentlyContinue) -ne 'console') {
   Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name AutoAdminLogon -Value '0'
@@ -100,8 +102,8 @@ New-Item -ItemType Directory -Force 'C:\OEM\rdp-events' | Out-Null
 "@
 Set-Content 'C:\OEM\rdp-ready.ps1' $ready
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File C:\OEM\rdp-ready.ps1'
-if (Test-Path 'C:\OEM\domain') {
-  # ADR-0100, increment 4: the promotion restarts Windows; the readiness task runs at the next start,
+if ((Test-Path 'C:\OEM\domain') -or (Test-Path 'C:\OEM\rdsh')) {
+  # ADR-0100, increment 4, and ADR-0099, increment 2 (the session host's roles): the promotion restarts Windows; the readiness task runs at the next start,
   # once, with the domain up (kerberos-ready.ps1 removes the task); the promotion itself is this
   # script's very last step.
   Register-ScheduledTask -TaskName 'OpenBastionRdpReady' -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
@@ -239,3 +241,6 @@ while ($true) {
 
 # ADR-0100, increment 4: the promotion to domain controller restarts Windows, so it comes last.
 if (Test-Path 'C:\OEM\domain') { & 'C:\OEM\kerberos-dc.ps1' }
+
+# ADR-0099, increment 2: the session host's roles restart Windows, so they come last too.
+if (Test-Path 'C:\OEM\rdsh') { & 'C:\OEM\rdsh-setup.ps1' }

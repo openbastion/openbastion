@@ -15,7 +15,9 @@
 # matrix asks for (increment 4).
 # DOMAIN, none by default: kerberos makes this Windows its own domain controller, openbastion.test
 # (ADR-0100, increment 4), with a user of the domain for the test and incoming NTLM refused; start it
-# with docker-compose.kerberos.yml too, which publishes its KDC.
+# with docker-compose.kerberos.yml too, which publishes its KDC. rdsh makes it a Remote Desktop
+# Session Host with its own license server (ADR-0099, increment 2), which leads the whole licensing
+# exchange.
 # The pin and the roots are known before Windows starts: nothing is learnt from the target.
 # Everything here is for one run and is never committed.
 set -euo pipefail
@@ -29,7 +31,7 @@ case "$keyboard" in en-US | fr-FR) ;; *) echo "KEYBOARD must be en-US or fr-FR, 
 version=${5:-2022}
 case "$version" in 2022 | 2019) ;; *) echo "VERSION must be 2022 or 2019, not $version" >&2; exit 2 ;; esac
 domain=${6:-none}
-case "$domain" in none | kerberos) ;; *) echo "DOMAIN must be none or kerberos, not $domain" >&2; exit 2 ;; esac
+case "$domain" in none | kerberos | rdsh) ;; *) echo "DOMAIN must be none, kerberos or rdsh, not $domain" >&2; exit 2 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 name=rdp-windows.test
 mkdir -p "$dir/oem" "$dir/storage" "$dir/dump" "$dir/shared"
@@ -57,6 +59,10 @@ printf '%s' "$depth" > oem/color-depth
 printf '%s' "$session" > oem/session
 printf '%s' "$keyboard" > oem/keyboard
 printf '%s' "$name" > oem/server-name
+if [ "$domain" = rdsh ]; then
+  printf '%s' rdsh > oem/rdsh
+  cp "$here/oem/rdsh-setup.ps1" "$here/oem/rdsh-ready.ps1" oem/
+fi
 if [ "$domain" = kerberos ]; then
   printf '%s' openbastion.test > oem/domain
   cp "$here/oem/kerberos-dc.ps1" "$here/oem/kerberos-ready.ps1" oem/
@@ -94,6 +100,9 @@ RDP_WINDOWS_KEYBOARD=$keyboard
 RDP_WINDOWS_VERSION=$version
 RDP_WINDOWS_SHARED=$dir/shared
 ENV
+if [ "$domain" = rdsh ]; then
+  echo RDP_WINDOWS_RDSH=1 >> test.env
+fi
 if [ "$domain" = kerberos ]; then
   cat >> test.env <<ENV
 RDP_WINDOWS_KERBEROS=1

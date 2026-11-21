@@ -156,6 +156,9 @@ func (s *CredSSPClientSession) CompleteLicensing(ctx context.Context, timeout ti
 	if ctx.Err() != nil || sendErr != nil {
 		return ErrMCSConnection
 	}
+	if len(kept) != 0 {
+		cache.notePresented()
+	}
 
 	for challenges := 0; ; {
 		serverPacket, readErr = readMCSConnectResponse(conn)

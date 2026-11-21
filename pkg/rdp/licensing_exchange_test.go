@@ -325,6 +325,9 @@ func TestLicensing_AHostIssuesALicense_ThenItIsPresentedAgain(t *testing.T) {
 	if got := cache.get("desk"); string(got) != "LICENSE-2" {
 		t.Fatalf("the upgraded license: %q", got)
 	}
+	if issued, presented, held := cache.Stats(); issued != 2 || presented != 1 || held != 1 {
+		t.Fatalf("stats: issued %d, presented %d, held %d", issued, presented, held)
+	}
 	// Another target has its own scope: a new request, nothing presented.
 	clientErr, hostErr = runLicensing(t, cache, "other", func(h *licensingHost) error {
 		if h.acceptFirst() != rdpLicenseNewRequest {
