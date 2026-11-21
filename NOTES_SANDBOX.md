@@ -5268,3 +5268,4 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Rapport** : la recette critère par critère est dans ADR-0134 §4 et §4 bis (57 sur 59). A06 dépend du déploiement. H08 (risques P1 d'ADR-0097) et le statut `Accepté` reviennent au propriétaire.
 - **Défaut relevé** : après une fin de session, le détail ouvert dans l'Admin UI reste affiché « Active ». La saisie y est refusée (`409`).
 - **Environnement local** : le Go du snap ne répondait plus depuis le redémarrage (snapfuse). Go 1.27.4, la version de la CI, est installé dans `~/sdk/go1.27.4`, et les contrats Protobuf sont régénérés avec `~/go/bin/buf`.
+- **Statut** : ADR-0134 passe à `Accepté` le 21 novembre 2026, sur décision du propriétaire (« Oui », après la recette). Les risques P1 d'ADR-0097 (H08) restent ouverts et suivis dans `docs/security/known-limitations.md` ; ADR-0134 entre aux invariants (`.agents/architecture/invariants.md`).

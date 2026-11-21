@@ -1,6 +1,6 @@
 # ADR-0134 — Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l'action dans l'Admin UI
 
-**Statut** `Proposé` · 21 novembre 2026 · catégorie : Proxy SSH · recette faite le 21 novembre 2026 (§4 et §4 bis) : 57 critères sur 59 prouvés ; A06 relève du déploiement, H08 attend la décision du propriétaire
+**Statut** `Accepté` · 21 novembre 2026, décision du propriétaire du projet (« Oui », après la recette) · catégorie : Proxy SSH · recette faite le 21 novembre 2026 (§4 et §4 bis) : 57 critères sur 59 prouvés. A06 relève du déploiement. H08 : les risques P1 d'ADR-0097 restent ouverts et suivis (`docs/security/known-limitations.md`) ; l'acceptation de l'ADR ne les déclare pas acceptés comme définitifs.
 **Remplace** aucun ADR. Cette décision complète ADR-0097 sans en modifier ni remplacer les invariants.
 
 ## Contexte
@@ -268,7 +268,7 @@ Les cases sont des critères à prouver, pas une déclaration de réussite. Une 
 - **Restent** :
   - A06, une propriété de chaque déploiement ;
   - H08, les risques P1 d'ADR-0097, qui sont la décision du propriétaire ;
-  - le passage au statut `Accepté` (§5).
+  - ~~le passage au statut `Accepté` (§5)~~ : décidé par le propriétaire le 21 novembre 2026.
 
 ### 5. Critères de sortie
 
