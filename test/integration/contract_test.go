@@ -126,6 +126,8 @@ var contractPairs = []contractPair{
 	{"services/access/session-broker/internal/infrastructure/mfa_action_client.go", "mfaActionConsumeResponseBody", "proto/authentication/v1/action_step_up.proto", "ConsumeMFAActionGrantResponse", nil, nil},
 	{"services/access/session-broker/internal/infrastructure/proxy_client.go", "injectVaultSecretRequestBody", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
 		map[string]string{"context": whyContext}},
+	{"services/access/session-broker/internal/infrastructure/proxy_client.go", "authorizePasteRequestBody", "proto/proxy/v1/proxy_control.proto", "AuthorizePasteRequest", nil,
+		map[string]string{"context": whyContext}},
 	{"services/proxy/ssh-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,
 		map[string]string{"context": whyContext}},
 	{"services/proxy/rdp-vnc-proxy/internal/interfaces/http.go", "injectVaultSecretRequest", "proto/proxy/v1/proxy_control.proto", "InjectVaultSecretRequest", nil,

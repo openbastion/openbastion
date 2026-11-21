@@ -122,3 +122,31 @@ func TestProxyClient_InjectVaultSecretSendsOnlyTheOneUseScope(t *testing.T) {
 		t.Fatal("proxy request contains secret material")
 	}
 }
+
+// ADR-0133: the Broker's grant of one operator paste carries the token and its lifetime, no text.
+func TestProxyClient_AuthorizePasteSendsOnlyTheToken(t *testing.T) {
+	var got map[string]any
+	var path string
+	status := http.StatusNoContent
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		if r.Header.Get("Cache-Control") != "no-store" {
+			t.Errorf("Cache-Control=%q", r.Header.Get("Cache-Control"))
+		}
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.WriteHeader(status)
+	}))
+	defer srv.Close()
+	client := &infrastructure.ProxyClientHTTPClient{BaseURL: srv.URL}
+	if err := client.AuthorizePaste(context.Background(), "session-1", "account-1", "ab12", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if path != "/internal/v1/authorize-paste" || got["session_id"] != "session-1" || got["account_id"] != "account-1" ||
+		got["paste_token"] != "ab12" || got["ttl_seconds"] != float64(60) || len(got) != 4 {
+		t.Fatalf("path=%q request=%v", path, got)
+	}
+	status = http.StatusNotFound
+	if err := client.AuthorizePaste(context.Background(), "session-1", "account-1", "ab12", time.Minute); err == nil {
+		t.Fatal("a refused grant taken for a success")
+	}
+}

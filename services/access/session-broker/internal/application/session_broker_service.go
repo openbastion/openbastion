@@ -144,6 +144,8 @@ type SessionBrokerService struct {
 	proxy     ProxyClient
 	proxies   ProxySelector
 	mfaAction MFAActionClient
+	// pasteProxy hands an operator's paste token to the screen proxy (ADR-0133); nil, no paste.
+	pasteProxy PasteProxy
 
 	// breakGlassMaxMinutes is both the switch and the limit of break-glass
 	// (ADR-0009): zero — the default — means the platform does not grant it at all.

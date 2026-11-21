@@ -1013,6 +1013,79 @@ paths:
         "503":
           description: Dépendance MFA, Vault, Audit, Recorder ou proxy indisponible ; l'injection n'est pas confirmée.
 
+  /sessions/{sessionId}/secret-paste-step-up:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [sessions]
+      summary: Démarre une confirmation MFA pour saisir un mot de passe de l'opérateur (ADR-0133)
+      description: >
+        Le même parcours que `secret-injection-step-up`, pour l'action `secret:paste` sur le compte de
+        la session : corps vide, acteur et rôles tirés du bearer token, compte et protocole tirés de la
+        session persistée. Réservé aux sessions VNC et RDP : le mot de passe passera chiffré pour le
+        proxy par le flux d'écran (`409` pour SSH, qui n'en a pas). Même seau de débit que les autres
+        actions de session ; `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Challenge MFA et facteurs disponibles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SecretActionStepUpChallenge" }
+        "400": { description: Le corps doit être vide. }
+        "401": { description: Bearer token absent ou invalide. }
+        "403": { description: L'appelant n'est pas le demandeur, n'a pas le droit `secret:paste` sur le compte, ou n'a aucun facteur admissible. }
+        "404": { description: Session inconnue. }
+        "409": { description: Session inactive ou expirée. }
+        "429": { description: Seau des actions de session épuisé ; le Broker n'a pas été appelé. }
+        "503": { description: MFA, Authorization, audit ou stockage indisponible. }
+
+  /sessions/{sessionId}/secret-paste:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [sessions]
+      summary: Confirme le MFA et rend un jeton de saisie à usage unique (ADR-0133)
+      description: >
+        Le corps ne porte que la preuve du facteur (comme `secret-injection`), **jamais le mot de
+        passe** : un champ de plus est refusé. Le Broker revalide le propriétaire, la session et
+        Authorization après le facteur, consomme le grant, tire un jeton de 32 octets, le remet par mTLS
+        au proxy écran qui relaie la session (60 s, un usage), écrit `session.secret_paste_authorized`,
+        puis le rend ici. Le navigateur chiffre ensuite le mot de passe pour le proxy (ECDH P-256 avec
+        la clé du `HELLO`, HKDF-SHA-256, AES-256-GCM lié à la session, au jeton et au protocole) et
+        l'envoie par le flux d'écran (`InputPaste`) : la Gateway ne relaie que le chiffré. Le proxy
+        n'enregistre que la taille et l'empreinte salée. Limite dite par ADR-0133 : une Gateway
+        compromise sert l'Admin UI et peut lire le mot de passe avant son chiffrement.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SecretInjectionProof" }
+      responses:
+        "200":
+          description: Le jeton de saisie, à usage unique, et sa durée.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pasteToken, expiresInSeconds]
+                properties:
+                  pasteToken: { type: string, pattern: '^[0-9a-f]{64}$' }
+                  expiresInSeconds: { type: integer, minimum: 1, maximum: 60 }
+        "400": { description: Preuve MFA invalide ou champ non autorisé (dont un texte). }
+        "401": { description: Bearer token absent ou invalide. }
+        "403": { description: Propriétaire, MFA (preuve invalide, challenge expiré ou rejoué) ou autorisation refusé. }
+        "404": { description: Session inconnue. }
+        "409": { description: Session inactive, ou protocole sans flux d'écran (SSH). }
+        "429": { description: Seau des actions de session épuisé ; le Broker n'a pas été appelé. }
+        "503": { description: MFA, audit ou proxy indisponible, ou proxy qui refuse le jeton (session écran pas ouverte) ; aucun jeton n'est rendu. }
+
   /sessions/{sessionId}/connect:
     parameters:
       - $ref: "#/components/parameters/SessionId"

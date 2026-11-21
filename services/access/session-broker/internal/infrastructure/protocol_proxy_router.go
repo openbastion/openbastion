@@ -58,3 +58,12 @@ func (r *ProtocolProxyRouter) InjectVaultSecret(ctx context.Context, protocol, s
 	}
 	return pool.InjectVaultSecret(ctx, sessionID, accountID, scopeToken)
 }
+
+// AuthorizePaste sends an operator's paste token to the screen proxies' pool (ADR-0133): RDP and VNC
+// only, never SSH.
+func (r *ProtocolProxyRouter) AuthorizePaste(ctx context.Context, protocol, sessionID, accountID, token string, ttl time.Duration) error {
+	if protocol != "vnc" && protocol != "rdp" {
+		return fmt.Errorf("no paste for protocol %q", protocol)
+	}
+	return r.pools["vnc"].AuthorizePaste(ctx, sessionID, accountID, token, ttl)
+}

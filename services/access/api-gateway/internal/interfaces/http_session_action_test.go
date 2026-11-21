@@ -303,3 +303,62 @@ func TestSessionAction_WhatTheBrokerAnswersIsRelayedAsItIs(t *testing.T) {
 		t.Fatalf("%d, Retry-After %q, %q: an admitted action is the Broker's to answer", rec.Code, rec.Header().Get("Retry-After"), rec.Body.String())
 	}
 }
+
+// ADR-0133: the paste's two routes take the factor's proof only, never a text; the identity and the
+// roles are the verified token's; and they share the session actions' budget.
+func TestSessionAction_AnOperatorsPasteTakesTheProofOnly(t *testing.T) {
+	gw, broker, _ := actionGateway(t, 10, 6, 100)
+	send := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer tok-alice")
+		rec := httptest.NewRecorder()
+		gw.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := send("/sessions/s-1/secret-paste-step-up", ""); rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("step-up: %d %v", rec.Code, rec.Header())
+	}
+	if rec := send("/sessions/s-1/secret-paste-step-up", "x"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("a step-up with a body: %d", rec.Code)
+	}
+	if rec := send("/sessions/s-1/secret-paste", `{"challenge":"c","factor":"totp","totp_code":"123456"}`); rec.Code != http.StatusOK {
+		t.Fatalf("paste: %d", rec.Code)
+	}
+	for name, body := range map[string]string{
+		"a text in it":   `{"challenge":"c","factor":"totp","totp_code":"123456","text":"hunter2"}`,
+		"no challenge":   `{"factor":"totp","totp_code":"123456"}`,
+		"another caller": `{"challenge":"c","factor":"totp","callerId":"u-root"}`,
+	} {
+		if rec := send("/sessions/s-1/secret-paste", body); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, rec.Code)
+		}
+	}
+	var stepUp, paste map[string]any
+	for _, r := range broker.requests() {
+		switch {
+		case strings.HasSuffix(r.path, "/secret-paste-step-up"):
+			stepUp = r.body
+		case strings.HasSuffix(r.path, "/secret-paste"):
+			paste = r.body
+		}
+	}
+	if stepUp["callerId"] != "u-alice" || len(stepUp) != 2 {
+		t.Fatalf("step-up forwarded %v", stepUp)
+	}
+	if paste["callerId"] != "u-alice" || paste["challenge"] != "c" || paste["totp_code"] != "123456" {
+		t.Fatalf("paste forwarded %v", paste)
+	}
+	if _, slipped := paste["text"]; slipped {
+		t.Fatal("a text reached the Broker")
+	}
+	if n := broker.reached(http.MethodPost, "/secret-paste"); n != 1 {
+		t.Fatalf("%d paste(s) reached the Broker", n)
+	}
+	// One budget with the other session actions: a burst of 3 spent on pastes leaves no connect.
+	gw, _, _ = actionGateway(t, 3, 6, 100)
+	codes := []int{send("/sessions/s-1/secret-paste-step-up", "").Code, send("/sessions/s-1/secret-paste-step-up", "").Code,
+		send("/sessions/s-1/secret-paste", `{"challenge":"c","factor":"totp"}`).Code, doAs(gw, "tok-alice", http.MethodPost, "/sessions/s-1/connect", "").Code}
+	if codes[3] != http.StatusTooManyRequests {
+		t.Fatalf("the paste routes do not share the budget: %v", codes)
+	}
+}
