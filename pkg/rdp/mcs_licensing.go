@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -15,7 +16,8 @@ import (
 )
 
 const (
-	rdpSecLicensePacket = uint16(0x0080)
+	rdpSecLicensePacket    = uint16(0x0080)
+	rdpSecLicenseEncryptCS = uint16(0x0200)
 
 	rdpLicenseRequest         = byte(0x01)
 	rdpLicenseNewRequest      = byte(0x13)
@@ -329,7 +331,10 @@ func parseRDPServerLicenseRequest(packet []byte, expectedChannelID uint16, fallb
 // secret is encrypted to and the ServerRandom, which the licensing keys are derived from.
 func parseRDPServerLicenseRequestRandom(packet []byte, expectedChannelID uint16, fallbackKey *rsa.PublicKey) (*rsa.PublicKey, []byte, error) {
 	userData, err := parseMCSLicensingIndication(packet, expectedChannelID)
-	if err != nil || len(userData) < 4+4+32+12+8+4 {
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(userData) < 4+4+32+12+8+4 {
 		return nil, nil, licensingRefused("the request: %d bytes", len(packet))
 	}
 	preamble := userData[4:]
@@ -385,7 +390,7 @@ func parseRDPServerLicenseRequestRandom(packet []byte, expectedChannelID uint16,
 	}
 	licenseKey, certErr := parseRDPServerLicenseCertificate(certificateBlob, fallbackKey)
 	if certErr != nil {
-		return nil, nil, licensingRefused("the request certificate: version %#x, %d bytes", licenseCertificateVersion(certificateBlob), len(certificateBlob))
+		return nil, nil, certErr
 	}
 	if len(body) < 4 {
 		return nil, nil, licensingRefused("the request scope count")
@@ -414,45 +419,99 @@ func parseRDPServerLicenseRequestRandom(packet []byte, expectedChannelID uint16,
 func parseRDPServerLicenseCertificate(blob []byte, fallback *rsa.PublicKey) (*rsa.PublicKey, error) {
 	if len(blob) == 0 {
 		if fallback == nil || fallback.N == nil || fallback.N.BitLen() < 1024 {
-			return nil, ErrMCSConnection
+			return nil, licensingRefused("no certificate, and the TLS key is not RSA of 1024 bits or more")
 		}
 		return fallback, nil
 	}
-	if len(blob) < 8 || binary.LittleEndian.Uint32(blob[:4]) != 0x80000002 {
-		return nil, ErrMCSConnection
+	if len(blob) < 8 || binary.LittleEndian.Uint32(blob[:4])&0x7fffffff != 2 {
+		return nil, licensingRefused("the certificate: version %#x, an X.509 chain alone is accepted", licenseCertificateVersion(blob))
 	}
 	count := binary.LittleEndian.Uint32(blob[4:8])
 	if count == 0 || count > 8 {
-		return nil, ErrMCSConnection
+		return nil, licensingRefused("the certificate chain: %d certificates", count)
 	}
 	body := blob[8:]
-	var leaf *x509.Certificate
+	var leaf []byte
 	for i := uint32(0); i < count; i++ {
 		if len(body) < 4 {
-			return nil, ErrMCSConnection
+			return nil, licensingRefused("the certificate chain: certificate %d truncated", i)
 		}
 		length := int(binary.LittleEndian.Uint32(body[:4]))
 		body = body[4:]
 		if length <= 0 || length > maxRDPLicenseBlobSize || len(body) < length {
-			return nil, ErrMCSConnection
+			return nil, licensingRefused("the certificate chain: certificate %d of %d bytes", i, length)
 		}
-		cert, err := x509.ParseCertificate(body[:length])
-		if err != nil {
-			return nil, ErrMCSConnection
-		}
-		if i == 0 {
-			leaf = cert
-		}
+		// The chain goes from the license server's issuer to the terminal server: the key the
+		// premaster secret is encrypted to is the last certificate's (MS-RDPELE 2.2.1.4.2, as
+		// FreeRDP reads it).
+		leaf = body[:length]
 		body = body[length:]
 	}
-	if len(body) != 0 || leaf == nil {
-		return nil, ErrMCSConnection
+	// MS-RDPELE 2.2.1.4.2: 8 + 4 x NumCertBlobs bytes of padding end the chain.
+	if len(body) != 0 && len(body) != 8+4*int(count) {
+		return nil, licensingRefused("the certificate chain: %d bytes after %d certificates", len(body), count)
 	}
-	key, ok := leaf.PublicKey.(*rsa.PublicKey)
-	if !ok || key.N == nil || key.N.BitLen() < 1024 {
-		return nil, ErrMCSConnection
+	key, err := licenseCertificateRSAKey(leaf)
+	if err != nil {
+		return nil, err
+	}
+	if key.N == nil || key.N.BitLen() < 1024 {
+		return nil, licensingRefused("the terminal server key: %d bits", key.N.BitLen())
 	}
 	return key, nil
+}
+
+// licenseCertificateRSAKey is the RSA key of a terminal server certificate. A license server issues
+// it, and Go's X.509 parser may refuse what it signs; the key is then read from the certificate's
+// SubjectPublicKeyInfo alone (an RSAPublicKey in its BIT STRING, RFC 5280 4.1), whatever the
+// algorithm says. The TLS channel, pinned, authenticates the server: this key only encrypts the
+// premaster secret of the licensing exchange.
+func licenseCertificateRSAKey(der []byte) (*rsa.PublicKey, error) {
+	if cert, err := x509.ParseCertificate(der); err == nil {
+		key, ok := cert.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			return nil, licensingRefused("the terminal server key is not RSA")
+		}
+		return key, nil
+	}
+	var certificate struct {
+		TBS       asn1.RawValue
+		Algorithm asn1.RawValue
+		Signature asn1.BitString
+	}
+	if rest, err := asn1.Unmarshal(der, &certificate); err != nil || len(rest) != 0 {
+		return nil, licensingRefused("the terminal server certificate is not DER: %v", err)
+	}
+	// TBSCertificate: [0] version (optional), serial, signature, issuer, validity, subject, SPKI.
+	fields := certificate.TBS.Bytes
+	var field asn1.RawValue
+	index := 0
+	for len(fields) > 0 {
+		next, err := asn1.Unmarshal(fields, &field)
+		if err != nil {
+			return nil, licensingRefused("the terminal server certificate's fields: %v", err)
+		}
+		fields = next
+		if index == 0 && field.Class == asn1.ClassContextSpecific && field.Tag == 0 {
+			continue // version
+		}
+		if index == 5 {
+			var spki struct {
+				Algorithm asn1.RawValue
+				PublicKey asn1.BitString
+			}
+			if _, err := asn1.Unmarshal(field.FullBytes, &spki); err != nil {
+				return nil, licensingRefused("the terminal server key info: %v", err)
+			}
+			key, err := x509.ParsePKCS1PublicKey(spki.PublicKey.Bytes)
+			if err != nil {
+				return nil, licensingRefused("the terminal server key: %v", err)
+			}
+			return key, nil
+		}
+		index++
+	}
+	return nil, licensingRefused("the terminal server certificate has no key")
 }
 
 func validLicenseUTF16Blob(data []byte, length int) bool {
@@ -490,18 +549,25 @@ func parseMCSLicensingIndication(packet []byte, expectedChannelID uint16) ([]byt
 	if len(packet) < 7+7+4 || len(packet) > maxTPKTPacket || packet[0] != 3 || packet[1] != 0 ||
 		int(binary.BigEndian.Uint16(packet[2:4])) != len(packet) ||
 		!equalBytes(packet[4:7], []byte{2, 0xf0, 0x80}) {
-		return nil, ErrMCSConnection
+		return nil, licensingRefused("not one TPKT and X.224 data packet (%d bytes)", len(packet))
 	}
 	mcs := packet[7:]
-	if len(mcs) < 7 || mcs[0] != mcsSendDataIndication ||
-		binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5] != 0x70 {
-		return nil, ErrMCSConnection
+	if len(mcs) < 7 || mcs[0] != mcsSendDataIndication {
+		return nil, licensingRefused("not an MCS Send Data Indication (%#x)", mcs[0])
+	}
+	if binary.BigEndian.Uint16(mcs[3:5]) != expectedChannelID || mcs[5] != 0x70 {
+		return nil, licensingRefused("MCS channel %d, priority and segmentation %#x", binary.BigEndian.Uint16(mcs[3:5]), mcs[5])
 	}
 	length, rest, err := readPERLength(mcs[6:])
-	if err != nil || length == 0 || length > maxTPKTPacket || len(rest) != length ||
-		len(rest) < 4 || binary.LittleEndian.Uint16(rest[:2]) != rdpSecLicensePacket ||
-		binary.LittleEndian.Uint16(rest[2:4]) != 0 {
-		return nil, ErrMCSConnection
+	if err != nil || length == 0 || length > maxTPKTPacket || len(rest) != length || len(rest) < 4 {
+		return nil, licensingRefused("MCS user data of %d bytes for %d", len(rest), length)
+	}
+	// The basic security header (MS-RDPBCGR 2.2.8.1.1.2.1): SEC_LICENSE_PKT, and possibly
+	// SEC_LICENSE_ENCRYPT_CS, which a Remote Desktop Session Host sets to say the client may encrypt
+	// its licensing messages; under TLS nothing else (no SEC_ENCRYPT), and flagsHi zero.
+	flags := binary.LittleEndian.Uint16(rest[:2])
+	if flags&rdpSecLicensePacket == 0 || flags&^(rdpSecLicensePacket|rdpSecLicenseEncryptCS) != 0 || binary.LittleEndian.Uint16(rest[2:4]) != 0 {
+		return nil, licensingRefused("security header flags %#x, flagsHi %#x", flags, binary.LittleEndian.Uint16(rest[2:4]))
 	}
 	return rest, nil
 }
