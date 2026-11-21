@@ -24,10 +24,13 @@ export function SessionDetail({
   session,
   onOpenScreen,
   onTerminate,
+  onConflict,
 }: {
   session: Session;
   onOpenScreen: (sessionId: string, choice?: ScreenChoice) => void;
   onTerminate: (session: Session) => void;
+  // An action refused because the session changed elsewhere (409): the page reads it again.
+  onConflict?: (err: unknown) => void;
 }) {
   const { t, i18n } = useAppTranslation();
   const { who } = useSignedIn();
@@ -83,7 +86,7 @@ export function SessionDetail({
       </dl>
       {session.status === "active" ? (
         <>
-          <SecretInjection session={session} />
+          <SecretInjection session={session} onConflict={onConflict} />
           {session.protocol === "rdp" && mayOpen ? (
             <fieldset className="screen-choice" aria-describedby={`screen-choice-hint-${session.id}`}>
               <legend>{t("screen.choice.label")}</legend>

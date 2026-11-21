@@ -28,7 +28,9 @@ function errorText(error: unknown): string {
 
 // Injects only the Vault credential bound to this persisted session. The browser handles MFA
 // proof, but never receives the credential, the Vault scope, or a caller-selectable account.
-export function SecretInjection({ session, credentials }: { session: Session; credentials?: Credentials }) {
+// onConflict is told of a refusal that may mean the session changed elsewhere (409): the page reads
+// the session again and shows its true status.
+export function SecretInjection({ session, credentials, onConflict }: { session: Session; credentials?: Credentials; onConflict?: (err: unknown) => void }) {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
   const [confirming, setConfirming] = useState(false);
@@ -63,6 +65,7 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
       return true;
     } catch (err) {
       setStartError(errorText(err));
+      onConflict?.(err);
       return false;
     }
   }
@@ -107,6 +110,7 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
       await sendProof({ factor: "totp", totp_code: totpCode });
     } catch (err) {
       setError(err);
+      onConflict?.(err);
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -123,6 +127,7 @@ export function SecretInjection({ session, credentials }: { session: Session; cr
       await sendProof({ factor: "webauthn", webauthn_response: assertion });
     } catch (err) {
       setError(err);
+      onConflict?.(err);
     } finally {
       inFlight.current = false;
       setBusy(false);

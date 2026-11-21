@@ -264,7 +264,7 @@ Les cases sont des critères à prouver, pas une déclaration de réussite. Une 
   - signature non altérée ;
   - protocole retiré du lien du challenge (B03).
 - **Ce que la preuve n'est pas** : la clé est l'authentificateur virtuel de Chrome, pas une clé matérielle. La cible est un serveur SSH de test, pas sudo sur un vrai système.
-- **Défaut d'interface relevé, sans effet de sécurité** : après une fin de session, le détail ouvert dans l'Admin UI montre encore « Active » jusqu'à une nouvelle recherche. La saisie y est refusée (`409`), et le message le dit.
+- **Défaut d'interface relevé, sans effet de sécurité, corrigé le 21 novembre 2026** : après une fin de session, le détail ouvert dans l'Admin UI montrait encore « Active ». Désormais, un refus `409` sur une action de la session affichée (saisie du secret, écran, décision) fait relire la session : son vrai statut s'affiche, ses boutons disparaissent, et la page dit qu'elle n'est plus active (`SessionStaleStatus.test.tsx`).
 - **Restent** :
   - A06, une propriété de chaque déploiement ;
   - H08, les risques P1 d'ADR-0097, qui sont la décision du propriétaire ;

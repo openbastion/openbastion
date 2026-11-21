@@ -1185,6 +1185,7 @@ export default {
       emergencyDecidedBy: "oui, décidée par {{who}}",
       screenRequesterOnly: "Seul le demandeur de la session peut ouvrir son écran.",
       openScreen: "Ouvrir l'écran",
+      noLongerActive: "La session {{id}} n'est plus active : rien n'a été fait. Son statut vient d'être relu.",
       terminate: "Mettre fin",
     },
   },
