@@ -564,10 +564,12 @@ func parseMCSLicensingIndication(packet []byte, expectedChannelID uint16) ([]byt
 	}
 	// The basic security header (MS-RDPBCGR 2.2.8.1.1.2.1): SEC_LICENSE_PKT, and possibly
 	// SEC_LICENSE_ENCRYPT_CS, which a Remote Desktop Session Host sets to say the client may encrypt
-	// its licensing messages; under TLS nothing else (no SEC_ENCRYPT), and flagsHi zero.
+	// its licensing messages; under TLS nothing else (no SEC_ENCRYPT, no SEC_FLAGSHI_VALID). flagsHi
+	// is ignored without SEC_FLAGSHI_VALID, as the specification says and FreeRDP does: a session
+	// host fills it with what looks like garbage (0x46, 0x1648, 0xafe2… in CI of PR #259).
 	flags := binary.LittleEndian.Uint16(rest[:2])
-	if flags&rdpSecLicensePacket == 0 || flags&^(rdpSecLicensePacket|rdpSecLicenseEncryptCS) != 0 || binary.LittleEndian.Uint16(rest[2:4]) != 0 {
-		return nil, licensingRefused("security header flags %#x, flagsHi %#x", flags, binary.LittleEndian.Uint16(rest[2:4]))
+	if flags&rdpSecLicensePacket == 0 || flags&^(rdpSecLicensePacket|rdpSecLicenseEncryptCS) != 0 {
+		return nil, licensingRefused("security header flags %#x", flags)
 	}
 	return rest, nil
 }

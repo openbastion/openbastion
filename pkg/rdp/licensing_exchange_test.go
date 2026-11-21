@@ -559,14 +559,21 @@ func TestLicensing_TheChainOfASessionHost(t *testing.T) {
 }
 
 func TestLicensing_TheSecurityHeaderOfASessionHost(t *testing.T) {
-	packet := func(flags uint16) []byte {
-		return mcsTestServerSendData(testConcat(binary.LittleEndian.AppendUint16(nil, flags), []byte{0, 0, rdpLicenseErrorAlert, rdpLicenseProtocolVersion, 4, 0}))
+	packet := func(flags, flagsHi uint16) []byte {
+		return mcsTestServerSendData(testConcat(binary.LittleEndian.AppendUint16(nil, flags), binary.LittleEndian.AppendUint16(nil, flagsHi),
+			[]byte{rdpLicenseErrorAlert, rdpLicenseProtocolVersion, 4, 0}))
 	}
-	if _, err := parseMCSLicensingIndication(packet(0x0280), mcsGlobalChannelID); err != nil {
+	if _, err := parseMCSLicensingIndication(packet(0x0280, 0), mcsGlobalChannelID); err != nil {
 		t.Fatalf("SEC_LICENSE_ENCRYPT_CS refused: %v", err)
 	}
-	for _, flags := range []uint16{0x0000, 0x0200, 0x0088, 0x0480} {
-		if _, err := parseMCSLicensingIndication(packet(flags), mcsGlobalChannelID); !errors.Is(err, ErrMCSConnection) {
+	// flagsHi as a session host of the CI filled it, ignored without SEC_FLAGSHI_VALID.
+	for _, flagsHi := range []uint16{0x46, 0x1648, 0xafe2} {
+		if _, err := parseMCSLicensingIndication(packet(0x0080, flagsHi), mcsGlobalChannelID); err != nil {
+			t.Fatalf("flagsHi %#x refused: %v", flagsHi, err)
+		}
+	}
+	for _, flags := range []uint16{0x0000, 0x0200, 0x0088, 0x0480, 0x8080} {
+		if _, err := parseMCSLicensingIndication(packet(flags, 0), mcsGlobalChannelID); !errors.Is(err, ErrMCSConnection) {
 			t.Errorf("flags %#x accepted", flags)
 		}
 	}
