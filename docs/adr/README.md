@@ -142,6 +142,7 @@ Le pipeline proxy partagé, les transferts, la mise à l'échelle et la biblioth
 | 3 | [ADR-0046](0046-plusieurs-instances-du-proxy-ssh-le-broker-les-connait-toutes.md) | Plusieurs instances du proxy SSH : le Broker les connaît toutes, émet un ticket chez l'une, et fait révoquer chez toutes | Accepté |
 | 4 | [ADR-0083](0083-bibliotheque-ssh-openbastion-avec-politiques-capture-et-audit.md) | La bibliothèque SSH OpenBastion intègre politiques, capture et audit au cycle protocolaire | Proposé |
 | 5 | [ADR-0082](0082-rsync-distant-passe-par-le-proxy-ssh-sans-shell-arbitraire.md) | rsync distant passe par le proxy SSH, sans shell arbitraire | Proposé |
+| 6 | [ADR-0133](0133-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Proposé |
 
 ### 9. Proxy écran RDP et VNC
 
@@ -420,3 +421,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0130](0130-connecteurs-protocoles.md) | Les connecteurs et protocoles ne sont visibles qu’après preuve de disponibilité | Proposé | Alignement UI, contrats et roadmap |
 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté | Alignement UI, contrats et roadmap |
 | [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté | Alignement UI, contrats et roadmap |
+| [ADR-0133](0133-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Proposé | Proxy SSH |

@@ -1,6 +1,6 @@
 # Contrat de confirmation MFA pour l'injection d'un secret
 
-**Statut au 15 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles ; Admin UI raccordée à l'incrément UI ADR-0097 ; validation multi-processus VNC/RDP sur cibles réelles encore requise
+**État actualisé au 21 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles ; Admin UI raccordée (ADR-0097 §12) ; E2E multi-processus SSH/VNC/RDP validés ; VNC éprouvé contre TigerVNC réel ; test Chromium de l’UI avec API simulée passé dans la CI de la PR #220. Restent la réception Unicode RDP sur Windows en CI, le parcours navigateur contre une cible réelle et les risques P1 de la revue STRIDE.
 **Décision de référence :** ADR-0097 (accepté)  
 **Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) reste bloqué tant que le transport navigateur → proxy ne garantit pas que la Gateway ne voit jamais le clair.
 

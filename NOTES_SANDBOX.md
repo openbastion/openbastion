@@ -5228,3 +5228,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : la session s'ouvre sur un vrai hôte de sessions, à travers sa demande de licence réelle.
 - **Non prouvé contre Windows** : l'émission et la présentation d'une licence. Pendant sa période de grâce, l'hôte ne licencie personne (« issued 0 », mesuré). Il faudrait un serveur de licences activé et pourvu de licences, et forcer la fin de la grâce est écarté.
 - **Une fois** : des refus TLS de Windows (événement 139, `SEC_E_CERT_UNKNOWN`), alors que la cible était saine. Run 44905986307.
+
+
+## 2026-11-21 — ADR-0133 : client SSH standard et step-up MFA lié à l’action
+
+- **Proposé** : ADR-0133 décrit le parcours OpenSSH → SSH Proxy avec ticket à usage unique, puis le step-up `secret:inject` réalisé dans l’Admin UI par TOTP ou WebAuthn. Il complète ADR-0097 sans réécrire ses décisions acceptées.
+- **Frontières clarifiées** : SSH client-proxy et SSH proxy-cible sont deux transports distincts terminés par le proxy ; HTTPS transporte le challenge/la preuve MFA et mTLS protège les appels internes. Le credential Vault n’est remis qu’au proxy propriétaire puis envoyé à la cible dans le flux SSH. Aucun chiffrement opaque de bout en bout client-cible n’est revendiqué.
+- **Documentation alignée** : les deux phrases historiques de `docs/api/grpc/README.md` qui disaient que l’Admin UI n’était pas raccordée sont corrigées ; le contrat ADR-0097 §12 et le composant `SecretInjection` montrent déjà l’intégration.
+- **Limites non levées** : WebAuthn réel en navigateur contre une cible SSH, course révocation/frappe, focus/invite masquée et copies résiduelles mémoire restent à prouver ou à accepter explicitement ; le parcours B reste interdit.
+- Aucun code produit ni contrat API modifié. Les tests d’intégration existants ne sont pas relancés par cette contribution documentaire.
