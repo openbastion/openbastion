@@ -113,12 +113,22 @@ func (k *PasteKey) Open(sessionID, protocol string, in screenstream.PasteInput) 
 // SealPaste is what the browser does (WebCrypto), written in Go for the tests and for any other
 // client of the screen contract: an ephemeral key, the same derivation, a random nonce.
 func SealPaste(proxyKey []byte, sessionID, protocol string, token [screenstream.PasteTokenSize]byte, text []byte) (screenstream.PasteInput, error) {
+	ephemeral, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		return screenstream.PasteInput{}, err
+	}
+	var nonce [screenstream.PasteNonceSize]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return screenstream.PasteInput{}, err
+	}
+	return sealPasteWith(proxyKey, ephemeral, nonce, sessionID, protocol, token, text)
+}
+
+// sealPasteWith is SealPaste with its ephemeral key and nonce given: the known-answer vector the Admin
+// UI's WebCrypto code is checked against is made with it (paste_vector_test.go, pasteCrypto.test.ts).
+func sealPasteWith(proxyKey []byte, ephemeral *ecdh.PrivateKey, nonce [screenstream.PasteNonceSize]byte, sessionID, protocol string, token [screenstream.PasteTokenSize]byte, text []byte) (screenstream.PasteInput, error) {
 	var in screenstream.PasteInput
 	proxy, err := ecdh.P256().NewPublicKey(proxyKey)
-	if err != nil {
-		return in, err
-	}
-	ephemeral, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {
 		return in, err
 	}
@@ -128,12 +138,9 @@ func SealPaste(proxyKey []byte, sessionID, protocol string, token [screenstream.
 	}
 	defer clear(shared)
 	copy(in.ClientKey[:], ephemeral.PublicKey().Bytes())
-	in.Token = token
+	in.Token, in.Nonce = token, nonce
 	aead, err := pasteAEAD(shared, token, in.ClientKey[:], proxyKey)
 	if err != nil {
-		return in, err
-	}
-	if _, err := rand.Read(in.Nonce[:]); err != nil {
 		return in, err
 	}
 	in.Ciphertext = aead.Seal(nil, in.Nonce[:], text, pasteAAD(sessionID, token, protocol))

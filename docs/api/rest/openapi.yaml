@@ -2260,6 +2260,7 @@ components:
             sessions.read: false
             sessions.terminate: false
             secrets.inject: false
+            secrets.paste: false
             recordings.read: false
             audit.secretInjections: false
     User:

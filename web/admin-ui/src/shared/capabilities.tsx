@@ -27,6 +27,7 @@ export const capabilityNames = [
   "sessions.read",
   "sessions.terminate",
   "secrets.inject",
+  "secrets.paste",
   "recordings.read",
   "audit.secretInjections",
 ] as const;

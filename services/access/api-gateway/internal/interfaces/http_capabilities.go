@@ -49,6 +49,7 @@ var capabilityCatalogue = []struct {
 	{"sessions.read", []capabilityCheck{{"session-read:account:", "session:read", true}}},
 	{"sessions.terminate", []capabilityCheck{{"session-terminate:account:", "session:terminate", true}}},
 	{"secrets.inject", []capabilityCheck{{"secret:inject:account:", "secret:inject", true}}},
+	{"secrets.paste", []capabilityCheck{{"secret:paste:account:", "secret:paste", true}}}, // ADR-0133
 	// Command Recorder and Video Recorder.
 	{"recordings.read", []capabilityCheck{{"recording:session:", "recording:session:read", true}}},
 	// Gateway (handleSecretInjectionReconciliation).
