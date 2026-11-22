@@ -32,6 +32,8 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/audit/v1/emit-event", s.handleEmitEvent)
 	mux.HandleFunc("/audit/v1/verify-chain", s.handleVerifyChain)
 	mux.HandleFunc("/audit/v1/secret-injections", s.handleSecretInjectionReconciliation)
+	mux.HandleFunc("/audit/v1/session-metadata/attestations", s.handleAttestSessionMetadata)
+	mux.HandleFunc("/audit/v1/session-metadata/head", s.handleSessionMetadataHead)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	return mux
 }

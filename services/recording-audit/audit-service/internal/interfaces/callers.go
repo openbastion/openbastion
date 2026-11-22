@@ -20,6 +20,9 @@ func CallerRules() []mtls.Rule {
 		// Reconciliation is an operator-only read of retained, signed audit evidence. The Gateway
 		// is admitted only as a facade; it enforces the verified user policy before this call.
 		{Method: http.MethodGet, Path: "/audit/v1/secret-injections", Callers: []string{mtls.AdminCLI, mtls.APIGateway}},
+		// The heads of the session metadata (ADR-0116 §4): the Session Broker's only.
+		{Method: http.MethodPost, Path: "/audit/v1/session-metadata/attestations", Callers: []string{mtls.SessionBroker}},
+		{Method: http.MethodGet, Path: "/audit/v1/session-metadata/head", Callers: []string{mtls.SessionBroker}},
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

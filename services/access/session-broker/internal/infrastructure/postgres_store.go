@@ -48,6 +48,36 @@ type PostgresStore struct {
 	db *sql.DB
 	// keys: the current key first, then the previous ones a rotation still verifies (§7).
 	keys []domain.MetadataKey
+	// attestor moves each session's independent head once a change is committed (§3, §5); nil:
+	// none, as in the store's own tests.
+	attestor domain.MetadataAttestor
+}
+
+// WithAttestor has every committed change attested to the Audit Service (ADR-0116 §5): a change
+// is confirmed to the caller only once its revision is the head.
+func (s *PostgresStore) WithAttestor(a domain.MetadataAttestor) *PostgresStore {
+	s.attestor = a
+	return s
+}
+
+// attest moves the head of each session written to its new revision. The rows are committed: a
+// failure here is a change not confirmed, which the next read of the session finds one revision
+// ahead of its head (§5).
+func (s *PostgresStore) attest(ctx context.Context, written ...*domain.Session) error {
+	if s.attestor == nil {
+		return nil
+	}
+	for _, sess := range written {
+		if err := s.attestor.AttestMetadata(ctx, sess.ID, sess.MetadataRevision, domain.MetadataDigest(sess), s.keys[0].ID); err != nil {
+			if errors.Is(err, domain.ErrMetadataIntegrity) {
+				log.Printf("session-broker: ADR-0116: the audit's head refuses revision %d of session %q: %v", sess.MetadataRevision, sess.ID, err)
+				return err
+			}
+			return fmt.Errorf("%w: revision %d of session %s is written but not attested, so not confirmed (ADR-0116 §5): %v",
+				domain.ErrUnavailable, sess.MetadataRevision, sess.ID, err)
+		}
+	}
+	return nil
 }
 
 // NewPostgresStore signs with current, and verifies rows signed with current or any of previous.
@@ -205,31 +235,40 @@ func (s *PostgresStore) Save(ctx context.Context, sess *domain.Session) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := s.saveTx(ctx, tx, sess); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *PostgresStore) saveTx(ctx context.Context, tx *sql.Tx, sess *domain.Session) error {
-	r, err := s.lockRow(ctx, tx, sess.ID)
+	written, err := s.saveTx(ctx, tx, sess)
 	if err != nil {
 		return err
 	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.attest(ctx, written)
+}
+
+// saveTx writes sess in tx and returns the row as written (what is signed and attested).
+func (s *PostgresStore) saveTx(ctx context.Context, tx *sql.Tx, sess *domain.Session) (*domain.Session, error) {
+	r, err := s.lockRow(ctx, tx, sess.ID)
+	if err != nil {
+		return nil, err
+	}
 	if r == nil {
-		return s.insert(ctx, tx, sess)
+		if err := s.insert(ctx, tx, sess); err != nil {
+			return nil, err
+		}
+		written := *sess
+		return &written, nil
 	}
 	stored, err := s.writable(r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	next := *stored
 	next.Status, next.TerminatedAt = sess.Status, sess.TerminatedAt
 	if err := s.update(ctx, tx, &next, ""); err != nil {
-		return err
+		return nil, err
 	}
 	sess.MetadataRevision, sess.Integrity = next.MetadataRevision, next.Integrity
-	return nil
+	return &next, nil
 }
 
 // pendingLockClass namespaces the advisory locks this store takes, so that they
@@ -273,10 +312,14 @@ func (s *PostgresStore) SaveIfUnderPendingLimit(ctx context.Context, sess *domai
 	if n >= limit {
 		return false, nil // the deferred Rollback ends the transaction and frees the lock
 	}
-	if err := s.saveTx(ctx, tx, sess); err != nil {
+	written, err := s.saveTx(ctx, tx, sess)
+	if err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	if err := s.attest(ctx, written); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -312,6 +355,9 @@ func (s *PostgresStore) SaveIfStatus(ctx context.Context, sess *domain.Session, 
 		return false, err
 	}
 	sess.MetadataRevision, sess.Integrity = next.MetadataRevision, next.Integrity
+	if err := s.attest(ctx, &next); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -451,6 +497,13 @@ func (s *PostgresStore) ExpireDue(ctx context.Context, now time.Time, limit int)
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	// The expiries are committed and stand; a revision not attested now is found one ahead of its
+	// head by the next read (§5), and does not hold up the others.
+	for _, sess := range due {
+		if err := s.attest(ctx, sess); err != nil {
+			log.Printf("session-broker: the expiry of session %q: %v", sess.ID, err)
+		}
+	}
 	return due, nil
 }
 
@@ -530,5 +583,8 @@ func (s *PostgresStore) MarkAfterUseDelivered(ctx context.Context, id string) er
 	if err := s.update(ctx, tx, &next, ""); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.attest(ctx, &next)
 }

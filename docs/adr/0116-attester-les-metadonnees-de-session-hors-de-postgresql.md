@@ -73,3 +73,18 @@ Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, ren
   - contre-épreuves : sans la vérification, avec un champ retiré de la forme canonique, avec une ligne legacy dans la liste, sans la garde de la migration, sans le refus à la connexion : les tests échouent.
 - **Reste** (incrément 2 d'abord) : **le rejeu d'une ancienne ligne entière n'est pas encore détecté** — une ligne restaurée à une révision antérieure porte un MAC valide ; c'est la tête de l'Audit Service qui l'arrêtera. L'Admin UI ne signale pas encore une session legacy.
 
+### Incrément 2 — la tête dans l'Audit Service (22 novembre 2026)
+
+- **Fait** :
+  - Audit Service : la table `session_metadata_heads` (migration 004), l'événement `session.metadata_attested` écrit avec la tête dans **une** transaction, et les deux routes internes réservées au Broker (`docs/api/internal/audit-service.md`).
+    - Attester : une révision qui suit la tête l'avance ; la même révision avec le même digest ne change rien ; une révision plus ancienne, la même avec un autre digest ou une autre clé, ou plus d'une d'avance sont refusées (`409`) sans rien écrire.
+    - Lire : la tête n'est rendue qu'une fois recalculée en l'événement signé qu'elle nomme ; elle le reste après l'archivage de cet événement.
+    - Une session sans tête accepte sa première attestation à toute révision : ce sont les lignes signées avant cet incrément, ou celles dont la première attestation s'est perdue. Choix renversable, sans lequel ces sessions seraient refusées pour toujours ; l'incrément 3 dira ce qu'une lecture fait d'une session sans tête.
+  - Broker : chaque changement validé en base est attesté (création, `Save`, compare-and-swap, quota, effacement de la dette) ; il n'est confirmé à l'appelant qu'une fois la tête avancée. Une attestation qui échoue donne `ErrUnavailable` (la ligne est écrite, une révision en avance) ; une tête qui refuse donne `ErrMetadataIntegrity`. Le balayage des expirations attestera ce qu'il expire, et ne s'arrête pas si l'Audit Service ne répond pas. La terminaison prévient le proxy avant d'écrire : une attestation qui échoue ne laisse jamais une session vivante au proxy.
+- **Prouvé** :
+  - Audit, en mémoire et sur PostgreSQL réel (schéma isolé) : la suite des révisions, l'idempotence sans nouvel événement, les trois refus sans rien écrire, l'émetteur (le Broker seul), les champs mal formés ; une tête modifiée (révision, digest, clé, événement, émetteur, ou en SQL) ne se recalcule plus ; une tête reste vérifiable une fois ses événements sortis de la base ; la chaîne se vérifie avec ses attestations ; une tête qui a bougé n'écrit ni l'événement ni la tête ; les règles d'appel (le Broker seul).
+  - Broker, sur PostgreSQL réel : les révisions 1, 2, 3 d'une session sont attestées dans l'ordre ; une attestation échouée n'est pas confirmée, une tête qui refuse est une erreur d'intégrité ; le balayage expire malgré l'Audit Service absent.
+  - **Entre deux vrais processus** : un Broker qui expire une session fait avancer sa tête dans un vrai Audit Service à la révision 2, avec l'empreinte que le signataire indépendant de `test/integration` calcule pour la ligne expirée.
+  - Contre-épreuves : un retour en arrière accepté, une tête non recalculée, un `Save` non attesté, et les tests échouent. La garde « tête déplacée » de l'Audit Service est doublée par la condition de l'upsert : retirer l'une seule ne suffit pas à écrire.
+- **Reste** : **la lecture ne compare pas encore la ligne à la tête** (incrément 3) : tant qu'elle ne le fait pas, une ancienne ligne restaurée n'est toujours pas refusée. Puis la ré-attestation d'une rotation et les rôles PostgreSQL distincts (incrément 4).
+

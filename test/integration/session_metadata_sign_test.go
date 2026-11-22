@@ -21,19 +21,11 @@ import (
 type signedSessionRow struct {
 	ID, Status, Protocol, RequestedBy, Account, Justification string
 	CreatedAt, ExpiresAt                                      time.Time
-	BreakGlass                                                bool
+	BreakGlass, AfterUseOwed                                  bool
 }
 
-func sessionMetadataMAC(t *testing.T, r signedSessionRow, revision uint64, keyID string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(testMetadataKeyFile())
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, err := hex.DecodeString(strings.TrimSpace(string(raw)))
-	if err != nil {
-		t.Fatal(err)
-	}
+// sessionMetadataCanonical is the canonical form v1 of the row.
+func sessionMetadataCanonical(r signedSessionRow) []byte {
 	b := []byte{1}
 	str := func(v string) { b = binary.BigEndian.AppendUint32(b, uint32(len(v))); b = append(b, v...) }
 	i64 := func(v int64) { b = binary.BigEndian.AppendUint64(b, uint64(v)) }
@@ -62,7 +54,21 @@ func sessionMetadataMAC(t *testing.T, r signedSessionRow, revision uint64, keyID
 	flag(false) // decided_at
 	flag(false) // clipboard_to_target
 	flag(false) // clipboard_from_target
-	flag(false) // after_use_owed
+	flag(r.AfterUseOwed)
+	return b
+}
+
+func sessionMetadataMAC(t *testing.T, r signedSessionRow, revision uint64, keyID string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(testMetadataKeyFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := hex.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := sessionMetadataCanonical(r)
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte("openbastion/session-metadata/v1\x00"))
 	var head [8]byte

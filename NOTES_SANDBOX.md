@@ -5362,3 +5362,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Limite** : le rejeu d'une ancienne ligne entière n'est pas encore détecté (incrément 2 : la tête dans l'Audit Service).
 - **Sandbox** : un volume Base44 qui contient une session active, une expiration non auditée ou une dette envers le Vault empêche le Broker de démarrer (la migration le dit) ; terminer les sessions ou `down -v`.
 
+## 2026-11-22 — ADR-0116, incrément 2 : la tête de chaque session dans l'Audit Service
+
+- **Fait** : `session.metadata_attested` et `session_metadata_heads` dans une transaction ; routes internes réservées au Broker ; le Broker atteste chaque changement validé et ne le confirme qu'ensuite.
+- **Prouvé** : suite, idempotence, refus (retour en arrière, fourche, saut), tête altérée refusée, tête vérifiable après archivage ; entre deux vrais processus, la tête suit l'expiration avec l'empreinte du signataire indépendant ; contre-épreuves.
+- **Limite** : la lecture ne compare pas encore la ligne à la tête (incrément 3) ; le rejeu d'une ancienne ligne n'est donc pas encore refusé.
+

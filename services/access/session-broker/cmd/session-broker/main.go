@@ -66,6 +66,7 @@ func runService() {
 	vncProxyURLs := proxyURLsFor("RDP_VNC_PROXY_URLS", "RDP_VNC_PROXY_URL", rt.DefaultURL("127.0.0.1:8090"))
 
 	var store domain.SessionRepository
+	var pgStore *infrastructure.PostgresStore
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		// ADR-0116: every row is signed under a key PostgreSQL never holds. Read before the database
 		// is opened: without it, nothing is written.
@@ -78,7 +79,8 @@ func runService() {
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
-		store = infrastructure.NewPostgresStore(db, current, previous...)
+		pgStore = infrastructure.NewPostgresStore(db, current, previous...)
+		store = pgStore
 		log.Printf("session-broker: session metadata signed under key %q (ADR-0116)", current.ID)
 		log.Printf("session-broker: using PostgreSQL at %s", redactDSN(dsn))
 	} else {
@@ -101,6 +103,11 @@ func runService() {
 	mfaAction := &infrastructure.MFAActionClient{BaseURL: authenticationURL, Client: peer(authenticationURL, mtls.Authentication)}
 	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
+	if pgStore != nil {
+		// ADR-0116 §3: each committed change of a session's row moves its independent head in the
+		// Audit Service; a change is confirmed only once it has.
+		pgStore.WithAttestor(audit)
+	}
 	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	// Every instance of the SSH proxy, each addressed directly and pinned to the proxy's
 	// identity (ADR-0046): a ticket is issued by one, a revocation is asked of all.

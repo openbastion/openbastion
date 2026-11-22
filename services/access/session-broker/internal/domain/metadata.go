@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
@@ -43,6 +44,12 @@ var ErrMetadataIntegrity = errors.New("session metadata failed its integrity che
 
 // ErrMetadataUnverified is a privileged action on a legacy, unattested session (ADR-0116 §8).
 var ErrMetadataUnverified = errors.New("this session predates the attestation of session metadata (ADR-0116): it is read-only")
+
+// MetadataAttestor moves a session's independent head to a revision (ADR-0116 §3): the Audit
+// Service's, out of reach of the Broker's database role.
+type MetadataAttestor interface {
+	AttestMetadata(ctx context.Context, sessionID string, revision uint64, digest [32]byte, keyID string) error
+}
 
 // MetadataKey is one HMAC key and the identifier stored with the rows it signs.
 type MetadataKey struct {

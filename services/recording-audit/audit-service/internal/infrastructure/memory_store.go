@@ -13,6 +13,7 @@ import (
 type InMemoryStore struct {
 	mu     sync.Mutex
 	events []*domain.Event
+	heads  map[string]domain.MetadataHead // ADR-0116 §3
 }
 
 func NewInMemoryStore() *InMemoryStore { return &InMemoryStore{} }
@@ -55,4 +56,31 @@ func (s *InMemoryStore) DeleteThrough(ctx context.Context, lastID string, expect
 		}
 	}
 	return fmt.Errorf("event %s is not in the chain: nothing deleted", lastID)
+}
+
+// AppendAttestation is application.MetadataHeadStore.AppendAttestation, under the store's lock.
+func (s *InMemoryStore) AppendAttestation(ctx context.Context, e *domain.Event, head domain.MetadataHead, previous *domain.MetadataHead) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.heads[head.SessionID]
+	if ok != (previous != nil) || ok && current.Revision != previous.Revision {
+		return fmt.Errorf("the head of session %s moved: nothing written", head.SessionID)
+	}
+	if s.heads == nil {
+		s.heads = map[string]domain.MetadataHead{}
+	}
+	s.events = append(s.events, e)
+	s.heads[head.SessionID] = head
+	return nil
+}
+
+// MetadataHead is application.MetadataHeadStore.MetadataHead.
+func (s *InMemoryStore) MetadataHead(ctx context.Context, sessionID string) (*domain.MetadataHead, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	head, ok := s.heads[sessionID]
+	if !ok {
+		return nil, nil
+	}
+	return &head, nil
 }

@@ -35,6 +35,14 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Deny("ssh-proxy", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Allow("command-recorder", "GET", "/healthz"),
+
+		// ADR-0116 §4: the heads of the session metadata, the Session Broker's only.
+		mtlstest.Allow("session-broker", "POST", "/audit/v1/session-metadata/attestations"),
+		mtlstest.Allow("session-broker", "GET", "/audit/v1/session-metadata/head"),
+		mtlstest.Deny("rdp-vnc-proxy", "POST", "/audit/v1/session-metadata/attestations"),
+		mtlstest.Deny("api-gateway", "GET", "/audit/v1/session-metadata/head"),
+		mtlstest.Deny("admin-cli", "POST", "/audit/v1/session-metadata/attestations"),
+		mtlstest.Deny("session-broker", "GET", "/audit/v1/session-metadata/attestations"),
 	})
 }
 
@@ -43,6 +51,8 @@ func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 		{Method: "POST", Path: "/audit/v1/emit-event"},
 		{Method: "GET", Path: "/audit/v1/verify-chain"},
 		{Method: "GET", Path: "/audit/v1/secret-injections"},
+		{Method: "POST", Path: "/audit/v1/session-metadata/attestations"},
+		{Method: "GET", Path: "/audit/v1/session-metadata/head"},
 		{Method: "GET", Path: "/healthz"},
 	})
 }
