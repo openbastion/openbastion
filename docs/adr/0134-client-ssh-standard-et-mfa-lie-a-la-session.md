@@ -300,7 +300,7 @@ L'ADR ne pourra passer à `Accepté` qu'après décision explicite du propriéta
 - La course concurrente entre révocation et frappe reste un risque P1 dans la revue STRIDE ; l'absence de nouvelles frappes après acquittement ne prouve pas l'atomicité d'une frappe déjà en cours.
 - Go, TLS et le ramasse-miettes peuvent conserver des copies transitoires que l'application ne peut pas garantir effacées ; voir ADR-0115.
 - Un Broker, un proxy ou une identité mTLS compromise reste une compromission d'une frontière de confiance.
-- Le parcours B (secret fourni par l'opérateur) est conçu pour RDP/VNC par ADR-0133 (ECDH P-256, HKDF-SHA-256 et AES-256-GCM pour le proxy), mais son implémentation et sa validation restent à réaliser. Cette conception protège contre une Gateway saine qui relaie le ciphertext, pas contre une Gateway compromise qui sert une UI modifiée. Elle ne définit pas de canal pour le parcours SSH de cet ADR.
+- Le parcours B (secret fourni par l'opérateur) est conçu pour RDP/VNC par ADR-0133 (ECDH P-256, HKDF-SHA-256 et AES-256-GCM pour le proxy), mais son implémentation et sa validation restent à réaliser (mises en œuvre et éprouvées depuis le 22 novembre 2026 : voir ADR-0133). Cette conception protège contre une Gateway saine qui relaie le ciphertext, pas contre une Gateway compromise qui sert une UI modifiée. Elle ne définit pas de canal pour le parcours SSH de cet ADR.
 - Le client SSH doit faire confiance à la clé d'hôte du proxy selon la configuration du déploiement ; cet ADR ne définit pas de nouveau mécanisme de distribution de cette clé.
 
 ### 7. Alternatives envisagées
