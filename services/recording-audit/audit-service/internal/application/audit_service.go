@@ -181,51 +181,10 @@ func (s *AuditService) EmitEventAsWithDetails(ctx context.Context, emitter, acto
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	last, err := s.store.Last(ctx)
+	e, err := s.nextEvent(ctx, emitter, actorID, action, resourceType, resourceID, details, success)
 	if err != nil {
 		return nil, err
 	}
-	var prevHash []byte
-	hashVersion := domain.HashV3
-	if last != nil {
-		prevHash = last.Hash
-		if last.HashVersion >= domain.HashV4 || len(details) > 0 {
-			hashVersion = domain.HashV4
-		}
-	} else if len(details) > 0 {
-		hashVersion = domain.HashV4
-	}
-
-	e := &domain.Event{
-		// Truncated to microsecond precision — not time.Now().UTC()'s
-		// full nanosecond resolution — because computeHash below hashes
-		// Timestamp byte-for-byte (via UnixNano), and PostgreSQL's
-		// TIMESTAMPTZ column (001_init.sql) only HAS microsecond
-		// precision: a value stored and reloaded loses its last three
-		// nanosecond digits, silently. A hash computed on the
-		// full-precision value and later recomputed from the
-		// Postgres-truncated one would never match again — VerifyChain
-		// would report every single event as tampered, forever, the
-		// moment it round-tripped through a real database. This was a
-		// real, latent bug until TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart
-		// actually called verify-chain against a real Postgres-backed
-		// chain — see NOTES_SANDBOX.md. Truncating here, before the hash
-		// is ever computed, makes the hashed value identical to what any
-		// storage engine (PostgresStore included) actually persists and
-		// returns, InMemoryStore's untruncated precision notwithstanding
-		// (it never had a precision mismatch to begin with, so this is a
-		// no-op for it).
-		ID: nextID(), Timestamp: s.now().UTC().Truncate(time.Microsecond), ActorID: actorID,
-		Action: action, ResourceType: resourceType, ResourceID: resourceID,
-		Details: cloneDetails(details), Success: success, PrevHash: prevHash, HashVersion: hashVersion,
-		Emitter: emitter, KeyID: s.keys.current,
-	}
-	if e.HashVersion == domain.HashV4 {
-		e.Hash = computeHashV4(s.keys.keys[s.keys.current], e)
-	} else {
-		e.Hash = computeHashV3(s.keys.keys[s.keys.current], e)
-	}
-
 	if err := s.store.Append(ctx, e); err != nil {
 		return nil, err
 	}
@@ -401,4 +360,54 @@ var idCounter int64
 func nextID() string {
 	idCounter++
 	return fmt.Sprintf("evt_%d_%d", time.Now().UTC().UnixNano(), idCounter)
+}
+
+// nextEvent is the next event of the chain, signed, not yet appended. The caller holds s.mu.
+func (s *AuditService) nextEvent(ctx context.Context, emitter, actorID, action, resourceType, resourceID string, details map[string]string, success bool) (*domain.Event, error) {
+	last, err := s.store.Last(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var prevHash []byte
+	hashVersion := domain.HashV3
+	if last != nil {
+		prevHash = last.Hash
+		if last.HashVersion >= domain.HashV4 || len(details) > 0 {
+			hashVersion = domain.HashV4
+		}
+	} else if len(details) > 0 {
+		hashVersion = domain.HashV4
+	}
+
+	e := &domain.Event{
+		// Truncated to microsecond precision — not time.Now().UTC()'s
+		// full nanosecond resolution — because computeHash below hashes
+		// Timestamp byte-for-byte (via UnixNano), and PostgreSQL's
+		// TIMESTAMPTZ column (001_init.sql) only HAS microsecond
+		// precision: a value stored and reloaded loses its last three
+		// nanosecond digits, silently. A hash computed on the
+		// full-precision value and later recomputed from the
+		// Postgres-truncated one would never match again — VerifyChain
+		// would report every single event as tampered, forever, the
+		// moment it round-tripped through a real database. This was a
+		// real, latent bug until TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart
+		// actually called verify-chain against a real Postgres-backed
+		// chain — see NOTES_SANDBOX.md. Truncating here, before the hash
+		// is ever computed, makes the hashed value identical to what any
+		// storage engine (PostgresStore included) actually persists and
+		// returns, InMemoryStore's untruncated precision notwithstanding
+		// (it never had a precision mismatch to begin with, so this is a
+		// no-op for it).
+		ID: nextID(), Timestamp: s.now().UTC().Truncate(time.Microsecond), ActorID: actorID,
+		Action: action, ResourceType: resourceType, ResourceID: resourceID,
+		Details: cloneDetails(details), Success: success, PrevHash: prevHash, HashVersion: hashVersion,
+		Emitter: emitter, KeyID: s.keys.current,
+	}
+	if e.HashVersion == domain.HashV4 {
+		e.Hash = computeHashV4(s.keys.keys[s.keys.current], e)
+	} else {
+		e.Hash = computeHashV3(s.keys.keys[s.keys.current], e)
+	}
+
+	return e, nil
 }

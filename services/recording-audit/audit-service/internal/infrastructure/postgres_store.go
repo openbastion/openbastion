@@ -49,6 +49,14 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 }
 
 func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
+	return appendEvent(ctx, s.db, e)
+}
+
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func appendEvent(ctx context.Context, db execer, e *domain.Event) error {
 	eventDetails := e.Details
 	if eventDetails == nil {
 		eventDetails = map[string]string{}
@@ -57,7 +65,7 @@ func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO audit_events (id, ts, actor_id, action, resource_type, resource_id, details, success, prev_hash, hash, hash_version, emitter, chain_key_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		e.ID, e.Timestamp, nullIfEmpty(e.ActorID), e.Action, e.ResourceType, e.ResourceID, string(details), e.Success, e.PrevHash, e.Hash, e.HashVersion, e.Emitter, e.KeyID)
@@ -152,4 +160,65 @@ func scanEvent(row rowScanner) (*domain.Event, error) {
 
 func nullIfEmpty(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// AppendAttestation is application.MetadataHeadStore.AppendAttestation: the event and the head in one
+// transaction, the head locked, and moved only if it is still `previous`.
+func (s *PostgresStore) AppendAttestation(ctx context.Context, e *domain.Event, head domain.MetadataHead, previous *domain.MetadataHead) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var revision int64
+	err = tx.QueryRowContext(ctx, `SELECT revision FROM session_metadata_heads WHERE session_id = $1 FOR UPDATE`, head.SessionID).Scan(&revision)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if previous != nil {
+			return fmt.Errorf("the head of session %s is gone: nothing written", head.SessionID)
+		}
+	case err != nil:
+		return err
+	case previous == nil || uint64(revision) != previous.Revision:
+		return fmt.Errorf("the head of session %s moved: nothing written", head.SessionID)
+	}
+	if err := appendEvent(ctx, tx, e); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO session_metadata_heads (session_id, revision, metadata_sha256, key_id, event_id, event_ts, prev_hash, event_hash, chain_key_id, hash_version, emitter, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+		ON CONFLICT (session_id) DO UPDATE SET revision = EXCLUDED.revision, metadata_sha256 = EXCLUDED.metadata_sha256,
+			key_id = EXCLUDED.key_id, event_id = EXCLUDED.event_id, event_ts = EXCLUDED.event_ts, prev_hash = EXCLUDED.prev_hash,
+			event_hash = EXCLUDED.event_hash, chain_key_id = EXCLUDED.chain_key_id, hash_version = EXCLUDED.hash_version,
+			emitter = EXCLUDED.emitter, updated_at = now()
+		WHERE session_metadata_heads.revision = $2 - 1`,
+		head.SessionID, int64(head.Revision), head.Digest, head.KeyID, head.EventID, head.EventTime, head.PrevHash, head.EventHash,
+		head.ChainKeyID, head.HashVersion, head.Emitter)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 && previous != nil {
+		return fmt.Errorf("the head of session %s moved: nothing written", head.SessionID)
+	}
+	return tx.Commit()
+}
+
+// MetadataHead is application.MetadataHeadStore.MetadataHead.
+func (s *PostgresStore) MetadataHead(ctx context.Context, sessionID string) (*domain.MetadataHead, error) {
+	var h domain.MetadataHead
+	var revision int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT session_id, revision, metadata_sha256, key_id, event_id, event_ts, prev_hash, event_hash, chain_key_id, hash_version, emitter
+		FROM session_metadata_heads WHERE session_id = $1`, sessionID).Scan(
+		&h.SessionID, &revision, &h.Digest, &h.KeyID, &h.EventID, &h.EventTime, &h.PrevHash, &h.EventHash, &h.ChainKeyID, &h.HashVersion, &h.Emitter)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	h.Revision = uint64(revision)
+	h.EventTime = h.EventTime.UTC()
+	return &h, nil
 }

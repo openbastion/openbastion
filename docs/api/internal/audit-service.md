@@ -60,3 +60,22 @@ curl --fail --silent --show-error \
 L’Admin UI n’appelle jamais ce service directement et ne reçoit jamais le certificat `admin-cli`. Elle utilise `GET /audit/secret-injections` sur la Gateway. La Gateway vérifie le bearer token, puis appelle Authorization avec les rôles vérifiés, `action=audit:secret-injections:read` et `resource=audit:secret-injections:all`. Depuis ADR-0114, Authorization doit faire correspondre simultanément `action_pattern` et `resource_pattern` ; une politique qui ne couvre que la ressource est refusée. Le refus par défaut est `403` ; une panne d’Authorization est `503`. Après autorisation, la Gateway appelle cette route interne sous son identité mTLS `api-gateway`. Seuls `limit` et `before` sont relayés. La réponse publique est bornée à 2 Mio et porte `Cache-Control: no-store`.
 
 Cette permission est transverse : elle donne accès à toutes les injections et tous les comptes. Elle n’est accordée implicitement à aucun rôle. La consultation n’écrit pas dans la chaîne d’audit consultée ; ce choix a été accepté dans ADR-0113.
+
+## Les têtes des métadonnées de session (ADR-0116 §3, §4)
+
+Réservées au certificat mTLS `session-broker` (`CallerRules`). Rien de secret ne passe : un identifiant de session, une révision, un digest et l'identifiant de la clé HMAC du Broker, jamais la clé.
+
+### `POST /audit/v1/session-metadata/attestations`
+
+Corps (champs inconnus refusés) : `{"session_id": "…", "revision": 3, "metadata_sha256": "<64 hex>", "key_id": "k1"}`. Le Broker l'envoie après chaque changement validé d'une ligne `sessions`.
+
+| Réponse | Quand |
+|---|---|
+| `200` et la tête | La révision suit la tête (ou la session n'en a pas encore) : l'événement `session.metadata_attested` (détails `revision`, `metadata_sha256`, `key_id`) est écrit dans la chaîne **et** la tête avance, dans une seule transaction. Ou c'est la tête elle-même (même révision, même digest, même clé) : rien n'est écrit, la réponse est idempotente. |
+| `409` et `{"error", "head"}` | Une révision plus ancienne que la tête (retour en arrière), la révision de la tête avec un autre digest ou une autre clé (altération), ou plus d'une révision d'avance. Rien n'est écrit. |
+| `400` | Corps mal formé, révision 0, digest qui n'a pas 32 octets, identifiant de clé hors de `[A-Za-z0-9._-]{1,64}`, ou émetteur autre que le Broker. |
+| `503` | La base de l'Audit Service ne répond pas. |
+
+### `GET /audit/v1/session-metadata/head?session_id=…`
+
+`200` et la tête (`session_id`, `revision`, `metadata_sha256`, `key_id`, `event_id`) **après vérification contre l'événement signé** : l'événement est recalculé à partir des champs de la tête et doit redonner le hash que la chaîne a signé, sous la clé de chaîne qui l'a signé. Cette vérification ne lit pas l'événement en base : une tête reste vérifiable quand son mois est archivé (ADR-0032). `404` sans tête ; `500` si la tête ne se recalcule pas (projection altérée).

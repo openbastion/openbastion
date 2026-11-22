@@ -6,7 +6,9 @@ package infrastructure_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -290,4 +292,92 @@ func TestMetadataStore_TheMigrationNeedsAMaintenanceWindow(t *testing.T) {
 	if got, err := store.Get(ctx, fresh.ID); err != nil || got.Integrity != domain.IntegrityAttested {
 		t.Fatalf("a new session after the migration: %+v %v", got, err)
 	}
+}
+
+// fakeAttestor records the heads it is asked to move, and answers what it is told to.
+type fakeAttestor struct {
+	mu    sync.Mutex
+	heads map[string][]uint64
+	fail  error
+}
+
+func (a *fakeAttestor) AttestMetadata(ctx context.Context, id string, revision uint64, digest [32]byte, keyID string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.fail != nil {
+		return a.fail
+	}
+	if a.heads == nil {
+		a.heads = map[string][]uint64{}
+	}
+	a.heads[id] = append(a.heads[id], revision)
+	return nil
+}
+
+func (a *fakeAttestor) of(id string) []uint64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]uint64(nil), a.heads[id]...)
+}
+
+// ADR-0116 §5: every committed change is attested, revision after revision, with the digest of the
+// row as written; a change not attested is not confirmed, and a head that refuses it is an
+// integrity failure; the expiry sweep goes on without its attestations.
+func TestMetadataStore_EveryChangeIsAttestedOnceCommitted(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	attestor := &fakeAttestor{}
+	store := infrastructure.NewPostgresStore(db, testMetadataKey).WithAttestor(attestor)
+	sess := attestedSession(t, store, domain.StatusPendingApproval)
+	decided := *sess
+	now := time.Now().UTC()
+	decided.Status, decided.DecidedBy, decided.DecidedAt = domain.StatusActive, "lead", &now
+	if ok, err := store.SaveIfStatus(ctx, &decided, domain.StatusPendingApproval); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	decided.Status, decided.TerminatedAt = domain.StatusTerminated, &now
+	if err := store.Save(ctx, &decided); err != nil {
+		t.Fatal(err)
+	}
+	if got := attestor.of(sess.ID); fmt.Sprint(got) != "[1 2 3]" {
+		t.Fatalf("attested revisions %v, want [1 2 3]", got)
+	}
+
+	// The Audit Service down: the change is in the database, but the caller is told it is not
+	// confirmed.
+	attestor.fail = errors.New("connection refused")
+	other := &domain.Session{ID: uniqueID("sess-unattested"), Status: domain.StatusActive, Protocol: "ssh", RequestedBy: "u",
+		PrivilegedAccountID: uniqueID("acc"), Justification: "j", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	if err := store.Save(ctx, other); !errors.Is(err, domain.ErrUnavailable) {
+		t.Fatalf("a change not attested: %v, want ErrUnavailable", err)
+	}
+	if got, err := store.Get(ctx, other.ID); err != nil || got.MetadataRevision != 1 {
+		t.Fatalf("the row of a change not attested: %+v %v", got, err)
+	}
+	// The head refusing: the integrity error, as it is.
+	attestor.fail = fmt.Errorf("%w: refused", domain.ErrMetadataIntegrity)
+	if ok, err := store.SaveIfStatus(ctx, other, domain.StatusActive); ok || !errors.Is(err, domain.ErrMetadataIntegrity) {
+		t.Fatalf("a head that refuses: %v %v", ok, err)
+	}
+	// The sweep expires and goes on, attestations or not.
+	attestor.fail = errors.New("connection refused")
+	due := &domain.Session{ID: uniqueID("sess-due-unattested"), Status: domain.StatusActive, Protocol: "ssh", RequestedBy: "u",
+		PrivilegedAccountID: uniqueID("acc"), Justification: "j", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(-time.Minute)}
+	attestor.fail = nil
+	if err := store.Save(ctx, due); err != nil {
+		t.Fatal(err)
+	}
+	attestor.fail = errors.New("connection refused")
+	expired, err := store.ExpireDue(ctx, now, 10000)
+	if err != nil {
+		t.Fatalf("the sweep with the Audit Service down: %v", err)
+	}
+	found := false
+	for _, s := range expired {
+		found = found || s.ID == due.ID
+	}
+	if !found {
+		t.Fatal("the sweep did not expire a due session with the Audit Service down")
+	}
+	_, _ = db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ANY($1)`, "{"+other.ID+","+due.ID+"}")
 }

@@ -151,6 +151,10 @@ var contractPairs = []contractPair{
 
 // notMirrored are internal JSON structs with no message in proto/, each with its reason.
 var notMirrored = map[string]string{
+	"session-broker/attestRequestBody": "the heads of the session metadata (ADR-0116), described in docs/api/internal/audit-service.md, not in proto/; " +
+		"client and server agree field for field across real processes (TestPostgresFlow_AChangeOfASessionMovesItsHeadInTheAuditService)",
+	"audit-service/attestRequest":              "idem — the Audit Service's side",
+	"audit-service/headResponse":               "idem",
 	"authorization/checkAccessRequest":         "the Authorization contract is described in docs/api/grpc/README.md §8, not yet in proto/",
 	"authorization/checkAccessResponse":        "idem",
 	"authorization/capabilitiesRequest":        "the Admin UI's capabilities (ADR-0131), described in docs/api/grpc/README.md §8, not yet in proto/",

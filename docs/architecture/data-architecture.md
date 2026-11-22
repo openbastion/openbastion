@@ -296,6 +296,25 @@ CREATE INDEX idx_audit_events_actor ON audit_events (actor_id, ts DESC);
 CREATE INDEX idx_audit_events_action ON audit_events (action, ts DESC);
 CREATE INDEX idx_audit_events_resource ON audit_events (resource_type, resource_id, ts DESC);
 
+-- ADR-0116 §3 : la tête indépendante des métadonnées de chaque session (schéma réel :
+-- services/recording-audit/audit-service/migrations/004_session_metadata_heads.sql). Écrite dans la
+-- même transaction que l'événement `session.metadata_attested`, et vérifiée contre lui (recalcul du
+-- hash) à chaque lecture, même une fois l'événement archivé.
+CREATE TABLE session_metadata_heads (
+    session_id      TEXT PRIMARY KEY,
+    revision        BIGINT NOT NULL,      -- la dernière révision attestée par le Session Broker
+    metadata_sha256 BYTEA NOT NULL,       -- SHA-256 de la forme canonique de la ligne
+    key_id          TEXT NOT NULL,        -- la clé HMAC du Broker (identifiant seulement)
+    event_id        TEXT NOT NULL,        -- l'événement de la chaîne qui la porte, et de quoi le recalculer :
+    event_ts        TIMESTAMPTZ NOT NULL,
+    prev_hash       BYTEA,
+    event_hash      BYTEA NOT NULL,
+    chain_key_id    TEXT NOT NULL,
+    hash_version    INT NOT NULL,
+    emitter         TEXT NOT NULL DEFAULT '',
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Exemple de partition mensuelle, créée à l'avance par le Scheduler
 CREATE TABLE audit_events_2026_08 PARTITION OF audit_events
     FOR VALUES FROM ('2026-08-01') TO ('2026-09-01');
