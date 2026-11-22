@@ -29,6 +29,8 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/emit-event"),
 
 		mtlstest.Allow("admin-cli", "GET", "/audit/v1/verify-chain"),
+		// ADR-0119: the Gateway may read only the metadata projection, never verify the chain.
+		mtlstest.Deny("api-gateway", "GET", "/audit/v1/verify-chain"),
 		mtlstest.Allow("admin-cli", "GET", "/audit/v1/secret-injections"),
 		mtlstest.Allow("api-gateway", "GET", "/audit/v1/secret-injections"),
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/secret-injections"),

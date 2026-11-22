@@ -27,9 +27,10 @@ func TestSecretInjectionReconciliation_GatewayRequiresExplicitAuthorizationAndUs
 	}))
 	defer authz.Close()
 	var auditCalls int
+	const cursor = "0123456789abcdef0123456789abcdef"
 	audit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auditCalls++
-		if r.URL.Path != "/audit/v1/secret-injections" || r.URL.Query().Get("limit") != "10" {
+		if r.URL.Path != "/audit/v1/secret-injections" || r.URL.Query().Get("limit") != "500" || r.URL.Query().Get("before") != cursor {
 			t.Errorf("Audit request: %s", r.URL.String())
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -38,7 +39,7 @@ func TestSecretInjectionReconciliation_GatewayRequiresExplicitAuthorizationAndUs
 	}))
 	defer audit.Close()
 	gw := interfaces.NewGatewayServer(&infrastructure.AuthenticationHTTPClient{BaseURL: auth.URL}, application.NewRateLimiter(100, time.Minute), application.NewRateLimiter(100, time.Minute), auth.URL, "", "", authz.URL, "").WithAuditServiceURL(audit.URL)
-	req := httptest.NewRequest(http.MethodGet, "/audit/secret-injections?limit=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/audit/secret-injections?limit=500&before="+cursor, nil)
 	req.Header.Set("Authorization", "Bearer good-token")
 	rec := httptest.NewRecorder()
 	gw.Routes().ServeHTTP(rec, req)
@@ -131,5 +132,35 @@ func TestSecretInjectionReconciliation_AuditFailureIsGenericAndNoStore(t *testin
 	}
 	if strings.Contains(rec.Body.String(), "/srv/audit/archive") {
 		t.Fatalf("internal Audit diagnostic leaked: %q", rec.Body.String())
+	}
+}
+
+func TestSecretInjectionReconciliation_RejectsOutOfRangeLimitAndNonCanonicalCursorBeforeAuthorization(t *testing.T) {
+	auth := newFakeTokenVerifierServer(t, "good-token", "user-verified", "operator", []string{"audit-reader"})
+	defer auth.Close()
+	authzCalls, auditCalls := 0, 0
+	authz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authzCalls++
+		_, _ = w.Write([]byte(`{"allowed":[true]}`))
+	}))
+	defer authz.Close()
+	audit := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { auditCalls++ }))
+	defer audit.Close()
+	gw := interfaces.NewGatewayServer(&infrastructure.AuthenticationHTTPClient{BaseURL: auth.URL}, application.NewRateLimiter(100, time.Minute), application.NewRateLimiter(100, time.Minute), auth.URL, "", "", authz.URL, "").WithAuditServiceURL(audit.URL)
+	for _, path := range []string{
+		"/audit/secret-injections?limit=501",
+		"/audit/secret-injections?before=ABCDEF0123456789ABCDEF0123456789",
+		"/audit/secret-injections?actorRoles=platform-admin",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer good-token")
+		rec := httptest.NewRecorder()
+		gw.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%s: status=%d headers=%v body=%q", path, rec.Code, rec.Header(), rec.Body.String())
+		}
+	}
+	if authzCalls != 0 || auditCalls != 0 {
+		t.Fatalf("invalid query reached downstream services: authz=%d audit=%d", authzCalls, auditCalls)
 	}
 }
