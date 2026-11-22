@@ -104,9 +104,10 @@ func runService() {
 	vault := &infrastructure.VaultAuthorizationHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	audit := &infrastructure.AuditHTTPClient{BaseURL: auditURL, Client: peer(auditURL, mtls.AuditService)}
 	if pgStore != nil {
-		// ADR-0116 §3: each committed change of a session's row moves its independent head in the
-		// Audit Service; a change is confirmed only once it has.
-		pgStore.WithAttestor(audit)
+		// ADR-0116 §3, §6: each committed change of a session's row moves its independent head in
+		// the Audit Service, and is confirmed only once it has; every read a decision rests on
+		// compares the row with that head.
+		pgStore.WithAttestor(audit).WithHeads(audit)
 	}
 	accounts := &infrastructure.AccountLookupHTTPClient{BaseURL: vaultURL, Client: vaultClient}
 	// Every instance of the SSH proxy, each addressed directly and pinned to the proxy's

@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/domain"
 )
@@ -83,4 +85,46 @@ func (c *AuditHTTPClient) AttestMetadata(ctx context.Context, sessionID string, 
 	default:
 		return fmt.Errorf("session metadata attestation: status %d", resp.StatusCode)
 	}
+}
+
+type headResponseBody struct {
+	SessionID      string `json:"session_id"`
+	Revision       uint64 `json:"revision"`
+	MetadataSHA256 string `json:"metadata_sha256"`
+	KeyID          string `json:"key_id"`
+}
+
+// MetadataHead reads the session's head from the Audit Service, which checked it against the signed
+// event it names (ADR-0116 §4). 404 is a session without a head; a head that does not recompute
+// (500) is domain.ErrMetadataIntegrity; anything else is an error, and the caller refuses.
+func (c *AuditHTTPClient) MetadataHead(ctx context.Context, sessionID string) (domain.MetadataHead, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/audit/v1/session-metadata/head?session_id="+url.QueryEscape(sessionID), nil)
+	if err != nil {
+		return domain.MetadataHead{}, false, err
+	}
+	resp, err := orDefault(c.Client).Do(req)
+	if err != nil {
+		return domain.MetadataHead{}, false, err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return domain.MetadataHead{}, false, nil
+	case http.StatusInternalServerError:
+		return domain.MetadataHead{}, false, fmt.Errorf("%w: the audit's head of session %s does not match its signed event", domain.ErrMetadataIntegrity, sessionID)
+	case http.StatusOK:
+	default:
+		return domain.MetadataHead{}, false, fmt.Errorf("session metadata head: status %d", resp.StatusCode)
+	}
+	var body headResponseBody
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&body); err != nil || body.SessionID != sessionID || body.Revision == 0 {
+		return domain.MetadataHead{}, false, fmt.Errorf("session metadata head: an unreadable answer")
+	}
+	raw, err := hex.DecodeString(body.MetadataSHA256)
+	if err != nil || len(raw) != 32 {
+		return domain.MetadataHead{}, false, fmt.Errorf("session metadata head: an unreadable digest")
+	}
+	head := domain.MetadataHead{Revision: body.Revision, KeyID: body.KeyID}
+	copy(head.Digest[:], raw)
+	return head, true, nil
 }

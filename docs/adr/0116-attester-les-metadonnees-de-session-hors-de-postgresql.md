@@ -88,3 +88,20 @@ Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, ren
   - Contre-épreuves : un retour en arrière accepté, une tête non recalculée, un `Save` non attesté, et les tests échouent. La garde « tête déplacée » de l'Audit Service est doublée par la condition de l'upsert : retirer l'une seule ne suffit pas à écrire.
 - **Reste** : **la lecture ne compare pas encore la ligne à la tête** (incrément 3) : tant qu'elle ne le fait pas, une ancienne ligne restaurée n'est toujours pas refusée. Puis la ré-attestation d'une rotation et les rôles PostgreSQL distincts (incrément 4).
 
+### Incrément 3 — chaque lecture compare la ligne à sa tête (22 novembre 2026)
+
+- **Fait** : `Get`, la lecture dont dépendent la connexion, la terminaison, la décision, toute saisie de secret et la lecture d'une session, vérifie le MAC, puis lit la tête de la session dans l'Audit Service, sans cache (§6) :
+  - même révision et même digest : la ligne est valide ;
+  - une révision plus ancienne que la tête : **retour en arrière, refusé** (`500`, le journal du Broker le nomme) ;
+  - la révision de la tête avec un autre digest : altération, refusée ;
+  - exactement une révision d'avance (un changement dont l'attestation s'est perdue, §5), ou une session sans tête : la ligne est attestée à cet instant, puis utilisée ;
+  - plus d'une révision d'avance, une tête que l'Audit Service trouve altérée, ou un Audit Service qui ne répond pas : refusée (`503` pour l'indisponibilité, l'erreur d'intégrité sinon).
+  - Une ligne legacy ne demande rien : elle est en lecture seule de toute façon.
+  - Les listes d'affichage (recherche, demandes à décider) et les balayages en arrière-plan gardent la vérification du MAC seule ; chaque action passe ensuite par `Get`. Choix renversable : comparer chaque ligne d'une liste coûterait une requête à l'Audit Service par ligne.
+- **Prouvé** :
+  - sur PostgreSQL réel, avec un registre qui applique les règles de l'Audit Service : la tête valide ; une sauvegarde restaurée par-dessus une révision plus récente, dont le MAC est valide, est refusée ; une révision d'avance est attestée puis utilisée ; deux d'avance sont refusées sans même être proposées à l'Audit Service ; une session sans tête est attestée ; une tête altérée et un Audit Service absent sont refusés ; une ligne legacy ne demande rien ;
+  - **entre deux vrais processus** : une ligne signée, lue (la tête naît à 1), terminée en révision 2 (signée par le signataire indépendant, attestée par la lecture suivante), puis la sauvegarde de la révision 1 remise en place : le vrai Broker la refuse (`500`) et dit « rolled back » ;
+  - contre-épreuves : sans la comparaison, en réparant toute révision d'avance, en se fiant à un Audit Service absent : les tests échouent.
+- **Conséquence** (§ Conséquences, déjà dite) : toute lecture de session dépend désormais de l'Audit Service ; sans lui, elle échoue fermée.
+- **Reste** (incrément 4) : la ré-attestation de toutes les lignes avant le retrait d'une ancienne clé (§7) ; les tests avec un rôle PostgreSQL du Broker incapable de lire ou d'écrire les têtes ; la latence et le débit à mesurer avant production.
+

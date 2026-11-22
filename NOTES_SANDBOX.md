@@ -5368,3 +5368,9 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : suite, idempotence, refus (retour en arrière, fourche, saut), tête altérée refusée, tête vérifiable après archivage ; entre deux vrais processus, la tête suit l'expiration avec l'empreinte du signataire indépendant ; contre-épreuves.
 - **Limite** : la lecture ne compare pas encore la ligne à la tête (incrément 3) ; le rejeu d'une ancienne ligne n'est donc pas encore refusé.
 
+## 2026-11-22 — ADR-0116, incrément 3 : chaque lecture compare la ligne à sa tête
+
+- **Fait** : `Get` compare la ligne à la tête de l'Audit Service, sans cache. Une ancienne ligne restaurée est refusée, une ligne altérée aussi, et une ligne d'une révision d'avance est réparée. Sans Audit Service, la lecture échoue fermée.
+- **Prouvé** : huit cas sur PostgreSQL réel ; entre deux vrais processus, une sauvegarde remise en place est refusée par le vrai Broker ; contre-épreuves.
+- **Reste** : la rotation (ré-attestation), les rôles PostgreSQL distincts, la mesure de la latence.
+
