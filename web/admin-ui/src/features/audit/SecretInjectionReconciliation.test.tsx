@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Api } from "../../shared/api";
 import { SignedInContext } from "../../shared/session";
 import { fakeApi } from "../../test-helpers";
 import { SecretInjectionReconciliation } from "./SecretInjectionReconciliation";
@@ -53,6 +54,26 @@ describe("secret injection audit reconciliation (ADR-0113)", () => {
     expect(await screen.findByText("Résultat inconnu")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Charger les injections suivantes" }));
     expect(await screen.findByText("Terminé (audit)")).toBeTruthy();
+  });
+
+
+  it("shows loading and then the verified empty state", async () => {
+    let finish!: (response: Response) => void;
+    const api = new Api(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    render(<SignedInContext.Provider value={{ api, who: null, signOut: () => {} }}><SecretInjectionReconciliation /></SignedInContext.Provider>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Charger le rapprochement" }));
+    expect(screen.getByRole("status").textContent).toContain("Vérification et chargement");
+    finish(new Response(JSON.stringify({ ...page, outcomes: [] }), { status: 200 }));
+    expect(await screen.findByText("Aucune injection enregistrée dans la couverture vérifiée.")).toBeTruthy();
+  });
+
+  it("shows a generic unavailable state when the reconciliation API returns 503", async () => {
+    mount({ "GET /audit/secret-injections?limit=100": { status: 503, body: "private upstream diagnostic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Charger le rapprochement" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Le rapprochement est indisponible");
+    expect(screen.getByRole("alert").textContent).not.toContain("private upstream diagnostic");
   });
 
   it("explains that the cross-session permission is explicit", async () => {

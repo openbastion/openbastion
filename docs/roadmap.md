@@ -2,14 +2,14 @@
 
 Séquencement du périmètre fonctionnel, sans estimation calendaire. Les versions suivent Semantic Versioning (ADR-0063, [`development/versioning.md`](development/versioning.md)) : les anciens jalons « v1.0 » et « v2.0 » sont devenus **v0.0.1** et **v0.0.2**.
 
-## 0. État d'avancement — 18 novembre 2026
+## 0. État d'avancement — 22 novembre 2026
 
 La roadmap décrit les jalons de livraison ; elle ne signifie pas qu'une fonction inscrite dans une phase est déjà disponible.
 
 - **MVP SSH/SFTP/SCP** : parcours fonctionnel de référence, avec Gateway, Broker, Vault, proxy SSH, audit et replay texte.
 - **VNC** : parcours de bout en bout validé avec TigerVNC 1.13.1, incluant Gateway, Broker, Vault, proxy écran et Video Recorder. Le replay est disponible par API et dans l'Admin UI (lecteur d'écran enregistré, page « Enregistrements ») ; plusieurs fonctions de redirection restent à faire.
 - **Marqueurs de relecture vidéo (ADR-0111)** : contrat Protobuf, stockage append-only, RPC mTLS proxy/Gateway et route REST paginée implémentés dans la branche de réalisation ; le raccordement à la transaction d’injection Vault VNC/RDP et l’affichage dans la timeline Admin UI restent à intégrer.
-- **Rapprochement des injections Vault (ADR-0112)** : projection en lecture seule sur chaîne retenue et archives vérifiées, route interne mTLS `admin-cli` et commande `openbastion-cli audit secret-injections` implémentées. La façade Gateway et le composant Admin UI `SecretInjectionReconciliation` sont livrés sous ADR-0113/0114. Restent le test multi-processus de perte de l’acquittement Audit après frappe et le scénario PostgreSQL 16 archive → redémarrage → relecture. Les politiques historiques conservent `action_pattern=*` par compatibilité ; leur réduction vers des actions explicites reste un travail de durcissement.
+- **Rapprochement des injections Vault (ADR-0112/0113/0114)** : projection en lecture seule sur chaîne retenue et archives vérifiées, route interne mTLS et CLI `openbastion-cli audit secret-injections` réservées à `admin-cli`, façade Gateway et panneau Admin UI livrés. La Gateway vérifie la permission exacte `audit:secret-injections:read` sur `audit:secret-injections:all` à partir des rôles du jeton vérifié ; l’Audit Service n’admet `api-gateway` que pour cette projection. La réponse est bornée (500 éléments), paginée par curseur et `Cache-Control: no-store`. Les états chargement/vide/erreur sont affichés ; `failed` et `outcome_unknown` imposent une vérification manuelle, sans réinjection. `verify-chain` reste exclusivement accessible à `admin-cli` par mTLS (ADR-0119), sans verdict d’intégrité dans l’Admin UI. Les tests multi-processus de perte d’acquittement après frappe et le scénario PostgreSQL 16 archive → redémarrage → relecture sont passés localement ; la confirmation CI du scénario PostgreSQL reste à tracer. Les politiques historiques conservent `action_pattern=*` par compatibilité ; leur réduction vers des actions explicites reste un travail de durcissement distinct.
 - **RDP** : moteur Go pur ([ADR-0071](adr/0071-le-proxy-rdp-vnc-termine-la-cible-en-go-pur-et-sert-un-flux-ecran-acquitte.md)), éprouvé contre FreeRDP 3 et Windows Server 2022 en CI :
   - CredSSP/NTLMv2 avec certificat épinglé avant tout secret ;
   - image en 15, 16 et 32 bpp, fragments Fast-Path, réactivation ;

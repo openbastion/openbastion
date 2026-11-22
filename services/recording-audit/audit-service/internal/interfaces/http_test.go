@@ -163,8 +163,14 @@ func TestHTTP_SecretInjectionReconciliationIsReadOnlyAndNoStore(t *testing.T) {
 	h := interfaces.NewHTTPServer(svc).Routes()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/audit/v1/secret-injections?limit=10", nil))
-	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" || !strings.Contains(rec.Body.String(), `"status":"completed"`) || strings.Contains(rec.Body.String(), "secret-value") {
-		t.Fatalf("%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" || !strings.Contains(body, `"status":"completed"`) {
+		t.Fatalf("%d headers=%v body=%s", rec.Code, rec.Header(), body)
+	}
+	for _, forbidden := range []string{"secret-value", `"credential"`, `"vault_scope"`, `"mfa_grant"`, `"mfa_proof"`, `"typed_content"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("sensitive field %q leaked in reconciliation projection: %s", forbidden, body)
+		}
 	}
 	after, _ := store.All(context.Background())
 	if len(after) != len(before) {
