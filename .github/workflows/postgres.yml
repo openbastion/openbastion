@@ -55,6 +55,9 @@ jobs:
         run: |
           work="$RUNNER_TEMP/openbastion-vnc-target"
           mkdir -p "$work"
+          # 4 KiB is the Vault injection ceiling and spans multiple TLS records,
+          # giving SI-02 a real, observable in-flight key stream to revoke.
+          export VNC_PLAIN_PASSWORD="$(printf '%4096s' '' | tr ' ' A)"
           test/integration/testdata/vnc/target.sh "$work" X509Plain >"$work/server.log" 2>&1 &
           echo "$!" > "$work/pid"
           ready=0

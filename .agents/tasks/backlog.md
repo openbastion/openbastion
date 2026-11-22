@@ -8,7 +8,7 @@ Le backlog est organisé en trois axes. Les risques de sécurité sont distingu�
 
 | Priorité | Sujet | État vérifié | Prochaine action |
 |---|---|---|---|
-| P1 — bloquant | **SI-02 — révocation/fin de session concurrente à une frappe** (ADR-0097) | Le test VNC contre TigerVNC avec oracle X11 prouve la réception Unicode et l'absence de nouvelle entrée après l'acquittement de révocation. La course déclenchée pendant une frappe déjà en cours n'est pas encore démontrée. | Ajouter une course déterministe qui révoque pendant la frappe ; prouver l'annulation de l'entrée en attente et l'absence de frappe après la terminaison, sur processus réels. |
+| P1 — bloquant | **SI-02 — révocation/fin de session concurrente à une frappe** (ADR-0097) | Test déterministe ajouté : TigerVNC réel + oracle X11, flux TLS ralenti et octets en attente retenus par un relais de test ; validation CI requise avant clôture. | Vérifier en CI que la cible reçoit un préfixe réel, que la révocation ferme le relais et qu'aucune frappe supplémentaire n'arrive après l'acquittement ; corriger le proxy si la preuve échoue. |
 | P1 — durcissement | **Politiques historiques `action_pattern=*`** | La migration de compatibilité conserve le joker pour les anciennes politiques. Les nouvelles autorisations doivent rester explicites et le refus par défaut demeure obligatoire. | Inventorier les politiques historiques, identifier les usages encore dépendants du joker et proposer une migration additive vers des actions explicites, sans élargir les droits. |
 
 ### 1.2 Risques traités, preuves livrées et limites résiduelles
