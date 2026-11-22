@@ -34,6 +34,62 @@ describe("Sessions workspace tabs", () => {
     expect(request?.path).not.toContain("q=");
   });
 
+  it("submits session text and structured filters, then follows opaque page cursors", async () => {
+    const session = {
+      id: "sess_filtered", status: "terminated", protocol: "ssh", requestedBy: "alice",
+      privilegedAccountId: "acc_prod", targetHost: "db-prod:22", justification: "maintenance window",
+      breakGlass: false, expiresAt: "2026-11-17T09:00:00Z", createdAt: "2026-11-17T08:00:00Z",
+    };
+    const { api, calls } = fakeApi({
+      "GET /sessions": { body: pending },
+      "GET /sessions/search": { body: { sessions: [session], next: "next-token" } },
+    });
+    signedIn(api, <Sessions />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Historique" }), { button: 0 });
+    expect(await screen.findByText("sess_filtered")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Recherche"), { target: { value: "maintenance" } });
+    fireEvent.change(screen.getByLabelText("Statut"), { target: { value: "terminated" } });
+    fireEvent.change(screen.getByLabelText("Protocole"), { target: { value: "ssh" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rechercher" }));
+    await waitFor(() => {
+      const requests = calls.filter((call) => call.path.startsWith("/sessions/search?"));
+      expect(requests.length).toBeGreaterThanOrEqual(2);
+      const params = new URL(requests[requests.length - 1].path, "http://localhost").searchParams;
+      expect(params.get("q")).toBe("maintenance");
+      expect(params.get("status")).toBe("terminated");
+      expect(params.get("protocol")).toBe("ssh");
+    });
+
+    const beforeNext = calls.filter((call) => call.path.startsWith("/sessions/search?")).length;
+    fireEvent.click(screen.getByRole("button", { name: "Page suivante" }));
+    await waitFor(() => {
+      const requests = calls.filter((call) => call.path.startsWith("/sessions/search?"));
+      expect(requests).toHaveLength(beforeNext + 1);
+      expect(new URL(requests[requests.length - 1].path, "http://localhost").searchParams.get("cursor")).toBe("next-token");
+    });
+
+    const beforePrevious = calls.filter((call) => call.path.startsWith("/sessions/search?")).length;
+    fireEvent.click(screen.getByRole("button", { name: "Page précédente" }));
+    await waitFor(() => {
+      const requests = calls.filter((call) => call.path.startsWith("/sessions/search?"));
+      expect(requests).toHaveLength(beforePrevious + 1);
+      expect(new URL(requests[requests.length - 1].path, "http://localhost").searchParams.has("cursor")).toBe(false);
+    });
+  });
+
+  it("announces when the bounded command search is truncated", async () => {
+    const { api } = fakeApi({
+      "GET /sessions": { body: pending },
+      "GET /recordings/search": { body: { searchId: "search-truncated", truncated: true, sessions: [] } },
+    });
+    signedIn(api, <Sessions />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Enregistrements" }), { button: 0 });
+    fireEvent.change(screen.getByLabelText("Texte à rechercher"), { target: { value: "systemctl" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rechercher" }));
+    expect(await screen.findByText("Résultats tronqués par la limite de sécurité. Réduisez la période pour poursuivre la recherche.")).toBeTruthy();
+  });
+
   it("searches recorded command text and opens the selected session in the existing replay screen", async () => {
     const openRecording = (sessionId: string) => { opened.push(sessionId); };
     const opened: string[] = [];

@@ -60,7 +60,7 @@ Invariants touchés : un secret n'est jamais en clair hors de son enveloppe ; en
 - (−) L'empreinte de `q` permet de confirmer une recherche supposée, avec la clé, mais pas de retrouver ce qui a été cherché sans elle. Un `q` court et courant (`root`) se retrouve par dictionnaire **pour qui a la clé** : elle se garde comme un secret.
 - (−) **Un secret de plus à fournir et à sauvegarder** : `SEARCH_AUDIT_KEY_FILE`. Perdue, les empreintes passées ne peuvent plus être confirmées ; la chaîne, elle, reste vérifiable.
 
-**Mise en œuvre** (7 novembre 2026), en trois incréments : (1) les commandes — fait ; (2) les sessions — fait ; (3) l'Admin UI.
+**Mise en œuvre** (7 novembre au 22 novembre 2026), en trois incréments : (1) les commandes — fait ; (2) les sessions — fait ; (3) l'Admin UI — fait le 22 novembre 2026.
 
 - **Incrément 1, les commandes** : `GET /recordings/search` (Gateway) → `GET /recorder/v1/search` (Command Recorder, appelable par la Gateway seule). Migration `002_search_window.sql` (index de la fenêtre). La normalisation NFC et le repli de casse viennent de `golang.org/x/text`, déjà dans l'espace de travail (Gateway, Video Recorder), devenu une dépendance directe du Command Recorder.
 - **Précisions, sans changer la décision** :
@@ -84,6 +84,16 @@ Invariants touchés : un secret n'est jamais en clair hors de son enveloppe ; en
   - application : 7 tests, 5 mutations sur 5 tuées (autorisation retirée, pas de `session.read`, demandeur soumis à une politique, reste d'un lot perdu, pas de borne des 500) ;
   - magasins : le contrat (jokers neutralisés, sans casse, ticket, demandeur, filtres, ordre, égalités, curseur, limite), en mémoire et sous PostgreSQL ; la mutation « échappement retiré » est tuée sous PostgreSQL ;
   - processus réels (`test/integration/session_search_flow_test.go`, de vraies sessions créées par la Gateway) : 5 sous-tests verts, et la mutation « autorisation retirée » y est tuée.
+
+### Incrément 3 — l'Admin UI (22 novembre 2026)
+
+- **Fait** :
+  - `Sessions > Historique` appelle la route publique `/sessions/search` ; fenêtre obligatoire de 31 jours maximum, texte facultatif d'au moins 3 caractères, filtres statut/protocole et pagination par curseur opaque ;
+  - `Sessions > Enregistrements` appelle `/recordings/search` ; texte de commande obligatoire d'au moins 3 caractères, fenêtre bornée, aperçu des occurrences et ouverture du replay existant ;
+  - l'interface annonce explicitement une réponse tronquée et demande de réduire la période ; elle ne prétend pas fournir un inventaire global des enregistrements vidéo ;
+  - les deux recherches restent sur l'API publique Gateway et conservent les contrôles d'accès du Broker/Recorder ; aucune requête directe vers un service interne.
+- **Prouvé** : `SessionViews.test.tsx` couvre maintenant 10 cas, dont filtres de recherche de sessions, navigation aller/retour par curseur, recherche de commandes, ouverture du replay, avertissement de troncature, bornes de période, requête trop courte et refus `403`.
+- **Limites maintenues** : aucune durée ni disponibilité d'enregistrement n'est inventée dans l'historique ; la recherche des commandes n'est pas un index vidéo ; les bornes et le déchiffrement à la volée restent ceux des incréments 1 et 2.
 
 **Alternatives envisagées**
 
