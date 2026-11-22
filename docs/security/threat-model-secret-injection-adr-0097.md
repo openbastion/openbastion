@@ -283,4 +283,4 @@ Critères minimaux de clôture :
 5. validation CI Windows de la réception Unicode RDP ;
 6. revue des logs, traces, crash dumps et captures pour la non-divulgation.
 
-Aucune propriété du parcours B ne peut être déduite de cette revue.
+Aucune propriété du parcours B ne peut être déduite de cette revue : il a sa propre conception, ses menaces et ses preuves dans ADR-0133.

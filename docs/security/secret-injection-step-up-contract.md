@@ -2,7 +2,7 @@
 
 **État actualisé au 21 novembre 2026 :** parcours A câblé Gateway → Broker → proxy pour SSH, VNC et RDP ; MFA TOTP/WebAuthn et routes API disponibles ; Admin UI raccordée (ADR-0097 §12) ; E2E multi-processus SSH/VNC/RDP validés ; VNC éprouvé contre TigerVNC réel ; test Chromium de l’UI avec API simulée passé dans la CI de la PR #220. Restent la réception Unicode RDP sur Windows en CI, le parcours navigateur contre une cible réelle et les risques P1 de la revue STRIDE.
 **Décision de référence :** ADR-0097 (accepté)  
-**Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) a désormais une conception acceptée pour RDP/VNC dans ADR-0133 : le navigateur chiffre pour le proxy et la Gateway relaie le ciphertext. Il n'est pas encore implémenté ni validé ; cette conception ne protège pas contre une Gateway compromise qui sert une UI modifiée. Aucun canal B SSH n'est défini.
+**Périmètre :** injection d'un secret issu du Vault (parcours A). Le parcours B (secret saisi par l'opérateur) a désormais une conception acceptée pour RDP/VNC dans ADR-0133 : le navigateur chiffre pour le proxy et la Gateway relaie le ciphertext. Il est mis en œuvre et éprouvé de bout en bout en VNC et en RDP depuis le 22 novembre 2026 (ADR-0133, routes `secret-paste-step-up` et `secret-paste`) ; cette conception ne protège pas contre une Gateway compromise qui sert une UI modifiée. Aucun canal B SSH n'est défini.
 
 ## 1. Invariants
 

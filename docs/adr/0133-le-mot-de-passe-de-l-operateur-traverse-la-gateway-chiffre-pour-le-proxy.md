@@ -1,6 +1,6 @@
 # ADR-0133 — Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy
 
-**Statut** `Accepté` · 21 novembre 2026 · accepté le même jour par le propriétaire du projet : « Go pour l'option A avec l'empreinte salée ». L'option A (le chiffrement pour le proxy, avec sa limite) et l'empreinte salée (point 4) sont retenues.
+**Statut** `Accepté` · 21 novembre 2026 · accepté le même jour par le propriétaire du projet : « Go pour l'option A avec l'empreinte salée ». L'option A (le chiffrement pour le proxy, avec sa limite) et l'empreinte salée (point 4) sont retenues. **Mise en œuvre** le 22 novembre 2026, en six incréments (PR #262, #263, #267, #268, #269, #270, #271), éprouvée de bout en bout en VNC (TigerVNC réel) et en RDP (cinq Windows de CI).
 
 ## Contexte
 
