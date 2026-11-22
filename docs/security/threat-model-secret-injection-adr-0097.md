@@ -239,7 +239,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 accepté) |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
 | SI-07 | E | Confused deputy si identité interne compromise | P1 | Allowlist mTLS et autorisation exacte ; risque résiduel |
-| SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | ADR-0116 : incrément 1 livré (HMAC Broker par ligne, altération de chaque champ protégé contre-éprouvée sur PostgreSQL) ; la révision ancrée dans l'Audit Service, qui seule arrête le rejeu d'une ancienne ligne, reste à livrer |
+| SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | ADR-0116 : incrément 1 livré (HMAC Broker par ligne, altération de chaque champ protégé contre-éprouvée sur PostgreSQL) ; incréments 2 et 3 livrés : la révision ancrée dans l'Audit Service, comparée à chaque lecture, refuse le rejeu d'une ancienne ligne (prouvé entre deux vrais processus) ; restent la rotation et les rôles distincts |
 
 ## 6. Tests et contre-épreuves à maintenir
 

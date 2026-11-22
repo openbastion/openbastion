@@ -25,7 +25,10 @@ type signedSessionRow struct {
 }
 
 // sessionMetadataCanonical is the canonical form v1 of the row.
-func sessionMetadataCanonical(r signedSessionRow) []byte {
+func sessionMetadataCanonical(r signedSessionRow) []byte { return canonicalWith(r, nil) }
+
+// canonicalWith is the canonical form with a termination time, nil for none.
+func canonicalWith(r signedSessionRow, terminatedAt *time.Time) []byte {
 	b := []byte{1}
 	str := func(v string) { b = binary.BigEndian.AppendUint32(b, uint32(len(v))); b = append(b, v...) }
 	i64 := func(v int64) { b = binary.BigEndian.AppendUint64(b, uint64(v)) }
@@ -45,8 +48,11 @@ func sessionMetadataCanonical(r signedSessionRow) []byte {
 	str(r.Justification)
 	i64(micro(r.CreatedAt))
 	i64(micro(r.ExpiresAt))
-	flag(false) // terminated_at
-	i64(0)      // duration_minutes
+	flag(terminatedAt != nil) // terminated_at
+	if terminatedAt != nil {
+		i64(micro(*terminatedAt))
+	}
+	i64(0) // duration_minutes
 	flag(r.BreakGlass)
 	flag(false) // approval_required
 	str("")     // ticket
@@ -58,7 +64,17 @@ func sessionMetadataCanonical(r signedSessionRow) []byte {
 	return b
 }
 
+// sessionMetadataMACTerminated is the MAC of r terminated at terminatedAt.
+func sessionMetadataMACTerminated(t *testing.T, r signedSessionRow, terminatedAt time.Time, revision uint64) []byte {
+	return macOf(t, canonicalWith(r, &terminatedAt), revision, "k1")
+}
+
 func sessionMetadataMAC(t *testing.T, r signedSessionRow, revision uint64, keyID string) []byte {
+	t.Helper()
+	return macOf(t, sessionMetadataCanonical(r), revision, keyID)
+}
+
+func macOf(t *testing.T, b []byte, revision uint64, keyID string) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(testMetadataKeyFile())
 	if err != nil {
@@ -68,7 +84,6 @@ func sessionMetadataMAC(t *testing.T, r signedSessionRow, revision uint64, keyID
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := sessionMetadataCanonical(r)
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte("openbastion/session-metadata/v1\x00"))
 	var head [8]byte

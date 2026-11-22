@@ -51,6 +51,20 @@ type MetadataAttestor interface {
 	AttestMetadata(ctx context.Context, sessionID string, revision uint64, digest [32]byte, keyID string) error
 }
 
+// MetadataHead is a session's head as the Audit Service holds it (ADR-0116 §3), already checked by it
+// against the signed event it comes from.
+type MetadataHead struct {
+	Revision uint64
+	Digest   [32]byte
+	KeyID    string
+}
+
+// MetadataHeadReader reads a session's head; found is false for a session without one. No cache
+// (§6): every read asks.
+type MetadataHeadReader interface {
+	MetadataHead(ctx context.Context, sessionID string) (head MetadataHead, found bool, err error)
+}
+
 // MetadataKey is one HMAC key and the identifier stored with the rows it signs.
 type MetadataKey struct {
 	ID  string

@@ -155,6 +155,7 @@ var notMirrored = map[string]string{
 		"client and server agree field for field across real processes (TestPostgresFlow_AChangeOfASessionMovesItsHeadInTheAuditService)",
 	"audit-service/attestRequest":              "idem — the Audit Service's side",
 	"audit-service/headResponse":               "idem",
+	"session-broker/headResponseBody":          "idem — the Broker’s reading of the head; agreement proved by TestPostgresFlow_ARolledBackSessionIsRefusedByTheBroker",
 	"authorization/checkAccessRequest":         "the Authorization contract is described in docs/api/grpc/README.md §8, not yet in proto/",
 	"authorization/checkAccessResponse":        "idem",
 	"authorization/capabilitiesRequest":        "the Admin UI's capabilities (ADR-0131), described in docs/api/grpc/README.md §8, not yet in proto/",

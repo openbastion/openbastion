@@ -5,6 +5,7 @@ package infrastructure_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -380,4 +381,178 @@ func TestMetadataStore_EveryChangeIsAttestedOnceCommitted(t *testing.T) {
 		t.Fatal("the sweep did not expire a due session with the Audit Service down")
 	}
 	_, _ = db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ANY($1)`, "{"+other.ID+","+due.ID+"}")
+}
+
+// fakeLedger is the Audit Service's heads as ADR-0116 §3 has them: a revision that follows the head
+// (or the first) moves it; anything else is refused.
+type fakeLedger struct {
+	mu       sync.Mutex
+	heads    map[string]domain.MetadataHead
+	down     error
+	tampered bool
+	attested int
+	asked    int
+}
+
+func (l *fakeLedger) AttestMetadata(ctx context.Context, id string, revision uint64, digest [32]byte, keyID string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.asked++
+	if l.down != nil {
+		return l.down
+	}
+	if l.heads == nil {
+		l.heads = map[string]domain.MetadataHead{}
+	}
+	if h, ok := l.heads[id]; ok && revision != h.Revision+1 && !(revision == h.Revision && digest == h.Digest) {
+		return fmt.Errorf("%w: refused", domain.ErrMetadataIntegrity)
+	}
+	l.heads[id] = domain.MetadataHead{Revision: revision, Digest: digest, KeyID: keyID}
+	l.attested++
+	return nil
+}
+
+func (l *fakeLedger) MetadataHead(ctx context.Context, id string) (domain.MetadataHead, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.down != nil {
+		return domain.MetadataHead{}, false, l.down
+	}
+	if l.tampered {
+		return domain.MetadataHead{}, false, fmt.Errorf("%w: tampered", domain.ErrMetadataIntegrity)
+	}
+	h, ok := l.heads[id]
+	return h, ok, nil
+}
+
+func (l *fakeLedger) forget(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.heads, id)
+}
+
+// rowState is the stored columns of a row, to put back as they were (a restored backup).
+type rowState struct {
+	status, mac string
+	revision    int64
+	terminated  sql.NullTime
+}
+
+func snapshot(t *testing.T, db *sql.DB, id string) rowState {
+	t.Helper()
+	var r rowState
+	if err := db.QueryRow(`SELECT status, encode(metadata_mac, 'hex'), metadata_revision, terminated_at FROM sessions WHERE id = $1`, id).
+		Scan(&r.status, &r.mac, &r.revision, &r.terminated); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func restore(t *testing.T, db *sql.DB, id string, r rowState) {
+	t.Helper()
+	if _, err := db.Exec(`UPDATE sessions SET status = $2, metadata_mac = decode($3, 'hex'), metadata_revision = $4, terminated_at = $5 WHERE id = $1`,
+		id, r.status, r.mac, r.revision, r.terminated); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ADR-0116 §6: the read a decision rests on compares the row with its head.
+func TestMetadataStore_AReadComparesTheRowWithItsHead(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+	ledger := &fakeLedger{}
+	store := infrastructure.NewPostgresStore(db, testMetadataKey).WithAttestor(ledger).WithHeads(ledger)
+	plain := infrastructure.NewPostgresStore(db, testMetadataKey) // writes without attesting: a lost attestation
+
+	t.Run("the head's revision: valid", func(t *testing.T) {
+		sess := attestedSession(t, store, domain.StatusActive)
+		if got, err := store.Get(ctx, sess.ID); err != nil || got.MetadataRevision != 1 {
+			t.Fatalf("%+v %v", got, err)
+		}
+	})
+	t.Run("a backup restored over a later revision: a rollback, refused", func(t *testing.T) {
+		sess := attestedSession(t, store, domain.StatusActive)
+		before := snapshot(t, db, sess.ID)
+		ended := *sess
+		now := time.Now().UTC()
+		ended.Status, ended.TerminatedAt = domain.StatusTerminated, &now
+		if err := store.Save(ctx, &ended); err != nil {
+			t.Fatal(err)
+		}
+		restore(t, db, sess.ID, before) // its MAC is valid: only the head tells
+		if _, err := plain.Get(ctx, sess.ID); err != nil {
+			t.Fatalf("the restored row's MAC: %v", err)
+		}
+		if _, err := store.Get(ctx, sess.ID); !errors.Is(err, domain.ErrMetadataIntegrity) {
+			t.Fatalf("a rolled-back row: %v, want ErrMetadataIntegrity", err)
+		}
+	})
+	t.Run("one revision ahead: attested now, then valid", func(t *testing.T) {
+		sess := attestedSession(t, store, domain.StatusActive)
+		ended := *sess
+		ended.AfterUseOwed = true
+		if ok, err := plain.SaveIfStatus(ctx, &ended, domain.StatusActive); !ok || err != nil {
+			t.Fatal(ok, err)
+		}
+		n := ledger.attested
+		if got, err := store.Get(ctx, sess.ID); err != nil || got.MetadataRevision != 2 {
+			t.Fatalf("one ahead: %+v %v", got, err)
+		}
+		if ledger.attested != n+1 || ledger.heads[sess.ID].Revision != 2 {
+			t.Fatal("the read did not attest the revision ahead")
+		}
+	})
+	t.Run("two revisions ahead: refused", func(t *testing.T) {
+		sess := attestedSession(t, store, domain.StatusActive)
+		for i := 0; i < 2; i++ {
+			next := *sess
+			next.AfterUseOwed = i == 0
+			if ok, err := plain.SaveIfStatus(ctx, &next, domain.StatusActive); !ok || err != nil {
+				t.Fatal(ok, err)
+			}
+		}
+		asked := ledger.asked
+		if _, err := store.Get(ctx, sess.ID); !errors.Is(err, domain.ErrMetadataIntegrity) {
+			t.Fatalf("two ahead: %v", err)
+		}
+		if ledger.asked != asked {
+			t.Fatal("a row two revisions ahead was offered to the Audit Service as a repair")
+		}
+	})
+	t.Run("no head yet: attested now", func(t *testing.T) {
+		sess := attestedSession(t, plain, domain.StatusActive)
+		ledger.forget(sess.ID)
+		if _, err := store.Get(ctx, sess.ID); err != nil || ledger.heads[sess.ID].Revision != 1 {
+			t.Fatalf("no head: %v", err)
+		}
+	})
+	t.Run("a head the Audit Service finds altered: refused", func(t *testing.T) {
+		sess := attestedSession(t, store, domain.StatusActive)
+		ledger.tampered = true
+		defer func() { ledger.tampered = false }()
+		if _, err := store.Get(ctx, sess.ID); !errors.Is(err, domain.ErrMetadataIntegrity) {
+			t.Fatalf("an altered head: %v", err)
+		}
+	})
+	t.Run("the Audit Service down: refused, not trusted", func(t *testing.T) {
+		sess := attestedSession(t, store, domain.StatusActive)
+		ledger.down = errors.New("connection refused")
+		defer func() { ledger.down = nil }()
+		if _, err := store.Get(ctx, sess.ID); !errors.Is(err, domain.ErrUnavailable) {
+			t.Fatalf("the Audit Service down: %v", err)
+		}
+	})
+	t.Run("a legacy row asks nothing", func(t *testing.T) {
+		id := uniqueID("sess-legacy-head")
+		if _, err := db.Exec(`INSERT INTO sessions (id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, legacy_unverified)
+			VALUES ($1, 'terminated', 'ssh', 'u', 'a', 'j', now(), now(), true)`, id); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _, _ = db.Exec(`DELETE FROM sessions WHERE id = $1`, id) }()
+		ledger.down = errors.New("connection refused")
+		defer func() { ledger.down = nil }()
+		if got, err := store.Get(ctx, id); err != nil || got.Integrity != domain.IntegrityLegacyUnverified {
+			t.Fatalf("a legacy row with the Audit Service down: %+v %v", got, err)
+		}
+	})
 }

@@ -51,6 +51,50 @@ type PostgresStore struct {
 	// attestor moves each session's independent head once a change is committed (§3, §5); nil:
 	// none, as in the store's own tests.
 	attestor domain.MetadataAttestor
+	// heads reads each session's head for the reads a decision rests on (§6); nil: none.
+	heads domain.MetadataHeadReader
+}
+
+// WithHeads has every Get compare the row with the session's head in the Audit Service (§6).
+func (s *PostgresStore) WithHeads(h domain.MetadataHeadReader) *PostgresStore {
+	s.heads = h
+	return s
+}
+
+// againstHead compares an attested row with its session's head (ADR-0116 §6):
+//
+//   - the head's revision and digest: valid;
+//   - an older revision than the head: a rollback, refused;
+//   - the head's revision with another digest or key: an alteration, refused;
+//   - exactly one revision ahead (a change whose attestation was lost, §5), or no head yet: the row
+//     is attested now, and valid once the Audit Service has taken it;
+//   - anything else, or the Audit Service not answering: refused. No cache.
+func (s *PostgresStore) againstHead(ctx context.Context, sess *domain.Session) error {
+	if s.heads == nil || sess.Integrity != domain.IntegrityAttested {
+		return nil
+	}
+	head, found, err := s.heads.MetadataHead(ctx, sess.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrMetadataIntegrity) {
+			log.Printf("session-broker: ADR-0116: the head of session %q: %v", sess.ID, err)
+			return domain.ErrMetadataIntegrity
+		}
+		return fmt.Errorf("%w: the head of session %s cannot be read, so its row is not used (ADR-0116 §6): %v", domain.ErrUnavailable, sess.ID, err)
+	}
+	digest := domain.MetadataDigest(sess)
+	switch {
+	case found && sess.MetadataRevision == head.Revision && digest == head.Digest:
+		return nil
+	case !found || sess.MetadataRevision == head.Revision+1:
+		return s.attest(ctx, sess)
+	case sess.MetadataRevision < head.Revision:
+		log.Printf("session-broker: ADR-0116: session %q is at revision %d, its head at %d: the row was rolled back, it is not used", sess.ID, sess.MetadataRevision, head.Revision)
+	case sess.MetadataRevision == head.Revision:
+		log.Printf("session-broker: ADR-0116: session %q at revision %d differs from its attested head: the row was altered, it is not used", sess.ID, sess.MetadataRevision)
+	default:
+		log.Printf("session-broker: ADR-0116: session %q is at revision %d, %d ahead of its head: it is not used", sess.ID, sess.MetadataRevision, sess.MetadataRevision-head.Revision)
+	}
+	return domain.ErrMetadataIntegrity
 }
 
 // WithAttestor has every committed change attested to the Audit Service (ADR-0116 §5): a change
@@ -369,7 +413,14 @@ func (s *PostgresStore) Get(ctx context.Context, id string) (*domain.Session, er
 	if err != nil {
 		return nil, err
 	}
-	return s.verified(r)
+	sess, err := s.verified(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.againstHead(ctx, sess); err != nil {
+		return nil, err
+	}
+	return sess, nil
 }
 
 // list reads rows of sessionColumns and verifies each: one that does not verify fails the whole
