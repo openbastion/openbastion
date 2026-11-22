@@ -5345,3 +5345,8 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
   - dans Chromium : le code du proxy ouvre ce que l'Admin UI a chiffré.
 - **Reste** : un test unique navigateur et processus réels ; RDP dans un Windows réel.
 
+## 2026-11-22 — ADR-0133, incrément 5 : la saisie d'un seul tenant, du bouton à la cible
+
+- **Prouvé** : `TestScreenFlow_VNCInAHeadlessBrowser` enchaîne la connexion avec second facteur dans Chrome, le bouton de saisie, le facteur, et les touches reçues par la cible VNC (TigerVNC réel en CI). L'empreinte salée de l'enregistrement est vérifiée ; rien en clair dans le stockage, l'audit ou le journal du proxy. Contre-épreuve : sans le correctif de lecture du proxy, le test échoue.
+- **Reste** : RDP dans un vrai Windows (décision du propriétaire).
+

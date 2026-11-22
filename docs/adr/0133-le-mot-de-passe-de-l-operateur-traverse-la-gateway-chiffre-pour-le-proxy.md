@@ -145,3 +145,12 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
 - **Prouvé dans un vrai navigateur** (`admin_ui_operator_paste_browser_test.go`, Chromium, job navigateur de `integration.yml`) : l'Admin UI chiffre ; la clé est tirée par `proxycore.NewPasteKey` et ouverte par `(*PasteKey).Open`, le code même du proxy, qui retrouve le mot de passe tapé. Le message ne s'ouvre ni pour une autre session ni pour un autre protocole ; l'API n'a reçu que la preuve du facteur. Contre-épreuve : une étiquette de dérivation changée dans le navigateur, et le proxy refuse.
 - **Reste** : un même test qui enchaîne le navigateur et les processus réels (l'Admin UI servie par la Gateway, avec Chrome, dans le job PostgreSQL) ; les deux moitiés sont prouvées séparément, et le vecteur commun les relie. RDP : la saisie suit le même chemin dans le proxy (`InjectSecret`), mais aucun test ne la tape encore dans un Windows réel ; la règle de ne jamais taper de secret dans un test Windows s'applique aussi ici.
 
+### Incrément 5 — le trajet d'un seul tenant (22 novembre 2026)
+
+- **Prouvé** (`TestScreenFlow_VNCInAHeadlessBrowser`, job PostgreSQL : l'Admin UI construite, servie par la Gateway, dans Chrome ; les services réels sous mTLS ; le vrai TigerVNC en CI, la cible simulée sinon) :
+  - un opérateur avec second facteur se connecte dans la page (mot de passe, puis code), ouvre l'écran de sa session, tape un mot de passe dans le champ masqué du bouton « Saisir un mot de passe… » et confirme par un second code ;
+  - la cible reçoit le mot de passe, touche par touche (sans les modificateurs qu'un serveur X ajoute) ; l'écran reste ouvert ;
+  - l'enregistrement porte un seul marqueur, dont `pasteSha256` vaut SHA-256(`pasteSalt`‖mot de passe) ; `session.secret_pasted` est audité ; ni le stockage objet, ni l'audit, ni le journal du proxy ne contient le mot de passe.
+  - Contre-épreuve : sans le correctif de la lecture WebSocket du proxy (incrément 4), le mot de passe n'arrive pas et le test échoue.
+- **Reste** : RDP dans un vrai Windows, que la règle de ne jamais taper de secret dans un test Windows tient à l'écart ; la décision revient au propriétaire (un mot de passe de test jetable ?).
+
