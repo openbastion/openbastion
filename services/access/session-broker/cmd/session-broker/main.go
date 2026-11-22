@@ -67,10 +67,12 @@ func runService() {
 
 	var store domain.SessionRepository
 	var pgStore *infrastructure.PostgresStore
+	var previousKeys []domain.MetadataKey
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		// ADR-0116: every row is signed under a key PostgreSQL never holds. Read before the database
 		// is opened: without it, nothing is written.
 		current, previous, err := metadataKeys()
+		previousKeys = previous
 		if err != nil {
 			log.Fatalf("session-broker: %v", err)
 		}
@@ -143,6 +145,9 @@ func runService() {
 
 	// Sessions and requests past their end are expired, once, and each expiry is written to
 	// the audit (ADR-0034). Always on: an end is a fact, not an option.
+	if pgStore != nil {
+		metadataRotation(pgStore, len(previousKeys) > 0)
+	}
 	sweep := boundedIntEnv("SESSION_EXPIRY_SWEEP_SECONDS", 30, 1, 3600)
 	go expireEvery(svc, time.Duration(sweep)*time.Second)
 	log.Printf("session-broker: sessions and requests past their end are expired every %ds, each expiry written to the audit", sweep)
@@ -410,4 +415,39 @@ func metadataKeys() (domain.MetadataKey, []domain.MetadataKey, error) {
 		return domain.MetadataKey{}, nil, errors.New("SESSION_METADATA_HMAC_PREVIOUS_KEY_ID must differ from the current key's identifier")
 	}
 	return current, []domain.MetadataKey{previous}, nil
+}
+
+// metadataRotation says, at startup, which keys sign the session rows (ADR-0116 §7): rows under a key
+// this process does not hold are refused, and that is said. During a rotation (a previous key set),
+// the rows still under it are re-signed under the current one, a batch a minute, until none is left,
+// and then the previous key can be withdrawn.
+func metadataRotation(store *infrastructure.PostgresStore, rotating bool) {
+	census, err := store.MetadataKeyCensus(context.Background())
+	if err != nil {
+		log.Printf("session-broker: the census of the session metadata keys failed: %v", err)
+	}
+	for id, n := range census {
+		if !store.HoldsMetadataKey(id) {
+			log.Printf("session-broker: WARNING %d session row(s) are signed under key %q, which this process does not hold: they are refused (ADR-0116 §7)", n, id)
+		}
+	}
+	if !rotating {
+		return
+	}
+	go func() {
+		for {
+			done, remaining, err := store.Reattest(context.Background(), 200)
+			switch {
+			case err != nil:
+				log.Printf("session-broker: re-signing session rows under the current key: %v", err)
+			case done > 0 || remaining > 0:
+				log.Printf("session-broker: %d session row(s) re-signed under the current key, %d still under another", done, remaining)
+			}
+			if err == nil && remaining == 0 {
+				log.Printf("session-broker: every session row is signed under the current key: SESSION_METADATA_HMAC_PREVIOUS_KEY_FILE can be withdrawn (ADR-0116 §7)")
+				return
+			}
+			time.Sleep(time.Minute)
+		}
+	}()
 }

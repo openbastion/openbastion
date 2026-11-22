@@ -10,8 +10,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -139,4 +141,65 @@ func TestPostgresFlow_ARolledBackSessionIsRefusedByTheBroker(t *testing.T) {
 	if !strings.Contains(broker.out.String(), "rolled back") {
 		t.Fatalf("the Broker does not say the row was rolled back:\n%s", broker.out.String())
 	}
+}
+
+// ADR-0116, consequences: "la latence et le débit doivent être mesurés". Run on demand
+// (OPENBASTION_MEASURE=1): the read of a session through a real Broker, which now asks the Audit
+// Service for the head, and the head read alone, the cost it adds. Internal TLS is off here: the
+// numbers leave out the mutual-TLS handshake (a pooled connection pays it once).
+func TestPostgresFlow_MeasureTheReadOfASession(t *testing.T) {
+	if os.Getenv("OPENBASTION_MEASURE") == "" {
+		t.Skip("OPENBASTION_MEASURE not set: a measurement, not a check")
+	}
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	root := repoRoot(t)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-0116")
+	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-0116")
+	unreachable := "http://127.0.0.1:1"
+	audit := startService(t, root, auditBin, "19955", "DATABASE_URL="+dsn,
+		"AUDIT_CHAIN_KEY_HEX="+testKMSKeyHex(t), "AUDIT_ANCHOR_FILE="+t.TempDir()+"/anchors.jsonl")
+	env := []string{"DATABASE_URL=" + dsn, "AUTHORIZATION_URL=" + unreachable, "AUDIT_URL=" + audit.baseURL,
+		"VAULT_URL=" + unreachable, "SSH_PROXY_URL=" + unreachable, "SESSION_EXPIRY_SWEEP_SECONDS=3600"}
+	stopService(t, startService(t, root, brokerBin, "19956", env...))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	row := signedSessionRow{ID: fmt.Sprintf("session_measure_%d", time.Now().UnixNano()), Status: "active", Protocol: "ssh",
+		RequestedBy: "user_a", Account: "acc_1", Justification: "ADR-0116 measure", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	insertSignedSession(t, db, row)
+	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM sessions WHERE id = $1`, row.ID) })
+	broker := startService(t, root, brokerBin, "19956", env...)
+
+	measure := func(url string) (p50, p95, p99 time.Duration) {
+		const n = 500
+		client := &http.Client{}
+		var d []time.Duration
+		for i := 0; i < n+20; i++ {
+			start := time.Now()
+			resp, err := client.Get(url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("%s: %d", url, resp.StatusCode)
+			}
+			if i >= 20 { // the first are the warm-up
+				d = append(d, time.Since(start))
+			}
+		}
+		sort.Slice(d, func(i, j int) bool { return d[i] < d[j] })
+		return d[len(d)/2], d[len(d)*95/100], d[len(d)*99/100]
+	}
+	r50, r95, r99 := measure(broker.baseURL + "/sessions/" + row.ID + "?callerId=user_a")
+	h50, h95, h99 := measure(audit.baseURL + "/audit/v1/session-metadata/head?session_id=" + row.ID)
+	t.Logf("a session read through the Broker (MAC + head): p50 %v, p95 %v, p99 %v", r50, r95, r99)
+	t.Logf("the head read alone (what the comparison adds): p50 %v, p95 %v, p99 %v", h50, h95, h99)
 }

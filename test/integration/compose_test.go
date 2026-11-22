@@ -114,6 +114,10 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		want := ""
 		for _, svc := range []string{"admin-cli", "api-gateway", "audit-service", "authentication", "authorization", "command-recorder", "password-vault", "rdp-vnc-proxy", "seaweedfs", "session-broker", "ssh-proxy", "video-recorder"} {
 			want += "./" + svc + "/ca.pem\n./" + svc + "/cert.pem\n./" + svc + "/key.pem\n"
+			if svc == "session-broker" {
+				// ADR-0116: the HMAC key of the session metadata, the Broker's alone, drawn once.
+				want += "./session-broker/session-metadata.key\n"
+			}
 		}
 		if got := out[strings.Index(out, "./"):]; got != want {
 			t.Fatalf("the volume mounted by the services holds:\n%s\nwant exactly each service's own three files:\n%s", got, want)
@@ -128,6 +132,8 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 		if err := psql("session_broker", secrets["PG_PASSWORD_SESSION_BROKER"], "session_broker"); err != nil {
 			t.Fatalf("the Broker's role cannot open its own database: %v", err)
 		}
+		// Among them the Audit Service's, which holds the heads of the session metadata (ADR-0116 §3):
+		// the Broker's role can neither read nor move them.
 		for _, db := range []string{"authentication", "password_vault", "audit_service", "command_recorder", "authorization"} {
 			if err := psql("session_broker", secrets["PG_PASSWORD_SESSION_BROKER"], db); err == nil {
 				t.Fatalf("the Broker's role opens the %s database", db)
@@ -258,9 +264,9 @@ func TestCompose_TheMVPJourneyOnARealDockerComposeStack(t *testing.T) {
 	t.Run("after a restart of the whole stack, everything is still there", func(t *testing.T) {
 		before := auditActions(t)
 		// Since ADR-0064 the logins are in it too: the refused one first, then the administrator's,
-		// the operator's and the auditor's, before the session.
-		if before != "auth.login_refused,auth.login,auth.login,auth.login,session.create,session.connect,recording.read" {
-			t.Fatalf("the trail before the restart: %q, want a refused login, three logins, then the session created, connected, its recording read", before)
+		// the operator's and the auditor's. ADR-0116 attests the session metadata after creation.
+		if before != "auth.login_refused,auth.login,auth.login,auth.login,session.create,session.metadata_attested,session.connect,recording.read" {
+			t.Fatalf("the trail before the restart: %q, want a refused login, three logins, the session created and attested, connected, its recording read", before)
 		}
 		since := time.Now().UTC().Format(time.RFC3339)
 		run("", "restart")

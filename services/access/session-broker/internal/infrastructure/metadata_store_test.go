@@ -556,3 +556,57 @@ func TestMetadataStore_AReadComparesTheRowWithItsHead(t *testing.T) {
 		}
 	})
 }
+
+// ADR-0116 §7: a rotation re-signs every row under the current key, one revision further, attested;
+// a row that was altered or rolled back is never made valid by it; once none is left, the previous
+// key can go.
+func TestMetadataStore_ARotationReSignsEveryRowButNeverAForgedOne(t *testing.T) {
+	db, _ := isolatedDB(t)
+	ctx := context.Background()
+	old := domain.MetadataKey{ID: "test-k0", Key: []byte("fedcba9876543210fedcba9876543210")}
+	ledger := &fakeLedger{}
+	before := infrastructure.NewPostgresStore(db, old).WithAttestor(ledger).WithHeads(ledger)
+	honest := attestedSession(t, before, domain.StatusActive)
+	forged := attestedSession(t, before, domain.StatusActive)
+	rolledBack := attestedSession(t, before, domain.StatusActive)
+	if _, err := db.Exec(`UPDATE sessions SET justification = 'forged' WHERE id = $1`, forged.ID); err != nil {
+		t.Fatal(err)
+	}
+	backup := snapshot(t, db, rolledBack.ID)
+	ended := *rolledBack
+	now := time.Now().UTC()
+	ended.Status, ended.TerminatedAt = domain.StatusTerminated, &now
+	if err := before.Save(ctx, &ended); err != nil {
+		t.Fatal(err)
+	}
+	restore(t, db, rolledBack.ID, backup)
+
+	rotating := infrastructure.NewPostgresStore(db, testMetadataKey, old).WithAttestor(ledger).WithHeads(ledger)
+	done, remaining, err := rotating.Reattest(ctx, 100)
+	if err != nil || done != 1 || remaining != 2 {
+		t.Fatalf("re-signed %d, %d remaining, %v; want 1 and the 2 forged ones", done, remaining, err)
+	}
+	var keyID string
+	var revision int64
+	_ = db.QueryRow(`SELECT metadata_key_id, metadata_revision FROM sessions WHERE id = $1`, honest.ID).Scan(&keyID, &revision)
+	if keyID != testMetadataKey.ID || revision != 2 || ledger.heads[honest.ID].Revision != 2 {
+		t.Fatalf("the honest row: key %q revision %d head %d", keyID, revision, ledger.heads[honest.ID].Revision)
+	}
+	after := infrastructure.NewPostgresStore(db, testMetadataKey).WithAttestor(ledger).WithHeads(ledger)
+	if _, err := after.Get(ctx, honest.ID); err != nil {
+		t.Fatalf("the honest row without the previous key: %v", err)
+	}
+	for _, id := range []string{forged.ID, rolledBack.ID} {
+		if _, err := after.Get(ctx, id); !errors.Is(err, domain.ErrMetadataIntegrity) {
+			t.Fatalf("a forged row after the rotation: %v", err)
+		}
+	}
+	census, err := after.MetadataKeyCensus(ctx)
+	if err != nil || census[testMetadataKey.ID] != 1 || census[old.ID] != 2 || after.HoldsMetadataKey(old.ID) {
+		t.Fatalf("the census: %v %v", census, err)
+	}
+	// A second pass re-signs nothing more: the forged rows stay as they are.
+	if done, remaining, err := rotating.Reattest(ctx, 100); err != nil || done != 0 || remaining != 2 {
+		t.Fatalf("a second pass: %d %d %v", done, remaining, err)
+	}
+}
