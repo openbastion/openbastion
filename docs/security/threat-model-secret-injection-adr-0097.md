@@ -7,9 +7,9 @@
 
 ## 1. Résumé exécutif
 
-Le chemin de confiance est correctement orienté : le navigateur ne reçoit que le challenge et la preuve MFA ; le Session Broker dérive le compte et le protocole depuis la session persistée ; le proxy propriétaire de la session échange un scope Vault à usage unique contre le credential et réalise la frappe. L’audit préalable et le marqueur Video Recorder doivent être acquittés avant la frappe.
+Le chemin de confiance reste orienté vers le moindre privilège. **Parcours A (secret Vault)** : le navigateur ne reçoit que les preuves de step-up ; le Session Broker dérive le compte et le protocole depuis la session persistée ; le proxy propriétaire échange un scope Vault à usage unique contre le credential et réalise la frappe. **Parcours B (ADR-0133)** : le mot de passe saisi par l’opérateur existe dans le navigateur puis est chiffré pour le proxy écran avant transport ; la Gateway ne relaie que le chiffré. Dans les deux parcours, l’audit préalable et le marqueur Video Recorder sont acquittés avant la frappe.
 
-Les tests multi-processus apportent une preuve utile du parcours VNC et RDP, en plus du parcours SSH antérieur. Ils ne prouvent cependant pas toutes les propriétés de sécurité du système en production : la réception exacte de la frappe RDP sur Windows reste une validation CI distincte ; la résistance aux courses session/termination, le comportement d’audit après résultat ambigu et l’absence de fuite dans les dumps mémoire ne sont pas établis par une preuve dédiée. Les tests UI Vitest ne remplacent pas un test navigateur réel.
+Au 22 novembre 2026, les parcours SSH/VNC/RDP, la réconciliation `outcome_unknown`, le rejeu d'archives après redémarrage, l'attestation ADR-0116 et la saisie opérateur ADR-0133 ont des preuves multi-processus ou CI. Le risque technique majeur encore ouvert est la terminaison/révocation déclenchée pendant une frappe déjà en cours (SI-02). Les copies mémoire résiduelles et le focus distant restent des limites documentées, pas des garanties d'effacement ou de masquage.
 
 **Conclusion :** ne pas considérer l’injection comme une fonction de sécurité entièrement close tant que les risques P1 de cette revue n’ont pas été traités ou explicitement acceptés. Cette revue ne lève pas le blocage du parcours B.
 
@@ -233,13 +233,13 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | ID | STRIDE | Risque | Sévérité | État |
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
-| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : E2E VNC contre TigerVNC réel avec oracle X11 indépendant ; séquence Unicode reçue et aucune nouvelle entrée après l’acquittement de révocation, CI PostgreSQL 16 passée dans la PR #220 ; la course concurrente pendant la frappe reste à prouver |
-| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | Partiel : projection cryptographiquement vérifiée sur chaîne et archives, CLI disponible ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans Draft PR #219 (CI à confirmer) ; façade UI dans Draft PR #217 (ADR-0113) ; cible à vérifier manuellement |
+| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : E2E VNC contre TigerVNC réel avec oracle X11 indépendant ; séquence Unicode reçue et aucune nouvelle entrée après l’acquittement de révocation ; la course concurrente déclenchée au milieu de la frappe reste à prouver |
+| SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | **Contrôle livré et éprouvé** : projection cryptographiquement vérifiée, CLI, Gateway/Admin UI ; test multi-processus `outcome_unknown` sans retry ; archivage → redémarrage → réconciliation passé en PostgreSQL 16 CI dans le run `45023573283`. La cible reste à vérifier manuellement quand le résultat est ambigu. |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 accepté) |
 | SI-06 | D | Rafale de challenges et contention de frappe | P2 | Mesure et test de charge à ajouter |
 | SI-07 | E | Confused deputy si identité interne compromise | P1 | Allowlist mTLS et autorisation exacte ; risque résiduel |
-| SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | ADR-0116 : incrément 1 livré (HMAC Broker par ligne, altération de chaque champ protégé contre-éprouvée sur PostgreSQL) ; incréments 2 et 3 livrés : la révision ancrée dans l'Audit Service, comparée à chaque lecture, refuse le rejeu d'une ancienne ligne (prouvé entre deux vrais processus) ; restent la rotation et les rôles distincts |
+| SI-08 | T | Altération/rejeu des métadonnées de session par un rôle PostgreSQL compromis | P1 | **Contrôle livré — ADR-0116, incréments 1 à 4** : HMAC par ligne, tête Audit, comparaison à chaque lecture, refus du rollback, ré-attestation de rotation et rôles PostgreSQL distincts. Le test Compose complet prouve que le rôle `session_broker` ne peut pas lire/modifier `audit_service`. Reste un benchmark de performance mTLS/concurrence, pas une lacune d'intégrité. |
 
 ## 6. Tests et contre-épreuves à maintenir
 
@@ -261,26 +261,34 @@ Ajouter aussi un scénario avec un rôle PostgreSQL de test qui modifie les colo
 
 Les contre-épreuves doivent être réalisées sur des branches de test isolées ; ne jamais affaiblir un contrôle dans le code livré.
 
-## 7. État des preuves au 16 novembre 2026
+## 7. État des preuves au 22 novembre 2026
 
 - **SSH :** parcours multi-processus MFA → Broker → Vault → proxy → cible → Recorder/Audit validé ; la valeur est absente de l’enregistrement et remplacée par un marqueur. Le test de perte d’acquittement terminal transmet l’événement au véritable Audit Service, perd la réponse après commit, vérifie `outcome_unknown`, une seule frappe côté cible, aucun retry et une chaîne valide.
 - **VNC :** parcours multi-processus avec TOTP, refus d’un autre acteur et d’une preuve invalide, frappe Unicode vérifiée à la cible RFB, marqueur et audit, absence du secret dans les logs et l’objet enregistré. Un test complet contre TigerVNC réel a également passé dans l’environnement local.
-- **RDP :** parcours multi-processus avec FreeRDP 3, scope Vault, audit, marqueur durable et rejeu validés. FreeRDP Shadow ne constitue pas un oracle fiable de réception Unicode ; le test Windows TestRDPWindows_SecretTyperUnicode reste à valider dans la CI Windows.
-- **Admin UI :** tests Vitest du composant et du parcours TOTP/WebAuthn présents. Le test Chromium réel de l’UI avec API simulée a passé dans la CI de la PR #220 ; il vérifie l’effacement du TOTP avant réponse, le payload limité et l’absence de credential/scope et de stockage persistant. Il ne remplace pas un parcours navigateur contre une cible TigerVNC/Windows réelle. Il n’a pas été exécuté localement sur LT209227 faute de binaire Chrome.
-- **Parcours B (mot de passe fourni par l’opérateur) :** non couvert et interdit jusqu’à un canal navigateur → proxy chiffré de bout en bout, défini par un ADR distinct.
+- **RDP :** le parcours CredSSP, scope Vault, audit, marqueur et rejeu est validé. Le test `TestScreenFlow_RDPOperatorPasteInAHeadlessBrowser` passe dans cinq configurations Windows Server 2019/2022, dont `fr-FR`, dans le workflow Windows RDP (run `44976798904`). Cette preuve couvre ces matrices, pas toute compatibilité RDS.
+- **Admin UI :** Vitest couvre les formulaires et refus ; le test Chromium avec API simulée vérifie l’effacement du TOTP avant réponse, le payload limité et l’absence de credential/scope et de stockage persistant. Des tests navigateur/processus réels distincts valident le parcours VNC contre TigerVNC et le parcours RDP contre Windows Server 2019/2022 (run Windows RDP `44976798904`).
+- **Parcours B (mot de passe fourni par l’opérateur, ADR-0133) :** livré et éprouvé de bout en bout sur TigerVNC réel et Windows Server 2019/2022 en CI. Le navigateur chiffre pour le proxy écran (ECDH P-256, HKDF-SHA-256, AES-256-GCM) ; la Gateway relaie le chiffré et le Broker ne voit pas le secret. Limites documentées : Gateway compromise pouvant servir une UI hostile avant chiffrement, chaîne JavaScript non effaçable de façon garantie, champ cible visible dans la capture.
 
-## 8. Décision et critères de clôture
+## 8. Décision et critères de clôture — revue du 22 novembre 2026
 
-**Classement :** SI-02, SI-03, SI-05 et SI-08 sont à corriger avant production ou à faire accepter explicitement par le propriétaire du risque ; SI-01 et SI-07 sont des risques résiduels de composants de confiance à réduire par défense en profondeur ; SI-06 est une amélioration de résilience P2. SI-04 est une limite technique connue, pas un risque réputé accepté : l’avertissement opérateur et la documentation restent obligatoires.
+| Risque | Classement actuel | Décision / suite |
+|---|---|---|
+| SI-02 — révocation pendant la frappe | **P1 ouvert, bloquant avant généralisation** | Ajouter une course déterministe qui révoque au milieu d'une frappe en cours. Le test actuel prouve seulement l'absence d'entrée après acquittement de révocation. |
+| SI-03 — audit terminal perdu | Contrôle livré ; risque opérationnel résiduel | `outcome_unknown`, aucune réinjection, rapprochement cryptographique et CI PostgreSQL 16 archivage/redémarrage validée. Vérification manuelle de la cible obligatoire en cas d'ambiguïté. |
+| SI-04 — focus distant visible | Limite technique connue | L'opérateur doit confirmer le focus et un champ masqué ; l'avertissement reste obligatoire. Le proxy ne peut pas inspecter le type de contrôle de la cible. |
+| SI-05 — copies mémoire | Partiellement mitigé, limite résiduelle | ADR-0115 bloque les core dumps et purge les buffers contrôlés ; aucune promesse d'effacement des copies Go/GC/TLS, chaînes immuables, swap ou mémoire noyau. |
+| SI-08 — altération/rollback PostgreSQL | **Contrôle livré, ADR-0116 incréments 1–4** | HMAC, tête Audit, comparaison à chaque `Get`, ré-attestation et rôles séparés sont prouvés. Seul le benchmark mTLS/concurrence reste à faire. |
+| ADR-0133 — saisie opérateur | Livré et éprouvé, limites acceptées | Garder step-up, jeton à usage unique, avertissement de focus et accès restreint aux replays. La compromission de la Gateway et les chaînes JavaScript restent dans le modèle de menace. |
+| SI-01 / SI-07 — service de confiance compromis | Risque résiduel P1 | Défense en profondeur, mTLS, allowlists, autorisation exacte et intégrité de la chaîne d'approvisionnement. |
+| SI-06 — contention / rafale | P2 | Test de charge et mesure des temps d'attente à planifier. |
 
-La revue ne change pas ADR-0097 et n’autorise pas à elle seule l’activation générale de l’injection. Les P1 SI-02, SI-03, SI-05 et SI-08 sont à traiter ou à accepter explicitement avant production. SI-04 est une limite technique connue, non réputée acceptée : elle doit rester visible à l’opérateur et dans la documentation. SI-01 et SI-07 sont des risques résiduels de compromission de composants de confiance ; SI-06 est une amélioration de résilience P2.
+**Conclusion :** aucun reliquat d'intégrité ADR-0116, de réconciliation SI-03 ou de validation Unicode RDP n'est identifié dans le périmètre audité. Le seul blocage technique restant pour généraliser l'injection est SI-02, la révocation concurrente au milieu de la frappe. SI-04 et SI-05 restent des limites résiduelles explicites ; elles ne doivent pas être masquées par une affirmation de garantie.
 
-Critères minimaux de clôture :
-1. tests unitaires de propagation de révocation ajoutés pour SSH et proxy écran ; E2E TigerVNC réel + oracle X11 ajouté pour vérifier qu’aucune entrée ne survient après l’acquittement ; ajouter ensuite une course déterministe qui révoque pendant la frappe ;
-2. implémenter ADR-0116 et contre-éprouver l’altération de chaque champ protégé, le rejeu/rollback, le crash entre commit SQL et attestation, la restauration, l’indisponibilité Audit et les rôles PostgreSQL distincts ;
-3. projection de rapprochement des `injection_id` sans événement terminal, avec classification `outcome_unknown` et absence de retry (projection cryptographique et CLI implémentés par ADR-0112) ; test multi-processus de perte d’acquittement passé localement ; E2E PostgreSQL 16 archive/restart/reconciliation passé localement dans la Draft PR #219 (CI à confirmer) et valider la façade UI de la Draft PR #217 (ADR-0113) ;
-4. preuve navigateur Chromium du parcours UI, y compris effacement du TOTP et absence de credential/scope dans le navigateur ;
-5. validation CI Windows de la réception Unicode RDP ;
-6. revue des logs, traces, crash dumps et captures pour la non-divulgation.
+### Actions restantes
 
-Aucune propriété du parcours B ne peut être déduite de cette revue : il a sa propre conception, ses menaces et ses preuves dans ADR-0133.
+1. Ajouter la course déterministe SI-02 sur processus réels, avec terminaison/révocation au milieu d'une frappe et oracle indépendant côté cible.
+2. Mesurer SI-06 (contention du verrou et rafales MFA) ; P2, non bloquant pour les clôtures documentaires.
+3. Mesurer le coût ADR-0116 sous charge et mTLS sur un déploiement représentatif ; non bloquant pour l'intégrité.
+4. Maintenir l'avertissement de focus et les limites mémoire dans l'Admin UI, la documentation d'exploitation et les procédures d'incident.
+
+Les contrôles ADR-0115, ADR-0116 et ADR-0133 ne sont pas réécrits par cette revue. Les preuves CI citées valident les scénarios explicitement exécutés, pas une compatibilité universelle de toutes les cibles.

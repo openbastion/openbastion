@@ -126,5 +126,5 @@ Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, ren
   | Lecture de la tête seule (requête Audit) | 1,62 ms | 2,99 ms | 3,86 ms |
 
   Ces valeurs sont une première référence de latence, pas un objectif SLO ni un benchmark de débit : elles ne comprennent pas le transport mTLS, les charges concurrentes, la latence réseau inter-hôtes ni la contention de production. Les percentiles de deux séries distinctes ne se soustraient pas pour produire un coût marginal exact. Un benchmark de débit/concurrence et une mesure avec mTLS restent à faire avant production.
-- **Reste** : mesurer le débit et la latence sous concurrence, avec mTLS et sur un déploiement représentatif ; intégrer l'exécution de `test-compose` à la CI dans un changement CI séparé.
+- **Reste** : mesurer le débit et la latence sous concurrence, avec mTLS et sur un déploiement représentatif. ~~Intégrer `test-compose` à la CI~~ — fait : le job « Docker Compose / full MVP journey » est requis et a passé dans le run CI `45023573283` (PR #277).
 
