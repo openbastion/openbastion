@@ -104,7 +104,7 @@ func TestPostgresStore_ExpiryContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE sessions`) })
-	expiryContract(t, infrastructure.NewPostgresStore(db), uniqueID("exp")+"_")
+	expiryContract(t, infrastructure.NewPostgresStore(db, testMetadataKey), uniqueID("exp")+"_")
 }
 
 // Two replicas sweeping the same rows together: each session expired by exactly one.
@@ -117,7 +117,7 @@ func TestPostgresStore_ExpireDue_TwoReplicasExpireEachSessionOnce(t *testing.T) 
 	ctx := context.Background()
 	now := time.Now().UTC()
 	const n = 300
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	for i := 0; i < n; i++ {
 		if err := store.Save(ctx, &domain.Session{ID: fmt.Sprintf("race_%03d", i), Status: domain.StatusActive, Protocol: "ssh", RequestedBy: "u",
 			PrivilegedAccountID: "acc", Justification: "j", CreatedAt: now.Add(-time.Hour), ExpiresAt: now.Add(-time.Minute)}); err != nil {
@@ -129,7 +129,7 @@ func TestPostgresStore_ExpireDue_TwoReplicasExpireEachSessionOnce(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer other.Close()
-	replicas := []domain.SessionRepository{store, infrastructure.NewPostgresStore(other)}
+	replicas := []domain.SessionRepository{store, infrastructure.NewPostgresStore(other, testMetadataKey)}
 	var mu sync.Mutex
 	seen := map[string]int{}
 	var wg sync.WaitGroup

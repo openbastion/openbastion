@@ -14,6 +14,8 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -64,6 +67,9 @@ func buildEnv(root string) []string {
 		// to a default (the default is mutual TLS, ADR-0010). The mutual-TLS mode
 		// has its own tests: mtls_flow_test.go.
 		"INTERNAL_TLS=disabled",
+		// ADR-0116: a Session Broker on PostgreSQL signs its rows under this key, the same for every
+		// replica and every restart of a test process; ignored by every other service.
+		"SESSION_METADATA_HMAC_KEY_FILE=" + testMetadataKeyFile(),
 	}
 }
 
@@ -334,4 +340,29 @@ func TestSSHFlow_EndToEnd_AcrossRealSeparateProcesses(t *testing.T) {
 			t.Fatal("expected a scope authorized for ssh-proxy to be rejected when redeemed by database-proxy-1")
 		}
 	})
+}
+
+var (
+	metadataKeyOnce sync.Once
+	metadataKeyPath string
+)
+
+// testMetadataKeyFile is the HMAC key of the session metadata (ADR-0116) for the services these
+// tests start: random for each test process, in a file only its owner reads.
+func testMetadataKeyFile() string {
+	metadataKeyOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "openbastion-metadata-key-")
+		if err != nil {
+			panic(err)
+		}
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			panic(err)
+		}
+		metadataKeyPath = filepath.Join(dir, "session-metadata.key")
+		if err := os.WriteFile(metadataKeyPath, []byte(hex.EncodeToString(key)+"\n"), 0o600); err != nil {
+			panic(err)
+		}
+	})
+	return metadataKeyPath
 }

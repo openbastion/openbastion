@@ -160,12 +160,12 @@ func TestInMemoryStore_SaveIfUnderPendingLimit_TakesExactlyThePlacesLeftUnderCon
 
 func TestPostgresStore_CountPending_CountsWhatIsWaitingForThatRequester(t *testing.T) {
 	db := testDB(t)
-	quotaCountContract(t, infrastructure.NewPostgresStore(db), uniqueID("qc")+"-")
+	quotaCountContract(t, infrastructure.NewPostgresStore(db, testMetadataKey), uniqueID("qc")+"-")
 }
 
 func TestPostgresStore_SaveIfUnderPendingLimit_IsRefusedAtTheLimit_AndWritesNothing(t *testing.T) {
 	db := testDB(t)
-	quotaSaveContract(t, infrastructure.NewPostgresStore(db), uniqueID("qs")+"-")
+	quotaSaveContract(t, infrastructure.NewPostgresStore(db, testMetadataKey), uniqueID("qs")+"-")
 }
 
 // Two stores on two separate connection pools are two Broker replicas: only the
@@ -177,5 +177,5 @@ func TestPostgresStore_SaveIfUnderPendingLimit_TakesExactlyThePlacesLeft_AcrossT
 		t.Fatal(err)
 	}
 	defer db2.Close()
-	quotaRaceContract(t, []domain.SessionRepository{infrastructure.NewPostgresStore(db1), infrastructure.NewPostgresStore(db2)}, uniqueID("qr")+"-")
+	quotaRaceContract(t, []domain.SessionRepository{infrastructure.NewPostgresStore(db1, testMetadataKey), infrastructure.NewPostgresStore(db2, testMetadataKey)}, uniqueID("qr")+"-")
 }

@@ -41,6 +41,7 @@ startup_keys:              # obligatoires avec DATABASE_URL ; jamais dans le dé
   - TOKEN_SIGNING_KEY_HEX   # authentication
   - AUDIT_CHAIN_KEY_HEX     # audit-service (ADR-0027)
 optional_keys:             # requises seulement avec la fonction qu'elles servent ; jamais dans le dépôt
+  - SESSION_METADATA_HMAC_KEY_FILE # session-broker (ADR-0116) : fichier 0600, 32 octets en hexadécimal, obligatoire avec DATABASE_URL ; signe chaque ligne sessions, jamais dans PostgreSQL ; la perdre rend toutes les sessions invérifiables (refusées)
   - MFA_SECRET_KEY_HEX      # authentication (ADR-0062) : scelle les secrets TOTP, obligatoire avec MFA_REQUIRED_ROLES (et réciproquement) ; la perdre rend tous les secrets illisibles
   - S3_ACCESS_KEY + S3_SECRET_KEY # video-recorder : compte S3 dédié ; en Compose, identité SeaweedFS actuellement administratrice pour créer le bucket
 optional_secrets:          # fichiers 0600, jamais une variable d'environnement qui porte la valeur

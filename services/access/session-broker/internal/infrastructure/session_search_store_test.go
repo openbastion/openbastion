@@ -77,5 +77,5 @@ func TestInMemoryStore_SessionSearchContract(t *testing.T) {
 }
 
 func TestPostgresStore_SessionSearchContract(t *testing.T) {
-	runSessionSearchContract(t, infrastructure.NewPostgresStore(testDB(t)))
+	runSessionSearchContract(t, infrastructure.NewPostgresStore(testDB(t), testMetadataKey))
 }

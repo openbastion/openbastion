@@ -46,10 +46,14 @@ func (s *SessionBrokerService) authorizedSecretAction(ctx context.Context, actor
 	}
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrMetadataIntegrity) {
 			return MFAActionBinding{}, err
 		}
 		return MFAActionBinding{}, fmt.Errorf("%w: reading session for secret action: %v", domain.ErrUnavailable, err)
+	}
+	// ADR-0116 §8: no secret is typed into a session whose row nobody attested.
+	if err := sess.RequireAttested(); err != nil {
+		return MFAActionBinding{}, err
 	}
 	if actorID != sess.RequestedBy {
 		return MFAActionBinding{}, domain.ErrForbidden

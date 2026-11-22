@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,13 +33,49 @@ func testDB(t *testing.T) *sql.DB {
 	return db
 }
 
+// isolatedDB is a database of its own for a test that takes the schema back to an older one: a
+// fresh PostgreSQL schema, first on the search path, dropped afterwards. Dropping a column of the
+// shared schema would change every other test's signed rows (ADR-0116) under them. It returns the
+// opened database and the DSN a "new binary" starts with.
+func isolatedDB(t *testing.T) (*sql.DB, string) {
+	t.Helper()
+	base := os.Getenv("TEST_DATABASE_URL")
+	if base == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping PostgreSQL-backed tests (see /NOTES_SANDBOX.md)")
+	}
+	admin, err := sql.Open("postgres", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = admin.Close() })
+	schema := fmt.Sprintf("t_upgrade_%d", time.Now().UnixNano())
+	if _, err := admin.Exec(`CREATE SCHEMA ` + schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`) })
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	dsn := base + sep + "search_path=" + schema
+	db, err := infrastructure.OpenPostgres(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("OpenPostgres: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db, dsn
+}
+
+// testMetadataKey signs the rows these tests write (ADR-0116).
+var testMetadataKey = domain.MetadataKey{ID: "test-k1", Key: []byte("0123456789abcdef0123456789abcdef")}
+
 func uniqueID(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
 }
 
 func TestPostgresStore_SaveThenGet_RoundTrips(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 
 	now := time.Now().UTC().Truncate(time.Microsecond) // Postgres TIMESTAMPTZ precision
@@ -73,7 +110,7 @@ func TestPostgresStore_Save_IsAnUpsertNotAnInsertOnly(t *testing.T) {
 	// and calls Save again with the same ID. A plain INSERT would fail
 	// outright on the primary key the second time.
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -112,7 +149,7 @@ func TestPostgresStore_Save_IsAnUpsertNotAnInsertOnly(t *testing.T) {
 
 func TestPostgresStore_Get_UnknownSessionReturnsTheSameSentinelAsInMemoryStore(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 
 	_, err := store.Get(context.Background(), uniqueID("does-not-exist"))
 	if !errors.Is(err, domain.ErrNotFound) {
@@ -126,7 +163,7 @@ func TestPostgresStore_Save_DeniedSessionWithNoAccountGrantRoundTrips(t *testing
 	// made active. Pins that this path, not just the happy path, writes
 	// cleanly.
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -152,7 +189,7 @@ func TestPostgresStore_Save_DeniedSessionWithNoAccountGrantRoundTrips(t *testing
 // and, like everything else about a session, a refused attempt keeps it.
 func TestPostgresStore_BreakGlassMarkRoundTrips(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -184,11 +221,11 @@ func TestPostgresStore_BreakGlassMarkRoundTrips(t *testing.T) {
 // column. Starting the new Session Broker against it must upgrade it — and the
 // sessions already in it were never authorised to waive recording.
 func TestPostgresStore_AnOlderDatabaseIsUpgradedInPlace(t *testing.T) {
-	db := testDB(t)
+	db, dsn := isolatedDB(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	old := &domain.Session{
 		ID: uniqueID("sess-old"), Status: domain.StatusActive, Protocol: "ssh", RequestedBy: "jdupont",
 		PrivilegedAccountID: uniqueID("acc"), Justification: "before break-glass", CreatedAt: now, ExpiresAt: now.Add(time.Hour),
@@ -206,14 +243,13 @@ func TestPostgresStore_AnOlderDatabaseIsUpgradedInPlace(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE component = 'session-broker'`); err != nil {
 		t.Fatal(err)
 	}
-	dsn := os.Getenv("TEST_DATABASE_URL")
 	db2, err := infrastructure.OpenPostgres(ctx, dsn) // what the new binary does at startup
 	if err != nil {
 		t.Fatalf("OpenPostgres on an older database: %v", err)
 	}
 	defer db2.Close()
 
-	got, err := infrastructure.NewPostgresStore(db2).Get(ctx, old.ID)
+	got, err := infrastructure.NewPostgresStore(db2, testMetadataKey).Get(ctx, old.ID)
 	if err != nil {
 		t.Fatalf("reading a session that predates the column: %v", err)
 	}
@@ -232,7 +268,7 @@ func TestPostgresStore_AnOlderDatabaseIsUpgradedInPlace(t *testing.T) {
 
 // What a decision changes survives storage: the new end of the session, who decided, when.
 func TestPostgresStore_ADecisionRoundTrips(t *testing.T) {
-	store := infrastructure.NewPostgresStore(testDB(t))
+	store := infrastructure.NewPostgresStore(testDB(t), testMetadataKey)
 	ctx := context.Background()
 
 	req := pendingRequest(uniqueID("sess-req"))
@@ -279,7 +315,7 @@ func ptrTime(t time.Time) *time.Time { return &t }
 // for the same request — from this process or another Broker replica — one lands.
 func TestPostgresStore_SaveIfStatus_OfManyRacingDecisionsExactlyOneWins(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 
 	for round := 0; round < 10; round++ {
@@ -332,9 +368,9 @@ func TestPostgresStore_SaveIfStatus_OfManyRacingDecisionsExactlyOneWins(t *testi
 // ADR-0011 adds. Starting the new Broker against it upgrades it, and what was granted under
 // the earlier regime reads back as it was: no duration, and above all no decider.
 func TestPostgresStore_ADatabaseFromBeforeTheDoubleValidationIsUpgradedInPlace(t *testing.T) {
-	db := testDB(t)
+	db, dsn := isolatedDB(t)
 	ctx := context.Background()
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
 	granted := &domain.Session{
@@ -354,13 +390,12 @@ func TestPostgresStore_ADatabaseFromBeforeTheDoubleValidationIsUpgradedInPlace(t
 		t.Fatal(err)
 	}
 
-	dsn := os.Getenv("TEST_DATABASE_URL")
 	db2, err := infrastructure.OpenPostgres(ctx, dsn) // what the new binary does at startup
 	if err != nil {
 		t.Fatalf("OpenPostgres on an ADR-0009 database: %v", err)
 	}
 	defer db2.Close()
-	store2 := infrastructure.NewPostgresStore(db2)
+	store2 := infrastructure.NewPostgresStore(db2, testMetadataKey)
 
 	got, err := store2.Get(ctx, granted.ID)
 	if err != nil {
@@ -390,7 +425,7 @@ func TestPostgresStore_ADatabaseFromBeforeTheDoubleValidationIsUpgradedInPlace(t
 // termination is written, from a copy read earlier — does not touch who decided, when,
 // or the end of the session, so it cannot rewrite a decision that was taken.
 func TestPostgresStore_OnlyTheCompareAndSwapWritesADecision(t *testing.T) {
-	store := infrastructure.NewPostgresStore(testDB(t))
+	store := infrastructure.NewPostgresStore(testDB(t), testMetadataKey)
 	ctx := context.Background()
 
 	req := pendingRequest(uniqueID("sess-save"))
@@ -422,7 +457,7 @@ func TestPostgresStore_OnlyTheCompareAndSwapWritesADecision(t *testing.T) {
 // request that was never granted does not; a termination writes the debt with its swap; the
 // debts come back with the end of each session; a delivered one is no longer owed.
 func TestPostgresStore_AfterUseOwed(t *testing.T) {
-	store := infrastructure.NewPostgresStore(testDB(t))
+	store := infrastructure.NewPostgresStore(testDB(t), testMetadataKey)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	active, pending, ended := uniqueID("s_active"), uniqueID("s_pending"), uniqueID("s_term")
@@ -480,7 +515,7 @@ func TestPostgresStore_AfterUseOwed(t *testing.T) {
 // through a decision, in Get and in the list of the requests waiting.
 func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -525,7 +560,7 @@ func TestPostgresStore_ApprovalAndTicketRoundTrip(t *testing.T) {
 // each direction survives a round trip on its own column, and a later save (a termination) keeps it.
 func TestPostgresStore_ClipboardRightsRoundTrip(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 

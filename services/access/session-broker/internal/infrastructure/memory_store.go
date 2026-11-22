@@ -89,6 +89,7 @@ func (s *InMemoryStore) Save(ctx context.Context, sess *domain.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cp := *sess
+	s.attest(&cp)
 	s.sessions[sess.ID] = &cp
 	return nil
 }
@@ -114,6 +115,7 @@ func (s *InMemoryStore) SaveIfStatus(ctx context.Context, sess *domain.Session, 
 		return false, nil
 	}
 	cp := *sess
+	s.attest(&cp)
 	s.sessions[sess.ID] = &cp
 	return true, nil
 }
@@ -145,6 +147,7 @@ func (s *InMemoryStore) SaveIfUnderPendingLimit(ctx context.Context, sess *domai
 		return false, nil
 	}
 	cp := *sess
+	s.attest(&cp)
 	s.sessions[sess.ID] = &cp
 	return true, nil
 }
@@ -248,4 +251,14 @@ func (s *InMemoryStore) SearchSessions(ctx context.Context, q domain.SessionSear
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+// attest marks a kept copy as the store's own (ADR-0116): memory nothing else can write, so every
+// session it returns is attested, one revision further than the one it replaces.
+func (s *InMemoryStore) attest(cp *domain.Session) {
+	cp.MetadataRevision = 1
+	if prev, ok := s.sessions[cp.ID]; ok {
+		cp.MetadataRevision = prev.MetadataRevision + 1
+	}
+	cp.Integrity = domain.IntegrityAttested
 }

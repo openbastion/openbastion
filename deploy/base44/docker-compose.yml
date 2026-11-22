@@ -443,6 +443,8 @@ services:
       <<: *go-env
       PORT: "8084"
       DATABASE_URL: postgres://session_broker:ob-dev-session-broker@postgres:5432/session_broker?sslmode=disable
+      # ADR-0116: drawn once by the pki job (deploy/docker-compose/pki.sh), never in PostgreSQL.
+      SESSION_METADATA_HMAC_KEY_FILE: /pki/session-metadata.key
       AUTHORIZATION_URL: https://authorization:8083
       VAULT_URL: https://password-vault:8081
       AUDIT_URL: https://audit-service:8082

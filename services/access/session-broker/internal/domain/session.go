@@ -67,6 +67,12 @@ type Session struct {
 	// session MAY do, not that it did: only the proxy knows whether the waiver
 	// was actually used, and it says so in the audit trail (session.breakglass).
 	BreakGlass bool
+
+	// MetadataRevision is the row's revision (ADR-0116 §2): 1 at creation, one more at every change,
+	// covered by the row's MAC. Integrity is what the store established when it read the row; set
+	// by the store, never by a caller.
+	MetadataRevision uint64
+	Integrity        MetadataIntegrity
 }
 
 // EffectiveStatus returns Expired if the session is still marked Active — or a
