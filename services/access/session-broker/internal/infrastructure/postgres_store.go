@@ -639,3 +639,81 @@ func (s *PostgresStore) MarkAfterUseDelivered(ctx context.Context, id string) er
 	}
 	return s.attest(ctx, &next)
 }
+
+// Reattest re-signs under the current key up to limit rows still signed under another one (ADR-0116
+// §7), and says how many it did and how many remain. Each row is verified under the key that signed
+// it and compared with its head before it is signed again: a rotation never makes valid a row that
+// was altered or rolled back. A row that fails either is left as it is, and logged. Once remaining
+// is 0, the previous key can be withdrawn.
+func (s *PostgresStore) Reattest(ctx context.Context, limit int) (reattested, remaining int, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `
+		SELECT `+sessionColumns+` FROM sessions
+		WHERE metadata_key_id <> $1 AND NOT legacy_unverified
+		ORDER BY id
+		LIMIT $2
+		FOR UPDATE SKIP LOCKED`, s.keys[0].ID, limit)
+	if err != nil {
+		return 0, 0, err
+	}
+	candidates, err := s.list(rows, true)
+	if err != nil {
+		return 0, 0, err
+	}
+	var done []*domain.Session
+	for _, sess := range candidates {
+		if err := s.againstHead(ctx, sess); err != nil {
+			log.Printf("session-broker: ADR-0116: session %q is not re-signed under the current key: %v", sess.ID, err)
+			continue
+		}
+		if err := s.update(ctx, tx, sess, ""); err != nil {
+			return 0, 0, err
+		}
+		done = append(done, sess)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	for _, sess := range done {
+		if err := s.attest(ctx, sess); err != nil {
+			log.Printf("session-broker: the re-signed revision of session %q: %v", sess.ID, err)
+		}
+	}
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE metadata_key_id <> $1 AND NOT legacy_unverified`, s.keys[0].ID).Scan(&remaining); err != nil {
+		return len(done), 0, err
+	}
+	return len(done), remaining, nil
+}
+
+// MetadataKeyCensus is how many signed rows each key identifier signs.
+func (s *PostgresStore) MetadataKeyCensus(ctx context.Context) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT metadata_key_id, count(*) FROM sessions WHERE NOT legacy_unverified GROUP BY metadata_key_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
+// HoldsMetadataKey says whether this store verifies rows signed under id.
+func (s *PostgresStore) HoldsMetadataKey(id string) bool {
+	for _, k := range s.keys {
+		if k.ID == id {
+			return true
+		}
+	}
+	return false
+}

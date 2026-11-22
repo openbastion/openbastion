@@ -103,5 +103,28 @@ Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, ren
   - **entre deux vrais processus** : une ligne signée, lue (la tête naît à 1), terminée en révision 2 (signée par le signataire indépendant, attestée par la lecture suivante), puis la sauvegarde de la révision 1 remise en place : le vrai Broker la refuse (`500`) et dit « rolled back » ;
   - contre-épreuves : sans la comparaison, en réparant toute révision d'avance, en se fiant à un Audit Service absent : les tests échouent.
 - **Conséquence** (§ Conséquences, déjà dite) : toute lecture de session dépend désormais de l'Audit Service ; sans lui, elle échoue fermée.
-- **Reste** (incrément 4) : la ré-attestation de toutes les lignes avant le retrait d'une ancienne clé (§7) ; les tests avec un rôle PostgreSQL du Broker incapable de lire ou d'écrire les têtes ; la latence et le débit à mesurer avant production.
+- **Fait** (incrément 4, 22 novembre 2026) : la ré-attestation de toutes les lignes avant le retrait d'une ancienne clé (§7), les tests de rôles PostgreSQL distincts et la mesure initiale du coût de lecture.
+
+### Incrément 4 — rotation, séparation des rôles et coût de lecture (22 novembre 2026)
+
+- **Fait** :
+  - Au démarrage, le Broker recense les lignes par `metadata_key_id` et avertit explicitement pour chaque clé qu'il ne détient pas ; ces lignes restent refusées.
+  - Si une clé précédente est configurée, le Broker ré-atteste en arrière-plan des lots de 200 lignes par minute. Chaque ligne est vérifiée sous sa clé d'origine puis comparée à sa tête Audit avant d'être réécrite sous la clé courante à une nouvelle révision et attestée. Une ligne altérée, revenue en arrière ou signée sous une clé inconnue n'est jamais légitimée par la rotation. Le journal annonce le nombre restant et le retrait possible de l'ancienne clé seulement lorsque le compteur atteint zéro.
+  - L'API `probe` de l'Audit Service permet au healthcheck Compose de sonder le service sans shell dans son image distroless ; le Gateway peut donc attendre son état sain. Le test Compose a aussi révélé que `pg_isready` sur socket Unix déclarait PostgreSQL sain pendant son serveur temporaire d'initialisation : les services dépendants redémarraient avant le serveur TCP définitif. Le healthcheck force désormais `127.0.0.1` en TCP.
+  - Le test Compose vérifie que le rôle `session_broker` ouvre sa propre base, mais ne peut pas ouvrir celle de `audit_service` (ni celles des autres services) : il ne peut donc ni lire ni modifier `session_metadata_heads`. La chaîne attendue inclut désormais `session.metadata_attested` entre `session.create` et `session.connect`.
+  - Le test de mesure lance un vrai Broker, un vrai Audit Service et PostgreSQL ; il effectue 20 lectures d'échauffement puis 500 lectures séquentielles et compare la lecture complète du Broker à l'endpoint de tête seul. Le test fournit sa propre clé de chaîne Audit éphémère et un fichier d'ancres temporaire.
+- **Prouvé** :
+  - PostgreSQL réel : une ligne honnête est ré-attestée sous la nouvelle clé à la révision suivante ; une ligne altérée et une ligne restaurée à une révision antérieure restent refusées, même après retrait de l'ancienne clé ; un second passage ne les rend pas valides.
+  - Entre deux vrais processus : la création/expiration fait avancer la tête Audit ; la restauration d'une ligne signée antérieure est refusée par le Broker.
+  - Les tests du stockage PostgreSQL du Broker et les tests d'intégration ciblés passent sur PostgreSQL 16 réel.
+  - `COMPOSE_TEST=1 go test -run '^TestCompose_TheMVPJourneyOnARealDockerComposeStack$' -count=1 -v` passe : démarrage complet, healthchecks, séparation des rôles, parcours SSH, chaîne d'audit, absence de secrets dans les logs et persistance après redémarrage. Le test Compose reste à raccorder à la CI dans un changement distinct.
+- **Mesure locale de référence** (LT209227, PostgreSQL 16 en conteneur, 22 novembre 2026, 500 échantillons après 20 échauffements, HTTP local, `INTERNAL_TLS=disabled`) :
+
+  | Opération | p50 | p95 | p99 |
+  | --- | ---: | ---: | ---: |
+  | Lecture via Broker (HMAC + comparaison de tête) | 3,39 ms | 4,96 ms | 6,13 ms |
+  | Lecture de la tête seule (requête Audit) | 1,62 ms | 2,99 ms | 3,86 ms |
+
+  Ces valeurs sont une première référence de latence, pas un objectif SLO ni un benchmark de débit : elles ne comprennent pas le transport mTLS, les charges concurrentes, la latence réseau inter-hôtes ni la contention de production. Les percentiles de deux séries distinctes ne se soustraient pas pour produire un coût marginal exact. Un benchmark de débit/concurrence et une mesure avec mTLS restent à faire avant production.
+- **Reste** : mesurer le débit et la latence sous concurrence, avec mTLS et sur un déploiement représentatif ; intégrer l'exécution de `test-compose` à la CI dans un changement CI séparé.
 
