@@ -25,6 +25,11 @@ jobs:
     uses: ./.github/workflows/integration.yml
     permissions:
       contents: read
+  compose:
+    name: Docker Compose
+    uses: ./.github/workflows/compose.yml
+    permissions:
+      contents: read
   postgres:
     name: PostgreSQL
     uses: ./.github/workflows/postgres.yml
@@ -47,7 +52,7 @@ jobs:
       contents: read
   required-checks:
     name: Required checks
-    needs: [go, integration, postgres, frontend, security, containers]
+    needs: [go, integration, compose, postgres, frontend, security, containers]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -61,6 +66,7 @@ jobs:
         env:
           GO_RESULT: ${{ needs.go.result }}
           INTEGRATION_RESULT: ${{ needs.integration.result }}
+          COMPOSE_RESULT: ${{ needs.compose.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           SECURITY_RESULT: ${{ needs.security.result }}

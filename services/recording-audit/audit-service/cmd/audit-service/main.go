@@ -250,7 +250,13 @@ func configureAlerts(svc *application.AuditService, internalTLS bool, queue infr
 
 // main dispatches version before entering the recorder lifecycle.
 func main() {
-	if err := command.NewServiceCommand("audit-service", runService).Execute(); err != nil {
+	root := command.NewServiceCommand("audit-service", runService)
+	// The healthcheck of the distroless image (deploy/docker-compose): the running service, asked
+	// under its own identity (ADR-0072). The Gateway waits for it.
+	root.AddCommand(command.NewProbeCommand(func(ctx context.Context, port int, path string) error {
+		return mtls.ProbeSelf(ctx, mtls.AuditService, port, path)
+	}))
+	if err := root.Execute(); err != nil {
 		log.Fatalf("audit-service: %v", err)
 	}
 }
