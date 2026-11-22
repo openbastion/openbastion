@@ -3,17 +3,18 @@
 set -euo pipefail
 
 script="$(dirname "$0")/required-checks.sh"
-variables=(GO_RESULT INTEGRATION_RESULT POSTGRES_RESULT FRONTEND_RESULT SECURITY_RESULT CONTAINERS_RESULT)
-success=(success success success success success success)
+variables=(GO_RESULT INTEGRATION_RESULT COMPOSE_RESULT POSTGRES_RESULT FRONTEND_RESULT SECURITY_RESULT CONTAINERS_RESULT)
+success=(success success success success success success success)
 
 run_gate() {
   env \
     "GO_RESULT=$1" \
     "INTEGRATION_RESULT=$2" \
-    "POSTGRES_RESULT=$3" \
-    "FRONTEND_RESULT=$4" \
-    "SECURITY_RESULT=$5" \
-    "CONTAINERS_RESULT=$6" \
+    "COMPOSE_RESULT=$3" \
+    "POSTGRES_RESULT=$4" \
+    "FRONTEND_RESULT=$5" \
+    "SECURITY_RESULT=$6" \
+    "CONTAINERS_RESULT=$7" \
     bash "$script"
 }
 

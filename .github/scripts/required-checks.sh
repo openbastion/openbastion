@@ -18,6 +18,7 @@ require_success() {
 
 require_success "Go" "${GO_RESULT-}"
 require_success "Integration" "${INTEGRATION_RESULT-}"
+require_success "Docker Compose" "${COMPOSE_RESULT-}"
 require_success "PostgreSQL" "${POSTGRES_RESULT-}"
 require_success "Frontend" "${FRONTEND_RESULT-}"
 require_success "Security" "${SECURITY_RESULT-}"
