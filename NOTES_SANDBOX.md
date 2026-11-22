@@ -5355,3 +5355,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Décision** : un mot de passe de test inventé et sans valeur peut être tapé dans le Windows de CI (propriétaire, 22 novembre 2026).
 - **Test** : `TestScreenFlow_RDPOperatorPasteInAHeadlessBrowser` (`windows-rdp.yml`). La page saisit le mot de passe dans Notepad ; recopié par le presse-papiers, il est vérifié ; l'empreinte salée de l'enregistrement est vérifiée. En CI seulement.
 
+## 2026-11-22 — ADR-0116, incrément 1 : chaque ligne de session est signée
+
+- **Fait** : HMAC-SHA-256 par ligne `sessions` sous `SESSION_METADATA_HMAC_KEY_FILE` (jamais dans PostgreSQL), révision par compare-and-swap, vérification à chaque lecture, migration 007 avec fenêtre de maintenance, historique `legacy_unverified` en lecture seule, refus des actions privilégiées sur une ligne non attestée. Compose : la clé tirée une fois par le job `pki`.
+- **Prouvé** : chaque colonne protégée modifiée en SQL est vue (PostgreSQL réel) ; rotation, révisions monotones entre réplicas, balayages, legacy, migration ; contre-épreuves.
+- **Limite** : le rejeu d'une ancienne ligne entière n'est pas encore détecté (incrément 2 : la tête dans l'Audit Service).
+- **Sandbox** : un volume Base44 qui contient une session active, une expiration non auditée ou une dette envers le Vault empêche le Broker de démarrer (la migration le dit) ; terminer les sessions ou `down -v`.
+

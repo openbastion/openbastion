@@ -136,14 +136,14 @@ func TestInMemoryStore_ListPending_ReturnsCopies(t *testing.T) {
 
 func TestPostgresStore_ListPending_IsThePendingRequestsSoonestFirst(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	clearPending(t, db)
 	listPendingContract(t, store, uniqueID("lp")+"-")
 }
 
 func TestPostgresStore_ListPending_IsBounded_AndSaysWhenItCut(t *testing.T) {
 	db := testDB(t)
-	store := infrastructure.NewPostgresStore(db)
+	store := infrastructure.NewPostgresStore(db, testMetadataKey)
 	clearPending(t, db)
 	listPendingLimit(t, store, uniqueID("lp")+"-")
 }

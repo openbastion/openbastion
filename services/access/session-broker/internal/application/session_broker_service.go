@@ -594,7 +594,7 @@ func (s *SessionBrokerService) GetSession(ctx context.Context, id, callerID stri
 	}
 	sess, err := s.sessions.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrMetadataIntegrity) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w (reading the session: %v)", domain.ErrUnavailable, err)
@@ -664,10 +664,14 @@ func (s *SessionBrokerService) TerminateSession(ctx context.Context, id, callerI
 	}
 	sess, err := s.sessions.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrMetadataIntegrity) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w (reading the session: %v)", domain.ErrUnavailable, err)
+	}
+	// ADR-0116 §8: a row nobody attested is never acted on.
+	if err := sess.RequireAttested(); err != nil {
+		return nil, err
 	}
 	if callerID != sess.RequestedBy {
 		allowed, reason, err := s.authz.CheckAccess(ctx, actorRoles, SessionTerminateResourcePrefix+sess.PrivilegedAccountID, "session:terminate")
@@ -742,6 +746,10 @@ func (s *SessionBrokerService) Connect(ctx context.Context, sessionID, callerID 
 func (s *SessionBrokerService) ConnectDetails(ctx context.Context, sessionID, callerID string, choice domain.ScreenChoice) (proxyEndpoint, connectionTicket, protocol string, expiresAt time.Time, err error) {
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
+		return "", "", "", time.Time{}, err
+	}
+	// ADR-0116 §8: a row nobody attested is never connected to.
+	if err := sess.RequireAttested(); err != nil {
 		return "", "", "", time.Time{}, err
 	}
 	if callerID == "" || callerID != sess.RequestedBy {
@@ -838,10 +846,14 @@ func (s *SessionBrokerService) decide(ctx context.Context, sessionID, decidedBy 
 	}
 	sess, err := s.sessions.Get(ctx, sessionID)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrMetadataIntegrity) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w (reading the session: %v)", domain.ErrUnavailable, err)
+	}
+	// ADR-0116 §8: a row nobody attested is never acted on.
+	if err := sess.RequireAttested(); err != nil {
+		return nil, err
 	}
 
 	// A break-glass request is decided under its own rules and by its own approvers

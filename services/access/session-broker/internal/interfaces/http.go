@@ -213,6 +213,9 @@ func (s *HTTPServer) handleListPending(w http.ResponseWriter, r *http.Request) {
 	pageSize, _ := strconv.Atoi(q.Get("pageSize"))
 
 	items, total, truncated, err := s.svc.ListPendingApprovals(r.Context(), q.Get("callerId"), roles, page, pageSize)
+	if writeMetadataError(w, err) {
+		return
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, domain.ErrForbidden):
@@ -284,6 +287,9 @@ func (s *HTTPServer) handleGetSession(w http.ResponseWriter, r *http.Request, se
 		roles = strings.Split(raw, ",")
 	}
 	sess, err := s.svc.GetSession(r.Context(), sessionID, q.Get("callerId"), roles)
+	if writeMetadataError(w, err) {
+		return
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, domain.ErrNotFound):
@@ -318,6 +324,9 @@ func (s *HTTPServer) handleTerminate(w http.ResponseWriter, r *http.Request, ses
 		req = terminateRequest{}
 	}
 	sess, err := s.svc.TerminateSession(r.Context(), sessionID, req.CallerID, req.ActorRoles)
+	if writeMetadataError(w, err) {
+		return
+	}
 	switch {
 	case err == nil:
 		w.Header().Set("Content-Type", "application/json")
@@ -373,6 +382,9 @@ func (s *HTTPServer) handleConnect(w http.ResponseWriter, r *http.Request, sessi
 	}
 	proxyEndpoint, ticket, protocol, expiresAt, err := s.svc.ConnectDetails(r.Context(), sessionID, req.CallerID, choice)
 	if err != nil {
+		if writeMetadataError(w, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, domain.ErrInvalidScreenChoice):
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -524,6 +536,9 @@ func (s *HTTPServer) handleSecretPaste(w http.ResponseWriter, r *http.Request, s
 }
 
 func writeSecretActionError(w http.ResponseWriter, err error) {
+	if writeMetadataError(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
 		http.Error(w, "secret injection is not authorized or MFA verification failed", http.StatusForbidden)
@@ -564,6 +579,9 @@ func (s *HTTPServer) decide(w http.ResponseWriter, r *http.Request, sessionID st
 		return
 	}
 	sess, err := decide(r.Context(), sessionID, req.DecidedBy, req.ActorRoles)
+	if writeMetadataError(w, err) {
+		return
+	}
 	switch {
 	case err == nil:
 		w.Header().Set("Content-Type", "application/json")
@@ -647,6 +665,9 @@ func (s *HTTPServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	callerID := q.Get("callerId")
 	result, err := s.svc.SearchSessions(r.Context(), callerID, roles, req)
+	if writeMetadataError(w, err) {
+		return
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, application.ErrInvalidSearch):
@@ -668,4 +689,19 @@ func (s *HTTPServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// writeMetadataError answers a session whose row was not attested (ADR-0116), and says whether it
+// did. A legacy row is read-only: 409, with the reason. A row whose MAC does not verify may have been
+// changed outside the Broker: 500, without detail for the client; the store's log names it.
+func writeMetadataError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, domain.ErrMetadataUnverified):
+		http.Error(w, domain.ErrMetadataUnverified.Error(), http.StatusConflict)
+		return true
+	case errors.Is(err, domain.ErrMetadataIntegrity):
+		http.Error(w, "the session's metadata failed its integrity check: nothing was done", http.StatusInternalServerError)
+		return true
+	}
+	return false
 }

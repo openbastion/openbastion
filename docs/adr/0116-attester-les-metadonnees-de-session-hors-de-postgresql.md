@@ -45,3 +45,31 @@ L'intégrité doit donc être vérifiée indépendamment de la base du Session B
 - Courses de mise à jour entre deux réplicas : révisions strictement monotones, aucune attestation perdue ni réutilisée.
 - Migration : refus si une session active/en attente subsiste ; historique non attesté explicitement read-only.
 - Tests d'intégration avec un rôle PostgreSQL Broker incapable de lire/écrire la tête Audit, plus test de restauration/restart.
+
+## Mise en œuvre
+
+Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, renversable) :
+
+1. **Le HMAC par ligne, côté Broker** : forme canonique, clé, migration, signature à chaque écriture et vérification à chaque lecture, refus des lignes altérées ou legacy.
+2. **La tête dans l'Audit Service** : `session.metadata_attested` dans la chaîne, la projection par session, l'API interne réservée au Broker (§3, §4).
+3. **La comparaison à chaque lecture** et la réparation idempotente d'une révision d'avance (§5, §6).
+4. **La ré-attestation d'une rotation** avant le retrait de l'ancienne clé (§7), et les tests avec des rôles PostgreSQL distincts.
+
+### Incrément 1 — le HMAC par ligne (22 novembre 2026)
+
+- **Fait** :
+  - `domain/metadata.go` : la forme canonique v1 (un octet de version, puis chaque champ dans un ordre fixe, préfixé par sa longueur), le MAC sur le domaine, la révision, l'identifiant de clé et la forme canonique, `metadata_sha256` prêt pour l'incrément 2.
+    - Champs couverts : l'identité, la cible, la justification et le ticket, le cycle de vie, l'approbation, les droits (break-glass, presse-papiers) et la dette de fin de session envers le Vault (ADR-0044), dont la perte sauterait une rotation.
+    - Non couverts : `expiry_audited`, la tenue de la livraison de l'audit d'une expiration, qui n'accorde rien ; `expired_at`, qui ne sert qu'à dater la fin envoyée au Vault.
+    - Les temps sont ceux de PostgreSQL (microsecondes, UTC).
+  - `SESSION_METADATA_HMAC_KEY_FILE` (fichier `0600`, 32 octets), obligatoire avec `DATABASE_URL` ; `SESSION_METADATA_HMAC_KEY_ID` ; une clé précédente pendant une rotation, qui vérifie encore ce qu'elle a signé, chaque changement étant re-signé sous la courante. En Compose, le job `pki` la tire une seule fois.
+  - Migration `007_metadata_attestation.sql`, idempotente : elle refuse de s'appliquer tant qu'une session est en attente ou active, qu'une expiration reste à auditer ou qu'une fin reste à dire au Vault ; elle marque l'historique `legacy_unverified`.
+  - Le stockage PostgreSQL : toute écriture (création, `Save`, compare-and-swap, quota, balayage des expirations, effacement de la dette) verrouille la ligne, la vérifie, applique le changement, signe la révision suivante et l'écrit sous condition de la révision lue. Les deux mises à jour en masse deviennent des écritures ligne à ligne. Toute lecture vérifie le MAC : `Get` et les listes qu'un opérateur suit échouent fermées ; les balayages en arrière-plan passent la ligne altérée sans s'arrêter (elle n'est utilisée par personne). Une ligne legacy n'est jamais modifiée, ni comptée, ni listée parmi les demandes à décider, ni expirée, ni réclamée au Vault.
+  - Le service refuse la connexion, la terminaison, la décision et toute saisie de secret (Vault ou opérateur) sur une ligne non attestée ; la lecture d'une session legacy reste permise. HTTP : `409` pour une ligne legacy, `500` sans détail pour une ligne altérée, que le journal du Broker nomme.
+- **Prouvé** :
+  - le domaine : chacun des 19 champs protégés, changé seul, casse le MAC ; une autre révision, une autre clé, un MAC tronqué ou un bit changé sont refusés ; les frontières des champs sont non ambiguës ;
+  - sur PostgreSQL réel : une écriture SQL de chacune des 20 colonnes protégées (les 17 champs, la révision, l'identifiant de clé, le MAC) rend la ligne inutilisable par `Get`, le compare-and-swap, `Save` et la liste des demandes ; une clé non détenue est refusée, la précédente d'une rotation vérifie, et le changement suivant est re-signé ; deux réplicas qui changent la même ligne donnent deux révisions de plus, aucune perdue ; le balayage signe ce qu'il expire et passe une ligne altérée ; une dette forgée n'atteint pas le Vault ; une ligne legacy est en lecture seule ; la migration refuse une base avec une session vivante, puis passe une fois la session terminée ;
+  - le service : une session legacy se lit mais ne se connecte pas, ne se termine pas, ne se décide pas et ne reçoit aucun secret ; une session altérée ne se lit même pas ;
+  - contre-épreuves : sans la vérification, avec un champ retiré de la forme canonique, avec une ligne legacy dans la liste, sans la garde de la migration, sans le refus à la connexion : les tests échouent.
+- **Reste** (incrément 2 d'abord) : **le rejeu d'une ancienne ligne entière n'est pas encore détecté** — une ligne restaurée à une révision antérieure porte un MAC valide ; c'est la tête de l'Audit Service qui l'arrêtera. L'Admin UI ne signale pas encore une session legacy.
+

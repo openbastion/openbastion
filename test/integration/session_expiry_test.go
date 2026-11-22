@@ -44,12 +44,11 @@ func TestPostgresFlow_SessionsPastTheirEndAreExpiredOnce_AndTheExpiryIsAudited(t
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE sessions`) })
+	// Signed as the Broker signs its rows (ADR-0116): an unsigned row is never expired.
 	insert := func(id, status string, end time.Time, breakGlass bool) {
 		t.Helper()
-		if _, err := db.Exec(`INSERT INTO sessions (id, status, protocol, requested_by, privileged_account_id, justification, created_at, expires_at, break_glass)
-			VALUES ($1, $2, 'ssh', 'user_a', 'acc_1', 'expiry test', $3, $4, $5)`, id, status, end.Add(-time.Hour), end, breakGlass); err != nil {
-			t.Fatal(err)
-		}
+		insertSignedSession(t, db, signedSessionRow{ID: id, Status: status, Protocol: "ssh", RequestedBy: "user_a", Account: "acc_1",
+			Justification: "expiry test", CreatedAt: end.Add(-time.Hour), ExpiresAt: end, BreakGlass: breakGlass})
 	}
 	past, future := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
 	insert("session_granted_never_used", "active", past, false)

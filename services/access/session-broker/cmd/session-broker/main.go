@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -66,12 +67,19 @@ func runService() {
 
 	var store domain.SessionRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		// ADR-0116: every row is signed under a key PostgreSQL never holds. Read before the database
+		// is opened: without it, nothing is written.
+		current, previous, err := metadataKeys()
+		if err != nil {
+			log.Fatalf("session-broker: %v", err)
+		}
 		ctx := context.Background()
 		db, err := infrastructure.OpenPostgres(ctx, dsn)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
-		store = infrastructure.NewPostgresStore(db)
+		store = infrastructure.NewPostgresStore(db, current, previous...)
+		log.Printf("session-broker: session metadata signed under key %q (ADR-0116)", current.ID)
 		log.Printf("session-broker: using PostgreSQL at %s", redactDSN(dsn))
 	} else {
 		store = infrastructure.NewInMemoryStore()
@@ -364,4 +372,34 @@ func switchFromEnv(name, value string, def bool) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("%s must be true or false, got %q", name, value)
+}
+
+// metadataKeys reads the HMAC key of ADR-0116 (SESSION_METADATA_HMAC_KEY_FILE, identified by
+// SESSION_METADATA_HMAC_KEY_ID, "k1" by default) and, during a rotation, the previous one
+// (SESSION_METADATA_HMAC_PREVIOUS_KEY_FILE and _ID), which still verifies the rows it signed.
+func metadataKeys() (domain.MetadataKey, []domain.MetadataKey, error) {
+	path := os.Getenv("SESSION_METADATA_HMAC_KEY_FILE")
+	if path == "" {
+		return domain.MetadataKey{}, nil, errors.New("SESSION_METADATA_HMAC_KEY_FILE must name the 32-byte HMAC key of the session metadata (ADR-0116) when DATABASE_URL is set")
+	}
+	id := os.Getenv("SESSION_METADATA_HMAC_KEY_ID")
+	if id == "" {
+		id = "k1"
+	}
+	current, err := infrastructure.LoadMetadataKey("SESSION_METADATA_HMAC_KEY_FILE", path, id)
+	if err != nil {
+		return domain.MetadataKey{}, nil, err
+	}
+	previousPath := os.Getenv("SESSION_METADATA_HMAC_PREVIOUS_KEY_FILE")
+	if previousPath == "" {
+		return current, nil, nil
+	}
+	previous, err := infrastructure.LoadMetadataKey("SESSION_METADATA_HMAC_PREVIOUS_KEY_FILE", previousPath, os.Getenv("SESSION_METADATA_HMAC_PREVIOUS_KEY_ID"))
+	if err != nil {
+		return domain.MetadataKey{}, nil, err
+	}
+	if previous.ID == current.ID {
+		return domain.MetadataKey{}, nil, errors.New("SESSION_METADATA_HMAC_PREVIOUS_KEY_ID must differ from the current key's identifier")
+	}
+	return current, []domain.MetadataKey{previous}, nil
 }

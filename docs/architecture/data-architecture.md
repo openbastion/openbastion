@@ -196,7 +196,11 @@ CREATE TABLE sessions (
     terminated_at              TIMESTAMPTZ,
     duration_minutes          INT NOT NULL DEFAULT 0,          -- ADR-0011 : durée demandée ; l'horloge d'un break-glass part de l'approbation
     decided_by                UUID REFERENCES users(id),       -- ADR-0011 : qui a approuvé ou rejeté ; NULL sans décision (implémentation : TEXT '' sans FK, une base par service)
-    decided_at                TIMESTAMPTZ
+    decided_at                TIMESTAMPTZ,
+    metadata_revision         BIGINT NOT NULL DEFAULT 0,       -- ADR-0116 : 1 à la création, +1 à chaque changement (compare-and-swap)
+    metadata_key_id           TEXT NOT NULL DEFAULT '',        -- ADR-0116 : la clé HMAC qui a signé la ligne
+    metadata_mac              BYTEA,                           -- ADR-0116 : HMAC-SHA-256 de la forme canonique ; la clé n'est jamais dans la base
+    legacy_unverified         BOOLEAN NOT NULL DEFAULT FALSE   -- ADR-0116 §8 : ligne d'avant l'attestation, lecture seule
 );
 -- ADR-0011 : `decided_by`, `decided_at` et `expires_at` d'une demande décidée ne s'écrivent que par un
 -- `UPDATE ... WHERE status = 'pending_approval'` (comparaison-échange) : une seule décision par demande.

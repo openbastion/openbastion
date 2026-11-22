@@ -342,6 +342,8 @@ services:
       RDP_VNC_PROXY_URL: https://rdp-vnc-proxy:8090
       RDP_ENABLED: ${RDP_ENABLED:-true}
       DATABASE_URL: postgres://session_broker:${PG_PASSWORD_SESSION_BROKER}@postgres:5432/session_broker?sslmode=disable
+      # ADR-0116: the HMAC key of the session metadata, drawn once by the pki job, never in PostgreSQL.
+      SESSION_METADATA_HMAC_KEY_FILE: /pki/session-metadata.key
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: session-broker}}
 
