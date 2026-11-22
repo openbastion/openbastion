@@ -154,3 +154,13 @@ ADR-0097 a accepté deux façons de saisir un secret dans une session, par le pr
   - Contre-épreuve : sans le correctif de la lecture WebSocket du proxy (incrément 4), le mot de passe n'arrive pas et le test échoue.
 - **Reste** : RDP dans un vrai Windows, que la règle de ne jamais taper de secret dans un test Windows tient à l'écart ; la décision revient au propriétaire (un mot de passe de test jetable ?).
 
+### Incrément 6 — RDP dans un vrai Windows (22 novembre 2026)
+
+- **Décision du propriétaire** (22 novembre 2026) : un mot de passe **inventé dans le test et sans valeur** peut être tapé dans le Windows de CI. Jamais le mot de passe du compte cible, jamais un secret du Vault.
+- **Le test** (`TestScreenFlow_RDPOperatorPasteInAHeadlessBrowser`, `windows-rdp.yml`, sur les cinq cibles Windows) : les services réels, l'Admin UI construite servie par la Gateway, Chrome.
+  - Un opérateur avec second facteur se connecte, ouvre l'écran de sa session RDP, sélectionne le texte de Notepad et saisit le mot de passe par le bouton, avec un second code.
+  - Le texte de Notepad, recopié par le panneau du presse-papiers, est le mot de passe : c'est Windows qui en témoigne. Notepad l'affiche exprès, comme témoin ; un opérateur, lui, place le curseur dans un champ masqué.
+  - L'enregistrement porte un seul marqueur RDP, dont l'empreinte vaut SHA-256(sel‖mot de passe) ; ni l'audit ni le journal du proxy ne contient le mot de passe.
+  - Le proxy tape en `TS_UNICODE_KEYBOARD_EVENT` : la disposition du clavier (fr-FR comprise) n'y change rien.
+- **Limite** : ce test ne tourne qu'en CI (dockur, KVM) ; il n'a pas été lancé en local avant la PR.
+

@@ -5350,3 +5350,8 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Prouvé** : `TestScreenFlow_VNCInAHeadlessBrowser` enchaîne la connexion avec second facteur dans Chrome, le bouton de saisie, le facteur, et les touches reçues par la cible VNC (TigerVNC réel en CI). L'empreinte salée de l'enregistrement est vérifiée ; rien en clair dans le stockage, l'audit ou le journal du proxy. Contre-épreuve : sans le correctif de lecture du proxy, le test échoue.
 - **Reste** : RDP dans un vrai Windows (décision du propriétaire).
 
+## 2026-11-22 — ADR-0133, incrément 6 : la saisie RDP dans un vrai Windows
+
+- **Décision** : un mot de passe de test inventé et sans valeur peut être tapé dans le Windows de CI (propriétaire, 22 novembre 2026).
+- **Test** : `TestScreenFlow_RDPOperatorPasteInAHeadlessBrowser` (`windows-rdp.yml`). La page saisit le mot de passe dans Notepad ; recopié par le presse-papiers, il est vérifié ; l'empreinte salée de l'enregistrement est vérifiée. En CI seulement.
+
