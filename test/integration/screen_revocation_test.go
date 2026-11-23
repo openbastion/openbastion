@@ -119,6 +119,7 @@ func (r *gatedTCPRelay) serve(client net.Conn) {
 		}
 		select {
 		case <-r.pause:
+			r.hold.Store(true)
 			paused = true
 			r.pausedOnce.Do(func() { close(r.paused) })
 		case chunk, ok := <-chunks:

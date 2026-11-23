@@ -20,6 +20,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +112,51 @@ func TestSessionTypeSecretUsesUnicodeKeyEventsWithoutClipboard(t *testing.T) {
 	}
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+}
+
+type cancelOnFirstWriteConn struct {
+	bytes.Buffer
+	cancel context.CancelFunc
+	writes int
+}
+
+func (c *cancelOnFirstWriteConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (c *cancelOnFirstWriteConn) Close() error                     { return nil }
+func (c *cancelOnFirstWriteConn) LocalAddr() net.Addr              { return testNetAddr("local") }
+func (c *cancelOnFirstWriteConn) RemoteAddr() net.Addr             { return testNetAddr("remote") }
+func (c *cancelOnFirstWriteConn) SetDeadline(time.Time) error      { return nil }
+func (c *cancelOnFirstWriteConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *cancelOnFirstWriteConn) SetWriteDeadline(time.Time) error { return nil }
+func (c *cancelOnFirstWriteConn) Write(p []byte) (int, error) {
+	n, err := c.Buffer.Write(p)
+	c.writes++
+	if c.writes == 1 {
+		c.cancel()
+	}
+	return n, err
+}
+
+type testNetAddr string
+
+func (a testNetAddr) Network() string { return "test" }
+func (a testNetAddr) String() string  { return string(a) }
+
+func TestSessionTypeSecretStopsBetweenBoundedKeyBatchesWhenContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	conn := &cancelOnFirstWriteConn{cancel: cancel}
+	session := &Session{conn: conn, pressed: make(map[uint32]struct{}), done: make(chan struct{})}
+
+	err := session.TypeSecret(ctx, []byte(strings.Repeat("A", 64)))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("TypeSecret error = %v, want context.Canceled", err)
+	}
+	const firstBatchBytes = 16 * 16 // sixteen complete key-down/key-up pairs
+	if got := conn.Len(); got != firstBatchBytes {
+		t.Fatalf("bytes written after cancellation = %d, want exactly one %d-byte batch", got, firstBatchBytes)
+	}
+	if conn.writes != 1 {
+		t.Fatalf("TLS write batches = %d, want 1", conn.writes)
 	}
 }
 
