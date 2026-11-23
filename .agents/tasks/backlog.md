@@ -8,7 +8,7 @@ Le backlog est organisé en trois axes. Les risques de sécurité sont distingu�
 
 | Priorité | Sujet | État vérifié | Prochaine action |
 |---|---|---|---|
-| P1 — bloquant | **SI-02 — révocation/fin de session concurrente à une frappe** (ADR-0097) | Test déterministe ajouté : TigerVNC réel + oracle X11, flux TLS ralenti et octets en attente retenus par un relais de test ; validation CI requise avant clôture. | Vérifier en CI que la cible reçoit un préfixe réel, que la révocation ferme le relais et qu'aucune frappe supplémentaire n'arrive après l'acquittement ; corriger le proxy si la preuve échoue. |
+| P1 — bloquant | **SI-02 — révocation/fin de session concurrente à une frappe** (ADR-0097) | Le run CI `45121879161` a atteint le test TigerVNC mais a révélé un jeton d'acteur incorrect (403 step-up) avant la course ; le test utilise maintenant le jeton MFA enrôlé. | Rejouer le job PostgreSQL 16 : prouver préfixe X11 réel, fermeture du relais et absence de frappe après acquittement ; ne clôturer qu'après succès CI. |
 | P1 — durcissement | **Politiques historiques `action_pattern=*`** | La migration de compatibilité conserve le joker pour les anciennes politiques. Les nouvelles autorisations doivent rester explicites et le refus par défaut demeure obligatoire. | Inventorier les politiques historiques, identifier les usages encore dépendants du joker et proposer une migration additive vers des actions explicites, sans élargir les droits. |
 
 ### 1.2 Risques traités, preuves livrées et limites résiduelles

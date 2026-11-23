@@ -204,7 +204,6 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 	t *testing.T,
 	gatewayURL string,
 	api screenAPI,
-	operatorToken string,
 	mfa *mfaStepUpCredentials,
 	target *realVNCTarget,
 	accountID string,
@@ -213,14 +212,17 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 ) *mfaStepUpCredentials {
 	t.Helper()
 	if mfa == nil || target == nil || relay == nil {
-		t.Fatal("SI-02 requires an enrolled operator, real TigerVNC target and gated relay")
+		t.Fatal("SI-02 requires an enrolled step-up identity, real TigerVNC target and gated relay")
 	}
+	// The session requester must be the enrolled step-up identity: its verified
+	// roles carry the exact account and injection policies used by this scenario.
+	actorToken := mfa.token
 	const secretLength = 128
 	if len(target.password) != secretLength {
 		t.Fatalf("real target password length = %d, want %d for the deterministic in-flight RFB input", len(target.password), secretLength)
 	}
 
-	status, raw := api.in(t).call(operatorToken, http.MethodPost, "/sessions", map[string]any{
+	status, raw := api.in(t).call(actorToken, http.MethodPost, "/sessions", map[string]any{
 		"targetAccountId": accountID, "protocol": "vnc", "justification": "SI-02 revoke during real keystroke", "durationMinutes": 10,
 	})
 	if status != http.StatusCreated {
@@ -230,11 +232,11 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 	revoked := false
 	defer func() {
 		if !revoked {
-			_, _ = api.in(t).call(operatorToken, http.MethodDelete, "/sessions/"+sessionID, nil)
+			_, _ = api.in(t).call(actorToken, http.MethodDelete, "/sessions/"+sessionID, nil)
 		}
 	}()
 
-	attach := api.in(t).connect(operatorToken, sessionID)
+	attach := api.in(t).connect(actorToken, sessionID)
 	conn := dialScreen(t, gatewayURL, attach.path, attach.cookie)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	if hello := readScreen(t, conn); hello.kind != 2 || hello.helloSession != sessionID {
@@ -244,7 +246,7 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 
 	step := mfa.step + 1
 	waitForTOTPStep(t, step)
-	status, raw = api.in(t).call(operatorToken, http.MethodPost, "/sessions/"+sessionID+"/secret-injection-step-up", nil)
+	status, raw = api.in(t).call(actorToken, http.MethodPost, "/sessions/"+sessionID+"/secret-injection-step-up", nil)
 	if status != http.StatusOK {
 		t.Fatalf("SI-02 step-up: %d %s", status, raw)
 	}
@@ -260,7 +262,7 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set("Authorization", "Bearer "+operatorToken)
+	request.Header.Set("Authorization", "Bearer "+actorToken)
 	request.Header.Set("Content-Type", "application/json")
 	type injectionResult struct {
 		status int
@@ -307,7 +309,7 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 		t.Fatalf("the real target received keysym prefix %v, want %v", receivedPrefix, want[:len(receivedPrefix)])
 	}
 
-	status, body := api.in(t).call(operatorToken, http.MethodDelete, "/sessions/"+sessionID, nil)
+	status, body := api.in(t).call(actorToken, http.MethodDelete, "/sessions/"+sessionID, nil)
 	if status/100 != 2 {
 		t.Fatalf("revoke during real key stream: %d %s", status, body)
 	}

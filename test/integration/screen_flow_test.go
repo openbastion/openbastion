@@ -407,7 +407,7 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 			}
 		}
 		t.Run("SI-02 revocation cuts a real TigerVNC keystroke stream", func(t *testing.T) {
-			mfa = testScreenVaultSecretInjectionRevokedDuringRealTyping(t, gatewayURL, api, operatorToken, mfa, real, "screen_real_si02", audit, si02Relay)
+			mfa = testScreenVaultSecretInjectionRevokedDuringRealTyping(t, gatewayURL, api, mfa, real, "screen_real_si02", audit, si02Relay)
 		})
 		t.Run("an operator's password reaches the real TigerVNC input surface", func(t *testing.T) {
 			testScreenOperatorPaste(t, gatewayURL, api, operatorToken, auditorToken, mfa, real, "screen_real", "Op-Paste-7e", audit, store, outputs)
