@@ -1,6 +1,6 @@
 # ADR-0117 — Les alertes de session sont durables, autorisées et acquittées dans la chaîne d'audit
 
-**Statut** `Proposé` · 2026-11-17 · soumis à validation du propriétaire du projet ; aucun code n'est autorisé par cet ADR seul.
+**Statut** `Accepté` · 2026-11-23 · contrat de référence fonctionnel et technique de la file d’alertes de session.
 
 **Contexte** — L'Admin UI possède un onglet « Alertes » mais aucun contrat public ne permet aujourd'hui de l'alimenter : ni file d'alertes de session, ni sévérité, ni compteur non traité, ni acquittement. L'interface affiche donc honnêtement « API requise ».
 
