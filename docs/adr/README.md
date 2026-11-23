@@ -12,7 +12,7 @@ Les ADR sont regroupés par domaine. Dans chaque domaine, ils sont rangés dans 
 
 | # | Catégorie | ADR |
 |---|---|---|
-| 1 | [Fondations du code](#1-fondations-du-code) | 6 |
+| 1 | [Fondations du code](#1-fondations-du-code) | 7 |
 | 2 | [Communication entre services](#2-communication-entre-services) | 3 |
 | 3 | [Invariants de sécurité transverses](#3-invariants-de-sécurité-transverses) | 5 |
 | 4 | [Identité et authentification](#4-identité-et-authentification) | 10 |
@@ -40,8 +40,9 @@ Langage, organisation du dépôt, accès aux données, schéma, binaires et vers
 | 2 | [ADR-0002](0002-organisation-en-monorepo-multi-module-go.md) | Organisation en monorepo multi-module Go | Accepté |
 | 3 | [ADR-0029](0029-l-acces-aux-donnees-reste-en-database-sql-et-sql-ecrit-a-la.md) | L'accès aux données reste en `database/sql` et SQL écrit à la main ; pas d'ORM | Accepté |
 | 4 | [ADR-0030](0030-des-migrations-de-schema-versionnees-appliquees-une-fois.md) | Des migrations de schéma versionnées, appliquées une fois, sous verrou, et dont le texte appliqué ne change plus | Accepté |
-| 5 | [ADR-0072](0072-la-cli-cobra-et-une-version-homogene-pour-chaque-binaire.md) | Les exécutables OpenBastion adoptent Cobra et exposent une version de build homogène | Accepté |
-| 6 | [ADR-0063](0063-le-projet-suit-semantic-versioning-version-dans-un-fichier-estampillee-a-la-construction.md) | Le projet suit Semantic Versioning : un fichier `VERSION`, estampillé dans chaque binaire, vérifié par la CI, et un tag `vX.Y.Z` pour chaque release | Accepté |
+| 5 | [ADR-0135](0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md) | Borner les pools PostgreSQL par service dans un budget de déploiement | Proposé |
+| 6 | [ADR-0072](0072-la-cli-cobra-et-une-version-homogene-pour-chaque-binaire.md) | Les exécutables OpenBastion adoptent Cobra et exposent une version de build homogène | Accepté |
+| 7 | [ADR-0063](0063-le-projet-suit-semantic-versioning-version-dans-un-fichier-estampillee-a-la-construction.md) | Le projet suit Semantic Versioning : un fichier `VERSION`, estampillé dans chaque binaire, vérifié par la CI, et un tag `vX.Y.Z` pour chaque release | Accepté |
 
 ### 2. Communication entre services
 
@@ -425,3 +426,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté | Alignement UI, contrats et roadmap |
 | [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté | Alignement UI, contrats et roadmap |
 | [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté | Proxy SSH |
+| [ADR-0135](0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md) | Borner les pools PostgreSQL par service dans un budget de déploiement | Proposé | Fondations du code |

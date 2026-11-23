@@ -57,6 +57,12 @@ Les lignes ci-dessous sont conservées comme historique de livraison, pas comme 
 | 13 | ~~**ADR-0073 UX-04 — Vue générale et Centre de sécurité** : synthèse des totaux API, contrôles explicites des métadonnées Vault, couverture partielle signalée~~ — **fait** | visibilité opérationnelle sans métriques fictives ni accès hors Gateway ; restent les contrats publics d'audit, d'alertes et de santé des proxies | ADR-0073, `NOTES_SANDBOX.md` |
 | 14 | ~~**ADR-0073 UX-05 — Personnalisation** : préférences locales versionnées, favoris de navigation, vues catégorielles de comptes, raccourcis et gestion du focus~~ — **fait** | stockage navigateur sans secrets ni requêtes libres ; vues limitées à la page déjà chargée, sans synchronisation multi-appareils | ADR-0073, `NOTES_SANDBOX.md` |
 
+### 2.3 Capacité PostgreSQL
+
+| Sujet | État | Prochaine action |
+|---|---|---|
+| **ADR-0135 — budget des pools PostgreSQL** | Contrat proposé : plafonds locaux par service, budget par cluster tenant compte des réplicas et de la réserve opérationnelle ; défauts 10/10 inchangés. Aucun validateur ni nouveau réglage n'est encore livré. | Après validation de l'ADR, implémenter les parseurs stricts, le manifeste de capacité, le validateur CI et les métriques `DB.Stats()` ; mesurer ensuite avant tout changement des défauts. |
+
 ## 3. Interopérabilité / protocoles
 
 ### 3.1 RDP — moteur Go et compatibilité Windows/RDS

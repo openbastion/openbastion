@@ -10,6 +10,7 @@
 | [`deployment-architecture.md`](deployment-architecture.md) | Modèle de déploiement et portabilité cloud-native |
 | [`data-architecture.md`](data-architecture.md) | Modèle de données PostgreSQL : diagramme entité-relation, DDL, choix |
 | [`data-access-orm-analysis.md`](data-access-orm-analysis.md) | Analyse « faut-il un ORM ? », à l'origine d'ADR-0029 et d'ADR-0030 |
+| [`postgresql-connection-budget.md`](postgresql-connection-budget.md) | Contrat proposé de dimensionnement des pools et budget PostgreSQL par cluster (ADR-0135) |
 | [`agent-framework.md`](agent-framework.md) | Architecture des Network Agent et Security Agent, flux de session, télémétrie et frontières de confiance (v0.0.3) |
 
 Ces pages décrivent la **cible** autant que le MVP : le catalogue cite 35 services, le dépôt en construit 8. Ce qui est construit est tenu dans [`NOTES_SANDBOX.md`](../../NOTES_SANDBOX.md) et dans `.agents/architecture/known-gaps.md`. Le modèle de menace est dans [`../security/threat-model.md`](../security/threat-model.md) ; les décisions, dans [`../adr/`](../adr/README.md).
