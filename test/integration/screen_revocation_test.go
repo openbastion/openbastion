@@ -298,10 +298,13 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 	if len(prefix) <= relay.baseline || len(prefix) >= relay.baseline+secretLength {
 		t.Fatalf("the real target did not stop part-way through the secret: received %d new keypresses", len(prefix)-relay.baseline)
 	}
-	for _, keysym := range prefix[relay.baseline:] {
-		if keysym != uint32('A') {
-			t.Fatalf("the real target received unexpected keysym 0x%x in the secret prefix", keysym)
-		}
+	want := make([]uint32, 0, secretLength)
+	for _, r := range target.password {
+		want = append(want, uint32(r))
+	}
+	receivedPrefix := prefix[relay.baseline:]
+	if fmt.Sprint(receivedPrefix) != fmt.Sprint(want[:len(receivedPrefix)]) {
+		t.Fatalf("the real target received keysym prefix %v, want %v", receivedPrefix, want[:len(receivedPrefix)])
 	}
 
 	status, body := api.in(t).call(operatorToken, http.MethodDelete, "/sessions/"+sessionID, nil)

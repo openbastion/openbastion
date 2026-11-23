@@ -233,7 +233,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | ID | STRIDE | Risque | Sévérité | État |
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
-| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | En validation : E2E déterministe ajouté sur TigerVNC réel avec oracle X11 ; le relais retient des enregistrements TLS après un préfixe réellement reçu. La CI doit confirmer fermeture et absence d'événement après acquittement avant clôture |
+| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | En validation : E2E déterministe ajouté sur TigerVNC réel avec oracle X11 ; le relais retient des octets TLS après un préfixe réellement reçu. La CI doit confirmer fermeture et absence d'événement après acquittement avant clôture |
 | SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | **Contrôle livré et éprouvé** : projection cryptographiquement vérifiée, CLI, Gateway/Admin UI ; test multi-processus `outcome_unknown` sans retry ; archivage → redémarrage → réconciliation passé en PostgreSQL 16 CI dans le run `45023573283`. La cible reste à vérifier manuellement quand le résultat est ambigu. |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 accepté) |
