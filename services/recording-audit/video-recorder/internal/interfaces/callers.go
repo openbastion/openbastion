@@ -9,6 +9,7 @@ import (
 func HTTPCallerRules() []mtls.Rule {
 	return []mtls.Rule{
 		{Method: http.MethodGet, Path: "/readyz", Callers: []string{mtls.Any}},
+		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry
 		{Method: http.MethodGet, Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

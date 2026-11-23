@@ -23,6 +23,7 @@ func CallerRules() []mtls.Rule {
 		// The heads of the session metadata (ADR-0116 §4): the Session Broker's only.
 		{Method: http.MethodPost, Path: "/audit/v1/session-metadata/attestations", Callers: []string{mtls.SessionBroker}},
 		{Method: http.MethodGet, Path: "/audit/v1/session-metadata/head", Callers: []string{mtls.SessionBroker}},
+		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

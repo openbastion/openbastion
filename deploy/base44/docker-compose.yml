@@ -120,6 +120,8 @@ services:
       <<: *go-env
       PORT: "8086"
       DATABASE_URL: postgres://authentication:ob-dev-authentication@postgres:5432/authentication?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${AUTHENTICATION_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${AUTHENTICATION_DB_POOL_MAX_IDLE_CONNS-10}
       TOKEN_SIGNING_KEY_HEX: 2239acb116a20ab72fe698d0fbf018a7180072508ab7ce0ab7e9040615956892
       # Every login is written to the audit before its token is issued (ADR-0064).
       AUDIT_URL: https://audit-service:8082
@@ -147,6 +149,8 @@ services:
       <<: *go-env
       PORT: "8083"
       DATABASE_URL: postgres://authorization:ob-dev-authorization@postgres:5432/authorization?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${AUTHORIZATION_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${AUTHORIZATION_DB_POOL_MAX_IDLE_CONNS-10}
       BOOTSTRAP_ADMIN_ROLE: platform-admin
     volumes:
       - ../..:/src
@@ -169,6 +173,8 @@ services:
       <<: *go-env
       PORT: "8082"
       DATABASE_URL: postgres://audit_service:ob-dev-audit-service@postgres:5432/audit_service?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${AUDIT_SERVICE_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${AUDIT_SERVICE_DB_POOL_MAX_IDLE_CONNS-10}
       AUDIT_CHAIN_KEY_HEX: d9ca615ccfc46eeac66997c9a31d89c164228270b0d1ab311368d3f1bd994687
       AUDIT_ANCHOR_FILE: /var/lib/openbastion/anchors/anchors.jsonl
     volumes:
@@ -193,6 +199,8 @@ services:
       <<: *go-env
       PORT: "8081"
       DATABASE_URL: postgres://password_vault:ob-dev-password-vault@postgres:5432/password_vault?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${PASSWORD_VAULT_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${PASSWORD_VAULT_DB_POOL_MAX_IDLE_CONNS-10}
       KMS_KEY_HEX: b883e7a9a40351f519ffec706bcb39cb9fefc3f2157e66cc79d816f943512fc7
       AUTHORIZATION_URL: https://authorization:8083
       AUDIT_URL: https://audit-service:8082
@@ -222,6 +230,8 @@ services:
       <<: *go-env
       PORT: "8087"
       DATABASE_URL: postgres://command_recorder:ob-dev-command-recorder@postgres:5432/command_recorder?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${COMMAND_RECORDER_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${COMMAND_RECORDER_DB_POOL_MAX_IDLE_CONNS-10}
       KMS_KEY_HEX: 9b1e3a563bbd8ca0ae8c348e591df45186e6aa7a29d0fc8d9292eb18b92068a6
       AUTHORIZATION_URL: https://authorization:8083
       AUDIT_URL: https://audit-service:8082
@@ -301,6 +311,8 @@ services:
       PORT: "8088"
       GRPC_PORT: "8089"
       DATABASE_URL: postgres://video_recorder:ob-dev-video-recorder@postgres:5432/video_recorder?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${VIDEO_RECORDER_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${VIDEO_RECORDER_DB_POOL_MAX_IDLE_CONNS-10}
       AUTHORIZATION_URL: https://authorization:8083
       AUDIT_URL: https://audit-service:8082
       S3_ENDPOINT: https://seaweedfs:8333
@@ -443,6 +455,8 @@ services:
       <<: *go-env
       PORT: "8084"
       DATABASE_URL: postgres://session_broker:ob-dev-session-broker@postgres:5432/session_broker?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${SESSION_BROKER_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${SESSION_BROKER_DB_POOL_MAX_IDLE_CONNS-10}
       # ADR-0116: drawn once by the pki job (deploy/docker-compose/pki.sh), never in PostgreSQL.
       SESSION_METADATA_HMAC_KEY_FILE: /pki/session-metadata.key
       AUTHORIZATION_URL: https://authorization:8083
