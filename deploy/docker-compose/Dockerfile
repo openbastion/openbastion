@@ -4,7 +4,7 @@
 #   docker build -f deploy/docker-compose/Dockerfile .
 
 # -- build: every binary, static, from go.work and go.sum ----------------------------------
-FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
 # The generated Protobuf stubs are not in git (docs/development/contributing.md): the image

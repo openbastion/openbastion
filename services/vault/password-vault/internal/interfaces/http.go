@@ -26,13 +26,20 @@ import (
 )
 
 type HTTPServer struct {
-	svc *application.VaultService
+	svc     *application.VaultService
+	metrics http.Handler
 
 	// CallerFromCertificate makes the identity of the proxy redeeming a scope
 	// the one in its client certificate (ADR-0010), instead of the one it writes
 	// in the request. Set when mutual TLS is on. Left unset, the claim in the
 	// body is believed — development only, where nothing authenticates anyone.
 	CallerFromCertificate bool
+}
+
+// WithMetrics installs the internal PostgreSQL pool metrics handler (ADR-0135).
+func (s *HTTPServer) WithMetrics(handler http.Handler) *HTTPServer {
+	s.metrics = handler
+	return s
 }
 
 func NewHTTPServer(svc *application.VaultService) *HTTPServer {
@@ -49,6 +56,17 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/vault/v1/accounts", s.handleListAccounts) // exact path — distinct ServeMux pattern from the subtree below
 	mux.HandleFunc("/vault/v1/accounts/", s.handleAccountItem) // subtree — GET and DELETE by id
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	if s.metrics != nil {
+		mux.Handle("/metrics", s.metrics)
+	} else {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return mux
 }
 

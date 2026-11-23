@@ -31,7 +31,7 @@ SCHEME := https
 tls = INTERNAL_TLS=$(INTERNAL_TLS) TLS_CERT_FILE=$(PKI_DIR)/$(1)/cert.pem TLS_KEY_FILE=$(PKI_DIR)/$(1)/key.pem TLS_CA_FILE=$(PKI_DIR)/ca.pem
 endif
 
-.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons ui-tokens-test vet pki proto-tools proto-gen proto-lint run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean license-check
+.PHONY: build version version-check test fuzz test-rdp-interop test-rdp-recording test-rdp-windows test-integration test-postgres test-compose vuln scan-images scan-postgres-image ui-build ui-test ui-icons ui-tokens-test vet pki proto-tools proto-gen proto-lint db-pool-budget-check run-vault run-audit run-authorization run-authentication run-broker run-ssh-proxy run-rdp-vnc-proxy run-recorder run-video-recorder run-gateway clean license-check
 
 ## La version qu'une construction estampille ; et sa vérification : VERSION est une version
 ## sémantique, et sur un tag (TAG=vX.Y.Z, la CI le passe) le tag est v$(VERSION), sans pré-version.
@@ -79,6 +79,8 @@ build: proto-gen
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
+		./pkg/dbpool/... \
+		./tools/db-pool-budget/... \
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
 		./pkg/transit/... \
@@ -94,6 +96,11 @@ build: proto-gen
 		./services/recording-audit/command-recorder/... \
 		./services/recording-audit/video-recorder/...
 
+
+## Vérifie le budget PostgreSQL du cluster et l'alignement des valeurs par défaut Compose (ADR-0135).
+db-pool-budget-check:
+	cd tools/db-pool-budget && $(GO) run . -manifest ../../deploy/postgresql/capacity.yaml -compose ../../deploy/docker-compose/docker-compose.yml -base44 ../../deploy/base44/docker-compose.yml
+
 ## go vet sur tous les modules.
 vet: proto-gen
 	$(GO) vet ./pkg/processsecurity/...
@@ -108,6 +115,8 @@ vet: proto-gen
 	$(GO) vet ./cli/openbastion-cli/...
 	$(GO) vet ./pkg/migrate/...
 	$(GO) vet ./pkg/refusalbudget/...
+	$(GO) vet ./pkg/dbpool/...
+	$(GO) vet ./tools/db-pool-budget/...
 	$(GO) vet ./pkg/webhook/...
 	$(GO) vet ./pkg/hostkey/...
 	$(GO) vet ./pkg/transit/...
@@ -143,6 +152,8 @@ test: proto-gen
 		./cli/openbastion-cli/... \
 		./pkg/migrate/... \
 		./pkg/refusalbudget/... \
+		./pkg/dbpool/... \
+		./tools/db-pool-budget/... \
 		./pkg/webhook/... \
 		./pkg/hostkey/... \
 		./pkg/transit/... \

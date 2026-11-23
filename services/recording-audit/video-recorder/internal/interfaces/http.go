@@ -7,7 +7,16 @@ import (
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/application"
 )
 
-type HTTPServer struct{ svc *application.RecorderService }
+type HTTPServer struct {
+	svc     *application.RecorderService
+	metrics http.Handler
+}
+
+// WithMetrics installs the internal PostgreSQL pool metrics handler (ADR-0135).
+func (s *HTTPServer) WithMetrics(handler http.Handler) *HTTPServer {
+	s.metrics = handler
+	return s
+}
 
 func NewHTTPServer(svc *application.RecorderService) *HTTPServer {
 	return &HTTPServer{svc: svc}
@@ -17,6 +26,17 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/readyz", s.handleReady)
+	if s.metrics != nil {
+		mux.Handle("/metrics", s.metrics)
+	} else {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return mux
 }
 

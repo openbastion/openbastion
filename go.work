@@ -4,6 +4,7 @@ use (
 	./cli/openbastion-cli
 	./pkg/buildinfo
 	./pkg/command
+	./pkg/dbpool
 	./pkg/hostkey
 	./pkg/migrate
 	./pkg/mtls
@@ -30,4 +31,5 @@ use (
 	./services/recording-audit/video-recorder
 	./services/vault/password-vault
 	./test/integration
+	./tools/db-pool-budget
 )

@@ -18,6 +18,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/recording-audit/video-recorder/internal/application"
@@ -46,8 +47,12 @@ func runService() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	poolConfig, err := dbpool.ParseEnv(os.LookupEnv)
+	if err != nil {
+		log.Fatalf("video-recorder: database pool configuration: %v", err)
+	}
 	dbCtx, cancelDB := context.WithTimeout(ctx, 10*time.Second)
-	db, err := infrastructure.OpenPostgres(dbCtx, dsn)
+	db, err := infrastructure.OpenPostgresWithPoolConfig(dbCtx, dsn, poolConfig)
 	cancelDB()
 	if err != nil {
 		log.Fatalf("video-recorder: postgres: %v", err)
@@ -104,7 +109,11 @@ func runService() {
 		log.Fatalf("video-recorder: dependencies are not ready: %v", err)
 	}
 
-	httpServer := runtime.Server(":"+strconv.Itoa(httpPort), interfaces.NewHTTPServer(svc).Routes(), interfaces.HTTPCallerRules())
+	httpApplication := interfaces.NewHTTPServer(svc)
+	httpApplication.WithMetrics(dbpool.MetricsHandler("video-recorder", db, poolConfig))
+	httpRoutes := httpApplication.Routes()
+	log.Printf("video-recorder: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	httpServer := runtime.Server(":"+strconv.Itoa(httpPort), httpRoutes, interfaces.HTTPCallerRules())
 	grpcServer := interfaces.NewGRPCServer(svc, runtime)
 	log.Printf("video-recorder: HTTP health on :%d; gRPC on :%d", httpPort, grpcPort)
 	log.Printf("  -> authorization: %s", authzURL)

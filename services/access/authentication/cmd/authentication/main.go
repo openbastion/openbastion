@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/refusalbudget"
 	"github.com/openbastion/openbastion/services/access/authentication/internal/application"
@@ -52,6 +54,8 @@ func runService() {
 		log.Fatalf("signing key: %v", err)
 	}
 
+	var poolDB *sql.DB
+	var poolConfig dbpool.Config
 	var store interface {
 		domain.UserRepository
 		domain.LoginAttemptRepository
@@ -61,10 +65,15 @@ func runService() {
 	}
 	if dsn != "" {
 		ctx := context.Background()
-		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		config, err := dbpool.ParseEnv(os.LookupEnv)
+		if err != nil {
+			log.Fatalf("authentication: database pool configuration: %v", err)
+		}
+		db, err := infrastructure.OpenPostgresWithPoolConfig(ctx, dsn, config)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
+		poolDB, poolConfig = db, config
 		store = infrastructure.NewPostgresStore(db)
 		log.Printf("authentication: using PostgreSQL at %s", redactDSN(dsn))
 	} else {
@@ -170,8 +179,13 @@ func runService() {
 	}
 
 	srv := interfaces.NewHTTPServer(svc)
+	if poolDB != nil {
+		srv.WithMetrics(dbpool.MetricsHandler("authentication", poolDB, poolConfig))
+		log.Printf("authentication: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	}
+	routes := srv.Routes()
 	log.Printf("authentication listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
-	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+	log.Fatal(rt.ListenAndServe(":"+port, routes, interfaces.CallerRules()))
 }
 
 // The variables of one provider of each kind (ADR-0035, ADR-0061); IDENTITY_PROVIDERS_FILE excludes them.

@@ -27,7 +27,14 @@ import (
 const maxBodyBytes = 16 << 20
 
 type HTTPServer struct {
-	svc *application.RecorderService
+	svc     *application.RecorderService
+	metrics http.Handler
+}
+
+// WithMetrics installs the internal PostgreSQL pool metrics handler (ADR-0135).
+func (s *HTTPServer) WithMetrics(handler http.Handler) *HTTPServer {
+	s.metrics = handler
+	return s
 }
 
 func NewHTTPServer(svc *application.RecorderService) *HTTPServer {
@@ -41,6 +48,17 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/recorder/v1/search", s.handleSearch)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/readyz", s.handleReady)
+	if s.metrics != nil {
+		mux.Handle("/metrics", s.metrics)
+	} else {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return mux
 }
 
