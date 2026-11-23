@@ -134,6 +134,7 @@ func runService() {
 	}
 
 	configureAlerts(svc, rt.Enabled(), alertQueue)
+	go detectSessionAlertsEvery(svc, time.Second)
 
 	srv := interfaces.NewHTTPServer(svc)
 
@@ -272,5 +273,17 @@ func main() {
 	}))
 	if err := root.Execute(); err != nil {
 		log.Fatalf("audit-service: %v", err)
+	}
+}
+
+// detectSessionAlertsEvery drains the durable operator-alert outbox. Processing failures
+// remain queued with bounded backoff; they never change the source event's audit result.
+func detectSessionAlertsEvery(svc *application.AuditService, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for range ticker.C {
+		if _, err := svc.ProcessSessionAlertDetections(context.Background(), 32); err != nil {
+			log.Printf("audit-service: session alert detection worker unavailable: %v", err)
+		}
 	}
 }

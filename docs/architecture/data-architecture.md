@@ -484,6 +484,26 @@ CREATE TABLE IF NOT EXISTS alert_outbox (
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_due ON alert_outbox (due_at);
 ```
 
+### File de détection et occurrences d’alertes de session (ADR-0117/0122)
+
+`services/recording-audit/audit-service/migrations/005_session_alert_detection.sql` sépare la file opérateur de `alert_outbox` (webhooks ADR-0057) :
+
+- `session_alert_detection_outbox` conserve uniquement `source_event_id`, la version du catalogue, le nombre de tentatives, la prochaine échéance et un code d’erreur interne borné. La référence vers `audit_events` empêche l’archivage d’un événement source tant que sa détection n’est pas terminée.
+- `session_alerts` est une projection métier distincte de la preuve source : règle/version, identifiant source, session, sévérité, statut, résumé borné, dates, révision et champs d’acquittement. L’unicité `(source_event_id, rule_id)` rend la projection idempotente. Les trois champs d’acquittement sont tous nuls ou tous renseignés.
+- La limite de 4 096 éléments est vérifiée dans la transaction d’insertion ; si elle est atteinte, l’événement source candidat n’est pas ajouté. Le verrou consultatif PostgreSQL sérialise le contrôle de capacité entre réplicas.
+- Le worker vérifie la chaîne avant d’interpréter l’événement. L’insertion de `session.alert.detected`, de la projection et la suppression de l’outbox forment une transaction ; une reprise ne peut donc pas laisser une demi-alerte. Une erreur conserve l’élément et applique un délai de reprise borné.
+
+Catalogue v1 activé uniquement pour les couples authentifiés déjà émis : `session-broker/session.breakglass_requested`, `ssh-proxy/session.secret_injection_failed` et `rdp-vnc-proxy/session.secret_injection_failed`. Les sévérités sont fixées côté serveur (`high`). Aucun contenu de credential, presse-papiers, commande brute ou détail d’injection n’est copié dans la projection. Les routes publiques, les permissions de lecture/acquittement et l’acquittement transactionnel audité restent à livrer dans les incréments suivants.
+
+```mermaid
+flowchart LR
+    E[Événement source signé] --> T[(audit_events + detection_outbox<br/>transaction atomique)]
+    T --> W[Worker : vérification de chaîne + catalogue versionné]
+    W -->|règle reconnue| C[(session_alerts + session.alert.detected<br/>transaction atomique)]
+    W -->|aucune règle| D[Suppression de l'élément non applicable]
+    W -->|erreur| R[Outbox conservée + reprise différée]
+```
+
 ### Expiration des sessions (ADR-0034)
 
 `services/access/session-broker/migrations/002_session_expiry.sql` — la première migration numérotée après `001_init.sql` — ajoute à `sessions` :

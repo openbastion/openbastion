@@ -76,7 +76,7 @@ Il faut donc séparer trois choses : l'événement source signé, l'occurrence d
 - (+) Le compteur non traité est une requête de données métier sur les occurrences visibles, pas un comptage de notifications webhook ni une estimation côté navigateur.
 - (+) Un acquittement ne peut être annoncé sans preuve correspondante dans la chaîne d'audit ; acteur, heure, ressource et règle sont attribués côté serveur.
 - (+) Les permissions d'alerte restent distinctes de `session.read`, ce qui permet une supervision SOC sans ouvrir implicitement l'accès aux détails de session.
-- (−) **Aucun gain n'est encore mesuré** : cet ADR est proposé et aucun code ni test ne l'implémente à ce stade. Les seuils, la capacité de l'outbox et le coût des requêtes de résumé devront être mesurés avant production.
+- (−) **Aucun gain de performance n'est encore mesuré**. Les seuils, la capacité de l'outbox et le coût des requêtes de résumé devront être mesurés avant production.
 - (−) Le premier catalogue est volontairement petit. Les signaux géographiques, horaires, comportementaux, commandes inhabituelles, transferts massifs et corrélations multi-sessions ne sont pas disponibles sans nouvelles données, règles et tests.
 - (−) Le mode mémoire ne garantit ni la reprise ni la persistance ; une installation de production doit utiliser PostgreSQL pour activer le contrat durable.
 - (−) La liste est globale pour les principaux autorisés par `session-alerts:read`, mais elle ne donne pas automatiquement le droit de lire les sessions associées. L'UI doit traiter séparément les refus de `session.read`.
@@ -105,3 +105,6 @@ Il faut donc séparer trois choses : l'événement source signé, l'occurrence d
 - Une panne de la chaîne, de l'ancre ou de PostgreSQL ne laisse pas un acquittement confirmé sans événement audité.
 - Les tests PostgreSQL couvrent transactions, contraintes uniques, reprise après redémarrage et isolation des rôles ; les tests HTTP couvrent les codes stables, les filtres, la pagination, le compteur et les refus d'autorisation.
 - Aucune notification webhook n'est envoyée dans la première version ; les tests d'ADR-0045 et ADR-0057 restent inchangés et verts.
+
+
+**État d’implémentation — 23 novembre 2026** — Le socle backend initial est livré dans l’incrément `feat/session-alert-detection` : migration PostgreSQL, catalogue v1, insertion atomique de l’outbox, worker de détection, projection idempotente et événement `session.alert.detected` dans la chaîne. Les routes Gateway, permissions, résumé durable, acquittement audité et intégration Admin UI restent à réaliser ; cet état ne modifie pas la décision ci-dessus.

@@ -8,12 +8,14 @@
 package infrastructure
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	_ "github.com/lib/pq"
 
@@ -56,6 +58,58 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 
 func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 	return appendEvent(ctx, s.db, e)
+}
+
+func lockAuditChain(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(1329742163, 1396788308)`)
+	return err
+}
+
+// checkAuditChainHead prevents a detection transaction from appending against a stale head.
+func checkAuditChainHead(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, e *domain.Event) error {
+	var lastHash []byte
+	err := q.QueryRowContext(ctx, `SELECT hash FROM audit_events ORDER BY seq DESC LIMIT 1`).Scan(&lastHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		lastHash = nil
+	} else if err != nil {
+		return err
+	}
+	if !bytes.Equal(lastHash, e.PrevHash) {
+		return fmt.Errorf("audit chain head moved; event was not appended")
+	}
+	return nil
+}
+
+// AppendWithDetection atomically stores the signed source event and its outbox reference.
+// The namespaced advisory lock serializes detection-source appends and capacity checks with worker completions.
+func (s *PostgresStore) AppendWithDetection(ctx context.Context, e *domain.Event, catalogVersion string, maxPending int) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := lockAuditChain(ctx, tx); err != nil {
+		return err
+	}
+	if err := checkAuditChainHead(ctx, tx, e); err != nil {
+		return err
+	}
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM session_alert_detection_outbox`).Scan(&pending); err != nil {
+		return err
+	}
+	if pending >= maxPending {
+		return fmt.Errorf("session alert detection outbox is full")
+	}
+	if err := appendEvent(ctx, tx, e); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO session_alert_detection_outbox (source_event_id, catalog_version) VALUES ($1, $2)`, e.ID, catalogVersion); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type execer interface {
@@ -227,4 +281,84 @@ func (s *PostgresStore) MetadataHead(ctx context.Context, sessionID string) (*do
 	h.Revision = uint64(revision)
 	h.EventTime = h.EventTime.UTC()
 	return &h, nil
+}
+
+// PendingDetections returns due work in deterministic FIFO order.
+func (s *PostgresStore) PendingDetections(ctx context.Context, limit int) ([]domain.AlertDetectionItem, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT source_event_id, catalog_version, attempts, next_attempt_at FROM session_alert_detection_outbox WHERE next_attempt_at <= now() ORDER BY created_at, source_event_id LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []domain.AlertDetectionItem
+	for rows.Next() {
+		var item domain.AlertDetectionItem
+		if err := rows.Scan(&item.SourceEventID, &item.CatalogVersion, &item.Attempts, &item.NextAttemptAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) DetectionSource(ctx context.Context, id string) (*domain.Event, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, ts, actor_id, action, resource_type, resource_id, details, success, prev_hash, hash, hash_version, emitter, chain_key_id FROM audit_events WHERE id = $1`, id)
+	event, err := scanEvent(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return event, err
+}
+
+func (s *PostgresStore) CompleteDetection(ctx context.Context, item domain.AlertDetectionItem, alert domain.SessionAlert, event *domain.Event) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var version string
+	err = tx.QueryRowContext(ctx, `SELECT catalog_version FROM session_alert_detection_outbox WHERE source_event_id = $1 FOR UPDATE`, item.SourceEventID).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ErrAlertDetectionAlreadyProcessed
+	}
+	if err != nil {
+		return err
+	}
+	if version != item.CatalogVersion {
+		return fmt.Errorf("detection catalogue version changed")
+	}
+	if err := lockAuditChain(ctx, tx); err != nil {
+		return err
+	}
+	var lastHash []byte
+	err = tx.QueryRowContext(ctx, `SELECT hash FROM audit_events ORDER BY seq DESC LIMIT 1`).Scan(&lastHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		lastHash = nil
+	} else if err != nil {
+		return err
+	}
+	if !bytes.Equal(lastHash, event.PrevHash) {
+		return fmt.Errorf("audit chain head moved during detection")
+	}
+	if err := appendEvent(ctx, tx, event); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO session_alerts (id, rule_id, rule_version, source_event_id, session_id, severity, status, summary, detected_at, created_at, revision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, alert.ID, alert.RuleID, alert.RuleVersion, alert.SourceEventID, alert.SessionID, string(alert.Severity), alert.Status, alert.Summary, alert.DetectedAt, alert.CreatedAt, alert.Revision)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM session_alert_detection_outbox WHERE source_event_id = $1`, item.SourceEventID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *PostgresStore) DiscardDetection(ctx context.Context, item domain.AlertDetectionItem) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM session_alert_detection_outbox WHERE source_event_id = $1`, item.SourceEventID)
+	return err
+}
+
+func (s *PostgresStore) RetryDetection(ctx context.Context, item domain.AlertDetectionItem, code string, next time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE session_alert_detection_outbox SET attempts = attempts + 1, next_attempt_at = $2, last_error_code = $3 WHERE source_event_id = $1`, item.SourceEventID, next, code)
+	return err
 }
