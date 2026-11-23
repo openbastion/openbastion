@@ -21,6 +21,7 @@ func CallerRules() []mtls.Rule {
 		// Readiness is asked by the proxy before it admits a session (ADR-0008),
 		// and by whatever supervises the recorder.
 		{Method: http.MethodGet, Path: "/readyz", Callers: []string{mtls.Any}},
+		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

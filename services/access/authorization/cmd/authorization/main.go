@@ -6,11 +6,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/application"
 	"github.com/openbastion/openbastion/services/access/authorization/internal/domain"
@@ -38,13 +40,20 @@ func runService() {
 	port := mustEnv("PORT", "8083")
 	bootstrapRole := mustEnv("BOOTSTRAP_ADMIN_ROLE", "platform-admin")
 
+	var poolDB *sql.DB
+	var poolConfig dbpool.Config
 	var store domain.PolicyRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		ctx := context.Background()
-		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		config, err := dbpool.ParseEnv(os.LookupEnv)
+		if err != nil {
+			log.Fatalf("authorization: database pool configuration: %v", err)
+		}
+		db, err := infrastructure.OpenPostgresWithPoolConfig(ctx, dsn, config)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
+		poolDB, poolConfig = db, config
 		store = infrastructure.NewPostgresStore(db)
 		log.Printf("authorization: using PostgreSQL at %s", redactDSN(dsn))
 	} else {
@@ -70,8 +79,13 @@ func runService() {
 	}
 
 	srv := interfaces.NewHTTPServer(svc)
+	if poolDB != nil {
+		srv.WithMetrics(dbpool.MetricsHandler("authorization", poolDB, poolConfig))
+		log.Printf("authorization: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	}
+	routes := srv.Routes()
 	log.Printf("authorization listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
-	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+	log.Fatal(rt.ListenAndServe(":"+port, routes, interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

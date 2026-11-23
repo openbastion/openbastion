@@ -46,11 +46,13 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("admin-cli", "POST", "/sessions"),
 		mtlstest.Deny("session-broker", "POST", "/sessions"),
 		mtlstest.Allow("ssh-proxy", "GET", "/healthz"),
+		mtlstest.Allow("admin-cli", "GET", "/metrics"),
 	})
 }
 
 func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), CallerRules(), []mtlstest.Route{
+		{Method: "GET", Path: "/metrics"},
 		{Method: "POST", Path: "/sessions"}, {Method: "GET", Path: "/sessions"}, {Method: "GET", Path: "/sessions/s1"},
 		{Method: "POST", Path: "/sessions/s1/connect"}, {Method: "POST", Path: "/sessions/s1/approve"},
 		{Method: "POST", Path: "/sessions/s1/reject"},

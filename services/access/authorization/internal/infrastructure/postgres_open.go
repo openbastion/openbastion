@@ -2,9 +2,12 @@ package infrastructure
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
+
+	"github.com/openbastion/openbastion/pkg/dbpool"
 )
 
 // connectTimeout bounds each new connection, the TCP dial and PostgreSQL's startup, when the DSN
@@ -13,17 +16,24 @@ import (
 // dial, and lib/pq's startup exchange watches no context at all. A test shortens it.
 var connectTimeout = 10 * time.Second
 
-// poolSize is how many connections the pool keeps, open and idle. database/sql keeps two idle
-// connections by default and opens as many as are asked for: fifty sessions recording at once then
-// opened and closed a connection for nearly every frame, until the host ran out of ports and frames
-// were lost. Ten held at most per instance: seven services stay within PostgreSQL's default of 100
-// connections, and fifty recording sessions lost nothing (NOTES_SANDBOX.md, 12 November 2026).
-const poolSize = 10
+// The default pool limits retain the historical 10/10 behavior (ADR-0135). The idle ceiling is
+// a subset of the open ceiling: it is never added to the cluster-wide connection budget.
+const poolSize = dbpool.DefaultMaxOpenConns
 
 // openPool opens the pool through a lib/pq connector, so the context of each call also bounds the
-// dial, with connectTimeout as connect_timeout unless the DSN sets its own, and poolSize connections
-// kept.
-func openPool(dsn string) (*sql.DB, error) {
+// dial, with connectTimeout as connect_timeout unless the DSN sets its own, and the configured
+// per-process open/idle ceilings.
+func openPool(dsn string, configs ...dbpool.Config) (*sql.DB, error) {
+	config := dbpool.Defaults()
+	if len(configs) > 1 {
+		return nil, fmt.Errorf("postgres pool: at most one configuration is allowed")
+	}
+	if len(configs) == 1 {
+		config = configs[0]
+	}
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
 	cfg, err := pq.NewConfig(dsn)
 	if err != nil {
 		return nil, err
@@ -36,7 +46,9 @@ func openPool(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	db := sql.OpenDB(connector)
-	db.SetMaxOpenConns(poolSize)
-	db.SetMaxIdleConns(poolSize)
+	if err := dbpool.Configure(db, config); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return db, nil
 }

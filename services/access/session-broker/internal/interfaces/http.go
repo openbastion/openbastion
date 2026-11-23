@@ -35,7 +35,14 @@ type secretInjectionOutcomeUnknownResponse struct {
 }
 
 type HTTPServer struct {
-	svc *application.SessionBrokerService
+	svc     *application.SessionBrokerService
+	metrics http.Handler
+}
+
+// WithMetrics installs the internal PostgreSQL pool metrics handler (ADR-0135).
+func (s *HTTPServer) WithMetrics(handler http.Handler) *HTTPServer {
+	s.metrics = handler
+	return s
 }
 
 func NewHTTPServer(svc *application.SessionBrokerService) *HTTPServer {
@@ -48,6 +55,17 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/sessions/search", s.handleSearch) // ADR-0080; more specific than /sessions/
 	mux.HandleFunc("/sessions/", s.handleSessionItem)  // /sessions/{id}, /sessions/{id}/connect
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	if s.metrics != nil {
+		mux.Handle("/metrics", s.metrics)
+	} else {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return mux
 }
 

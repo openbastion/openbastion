@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"database/sql"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"os"
 	"testing"
 )
@@ -41,5 +42,22 @@ func TestPostgres_PoolKeepsItsConnections(t *testing.T) {
 	if stats := db.Stats(); stats.Idle != poolSize || stats.MaxIdleClosed != 0 {
 		t.Fatalf("after %d connections are released: %d idle, %d closed for want of room; want all %d kept",
 			poolSize, stats.Idle, stats.MaxIdleClosed, poolSize)
+	}
+}
+
+func TestPostgres_PoolUsesExplicitLimitsWithoutConnecting(t *testing.T) {
+	db, err := openPool("postgres://test:test@127.0.0.1:5432/test?sslmode=disable", dbpool.Config{MaxOpenConns: 3, MaxIdleConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if got := db.Stats().MaxOpenConnections; got != 3 {
+		t.Fatalf("max open connections = %d, want 3", got)
+	}
+}
+
+func TestPostgres_PoolRejectsUnboundedLimitsBeforeConnecting(t *testing.T) {
+	if _, err := openPool("postgres://test:test@127.0.0.1:5432/test?sslmode=disable", dbpool.Config{MaxOpenConns: 0, MaxIdleConns: 0}); err == nil {
+		t.Fatal("openPool accepted zero max open connections")
 	}
 }

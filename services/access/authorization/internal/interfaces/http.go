@@ -15,7 +15,14 @@ import (
 )
 
 type HTTPServer struct {
-	svc *application.AuthorizationService
+	svc     *application.AuthorizationService
+	metrics http.Handler
+}
+
+// WithMetrics installs the internal PostgreSQL pool metrics handler (ADR-0135).
+func (s *HTTPServer) WithMetrics(handler http.Handler) *HTTPServer {
+	s.metrics = handler
+	return s
 }
 
 func NewHTTPServer(svc *application.AuthorizationService) *HTTPServer {
@@ -28,6 +35,17 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/authz/v1/check-access", s.handleCheckAccess)
 	mux.HandleFunc("/authz/v1/capabilities", s.handleCapabilities)
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	if s.metrics != nil {
+		mux.Handle("/metrics", s.metrics)
+	} else {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return mux
 }
 

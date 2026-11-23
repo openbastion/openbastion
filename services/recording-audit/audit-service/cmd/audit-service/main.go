@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"sort"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/application"
@@ -36,14 +38,21 @@ func runService() {
 		port = "8082"
 	}
 
+	var poolDB *sql.DB
+	var poolConfig dbpool.Config
 	var store application.Store
 	var alertQueue infrastructure.AlertQueue = infrastructure.NewMemoryAlertQueue()
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		ctx := context.Background()
-		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		config, err := dbpool.ParseEnv(os.LookupEnv)
+		if err != nil {
+			log.Fatalf("audit-service: database pool configuration: %v", err)
+		}
+		db, err := infrastructure.OpenPostgresWithPoolConfig(ctx, dsn, config)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
+		poolDB, poolConfig = db, config
 		store = infrastructure.NewPostgresStore(db)
 		alertQueue = infrastructure.NewPostgresAlertQueue(db) // ADR-0057: what waits survives a restart
 		log.Printf("audit-service: using PostgreSQL at %s", redactDSN(dsn))
@@ -129,7 +138,12 @@ func runService() {
 	srv := interfaces.NewHTTPServer(svc)
 
 	log.Printf("audit-service listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
-	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+	if poolDB != nil {
+		srv.WithMetrics(dbpool.MetricsHandler("audit-service", poolDB, poolConfig))
+		log.Printf("audit-service: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	}
+	routes := srv.Routes()
+	log.Fatal(rt.ListenAndServe(":"+port, routes, interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {
