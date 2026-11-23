@@ -298,11 +298,33 @@ func (s *Session) TypeSecret(ctx context.Context, secret []byte) error {
 	}
 	stop := context.AfterFunc(ctx, func() { _ = s.Close() })
 	defer stop()
-	// Build one bounded write to avoid per-key network round trips. The encoded keysyms are
-	// secret-derived too, so the temporary buffer is explicitly cleared after the write.
-	encoded := make([]byte, 0, len(secret)*16)
+	// Bound each TLS write to a short run of key pairs. This creates cancellation
+	// points between records: revocation must not leave an entire secret queued in
+	// one TLS record that the target can only process all at once. The encoded
+	// keysyms are secret-derived too, so each temporary batch is cleared after use.
+	const keyPairsPerWrite = 16
+	const bytesPerKeyPair = 16 // RFB KeyEvent down + up, each eight bytes.
+	encoded := make([]byte, 0, keyPairsPerWrite*bytesPerKeyPair)
 	defer clear(encoded)
+	flush := func() error {
+		if len(encoded) == 0 {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := writeFull(s.conn, encoded); err != nil {
+			_ = s.Close()
+			return err
+		}
+		clear(encoded)
+		encoded = encoded[:0]
+		return nil
+	}
 	for len(secret) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		r, size := utf8.DecodeRune(secret)
 		if size == 0 || r == utf8.RuneError && size == 1 || r == '\r' || r == '\n' || r == '\t' || r < 0x20 || r == 0x7f {
 			return screenstream.ErrUnsupported
@@ -321,15 +343,13 @@ func (s *Session) TypeSecret(ctx context.Context, secret []byte) error {
 			encoded = append(encoded, event[:]...)
 		}
 		secret = secret[size:]
+		if len(encoded) == keyPairsPerWrite*bytesPerKeyPair {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := writeFull(s.conn, encoded); err != nil {
-		_ = s.Close()
-		return err
-	}
-	return nil
+	return flush()
 }
 
 func (s *Session) Input(e screenstream.InputEvent) error {

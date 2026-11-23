@@ -138,9 +138,11 @@ func TestPostgresFlow_ARolledBackSessionIsRefusedByTheBroker(t *testing.T) {
 	if code := read(); code != http.StatusInternalServerError {
 		t.Fatalf("a rolled-back session read: %d, want 500", code)
 	}
-	if !strings.Contains(broker.out.String(), "rolled back") {
-		t.Fatalf("the Broker does not say the row was rolled back:\n%s", broker.out.String())
-	}
+	// os/exec drains the child process's stdout/stderr into syncBuffer asynchronously;
+	// the HTTP response can arrive before that copy goroutine has delivered the log line.
+	waitUntil(t, 2*time.Second, "the Broker's rollback log", func() bool {
+		return strings.Contains(broker.out.String(), "rolled back")
+	})
 }
 
 // ADR-0116, consequences: "la latence et le débit doivent être mesurés". Run on demand

@@ -128,3 +128,11 @@ Avec ADR-0096, un texte collé dans une session RDP est enregistré avec la sess
 
 - **A est livrée** : routes Gateway et Broker, Admin UI (`SecretInjection.tsx`), audit en deux phases, frappe SSH, VNC et RDP, réconciliation des saisies (`/audit/secret-injections`). Les mentions « non livré » des incréments 4 à 6 sont dépassées sur ces points.
 - **B attend son canal** : ADR-0133 le conçoit, accepté le 21 novembre 2026 (option A, empreinte salée). La Gateway relaie le flux d'écran en décodant ses trames, et elle sert aussi le code de l'UI. Un chiffrement fait dans le navigateur pour le proxy protège donc d'une Gateway saine, pas d'une Gateway compromise. ADR-0133 le dit. L'empreinte d'un mot de passe saisi est salée (ADR-0133, point 4), et non un SHA-256 nu (point 6 ci-dessus).
+
+
+### Incrément 7 — annulation VNC entre lots RFB (23 novembre 2026)
+
+- Le premier E2E SI-02 sur TigerVNC réel a révélé une limite de granularité : `pkg/vnc.Session.TypeSecret` construisait les événements de toute la valeur (jusqu'à 4 Kio) puis les écrivait en un seul appel TLS. Le serveur TLS ne livre les événements RFB qu'après réception du record complet ; un relais TCP qui retient des fragments de ce record ne peut donc pas observer un préfixe de frappes et interrompre le reste.
+- `TypeSecret` émet désormais au plus 16 paires `KeyEvent` (down/up) par écriture, soit 256 octets RFB avant chiffrement, et vérifie le contexte d'annulation avant chaque lot. Chaque lot est un record TLS distinct ; la révocation ferme toujours la connexion, et les lots suivants ne sont pas soumis après observation de l'annulation. Les buffers temporaires de chaque lot sont purgés après écriture.
+- Un test unitaire déterministe annule le contexte depuis la première écriture et vérifie qu'exactement un lot complet a été envoyé, sans lot suivant. Le test d'intégration SI-02 conserve TigerVNC réel, `xev`, le relais TCP qui retient les octets TLS, et l'assertion d'absence de frappe après acquittement.
+- **État de preuve** : `go test -race ./pkg/vnc` et compilation de `test/integration/...` passent localement. Le run PostgreSQL `45132080281` a échoué sur l'ancien chemin monolithique avant cette correction ; le nouvel E2E TigerVNC doit passer en CI avant clôture de SI-02.

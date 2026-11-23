@@ -233,7 +233,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | ID | STRIDE | Risque | Sévérité | État |
 |---|---|---|---|---|
 | SI-01 | S | Compromission/usurpation d’un service de confiance mTLS | P1 | Résiduel, défense en profondeur |
-| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | Partiel : E2E VNC contre TigerVNC réel avec oracle X11 indépendant ; séquence Unicode reçue et aucune nouvelle entrée après l’acquittement de révocation ; la course concurrente déclenchée au milieu de la frappe reste à prouver |
+| SI-02 | T | Course entre révocation/fin de session et frappe | P1 | En validation : `TypeSecret` VNC émet des lots RFB bornés (16 paires par record TLS) avec contrôle d'annulation entre lots ; E2E TigerVNC réel + oracle X11 vérifie la rétention des records restants, la fermeture et l'absence d'événement après acquittement. Nouveau passage CI requis avant clôture |
 | SI-03 | R | Résultat cible ambigu si audit final indisponible | P1 | **Contrôle livré et éprouvé** : projection cryptographiquement vérifiée, CLI, Gateway/Admin UI ; test multi-processus `outcome_unknown` sans retry ; archivage → redémarrage → réconciliation passé en PostgreSQL 16 CI dans le run `45023573283`. La cible reste à vérifier manuellement quand le résultat est ambigu. |
 | SI-04 | I | Secret visible dans la capture si focus non masqué | P1 | Limite inhérente, avertissement opérateur |
 | SI-05 | I | Copie du secret en mémoire/dump/crash | P1 | Partiel : `RLIMIT_CORE=0` et `PR_SET_DUMPABLE=0` vérifiés au démarrage du Vault et des proxies ; buffers contrôlés purgés ; copies Go/TLS/GC et chaîne SSH imposée restent explicitement hors garantie (ADR-0115 accepté) |
@@ -250,7 +250,7 @@ Les flèches représentent les flux logiques, pas une autorisation implicite : l
 | Substitution de cible | Comparaison Vault ↔ relay vivant | Refus, aucun événement de frappe |
 | Altération d’une session en base | Liaison des métadonnées persistées et contrôle d’accès DB | Refus ou détection avant scope Vault ; aucune frappe |
 | Grant rejoué ou consommé concurremment | Consommation atomique | Une seule opération au plus |
-| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre ; E2E TigerVNC + oracle `xev` indépendant | L’E2E vérifie l’entrée réelle puis l’absence de nouvelle frappe après l’acquittement de révocation ; la course déclenchée pendant la frappe reste à tester |
+| Terminaison pendant injection | `LiveSessions.Revoke` et propagation du contexte relay → registre ; E2E TigerVNC + oracle `xev` indépendant | L’E2E TigerVNC avec lots TLS bornés doit vérifier qu’un préfixe réel est reçu, que les lots chiffrés suivants restent retenus jusqu’à la révocation, puis qu’aucune frappe ne suit l’acquittement ; nouvelle validation CI en attente |
 | Audit préalable indisponible | Fail-closed | Aucun marqueur ni frappe |
 | Recorder indisponible | Acquittement préalable | Aucune frappe |
 | Audit final perdu après frappe | `injection_id` commun audit/recording et réponse `outcome_unknown` | Aucun retry ; rapprochement par identifiant ; vérification manuelle de la cible |
@@ -273,7 +273,7 @@ Les contre-épreuves doivent être réalisées sur des branches de test isolées
 
 | Risque | Classement actuel | Décision / suite |
 |---|---|---|
-| SI-02 — révocation pendant la frappe | **P1 ouvert, bloquant avant généralisation** | Ajouter une course déterministe qui révoque au milieu d'une frappe en cours. Le test actuel prouve seulement l'absence d'entrée après acquittement de révocation. |
+| SI-02 — révocation pendant la frappe | **P1 ouvert, bloquant avant généralisation ; test ajouté, CI en attente** | `TypeSecret` borne désormais chaque record TLS à 16 paires RFB et vérifie l'annulation entre lots. Le test retient les records restants après un préfixe observé par `xev`, révoque la session et vérifie fermeture et absence de nouvelle entrée après acquittement. Le run `45132080281` a échoué avec l'ancienne écriture monolithique ; ne clôturer qu'après preuve CI du nouveau chemin. |
 | SI-03 — audit terminal perdu | Contrôle livré ; risque opérationnel résiduel | `outcome_unknown`, aucune réinjection, rapprochement cryptographique et CI PostgreSQL 16 archivage/redémarrage validée. Vérification manuelle de la cible obligatoire en cas d'ambiguïté. |
 | SI-04 — focus distant visible | Limite technique connue | L'opérateur doit confirmer le focus et un champ masqué ; l'avertissement reste obligatoire. Le proxy ne peut pas inspecter le type de contrôle de la cible. |
 | SI-05 — copies mémoire | Partiellement mitigé, limite résiduelle | ADR-0115 bloque les core dumps et purge les buffers contrôlés ; aucune promesse d'effacement des copies Go/GC/TLS, chaînes immuables, swap ou mémoire noyau. |
@@ -286,7 +286,7 @@ Les contre-épreuves doivent être réalisées sur des branches de test isolées
 
 ### Actions restantes
 
-1. Ajouter la course déterministe SI-02 sur processus réels, avec terminaison/révocation au milieu d'une frappe et oracle indépendant côté cible.
+1. Valider en CI la course déterministe SI-02 ajoutée sur processus réels, avec révocation pendant un flux de frappes TigerVNC et oracle X11 indépendant ; corriger le proxy si une entrée supplémentaire est observée.
 2. Mesurer SI-06 (contention du verrou et rafales MFA) ; P2, non bloquant pour les clôtures documentaires.
 3. Mesurer le coût ADR-0116 sous charge et mTLS sur un déploiement représentatif ; non bloquant pour l'intégrité.
 4. Maintenir l'avertissement de focus et les limites mémoire dans l'Admin UI, la documentation d'exploitation et les procédures d'incident.

@@ -55,6 +55,11 @@ jobs:
         run: |
           work="$RUNNER_TEMP/openbastion-vnc-target"
           mkdir -p "$work"
+          # Keep the real target's PAM password within its practical input bound.
+          # SI-02 creates a 128-character in-flight key stream and gates the TCP
+          # relay after a 64-byte chunk; it does not need a 4 KiB PAM password.
+          export VNC_PLAIN_PASSWORD="$(openssl rand -hex 64)"
+          echo "::add-mask::$VNC_PLAIN_PASSWORD"
           test/integration/testdata/vnc/target.sh "$work" X509Plain >"$work/server.log" 2>&1 &
           echo "$!" > "$work/pid"
           ready=0

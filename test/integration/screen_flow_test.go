@@ -395,6 +395,20 @@ func TestScreenFlow_VNCFromThePublicAPIToTheTargetAndBack_AcrossRealProcesses(t 
 		t.Run("Vault secret injection reaches the real TigerVNC input surface", func(t *testing.T) {
 			_ = testScreenVaultSecretInjection(t, gatewayURL, authnURL, admin, api, operatorToken, auditorToken, mfa, real, "screen_real", real.password, audit, store, outputs)
 		})
+		baseline := len(real.keySequence())
+		si02Relay := newGatedTCPRelay(t, real.address, baseline, func() int { return len(real.keySequence()) })
+		onboard(t, "screen_real_si02", si02Relay.address, real.user, real.password, real.pin())
+		for _, pol := range []struct{ name, role, resource string }{
+			{"screen-stepup-si02-account", "screen-stepup", "vault:account:screen_real_si02"},
+			{"screen-stepup-si02-inject", "screen-stepup", "secret:inject:account:screen_real_si02"},
+		} {
+			if status := gatewayCreatePolicy(t, gatewayURL, adminToken, pol.name, pol.role, pol.resource, "allow", "ignored"); status != http.StatusCreated {
+				t.Fatalf("policy %s: %d", pol.name, status)
+			}
+		}
+		t.Run("SI-02 revocation cuts a real TigerVNC keystroke stream", func(t *testing.T) {
+			mfa = testScreenVaultSecretInjectionRevokedDuringRealTyping(t, gatewayURL, api, mfa, real, "screen_real_si02", audit, si02Relay)
+		})
 		t.Run("an operator's password reaches the real TigerVNC input surface", func(t *testing.T) {
 			testScreenOperatorPaste(t, gatewayURL, api, operatorToken, auditorToken, mfa, real, "screen_real", "Op-Paste-7e", audit, store, outputs)
 		})
@@ -819,6 +833,9 @@ func realVNCTargetFromEnv(t *testing.T) *realVNCTarget {
 func wrongPasswordFor(r *realVNCTarget) string {
 	if len(r.password) <= 8 {
 		return "wrongpw1"
+	}
+	if len(r.password) == 4096 {
+		return strings.Repeat("B", len(r.password))
 	}
 	return r.password + "-wrong"
 }
