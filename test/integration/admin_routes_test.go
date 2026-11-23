@@ -125,7 +125,7 @@ func vaultAuthorizeScopeStatus(t *testing.T, baseURL, sessionID, accountID, prox
 func gatewayCreatePolicy(t *testing.T, baseURL, token, name, role, resourcePattern, effect, claimedCreatedBy string) int {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{
-		"name": name, "role": role, "resourcePattern": resourcePattern,
+		"name": name, "role": role, "resourcePattern": resourcePattern, "actionPattern": "*",
 		"effect": effect, "createdBy": claimedCreatedBy,
 	})
 	req, _ := http.NewRequest(http.MethodPost, baseURL+"/policies", bytes.NewReader(body))

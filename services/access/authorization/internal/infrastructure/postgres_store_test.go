@@ -165,7 +165,7 @@ func TestPostgresStore_Create_AllowsDistinctActionPatternsForSameRoleAndResource
 	}
 }
 
-func TestMigration002_PreservesExistingPoliciesWithWildcardAction(t *testing.T) {
+func TestMigration003_RequiresExplicitActionPattern(t *testing.T) {
 	db := testDB(t)
 	conn, err := db.Conn(context.Background())
 	if err != nil {
@@ -177,25 +177,24 @@ func TestMigration002_PreservesExistingPoliciesWithWildcardAction(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = conn.ExecContext(ctx, `INSERT INTO policies (id, name, role, resource_pattern, effect) VALUES ('legacy-1', 'legacy', 'legacy-role', 'audit:secret-injections:all', 'allow')`)
-	if err != nil {
-		t.Fatal(err)
-	}
 	sql, err := migrations.Files.ReadFile("002_action_pattern.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.ExecContext(ctx, string(sql)); err != nil {
-		t.Fatalf("apply ADR-0114 migration to legacy policy: %v", err)
+		t.Fatalf("apply action-pattern migration: %v", err)
 	}
-	var actionPattern string
-	if err := conn.QueryRowContext(ctx, `SELECT action_pattern FROM policies WHERE id='legacy-1'`).Scan(&actionPattern); err != nil {
+	sql, err = migrations.Files.ReadFile("003_require_explicit_action_pattern.sql")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if actionPattern != "*" {
-		t.Fatalf("legacy action_pattern=%q, want wildcard compatibility", actionPattern)
+	if _, err := conn.ExecContext(ctx, string(sql)); err != nil {
+		t.Fatalf("apply explicit-action migration: %v", err)
 	}
-	if _, err := conn.ExecContext(ctx, `INSERT INTO policies (id, name, role, resource_pattern, action_pattern, effect) VALUES ('legacy-2', 'new-action', 'legacy-role', 'audit:secret-injections:all', 'audit:secret-injections:read', 'allow')`); err != nil {
-		t.Fatalf("new action-specific policy conflicts with preserved legacy policy: %v", err)
+	if _, err := conn.ExecContext(ctx, `INSERT INTO policies (id, name, role, resource_pattern, effect) VALUES ('missing-action', 'missing', 'role', 'resource:*', 'allow')`); err == nil {
+		t.Fatal("policy insert without action_pattern unexpectedly succeeded")
+	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO policies (id, name, role, resource_pattern, action_pattern, effect) VALUES ('explicit-wildcard', 'explicit wildcard', 'role', 'resource:*', '*', 'allow')`); err != nil {
+		t.Fatalf("explicit wildcard policy should remain possible: %v", err)
 	}
 }

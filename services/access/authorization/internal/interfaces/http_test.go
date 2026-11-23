@@ -57,7 +57,7 @@ func TestCreatePolicy_ARefusalSaysWhy_ADuplicateIs409_AFailureNamesNothing(t *te
 	}
 }
 
-func TestCreatePolicy_ActionPatternIsPersistedAndLegacyOmissionDefaultsWildcard(t *testing.T) {
+func TestCreatePolicy_RequiresExplicitActionPattern(t *testing.T) {
 	var captured *domain.Policy
 	st := captureStore{store: store{}, captured: &captured}
 	rec := post(t, st, []string{"platform-admin"})
@@ -68,11 +68,21 @@ func TestCreatePolicy_ActionPatternIsPersistedAndLegacyOmissionDefaultsWildcard(
 		t.Fatalf("action pattern not persisted: %+v", captured)
 	}
 
-	b, _ := json.Marshal(map[string]any{"name": "legacy", "role": "dba", "resourcePattern": "vault:account:a", "effect": "allow", "actorRoles": []string{"platform-admin"}})
+	// A wildcard is still possible, but only as an explicit administrative choice.
+	wildcardBody := []byte(`{"name":"explicit-wildcard","role":"dba","resourcePattern":"vault:account:*","actionPattern":"*","effect":"allow","actorRoles":["platform-admin"]}`)
+	rec = httptest.NewRecorder()
+	interfaces.NewHTTPServer(application.NewAuthorizationService(captureStore{store: store{}, captured: &captured})).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/authz/v1/policies", bytes.NewReader(wildcardBody)))
+	if rec.Code != http.StatusCreated || captured == nil || captured.ActionPattern != "*" {
+		t.Fatalf("explicit wildcard should be accepted: status=%d policy=%+v", rec.Code, captured)
+	}
+
+	// Omission must fail closed rather than silently granting every action.
+	b, _ := json.Marshal(map[string]any{"name": "missing", "role": "dba", "resourcePattern": "vault:account:a", "effect": "allow", "actorRoles": []string{"platform-admin"}})
+	captured = nil
 	rec = httptest.NewRecorder()
 	interfaces.NewHTTPServer(application.NewAuthorizationService(captureStore{store: store{}, captured: &captured})).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/authz/v1/policies", bytes.NewReader(b)))
-	if rec.Code != http.StatusCreated || captured.ActionPattern != "*" {
-		t.Fatalf("legacy default: status=%d policy=%+v", rec.Code, captured)
+	if rec.Code != http.StatusBadRequest || captured != nil {
+		t.Fatalf("missing action pattern must be rejected without creating a policy: status=%d policy=%+v", rec.Code, captured)
 	}
 
 	captured = nil

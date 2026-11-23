@@ -131,7 +131,7 @@ CREATE TABLE policies (
     name              TEXT NOT NULL,
     role_id           UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     resource_pattern  TEXT NOT NULL,             -- ex. 'vault:account:prod-*'
-    action_pattern    TEXT NOT NULL DEFAULT '*', -- ADR-0114 ; ex. 'session:create'
+    action_pattern    TEXT NOT NULL, -- ADR-0114 ; obligatoire, ex. 'session:create'
     effect            TEXT NOT NULL CHECK (effect IN ('allow','deny')),
     created_by        UUID REFERENCES users(id),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),

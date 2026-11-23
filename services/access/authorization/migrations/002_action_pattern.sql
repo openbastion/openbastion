@@ -1,5 +1,5 @@
 -- ADR-0114: separate resource scope from the action a role may perform.
--- Existing policies retain their historical behavior through the explicit wildcard.
+-- Development-era default; migration 003 removes it so future policies must name an action.
 ALTER TABLE policies
     ADD COLUMN action_pattern TEXT NOT NULL DEFAULT '*';
 

@@ -22,11 +22,11 @@ Chaque politique porte désormais deux motifs indépendants : `resource_pattern`
 - La politique de bootstrap `authz:policy-admin` est limitée à l'action `authz:policy:create`.
 - La route de rapprochement ADR-0113 exige une politique explicite `resource_pattern=audit:secret-injections:all`, `action_pattern=audit:secret-injections:read`, `effect=allow`.
 
-### Compatibilité des politiques existantes
+### Création de politiques : action obligatoire
 
-Une migration additive `002_action_pattern.sql` ajoute `action_pattern TEXT NOT NULL DEFAULT '*'`. Les politiques déjà stockées conservent ainsi exactement leur portée historique sur les actions ; aucune ligne n'est supprimée ou réinterprétée silencieusement. La contrainte d'unicité devient `(role, resource_pattern, action_pattern, effect)`.
+`action_pattern` est obligatoire et ne possède aucune valeur par défaut. La migration `002_action_pattern.sql` a historiquement introduit la colonne avec `DEFAULT '*'` pendant le développement ; la migration `003_require_explicit_action_pattern.sql` retire ce défaut. Aucun déploiement de production n'ayant été livré, le contrat est durci maintenant sans maintenir de compatibilité avec des politiques ou clients historiques.
 
-Pour les clients HTTP existants, l'omission de `actionPattern` est temporairement équivalente à `*`, afin de préserver les contrats et les déploiements déjà automatisés. Une valeur explicitement vide ou `null` est invalide et renvoie `400` : elle ne doit jamais être confondue avec une omission. Les nouveaux clients et les permissions sensibles doivent fournir une action explicite. L'API expose `actionPattern` et documente le défaut de compatibilité.
+L'API HTTP exige `actionPattern`. Une propriété absente, `null` ou vide est rejetée avec `400`. Un motif `*` reste syntaxiquement valide, mais uniquement s'il est explicitement fourni : une politique globale doit être un choix conscient, jamais une conséquence d'omission.
 
 ## Conséquences
 
@@ -41,13 +41,13 @@ Pour les clients HTTP existants, l'omission de `actionPattern` est temporairemen
 
 1. **Ajouter un contrôle d'action uniquement dans la Gateway.** Rejeté : cela dupliquerait l'autorisation dans un service appelant et laisserait les autres consommateurs de `CheckAccess` vulnérables.
 2. **Encoder l'action dans `resource_pattern`.** Rejeté : cela fusionnerait deux dimensions distinctes, casserait les ressources existantes et rendrait la politique difficile à comprendre.
-3. **Refuser immédiatement toute politique sans action explicite.** Rejeté pour cette migration : les politiques existantes et les clients de création seraient invalidés au déploiement. La compatibilité est conservée par `*`, avec un plan de réduction progressive documenté.
+3. **Accepter l'omission comme `*`.** Rejeté : une omission ne doit jamais accorder implicitement toutes les actions. Aucun déploiement de production n'ayant été livré, il n'existe aucune contrainte de compatibilité à préserver.
 4. **Remplacer le matcher par un moteur glob/regex/ABAC complet.** Rejeté : hors périmètre et plus difficile à auditer. La grammaire exacte + joker final est conservée.
 
 ## Validation attendue
 
 - Tests unitaires : ressource seule correspondante refusée, action seule correspondante refusée, double correspondance acceptée, joker final, action vide, refus explicite prioritaire.
-- Tests HTTP : `actionPattern` est persisté ; omission legacy devient `*`.
-- Tests PostgreSQL : lecture/écriture de `action_pattern`, unicité tenant compte de l'action, migration additive appliquée au démarrage.
+- Tests HTTP : `actionPattern` est persisté ; omission, `null` et chaîne vide sont rejetés.
+- Tests PostgreSQL : lecture/écriture de `action_pattern`, unicité tenant compte de l'action, absence de défaut SQL après migration 003.
 - Tests Gateway ADR-0113 : la permission ne passe que si la politique correspond à la fois à `audit:secret-injections:all` et `audit:secret-injections:read` ; une autre action sur la même ressource est refusée.
 - Vérifier les tests d'intégration existants et les contrats REST/OpenAPI.

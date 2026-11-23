@@ -44,7 +44,7 @@ func startServiceWithExtraPort(t *testing.T, root, binPath, httpPort, sshPort st
 func authzCreatePolicy(t *testing.T, baseURL string, actorRoles []string, role, resourcePattern, effect string) {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{
-		"name": "it-test-policy", "role": role, "resourcePattern": resourcePattern,
+		"name": "it-test-policy", "role": role, "resourcePattern": resourcePattern, "actionPattern": "*",
 		"effect": effect, "createdBy": "it-admin", "actorRoles": actorRoles,
 	})
 	resp, err := http.Post(baseURL+"/authz/v1/policies", "application/json", bytes.NewReader(body))

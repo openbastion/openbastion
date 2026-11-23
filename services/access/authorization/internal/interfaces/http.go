@@ -57,16 +57,12 @@ func (s *HTTPServer) handleCreatePolicy(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// Omission preserves the pre-ADR-0114 policy semantics for existing API clients.
-	// An explicitly empty or null actionPattern is not omission and must fail validation.
-	// New narrowly-scoped policies should always supply an explicit actionPattern.
-	actionPattern := "*"
-	if len(req.ActionPattern) > 0 {
-		actionPattern = ""
-		if err := json.Unmarshal(req.ActionPattern, &actionPattern); err != nil || actionPattern == "" {
-			http.Error(w, domain.ErrInvalidPolicyPattern.Error(), http.StatusBadRequest)
-			return
-		}
+	// Every policy must declare its action scope. A wildcard remains available only
+	// when an administrator explicitly requests it; omission must never widen access.
+	var actionPattern string
+	if len(req.ActionPattern) == 0 || json.Unmarshal(req.ActionPattern, &actionPattern) != nil || actionPattern == "" {
+		http.Error(w, domain.ErrInvalidPolicyPattern.Error(), http.StatusBadRequest)
+		return
 	}
 	p, err := s.svc.CreatePolicy(r.Context(), req.ActorRoles, req.Name, req.Role, req.ResourcePattern, actionPattern, domain.Effect(req.Effect), req.CreatedBy)
 	if err != nil {

@@ -6,4 +6,4 @@
 
 **Point de vérification pour audit** : un rôle nouvellement créé sans politique associée ne doit donner accès à rien (deny-by-default).
 
-- **Compatibilité ADR-0114 :** la migration remplit `action_pattern=*` pour les politiques historiques et l’API HTTP accepte temporairement l’omission de `actionPattern` comme `*`. Ces politiques conservent leur ancienne portée large sur les actions. L’Admin UI et les seeds Base44 demandent/déclarent désormais une action explicite ; les nouveaux clients doivent toujours fournir `actionPattern`. Les politiques historiques doivent être réduites progressivement après inventaire, sans retirer de droit avant validation de l’équivalence.
+- **Action explicite (ADR-0114) :** `actionPattern` est obligatoire à la création ; l’API rejette son omission, `null` et la chaîne vide. La base ne définit aucun défaut pour `action_pattern`. Un joker `*` reste possible uniquement s’il est fourni explicitement et si sa portée est justifiée ; il ne doit jamais être ajouté automatiquement.
