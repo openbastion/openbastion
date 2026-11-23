@@ -112,19 +112,34 @@ Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, ren
   - Si une clé précédente est configurée, le Broker ré-atteste en arrière-plan des lots de 200 lignes par minute. Chaque ligne est vérifiée sous sa clé d'origine puis comparée à sa tête Audit avant d'être réécrite sous la clé courante à une nouvelle révision et attestée. Une ligne altérée, revenue en arrière ou signée sous une clé inconnue n'est jamais légitimée par la rotation. Le journal annonce le nombre restant et le retrait possible de l'ancienne clé seulement lorsque le compteur atteint zéro.
   - L'API `probe` de l'Audit Service permet au healthcheck Compose de sonder le service sans shell dans son image distroless ; le Gateway peut donc attendre son état sain. Le test Compose a aussi révélé que `pg_isready` sur socket Unix déclarait PostgreSQL sain pendant son serveur temporaire d'initialisation : les services dépendants redémarraient avant le serveur TCP définitif. Le healthcheck force désormais `127.0.0.1` en TCP.
   - Le test Compose vérifie que le rôle `session_broker` ouvre sa propre base, mais ne peut pas ouvrir celle de `audit_service` (ni celles des autres services) : il ne peut donc ni lire ni modifier `session_metadata_heads`. La chaîne attendue inclut désormais `session.metadata_attested` entre `session.create` et `session.connect`.
-  - Le test de mesure lance un vrai Broker, un vrai Audit Service et PostgreSQL ; il effectue 20 lectures d'échauffement puis 500 lectures séquentielles et compare la lecture complète du Broker à l'endpoint de tête seul. Le test fournit sa propre clé de chaîne Audit éphémère et un fichier d'ancres temporaire.
+  - La mesure séquentielle initiale (22 novembre) lançait un Broker, un Audit Service et PostgreSQL ; elle faisait 20 lectures d'échauffement puis 500 lectures séquentielles. Le test à la demande a depuis été étendu : deux Brokers, un Audit Service, PostgreSQL, mTLS, connexions persistantes et niveaux de concurrence 1/8/32/64 ; il fournit sa clé de chaîne Audit éphémère et un fichier d'ancres temporaire.
 - **Prouvé** :
   - PostgreSQL réel : une ligne honnête est ré-attestée sous la nouvelle clé à la révision suivante ; une ligne altérée et une ligne restaurée à une révision antérieure restent refusées, même après retrait de l'ancienne clé ; un second passage ne les rend pas valides.
   - Entre deux vrais processus : la création/expiration fait avancer la tête Audit ; la restauration d'une ligne signée antérieure est refusée par le Broker.
   - Les tests du stockage PostgreSQL du Broker et les tests d'intégration ciblés passent sur PostgreSQL 16 réel.
-  - `COMPOSE_TEST=1 go test -run '^TestCompose_TheMVPJourneyOnARealDockerComposeStack$' -count=1 -v` passe : démarrage complet, healthchecks, séparation des rôles, parcours SSH, chaîne d'audit, absence de secrets dans les logs et persistance après redémarrage. Le test Compose reste à raccorder à la CI dans un changement distinct.
-- **Mesure locale de référence** (LT209227, PostgreSQL 16 en conteneur, 22 novembre 2026, 500 échantillons après 20 échauffements, HTTP local, `INTERNAL_TLS=disabled`) :
+  - `COMPOSE_TEST=1 go test -run '^TestCompose_TheMVPJourneyOnARealDockerComposeStack$' -count=1 -v` passe : démarrage complet, healthchecks, séparation des rôles, parcours SSH, chaîne d'audit, absence de secrets dans les logs et persistance après redémarrage. Le job « Docker Compose / full MVP journey » est requis dans la CI et a passé dans le run `45023573283` (PR #277).
+- **Mesure locale séquentielle de référence** (LT209227, PostgreSQL 16 en conteneur, 22 novembre 2026, 500 échantillons après 20 échauffements, HTTP local, `INTERNAL_TLS=disabled`) :
 
   | Opération | p50 | p95 | p99 |
   | --- | ---: | ---: | ---: |
   | Lecture via Broker (HMAC + comparaison de tête) | 3,39 ms | 4,96 ms | 6,13 ms |
   | Lecture de la tête seule (requête Audit) | 1,62 ms | 2,99 ms | 3,86 ms |
 
-  Ces valeurs sont une première référence de latence, pas un objectif SLO ni un benchmark de débit : elles ne comprennent pas le transport mTLS, les charges concurrentes, la latence réseau inter-hôtes ni la contention de production. Les percentiles de deux séries distinctes ne se soustraient pas pour produire un coût marginal exact. Un benchmark de débit/concurrence et une mesure avec mTLS restent à faire avant production.
-- **Reste** : mesurer le débit et la latence sous concurrence, avec mTLS et sur un déploiement représentatif. ~~Intégrer `test-compose` à la CI~~ — fait : le job « Docker Compose / full MVP journey » est requis et a passé dans le run CI `45023573283` (PR #277).
+  Cette première référence n'incluait ni mTLS ni concurrence. Les percentiles de deux séries distinctes ne se soustraient pas pour produire un coût marginal exact.
+- **Mesure concurrente mTLS** (LT209227 sous WSL2, noyau 6.18.40.1, 6 vCPU visibles, 5,8 Gio RAM ; PostgreSQL 16.15 ; deux processus Broker et un Audit Service, tous sur le même hôte ; TLS 1.3, HTTP/1.1 persistant, loopback ; trois passages, 2 000 requêtes par endpoint et niveau, 20 échauffements par worker ; valeurs ci-dessous = médiane des trois passages) :
+
+  | Endpoint | Concurrence | p50 | p95 | p99 | Débit médian |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | Broker (HMAC + tête Audit) | 1 | 3,49 ms | 5,67 ms | 6,85 ms | 265 req/s |
+  | Broker (HMAC + tête Audit) | 8 | 8,79 ms | 13,09 ms | 23,27 ms | 850 req/s |
+  | Broker (HMAC + tête Audit) | 32 | 37,01 ms | 77,77 ms | 97,21 ms | 773 req/s |
+  | Broker (HMAC + tête Audit) | 64 | 59,19 ms | 134,69 ms | 194,76 ms | 925 req/s |
+  | Audit (lecture de tête seule) | 1 | 1,57 ms | 2,59 ms | 3,23 ms | 580 req/s |
+  | Audit (lecture de tête seule) | 8 | 4,05 ms | 5,64 ms | 7,34 ms | 1 891 req/s |
+  | Audit (lecture de tête seule) | 32 | 9,93 ms | 25,54 ms | 38,91 ms | 2 544 req/s |
+  | Audit (lecture de tête seule) | 64 | 18,50 ms | 65,34 ms | 101,39 ms | 2 341 req/s |
+
+  Les clients réutilisent les connexions TLS : le handshake est payé à l'ouverture de la connexion, pas à chaque requête. Le client du Broker présente le certificat `api-gateway` (appel direct pour isoler le chemin Broker) ; le client de comparaison Audit présente `session-broker`. Les deux Brokers partagent PostgreSQL, la clé HMAC et l'unique Audit Service. Ces chiffres sont des observations locales, pas des SLO. La hausse de latence dès 32 lecteurs simultanés justifie une investigation avant toute cible de capacité.
+- **Limites de la mesure** : les deux Brokers et l'Audit Service tournent sur le même hôte WSL2 ; aucun RTT inter-hôtes, équilibrage réseau réel, Kubernetes/Envoy, seconde réplique Audit, handshake TLS par requête ni profil de charge de production n'est mesuré. Le benchmark ne suffit donc pas à qualifier un déploiement représentatif ni à fixer un SLO.
+- **Reste** : reproduire cette mesure sur des hôtes distincts et un déploiement représentatif, puis diagnostiquer la hausse de latence sous concurrence avant production. ~~Intégrer `test-compose` à la CI~~ — fait : le job « Docker Compose / full MVP journey » est requis et a passé dans le run CI `45023573283` (PR #277).
 
