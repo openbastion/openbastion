@@ -5430,3 +5430,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Test unitaire** : annulation déterministe déclenchée par la première écriture ; exactement un lot complet (16 paires) est observé et aucun lot suivant n'est envoyé.
 - **Validations locales** : `GOWORK=$PWD/go.work go test -race -count=1 ./pkg/vnc` : PASS ; `GOWORK=$PWD/go.work go test -run '^$' ./test/integration/...` : PASS (compilation) ; `gofmt`, `git diff --check` : PASS. Le vrai E2E TigerVNC nécessite PostgreSQL et ne peut pas tourner sur LT209227.
 - **État** : correction poussée en attente du prochain job PostgreSQL 16. SI-02 reste P1 ouvert jusqu'à preuve du préfixe partiel, de la rétention des lots TLS restants, de la fermeture du relais et de l'absence de frappe après acquittement.
+
+
+## 2026-11-23 — ADR-0116 : attente déterministe du journal de rollback en intégration PostgreSQL
+
+- **Échec CI** : le job PostgreSQL 16 du run `45144228708` échoue dans `TestPostgresFlow_ARolledBackSessionIsRefusedByTheBroker` après avoir reçu le `500` attendu, car la ligne `rolled back` n'est pas encore visible dans `broker.out`.
+- **Cause** : `os/exec` copie stdout/stderr vers le `syncBuffer` du harnais via une goroutine. La réponse HTTP peut donc être observée avant que la copie du journal soit achevée ; l'assertion immédiate introduisait une course entre deux observations indépendantes.
+- **Correction du test uniquement** : attendre jusqu'à deux secondes l'arrivée de la ligne de rollback avec `waitUntil`. Le statut HTTP `500`, le scénario de restauration de la ligne et l'exigence d'un diagnostic dans le journal restent inchangés ; aucun contrôle de production n'est affaibli.
+- **Reproduction avant correction** : le test isolé et le test précédé de `TestPostgresFlow_AChangeOfASessionMovesItsHeadInTheAuditService` passent localement ; l'échec intermittent n'a pas été reproduit sur LT209227. Le commit de merge CI `0e6ba3b5a164` a également passé 20 exécutions isolées.
+- **Validation après correction, avant push** : PostgreSQL 16 `obpg-kerberos`, base dédiée `openbastion_si02_repro` : test ciblé 20/20 PASS ; test ciblé sous `-race` 5/5 PASS ; `go vet ./test/integration/...` et `git diff --check` PASS. Le test n'a pas nécessité de purge de la base existante `openbastion`.
