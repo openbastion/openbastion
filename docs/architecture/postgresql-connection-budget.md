@@ -1,6 +1,6 @@
 # Budget de connexions PostgreSQL
 
-Ce document décrit le contrat de dimensionnement proposé par [ADR-0135](../adr/0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md). L'ADR reste `Proposé` : les variables et le validateur décrits ici ne sont pas encore implémentés.
+Ce document décrit le contrat de dimensionnement proposé par [ADR-0135](../adr/0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md). L'ADR est accepté. Les variables et le validateur décrits ici ne sont pas encore implémentés ; leur réalisation constitue l'incrément suivant.
 
 ## Périmètre
 

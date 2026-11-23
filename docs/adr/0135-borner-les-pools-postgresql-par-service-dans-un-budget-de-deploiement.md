@@ -1,6 +1,6 @@
 # ADR-0135 — Borner les pools PostgreSQL par service dans un budget de déploiement
 
-**Statut** `Proposé` · 2026-11-23 · décision de dimensionnement à valider par le propriétaire du projet
+**Statut** `Accepté` · 2026-11-23 · accepté avant implémentation
 
 **Contexte** — Les sept services qui ouvrent PostgreSQL utilisent chacun `SetMaxOpenConns(10)` et `SetMaxIdleConns(10)` : Authentication, Authorization, Session Broker, Audit Service, Password Vault, Command Recorder et Video Recorder. À une instance de chaque service, le plafond cumulé est donc de 70 connexions. `MaxIdleConns` borne les connexions conservées après usage ; il ne les ouvre pas toutes au démarrage et ne s'ajoute pas à `MaxOpenConns`.
 

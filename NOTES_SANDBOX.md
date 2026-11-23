@@ -5473,11 +5473,11 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Limites et suite** : tous les processus sont sur le même hôte WSL2 ; les résultats ne sont pas des SLO. La reproduction entre hôtes est différée à la demande de l'utilisateur. Prochaine étape : concevoir le budget de connexions et la configuration de pool par service, puis ajouter des tests de bornes et d'intégration.
 
 
-## 2026-11-23 — ADR-0135 proposé : budget PostgreSQL par service et par cluster
+## 2026-11-23 — ADR-0135 accepté : budget PostgreSQL par service et par cluster
 
 - **État de départ** : les sept services PostgreSQL fixent `MaxOpenConns=10` et `MaxIdleConns=10`. Une instance de chaque service représente 70 connexions ouvertes au maximum ; les connexions inactives sont comprises dans ce plafond, elles ne s'y ajoutent pas et ne sont pas toutes ouvertes au démarrage.
 - **Contexte mesuré** : le profilage et les essais de pools de l'ADR-0116 identifient la contention `database/sql` de l'Audit Service comme cause dominante. Les pools 10/20 puis 20/20 améliorent les p95 mesurés à 32/64 lecteurs, mais sept pools à 20 dépasseraient les 100 connexions PostgreSQL par défaut avant réplicas et réserve. Ces chiffres restent locaux à LT209227/WSL2 et ne sont pas des SLO.
 - **Contrat proposé** : `DB_POOL_MAX_OPEN_CONNS` (défaut 10, 1–1 000) et `DB_POOL_MAX_IDLE_CONNS` (défaut `min(max_open,10)`, 0–max_open), parsés strictement par chaque `main.go`. Un manifeste par cluster calcule `Σ(max_instances × max_open_per_instance) + reserved_connections <= max_connections`. `max_instances` inclut HPA max, `maxSurge`, jobs et processus temporaires.
 - **Exemple uniquement** : sept services × 10 + 20 connexions réservées = 90 sur un serveur configuré à 100, laissant 10 de marge. La réserve de 20 n'est pas imposée ; elle dépend de l'exploitation réelle.
 - **Choix de sécurité** : validation statique en CI/déploiement ; pas de coordinateur dynamique, pas de réduction silencieuse, pas de cache de la tête Audit, pas de PgBouncer dans cette étape. Métriques `DB.Stats()` prévues pour éclairer les ajustements sans autoscaling du pool.
-- **Aucun changement de code ni de défaut** : les sept pools restent à 10/10. L'ADR-0135 est `Proposé`, en attente de validation du contrat. Le benchmark multi-hôte reste différé à la demande de l'utilisateur.
+- **Aucun changement de code ni de défaut** : les sept pools restent à 10/10. L'ADR-0135 est `Accepté` avant implémentation. Le benchmark multi-hôte reste différé à la demande de l'utilisateur.
