@@ -284,8 +284,8 @@ Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et
 | 10 | [ADR-0130](0130-connecteurs-protocoles.md) | Les connecteurs et protocoles ne sont visibles qu’après preuve de disponibilité | Proposé |
 | 11 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté |
 | 12 | [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté |
-| [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté | Proxy écran RDP et VNC |
-| [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté | Proxy SSH |
+| 13 | [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté |
+| 14 | [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté |
 
 ## Index numérique
 
@@ -425,5 +425,6 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0130](0130-connecteurs-protocoles.md) | Les connecteurs et protocoles ne sont visibles qu’après preuve de disponibilité | Proposé | Alignement UI, contrats et roadmap |
 | [ADR-0131](0131-admin-ui-capacites-appelant.md) | L'Admin UI s'adapte aux capacités que les politiques ouvrent à l'appelant | Accepté | Alignement UI, contrats et roadmap |
 | [ADR-0132](0132-profil-ecran-rdp-par-compte-et-choix-operateur.md) | Le profil d'écran RDP se règle par compte, et l'opérateur choisit dans ses limites | Accepté | Alignement UI, contrats et roadmap |
+| [ADR-0133](0133-le-mot-de-passe-de-l-operateur-traverse-la-gateway-chiffre-pour-le-proxy.md) | Le mot de passe de l'opérateur traverse la Gateway chiffré pour le proxy | Accepté | Proxy écran RDP et VNC |
 | [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté | Proxy SSH |
 | [ADR-0135](0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md) | Borner les pools PostgreSQL par service dans un budget de déploiement | Accepté | Fondations du code |
