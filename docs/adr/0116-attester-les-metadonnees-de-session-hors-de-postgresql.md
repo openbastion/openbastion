@@ -139,7 +139,24 @@ Quatre incréments, dans cet ordre (découpage décidé le 22 novembre 2026, ren
   | Audit (lecture de tête seule) | 32 | 9,93 ms | 25,54 ms | 38,91 ms | 2 544 req/s |
   | Audit (lecture de tête seule) | 64 | 18,50 ms | 65,34 ms | 101,39 ms | 2 341 req/s |
 
-  Les clients réutilisent les connexions TLS : le handshake est payé à l'ouverture de la connexion, pas à chaque requête. Le client du Broker présente le certificat `api-gateway` (appel direct pour isoler le chemin Broker) ; le client de comparaison Audit présente `session-broker`. Les deux Brokers partagent PostgreSQL, la clé HMAC et l'unique Audit Service. Ces chiffres sont des observations locales, pas des SLO. La hausse de latence dès 32 lecteurs simultanés justifie une investigation avant toute cible de capacité.
-- **Limites de la mesure** : les deux Brokers et l'Audit Service tournent sur le même hôte WSL2 ; aucun RTT inter-hôtes, équilibrage réseau réel, Kubernetes/Envoy, seconde réplique Audit, handshake TLS par requête ni profil de charge de production n'est mesuré. Le benchmark ne suffit donc pas à qualifier un déploiement représentatif ni à fixer un SLO.
-- **Reste** : reproduire cette mesure sur des hôtes distincts et un déploiement représentatif, puis diagnostiquer la hausse de latence sous concurrence avant production. ~~Intégrer `test-compose` à la CI~~ — fait : le job « Docker Compose / full MVP journey » est requis et a passé dans le run CI `45023573283` (PR #277).
+  Les clients réutilisent les connexions TLS : le handshake est payé à l'ouverture de la connexion, pas à chaque requête. Le client du Broker présente le certificat `api-gateway` (appel direct pour isoler le chemin Broker) ; le client de comparaison Audit présente `session-broker`. Les deux Brokers partagent PostgreSQL, la clé HMAC et l'unique Audit Service. Ces chiffres sont des observations locales, pas des SLO.
+- **Diagnostic de contention** (même hôte et même charge, instrumentation temporaire locale non conservée dans le code) :
+  - Le block profile Go à 32 lecteurs attribue 24,06 s cumulées à `database/sql.(*DB).conn` dans l'Audit Service, sur 109,45 s de blocage cumulées dans le profil. Le chemin `AuditService.SessionMetadataHead` / `PostgresStore.MetadataHead` est le point d'attente ; côté Broker, `GetSession` passe une part importante de son attente dans `AuditHTTPClient.MetadataHead` / `http.Transport.RoundTrip`. Le profil mutex ne révèle pas de verrou applicatif dominant.
+  - `DB.Stats()` confirme la saturation du pool Audit limité à 10 : sur une passe profilée, `WaitCount=7 669` et `WaitDuration=1 min 41 s` cumulées. Les deux pools Broker atteignent aussi 10 connexions, avec environ 700 et 500 attentes respectives, mais une attente cumulée plus faible. Ces compteurs sont cumulatifs entre goroutines, pas une durée murale.
+  - Le plan de la lecture de tête utilise la clé primaire (`Index Scan`) ; l'essai isolé sur une clé absente s'exécute en environ 0,10 ms. Cela ne remplace pas une mesure de toutes les requêtes, mais ne suggère pas un scan de table.
+- **Expérience contrôlée de dimensionnement** (trois passages par configuration, médiane des p95 et débits ; 2 000 requêtes par endpoint et niveau ; aucune modification conservée dans le code) :
+
+  | Pool Broker / Audit | Concurrence | p95 Broker | Débit Broker | p95 Audit | Débit Audit |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | 10 / 10 | 32 | 83,09 ms | 725 req/s | 28,14 ms | 2 296 req/s |
+  | 10 / 20 | 32 | 46,63 ms | 1 262 req/s | 10,92 ms | 4 723 req/s |
+  | 20 / 20 | 32 | 47,13 ms | 1 264 req/s | 10,83 ms | 4 870 req/s |
+  | 10 / 10 | 64 | 156,65 ms | 790 req/s | 70,15 ms | 2 098 req/s |
+  | 10 / 20 | 64 | 108,13 ms | 1 075 req/s | 40,67 ms | 3 399 req/s |
+  | 20 / 20 | 64 | 97,87 ms | 1 258 req/s | 25,98 ms | 4 871 req/s |
+
+  Augmenter le pool Audit de 10 à 20 réduit nettement la latence et augmente le débit. Porter aussi les pools Broker à 20 apporte un gain supplémentaire à 64 lecteurs, mais l'Audit atteint encore 20 connexions et cumule plusieurs milliers d'attentes. **Ce test ne justifie pas de remplacer le défaut global par 20** : sept services à 20 connexions dépasseraient les 100 connexions PostgreSQL par défaut, avant même les réplicas et les outils.
+- **Décision provisoire** : garder le défaut 10 en production. Le prochain incrément doit concevoir des limites de pool configurables par service et un budget de connexions tenant compte du nombre de réplicas (`somme(instances × max_open) + marge <= max_connections`), puis mesurer ce budget. PgBouncer reste une option d'architecture à évaluer ; aucune mise en cache de la tête Audit ni aucun contournement de sa vérification n'est acceptable.
+- **Limites de la mesure** : les deux Brokers et l'Audit Service tournent sur le même hôte WSL2 ; aucun RTT inter-hôtes, équilibrage réseau réel, Kubernetes/Envoy, seconde réplique Audit, handshake TLS par requête ni profil de charge de production n'est mesuré. Le benchmark ne suffit donc pas à qualifier un déploiement représentatif ni à fixer un SLO. La reproduction sur des hôtes distincts est différée à la demande de l'utilisateur.
+- **Reste** : concevoir et valider le budget/configuration des pools sans modifier les invariants d'intégrité ; aucune valeur par défaut n'est changée par cette investigation. ~~Intégrer `test-compose` à la CI~~ — fait : le job « Docker Compose / full MVP journey » est requis et a passé dans le run CI `45023573283` (PR #277).
 
