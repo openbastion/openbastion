@@ -61,7 +61,7 @@ Les lignes ci-dessous sont conservées comme historique de livraison, pas comme 
 
 | Sujet | État | Prochaine action |
 |---|---|---|
-| **ADR-0135 — budget des pools PostgreSQL** | ADR accepté : plafonds locaux par service, budget par cluster tenant compte des réplicas et de la réserve opérationnelle ; défauts 10/10 inchangés. Aucun validateur ni nouveau réglage n'est encore livré. | Implémenter les parseurs stricts, le manifeste de capacité, le validateur CI et les métriques `DB.Stats()` ; mesurer ensuite avant tout changement des défauts. |
+| **ADR-0135 — budget des pools PostgreSQL** | **Implémenté** : parseurs stricts dans les sept services, défauts 10/10 conservés, manifeste cluster, validateur CI/Compose, métriques `DB.Stats()` sous mTLS. | Renseigner le manifeste avec les HPA/maxSurge et overrides réels de chaque cluster ; mesurer en production représentative avant tout changement des défauts. Le benchmark multi-hôte reste différé à la demande de l'utilisateur. |
 
 ## 3. Interopérabilité / protocoles
 

@@ -51,11 +51,13 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("admin-cli", "POST", "/auth/v1/mfa/verify"),
 		mtlstest.Deny("session-broker", "POST", "/auth/v1/mfa/enrollment-codes"),
 		mtlstest.Deny("api-gateway", "GET", "/auth/v1/mfa/enrollment-codes"),
+		mtlstest.Allow("admin-cli", "GET", "/metrics"),
 	})
 }
 
 func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), CallerRules(), []mtlstest.Route{
+		{Method: "GET", Path: "/metrics"},
 		{Method: "POST", Path: "/auth/v1/users"},
 		{Method: "POST", Path: "/auth/v1/login"},
 		{Method: "POST", Path: "/auth/v1/verify"},

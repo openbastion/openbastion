@@ -4,7 +4,7 @@
 #   docker build -f deploy/docker-compose/Dockerfile .
 
 # -- build: every binary, static, from go.work and go.sum ----------------------------------
-FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
 # The generated Protobuf stubs are not in git (docs/development/contributing.md): the image
@@ -46,7 +46,7 @@ RUN mkdir -p /rootfs/pki /rootfs/var/lib/openbastion/anchors /rootfs/var/lib/ope
  && chown -R 65532:65532 /rootfs
 
 # -- ui: the Admin UI (ADR-0036), built from its lockfile ------------------------------------
-FROM node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS ui
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS ui
 ARG SOURCE_REVISION=unknown
 ARG SOURCE_REPOSITORY=https://github.com/openbastion/openbastion
 ENV OPENBASTION_SOURCE_REVISION=${SOURCE_REVISION}
