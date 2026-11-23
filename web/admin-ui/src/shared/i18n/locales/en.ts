@@ -268,7 +268,7 @@ export default {
   },
   policies: {
     title: "Policies",
-    prefix: "A policy gives a role a resource pattern:",
+    prefix: "A policy binds a role to both a resource pattern and an action pattern:",
     session: "to open a session,",
     recording: "to read recordings back,",
     breakglass: "to decide on an emergency request. The public API does not list policies.",
@@ -280,6 +280,8 @@ export default {
       name: "Name",
       role: "Role",
       resourcePattern: "Resource pattern",
+      actionPattern: "Action pattern",
+      actionPatternHelp: "Exact action (session:create) or a scoped prefix (session:*). Use * only when every action is genuinely required.",
       effect: "Effect",
       allow: "allow",
       deny: "deny",

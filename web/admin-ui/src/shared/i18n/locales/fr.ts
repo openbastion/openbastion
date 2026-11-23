@@ -269,7 +269,7 @@ export default {
   },
   policies: {
     title: "Politiques",
-    prefix: "Une politique donne à un rôle un motif de ressource :",
+    prefix: "Une politique associe un rôle à un motif de ressource et à un motif d’action :",
     session: "pour ouvrir une session,",
     recording: "pour relire les enregistrements,",
     breakglass: "pour décider d'une demande d'urgence. L'API publique ne liste pas les politiques.",
@@ -281,6 +281,8 @@ export default {
       name: "Nom",
       role: "Rôle",
       resourcePattern: "Motif de ressource",
+      actionPattern: "Motif d’action",
+      actionPatternHelp: "Action exacte (session:create) ou préfixe maîtrisé (session:*). N’utilisez * que si toutes les actions sont réellement nécessaires.",
       effect: "Effet",
       allow: "autoriser",
       deny: "refuser",

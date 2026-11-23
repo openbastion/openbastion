@@ -374,13 +374,15 @@ describe("Policies", () => {
     const { api, calls } = fakeApi({ "POST /policies": { status: 201, body: {} } });
     signedIn(api, <PolicyForm />);
     expect((await screen.findByRole("form", { name: "Créer une politique" })).className).toContain("ob-surface");
+    expect((screen.getByLabelText("Motif d’action") as HTMLInputElement).required).toBe(true);
     const field = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
     field("Nom", "dba-on-prod");
     field("Rôle", "dba");
     field("Motif de ressource", "vault:account:acc_1");
+    field("Motif d’action", "session:create");
     fireEvent.click(screen.getByText("Créer"));
     expect((await screen.findByRole("status")).textContent).toContain("Politique dba-on-prod créée");
-    expect(calls[0].body).toEqual({ name: "dba-on-prod", role: "dba", resourcePattern: "vault:account:acc_1", effect: "allow" });
+    expect(calls[0].body).toEqual({ name: "dba-on-prod", role: "dba", resourcePattern: "vault:account:acc_1", actionPattern: "session:create", effect: "allow" });
   });
 });
 

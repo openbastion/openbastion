@@ -78,3 +78,7 @@
 - La recherche d'une session par identifiant utilise `GET /sessions/{id}` et reste soumise à la politique de lecture de la ressource. La sélection d'une demande déjà renvoyée par la file d'approbation réutilise cet objet autorisé sans déclencher une lecture additionnelle.
 - L'Admin UI ne fournit pas de terminal SSH interactif ni de flux de commandes live. Les commandes enregistrées restent consultables via la recherche d'enregistrements existante.
 - Le contrat de file d'alertes, de sévérité, de compteur non traité et d'acquittement n'est pas encore exposé par l'API ; l'interface ne présente donc aucun faux compteur d'alertes.
+
+## Politiques historiques avec `action_pattern='*'`
+
+ADR-0114 conserve `action_pattern='*'` pour les politiques déjà présentes et pour les clients HTTP qui omettent encore `actionPattern`. Ces politiques couvrent toutes les actions sur leur motif de ressource. L'Admin UI et les seeds Base44 créent désormais des politiques avec des actions explicites, mais les enregistrements wildcard déjà stockés ne sont ni inventoriés ni réduits automatiquement. Il faut exporter les lignes depuis PostgreSQL, valider les actions avec les propriétaires de rôles, puis appliquer une réduction additive et auditée ; voir `docs/security/legacy-action-pattern-inventory.md`. La route publique ne liste pas les politiques.

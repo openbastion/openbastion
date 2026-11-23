@@ -26,7 +26,8 @@ Pour donner ce pouvoir à une astreinte, sur un compte :
 curl -X POST https://bastion.example.com/api/v1/policies \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "oncall-can-end-prod-db-01-sessions", "role": "oncall",
-       "resourcePattern": "session-terminate:account:<id-de-prod-db-01>", "effect": "allow"}'
+       "resourcePattern": "session-terminate:account:<id-de-prod-db-01>",
+       "actionPattern": "session:terminate", "effect": "allow"}'
 ```
 
 Un `*` final est un préfixe : `session-terminate:account:*` couvre **tous** les comptes — réservez-le à un rôle d'urgence réellement transverse, et gardez à l'esprit que `*` seul, ou `session*`, couvrent aussi cette ressource. Un refus explicite (`effect: deny`) l'emporte toujours.
@@ -45,7 +46,8 @@ Ce que l'on voit dans l'audit : la terminaison (`session.terminate`) est écrite
 curl -X POST https://bastion.example.com/api/v1/policies \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "secops-can-read-prod-db-01-sessions", "role": "secops",
-       "resourcePattern": "session-read:account:<id-de-prod-db-01>", "effect": "allow"}'
+       "resourcePattern": "session-read:account:<id-de-prod-db-01>",
+       "actionPattern": "session:read", "effect": "allow"}'
 ```
 
 Un `*` final est un préfixe : `session-read:account:*` couvre **tous** les comptes — et donc les **justifications d'urgence** de toutes les demandes ; réservez-le à un rôle réellement transverse, et gardez à l'esprit que `*` seul, ou `session*`, couvrent aussi cette ressource. Un refus explicite (`effect: deny`) l'emporte toujours. **Lire une session n'est pas lire ce qui s'y est tapé** : les commandes enregistrées restent derrière le rôle auditeur du Command Recorder.
