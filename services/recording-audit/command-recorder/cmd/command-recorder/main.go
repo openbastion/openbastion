@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/transit"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/application"
@@ -62,6 +64,8 @@ func runService() {
 	// without it (ADR-0022): there is no setting that turns this off.
 	auditURL := mustEnv("AUDIT_URL", rt.DefaultURL("127.0.0.1:8082"))
 
+	var poolDB *sql.DB
+	var poolConfig dbpool.Config
 	var repo domain.CommandRepository
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		// Fail closed, not open: with PostgreSQL every command is encrypted
@@ -72,10 +76,15 @@ func runService() {
 		// give this service its OWN key, not the Password Vault's.
 		kek, previous := recordingKeys()
 		ctx := context.Background()
-		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		config, err := dbpool.ParseEnv(os.LookupEnv)
+		if err != nil {
+			log.Fatalf("command-recorder: database pool configuration: %v", err)
+		}
+		db, err := infrastructure.OpenPostgresWithPoolConfig(ctx, dsn, config)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
+		poolDB, poolConfig = db, config
 		store, err := infrastructure.NewPostgresStore(ctx, db, kek, previous...)
 		if err != nil {
 			log.Fatalf("postgres store: %v", err)
@@ -133,7 +142,12 @@ func runService() {
 	log.Printf("  -> authorization: %s", authzURL)
 	log.Printf("  -> audit: %s (every read of a recording is written there before it is served)", auditURL)
 	log.Printf("command-recorder: the refusals of reads of a recording are written to the audit per user: a burst of %d, then %d a minute (per process; a refusal is the same whatever the budget says)", readBurst, readRate)
-	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+	if poolDB != nil {
+		srv.WithMetrics(dbpool.MetricsHandler("command-recorder", poolDB, poolConfig))
+		log.Printf("command-recorder: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	}
+	routes := srv.Routes()
+	log.Fatal(rt.ListenAndServe(":"+port, routes, interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

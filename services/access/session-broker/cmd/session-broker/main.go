@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/webhook"
 	"github.com/openbastion/openbastion/services/access/session-broker/internal/application"
@@ -65,6 +67,8 @@ func runService() {
 	sshProxyURLs := proxyURLsFor("SSH_PROXY_URLS", "SSH_PROXY_URL", rt.DefaultURL("127.0.0.1:8085"))
 	vncProxyURLs := proxyURLsFor("RDP_VNC_PROXY_URLS", "RDP_VNC_PROXY_URL", rt.DefaultURL("127.0.0.1:8090"))
 
+	var poolDB *sql.DB
+	var poolConfig dbpool.Config
 	var store domain.SessionRepository
 	var pgStore *infrastructure.PostgresStore
 	var previousKeys []domain.MetadataKey
@@ -77,10 +81,15 @@ func runService() {
 			log.Fatalf("session-broker: %v", err)
 		}
 		ctx := context.Background()
-		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		config, err := dbpool.ParseEnv(os.LookupEnv)
+		if err != nil {
+			log.Fatalf("session-broker: database pool configuration: %v", err)
+		}
+		db, err := infrastructure.OpenPostgresWithPoolConfig(ctx, dsn, config)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
+		poolDB, poolConfig = db, config
 		pgStore = infrastructure.NewPostgresStore(db, current, previous...)
 		store = pgStore
 		log.Printf("session-broker: session metadata signed under key %q (ADR-0116)", current.ID)
@@ -284,7 +293,12 @@ func runService() {
 	log.Printf("  -> vault:         %s", vaultURL)
 	log.Printf("  -> audit:         %s", auditURL)
 	log.Printf("  -> ssh-proxy:     %s", strings.Join(sshProxyURLs, ", "))
-	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+	if poolDB != nil {
+		srv.WithMetrics(dbpool.MetricsHandler("session-broker", poolDB, poolConfig))
+		log.Printf("session-broker: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	}
+	routes := srv.Routes()
+	log.Fatal(rt.ListenAndServe(":"+port, routes, interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

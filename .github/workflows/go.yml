@@ -35,6 +35,7 @@ jobs:
       - uses: ./.github/actions/setup-go
         with:
           go-version: ${{ env.GO_VERSION }}
+      - run: make db-pool-budget-check
       - run: make proto-tools proto-lint build vet
       - name: gofmt -l (must print nothing)
         run: |
