@@ -45,7 +45,7 @@ seed_vnc() {
   fi
   log "onboarding the VNC demonstration account"
   step 'VNC policy' POST /policies \
-    '{"name":"vault-admin-demo-screen","role":"vault-admin","resourcePattern":"vault:account:acc_demo_vnc","effect":"allow"}'
+    '{"name":"vault-admin-demo-screen","role":"vault-admin","resourcePattern":"vault:account:acc_demo_vnc","actionPattern":"session:create","effect":"allow"}'
   step 'VNC account' POST /vault/accounts \
     "{\"id\":\"acc_demo_vnc\",\"name\":\"demo-desktop\",\"username\":\"operator\",
       \"targetHost\":\"vnc-target:5901\",\"protocol\":\"vnc\",\"rotationPolicy\":\"manual\",
@@ -73,7 +73,7 @@ seed_ssh() {
   esac
   log "onboarding the SSH demonstration account"
   step 'SSH policy' POST /policies \
-    '{"name":"vault-admin-demo-ssh","role":"vault-admin","resourcePattern":"vault:account:acc_demo","effect":"allow"}'
+    '{"name":"vault-admin-demo-ssh","role":"vault-admin","resourcePattern":"vault:account:acc_demo","actionPattern":"session:create","effect":"allow"}'
   step 'SSH account' POST /vault/accounts \
     "{\"id\":\"acc_demo\",\"name\":\"demo-shell\",\"username\":\"root\",
       \"targetHost\":\"demo-ssh-target:2022\",\"protocol\":\"ssh\",\"rotationPolicy\":\"manual\",
@@ -91,7 +91,24 @@ seed_auditor() {
     -authn "$AUTHN" -username "$AUDITOR_NAME" -display "Auditeur" \
     -roles session-auditor 2>&1 | sed 's/^/seed: /' || true
   step 'recording read policy' POST /policies \
-    '{"name":"session-auditor-recordings","role":"session-auditor","resourcePattern":"recording:session:*","effect":"allow"}'
+    '{"name":"session-auditor-recordings","role":"session-auditor","resourcePattern":"recording:session:*","actionPattern":"recording:session:read","effect":"allow"}'
+}
+
+seed_vault_admin_policies() {
+  token=$1
+  for action in \
+    vault:account:list \
+    vault:account:onboard \
+    vault:account:rotate \
+    vault:account:delete \
+    vault:account:pin \
+    vault:account:approval \
+    vault:account:screen-profile \
+    vault:account:kerberos; do
+    suffix=${action##*:}
+    step "vault-admin ${suffix} policy" POST /policies \
+      "{\"name\":\"vault-admin-${suffix}\",\"role\":\"vault-admin\",\"resourcePattern\":\"vault:account-admin:*\",\"actionPattern\":\"${action}\",\"effect\":\"allow\"}"
+  done
 }
 
 step() {
@@ -107,6 +124,7 @@ step() {
 TOKEN=$(login)
 if [ -n "$TOKEN" ]; then
   log "$USER_NAME already exists"
+  seed_vault_admin_policies "$TOKEN"
   seed_ssh "$TOKEN"
   seed_vnc "$TOKEN"
   seed_auditor "$TOKEN"
@@ -122,12 +140,8 @@ printf '%s\n' "$PASSWORD" | go run github.com/openbastion/openbastion/cli/openba
 TOKEN=$(login)
 [ -n "$TOKEN" ] || { log "the operator cannot log in — stopping"; exit 1; }
 
-# The policy that lets the Vault-administering role list and manage the Vault's accounts.
-log "creating the vault-admin policy"
-curl -sS -o /dev/null -w 'seed: policy -> HTTP %{http_code}\n' -X POST "$GATEWAY/policies" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"vault-admin-accounts","role":"vault-admin","resourcePattern":"vault:account-admin:*","effect":"allow"}'
-
+# Account administration is split by action: a new Vault action is not granted implicitly.
+seed_vault_admin_policies "$TOKEN"
 seed_ssh "$TOKEN"
 seed_vnc "$TOKEN"
 seed_auditor "$TOKEN"

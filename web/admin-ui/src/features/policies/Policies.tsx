@@ -12,7 +12,7 @@ import { useAppTranslation } from "../../shared/i18n";
 export function PolicyForm() {
   const { t } = useAppTranslation();
   const { api } = useSignedIn();
-  const [f, setF] = useState({ name: "", role: "", resourcePattern: "", effect: "allow" });
+  const [f, setF] = useState({ name: "", role: "", resourcePattern: "", actionPattern: "", effect: "allow" });
   const [error, setError] = useState<unknown>();
   const [ok, setOk] = useState<string>();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -25,7 +25,7 @@ export function PolicyForm() {
       const name = f.name;
       await api.request("POST", "/policies", f);
       setOk(t("policies.created", { name }));
-      setF({ name: "", role: "", resourcePattern: "", effect: "allow" });
+      setF({ name: "", role: "", resourcePattern: "", actionPattern: "", effect: "allow" });
     } catch (err) {
       setError(err);
     }
@@ -48,6 +48,9 @@ export function PolicyForm() {
       </FormField>
       <FormField id="policy-resource" label={t("policies.form.resourcePattern")} required>
         <Input value={f.resourcePattern} onChange={set("resourcePattern")} />
+      </FormField>
+      <FormField id="policy-action" label={t("policies.form.actionPattern")} description={t("policies.form.actionPatternHelp")} required>
+        <Input value={f.actionPattern} onChange={set("actionPattern")} />
       </FormField>
       <FormField id="policy-effect" label={t("policies.form.effect")}>
         <Select value={f.effect} onChange={set("effect")}>

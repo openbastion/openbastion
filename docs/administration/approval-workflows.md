@@ -60,6 +60,7 @@ curl -X POST https://bastion.example.com/api/v1/policies \
     "name": "oncall-breakglass-prod-db-01",
     "role": "oncall-sre",
     "resourcePattern": "breakglass:account:<id-de-prod-db-01>",
+    "actionPattern": "session:breakglass",
     "effect": "allow"
   }'
 ```
@@ -72,7 +73,8 @@ curl -X POST https://bastion.example.com/api/v1/policies \
 curl -X POST https://bastion.example.com/api/v1/policies \
   -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "incident-lead-approves-prod-db-01", "role": "incident-lead",
-       "resourcePattern": "breakglass-approve:account:<id-de-prod-db-01>", "effect": "allow"}'
+       "resourcePattern": "breakglass-approve:account:<id-de-prod-db-01>",
+       "actionPattern": "session:approve", "effect": "allow"}'
 ```
 
 Évitez `*` et `breakglass*` : ces motifs couvrent **à la fois** la demande et l'approbation, et annulent la double validation. Le moteur compare des rôles et des motifs, pas des personnes : veillez à ce que personne ne détienne les deux rôles sur un même compte — et, de toute façon, **personne n'approuve sa propre demande** (la comparaison porte sur l'identifiant d'utilisateur, pas sur le rôle).
