@@ -3,15 +3,17 @@ module github.com/openbastion/openbastion/services/proxy/ssh-proxy
 go 1.26.0
 
 require (
+	github.com/openbastion/openbastion/pkg/processsecurity v0.0.0-20261123171932-2a177f4763d3
 	github.com/openbastion/openbastion/pkg/proxycore v0.0.0
-	golang.org/x/crypto v0.58.0
+	github.com/openbastion/openbastion/pkg/securemem v0.0.0-20261123171932-2a177f4763d3
+	golang.org/x/crypto v0.59.0
 )
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
 
 // Un replace local explicite vers pkg/proxycore : il lève l'ambiguïté du mode
