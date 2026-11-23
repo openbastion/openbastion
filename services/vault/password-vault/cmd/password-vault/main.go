@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/openbastion/openbastion/pkg/buildinfo"
 	"github.com/openbastion/openbastion/pkg/command"
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/mtls"
 	"github.com/openbastion/openbastion/pkg/processsecurity"
 	"github.com/openbastion/openbastion/pkg/transit"
@@ -49,16 +51,23 @@ func runService() {
 
 	kms := keyring(dsn, kmsKeyHex)
 
+	var poolDB *sql.DB
+	var poolConfig dbpool.Config
 	var accounts domain.AccountRepository
 	var secrets domain.SecretRepository
 	var scopes domain.ScopeRepository
 
 	if dsn != "" {
 		ctx := context.Background()
-		db, err := infrastructure.OpenPostgres(ctx, dsn)
+		config, err := dbpool.ParseEnv(os.LookupEnv)
+		if err != nil {
+			log.Fatalf("password-vault: database pool configuration: %v", err)
+		}
+		db, err := infrastructure.OpenPostgresWithPoolConfig(ctx, dsn, config)
 		if err != nil {
 			log.Fatalf("postgres: %v", err)
 		}
+		poolDB, poolConfig = db, config
 		store := infrastructure.NewPostgresStore(db)
 		accounts, secrets, scopes = store, store, store
 		log.Printf("password-vault: using PostgreSQL at %s", redactDSN(dsn))
@@ -125,7 +134,12 @@ func runService() {
 	log.Printf("password-vault listening on :%s (HTTP/JSON — see /NOTES_SANDBOX.md)", port)
 	log.Printf("  -> authorization: %s", authorizationURL)
 	log.Printf("  -> audit:         %s (rotations; the targets are reached over SSH, their pinned host keys verified — ADR-0037, ADR-0039)", auditURL)
-	log.Fatal(rt.ListenAndServe(":"+port, srv.Routes(), interfaces.CallerRules()))
+	if poolDB != nil {
+		srv.WithMetrics(dbpool.MetricsHandler("password-vault", poolDB, poolConfig))
+		log.Printf("password-vault: PostgreSQL pool max_open=%d max_idle=%d", poolConfig.MaxOpenConns, poolConfig.MaxIdleConns)
+	}
+	routes := srv.Routes()
+	log.Fatal(rt.ListenAndServe(":"+port, routes, interfaces.CallerRules()))
 }
 
 func redactDSN(dsn string) string {

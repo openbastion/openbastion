@@ -39,6 +39,7 @@ func CallerRules() []mtls.Rule {
 		{Method: http.MethodPost, Path: "/auth/v1/internal/action-step-up/consume", Callers: []string{mtls.SessionBroker}},
 		// Creating a local user has no public surface yet: it is operator tooling.
 		{Method: http.MethodPost, Path: "/auth/v1/users", Callers: []string{mtls.AdminCLI}},
+		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

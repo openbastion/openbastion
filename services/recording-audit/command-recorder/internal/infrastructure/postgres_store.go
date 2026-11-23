@@ -14,13 +14,19 @@ import (
 
 	"github.com/lib/pq" // the driver, and pq.Array
 
+	"github.com/openbastion/openbastion/pkg/dbpool"
 	"github.com/openbastion/openbastion/pkg/migrate"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/internal/domain"
 	"github.com/openbastion/openbastion/services/recording-audit/command-recorder/migrations"
 )
 
 func OpenPostgres(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := openPool(dsn)
+	return OpenPostgresWithPoolConfig(ctx, dsn, dbpool.Defaults())
+}
+
+// OpenPostgresWithPoolConfig applies the limits read by the service entry point (ADR-0135).
+func OpenPostgresWithPoolConfig(ctx context.Context, dsn string, config dbpool.Config) (*sql.DB, error) {
+	db, err := openPool(dsn, config)
 	if err != nil {
 		return nil, err
 	}
