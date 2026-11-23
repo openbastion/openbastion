@@ -2523,12 +2523,12 @@ components:
 
     PolicyInput:
       type: object
-      required: [name, role, resourcePattern, effect]
+      required: [name, role, resourcePattern, actionPattern, effect]
       properties:
         name: { type: string }
         role: { type: string }
         resourcePattern: { type: string, example: "vault:account:prod-*" }
-        actionPattern: { type: string, default: "*", example: "session:create", description: "ADR-0114 : valeur exacte ou joker final. Seule l'omission vaut temporairement * pour compatibilité ; une valeur vide ou null est rejetée. Déclarer explicitement les actions pour les nouvelles politiques." }
+        actionPattern: { type: string, example: "session:create", description: "ADR-0114 : obligatoire. Valeur exacte ou joker final ; * doit être explicitement demandé et justifié." }
         effect: { type: string, enum: [allow, deny] }
 
     Policy:

@@ -15,6 +15,6 @@ curl -X POST https://bastion.example.com/api/v1/policies \
   }'
 ```
 
-Renseignez toujours `actionPattern` pour les nouvelles politiques : une action exacte est préférable ; un joker final ne doit couvrir que la famille d’actions voulue. L’API conserve temporairement l’omission comme `*` pour les clients historiques (ADR-0114), mais cette compatibilité ne doit pas être utilisée par les nouveaux clients.
+`actionPattern` est obligatoire. Une action exacte est préférable ; un joker final ne doit couvrir que la famille d’actions voulue. `*` reste accepté uniquement lorsqu’il est explicitement fourni et justifié. Une propriété absente, vide ou `null` est rejetée (`400`) : aucune politique ne reçoit une portée implicite.
 
 Le comportement est **deny-by-default** (`docs/security/authorization-rbac-abac.md`) : un rôle sans politique associée n'ouvre l'accès à rien. Il n'existe pas de politique implicite « administrateur = accès total » — elle doit être créée explicitement si souhaitée.

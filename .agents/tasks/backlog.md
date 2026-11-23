@@ -9,7 +9,6 @@ Le backlog est organisé en trois axes. Les risques de sécurité sont distingu�
 | Priorité | Sujet | État vérifié | Prochaine action |
 |---|---|---|---|
 | ~~P1 — bloquant~~ | ~~**SI-02 — révocation/fin de session concurrente à une frappe** (ADR-0097)~~ | **Clôturé** : CI #987, run `45153071885`, job PostgreSQL 16 PASS ; TigerVNC réel, oracle X11, intégration avec base et arrêt de la cible PASS. | Aucune action SI-02 restante dans cette PR ; conserver la preuve dans l’historique CI et `NOTES_SANDBOX.md`. |
-| P1 — durcissement | **Politiques historiques `action_pattern=*`** | Audit source terminé : Admin UI, seeds et exemples documentaires omettaient l’action et créaient donc des politiques `*`. Les clients maintenus déclarent maintenant des actions explicites ; les helpers d’intégration conservent volontairement le cas legacy. Aucun accès à la base d’une installation ni route publique de liste des politiques n’est disponible dans cet audit. | Obtenir l’export SQL en lecture seule des politiques réelles, faire valider les actions par les propriétaires de rôles, puis concevoir la réduction additive et auditée. Voir `docs/security/legacy-action-pattern-inventory.md`. |
 
 ### 1.2 Risques traités, preuves livrées et limites résiduelles
 
