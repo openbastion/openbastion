@@ -98,6 +98,11 @@ func (s *HTTPServer) handleEmitEvent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if errors.Is(err, domain.ErrSessionAlertOutboxFull) || errors.Is(err, application.ErrSessionAlertDetectionUnavailable) {
+			log.Printf("audit-service: session alert detection is unavailable: %v", err)
+			http.Error(w, "the event could not be durably scheduled for detection", http.StatusServiceUnavailable)
+			return
+		}
 		// The store's error can name addresses and tables: it stays in this log.
 		log.Printf("audit-service: an event could not be appended: %v", err)
 		http.Error(w, "the event could not be appended", http.StatusInternalServerError)

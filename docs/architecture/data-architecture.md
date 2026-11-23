@@ -484,6 +484,25 @@ CREATE TABLE IF NOT EXISTS alert_outbox (
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_due ON alert_outbox (due_at);
 ```
 
+### Outbox de détection des alertes de session (ADR-0117)
+
+`services/recording-audit/audit-service/migrations/005_session_alert_detection_outbox.sql` sépare le travail de détection opérateur de la livraison webhook ci-dessus. Seuls les événements dont le couple émetteur mTLS/action correspond exactement à une règle versionnée sont inscrits. L'ajout de l'événement signé et de sa référence d'outbox est atomique ; le verrou consultatif PostgreSQL sérialise le contrôle de capacité entre réplicas. Le plafond initial est de 4 096 éléments en attente. À saturation, la transaction refuse aussi l'événement source : l'action appelante échoue fermée.
+
+```sql
+CREATE TABLE IF NOT EXISTS session_alert_detection_outbox (
+    source_event_id  TEXT PRIMARY KEY,
+    catalog_version  TEXT NOT NULL CHECK (catalog_version <> ''),
+    attempts         INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    next_attempt_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_error_code  TEXT NOT NULL DEFAULT '',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_session_alert_detection_due
+    ON session_alert_detection_outbox (next_attempt_at, source_event_id);
+```
+
+Cette première tranche ne traite pas encore les lignes : le worker, la projection `session_alerts`, les événements `session.alert.detected`, les routes de lecture/acquittement et la façade Gateway restent à livrer. Tant qu'une référence de détection est en attente, `DeleteThrough` refuse l'archivage de son événement source ; une file non consommée peut donc retarder l'archivage, jamais perdre la preuve. La table ne duplique ni le corps source ni les détails potentiellement sensibles. `alert_outbox` reste exclusivement dédiée aux webhooks ADR-0057.
+
 ### Expiration des sessions (ADR-0034)
 
 `services/access/session-broker/migrations/002_session_expiry.sql` — la première migration numérotée après `001_init.sql` — ajoute à `sessions` :

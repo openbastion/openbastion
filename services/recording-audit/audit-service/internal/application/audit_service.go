@@ -185,7 +185,15 @@ func (s *AuditService) EmitEventAsWithDetails(ctx context.Context, emitter, acto
 	if err != nil {
 		return nil, err
 	}
-	if err := s.store.Append(ctx, e); err != nil {
+	if rule, detected := MatchSessionAlertRule(e); detected {
+		detectionStore, ok := s.store.(SessionAlertDetectionStore)
+		if !ok {
+			return nil, ErrSessionAlertDetectionUnavailable
+		}
+		if err := detectionStore.AppendWithDetection(ctx, e, rule.CatalogVersion); err != nil {
+			return nil, err
+		}
+	} else if err := s.store.Append(ctx, e); err != nil {
 		return nil, err
 	}
 	tip := *e
