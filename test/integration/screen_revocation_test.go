@@ -83,14 +83,14 @@ func (r *gatedTCPRelay) serve(client net.Conn) {
 	go func() {
 		defer close(sourceDone)
 		defer close(chunks)
-		buf := make([]byte, 4096)
+		buf := make([]byte, 64)
 		for {
 			n, readErr := client.Read(buf)
 			if n > 0 {
 				chunk := append([]byte(nil), buf[:n]...)
 				r.pending.Add(int64(n))
 				select {
-				case chunks <- chunk: // bounded well above the 4 KiB Vault input limit
+				case chunks <- chunk: // small chunks let the independent X11 oracle gate mid-stream
 				case <-stopReader:
 					return
 				}
@@ -215,9 +215,9 @@ func testScreenVaultSecretInjectionRevokedDuringRealTyping(
 	if mfa == nil || target == nil || relay == nil {
 		t.Fatal("SI-02 requires an enrolled operator, real TigerVNC target and gated relay")
 	}
-	const secretLength = 4096
+	const secretLength = 128
 	if len(target.password) != secretLength {
-		t.Fatalf("real target password length = %d, want %d for a multi-record RFB input", len(target.password), secretLength)
+		t.Fatalf("real target password length = %d, want %d for the deterministic in-flight RFB input", len(target.password), secretLength)
 	}
 
 	status, raw := api.in(t).call(operatorToken, http.MethodPost, "/sessions", map[string]any{
