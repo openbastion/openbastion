@@ -29,8 +29,8 @@ Le backlog est organisé en trois axes. Les risques de sécurité sont distingu�
 | Sujet | État | Prochaine action |
 |---|---|---|
 | **ADR-0080 — recherche plein texte** | **Terminé côté Admin UI** le 22 novembre 2026 : Historique (`/sessions/search`) et Enregistrements (`/recordings/search`), filtres, pagination, troncature et ouverture du replay. Les tests UI couvrent maintenant ces parcours. | Aucun incrément fonctionnel ouvert. Garder les bornes ADR-0080 : 31 jours, 200 sessions par recherche de commandes, sous-chaîne et déchiffrement à la volée. |
-| **ADR-0111 — marqueurs de relecture vidéo** | Contrat et stockage décrits dans la roadmap ; raccordement complet au parcours d'injection et affichage dans la timeline restent à confirmer/livrer sur `main`. | Vérifier le dernier état du code et terminer le raccordement transactionnel et la timeline Admin UI sans exposer le contenu secret. |
-| **File d'alertes de session** | L'Admin UI indique explicitement que le contrat API de file, sévérité, compteur non traité et acquittement n'est pas disponible. Aucun compteur fictif n'est affiché. | Définir le contrat API et les règles d'autorisation/audit avant d'implémenter le traitement UI. |
+| ~~**ADR-0111 — marqueurs de relecture vidéo**~~ | **Clôturé** : émission après injection Vault VNC/RDP, API paginée et timeline Admin UI livrées ; tests d’intégration contrôlent le marqueur et l’absence de fuite du secret. | Aucune action restante sur le contrat initial. Toute nouvelle catégorie de marqueur demande un contrat et des tests dédiés. |
+| **File d'alertes de session (ADR-0117/0122)** | **Contrat accepté le 23 novembre 2026** : Audit Service propriétaire, événements sources authentifiés, règles versionnées, outbox durable, permissions distinctes et acquittement audité. Aucun code de file n'est encore livré. | Implémenter la projection durable et son worker, les routes internes mTLS, les routes Gateway autorisées, puis l'Admin UI ; tests de provenance, reprise, concurrence, isolation par principal et fail-closed. Les signaux absents restent désactivés. |
 | **Workflow / Approval Engine complet** | L'approbation de session existe, mais le moteur multi-étapes configurable n'est pas livré comme capacité générale. | Concevoir les états, validations N+1/double validation, fenêtre horaire, expiration, justification et intégrations ticketing avant développement. |
 | **Reporting, User Portal et moteur de risque/anomalies** | Périmètre de roadmap ultérieur, non livré dans le MVP actuel. | Démarrer par des ADR et des contrats de données/audit ; ne pas présenter ces capacités comme disponibles. |
 
@@ -61,7 +61,7 @@ Les lignes ci-dessous sont conservées comme historique de livraison, pas comme 
 
 | Sujet | État | Prochaine action |
 |---|---|---|
-| **ADR-0135 — budget des pools PostgreSQL** | **Implémenté** : parseurs stricts dans les sept services, défauts 10/10 conservés, manifeste cluster, validateur CI/Compose, métriques `DB.Stats()` sous mTLS. | Renseigner le manifeste avec les HPA/maxSurge et overrides réels de chaque cluster ; mesurer en production représentative avant tout changement des défauts. Le benchmark multi-hôte reste différé à la demande de l'utilisateur. |
+| **ADR-0135 — budget des pools PostgreSQL** | **Implémenté dans la PR #285** : parseurs stricts dans les sept services, défauts 10/10 conservés, manifeste cluster, validateur CI/Compose et métriques `DB.Stats()` sous mTLS. | Renseigner le manifeste avec les HPA/maxSurge et overrides réels lorsqu’un cluster sera déployé ; mesurer en production représentative avant tout changement des défauts. Le benchmark multi-hôte reste différé à la demande de l'utilisateur. |
 
 ## 3. Interopérabilité / protocoles
 
