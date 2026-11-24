@@ -136,6 +136,12 @@ services:
       KMS_KEY_HEX: ${VAULT_KMS_KEY_HEX:?}
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: password-vault}}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/password-vault", "probe", "--port", "8081", "--path", "/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
 
   audit-service:
     <<: *service
@@ -322,6 +328,12 @@ services:
       - "${OB_BIND:-127.0.0.1}:${OB_SSH_PORT:-2222}:2222"
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: ssh-proxy}}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/ssh-proxy", "probe", "--port", "8085", "--path", "/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
 
   # Optional graphical target proxy. Enable both --profile recording and --profile rdp-vnc,
   # and set SCREEN_TARGET_CA_FILE to an explicit PEM trust bundle for VNC targets.
