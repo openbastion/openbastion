@@ -23,7 +23,7 @@ Le dépôt contient deux applications distinctes :
 
 Chaque application possède son propre point d'entrée, son routeur, ses providers, ses layouts, ses fonctionnalités et ses tests. Aucune application n'importe le code métier de l'autre. Les évolutions et livraisons de l'une ne doivent pas imposer une régression fonctionnelle à l'autre.
 
-Le User Portal adopte React, TypeScript et Vite, en cohérence avec l'ADR-0036. Le choix de nouvelles dépendances runtime, d'un routeur tiers ou d'un gestionnaire d'état tiers n'est pas implicite dans cette ADR : toute dépendance supplémentaire doit être justifiée, évaluée pour la sécurité et validée séparément.
+Le User Portal adopte React, TypeScript et Vite, en cohérence avec l'ADR-0036. Le choix de nouvelles dépendances runtime, d'un routeur tiers ou d'un gestionnaire d'état tiers n'est pas implicite dans cette ADR : toute dépendance supplémentaire doit être justifiée, évaluée pour la sécurité et validée séparément. Le routeur de l'Admin UI est tranché par [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) (proposé le 24 novembre 2026) ; pour le User Portal, la règle tient.
 
 ### 2. Arborescence frontend normative
 

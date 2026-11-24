@@ -235,7 +235,7 @@ Pour chaque comportement ajouté, les tests Vitest/Testing Library couvrent les 
 ## Alternatives envisagées
 
 - **Adopter immédiatement une bibliothèque UI complète** : écarté pour préserver la maîtrise du design system et éviter de diffuser des API tierces dans les applications. Les primitives Radix ne sont utilisées que derrière des composants OpenBastion ciblés.
-- **Introduire un routeur et un gestionnaire d'état tiers dès maintenant** : écarté ; la navigation et les besoins d'état doivent d'abord être éprouvés avec les parcours réels. Un besoin démontré pourra faire l'objet d'un ADR distinct.
+- **Introduire un routeur et un gestionnaire d'état tiers dès maintenant** : écarté ; la navigation et les besoins d'état doivent d'abord être éprouvés avec les parcours réels. Un besoin démontré pourra faire l'objet d'un ADR distinct. *Levée pour le routeur par [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) (proposé le 24 novembre 2026, effet à son acceptation) : l'audit a démontré le besoin ; le gestionnaire d'état tiers reste écarté.*
 - **Créer un dashboard et une recherche en agrégeant directement les bases ou services internes** : refusé ; cela contournerait la Gateway, l'autorisation, les contrats publics et les frontières de service.
 - **Afficher des compteurs, scores ou alertes simulés en attendant les API** : refusé ; cela donnerait à l'opérateur une représentation fausse de la posture de sécurité.
 - **Faire une refonte visuelle complète en une seule livraison** : écarté au profit de lots indépendants, testables et réversibles qui préservent les parcours existants.
