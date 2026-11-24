@@ -63,6 +63,12 @@ Les lignes ci-dessous sont conservées comme historique de livraison, pas comme 
 |---|---|---|
 | **ADR-0135 — budget des pools PostgreSQL** | ADR accepté : plafonds locaux par service, budget par cluster tenant compte des réplicas et de la réserve opérationnelle ; défauts 10/10 inchangés. Aucun validateur ni nouveau réglage n'est encore livré. | Implémenter les parseurs stricts, le manifeste de capacité, le validateur CI et les métriques `DB.Stats()` ; mesurer ensuite avant tout changement des défauts. |
 
+### 2.4 Refonte de l'Admin UI
+
+| Sujet | État | Prochaine action |
+|---|---|---|
+| **ADR-0136 — navigation adressable** | Contrat proposé : `react-router` seule dépendance de routage, `basename = BASE_URL`, déclaration unique `app/navigation.ts`, 403/404 explicites, filtres en `searchParams`. Aucun code n'est modifié, aucune dépendance n'est ajoutée. L'audit validé est dans `docs/ui/audit-refonte-admin-ui.md`. | Après acceptation de l'ADR, incrément 2 (baseline mesurée), puis les incréments 3 à 6 (shell partagé) avant le routeur (7). |
+
 ## 3. Interopérabilité / protocoles
 
 ### 3.1 RDP — moteur Go et compatibilité Windows/RDS
