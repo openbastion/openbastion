@@ -59,10 +59,10 @@ func TestPostgresFlow_TheAuditChainIsKeyed_ARewrittenTailIsFound_AndTheKeyIsRequ
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`TRUNCATE audit_events RESTART IDENTITY`); err != nil {
+	if _, err := db.Exec(`TRUNCATE session_alert_detection_outbox, audit_events RESTART IDENTITY`); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE audit_events RESTART IDENTITY`) })
+	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE session_alert_detection_outbox, audit_events RESTART IDENTITY`) })
 
 	root := repoRoot(t)
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-27")

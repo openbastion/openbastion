@@ -388,7 +388,7 @@ func TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart(t *testing.T)
 		t.Fatalf("opening database for setup: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("TRUNCATE audit_events RESTART IDENTITY"); err != nil {
+	if _, err := db.Exec("TRUNCATE session_alert_detection_outbox, audit_events RESTART IDENTITY"); err != nil {
 		t.Fatalf("truncating audit_events before the test: %v", err)
 	}
 

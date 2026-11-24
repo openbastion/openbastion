@@ -5513,3 +5513,11 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Tests locaux** : `go test ./services/recording-audit/audit-service/... -count=1` PASS après ajout des tests de catalogue, de provenance exacte, d'atomicité mémoire et de borne. Le test PostgreSQL transactionnel est ajouté mais se skippe si `TEST_DATABASE_URL` n'est pas configuré ; la validation PostgreSQL réelle reste à confirmer.
 - **Non livré dans cet incrément** : worker, reprise après crash, projection `session_alerts`, événement `session.alert.detected`, routes de lecture/acquittement, façade Gateway/Authorization et Admin UI. La file n'est donc pas encore visible par les opérateurs et doit être consommée dans l'incrément suivant.
 - **Limites** : l'ingestion transactionnelle ne prouve pas encore la reprise du worker ; le contrôle de capacité est global à la table et utilise le verrou consultatif `731947201`. L'archivage refuse désormais de supprimer une source encore présente dans cette outbox ; les archives peuvent donc être retardées jusqu'à la livraison du worker.
+
+
+## 2026-11-24 — PR #297 : corriger les tests hostkey et le nettoyage de l'outbox
+
+- **Reproduction CI** : `TestAuthority_EveryImpostorIsRefused` échouait avant les autres tests Go, car `ssh.Certificate.SignCert` refuse lui-même une liste `ValidPrincipals` vide. Le test ne parvenait donc pas jusqu'au vérificateur qu'il voulait éprouver.
+- **Correction hostkey** : signer d'abord un certificat structurellement valide, puis vider `ValidPrincipals` afin de simuler le certificat malformé reçu sur le fil. Le vérificateur reste testé contre l'absence de principal ; aucun contrôle de sécurité n'est relâché.
+- **Nettoyage PostgreSQL** : la file `session_alert_detection_outbox` est maintenant purgée avec `audit_events` dans les helpers d'intégration et dans le `PURGE` du workflow PostgreSQL. Cela évite de conserver des références de détection d'un test à l'autre, puisque cette première tranche ne livre pas encore le worker.
+- **Portée** : correction des fixtures et de l'isolation des tests uniquement ; aucun changement au contrat d'ingestion ou au schéma de production.
