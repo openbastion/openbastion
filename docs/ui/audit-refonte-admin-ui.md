@@ -81,3 +81,62 @@ Chaque incrément est livrable seul, sur sa branche, avec `make ui-test ui-build
 3. **Accès direct à une page interdite** : 403 explicite, au lieu du repli silencieux sur Vue d'ensemble.
 4. **État dans l'URL** : filtres et onglets en `searchParams` ; rien de sensible en URL.
 5. **Identité visuelle** : décision reportée à l'incrément 13 — palette Figma ou tokens actuels, Inter ou pile système, logo du package ou `BrandMark` ; choix réversible.
+
+## 8. Inventaire des composants monolithiques à extraire vers `@openbastion/ui`
+
+Relevé sur cette branche (`admin-ui-baseline`), avant tout changement de code, sur `web/admin-ui/src/app/AppShell.tsx` (552 lignes) et `web/admin-ui/src/shared/`. Les plages de lignes désignent le fichier tel qu'il est au relevé ; elles servent à l'extraction, pas à une lecture durable.
+
+### 8.1 `AppShell.tsx` — décomposition en dix blocs
+
+| Lignes | Bloc actuel | Nature | Cible dans `@openbastion/ui` | Incrément |
+|---|---|---|---|---|
+| 42–66 | `tabs`, `groups`, `Tab`, `tabOrder` | déclaration de navigation de l'application | reste dans l'app : `app/navigation.ts` (ADR-0137 §3) | 6 |
+| 68–72 | `isTextEntry` | utilitaire clavier (champ de saisie vs raccourci) | `lib/keyboard.ts` du package | 4 |
+| 74–293 | état, préférences, thème, densité, raccourcis, focus, menus, piège de focus mobile | interactions et cycle de vie | `AppShell`, `AppThemeProvider`, `AppMobileNavigation` | 3–4 |
+| 295–326 | `renderNavItem` | item de navigation, actif et favori | `AppNavigationItem` | 3 |
+| 328 | lien d'évitement (`skip-link`) | structure | `AppShell` (prop `skipLink`) | 3 |
+| 330–356 | palette `Ctrl+K` et dialogue de préférences | interactions | `AppCommandPalette` ; le dialogue de préférences reste dans l'app | 4 |
+| 357–381 | `<aside>` : marque, titre, bouton replier | structure | `AppSidebar`, `AppSidebarBrand` | 3 |
+| 382–405 | sélecteur d'espace de travail | interaction | `AppWorkspaceSelector` | 4 |
+| 406–428 | `<nav>` : favoris, groupes, ressources | structure | `AppNavigation`, `AppNavigationGroup`, `AppNavigationResources` | 3 |
+| 429–435 | pied de barre latérale (statut console) | structure | `AppSidebarFooter` | 3 |
+| 436–479 | menu utilisateur (identité, langue, thème, préférences, déconnexion) | interaction | `AppUserMenu` | 4 |
+| 480–542 | `<header>` : fil d'Ariane, déclencheur de recherche, badge d'environnement, notifications, aide, menu mobile | structure | `AppHeader`, `AppBreadcrumbs`, `AppHeaderActions` | 3 |
+| 543–547 | `<main>` et bandeau capacités indisponibles | structure | `AppContent` (slot `banner`) | 3 |
+| 548 | `LegalNotice` | pied de page | `AppShell` (slot `footer`) | 3 |
+
+Contrat à conserver : le shell extrait rend les **mêmes** classes et rôles que l'actuel (`.app-workspace`, `.app-sidebar`, `.app-content`, `.app-header`, `.app-main`, `.nav-item`, `.nav-group`, `.sidebar-*`, `.legal-notice`, `role="complementary"` nommé, `role="navigation"` nommé, `main#main-content` en `tabIndex=-1`). C'est ce contrat que les tests existants pinent (voir §9.3), et c'est lui qui rend l'incrément 6 réversible.
+
+### 8.2 Composants génériques de `shared/ui` et `shared/`
+
+| Fichier | Lignes | Contenu | Décision |
+|---|---|---|---|
+| `shared/ui/AdminPage.tsx` | 68 | `AdminPage` + `PageHead` (cadre d'écran, consignations, actions) | → `AppPage` / `AppPageHead`, sans i18n : le libellé du dépliant des consignations passe en prop | 3 |
+| `shared/BrandMark.tsx` | 12 | bouclier OpenBastion, décoratif | → `AppBrandMark` (motif paramétrable) ; la marque textuelle reste dans l'app | 3 |
+| `shared/ui/ConfirmDialog.tsx` | 82 | confirmation destructive sur `Dialog` | → `AppConfirmDialog` | 4 |
+| `shared/ui/CommandPalette.tsx` | 162 | palette : index local, filtre, clavier, focus | → `AppCommandPalette` générique ; l'app fournit l'index de commandes | 4 |
+| `shared/ui/Modal.tsx` | 31 | enveloppe de `Dialog` (titre, description, fermeture) | doublon du primitif `Dialog` : supprimé au profit du package | 4 |
+| `shared/ui/GatedButton.tsx` | 28 | bouton désactivé faute de capacité, avec explication | → `AppCapabilityButton` (garde/erreurs) | 5 |
+| `shared/ui/FormCard.tsx` | 57 | carte de formulaire (titre, description, soumission) | → `AppFormCard` | 12 |
+| `shared/ui/Pager.tsx` · `ReferencePager.tsx` | 33 · 65 | pagination simple et pagination de référence | → `AppPager` (une seule implémentation) | 12 |
+| `shared/ui/ReferenceCard.tsx` · `ReferenceMetric.tsx` | 106 · 35 | carte et métrique de tableau de bord | restent dans l'app (présentation d'écran, pas de shell) | — |
+| `shared/ui/OperatorPreferencesDialog.tsx` | 138 | préférences de l'opérateur | reste dans l'app ; ses champs viennent déjà du package | — |
+| `shared/ui/LanguageSwitcher.tsx` | 28 | sélecteur de langue | reste dans l'app (i18n propre à l'application) | — |
+| `shared/ui/StatusBadge.tsx` | 18 | badge de statut métier | reste dans l'app (mappe des statuts métier) | — |
+| `shared/LegalNotice.tsx` | 33 | mentions AGPL et révision source | reste dans l'app (constantes de construction Vite) | — |
+
+Les trois ré-exports d'une ligne (`Button.tsx`, `Badge.tsx`, `InlineNotice.tsx`) ne sont pas des composants monolithiques : ce sont des alias de compatibilité du package, à conserver.
+
+### 8.3 Primitives du package déjà disponibles mais inutilisées
+
+Vérifié : aucune occurrence hors tests dans `web/admin-ui/src`.
+
+| Primitive | Fichier | Usage applicatif | Décision |
+|---|---|---|---|
+| `Sidebar` | `components/Sidebar.tsx` | 0 | socle de `AppSidebar` (incrément 3) |
+| `Breadcrumb` | `components/Breadcrumb.tsx` | 0 | socle de `AppBreadcrumbs` (incrément 3) |
+| `Command` | `components/Command.tsx` | 0 | socle de `AppCommandPalette` (incrément 4) |
+| `Sheet` | `components/Sheet.tsx` | 0 | navigation mobile (incrément 4) |
+| `Tooltip` | `components/Tooltip.tsx` | 0 | libellés des boutons icône (incrément 4) |
+
+**Hors périmètre** : les écrans métier (`features/*`) et la déclaration de navigation restent dans l'application. Aucun composant de ce tableau ne change de comportement à l'extraction ; l'incrément 3 les livre dans le package sans que l'application les consomme.
