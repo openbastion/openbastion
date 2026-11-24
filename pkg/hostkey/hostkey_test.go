@@ -141,13 +141,18 @@ func TestAuthority_EveryImpostorIsRefused(t *testing.T) {
 	tr := trust(t, "@cert-authority target.example "+line(ca.PublicKey()))
 	forged := certify(t, ca, host.PublicKey())
 	forged.Signature.Blob[0] ^= 0xff // the authority's signature, broken
+	// Sign a structurally valid certificate first, then remove its principals. SignCert
+	// rejects an empty principal list, but a peer can still send such a malformed wire
+	// certificate; the verifier must refuse it as an account/target mismatch.
+	anyName := certify(t, ca, host.PublicKey())
+	anyName.ValidPrincipals = nil
 	for name, key := range map[string]ssh.PublicKey{
 		"a plain key":                           host.PublicKey(),
 		"the authority's own key":               ca.PublicKey(),
 		"a certificate of another authority":    certify(t, rogue, host.PublicKey()),
 		"a user certificate":                    certify(t, ca, host.PublicKey(), func(c *ssh.Certificate) { c.CertType = ssh.UserCert }),
 		"a certificate for another name":        certify(t, ca, host.PublicKey(), func(c *ssh.Certificate) { c.ValidPrincipals = []string{"other.example"} }),
-		"a certificate for any name":            certify(t, ca, host.PublicKey(), func(c *ssh.Certificate) { c.ValidPrincipals = nil }),
+		"a certificate for any name":            anyName,
 		"a certificate for the dialled address": certify(t, ca, host.PublicKey(), func(c *ssh.Certificate) { c.ValidPrincipals = []string{"10.0.0.9"} }),
 		"an expired certificate":                certify(t, ca, host.PublicKey(), func(c *ssh.Certificate) { c.ValidBefore = uint64(now.Add(-time.Minute).Unix()) }),
 		"a certificate not yet valid":           certify(t, ca, host.PublicKey(), func(c *ssh.Certificate) { c.ValidAfter = uint64(now.Add(time.Minute).Unix()) }),
