@@ -388,9 +388,7 @@ func TestPostgresFlow_EventChainSurvivesAuditServiceProcessRestart(t *testing.T)
 		t.Fatalf("opening database for setup: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("TRUNCATE session_alert_detection_outbox, audit_events RESTART IDENTITY"); err != nil {
-		t.Fatalf("truncating audit_events before the test: %v", err)
-	}
+	truncateAuditEvents(t, db)
 
 	root := repoRoot(t)
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-pg")

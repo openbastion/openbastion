@@ -30,9 +30,7 @@ func TestPostgresFlow_AnAlertWaitingForARetryIsDeliveredAfterTheAuditServiceRest
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("TRUNCATE session_alert_detection_outbox, audit_events RESTART IDENTITY"); err != nil { // the same reason as the chain restart test
-		t.Fatal(err)
-	}
+	truncateAuditEvents(t, db)
 
 	// The receiver is down (503) until up is set.
 	var mu sync.Mutex
