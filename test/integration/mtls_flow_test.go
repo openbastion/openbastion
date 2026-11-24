@@ -100,6 +100,19 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			t.Fatalf("policy %s through the Gateway: status %d", pol.name, status)
 		}
 	}
+	// Session-alert visibility is a dedicated permission with an exact action (ADR-0117/0114).
+	alertPolicy, _ := json.Marshal(map[string]any{"name": "session-alert-read", "role": "session-auditor", "resourcePattern": "session-alerts:*", "actionPattern": "session-alerts:read", "effect": "allow", "createdBy": "forged"})
+	alertPolicyReq, _ := http.NewRequest(http.MethodPost, gatewayURL+"/policies", strings.NewReader(string(alertPolicy)))
+	alertPolicyReq.Header.Set("Authorization", "Bearer "+adminToken)
+	alertPolicyReq.Header.Set("Content-Type", "application/json")
+	alertPolicyResp, err := http.DefaultClient.Do(alertPolicyReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alertPolicyResp.Body.Close()
+	if alertPolicyResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create exact session-alert policy: %d", alertPolicyResp.StatusCode)
+	}
 	if status := gatewayOnboardAccount(t, gatewayURL, adminToken, accountID, "mtls-account", "root", targetAddr, targetSecret); status != http.StatusCreated {
 		t.Fatalf("onboarding through the Gateway: status %d", status)
 	}
@@ -113,6 +126,36 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	if status != http.StatusOK {
 		t.Fatalf("auditor login: status %d", status)
 	}
+	t.Run("session alert reads pass through Gateway and the dedicated ABAC permission", func(t *testing.T) {
+		for _, who := range []struct {
+			name, token string
+			want        int
+		}{{"auditor", auditorToken, http.StatusOK}, {"operator without alert permission", operatorToken, http.StatusForbidden}} {
+			req, _ := http.NewRequest(http.MethodGet, gatewayURL+"/session-alerts?limit=10", nil)
+			req.Header.Set("Authorization", "Bearer "+who.token)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != who.want {
+				t.Errorf("%s: GET /session-alerts = %d %s, want %d", who.name, resp.StatusCode, body, who.want)
+			}
+		}
+		req, _ := http.NewRequest(http.MethodGet, gatewayURL+"/session-alerts/summary", nil)
+		req.Header.Set("Authorization", "Bearer "+auditorToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var summary map[string]any
+		decodeErr := json.NewDecoder(resp.Body).Decode(&summary)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || decodeErr != nil || summary["by_severity"] == nil || summary["durable"] != false {
+			t.Errorf("auditor GET /session-alerts/summary: status=%d body=%v decode=%v", resp.StatusCode, summary, decodeErr)
+		}
+	})
 
 	sess, status := gatewayCreateSession(t, gatewayURL, operatorToken, "someone-else", []string{"platform-admin"}, accountID)
 	if status != http.StatusCreated {
@@ -442,6 +485,8 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		{"Authorization writes an audit event", mtls.Authorization, http.MethodPost, auditURL + "/audit/v1/emit-event",
 			map[string]any{"actor_id": "root-admin", "action": "session.terminated", "resource_type": "session", "resource_id": sess.ID, "success": true}, "an audit entry"},
 		{"a compromised Gateway verifies the audit chain", mtls.APIGateway, http.MethodGet, auditURL + "/audit/v1/verify-chain", nil, "an oracle on the audit store"},
+		{"a compromised Session Broker reads the alert projection", mtls.SessionBroker, http.MethodGet, auditURL + "/audit/v1/session-alerts", nil, "the operator alert queue"},
+		{"operator tooling reads the alert projection directly", mtls.AdminCLI, http.MethodGet, auditURL + "/audit/v1/session-alerts/summary", nil, "the operator alert summary"},
 		{"the broker forges commands into a recording", mtls.SessionBroker, http.MethodPost, recorderURL + "/recorder/v1/command-entries", forgedEntry, "a recorded command"},
 		{"the operator tooling forges commands into a recording", mtls.AdminCLI, http.MethodPost, recorderURL + "/recorder/v1/command-entries", forgedEntry, "a recorded command"},
 		{"the broker reads a recording, forging the auditor role", mtls.SessionBroker, http.MethodGet,
@@ -514,6 +559,98 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			}
 		})
 	}
+	t.Run("only the Gateway workload can read the alert projection", func(t *testing.T) {
+		gw := p.clientAs(t, mtls.APIGateway)
+		status, raw := mustCall(t, p.clientAs(t, mtls.SessionBroker), http.MethodPost, auditURL+"/audit/v1/emit-event", map[string]any{
+			"actor_id": operatorID, "action": "session.breakglass_requested", "resource_type": "session", "resource_id": sess.ID, "success": true,
+		})
+		if status != http.StatusOK {
+			t.Fatalf("append source event: %d %s", status, raw)
+		}
+		var page struct {
+			Alerts []map[string]any `json:"alerts"`
+		}
+		waitUntil(t, 5*time.Second, "the detection worker to project the alert", func() bool {
+			status, raw = mustCall(t, gw, http.MethodGet, auditURL+"/audit/v1/session-alerts?limit=10", nil)
+			if status != http.StatusOK {
+				return false
+			}
+			if err := json.Unmarshal([]byte(raw), &page); err != nil {
+				return false
+			}
+			for _, alert := range page.Alerts {
+				if alert["session_id"] == sess.ID {
+					return true
+				}
+			}
+			return false
+		})
+		status, raw = mustCall(t, gw, http.MethodGet, auditURL+"/audit/v1/session-alerts/summary", nil)
+		if status != http.StatusOK || !strings.Contains(raw, `"durable":false`) {
+			t.Fatalf("summary: %d %s", status, raw)
+		}
+		var alertID string
+		for _, alert := range page.Alerts {
+			if alert["session_id"] == sess.ID {
+				alertID, _ = alert["id"].(string)
+			}
+		}
+		if alertID == "" {
+			t.Fatal("the projected alert has no ID")
+		}
+		status, raw = mustCall(t, gw, http.MethodGet, auditURL+"/audit/v1/session-alerts/"+alertID, nil)
+		if status != http.StatusOK || !strings.Contains(raw, `"severity":"high"`) {
+			t.Fatalf("detail: %d %s", status, raw)
+		}
+		// The same auditor reads the alert through the public Gateway, including its exact-ID route.
+		// This permission must not grant the separate right to read the linked session.
+		publicReq, _ := http.NewRequest(http.MethodGet, gatewayURL+"/session-alerts?session_id="+sess.ID, nil)
+		publicReq.Header.Set("Authorization", "Bearer "+auditorToken)
+		publicResp, err := http.DefaultClient.Do(publicReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var publicPage struct {
+			Alerts []struct {
+				ID        string `json:"id"`
+				SessionID string `json:"session_id"`
+			} `json:"alerts"`
+		}
+		decodeErr := json.NewDecoder(publicResp.Body).Decode(&publicPage)
+		publicResp.Body.Close()
+		if publicResp.StatusCode != http.StatusOK || decodeErr != nil {
+			t.Fatalf("public alert list: %d decode=%v", publicResp.StatusCode, decodeErr)
+		}
+		var publicAlertID string
+		for _, alert := range publicPage.Alerts {
+			if alert.SessionID == sess.ID {
+				publicAlertID = alert.ID
+			}
+		}
+		if publicAlertID != alertID {
+			t.Fatalf("public alert ID %q, internal ID %q", publicAlertID, alertID)
+		}
+		detailReq, _ := http.NewRequest(http.MethodGet, gatewayURL+"/session-alerts/"+publicAlertID, nil)
+		detailReq.Header.Set("Authorization", "Bearer "+auditorToken)
+		detailResp, err := http.DefaultClient.Do(detailReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		detailResp.Body.Close()
+		if detailResp.StatusCode != http.StatusOK {
+			t.Fatalf("public alert detail: %d", detailResp.StatusCode)
+		}
+		sessionReq, _ := http.NewRequest(http.MethodGet, gatewayURL+"/sessions/"+sess.ID, nil)
+		sessionReq.Header.Set("Authorization", "Bearer "+auditorToken)
+		sessionResp, err := http.DefaultClient.Do(sessionReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sessionResp.Body.Close()
+		if sessionResp.StatusCode != http.StatusForbidden {
+			t.Fatalf("alert reader implicitly read session: %d, want 403", sessionResp.StatusCode)
+		}
+	})
 
 	t.Run("and none of it happened", func(t *testing.T) {
 		// The forged policy was not created: the role it was for has no access.
@@ -559,6 +696,17 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			map[string]any{"actor_roles": []string{"dba"}, "resource": "vault:account:" + accountID, "action": "read"})
 		if status != http.StatusOK {
 			t.Errorf("the recorder asks what a role may do: %d %q", status, raw)
+		}
+		// The Gateway is now an explicitly permitted Authorization workload for its public ABAC checks.
+		status, raw = mustCall(t, p.clientAs(t, mtls.APIGateway), http.MethodPost, authzURL+"/authz/v1/check-access",
+			map[string]any{"actor_roles": []string{"session-auditor"}, "resource": "session-alerts:all", "action": "session-alerts:read"})
+		if status != http.StatusOK || !strings.Contains(raw, `"allowed":true`) {
+			t.Errorf("Gateway alert permission check: %d %s", status, raw)
+		}
+		status, _ = mustCall(t, p.clientAs(t, mtls.AdminCLI), http.MethodPost, authzURL+"/authz/v1/check-access",
+			map[string]any{"actor_roles": []string{"platform-admin"}, "resource": "session-alerts:all", "action": "session-alerts:read"})
+		if status != http.StatusForbidden {
+			t.Errorf("admin-cli must not ask Authorization check-access directly: %d", status)
 		}
 	})
 

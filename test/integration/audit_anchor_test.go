@@ -27,12 +27,10 @@ func TestPostgresFlow_TheChainIsAnchoredOutsideTheDatabase_ARewriteOrACutIsFound
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
-	if _, err := db.Exec(`TRUNCATE audit_events RESTART IDENTITY`); err != nil {
-		t.Fatal(err)
-	}
+	t.Cleanup(func() { _ = db.Close() })
+	truncateAuditEvents(t, db)
 	t.Cleanup(func() {
-		_, _ = db.Exec(`TRUNCATE audit_events RESTART IDENTITY`)
+		truncateAuditEvents(t, db)
 		_, _ = db.Exec(`DROP TABLE IF EXISTS audit_anchor_snapshot`)
 	})
 

@@ -155,11 +155,19 @@ var notMirrored = map[string]string{
 		"client and server agree field for field across real processes (TestPostgresFlow_AChangeOfASessionMovesItsHeadInTheAuditService)",
 	"audit-service/attestRequest":              "idem — the Audit Service's side",
 	"audit-service/headResponse":               "idem",
+	"audit-service/sessionAlertResponse":       "projection HTTP/JSON interne des alertes (ADR-0117/0122), contrat décrit dans docs/api/internal/audit-service.md ; pas de RPC Protobuf ajouté",
+	"audit-service/sessionAlertPageResponse":   "enveloppe de pagination HTTP/JSON interne des alertes (ADR-0117/0122), contrat décrit dans docs/api/internal/audit-service.md ; pas de RPC Protobuf ajouté",
+	"audit-service/SessionAlertSummary":        "résumé HTTP/JSON interne des alertes (ADR-0117/0122), contrat décrit dans docs/api/internal/audit-service.md ; pas de RPC Protobuf ajouté",
 	"session-broker/headResponseBody":          "idem — the Broker’s reading of the head; agreement proved by TestPostgresFlow_ARolledBackSessionIsRefusedByTheBroker",
 	"authorization/checkAccessRequest":         "the Authorization contract is described in docs/api/grpc/README.md §8, not yet in proto/",
 	"authorization/checkAccessResponse":        "idem",
 	"authorization/capabilitiesRequest":        "the Admin UI's capabilities (ADR-0131), described in docs/api/grpc/README.md §8, not yet in proto/",
 	"api-gateway/capabilitiesRequestBody":      "idem — the Gateway's client of it (ADR-0131)",
+	"api-gateway/sessionAlertAccessRequest":    "Gateway's end-user ABAC check for the session alert projection (ADR-0117/0122), same Authorization check-access HTTP/JSON contract documented in docs/api/grpc/README.md §8",
+	"api-gateway/sessionAlertAccessResponse":   "idem — Gateway's bounded decode of Authorization check-access decision",
+	"api-gateway/publicSessionAlert":           "allowlisted public Gateway DTO for the internal Audit Service alert projection (ADR-0117/0122), deliberately narrower than any future internal fields",
+	"api-gateway/publicSessionAlertPage":       "bounded public pagination envelope for the Gateway alert projection, no Protobuf RPC added",
+	"api-gateway/publicSessionAlertSummary":    "allowlisted public summary DTO for the Gateway alert projection, no Protobuf RPC added",
 	"session-broker/checkAccessRequestBody":    "idem — the Broker's client of it",
 	"session-broker/checkAccessResponseBody":   "idem",
 	"password-vault/checkAccessRequestBody":    "idem — the Vault's client of it",
@@ -276,9 +284,10 @@ func TestContract_EveryInternalRouteCarriesTheFieldsOfItsProtoMessage_OrSaysWhyN
 
 // anonymousAllowed are files whose anonymous snake_case shapes are not routes between services.
 var anonymousAllowed = map[string]string{
-	"services/access/authentication/internal/infrastructure/oidc_provider.go":  "the OIDC provider's discovery document and token response (ADR-0035)",
-	"services/access/authentication/internal/infrastructure/providers_file.go": "the required fields of IDENTITY_PROVIDERS_FILE, named in its errors (ADR-0076): no body is built there",
-	"services/proxy/rdp-vnc-proxy/internal/infrastructure/audit_client.go":     "protocol and account_id are keys in the nested audit details map, not standalone JSON request bodies; auditEventRequest is covered above",
+	"services/access/authentication/internal/infrastructure/oidc_provider.go":           "the OIDC provider's discovery document and token response (ADR-0035)",
+	"services/access/authentication/internal/infrastructure/providers_file.go":          "the required fields of IDENTITY_PROVIDERS_FILE, named in its errors (ADR-0076): no body is built there",
+	"services/proxy/rdp-vnc-proxy/internal/infrastructure/audit_client.go":              "protocol and account_id are keys in the nested audit details map, not standalone JSON request bodies; auditEventRequest is covered above",
+	"services/recording-audit/audit-service/internal/interfaces/session_alert_reads.go": "the strict allowlist of accepted query parameter names for the HTTP/JSON alert-list route; the request is a URL query, not a JSON body",
 }
 
 // anonymousJSON lists, in a Go file, the anonymous structs with snake_case json tags and the map

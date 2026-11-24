@@ -1,6 +1,6 @@
 # ADR-0122 — La file d’alertes de session sépare détection, visibilité et acquittement
 
-**Statut** `Proposé` · 2026-11-18 · décision soumise au propriétaire ; cet ADR n'autorise aucune implémentation à lui seul.
+**Statut** `Accepté` · 2026-11-23 · complément Zero Trust et intégration Gateway de l’ADR-0117.
 
 **Invariant Zero Trust** — Aucun écran, navigateur, SDK ou client ne communique directement avec un microservice interne. Toute requête opérateur passe par l'API Gateway publique, avec authentification, autorisation Authorization sur ressource ET action (ADR-0114), limitation de débit, validation de schéma et journalisation. Les appels interservices restent privés, TLS mutuel, identités de workload dédiées, audiences et permissions minimales. Aucun certificat mTLS interne n'est distribué à l'Admin UI, au User Portal, au Desktop Client ou aux SDK. Refus par défaut ; panne d'identité, d'autorisation, de preuve ou de dépendance requise = échec fermé. Les routes internes ne sont jamais documentées comme API utilisateur et ne sont jamais exposées par ingress, NodePort, LoadBalancer ou reverse proxy public.
 
@@ -22,3 +22,6 @@
 - (−) Les fonctionnalités non livrées restent explicitement indisponibles jusqu’à implémentation et validation.
 
 **Alternatives rejetées** — Appels directs depuis le navigateur, proxy générique de routes internes, données synthétiques présentées comme réelles, autorisation uniquement côté frontend, confiance implicite dans le réseau ou dans un rôle global.
+
+
+**État d’implémentation — 24 novembre 2026** — Les lectures Audit Service (mTLS) et la façade publique Gateway de liste, résumé et détail sont livrées. La Gateway vérifie `session-alerts:read` avec l'identité utilisateur issue du bearer token ; la ressource est `session-alerts:all` pour la collection/le résumé et `session-alerts:{id}` pour le détail. La Gateway est explicitement autorisée par la CallerRules mTLS d'Authorization à demander `check-access`. L'acquittement audité et le raccordement Admin UI restent à réaliser.

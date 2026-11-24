@@ -110,3 +110,12 @@ L'Authentication Service retient l'émetteur de chaque fournisseur OIDC (table `
 ## Clés de chiffrement : Transit (ADR-0049)
 
 Le Password Vault et le Command Recorder peuvent faire garder leur clé maîtresse par le moteur Transit d'OpenBao (ou de HashiCorp Vault) plutôt que par `KMS_KEY_HEX` : `TRANSIT_ADDR`, `TRANSIT_KEY`, et soit `TRANSIT_TOKEN_FILE` (fichier `0600`), soit AppRole — `TRANSIT_ROLE_ID_FILE` et `TRANSIT_SECRET_ID_FILE` (fichiers `0600`, `TRANSIT_APPROLE_MOUNT` en option, ADR-0058) —, et en option `TRANSIT_MOUNT` et `TRANSIT_CA_FILE`. La mise en place, la politique minimale du jeton, la migration depuis la clé locale et le comportement en panne sont décrits dans [`../security/key-management.md`](../security/key-management.md).
+
+
+## Pools PostgreSQL (ADR-0135)
+
+Chaque service PostgreSQL accepte `DB_POOL_MAX_OPEN_CONNS` (défaut 10, bornes 1–1 000) et `DB_POOL_MAX_IDLE_CONNS` (défaut `min(max_open, 10)`, bornes 0–max_open). Les valeurs sont des entiers décimaux stricts ; une variable présente mais vide ou mal formée fait échouer le démarrage. Les réglages sont propres à chaque service.
+
+Dans Docker Compose, utilisez les variables hôte par service documentées dans [`postgresql-connection-budget.md`](../architecture/postgresql-connection-budget.md). Les valeurs par défaut restent 10/10. Si vous changez `max_open`, ajustez aussi `max_idle` pour qu'il ne le dépasse pas et mettez à jour `deploy/postgresql/capacity.yaml` avec le plafond d'instances réel. Avant déploiement, exécutez `make db-pool-budget-check` ; le workflow CI Go exécute le même contrôle.
+
+Chaque service publie ses statistiques `database/sql` sur `GET /metrics`, uniquement via le listener interne protégé par mTLS. Ce endpoint n'est pas exposé par la Gateway. Voir le guide d'architecture pour les noms de métriques et les limites du contrôle statique.

@@ -45,13 +45,19 @@ replace github.com/openbastion/openbastion/pkg/migrate => ../../../pkg/migrate
 replace github.com/openbastion/openbastion/pkg/mtls => ../../../pkg/mtls
 
 replace github.com/openbastion/openbastion/pkg/refusalbudget => ../../../pkg/refusalbudget
+
 replace github.com/openbastion/openbastion/pkg/screenstream => ../../../pkg/screenstream
 
 replace github.com/openbastion/openbastion/pkg/transit => ../../../pkg/transit
 
 replace github.com/openbastion/openbastion/proto => ../../../proto
 
-// Racine Cobra et commande version communes (ADR-0072).
-require github.com/openbastion/openbastion/pkg/command v0.0.0
+require (
+	// Racine Cobra et commande version communes (ADR-0072).
+	github.com/openbastion/openbastion/pkg/command v0.0.0
+	github.com/openbastion/openbastion/pkg/dbpool v0.0.0
+)
 
 replace github.com/openbastion/openbastion/pkg/command => ../../../pkg/command
+
+replace github.com/openbastion/openbastion/pkg/dbpool => ../../../pkg/dbpool

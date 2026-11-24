@@ -120,7 +120,7 @@ Créer, approuver, borner, lire, terminer une session ; limiter les demandes.
 | 8 | [ADR-0019](0019-qui-peut-lire-une-session-son-demandeur-celui-qui-l-a.md) | Qui peut lire une session : son demandeur, celui qui l'a décidée, ou le titulaire d'une politique `session-read` — et une lecture n'écrit rien | Accepté (règle 6 amendée par ADR-0020) |
 | 9 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté |
 
-| 10 | [ADR-0117](0117-les-alertes-de-session-sont-durables-autorisees-et-acquittees-dans-la-chaine.md) | Les alertes de session sont durables, autorisées et acquittées dans la chaîne d’audit | Proposé |
+| 10 | [ADR-0117](0117-les-alertes-de-session-sont-durables-autorisees-et-acquittees-dans-la-chaine.md) | Les alertes de session sont durables, autorisées et acquittées dans la chaîne d’audit | Accepté |
 ### 7. Break-glass
 
 La dérogation d'urgence à « enregistrer ou refuser », bornée et validée.
@@ -209,7 +209,7 @@ Le stockage des sessions enregistrées, leur relecture et leur recherche.
 | 1 | [ADR-0070](0070-le-video-recorder-acquitte-des-segments-chiffres-avant-de-les-servir.md) | Le Video Recorder acquitte des segments chiffrés avant de les servir | Accepté |
 | 2 | [ADR-0092](0092-l-ecran-s-enregistre-en-images-partielles-ancrees-sur-des-images-cles.md) | L'écran s'enregistre en images partielles, ancrées sur des images clés | Accepté |
 | 3 | [ADR-0093](0093-une-relecture-lit-plusieurs-segments-par-requete.md) | Une relecture lit plusieurs segments par requête | Accepté |
-| 4 | [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Proposé |
+| 4 | [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Accepté |
 | 5 | [ADR-0080](0080-la-recherche-plein-texte-dechiffre-a-la-volee-dans-une-fenetre-bornee.md) | La recherche plein texte déchiffre à la volée, dans une fenêtre bornée, sans index en clair | Accepté, mise en œuvre en cours |
 
 ### 13. Interfaces et notifications
@@ -274,7 +274,7 @@ Traçabilité des écrans, supervision, workflow, secrets dynamiques, alertes et
 | Ordre | ID | Titre | Statut |
 |---|---|---|---|
 | 1 | [ADR-0121](0121-dashboard-supervision.md) | Les écrans de supervision ne présentent que des métriques issues de contrats vérifiés | Proposé |
-| 2 | [ADR-0122](0122-alertes-session.md) | La file d’alertes de session sépare détection, visibilité et acquittement | Proposé |
+| 2 | [ADR-0122](0122-alertes-session.md) | La file d’alertes de session sépare détection, visibilité et acquittement | Accepté |
 | 3 | [ADR-0123](0123-audit-conformite.md) | Les journaux et preuves d’audit restent cloisonnés derrière la Gateway | Proposé |
 | 4 | [ADR-0124](0124-infrastructure-sante.md) | La santé des composants est agrégée sans exposer les routes internes | Proposé |
 | 5 | [ADR-0125](0125-sessions-replay.md) | Les sessions et relectures exposent uniquement les capacités réellement acquittées | Proposé |
@@ -404,18 +404,18 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0108](0108-les-binaires-et-politiques-agent-sont-signes-et-anti-retour.md) | Les binaires et politiques agent sont signés et protégés contre le retour arrière | Proposé | Agents distribués |
 | [ADR-0109](0109-la-haute-disponibilite-des-agents-ne-reprend-pas-une-session-a-l-aveugle.md) | La haute disponibilité des agents ne reprend pas une session à l'aveugle | Proposé | Agents distribués |
 | [ADR-0110](0110-les-evenements-agent-sont-attribues-et-separes-de-la-preuve-daudit-pam.md) | Les événements agent sont attribués et séparés de la preuve d'audit PAM | Proposé | Agents distribués |
-| [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Proposé | Enregistrement et relecture |
+| [ADR-0111](0111-les-marqueurs-de-relecture-video-sont-des-evenements-lateraux.md) | Les marqueurs de relecture vidéo sont des événements latéraux, indépendants des images | Accepté | Enregistrement et relecture |
 | [ADR-0112](0112-rapprocher-les-injections-de-secrets-depuis-la-chaine-d-audit-sans-la-modifier.md) | Rapprocher les injections de secrets depuis la chaîne d’audit, sans la modifier | Accepté | Chaîne d’audit |
 | [ADR-0113](0113-exposer-le-rapprochement-des-injections-a-l-admin-ui-sous-autorisation-explicite.md) | Exposer le rapprochement des injections à l’Admin UI sous autorisation explicite | Accepté | Chaîne d'audit |
 | [ADR-0114](0114-les-politiques-authorization-portent-sur-la-ressource-et-l-action.md) | Les politiques Authorization portent sur la ressource et l’action | Accepté | Invariants de sécurité transverses |
 | [ADR-0115](0115-reduire-la-vie-des-secrets-en-memoire-et-interdire-les-core-dumps.md) | Réduire la durée de vie des secrets en mémoire et interdire les core dumps | Accepté | Invariants de sécurité transverses |
 | [ADR-0116](0116-attester-les-metadonnees-de-session-hors-de-postgresql.md) | Attester les métadonnées de session hors de PostgreSQL | Accepté | Sessions : cycle de vie et contrôle |
-| [ADR-0117](0117-les-alertes-de-session-sont-durables-autorisees-et-acquittees-dans-la-chaine.md) | Les alertes de session sont durables, autorisées et acquittées dans la chaîne d’audit | Proposé | Sessions : cycle de vie et contrôle |
+| [ADR-0117](0117-les-alertes-de-session-sont-durables-autorisees-et-acquittees-dans-la-chaine.md) | Les alertes de session sont durables, autorisées et acquittées dans la chaîne d’audit | Accepté | Sessions : cycle de vie et contrôle |
 | [ADR-0118](0118-le-centre-de-securite-agrege-des-constats-explicables-et-couvres.md) | Le centre de sécurité agrège des constats explicables et mesure leur couverture | Proposé | Posture de sécurité |
 | [ADR-0119](0119-la-verification-de-la-chaine-daudit-reste-reservee-a-admin-cli.md) | La vérification de la chaîne d'audit reste réservée à admin-cli | Retiré | Posture de sécurité |
 | [ADR-0120](0120-la-sante-des-composants-est-publiee-sans-exposer-la-topologie-interne.md) | La santé des composants est publiée sans exposer la topologie interne | Proposé | Posture de sécurité |
 | [ADR-0121](0121-dashboard-supervision.md) | Les écrans de supervision ne présentent que des métriques issues de contrats vérifiés | Proposé | Alignement UI, contrats et roadmap |
-| [ADR-0122](0122-alertes-session.md) | La file d’alertes de session sépare détection, visibilité et acquittement | Proposé | Alignement UI, contrats et roadmap |
+| [ADR-0122](0122-alertes-session.md) | La file d’alertes de session sépare détection, visibilité et acquittement | Accepté | Alignement UI, contrats et roadmap |
 | [ADR-0123](0123-audit-conformite.md) | Les journaux et preuves d’audit restent cloisonnés derrière la Gateway | Proposé | Alignement UI, contrats et roadmap |
 | [ADR-0124](0124-infrastructure-sante.md) | La santé des composants est agrégée sans exposer les routes internes | Proposé | Alignement UI, contrats et roadmap |
 | [ADR-0125](0125-sessions-replay.md) | Les sessions et relectures exposent uniquement les capacités réellement acquittées | Proposé | Alignement UI, contrats et roadmap |

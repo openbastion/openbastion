@@ -143,3 +143,12 @@ openbastion-cli audit secret-injections \
 ### Rapprochement des injections Vault
 
 Dans **Enregistrements**, le panneau « Rapprochement des injections Vault » présente les résultats corrélés de l’Audit Service, y compris les archives vérifiées. L’accès est réservé aux rôles auxquels une politique explicite attribue `audit:secret-injections:read` sur `audit:secret-injections:all`. Cette permission est transverse à tous les comptes et toutes les sessions ; elle n’est pas implicite pour `platform-admin` ni `session-auditor`. La consultation est en lecture seule et ne modifie pas la chaîne d’audit. `outcome_unknown` et `failed` exigent une vérification manuelle de la cible ; aucune réinjection automatique n’est proposée.
+
+
+## File de détection des alertes de session (ADR-0117/0122)
+
+L’Audit Service transforme en arrière-plan les événements sources authentifiés du catalogue v1 en occurrences opérateur. La source reste dans la chaîne signée ; la projection `session_alerts` ne contient que l’identifiant de session, la règle/version, la sévérité et un résumé constant. La file de détection est distincte de la file webhook `alert_outbox`.
+
+Le worker vérifie la chaîne avant traitement. En cas d’erreur, l’élément reste dans `session_alert_detection_outbox` et sa prochaine tentative est différée ; une saturation à 4 096 éléments refuse atomiquement un nouvel événement source candidat, conformément au fail-closed. Surveillez les erreurs `session alert detection worker unavailable` et la croissance de cette table.
+
+Cette tranche ne publie pas encore de route opérateur : aucune consultation, aucun compteur et aucun acquittement depuis l’Admin UI ne sont disponibles à ce stade.

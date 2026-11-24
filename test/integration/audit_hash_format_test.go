@@ -61,7 +61,7 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 	exec(`CREATE TABLE IF NOT EXISTS audit_events (seq BIGSERIAL PRIMARY KEY, id TEXT NOT NULL UNIQUE, ts TIMESTAMPTZ NOT NULL,
 		actor_id TEXT, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT NOT NULL, success BOOLEAN NOT NULL,
 		prev_hash BYTEA, hash BYTEA NOT NULL)`)
-	exec(`TRUNCATE audit_events RESTART IDENTITY`)
+	truncateAuditEvents(t, db)
 	exec(`ALTER TABLE audit_events DROP COLUMN IF EXISTS hash_version`)
 	// Such a deployment predates versioned migrations too (ADR-0030): no row in schema_migrations.
 	exec(`DO $$ BEGIN IF to_regclass('schema_migrations') IS NOT NULL THEN
@@ -162,5 +162,5 @@ func TestPostgresFlow_ALegacyChainIsUpgradedInPlace_AndTheNewFormatFindsBytesMov
 	})
 
 	// Leave nothing for the tests that run after this one: a chain they did not write.
-	exec(`TRUNCATE audit_events RESTART IDENTITY`)
+	truncateAuditEvents(t, db)
 }

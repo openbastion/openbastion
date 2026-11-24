@@ -29,6 +29,7 @@ func CallerRules() []mtls.Rule {
 		// Pinning a target's host key (ADR-0039): an administrator, through the Gateway.
 		{Method: http.MethodPut, Path: "/vault/v1/accounts/", Prefix: true, Callers: []string{mtls.APIGateway}},
 
+		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}
 }

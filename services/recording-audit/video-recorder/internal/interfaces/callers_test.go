@@ -17,8 +17,10 @@ func TestHTTPCallerRules(t *testing.T) {
 		mtlstest.Allow("api-gateway", "GET", "/healthz"),
 		mtlstest.Deny("api-gateway", "POST", "/healthz"),
 		mtlstest.Deny("admin-cli", "GET", "/recordings/s1"),
+		mtlstest.Allow("admin-cli", "GET", "/metrics"),
 	})
 	mtlstest.CheckRoutes(t, NewHTTPServer(nil).Routes(), HTTPCallerRules(), []mtlstest.Route{
+		{Method: "GET", Path: "/metrics"},
 		{Method: http.MethodGet, Path: "/healthz"},
 		{Method: http.MethodGet, Path: "/readyz"},
 	})

@@ -20,7 +20,14 @@ import (
 const maxEventBodyBytes = 16 << 10
 
 type HTTPServer struct {
-	svc *application.AuditService
+	svc     *application.AuditService
+	metrics http.Handler
+}
+
+// WithMetrics installs the internal PostgreSQL pool metrics handler (ADR-0135).
+func (s *HTTPServer) WithMetrics(handler http.Handler) *HTTPServer {
+	s.metrics = handler
+	return s
 }
 
 func NewHTTPServer(svc *application.AuditService) *HTTPServer {
@@ -34,7 +41,21 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/audit/v1/secret-injections", s.handleSecretInjectionReconciliation)
 	mux.HandleFunc("/audit/v1/session-metadata/attestations", s.handleAttestSessionMetadata)
 	mux.HandleFunc("/audit/v1/session-metadata/head", s.handleSessionMetadataHead)
+	mux.HandleFunc("/audit/v1/session-alerts/summary", s.handleSessionAlertSummary)
+	mux.HandleFunc("/audit/v1/session-alerts/", s.handleSessionAlertDetail)
+	mux.HandleFunc("/audit/v1/session-alerts", s.handleSessionAlertList)
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	if s.metrics != nil {
+		mux.Handle("/metrics", s.metrics)
+	} else {
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	return mux
 }
 
@@ -78,6 +99,11 @@ func (s *HTTPServer) handleEmitEvent(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, domain.ErrInvalidEvent) {
 			// Names the field and the rule, never the value.
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, domain.ErrSessionAlertOutboxFull) || errors.Is(err, application.ErrSessionAlertDetectionUnavailable) {
+			log.Printf("audit-service: session alert detection is unavailable: %v", err)
+			http.Error(w, "the event could not be durably scheduled for detection", http.StatusServiceUnavailable)
 			return
 		}
 		// The store's error can name addresses and tables: it stays in this log.

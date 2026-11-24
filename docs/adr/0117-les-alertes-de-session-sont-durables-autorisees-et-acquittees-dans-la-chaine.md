@@ -1,6 +1,6 @@
 # ADR-0117 — Les alertes de session sont durables, autorisées et acquittées dans la chaîne d'audit
 
-**Statut** `Proposé` · 2026-11-17 · soumis à validation du propriétaire du projet ; aucun code n'est autorisé par cet ADR seul.
+**Statut** `Accepté` · 2026-11-23 · contrat de référence fonctionnel et technique de la file d’alertes de session.
 
 **Contexte** — L'Admin UI possède un onglet « Alertes » mais aucun contrat public ne permet aujourd'hui de l'alimenter : ni file d'alertes de session, ni sévérité, ni compteur non traité, ni acquittement. L'interface affiche donc honnêtement « API requise ».
 
@@ -76,7 +76,7 @@ Il faut donc séparer trois choses : l'événement source signé, l'occurrence d
 - (+) Le compteur non traité est une requête de données métier sur les occurrences visibles, pas un comptage de notifications webhook ni une estimation côté navigateur.
 - (+) Un acquittement ne peut être annoncé sans preuve correspondante dans la chaîne d'audit ; acteur, heure, ressource et règle sont attribués côté serveur.
 - (+) Les permissions d'alerte restent distinctes de `session.read`, ce qui permet une supervision SOC sans ouvrir implicitement l'accès aux détails de session.
-- (−) **Aucun gain n'est encore mesuré** : cet ADR est proposé et aucun code ni test ne l'implémente à ce stade. Les seuils, la capacité de l'outbox et le coût des requêtes de résumé devront être mesurés avant production.
+- (−) **Aucun gain de performance n'est encore mesuré**. Les seuils, la capacité de l'outbox et le coût des requêtes de résumé devront être mesurés avant production.
 - (−) Le premier catalogue est volontairement petit. Les signaux géographiques, horaires, comportementaux, commandes inhabituelles, transferts massifs et corrélations multi-sessions ne sont pas disponibles sans nouvelles données, règles et tests.
 - (−) Le mode mémoire ne garantit ni la reprise ni la persistance ; une installation de production doit utiliser PostgreSQL pour activer le contrat durable.
 - (−) La liste est globale pour les principaux autorisés par `session-alerts:read`, mais elle ne donne pas automatiquement le droit de lire les sessions associées. L'UI doit traiter séparément les refus de `session.read`.
@@ -105,3 +105,6 @@ Il faut donc séparer trois choses : l'événement source signé, l'occurrence d
 - Une panne de la chaîne, de l'ancre ou de PostgreSQL ne laisse pas un acquittement confirmé sans événement audité.
 - Les tests PostgreSQL couvrent transactions, contraintes uniques, reprise après redémarrage et isolation des rôles ; les tests HTTP couvrent les codes stables, les filtres, la pagination, le compteur et les refus d'autorisation.
 - Aucune notification webhook n'est envoyée dans la première version ; les tests d'ADR-0045 et ADR-0057 restent inchangés et verts.
+
+
+**État d’implémentation — 24 novembre 2026** — Le backend de détection est livré (`feat/session-alert-detection`) : migration PostgreSQL, catalogue v1, insertion atomique de l’outbox, worker de détection, projection idempotente et événement `session.alert.detected` dans la chaîne. L’incrément `feat/session-alert-api` ajoute les lectures internes mTLS de liste paginée, résumé et détail, réservées à `api-gateway`. L’incrément `feat/session-alert-gateway` expose ces lectures sous `/session-alerts`, `/summary` et `/{id}` après authentification Gateway et vérification Authorization de `session-alerts:read` sur la ressource globale ou l’occurrence exacte ; la route `check-access` accepte l’identité mTLS `api-gateway` et reste interdite aux autres workloads non listés. L’acquittement transactionnel audité (`session-alerts:acknowledge`) et l’intégration Admin UI restent à réaliser ; cet état ne modifie pas la décision ci-dessus.

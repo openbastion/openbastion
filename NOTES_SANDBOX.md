@@ -5489,3 +5489,60 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Exemple uniquement** : sept services × 10 + 20 connexions réservées = 90 sur un serveur configuré à 100, laissant 10 de marge. La réserve de 20 n'est pas imposée ; elle dépend de l'exploitation réelle.
 - **Choix de sécurité** : validation statique en CI/déploiement ; pas de coordinateur dynamique, pas de réduction silencieuse, pas de cache de la tête Audit, pas de PgBouncer dans cette étape. Métriques `DB.Stats()` prévues pour éclairer les ajustements sans autoscaling du pool.
 - **Aucun changement de code ni de défaut** : les sept pools restent à 10/10. L'ADR-0135 est `Accepté` avant implémentation. Le benchmark multi-hôte reste différé à la demande de l'utilisateur.
+
+
+## 2026-11-23 — ADR-0135 : implémentation des pools PostgreSQL et du budget cluster
+
+- **Configuration partagée** : nouveau module `pkg/dbpool` avec défauts 10/10, lecture stricte de `DB_POOL_MAX_OPEN_CONNS` (1–1 000) et `DB_POOL_MAX_IDLE_CONNS` (0–max_open, défaut `min(max_open, 10)`). Une variable présente mais vide, signée, avec espaces, non entière ou hors borne fait échouer le démarrage. Les sept services transmettent la configuration à `openPool`; les wrappers `OpenPostgres` historiques gardent le défaut 10/10 pour les tests et appels internes existants.
+- **Intégrité et comportement inchangés** : `MaxIdleConns` reste inclus dans `MaxOpenConns`; les valeurs par défaut ne sont pas augmentées. Aucun cache de tête Audit, aucun changement aux vérifications ADR-0116 et aucun PgBouncer ajouté.
+- **Budget de cluster** : `deploy/postgresql/capacity.yaml` donne l'exemple 7 × 10 + 20 réservées = 90 sur 100. Le validateur `tools/db-pool-budget` refuse les champs inconnus, doublons YAML, documents multiples, services absents/inconnus, bornes incorrectes, dépassements et débordements. Il vérifie également les valeurs par défaut d'injection des sept services dans les deux fichiers Compose. `make db-pool-budget-check` est un contrôle requis du workflow Go.
+- **Déploiement Compose** : chaque service reçoit des variables hôte distinctes préfixées par son nom ; les noms communs `DB_POOL_MAX_*` sont utilisés dans le conteneur. Les valeurs Compose par défaut restent 10/10. L'exploitant doit synchroniser le manifeste avec ses overrides, HPA, `maxSurge`, jobs et clients temporaires : la CI ne peut pas lire les valeurs privées du cluster ni découvrir les réplicas Kubernetes réels.
+- **Observabilité** : `GET /metrics` est ajouté aux sept services, explicitement dans leurs allowlists mTLS. Les métriques `openbastion_db_connections_*` et `openbastion_db_pool_wait_*` sont issues de `sql.DB.Stats()`, avec le seul label borné `service`; aucun DSN ni secret n'est publié. Sans base, le endpoint répond `503`.
+- **Tests locaux finaux** : `make build vet test` PASS ; `make test GOFLAGS=-race` PASS ; `make proto-lint` PASS ; `make db-pool-budget-check` PASS ; `gofmt` et `git diff --check` PASS. Le parcours processus réels `GOWORK=$PWD/go.work go test ./test/integration/... -v -count=1 -timeout=900s` PASS (environ 10 min). Les sous-tests nécessitant Chrome, `TEST_DATABASE_URL` ou `COMPOSE_TEST` sont ignorés localement et restent couverts par les jobs dédiés de CI. Aucun test Windows ni benchmark multi-hôte n'a été lancé. PostgreSQL 16 dédié et parcours Docker Compose complet restent à valider par la CI.
+- **Limites** : le contrôle CI vérifie les valeurs par défaut des Compose et le manifeste versionné ; les overrides de l'environnement réel et les plafonds HPA/maxSurge doivent être maintenus en cohérence par l'exploitant. Les métriques sont exposées sur les listeners internes mTLS ; aucun scraping Prometheus central n'est ajouté ici.
+- **Benchmark multi-hôte** : non lancé, conformément à la demande de le différer.
+
+
+## 2026-11-23 — ADR-0117/0122 acceptés ; état du backlog réaligné
+
+- **Décision propriétaire** : ADR-0117 est accepté comme contrat fonctionnel et technique de référence de la file d’alertes de session ; ADR-0122 est accepté comme complément Zero Trust et d’intégration Gateway. L’Audit Service reste propriétaire ; les occurrences proviennent exclusivement d’événements sources dont l’émetteur mTLS et l’action sont explicitement autorisés. Les signaux absents restent désactivés.
+- **Périmètre non encore livré** : outbox durable de détection, projection d’occurrences, API interne Audit, façade Gateway avec permissions distinctes, acquittement transactionnel dans la chaîne d’audit et raccordement Admin UI. L’acceptation des ADR autorise la conception et l’implémentation, elle ne vaut pas preuve de livraison.
+- **Correction de suivi ADR-0111** : les marqueurs d’injection VNC/RDP et leur affichage dans la timeline Admin UI sont présents sur `main`, avec tests d’intégration de l’émission et de l’absence de fuite du secret ; la roadmap et le backlog ont été corrigés.
+- **Correction de suivi SI-02** : la révocation en milieu de frappe est clôturée par la PR #279 et le run CI `45153071885` ; la roadmap ne la présente plus comme un blocage ouvert.
+- **Correction de suivi ADR-0135** : les pools configurables, le manifeste de capacité, le validateur et les métriques ont été livrés par la PR #285 ; le seul suivi restant concerne le renseignement des capacités réelles lorsqu’un cluster existera et le benchmark multi-hôte différé.
+- **Aucun code de file d’alertes n’est inclus dans cet incrément documentaire** ; il sera implémenté ensuite sous les contrats acceptés, sans créer de signaux synthétiques.
+
+
+## 2026-11-23 — ADR-0117/0122, incrément backend initial de détection
+
+- **Contrats** : ADR-0117 et ADR-0122 sont acceptés ; leurs en-têtes sont alignés sur les deux index.
+- **Catalogue v1** : seuls `session-broker/session.breakglass_requested`, `ssh-proxy/session.secret_injection_failed` et `rdp-vnc-proxy/session.secret_injection_failed` sont activés. La sévérité `high` et les résumés sont décidés côté Audit Service. Les actions non déclarées, les émetteurs incorrects et les échecs d’injection annoncés avec `success=true` ne créent pas d’alerte.
+- **Atomicité source/outbox** : `AppendWithDetection` insère l’événement signé et la référence de détection dans une transaction PostgreSQL, sous verrou consultatif dédié ; le plafond initial est 4 096. Le verrou protège cette transaction et les complétions du worker, sans prétendre rendre l’Audit Service multi-réplicas : les écritures ordinaires et les ancres restent à une seule instance. Une saturation refuse la transaction entière. Le magasin mémoire fournit le même contrat pour tests/développement uniquement.
+- **Worker** : relit l’événement source, vérifie la chaîne, conserve la version du catalogue, puis écrit `session.alert.detected`, `session_alerts` et supprime l’outbox dans une transaction. Les erreurs conservent l’élément avec un délai de reprise ; les traitements concurrents sont idempotents et un append sur une tête de chaîne déplacée échoue fermé.
+- **Données** : migration 005 (PR #297) crée l’outbox ; migration 006 (PR #298) ajoute la projection et les FK vers `audit_events` pour empêcher l’archivage d’une source non traitée. La projection ne copie ni secret, ni détail d’injection, ni commande brute, ni presse-papiers. `alert_outbox` reste exclusivement dédiée aux webhooks ADR-0057.
+- **Tests ajoutés et exécutés** : règles positives/négatives, création de projection, événement de détection signé, rejeu sans doublon, deux workers concurrents, source altérée refusée et refus atomique lorsque la file est pleine. Sur PostgreSQL 16 réel, les tests prouvent la migration 005, la reprise depuis une nouvelle instance de service, l’atomicité de l’outbox, le traitement et le refus à saturation. `go test ./services/recording-audit/audit-service/... -count=1` : PASS ; même suite avec `-race` : PASS ; `go build` et `go vet` du module : PASS ; `git diff --check` : PASS. Trois mutations (allowlist mTLS, plafond outbox, vérification de chaîne) ont été tuées, 3/3.
+- **Non livré dans cet incrément** : API de lecture/résumé/détail, Gateway, permissions, acquittement audité, Admin UI, métriques de file et readiness durable. Le mode mémoire n'est pas conforme au mode durable de production. Les signaux géographiques, horaires, comportementaux, volume et ML restent désactivés.
+
+
+## 2026-11-24 — resets PostgreSQL des tests après la migration 005
+
+- **Défaut détecté en CI** : les parcours `TestPostgresFlow` et les tests de chaîne d'audit tronquaient `audit_events` seuls. La migration 006 ajoute une FK de `session_alert_detection_outbox.source_event_id` vers `audit_events(id)` ; PostgreSQL refuse donc légitimement le `TRUNCATE` isolé.
+- **Correction** : les resets concernés tronquent explicitement `session_alert_detection_outbox`, `session_alerts` et `audit_events` dans la même instruction. Le `PURGE` du workflow PostgreSQL inclut aussi les deux nouvelles tables. La FK et la protection contre l'archivage d'une source en attente restent inchangées.
+- **Portée** : uniquement l'isolation et le nettoyage des tests ; aucun changement au comportement de production.
+
+
+## 2026-11-24 — PR #298 réalignée sur l'outbox de la PR #297
+
+- **Conflit résolu sans réécriture d'historique** : la migration 005 de `main` reste inchangée ; la projection `session_alerts` et les FK de rétention sont ajoutées dans la migration 006. Le catalogue conserve l'identifiant `v1` commun à l'incrément d'ingestion de la PR #297.
+- **Atomicité** : le même verrou consultatif PostgreSQL (`731947201`) sérialise l'insertion source/outbox et la complétion du worker ; la complétion vérifie que la tête de chaîne n'a pas bougé avant d'ajouter `session.alert.detected`.
+- **Tests** : les resets d'intégration détectent séparément `audit_events`, `session_alert_detection_outbox` et `session_alerts` pour rester compatibles avec une base fraîche ou partiellement migrée. Les tables présentes sont purgées ensemble afin de respecter les FK.
+- **Périmètre restant** : aucune route publique de lecture/résumé/acquittement, permission Gateway dédiée, acquittement audité ou intégration Admin UI n'est ajoutée dans cette PR.
+
+
+## 2026-11-24 — Lectures internes mTLS des alertes de session (ADR-0117/0122)
+
+- **Périmètre** : l’Audit Service expose `GET /audit/v1/session-alerts`, `/summary` et `/{id}` sous mTLS. `CallerRules()` autorise uniquement `api-gateway` ; aucune identité utilisateur ni rôle n’est accepté par le service. La Gateway devra faire l’ABAC avant chaque appel.
+- **Liste** : filtres stricts statut/sévérité/session/période, pagination keyset déterministe `(detected_at DESC, id DESC)`, limite 50 par défaut et 100 maximum, curseur opaque, query bornée et paramètres inconnus/dupliqués refusés.
+- **Résumé** : compteurs des cinq sévérités calculés par une seule instruction SQL ; `durable=true` avec PostgreSQL et `false` en mémoire. Liste, détail et résumé sont `no-store` et ne renvoient jamais l’événement source ni ses détails.
+- **Validations** : `make test` PASS (tous les modules Go) ; `make build vet` PASS ; `go test -race ./services/recording-audit/audit-service/... -count=1` PASS ; tests Audit Service avec PostgreSQL 16 PASS ; `TestContract_*` PASS ; `TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProcesses` PASS avec le Gateway autorisé et les identités Session Broker/admin-cli refusées ; `git diff --check` PASS. Deux mutations de sécurité ont été tuées : élargissement de l’allowlist mTLS à `mtls.Any`, et déclaration erronée du magasin mémoire comme durable.
+- **Non livré** : façade publique Gateway, permissions `session-alerts:read`, acquittement audité, `session-alerts:acknowledge` et Admin UI.
