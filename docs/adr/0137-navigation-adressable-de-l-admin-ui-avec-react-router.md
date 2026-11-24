@@ -38,9 +38,8 @@ Rien à changer côté serveur : `services/access/api-gateway/internal/interface
 | `/ui/access/requests` | Demandes | `sessions.approve` |
 | `/ui/sessions` → `/ui/sessions/live` | `Sessions` En direct | jeton |
 | `/ui/sessions/history` | `SessionHistory` | jeton |
-| `/ui/sessions/recordings` · `/ui/sessions/recordings/:sessionId` | Enregistrements + replay | `recordings.read` |
+| `/ui/sessions/recordings` | Enregistrements + replay (la session ouverte vit dans un contexte React, jamais dans l'URL) | `recordings.read` |
 | `/ui/sessions/alerts` | `SessionAlerts` | jeton |
-| `/ui/sessions/:sessionId` | détail (panneau) | jeton |
 | `/ui/infrastructure` | `Infrastructure` | jeton |
 | `/ui/audit` → `/ui/audit/journal` · `/reports` · `/evidence` · `/retention` | `AuditCompliance` | jeton |
 | `/ui/security` | `SecurityCenter` | `accounts.list` |
@@ -49,7 +48,7 @@ Rien à changer côté serveur : `services/access/api-gateway/internal/interface
 
    Règles : aucune route pour une fonction absente (le détail de compte n'arrive qu'avec son panneau) ; les onglets déjà livrés deviennent des sous-routes ; les filtres persistants passent en `searchParams` ; les noms de domaine sont `audit` et `security` — pas les clés actuelles, inversées.
 5. **Refus explicites** : `AuthGate` (jeton en mémoire) → `CapabilityGate` (capacité manquante : page 403 nommant la capacité, navigation inchangée) → écran ; un `AppErrorBoundary` par route ; chemin inconnu : 404. Une garde de route n'est jamais une protection : le serveur reste l'autorité (ADR-0131 §6).
-6. **L'état vit dans l'URL** : onglets et filtres en `searchParams` (`?protocol=ssh&rule=…`, `?from=&to=&status=`). Jamais de secret, de jeton, d'identifiant de session ni de recherche libre au-delà de ce qui est déjà visible et non sensible (ADR-0073 §6) ; l'état de dialogue reste local.
+6. **L'état vit dans l'URL** (décision du 24 novembre 2026, option (a) : aucune route `:sessionId` ; la session sélectionnée est portée par un contexte React `SelectedSession`, perdu au rechargement comme le jeton) : onglets et filtres en `searchParams` (`?protocol=ssh&rule=…`, `?from=&to=&status=`). Jamais de secret, de jeton, d'identifiant de session ni de recherche libre au-delà de ce qui est déjà visible et non sensible (ADR-0073 §6) ; l'état de dialogue reste local.
 7. **Le rechargement passe par la connexion** : le jeton vit en mémoire (ADR-0036 règle 5). Recharger `/ui/access/accounts` affiche la connexion, puis **la même URL** rend l'écran demandé. Cela remplace le `history.replaceState("/ui/")` codé en dur de `OidcCallback`.
 8. **Le shell partagé rejoint `@openbastion/ui`** : structure (`AppShell`, `AppSidebar`, `AppHeader`, `AppBreadcrumbs`, `AppContent`, `AppPage`), interactions (palette, thèmes, menu utilisateur, sélecteur d'espace, navigation mobile, focus) et gardes/erreurs (`AppRouteGuard`, `AppLoadingState`, `AppErrorBoundary`, `AppNotificationProvider`). L'`AppShell.tsx` de l'application est remplacé à l'incrément 6, en conservant favoris, réduction, thème, densité, palette, pied de page et les tests existants.
 9. **Réversibilité** : chaque incrément se livre seul, sur sa branche, avec `make ui-test ui-build` ; retirer le routeur ramène les onglets en état React.
