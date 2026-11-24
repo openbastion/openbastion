@@ -101,7 +101,13 @@ func redactDSN(dsn string) string {
 }
 
 func main() {
-	if err := command.NewServiceCommand("workflow-service", runService).Execute(); err != nil {
+	root := command.NewServiceCommand("workflow-service", runService)
+	// The healthcheck of the distroless image (deploy/docker-compose): probe the running service
+	// under its own identity, so dependent services can wait for readiness.
+	root.AddCommand(command.NewProbeCommand(func(ctx context.Context, port int, path string) error {
+		return mtls.ProbeSelf(ctx, mtls.WorkflowService, port, path)
+	}))
+	if err := root.Execute(); err != nil {
 		log.Fatalf("workflow-service: %v", err)
 	}
 }
