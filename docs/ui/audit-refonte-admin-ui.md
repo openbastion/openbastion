@@ -158,3 +158,15 @@ Mesures faites dans le sandbox (`make ui-test`, `make ui-build`), aucun code app
 | `react-router` | **absent** de `admin-ui/package.json` et de `packages/ui/package.json` (ADR-0137 accepté, non implémenté) |
 
 **Non réalisé, et pourquoi :** les captures 1440/768/320 px et la comparaison aux maquettes SVG/Figma. La pile Docker complète (Go, PostgreSQL, PKI) n'était pas démarrée dans ce sandbox ; aucune capture n'est donc revendiquée. Les matrices d'écarts de `reference-screens/ecarts-admin-ui.md` restent la dernière source documentée.
+
+### 9.1 Captures navigateur (incrément 2, suite) — 24 novembre 2026
+
+Pile complète démarrée (`deploy/base44/docker-compose.yml`), connexion avec le compte de développement `operator`. Les préréglages du navigateur d'audit sont **desktop 1280 px, tablette 768 px, mobile 375 px** : les largeurs 1440 et 320 px **n'ont pas été capturées** et restent à faire. Aucune erreur console sur les parcours capturés.
+
+| Écran | 1280 | 768 | 375 | Constat |
+|---|---|---|---|---|
+| Vue d'ensemble | capturé | capturé | capturé | Conforme dans l'ensemble. À 768 px, la recherche de l'en-tête chevauche le fil d'Ariane (« Vue d'… ») et le badge « Production » : **défaut réel de l'en-tête**, à corriger lors de l'adoption du shell (incrément 6/12). À 375 px le champ de recherche n'affiche que l'icône et la sidebar est repliée derrière le bouton de menu. |
+| Accès privilégiés (Ressources) | capturé | — | — | Lisible ; onglets Ressources, Comptes, Politiques. |
+| Sessions (En direct) | capturé | — | — | Onglets En direct, Historique, Alertes de session présents. |
+
+Non capturés : Infrastructure, Audit & conformité, Sécurité, Paramètres, 768/375 px hors Vue d'ensemble, thème sombre. La comparaison pixel à pixel aux maquettes SVG/Figma n'est pas faite.
