@@ -5473,10 +5473,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Limites et suite** : tous les processus sont sur le même hôte WSL2 ; les résultats ne sont pas des SLO. La reproduction entre hôtes est différée à la demande de l'utilisateur. Prochaine étape : concevoir le budget de connexions et la configuration de pool par service, puis ajouter des tests de bornes et d'intégration.
 
 
-## 2026-11-24 — Refonte de l'Admin UI : audit validé, ADR-0136 proposé
+## 2026-11-24 — Refonte de l'Admin UI : audit validé, ADR-0137 proposé
 
 - **Audit commité** : `docs/ui/audit-refonte-admin-ui.md` consigne le diagnostic validé par le propriétaire le 24 novembre 2026, avec les chiffres re-mesurés sur `2a177f47` : 7 destinations, 113 fichiers TS/TSX (16 525 lignes), 37 fichiers de tests (299 `it()`), `AppShell.tsx` 552 lignes, 18 capacités du catalogue ADR-0131, 40 cadres Figma dont 24 maquettes comparées.
-- **ADR-0136 `Proposé`** : navigation adressable avec `react-router` (version exacte, peer dependency de `@openbastion/ui`, aucun routeur dans le package), `basename = import.meta.env.BASE_URL`, déclaration unique `app/navigation.ts`, table de routes avec 403/404 explicites, filtres en `searchParams`, rechargement → connexion → même URL. Amende l'ADR-0036 règle 1 et l'ADR-0073 ; effet à l'acceptation du propriétaire.
+- **ADR-0137 `Proposé`** : navigation adressable avec `react-router` (version exacte, peer dependency de `@openbastion/ui`, aucun routeur dans le package), `basename = import.meta.env.BASE_URL`, déclaration unique `app/navigation.ts`, table de routes avec 403/404 explicites, filtres en `searchParams`, rechargement → connexion → même URL. Amende l'ADR-0036 règle 1 et l'ADR-0073 ; effet à l'acceptation du propriétaire.
 - **Ce qui n'est pas fait** : aucune dépendance ajoutée, aucun code applicatif modifié, aucun test exécuté pour un changement de comportement (il n'y en a pas) ; `git diff --check` seul contrôle mécanique. Les incréments 2 à 14 de l'audit restent à livrer. Risques principaux déclarés dans l'ADR : réécriture des tests de navigation, restitution de l'URL après connexion (jeton en mémoire), taille du bundle à mesurer à l'incrément 7.
 - **Documents non corrigés volontairement** : `.agents/rules/frontend.md` règle 1 et l'invariant ADR-0036 de `.agents/architecture/invariants.md` (« à l'exécution React seulement ») restent vrais tant que la dépendance n'est pas ajoutée ; ils changent à l'incrément 7, pas avant.
 

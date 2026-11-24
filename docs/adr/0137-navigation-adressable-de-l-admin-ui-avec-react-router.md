@@ -1,4 +1,4 @@
-# ADR-0136 — La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites
+# ADR-0137 — La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites
 
 **Statut** `Proposé` · 24 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date. L'audit de la refonte et ses cinq décisions ont été validés par Bony Kiss le 24 novembre 2026 ; cet ADR fixe la première des cinq, le routage.
 

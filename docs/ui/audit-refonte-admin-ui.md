@@ -25,7 +25,7 @@
 
 ## 2. Trois constats qui commandent le reste
 
-1. **Le routeur est interdit par deux ADR acceptés** : ADR-0036 règle 1 (« ni routeur ») et ADR-0073, dont l'alternative « introduire un routeur » est écartée au profit d'un ADR distinct si le besoin est démontré. La migration est donc bloquée jusqu'à l'acceptation de [l'ADR-0136](../adr/0136-navigation-adressable-de-l-admin-ui-avec-react-router.md).
+1. **Le routeur est interdit par deux ADR acceptés** : ADR-0036 règle 1 (« ni routeur ») et ADR-0073, dont l'alternative « introduire un routeur » est écartée au profit d'un ADR distinct si le besoin est démontré. La migration est donc bloquée jusqu'à l'acceptation de [l'ADR-0137](../adr/0137-navigation-adressable-de-l-admin-ui-avec-react-router.md).
 2. **Le shell est monolithique et n'utilise pas le socle partagé** : `AppShell.tsx` (552 lignes) contient son propre piège de focus pour la navigation mobile et des restitutions de focus manuelles ; les primitives `Sidebar`, `Breadcrumb`, `Command`, `Sheet` et `Tooltip` de `@openbastion/ui` ne sont utilisées par **aucun** écran applicatif, seulement par leurs tests.
 3. **La documentation d'écarts est périmée** : `ecarts-admin-ui.md` compare `main` à `8da45e3` et décrit comme manquants des comportements livrés depuis (état d'envoi, erreurs par champ, zone de texte, compteur de ticket, Annuler).
 
@@ -46,7 +46,7 @@
 
 ## 5. Cible : navigation adressable
 
-La décision, la table de routes complète et les gardes sont dans [l'ADR-0136](../adr/0136-navigation-adressable-de-l-admin-ui-avec-react-router.md). Trois points vérifiés ici :
+La décision, la table de routes complète et les gardes sont dans [l'ADR-0137](../adr/0137-navigation-adressable-de-l-admin-ui-avec-react-router.md). Trois points vérifiés ici :
 
 - **Le repli SPA existe déjà** : `services/access/api-gateway/internal/interfaces/ui.go` sert `index.html` (`no-store`) pour tout chemin sans extension ; aucun changement serveur n'est nécessaire pour les liens profonds, et la CSP reste inchangée.
 - **Le jeton reste en mémoire** (ADR-0036 règle 5) : recharger une URL affiche la connexion, puis la même URL rend l'écran demandé. C'est le comportement à tester, et il remplace le `history.replaceState("/ui/")` codé en dur de `OidcCallback`.
@@ -57,7 +57,7 @@ La décision, la table de routes complète et les gardes sont dans [l'ADR-0136](
 | # | Livrable | Contrôle de sortie | Réversibilité |
 |---|---|---|---|
 | 0 | **Audit commité** : ce document + corrections factuelles de `ecarts-admin-ui.md` | relecture propriétaire | revert d'un fichier |
-| 1 | **ADR routage** : ADR-0136 + amendements 0036/0073 | ADR accepté | doc seule |
+| 1 | **ADR routage** : ADR-0137 + amendements 0036/0073 | ADR proposé | doc seule |
 | 2 | **Baseline mesurée** : `make ui-test ui-build`, comptage tests/fichiers, captures 1440/768/320, inventaire des assertions de navigation | chiffres réels consignés | aucun code |
 | 3 | **Shell — structure** : `AppShell*`, `AppSidebar*`, `AppNavigation*`, `AppHeader`, `AppBreadcrumbs`, `AppContent`, `AppPage` dans `@openbastion/ui` + tests package | tests package seuls, app inchangée | package non consommé |
 | 4 | **Shell — interactions** : `AppCommandPalette`, `AppThemeProvider`, `AppUserMenu`, `AppWorkspaceSelector`, `AppMobileNavigation`, focus/clavier | tests focus, Échap, restitution, `Ctrl+K` | idem |
@@ -76,7 +76,7 @@ Chaque incrément est livrable seul, sur sa branche, avec `make ui-test ui-build
 
 ## 7. Cinq décisions validées le 24 novembre 2026
 
-1. **ADR react-router** : rédigé ([ADR-0136](../adr/0136-navigation-adressable-de-l-admin-ui-avec-react-router.md)) ; son acceptation ouvre les incréments 7 à 11. Rester sans routeur les ferme.
+1. **ADR react-router** : rédigé ([ADR-0137](../adr/0137-navigation-adressable-de-l-admin-ui-avec-react-router.md)) ; son acceptation ouvre les incréments 7 à 11. Rester sans routeur les ferme.
 2. **Périmètre du shell partagé** : composants génériques dans `@openbastion/ui`, avec `react-router` en peer dependency ; l'application fournit le routeur et la déclaration.
 3. **Accès direct à une page interdite** : 403 explicite, au lieu du repli silencieux sur Vue d'ensemble.
 4. **État dans l'URL** : filtres et onglets en `searchParams` ; rien de sensible en URL.
