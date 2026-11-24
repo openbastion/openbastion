@@ -207,10 +207,10 @@ func (m *sessionMeter) scene(name string, act func()) *sceneMeasure {
 		result.PNGBytesMean = total / len(frames)
 	}
 	result.PNGKiBps = round(float64(total)/1024/seconds, 1)
-	result.EncodeMsMedian = round(encodeMedianMs(m.t, last), 1)
+	result.EncodeMsMedian = round(encodeMedianMs(m.t, last), 3)
 	result.HeapMiBPeak = round(peak/(1<<20), 1)
 	m.results = append(m.results, result)
-	m.t.Logf("MEASURE %s %s: %.2f s, target %d bytes (%.1f KiB/s), %d frame(s) (%d key, %.1f/s), PNG mean %d max %d bytes (%.1f KiB/s), encode %.1f ms, heap peak %.1f MiB",
+	m.t.Logf("MEASURE %s %s: %.2f s, target %d bytes (%.1f KiB/s), %d frame(s) (%d key, %.1f/s), PNG mean %d max %d bytes (%.1f KiB/s), encode %.3f ms, heap peak %.1f MiB",
 		m.target, name, seconds, result.TargetBytes, result.TargetKiBps, result.Frames, result.KeyFrames, result.FramesPerSec,
 		result.PNGBytesMean, result.PNGBytesMax, result.PNGKiBps, result.EncodeMsMedian, result.HeapMiBPeak)
 	return &m.results[len(m.results)-1]
@@ -307,17 +307,28 @@ func encodeOneMedianMs(t *testing.T, frame []byte) float64 {
 			}
 		}
 	}
-	var samples []float64
+	var samples []time.Duration
 	for i := 0; i < 5; i++ {
 		var out bytes.Buffer
 		start := time.Now()
 		if err := png.Encode(&out, rgba); err != nil {
 			t.Fatal(err)
 		}
-		samples = append(samples, float64(time.Since(start).Microseconds())/1000)
+		samples = append(samples, time.Since(start))
 	}
-	sort.Float64s(samples)
-	return samples[len(samples)/2]
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	return encodeDurationMs(samples[len(samples)/2])
+}
+
+// encodeDurationMs retains microsecond-scale measurements in the millisecond report.
+func encodeDurationMs(duration time.Duration) float64 {
+	return round(float64(duration.Nanoseconds())/float64(time.Millisecond), 3)
+}
+
+func TestEncodeDurationMsPreservesMicrosecondPrecision(t *testing.T) {
+	if got, want := encodeDurationMs(49*time.Microsecond), 0.049; got != want {
+		t.Fatalf("encodeDurationMs(49 microseconds) = %.3f ms, want %.3f ms", got, want)
+	}
 }
 
 func heapInUse() float64 {
