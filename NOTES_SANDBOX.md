@@ -5514,3 +5514,10 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Données** : migration 005 additive ; la file référence `audit_events` pour empêcher l’archivage d’une source non traitée. La projection ne copie ni secret, ni détail d’injection, ni commande brute, ni presse-papiers. `alert_outbox` reste exclusivement dédiée aux webhooks ADR-0057.
 - **Tests ajoutés et exécutés** : règles positives/négatives, création de projection, événement de détection signé, rejeu sans doublon, deux workers concurrents, source altérée refusée et refus atomique lorsque la file est pleine. Sur PostgreSQL 16 réel, les tests prouvent la migration 005, la reprise depuis une nouvelle instance de service, l’atomicité de l’outbox, le traitement et le refus à saturation. `go test ./services/recording-audit/audit-service/... -count=1` : PASS ; même suite avec `-race` : PASS ; `go build` et `go vet` du module : PASS ; `git diff --check` : PASS. Trois mutations (allowlist mTLS, plafond outbox, vérification de chaîne) ont été tuées, 3/3.
 - **Non livré dans cet incrément** : API de lecture/résumé/détail, Gateway, permissions, acquittement audité, Admin UI, métriques de file et readiness durable. Le mode mémoire n'est pas conforme au mode durable de production. Les signaux géographiques, horaires, comportementaux, volume et ML restent désactivés.
+
+
+## 2026-11-24 — resets PostgreSQL des tests après la migration 005
+
+- **Défaut détecté en CI** : les parcours `TestPostgresFlow` et les tests de chaîne d'audit tronquaient `audit_events` seuls. La migration 005 ajoute une FK de `session_alert_detection_outbox.source_event_id` vers `audit_events(id)` ; PostgreSQL refuse donc légitimement le `TRUNCATE` isolé.
+- **Correction** : les resets concernés tronquent explicitement `session_alert_detection_outbox`, `session_alerts` et `audit_events` dans la même instruction. Le `PURGE` du workflow PostgreSQL inclut aussi les deux nouvelles tables. La FK et la protection contre l'archivage d'une source en attente restent inchangées.
+- **Portée** : uniquement l'isolation et le nettoyage des tests ; aucun changement au comportement de production.
