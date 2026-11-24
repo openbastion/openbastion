@@ -11,9 +11,10 @@ import (
 // InMemoryStore is an in-memory log for local development and tests: append-only, except that
 // archived events leave from its start (ADR-0032).
 type InMemoryStore struct {
-	mu     sync.Mutex
-	events []*domain.Event
-	heads  map[string]domain.MetadataHead // ADR-0116 §3
+	mu              sync.Mutex
+	events          []*domain.Event
+	heads           map[string]domain.MetadataHead // ADR-0116 §3
+	detectionOutbox map[string]string
 }
 
 func NewInMemoryStore() *InMemoryStore { return &InMemoryStore{} }
@@ -48,6 +49,11 @@ func (s *InMemoryStore) DeleteThrough(ctx context.Context, lastID string, expect
 	defer s.mu.Unlock()
 	for i, e := range s.events {
 		if e.ID == lastID {
+			for _, sourceEvent := range s.events[:i+1] {
+				if _, pending := s.detectionOutbox[sourceEvent.ID]; pending {
+					return fmt.Errorf("archiving through %s would remove a source event awaiting session alert detection: nothing deleted", lastID)
+				}
+			}
 			if i+1 != expected {
 				return fmt.Errorf("deleting through %s would remove %d events, not %d: nothing deleted", lastID, i+1, expected)
 			}
@@ -83,4 +89,22 @@ func (s *InMemoryStore) MetadataHead(ctx context.Context, sessionID string) (*do
 		return nil, nil
 	}
 	return &head, nil
+}
+
+// AppendWithDetection atomically stores the signed event and its catalog version in memory.
+func (s *InMemoryStore) AppendWithDetection(ctx context.Context, e *domain.Event, catalogVersion string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.detectionOutbox == nil {
+		s.detectionOutbox = make(map[string]string)
+	}
+	if _, exists := s.detectionOutbox[e.ID]; exists {
+		return nil
+	}
+	if len(s.detectionOutbox) >= domain.SessionAlertOutboxCapacity {
+		return domain.ErrSessionAlertOutboxFull
+	}
+	s.events = append(s.events, e)
+	s.detectionOutbox[e.ID] = catalogVersion
+	return nil
 }

@@ -58,6 +58,33 @@ func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 	return appendEvent(ctx, s.db, e)
 }
 
+// AppendWithDetection commits the audit event and its detection work item together (ADR-0117).
+// A transaction-scoped advisory lock makes the capacity check valid across Audit Service replicas.
+func (s *PostgresStore) AppendWithDetection(ctx context.Context, e *domain.Event, catalogVersion string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DO $$ BEGIN PERFORM pg_advisory_xact_lock(731947201); END $$`); err != nil {
+		return err
+	}
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM session_alert_detection_outbox`).Scan(&pending); err != nil {
+		return err
+	}
+	if pending >= domain.SessionAlertOutboxCapacity {
+		return domain.ErrSessionAlertOutboxFull
+	}
+	if err := appendEvent(ctx, tx, e); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO session_alert_detection_outbox (source_event_id, catalog_version, attempts, next_attempt_at) VALUES ($1, $2, 0, now())`, e.ID, catalogVersion); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
@@ -132,6 +159,13 @@ func (s *PostgresStore) DeleteThrough(ctx context.Context, lastID string, expect
 			return fmt.Errorf("event %s is not in the chain: nothing deleted", lastID)
 		}
 		return err
+	}
+	var pendingDetection int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM session_alert_detection_outbox d JOIN audit_events e ON e.id = d.source_event_id WHERE e.seq <= $1`, seq).Scan(&pendingDetection); err != nil {
+		return err
+	}
+	if pendingDetection > 0 {
+		return fmt.Errorf("archiving through %s would remove %d source event(s) awaiting session alert detection: nothing deleted", lastID, pendingDetection)
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM audit_events WHERE seq <= $1`, seq)
 	if err != nil {

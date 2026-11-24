@@ -117,6 +117,31 @@ func TestHTTP_TheEmitterIsTheCertificatesNotTheBodys(t *testing.T) {
 	}
 }
 
+type fullDetectionStore struct{ *infrastructure.InMemoryStore }
+
+func (fullDetectionStore) AppendWithDetection(context.Context, *domain.Event, string) error {
+	return domain.ErrSessionAlertOutboxFull
+}
+
+func TestHTTP_AFullDetectionOutboxRefusesTheSourceEventWith503(t *testing.T) {
+	store := fullDetectionStore{infrastructure.NewInMemoryStore()}
+	h := interfaces.NewHTTPServer(application.NewAuditService(store)).Routes()
+	req := httptest.NewRequest(http.MethodPost, "/audit/v1/emit-event", strings.NewReader(`{"actor_id":"u_1","action":"session.breakglass_requested","resource_type":"session","resource_id":"s1","success":true}`))
+	req = req.WithContext(mtls.WithCaller(req.Context(), "session-broker"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), "731947201") {
+		t.Fatalf("%d %q, want generic 503", rec.Code, rec.Body.String())
+	}
+	last, err := store.Last(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last != nil {
+		t.Fatalf("source event was appended despite the full outbox: %+v", last)
+	}
+}
+
 type unreadableAnchors struct{}
 
 func (unreadableAnchors) Append(context.Context, domain.Anchor) error { return nil }

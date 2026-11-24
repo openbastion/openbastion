@@ -36,7 +36,7 @@ func TestPostgresFlow_OldMonthsAreArchivedOutOfTheDatabase_AndArchivedInjections
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { _ = db.Close() })
 	run := func(t *testing.T, q string, args ...any) {
 		t.Helper()
 		if _, err := db.Exec(q, args...); err != nil {
@@ -80,8 +80,8 @@ func TestPostgresFlow_OldMonthsAreArchivedOutOfTheDatabase_AndArchivedInjections
 
 	// Seed a valid keyed-v4 chain in January and February 2025. Two historical injections
 	// (start + terminal) must be found in their archives after the Audit Service restarts.
-	run(t, `TRUNCATE audit_events RESTART IDENTITY`)
-	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE audit_events RESTART IDENTITY`) })
+	truncateAuditEvents(t, db)
+	t.Cleanup(func() { truncateAuditEvents(t, db) })
 	chainKey, err := hex.DecodeString(key)
 	if err != nil {
 		t.Fatal(err)

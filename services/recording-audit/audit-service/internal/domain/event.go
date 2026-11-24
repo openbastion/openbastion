@@ -44,4 +44,9 @@ const (
 // ErrInvalidEvent is returned for an event no emitter can mean (ADR-0025): a field that is
 // missing, too long, not UTF-8, carrying a control character, or an action or resource type
 // outside their alphabet. Nothing of it is appended to the chain.
-var ErrInvalidEvent = errors.New("invalid event")
+const SessionAlertOutboxCapacity = 4096
+
+var (
+	ErrInvalidEvent           = errors.New("invalid event")
+	ErrSessionAlertOutboxFull = errors.New("session alert detection outbox full")
+)
