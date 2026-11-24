@@ -201,6 +201,39 @@ export interface SessionSearchResult {
   next: string;
 }
 
+export type SessionAlertSeverity = "info" | "low" | "medium" | "high" | "critical";
+export type SessionAlertStatus = "unacknowledged" | "acknowledged";
+
+export interface SessionAlert {
+  id: string;
+  rule_id: string;
+  rule_version: string;
+  source_event_id: string;
+  session_id: string;
+  severity: SessionAlertSeverity;
+  status: SessionAlertStatus;
+  summary: string;
+  detected_at: string;
+  created_at: string;
+  revision: number;
+  acknowledged_at?: string;
+  acknowledged_by?: string;
+  acknowledgement_event_id?: string;
+}
+
+export interface SessionAlertPage {
+  alerts: SessionAlert[];
+  next_cursor?: string;
+  has_more: boolean;
+}
+
+export interface SessionAlertSummary {
+  unacknowledged_count: number;
+  by_severity: Record<SessionAlertSeverity, number>;
+  as_of: string;
+  durable: boolean;
+}
+
 export interface RecordingSearchResult {
   searchId: string;
   truncated: boolean;
