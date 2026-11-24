@@ -94,6 +94,12 @@ services:
       AUDIT_URL: https://audit-service:8082
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authentication}}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/authentication", "probe", "--port", "8086", "--path", "/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
 
   authorization:
     <<: *service
@@ -107,6 +113,12 @@ services:
       BOOTSTRAP_ADMIN_ROLE: ${BOOTSTRAP_ADMIN_ROLE:-platform-admin}
     volumes:
       - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: authorization}}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/authorization", "probe", "--port", "8083", "--path", "/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
 
   password-vault:
     <<: *service
