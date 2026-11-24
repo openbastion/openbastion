@@ -140,3 +140,21 @@ Vérifié : aucune occurrence hors tests dans `web/admin-ui/src`.
 | `Tooltip` | `components/Tooltip.tsx` | 0 | libellés des boutons icône (incrément 4) |
 
 **Hors périmètre** : les écrans métier (`features/*`) et la déclaration de navigation restent dans l'application. Aucun composant de ce tableau ne change de comportement à l'extraction ; l'incrément 3 les livre dans le package sans que l'application les consomme.
+
+## 9. Baseline technique mesurée (incrément 2) — 24 novembre 2026, `main` à `a55688e8`
+
+Mesures faites dans le sandbox (`make ui-test`, `make ui-build`), aucun code applicatif modifié.
+
+| Mesure | Valeur |
+|---|---|
+| `make ui-test` | **39 fichiers, 333 tests, tous verts** (≈ 24 s) |
+| `it()`/`test()` comptés dans `admin-ui/src` | 318 (les tests paramétrés expliquent l'écart avec 333) |
+| Fichiers TS/TSX `admin-ui/src` | 116 fichiers, 17 181 lignes (dont 39 fichiers de tests) |
+| Lignes TS/TSX `packages/ui/src` | 1 458 |
+| `make ui-build` (`tsc --noEmit` + `vite build`) | vert, 256 modules, ≈ 8,5 s au total (Vite : 0,42 s) |
+| JS principal | **767,21 kB minifiés, 218,15 kB gzip** (PR #304 : 766,47 / 217,92 — +0,74 kB / +0,23 kB) |
+| CSS | 148,83 kB, 24,14 kB gzip |
+| Avertissement Vite > 500 kB | toujours présent ; budget de référence à ne pas aggraver : 767,21 kB / 218,15 kB gzip |
+| `react-router` | **absent** de `admin-ui/package.json` et de `packages/ui/package.json` (ADR-0137 accepté, non implémenté) |
+
+**Non réalisé, et pourquoi :** les captures 1440/768/320 px et la comparaison aux maquettes SVG/Figma. La pile Docker complète (Go, PostgreSQL, PKI) n'était pas démarrée dans ce sandbox ; aucune capture n'est donc revendiquée. Les matrices d'écarts de `reference-screens/ecarts-admin-ui.md` restent la dernière source documentée.
