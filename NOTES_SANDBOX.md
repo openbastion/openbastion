@@ -5529,3 +5529,12 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Atomicité** : le même verrou consultatif PostgreSQL (`731947201`) sérialise l'insertion source/outbox et la complétion du worker ; la complétion vérifie que la tête de chaîne n'a pas bougé avant d'ajouter `session.alert.detected`.
 - **Tests** : les resets d'intégration détectent séparément `audit_events`, `session_alert_detection_outbox` et `session_alerts` pour rester compatibles avec une base fraîche ou partiellement migrée. Les tables présentes sont purgées ensemble afin de respecter les FK.
 - **Périmètre restant** : aucune route publique de lecture/résumé/acquittement, permission Gateway dédiée, acquittement audité ou intégration Admin UI n'est ajoutée dans cette PR.
+
+
+## 2026-11-24 — Lectures internes mTLS des alertes de session (ADR-0117/0122)
+
+- **Périmètre** : l’Audit Service expose `GET /audit/v1/session-alerts`, `/summary` et `/{id}` sous mTLS. `CallerRules()` autorise uniquement `api-gateway` ; aucune identité utilisateur ni rôle n’est accepté par le service. La Gateway devra faire l’ABAC avant chaque appel.
+- **Liste** : filtres stricts statut/sévérité/session/période, pagination keyset déterministe `(detected_at DESC, id DESC)`, limite 50 par défaut et 100 maximum, curseur opaque, query bornée et paramètres inconnus/dupliqués refusés.
+- **Résumé** : compteurs des cinq sévérités calculés par une seule instruction SQL ; `durable=true` avec PostgreSQL et `false` en mémoire. Liste, détail et résumé sont `no-store` et ne renvoient jamais l’événement source ni ses détails.
+- **Validations** : `make test` PASS (tous les modules Go) ; `make build vet` PASS ; `go test -race ./services/recording-audit/audit-service/... -count=1` PASS ; tests Audit Service avec PostgreSQL 16 PASS ; `TestContract_*` PASS ; `TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProcesses` PASS avec le Gateway autorisé et les identités Session Broker/admin-cli refusées ; `git diff --check` PASS. Deux mutations de sécurité ont été tuées : élargissement de l’allowlist mTLS à `mtls.Any`, et déclaration erronée du magasin mémoire comme durable.
+- **Non livré** : façade publique Gateway, permissions `session-alerts:read`, acquittement audité, `session-alerts:acknowledge` et Admin UI.

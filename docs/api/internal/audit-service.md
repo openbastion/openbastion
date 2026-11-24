@@ -55,6 +55,29 @@ curl --fail --silent --show-error \
 ```
 
 
+## Lectures internes de la file d’alertes de session (ADR-0117/0122)
+
+Ces routes internes sont réservées à l’identité mTLS `api-gateway`. Elles ne sont pas des routes opérateur et ne sont jamais exposées directement. La Gateway doit vérifier le bearer token et la permission Authorization sur la ressource et l’action exactes avant chaque appel. Le certificat mTLS ne transporte que l’identité du workload ; aucun utilisateur ou rôle n’est accepté dans le corps ou la query.
+
+### `GET /audit/v1/session-alerts`
+
+- **Query autorisée :** `status` (`unacknowledged` ou `acknowledged`), `severity` (`info`, `low`, `medium`, `high`, `critical`), `session_id`, `since`, `until` (RFC 3339), `cursor` (opaque), `limit` (défaut 50, maximum 100). Les paramètres inconnus ou dupliqués sont refusés.
+- **Tri :** `detected_at DESC, id DESC`. Le curseur encode la dernière paire `(detected_at, id)` de la page ; il est opaque pour le client et ne constitue pas un jeton d’autorisation.
+- **Réponse :** `200 application/json`, `Cache-Control: no-store`, `{alerts, has_more, next_cursor?}`. Chaque occurrence expose uniquement son identifiant, sa règle/version, la référence de preuve source, la session, la sévérité, le statut, le résumé borné, les dates, la révision et les champs d’acquittement. Le contenu de l’événement source n’est jamais retourné.
+- **Erreurs :** `400` filtre/cursor invalide, `405` méthode incorrecte, `503` projection indisponible. La liste vide est `200` avec `alerts: []`.
+
+### `GET /audit/v1/session-alerts/summary`
+
+Réponse `200` : `{unacknowledged_count, by_severity, as_of, durable}`. Les cinq sévérités sont toujours présentes dans `by_severity`, y compris avec une valeur zéro. Les compteurs sont calculés par une seule instruction SQL afin qu’ils représentent un même instantané. `durable=false` en mémoire (tests/développement) et `true` avec PostgreSQL. `Cache-Control: no-store`. Query string non vide refusée (`400`), autre méthode `405`, dépendance indisponible `503`.
+
+### `GET /audit/v1/session-alerts/{id}`
+
+Retourne la même projection bornée que la liste (`200`), `404` si l’identifiant valide n’existe pas, `400` si l’identifiant n’est pas au format `alert_` suivi de 32 caractères hexadécimaux minuscules, `405` pour une autre méthode et `503` si le magasin est indisponible. Aucun événement source brut ni détail de credential n’est inclus.
+
+**Frontière de confiance :** `CallerRules()` n’autorise que `api-gateway` sur ces routes. Le service Audit ne connaît pas les rôles opérateur ; la Gateway doit vérifier `session-alerts:read` sur `session-alerts:all` pour la liste et le résumé, ou sur `session-alerts:{id}` pour le détail, avant d’appeler le service. Une permission de lecture d’alerte ne confère pas `session.read`. L’acquittement n’est pas encore exposé dans cet incrément.
+
+Les DTO HTTP de ces lectures sont documentés ici plutôt que dans `proto/audit/v1/audit.proto` : le contrat interservices reste HTTP/JSON sous mTLS (ADR-0050), et aucune RPC Protobuf n’est introduite. Les tests de contrats signalent explicitement cette exception.
+
 ## Façade publique opérateur (ADR-0113)
 
 L’Admin UI n’appelle jamais ce service directement et ne reçoit jamais le certificat `admin-cli`. Elle utilise `GET /audit/secret-injections` sur la Gateway. La Gateway vérifie le bearer token, puis appelle Authorization avec les rôles vérifiés, `action=audit:secret-injections:read` et `resource=audit:secret-injections:all`. Depuis ADR-0114, Authorization doit faire correspondre simultanément `action_pattern` et `resource_pattern` ; une politique qui ne couvre que la ressource est refusée. Le refus par défaut est `403` ; une panne d’Authorization est `503`. Après autorisation, la Gateway appelle cette route interne sous son identité mTLS `api-gateway`. Seuls `limit` et `before` sont relayés. La réponse publique est bornée à 2 Mio et porte `Cache-Control: no-store`.

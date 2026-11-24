@@ -683,3 +683,8 @@ La Gateway expose deux routes bearer-authentifiées, avec réponses `Cache-Contr
 La Gateway reconstruit `callerId` et `actorRoles` à partir du jeton vérifié ; les champs fournis par le navigateur ne sont jamais utilisés comme identité. Le Broker vérifie le propriétaire, l'état actif, l'expiration, l'autorisation exacte et le protocole de la session ; il récupère compte/protocole depuis son stockage et fixe l'action à `secret:inject`. Le challenge MFA et le grant sont liés à ce tuple complet.
 
 **Limites de disponibilité fonctionnelle :** le flux A est câblé pour SSH, VNC et RDP, et l'Admin UI le consomme depuis le détail d'une session active. Pour SSH, la validation de bout en bout existe depuis ADR-0134 : OpenSSH réel, Admin UI dans Chrome avec l'authentificateur WebAuthn virtuel, processus réels (`TestADR0134_OpenSSHAndAWebAuthnStepUpInARealBrowser`) ; le parcours VNC a été éprouvé contre TigerVNC réel, tandis que la réception Unicode RDP reste à confirmer sur les cibles Windows en CI. Le parcours B (le mot de passe de l'opérateur, chiffré dans le navigateur pour le proxy écran) est le contrat d'ADR-0133 : `ProxyControl.AuthorizePaste` ci-dessus, et le message `InputPaste` du flux d'écran. Voir `docs/api/rest/openapi.yaml`, `docs/security/secret-injection-step-up-contract.md` et ADR-0134 pour le parcours SSH depuis un client standard.
+
+
+## Lectures internes des alertes de session
+
+Les routes HTTP/JSON sous mTLS sont documentées dans `docs/api/internal/audit-service.md` ; aucun RPC Protobuf n’est ajouté (ADR-0050, ADR-0117/0122).

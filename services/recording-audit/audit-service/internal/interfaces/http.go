@@ -41,6 +41,9 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/audit/v1/secret-injections", s.handleSecretInjectionReconciliation)
 	mux.HandleFunc("/audit/v1/session-metadata/attestations", s.handleAttestSessionMetadata)
 	mux.HandleFunc("/audit/v1/session-metadata/head", s.handleSessionMetadataHead)
+	mux.HandleFunc("/audit/v1/session-alerts/summary", s.handleSessionAlertSummary)
+	mux.HandleFunc("/audit/v1/session-alerts/", s.handleSessionAlertDetail)
+	mux.HandleFunc("/audit/v1/session-alerts", s.handleSessionAlertList)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	if s.metrics != nil {
 		mux.Handle("/metrics", s.metrics)
