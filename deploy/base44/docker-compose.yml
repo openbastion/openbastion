@@ -41,6 +41,7 @@ x-db-passwords: &db-passwords
   PG_PASSWORD_AUTHENTICATION: ob-dev-authentication
   PG_PASSWORD_AUTHORIZATION: ob-dev-authorization
   PG_PASSWORD_SESSION_BROKER: ob-dev-session-broker
+  PG_PASSWORD_WORKFLOW_SERVICE: ob-dev-workflow-service
   PG_PASSWORD_PASSWORD_VAULT: ob-dev-password-vault
   PG_PASSWORD_AUDIT_SERVICE: ob-dev-audit-service
   PG_PASSWORD_COMMAND_RECORDER: ob-dev-command-recorder
@@ -96,11 +97,12 @@ services:
       test:
         - CMD-SHELL
         - >
-          for user in authentication authorization session_broker password_vault audit_service command_recorder video_recorder; do
+          for user in authentication authorization session_broker workflow_service password_vault audit_service command_recorder video_recorder; do
             case "$$user" in
               authentication) pw='ob-dev-authentication' ;;
               authorization) pw='ob-dev-authorization' ;;
               session_broker) pw='ob-dev-session-broker' ;;
+              workflow_service) pw='ob-dev-workflow-service' ;;
               password_vault) pw='ob-dev-password-vault' ;;
               audit_service) pw='ob-dev-audit-service' ;;
               command_recorder) pw='ob-dev-command-recorder' ;;
@@ -448,6 +450,35 @@ services:
       retries: 24
       start_period: 120s
 
+  workflow-service:
+    <<: *go
+    command: ["go", "run", "github.com/openbastion/openbastion/services/access/workflow-service/cmd/workflow-service"]
+    environment:
+      <<: *go-env
+      PORT: "8091"
+      DATABASE_URL: postgres://workflow_service:ob-dev-workflow-service@postgres:5432/workflow_service?sslmode=disable
+      DB_POOL_MAX_OPEN_CONNS: ${WORKFLOW_SERVICE_DB_POOL_MAX_OPEN_CONNS-10}
+      DB_POOL_MAX_IDLE_CONNS: ${WORKFLOW_SERVICE_DB_POOL_MAX_IDLE_CONNS-10}
+      AUTHENTICATION_URL: https://authentication:8086
+      AUTHORIZATION_URL: https://authorization:8083
+      AUDIT_URL: https://audit-service:8082
+    volumes:
+      - ../..:/src
+      - {type: volume, source: pki, target: /pki, read_only: true, volume: {subpath: workflow-service}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      proto: {condition: service_completed_successfully}
+      pki: {condition: service_completed_successfully}
+      authentication: {condition: service_healthy}
+      authorization: {condition: service_healthy}
+      audit-service: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8091"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 120s
+
   session-broker:
     <<: *go
     command: ["go", "run", "github.com/openbastion/openbastion/services/access/session-broker/cmd/session-broker"]
@@ -462,6 +493,7 @@ services:
       AUTHORIZATION_URL: https://authorization:8083
       VAULT_URL: https://password-vault:8081
       AUDIT_URL: https://audit-service:8082
+      WORKFLOW_SERVICE_URL: https://workflow-service:8091
       SSH_PROXY_URL: https://ssh-proxy:8085
       RDP_VNC_PROXY_URLS: https://rdp-vnc-proxy:8090
     volumes:
@@ -476,6 +508,7 @@ services:
       audit-service: {condition: service_healthy}
       ssh-proxy: {condition: service_healthy}
       rdp-vnc-proxy: {condition: service_healthy}
+      workflow-service: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8084"]
       interval: 5s
@@ -498,6 +531,7 @@ services:
       AUTHENTICATION_URL: https://authentication:8086
       AUTHORIZATION_URL: https://authorization:8083
       SESSION_BROKER_URL: https://session-broker:8084
+      WORKFLOW_SERVICE_URL: https://workflow-service:8091
       VAULT_URL: https://password-vault:8081
       COMMAND_RECORDER_URL: https://command-recorder:8087
       VIDEO_RECORDER_GRPC_URL: https://video-recorder:8089
@@ -517,6 +551,7 @@ services:
       authorization: {condition: service_healthy}
       password-vault: {condition: service_healthy}
       session-broker: {condition: service_healthy}
+      workflow-service: {condition: service_healthy}
       command-recorder: {condition: service_healthy}
       video-recorder: {condition: service_healthy}
       audit-service: {condition: service_healthy}

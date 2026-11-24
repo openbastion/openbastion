@@ -2,7 +2,7 @@ package integration_test
 
 // A listing of the break-glass requests that wait is on the record before it is served
 // (ADR-0023), across real processes — Authentication, Authorization, Audit (behind a spy that
-// can be made to fail), the Session Broker and the Gateway.
+// can be made to fail), Workflow, the Session Broker and the Gateway.
 //
 // Before ADR-0023 an approver listed the requests waiting for them (ADR-0012) — who asked, on
 // which account, and why, an emergency's justification included — and nothing anywhere said
@@ -29,6 +29,7 @@ func TestPendingListRead_EachRequestServedIsOnTheRecordBeforeItIsServed_AndWitho
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-23")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-23")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-23")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-23")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-23")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-23")
 
@@ -36,10 +37,11 @@ func TestPendingListRead_EachRequestServedIsOnTheRecordBeforeItIsServed_AndWitho
 	spy := startAuditSpy(t, audit.baseURL)
 	authz := startService(t, root, authzBin, "19402")
 	authn := startService(t, root, authnBin, "19403", "SKIP_DEMO_SEED=1")
+	workflow := startService(t, root, workflowBin, "19409", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+spy.baseURL)
 	playVaultAccounts(t, "19406") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "19404",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:19406", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:19407", "BREAKGLASS_MAX_MINUTES=30")
+		"SSH_PROXY_URL=http://127.0.0.1:19407", "WORKFLOW_SERVICE_URL="+workflow.baseURL, "BREAKGLASS_MAX_MINUTES=30")
 	gw := startService(t, root, gatewayBin, "19405",
 		"AUTHENTICATION_URL="+authn.baseURL, "SESSION_BROKER_URL="+broker.baseURL, "COMMAND_RECORDER_URL=http://127.0.0.1:19408",
 		"CLIENT_REQUEST_BURST=500", "CLIENT_REQUEST_RATE_PER_MINUTE=600")
@@ -98,6 +100,17 @@ func TestPendingListRead_EachRequestServedIsOnTheRecordBeforeItIsServed_AndWitho
 		return n
 	}
 	anyListed := func() int { return spy.anyEvent("session.listed", true) }
+	workflowListed := func(actor string) int {
+		spy.mu.Lock()
+		defer spy.mu.Unlock()
+		n := 0
+		for _, e := range spy.events {
+			if e.Action == "workflow.approvals.listed" && e.Success && e.ActorID == actor {
+				n++
+			}
+		}
+		return n
+	}
 
 	t.Run("a request served in a listing is on the record, under the lister's name, before the response", func(t *testing.T) {
 		code, text, got := list(bob, "")
@@ -154,14 +167,17 @@ func TestPendingListRead_EachRequestServedIsOnTheRecordBeforeItIsServed_AndWitho
 		}
 	})
 
-	t.Run("an empty listing discloses nothing and writes nothing", func(t *testing.T) {
-		before := anyListed()
+	t.Run("an empty listing discloses no sessions but its workflow read is audited", func(t *testing.T) {
+		beforeSessions, beforeWorkflow := anyListed(), workflowListed(userIDOf(t, alice))
 		code, text, got := list(alice, "")
 		if code != http.StatusOK || len(got.Items) != 0 {
 			t.Fatalf("Alice (no authority): %d %s, want an empty list", code, text)
 		}
-		if n := anyListed() - before; n != 0 {
-			t.Fatalf("%d event(s) for an empty listing", n)
+		if n := anyListed() - beforeSessions; n != 0 {
+			t.Fatalf("%d session.listed event(s) for an empty listing", n)
+		}
+		if n := workflowListed(userIDOf(t, alice)) - beforeWorkflow; n != 1 {
+			t.Fatalf("%d workflow.approvals.listed event(s) for the empty queue read, want 1", n)
 		}
 	})
 
@@ -179,9 +195,10 @@ func TestPendingListRead_EachRequestServedIsOnTheRecordBeforeItIsServed_AndWitho
 				t.Fatalf("the 503 tells %q of requests that were not served: %q", leak, text)
 			}
 		}
-		// What discloses nothing does not depend on the audit.
-		if code, _, _ := list(alice, ""); code != http.StatusOK {
-			t.Fatalf("an empty listing with the audit down: %d, want 200", code)
+		// Workflow audits the queue read even when it contains no sessions; with the audit
+		// unavailable, neither a populated nor an empty queue is served.
+		if code, emptyBody, _ := list(alice, ""); code != http.StatusServiceUnavailable {
+			t.Fatalf("an empty listing with the audit down: %d %s, want 503", code, emptyBody)
 		}
 		if n := anyListed() - before; n != 0 {
 			t.Fatalf("%d event(s) recorded while the audit was down", n)

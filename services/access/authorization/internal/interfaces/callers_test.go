@@ -16,6 +16,7 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Deny("admin-cli", "POST", "/authz/v1/policies"),
 
 		mtlstest.Allow("session-broker", "POST", "/authz/v1/check-access"),
+		mtlstest.Allow("workflow-service", "POST", "/authz/v1/check-access"),
 		mtlstest.Allow("password-vault", "POST", "/authz/v1/check-access"),
 		mtlstest.Allow("command-recorder", "POST", "/authz/v1/check-access"),
 		mtlstest.Allow("video-recorder", "POST", "/authz/v1/check-access"),

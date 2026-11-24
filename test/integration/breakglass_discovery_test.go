@@ -1,5 +1,5 @@
 // Finding the break-glass requests that wait, and being told of them (ADR-0012), proved on
-// FIVE real processes — Authorization, Authentication, Audit, the Session Broker and the
+// SIX real processes — Authorization, Authentication, Audit, Workflow, the Session Broker and the
 // API Gateway — with a webhook that this test plays from the outside, as Slack would.
 //
 // The claims that matter are the negative ones: the list shows a person only what he may
@@ -143,12 +143,13 @@ func (p *pendingList) ids() []string {
 	return out
 }
 
-func TestBreakGlassDiscovery_TheApproverFindsTheRequestAndTheChannelIsToldOfIt_AcrossFiveRealProcesses(t *testing.T) {
+func TestBreakGlassDiscovery_TheApproverFindsTheRequestAndTheChannelIsToldOfIt_AcrossSixRealProcesses(t *testing.T) {
 	root := repoRoot(t)
 
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-9")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-9")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-9")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-9")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-9")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-9")
 
@@ -156,6 +157,7 @@ func TestBreakGlassDiscovery_TheApproverFindsTheRequestAndTheChannelIsToldOfIt_A
 	authz := startService(t, root, authzBin, "18723")
 	authn := startService(t, root, authnBin, "18727", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	workflow := startService(t, root, workflowBin, "18730", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+spy.baseURL)
 
 	hook := newHookSpy(t)
 	const secretToken = "SECRETHOOK-7f3a91"
@@ -166,7 +168,8 @@ func TestBreakGlassDiscovery_TheApproverFindsTheRequestAndTheChannelIsToldOfIt_A
 	playVaultAccounts(t, "18721") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18724",
 		"AUTHORIZATION_URL=http://127.0.0.1:18723", "VAULT_URL=http://127.0.0.1:18721", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:18725", "BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_NOTIFY_URL="+hookURL)
+		"SSH_PROXY_URL=http://127.0.0.1:18725", "WORKFLOW_SERVICE_URL="+workflow.baseURL,
+		"BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_NOTIFY_URL="+hookURL)
 	gateway := startService(t, root, gatewayBin, "18728",
 		"AUTHENTICATION_URL=http://127.0.0.1:18727", "SESSION_BROKER_URL="+broker.baseURL,
 		"COMMAND_RECORDER_URL=http://127.0.0.1:18729")
@@ -431,6 +434,7 @@ func TestBreakGlassDiscovery_AnAccountIdentifierThatIsNotOneIsRefusedBeforeItRea
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-9b")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-9b")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-9b")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-9b")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-9b")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-9b")
 
@@ -438,11 +442,13 @@ func TestBreakGlassDiscovery_AnAccountIdentifierThatIsNotOneIsRefusedBeforeItRea
 	authz := startService(t, root, authzBin, "18733")
 	authn := startService(t, root, authnBin, "18737", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	workflow := startService(t, root, workflowBin, "18740", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+spy.baseURL)
 	hook := newHookSpy(t)
 	playVaultAccounts(t, "18731") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18734",
 		"AUTHORIZATION_URL=http://127.0.0.1:18733", "VAULT_URL=http://127.0.0.1:18731", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:18735", "BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook")
+		"SSH_PROXY_URL=http://127.0.0.1:18735", "WORKFLOW_SERVICE_URL="+workflow.baseURL,
+		"BREAKGLASS_MAX_MINUTES=30", "BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook")
 	gateway := startService(t, root, gatewayBin, "18738",
 		"AUTHENTICATION_URL=http://127.0.0.1:18737", "SESSION_BROKER_URL="+broker.baseURL, "COMMAND_RECORDER_URL=http://127.0.0.1:18739")
 

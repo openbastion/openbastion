@@ -71,7 +71,8 @@ func TestNotifyFormat_ARequestReachesSlackAsAPhrase_AndADeadChannelDelaysNothing
 	for name, pkg := range map[string]string{
 		"vault": "./services/vault/password-vault/cmd/password-vault", "audit": "./services/recording-audit/audit-service/cmd/audit-service",
 		"authz": "./services/access/authorization/cmd/authorization", "authn": "./services/access/authentication/cmd/authentication",
-		"broker": "./services/access/session-broker/cmd/session-broker", "proxy": "./services/proxy/ssh-proxy/cmd/ssh-proxy",
+		"broker": "./services/access/session-broker/cmd/session-broker", "workflow": "./services/access/workflow-service/cmd/workflow-service",
+		"proxy":    "./services/proxy/ssh-proxy/cmd/ssh-proxy",
 		"recorder": "./services/recording-audit/command-recorder/cmd/command-recorder", "gateway": "./services/access/api-gateway/cmd/api-gateway",
 	} {
 		bins[name] = buildBinary(t, root, pkg, name+"-74")
@@ -81,22 +82,27 @@ func TestNotifyFormat_ARequestReachesSlackAsAPhrase_AndADeadChannelDelaysNothing
 	vault := startService(t, root, bins["vault"], "18781", "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL=http://127.0.0.1:18783", "AUDIT_URL="+audit.baseURL)
 	authz := startService(t, root, bins["authz"], "18783")
 	authn := startService(t, root, bins["authn"], "18787", "SKIP_DEMO_SEED=1")
+	workflow := startService(t, root, bins["workflow"], "18790", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL)
 	startService(t, root, bins["recorder"], "18789", "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL)
 	startServiceWithExtraPort(t, root, bins["proxy"], "18785", "18786", "VAULT_URL="+vault.baseURL, "AUDIT_URL="+audit.baseURL,
 		"PROXY_SERVICE_ID=ssh-proxy", "RECORDER_URL=http://127.0.0.1:18789", "RECORDING_POLICY=required")
 	broker := startService(t, root, bins["broker"], "18784", "AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL="+vault.baseURL,
-		"AUDIT_URL="+audit.baseURL, "SSH_PROXY_URL=http://127.0.0.1:18785",
+		"AUDIT_URL="+audit.baseURL, "SSH_PROXY_URL=http://127.0.0.1:18785", "WORKFLOW_SERVICE_URL="+workflow.baseURL,
 		"BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook", "BREAKGLASS_NOTIFY_FORMAT=slack")
 	gateway := startService(t, root, bins["gateway"], "18788", "AUTHENTICATION_URL="+authn.baseURL, "SESSION_BROKER_URL="+broker.baseURL,
-		"COMMAND_RECORDER_URL=http://127.0.0.1:18789", "VAULT_URL="+vault.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "CLIENT_LOGIN_BURST=100")
+		"COMMAND_RECORDER_URL=http://127.0.0.1:18789", "VAULT_URL="+vault.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "WORKFLOW_SERVICE_URL="+workflow.baseURL, "CLIENT_LOGIN_BURST=100")
 
 	const accountID = "acc_notify"
 	targetAddr := startObservedInteractiveTargetSSHServer(t, "notify-target-secret", func(string) {})
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "vault:account-admin:*", "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "approval-hierarchy:all", "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "change-manager", "session-approve:account:"+accountID, "allow")
 	onboardAccountFull(t, vault.baseURL, accountID, "notify-account", "root", targetAddr, "notify-target-secret", []string{"vault-admin"})
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "dba", "vault:account:"+accountID, "allow")
 	authCreateUser(t, authn.baseURL, "admin", "Admin", "admin-password-123", []string{"vault-admin"})
 	authCreateUser(t, authn.baseURL, "dba-alice", "Alice", "alice-password-1", []string{"dba"})
+	monaPass := "mona-test-login-value-1"
+	authCreateUser(t, authn.baseURL, "mona", "Mona", monaPass, []string{"change-manager"})
 	admin, status := gatewayLogin(t, gateway.baseURL, "admin", "admin-password-123")
 	if status != http.StatusOK {
 		t.Fatalf("login: %d", status)
@@ -104,6 +110,19 @@ func TestNotifyFormat_ARequestReachesSlackAsAPhrase_AndADeadChannelDelaysNothing
 	alice, status := gatewayLogin(t, gateway.baseURL, "dba-alice", "alice-password-1")
 	if status != http.StatusOK {
 		t.Fatalf("login: %d", status)
+	}
+	mona, status := gatewayLogin(t, gateway.baseURL, "mona", monaPass)
+	if status != http.StatusOK {
+		t.Fatalf("manager login: %d", status)
+	}
+	aliceID, monaID := userIDOf(t, alice), userIDOf(t, mona)
+	managerURL := gateway.baseURL + "/approval-hierarchy/users/" + aliceID + "/manager"
+	etag, status, body := gatewayManagerETag(t, managerURL, admin)
+	if status != http.StatusOK {
+		t.Fatalf("read Alice's hierarchy: %d %s", status, body)
+	}
+	if _, status, body = gatewaySetManager(t, managerURL, admin, monaID, etag); status != http.StatusOK {
+		t.Fatalf("assign Mona as Alice's approver: %d %s", status, body)
 	}
 	if st, body := gatewaySetApproval(t, gateway.baseURL, admin, accountID, `{"approvalRequired":true}`); st != http.StatusOK {
 		t.Fatalf("set approval: %d %s", st, body)
@@ -113,7 +132,13 @@ func TestNotifyFormat_ARequestReachesSlackAsAPhrase_AndADeadChannelDelaysNothing
 	if st != http.StatusCreated || out["status"] != "pending_approval" {
 		t.Fatalf("request: %d %s", st, raw)
 	}
-	waitUntil(t, 5*time.Second, "the request to be told", func() bool { return len(hook.deliveries("", "")) > 0 })
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && len(hook.deliveries("", "")) == 0 {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(hook.deliveries("", "")) == 0 {
+		t.Fatalf("gave up waiting for the request to be told\nbroker:\n%s\nworkflow:\n%s", broker.out.String(), workflow.out.String())
+	}
 	d := hook.deliveries("", "")[0]
 	text, _ := d.Body["text"].(string)
 	if len(d.Body) != 1 || !strings.Contains(text, "OpenBastion access request") || !strings.Contains(text, accountID) || !strings.Contains(text, "CHG0001234") {

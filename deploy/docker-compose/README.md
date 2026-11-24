@@ -1,6 +1,6 @@
 # OpenBastion with docker-compose (ADR-0033)
 
-One host, eight core services under mutual TLS, one PostgreSQL database per service, two ports
+One host, nine core services under mutual TLS, one PostgreSQL database per service, two ports
 published on `127.0.0.1`: the public API of the Gateway and the SSH port of the proxy. The
 Video Recorder and SeaweedFS are added by the optional `recording` profile.
 For development and small on-premise installations; not a high-availability setup
@@ -76,7 +76,7 @@ The Session Broker routes a session based on its stored protocol. The Gateway re
 
 | Volume | Holds | Mounted in |
 |---|---|---|
-| `postgres` | the seven service databases | `postgres` |
+| `postgres` | the eight core service databases (plus the optional Video Recorder database) | `postgres` |
 | `pki-ca` | the internal authority **and its key** | the `pki` job only |
 | `pki` | each service's certificate and key, one directory each | each service: **its own directory only**, read-only |
 | `anchors` | the anchors of the audit chain (ADR-0028) | `audit-service` |
@@ -160,6 +160,6 @@ goes through the whole journey on the published ports (`test/integration/compose
 
 ## Budget PostgreSQL (ADR-0135)
 
-Les sept services conservent les plafonds par défaut `DB_POOL_MAX_OPEN_CONNS=10` et `DB_POOL_MAX_IDLE_CONNS=10`. Chaque service possède ses variables hôte propres (par exemple `AUTHENTICATION_DB_POOL_MAX_OPEN_CONNS` et `AUTHENTICATION_DB_POOL_MAX_IDLE_CONNS`) ; elles sont injectées dans le conteneur sous les noms communs `DB_POOL_MAX_OPEN_CONNS` et `DB_POOL_MAX_IDLE_CONNS`. Pour un pool `max_open` inférieur à 10, abaissez aussi `max_idle`.
+Les huit services PostgreSQL (dont le Workflow Service) conservent les plafonds par défaut `DB_POOL_MAX_OPEN_CONNS=10` et `DB_POOL_MAX_IDLE_CONNS=10`. Chaque service possède ses variables hôte propres (par exemple `AUTHENTICATION_DB_POOL_MAX_OPEN_CONNS` et `AUTHENTICATION_DB_POOL_MAX_IDLE_CONNS`) ; elles sont injectées dans le conteneur sous les noms communs `DB_POOL_MAX_OPEN_CONNS` et `DB_POOL_MAX_IDLE_CONNS`. Pour un pool `max_open` inférieur à 10, abaissez aussi `max_idle`.
 
 Le fichier `deploy/postgresql/capacity.yaml` est l'exemple de budget pour le cluster PostgreSQL partagé par ces bases. Ajustez `max_instances` à l'échelle et aux réplicas temporaires réels, et `max_open_per_instance` aux overrides de pool. Vérifiez avant démarrage avec `make db-pool-budget-check`. La réserve de 20 dans l'exemple est illustrative, pas une valeur par défaut de PostgreSQL.

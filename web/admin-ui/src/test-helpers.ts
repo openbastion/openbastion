@@ -6,6 +6,7 @@ export interface Call {
   body?: unknown;
   auth?: string;
   credentials?: RequestCredentials;
+  headers?: Record<string, string>;
 }
 
 // fakeApi answers by "METHOD path" (path without query when no exact match), and records calls.
@@ -14,7 +15,7 @@ export function fakeApi(routes: Record<string, { status?: number; body?: unknown
   const api = new Api(async (input, init) => {
     const method = init?.method ?? "GET";
     const headers = (init?.headers ?? {}) as Record<string, string>;
-    calls.push({ method, path: input, body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: headers["Authorization"], credentials: init?.credentials });
+    calls.push({ method, path: input, body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: headers["Authorization"], credentials: init?.credentials, headers });
     const r = routes[`${method} ${input}`] ?? routes[`${method} ${input.split("?")[0]}`];
     if (!r) return new Response("not found", { status: 404 });
     const body = r.body === undefined ? "" : typeof r.body === "string" ? r.body : JSON.stringify(r.body);

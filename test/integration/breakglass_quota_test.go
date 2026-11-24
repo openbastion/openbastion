@@ -1,5 +1,5 @@
 // The quota of break-glass requests waiting per requester, and the signed webhook
-// (ADR-0013), proved on FIVE real processes — Authorization, Authentication, Audit, the
+// (ADR-0013), proved on SIX real processes — Authorization, Authentication, Audit, Workflow, the
 // Session Broker and the API Gateway — with a webhook that this test plays from the
 // outside, and verifies the way a receiver would.
 //
@@ -39,12 +39,13 @@ func receiverVerifies(secret string, d hookDelivery, tolerance time.Duration) bo
 	return hmac.Equal([]byte("v1="+hex.EncodeToString(mac.Sum(nil))), []byte(d.Signature))
 }
 
-func TestBreakGlassQuota_ARequesterCannotDrownTheListNorTheChannel_AcrossFiveRealProcesses(t *testing.T) {
+func TestBreakGlassQuota_ARequesterCannotDrownTheListNorTheChannel_AcrossSixRealProcesses(t *testing.T) {
 	root := repoRoot(t)
 
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-10")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-10")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-10")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-10")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-10")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-10")
 
@@ -52,13 +53,14 @@ func TestBreakGlassQuota_ARequesterCannotDrownTheListNorTheChannel_AcrossFiveRea
 	authz := startService(t, root, authzBin, "18743")
 	authn := startService(t, root, authnBin, "18747", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	workflow := startService(t, root, workflowBin, "18750", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+spy.baseURL)
 
 	hook := newHookSpy(t)
 	const channelSecret = "quota-test-HMAC-KEY-0123456789abcdef-NEVERLOG"
 	playVaultAccounts(t, "18741") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18744",
 		"AUTHORIZATION_URL=http://127.0.0.1:18743", "VAULT_URL=http://127.0.0.1:18741", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:18745", "BREAKGLASS_MAX_MINUTES=30",
+		"SSH_PROXY_URL=http://127.0.0.1:18745", "WORKFLOW_SERVICE_URL="+workflow.baseURL, "BREAKGLASS_MAX_MINUTES=30",
 		"BREAKGLASS_MAX_PENDING_PER_REQUESTER=2",
 		"BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook", "BREAKGLASS_NOTIFY_SECRET="+channelSecret)
 	// This test is about the Broker's quota, so the Gateway's rate budget (ADR-0014) is

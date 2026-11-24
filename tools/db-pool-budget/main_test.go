@@ -20,6 +20,7 @@ services:
   password-vault: {max_instances: 1, max_open_per_instance: 10}
   command-recorder: {max_instances: 1, max_open_per_instance: 10}
   video-recorder: {max_instances: 1, max_open_per_instance: 10}
+  workflow-service: {max_instances: 1, max_open_per_instance: 10}
 `
 
 func TestRunAcceptsValidManifest(t *testing.T) {

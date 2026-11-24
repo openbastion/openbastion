@@ -1,5 +1,5 @@
 // The approval of an ordinary session by another person, with a ticket (ADR-0067), proved
-// across EIGHT real processes — with break-glass switched off, so that what is proved is
+// across NINE real processes — with break-glass switched off, so that what is proved is
 // this mechanism and not ADR-0011's.
 //
 // The account says it requires approval; only an administrator says so, and the audit trail
@@ -58,13 +58,14 @@ func gatewaySetApproval(t *testing.T, baseURL, token, accountID, body string) (i
 	return resp.StatusCode, string(raw)
 }
 
-func TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossEightRealProcesses(t *testing.T) {
+func TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossNineRealProcesses(t *testing.T) {
 	root := repoRoot(t)
 	bins := map[string]string{}
 	for name, pkg := range map[string]string{
 		"vault": "./services/vault/password-vault/cmd/password-vault", "audit": "./services/recording-audit/audit-service/cmd/audit-service",
 		"authz": "./services/access/authorization/cmd/authorization", "authn": "./services/access/authentication/cmd/authentication",
-		"broker": "./services/access/session-broker/cmd/session-broker", "proxy": "./services/proxy/ssh-proxy/cmd/ssh-proxy",
+		"broker": "./services/access/session-broker/cmd/session-broker", "workflow": "./services/access/workflow-service/cmd/workflow-service",
+		"proxy":    "./services/proxy/ssh-proxy/cmd/ssh-proxy",
 		"recorder": "./services/recording-audit/command-recorder/cmd/command-recorder", "gateway": "./services/access/api-gateway/cmd/api-gateway",
 	} {
 		bins[name] = buildBinary(t, root, pkg, name+"-67")
@@ -75,15 +76,16 @@ func TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossEightRealProcesses(
 	vault := startService(t, root, bins["vault"], "19761", "SKIP_DEMO_SEED=1", "AUTHORIZATION_URL=http://127.0.0.1:19763", "AUDIT_URL="+spy.baseURL)
 	authz := startService(t, root, bins["authz"], "19763")
 	authn := startService(t, root, bins["authn"], "19767", "SKIP_DEMO_SEED=1")
+	workflow := startService(t, root, bins["workflow"], "19770", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+spy.baseURL)
 	startService(t, root, bins["recorder"], "19769", "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+audit.baseURL)
 	startServiceWithExtraPort(t, root, bins["proxy"], "19765", "19766", "VAULT_URL="+vault.baseURL, "AUDIT_URL="+spy.baseURL,
 		"PROXY_SERVICE_ID=ssh-proxy", "RECORDER_URL=http://127.0.0.1:19769", "RECORDING_POLICY=required")
 	// BREAKGLASS_MAX_MINUTES is not set: break-glass is off on this platform.
 	broker := startService(t, root, bins["broker"], "19764", "AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL="+vault.baseURL,
-		"AUDIT_URL="+spy.baseURL, "SSH_PROXY_URL=http://127.0.0.1:19765",
+		"AUDIT_URL="+spy.baseURL, "SSH_PROXY_URL=http://127.0.0.1:19765", "WORKFLOW_SERVICE_URL="+workflow.baseURL,
 		"APPROVAL_TICKET_PATTERN=(INC|CHG)[0-9]{7}", "BREAKGLASS_NOTIFY_URL="+hook.srv.URL+"/hook")
 	gateway := startService(t, root, bins["gateway"], "19768", "AUTHENTICATION_URL="+authn.baseURL, "SESSION_BROKER_URL="+broker.baseURL,
-		"COMMAND_RECORDER_URL=http://127.0.0.1:19769", "VAULT_URL="+vault.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "CLIENT_LOGIN_BURST=100")
+		"COMMAND_RECORDER_URL=http://127.0.0.1:19769", "VAULT_URL="+vault.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "WORKFLOW_SERVICE_URL="+workflow.baseURL, "CLIENT_LOGIN_BURST=100")
 
 	const targetSecret = "approval-flow-target-secret"
 	var (
@@ -103,6 +105,7 @@ func TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossEightRealProcesses(
 
 	const accountID = "acc_gated"
 	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "vault:account-admin:*", "allow")
+	authzCreatePolicy(t, authz.baseURL, []string{"platform-admin"}, "vault-admin", "approval-hierarchy:all", "allow")
 	onboardAccountFull(t, vault.baseURL, accountID, "gated-account", "root", targetAddr, targetSecret, []string{"vault-admin"})
 	// Distinct authorities: to open a session, to approve one on this account, to approve a
 	// break-glass on it, to read recordings.
@@ -126,7 +129,17 @@ func TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossEightRealProcesses(
 	}
 	admin, alice, mona := login("admin", "admin-password-123"), login("dba-alice", "alice-password-1"), login("cm-mona", "mona-password-1")
 	bob, carol, auditor := login("lead-bob", "bob-password-123"), login("dba-cm-carol", "carol-password-1"), login("auditor", "aud-password-123")
-	aliceID, monaID := userIDOf(t, alice), userIDOf(t, mona)
+	aliceID, monaID, carolID := userIDOf(t, alice), userIDOf(t, mona), userIDOf(t, carol)
+	for _, requesterID := range []string{aliceID, carolID} {
+		managerURL := gateway.baseURL + "/approval-hierarchy/users/" + requesterID + "/manager"
+		etag, status, body := gatewayManagerETag(t, managerURL, admin)
+		if status != http.StatusOK {
+			t.Fatalf("read approval hierarchy for %s: %d %s", requesterID, status, body)
+		}
+		if _, status, body = gatewaySetManager(t, managerURL, admin, monaID, etag); status != http.StatusOK {
+			t.Fatalf("assign Mona as approver for %s: %d %s", requesterID, status, body)
+		}
+	}
 	status := func(t *testing.T, token, id string) string {
 		t.Helper()
 		s, _ := gatewayGetSession(t, gateway.baseURL, token, id)["status"].(string)
@@ -231,11 +244,12 @@ func TestApprovalFlow_AnotherPersonApprovesWithATicket_AcrossEightRealProcesses(
 			t.Fatalf("the requester approved, with a forged body: %d %s", st, body)
 		}
 		s2 := ask(t, carol)
-		if st, body := gatewayDecide(t, gateway.baseURL, carol, s2, "approve", `{}`); st != http.StatusForbidden || !strings.Contains(body, "person who made it") {
+		hook.waitFor(t, "approval.requested", s2) // the outbox dispatch is asynchronous
+		if st, body := gatewayDecide(t, gateway.baseURL, carol, s2, "approve", `{}`); st != http.StatusForbidden || !strings.Contains(body, "request cannot be decided by its requester") {
 			t.Fatalf("a requester who holds the approval policy approved their own request: %d %s", st, body)
 		}
 		for _, action := range []string{"approve", "reject"} {
-			if st, body := gatewayDecide(t, gateway.baseURL, bob, s1, action, forged); st != http.StatusForbidden || !strings.Contains(body, "no approval policy") {
+			if st, body := gatewayDecide(t, gateway.baseURL, bob, s1, action, forged); st != http.StatusForbidden || !strings.Contains(body, "Workflow refused the decision") {
 				t.Fatalf("a break-glass approver could %s: %d %s", action, st, body)
 			}
 		}

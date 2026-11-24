@@ -499,7 +499,7 @@ Les détails sont des métadonnées bornées (clé `a-z`, chiffres, `_` et `.` ;
 
 **Alertes poussées (ADR-0045).** Le contrat d'`EmitEvent` ne change pas. Après l'écriture, un événement dont le couple (action, émetteur du certificat) est une alerte déclarée — aujourd'hui `vault.rotation_overdue` écrit par `password-vault` — est poussé par l'Audit Service vers `ALERT_NOTIFY_URL`, hors de la requête : la réponse n'attend pas le canal et n'en dit rien. Le même événement écrit par un autre émetteur est enregistré et n'est pas poussé. Le message sortant est décrit dans `docs/administration/notifications.md` ; ce n'est pas un contrat gRPC.
 
-## 8. Broker/Gateway → Authorization Service — `Authorization`
+## 8. Broker/Gateway/Workflow Service → Authorization Service — `Authorization`
 
 ```protobuf
 // proto/authz/v1/authorization.proto
@@ -522,7 +522,7 @@ message CheckAccessRequest {
 
 message CheckAccessResponse {
   bool allowed = 1;
-  bool requires_approval = 2;     // false en MVP (pas de Workflow Service) ; actif dès v0.0.1
+  bool requires_approval = 2;     // réservé, toujours false ; ADR-0138 résout N+1 dans Workflow Service
   string decision_reason = 3;
 }
 
@@ -545,6 +545,8 @@ message CapabilitiesResponse {
 ```
 
 `Capabilities` n'accorde rien : c'est une image des politiques qui façonne l'interface. Une question exacte suit `CheckAccess` ; une question par préfixe est un majorant (`AllowsSomeUnder` : un `deny` qui couvre tout le préfixe l'emporte). Liste vide ou au-delà de 32, champ inconnu, ressource ou action vide ou de plus de 256 octets : `400` ; magasin des politiques en panne : `503` sans détail.
+
+Depuis ADR-0138, le certificat mTLS `workflow-service` est également autorisé à appeler `CheckAccess` pour vérifier le candidat N+1 : `resource=session-approve:account:{account_id}`, `action=session:approve`, `context.actor_user_id` égal à l'approbateur candidat. Cette vérification est indépendante de la relation hiérarchique ; le service refuse si la politique n'autorise pas explicitement l'action.
 
 ## 9. Flux MVP annoté au niveau RPC
 
@@ -688,3 +690,32 @@ La Gateway reconstruit `callerId` et `actorRoles` à partir du jeton vérifié ;
 ## Lectures internes des alertes de session
 
 Les routes HTTP/JSON sous mTLS sont documentées dans `docs/api/internal/audit-service.md` ; aucun RPC Protobuf n’est ajouté (ADR-0050, ADR-0117/0122).
+
+## 17. API Gateway / Session Broker → Workflow Service — `ApprovalWorkflow` (ADR-0138)
+
+Contrat Protobuf : `proto/workflow/v1/approval_workflow.proto`. **Le transport reste HTTP/JSON sous mTLS**, conformément à ADR-0050 ; les méthodes Protobuf nomment et typent les messages, elles ne créent pas un serveur gRPC.
+
+| Route HTTP/JSON | Appelant mTLS | Méthode de contrat | Permission / identité |
+|---|---|---|---|
+| `GET /internal/v1/approval-hierarchy` | `api-gateway` | `ListHierarchy` | `approval-hierarchy:read` sur `approval-hierarchy:all` |
+| `GET /internal/v1/approval-hierarchy/users/{user_id}/manager` | `api-gateway` | `GetManager` | Lecture autorisée en façade Gateway |
+| `GET /internal/v1/approval-hierarchy/users/{manager_user_id}/reports` | `api-gateway` | `ListDirectReports` | `approval-hierarchy:read` contrôlé en façade |
+| `PUT /internal/v1/approval-hierarchy/users/{user_id}/manager` | `api-gateway` | `SetManager` | `approval-hierarchy:manage`, révision attendue |
+| `DELETE /internal/v1/approval-hierarchy/users/{user_id}/manager` | `api-gateway` | `DeleteManager` | `approval-hierarchy:manage`, révision attendue |
+| `POST /internal/v1/approval-requests` | `session-broker` | `CreateApprovalRequest` | Worker système ; demandeur recopié depuis la session Broker durable, idempotence par session |
+| `GET /internal/v1/approval-requests/{request_id}` | `session-broker` | `GetApprovalRequest` | Lecture de la demande référencée par la session |
+| `GET /internal/v1/approval-requests?actor_user_id=&actor_roles=&page=&page_size=` | `session-broker` | `ListPendingApprovals` | Acteur transmis dans le contexte HTTP ; rôles relus par Workflow dans Authentication |
+| `POST /internal/v1/approval-requests/{request_id}/approve` | `session-broker` | `ApproveRequest` | Approver snapshot + Authorization + audit préalable |
+| `POST /internal/v1/approval-requests/{request_id}/reject` | `session-broker` | `RejectRequest` | Même séparation des tâches et autorité que l'approbation |
+| `POST /internal/v1/approval-requests/{request_id}/cancel` | `session-broker` | `CancelRequest` | Compensation/annulation explicitement attribuée au Broker |
+
+Les champs internes sont `snake_case`. `RequestContext` est reconstruit par le service récepteur depuis l'identité mTLS et les informations d'acteur authentifiées ; le `calling_service_id` n'est jamais cru depuis le JSON. La hiérarchie ne référence pas directement la base Authentication : le Workflow Service valide les utilisateurs actifs par son interface mTLS. Le Session Broker persiste la session et `session_workflow_outbox` dans une seule transaction, après l'audit préalable et le plafond partagé ADR-0013/0067 ; le worker livre l'outbox au moins une fois. Les décisions sont des CAS sur `status=pending` et `revision`; une répétition identique du même acteur est idempotente, une décision opposée est un conflit. L'approbateur est résolu une seule fois à la création et accompagné de `hierarchy_revision` ; il n'est jamais recalculé pour une demande existante.
+
+Les listes sont bornées à 100 éléments et ne renvoient que les demandes que l'acteur peut décider maintenant. Une erreur Authentication, Authorization, Audit ou PostgreSQL produit une erreur globale, jamais une page partielle. Les routes internes sont enregistrées dans `CallerRules()` avec refus par défaut ; les tests couvrent les appelants autorisés, les appelants interdits et les routes inconnues.
+
+
+## 18. Workflow Service → Authentication Service — `UserDirectory` (ADR-0138)
+
+Contrat Protobuf : `proto/authentication/v1/user_directory.proto`. Transport HTTP/JSON sous mTLS (ADR-0050), route `GET /auth/v1/internal/users/{user_id}/authorization-context`, appelable par le seul certificat `workflow-service`. La réponse porte `user_id`, `exists`, `active` et les rôles actuels. Elle ne contient aucun nom, profil, attribut d'annuaire ou secret. `active` est dérivé de `disabled_at IS NULL` ; les rôles sont transmis à Authorization dans le `RequestContext` du candidat. Le Workflow Service relit cet état à la création, à la liste et à la décision afin qu'un JWT ancien ou une relation hiérarchique ne suffise jamais à autoriser une action.
+
+**État de livraison** : la migration Authentication 010 et `domain.User` exposent `disabled_at` ; la route `UserDirectory` retourne uniquement l'existence, l'état actif et les rôles actuels. Le certificat `workflow-service` est explicitement autorisé par `CallerRules()` d'Authentication, et les tests couvrent l'identité autorisée, les refus et les réponses bornées. Aucun accès SQL inter-service.

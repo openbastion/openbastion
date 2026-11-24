@@ -16,6 +16,8 @@ import { PolicyForm } from "../policies/Policies";
 import { AccountActions, AccountTable } from "./AccountTable";
 import { ResourceTable } from "./ResourceTable";
 import { ApprovalCards } from "./ApprovalCards";
+import { ApprovalHierarchy } from "./ApprovalHierarchy";
+import { PendingRequests } from "../sessions/PendingRequests";
 import { OnboardAccount } from "./OnboardAccount";
 import { askHostKey, askTlsPin } from "./pinPrompts";
 import { useAppTranslation } from "../../shared/i18n";
@@ -36,7 +38,7 @@ import {
 const pageSize = 20;
 const approvalPreview = 3;
 
-type View = "resources" | "accounts" | "policies" | "requests";
+type View = "resources" | "accounts" | "policies" | "requests" | "hierarchy";
 
 // Privileged accounts of the Vault: list, onboard, rotate, disable. A secret is typed once at
 // onboarding and never shown again: the API never returns one. A rotation changes the secret on
@@ -57,7 +59,7 @@ export function Accounts({
   initialView?: View;
 } = {}) {
   const { t } = useAppTranslation();
-  const { api } = useSignedIn();
+  const { api, who } = useSignedIn();
   const { can, visible, status: capabilityStatus } = useCapabilities();
   // ADR-0131: a tab is present when the caller may do what it is for; the page opens on the first
   // one that is.
@@ -66,8 +68,9 @@ export function Accounts({
     accounts: visible("accounts.list"),
     policies: visible("policies.create"),
     requests: visible("sessions.approve"),
+    hierarchy: visible("approvalHierarchy.read", "approvalHierarchy.manage", "approvalHierarchy.reports"),
   };
-  const firstShown = (["resources", "accounts", "policies", "requests"] as const).find((v) => viewShown[v]) ?? "resources";
+  const firstShown = (["resources", "accounts", "policies", "requests", "hierarchy"] as const).find((v) => viewShown[v]) ?? "resources";
   const [chosenView, setView] = useState<View>(initialView);
   const view: View = viewShown[chosenView] ? chosenView : firstShown;
   const mayList = visible("accounts.list");
@@ -92,6 +95,8 @@ export function Accounts({
   const [kerberosFor, setKerberosFor] = useState<Account>();
   const [approvals, setApprovals] = useState<Page<Session>>();
   const [approvalsError, setApprovalsError] = useState<unknown>();
+  const [approvalsLoading, setApprovalsLoading] = useState(true);
+  const [approvalDecision, setApprovalDecision] = useState<{ kind: "approve" | "reject"; session: Session }>();
 
   const load = useCallback(() => {
     // The inventory waits for the caller's capabilities, and is not asked for without the right
@@ -109,11 +114,37 @@ export function Accounts({
   // The approval list is what this caller could decide right now (GET /sessions, the only status
   // the Broker serves); it never claims to be every request of the platform.
   const loadApprovals = useCallback(() => {
+    if (capabilityStatus === "loading") return;
+    if (!can("sessions.approve")) { setApprovals(undefined); setApprovalsError(undefined); setApprovalsLoading(false); return; }
+    setApprovalsLoading(true);
     api.request<Page<Session>>("GET", "/sessions?status=pending_approval&page=1&pageSize=100")
       .then((result) => { setApprovals(result); setApprovalsError(undefined); })
-      .catch((err: unknown) => { setApprovals(undefined); setApprovalsError(err); });
-  }, [api]);
+      .catch((err: unknown) => { setApprovals(undefined); setApprovalsError(err); })
+      .finally(() => setApprovalsLoading(false));
+  }, [api, capabilityStatus, can]);
   useEffect(loadApprovals, [loadApprovals]);
+
+  function askApprovalDecision(kind: "approve" | "reject", session: Session) {
+    setError(undefined);
+    setOk(undefined);
+    setApprovalDecision({ kind, session });
+  }
+
+  async function confirmApprovalDecision(): Promise<boolean> {
+    if (!approvalDecision) return false;
+    const { kind, session } = approvalDecision;
+    try {
+      await api.request("POST", `/sessions/${encodeURIComponent(session.id)}/${kind}`);
+      setError(undefined);
+      setOk(kind === "approve" ? t("sessions.decisions.approved", { id: session.id }) : t("sessions.decisions.rejected", { id: session.id }));
+      setApprovalDecision(undefined);
+      loadApprovals();
+      return true;
+    } catch (err) {
+      setError(err);
+      return false;
+    }
+  }
 
   async function act(what: string | ((result: unknown) => string), run: () => Promise<unknown>) {
     setError(undefined);
@@ -341,7 +372,7 @@ export function Accounts({
       }
       hints={[t("accounts.hints.rotation"), t("accounts.hints.hostKey"), t("accounts.hints.tls")]}
     >
-      <Notice error={accountAction || screenProfileFor || kerberosFor ? undefined : error} ok={accountAction || screenProfileFor || kerberosFor ? undefined : ok} />
+      <Notice error={accountAction || screenProfileFor || kerberosFor || approvalDecision ? undefined : error} ok={accountAction || screenProfileFor || kerberosFor || approvalDecision ? undefined : ok} />
       {onboardOpen && can("accounts.onboard") ? (
         <div id="onboard-account">
           <OnboardAccount onDone={(id) => act(t("accounts.notices.onboarded", { id }), async () => undefined)} />
@@ -391,6 +422,7 @@ export function Accounts({
             {t("accounts.tabs.requests")}
             <span className="reference-tab-count">{approvalsUnavailable ? "—" : approvals?.totalItems ?? "…"}</span>
           </TabsTrigger> : null}
+          {viewShown.hierarchy ? <TabsTrigger value="hierarchy">{t("accounts.tabs.hierarchy")}</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="resources">
@@ -566,12 +598,21 @@ export function Accounts({
               </div>
               {approvalsUnavailable ? null : <span className="reference-panel-badge">{approvals?.totalItems ?? "…"}</span>}
             </div>
-            {approvalsUnavailable ? <p className="ob-empty-state">{t("accounts.approvals.unavailable")}</p> : null}
-            {!approvalsUnavailable && approvals && pendingItems.length === 0 ? <p className="ob-empty-state">{t("accounts.approvals.empty")}</p> : null}
-            {!approvalsUnavailable && pendingItems.length > 0 ? (
-              <ApprovalCards sessions={pendingItems} onOpen={() => onNavigate?.("sessions")} />
+            {approvalsUnavailable ? <Notice error={approvalsError ?? new Error(t("accounts.approvals.unavailable"))} /> : null}
+            {!approvalsUnavailable ? (
+              <PendingRequests
+                pending={approvals}
+                loading={approvalsLoading}
+                currentUserId={who?.sub}
+                onApprove={(session) => askApprovalDecision("approve", session)}
+                onReject={(session) => askApprovalDecision("reject", session)}
+              />
             ) : null}
           </section>
+        </TabsContent>
+
+        <TabsContent value="hierarchy">
+          <ApprovalHierarchy />
         </TabsContent>
       </Tabs>
 
@@ -625,6 +666,25 @@ export function Accounts({
               return false;
             }
           }}
+        />
+      ) : null}
+      {approvalDecision ? (
+        <ConfirmDialog
+          title={approvalDecision.kind === "approve" ? t("sessions.confirm.approveTitle") : t("sessions.confirm.rejectTitle")}
+          description={t("sessions.confirm.decideBody", {
+            kind: approvalDecision.session.breakGlass ? t("sessions.confirm.emergency") : t("sessions.confirm.access"),
+            id: approvalDecision.session.id,
+            requester: approvalDecision.session.requestedBy,
+            account: approvalDecision.session.privilegedAccountId,
+            justification: approvalDecision.session.justification,
+            ticket: approvalDecision.session.ticket ?? t("sessions.confirm.none"),
+            expiresAt: approvalDecision.session.expiresAt,
+          })}
+          confirmLabel={approvalDecision.kind === "approve" ? t("sessions.confirm.approve") : t("sessions.confirm.reject")}
+          danger={approvalDecision.kind === "reject"}
+          error={error instanceof ApiError ? `${error.status} — ${error.message}` : error ? String((error as Error)?.message ?? error) : undefined}
+          onCancel={() => setApprovalDecision(undefined)}
+          onConfirm={confirmApprovalDecision}
         />
       ) : null}
       {accountAction ? (

@@ -15,6 +15,7 @@ var knownServices = [...]string{
 	"password-vault",
 	"session-broker",
 	"video-recorder",
+	"workflow-service",
 }
 
 // KnownServiceNames returns a fresh copy of the bounded service-name allowlist.
@@ -42,7 +43,7 @@ type BudgetResult struct {
 	Remaining              int64
 }
 
-// ValidateBudget requires an exact declaration of all seven database services and
+// ValidateBudget requires an exact declaration of all eight database services and
 // checks every multiplication and addition before evaluating the cluster ceiling.
 func ValidateBudget(b CapacityBudget) (BudgetResult, error) {
 	if b.MaxConnections <= 0 {

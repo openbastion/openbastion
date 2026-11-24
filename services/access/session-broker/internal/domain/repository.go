@@ -45,7 +45,8 @@ var (
 
 	// ErrInvalidTicket: the account requires approval (ADR-0067), and the request carries no
 	// ticket, or one that does not follow the format the platform declared.
-	ErrInvalidTicket = errors.New("this account requires approval: a ticket in the declared format is required")
+	ErrInvalidTicket     = errors.New("this account requires approval: a ticket in the declared format is required")
+	ErrWorkflowPermanent = errors.New("Workflow permanently refused the approval request")
 )
 
 type SessionRepository interface {
@@ -85,6 +86,15 @@ type SessionRepository interface {
 	// Broker replica they reached (ADR-0013). Refusing is not an error: nothing is
 	// written and saved is false.
 	SaveIfUnderPendingLimit(ctx context.Context, s *Session, limit int, now time.Time) (saved bool, err error)
+
+	// SavePendingWithWorkflowOutbox atomically applies the shared requester quota,
+	// persists an ordinary approval-required session, and inserts its durable
+	// Workflow dispatch. It is never used for break-glass sessions.
+	SavePendingWithWorkflowOutbox(ctx context.Context, s *Session, limit int, now time.Time) (saved bool, err error)
+	ClaimWorkflowDispatches(ctx context.Context, now time.Time, lease time.Duration, limit int) ([]WorkflowDispatch, error)
+	CompleteWorkflowDispatch(ctx context.Context, sessionID, leaseToken string) error
+	RetryWorkflowDispatch(ctx context.Context, sessionID, leaseToken, errorCode string, dueAt time.Time) error
+	HasPendingWorkflowDispatches(ctx context.Context) (bool, error)
 
 	// ExpireDue marks expired the active sessions and pending requests whose end
 	// (ExpiresAt) is before now — at most limit, soonest end first — and returns them as

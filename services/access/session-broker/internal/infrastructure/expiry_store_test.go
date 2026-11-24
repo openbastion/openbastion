@@ -100,20 +100,20 @@ func TestInMemoryStore_ExpiryContract(t *testing.T) {
 func TestPostgresStore_ExpiryContract(t *testing.T) {
 	db := testDB(t)
 	// ExpireDue reads the whole table: start from an empty one.
-	if _, err := db.Exec(`TRUNCATE sessions`); err != nil {
+	if _, err := db.Exec(`TRUNCATE session_workflow_outbox, sessions`); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE sessions`) })
+	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE session_workflow_outbox, sessions`) })
 	expiryContract(t, infrastructure.NewPostgresStore(db, testMetadataKey), uniqueID("exp")+"_")
 }
 
 // Two replicas sweeping the same rows together: each session expired by exactly one.
 func TestPostgresStore_ExpireDue_TwoReplicasExpireEachSessionOnce(t *testing.T) {
 	db := testDB(t)
-	if _, err := db.Exec(`TRUNCATE sessions`); err != nil {
+	if _, err := db.Exec(`TRUNCATE session_workflow_outbox, sessions`); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE sessions`) })
+	t.Cleanup(func() { _, _ = db.Exec(`TRUNCATE session_workflow_outbox, sessions`) })
 	ctx := context.Background()
 	now := time.Now().UTC()
 	const n = 300

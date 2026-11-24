@@ -33,11 +33,13 @@ type User struct {
 	IdentitySource   string
 	IdentityProvider string
 	ExternalSubject  string
+	DisabledAt       *time.Time
 }
 
 // ErrAttemptNotFound: no login under way has this state — never started, already used, or
 // forged.
 var ErrAttemptNotFound = errors.New("no such login attempt")
+var ErrUserNotFound = errors.New("user not found")
 
 const (
 	SourceLocal = "local"

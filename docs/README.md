@@ -113,3 +113,5 @@ Jusqu'au 31 octobre 2026, la documentation était une séquence de documents num
 | Guide Utilisateur (`OpenBastion_Guide_Utilisateur.md`) | 1. Ce que fait OpenBastion pour vous | [`user-guide/README.md`](user-guide/README.md) |
 | Guide Utilisateur (`OpenBastion_Guide_Utilisateur.md`) | 9. Bonnes pratiques | [`user-guide/README.md`](user-guide/README.md) |
 | doc 03 — ADR (`OpenBastion_03_ADR.md`) | §1 format, §2 index ; chaque ADR-NNNN | [`adr/README.md`](adr/README.md) ; `adr/NNNN-….md` |
+
+- [Contrats Workflow / Approval — ADR-0138](architecture/workflow-approval-contracts.md) — proposition contractuelle REST, mTLS, états, audit et PostgreSQL (non implémentée).

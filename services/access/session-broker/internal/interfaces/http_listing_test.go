@@ -86,7 +86,7 @@ func TestListOverHTTP_TheApproverSeesWhatHeMayDecide_AndTheShapeIsThatOfTheOther
 
 func TestListOverHTTP_AnEmptyListIsAnEmptyArray_ForTheAuthorAndForWhoHasNoAuthority(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	svc := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 	requestOverHTTP(t, svc) // alice's
 
 	_, own, code := get(t, svc, "status=pending_approval&callerId=alice&actorRoles=lead")
@@ -94,7 +94,7 @@ func TestListOverHTTP_AnEmptyListIsAnEmptyArray_ForTheAuthorAndForWhoHasNoAuthor
 		t.Fatalf("the author: %d %s", code, own)
 	}
 
-	noAuthority := application.NewSessionBrokerService(store, onlyAsking{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	noAuthority := application.NewSessionBrokerService(store, onlyAsking{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 	_, stranger, code := get(t, noAuthority, "status=pending_approval&callerId=mallory&actorRoles=sre")
 	if code != http.StatusOK || stranger != own {
 		t.Fatalf("who has no authority gets %d %s, want exactly what the author gets (%s): the list must not say that requests exist", code, stranger, own)
@@ -126,7 +126,7 @@ func TestListOverHTTP_RefusesWhatItDoesNotServe(t *testing.T) {
 
 func TestListOverHTTP_APageIsServedAsClamped_AndTheRolesAreSplitOnCommas(t *testing.T) {
 	seen := &rolesSeen{}
-	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), seen, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	svc := application.NewSessionBrokerService(infrastructure.NewInMemoryStore(), seen, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 	for i := 0; i < 3; i++ {
 		requestOverHTTP(t, svc)
 	}
@@ -164,9 +164,9 @@ func TestListOverHTTP_ADependencyFailureIsA503_WithoutItsMessage_ButInTheLog(t *
 	t.Cleanup(func() { log.SetOutput(previous) })
 
 	store := infrastructure.NewInMemoryStore()
-	good := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	good := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 	requestOverHTTP(t, good)
-	down := application.NewSessionBrokerService(store, downAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	down := application.NewSessionBrokerService(store, downAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 
 	rec := send(down, http.MethodGet, "/sessions?status=pending_approval&callerId=bob&actorRoles=lead", "")
 	assertUnavailableWithoutLeak(t, rec)
@@ -177,7 +177,7 @@ func TestListOverHTTP_ADependencyFailureIsA503_WithoutItsMessage_ButInTheLog(t *
 
 func TestListOverHTTP_SaysWhenTheListWasCut(t *testing.T) {
 	store := infrastructure.NewInMemoryStore()
-	svc := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30)
+	svc := application.NewSessionBrokerService(store, allowAuthz{}, okVault{}, quietAudit{}, oneAccount{}, failingProxy{}).WithBreakGlass(30).WithWorkflowApprovalClient(newTestWorkflow())
 	now := time.Now().UTC()
 	for i := 0; i <= application.MaxPendingScanned; i++ { // one more than the bound
 		err := store.Save(context.Background(), &domain.Session{

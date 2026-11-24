@@ -58,11 +58,12 @@ type GatewayServer struct {
 	// proxyTrust says whose X-Forwarded-For is believed when the per-address limiters
 	// look for the client (ADR-0015). It is never nil: a Gateway built by hand trusts
 	// nobody, and keys on the address of the peer.
-	proxyTrust        *application.ProxyTrust
-	authenticationURL string
-	sessionBrokerURL  string
-	vaultURL          string
-	authorizationURL  string
+	proxyTrust         *application.ProxyTrust
+	authenticationURL  string
+	sessionBrokerURL   string
+	workflowServiceURL string
+	vaultURL           string
+	authorizationURL   string
 	// commandRecorderURL is where GET /sessions/{id}/recording is routed.
 	commandRecorderURL string
 	auditURL           string
@@ -142,6 +143,12 @@ func (g *GatewayServer) WithHTTPClient(c *http.Client) *GatewayServer {
 	return g
 }
 
+// WithWorkflowServiceURL configures the mTLS-protected Workflow Service used by hierarchy administration.
+func (g *GatewayServer) WithWorkflowServiceURL(url string) *GatewayServer {
+	g.workflowServiceURL = strings.TrimRight(url, "/")
+	return g
+}
+
 // WithAuditServiceURL configures the mTLS-protected Audit Service used by the operator alert reads and acknowledgements.
 func (g *GatewayServer) WithAuditServiceURL(url string) *GatewayServer {
 	g.auditURL = strings.TrimRight(url, "/")
@@ -202,6 +209,8 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/mfa/webauthn/keys/add", g.handleMFA("/auth/v1/mfa/webauthn/keys/add", "challenge", "{credential}", "enrollmentCode"))
 	mux.HandleFunc("/auth/me/capabilities", g.requireAuth(g.handleCapabilities)) // ADR-0131
 	mux.HandleFunc("/sessions", g.requireAuth(g.handleSessionsCollection))
+	mux.HandleFunc("/approval-hierarchy", g.requireAuth(g.handleApprovalHierarchyCollection))
+	mux.HandleFunc("/approval-hierarchy/", g.requireAuth(g.handleApprovalHierarchyItem))
 	// The search of recorded commands (ADR-0080), served by the Command Recorder.
 	mux.HandleFunc("/recordings/search", g.requireAuth(g.handleRecordingSearch))
 	// Cross-session injection audit is a separate permission, never implied by session or platform roles (ADR-0113).

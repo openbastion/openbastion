@@ -1,5 +1,5 @@
 // The per-user budget of approve, reject, connect and terminate at the Gateway (ADR-0016, ADR-0017), on real
-// processes: Authorization, Authentication, Audit, the Session Broker and three API Gateways
+// processes: Authorization, Authentication, Audit, Workflow, the Session Broker and three API Gateways
 // with different settings.
 //
 // What it pins is what the ADR measured and the reason for the budget: an approval or a
@@ -23,6 +23,7 @@ func TestSessionAction_AUserWithASessionOfItsOwnCannotMakeTheBrokerWriteMoreThan
 	auditBin := buildBinary(t, root, "./services/recording-audit/audit-service/cmd/audit-service", "audit-service-16")
 	authzBin := buildBinary(t, root, "./services/access/authorization/cmd/authorization", "authorization-16")
 	authnBin := buildBinary(t, root, "./services/access/authentication/cmd/authentication", "authentication-16")
+	workflowBin := buildBinary(t, root, "./services/access/workflow-service/cmd/workflow-service", "workflow-service-16")
 	brokerBin := buildBinary(t, root, "./services/access/session-broker/cmd/session-broker", "session-broker-16")
 	gatewayBin := buildBinary(t, root, "./services/access/api-gateway/cmd/api-gateway", "api-gateway-16")
 
@@ -30,10 +31,11 @@ func TestSessionAction_AUserWithASessionOfItsOwnCannotMakeTheBrokerWriteMoreThan
 	authz := startService(t, root, authzBin, "18780")
 	authn := startService(t, root, authnBin, "18781", "SKIP_DEMO_SEED=1")
 	spy := startAuditSpy(t, audit.baseURL)
+	workflow := startService(t, root, workflowBin, "18788", "AUTHENTICATION_URL="+authn.baseURL, "AUTHORIZATION_URL="+authz.baseURL, "AUDIT_URL="+spy.baseURL)
 	playVaultAccounts(t, "18786") // the account read of a session request (ADR-0043)
 	broker := startService(t, root, brokerBin, "18782",
 		"AUTHORIZATION_URL="+authz.baseURL, "VAULT_URL=http://127.0.0.1:18786", "AUDIT_URL="+spy.baseURL,
-		"SSH_PROXY_URL=http://127.0.0.1:18787", "BREAKGLASS_MAX_MINUTES=30")
+		"SSH_PROXY_URL=http://127.0.0.1:18787", "WORKFLOW_SERVICE_URL="+workflow.baseURL, "BREAKGLASS_MAX_MINUTES=30")
 	gatewayEnv := func(extra ...string) []string {
 		return append([]string{"AUTHENTICATION_URL=" + authn.baseURL, "SESSION_BROKER_URL=" + broker.baseURL,
 			"COMMAND_RECORDER_URL=http://127.0.0.1:18787"}, extra...)

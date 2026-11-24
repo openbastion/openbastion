@@ -2,6 +2,9 @@ package infrastructure
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -15,12 +18,13 @@ type InMemoryStore struct {
 	sessions map[string]*domain.Session
 	// expiredAt holds, for each session the sweep expired, when; toAudit those whose
 	// expiry is not yet in the trail (ADR-0034).
-	expiredAt map[string]time.Time
-	toAudit   map[string]bool
+	expiredAt      map[string]time.Time
+	toAudit        map[string]bool
+	workflowOutbox map[string]domain.WorkflowDispatch
 }
 
 func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{sessions: map[string]*domain.Session{}, expiredAt: map[string]time.Time{}, toAudit: map[string]bool{}}
+	return &InMemoryStore{sessions: map[string]*domain.Session{}, expiredAt: map[string]time.Time{}, toAudit: map[string]bool{}, workflowOutbox: map[string]domain.WorkflowDispatch{}}
 }
 
 // ExpireDue is domain.SessionRepository.ExpireDue, under the store's lock.
@@ -152,13 +156,90 @@ func (s *InMemoryStore) SaveIfUnderPendingLimit(ctx context.Context, sess *domai
 	return true, nil
 }
 
+// SavePendingWithWorkflowOutbox stores an ordinary pending session and its dispatch row under one lock.
+func (s *InMemoryStore) SavePendingWithWorkflowOutbox(_ context.Context, sess *domain.Session, limit int, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess.BreakGlass {
+		return false, fmt.Errorf("workflow outbox cannot dispatch break-glass sessions")
+	}
+	if s.pendingOf(sess.RequestedBy, now) >= limit {
+		return false, nil
+	}
+	cp := *sess
+	s.attest(&cp)
+	s.sessions[sess.ID] = &cp
+	s.workflowOutbox[sess.ID] = domain.WorkflowDispatch{SessionID: sess.ID, DueAt: now, CreatedAt: now}
+	return true, nil
+}
+
+func (s *InMemoryStore) ClaimWorkflowDispatches(_ context.Context, now time.Time, lease time.Duration, limit int) ([]domain.WorkflowDispatch, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items := make([]domain.WorkflowDispatch, 0)
+	for _, item := range s.workflowOutbox {
+		if !item.DueAt.After(now) && (item.LeaseUntil == nil || !item.LeaseUntil.After(now)) {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if !items[i].DueAt.Equal(items[j].DueAt) {
+			return items[i].DueAt.Before(items[j].DueAt)
+		}
+		return items[i].SessionID < items[j].SessionID
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	for i := range items {
+		var raw [16]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			return nil, err
+		}
+		token := "lease_" + hex.EncodeToString(raw[:])
+		until := now.Add(lease)
+		items[i].LeaseToken, items[i].LeaseUntil, items[i].Attempts = token, &until, items[i].Attempts+1
+		s.workflowOutbox[items[i].SessionID] = items[i]
+	}
+	return items, nil
+}
+
+func (s *InMemoryStore) CompleteWorkflowDispatch(_ context.Context, sessionID, leaseToken string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.workflowOutbox[sessionID]
+	if !ok || item.LeaseToken != leaseToken {
+		return domain.ErrConflict
+	}
+	delete(s.workflowOutbox, sessionID)
+	return nil
+}
+
+func (s *InMemoryStore) RetryWorkflowDispatch(_ context.Context, sessionID, leaseToken, errorCode string, dueAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.workflowOutbox[sessionID]
+	if !ok || item.LeaseToken != leaseToken {
+		return domain.ErrConflict
+	}
+	item.DueAt, item.LeaseUntil, item.LeaseToken, item.LastErrorCode = dueAt, nil, "", errorCode
+	s.workflowOutbox[sessionID] = item
+	return nil
+}
+
+func (s *InMemoryStore) HasPendingWorkflowDispatches(_ context.Context) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.workflowOutbox) != 0, nil
+}
+
 // ListPending is domain.SessionRepository.ListPending over the map.
 func (s *InMemoryStore) ListPending(ctx context.Context, now time.Time, limit int) ([]*domain.Session, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var pending []*domain.Session
 	for _, sess := range s.sessions {
-		if sess.Status == domain.StatusPendingApproval && !sess.ExpiresAt.Before(now) {
+		if sess.Status == domain.StatusPendingApproval && sess.BreakGlass && !sess.ExpiresAt.Before(now) {
 			cp := *sess
 			pending = append(pending, &cp)
 		}

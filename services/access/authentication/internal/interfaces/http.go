@@ -37,6 +37,7 @@ func (s *HTTPServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/auth/v1/users", s.handleCreateUser)
 	mux.HandleFunc("/auth/v1/login", s.handleLogin)
 	mux.HandleFunc("/auth/v1/verify", s.handleVerify)
+	mux.HandleFunc("GET /auth/v1/internal/users/{user_id}/authorization-context", s.handleGetAuthorizationContext)
 	mux.HandleFunc("/auth/v1/oidc", s.handleOIDCInfo)
 	mux.HandleFunc("/auth/v1/oidc/start", s.handleOIDCStart)
 	mux.HandleFunc("/auth/v1/oidc/callback", s.handleOIDCCallback)
@@ -101,6 +102,45 @@ func (s *HTTPServer) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(createUserResponse{ID: u.ID})
+}
+
+// userAuthorizationContextResponse is intentionally smaller than domain.User:
+// the Workflow Service receives only current authorization inputs.
+type userAuthorizationContextResponse struct {
+	UserID string   `json:"user_id"`
+	Exists bool     `json:"exists"`
+	Active bool     `json:"active"`
+	Roles  []string `json:"roles"`
+}
+
+func (s *HTTPServer) handleGetAuthorizationContext(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("user_id")
+	if !validInternalUserID(userID) {
+		http.Error(w, "invalid user identifier", http.StatusBadRequest)
+		return
+	}
+	ctx, err := s.svc.GetAuthorizationContext(r.Context(), userID)
+	if err != nil {
+		log.Printf("authentication: authorization context unavailable: %v", err)
+		http.Error(w, "authorization context unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(userAuthorizationContextResponse{UserID: ctx.UserID, Exists: ctx.Exists, Active: ctx.Active, Roles: ctx.Roles})
+}
+
+func validInternalUserID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // -- POST /auth/v1/login (mirrors POST /auth/login, docs/api/rest/openapi.yaml) ---------
