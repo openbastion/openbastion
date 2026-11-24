@@ -41,6 +41,12 @@ func TestCallerRules(t *testing.T) {
 		// ADR-0116 §4: the heads of the session metadata, the Session Broker's only.
 		mtlstest.Allow("session-broker", "POST", "/audit/v1/session-metadata/attestations"),
 		mtlstest.Allow("session-broker", "GET", "/audit/v1/session-metadata/head"),
+		mtlstest.Allow("api-gateway", "GET", "/audit/v1/session-alerts"),
+		mtlstest.Allow("api-gateway", "GET", "/audit/v1/session-alerts/summary"),
+		mtlstest.Allow("api-gateway", "GET", "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef"),
+		mtlstest.Deny("admin-cli", "GET", "/audit/v1/session-alerts"),
+		mtlstest.Deny("session-broker", "GET", "/audit/v1/session-alerts/summary"),
+		mtlstest.Deny("api-gateway", "POST", "/audit/v1/session-alerts"),
 		mtlstest.Deny("rdp-vnc-proxy", "POST", "/audit/v1/session-metadata/attestations"),
 		mtlstest.Deny("api-gateway", "GET", "/audit/v1/session-metadata/head"),
 		mtlstest.Deny("admin-cli", "POST", "/audit/v1/session-metadata/attestations"),
@@ -57,6 +63,9 @@ func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 		{Method: "GET", Path: "/audit/v1/secret-injections"},
 		{Method: "POST", Path: "/audit/v1/session-metadata/attestations"},
 		{Method: "GET", Path: "/audit/v1/session-metadata/head"},
+		{Method: "GET", Path: "/audit/v1/session-alerts"},
+		{Method: "GET", Path: "/audit/v1/session-alerts/summary"},
+		{Method: "GET", Path: "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef"},
 		{Method: "GET", Path: "/healthz"},
 	})
 }

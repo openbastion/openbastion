@@ -442,6 +442,8 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 		{"Authorization writes an audit event", mtls.Authorization, http.MethodPost, auditURL + "/audit/v1/emit-event",
 			map[string]any{"actor_id": "root-admin", "action": "session.terminated", "resource_type": "session", "resource_id": sess.ID, "success": true}, "an audit entry"},
 		{"a compromised Gateway verifies the audit chain", mtls.APIGateway, http.MethodGet, auditURL + "/audit/v1/verify-chain", nil, "an oracle on the audit store"},
+		{"a compromised Session Broker reads the alert projection", mtls.SessionBroker, http.MethodGet, auditURL + "/audit/v1/session-alerts", nil, "the operator alert queue"},
+		{"operator tooling reads the alert projection directly", mtls.AdminCLI, http.MethodGet, auditURL + "/audit/v1/session-alerts/summary", nil, "the operator alert summary"},
 		{"the broker forges commands into a recording", mtls.SessionBroker, http.MethodPost, recorderURL + "/recorder/v1/command-entries", forgedEntry, "a recorded command"},
 		{"the operator tooling forges commands into a recording", mtls.AdminCLI, http.MethodPost, recorderURL + "/recorder/v1/command-entries", forgedEntry, "a recorded command"},
 		{"the broker reads a recording, forging the auditor role", mtls.SessionBroker, http.MethodGet,
@@ -514,6 +516,50 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 			}
 		})
 	}
+	t.Run("only the Gateway workload can read the alert projection", func(t *testing.T) {
+		gw := p.clientAs(t, mtls.APIGateway)
+		status, raw := mustCall(t, p.clientAs(t, mtls.SessionBroker), http.MethodPost, auditURL+"/audit/v1/emit-event", map[string]any{
+			"actor_id": operatorID, "action": "session.breakglass_requested", "resource_type": "session", "resource_id": "mtls-alert-session", "success": true,
+		})
+		if status != http.StatusOK {
+			t.Fatalf("append source event: %d %s", status, raw)
+		}
+		var page struct {
+			Alerts []map[string]any `json:"alerts"`
+		}
+		waitUntil(t, 5*time.Second, "the detection worker to project the alert", func() bool {
+			status, raw = mustCall(t, gw, http.MethodGet, auditURL+"/audit/v1/session-alerts?limit=10", nil)
+			if status != http.StatusOK {
+				return false
+			}
+			if err := json.Unmarshal([]byte(raw), &page); err != nil {
+				return false
+			}
+			for _, alert := range page.Alerts {
+				if alert["session_id"] == "mtls-alert-session" {
+					return true
+				}
+			}
+			return false
+		})
+		status, raw = mustCall(t, gw, http.MethodGet, auditURL+"/audit/v1/session-alerts/summary", nil)
+		if status != http.StatusOK || !strings.Contains(raw, `"durable":false`) {
+			t.Fatalf("summary: %d %s", status, raw)
+		}
+		var alertID string
+		for _, alert := range page.Alerts {
+			if alert["session_id"] == "mtls-alert-session" {
+				alertID, _ = alert["id"].(string)
+			}
+		}
+		if alertID == "" {
+			t.Fatal("the projected alert has no ID")
+		}
+		status, raw = mustCall(t, gw, http.MethodGet, auditURL+"/audit/v1/session-alerts/"+alertID, nil)
+		if status != http.StatusOK || !strings.Contains(raw, `"severity":"high"`) {
+			t.Fatalf("detail: %d %s", status, raw)
+		}
+	})
 
 	t.Run("and none of it happened", func(t *testing.T) {
 		// The forged policy was not created: the role it was for has no access.

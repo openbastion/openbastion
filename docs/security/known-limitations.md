@@ -78,3 +78,8 @@
 - La recherche d'une session par identifiant utilise `GET /sessions/{id}` et reste soumise à la politique de lecture de la ressource. La sélection d'une demande déjà renvoyée par la file d'approbation réutilise cet objet autorisé sans déclencher une lecture additionnelle.
 - L'Admin UI ne fournit pas de terminal SSH interactif ni de flux de commandes live. Les commandes enregistrées restent consultables via la recherche d'enregistrements existante.
 - Le contrat public de file d'alertes, de sévérité, de compteur non traité et d'acquittement n'est pas encore exposé par l'API ; l'Admin UI ne présente donc aucun faux compteur. Le backend durable (ingestion, worker et projection) est livré dans l'Audit Service.
+
+
+## File d’alertes de session — visibilité opérateur non encore exposée
+
+L’Audit Service possède désormais les lectures internes mTLS de liste, résumé et détail des occurrences ; seul `api-gateway` peut les appeler. Aucune route publique Gateway ni permission `session-alerts:read` n’est encore livrée. L’Admin UI ne doit pas appeler ces routes internes ni afficher des données synthétiques. L’acquittement audité (`session-alerts:acknowledge`) et l’interface restent à réaliser.
