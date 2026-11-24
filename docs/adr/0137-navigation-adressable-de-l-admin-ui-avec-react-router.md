@@ -1,6 +1,6 @@
 # ADR-0137 — La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites
 
-**Statut** `Proposé` · 24 novembre 2026 · `Accepté` seulement avec le go du propriétaire du projet, cité avec sa date. L'audit de la refonte et ses cinq décisions ont été validés par Bony Kiss le 24 novembre 2026 ; cet ADR fixe la première des cinq, le routage.
+**Statut** `Accepté` · 24 novembre 2026 · go du propriétaire du projet, Bony Kiss, cité le 24 novembre 2026. L'audit de la refonte et ses cinq décisions ont été validés par Bony Kiss le 24 novembre 2026 ; cet ADR fixe la première des cinq, le routage. Les incréments 2 à 11 de l'audit sont ouverts.
 
 **Contexte** — L'Admin UI garde sa destination dans un état React (`Tab`, `app/App.tsx`), pas dans une URL. Mesuré sur `2a177f47` : 7 destinations, 113 fichiers TS/TSX (16 525 lignes), 37 fichiers de tests (299 `it()`), `app/AppShell.tsx` 552 lignes, 18 capacités du catalogue de l'ADR-0131.
 

@@ -42,8 +42,5 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     sourcemap: false,
   },
-  test: {
-    environment: "jsdom",
-    globals: true,
-  },
+  // The tests have their own configuration: vitest.config.ts.
 });

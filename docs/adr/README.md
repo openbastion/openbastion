@@ -222,7 +222,7 @@ Admin UI, portail utilisateur, système de conception, notifications vers les me
 | 1 | [ADR-0036](0036-l-admin-ui-react-vite-et-typescript-servie-par-la-gateway.md) | L'Admin UI : React, Vite et TypeScript, servie par la Gateway sous `/ui/`, de même origine que l'API, sous une CSP stricte | Accepté |
 | 2 | [ADR-0073](0073-l-admin-ui-adopte-un-systeme-de-conception-et-une-experience-operateur-progressive.md) | L'Admin UI adopte un système de conception cohérent et une expérience opérateur progressive | Accepté, mise en œuvre en cours |
 | 3 | [ADR-0075](0075-architecture-du-user-portal-et-socle-frontend-partage.md) | Architecture du User Portal et socle frontend partagé | Proposé |
-| 4 | [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Proposé |
+| 4 | [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Accepté, mise en œuvre en cours |
 | 5 | [ADR-0098](0098-le-client-desktop-est-natif-go-et-construit-avec-fyne.md) | Le client Desktop OpenBastion est une application native Go construite avec Fyne | Proposé |
 | 6 | [ADR-0074](0074-slack-et-teams-recoivent-les-notifications-dans-leur-format-sans-nouveau-service.md) | Slack et Teams reçoivent les notifications dans leur format, sans nouveau service | Accepté |
 
@@ -431,4 +431,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0134](0134-client-ssh-standard-et-mfa-lie-a-la-session.md) | Le client SSH standard ouvre une session à ticket ; le step-up MFA reste lié à l’action dans l’Admin UI | Accepté | Proxy SSH |
 | [ADR-0135](0135-borner-les-pools-postgresql-par-service-dans-un-budget-de-deploiement.md) | Borner les pools PostgreSQL par service dans un budget de déploiement | Accepté | Fondations du code |
 | [ADR-0136](0136-provenance-des-evenements-par-identite-de-lappelant-mtls.md) | Attribuer l’émetteur d’un événement à l’appelant mTLS immédiat | Accepté | Chaîne d’audit |
-| [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Proposé | Interfaces et notifications |
+| [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Accepté, mise en œuvre en cours | Interfaces et notifications |

@@ -52,3 +52,21 @@ export { Toaster, type ToasterProps } from "./components/Toaster";
 export { Sonner, type SonnerProps } from "./components/Sonner";
 export { ToastProvider, useToast, type ToastProviderProps, type ToastOptions, type ToastEntry, type ToastVariant } from "./hooks/use-toast";
 export { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell, TableCaption, type TableProps, type TableHeaderProps, type TableBodyProps, type TableFooterProps, type TableRowProps, type TableHeadProps, type TableCellProps, type TableCaptionProps } from "./components/Table";
+
+export {
+  AppShell, type AppShellProps,
+  AppSidebar, type AppSidebarProps,
+  AppSidebarBrand, type AppSidebarBrandProps,
+  AppSidebarFooter, type AppSidebarFooterProps,
+  AppNavigation, type AppNavigationProps,
+  AppHeader, type AppHeaderProps,
+  AppBreadcrumbs, type AppBreadcrumbsProps,
+  AppContent, type AppContentProps,
+  AppPage, AppPageHead, type AppPageProps, type AppPageHeadProps,
+  AppBrandMark,
+  type AppNavigationIcon,
+  type AppNavigationItemDescriptor,
+  type AppNavigationResource,
+  type AppNavigationSection,
+  type AppBreadcrumbItem,
+} from "./shell";
