@@ -71,9 +71,14 @@ func TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProces
 	)
 	startMTLSService(t, root, brokerBin, "18804", p, mtls.SessionBroker,
 		"AUTHORIZATION_URL="+authzURL, "VAULT_URL="+vaultURL, "AUDIT_URL="+auditURL, "SSH_PROXY_URL="+proxyURL)
+	// This scenario exercises many independent routes from one loopback client. Keep the
+	// production per-address limiter enabled, but give this integration harness a bounded
+	// budget large enough that unrelated route coverage cannot mask the authorization
+	// status under test with a 429. Dedicated rate-limit tests exercise the production defaults.
 	startService(t, root, gatewayBin, "18808", p.env(mtls.APIGateway,
 		"AUTHENTICATION_URL="+authnURL, "SESSION_BROKER_URL="+brokerURL, "VAULT_URL="+vaultURL,
-		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+recorderURL, "AUDIT_URL="+auditURL)...)
+		"AUTHORIZATION_URL="+authzURL, "COMMAND_RECORDER_URL="+recorderURL, "AUDIT_URL="+auditURL,
+		"CLIENT_REQUEST_BURST=1000", "CLIENT_REQUEST_RATE_PER_MINUTE=6000")...)
 
 	const targetSecret = "mtls-it-target-secret"
 	targetAddr := startInteractiveTargetSSHServer(t, targetSecret)
