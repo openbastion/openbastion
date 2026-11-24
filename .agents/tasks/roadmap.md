@@ -5,7 +5,7 @@ La source est `docs/roadmap.md` ; ce fichier n'en garde que ce qui oriente le tr
 | Étape | Contenu | État |
 |---|---|---|
 | MVP | SSH (et SFTP/SCP) de bout en bout : Authentication, Authorization (RBAC), Session Broker, Password Vault (rotation sur la cible, manuelle, après usage et planifiée ; clé d'hôte épinglée), SSH Proxy, Audit Service, Command Recorder, API Gateway, mTLS, Admin UI, OIDC, docker-compose | implémenté, rotation planifiée comprise (ADR-0040) ; reste : `backlog.md` |
-| v0.0.1 | LDAP/AD, MFA TOTP/WebAuthn, fédération OIDC/Entra ID, recherche plein texte ADR-0080, Workflow/Approval Engine, autres protocoles et haute disponibilité | LDAP/AD, TOTP, WebAuthn, Entra ID/OIDC multi-fournisseurs et recherche plein texte (Admin UI incluse) livrés ; Workflow/Approval Engine complet, file d’alertes (contrats ADR-0117/0122 acceptés, implémentation restante) et protocoles supplémentaires restent à traiter |
+| v0.0.1 | LDAP/AD, MFA TOTP/WebAuthn, fédération OIDC/Entra ID, recherche plein texte ADR-0080, Workflow/Approval Engine, autres protocoles et haute disponibilité | LDAP/AD, TOTP, WebAuthn, Entra ID/OIDC multi-fournisseurs, recherche plein texte et file d’alertes de session (ADR-0117/0122, backend et Admin UI) livrés ; Workflow/Approval Engine complet et protocoles supplémentaires restent à traiter |
 | v0.0.2 | détection d'anomalies, score de risque, protocoles supplémentaires | à concevoir |
 
 Une étape de la feuille de route commence par un ADR (`architecture/write-adr.md`) et la validation du propriétaire.
