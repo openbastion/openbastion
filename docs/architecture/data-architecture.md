@@ -484,24 +484,25 @@ CREATE TABLE IF NOT EXISTS alert_outbox (
 CREATE INDEX IF NOT EXISTS idx_alert_outbox_due ON alert_outbox (due_at);
 ```
 
-### Outbox de détection des alertes de session (ADR-0117)
+### File de détection et occurrences d’alertes de session (ADR-0117/0122)
 
-`services/recording-audit/audit-service/migrations/005_session_alert_detection_outbox.sql` sépare le travail de détection opérateur de la livraison webhook ci-dessus. Seuls les événements dont le couple émetteur mTLS/action correspond exactement à une règle versionnée sont inscrits. L'ajout de l'événement signé et de sa référence d'outbox est atomique ; le verrou consultatif PostgreSQL sérialise le contrôle de capacité entre réplicas. Le plafond initial est de 4 096 éléments en attente. À saturation, la transaction refuse aussi l'événement source : l'action appelante échoue fermée.
+`services/recording-audit/audit-service/migrations/005_session_alert_detection_outbox.sql` (migration 005, livrée par la PR #297) sépare le travail de détection de `alert_outbox` (webhooks ADR-0057). La migration 006 `services/recording-audit/audit-service/migrations/006_session_alerts_projection.sql` ajoute la projection et les clés étrangères qui retiennent la preuve source tant que le traitement ou l’acquittement la référence :
 
-```sql
-CREATE TABLE IF NOT EXISTS session_alert_detection_outbox (
-    source_event_id  TEXT PRIMARY KEY,
-    catalog_version  TEXT NOT NULL CHECK (catalog_version <> ''),
-    attempts         INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
-    next_attempt_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_error_code  TEXT NOT NULL DEFAULT '',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_session_alert_detection_due
-    ON session_alert_detection_outbox (next_attempt_at, source_event_id);
+- `session_alert_detection_outbox` conserve uniquement `source_event_id`, la version du catalogue, le nombre de tentatives, la prochaine échéance et un code d’erreur interne borné. La FK ajoutée en migration 006 vers `audit_events` empêche l’archivage d’un événement source tant que sa détection n’est pas terminée.
+- `session_alerts` est créée en migration 006 comme projection métier distincte de la preuve source : règle/version, identifiant source, session, sévérité, statut, résumé borné, dates, révision et champs d’acquittement. L’unicité `(source_event_id, rule_id)` rend la projection idempotente. Les trois champs d’acquittement sont tous nuls ou tous renseignés.
+- La limite de 4 096 éléments est vérifiée dans la transaction d’insertion ; si elle est atteinte, l’événement source candidat n’est pas ajouté. Le verrou consultatif PostgreSQL sérialise le contrôle de capacité entre réplicas.
+- Le worker vérifie la chaîne avant d’interpréter l’événement. L’insertion de `session.alert.detected`, de la projection et la suppression de l’outbox forment une transaction ; une reprise ne peut donc pas laisser une demi-alerte. Une erreur conserve l’élément et applique un délai de reprise borné.
+
+Catalogue v1 activé uniquement pour les couples authentifiés déjà émis : `session-broker/session.breakglass_requested`, `ssh-proxy/session.secret_injection_failed` et `rdp-vnc-proxy/session.secret_injection_failed`. Les sévérités sont fixées côté serveur (`high`). Aucun contenu de credential, presse-papiers, commande brute ou détail d’injection n’est copié dans la projection. Les routes publiques, les permissions de lecture/acquittement et l’acquittement transactionnel audité restent à livrer dans les incréments suivants.
+
+```mermaid
+flowchart LR
+    E[Événement source signé] --> T[(audit_events + detection_outbox<br/>transaction atomique)]
+    T --> W[Worker : vérification de chaîne + catalogue versionné]
+    W -->|règle reconnue| C[(session_alerts + session.alert.detected<br/>transaction atomique)]
+    W -->|aucune règle| D[Suppression de l'élément non applicable]
+    W -->|erreur| R[Outbox conservée + reprise différée]
 ```
-
-Cette première tranche ne traite pas encore les lignes : le worker, la projection `session_alerts`, les événements `session.alert.detected`, les routes de lecture/acquittement et la façade Gateway restent à livrer. Tant qu'une référence de détection est en attente, `DeleteThrough` refuse l'archivage de son événement source ; une file non consommée peut donc retarder l'archivage, jamais perdre la preuve. La table ne duplique ni le corps source ni les détails potentiellement sensibles. `alert_outbox` reste exclusivement dédiée aux webhooks ADR-0057.
 
 ### Expiration des sessions (ADR-0034)
 

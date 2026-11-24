@@ -152,3 +152,11 @@
 | `mtls: NOT reloading … keeping the current one` | Un renouvellement a déposé des fichiers invalides ; le service garde l'ancien certificat | Corriger les fichiers avant l'échéance de l'ancien ; le message dit pourquoi |
 | `mtls: the certificate of … EXPIRED` | Le certificat n'a pas été renouvelé à temps ; les pairs refusent ce service | Renouveler immédiatement (la reprise est automatique) ; revoir l'alerte d'échéance |
 | Rotation d'un compte reste indéfiniment en cours | KMS/HSM externe indisponible (`docs/security/secrets-management.md`) | Vérifier la connectivité du Password Vault vers le KMS configuré en `values.yaml` |
+
+
+### File de détection des alertes de session
+
+- **Outbox qui augmente** : consulter les journaux `audit-service` pour `session alert detection worker unavailable`, vérifier l’accès PostgreSQL et l’intégrité de la chaîne (`openbastion-cli audit verify-chain`).
+- **Saturation** : la limite initiale est de 4 096 éléments en attente. L’Audit Service refuse alors l’ajout d’un événement source candidat dans la même transaction ; l’opération dépendante échoue fermée. Ne pas supprimer manuellement des lignes de l’outbox ou de la chaîne.
+- **Reprise** : les éléments en erreur sont conservés avec une échéance de nouvelle tentative. Une reprise après redémarrage est automatique ; ne pas purger `session_alert_detection_outbox` ni `session_alerts`.
+- **Mode mémoire** : il ne survit pas au redémarrage et reste réservé au développement/tests. Il ne constitue pas un déploiement durable conforme à ADR-0117.

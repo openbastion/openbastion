@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -29,6 +30,14 @@ type Store interface {
 	// and only if they are exactly `expected` events — otherwise nothing (ADR-0032).
 	DeleteThrough(ctx context.Context, lastID string, expected int) error
 }
+
+// DetectionAppender atomically appends a source event and its detection outbox reference.
+// Stores that cannot provide this transaction must refuse alert-producing events.
+type DetectionAppender interface {
+	AppendWithDetection(ctx context.Context, e *domain.Event, catalogVersion string, maxPending int) error
+}
+
+const MaxPendingSessionAlertDetections = 4096
 
 // AuditService computes the hash chain itself — a caller never supplies or
 // even knows the previous hash, by design (docs/architecture/data-architecture.md §4).
@@ -185,12 +194,12 @@ func (s *AuditService) EmitEventAsWithDetails(ctx context.Context, emitter, acto
 	if err != nil {
 		return nil, err
 	}
-	if rule, detected := MatchSessionAlertRule(e); detected {
-		detectionStore, ok := s.store.(SessionAlertDetectionStore)
+	if _, alert := MatchSessionAlert(e); alert {
+		appender, ok := s.store.(DetectionAppender)
 		if !ok {
 			return nil, ErrSessionAlertDetectionUnavailable
 		}
-		if err := detectionStore.AppendWithDetection(ctx, e, rule.CatalogVersion); err != nil {
+		if err := appender.AppendWithDetection(ctx, e, SessionAlertCatalogVersion, MaxPendingSessionAlertDetections); err != nil {
 			return nil, err
 		}
 	} else if err := s.store.Append(ctx, e); err != nil {
@@ -366,8 +375,7 @@ var idCounter int64
 // generator without touching the hashing logic above, which only needs
 // e.ID to be stable and included in the hash input.
 func nextID() string {
-	idCounter++
-	return fmt.Sprintf("evt_%d_%d", time.Now().UTC().UnixNano(), idCounter)
+	return fmt.Sprintf("evt_%d_%d", time.Now().UTC().UnixNano(), atomic.AddInt64(&idCounter, 1))
 }
 
 // nextEvent is the next event of the chain, signed, not yet appended. The caller holds s.mu.

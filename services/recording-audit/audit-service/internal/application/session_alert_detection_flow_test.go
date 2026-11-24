@@ -15,10 +15,10 @@ type detectionRecordingStore struct {
 	calls          int
 }
 
-func (s *detectionRecordingStore) AppendWithDetection(ctx context.Context, event *domain.Event, catalogVersion string) error {
+func (s *detectionRecordingStore) AppendWithDetection(ctx context.Context, event *domain.Event, catalogVersion string, maxPending int) error {
 	s.catalogVersion = catalogVersion
 	s.calls++
-	return s.InMemoryStore.AppendWithDetection(ctx, event, catalogVersion)
+	return s.InMemoryStore.AppendWithDetection(ctx, event, catalogVersion, maxPending)
 }
 
 func TestEmitEvent_EnqueuesOnlyARecognizedAuthenticatedSource(t *testing.T) {
