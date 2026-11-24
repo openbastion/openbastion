@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -102,4 +103,61 @@ func scanSessionAlert(row sessionAlertScanner) (domain.SessionAlert, error) {
 		alert.AcknowledgementEventID = acknowledgementEventID.String
 	}
 	return alert, nil
+}
+
+// AcknowledgeSessionAlert commits the chain event and projection transition in one transaction.
+func (s *PostgresStore) AcknowledgeSessionAlert(ctx context.Context, id string, expectedRevision int64, actorID string, event *domain.Event) (domain.SessionAlert, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	defer tx.Rollback()
+	if err := lockAuditChain(ctx, tx); err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+
+	row := tx.QueryRowContext(ctx, `SELECT id, rule_id, rule_version, source_event_id, session_id, severity, status, summary, detected_at, created_at, revision, acknowledged_at, acknowledged_by, acknowledgement_event_id FROM session_alerts WHERE id = $1 FOR UPDATE`, id)
+	alert, err := scanSessionAlert(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertNotFound
+	}
+	if err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	if alert.Status == domain.AlertStatusAcknowledged {
+		return alert, false, nil
+	}
+	if alert.Status != domain.AlertStatusUnacknowledged || alert.Revision != expectedRevision || alert.Revision >= domain.MaxSessionAlertRevision {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertRevisionConflict
+	}
+	if event == nil || event.ActorID != actorID || event.ResourceID != id || event.Action != "session.alert.acknowledged" {
+		return domain.SessionAlert{}, false, fmt.Errorf("invalid session alert acknowledgement event")
+	}
+	if err := checkAuditChainHead(ctx, tx, event); err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	if err := appendEvent(ctx, tx, event); err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE session_alerts SET status = 'acknowledged', acknowledged_at = $3, acknowledged_by = $4, acknowledgement_event_id = $5, revision = revision + 1 WHERE id = $1 AND status = 'unacknowledged' AND revision = $2`, id, expectedRevision, event.Timestamp, actorID, event.ID)
+	if err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	if rows != 1 {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertRevisionConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.SessionAlert{}, false, err
+	}
+	at := event.Timestamp.UTC()
+	alert.Status = domain.AlertStatusAcknowledged
+	alert.AcknowledgedAt = &at
+	alert.AcknowledgedBy = actorID
+	alert.AcknowledgementEventID = event.ID
+	alert.Revision++
+	return alert, true, nil
 }

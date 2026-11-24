@@ -1,7 +1,9 @@
 package infrastructure
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -69,4 +71,39 @@ func cloneSessionAlert(alert domain.SessionAlert) domain.SessionAlert {
 		alert.AcknowledgedAt = &at
 	}
 	return alert
+}
+
+// AcknowledgeSessionAlert appends the event and changes the projection under the same lock.
+func (s *InMemoryStore) AcknowledgeSessionAlert(_ context.Context, id string, expectedRevision int64, actorID string, event *domain.Event) (domain.SessionAlert, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	alert, ok := s.sessionAlerts[id]
+	if !ok {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertNotFound
+	}
+	if alert.Status == domain.AlertStatusAcknowledged {
+		return cloneSessionAlert(alert), false, nil
+	}
+	if alert.Status != domain.AlertStatusUnacknowledged || alert.Revision != expectedRevision || alert.Revision >= domain.MaxSessionAlertRevision {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertRevisionConflict
+	}
+	if event == nil || event.ActorID != actorID || event.ResourceID != id || event.Action != "session.alert.acknowledged" {
+		return domain.SessionAlert{}, false, fmt.Errorf("invalid session alert acknowledgement event")
+	}
+	var lastHash []byte
+	if len(s.events) > 0 {
+		lastHash = s.events[len(s.events)-1].Hash
+	}
+	if !bytes.Equal(lastHash, event.PrevHash) {
+		return domain.SessionAlert{}, false, fmt.Errorf("audit chain head moved during session alert acknowledgement")
+	}
+	at := event.Timestamp.UTC()
+	alert.Status = domain.AlertStatusAcknowledged
+	alert.AcknowledgedAt = &at
+	alert.AcknowledgedBy = actorID
+	alert.AcknowledgementEventID = event.ID
+	alert.Revision++
+	s.events = append(s.events, event)
+	s.sessionAlerts[id] = alert
+	return cloneSessionAlert(alert), true, nil
 }

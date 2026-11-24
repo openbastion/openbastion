@@ -23,10 +23,11 @@ func CallerRules() []mtls.Rule {
 		// The heads of the session metadata (ADR-0116 §4): the Session Broker's only.
 		{Method: http.MethodPost, Path: "/audit/v1/session-metadata/attestations", Callers: []string{mtls.SessionBroker}},
 		{Method: http.MethodGet, Path: "/audit/v1/session-metadata/head", Callers: []string{mtls.SessionBroker}},
-		// The operator projection is read only by the Gateway facade after user authorization (ADR-0117/0122).
+		// The operator projection is read by the Gateway facade after user authorization; acknowledgements are written only by the same facade (ADR-0117/0122).
 		{Method: http.MethodGet, Path: "/audit/v1/session-alerts", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodGet, Path: "/audit/v1/session-alerts/summary", Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodGet, Path: "/audit/v1/session-alerts/", Prefix: true, Callers: []string{mtls.APIGateway}},
+		{Method: http.MethodPost, Path: "/audit/v1/session-alerts/", Prefix: true, Callers: []string{mtls.APIGateway}},
 		{Method: http.MethodGet, Path: "/metrics", Callers: []string{mtls.Any}}, // ADR-0135: pool telemetry
 		{Path: "/healthz", Callers: []string{mtls.Any}},
 	}

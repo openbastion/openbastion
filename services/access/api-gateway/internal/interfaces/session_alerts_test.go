@@ -128,7 +128,7 @@ func TestSessionAlerts_NoTokenAndInvalidRoutesNeverReachUpstreams(t *testing.T) 
 		want         int
 	}{
 		{http.MethodGet, "/session-alerts", http.StatusUnauthorized},
-		{http.MethodGet, "/session-alerts/alert_0123456789abcdef0123456789abcdef/acknowledge", http.StatusNotFound},
+		{http.MethodGet, "/session-alerts/alert_0123456789abcdef0123456789abcdef/acknowledge", http.StatusMethodNotAllowed},
 		{http.MethodGet, "/session-alerts/alert.123", http.StatusBadRequest},
 		{http.MethodGet, "/session-alerts/alert_0123456789ABCDEF0123456789abcdef", http.StatusBadRequest},
 		{http.MethodGet, "/session-alerts?cursor=not-a-cursor", http.StatusBadRequest},

@@ -142,7 +142,7 @@ func (g *GatewayServer) WithHTTPClient(c *http.Client) *GatewayServer {
 	return g
 }
 
-// WithAuditServiceURL configures the mTLS-protected Audit Service used by the read-only operator projection.
+// WithAuditServiceURL configures the mTLS-protected Audit Service used by the operator alert reads and acknowledgements.
 func (g *GatewayServer) WithAuditServiceURL(url string) *GatewayServer {
 	g.auditURL = strings.TrimRight(url, "/")
 	return g
@@ -433,9 +433,9 @@ func (g *GatewayServer) admitSessionRequest(w http.ResponseWriter, id identity) 
 	return admitFromBudget(w, id, g.sessionLimiter, "session requests")
 }
 
-// admitSessionAction is the same charge for approve, reject, connect (ADR-0016) and
-// terminate (ADR-0017), to a budget of its own: it is one bucket for the four, so that
-// changing route is not a way to a new budget, and it is not the bucket of POST /sessions.
+// admitSessionAction charges the shared per-user budget for session writes (approve,
+// reject, connect and terminate) and the session-alert acknowledgement (ADR-0117).
+// Changing write route does not create a new budget; it is separate from POST /sessions.
 func (g *GatewayServer) admitSessionAction(w http.ResponseWriter, id identity) bool {
 	return admitFromBudget(w, id, g.actionLimiter, "session actions")
 }

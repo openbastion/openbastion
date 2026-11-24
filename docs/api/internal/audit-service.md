@@ -102,3 +102,13 @@ Corps (champs inconnus refusés) : `{"session_id": "…", "revision": 3, "metada
 ### `GET /audit/v1/session-metadata/head?session_id=…`
 
 `200` et la tête (`session_id`, `revision`, `metadata_sha256`, `key_id`, `event_id`) **après vérification contre l'événement signé** : l'événement est recalculé à partir des champs de la tête et doit redonner le hash que la chaîne a signé, sous la clé de chaîne qui l'a signé. Cette vérification ne lit pas l'événement en base : une tête reste vérifiable quand son mois est archivé (ADR-0032). `404` sans tête ; `500` si la tête ne se recalcule pas (projection altérée).
+
+
+## `POST /audit/v1/session-alerts/{id}/acknowledge` (ADR-0117/0122)
+
+- **Appelant mTLS autorisé :** `api-gateway` uniquement. La route est privée ; l’Admin UI et les clients ne reçoivent aucun certificat interne.
+- **Corps strict :** `{"actor_id":"<identifiant vérifié par la Gateway>","expected_revision":1}`. Les champs inconnus, les corps supérieurs à 4 Kio, les révisions nulles/négatives et les données JSON supplémentaires sont refusés. `actor_id` est reconstruit par la Gateway depuis le jeton vérifié ; il n’est jamais repris du corps public.
+- **Effet :** dans une seule transaction PostgreSQL, verrouille la chaîne et l’occurrence, vérifie la révision, ajoute l’événement signé `session.alert.acknowledged`, puis passe `unacknowledged` à `acknowledged`, renseigne les trois champs d’acquittement et incrémente `revision`.
+- **Idempotence :** une occurrence déjà acquittée renvoie son état existant sans ajouter un événement, même si le client rejoue l’ancienne révision. Une révision périmée sur une occurrence encore ouverte renvoie `409`.
+- **Réponses :** `200` avec uniquement `id`, `status`, `revision`, `acknowledged_at`, `acknowledged_by` et `acknowledgement_event_id` ; `400` requête invalide ; `404` occurrence inconnue ; `409` révision périmée ; `503` si la chaîne, PostgreSQL ou le magasin requis est indisponible. `Cache-Control: no-store`.
+- **Attribution :** `actor_id` est l’utilisateur issu du bearer token vérifié par la Gateway ; `emitter` est extrait par l’Audit Service du certificat mTLS de l’appelant immédiat (`api-gateway`). L’Audit Service signe et persiste l’événement, mais n’est pas la valeur de `emitter`. Aucun de ces champs n’est choisi par le client. Détails bornés : `alert_id`, `session_id`, `rule_id`, `severity`, `revision`. Aucun commentaire libre, secret, credential, contenu de session ou valeur saisie n’est accepté.
