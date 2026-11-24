@@ -1,5 +1,27 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-24 — Précision de la mesure d'encodage PNG RDP/VNC
+
+Le banc de mesure `rdp_measure_test.go` tronquait chaque durée à la microseconde,
+puis arrondissait la médiane à 0,1 ms. Un encodage inférieur à 0,05 ms devenait
+ainsi `0.0 ms`, ce qui faisait échouer l'assertion exigeant une durée positive
+alors que l'encodage avait bien eu lieu. La mesure conserve maintenant les
+`time.Duration` jusqu'au calcul de la médiane, convertit les nanosecondes en
+millisecondes et expose trois décimales (résolution de 1 µs). Le journal utilise
+le même format. Aucun chemin de production, seuil de sécurité, budget de débit
+ou limite de rate limiting n'est modifié.
+
+Validation sur LT209227 : le test de précision déterministe passe ; le test
+`TestSessionMeterMeasuresWhatItSees` passe trois fois ; la mutation qui ramène
+l'arrondi à 0,1 ms échoue bien sur 49 µs (1 mutation tuée sur 1). La suite du
+module RDP/VNC passe avec 101 lignes `--- PASS` ; `go test -race ./... -count=1`
+passe également. `make -o proto-gen build vet`, `gofmt -l` et `git diff --check`
+passent. `buf` n'est pas installé : `proto-gen` a été sauté et les fichiers
+`*.pb.go` ignorés ont été copiés depuis le checkout `main` au même commit
+`cff1c3c6` pour valider le module. Les tests interop nécessitant FreeRDP/Docker,
+Windows ou le Video Recorder réel restent ignorés ; aucun test Windows n'a été
+lancé localement.
+
 ## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0073)
 
 Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
