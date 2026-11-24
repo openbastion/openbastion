@@ -44,6 +44,9 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("api-gateway", "GET", "/audit/v1/session-alerts"),
 		mtlstest.Allow("api-gateway", "GET", "/audit/v1/session-alerts/summary"),
 		mtlstest.Allow("api-gateway", "GET", "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef"),
+		mtlstest.Allow("api-gateway", "POST", "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef/acknowledge"),
+		mtlstest.Deny("admin-cli", "POST", "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef/acknowledge"),
+		mtlstest.Deny("session-broker", "POST", "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef/acknowledge"),
 		mtlstest.Deny("admin-cli", "GET", "/audit/v1/session-alerts"),
 		mtlstest.Deny("session-broker", "GET", "/audit/v1/session-alerts/summary"),
 		mtlstest.Deny("api-gateway", "POST", "/audit/v1/session-alerts"),
@@ -66,6 +69,7 @@ func TestEveryRegisteredRouteHasACaller(t *testing.T) {
 		{Method: "GET", Path: "/audit/v1/session-alerts"},
 		{Method: "GET", Path: "/audit/v1/session-alerts/summary"},
 		{Method: "GET", Path: "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef"},
+		{Method: "POST", Path: "/audit/v1/session-alerts/alert_0123456789abcdef0123456789abcdef/acknowledge"},
 		{Method: "GET", Path: "/healthz"},
 	})
 }

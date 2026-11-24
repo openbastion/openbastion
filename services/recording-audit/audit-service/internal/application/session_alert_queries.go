@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -14,9 +15,11 @@ import (
 )
 
 var (
-	ErrSessionAlertReadUnavailable = errors.New("session alert read unavailable")
-	ErrSessionAlertNotFound        = errors.New("session alert not found")
-	ErrInvalidSessionAlertQuery    = errors.New("invalid session alert query")
+	ErrSessionAlertReadUnavailable            = errors.New("session alert read unavailable")
+	ErrSessionAlertNotFound                   = errors.New("session alert not found")
+	ErrInvalidSessionAlertQuery               = errors.New("invalid session alert query")
+	ErrSessionAlertAcknowledgementUnavailable = errors.New("session alert acknowledgement unavailable")
+	ErrInvalidSessionAlertAcknowledgement     = errors.New("invalid session alert acknowledgement")
 )
 
 const (
@@ -205,4 +208,66 @@ func decodeSessionAlertCursor(cursor string) (time.Time, string, error) {
 		return time.Time{}, "", err
 	}
 	return at.UTC(), parts[1], nil
+}
+
+// SessionAlertAcknowledger appends the signed audit event and updates the projection atomically.
+type SessionAlertAcknowledger interface {
+	AcknowledgeSessionAlert(context.Context, string, int64, string, *domain.Event) (domain.SessionAlert, bool, error)
+}
+
+// AcknowledgeSessionAlert records a human acknowledgement in the audit chain and projection.
+// The returned bool is true when the occurrence had already been acknowledged (idempotent retry).
+func (s *AuditService) AcknowledgeSessionAlert(ctx context.Context, emitter, actorID, id string, expectedRevision int64) (domain.SessionAlert, bool, error) {
+	if !validSessionAlertID(id) || expectedRevision < 1 || checkID("actor_id", actorID, true) != nil || checkEmitter(emitter) != nil {
+		return domain.SessionAlert{}, false, ErrInvalidSessionAlertAcknowledgement
+	}
+	readStore, readOK := s.store.(SessionAlertReadStore)
+	ackStore, ackOK := s.store.(SessionAlertAcknowledger)
+	if !readOK || !ackOK {
+		return domain.SessionAlert{}, false, ErrSessionAlertAcknowledgementUnavailable
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	alert, err := readStore.GetSessionAlert(ctx, id)
+	if err != nil {
+		return domain.SessionAlert{}, false, fmt.Errorf("read session alert before acknowledgement: %w", err)
+	}
+	if alert == nil {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertNotFound
+	}
+	if alert.Status == domain.AlertStatusAcknowledged {
+		return *alert, true, nil
+	}
+	if alert.Status != domain.AlertStatusUnacknowledged || alert.Revision != expectedRevision || alert.Revision >= domain.MaxSessionAlertRevision {
+		return domain.SessionAlert{}, false, domain.ErrSessionAlertRevisionConflict
+	}
+
+	details := map[string]string{
+		"alert_id":   id,
+		"session_id": alert.SessionID,
+		"rule_id":    alert.RuleID,
+		"severity":   string(alert.Severity),
+		"revision":   strconv.FormatInt(alert.Revision, 10),
+	}
+	if err := validate(actorID, "session.alert.acknowledged", "session_alert", id); err != nil {
+		return domain.SessionAlert{}, false, ErrInvalidSessionAlertAcknowledgement
+	}
+	if err := validateDetails(details); err != nil {
+		return domain.SessionAlert{}, false, ErrInvalidSessionAlertAcknowledgement
+	}
+	event, err := s.nextEvent(ctx, emitter, actorID, "session.alert.acknowledged", "session_alert", id, details, true)
+	if err != nil {
+		return domain.SessionAlert{}, false, fmt.Errorf("prepare session alert acknowledgement event: %w", err)
+	}
+	acknowledged, changed, err := ackStore.AcknowledgeSessionAlert(ctx, id, expectedRevision, actorID, event)
+	if err != nil {
+		return domain.SessionAlert{}, false, fmt.Errorf("commit session alert acknowledgement: %w", err)
+	}
+	if changed {
+		tip := *event
+		s.tip = &tip
+	}
+	return acknowledged, !changed, nil
 }
