@@ -1661,6 +1661,48 @@ paths:
         '502': { description: Réponse interne invalide ou dépendance non conforme au contrat. }
         '429': { description: Limite de requêtes de la Gateway atteinte. }
 
+  /session-alerts/{alertId}/acknowledge:
+    post:
+      tags: [audit]
+      operationId: acknowledgeSessionAlert
+      summary: Acquitter une occurrence d’alerte
+      description: >-
+        Requiert `session-alerts:acknowledge` sur la ressource exacte
+        `session-alerts:{alertId}`. L’acteur est toujours tiré du jeton vérifié
+        par la Gateway. L’événement signé et la projection sont écrits dans une
+        seule transaction. Une répétition sur une alerte déjà acquittée est
+        idempotente ; une révision obsolète sur une alerte encore ouverte renvoie 409.
+        Cette permission ne confère ni `session-alerts:read` ni `session.read`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: alertId
+          required: true
+          schema: { type: string, pattern: '^alert_[0-9a-f]{32}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionAlertAcknowledgementRequest' }
+      responses:
+        '200':
+          description: État d’acquittement (identique lors d’un retry idempotent)
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionAlertAcknowledgement' }
+        '400': { description: Corps, révision ou identifiant invalide. }
+        '401': { description: Jeton absent, invalide ou expiré. }
+        '403': { description: Permission `session-alerts:acknowledge` absente. }
+        '404': { description: Alerte inconnue. }
+        '409': { description: Révision obsolète pour une alerte encore ouverte. }
+        '429': { description: Budget partagé des actions d’écriture de la Gateway atteint. }
+        '503': { description: Authorization, Audit Service, chaîne ou PostgreSQL indisponible ; aucun acquittement confirmé. }
+        '502': { description: Réponse interne invalide ou dépendance non conforme au contrat. }
+
   /audit/secret-injections:
     get:
       summary: Rapprocher les injections de secrets depuis l’audit vérifié
@@ -2297,6 +2339,23 @@ components:
             critical: { type: integer, minimum: 0 }
         as_of: { type: string, format: date-time }
         durable: { type: boolean }
+    SessionAlertAcknowledgementRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: { type: integer, format: int64, minimum: 1 }
+    SessionAlertAcknowledgement:
+      type: object
+      additionalProperties: false
+      required: [id, status, revision, acknowledged_at, acknowledged_by, acknowledgement_event_id]
+      properties:
+        id: { type: string, pattern: '^alert_[0-9a-f]{32}$' }
+        status: { type: string, enum: [acknowledged] }
+        revision: { type: integer, format: int64, minimum: 2 }
+        acknowledged_at: { type: string, format: date-time }
+        acknowledged_by: { type: string, minLength: 1, maxLength: 256 }
+        acknowledgement_event_id: { type: string, minLength: 1, maxLength: 256 }
     Error:
       type: object
       required: [code, message]

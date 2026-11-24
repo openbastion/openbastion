@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	sessionAlertsResourceAll = "session-alerts:all"
-	sessionAlertsReadAction  = "session-alerts:read"
-	maxSessionAlertsResponse = 1 << 20
-	maxSessionAlertsQuery    = 4 << 10
+	sessionAlertsResourceAll       = "session-alerts:all"
+	sessionAlertsReadAction        = "session-alerts:read"
+	sessionAlertsAcknowledgeAction = "session-alerts:acknowledge"
+	maxSessionAlertsResponse       = 1 << 20
+	maxSessionAlertsQuery          = 4 << 10
 )
 
 type sessionAlertAccessRequest struct {
@@ -58,6 +59,24 @@ type publicSessionAlertPage struct {
 	HasMore    *bool                `json:"has_more"`
 }
 
+type publicSessionAlertAcknowledgement struct {
+	ID                     string     `json:"id"`
+	Status                 string     `json:"status"`
+	Revision               int64      `json:"revision"`
+	AcknowledgedAt         *time.Time `json:"acknowledged_at"`
+	AcknowledgedBy         string     `json:"acknowledged_by"`
+	AcknowledgementEventID string     `json:"acknowledgement_event_id"`
+}
+
+type sessionAlertAcknowledgementRequestBody struct {
+	ExpectedRevision int64 `json:"expected_revision"`
+}
+
+type internalSessionAlertAcknowledgementRequest struct {
+	ActorID          string `json:"actor_id"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+
 type publicSessionAlertSummary struct {
 	UnacknowledgedCount *int64           `json:"unacknowledged_count"`
 	BySeverity          map[string]int64 `json:"by_severity"`
@@ -71,14 +90,6 @@ type publicSessionAlertSummary struct {
 func (g *GatewayServer) handleSessionAlerts(w http.ResponseWriter, r *http.Request, id identity) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if r.Body != nil && r.Body != http.NoBody {
-		body, err := io.ReadAll(io.LimitReader(r.Body, 1))
-		if err != nil || len(body) != 0 {
-			http.Error(w, "session alert reads do not accept a body", http.StatusBadRequest)
-			return
-		}
-	}
-
 	path := strings.TrimPrefix(r.URL.EscapedPath(), "/session-alerts")
 	if path == "/" {
 		path = ""
@@ -90,6 +101,9 @@ func (g *GatewayServer) handleSessionAlerts(w http.ResponseWriter, r *http.Reque
 	case path == "":
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !sessionAlertRequestHasNoBody(w, r) {
 			return
 		}
 		if len(r.URL.RawQuery) > maxSessionAlertsQuery {
@@ -154,14 +168,129 @@ func (g *GatewayServer) handleSessionAlerts(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if !sessionAlertRequestHasNoBody(w, r) {
+			return
+		}
 		if r.URL.RawQuery != "" {
 			http.Error(w, "unsupported session alert query", http.StatusBadRequest)
 			return
 		}
 		upstreamPath += "/summary"
+	case strings.HasPrefix(path, "/") && strings.HasSuffix(path, "/acknowledge") && strings.Count(path, "/") == 2:
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if r.URL.RawQuery != "" {
+			http.Error(w, "unsupported session alert query", http.StatusBadRequest)
+			return
+		}
+		alertIDRaw := strings.TrimSuffix(strings.TrimPrefix(path, "/"), "/acknowledge")
+		alertID, err := neturl.PathUnescape(alertIDRaw)
+		if err != nil || !validSessionAlertID(alertID) {
+			http.Error(w, "invalid session alert id", http.StatusBadRequest)
+			return
+		}
+		// Every acknowledgement can append an audit event. Charge the verified user's
+		// shared write-action budget before parsing or forwarding (ADR-0016).
+		if !g.admitSessionAction(w, id) {
+			return
+		}
+		var body sessionAlertAcknowledgementRequestBody
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&body); err != nil {
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				http.Error(w, "acknowledgement request too large", http.StatusRequestEntityTooLarge)
+			} else {
+				http.Error(w, "invalid acknowledgement request", http.StatusBadRequest)
+			}
+			return
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err != io.EOF || body.ExpectedRevision < 1 {
+			http.Error(w, "invalid acknowledgement request", http.StatusBadRequest)
+			return
+		}
+		resource = "session-alerts:" + alertID
+		if id.UserID == "" {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		decision, err := g.checkSessionAlertAccess(r.Context(), id.Roles, resource, sessionAlertsAcknowledgeAction)
+		if err != nil {
+			http.Error(w, "authorization unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if !decision.Allowed || decision.RequiresApproval {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if g.auditURL == "" {
+			http.Error(w, "session alerts unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		internalBody, err := json.Marshal(internalSessionAlertAcknowledgementRequest{ActorID: id.UserID, ExpectedRevision: body.ExpectedRevision})
+		if err != nil {
+			http.Error(w, "session alerts unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		upstreamPath = "/audit/v1/session-alerts/" + neturl.PathEscape(alertID) + "/acknowledge"
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.auditURL+upstreamPath, bytes.NewReader(internalBody))
+		if err != nil {
+			http.Error(w, "session alerts unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := g.doSessionAlertRequest(req)
+		if err != nil {
+			if r.Context().Err() == nil {
+				http.Error(w, "session alerts unavailable", http.StatusServiceUnavailable)
+			}
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			status := resp.StatusCode
+			if status >= 500 {
+				status = http.StatusServiceUnavailable
+			}
+			if status != http.StatusBadRequest && status != http.StatusNotFound && status != http.StatusConflict && status != http.StatusServiceUnavailable {
+				status = http.StatusBadGateway
+			}
+			http.Error(w, http.StatusText(status), status)
+			return
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, (16<<10)+1))
+		if err != nil || len(data) > 16<<10 {
+			http.Error(w, "session alerts unavailable", http.StatusBadGateway)
+			return
+		}
+		var acknowledgement publicSessionAlertAcknowledgement
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&acknowledgement); err != nil {
+			http.Error(w, "session alerts unavailable", http.StatusBadGateway)
+			return
+		}
+		var trailing any
+		if err := dec.Decode(&trailing); err != io.EOF || acknowledgement.ID != alertID || acknowledgement.Status != "acknowledged" || acknowledgement.Revision < 2 || acknowledgement.AcknowledgedAt == nil || acknowledgement.AcknowledgedAt.IsZero() || acknowledgement.AcknowledgedBy == "" || acknowledgement.AcknowledgementEventID == "" || len(acknowledgement.AcknowledgementEventID) > 256 || strings.IndexFunc(acknowledgement.AcknowledgementEventID, unicode.IsControl) >= 0 {
+			http.Error(w, "session alerts unavailable", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(acknowledgement)
+		return
 	case strings.HasPrefix(path, "/") && !strings.Contains(strings.TrimPrefix(path, "/"), "/"):
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !sessionAlertRequestHasNoBody(w, r) {
 			return
 		}
 		if r.URL.RawQuery != "" {
@@ -180,12 +309,12 @@ func (g *GatewayServer) handleSessionAlerts(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	allowed, err := g.checkSessionAlertAccess(r.Context(), id.Roles, resource)
+	decision, err := g.checkSessionAlertAccess(r.Context(), id.Roles, resource, sessionAlertsReadAction)
 	if err != nil {
 		http.Error(w, "authorization unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if !allowed {
+	if !decision.Allowed || decision.RequiresApproval {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -238,6 +367,18 @@ func (g *GatewayServer) handleSessionAlerts(w http.ResponseWriter, r *http.Reque
 	_, _ = w.Write(public)
 }
 
+func sessionAlertRequestHasNoBody(w http.ResponseWriter, r *http.Request) bool {
+	if r.Body == nil || r.Body == http.NoBody {
+		return true
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1))
+	if err != nil || len(body) != 0 {
+		http.Error(w, "session alert reads do not accept a body", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
 func (g *GatewayServer) doSessionAlertRequest(req *http.Request) (*http.Response, error) {
 	client := g.httpClient
 	if client == nil {
@@ -250,44 +391,44 @@ func (g *GatewayServer) doSessionAlertRequest(req *http.Request) (*http.Response
 	return redirectFree.Do(req)
 }
 
-func (g *GatewayServer) checkSessionAlertAccess(ctx context.Context, roles []string, resource string) (bool, error) {
+func (g *GatewayServer) checkSessionAlertAccess(ctx context.Context, roles []string, resource, action string) (sessionAlertAccessResponse, error) {
 	if g.authorizationURL == "" || g.httpClient == nil {
-		return false, errors.New("authorization unavailable")
+		return sessionAlertAccessResponse{}, errors.New("authorization unavailable")
 	}
-	body, err := json.Marshal(sessionAlertAccessRequest{ActorRoles: roles, Resource: resource, Action: sessionAlertsReadAction})
+	body, err := json.Marshal(sessionAlertAccessRequest{ActorRoles: roles, Resource: resource, Action: action})
 	if err != nil {
-		return false, err
+		return sessionAlertAccessResponse{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.authorizationURL+"/authz/v1/check-access", bytes.NewReader(body))
 	if err != nil {
-		return false, err
+		return sessionAlertAccessResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := g.doSessionAlertRequest(req)
 	if err != nil {
-		return false, err
+		return sessionAlertAccessResponse{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return false, errors.New("authorization decision unavailable")
+		return sessionAlertAccessResponse{}, errors.New("authorization decision unavailable")
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, (4<<10)+1))
 	if err != nil || len(data) > 4<<10 {
-		return false, errors.New("invalid authorization response bounds")
+		return sessionAlertAccessResponse{}, errors.New("invalid authorization response bounds")
 	}
 	var decision sessionAlertAccessResponse
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&decision); err != nil {
-		return false, err
+		return sessionAlertAccessResponse{}, err
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
-		return false, errors.New("invalid authorization response")
+		return sessionAlertAccessResponse{}, errors.New("invalid authorization response")
 	}
-	return decision.Allowed, nil
+	return decision, nil
 }
 
 func validSessionAlertID(value string) bool {

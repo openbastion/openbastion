@@ -5,12 +5,18 @@ import (
 	"time"
 )
 
-var ErrAlertDetectionAlreadyProcessed = errors.New("session alert detection already processed")
+var (
+	ErrAlertDetectionAlreadyProcessed = errors.New("session alert detection already processed")
+	ErrSessionAlertNotFound           = errors.New("session alert not found")
+	ErrSessionAlertRevisionConflict   = errors.New("session alert revision conflict")
+)
 
 const (
 	AlertStatusUnacknowledged = "unacknowledged"
 	AlertStatusAcknowledged   = "acknowledged"
 )
+
+const MaxSessionAlertRevision int64 = 1<<63 - 1
 
 type AlertSeverity string
 
