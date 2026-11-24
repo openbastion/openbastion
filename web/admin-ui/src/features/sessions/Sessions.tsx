@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ApiError, Page, ScreenChoice, Session, sessionPath } from "../../shared/api";
+import { ApiError, Page, ScreenChoice, Session, SessionAlertSummary, sessionPath } from "../../shared/api";
 import { Notice } from "../../shared/Notice";
 import { useSignedIn } from "../../shared/session";
 import { AdminPage } from "../../shared/ui/AdminPage";
@@ -48,6 +48,7 @@ export function Sessions({
   const { t, i18n } = useAppTranslation();
   const { api, who } = useSignedIn();
   const [pending, setPending] = useState<Page<Session>>();
+  const [alertSummary, setAlertSummary] = useState<SessionAlertSummary>();
   const [pendingLoading, setPendingLoading] = useState(true);
   const [decision, setDecision] = useState<{ kind: "approve" | "reject" | "terminate"; session: Session }>();
   const [error, setError] = useState<unknown>();
@@ -238,10 +239,10 @@ export function Sessions({
         ) : null}
         {view === "alerts" ? (
           <>
-            <ReferenceMetric label={t("sessions.metrics.alertsUnhandled")} detail={t("sessions.metrics.alertsUnavailable")} />
-            <ReferenceMetric label={t("sessions.metrics.alertsCritical")} detail={t("sessions.metrics.alertsUnavailable")} />
-            <ReferenceMetric label={t("sessions.metrics.alertsHigh")} detail={t("sessions.metrics.alertsUnavailable")} />
-            <ReferenceMetric label={t("sessions.metrics.alertsHandled")} detail={t("sessions.metrics.alertsUnavailable")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsUnhandled")} value={alertSummary?.unacknowledged_count} detail={alertSummary ? t("sessions.metrics.alertsSnapshot", { date: new Date(alertSummary.as_of).toLocaleString(i18n.language) }) : t("sessions.metrics.alertsUnavailable")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsCritical")} value={alertSummary?.by_severity.critical} detail={t("sessions.metrics.alertsSeverityDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsHigh")} value={alertSummary?.by_severity.high} detail={t("sessions.metrics.alertsSeverityDetail")} />
+            <ReferenceMetric label={t("sessions.metrics.alertsDurable")} value={alertSummary ? (alertSummary.durable ? t("sessions.alerts.storage.postgres") : t("sessions.alerts.storage.memory")) : undefined} detail={t("sessions.metrics.alertsDurableDetail")} />
           </>
         ) : null}
       </div>
@@ -256,7 +257,7 @@ export function Sessions({
           {recordingsShown ? <TabsTrigger value="recordings">{t("sessions.tabs.recordings")}</TabsTrigger> : null}
           <TabsTrigger value="alerts" aria-label={t("sessions.tabs.alerts")}>
             {t("sessions.tabs.alerts")}
-            <Badge tone="warning" className="session-alert-tab-badge">{t("sessions.alerts.badge")}</Badge>
+            {alertSummary && alertSummary.unacknowledged_count > 0 ? <Badge tone="warning" className="session-alert-tab-badge">{alertSummary.unacknowledged_count}</Badge> : null}
           </TabsTrigger>
         </TabsList>
 
@@ -386,7 +387,7 @@ export function Sessions({
             </div>
           ) : null}
         </TabsContent>
-        <TabsContent value="alerts"><SessionAlerts /></TabsContent>
+        <TabsContent value="alerts"><SessionAlerts onSummaryChange={setAlertSummary} /></TabsContent>
       </Tabs>
       {decision ? (
         <ConfirmDialog

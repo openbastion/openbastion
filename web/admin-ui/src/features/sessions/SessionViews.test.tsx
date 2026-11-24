@@ -110,15 +110,29 @@ describe("Sessions workspace tabs", () => {
     expect(opened).toEqual(["sess_recorded"]);
   });
 
-  it("shows the alert API gap and does not invent an unread count or call an unsupported route", async () => {
-    const { api, calls } = fakeApi({ "GET /sessions": { body: pending } });
+  it("loads the authorized session alert queue and summary through the public Gateway", async () => {
+    const alert = {
+      id: "alert_0123456789abcdef0123456789abcdef", rule_id: "session.secret_injection_failed",
+      rule_version: "1", source_event_id: "evt_0123456789abcdef0123456789abcdef", session_id: "sess_alert",
+      severity: "high", status: "unacknowledged", summary: "Échec d'injection du secret",
+      detected_at: "2026-11-24T10:00:00Z", created_at: "2026-11-24T10:00:00Z", revision: 1,
+    };
+    const { api, calls } = fakeApi({
+      "GET /sessions": { body: pending },
+      "GET /session-alerts": { body: { alerts: [alert], has_more: false } },
+      "GET /session-alerts/summary": { body: {
+        unacknowledged_count: 1, by_severity: { info: 0, low: 0, medium: 0, high: 1, critical: 0 },
+        as_of: "2026-11-24T10:00:00Z", durable: true,
+      } },
+    });
     signedIn(api, <Sessions />);
-    const alertTab = screen.getByRole("tab", { name: /Alertes/ });
-    expect(alertTab.textContent).toContain("API requise");
-    fireEvent.mouseDown(alertTab, { button: 0 });
-    expect(await screen.findByText(/La file d'alertes n'est pas encore disponible/)).toBeTruthy();
-    expect(screen.getByText(/Aucun compteur ni état de traitement n'est donc simulé/)).toBeTruthy();
-    await waitFor(() => expect(calls.every((call) => !call.path.startsWith("/audit/events") && !call.path.startsWith("/sessions/alerts"))).toBe(true));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Alertes de session/ }), { button: 0 });
+    expect(await screen.findByText("Échec d'injection du secret")).toBeTruthy();
+    expect(screen.getByText("sess_alert")).toBeTruthy();
+    expect(screen.getByText("PostgreSQL")).toBeTruthy();
+    expect(calls.some((call) => call.method === "GET" && call.path.startsWith("/session-alerts?"))).toBe(true);
+    expect(calls.some((call) => call.method === "GET" && call.path === "/session-alerts/summary")).toBe(true);
+    expect(calls.every((call) => !call.path.startsWith("/audit/v1/") && !call.path.startsWith("/audit/events"))).toBe(true);
   });
 
   it("rejects a history window longer than 31 days before calling the Gateway", async () => {

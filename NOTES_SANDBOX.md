@@ -1,5 +1,27 @@
 # Notes sur les contraintes de cet environnement de build
 
+## 2026-11-24 — Précision de la mesure d'encodage PNG RDP/VNC
+
+Le banc de mesure `rdp_measure_test.go` tronquait chaque durée à la microseconde,
+puis arrondissait la médiane à 0,1 ms. Un encodage inférieur à 0,05 ms devenait
+ainsi `0.0 ms`, ce qui faisait échouer l'assertion exigeant une durée positive
+alors que l'encodage avait bien eu lieu. La mesure conserve maintenant les
+`time.Duration` jusqu'au calcul de la médiane, convertit les nanosecondes en
+millisecondes et expose trois décimales (résolution de 1 µs). Le journal utilise
+le même format. Aucun chemin de production, seuil de sécurité, budget de débit
+ou limite de rate limiting n'est modifié.
+
+Validation sur LT209227 : le test de précision déterministe passe ; le test
+`TestSessionMeterMeasuresWhatItSees` passe trois fois ; la mutation qui ramène
+l'arrondi à 0,1 ms échoue bien sur 49 µs (1 mutation tuée sur 1). La suite du
+module RDP/VNC passe avec 101 lignes `--- PASS` ; `go test -race ./... -count=1`
+passe également. `make -o proto-gen build vet`, `gofmt -l` et `git diff --check`
+passent. `buf` n'est pas installé : `proto-gen` a été sauté et les fichiers
+`*.pb.go` ignorés ont été copiés depuis le checkout `main` au même commit
+`cff1c3c6` pour valider le module. Les tests interop nécessitant FreeRDP/Docker,
+Windows ou le Video Recorder réel restent ignorés ; aucun test Windows n'a été
+lancé localement.
+
 ## 2026-11-12 — Le package d’icônes est regroupé sous web/packages (ADR-0073)
 
 Le package `@openbastion/icons` a été déplacé de `web/openbastion-icons/` vers
@@ -5546,3 +5568,14 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 - **Résumé** : compteurs des cinq sévérités calculés par une seule instruction SQL ; `durable=true` avec PostgreSQL et `false` en mémoire. Liste, détail et résumé sont `no-store` et ne renvoient jamais l’événement source ni ses détails.
 - **Validations** : `make test` PASS (tous les modules Go) ; `make build vet` PASS ; `go test -race ./services/recording-audit/audit-service/... -count=1` PASS ; tests Audit Service avec PostgreSQL 16 PASS ; `TestContract_*` PASS ; `TestMTLS_TheWholeProductOverMutualTLS_AndItsAttackers_AcrossEightRealProcesses` PASS avec le Gateway autorisé et les identités Session Broker/admin-cli refusées ; `git diff --check` PASS. Deux mutations de sécurité ont été tuées : élargissement de l’allowlist mTLS à `mtls.Any`, et déclaration erronée du magasin mémoire comme durable.
 - **Non livré** : façade publique Gateway, permissions `session-alerts:read`, acquittement audité, `session-alerts:acknowledge` et Admin UI.
+
+
+## 2026-11-24 — ADR-0117/0122 : intégration de la file d’alertes dans l’Admin UI
+
+- **Fait** : `Sessions > Alertes` consomme exclusivement les routes publiques de l’API Gateway (`GET /session-alerts`, `GET /session-alerts/summary`, `POST /session-alerts/{id}/acknowledge`). Aucun appel direct Audit Service ni accès implicite aux sessions associées.
+- **Affichage** : résumé cohérent (non acquittées, critiques, élevées, durabilité), file de 50 éléments paginée par curseur, filtres statut/sévérité, sévérité serveur, état acquitté et acteur/date d’acquittement. Le compteur d’onglet reprend le résumé serveur. `durable=false` affiche explicitement que le mode mémoire n’est pas utilisable en production.
+- **Acquittement** : confirmation explicite indiquant l’écriture signée et irréversible ; le client envoie uniquement `expected_revision`. Après succès, liste et résumé sont rechargés. Un `409` ferme la confirmation périmée et recharge les données sans retry ; `403` et `503` restent visibles dans la confirmation, sans prétendre que l’alerte est acquittée.
+- **Sécurité** : aucune autorisation déduite des rôles affichés dans le jeton ; la Gateway et Authorization restent seules décisionnaires. Le contenu API est rendu comme texte React, les erreurs sont bornées par `ApiError`, et les appels utilisent `Api` (`Cache-Control: no-store` côté Gateway). La vue ne propose pas d’ouverture de session, car `session.read` reste une permission indépendante.
+- **Tests** : chargement Gateway, filtres et curseurs, confirmation/annulation, payload `expected_revision`, rafraîchissement après succès, refus 403, conflit 409, indisponibilité 503 et résumé hostile rendu comme texte. Suite complète Admin UI : 38 fichiers / 323 tests après ajout des deux tests de sécurité/503 ; `tsc --noEmit` et build Vite production PASS ; contrôle contrastes et couleurs PASS ; `git diff --check` PASS. Vite conserve un avertissement de chunk principal supérieur à 500 kB (766,47 kB minifié, 217,92 kB gzip), non bloquant.
+- **Non vérifié** : pas de capture navigateur réelle ni de test lecteur d’écran manuel dans ce worktree. Les tests automatisés couvrent les rôles et les messages accessibles ; une revue visuelle responsive reste souhaitable.
+- **Reste** : les signaux comportementaux, géographiques et horaires sont toujours désactivés ; la détection ne dépasse pas le catalogue vérifié ADR-0117.
