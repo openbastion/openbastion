@@ -77,9 +77,9 @@
 - L'onglet « En direct » expose les demandes en attente renvoyées par `GET /sessions?status=pending_approval`, selon les autorisations de décision de l'appelant. Il ne constitue pas un inventaire global des sessions actives : aucune route publique de listing global n'est disponible.
 - La recherche d'une session par identifiant utilise `GET /sessions/{id}` et reste soumise à la politique de lecture de la ressource. La sélection d'une demande déjà renvoyée par la file d'approbation réutilise cet objet autorisé sans déclencher une lecture additionnelle.
 - L'Admin UI ne fournit pas de terminal SSH interactif ni de flux de commandes live. Les commandes enregistrées restent consultables via la recherche d'enregistrements existante.
-- Le contrat public de file d'alertes, de sévérité, de compteur non traité et d'acquittement n'est pas encore exposé par l'API ; l'Admin UI ne présente donc aucun faux compteur. Le backend durable (ingestion, worker et projection) est livré dans l'Audit Service.
+- La Gateway expose maintenant la liste, le résumé et le détail des alertes ; `session-alerts:read` est une permission distincte vérifiée par Authorization (ADR-0117/0122). L'Admin UI n'est pas encore raccordée et aucun acquittement n'est disponible.
 
 
-## File d’alertes de session — visibilité opérateur non encore exposée
+## File d’alertes de session — acquittement et interface à livrer
 
-L’Audit Service possède désormais les lectures internes mTLS de liste, résumé et détail des occurrences ; seul `api-gateway` peut les appeler. Aucune route publique Gateway ni permission `session-alerts:read` n’est encore livrée. L’Admin UI ne doit pas appeler ces routes internes ni afficher des données synthétiques. L’acquittement audité (`session-alerts:acknowledge`) et l’interface restent à réaliser.
+L’Audit Service possède les lectures internes mTLS de liste, résumé et détail ; seul `api-gateway` peut les appeler. La Gateway expose `GET /session-alerts`, `/summary` et `/{id}` après authentification et vérification ABAC `session-alerts:read` sur la ressource globale ou l’occurrence exacte. Les refus et pannes d’Authorization échouent fermés ; les appels Audit restent mTLS et les réponses publiques portent `Cache-Control: no-store`. L’Admin UI ne doit pas appeler les routes internes ni afficher de données synthétiques. L’acquittement audité (`session-alerts:acknowledge`) et le raccordement UI restent à réaliser.

@@ -22,3 +22,6 @@
 - (−) Les fonctionnalités non livrées restent explicitement indisponibles jusqu’à implémentation et validation.
 
 **Alternatives rejetées** — Appels directs depuis le navigateur, proxy générique de routes internes, données synthétiques présentées comme réelles, autorisation uniquement côté frontend, confiance implicite dans le réseau ou dans un rôle global.
+
+
+**État d’implémentation — 24 novembre 2026** — Les lectures Audit Service (mTLS) et la façade publique Gateway de liste, résumé et détail sont livrées. La Gateway vérifie `session-alerts:read` avec l'identité utilisateur issue du bearer token ; la ressource est `session-alerts:all` pour la collection/le résumé et `session-alerts:{id}` pour le détail. La Gateway est explicitement autorisée par la CallerRules mTLS d'Authorization à demander `check-access`. L'acquittement audité et le raccordement Admin UI restent à réaliser.

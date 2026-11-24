@@ -7,11 +7,9 @@
 // rotation) via Authorization.CheckAccess, and Authorization enforces the
 // same discipline on itself for POST /policies (authz:policy-admin) — the
 // Gateway's job in both cases is only to inject the caller's verified
-// roles, never to duplicate that decision; see /NOTES_SANDBOX.md for why
-// the check belongs in the service itself rather than (or in addition
-// to) the Gateway: a client reaching Password Vault or Authorization
-// directly, bypassing the Gateway, must be exactly as gated as one going
-// through it.
+// roles, never to duplicate that decision for service-owned operations. Cross-service
+// operator projections explicitly owned by the Gateway (such as session alerts) are
+// checked here before the Gateway calls their private read API; see their ADRs.
 package interfaces
 
 import (
@@ -208,6 +206,9 @@ func (g *GatewayServer) Routes() *http.ServeMux {
 	mux.HandleFunc("/recordings/search", g.requireAuth(g.handleRecordingSearch))
 	// Cross-session injection audit is a separate permission, never implied by session or platform roles (ADR-0113).
 	mux.HandleFunc("/audit/secret-injections", g.requireAuth(g.handleSecretInjectionReconciliation))
+	// Operator session alert projection (ADR-0117/0122): distinct ABAC permission.
+	mux.HandleFunc("/session-alerts", g.requireAuth(g.handleSessionAlerts))
+	mux.HandleFunc("/session-alerts/", g.requireAuth(g.handleSessionAlerts))
 	// The search of sessions (ADR-0080), more specific than /sessions/{id}.
 	mux.HandleFunc("/sessions/search", g.requireAuth(g.handleSessionSearch))
 	mux.HandleFunc("/sessions/", g.handleSessionRoute)
