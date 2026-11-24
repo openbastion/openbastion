@@ -170,8 +170,8 @@ func TestSessionAlertDetection_TamperedSourceIsNotProjected(t *testing.T) {
 
 func TestSessionAlertRules_CatalogueVersionIsPinned(t *testing.T) {
 	event := &domain.Event{Emitter: mtls.SSHProxy, Action: "session.secret_injection_failed", ResourceType: "session", Success: false}
-	rule, matched, err := application.MatchSessionAlertForVersion(event, "1")
-	if err != nil || !matched || rule.Version != "1" {
+	rule, matched, err := application.MatchSessionAlertForVersion(event, "v1")
+	if err != nil || !matched || rule.Version != "v1" {
 		t.Fatalf("v1 match=%+v matched=%v err=%v", rule, matched, err)
 	}
 	if _, matched, err := application.MatchSessionAlertForVersion(event, "999"); err == nil || matched {

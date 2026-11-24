@@ -61,7 +61,7 @@ func (s *PostgresStore) Append(ctx context.Context, e *domain.Event) error {
 }
 
 func lockAuditChain(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(1329742163, 1396788308)`)
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(731947201)`)
 	return err
 }
 
@@ -101,7 +101,7 @@ func (s *PostgresStore) AppendWithDetection(ctx context.Context, e *domain.Event
 		return err
 	}
 	if pending >= maxPending {
-		return fmt.Errorf("session alert detection outbox is full")
+		return domain.ErrSessionAlertOutboxFull
 	}
 	if err := appendEvent(ctx, tx, e); err != nil {
 		return err
@@ -186,6 +186,13 @@ func (s *PostgresStore) DeleteThrough(ctx context.Context, lastID string, expect
 			return fmt.Errorf("event %s is not in the chain: nothing deleted", lastID)
 		}
 		return err
+	}
+	var pendingDetection int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM session_alert_detection_outbox d JOIN audit_events e ON e.id = d.source_event_id WHERE e.seq <= $1`, seq).Scan(&pendingDetection); err != nil {
+		return err
+	}
+	if pendingDetection > 0 {
+		return fmt.Errorf("archiving through %s would remove %d source event(s) awaiting session alert detection: nothing deleted", lastID, pendingDetection)
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM audit_events WHERE seq <= $1`, seq)
 	if err != nil {

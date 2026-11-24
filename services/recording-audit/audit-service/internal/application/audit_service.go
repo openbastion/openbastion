@@ -197,7 +197,7 @@ func (s *AuditService) EmitEventAsWithDetails(ctx context.Context, emitter, acto
 	if _, alert := MatchSessionAlert(e); alert {
 		appender, ok := s.store.(DetectionAppender)
 		if !ok {
-			return nil, fmt.Errorf("session alert detection storage unavailable")
+			return nil, ErrSessionAlertDetectionUnavailable
 		}
 		if err := appender.AppendWithDetection(ctx, e, SessionAlertCatalogVersion, MaxPendingSessionAlertDetections); err != nil {
 			return nil, err

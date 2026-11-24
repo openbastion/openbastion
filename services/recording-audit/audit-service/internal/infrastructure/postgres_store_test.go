@@ -399,3 +399,52 @@ func TestPostgresDetectionOutbox_FullQueueDoesNotAppendSourceEvent(t *testing.T)
 		t.Fatalf("queued=%d err=%v", queued, err)
 	}
 }
+
+func TestPostgresStore_AppendWithDetectionCommitsBothOrNeither(t *testing.T) {
+	db := testDB(t)
+	store := infrastructure.NewPostgresStore(db)
+	ctx := context.Background()
+	id := uniqueID("evt-detection")
+	previous, err := store.Last(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prevHash []byte
+	if previous != nil {
+		prevHash = previous.Hash
+	}
+	e := &domain.Event{ID: id, Timestamp: time.Now().UTC().Truncate(time.Microsecond), ActorID: "it-actor", Action: "session.breakglass_requested", ResourceType: "session", ResourceID: uniqueID("sess"), Success: true, PrevHash: prevHash, Hash: []byte("hash-" + id)}
+	if err := store.AppendWithDetection(ctx, e, "", 4096); err == nil {
+		t.Fatal("empty catalog version unexpectedly committed")
+	}
+	var events int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM audit_events WHERE id = $1`, id).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if events != 0 {
+		t.Fatalf("failed transaction left %d audit event(s)", events)
+	}
+
+	if err := store.AppendWithDetection(ctx, e, "v1", 4096); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM audit_events WHERE id = $1`, id).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	var queued int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM session_alert_detection_outbox WHERE source_event_id = $1 AND catalog_version = 'v1'`, id).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if events != 1 || queued != 1 {
+		t.Fatalf("atomic append: audit events=%d outbox rows=%d, want 1/1", events, queued)
+	}
+	if err := store.DeleteThrough(ctx, id, 1); err == nil {
+		t.Fatal("archive deleted a source event whose detection is still pending")
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM session_alert_detection_outbox WHERE source_event_id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM audit_events WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+}

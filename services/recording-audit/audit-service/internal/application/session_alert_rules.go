@@ -6,7 +6,7 @@ import (
 	"github.com/openbastion/openbastion/services/recording-audit/audit-service/internal/domain"
 )
 
-const SessionAlertCatalogVersion = "1"
+const SessionAlertCatalogVersion = "v1"
 
 type SessionAlertRule struct {
 	ID           string
@@ -29,15 +29,20 @@ func SessionAlertRules() []SessionAlertRule {
 // evaluated with the exact rule set captured when its source event was appended.
 func SessionAlertRulesForVersion(version string) ([]SessionAlertRule, bool) {
 	switch version {
-	case "1":
+	case "v1":
 		return []SessionAlertRule{
-			{ID: "session.breakglass-requested", Version: "1", Emitter: mtls.SessionBroker, Action: "session.breakglass_requested", ResourceType: "session", Severity: domain.AlertHigh, Summary: "A break-glass session was requested"},
-			{ID: "session.secret-injection-failed.ssh", Version: "1", Emitter: mtls.SSHProxy, Action: "session.secret_injection_failed", ResourceType: "session", Severity: domain.AlertHigh, Summary: "Secret injection failed during an SSH session"},
-			{ID: "session.secret-injection-failed.rdp-vnc", Version: "1", Emitter: mtls.RDPVNCProxy, Action: "session.secret_injection_failed", ResourceType: "session", Severity: domain.AlertHigh, Summary: "Secret injection failed during an RDP or VNC session"},
+			{ID: "session.breakglass-requested", Version: "v1", Emitter: mtls.SessionBroker, Action: "session.breakglass_requested", ResourceType: "session", Severity: domain.AlertHigh, Summary: "A break-glass session was requested"},
+			{ID: "session.secret-injection-failed.ssh", Version: "v1", Emitter: mtls.SSHProxy, Action: "session.secret_injection_failed", ResourceType: "session", Severity: domain.AlertHigh, Summary: "Secret injection failed during an SSH session"},
+			{ID: "session.secret-injection-failed.rdp-vnc", Version: "v1", Emitter: mtls.RDPVNCProxy, Action: "session.secret_injection_failed", ResourceType: "session", Severity: domain.AlertHigh, Summary: "Secret injection failed during an RDP or VNC session"},
 		}, true
 	default:
 		return nil, false
 	}
+}
+
+// MatchSessionAlertRule is the simple current-catalogue matcher used by ingestion callers.
+func MatchSessionAlertRule(event *domain.Event) (SessionAlertRule, bool) {
+	return MatchSessionAlert(event)
 }
 
 func MatchSessionAlert(event *domain.Event) (SessionAlertRule, bool) {

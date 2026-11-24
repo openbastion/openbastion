@@ -486,10 +486,10 @@ CREATE INDEX IF NOT EXISTS idx_alert_outbox_due ON alert_outbox (due_at);
 
 ### File de détection et occurrences d’alertes de session (ADR-0117/0122)
 
-`services/recording-audit/audit-service/migrations/005_session_alert_detection.sql` sépare la file opérateur de `alert_outbox` (webhooks ADR-0057) :
+`services/recording-audit/audit-service/migrations/005_session_alert_detection_outbox.sql` (migration 005, livrée par la PR #297) sépare le travail de détection de `alert_outbox` (webhooks ADR-0057). La migration 006 `services/recording-audit/audit-service/migrations/006_session_alerts_projection.sql` ajoute la projection et les clés étrangères qui retiennent la preuve source tant que le traitement ou l’acquittement la référence :
 
-- `session_alert_detection_outbox` conserve uniquement `source_event_id`, la version du catalogue, le nombre de tentatives, la prochaine échéance et un code d’erreur interne borné. La référence vers `audit_events` empêche l’archivage d’un événement source tant que sa détection n’est pas terminée.
-- `session_alerts` est une projection métier distincte de la preuve source : règle/version, identifiant source, session, sévérité, statut, résumé borné, dates, révision et champs d’acquittement. L’unicité `(source_event_id, rule_id)` rend la projection idempotente. Les trois champs d’acquittement sont tous nuls ou tous renseignés.
+- `session_alert_detection_outbox` conserve uniquement `source_event_id`, la version du catalogue, le nombre de tentatives, la prochaine échéance et un code d’erreur interne borné. La FK ajoutée en migration 006 vers `audit_events` empêche l’archivage d’un événement source tant que sa détection n’est pas terminée.
+- `session_alerts` est créée en migration 006 comme projection métier distincte de la preuve source : règle/version, identifiant source, session, sévérité, statut, résumé borné, dates, révision et champs d’acquittement. L’unicité `(source_event_id, rule_id)` rend la projection idempotente. Les trois champs d’acquittement sont tous nuls ou tous renseignés.
 - La limite de 4 096 éléments est vérifiée dans la transaction d’insertion ; si elle est atteinte, l’événement source candidat n’est pas ajouté. Le verrou consultatif PostgreSQL sérialise le contrôle de capacité entre réplicas.
 - Le worker vérifie la chaîne avant d’interpréter l’événement. L’insertion de `session.alert.detected`, de la projection et la suppression de l’outbox forment une transaction ; une reprise ne peut donc pas laisser une demi-alerte. Une erreur conserve l’élément et applique un délai de reprise borné.
 

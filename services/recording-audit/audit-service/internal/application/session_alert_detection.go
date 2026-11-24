@@ -14,6 +14,8 @@ import (
 var (
 	ErrDetectionOutboxUnavailable = errors.New("session alert detection outbox unavailable")
 	ErrDetectionAlreadyProcessed  = errors.New("session alert detection already processed")
+	// ErrSessionAlertDetectionUnavailable is the stable HTTP-facing alias used by the ingestion handler.
+	ErrSessionAlertDetectionUnavailable = ErrDetectionOutboxUnavailable
 )
 
 // SessionAlertDetectionStore is the durable worker port. Completion atomically writes

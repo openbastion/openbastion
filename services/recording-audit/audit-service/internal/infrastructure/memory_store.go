@@ -36,8 +36,11 @@ func (s *InMemoryStore) AppendWithDetection(ctx context.Context, e *domain.Event
 	if s.detectionOutbox == nil {
 		s.detectionOutbox = make(map[string]domain.AlertDetectionItem)
 	}
+	if _, exists := s.detectionOutbox[e.ID]; exists {
+		return nil
+	}
 	if len(s.detectionOutbox) >= maxPending {
-		return fmt.Errorf("session alert detection outbox is full")
+		return domain.ErrSessionAlertOutboxFull
 	}
 	var lastHash []byte
 	if len(s.events) > 0 {
@@ -74,6 +77,11 @@ func (s *InMemoryStore) DeleteThrough(ctx context.Context, lastID string, expect
 	defer s.mu.Unlock()
 	for i, e := range s.events {
 		if e.ID == lastID {
+			for _, sourceEvent := range s.events[:i+1] {
+				if _, pending := s.detectionOutbox[sourceEvent.ID]; pending {
+					return fmt.Errorf("archiving through %s would remove a source event awaiting session alert detection: nothing deleted", lastID)
+				}
+			}
 			if i+1 != expected {
 				return fmt.Errorf("deleting through %s would remove %d events, not %d: nothing deleted", lastID, i+1, expected)
 			}
