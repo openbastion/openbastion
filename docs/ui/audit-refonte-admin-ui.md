@@ -170,3 +170,17 @@ Pile complète démarrée (`deploy/base44/docker-compose.yml`), connexion avec l
 | Sessions (En direct) | capturé | — | — | Onglets En direct, Historique, Alertes de session présents. |
 
 Non capturés : Infrastructure, Audit & conformité, Sécurité, Paramètres, 768/375 px hors Vue d'ensemble, thème sombre. La comparaison pixel à pixel aux maquettes SVG/Figma n'est pas faite.
+
+## 10. Revalidation de la baseline — 24 novembre 2026, `main` à `c4389c79`
+
+Mesuré par `make ui-test` (`npm ci` inclus) puis `npm run build` dans `web/admin-ui` :
+
+| Mesure | Valeur |
+|---|---|
+| Tests (`make ui-test`) | 39 fichiers, **333 tests**, tous verts (20,9 s) |
+| Fichiers TS/TSX de `web/admin-ui/src` | 116 (11 909 lignes hors tests, 5 226 lignes de tests) |
+| Bundle principal | 767,21 kB (218,15 kB gzip) ; CSS 148,83 kB (24,14 kB gzip) ; avertissement de chunk > 500 kB toujours présent |
+| `react-router` | **absent** de `package.json` et du lockfile : l'ADR-0137 est accepté, pas implémenté |
+| Composants shell du package | structurels seulement (PR #305) ; ni menu utilisateur, ni palette, ni thème, ni navigation mobile, ni garde/erreur (voir `shell-migration-plan.md` §2) |
+
+Le bundle gagne 0,74 kB (0,23 kB gzip) par rapport à la mesure de la PR #304 (766,47 / 217,92 kB). Les captures 1440/768/320 px et la comparaison aux maquettes restent à faire : non réalisées ici.
