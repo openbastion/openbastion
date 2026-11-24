@@ -1552,6 +1552,115 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /session-alerts:
+    get:
+      tags: [audit]
+      operationId: listSessionAlerts
+      summary: Liste paginée des alertes de session
+      description: >-
+        Route publique exclusivement servie par la Gateway. Requiert la permission
+        dédiée `session-alerts:read` sur `session-alerts:all`. Elle ne confère pas
+        `session.read` sur les sessions associées. Les filtres et le curseur sont
+        bornés ; la réponse ne contient aucun événement source brut ni secret (ADR-0117/0122).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [unacknowledged, acknowledged] }
+        - in: query
+          name: severity
+          schema: { type: string, enum: [info, low, medium, high, critical] }
+        - in: query
+          name: session_id
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+        - in: query
+          name: until
+          schema: { type: string, format: date-time }
+        - in: query
+          name: cursor
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Page triée par date de détection décroissante et identifiant décroissant
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alerts, has_more]
+                properties:
+                  alerts:
+                    type: array
+                    items: { $ref: '#/components/schemas/SessionAlert' }
+                  next_cursor: { type: string, maxLength: 256 }
+                  has_more: { type: boolean }
+        '400': { description: Filtre, curseur ou combinaison invalide. }
+        '401': { description: Jeton absent, invalide ou expiré. }
+        '403': { description: Permission `session-alerts:read` absente. }
+        '503': { description: Authorization ou Audit Service indisponible ; refus fermé. }
+        '502': { description: Réponse interne invalide ou dépendance non conforme au contrat. }
+        '429': { description: Limite de requêtes de la Gateway atteinte. }
+  /session-alerts/summary:
+    get:
+      tags: [audit]
+      operationId: getSessionAlertsSummary
+      summary: Résumé des alertes non acquittées
+      description: Requiert `session-alerts:read` sur `session-alerts:all`. Les compteurs représentent un même instantané et ne comprennent que les occurrences de la file d'alertes (ADR-0117).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Compteurs cohérents par sévérité
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionAlertSummary' }
+        '401': { description: Jeton absent, invalide ou expiré. }
+        '403': { description: Permission `session-alerts:read` absente. }
+        '503': { description: Authorization ou Audit Service indisponible ; refus fermé. }
+        '502': { description: Réponse interne invalide ou dépendance non conforme au contrat. }
+        '429': { description: Limite de requêtes de la Gateway atteinte. }
+  /session-alerts/{alertId}:
+    get:
+      tags: [audit]
+      operationId: getSessionAlert
+      summary: Détail d'une alerte de session
+      description: Requiert `session-alerts:read` sur la ressource exacte `session-alerts:{alertId}`. Ne confère pas le droit de lire la session associée.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: alertId
+          required: true
+          schema: { type: string, pattern: '^alert_[0-9a-f]{32}$' }
+      responses:
+        '200':
+          description: Occurrence d'alerte
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionAlert' }
+        '400': { description: Identifiant invalide. }
+        '401': { description: Jeton absent, invalide ou expiré. }
+        '403': { description: Permission `session-alerts:read` absente sur cette occurrence. }
+        '404': { description: Alerte inconnue. }
+        '503': { description: Authorization ou Audit Service indisponible ; refus fermé. }
+        '502': { description: Réponse interne invalide ou dépendance non conforme au contrat. }
+        '429': { description: Limite de requêtes de la Gateway atteinte. }
+
   /audit/secret-injections:
     get:
       summary: Rapprocher les injections de secrets depuis l’audit vérifié
@@ -2154,6 +2263,40 @@ components:
       schema: { type: string, format: uuid }
 
   schemas:
+    SessionAlert:
+      type: object
+      required: [id, rule_id, rule_version, source_event_id, session_id, severity, status, summary, detected_at, created_at, revision]
+      properties:
+        id: { type: string, pattern: '^alert_[0-9a-f]{32}$' }
+        rule_id: { type: string }
+        rule_version: { type: string }
+        source_event_id: { type: string }
+        session_id: { type: string }
+        severity: { type: string, enum: [info, low, medium, high, critical] }
+        status: { type: string, enum: [unacknowledged, acknowledged] }
+        summary: { type: string, maxLength: 512 }
+        detected_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        revision: { type: integer, minimum: 1 }
+        acknowledged_at: { type: string, format: date-time }
+        acknowledged_by: { type: string }
+        acknowledgement_event_id: { type: string }
+    SessionAlertSummary:
+      type: object
+      required: [unacknowledged_count, by_severity, as_of, durable]
+      properties:
+        unacknowledged_count: { type: integer, minimum: 0 }
+        by_severity:
+          type: object
+          required: [info, low, medium, high, critical]
+          properties:
+            info: { type: integer, minimum: 0 }
+            low: { type: integer, minimum: 0 }
+            medium: { type: integer, minimum: 0 }
+            high: { type: integer, minimum: 0 }
+            critical: { type: integer, minimum: 0 }
+        as_of: { type: string, format: date-time }
+        durable: { type: boolean }
     Error:
       type: object
       required: [code, message]

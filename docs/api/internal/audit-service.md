@@ -74,7 +74,7 @@ Réponse `200` : `{unacknowledged_count, by_severity, as_of, durable}`. Les cinq
 
 Retourne la même projection bornée que la liste (`200`), `404` si l’identifiant valide n’existe pas, `400` si l’identifiant n’est pas au format `alert_` suivi de 32 caractères hexadécimaux minuscules, `405` pour une autre méthode et `503` si le magasin est indisponible. Aucun événement source brut ni détail de credential n’est inclus.
 
-**Frontière de confiance :** `CallerRules()` n’autorise que `api-gateway` sur ces routes. Le service Audit ne connaît pas les rôles opérateur ; la Gateway doit vérifier `session-alerts:read` sur `session-alerts:all` pour la liste et le résumé, ou sur `session-alerts:{id}` pour le détail, avant d’appeler le service. Une permission de lecture d’alerte ne confère pas `session.read`. L’acquittement n’est pas encore exposé dans cet incrément.
+**Frontière de confiance :** `CallerRules()` n’autorise que `api-gateway` sur ces routes. Le service Audit ne connaît pas les rôles opérateur ; la Gateway vérifie `session-alerts:read` sur `session-alerts:all` pour la liste et le résumé, ou sur `session-alerts:{id}` pour le détail, avant d’appeler le service sous son identité mTLS. Une permission de lecture d’alerte ne confère pas `session.read`. L’acquittement audité n’est pas encore exposé.
 
 Les DTO HTTP de ces lectures sont documentés ici plutôt que dans `proto/audit/v1/audit.proto` : le contrat interservices reste HTTP/JSON sous mTLS (ADR-0050), et aucune RPC Protobuf n’est introduite. Les tests de contrats signalent explicitement cette exception.
 

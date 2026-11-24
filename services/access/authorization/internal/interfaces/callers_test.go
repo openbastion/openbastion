@@ -21,7 +21,7 @@ func TestCallerRules(t *testing.T) {
 		mtlstest.Allow("video-recorder", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("rdp-vnc-proxy", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("ssh-proxy", "POST", "/authz/v1/check-access"),
-		mtlstest.Deny("api-gateway", "POST", "/authz/v1/check-access"),
+		mtlstest.Allow("api-gateway", "POST", "/authz/v1/check-access"),
 		mtlstest.Deny("session-broker", "GET", "/authz/v1/check-access"),
 
 		// ADR-0131: only the Gateway asks the Admin UI's capabilities.
