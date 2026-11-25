@@ -92,6 +92,7 @@ build: proto-gen
 		./services/access/workflow-service/... \
 		./services/proxy/ssh-proxy/... \
 		./services/proxy/rdp-vnc-proxy/... \
+		./services/proxy/database-proxy/... \
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
 		./services/recording-audit/command-recorder/... \
@@ -131,6 +132,7 @@ vet: proto-gen
 	$(GO) vet ./services/access/workflow-service/...
 	$(GO) vet ./services/proxy/ssh-proxy/...
 	$(GO) vet ./services/proxy/rdp-vnc-proxy/...
+	$(GO) vet ./services/proxy/database-proxy/...
 	$(GO) vet ./services/vault/password-vault/...
 	$(GO) vet ./services/recording-audit/audit-service/...
 	$(GO) vet ./services/recording-audit/command-recorder/...
@@ -169,6 +171,7 @@ test: proto-gen
 		./services/access/workflow-service/... \
 		./services/proxy/ssh-proxy/... \
 		./services/proxy/rdp-vnc-proxy/... \
+		./services/proxy/database-proxy/... \
 		./services/vault/password-vault/... \
 		./services/recording-audit/audit-service/... \
 		./services/recording-audit/command-recorder/... \

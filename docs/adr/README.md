@@ -178,7 +178,7 @@ Terminer le protocole SQL, séparer ticket opérateur et credential cible, et en
 
 | Ordre | ID | Titre | Statut |
 |---|---|---|---|
-| 1 | [ADR-0139](0139-le-proxy-postgresql-termine-deux-canaux-tls-et-n-expose-aucun-secret.md) | Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible | Proposé |
+| 1 | [ADR-0139](0139-le-proxy-postgresql-termine-deux-canaux-tls-et-n-expose-aucun-secret.md) | Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible | Accepté |
 
 ### 11. Chaîne d'audit
 
@@ -451,4 +451,4 @@ Dans l'ordre des numéros, c'est-à-dire l'ordre où les décisions ont été pr
 | [ADR-0136](0136-provenance-des-evenements-par-identite-de-lappelant-mtls.md) | Attribuer l’émetteur d’un événement à l’appelant mTLS immédiat | Accepté | Chaîne d’audit |
 | [ADR-0137](0137-navigation-adressable-de-l-admin-ui-avec-react-router.md) | La navigation de l'Admin UI devient adressable, avec `react-router`, une déclaration unique et des refus explicites | Accepté, mise en œuvre en cours | Interfaces et notifications |
 | [ADR-0138](0138-hierarchie-des-approbateurs-administree-dans-openbastion.md) | La hiérarchie des approbateurs est administrée dans OpenBastion | Accepté | Gouvernance et workflows |
-| [ADR-0139](0139-le-proxy-postgresql-termine-deux-canaux-tls-et-n-expose-aucun-secret.md) | Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible | Proposé | Proxy base de données |
+| [ADR-0139](0139-le-proxy-postgresql-termine-deux-canaux-tls-et-n-expose-aucun-secret.md) | Le proxy PostgreSQL termine deux canaux TLS et n’expose aucun secret cible | Accepté | Proxy base de données |
