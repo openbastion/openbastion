@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { Tab } from "../../app/AppShell";
+import type { Tab } from "../../app/navigation";
 import { AppCommandPalette } from "@openbastion/ui";
 import { ArrowRight } from "@openbastion/icons";
 import { useAppTranslation } from "../i18n";

@@ -33,8 +33,10 @@ export function useAppShortcuts(options: AppShortcutsOptions): void {
         return;
       }
       if (isTextEntry(event.target) || suspended) return;
-      if (event.altKey && event.shiftKey && /^[1-9]$/.test(event.key)) {
-        const index = Number(event.key) - 1;
+      // `event.key` is "!" for Shift+1 on a US layout: the physical key (`code`) is the reliable one.
+      const digit = /^[1-9]$/.test(event.key) ? event.key : /^Digit([1-9])$/.exec(event.code)?.[1];
+      if (event.altKey && event.shiftKey && digit) {
+        const index = Number(digit) - 1;
         if (index >= destinationCount) return;
         event.preventDefault();
         onDestination?.(index);

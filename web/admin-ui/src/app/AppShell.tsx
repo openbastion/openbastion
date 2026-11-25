@@ -6,21 +6,15 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Dashboard,
   HelpCircle,
-  Infrastructure,
   Menu,
   Moon,
   Notifications,
   Search,
-  Session,
-  Security,
   Settings,
-  Shield,
   Star,
   StarFilled,
   Sun,
-  Users,
 } from "@openbastion/icons";
 import { TokenClaims } from "../shared/api";
 import {
@@ -35,36 +29,10 @@ import { LanguageSwitcher } from "../shared/ui/LanguageSwitcher";
 import { useAppTranslation } from "../shared/i18n";
 import { LegalNotice } from "../shared/LegalNotice";
 import { useCapabilities } from "../shared/capabilities";
-import { tabAllowed } from "./tabAccess";
+import { destinationOf, groups, tabAllowed, tabOrder, type Tab } from "./navigation";
 import { InlineNotice } from "../shared/ui/InlineNotice";
 
-// Labels and descriptions live in the translation files (locales/*.ts), one key per tab: the
-// navigation is translated like the screens it opens, and the groups keep the same order.
-const tabs = {
-  overview: { icon: Dashboard, group: "workspace" },
-  accounts: { icon: Users, group: "workspace" },
-  sessions: { icon: Session, group: "workspace" },
-  infrastructure: { icon: Infrastructure, group: "workspace" },
-  security: { icon: Shield, group: "workspace" },
-  posture: { icon: Security, group: "workspace" },
-  settings: { icon: Settings, group: "workspace" },
-} as const;
-
-const groups = ["workspace"] as const;
-
-export type Tab = keyof typeof tabs;
-// The reference sidebar order (Vue d'ensemble, Accès privilégiés, Sessions, Infrastructure,
-// Audit & conformité, Paramètres). Policies and the recording screen are tabs of those pages,
-// not destinations of their own.
-const tabOrder: Tab[] = [
-  "overview",
-  "accounts",
-  "sessions",
-  "infrastructure",
-  "security",
-  "posture",
-  "settings",
-];
+export type { Tab };
 
 // Navigation contains only capabilities backed by an implemented Admin UI screen and public API.
 export function AppShell({
@@ -77,7 +45,7 @@ export function AppShell({
   children,
 }: {
   who: TokenClaims | null;
-  tab: Tab;
+  tab: Tab | null;
   onTab: (tab: Tab) => void;
   onDefaultTabChange?: (tab: Tab) => void;
   onSignOut: () => void;
@@ -102,6 +70,7 @@ export function AppShell({
   const notificationsButton = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
+  const mobileNavigated = useRef(false);
   const paletteWasOpen = useRef(false);
   const preferencesWereOpen = useRef(false);
   const initials = who?.username ? who.username.replace(/^oidc:/, "").slice(0, 2).toUpperCase() : "?";
@@ -127,6 +96,9 @@ export function AppShell({
   }
 
   function chooseTab(next: Tab) {
+    // The mobile navigation restores focus to its own button when it closes; the router applies the
+    // new address after that, so the main region must not take the focus back from it.
+    if (mobileOpen && next !== tab) mobileNavigated.current = true;
     onTab(next);
     setMobileOpen(false);
   }
@@ -144,7 +116,8 @@ export function AppShell({
   // A layout effect: it must run before the passive focus restorations of the child components
   // (mobile navigation, user menu), which come after a navigation and win when both apply.
   useLayoutEffect(() => {
-    mainRef.current?.focus();
+    if (mobileNavigated.current) mobileNavigated.current = false;
+    else mainRef.current?.focus();
   }, [tab]);
 
   useEffect(() => {
@@ -184,7 +157,7 @@ export function AppShell({
   });
 
   function renderNavItem(key: Tab) {
-    const Icon = tabs[key].icon;
+    const Icon = destinationOf(key).icon;
     const favorite = preferences.favorites.includes(key);
     const label = t(`shell.nav.${key}.label`);
     return (
@@ -302,7 +275,7 @@ export function AppShell({
             {groups.map((group) => (
               <div className="nav-group" key={group}>
                 <h2 className="nav-group-title">{t(`shell.groups.${group}`)}</h2>
-                {shownTabs.filter((key) => tabs[key].group === group).map(renderNavItem)}
+                {shownTabs.filter((key) => destinationOf(key).group === group).map(renderNavItem)}
               </div>
             ))}
             <div className="nav-group nav-resources">

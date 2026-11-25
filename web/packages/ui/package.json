@@ -22,7 +22,8 @@
     "@radix-ui/react-hover-card": "1.2.1",
     "@radix-ui/react-menubar": "1.2.1",
     "@radix-ui/react-navigation-menu": "1.2.1",
-    "@radix-ui/react-tabs": "1.1.16"
+    "@radix-ui/react-tabs": "1.1.16",
+    "react-router": "8.5.3"
   },
   "peerDependenciesMeta": {
     "react": {

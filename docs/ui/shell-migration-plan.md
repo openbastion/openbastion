@@ -38,3 +38,11 @@ Aucun fichier ne contient : palette de commandes (seules les primitives `Command
 - L'ordre `useLayoutEffect` de Ctrl/Meta+K a une raison documentée (fenêtre post-connexion) : le conserver tel quel.
 - `tabOrder` indexe Alt+Maj+1…6 sur 7 destinations : la septième n'a pas de raccourci aujourd'hui ; comportement à conserver, pas à « corriger » sans décision.
 - Le CSS passe par `design-tokens` : un changement exige `restart web` dans le sandbox.
+
+## Incrément 7 (base du routage, ADR-0137) — état
+
+- `react-router` 8.5.3 (exact), en mode bibliothèque, dans `web/admin-ui` et en `peerDependencies` de `@openbastion/ui` ; `basename` dérivé de `import.meta.env.BASE_URL`.
+- `app/navigation.ts` : déclaration unique des sept destinations de premier niveau (`/overview`, `/access`, `/sessions`, `/infrastructure`, `/audit`, `/security`, `/settings`) ; barre latérale, palette, raccourcis `Alt+Maj+1..6` et gardes en dérivent. L'état `Tab` de `App.tsx` disparaît : la destination est l'URL.
+- 403 explicite (`CapabilityGate`, capacité nommée) et 404 explicite ; `/` redirige vers l'écran par défaut des préférences. Les identifiants stockés (`security` = Audit, `posture` = Sécurité) restent inversés par rapport aux URL : leur renommage demande une migration des préférences.
+- Pas encore livrés : sous-routes et `searchParams` (incréments 9 à 11), page de connexion/MFA/OIDC comme routes, `AuthGate`, `AppErrorBoundary`.
+- Tests de bout en bout : `web/admin-ui/e2e/` (`npm run e2e` contre une pile qui tourne ; `E2E_BASE_URL`, `E2E_USERNAME`, `E2E_PASSWORD`). Une seule connexion par exécution : la Gateway limite les connexions (5, puis 1 par minute).

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { Api, claims } from "../shared/api";
 import { SignedInContext } from "../shared/session";
 import { Login } from "../features/login/Login";
@@ -11,8 +12,10 @@ import { Infrastructure } from "../features/infrastructure/Infrastructure";
 import { Settings } from "../features/settings/Settings";
 import { Sessions } from "../features/sessions/Sessions";
 import { LegalNotice } from "../shared/LegalNotice";
-import { AppShell, Tab } from "./AppShell";
-import { tabAllowed } from "./tabAccess";
+import { AppShell } from "./AppShell";
+import { Tab, routerBasename, tabAllowed, tabFromPath, tabPath, destinations } from "./navigation";
+import { CapabilityGate, NotFound } from "./RouteStates";
+import type { TokenClaims } from "../shared/api";
 import { readOperatorPreferences } from "../shared/operatorPreferences";
 import { Capabilities, CapabilitiesContext, capabilitiesFrom, parseCapabilities } from "../shared/capabilities";
 
@@ -20,10 +23,12 @@ export function App({
   api: given,
   location = window.location,
   navigate = (u: string) => window.location.assign(u),
+  initialEntries,
 }: {
   api?: Api;
   location?: Location;
   navigate?: (u: string) => void;
+  initialEntries?: string[];
 }) {
   // ONE client for the life of the page: a default made at each render would lose the token set
   // at login, and every call after it would go out without one (found and fixed in main.tsx by
@@ -32,9 +37,6 @@ export function App({
   if (!given && !own.current) own.current = new Api();
   const api = given ?? own.current!;
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>(() => readOperatorPreferences().defaultTab);
-  const [accountsInitialView, setAccountsInitialView] = useState<"resources" | "accounts" | "policies" | "requests">("resources");
-  const [sessionLookup, setSessionLookup] = useState<string | null>(null);
   const onToken = useCallback(
     (t: string) => {
       api.setToken(t);
@@ -42,19 +44,6 @@ export function App({
     },
     [api],
   );
-  const navigateToTab = useCallback((next: Tab | "policies") => {
-    if (next === "policies") {
-      setAccountsInitialView("policies");
-      setTab("accounts");
-      return;
-    }
-    setTab(next);
-  }, []);
-  const findSession = useCallback((id: string) => {
-    setTab("sessions");
-    setSessionLookup(id);
-  }, []);
-  const clearSessionLookup = useCallback(() => setSessionLookup(null), []);
   const signOut = useCallback(() => {
     api.setToken(null);
     setToken(null);
@@ -73,10 +62,6 @@ export function App({
     return () => { current = false; };
   }, [api, token]);
 
-  // A page the caller has no capability for is not rendered, even when the stored default
-  // or a link asks for it: the overview stands in.
-  const shownTab: Tab = tabAllowed(capabilities, tab) ? tab : "overview";
-
   if (!token) {
     if (location.pathname.startsWith("/ui/oidc/callback"))
       return (
@@ -88,18 +73,77 @@ export function App({
     return <Login api={api} onToken={onToken} navigate={navigate} />;
   }
   return (
-    <SignedInContext.Provider value={{ api, who, signOut }}>
-      <CapabilitiesContext.Provider value={capabilities}>
-      <AppShell who={who} tab={shownTab} onTab={setTab} onDefaultTabChange={setTab} onSignOut={signOut} onFindSession={findSession}>
-        {shownTab === "overview" && <Overview onNavigate={navigateToTab} />}
-        {shownTab === "accounts" && <Accounts onNavigate={navigateToTab} initialView={accountsInitialView} />}
-        {shownTab === "sessions" && <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />}
-        {shownTab === "infrastructure" && <Infrastructure onNavigate={navigateToTab} />}
-        {shownTab === "security" && <AuditCompliance onNavigate={navigateToTab} />}
-        {shownTab === "posture" && <SecurityCenter />}
-        {shownTab === "settings" && <Settings />}
-      </AppShell>
-      </CapabilitiesContext.Provider>
-    </SignedInContext.Provider>
+    <Router initialEntries={initialEntries}>
+      <SignedInContext.Provider value={{ api, who, signOut }}>
+        <CapabilitiesContext.Provider value={capabilities}>
+          <SignedInRoutes who={who} capabilities={capabilities} onSignOut={signOut} />
+        </CapabilitiesContext.Provider>
+      </SignedInContext.Provider>
+    </Router>
+  );
+}
+
+// BrowserRouter in the page (basename = Vite's BASE_URL, ADR-0137 §2); tests may give a history.
+function Router({ initialEntries, children }: { initialEntries?: string[]; children: ReactNode }) {
+  if (initialEntries) return <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>;
+  return <BrowserRouter basename={routerBasename}>{children}</BrowserRouter>;
+}
+
+// The destination lives in the URL, not in React state: it can be shared, survives a reload (after
+// the sign-in, which returns to the SAME address because the sign-in screen is not a route) and
+// the Back/Forward buttons walk it.
+function SignedInRoutes({ who, capabilities, onSignOut }: { who: TokenClaims | null; capabilities: Capabilities; onSignOut: () => void }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [accountsInitialView, setAccountsInitialView] = useState<"resources" | "accounts" | "policies" | "requests">("resources");
+  const [sessionLookup, setSessionLookup] = useState<string | null>(null);
+  const goTo = useCallback((next: Tab | "policies") => {
+    if (next === "policies") {
+      setAccountsInitialView("policies");
+      navigate(tabPath("accounts"));
+      return;
+    }
+    navigate(tabPath(next));
+  }, [navigate]);
+  const findSession = useCallback((id: string) => {
+    navigate(tabPath("sessions"));
+    setSessionLookup(id);
+  }, [navigate]);
+  const clearSessionLookup = useCallback(() => setSessionLookup(null), []);
+
+  const screens: Record<Tab, ReactNode> = {
+    overview: <Overview onNavigate={goTo} />,
+    accounts: <Accounts onNavigate={goTo} initialView={accountsInitialView} />,
+    sessions: <Sessions requestedSessionId={sessionLookup} onSessionLookupComplete={clearSessionLookup} />,
+    infrastructure: <Infrastructure onNavigate={goTo} />,
+    security: <AuditCompliance onNavigate={goTo} />,
+    posture: <SecurityCenter />,
+    settings: <Settings />,
+  };
+  // The stored default screen opens at "/"; one the caller may not see falls back to the overview.
+  const defaultTab = readOperatorPreferences().defaultTab;
+  const landing = tabAllowed(capabilities, defaultTab) ? defaultTab : "overview";
+
+  return (
+    <AppShell
+      who={who}
+      tab={tabFromPath(pathname) ?? null}
+      onTab={goTo}
+      onDefaultTabChange={goTo}
+      onSignOut={onSignOut}
+      onFindSession={findSession}
+    >
+      <Routes>
+        <Route path="/" element={<Navigate to={tabPath(landing)} replace />} />
+        {destinations.map((destination) => (
+          <Route
+            key={destination.id}
+            path={destination.path}
+            element={<CapabilityGate tab={destination.id}>{screens[destination.id]}</CapabilityGate>}
+          />
+        ))}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AppShell>
   );
 }
