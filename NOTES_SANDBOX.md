@@ -5642,3 +5642,25 @@ Le contrôle « Containers / Images — Trivy » de #194 a échoué sur un rése
 
 - **Notification Slack d'une demande ordinaire** : le dernier harnais ADR-0074 démarre maintenant Workflow Service et affecte réellement un supérieur `change-manager` à la demandeuse. Le scope de la policy est `session-approve:account:<account>`, identique au contrat Workflow. Le dispatch outbox déclenche alors `approval.requested` et le format Slack ; le test ciblé passe en 9,68 s, y compris le cas où le canal ne répond plus.
 - **Suite d'intégration complète** : le run local avec timeout 900 s a exécuté le package pendant 635 s ; tous les tests ont réussi sauf le test Slack ci-dessus, qui utilisait encore le parcours pré-Workflow. Après correction, ce test isolé est PASS. Les tests nécessitant `CHROME`, `TEST_DATABASE_URL`, les trois DSN ADR-0138 ou `BASE44_PREVIEW_URL` ont été ignorés localement selon leurs gardes explicites ; le job PostgreSQL CI configure les DSN ADR-0138 et exige Chromium. La suite complète n'a pas encore été rejouée après cette dernière correction.
+
+
+## 2026-11-25 — ADR-0141, incrément 65 : DstBlt complet et première négociation d'ordre primaire
+
+Le client RDP décode désormais le profil complet de `DstBlt` (`orderType=0x00`, index de négociation 0) : les cinq champs ont un état persistant par ordre, les champs omis réutilisent leur valeur précédente, et le drapeau de champ permet d'omettre l'octet final nul. Les coordonnées acceptent les valeurs absolues signées 16 bits ou les deltas signés 8 bits, avec refus de tout dépassement.
+
+`TS_BOUNDS` ajoute un rectangle inclusif de clipping dont les composantes sont absolues, delta ou inchangées ; `TS_ZERO_BOUNDS_DELTAS` réutilise les bornes précédentes et n'est accepté qu'avec `TS_BOUNDS`. Les bornes inversées sont refusées. Le rectangle destination est intersecté avec le bureau et les bornes ; une intersection vide est un no-op sans frame. Les ROP3 admis sont exactement les quatre fonctions destination-only : BLACKNESS, DSTINVERT, DSTCOPY et WHITENESS. Tout autre ROP3 est refusé.
+
+Confirm Active annonce uniquement `orderSupport[0]=1` ; les 31 autres octets restent nuls. Le lecteur TLS autorise DstBlt seulement après cet échange. Une réactivation réinitialise les champs et bornes de l'ancien partage puis restaure le même profil négocié. Les mises à jour DstBlt sans pixel visible commettent l'état protocolaire sans produire de frame inchangée.
+
+**Ce que cela ne fait PAS :** aucun autre ordre primaire n'est annoncé. PatBlt/OpaqueRect, ScrBlt, les ordres Multi, les formes avec brosse, les caches bitmap, MemBlt/Mem3Blt, PolygonCB/EllipseCB, les glyphes et les ordres Fast-Path restent hors annonce et/ou hors décodage complet. Aucun cache hors écran n'est créé. Les scénarios Windows Server 2019/2022 restent exécutés exclusivement en CI ; aucune compatibilité RDP/RDS générale n'est revendiquée.
+
+Validation de l'incrément 65 :
+- **Test rouge sur la base `origin/main`** (`5b243ca5`) : le test de régression DstBlt avec coordonnées delta échoue avant implémentation (`ErrMCSConnection`) ; il passe avec le nouveau profil.
+- `GOTOOLCHAIN=go1.27.3 GOWORK=$PWD/go.work make build vet test proto-lint` : **PASS** — génération Protobuf, build de tous les modules, `go vet` de tous les modules, tests unitaires de tous les modules et `buf lint`.
+- `go test ./... -count=1` dans `pkg/rdp` : **PASS** après ajout des tests de cache inter-PDU et de dépassement delta.
+- `go test -race ./... -count=1` dans `pkg/rdp` : **PASS** ; `go vet ./...` dans `pkg/rdp` : **PASS**.
+- `go test -race ./... -count=1` dans `services/proxy/rdp-vnc-proxy` : **PASS** (engine, infrastructure et interfaces).
+- `FuzzParseRDPOrdersUpdate` : **PASS**, 91 389 exécutions en 5 s, 14 nouveaux cas intéressants ; seeds ajoutées pour les champs omis, coordonnées delta et bornes.
+- Tests TLS : Confirm Active annonce DstBlt, la session lit/rend l'ordre, l'état de champs persiste entre deux PDU, la réactivation réinitialise le cache, et `DSTCOPY` est consommé sans frame inchangée.
+- `gofmt` et `git diff --check` : **PASS**.
+- Les tests Windows Server 2019/2022 ne sont pas exécutés localement conformément à la consigne ; ils restent obligatoires dans la CI de la PR. Aucune interopérabilité Windows/RDS réelle n'est revendiquée avant ce résultat.

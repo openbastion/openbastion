@@ -23,7 +23,10 @@ const (
 	rdpCapBitmap  = uint16(2)
 	rdpCapOrder   = uint16(3)
 	rdpCapPointer = uint16(8)
-	rdpCapInput   = uint16(13)
+
+	rdpOrderSupportOffset      = 36 // TS_ORDER_CAPABILITYSET: orderSupport starts after its 36-byte fixed prefix.
+	rdpOrderSupportDstBltIndex = 0  // TS_NEG_DSTBLT_INDEX.
+	rdpCapInput                = uint16(13)
 
 	maxRDPCapabilitySets = 32
 	maxRDPCapabilitySize = 2048
@@ -85,6 +88,7 @@ func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout
 		}
 		s.capabilitiesExchanged = true
 		s.serverCapabilities = cloneRDPServerCapabilities(capabilities)
+		setRDPPrimaryOrderProfileLocked(s)
 	}()
 
 	packet, readErr := readMCSConnectResponse(conn)
@@ -113,6 +117,24 @@ func (s *CredSSPClientSession) ExchangeCapabilities(ctx context.Context, timeout
 		return RDPServerCapabilities{}, ErrMCSConnection
 	}
 	return capabilities, nil
+}
+
+// setRDPPrimaryOrderProfileLocked mirrors the exact primary orders advertised in Confirm Active.
+// The caller holds s.mu. Unimplemented order families remain disabled even if their parsers have
+// experimental strict subsets.
+func setRDPPrimaryOrderProfileLocked(s *CredSSPClientSession) {
+	s.primaryOrdersEnabled = true
+	s.dstBltEnabled = true
+	s.patBltOpaqueRectEnabled = false
+	s.scrBltEnabled = false
+	s.multiDstBltEnabled = false
+	s.multiPatBltEnabled = false
+	s.multiScrBltEnabled = false
+	s.lineToEnabled = false
+	s.polylineEnabled = false
+	s.polygonSCEnabled = false
+	s.ellipseSCEnabled = false
+	s.multiOpaqueRectEnabled = false
 }
 
 func cloneRDPServerCapabilities(in RDPServerCapabilities) RDPServerCapabilities {
@@ -320,13 +342,14 @@ func marshalRDPClientCapabilitySets(settings MCSClientSettings, sessionBPP uint1
 	caps = append(caps, bitmap...)
 	clear(bitmap)
 
-	// Advertise only the mandatory baseline: no primary orders, a pointer cache only when the
-	// pointer is drawn (PointerShapes), and scancodes only (no fast-path, Unicode or extended mouse input).
+	// Advertise only the fully decoded DstBlt profile. Every other primary-order slot remains
+	// zero until its complete field, coordinate, bounds and rendering profile is implemented.
 	order := make([]byte, 88)
 	binary.LittleEndian.PutUint16(order[:2], rdpCapOrder)
 	binary.LittleEndian.PutUint16(order[2:4], uint16(len(order)))
 	binary.LittleEndian.PutUint16(order[30:32], 1)      // ORD_LEVEL_1_ORDERS
 	binary.LittleEndian.PutUint16(order[34:36], 0x000a) // NEGOTIATEORDERSUPPORT | ZEROBOUNDSDELTASSUPPORT
+	order[rdpOrderSupportOffset+rdpOrderSupportDstBltIndex] = 1
 	caps = append(caps, order...)
 	clear(order)
 

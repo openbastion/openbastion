@@ -13,69 +13,75 @@ import (
 )
 
 const (
-	rdpPDU2Update           = byte(2)
-	rdpPDU2Pointer          = byte(0x1b)
-	rdpUpdateOrders         = uint16(0)
-	rdpUpdateBitmap         = uint16(1)
-	rdpOrderStandard        = byte(0x01)
-	rdpOrderTypeChange      = byte(0x08)
-	rdpOrderOpaqueRect      = byte(0x0a)
-	rdpOrderDstBlt          = byte(0x00)
-	rdpOrderPatBlt          = byte(0x01)
-	rdpOrderScrBlt          = byte(0x02)
-	rdpOrderMultiDstBlt     = byte(0x0f)
-	rdpOrderMultiPatBlt     = byte(0x10)
-	rdpOrderMultiScrBlt     = byte(0x11)
-	rdpOrderLineTo          = byte(0x09)
-	rdpOrderPolygonSC       = byte(0x14)
-	rdpOrderPolyline        = byte(0x16)
-	rdpOrderEllipseSC       = byte(0x19)
-	rdpROP2Black            = byte(0x01)
-	rdpROP2NotMergePen      = byte(0x02)
-	rdpROP2MaskNotPen       = byte(0x03)
-	rdpROP2NotCopyPen       = byte(0x04)
-	rdpROP2MaskPenNot       = byte(0x05)
-	rdpROP2Not              = byte(0x06)
-	rdpROP2XorPen           = byte(0x07)
-	rdpROP2NotMaskPen       = byte(0x08)
-	rdpROP2MaskPen          = byte(0x09)
-	rdpROP2NotXorPen        = byte(0x0a)
-	rdpROP2Nop              = byte(0x0b)
-	rdpROP2MergeNotPen      = byte(0x0c)
-	rdpROP2CopyPen          = byte(0x0d)
-	rdpROP2MergePenNot      = byte(0x0e)
-	rdpROP2MergePen         = byte(0x0f)
-	rdpROP2White            = byte(0x10)
-	rdpOrderMultiOpaqueRect = byte(0x12)
-	rdpOpaqueRectFieldMask  = byte(0x7f)     // Four coordinates plus three RGB bytes.
-	rdpPatBltFieldMask      = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
-	rdpPatBltPatCopy        = byte(0xf0)
-	rdpPatBltPatInvert      = byte(0x5a)
-	rdpPatBltPatAnd         = byte(0xa0)
-	rdpPatBltPatOr          = byte(0xfa)
-	rdpPatBltNotPatCopy     = byte(0x0f)
-	rdpScrBltFieldMask      = byte(0x7f) // Four destination coordinates, ROP, and two source coordinates.
-	rdpScrBltSrcCopy        = byte(0xcc)
-	rdpPatBltSolidBrush     = byte(0x00)
-	rdpDstBltFieldMask      = byte(0x1f) // Four coordinates and bRop.
-	rdpMultiDstBltFieldMask = byte(0x7f) // Four coordinates, ROP, count and delta list.
-	rdpDstBltBlackness      = byte(0x00)
-	rdpDstBltWhiteness      = byte(0xff)
-	rdpDstBltInvert         = byte(0x55)
-	maxRDPPrimaryOrders     = 1024
-	maxRDPMultiDstBltRects  = 45
-	maxRDPMultiDstBltBytes  = 395
-	maxRDPLinePixels        = 32_768
-	maxRDPDeltaPoints       = 34
-	maxRDPDeltaBytes        = 147
-	maxRDPPolylinePoints    = maxRDPDeltaPoints
-	maxRDPPolylineBytes     = maxRDPDeltaBytes
-	maxRDPPolygonPoints     = maxRDPDeltaPoints // Local strict-profile limit for delta entries.
-	maxRDPPolygonBytes      = maxRDPDeltaBytes  // Local cbData payload limit; 148 bytes including cbData.
-	maxRDPPolygonSpans      = 1_114_095         // 17 spans per row at the maximum 16-bit desktop height.
-	rdpBitmapCompressed     = uint16(0x0001)
-	rdpBitmapNoCompHdr      = uint16(0x0400)
-	maxRDPBitmapRects       = 64
+	rdpPDU2Update             = byte(2)
+	rdpPDU2Pointer            = byte(0x1b)
+	rdpUpdateOrders           = uint16(0)
+	rdpUpdateBitmap           = uint16(1)
+	rdpOrderStandard          = byte(0x01)
+	rdpOrderBounds            = byte(0x04)
+	rdpOrderTypeChange        = byte(0x08)
+	rdpOrderDeltaCoordinates  = byte(0x10)
+	rdpOrderZeroBoundsDeltas  = byte(0x20)
+	rdpOrderZeroFieldByteBit0 = byte(0x40)
+	rdpOrderZeroFieldByteBit1 = byte(0x80)
+	rdpOrderZeroFieldByteMask = rdpOrderZeroFieldByteBit0 | rdpOrderZeroFieldByteBit1
+	rdpOrderOpaqueRect        = byte(0x0a)
+	rdpOrderDstBlt            = byte(0x00)
+	rdpOrderPatBlt            = byte(0x01)
+	rdpOrderScrBlt            = byte(0x02)
+	rdpOrderMultiDstBlt       = byte(0x0f)
+	rdpOrderMultiPatBlt       = byte(0x10)
+	rdpOrderMultiScrBlt       = byte(0x11)
+	rdpOrderLineTo            = byte(0x09)
+	rdpOrderPolygonSC         = byte(0x14)
+	rdpOrderPolyline          = byte(0x16)
+	rdpOrderEllipseSC         = byte(0x19)
+	rdpROP2Black              = byte(0x01)
+	rdpROP2NotMergePen        = byte(0x02)
+	rdpROP2MaskNotPen         = byte(0x03)
+	rdpROP2NotCopyPen         = byte(0x04)
+	rdpROP2MaskPenNot         = byte(0x05)
+	rdpROP2Not                = byte(0x06)
+	rdpROP2XorPen             = byte(0x07)
+	rdpROP2NotMaskPen         = byte(0x08)
+	rdpROP2MaskPen            = byte(0x09)
+	rdpROP2NotXorPen          = byte(0x0a)
+	rdpROP2Nop                = byte(0x0b)
+	rdpROP2MergeNotPen        = byte(0x0c)
+	rdpROP2CopyPen            = byte(0x0d)
+	rdpROP2MergePenNot        = byte(0x0e)
+	rdpROP2MergePen           = byte(0x0f)
+	rdpROP2White              = byte(0x10)
+	rdpOrderMultiOpaqueRect   = byte(0x12)
+	rdpOpaqueRectFieldMask    = byte(0x7f)     // Four coordinates plus three RGB bytes.
+	rdpPatBltFieldMask        = uint16(0x027f) // Four coordinates, ROP, colors, and solid BrushStyle.
+	rdpPatBltPatCopy          = byte(0xf0)
+	rdpPatBltPatInvert        = byte(0x5a)
+	rdpPatBltPatAnd           = byte(0xa0)
+	rdpPatBltPatOr            = byte(0xfa)
+	rdpPatBltNotPatCopy       = byte(0x0f)
+	rdpScrBltFieldMask        = byte(0x7f) // Four destination coordinates, ROP, and two source coordinates.
+	rdpScrBltSrcCopy          = byte(0xcc)
+	rdpPatBltSolidBrush       = byte(0x00)
+	rdpMultiDstBltFieldMask   = byte(0x7f) // Four coordinates, ROP, count and delta list.
+	rdpDstBltBlackness        = byte(0x00)
+	rdpDstBltWhiteness        = byte(0xff)
+	rdpDstBltInvert           = byte(0x55)
+	rdpDstBltCopy             = byte(0xaa)
+	maxRDPPrimaryOrders       = 1024
+	maxRDPMultiDstBltRects    = 45
+	maxRDPMultiDstBltBytes    = 395
+	maxRDPLinePixels          = 32_768
+	maxRDPDeltaPoints         = 34
+	maxRDPDeltaBytes          = 147
+	maxRDPPolylinePoints      = maxRDPDeltaPoints
+	maxRDPPolylineBytes       = maxRDPDeltaBytes
+	maxRDPPolygonPoints       = maxRDPDeltaPoints // Local strict-profile limit for delta entries.
+	maxRDPPolygonBytes        = maxRDPDeltaBytes  // Local cbData payload limit; 148 bytes including cbData.
+	maxRDPPolygonSpans        = 1_114_095         // 17 spans per row at the maximum 16-bit desktop height.
+	rdpBitmapCompressed       = uint16(0x0001)
+	rdpBitmapNoCompHdr        = uint16(0x0400)
+	maxRDPBitmapRects         = 64
 	// maxRDPBitmapUpdateRects bounds the rectangles of one bitmap update: Windows sends its whole
 	// screen at once, as 64 x 64 tiles (260 for 1280 x 800, CI run #36). 4096 is the largest desktop
 	// accepted (maxRDPDesktopArea) in such tiles; the PDU size bounds it further (19 bytes at least
@@ -180,6 +186,8 @@ func parseRDPBitmapShareData(userData []byte, shareID uint32, desktopWidth, desk
 type rdpPrimaryOrderState struct {
 	orderType            byte
 	hasOrderType         bool
+	dstBltFields         [5]int32
+	bounds               [4]int32
 	dstBltUsed           bool
 	patBltOpaqueRectUsed bool
 	scrBltUsed           bool
@@ -238,10 +246,185 @@ func isSupportedRDPROP2(operation byte) bool {
 	}
 }
 
+// readRDPPrimaryFieldFlags reads the variable field-flag bytes for an order. The high two
+// control bits count trailing zero bytes omitted from the wire; omitted bytes are restored as zero.
+func readRDPPrimaryFieldFlags(data []byte, fieldCount int, control byte) (uint32, []byte, error) {
+	if fieldCount < 1 || fieldCount > 23 {
+		return 0, data, ErrMCSConnection
+	}
+	byteCount := (fieldCount + 1 + 7) / 8
+	omitted := int((control & rdpOrderZeroFieldByteMask) >> 6)
+	if omitted > byteCount {
+		return 0, data, ErrMCSConnection
+	}
+	present := byteCount - omitted
+	if len(data) < present {
+		return 0, data, ErrMCSConnection
+	}
+	var flags uint32
+	for i := 0; i < present; i++ {
+		flags |= uint32(data[i]) << (8 * i)
+	}
+	validMask := uint32(1<<fieldCount) - 1
+	if flags&^validMask != 0 {
+		return 0, data, ErrMCSConnection
+	}
+	return flags, data[present:], nil
+}
+
+// readRDPPrimaryCoord reads a COORD_FIELD and updates its per-order cached value. Delta
+// coordinates are signed one-byte offsets from that field's previous value.
+func readRDPPrimaryCoord(data []byte, previous int32, delta bool) (int32, []byte, error) {
+	if delta {
+		if len(data) < 1 {
+			return 0, data, ErrMCSConnection
+		}
+		value := previous + int32(int8(data[0]))
+		if value < math.MinInt16 || value > math.MaxInt16 {
+			return 0, data, ErrMCSConnection
+		}
+		return value, data[1:], nil
+	}
+	if len(data) < 2 {
+		return 0, data, ErrMCSConnection
+	}
+	return int32(int16(binary.LittleEndian.Uint16(data[:2]))), data[2:], nil
+}
+
+// readRDPPrimaryBounds decodes the shared clipping rectangle. Unspecified edges retain their
+// previous values; absolute encodings take precedence over delta encodings for the same edge.
+func readRDPPrimaryBounds(data []byte, previous [4]int32) ([4]int32, []byte, error) {
+	if len(data) < 1 {
+		return previous, data, ErrMCSConnection
+	}
+	flags := data[0]
+	data = data[1:]
+	current := previous
+	for i := 0; i < len(current); i++ {
+		absolute := flags&(1<<i) != 0
+		delta := flags&(1<<(i+4)) != 0
+		switch {
+		case absolute:
+			if len(data) < 2 {
+				return previous, data, ErrMCSConnection
+			}
+			current[i] = int32(int16(binary.LittleEndian.Uint16(data[:2])))
+			data = data[2:]
+		case delta:
+			if len(data) < 1 {
+				return previous, data, ErrMCSConnection
+			}
+			value := current[i] + int32(int8(data[0]))
+			if value < math.MinInt16 || value > math.MaxInt16 {
+				return previous, data, ErrMCSConnection
+			}
+			current[i] = value
+			data = data[1:]
+		}
+	}
+	if current[0] > current[2] || current[1] > current[3] {
+		return previous, data, ErrMCSConnection
+	}
+	return current, data, nil
+}
+
+// clipRDPPrimaryRectangle intersects an inclusive destination rectangle with the desktop and,
+// when present, the order's inclusive bounds. A fully clipped order is a valid no-op.
+func clipRDPPrimaryRectangle(left, top, width, height int32, bounds *[4]int32, desktopWidth, desktopHeight uint16) (int32, int32, int32, int32, bool) {
+	if width <= 0 || height <= 0 {
+		return 0, 0, 0, 0, false
+	}
+	right, bottom := left+width-1, top+height-1
+	left, top = max(left, 0), max(top, 0)
+	right, bottom = min(right, int32(desktopWidth)-1), min(bottom, int32(desktopHeight)-1)
+	if bounds != nil {
+		left, top = max(left, bounds[0]), max(top, bounds[1])
+		right, bottom = min(right, bounds[2]), min(bottom, bounds[3])
+	}
+	if left > right || top > bottom {
+		return 0, 0, 0, 0, false
+	}
+	return left, top, right - left + 1, bottom - top + 1, true
+}
+
+// parseRDPDstBltOrder decodes the complete DstBlt field profile, including cached fields, signed
+// coordinate deltas, shared clipping bounds and the four destination-only ROP3 operations.
+func parseRDPDstBltOrder(data []byte, control byte, state *rdpPrimaryOrderState, result *RDPBitmapUpdate,
+	totalPixels *uint64, desktopWidth, desktopHeight uint16) ([]byte, error) {
+	if state == nil || result == nil || totalPixels == nil ||
+		(control&rdpOrderZeroBoundsDeltas != 0 && control&rdpOrderBounds == 0) {
+		return data, ErrMCSConnection
+	}
+	flags, rest, err := readRDPPrimaryFieldFlags(data, 5, control)
+	if err != nil {
+		return data, ErrMCSConnection
+	}
+	data = rest
+	var bounds *[4]int32
+	if control&rdpOrderBounds != 0 {
+		if control&rdpOrderZeroBoundsDeltas == 0 {
+			state.bounds, data, err = readRDPPrimaryBounds(data, state.bounds)
+			if err != nil {
+				return data, ErrMCSConnection
+			}
+		}
+		bounds = &state.bounds
+	}
+	delta := control&rdpOrderDeltaCoordinates != 0
+	for field := 0; field < 4; field++ {
+		if flags&(1<<field) == 0 {
+			continue
+		}
+		state.dstBltFields[field], data, err = readRDPPrimaryCoord(data, state.dstBltFields[field], delta)
+		if err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	if flags&(1<<4) != 0 {
+		if len(data) < 1 {
+			return data, ErrMCSConnection
+		}
+		state.dstBltFields[4] = int32(data[0])
+		data = data[1:]
+	}
+	left, top, width, height := state.dstBltFields[0], state.dstBltFields[1], state.dstBltFields[2], state.dstBltFields[3]
+	if width <= 0 || height <= 0 {
+		return data, ErrMCSConnection
+	}
+	var operation rdpBitmapRectangleOperation
+	var red, green, blue byte
+	switch byte(state.dstBltFields[4]) {
+	case rdpDstBltBlackness:
+		operation = rdpBitmapRectangleReplace
+	case rdpDstBltInvert:
+		operation = rdpBitmapRectangleDstInvert
+	case rdpDstBltCopy: // DSTCOPY: the destination is unchanged.
+		state.dstBltUsed = true
+		return data, nil
+	case rdpDstBltWhiteness:
+		operation = rdpBitmapRectangleReplace
+		red, green, blue = 0xff, 0xff, 0xff
+	default:
+		return data, ErrMCSConnection
+	}
+	clippedLeft, clippedTop, clippedWidth, clippedHeight, visible := clipRDPPrimaryRectangle(left, top, width, height, bounds, desktopWidth, desktopHeight)
+	if visible {
+		if operation == rdpBitmapRectangleReplace && byte(state.dstBltFields[4]) == rdpDstBltBlackness {
+			red, green, blue = 0, 0, 0
+		}
+		if err := appendRDPPrimaryRectangle(result, totalPixels, clippedLeft, clippedTop, clippedWidth, clippedHeight,
+			desktopWidth, desktopHeight, operation, red, green, blue, 0, 0); err != nil {
+			return data, ErrMCSConnection
+		}
+	}
+	state.dstBltUsed = true
+	return data, nil
+}
+
 // parseRDPOrdersUpdateData accepts deliberately narrow primary-order profiles:
-// DstBlt BLACKNESS/WHITENESS/DSTINVERT, MultiDstBlt with destination-only
-// raster operations, OpaqueRect, solid-brush PatBlt, and SRCCOPY ScrBlt, all
-// with absolute coordinates and no clipping bounds or omitted fields.
+// DstBlt has a complete cached-field, delta-coordinate and clipping-bounds profile. The other
+// decoded order families remain strict subsets with absolute coordinates, no clipping bounds and
+// no omitted fields; they are not advertised until their complete profiles are implemented.
 func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, state rdpPrimaryOrderState) (RDPBitmapUpdate, rdpPrimaryOrderState, error) {
 	var result RDPBitmapUpdate
 	initialState := state
@@ -262,7 +445,7 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		}
 		control := data[0]
 		data = data[1:]
-		if control&rdpOrderStandard == 0 || control&^(rdpOrderStandard|rdpOrderTypeChange) != 0 {
+		if control&rdpOrderStandard == 0 {
 			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
 		}
 		if control&rdpOrderTypeChange != 0 {
@@ -276,6 +459,22 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 			state.orderType = rdpOrderPatBlt // Initial primary order type per MS-RDPEGDI.
 			state.hasOrderType = true
 		}
+		if state.orderType == rdpOrderDstBlt {
+			const dstBltControlFlags = rdpOrderStandard | rdpOrderTypeChange | rdpOrderBounds |
+				rdpOrderDeltaCoordinates | rdpOrderZeroBoundsDeltas | rdpOrderZeroFieldByteMask
+			if control&^dstBltControlFlags != 0 {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			var parseErr error
+			data, parseErr = parseRDPDstBltOrder(data, control, &state, &result, &totalPixels, desktopWidth, desktopHeight)
+			if parseErr != nil {
+				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+			}
+			continue
+		}
+		if control&^(rdpOrderStandard|rdpOrderTypeChange) != 0 {
+			return RDPBitmapUpdate{}, initialState, ErrMCSConnection
+		}
 		var left, top, width, height int32
 		var red, green, blue byte
 		var sourceX, sourceY int32
@@ -285,28 +484,6 @@ func parseRDPOrdersUpdateData(data []byte, desktopWidth, desktopHeight uint16, s
 		lineROP2 := rdpROP2CopyPen
 		operation := rdpBitmapRectangleReplace
 		switch state.orderType {
-		case rdpOrderDstBlt:
-			if len(data) < 10 || data[0] != rdpDstBltFieldMask {
-				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
-			}
-			data = data[1:]
-			left = int32(int16(binary.LittleEndian.Uint16(data[0:2])))
-			top = int32(int16(binary.LittleEndian.Uint16(data[2:4])))
-			width = int32(int16(binary.LittleEndian.Uint16(data[4:6])))
-			height = int32(int16(binary.LittleEndian.Uint16(data[6:8])))
-			// Only destination-independent constant raster operations can be
-			// represented as a standalone rectangle without framebuffer state.
-			switch data[8] {
-			case rdpDstBltBlackness:
-				red, green, blue = 0, 0, 0
-			case rdpDstBltWhiteness:
-				red, green, blue = 0xff, 0xff, 0xff
-			case rdpDstBltInvert:
-				operation = rdpBitmapRectangleDstInvert
-			default:
-				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
-			}
-			data = data[9:]
 		case rdpOrderOpaqueRect:
 			if len(data) < 12 || data[0] != rdpOpaqueRectFieldMask {
 				return RDPBitmapUpdate{}, initialState, ErrMCSConnection
@@ -1854,6 +2031,13 @@ readUpdate:
 	s.mu.Lock()
 	s.primaryOrderState = nextOrderState
 	s.mu.Unlock()
+	if len(update.Rectangles) == 0 && binary.LittleEndian.Uint16(assembled[18:20]) == rdpUpdateOrders {
+		// A fully clipped order or DSTCOPY changes protocol state but not the framebuffer.
+		// Carry that state into the next PDU and consume it without emitting an unchanged frame.
+		orderState = nextOrderState
+		clear(assembled)
+		goto readUpdate
+	}
 	return update, nil
 }
 
